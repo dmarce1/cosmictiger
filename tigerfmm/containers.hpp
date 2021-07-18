@@ -9,6 +9,7 @@
 #define CONTAINERS_HPP_
 
 #include <tigerfmm/cuda.hpp>
+#include <tigerfmm/defs.hpp>
 
 #include <array>
 #include <vector>
@@ -75,14 +76,67 @@ public:
 	inline int size() const {
 		return N;
 	}
-
+	CUDA_EXPORT
+	inline const T* begin() const {
+		return A;
+	}
+	CUDA_EXPORT
+	inline T* begin() {
+		return A;
+	}
+	CUDA_EXPORT
+	inline const T* end() const {
+		return A + N;
+	}
+	CUDA_EXPORT
+	inline T* end() {
+		return A + N;
+	}
 	template<class Arc>
 	void serialize(Arc&& arc, unsigned) {
 		for (int i = 0; i < N; i++) {
 			arc & A[i];
 		}
 	}
-
 };
+
+
+inline array<int,NDIM> operator*(const array<int,NDIM>& a, int b ) {
+	array<int, NDIM> c;
+	for( int dim = 0; dim < NDIM; dim++) {
+		c[dim] = a[dim] * b;
+	}
+	return c;
+}
+
+inline bool operator==(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
+	for( int dim = 0; dim < NDIM; dim++) {
+		if( a[dim] != b[dim]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+inline bool operator!=(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
+	return !(a==b);
+}
+
+inline array<int,NDIM> operator+(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
+	array<int, NDIM> c;
+	for( int dim = 0; dim < NDIM; dim++) {
+		c[dim] = a[dim] + b[dim];
+	}
+	return c;
+}
+
+inline array<int,NDIM> operator-(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
+	array<int, NDIM> c;
+	for( int dim = 0; dim < NDIM; dim++) {
+		c[dim] = a[dim] - b[dim];
+	}
+	return c;
+}
+
 
 #endif /* CONTAINERS_HPP_ */

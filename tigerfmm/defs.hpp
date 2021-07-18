@@ -16,4 +16,12 @@
 
 #define MAX_PARTICLES_PER_PARCEL (16*1024*1024)
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
+
+#define ORDER 6
+
+#define LORDER ORDER
+#define MORDER (LORDER-1)
+
+#define EWALD_REAL_CUTOFF2 (2.6*2.6)
+
 #endif /* DEFS_HPP_ */

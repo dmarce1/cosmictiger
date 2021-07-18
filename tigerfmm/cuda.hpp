@@ -62,7 +62,6 @@ inline void _cuda_fft_check(cufftResult err, const char *file, const int line) {
 
 #define CUDA_FFT_CHECK(a) _cuda_fft_check(a,__FILE__,__LINE__)
 
-void cuda_init();
 void cuda_set_device();
 
 
