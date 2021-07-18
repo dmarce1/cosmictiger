@@ -14,12 +14,16 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 
 
 set(tigerfmm_source_files
+    src/cuda.cu
     src/domain.cpp
+    src/ewald_indices.cpp
+    src/ewald_indices.cu
     src/hpx.cpp
     src/main.cpp
     src/options.cpp
     src/particles.cpp
     src/test.cpp
+    src/tree.cpp
 )      
                        
                         
@@ -30,17 +34,18 @@ set(tigerfmm_header_files
     tigerfmm/cuda.hpp
     tigerfmm/defs.hpp
     tigerfmm/domain.hpp
+    tigerfmm/ewald_incides.hpp
     tigerfmm/fixes.hpp
     tigerfmm/hpx.hpp
+    tigerfmm/math.hpp
     tigerfmm/options.hpp
     tigerfmm/particles.hpp
     tigerfmm/range.hpp
     tigerfmm/safe_io.hpp
     tigerfmm/test.hpp
+    tigerfmm/tree.hpp
     tigerfmm/timer.hpp
 )
-
-
 
 add_hpx_executable(
   tigerfmm
@@ -51,9 +56,22 @@ add_hpx_executable(
   HEADERS
     ${tigerfmm_header_files}
  )
-
+ 
+ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp tigerfmm/tensor.hpp )
+ 
+ 
+ add_custom_command(
+    OUTPUT tigerfmm/fmm_kernels.hpp
+    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/tigerfmm/fmm_kernels.hpp
+    DEPENDS fmm_kernel_codegen
+    COMMENT "Generating FFM kernels"
+)
+add_custom_target( generate_fmm_kernels DEPENDS tigerfmm/fmm_kernels.hpp COMMENT "" )
+add_dependencies( tigerfmm generate_fmm_kernels )
+ 
 set_property(TARGET tigerfmm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(tigerfmm PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_options(tigerfmm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerfmm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;

@@ -82,5 +82,6 @@ int particles_size_pos();
 void particles_resize_pos(int);
 void particles_random_init();
 void particles_destroy();
+int particles_sort(pair<int,int> rng, double xm, int xdim);
 
 #endif /* PARTICLES_HPP_ */

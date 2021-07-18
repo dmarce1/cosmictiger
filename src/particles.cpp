@@ -73,3 +73,39 @@ void particles_random_init() {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
+
+int particles_sort(pair<int,int> rng, double xm, int xdim) {
+	int begin = rng.first;
+	int end = rng.second;
+	int lo = begin;
+	int hi = end;
+	fixed32 xmid(xm);
+	auto& xptr_dim = particles_x[xdim];
+	auto& x = particles_x[XDIM];
+	auto& y = particles_x[YDIM];
+	auto& z = particles_x[ZDIM];
+	auto& ux = particles_v[XDIM];
+	auto& uy = particles_v[YDIM];
+	auto& uz = particles_v[ZDIM];
+	while (lo < hi) {
+		if (xptr_dim[lo] >= xmid) {
+			while (lo != hi) {
+				hi--;
+				if (xptr_dim[hi] < xmid) {
+					std::swap(x[hi], x[lo]);
+					std::swap(y[hi], y[lo]);
+					std::swap(z[hi], z[lo]);
+					std::swap(ux[hi], ux[lo]);
+					std::swap(uy[hi], uy[lo]);
+					std::swap(uz[hi], uz[lo]);
+					std::swap(particles_r[hi], particles_r[lo]);
+					break;
+				}
+			}
+		}
+		lo++;
+	}
+	return hi;
+
+}
+

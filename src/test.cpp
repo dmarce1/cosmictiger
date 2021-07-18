@@ -5,9 +5,41 @@ constexpr bool verbose = true;
 #include <tigerfmm/safe_io.hpp>
 #include <tigerfmm/test.hpp>
 #include <tigerfmm/timer.hpp>
+#include <tigerfmm/tree.hpp>
 
 
 static void domain_test() {
+	timer tm;
+
+	tm.start();
+	particles_random_init();
+	tm.stop();
+	PRINT( "particles_random_init: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_begin();
+	tm.stop();
+	PRINT( "domains_begin: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_end();
+	tm.stop();
+	PRINT( "domains_end: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	tree_create();
+	tm.stop();
+	PRINT( "tree_create: %e s\n", tm.read());
+	tm.reset();
+
+}
+
+
+
+static void tree_test() {
 	timer tm;
 
 	tm.start();

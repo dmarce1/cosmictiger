@@ -1,4 +1,3 @@
-#include <tigerfmm/fmm_kernels.hpp>
 #include <tigerfmm/hpx.hpp>
 #include <tigerfmm/options.hpp>
 #include <tigerfmm/particles.hpp>

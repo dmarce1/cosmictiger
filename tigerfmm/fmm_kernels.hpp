@@ -3,18 +3,18 @@
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/ewald_indices.hpp>
 template<class T>
-using expansion = tensor_sym<T,6>;
+using expansion = tensor_trless_sym<T,6>;
 template<class T>
-using expansion2 = tensor_sym<T,2>;
+using expansion2 = tensor_trless_sym<T,2>;
 template<class T>
-using multipole = tensor_sym<T,5>;
+using multipole = tensor_trless_sym<T,5>;
 #define EXPANSION_SIZE 37
 #define MULTIPOLE_SIZE 26
 
 
 template<class T>
 CUDA_EXPORT
-inline int direct_greens_function(tensor_trless_sym<T, 6>& D, array<T, NDIM> X) {
+inline int greens_function(tensor_trless_sym<T, 6>& D, array<T, NDIM> X) {
 	auto r2 = sqr(X[0], X[1], X[2]);
 	r2 = sqr(X[0], X[1], X[2]);
 	const T r = SQRT(r2);
@@ -995,7 +995,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,6> &D, array<T, NDIM> 
 	flops += 114 * foursz + 320;
 	D = D + Dfour;
 	expansion<T> D1;
-	direct_greens_function(D1,X);
+	greens_function(D1,X);
 	D(0, 0, 0) = T(7.85398163e-01) + D(0, 0, 0); 
 	for (int i = 0; i < EXPANSION_SIZE; i++) {
 	D[i] -= D1[i];
@@ -1730,7 +1730,7 @@ inline int interaction(tensor_trless_sym<T, 6>& L, const tensor_trless_sym<T, 5>
 
 template<class T>
 CUDA_EXPORT
-tensor_trless_sym<T, 5> monopole_translate(array<T, NDIM>& X) {
+tensor_trless_sym<T, 5> P2M(array<T, NDIM>& X) {
 	tensor_trless_sym<T, 5> M;
 	X[0] = -X[0];
 	X[1] = -X[1];
@@ -1884,7 +1884,7 @@ tensor_trless_sym<T, 5> monopole_translate(array<T, NDIM>& X) {
 
 template<class T>
 CUDA_EXPORT
-tensor_trless_sym<T, 5> multipole_translate(const tensor_trless_sym<T,5>& Ma, array<T, NDIM>& X) {
+tensor_trless_sym<T, 5> M2M(const tensor_trless_sym<T,5>& Ma, array<T, NDIM>& X) {
 	tensor_sym<T, 5> Mb;
 	tensor_trless_sym<T, 5> Mc;
 	X[0] = -X[0];
@@ -2317,7 +2317,7 @@ tensor_trless_sym<T, 5> multipole_translate(const tensor_trless_sym<T,5>& Ma, ar
 }
 template<class T>
 CUDA_EXPORT
-tensor_trless_sym<T, 6> expansion_translate(const tensor_trless_sym<T, 6>& La, const array<T, NDIM>& X, bool do_phi) {
+tensor_trless_sym<T, 6> L2L(const tensor_trless_sym<T, 6>& La, const array<T, NDIM>& X, bool do_phi) {
 	tensor_trless_sym<T, 6> Lb;
 //	const T x000 = T(1);
 	const T& x100 = X[0];
@@ -2800,7 +2800,7 @@ tensor_trless_sym<T, 6> expansion_translate(const tensor_trless_sym<T, 6>& La, c
 }
 template<class T>
 CUDA_EXPORT
-tensor_trless_sym<T, 2> expansion_translate2(const tensor_trless_sym<T, 6>& La, const array<T, NDIM>& X, bool do_phi) {
+tensor_trless_sym<T, 2> L2P(const tensor_trless_sym<T, 6>& La, const array<T, NDIM>& X, bool do_phi) {
 	tensor_trless_sym<T, 2> Lb;
 //	const T x000 = T(1);
 	const T& x100 = X[0];
@@ -3091,7 +3091,7 @@ __managed__ char phi_Lsrc[55] = { 3,9,19,34,55,2,8,18,33,54,7,17,32,53,16,31,52,
 #ifdef __CUDA_ARCH__
 template<class T>
 __device__
-tensor_trless_sym<T, 6> expansion_translate_cuda(const tensor_trless_sym<T, 6>& La, const array<T, NDIM>& X, bool do_phi) {
+tensor_trless_sym<T, 6> L2L_cuda(const tensor_trless_sym<T, 6>& La, const array<T, NDIM>& X, bool do_phi) {
 	const int tid = threadIdx.x;
 	tensor_trless_sym<T, 6> Lb;
 	tensor_sym<T, 6> Lc;

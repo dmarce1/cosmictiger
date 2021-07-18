@@ -645,9 +645,9 @@ void do_expansion(bool two) {
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT\n");
 	if (two) {
-		tprint("tensor_trless_sym<T, %i> expansion_translate2(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+		tprint("tensor_trless_sym<T, %i> L2P(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
 	} else {
-		tprint("tensor_trless_sym<T, %i> expansion_translate(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+		tprint("tensor_trless_sym<T, %i> L2L(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
 
 	}
 	indent();
@@ -914,7 +914,7 @@ void do_expansion_cuda() {
 	tprint("#ifdef __CUDA_ARCH__\n");
 	tprint("template<class T>\n");
 	tprint("__device__\n");
-	tprint("tensor_trless_sym<T, %i> expansion_translate_cuda(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+	tprint("tensor_trless_sym<T, %i> L2L_cuda(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
 
 	indent();
 	tprint("const int tid = threadIdx.x;\n");
@@ -936,8 +936,12 @@ void do_expansion_cuda() {
 	deindent();
 	tprint("}\n");
 	if (entries1.size() != entries2.size()) {
+		tprint( "if( tid == 0 ) {\n");
+		indent();
 		tprint("Lb[Ldest1[%i]] = fmaf(factor1[%i] * dx[xsrc1[%i]], Lc[Lsrc1[%i]], Lb[Ldest1[%i]]);\n", entries2.size(), entries2.size(), entries2.size(),
 				entries2.size(), entries2.size());
+		deindent();
+		tprint( "}\n");
 	}
 	tprint("if( do_phi ) {\n");
 	indent();
@@ -1085,7 +1089,7 @@ void ewald(int direct_flops) {
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
 	tprint("D = D + Dfour;\n");                                    // P*P+1
 	tprint("expansion<T> D1;\n");
-	tprint("direct_greens_function(D1,X);\n");
+	tprint("greens_function(D1,X);\n");
 	tprint("D(0, 0, 0) = T(%.8e) + D(0, 0, 0); \n", M_PI / 4.0);                                    // 1
 	tprint("for (int i = 0; i < EXPANSION_SIZE; i++) {\n");
 	tprint("D[i] -= D1[i];\n");                                    // 2*(P*P+1)
@@ -1118,17 +1122,17 @@ int main() {
 	tprint("#include <tigerfmm/cuda.hpp>\n");
 	tprint("#include <tigerfmm/ewald_indices.hpp>\n");
 	tprint("template<class T>\n");
-	tprint("using expansion = tensor_sym<T,%i>;\n", P);
+	tprint("using expansion = tensor_trless_sym<T,%i>;\n", P);
 	tprint("template<class T>\n");
-	tprint("using expansion2 = tensor_sym<T,%i>;\n", 2);
+	tprint("using expansion2 = tensor_trless_sym<T,%i>;\n", 2);
 	tprint("template<class T>\n");
-	tprint("using multipole = tensor_sym<T,%i>;\n", P - 1);
+	tprint("using multipole = tensor_trless_sym<T,%i>;\n", P - 1);
 	tprint("#define EXPANSION_SIZE %i\n", P * P + 1);
 	tprint("#define MULTIPOLE_SIZE %i\n", (P - 1) * (P - 1) + 1);
 
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
-	tprint("inline int direct_greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X) {\n", P);
+	tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X) {\n", P);
 	flops = 0;
 	indent();
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
@@ -1294,7 +1298,7 @@ int main() {
 
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
-	tprint("tensor_trless_sym<T, %i> monopole_translate(array<T, NDIM>& X) {\n", P - 1);
+	tprint("tensor_trless_sym<T, %i> P2M(array<T, NDIM>& X) {\n", P - 1);
 	flops = 0;
 	indent();
 	tprint("tensor_trless_sym<T, %i> M;\n", P - 1);
@@ -1312,7 +1316,7 @@ int main() {
 
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
-	tprint("tensor_trless_sym<T, %i> multipole_translate(const tensor_trless_sym<T,%i>& Ma, array<T, NDIM>& X) {\n",
+	tprint("tensor_trless_sym<T, %i> M2M(const tensor_trless_sym<T,%i>& Ma, array<T, NDIM>& X) {\n",
 	P - 1, P - 1);
 	flops = 0;
 	indent();

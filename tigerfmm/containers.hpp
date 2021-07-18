@@ -100,43 +100,58 @@ public:
 	}
 };
 
-
-inline array<int,NDIM> operator*(const array<int,NDIM>& a, int b ) {
+inline array<int, NDIM> operator*(const array<int, NDIM>& a, int b) {
 	array<int, NDIM> c;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		c[dim] = a[dim] * b;
 	}
 	return c;
 }
 
-inline bool operator==(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
-	for( int dim = 0; dim < NDIM; dim++) {
-		if( a[dim] != b[dim]) {
+inline bool operator==(const array<int, NDIM>& a, const array<int, NDIM>& b) {
+	for (int dim = 0; dim < NDIM; dim++) {
+		if (a[dim] != b[dim]) {
 			return false;
 		}
 	}
 	return true;
 }
 
-inline bool operator!=(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
-	return !(a==b);
+inline bool operator!=(const array<int, NDIM>& a, const array<int, NDIM>& b) {
+	return !(a == b);
 }
 
-inline array<int,NDIM> operator+(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
+inline array<int, NDIM> operator+(const array<int, NDIM>& a, const array<int, NDIM>& b) {
 	array<int, NDIM> c;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		c[dim] = a[dim] + b[dim];
 	}
 	return c;
 }
 
-inline array<int,NDIM> operator-(const array<int,NDIM>& a, const array<int,NDIM>& b ) {
+inline array<int, NDIM> operator-(const array<int, NDIM>& a, const array<int, NDIM>& b) {
 	array<int, NDIM> c;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		c[dim] = a[dim] - b[dim];
 	}
 	return c;
 }
 
+template<class T, class V = T>
+struct pair {
+	T first;
+	V second;
+	pair() = default;
+	pair(const pair&) = default;
+	pair& operator=(const pair&) = default;
+	pair(T a, V b) :
+			first(a), second(b) {
+	}
+	template<class A>
+	void serialize(A&& a, unsigned) {
+		a & first;
+		a & second;
+	}
+};
 
 #endif /* CONTAINERS_HPP_ */

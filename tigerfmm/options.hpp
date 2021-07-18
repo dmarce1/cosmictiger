@@ -7,11 +7,14 @@ struct options {
 
 	int parts_dim;
 
+	double hsoft;
+
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & hsoft;
 		arc & parts_dim;
 		arc & config_file;
 		arc & test;

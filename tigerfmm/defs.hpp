@@ -14,8 +14,14 @@
 #define YDIM 1
 #define ZDIM 2
 
+#define NCHILD 2
+#define LEFT 0
+#define RIGHT 1
+
 #define MAX_PARTICLES_PER_PARCEL (16*1024*1024)
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
+#define BUCKET_SIZE 64
+#define MIN_SORT_THREAD_PARTS (64*BUCKET_SIZE)
 
 #define ORDER 6
 

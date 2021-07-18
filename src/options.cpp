@@ -10,13 +10,12 @@ constexpr bool verbose = true;
 #include <tigerfmm/options.hpp>
 #include <tigerfmm/safe_io.hpp>
 
-
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';
 
 options global_opts;
 
-HPX_PLAIN_ACTION(set_options);
+HPX_PLAIN_ACTION (set_options);
 
 const options& get_options() {
 	return global_opts;
@@ -72,9 +71,12 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
-	PRINT("Simulation Options\n");
 
+	opts.hsoft = 1.0 / opts.parts_dim / 25.0;
+
+	PRINT("Simulation Options\n");
 	SHOW_STRING(config_file);
+	SHOW(hsoft);
 	SHOW(parts_dim);
 	SHOW_STRING(test);
 
