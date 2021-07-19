@@ -17,7 +17,7 @@ CUDA_EXPORT
 inline int greens_function(tensor_trless_sym<T, 6>& D, array<T, NDIM> X) {
 	auto r2 = sqr(X[0], X[1], X[2]);
 	r2 = sqr(X[0], X[1], X[2]);
-	const T r = SQRT(r2);
+	const T r = sqrt(r2);
 	const T rinv1 = -(r > T(0)) / max(r, T(1e-20));
 	const T rinv2 = -rinv1 * rinv1;
 	const T rinv3 = -rinv2 * rinv1;
@@ -329,7 +329,7 @@ template<class T>
 CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,6> &D, array<T, NDIM> X) {
 	ewald_const econst;
 	int flops = 7;
-	T r = SQRT(FMA(X[0], X[0], FMA(X[1], X[1], sqr(X[2]))));
+	T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));
 	const T fouroversqrtpi = T(2.25675833e+00);
 	tensor_sym<T, 6> Dreal;
 	tensor_trless_sym<T,6> Dfour;
@@ -345,29 +345,30 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,6> &D, array<T, NDIM> 
 		for (int dim = 0; dim < NDIM; dim++) {
 			dx[dim] = X[dim] - n[dim];
 		}
-		T r2 = FMA(dx[0], dx[0], FMA(dx[1], dx[1], sqr(dx[2])));
+		T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));
 		if (anytrue(r2 < (EWALD_REAL_CUTOFF2))) {
 			icnt++;
-			const T r = SQRT(r2);
+			const T r = sqrt(r2);
 			const T n8r = T(-8) * r;
 			const T rinv = (r > T(0)) / max(r, 1.0e-20);
 			T exp0;
-			T erfc0 = erfcexp(2.f * r, &exp0);
+			T erfc0;
+			erfcexp(2.f * r, &erfc0, &exp0);
 			const T expfactor = fouroversqrtpi * exp0;
 			T e0 = expfactor * rinv;
 			const T rinv0 = T(1);
 			const T rinv1 = rinv;
 			const T rinv2 = rinv1 * rinv1;
 			const T d0 = -erfc0 * rinv;
-			const T d1 = FMA(T(-1) * d0, rinv, e0);
+			const T d1 = fmaf(T(-1) * d0, rinv, e0);
 			e0 *= n8r;
-			const T d2 = FMA(T(-3) * d1, rinv, e0);
+			const T d2 = fmaf(T(-3) * d1, rinv, e0);
 			e0 *= n8r;
-			const T d3 = FMA(T(-5) * d2, rinv, e0);
+			const T d3 = fmaf(T(-5) * d2, rinv, e0);
 			e0 *= n8r;
-			const T d4 = FMA(T(-7) * d3, rinv, e0);
+			const T d4 = fmaf(T(-7) * d3, rinv, e0);
 			e0 *= n8r;
-			const T d5 = FMA(T(-9) * d4, rinv, e0);
+			const T d5 = fmaf(T(-9) * d4, rinv, e0);
 			const T Drinvpow_0_0 = d0 * rinv0;
 			const T Drinvpow_1_0 = d1 * rinv0;
 			const T Drinvpow_1_1 = d1 * rinv1;
@@ -695,7 +696,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,6> &D, array<T, NDIM> 
 	for (int i = 0; i < foursz; i++) {
 		const auto &h = econst.four_index(i);
 		const auto& D0 = econst.four_expansion(i);
-		const T hdotx = FMA(h[0], X[0], FMA(h[1], X[1], h[2] * X[2]));
+		const T hdotx = fmaf(h[0], X[0], fmaf(h[1], X[1], h[2] * X[2]));
 		T cn, sn;
 		sincos(T(2.0 * M_PI) * hdotx, &sn, &cn);
 		Dfour[0] = fmaf(cn, D0[0], Dfour[0]);

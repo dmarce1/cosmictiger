@@ -11,13 +11,29 @@
 #include <tigerfmm/cuda.hpp>
 
 template<class T>
-CUDA_EXPORT inline T sqr(const T& a ) {
+CUDA_EXPORT inline T sqr(const T& a) {
 	return a * a;
 }
 
 template<class T>
-CUDA_EXPORT inline T sqr(const T& a, const T& b, const T& c ) {
+CUDA_EXPORT inline T sqr(const T& a, const T& b, const T& c) {
 	return a * a + b * b + c * c;
+}
+
+__device__ inline void erfcexpf(float x, float* ec, float *ex) {				// 18 + FLOP_DIV + FLOP_EXP
+	const float p(0.3275911f);
+	const float a1(0.254829592f);
+	const float a2(-0.284496736f);
+	const float a3(1.421413741f);
+	const float a4(-1.453152027f);
+	const float a5(1.061405429f);
+	const float t1 = 1.f / fma(p, x, 1.f);			            // FLOP_DIV + 2
+	const float t2 = t1 * t1;											// 1
+	const float t3 = t2 * t1;											// 1
+	const float t4 = t2 * t2;											// 1
+	const float t5 = t2 * t3;											// 1
+	*ex = expf(-x * x);												  // 2 + FLOP_EXP
+	*ec = fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *ex; 			// 10
 }
 
 #endif /* MATH_HPP_ */

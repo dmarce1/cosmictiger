@@ -977,7 +977,7 @@ void ewald(int direct_flops) {
 	indent();
 	tprint("ewald_const econst;\n");
 	tprint("int flops = %i;\n", 7);
-	tprint("T r = SQRT(FMA(X[0], X[0], FMA(X[1], X[1], sqr(X[2]))));\n"); // 6
+	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
 	tprint("const T fouroversqrtpi = T(%.8e);\n", 4.0 / sqrt(M_PI));
 	tprint("tensor_sym<T, %i> Dreal;\n", P);
 	tprint("tensor_trless_sym<T,%i> Dfour;\n", P);
@@ -996,15 +996,16 @@ void ewald(int direct_flops) {
 	tprint("dx[dim] = X[dim] - n[dim];\n");                                // 3
 	deindent();
 	tprint("}\n");
-	tprint("T r2 = FMA(dx[0], dx[0], FMA(dx[1], dx[1], sqr(dx[2])));\n");    // 5
+	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
 	tprint("if (anytrue(r2 < (EWALD_REAL_CUTOFF2))) {\n");                   // 1
 	indent();
 	tprint("icnt++;\n");                                       // 1
-	tprint("const T r = SQRT(r2);\n");                                       // 1
+	tprint("const T r = sqrt(r2);\n");                                       // 1
 	tprint("const T n8r = T(-8) * r;\n");                                       // 1
 	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
 	tprint("T exp0;\n");
-	tprint("T erfc0 = erfcexp(2.f * r, &exp0);\n");                          // 20
+	tprint("T erfc0;\n");
+	tprint( "erfcexp(2.f * r, &erfc0, &exp0);\n");                          // 20
 	tprint("const T expfactor = fouroversqrtpi * exp0;\n");                  // 1
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
@@ -1018,7 +1019,7 @@ void ewald(int direct_flops) {
 	}
 	tprint("const T d0 = -erfc0 * rinv;\n");                                       // 2
 	for (int l = 1; l < P; l++) {
-		tprint("const T d%i = FMA(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
+		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
 		if (l != P - 1) {
 			tprint("e0 *= n8r;\n");                                                // (P-1)
 		}
@@ -1054,7 +1055,7 @@ void ewald(int direct_flops) {
 	indent();
 	tprint("const auto &h = econst.four_index(i);\n");
 	tprint("const auto& D0 = econst.four_expansion(i);\n");
-	tprint("const T hdotx = FMA(h[0], X[0], FMA(h[1], X[1], h[2] * X[2]));\n"); // 5
+	tprint("const T hdotx = fmaf(h[0], X[0], fmaf(h[1], X[1], h[2] * X[2]));\n"); // 5
 	tprint("T cn, sn;\n");
 	tprint("sincos(T(2.0 * M_PI) * hdotx, &sn, &cn);\n"); // 35
 	these_flops = 40;
@@ -1137,7 +1138,7 @@ int main() {
 	indent();
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
-	tprint("const T r = SQRT(r2);\n");
+	tprint("const T r = sqrt(r2);\n");
 	tprint("const T rinv1 = -(r > T(0)) / max(r, T(1e-20));\n");
 	for (int i = 1; i < P; i++) {
 		const int j = i / 2;

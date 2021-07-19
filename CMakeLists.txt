@@ -46,6 +46,7 @@ set(tigerfmm_header_files
     tigerfmm/particles.hpp
     tigerfmm/range.hpp
     tigerfmm/safe_io.hpp
+    tigerfmm/simd.hpp
     tigerfmm/test.hpp
     tigerfmm/tree.hpp
     tigerfmm/timer.hpp
