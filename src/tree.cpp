@@ -1,19 +1,24 @@
+constexpr bool verbose = false;
+
+#include <tigerfmm/fast_future.hpp>
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/options.hpp>
 #include <tigerfmm/particles.hpp>
+#include <tigerfmm/safe_io.hpp>
 #include <tigerfmm/tree.hpp>
 
+HPX_PLAIN_ACTION(tree_create);
+HPX_PLAIN_ACTION(tree_destroy);
+
 static vector<tree_node> nodes;
-
-HPX_PLAIN_ACTION (tree_create);
-
-static mutex_type mutex;
+static shared_mutex_type mutex;
 static std::atomic<int> num_threads(0);
+static std::atomic<int> next_id;
 
-hpx::future<tree_create_return> tree_create_fork(pair<int, int> proc_range, pair<int, int> part_range, range<double> box, size_t morton_id, bool local_root,
-		bool threadme) {
+fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_range, const pair<int, int>& part_range, const range<double>& box,
+		const size_t& morton_id, const bool& local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
-	hpx::future<tree_create_return> rc;
+	fast_future<tree_create_return> rc;
 	bool remote = false;
 	if (proc_range.second - proc_range.first > 1 || proc_range.first != hpx_rank()) {
 		threadme = true;
@@ -24,12 +29,13 @@ hpx::future<tree_create_return> tree_create_fork(pair<int, int> proc_range, pair
 			if (nthreads++ < hpx::thread::hardware_concurrency()) {
 				threadme = true;
 			} else {
+				threadme = false;
 				nthreads--;
 			}
 		}
 	}
 	if (!threadme) {
-		rc = hpx::make_ready_future(tree_create(proc_range, part_range, box, morton_id, local_root));
+		rc.set_value(tree_create(proc_range, part_range, box, morton_id, local_root));
 	} else if (remote) {
 		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], proc_range, part_range, box, morton_id, local_root);
 	} else {
@@ -45,6 +51,10 @@ hpx::future<tree_create_return> tree_create_fork(pair<int, int> proc_range, pair
 tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_range, range<double> box, size_t morton_id, bool local_root) {
 	const double h = get_options().hsoft;
 	tree_create_return rc;
+	if (nodes.size() == 0) {
+		next_id = 0;
+		nodes.resize(4 * particles_size() / BUCKET_SIZE);
+	}
 	if (local_root) {
 		part_range.first = 0;
 		part_range.second = particles_size();
@@ -208,14 +218,25 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
-	std::unique_lock<mutex_type> lock(mutex);
-	node.index = nodes.size();
-	nodes.push_back(node);
-	lock.unlock();
+	node.index = next_id++;
+	nodes[node.index] = node;
+	if( node.index > nodes.size() ) {
+		THROW_ERROR( "Tree arena full\n");
+	}
 	rc.id.index = node.index;
 	rc.id.proc = hpx_rank();
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
 	return rc;
+}
+
+void tree_destroy() {
+	vector<hpx::future<void>> futs;
+	const auto children = hpx_children();
+	for (const auto& c : children) {
+		futs.push_back(hpx::async<tree_destroy_action>(c));
+	}
+	nodes.resize(0);
+	hpx::wait_all(futs.begin(), futs.end());
 }

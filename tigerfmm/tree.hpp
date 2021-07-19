@@ -51,5 +51,6 @@ struct tree_create_return {
 
 tree_create_return tree_create(pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(0, 0),
 		range<double> box = unit_box<double>(), size_t id = 1, bool local_root = (hpx_size() == 1));
+void tree_destroy();
 
 #endif /* TREE_HPP_ */
