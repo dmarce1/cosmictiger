@@ -1,8 +1,10 @@
+constexpr bool verbose = true;
 #define PARTICLES_CPP
 
 #include <tigerfmm/hpx.hpp>
 #include <tigerfmm/options.hpp>
 #include <tigerfmm/particles.hpp>
+#include <tigerfmm/safe_io.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -155,8 +157,9 @@ void particles_random_init() {
 		futs.push_back(hpx::async([proc,nthreads]() {
 			const int begin = (size_t) proc * particles_size() / nthreads;
 			const int end = (size_t) (proc+1) * particles_size() / nthreads;
-			const int seed = 4321 * (hpx_size() * proc + hpx_rank() + 42);
-			gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
+			const int seed = 4321*(hpx_rank() * nthreads + proc) + 42;
+			gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
+			gsl_rng_set(rndgen, seed);
 			for (int i = begin; i < end; i++) {
 				for (int dim = 0; dim < NDIM; dim++) {
 					particles_pos(dim, i) = gsl_rng_uniform(rndgen);

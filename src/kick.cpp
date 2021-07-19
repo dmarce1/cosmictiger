@@ -1,11 +1,14 @@
+constexpr bool verbose=true;
 #include <tigerfmm/fast_future.hpp>
 #include <tigerfmm/gravity.hpp>
 #include <tigerfmm/kick.hpp>
 #include <tigerfmm/math.hpp>
+#include <tigerfmm/safe_io.hpp>
 
 HPX_PLAIN_ACTION(kick);
 
-fast_future<kick_return> kick_fork(kick_params params, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist, bool threadme) {
+fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
+		vector<tree_id> echecklist, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<kick_return> rc;
 	const tree_node* self_ptr = tree_get_node(self);
@@ -26,12 +29,12 @@ fast_future<kick_return> kick_fork(kick_params params, tree_id self, vector<tree
 		}
 	}
 	if (!threadme) {
-		rc.set_value(kick(params, self, std::move(dchecklist), std::move(echecklist)));
+		rc.set_value(kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist)));
 	} else if (remote) {
-		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, self, std::move(dchecklist), std::move(echecklist));
+		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
-		rc = hpx::async([params,self] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
-			auto rc = kick(params,self,std::move(dchecklist),std::move(echecklist));
+		rc = hpx::async([params,self,L,pos] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+			auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist));
 			nthreads--;
 			return rc;
 		}, std::move(dchecklist), std::move(echecklist));
@@ -39,7 +42,7 @@ fast_future<kick_return> kick_fork(kick_params params, tree_id self, vector<tree
 	return rc;
 }
 
-kick_return kick(kick_params params, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 	kick_return kr;
 
 	vector<tree_id> nextlist;
@@ -57,7 +60,8 @@ kick_return kick(kick_params params, tree_id self, vector<tree_id> dchecklist, v
 			dx[dim] = distance(self_ptr->pos[dim], other_ptr->pos[dim]);
 		}
 		const float R2 = std::max(EWALD_DIST2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));
-		if (R2 > sqr(SINK_BIAS * self_ptr->radius + other_ptr->radius) * thetainv2) {
+		const float r2 = sqr(SINK_BIAS * self_ptr->radius + other_ptr->radius) * thetainv2;
+		if (R2 > r2) {
 			multlist.push_back(echecklist[ci]);
 		} else {
 			nextlist.push_back(echecklist[ci]);
@@ -102,8 +106,8 @@ kick_return kick(kick_params params, tree_id self, vector<tree_id> dchecklist, v
 		gravity_pc(std::move(multlist));
 		gravity_pp(std::move(partlist));
 	} else {
-		auto futl = kick_fork(params, self_ptr->children[LEFT], dchecklist, echecklist, true);
-		auto futr = kick_fork(params, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
+		auto futl = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, true);
+		auto futr = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);

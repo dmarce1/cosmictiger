@@ -100,7 +100,7 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 		THROW_ERROR("Maximum depth exceeded\n");
 	}
 	if (nodes.size() == 0) {
-		next_id = 0;
+		next_id = -tree_cache_line_size;
 		nodes.resize(TREE_NODE_ALLOCATION_SIZE * particles_size() / BUCKET_SIZE);
 		PRINT("%i trees allocated\n", nodes.size());
 		for (int i = 0; i < MAX_DEPTH; i++) {
@@ -113,9 +113,16 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 	}
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM> x;
+	array<double, NDIM> Xc;
 	multipole<float> multi;
 	size_t nactive;
 	float radius;
+	double r;
+	if (!allocators[depth].ready) {
+		allocators[depth].reset();
+		allocators[depth].ready = true;
+	}
+	const int index = allocators[depth].allocate();
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > BUCKET_SIZE) {
 		auto left_box = box;
 		auto right_box = box;
@@ -170,7 +177,7 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 			Xl[dim] = xl[dim].to_double();
 			Xr[dim] = xr[dim].to_double();
 			N[dim] = Xl[dim] - Xr[dim];
-			norminv = sqr(N[dim]);
+			norminv += sqr(N[dim]);
 		}
 		norminv = 1.0 / std::sqrt(norminv);
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -198,6 +205,16 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 		rl = std::sqrt(rl) + Rl;
 		rr = std::sqrt(rr) + Rr;
 		radius = std::max(rl, rr);
+		r = 0.0;
+		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
+		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
+		radius = std::min((double) radius, std::sqrt(r)) + h;
 		Mr = M2M<double>(Mr, Xr);
 		Ml = M2M<double>(Ml, Xl);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
@@ -208,10 +225,8 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
-		array<double, NDIM> X;
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
-		double r;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			M[i] = 0.0;
 		}
@@ -223,46 +238,37 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 		for (int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
-				X[dim] = x;
 				Xmax[dim] = std::max(Xmax[dim], x);
 				Xmin[dim] = std::min(Xmin[dim], x);
 			}
+		//	PRINT( "%e %e %e \n", particles_pos(0, i).to_double(), particles_pos(1, i).to_double(), particles_pos(2, i).to_double());
+
 			if (particles_rung(i) >= min_rung) {
 				nactive++;
 			}
-			const auto m = P2M(X);
+			const auto m = P2M(Xc);
 			for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 				M[i] += m[i];
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
+			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
 		r = 0.0;
 		for (int i = part_range.first; i < part_range.second; i++) {
 			double this_radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
-				this_radius += sqr(x - X[dim]);
+				this_radius += sqr(x - Xc[dim]);
 			}
 			r = std::max(r, this_radius);
 		}
 		radius = std::sqrt(r);
-		r = 0.0;
-		r = std::max(r, sqr(box.begin[XDIM] - X[XDIM], box.begin[YDIM] - X[YDIM], box.begin[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.begin[XDIM] - X[XDIM], box.begin[YDIM] - X[YDIM], box.end[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.begin[XDIM] - X[XDIM], box.end[YDIM] - X[YDIM], box.begin[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.begin[XDIM] - X[XDIM], box.end[YDIM] - X[YDIM], box.end[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - X[XDIM], box.begin[YDIM] - X[YDIM], box.begin[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - X[XDIM], box.begin[YDIM] - X[YDIM], box.end[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - X[XDIM], box.end[YDIM] - X[YDIM], box.begin[ZDIM] - X[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - X[XDIM], box.end[YDIM] - X[YDIM], box.end[ZDIM] - X[ZDIM]));
-		radius = std::min((double) radius, std::sqrt(r)) + h;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = X[dim];
+			x[dim] = Xc[dim];
 		}
 	}
 	tree_node node;
@@ -274,11 +280,6 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 	node.pos = x;
 	node.multi = multi;
 	node.nactive = nactive;
-	if (!allocators[depth].ready) {
-		allocators[depth].reset();
-		allocators[depth].ready = true;
-	}
-	const int index = allocators[depth].allocate();
 	nodes[index] = node;
 	if (index > nodes.size()) {
 		THROW_ERROR("Tree arena full\n");
@@ -291,6 +292,8 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 	if (local_root) {
 		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}
+	if( depth == 0 )
+	PRINT( "%i %e\n",index,nodes[index].radius);
 	return rc;
 }
 
@@ -307,6 +310,7 @@ void tree_destroy() {
 
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
+	//	PRINT( "%i %e\n", id.index, nodes[id.index].radius);
 		return &nodes[id.index];
 	} else {
 		return tree_cache_read(id);
