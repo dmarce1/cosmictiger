@@ -51,9 +51,8 @@ static void tree_test() {
 	PRINT("domains_end: %e s\n", tm.read());
 	tm.reset();
 
-
 	tm.start();
-	tree_create();
+	tree_create(0);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
@@ -65,7 +64,7 @@ static void tree_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create();
+	tree_create(0);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();

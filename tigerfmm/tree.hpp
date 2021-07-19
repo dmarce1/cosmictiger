@@ -10,15 +10,27 @@
 
 #include <tigerfmm/fmm_kernels.hpp>
 #include <tigerfmm/hpx.hpp>
+#include <tigerfmm/options.hpp>
 #include <tigerfmm/range.hpp>
 
 struct tree_id {
 	int proc;
 	int index;
+	inline bool operator==(tree_id other) const {
+		return proc == other.proc && index == other.index;
+	}
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & proc;
 		a & index;
+	}
+};
+
+struct tree_id_hash {
+	inline size_t operator()(tree_id id) const {
+		const int line_size = get_options().tree_cache_line_size;
+		const int i = id.index / line_size;
+		return i * (hpx_size() - 1) + ((id.proc < hpx_rank()) ? id.proc : id.proc - 1);
 	}
 };
 
@@ -29,31 +41,40 @@ struct tree_node {
 	pair<int, int> proc_range;
 	pair<int, int> part_range;
 	size_t nactive;
-	size_t morton_id;
 	float radius;
-	int index;
 	bool local_root;
-	tree_node() {
-		morton_id = 0xFFFFFFFFFFFFFFFFLL;
+	template<class A>
+	void serialize(A && arc, unsigned) {
+		arc & multi;
+		arc & children;
+		arc & pos;
+		arc & proc_range;
+		arc & part_range;
+		arc & nactive;
+		arc & radius;
+		arc & local_root;
 	}
 };
 
 struct tree_create_return {
 	multipole<float> multi;
-	tree_id id;
 	array<fixed32, NDIM> pos;
+	tree_id id;
+	size_t nactive;
 	float radius;
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & multi;
 		a & id;
 		a & pos;
+		a & nactive;
 		a & radius;
 	}
 };
 
-tree_create_return tree_create(pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(0, 0),
+tree_create_return tree_create(int min_rung, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(0, 0),
 		range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy();
+const tree_node* tree_get_node(tree_id);
 
 #endif /* TREE_HPP_ */
