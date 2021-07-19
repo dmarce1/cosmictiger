@@ -22,9 +22,14 @@
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define BUCKET_SIZE 64
 #define MIN_SORT_THREAD_PARTS (65536)
+#define MIN_KICK_THREAD_PARTS (65536)
 #define SORT_OVERSUBSCRIPTION 4
+#define KICK_OVERSUBSCRIPTION 4
 #define TREE_NODE_ALLOCATION_SIZE 8
 #define MAX_DEPTH 64
+#define EWALD_DIST2 float(0.25*0.25)
+#define SINK_BIAS float(1.5)
+
 
 #define ORDER 6
 

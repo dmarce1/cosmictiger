@@ -1,3 +1,4 @@
+#include <tigerfmm/ewald_indices.hpp>
 #include <tigerfmm/hpx.hpp>
 #include <tigerfmm/options.hpp>
 #include <tigerfmm/particles.hpp>
@@ -5,6 +6,7 @@
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
+	ewald_const::init();
 	if(process_options(argc,argv)) {
 		if( get_options().test != "") {
 			test(get_options().test);

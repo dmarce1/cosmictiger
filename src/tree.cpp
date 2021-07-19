@@ -64,11 +64,11 @@ fast_future<tree_create_return> tree_create_fork(int min_rung, const pair<int, i
 	static std::atomic<int> nthreads(0);
 	fast_future<tree_create_return> rc;
 	bool remote = false;
-	if (proc_range.second - proc_range.first > 1 || proc_range.first != hpx_rank()) {
+	if (proc_range.first != hpx_rank()) {
 		threadme = true;
 		remote = true;
 	} else if (threadme) {
-		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
+		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS || proc_range.second - proc_range.first > 1;
 		if (threadme) {
 			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency()) {
 				threadme = true;
@@ -83,7 +83,7 @@ fast_future<tree_create_return> tree_create_fork(int min_rung, const pair<int, i
 	} else if (remote) {
 		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], min_rung, proc_range, part_range, box, depth, local_root);
 	} else {
-		rc = hpx::async([min_rung,proc_range,part_range,depth,local_root, box] {
+		rc = hpx::async([min_rung,proc_range,part_range,depth,local_root, box]() {
 			auto rc = tree_create(min_rung,proc_range,part_range,box,depth,local_root);
 			nthreads--;
 			return rc;

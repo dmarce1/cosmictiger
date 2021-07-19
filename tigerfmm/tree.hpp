@@ -8,6 +8,7 @@
 #ifndef TREE_HPP_
 #define TREE_HPP_
 
+#include <tigerfmm/fixed.hpp>
 #include <tigerfmm/fmm_kernels.hpp>
 #include <tigerfmm/hpx.hpp>
 #include <tigerfmm/options.hpp>
@@ -43,6 +44,9 @@ struct tree_node {
 	size_t nactive;
 	float radius;
 	bool local_root;
+	bool is_leaf() const {
+		return children[0].index == -1;
+	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
 		arc & multi;
@@ -72,7 +76,7 @@ struct tree_create_return {
 	}
 };
 
-tree_create_return tree_create(int min_rung, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(0, 0),
+tree_create_return tree_create(int min_rung, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(-1, -1),
 		range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy();
 const tree_node* tree_get_node(tree_id);

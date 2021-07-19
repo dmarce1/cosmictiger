@@ -8,8 +8,34 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
+#include <tigerfmm/tree.hpp>
+
+struct kick_return {
+	int max_rung;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & max_rung;
+	}
+};
+
+struct kick_params {
+	int min_rung;
+	double a;
+	double t0;
+	double theta;
+	bool first_call;
+	template<class A>
+	void serialize(A && arc, unsigned) {
+		arc & min_rung;
+		arc & a;
+		arc & t0;
+		arc & theta;
+		arc & first_call;
+	}
+};
 
 
+kick_return kick(kick_params, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist );
 
 
 #endif /* KICK_HPP_ */
