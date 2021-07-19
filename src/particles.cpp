@@ -6,8 +6,104 @@
 
 #include <gsl/gsl_rng.h>
 
+#include <shared_mutex>
+
+struct line_id_type;
+
+static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index);
+static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
+
 HPX_PLAIN_ACTION(particles_random_init);
 HPX_PLAIN_ACTION(particles_destroy);
+HPX_PLAIN_ACTION(particles_fetch_cache_line);
+
+struct line_id_type {
+	int proc;
+	int index;
+	inline bool operator==(line_id_type other) const {
+		return proc == other.proc && index == other.index;
+	}
+};
+
+struct line_id_hash {
+	inline size_t operator()(line_id_type id) const {
+		const int line_size = get_options().part_cache_line_size;
+		const int i = id.index / line_size;
+		return i * (hpx_size() - 1) + ((id.proc < hpx_rank()) ? id.proc : id.proc - 1);
+	}
+};
+
+static std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash> part_cache;
+static shared_mutex_type mutex;
+
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, int offset) {
+	const int line_size = get_options().part_cache_line_size;
+	if (range.range.first != range.range.second) {
+		if (range.proc == hpx_rank()) {
+			const int dif = offset - range.range.first;
+			for (int i = range.range.first; i < range.range.second; i++) {
+				x[i + dif] = particles_pos(XDIM, i);
+				y[i + dif] = particles_pos(YDIM, i);
+				z[i + dif] = particles_pos(ZDIM, i);
+			}
+		} else {
+			line_id_type line_id;
+			line_id.proc = range.proc;
+			const int start_line = (range.range.first / line_size) * line_size;
+			const int stop_line = ((range.range.second - 1) / line_size) * line_size;
+			int dest_index = offset;
+			for (int line = start_line; line <= stop_line; line++) {
+				line_id.index = line;
+				const auto* ptr = particles_cache_read_line(line_id);
+				const auto begin = std::max(line_id.index, range.range.first);
+				const auto end = std::min(line_id.index + line_size, range.range.second);
+				for (int i = begin; i < end; i++) {
+					const int src_index = i - line_id.index;
+					x[dest_index] = ptr[src_index][XDIM];
+					y[dest_index] = ptr[src_index][YDIM];
+					z[dest_index] = ptr[src_index][ZDIM];
+				}
+			}
+		}
+	}
+}
+
+static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id) {
+	const int line_size = get_options().part_cache_line_size;
+	std::shared_lock<shared_mutex_type> read_lock(mutex);
+	auto iter = part_cache.find(line_id);
+	if (iter == part_cache.end()) {
+		read_lock.unlock();
+		std::unique_lock<shared_mutex_type> write_lock(mutex);
+		iter = part_cache.find(line_id);
+		if (iter == part_cache.end()) {
+			auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
+			part_cache[line_id] = prms->get_future();
+			write_lock.unlock();
+			hpx::apply([prms,line_id]() {
+				auto line_fut = hpx::async<particles_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+				prms->set_value(line_fut.get());
+			});
+			read_lock.lock();
+			iter = part_cache.find(line_id);
+		}
+	}
+	return iter->second.get().data();
+}
+
+static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index) {
+	const int line_size = get_options().part_cache_line_size;
+	vector<array<fixed32, NDIM>> line;
+	line.reserve(line_size);
+	const int begin = (index / line_size) * line_size;
+	const int end = std::min(particles_size(), begin + line_size);
+	for (int i = begin; i < end; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			line[i - begin][dim] = particles_pos(dim, i);
+		}
+	}
+	return line;
+}
 
 int particles_size() {
 	return particles_r.size();
@@ -20,13 +116,13 @@ int particles_size_pos() {
 void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
-	for( const auto& c : children) {
+	for (const auto& c : children) {
 		futs.push_back(hpx::async<particles_destroy_action>(c));
 	}
 	particles_x = decltype(particles_x)();
 	particles_v = decltype(particles_v)();
 	particles_r = decltype(particles_r)();
-	hpx::wait_all(futs.begin(),futs.end());
+	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void particles_resize(int sz) {
@@ -74,7 +170,7 @@ void particles_random_init() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-int particles_sort(pair<int,int> rng, double xm, int xdim) {
+int particles_sort(pair<int, int> rng, double xm, int xdim) {
 	int begin = rng.first;
 	int end = rng.second;
 	int lo = begin;

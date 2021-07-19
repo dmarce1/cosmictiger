@@ -24,12 +24,12 @@ template<class T>
 using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
 
 struct particle {
-	array<fixed32,NDIM> x;
-	array<float,NDIM> v;
+	array<fixed32, NDIM> x;
+	array<float, NDIM> v;
 	char r;
 	template<class A>
 	void serialize(A && a, unsigned) {
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			a & x[dim];
 			a & v[dim];
 		}
@@ -37,14 +37,14 @@ struct particle {
 	}
 };
 
-
-
-PARTICLES_EXTERN array<vector<fixed32, pinned_allocator<fixed32>>, NDIM> particles_x;
+PARTICLES_EXTERN array<vector<fixed32>, NDIM> particles_x;
 PARTICLES_EXTERN array<vector<float, pinned_allocator<float>>, NDIM> particles_v;
 PARTICLES_EXTERN vector<char, pinned_allocator<char>> particles_r;
 
-
-
+struct particle_global_range {
+	int proc;
+	pair<int> range;
+};
 
 inline fixed32& particles_pos(int dim, int index) {
 	return particles_x[dim][index];
@@ -60,18 +60,18 @@ inline char& particles_rung(int index) {
 
 inline particle particles_get_particle(int index) {
 	particle p;
-	for( int dim = 0; dim < NDIM; dim++) {
-		p.x[dim] = particles_pos(dim,index);
-		p.v[dim] = particles_vel(dim,index);
+	for (int dim = 0; dim < NDIM; dim++) {
+		p.x[dim] = particles_pos(dim, index);
+		p.v[dim] = particles_vel(dim, index);
 	}
 	p.r = particles_rung(index);
 	return p;
 }
 
 inline void particles_set_particle(particle p, int index) {
-	for( int dim = 0; dim < NDIM; dim++) {
-		particles_pos(dim,index) = p.x[dim];
-		particles_vel(dim,index) = p.v[dim];
+	for (int dim = 0; dim < NDIM; dim++) {
+		particles_pos(dim, index) = p.x[dim];
+		particles_vel(dim, index) = p.v[dim];
 	}
 	particles_rung(index) = p.r;
 }
@@ -82,6 +82,7 @@ int particles_size_pos();
 void particles_resize_pos(int);
 void particles_random_init();
 void particles_destroy();
-int particles_sort(pair<int,int> rng, double xm, int xdim);
+void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, int offset);
+int particles_sort(pair<int, int> rng, double xm, int xdim);
 
 #endif /* PARTICLES_HPP_ */

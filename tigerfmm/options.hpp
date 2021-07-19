@@ -7,6 +7,7 @@ struct options {
 
 	int parts_dim;
 	int tree_cache_line_size;
+	int part_cache_line_size;
 
 	double hsoft;
 
@@ -20,6 +21,7 @@ struct options {
 		arc & config_file;
 		arc & test;
 		arc & tree_cache_line_size;
+		arc & part_cache_line_size;
 	}
 };
 

@@ -19,6 +19,7 @@ set(tigerfmm_source_files
     src/ewald_indices.cpp
     src/ewald_indices.cu
     src/hpx.cpp
+    src/kick.cpp
     src/main.cpp
     src/options.cpp
     src/particles.cpp
@@ -37,6 +38,7 @@ set(tigerfmm_header_files
     tigerfmm/ewald_incides.hpp
     tigerfmm/fixes.hpp
     tigerfmm/hpx.hpp
+    tigerfmm/kick.hpp
     tigerfmm/math.hpp
     tigerfmm/options.hpp
     tigerfmm/particles.hpp
