@@ -11,6 +11,7 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
+HPX_PLAIN_ACTION(tree_cache_free);
 HPX_PLAIN_ACTION(tree_create);
 HPX_PLAIN_ACTION(tree_destroy);
 HPX_PLAIN_ACTION(tree_fetch_cache_line);
@@ -36,8 +37,22 @@ static std::atomic<int> next_id;
 static thread_local array<tree_allocator, MAX_DEPTH> allocators;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
+static thread_local tree_id last_line;
+static thread_local const tree_node* last_ptr = nullptr;
 
 static const tree_node* tree_cache_read(tree_id id);
+
+
+void tree_cache_free() {
+	vector<hpx::future<void>> futs;
+	for( const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<tree_cache_free_action>(c));
+	}
+	for (int i = 0; i < PART_CACHE_SIZE; i++) {
+		tree_cache[i] = std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>();
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
 
 void tree_allocator::reset() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
@@ -129,6 +144,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		THROW_ERROR("Maximum depth exceeded\n");
 	}
 	if (nodes.size() == 0) {
+		last_ptr = nullptr;
 		next_id = -tree_cache_line_size;
 		nodes.resize(std::max(TREE_NODE_ALLOCATION_SIZE * particles_size() / BUCKET_SIZE, NTREES_MIN));
 		PRINT("%i trees allocated\n", nodes.size());
@@ -349,23 +365,31 @@ const tree_node* tree_get_node(tree_id id) {
 static const tree_node* tree_cache_read(tree_id id) {
 	const int line_size = get_options().tree_cache_line_size;
 	tree_id line_id;
-	const size_t bin = tree_id_hash_lo()(id);
+	const tree_node* ptr;
 	line_id.proc = id.proc;
 	line_id.index = (id.index / line_size) * line_size;
-	std::unique_lock<spinlock_type> lock(mutex[bin]);
-	auto iter = tree_cache[bin].find(line_id);
-	if (iter == tree_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
-		tree_cache[bin][line_id] = prms->get_future();
-		lock.unlock();
-		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
-			prms->set_value(line_fut.get());
-		});
-		lock.lock();
-		iter = tree_cache[bin].find(line_id);
+	if (line_id != last_line || last_ptr == nullptr) {
+		const size_t bin = tree_id_hash_lo()(id);
+		std::unique_lock<spinlock_type> lock(mutex[bin]);
+		auto iter = tree_cache[bin].find(line_id);
+		if (iter == tree_cache[bin].end()) {
+			auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
+			tree_cache[bin][line_id] = prms->get_future();
+			lock.unlock();
+			hpx::apply([prms,line_id]() {
+				auto line_fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+				prms->set_value(line_fut.get());
+			});
+			lock.lock();
+			iter = tree_cache[bin].find(line_id);
+		}
+		ptr = iter->second.get().data();
+	} else {
+		ptr = last_ptr;
 	}
-	return &iter->second.get()[id.index - line_id.index];
+	last_ptr = ptr;
+	last_line = line_id;
+	return ptr + id.index - line_id.index;
 }
 
 static vector<tree_node> tree_fetch_cache_line(int index) {

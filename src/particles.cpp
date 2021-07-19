@@ -14,10 +14,12 @@ struct line_id_type;
 
 static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index);
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
+void particles_cache_free();
 
-HPX_PLAIN_ACTION(particles_random_init);
+HPX_PLAIN_ACTION(particles_cache_free);
 HPX_PLAIN_ACTION(particles_destroy);
 HPX_PLAIN_ACTION(particles_fetch_cache_line);
+HPX_PLAIN_ACTION(particles_random_init);
 
 struct line_id_type {
 	int proc;
@@ -51,6 +53,17 @@ struct line_id_hash_hi {
 
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
+
+void particles_cache_free() {
+	vector<hpx::future<void>> futs;
+	for( const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_cache_free_action>(c));
+	}
+	for (int i = 0; i < PART_CACHE_SIZE; i++) {
+		part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>();
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
 
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, int offset) {
 	const int line_size = get_options().part_cache_line_size;

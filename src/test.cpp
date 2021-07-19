@@ -8,6 +8,8 @@ constexpr bool verbose = true;
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
+constexpr double theta = 0.55;
+
 static void domain_test() {
 	timer tm;
 
@@ -52,9 +54,8 @@ static void tree_test() {
 	PRINT("domains_end: %e s\n", tm.read());
 	tm.reset();
 
-
 	tm.start();
-	tree_create_params tparams(0,0.7);
+	tree_create_params tparams(0, 0.7);
 	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
@@ -96,7 +97,7 @@ static void kick_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create_params tparams(0,0.4);
+	tree_create_params tparams(0, theta);
 	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
@@ -108,7 +109,7 @@ static void kick_test() {
 	kparams.first_call = true;
 	kparams.min_rung = 0;
 	kparams.t0 = 1.0;
-	kparams.theta = 0.4;
+	kparams.theta = theta;
 	expansion<float> L;
 	for (int i = 0; i < EXPANSION_SIZE; i++) {
 		L[i] = 0.0f;

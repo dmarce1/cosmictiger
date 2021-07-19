@@ -84,5 +84,6 @@ void particles_random_init();
 void particles_destroy();
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, int offset);
 int particles_sort(pair<int, int> rng, double xm, int xdim);
+void particles_cache_free();
 
 #endif /* PARTICLES_HPP_ */
