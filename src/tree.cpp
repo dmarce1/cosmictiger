@@ -1,4 +1,4 @@
-constexpr bool verbose = false;
+constexpr bool verbose = true;
 
 #include <tigerfmm/fast_future.hpp>
 #include <tigerfmm/math.hpp>
@@ -10,10 +10,47 @@ constexpr bool verbose = false;
 HPX_PLAIN_ACTION(tree_create);
 HPX_PLAIN_ACTION(tree_destroy);
 
+class tree_allocator {
+	int next;
+	int last;
+public:
+	void reset();
+	tree_allocator();
+	~tree_allocator();
+	int allocate();
+};
+
 static vector<tree_node> nodes;
 static shared_mutex_type mutex;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
+static thread_local tree_allocator allocator;
+static std::atomic<int> nallocators(0);
+
+void tree_allocator::reset() {
+	next = (next_id += TREES_PER_ALLOC);
+	last = next + TREES_PER_ALLOC;
+	if (last > nodes.size()) {
+		THROW_ERROR("Tree arena full\n");
+	}
+}
+
+tree_allocator::tree_allocator() {
+	nallocators++;
+	PRINT( "%i\n", (int) nallocators);
+	reset();
+}
+
+tree_allocator::~tree_allocator() {
+	nallocators--;
+}
+
+int tree_allocator::allocate() {
+	if (next == last) {
+		reset();
+	}
+	return next++;
+}
 
 fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_range, const pair<int, int>& part_range, const range<double>& box,
 		const size_t& morton_id, const bool& local_root, bool threadme) {
@@ -26,7 +63,7 @@ fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_rang
 	} else if (threadme) {
 		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < hpx::thread::hardware_concurrency()) {
+			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency()) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -54,6 +91,7 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 	if (nodes.size() == 0) {
 		next_id = 0;
 		nodes.resize(4 * particles_size() / BUCKET_SIZE);
+		allocator.reset();
 	}
 	if (local_root) {
 		part_range.first = 0;
@@ -218,10 +256,10 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
-	node.index = next_id++;
+	node.index = allocator.allocate();
 	nodes[node.index] = node;
-	if( node.index > nodes.size() ) {
-		THROW_ERROR( "Tree arena full\n");
+	if (node.index > nodes.size()) {
+		THROW_ERROR("Tree arena full\n");
 	}
 	rc.id.index = node.index;
 	rc.id.proc = hpx_rank();
