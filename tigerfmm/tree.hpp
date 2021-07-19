@@ -76,9 +76,24 @@ struct tree_create_return {
 	}
 };
 
-tree_create_return tree_create(int min_rung, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(-1, -1),
+struct tree_create_params {
+	int min_rung;
+	double theta;
+	int min_level;
+	tree_create_params() = default;
+	tree_create_params(int min_rung, double theta);
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & min_rung;
+		arc & theta;
+		arc & min_level;
+	}
+};
+
+tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(-1, -1),
 		range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy();
+int tree_min_level(double theta);
 const tree_node* tree_get_node(tree_id);
 
 #endif /* TREE_HPP_ */

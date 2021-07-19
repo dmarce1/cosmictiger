@@ -59,8 +59,39 @@ int tree_allocator::allocate() {
 	return next++;
 }
 
-fast_future<tree_create_return> tree_create_fork(int min_rung, const pair<int, int>& proc_range, const pair<int, int>& part_range, const range<double>& box,
-		const int depth, const bool local_root, bool threadme) {
+
+tree_create_params::tree_create_params(int min_rung_, double theta_) {
+	theta = theta_;
+	min_rung = min_rung_;
+	min_level = tree_min_level(theta);
+}
+
+
+int tree_min_level(double theta) {
+	const double h = get_options().hsoft;
+	int lev = 1;
+	double dx;
+	double r;
+	do {
+		int N = 1 << (lev / NDIM);
+		dx = EWALD_DIST * N;
+		double a;
+		constexpr double ffac = 1.01;
+		if (lev % NDIM == 0) {
+			a = std::sqrt(3) + ffac * h;
+		} else if (lev % NDIM == 1) {
+			a = 1.5 + ffac * h;
+		} else {
+			a = std::sqrt(1.5) + ffac * h;
+		}
+		r = (1.0 + SINK_BIAS) * a / theta + h * N;
+		lev++;
+	} while (dx <= r);
+	return lev;
+}
+
+fast_future<tree_create_return> tree_create_fork(tree_create_params params, const pair<int, int>& proc_range, const pair<int, int>& part_range,
+		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<tree_create_return> rc;
 	bool remote = false;
@@ -79,12 +110,12 @@ fast_future<tree_create_return> tree_create_fork(int min_rung, const pair<int, i
 		}
 	}
 	if (!threadme) {
-		rc.set_value(tree_create(min_rung, proc_range, part_range, box, depth, local_root));
+		rc.set_value(tree_create(params, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], min_rung, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, proc_range, part_range, box, depth, local_root);
 	} else {
-		rc = hpx::async([min_rung,proc_range,part_range,depth,local_root, box]() {
-			auto rc = tree_create(min_rung,proc_range,part_range,box,depth,local_root);
+		rc = hpx::async([params,proc_range,part_range,depth,local_root, box]() {
+			auto rc = tree_create(params,proc_range,part_range,box,depth,local_root);
 			nthreads--;
 			return rc;
 		});
@@ -92,7 +123,7 @@ fast_future<tree_create_return> tree_create_fork(int min_rung, const pair<int, i
 	return rc;
 }
 
-tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int, int> part_range, range<double> box, int depth, bool local_root) {
+tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range, pair<int, int> part_range, range<double> box, int depth, bool local_root) {
 	const double h = get_options().hsoft;
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	tree_create_return rc;
@@ -101,7 +132,7 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 	}
 	if (nodes.size() == 0) {
 		next_id = -tree_cache_line_size;
-		nodes.resize(TREE_NODE_ALLOCATION_SIZE * particles_size() / BUCKET_SIZE);
+		nodes.resize(std::max(TREE_NODE_ALLOCATION_SIZE * particles_size() / BUCKET_SIZE, NTREES_MIN));
 		PRINT("%i trees allocated\n", nodes.size());
 		for (int i = 0; i < MAX_DEPTH; i++) {
 			allocators[i].ready = false;
@@ -123,7 +154,7 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 		allocators[depth].ready = true;
 	}
 	const int index = allocators[depth].allocate();
-	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > BUCKET_SIZE) {
+	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > BUCKET_SIZE || depth < params.min_level) {
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -148,8 +179,8 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
-		auto futl = tree_create_fork(min_rung, left_range, left_parts, left_box, depth + 1, left_local_root, true);
-		auto futr = tree_create_fork(min_rung, right_range, right_parts, right_box, depth + 1, right_local_root, false);
+		auto futl = tree_create_fork(params, left_range, left_parts, left_box, depth + 1, left_local_root, true);
+		auto futr = tree_create_fork(params, right_range, right_parts, right_box, depth + 1, right_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		const auto xl = rcl.pos;
@@ -241,9 +272,9 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 				Xmax[dim] = std::max(Xmax[dim], x);
 				Xmin[dim] = std::min(Xmin[dim], x);
 			}
-		//	PRINT( "%e %e %e \n", particles_pos(0, i).to_double(), particles_pos(1, i).to_double(), particles_pos(2, i).to_double());
+			//	PRINT( "%e %e %e \n", particles_pos(0, i).to_double(), particles_pos(1, i).to_double(), particles_pos(2, i).to_double());
 
-			if (particles_rung(i) >= min_rung) {
+			if (particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
 			const auto m = P2M(Xc);
@@ -292,8 +323,8 @@ tree_create_return tree_create(int min_rung, pair<int, int> proc_range, pair<int
 	if (local_root) {
 		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}
-	if( depth == 0 )
-	PRINT( "%i %e\n",index,nodes[index].radius);
+	if (depth == 0)
+		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
 }
 
@@ -310,7 +341,7 @@ void tree_destroy() {
 
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
-	//	PRINT( "%i %e\n", id.index, nodes[id.index].radius);
+		//	PRINT( "%i %e\n", id.index, nodes[id.index].radius);
 		return &nodes[id.index];
 	} else {
 		return tree_cache_read(id);

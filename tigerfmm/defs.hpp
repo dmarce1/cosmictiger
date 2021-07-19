@@ -26,8 +26,10 @@
 #define SORT_OVERSUBSCRIPTION 4
 #define KICK_OVERSUBSCRIPTION 4
 #define TREE_NODE_ALLOCATION_SIZE 8
+#define NTREES_MIN (2*1024*1024)
 #define MAX_DEPTH 64
-#define EWALD_DIST2 float(0.25*0.25)
+#define EWALD_DIST float(0.25)
+#define EWALD_DIST2 float(EWALD_DIST*EWALD_DIST)
 #define SINK_BIAS float(1.5)
 
 

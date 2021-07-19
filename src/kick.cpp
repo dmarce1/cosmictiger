@@ -1,4 +1,4 @@
-constexpr bool verbose=true;
+constexpr bool verbose = true;
 #include <tigerfmm/fast_future.hpp>
 #include <tigerfmm/gravity.hpp>
 #include <tigerfmm/kick.hpp>
@@ -6,6 +6,35 @@ constexpr bool verbose=true;
 #include <tigerfmm/safe_io.hpp>
 
 HPX_PLAIN_ACTION(kick);
+
+struct kick_workspace {
+	vector<tree_id> nextlist;
+	vector<tree_id> partlist;
+	vector<tree_id> multlist;
+	kick_workspace() = default;
+	kick_workspace(const kick_workspace&) = delete;
+	kick_workspace& operator=(const kick_workspace&) = delete;
+	kick_workspace(kick_workspace&&) = default;
+	kick_workspace& operator=(kick_workspace&&) = default;
+};
+
+static thread_local std::stack<kick_workspace> workspaces;
+
+static kick_workspace get_workspace() {
+	if (workspaces.empty()) {
+		workspaces.push(kick_workspace());
+	}
+	kick_workspace workspace = std::move(workspaces.top());
+	workspaces.pop();
+	return std::move(workspace);
+}
+
+static void cleanup_workspace(kick_workspace&& workspace) {
+	workspace.multlist.resize(0);
+	workspace.partlist.resize(0);
+	workspace.nextlist.resize(0);
+	workspaces.push(std::move(workspace));
+}
 
 fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, bool threadme) {
@@ -45,9 +74,10 @@ fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 	kick_return kr;
 
-	vector<tree_id> nextlist;
-	vector<tree_id> partlist;
-	vector<tree_id> multlist;
+	auto workspace = get_workspace();
+	vector<tree_id>& nextlist = workspace.nextlist;
+	vector<tree_id>& partlist = workspace.partlist;
+	vector<tree_id>& multlist = workspace.multlist;
 
 	const float thetainv2 = 1.0 / sqr(params.theta);
 	const float thetainv = 1.0 / params.theta;
@@ -64,11 +94,14 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		if (R2 > r2) {
 			multlist.push_back(echecklist[ci]);
 		} else {
-			nextlist.push_back(echecklist[ci]);
+			nextlist.push_back(other_ptr->children[LEFT]);
+			nextlist.push_back(other_ptr->children[RIGHT]);
 		}
 	}
-	echecklist = std::move(nextlist);
-	gravity_cc_ewald(std::move(multlist));
+	std::swap(echecklist, nextlist);
+	gravity_cc_ewald(multlist);
+	nextlist.resize(0);
+	multlist.resize(0);
 
 	int pass = 0;
 	do {
@@ -78,7 +111,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self_ptr->pos[dim], other_ptr->pos[dim]);
 			}
-			const float R2 = std::max(EWALD_DIST2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));
+			const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 			const bool far1 = R2 > sqr(SINK_BIAS * self_ptr->radius + other_ptr->radius) * thetainv2;
 			const bool far2 = R2 > sqr(SINK_BIAS * self_ptr->radius * thetainv + other_ptr->radius);
 			const bool far3 = R2 > sqr(self_ptr->radius + other_ptr->radius * thetainv);
@@ -94,18 +127,23 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				nextlist.push_back(child_checks[RIGHT]);
 			}
 			if (pass == 0) {
-				gravity_cc(std::move(multlist));
-				gravity_cp(std::move(partlist));
+				gravity_cc(multlist);
+				gravity_cp(partlist);
+				multlist.resize(0);
+				partlist.resize(0);
 			}
 		}
-		dchecklist = std::move(nextlist);
+		std::swap(dchecklist, nextlist);
+		nextlist.resize(0);
 		pass++;
 	} while (dchecklist.size() && self_ptr->is_leaf());
 
 	if (self_ptr->is_leaf()) {
-		gravity_pc(std::move(multlist));
-		gravity_pp(std::move(partlist));
+		gravity_pc(multlist);
+		gravity_pp(partlist);
+		cleanup_workspace(std::move(workspace));
 	} else {
+		cleanup_workspace(std::move(workspace));
 		auto futl = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, true);
 		auto futr = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
 		const auto rcl = futl.get();

@@ -52,8 +52,10 @@ static void tree_test() {
 	PRINT("domains_end: %e s\n", tm.read());
 	tm.reset();
 
+
 	tm.start();
-	tree_create(0);
+	tree_create_params tparams(0,0.7);
+	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
@@ -65,7 +67,7 @@ static void tree_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create(0);
+	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
@@ -94,18 +96,19 @@ static void kick_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create(0);
+	tree_create_params tparams(0,0.4);
+	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
 
 	tm.start();
-	kick_params params;
-	params.a = 1.0;
-	params.first_call = true;
-	params.min_rung = 0;
-	params.t0 = 1.0;
-	params.theta = 0.7;
+	kick_params kparams;
+	kparams.a = 1.0;
+	kparams.first_call = true;
+	kparams.min_rung = 0;
+	kparams.t0 = 1.0;
+	kparams.theta = 0.4;
 	expansion<float> L;
 	for (int i = 0; i < EXPANSION_SIZE; i++) {
 		L[i] = 0.0f;
@@ -119,7 +122,7 @@ static void kick_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	kick(params, L, pos, root_id, checklist, checklist);
+	kick(kparams, L, pos, root_id, checklist, checklist);
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	tm.reset();
