@@ -33,6 +33,9 @@ struct tree_node {
 	float radius;
 	int index;
 	bool local_root;
+	tree_node() {
+		morton_id = 0xFFFFFFFFFFFFFFFFLL;
+	}
 };
 
 struct tree_create_return {
@@ -50,7 +53,7 @@ struct tree_create_return {
 };
 
 tree_create_return tree_create(pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(0, 0),
-		range<double> box = unit_box<double>(), size_t id = 1, bool local_root = (hpx_size() == 1));
+		range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy();
 
 #endif /* TREE_HPP_ */

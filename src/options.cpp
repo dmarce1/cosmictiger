@@ -73,12 +73,14 @@ bool process_options(int argc, char *argv[]) {
 	}
 
 	opts.hsoft = 1.0 / opts.parts_dim / 25.0;
+	opts.tree_cache_line_size = 128;
 
 	PRINT("Simulation Options\n");
 	SHOW_STRING(config_file);
 	SHOW(hsoft);
 	SHOW(parts_dim);
 	SHOW_STRING(test);
+	SHOW(tree_cache_line_size);
 
 	set_options(opts);
 

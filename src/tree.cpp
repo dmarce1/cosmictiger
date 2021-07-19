@@ -14,9 +14,14 @@ class tree_allocator {
 	int next;
 	int last;
 public:
+	bool ready;
 	void reset();
+	bool is_ready();
 	tree_allocator();
-	~tree_allocator();
+	tree_allocator(const tree_allocator&) = default;
+	tree_allocator& operator=(const tree_allocator&) = default;
+	tree_allocator(tree_allocator&&) = default;
+	tree_allocator& operator=(tree_allocator&&) = default;
 	int allocate();
 };
 
@@ -24,25 +29,19 @@ static vector<tree_node> nodes;
 static shared_mutex_type mutex;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
-static thread_local tree_allocator allocator;
-static std::atomic<int> nallocators(0);
+static thread_local array<tree_allocator, MAX_DEPTH> allocators;
 
 void tree_allocator::reset() {
-	next = (next_id += TREES_PER_ALLOC);
-	last = next + TREES_PER_ALLOC;
+	const int tree_cache_line_size = get_options().tree_cache_line_size;
+	next = (next_id += tree_cache_line_size);
+	last = next + tree_cache_line_size;
 	if (last > nodes.size()) {
 		THROW_ERROR("Tree arena full\n");
 	}
 }
 
 tree_allocator::tree_allocator() {
-	nallocators++;
-	PRINT( "%i\n", (int) nallocators);
-	reset();
-}
-
-tree_allocator::~tree_allocator() {
-	nallocators--;
+	ready = false;
 }
 
 int tree_allocator::allocate() {
@@ -52,8 +51,8 @@ int tree_allocator::allocate() {
 	return next++;
 }
 
-fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_range, const pair<int, int>& part_range, const range<double>& box,
-		const size_t& morton_id, const bool& local_root, bool threadme) {
+fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_range, const pair<int, int>& part_range, const range<double>& box, const int depth,
+		const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<tree_create_return> rc;
 	bool remote = false;
@@ -72,12 +71,12 @@ fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_rang
 		}
 	}
 	if (!threadme) {
-		rc.set_value(tree_create(proc_range, part_range, box, morton_id, local_root));
+		rc.set_value(tree_create(proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], proc_range, part_range, box, morton_id, local_root);
+		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], proc_range, part_range, box, depth, local_root);
 	} else {
-		rc = hpx::async([proc_range,part_range,morton_id,local_root, box] {
-			auto rc = tree_create(proc_range,part_range,box,morton_id,local_root);
+		rc = hpx::async([proc_range,part_range,depth,local_root, box] {
+			auto rc = tree_create(proc_range,part_range,box,depth,local_root);
 			nthreads--;
 			return rc;
 		});
@@ -85,13 +84,19 @@ fast_future<tree_create_return> tree_create_fork(const pair<int, int>& proc_rang
 	return rc;
 }
 
-tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_range, range<double> box, size_t morton_id, bool local_root) {
+tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_range, range<double> box, int depth, bool local_root) {
 	const double h = get_options().hsoft;
 	tree_create_return rc;
+	if (depth >= MAX_DEPTH) {
+		THROW_ERROR("Maximum depth exceeded\n");
+	}
 	if (nodes.size() == 0) {
 		next_id = 0;
-		nodes.resize(4 * particles_size() / BUCKET_SIZE);
-		allocator.reset();
+		nodes.resize(TREE_NODE_ALLOCATION_SIZE * particles_size() / BUCKET_SIZE);
+		PRINT("%i trees allocated\n", nodes.size());
+		for (int i = 0; i < MAX_DEPTH; i++) {
+			allocators[i].ready = false;
+		}
 	}
 	if (local_root) {
 		part_range.first = 0;
@@ -102,8 +107,6 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 	multipole<float> multi;
 	float radius;
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > BUCKET_SIZE) {
-		auto left_morton = morton_id << 1;
-		auto right_morton = (morton_id << 1) | 1;
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -128,8 +131,8 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
-		auto futl = tree_create_fork(left_range, left_parts, left_box, left_morton, left_local_root, true);
-		auto futr = tree_create_fork(right_range, right_parts, right_box, right_morton, right_local_root, false);
+		auto futl = tree_create_fork(left_range, left_parts, left_box, depth + 1, left_local_root, true);
+		auto futr = tree_create_fork(right_range, right_parts, right_box, depth + 1, right_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		const auto xl = rcl.pos;
@@ -251,12 +254,15 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 	node.radius = radius;
 	node.children = children;
 	node.local_root = local_root;
-	node.morton_id = morton_id;
 	node.part_range = part_range;
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
-	node.index = allocator.allocate();
+	if (!allocators[depth].ready) {
+		allocators[depth].reset();
+		allocators[depth].ready = true;
+	}
+	node.index = allocators[depth].allocate();
 	nodes[node.index] = node;
 	if (node.index > nodes.size()) {
 		THROW_ERROR("Tree arena full\n");
@@ -266,6 +272,9 @@ tree_create_return tree_create(pair<int, int> proc_range, pair<int, int> part_ra
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
+	if (local_root) {
+		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
+	}
 	return rc;
 }
 

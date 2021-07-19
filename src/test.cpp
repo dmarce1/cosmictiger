@@ -58,7 +58,6 @@ static void tree_test() {
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
 
-
 	tm.start();
 	tree_destroy();
 	tm.stop();
