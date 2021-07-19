@@ -34,8 +34,8 @@ static vector<tree_node> nodes;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
 static thread_local array<tree_allocator, MAX_DEPTH> allocators;
-static std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash> tree_cache;
-static shared_mutex_type mutex;
+static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
+static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 
 static const tree_node* tree_cache_read(tree_id id);
 
@@ -59,13 +59,11 @@ int tree_allocator::allocate() {
 	return next++;
 }
 
-
 tree_create_params::tree_create_params(int min_rung_, double theta_) {
 	theta = theta_;
 	min_rung = min_rung_;
 	min_level = tree_min_level(theta);
 }
-
 
 int tree_min_level(double theta) {
 	const double h = get_options().hsoft;
@@ -351,25 +349,21 @@ const tree_node* tree_get_node(tree_id id) {
 static const tree_node* tree_cache_read(tree_id id) {
 	const int line_size = get_options().tree_cache_line_size;
 	tree_id line_id;
+	const size_t bin = tree_id_hash_lo()(id);
 	line_id.proc = id.proc;
 	line_id.index = (id.index / line_size) * line_size;
-	std::shared_lock<shared_mutex_type> read_lock(mutex);
-	auto iter = tree_cache.find(line_id);
-	if (iter == tree_cache.end()) {
-		read_lock.unlock();
-		std::unique_lock<shared_mutex_type> write_lock(mutex);
-		iter = tree_cache.find(line_id);
-		if (iter == tree_cache.end()) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
-			tree_cache[line_id] = prms->get_future();
-			write_lock.unlock();
-			hpx::apply([prms,line_id]() {
-				auto line_fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
-				prms->set_value(line_fut.get());
-			});
-			read_lock.lock();
-			iter = tree_cache.find(line_id);
-		}
+	std::unique_lock<spinlock_type> lock(mutex[bin]);
+	auto iter = tree_cache[bin].find(line_id);
+	if (iter == tree_cache[bin].end()) {
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
+		tree_cache[bin][line_id] = prms->get_future();
+		lock.unlock();
+		hpx::apply([prms,line_id]() {
+			auto line_fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+			prms->set_value(line_fut.get());
+		});
+		lock.lock();
+		iter = tree_cache[bin].find(line_id);
 	}
 	return &iter->second.get()[id.index - line_id.index];
 }

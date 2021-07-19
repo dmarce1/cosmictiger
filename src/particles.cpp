@@ -35,8 +35,22 @@ struct line_id_hash {
 	}
 };
 
-static std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash> part_cache;
-static shared_mutex_type mutex;
+struct line_id_hash_lo {
+	inline size_t operator()(line_id_type id) const {
+		line_id_hash hash;
+		return hash(id) % PART_CACHE_SIZE;
+	}
+};
+
+struct line_id_hash_hi {
+	inline size_t operator()(line_id_type id) const {
+		line_id_hash hash;
+		return hash(id) / PART_CACHE_SIZE;
+	}
+};
+
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
+static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, int offset) {
 	const int line_size = get_options().part_cache_line_size;
@@ -72,23 +86,19 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id) {
 	const int line_size = get_options().part_cache_line_size;
-	std::shared_lock<shared_mutex_type> read_lock(mutex);
-	auto iter = part_cache.find(line_id);
-	if (iter == part_cache.end()) {
-		read_lock.unlock();
-		std::unique_lock<shared_mutex_type> write_lock(mutex);
-		iter = part_cache.find(line_id);
-		if (iter == part_cache.end()) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
-			part_cache[line_id] = prms->get_future();
-			write_lock.unlock();
-			hpx::apply([prms,line_id]() {
-				auto line_fut = hpx::async<particles_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
-				prms->set_value(line_fut.get());
-			});
-			read_lock.lock();
-			iter = part_cache.find(line_id);
-		}
+	const size_t bin = line_id_hash_lo()(line_id);
+	std::unique_lock<spinlock_type> lock(mutexes[bin]);
+	auto iter = part_cache[bin].find(line_id);
+	if (iter == part_cache[bin].end()) {
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
+		part_cache[bin][line_id] = prms->get_future();
+		lock.unlock();
+		hpx::apply([prms,line_id]() {
+			auto line_fut = hpx::async<particles_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+			prms->set_value(line_fut.get());
+		});
+		lock.lock();
+		iter = part_cache[bin].find(line_id);
 	}
 	return iter->second.get().data();
 }

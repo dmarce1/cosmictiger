@@ -35,6 +35,20 @@ struct tree_id_hash {
 	}
 };
 
+struct tree_id_hash_lo {
+	inline size_t operator()(tree_id id) const {
+		tree_id_hash hash;
+		return hash(id) % TREE_CACHE_SIZE;
+	}
+};
+
+struct tree_id_hash_hi {
+	inline size_t operator()(tree_id id) const {
+		tree_id_hash hash;
+		return hash(id) / TREE_CACHE_SIZE;
+	}
+};
+
 struct tree_node {
 	multipole<float> multi;
 	array<tree_id, NCHILD> children;
