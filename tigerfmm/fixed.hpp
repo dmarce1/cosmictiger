@@ -9,6 +9,7 @@
 #define COSMICTIGER_FIXED_HPP_
 
 #include <tigerfmm/cuda.hpp>
+#include <tigerfmm/simd.hpp>
 
 #include <cstdint>
 #include <cassert>
@@ -257,5 +258,4 @@ template<class T>
 inline void swap(fixed<T> &first, fixed<T> &second) {
 	std::swap(first, second);
 }
-
 #endif /* COSMICTIGER_FIXED_HPP_ */

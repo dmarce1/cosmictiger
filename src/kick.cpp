@@ -5,7 +5,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
 
-HPX_PLAIN_ACTION(kick);
+HPX_PLAIN_ACTION (kick);
 
 struct kick_workspace {
 	vector<tree_id> nextlist;
@@ -79,23 +79,47 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	vector<tree_id>& partlist = workspace.partlist;
 	vector<tree_id>& multlist = workspace.multlist;
 
-	const float thetainv2 = 1.0 / sqr(params.theta);
-	const float thetainv = 1.0 / params.theta;
+	const simd_float thetainv2(1.0 / sqr(params.theta));
+	const simd_float thetainv(1.0 / params.theta);
+	static const simd_float sink_bias(SINK_BIAS);
+	static const simd_float ewald_dist2(EWALD_DIST2);
 	const tree_node* self_ptr = tree_get_node(self);
+	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
 
-	for (int ci = 0; ci < echecklist.size(); ci++) {
-		const tree_node* other_ptr = tree_get_node(echecklist[ci]);
-		array<float, NDIM> dx;
-		for (int dim = 0; dim < NDIM; dim++) {
-			dx[dim] = distance(self_ptr->pos[dim], other_ptr->pos[dim]);
+	simd_float self_radius = self_ptr->radius;
+	array<simd_int, NDIM> self_pos;
+	for (int dim = 0; dim < NDIM; dim++) {
+		self_pos[dim] = self_ptr->pos[dim].raw();
+	}
+	array<simd_int, NDIM> other_pos;
+	array<simd_float, NDIM> dx;
+	simd_float other_radius;
+	simd_int other_leaf;
+	for (int ci = 0; ci < echecklist.size(); ci += SIMD_FLOAT_SIZE) {
+		const int maxci = std::min((int) echecklist.size(), ci + SIMD_FLOAT_SIZE);
+		const int maxi = maxci - ci;
+		for (int i = ci; i < maxci; i++) {
+			other_ptrs[i - ci] = tree_get_node(echecklist[i]);
 		}
-		const float R2 = std::max(EWALD_DIST2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));
-		const float r2 = sqr(SINK_BIAS * self_ptr->radius + other_ptr->radius) * thetainv2;
-		if (R2 > r2) {
-			multlist.push_back(echecklist[ci]);
-		} else {
-			nextlist.push_back(other_ptr->children[LEFT]);
-			nextlist.push_back(other_ptr->children[RIGHT]);
+		for (int i = 0; i < maxi; i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
+			}
+			other_radius[i] = other_ptrs[i]->radius;
+		}
+		for (int dim = 0; dim < NDIM; dim++) {
+			dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+		}
+		const simd_float R2 = max(ewald_dist2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));
+		const simd_float r2 = sqr(sink_bias * self_radius + other_radius) * thetainv2;
+		const simd_float far = R2 > r2;
+		for (int i = 0; i < maxi; i++) {
+			if (far[i]) {
+				multlist.push_back(echecklist[ci + i]);
+			} else {
+				nextlist.push_back(other_ptrs[i]->children[LEFT]);
+				nextlist.push_back(other_ptrs[i]->children[RIGHT]);
+			}
 		}
 	}
 	std::swap(echecklist, nextlist);
@@ -105,26 +129,42 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 
 	int pass = 0;
 	do {
-		for (int ci = 0; ci < dchecklist.size(); ci++) {
-			const tree_node* other_ptr = tree_get_node(dchecklist[ci]);
-			array<float, NDIM> dx;
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self_ptr->pos[dim], other_ptr->pos[dim]);
+		const simd_int passozero(pass > 0);
+		for (int ci = 0; ci < dchecklist.size(); ci += SIMD_FLOAT_SIZE) {
+			const int maxci = std::min((int) dchecklist.size(), ci + SIMD_FLOAT_SIZE);
+			const int maxi = maxci - ci;
+			for (int i = ci; i < maxci; i++) {
+				other_ptrs[i - ci] = tree_get_node(dchecklist[i]);
 			}
-			const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-			const bool far1 = R2 > sqr(SINK_BIAS * self_ptr->radius + other_ptr->radius) * thetainv2;
-			const bool far2 = R2 > sqr(SINK_BIAS * self_ptr->radius * thetainv + other_ptr->radius);
-			const bool far3 = R2 > sqr(self_ptr->radius + other_ptr->radius * thetainv);
-			if (far1 || (pass > 0 && far3)) {
-				multlist.push_back(dchecklist[ci]);
-			} else if ((far2 || pass > 0) && other_ptr->is_leaf()) {
-				partlist.push_back(dchecklist[ci]);
-			} else if (other_ptr->is_leaf()) {
-				nextlist.push_back(dchecklist[ci]);
-			} else {
-				const auto child_checks = other_ptr->children;
-				nextlist.push_back(child_checks[LEFT]);
-				nextlist.push_back(child_checks[RIGHT]);
+			for (int i = 0; i < maxi; i++) {
+				for (int dim = 0; dim < NDIM; dim++) {
+					other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
+				}
+				other_radius[i] = other_ptrs[i]->radius;
+				other_leaf[i] = other_ptrs[i]->is_leaf();
+			}
+			for (int dim = 0; dim < NDIM; dim++) {
+				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+			}
+			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+			const simd_float far1 = R2 > sqr(sink_bias * self_radius + other_radius) * thetainv2;
+			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius);
+			const simd_float far3 = R2 > sqr(self_radius + other_radius * thetainv);
+			const simd_float mult = far1 + (passozero * far3);
+			const simd_float part = (far2 + passozero) * other_leaf;
+			for (int i = 0; i < maxi; i++) {
+				if (mult[i]) {
+					multlist.push_back(dchecklist[ci + i]);
+				} else if (part[i]) {
+					partlist.push_back(dchecklist[ci + i]);
+				} else if (other_leaf[i]) {
+					nextlist.push_back(dchecklist[ci + i]);
+				} else {
+					const auto child_checks = other_ptrs[i]->children;
+					nextlist.push_back(child_checks[LEFT]);
+					nextlist.push_back(child_checks[RIGHT]);
+
+				}
 			}
 			if (pass == 0) {
 				gravity_cc(multlist);

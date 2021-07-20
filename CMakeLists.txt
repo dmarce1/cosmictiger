@@ -11,6 +11,7 @@ set(CMAKE_CXX_FLAGS "-ffast-math -march=native -Wno-deprecated-declarations -Wno
 execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
 execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
 message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
+set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 
 
 set(tigerfmm_source_files
