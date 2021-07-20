@@ -12,6 +12,7 @@
 #include <tigerfmm/fmm_kernels.hpp>
 #include <tigerfmm/hpx.hpp>
 #include <tigerfmm/options.hpp>
+#include <tigerfmm/particles.hpp>
 #include <tigerfmm/range.hpp>
 
 struct tree_id {
@@ -61,8 +62,17 @@ struct tree_node {
 	size_t nactive;
 	float radius;
 	bool local_root;
-	bool is_leaf() const {
+	inline bool is_leaf() const {
 		return children[0].index == -1;
+	}
+	inline int nparts() const {
+		return part_range.second - part_range.first;
+	}
+	inline particle_global_range global_part_range() const {
+		particle_global_range r;
+		r.proc = proc_range.first;
+		r.range = part_range;
+		return r;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {

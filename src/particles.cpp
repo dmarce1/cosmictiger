@@ -16,10 +16,10 @@ static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index);
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
 void particles_cache_free();
 
-HPX_PLAIN_ACTION(particles_cache_free);
-HPX_PLAIN_ACTION(particles_destroy);
-HPX_PLAIN_ACTION(particles_fetch_cache_line);
-HPX_PLAIN_ACTION(particles_random_init);
+HPX_PLAIN_ACTION (particles_cache_free);
+HPX_PLAIN_ACTION (particles_destroy);
+HPX_PLAIN_ACTION (particles_fetch_cache_line);
+HPX_PLAIN_ACTION (particles_random_init);
 
 struct line_id_type {
 	int proc;
@@ -56,7 +56,7 @@ static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 
 void particles_cache_free() {
 	vector<hpx::future<void>> futs;
-	for( const auto& c : hpx_children()) {
+	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_cache_free_action>(c));
 	}
 	for (int i = 0; i < PART_CACHE_SIZE; i++) {
@@ -65,7 +65,7 @@ void particles_cache_free() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, int offset) {
+void particles_global_read_pos(particle_global_range range, vector<fixed32>& x, vector<fixed32>& y, vector<fixed32>& z, int offset) {
 	const int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -81,7 +81,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 			const int start_line = (range.range.first / line_size) * line_size;
 			const int stop_line = ((range.range.second - 1) / line_size) * line_size;
 			int dest_index = offset;
-			for (int line = start_line; line <= stop_line; line++) {
+			for (int line = start_line; line <= stop_line; line += line_size) {
 				line_id.index = line;
 				const auto* ptr = particles_cache_read_line(line_id);
 				const auto begin = std::max(line_id.index, range.range.first);
@@ -102,6 +102,8 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 	const size_t bin = line_id_hash_lo()(line_id);
 	std::unique_lock<spinlock_type> lock(mutexes[bin]);
 	auto iter = part_cache[bin].find(line_id);
+	const array<fixed32, NDIM>* ptr;
+//	static std::atomic<int> hits(0), misses(0);
 	if (iter == part_cache[bin].end()) {
 		auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
 		part_cache[bin][line_id] = prms->get_future();
@@ -112,14 +114,19 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 		});
 		lock.lock();
 		iter = part_cache[bin].find(line_id);
-	}
-	return iter->second.get().data();
+		//misses++;
+		//PRINT( "%i %i\n", (int) hits, (int) misses);
+	} //else {
+	//	hits++;
+//	}
+	auto fut = iter->second;
+	lock.unlock();
+	return fut.get().data();
 }
 
 static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index) {
 	const int line_size = get_options().part_cache_line_size;
-	vector<array<fixed32, NDIM>> line;
-	line.reserve(line_size);
+	vector<array<fixed32, NDIM>> line(line_size);
 	const int begin = (index / line_size) * line_size;
 	const int end = std::min(particles_size(), begin + line_size);
 	for (int i = begin; i < end; i++) {

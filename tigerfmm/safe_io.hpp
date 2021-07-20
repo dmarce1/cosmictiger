@@ -20,22 +20,22 @@ template<class ...Args>
 __device__
 #endif
 inline void print(const char* fmt, Args ...args) {
-	if( verbose ) {
+//	if( verbose ) {
 		printf(fmt, args...);
 #ifndef __CUDA_ARCH__
 		fflush (stdout);
 #endif
-	}
+//	}
 }
 template<class ...Args>
 #ifdef __CUDA_ARCH__
 __device__
 #endif
 inline void throw_error(const char* file, int line, const char* fmt, Args ...args) {
-	fprintf(stderr,fmt, args...);
-	fprintf(stderr,"Error in %s on line %i\n", file, line);
+	printf(fmt, args...);
+	printf("Error in %s on line %i\n", file, line);
 #ifndef __CUDA_ARCH__
-	fflush (stderr);
+	fflush (stdout);
 	abort();
 #else
 	__trap();

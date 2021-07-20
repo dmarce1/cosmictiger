@@ -59,7 +59,7 @@ void tree_allocator::reset() {
 	next = (next_id += tree_cache_line_size);
 	last = next + tree_cache_line_size;
 	if (last > nodes.size()) {
-		THROW_ERROR("Tree arena full\n");
+		THROW_ERROR("%s\n", "Tree arena full");
 	}
 }
 
@@ -141,7 +141,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	tree_create_return rc;
 	if (depth >= MAX_DEPTH) {
-		THROW_ERROR("Maximum depth exceeded\n");
+		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
 	if (nodes.size() == 0) {
 		last_ptr = nullptr;
@@ -327,7 +327,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	node.nactive = nactive;
 	nodes[index] = node;
 	if (index > nodes.size()) {
-		THROW_ERROR("Tree arena full\n");
+		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
@@ -383,7 +383,9 @@ static const tree_node* tree_cache_read(tree_id id) {
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);
 		}
-		ptr = iter->second.get().data();
+		auto fut = iter->second;
+		lock.unlock();
+		ptr = fut.get().data();
 	} else {
 		ptr = last_ptr;
 	}

@@ -10,6 +10,7 @@
 
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/defs.hpp>
+#include <tigerfmm/safe_io.hpp>
 
 #include <array>
 #include <vector>
@@ -17,13 +18,13 @@
 #ifdef __CUDA_ARCH__
 #define DO_BOUNDS_CHECK(i) \
 		if( i < 0 || i >= this->size() ) { \
-			PRINT( "Bounds error in %s on line %i - %i is not between 0 and %i\n", __FILE__, __LINE__, i, this->size()); \
+			THROW_ERROR( "Bounds error - %i is not between 0 and %i\n",  i, this->size()); \
 			__trap(); \
 		}
 #else
 #define DO_BOUNDS_CHECK(i) \
 		if( i < 0 || i >= this->size() ) { \
-			PRINT( "Bounds error in %s on line %i - %i is not between 0 and %i\n", __FILE__, __LINE__, i, this->size()); \
+			THROW_ERROR( "Bounds error - %i is not between 0 and %i\n",  i, this->size()); \
 			abort(); \
 		}
 #endif
@@ -35,13 +36,13 @@ class vector: public std::vector<T, Alloc> {
 
 public:
 #ifdef CHECK_BOUNDS
-	inline T& operator[](int i ) {
+	inline T& operator[](int i) {
 		DO_BOUNDS_CHECK(i);
-		return std::vector<T>::operator[](i);
+		return (*((std::vector<T>*) this))[i];
 	}
-	inline const T operator[](int i ) const {
+	inline const T operator[](int i) const {
 		DO_BOUNDS_CHECK(i);
-		return std::vector<T>::operator[](i);
+		return (*((std::vector<T>*) this))[i];
 	}
 #endif
 };

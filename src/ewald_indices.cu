@@ -1,4 +1,3 @@
-constexpr bool verbose = true;
 
 #include <tigerfmm/ewald_indices.hpp>
 #include <tigerfmm/math.hpp>
@@ -41,7 +40,7 @@ void ewald_const::init_gpu() {
 		return a2 > b2;
 	};
 	std::sort(real_indices.begin(), real_indices.end(), sort_func);
-	PRINT("nreal = %i\n", count);
+//	PRINT("nreal = %i\n", count);
 	n2max = 8;
 	nmax = std::sqrt(n2max) + 1;
 	count = 0;
@@ -61,7 +60,7 @@ void ewald_const::init_gpu() {
 		}
 	}
 	std::sort(four_indices.begin(), four_indices.end(), sort_func);
-	PRINT("nfour = %i\n", count);
+//	PRINT("nfour = %i\n", count);
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
 		array<float, NDIM> h = four_indices[i];

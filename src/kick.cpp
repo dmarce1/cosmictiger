@@ -85,7 +85,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	static const simd_float ewald_dist2(EWALD_DIST2);
 	const tree_node* self_ptr = tree_get_node(self);
 	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
-
+	const bool do_phi = params.min_rung == 0;
+	array<float, NDIM> Ldx;
 	simd_float self_radius = self_ptr->radius;
 	array<simd_int, NDIM> self_pos;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -95,6 +96,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
 	simd_int other_leaf;
+	for (int dim = 0; dim < NDIM; dim++) {
+		Ldx[dim] = self_ptr->pos[dim].to_double() - pos[dim].to_double();
+	}
+	L = L2L(L, Ldx, do_phi);
 	for (int ci = 0; ci < echecklist.size(); ci += SIMD_FLOAT_SIZE) {
 		const int maxci = std::min((int) echecklist.size(), ci + SIMD_FLOAT_SIZE);
 		const int maxi = maxci - ci;
@@ -179,8 +184,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	} while (dchecklist.size() && self_ptr->is_leaf());
 
 	if (self_ptr->is_leaf()) {
-		gravity_pc(multlist);
-		gravity_pp(partlist);
+		const int mynparts = self_ptr->nparts();
+		force_vectors forces(mynparts);
+		gravity_pc(forces, params.min_rung, self, multlist);
+		gravity_pp(forces, params.min_rung, self, partlist);
 		cleanup_workspace(std::move(workspace));
 	} else {
 		cleanup_workspace(std::move(workspace));

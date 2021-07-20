@@ -8,6 +8,7 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
+//#define CHECK_BOUNDS
 
 #define NDIM 3
 #define XDIM 0
