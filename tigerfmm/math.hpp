@@ -36,4 +36,9 @@ __device__ inline void erfcexpf(float x, float* ec, float *ex) {				// 18 + FLOP
 	*ec = fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *ex; 			// 10
 }
 
+template<class T>
+T round_up(T a, T b) {
+	return (((a - 1) / b) + 1) * b;
+}
+
 #endif /* MATH_HPP_ */
