@@ -1014,7 +1014,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,6> &D, array<T, NDIM> 
 
 template<class T>
 CUDA_EXPORT
-inline int interaction(tensor_trless_sym<T, 2>& L, const tensor_trless_sym<T, 5>& M, const tensor_trless_sym<T, 6>& D, bool do_phi) {
+inline int M2L(tensor_trless_sym<T, 2>& L, const tensor_trless_sym<T, 5>& M, const tensor_trless_sym<T, 6>& D, bool do_phi) {
 	const T& M000 =  (M[0]);
 	const T& M001 =  (M[15]);
 	const T& M002 =  (M[25]);
@@ -1254,7 +1254,7 @@ inline int interaction(tensor_trless_sym<T, 2>& L, const tensor_trless_sym<T, 5>
 
 template<class T>
 CUDA_EXPORT
-inline int interaction(tensor_trless_sym<T, 6>& L, const tensor_trless_sym<T, 5>& M, const tensor_trless_sym<T, 6>& D, bool do_phi) {
+inline int M2L(tensor_trless_sym<T, 6>& L, const tensor_trless_sym<T, 5>& M, const tensor_trless_sym<T, 6>& D, bool do_phi) {
 	const T& M000 =  (M[0]);
 	const T& M001 =  (M[15]);
 	const T& M002 =  (M[25]);

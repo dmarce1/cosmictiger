@@ -1190,7 +1190,7 @@ int main() {
 		flops = 0;
 		tprint("\n\ntemplate<class T>\n");
 		tprint("CUDA_EXPORT\n");
-		tprint("inline int interaction(tensor_trless_sym<T, %i>& L, const tensor_trless_sym<T, %i>& M, const tensor_trless_sym<T, %i>& D, bool do_phi) {\n", Pmax,
+		tprint("inline int M2L(tensor_trless_sym<T, %i>& L, const tensor_trless_sym<T, %i>& M, const tensor_trless_sym<T, %i>& D, bool do_phi) {\n", Pmax,
 				P - 1, P);
 		indent();
 		int phi_flops = 0;

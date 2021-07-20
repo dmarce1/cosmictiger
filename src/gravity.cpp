@@ -1,3 +1,4 @@
+#include <tigerfmm/fmm_kernels.hpp>
 #include <tigerfmm/gravity.hpp>
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
@@ -15,7 +16,71 @@ void gravity_cp(const vector<tree_id>&) {
 
 }
 
-void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>&) {
+void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+	if (list.size()) {
+		static const simd_float _2float(fixed2float);
+		vector<const tree_node*> tree_ptrs(list.size());
+		const tree_node* self_ptr = tree_get_node(self);
+		const int nsink = self_ptr->nparts();
+		const int nsource = round_up((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
+		for (int i = 0; i < list.size(); i++) {
+			tree_ptrs[i] = tree_get_node(list[i]);
+		}
+		vector<multipole<simd_float>> M(nsource);
+		vector<array<simd_int, NDIM>> Y(nsource);
+		int count = 0;
+		for (int i = 0; i < tree_ptrs.size(); i++) {
+			const int k = i / SIMD_FLOAT_SIZE;
+			const int l = i % SIMD_FLOAT_SIZE;
+			const auto& m = tree_ptrs[i]->multi;
+			const auto& y = tree_ptrs[i]->pos;
+			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
+				M[k][j][l] = m[j];
+			}
+			for (int j = 0; j < NDIM; j++) {
+				Y[k][j][l] = y[j].raw();
+			}
+		}
+		const int last = tree_ptrs.size() - 1;
+		for (int i = tree_ptrs.size(); i < nsource * SIMD_FLOAT_SIZE; i++) {
+			const int k = i / SIMD_FLOAT_SIZE;
+			const int l = i % SIMD_FLOAT_SIZE;
+			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
+				M[k][j][l] = 0.0;
+			}
+			for (int j = 0; j < NDIM; j++) {
+				Y[k][j][l] = Y[last][j][l];
+			}
+		}
+		const auto range = self_ptr->part_range;
+		array<simd_int, NDIM> X;
+		for (int i = range.first; i < range.second; i++) {
+			if (particles_rung(i) >= min_rung) {
+				expansion2<simd_float> L;
+				L(0, 0, 0) = simd_float(0.0f);
+				L(1, 0, 0) = simd_float(0.0f);
+				L(0, 1, 0) = simd_float(0.0f);
+				L(0, 0, 1) = simd_float(0.0f);
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim] = particles_pos(dim, i).raw();
+				}
+				for (int j = 0; j < nsource; j++) {
+					array<simd_float, NDIM> dx;
+					for (int dim = 0; dim < NDIM; dim++) {
+						dx[dim] = (X[dim] - Y[j][dim]) * _2float;
+					}
+					expansion<simd_float> D;
+					greens_function(D, dx);
+					M2L(L, M[j], D, min_rung == 0);
+				}
+				const int j = i - range.first;
+				f.gx[j] -= L(1, 0, 0).sum();
+				f.gy[j] -= L(0, 1, 0).sum();
+				f.gz[j] -= L(0, 0, 1).sum();
+				f.phi[j] += L(0, 0, 0).sum();
+			}
+		}
+	}
 
 }
 
@@ -56,11 +121,11 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 		array<simd_int, NDIM> X;
 		array<simd_int, NDIM> Y;
 		for (int i = range.first; i < range.second; i++) {
-			simd_float gx(0.0);
-			simd_float gy(0.0);
-			simd_float gz(0.0);
-			simd_float phi(0.0);
 			if (particles_rung(i) >= min_rung) {
+				simd_float gx(0.0);
+				simd_float gy(0.0);
+				simd_float gz(0.0);
+				simd_float phi(0.0);
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim] = particles_pos(dim, i).raw();
 				}
@@ -102,12 +167,12 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 					gz = fma(rinv3, dx[ZDIM], gz);                                                                // 2
 					phi -= rinv1;                                                                                           // 1
 				}
+				const int j = i - range.first;
+				f.gx[j] += gx.sum();
+				f.gy[j] += gy.sum();
+				f.gz[j] += gz.sum();
+				f.phi[j] += phi.sum();
 			}
-			const int j = i - range.first;
-			f.gx[j] += gx.sum();
-			f.gy[j] += gy.sum();
-			f.gz[j] += gz.sum();
-			f.phi[j] += phi.sum();
 		}
 	}
 }
