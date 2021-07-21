@@ -9,6 +9,7 @@
 #define MATH_HPP_
 
 #include <tigerfmm/cuda.hpp>
+#include <tigerfmm/simd.hpp>
 
 template<class T>
 CUDA_EXPORT inline T sqr(const T& a) {
@@ -37,8 +38,16 @@ __device__ inline void erfcexpf(float x, float* ec, float *ex) {				// 18 + FLOP
 }
 
 template<class T>
-T round_up(T a, T b) {
+inline T round_up(T a, T b) {
 	return (((a - 1) / b) + 1) * b;
+}
+
+CUDA_EXPORT inline float anytrue(float x) {
+	return x;
+}
+
+inline float anytrue(const simd_float& x) {
+	return x.sum();
 }
 
 #endif /* MATH_HPP_ */

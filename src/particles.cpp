@@ -70,11 +70,10 @@ void particles_global_read_pos(particle_global_range range, vector<fixed32>& x, 
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
 			const int dif = offset - range.range.first;
-			for (int i = range.range.first; i < range.range.second; i++) {
-				x[i + dif] = particles_pos(XDIM, i);
-				y[i + dif] = particles_pos(YDIM, i);
-				z[i + dif] = particles_pos(ZDIM, i);
-			}
+			const int sz = range.range.second - range.range.first;
+			std::memcpy(x.data() + offset, &particles_pos(XDIM, range.range.first), sizeof(float) * sz);
+			std::memcpy(y.data() + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
+			std::memcpy(z.data() + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
 		} else {
 			line_id_type line_id;
 			line_id.proc = range.proc;
@@ -117,7 +116,7 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 		//misses++;
 		//PRINT( "%i %i\n", (int) hits, (int) misses);
 	} //else {
-	//	hits++;
+	  //	hits++;
 //	}
 	auto fut = iter->second;
 	lock.unlock();

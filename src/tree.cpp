@@ -11,10 +11,10 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
-HPX_PLAIN_ACTION(tree_cache_free);
-HPX_PLAIN_ACTION(tree_create);
-HPX_PLAIN_ACTION(tree_destroy);
-HPX_PLAIN_ACTION(tree_fetch_cache_line);
+HPX_PLAIN_ACTION (tree_cache_free);
+HPX_PLAIN_ACTION (tree_create);
+HPX_PLAIN_ACTION (tree_destroy);
+HPX_PLAIN_ACTION (tree_fetch_cache_line);
 
 class tree_allocator {
 	int next;
@@ -42,10 +42,9 @@ static thread_local const tree_node* last_ptr = nullptr;
 
 static const tree_node* tree_cache_read(tree_id id);
 
-
 void tree_cache_free() {
 	vector<hpx::future<void>> futs;
-	for( const auto& c : hpx_children()) {
+	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<tree_cache_free_action>(c));
 	}
 	for (int i = 0; i < PART_CACHE_SIZE; i++) {
@@ -139,6 +138,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range, pair<int, int> part_range, range<double> box, int depth, bool local_root) {
 	const double h = get_options().hsoft;
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
+	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	tree_create_return rc;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -146,7 +146,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	if (nodes.size() == 0) {
 		last_ptr = nullptr;
 		next_id = -tree_cache_line_size;
-		nodes.resize(std::max(TREE_NODE_ALLOCATION_SIZE * particles_size() / BUCKET_SIZE, NTREES_MIN));
+		nodes.resize(std::max(TREE_NODE_ALLOCATION_SIZE * particles_size() / bucket_size, NTREES_MIN));
 		PRINT("%i trees allocated\n", nodes.size());
 		for (int i = 0; i < MAX_DEPTH; i++) {
 			allocators[i].ready = false;
@@ -168,7 +168,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		allocators[depth].ready = true;
 	}
 	const int index = allocators[depth].allocate();
-	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > BUCKET_SIZE || depth < params.min_level) {
+	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -325,6 +325,10 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	node.pos = x;
 	node.multi = multi;
 	node.nactive = nactive;
+	const int nparts = part_range.second - part_range.first;
+	const bool global = proc_range.second - proc_range.first > 1;
+	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
+	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);
 	nodes[index] = node;
 	if (index > nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");

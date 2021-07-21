@@ -2,6 +2,7 @@
 #include <tigerfmm/tensor.hpp>
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/ewald_indices.hpp>
+#include <tigerfmm/math.hpp>
 template<class T>
 using expansion = tensor_trless_sym<T,6>;
 template<class T>

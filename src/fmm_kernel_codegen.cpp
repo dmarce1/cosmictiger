@@ -1122,6 +1122,7 @@ int main() {
 	tprint("#include <tigerfmm/tensor.hpp>\n");
 	tprint("#include <tigerfmm/cuda.hpp>\n");
 	tprint("#include <tigerfmm/ewald_indices.hpp>\n");
+	tprint("#include <tigerfmm/math.hpp>\n");
 	tprint("template<class T>\n");
 	tprint("using expansion = tensor_trless_sym<T,%i>;\n", P);
 	tprint("template<class T>\n");

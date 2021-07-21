@@ -62,9 +62,8 @@ struct tree_node {
 	size_t nactive;
 	float radius;
 	bool local_root;
-	inline bool is_leaf() const {
-		return children[0].index == -1;
-	}
+	bool sink_leaf;
+	bool source_leaf;
 	inline int nparts() const {
 		return part_range.second - part_range.first;
 	}

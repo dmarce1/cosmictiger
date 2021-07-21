@@ -30,9 +30,12 @@ struct force_vectors {
 	}
 };
 
-void gravity_cc_ewald(const vector<tree_id>&);
-void gravity_cc(const vector<tree_id>&);
-void gravity_cp(const vector<tree_id>&);
+enum gravity_cc_type {
+	GRAVITY_CC_DIRECT, GRAVITY_CC_EWALD
+};
+
+void gravity_cc(expansion<float>&, const vector<tree_id>&, tree_id, gravity_cc_type, bool do_phi);
+void gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
 void gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
 void gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&);
 

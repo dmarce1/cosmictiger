@@ -19,7 +19,8 @@
 #define LEFT 0
 #define RIGHT 1
 
-#define BUCKET_SIZE 16
+#define SINK_BUCKET_SIZE 64
+#define SOURCE_BUCKET_SIZE 64
 #define EWALD_DIST float(0.25)
 #define EWALD_REAL_CUTOFF2 (2.6*2.6)
 #define KICK_OVERSUBSCRIPTION 16

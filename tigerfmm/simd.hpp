@@ -14,7 +14,6 @@
 
 #include <cmath>
 
-
 #ifdef __AVX2__
 #define USE_AVX2
 #elif defined(__AVX__)
@@ -269,6 +268,20 @@ public:
 
 	friend simd_float two_pow(const simd_float &r);
 	friend void sincos(const simd_float &x, simd_float *s, simd_float *c);
+	simd_float operator<=(simd_float other) const { // 2
+		simd_float rc;
+		static const simd_float one(1);
+		static const simd_float zero(0);
+		for (int i = 0; i < SIMD_N; i++) {
+#ifdef USE_SCALAR
+			rc.v[i] = v[i] <= other.v[i];
+#else
+			auto mask0 = mmx_cmp_ps(v[i], other.v[i], _CMP_LE_OQ);
+			rc.v[i] = mmx_and_ps(mask0, one.v[i]);
+#endif
+		}
+		return rc;
+	}
 	simd_float operator<(simd_float other) const { // 2
 		simd_float rc;
 		static const simd_float one(1);
@@ -292,6 +305,20 @@ public:
 			rc.v[i] = v[i] > other.v[i];
 #else
 			auto mask0 = mmx_cmp_ps(v[i], other.v[i], _CMP_GT_OQ);
+			rc.v[i] = mmx_and_ps(mask0, one.v[i]);
+#endif
+		}
+		return rc;
+	}
+	simd_float operator>=(simd_float other) const { // 2
+		simd_float rc;
+		static const simd_float one(1);
+		static const simd_float zero(0);
+		for (int i = 0; i < SIMD_N; i++) {
+#ifdef USE_SCALAR
+			rc.v[i] = v[i] >= other.v[i];
+#else
+			auto mask0 = mmx_cmp_ps(v[i], other.v[i], _CMP_GE_OQ);
 			rc.v[i] = mmx_and_ps(mask0, one.v[i]);
 #endif
 		}
@@ -490,7 +517,7 @@ inline simd_float exp(simd_float a) { 	// 24
 	return two_pow(a * c0);
 }
 
-inline simd_float erfcexp(const simd_float &x, simd_float *e) {				// 76
+inline void erfcexp(const simd_float &x, simd_float *ec, simd_float* ex) {				// 76
 	const simd_float p(0.3275911);
 	const simd_float a1(0.254829592);
 	const simd_float a2(-0.284496736);
@@ -502,8 +529,8 @@ inline simd_float erfcexp(const simd_float &x, simd_float *e) {				// 76
 	const simd_float t3 = t2 * t1;											// 1
 	const simd_float t4 = t2 * t2;											// 1
 	const simd_float t5 = t2 * t3;											// 1
-	*e = exp(-x * x);														// 16
-	return (a1 * t1 + a2 * t2 + a3 * t3 + a4 * t4 + a5 * t5) * *e; 			// 11
+	*ex = exp(-x * x);														// 16
+	*ec = (a1 * t1 + a2 * t2 + a3 * t3 + a4 * t4 + a5 * t5) * *ex; 			// 11
 }
 
 inline simd_float fma(const simd_float &a, const simd_float &b, const simd_float &c) {
@@ -604,5 +631,4 @@ inline bool isnan(const simd_float& f) {
 }
 
 #endif /* COSMICTIGER_SIMD_HPP_ */
-
 
