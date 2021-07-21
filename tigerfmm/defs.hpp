@@ -29,13 +29,13 @@
 #define MIN_KICK_THREAD_PARTS (1024)
 #define MIN_SORT_THREAD_PARTS (1024)
 #define NTREES_MIN (2*1024*1024)
-#define ORDER 6
+#define ORDER 7
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
 #define SIMD_FLOAT_SIZE 8
 #define SIMD_INT_SIZE 8
-#define SORT_OVERSUBSCRIPTION 4
+#define SORT_OVERSUBSCRIPTION 8
 #define TREE_CACHE_SIZE 1024
 #define TREE_NODE_ALLOCATION_SIZE 8
 
