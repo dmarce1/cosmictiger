@@ -1,6 +1,7 @@
 constexpr bool verbose = true;
 
 #include <tigerfmm/domain.hpp>
+#include <tigerfmm/gravity.hpp>
 #include <tigerfmm/kick.hpp>
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/safe_io.hpp>
@@ -134,6 +135,7 @@ static void kick_test() {
 	PRINT("tree_destroy: %e s\n", tm.read());
 	tm.reset();
 
+	gravity_show_times();
 }
 
 void test(std::string test) {

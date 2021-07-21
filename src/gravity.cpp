@@ -2,9 +2,24 @@
 #include <tigerfmm/gravity.hpp>
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
+#include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
+static double cc_ewald_time = 0.0;
+static double cc_time = 0.0;
+static double cp_time = 0.0;
+static double pc_time = 0.0;
+static double pp_time = 0.0;
+
+void gravity_show_times() {
+	const double totalinv = 1.0 / (cc_ewald_time + cc_time + cp_time + pc_time + pp_time);
+	PRINT("gravity times - CC_ewald %e CC %e, CP %e, PC %e, PP %e\n", cc_ewald_time * totalinv, cc_time * totalinv, cp_time * totalinv, pc_time * totalinv,
+			pp_time * totalinv);
+}
+
 void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
+	timer tm;
+	tm.start();
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -65,9 +80,17 @@ void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 			L[i] += L0[i].sum();
 		}
 	}
+	tm.stop();
+	if (type == GRAVITY_CC_EWALD) {
+		cc_ewald_time += tm.read();
+	} else {
+		cc_time += tm.read();
+	}
 }
 
 void gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+	timer tm;
+	tm.start();
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float h(get_options().hsoft);
@@ -132,9 +155,14 @@ void gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 			L[i] += L0[i].sum();
 		}
 	}
+	tm.stop();
+	cp_time += tm.read();
+
 }
 
 void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+	timer tm;
+	tm.start();
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -201,10 +229,14 @@ void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 			}
 		}
 	}
+	tm.stop();
+	pc_time += tm.read();
 
 }
 
 void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+	timer tm;
+	tm.start();
 	constexpr int chunk_size = 32;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -303,4 +335,7 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 			}
 		}
 	}
+	tm.stop();
+	pp_time += tm.read();
+
 }

@@ -171,16 +171,16 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 
 				}
 			}
-			gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
-			gravity_cp(L, partlist, self, params.min_rung == 0);
-			multlist.resize(0);
-			partlist.resize(0);
 		}
 		std::swap(dchecklist, nextlist);
 		nextlist.resize(0);
 	} while (dchecklist.size() && self_ptr->sink_leaf);
+	gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
+	gravity_cp(L, partlist, self, params.min_rung == 0);
 
 	if (self_ptr->sink_leaf) {
+		partlist.resize(0);
+		multlist.resize(0);
 		const int mynparts = self_ptr->nparts();
 		force_vectors forces(mynparts);
 		for (int i = 0; i < leaflist.size(); i++) {
