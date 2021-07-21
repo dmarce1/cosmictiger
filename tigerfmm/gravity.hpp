@@ -38,6 +38,6 @@ void gravity_cc(expansion<float>&, const vector<tree_id>&, tree_id, gravity_cc_t
 void gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
 void gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
 void gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&);
-void gravity_show_times();
+void gravity_show_timings();
 
 #endif /* GRAVITY_HPP_ */

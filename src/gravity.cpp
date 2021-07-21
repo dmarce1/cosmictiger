@@ -5,21 +5,8 @@
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
-static double cc_ewald_time = 0.0;
-static double cc_time = 0.0;
-static double cp_time = 0.0;
-static double pc_time = 0.0;
-static double pp_time = 0.0;
-
-void gravity_show_times() {
-	const double totalinv = 1.0 / (cc_ewald_time + cc_time + cp_time + pc_time + pp_time);
-	PRINT("gravity times - CC_ewald %e CC %e, CP %e, PC %e, PP %e\n", cc_ewald_time * totalinv, cc_time * totalinv, cp_time * totalinv, pc_time * totalinv,
-			pp_time * totalinv);
-}
 
 void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
-	timer tm;
-	tm.start();
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -80,17 +67,10 @@ void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 			L[i] += L0[i].sum();
 		}
 	}
-	tm.stop();
-	if (type == GRAVITY_CC_EWALD) {
-		cc_ewald_time += tm.read();
-	} else {
-		cc_time += tm.read();
-	}
 }
 
 void gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
-	timer tm;
-	tm.start();
+	constexpr int chunk_size = 32;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float h(get_options().hsoft);
@@ -99,70 +79,70 @@ void gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 		const simd_float tiny(1.0e-20);
 		const simd_float hinv = simd_float(1) / h;
 		const simd_float hinv3 = hinv * hinv * hinv;
-		vector<const tree_node*> tree_ptrs(list.size());
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
-		int nsource = 0;
-		for (int i = 0; i < list.size(); i++) {
-			tree_ptrs[i] = tree_get_node(list[i]);
-			nsource += tree_ptrs[i]->nparts();
-		}
-		nsource = round_up(nsource, SIMD_FLOAT_SIZE);
-		static thread_local vector<fixed32> srcx;
-		static thread_local vector<fixed32> srcy;
-		static thread_local vector<fixed32> srcz;
-		static thread_local vector<float> masks;
-		srcx.resize(nsource);
-		srcy.resize(nsource);
-		srcz.resize(nsource);
-		masks.resize(nsource);
-		int count = 0;
-		for (int i = 0; i < tree_ptrs.size(); i++) {
-			particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx, srcy, srcz, count);
-			count += tree_ptrs[i]->nparts();
-		}
-		for (int i = 0; i < count; i++) {
-			masks[i] = 1.0;
-		}
-		for (int i = count; i < nsource; i++) {
-			masks[i] = 0.0;
-		}
-		const auto range = self_ptr->part_range;
-		array<simd_int, NDIM> X;
-		array<simd_int, NDIM> Y;
-		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = self_ptr->pos[dim].raw();
-		}
-		expansion<simd_float> L0;
-		L0 = simd_float(0.0f);
-		for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
-			const int k = j / SIMD_FLOAT_SIZE;
-			Y[XDIM] = *((simd_int*) srcx.data() + k);
-			Y[YDIM] = *((simd_int*) srcy.data() + k);
-			Y[ZDIM] = *((simd_int*) srcz.data() + k);
-			simd_float mask = *((simd_float*) masks.data() + k);
-			array<simd_float, NDIM> dx;
+		for (int li = 0; li < list.size(); li += chunk_size) {
+			array<const tree_node*, chunk_size> tree_ptrs;
+			int nsource = 0;
+			const int maxi = std::min((int) list.size(), li + chunk_size) - li;
+			for (int i = 0; i < maxi; i++) {
+				tree_ptrs[i] = tree_get_node(list[i + li]);
+				nsource += tree_ptrs[i]->nparts();
+			}
+			nsource = round_up(nsource, SIMD_FLOAT_SIZE);
+			static thread_local vector<fixed32> srcx;
+			static thread_local vector<fixed32> srcy;
+			static thread_local vector<fixed32> srcz;
+			static thread_local vector<float> masks;
+			srcx.resize(nsource);
+			srcy.resize(nsource);
+			srcz.resize(nsource);
+			masks.resize(nsource);
+			int count = 0;
+			for (int i = 0; i < maxi; i++) {
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx, srcy, srcz, count);
+				count += tree_ptrs[i]->nparts();
+			}
+			for (int i = 0; i < count; i++) {
+				masks[i] = 1.0;
+			}
+			for (int i = count; i < nsource; i++) {
+				masks[i] = 0.0;
+			}
+			const auto range = self_ptr->part_range;
+			array<simd_int, NDIM> X;
+			array<simd_int, NDIM> Y;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = (X[dim] - Y[dim]) * _2float;
+				X[dim] = self_ptr->pos[dim].raw();
 			}
-			expansion<simd_float> D;
-			greens_function(D, dx);
-			for (int l = 0; l < EXPANSION_SIZE; l++) {
-				L0[l] += mask * D[l];
+			expansion<simd_float> L0;
+			L0 = simd_float(0.0f);
+			for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
+				const int k = j / SIMD_FLOAT_SIZE;
+				Y[XDIM] = *((simd_int*) srcx.data() + k);
+				Y[YDIM] = *((simd_int*) srcy.data() + k);
+				Y[ZDIM] = *((simd_int*) srcz.data() + k);
+				simd_float mask = *((simd_float*) masks.data() + k);
+				array<simd_float, NDIM> dx;
+				for (int dim = 0; dim < NDIM; dim++) {
+					dx[dim] = (X[dim] - Y[dim]) * _2float;
+				}
+				expansion<simd_float> D;
+				greens_function(D, dx);
+				for (int l = 0; l < EXPANSION_SIZE; l++) {
+					L0[l] += mask * D[l];
+				}
 			}
-		}
-		for (int i = 0; i < EXPANSION_SIZE; i++) {
-			L[i] += L0[i].sum();
+			for (int i = 0; i < EXPANSION_SIZE; i++) {
+				L[i] += L0[i].sum();
+			}
 		}
 	}
-	tm.stop();
-	cp_time += tm.read();
 
 }
 
+
 void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
-	timer tm;
-	tm.start();
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -229,8 +209,6 @@ void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 			}
 		}
 	}
-	tm.stop();
-	pc_time += tm.read();
 
 }
 
@@ -335,7 +313,5 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 			}
 		}
 	}
-	tm.stop();
-	pp_time += tm.read();
 
 }
