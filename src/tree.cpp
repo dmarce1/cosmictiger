@@ -228,12 +228,19 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		for (int dim = 0; dim < NDIM; dim++) {
 			N[dim] *= norminv;
 		}
-		rr = rl = 0.0;
+		r = 0.0;
 		if (Mr[0] != 0.0 && Ml[0.0] != 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = (Xl[dim] + Xr[dim] + N[dim] * (Rl - Rr)) * 0.5;
-				rl += sqr(Xl[dim] - Xc[dim]);
-				rr += sqr(Xr[dim] - Xc[dim]);
+				double xmin, xmax;
+				if (N[dim] > 0.0) {
+					xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+					xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
+				} else {
+					xmax = std::max(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
+					xmin = std::min(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+				}
+				Xc[dim] = (xmax + xmin) * 0.5;
+				r += sqr((xmax - xmin) * 0.5);
 			}
 		} else if (Mr[0] == 0.0 && Ml[0.0] == 0) {
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -241,15 +248,15 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			}
 		} else if (Mr[0] != 0.0) {
 			Xc = Xr;
+			r = Rr * Rr;
 		} else {
 			Xc = Xl;
+			r = Rl * Rl;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
 		}
-		rl = std::sqrt(rl) + Rl;
-		rr = std::sqrt(rr) + Rr;
-		radius = std::max(rl, rr);
+		radius = std::sqrt(r);
 		r = 0.0;
 		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
 		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
@@ -259,7 +266,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
-		radius = std::min((double) radius, std::sqrt(r) + h);
+		radius = std::min((double) radius, std::sqrt(r));
 		Mr = M2M<double>(Mr, Xr);
 		Ml = M2M<double>(Ml, Xl);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
@@ -308,7 +315,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			}
 			r = std::max(r, this_radius);
 		}
-		radius = std::sqrt(r) + h;
+		radius = std::sqrt(r);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}

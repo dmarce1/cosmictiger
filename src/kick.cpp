@@ -119,7 +119,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
 		}
 		const simd_float R2 = max(ewald_dist2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));
-		const simd_float r2 = sqr(sink_bias * self_radius + other_radius) * thetainv2;
+		const simd_float r2 = sqr((sink_bias * self_radius + other_radius) * thetainv + h);
 		const simd_float far = R2 > r2;
 		for (int i = 0; i < maxi; i++) {
 			if (far[i]) {
@@ -153,8 +153,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
 			}
 			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-			const simd_float far1 = R2 > sqr(sink_bias * self_radius + other_radius) * thetainv2;
-			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius);
+			const simd_float far1 = R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + h);
+			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius + h);
 			const simd_float mult = far1;
 			const simd_float part = far2 * other_leaf;
 			for (int i = 0; i < maxi; i++) {
