@@ -205,7 +205,7 @@ void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 }
 
 void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
-	constexpr int chunk_size = 64;
+	constexpr int chunk_size = 32;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float h(get_options().hsoft);
