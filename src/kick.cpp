@@ -11,6 +11,7 @@ struct kick_workspace {
 	vector<tree_id> nextlist;
 	vector<tree_id> partlist;
 	vector<tree_id> multlist;
+	vector<tree_id> leaflist;
 	kick_workspace() = default;
 	kick_workspace(const kick_workspace&) = delete;
 	kick_workspace& operator=(const kick_workspace&) = delete;
@@ -33,6 +34,7 @@ static void cleanup_workspace(kick_workspace&& workspace) {
 	workspace.multlist.resize(0);
 	workspace.partlist.resize(0);
 	workspace.nextlist.resize(0);
+	workspace.leaflist.resize(0);
 	workspaces.push(std::move(workspace));
 }
 
@@ -78,7 +80,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	vector<tree_id>& nextlist = workspace.nextlist;
 	vector<tree_id>& partlist = workspace.partlist;
 	vector<tree_id>& multlist = workspace.multlist;
-	vector<tree_id>& tmplist = workspace.nextlist;
+	vector<tree_id>& leaflist = workspace.leaflist;
 
 	const simd_float thetainv2(1.0 / sqr(params.theta));
 	const simd_float thetainv(1.0 / params.theta);
@@ -133,9 +135,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	nextlist.resize(0);
 	multlist.resize(0);
 
-	int nleaves;
 	do {
-		nleaves = 0;
 		for (int ci = 0; ci < dchecklist.size(); ci += SIMD_FLOAT_SIZE) {
 			const int maxci = std::min((int) dchecklist.size(), ci + SIMD_FLOAT_SIZE);
 			const int maxi = maxci - ci;
@@ -163,8 +163,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				} else if (part[i]) {
 					partlist.push_back(dchecklist[ci + i]);
 				} else if (other_leaf[i]) {
-					nleaves++;
-					nextlist.push_back(dchecklist[ci + i]);
+					leaflist.push_back(dchecklist[ci + i]);
 				} else {
 					const auto child_checks = other_ptrs[i]->children;
 					nextlist.push_back(child_checks[LEFT]);
@@ -179,14 +178,13 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		}
 		std::swap(dchecklist, nextlist);
 		nextlist.resize(0);
-	} while (nleaves != dchecklist.size() && self_ptr->sink_leaf);
+	} while (dchecklist.size() && self_ptr->sink_leaf);
 
 	if (self_ptr->sink_leaf) {
 		const int mynparts = self_ptr->nparts();
 		force_vectors forces(mynparts);
-		tmplist = std::move(dchecklist);
-		for (int i = 0; i < tmplist.size(); i++) {
-			const tree_node* other_ptr = tree_get_node(tmplist[i]);
+		for (int i = 0; i < leaflist.size(); i++) {
+			const tree_node* other_ptr = tree_get_node(leaflist[i]);
 			other_radius = other_ptr->radius;
 			for (int dim = 0; dim < NDIM; dim++) {
 				other_pos[dim] = other_ptr->pos[dim].raw();
@@ -213,9 +211,9 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				}
 			}
 			if (pp) {
-				partlist.push_back(tmplist[i]);
+				partlist.push_back(leaflist[i]);
 			} else {
-				multlist.push_back(tmplist[i]);
+				multlist.push_back(leaflist[i]);
 			}
 		}
 		//	PRINT("%i %i\n", multlist.size(), partlist.size());
@@ -223,6 +221,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		gravity_pp(forces, params.min_rung, self, partlist);
 		cleanup_workspace(std::move(workspace));
 	} else {
+		dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
 		cleanup_workspace(std::move(workspace));
 		auto futl = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, true);
 		auto futr = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
