@@ -23,11 +23,11 @@
 #define SOURCE_BUCKET_SIZE 100
 #define EWALD_DIST float(0.25)
 #define EWALD_REAL_CUTOFF2 (2.6*2.6)
-#define KICK_OVERSUBSCRIPTION 16
+#define KICK_OVERSUBSCRIPTION 8
 #define MAX_DEPTH 64
 #define MAX_PARTICLES_PER_PARCEL (16*1024*1024)
-#define MIN_KICK_THREAD_PARTS (65536)
-#define MIN_SORT_THREAD_PARTS (65536)
+#define MIN_KICK_THREAD_PARTS (1024)
+#define MIN_SORT_THREAD_PARTS (1024)
 #define NTREES_MIN (2*1024*1024)
 #define ORDER 6
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
