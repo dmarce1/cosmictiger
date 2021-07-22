@@ -235,7 +235,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		}
 		gravity_pc(forces, params.min_rung, self, multlist);
 		gravity_pp(forces, params.min_rung, self, partlist);
-		PRINT("%i %i\n", multlist.size(), partlist.size());
+	//	PRINT("%i %i\n", multlist.size(), partlist.size());
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;

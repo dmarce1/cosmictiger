@@ -267,8 +267,14 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
 		radius = std::min((double) radius, std::sqrt(r));
-		Mr = M2M<double>(Mr, Xr);
-		Ml = M2M<double>(Ml, Xl);
+		array<double, NDIM> dxl;
+		array<double, NDIM> dxr;
+		for( int dim = 0; dim < NDIM; dim++) {
+			dxl[dim] = Xl[dim] - Xc[dim];
+			dxr[dim] = Xr[dim] - Xc[dim];
+		}
+		Mr = M2M<double>(Mr, dxr);
+		Ml = M2M<double>(Ml, dxl);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = Mr[i] + Ml[i];
 		}

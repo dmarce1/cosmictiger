@@ -53,11 +53,12 @@ void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 		for (int j = 0; j < nsource; j++) {
 			array<simd_float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = (X[dim] - Y[j][dim]) * _2float;
+				dx[dim] = simd_float(X[dim] - Y[j][dim]) * _2float;
 			}
 			expansion<simd_float> D;
 			if (type == GRAVITY_CC_DIRECT) {
 				greens_function(D, dx);
+
 			} else {
 				ewald_greens_function(D, dx);
 			}
@@ -125,7 +126,7 @@ void gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 				simd_float mask = *((simd_float*) masks.data() + k);
 				array<simd_float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = (X[dim] - Y[dim]) * _2float;
+					dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 				}
 				expansion<simd_float> D;
 				greens_function(D, dx);
@@ -195,7 +196,7 @@ void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 				for (int j = 0; j < nsource; j++) {
 					array<simd_float, NDIM> dx;
 					for (int dim = 0; dim < NDIM; dim++) {
-						dx[dim] = (X[dim] - Y[j][dim]) * _2float;
+						dx[dim] = simd_float(X[dim] - Y[j][dim]) * _2float;
 					}
 					expansion<simd_float> D;
 					greens_function(D, dx);
@@ -275,7 +276,7 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 						simd_float mask = *((simd_float*) masks.data() + k);
 						array<simd_float, NDIM> dx;
 						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = (X[dim] - Y[dim]) * _2float;                                              // 3
+							dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                              // 3
 						}
 						const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                    // 5
 						const simd_float far_flag = r2 > h2;
