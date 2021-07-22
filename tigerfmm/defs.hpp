@@ -19,6 +19,9 @@
 #define LEFT 0
 #define RIGHT 1
 
+
+#define SELF_PHI float(-35.0/16.0)
+#define ANALYTIC_BLOCK_SIZE 128
 #define SINK_BUCKET_SIZE 100
 #define SOURCE_BUCKET_SIZE 100
 #define EWALD_DIST float(0.25)

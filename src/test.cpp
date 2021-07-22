@@ -1,5 +1,6 @@
 constexpr bool verbose = true;
 
+#include <tigerfmm/analytic.hpp>
 #include <tigerfmm/domain.hpp>
 #include <tigerfmm/gravity.hpp>
 #include <tigerfmm/kick.hpp>
@@ -137,9 +138,78 @@ static void kick_test() {
 
 }
 
+static void force_test() {
+	timer tm;
+
+	tm.start();
+	particles_random_init();
+	tm.stop();
+	PRINT("particles_random_init: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_begin();
+	tm.stop();
+	PRINT("domains_begin: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_end();
+	tm.stop();
+	PRINT("domains_end: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	tree_create_params tparams(0, theta);
+	tree_create(tparams);
+	tm.stop();
+	PRINT("tree_create: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	kick_params kparams;
+	kparams.a = 1.0;
+	kparams.first_call = true;
+	kparams.min_rung = 0;
+	kparams.t0 = 1.0;
+	kparams.theta = theta;
+	expansion<float> L;
+	for (int i = 0; i < EXPANSION_SIZE; i++) {
+		L[i] = 0.0f;
+	}
+	array<fixed32, NDIM> pos;
+	for (int dim = 0; dim < NDIM; dim++) {
+		pos[dim] = 0.f;
+	}
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
+	kick(kparams, L, pos, root_id, checklist, checklist);
+	tm.stop();
+	PRINT("tree_kick: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	tree_destroy();
+	tm.stop();
+	PRINT("tree_destroy: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	analytic_compare(100);
+	tm.stop();
+	PRINT("analytic_compare: %e s\n", tm.read());
+	tm.reset();
+
+}
+
 void test(std::string test) {
 	if (test == "domain") {
 		domain_test();
+	} else if (test == "force") {
+		force_test();
 	} else if (test == "kick") {
 		kick_test();
 	} else if (test == "tree") {

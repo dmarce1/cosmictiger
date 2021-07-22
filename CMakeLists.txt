@@ -15,6 +15,8 @@ set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 
 
 set(tigerfmm_source_files
+    src/analytic.cu
+    src/analytic.cpp
     src/cuda.cu
     src/domain.cpp
     src/ewald_indices.cpp

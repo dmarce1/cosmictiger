@@ -20,6 +20,7 @@ HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_destroy);
 HPX_PLAIN_ACTION (particles_fetch_cache_line);
 HPX_PLAIN_ACTION (particles_random_init);
+HPX_PLAIN_ACTION (particles_sample);
 
 struct line_id_type {
 	int proc;
@@ -147,7 +148,9 @@ void particles_destroy() {
 		futs.push_back(hpx::async<particles_destroy_action>(c));
 	}
 	particles_x = decltype(particles_x)();
+	particles_g = decltype(particles_g)();
 	particles_v = decltype(particles_v)();
+	particles_p = decltype(particles_p)();
 	particles_r = decltype(particles_r)();
 	hpx::wait_all(futs.begin(), futs.end());
 }
@@ -233,3 +236,41 @@ int particles_sort(pair<int, int> rng, double xm, int xdim) {
 
 }
 
+vector<particle_sample> particles_sample(int cnt) {
+	const bool save_force = get_options().save_force;
+	const auto children = hpx_children();
+	const size_t nparts = std::pow(get_options().parts_dim, NDIM);
+	vector<hpx::future<vector<particle_sample>>>futs;
+	for (int i = 0; i < children.size(); i++) {
+		const int begin = size_t(cnt) * nparts / (children.size() + 1);
+		const int end = size_t(cnt + 1) * nparts / (children.size() + 1);
+		const int this_cnt = end - begin;
+		futs.push_back(hpx::async<particles_sample_action>(children[i], this_cnt));
+	}
+	const int begin = size_t(children.size()) * nparts / (children.size() + 1);
+	const int this_cnt = nparts - begin;
+	vector<particle_sample> parts;
+	const int seed = 4321 * hpx_rank() + 42;
+	gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
+	gsl_rng_set(rndgen, seed);
+	for (int i = 0; i < this_cnt; i++) {
+		particle_sample sample;
+		const int index = gsl_rng_get(rndgen) % particles_size();
+		for (int dim = 0; dim < NDIM; dim++) {
+			sample.x[dim] = particles_pos(dim, index);
+		}
+		if (save_force) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				sample.g[dim] = particles_gforce(dim, index);
+			}
+			sample.p = particles_pot(index);
+		}
+		parts.push_back(sample);
+	}
+	gsl_rng_free(rndgen);
+	for (auto& f : futs) {
+		auto v = f.get();
+		parts.insert(parts.end(), v.begin(), v.end());
+	}
+	return std::move(parts);
+}

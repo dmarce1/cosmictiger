@@ -37,6 +37,20 @@ struct particle {
 	}
 };
 
+struct particle_sample {
+	array<fixed32, NDIM> x;
+	array<float, NDIM> g;
+	float p;
+	template<class A>
+	void serialize(A && a, unsigned) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			a & x[dim];
+			a & g[dim];
+		}
+		a & p;
+	}
+};
+
 PARTICLES_EXTERN array<vector<fixed32>, NDIM> particles_x;
 PARTICLES_EXTERN array<vector<float, pinned_allocator<float>>, NDIM> particles_v;
 PARTICLES_EXTERN vector<char, pinned_allocator<char>> particles_r;
@@ -93,5 +107,6 @@ void particles_destroy();
 void particles_global_read_pos(particle_global_range, vector<fixed32>& x, vector<fixed32>& y, vector<fixed32>& z, int offset);
 int particles_sort(pair<int, int> rng, double xm, int xdim);
 void particles_cache_free();
+vector<particle_sample> particles_sample(int cnt);
 
 #endif /* PARTICLES_HPP_ */
