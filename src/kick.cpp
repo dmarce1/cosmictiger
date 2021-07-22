@@ -140,7 +140,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		}
 	}
 	std::swap(echecklist, nextlist);
-	gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
+	//gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
 	nextlist.resize(0);
 	multlist.resize(0);
 
@@ -164,13 +164,6 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 			const simd_float far1 = R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + h);
 			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius + h);
-			simd_float verynear;
-			if (self_ptr->sink_leaf) {
-				const simd_float R = sqrt(R2);
-				verynear = R + other_radius <= sink_bias * self_radius * thetainv + h;
-			} else {
-				verynear = simd_float(0.0f);
-			}
 			const simd_float mult = far1;
 			const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
 			for (int i = 0; i < maxi; i++) {
@@ -178,7 +171,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					multlist.push_back(dchecklist[ci + i]);
 				} else if (part[i]) {
 					partlist.push_back(dchecklist[ci + i]);
-				} else if (other_leaf[i] || verynear[i]) {
+				} else if (other_leaf[i]) {
 					leaflist.push_back(dchecklist[ci + i]);
 				} else {
 					const auto child_checks = other_ptrs[i]->children;
@@ -201,7 +194,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		force_vectors forces(mynparts);
 		for (int i = 0; i < mynparts; i++) {
 			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-			forces.phi[i] = -SELF_PHI;
+			forces.phi[i] = -SELF_PHI / hfloat;
 		}
 		for (int i = 0; i < leaflist.size(); i++) {
 			const tree_node* other_ptr = tree_get_node(leaflist[i]);
@@ -236,11 +229,13 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				} else {
 					multlist.push_back(leaflist[i]);
 				}
+			} else {
+				partlist.push_back(leaflist[i]);
 			}
 		}
-		//	PRINT("%i %i\n", multlist.size(), partlist.size());
 		gravity_pc(forces, params.min_rung, self, multlist);
 		gravity_pp(forces, params.min_rung, self, partlist);
+		PRINT("%i %i\n", multlist.size(), partlist.size());
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;

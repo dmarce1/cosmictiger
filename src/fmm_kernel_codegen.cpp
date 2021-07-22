@@ -656,11 +656,14 @@ void do_expansion(bool two) {
 	array<int, NDIM> n;
 	array<int, NDIM> k;
 	flops += const_reference_trless<P>("La");
-	tprint("for( int i = 0; i < %i; i++ ) {\n", Q);
-	indent();
-	tprint("Lb[i] = La[i];\n");
-	deindent();
-	tprint("}\n");
+	if (two) {
+		tprint("Lb(0,0,0) = La(0,0,0);\n");
+		tprint("Lb(1,0,0) = La(1,0,0);\n");
+		tprint("Lb(0,1,0) = La(0,1,0);\n");
+		tprint("Lb(0,0,1) = La(0,0,1);\n");
+	} else {
+		tprint("Lb = La;\n");
+	}
 	struct entry {
 		int Ldest;
 		array<int, NDIM> p;
