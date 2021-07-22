@@ -1,14 +1,13 @@
 constexpr bool verbose = true;
-
-#ifndef USE_HPX
-#include <boost/program_options.hpp>
-#include <fstream>
-#endif
-
+#include <tigerfmm/constants.hpp>
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/hpx.hpp>
+#include <tigerfmm/math.hpp>
 #include <tigerfmm/options.hpp>
 #include <tigerfmm/safe_io.hpp>
+
+#include <boost/program_options.hpp>
+#include <fstream>
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
 #define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';
@@ -72,12 +71,26 @@ bool process_options(int argc, char *argv[]) {
 		po::notify(vm);
 	}
 
-	opts.hsoft = 1.0 / opts.parts_dim / 25.0;
 	opts.tree_cache_line_size = 512;
 	opts.part_cache_line_size = 32 * 1024;
 	opts.save_force = opts.test == "force";
-	opts.GM = 1.0;
+	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);
+	opts.hubble = 0.7;
+	opts.sigma8 = 0.84;
+	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
+	opts.code_to_s = opts.code_to_cm / constants::c;
+	opts.code_to_g = 1.989e33;
+	opts.omega_m = 0.3;
+	double H = constants::H0 * opts.code_to_s;
+	const size_t nparts = pow(opts.parts_dim, NDIM);
+	const double Neff = 3.086;
+	const double Theta = 1.0;
+	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
+	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma
+			* (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
+			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
+	opts.omega_r = omega_r;
 
 	PRINT("Simulation Options\n");
 	SHOW_STRING(config_file);

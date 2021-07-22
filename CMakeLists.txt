@@ -19,10 +19,13 @@ set(tigerfmm_source_files
     src/analytic.cpp
     src/cuda.cu
     src/drift.cpp
+    src/driver.cpp
     src/domain.cpp
     src/ewald_indices.cpp
     src/ewald_indices.cu
+    src/fft.cpp
     src/gravity.cpp
+    src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
     src/main.cpp
@@ -36,14 +39,18 @@ set(tigerfmm_source_files
                         
 
 set(tigerfmm_header_files
+    tigerfmm/complex.hpp
     tigerfmm/containers.hpp
     tigerfmm/cuda.hpp
     tigerfmm/defs.hpp
     tigerfmm/domain.hpp
     tigerfmm/drift.hpp
+    tigerfmm/driver.hpp
     tigerfmm/ewald_incides.hpp
+    tigerfmm/fft.hpp
     tigerfmm/fixes.hpp
     tigerfmm/gravity.hpp
+    tigerfmm/initialize.hpp
     tigerfmm/hpx.hpp
     tigerfmm/kick.hpp
     tigerfmm/math.hpp
