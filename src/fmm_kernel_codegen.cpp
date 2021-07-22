@@ -644,6 +644,7 @@ void do_expansion(bool two) {
 	flops += compute_dx(P);
 	array<int, NDIM> n;
 	array<int, NDIM> k;
+	int phi_flops = 0;
 	flops += const_reference_trless<P>("La");
 	if (two) {
 		tprint("Lb(0,0,0) = La(0,0,0);\n");
@@ -659,12 +660,8 @@ void do_expansion(bool two) {
 		array<int, NDIM> k;
 		double factor;
 	};
-	vector<entry> entries;
+	vector<vector<entry>> entries(two ? 4 : Q * Q + 1);
 	for (int n0 = 0; n0 < Q; n0++) {
-		if (n0 == 0) {
-			tprint("if( do_phi ) {\n");
-			indent();
-		}
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
 				n[2] = n0 - n[1] - n[0];
@@ -677,25 +674,12 @@ void do_expansion(bool two) {
 								const auto p = n + k;
 								const int p0 = p[0] + p[1] + p[2];
 								if (n != p) {
-									if (n0 == 0) {
-										if (close21(factor)) {
-											tprint("Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", trless_index(n[0], n[1], n[2], Q), k[0], k[1], k[2], p[0], p[1], p[2],
-													trless_index(n[0], n[1], n[2], Q));
-											flops += 2;
-										} else {
-											tprint("Lb[%i] = fmaf(T(%.8e) * x%i%i%i, La%i%i%i, Lb[%i]);\n", trless_index(n[0], n[1], n[2], Q), factor, k[0], k[1], k[2],
-													p[0], p[1], p[2], trless_index(n[0], n[1], n[2], Q));
-											flops += 3;
-										}
-									} else {
-										entry e;
-										e.Ldest = trless_index(n[0], n[1], n[2], Q);
-										e.factor = factor;
-										e.k = k;
-										e.p = p;
-										entries.push_back(e);
-									}
-//			L2(n) += factor * delta_x(k) * L1(p);
+									entry e;
+									e.Ldest = trless_index(n[0], n[1], n[2], Q);
+									e.factor = factor;
+									e.k = k;
+									e.p = p;
+									entries[e.Ldest ].push_back(e);
 								}
 							}
 						}
@@ -703,60 +687,91 @@ void do_expansion(bool two) {
 				}
 			}
 		}
-		if (n0 == 0) {
-			deindent();
-			tprint("}\n");
+	}
+	for (auto& e : entries) {
+		std::sort(e.begin(), e.end(), [](entry a, entry b) {
+			return( a.factor < b.factor );
+		});
+	}
+	double last_factor = 1.0;
+	tprint("if( do_phi ) {\n");
+	indent();
+	for (int j = 0; j < entries[0].size(); j++) {
+		const auto factor = entries[0][j].factor;
+		const auto p = entries[0][j].p;
+		const auto k = entries[0][j].k;
+		const auto index = entries[0][j].Ldest;
+		if (!close21(last_factor / factor)) {
+			tprint("Lb[0] *= %e;\n", last_factor / factor);
+			last_factor = factor;
+			phi_flops++;
+		}
+		tprint("Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", index, k[0], k[1], k[2], p[0], p[1], p[2], index);
+		phi_flops += 2;
+	}
+	if (!close21(last_factor)) {
+		tprint("Lb[0] *= %e;\n", last_factor);
+	}
+	deindent();
+	phi_flops++;
+	tprint("}\n");
+	int total_size;
+	for (int i = 1; i < entries.size(); i++) {
+		total_size += entries[i].size();
+	}
+	int mid;
+	int half_size = 0;
+	for (int i = 1; i < entries.size(); i++) {
+		if (half_size >= total_size / 2) {
+			mid = i;
+			break;
+		}
+		half_size += entries[i].size();
+	}
+	char* str;
+	vector<std::string> cmds1, cmds2;
+	for (int i = 1; i < entries.size(); i++) {
+		last_factor = 1.0;
+		auto& cmds = i >= mid ? cmds2 : cmds1;
+		if (entries[i].size()) {
+			const auto index = entries[i][0].Ldest;
+			for (int j = 0; j < entries[i].size(); j++) {
+				const auto factor = entries[i][j].factor;
+				const auto p = entries[i][j].p;
+				const auto k = entries[i][j].k;
+				if (!close21(factor / last_factor)) {
+					ASPRINTF(&str, "Lb[%i] *= %e;\n", index, last_factor / factor);
+					cmds.push_back(str);
+					free(str);
+					flops++;
+					last_factor = factor;
+				}
+				ASPRINTF(&str, "Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", index, k[0], k[1], k[2], p[0], p[1], p[2], index);
+				cmds.push_back(str);
+				free(str);
+				flops += 2;
+			}
+			if (!close21(last_factor)) {
+				ASPRINTF(&str, "Lb[%i] *= %e;\n", index, last_factor);
+				cmds.push_back(str);
+				free(str);
+			}
 		}
 	}
-	std::sort(entries.begin(), entries.end(), [](entry a, entry b) {
-		if(a.Ldest < b.Ldest) {
-			return true;
-		} else if( a.Ldest > b.Ldest) {
-			return false;
-		} else {
-			return sym_index(a.k[0], a.k[1], a.k[2]) < sym_index(b.k[0], b.k[1], b.k[2]);
+	int i = 0;
+	int j = 0;
+	while (i < cmds1.size() || j < cmds2.size()) {
+		if (i < cmds1.size()) {
+			tprint("%s", cmds1[i].c_str());
+			i++;
 		}
-	});
-	vector<entry> entries1, entries2;
-	for (int i = 0; i < entries.size(); i++) {
-		if (i < (entries.size() + 1) / 2) {
-			entries1.push_back(entries[i]);
-		} else {
-			entries2.push_back(entries[i]);
-		}
-	}
-	for (int i = 0; i < entries1.size(); i++) {
-		{
-			const auto factor = entries1[i].factor;
-			const auto p = entries1[i].p;
-			const auto k = entries1[i].k;
-			const auto index = entries1[i].Ldest;
-			if (close21(factor)) {
-				tprint("Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", index, k[0], k[1], k[2], p[0], p[1], p[2], index);
-				flops += 2;
-			} else {
-				tprint("Lb[%i] = fmaf(T(%.8e) * x%i%i%i, La%i%i%i, Lb[%i]);\n", index, factor, k[0], k[1], k[2], p[0], p[1], p[2], index);
-				flops += 3;
-			}
-
-		}
-		if (entries2.size() > i) {
-			const auto factor = entries2[i].factor;
-			const auto p = entries2[i].p;
-			const auto k = entries2[i].k;
-			const auto index = entries2[i].Ldest;
-			if (close21(factor)) {
-				tprint("Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", index, k[0], k[1], k[2], p[0], p[1], p[2], index);
-				flops += 2;
-			} else {
-				tprint("Lb[%i] = fmaf(T(%.8e) * x%i%i%i, La%i%i%i, Lb[%i]);\n", index, factor, k[0], k[1], k[2], p[0], p[1], p[2], index);
-				flops += 3;
-			}
-
+		if (j < cmds2.size()) {
+			tprint("%s", cmds2[j].c_str());
+			j++;
 		}
 	}
 	tprint("return Lb;\n");
-	printf("/* FLOPS = %i*/\n", flops);
+	printf("/* FLOPS = %i + do_phi * %i*/\n", flops, phi_flops);
 	deindent();
 	tprint("}\n");
 }
@@ -1242,8 +1257,10 @@ int main() {
 						trless_index(n[0], n[1], n[2], Pmax));
 				fl += 2;
 			}
-			fl++;
-			tprint("L[%i] *= %e;\n", nindex, last_coeff);
+			if (!close21(last_coeff)) {
+				fl++;
+				tprint("L[%i] *= %e;\n", nindex, last_coeff);
+			}
 			if (nindex == 0) {
 				deindent();
 				tprint("}\n");

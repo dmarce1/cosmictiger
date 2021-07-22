@@ -18,6 +18,7 @@ set(tigerfmm_source_files
     src/analytic.cu
     src/analytic.cpp
     src/cuda.cu
+    src/drift.cpp
     src/domain.cpp
     src/ewald_indices.cpp
     src/ewald_indices.cu
@@ -39,6 +40,7 @@ set(tigerfmm_header_files
     tigerfmm/cuda.hpp
     tigerfmm/defs.hpp
     tigerfmm/domain.hpp
+    tigerfmm/drift.hpp
     tigerfmm/ewald_incides.hpp
     tigerfmm/fixes.hpp
     tigerfmm/gravity.hpp

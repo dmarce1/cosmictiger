@@ -22,8 +22,8 @@
 
 #define SELF_PHI float(-35.0/16.0)
 #define ANALYTIC_BLOCK_SIZE 128
-#define SINK_BUCKET_SIZE 96
-#define SOURCE_BUCKET_SIZE 96
+#define SINK_BUCKET_SIZE 90
+#define SOURCE_BUCKET_SIZE 90
 #define EWALD_DIST float(0.25)
 #define EWALD_REAL_CUTOFF2 (2.6*2.6)
 #define KICK_OVERSUBSCRIPTION 8
@@ -35,7 +35,7 @@
 #define MIN_PC_PARTS 47
 #define MIN_SORT_THREAD_PARTS (1024)
 #define NTREES_MIN (2*1024*1024)
-#define ORDER 8
+#define ORDER 6
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)

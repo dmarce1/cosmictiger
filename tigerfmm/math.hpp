@@ -21,6 +21,16 @@ CUDA_EXPORT inline T sqr(const T& a, const T& b, const T& c) {
 	return a * a + b * b + c * c;
 }
 
+template<class T>
+CUDA_EXPORT void constrain_range(T& x) {
+	while (x >= T(1)) {
+		x -= T(1);
+	}
+	while (x < T(0)) {
+		x += T(1);
+	}
+}
+
 __device__ inline void erfcexpf(float x, float* ec, float *ex) {				// 18 + FLOP_DIV + FLOP_EXP
 	const float p(0.3275911f);
 	const float a1(0.254829592f);
