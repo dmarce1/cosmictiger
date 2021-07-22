@@ -1,4 +1,5 @@
 #include <tigerfmm/defs.hpp>
+#include <tigerfmm/containers.hpp>
 #define CODE_GEN_CPP
 #include <tigerfmm/tensor.hpp>
 
@@ -142,11 +143,11 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 		array<int, NDIM> dest;
 		double factor;
 	};
-	std::vector<entry_type> entries;
+	vector<entry_type> entries;
 	int flops = 0;
 
-	std::vector<std::string> asn;
-	std::vector<std::string> op;
+	vector<std::string> asn;
+	vector<std::string> op;
 	for (int m0 = 1; m0 <= P / 2; m0++) {
 		array<int, NDIM> j;
 		const int Q = P - 2 * m0;
@@ -321,11 +322,11 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 		array<int, NDIM> dest;
 		double factor;
 	};
-	std::vector<entry_type> entries;
+	vector<entry_type> entries;
 	int flops = 0;
 
-	std::vector<std::string> asn;
-	std::vector<std::string> op;
+	vector<std::string> asn;
+	vector<std::string> op;
 	for (int m0 = 1; m0 <= P / 2; m0++) {
 		array<int, NDIM> j;
 		const int Q = P - 2 * m0;
@@ -670,7 +671,7 @@ void do_expansion(bool two) {
 		array<int, NDIM> k;
 		double factor;
 	};
-	std::vector<entry> entries;
+	vector<entry> entries;
 	for (int n0 = 0; n0 < Q; n0++) {
 		if (n0 == 0) {
 			tprint("if( do_phi ) {\n");
@@ -728,7 +729,7 @@ void do_expansion(bool two) {
 			return sym_index(a.k[0], a.k[1], a.k[2]) < sym_index(b.k[0], b.k[1], b.k[2]);
 		}
 	});
-	std::vector<entry> entries1, entries2;
+	vector<entry> entries1, entries2;
 	for (int i = 0; i < entries.size(); i++) {
 		if (i < (entries.size() + 1) / 2) {
 			entries1.push_back(entries[i]);
@@ -783,8 +784,8 @@ void do_expansion_cuda() {
 	};
 	array<int, NDIM> n;
 	array<int, NDIM> k;
-	std::vector<entry> entries;
-	std::vector<entry> phi_entries;
+	vector<entry> entries;
+	vector<entry> phi_entries;
 	for (int n0 = 0; n0 < Q; n0++) {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
@@ -826,7 +827,7 @@ void do_expansion_cuda() {
 		}
 	});
 	tprint("#ifdef EXPANSION_CU\n");
-	std::vector<entry> entries1, entries2;
+	vector<entry> entries1, entries2;
 	for (int i = 0; i < entries.size(); i++) {
 		if (i < (entries.size() + 1) / 2) {
 			entries1.push_back(entries[i]);
@@ -1212,8 +1213,8 @@ int main() {
 			array<int, NDIM> m;
 			double coeff;
 		};
-		std::vector<entry_type> entries0;
-		std::vector<entry_type> entries;
+		vector<vector<entry_type>> entries;
+		entries.resize(Pmax <= 2 ? Pmax * Pmax : Pmax * Pmax + 1);
 		for (n[0] = 0; n[0] < Pmax; n[0]++) {
 			for (n[1] = 0; n[1] < Pmax - n[0]; n[1]++) {
 				const int nzmax = (n[0] == 0 && n[1] == 0) ? intmin(3, Pmax) : intmin(Pmax - n[0] - n[1], 2);
@@ -1228,11 +1229,8 @@ int main() {
 								e.coeff = coeff;
 								e.n = n;
 								e.m = m;
-								if (n0 == 0) {
-									entries0.push_back(e);
-								} else {
-									entries.push_back(e);
-								}
+								const int index = trless_index(n[0], n[1], n[2], Pmax);
+								entries[index].push_back(e);
 							}
 						}
 					}
@@ -1240,64 +1238,96 @@ int main() {
 			}
 		}
 		const auto sort_func = [Pmax](entry_type a, entry_type b) {
-			if( trless_index(a.n[0], a.n[1], a.n[2], Pmax) < trless_index(b.n[0], b.n[1], b.n[2], Pmax)) {
+			if( a.coeff < b.coeff ) {
 				return true;
+			} else {
+				return false;
 			}
-			return false;
 		};
-		std::sort(entries.begin(), entries.end(), sort_func);
-		std::vector<entry_type> entries1, entries2;
-		for (int i = 0; i < entries.size(); i++) {
-			if (i < (entries.size() + 1) / 2) {
-				entries1.push_back(entries[i]);
-			} else {
-				entries2.push_back(entries[i]);
+		for (auto& e : entries) {
+			std::sort(e.begin(), e.end(), sort_func);
+		}
+		for (int i = 0; i < 1; i++) {
+			double last_coeff = 1.0;
+			const auto n = entries[i][0].n;
+			const int nindex = trless_index(n[0], n[1], n[2], Pmax);
+			auto& fl = phi_flops;
+			tprint("if( do_phi ) {\n");
+			indent();
+			for (int j = 0; j < entries[i].size(); j++) {
+				const auto coeff = entries[i][j].coeff;
+				const auto m = entries[i][j].m;
+				if (!close21(last_coeff / coeff)) {
+					double factor = last_coeff / coeff;
+					tprint("L[%i] *= %e;\n", nindex, factor);
+					last_coeff = coeff;
+					fl++;
+				}
+				tprint("L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+						trless_index(n[0], n[1], n[2], Pmax));
+				fl += 2;
+			}
+			fl++;
+			tprint("L[%i] *= %e;\n", nindex, last_coeff);
+			if (nindex == 0) {
+				deindent();
+				tprint("}\n");
 			}
 		}
-		tprint("if( do_phi ) {\n");
-		indent();
-		for (int i = 0; i < entries0.size(); i++) {
-			const auto coeff = entries0[i].coeff;
-			const auto n = entries0[i].n;
-			const auto m = entries0[i].m;
-			if (close21(coeff)) {
-				tprint("L[0] = fmaf(M%i%i%i, D%i%i%i, L[0]);\n", m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2]);
-				phi_flops += 2;
-			} else {
-				phi_flops += 3;
-				tprint("L[0] = fmaf(T(%.8e) * M%i%i%i, D%i%i%i, L[0]);\n", coeff, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2]);
+		int total_size = 0;
+		for (int i = 1; i < entries.size(); i++) {
+			total_size += entries[i].size();
+		}
+		int half_size = 0;
+		int mid;
+		for (int i = 1; i < entries.size(); i++) {
+			half_size += entries[i].size();
+			if (half_size >= total_size / 2) {
+				mid = i;
+				break;
 			}
 		}
-		deindent();
-		tprint("}\n");
-		for (int i = 0; i < entries1.size(); i++) {
-			{
-				const auto coeff = entries1[i].coeff;
-				const auto n = entries1[i].n;
-				const auto m = entries1[i].m;
-				if (close21(coeff)) {
-					tprint("L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", trless_index(n[0], n[1], n[2], Pmax), m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
-							trless_index(n[0], n[1], n[2], Pmax));
-					flops += 2;
-				} else {
-					flops += 3;
-					tprint("L[%i] = fmaf(T(%.8e) * M%i%i%i, D%i%i%i, L[%i]);\n", trless_index(n[0], n[1], n[2], Pmax), coeff, m[0], m[1], m[2], n[0] + m[0],
-							n[1] + m[1], n[2] + m[2], trless_index(n[0], n[1], n[2], Pmax));
+		vector<std::string> cmds1, cmds2;
+		for (int i = 1; i < entries.size(); i++) {
+			double last_coeff = 1.0;
+			const auto n = entries[i][0].n;
+			const int nindex = trless_index(n[0], n[1], n[2], Pmax);
+			auto& fl = flops;
+			auto& cmds = i >= mid ? cmds2 : cmds1;
+			char* str;
+			for (int j = 0; j < entries[i].size(); j++) {
+				const auto coeff = entries[i][j].coeff;
+				const auto m = entries[i][j].m;
+				if (!close21(last_coeff / coeff)) {
+					double factor = last_coeff / coeff;
+					asprintf(&str, "L[%i] *= %e;\n", nindex, factor);
+					cmds.push_back(str);
+					free(str);
+					last_coeff = coeff;
+					fl++;
 				}
+				asprintf(&str, "L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+						trless_index(n[0], n[1], n[2], Pmax));
+				cmds.push_back(str);
+				free(str);
+				fl += 2;
 			}
-			if (i < entries2.size()) {
-				const auto coeff = entries2[i].coeff;
-				const auto n = entries2[i].n;
-				const auto m = entries2[i].m;
-				if (close21(coeff)) {
-					tprint("L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", trless_index(n[0], n[1], n[2], Pmax), m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
-							trless_index(n[0], n[1], n[2], Pmax));
-					flops += 2;
-				} else {
-					flops += 3;
-					tprint("L[%i] = fmaf(T(%.8e) * M%i%i%i, D%i%i%i, L[%i]);\n", trless_index(n[0], n[1], n[2], Pmax), coeff, m[0], m[1], m[2], n[0] + m[0],
-							n[1] + m[1], n[2] + m[2], trless_index(n[0], n[1], n[2], Pmax));
-				}
+			if (!close21(last_coeff)) {
+				fl++;
+				asprintf(&str, "L[%i] *= %e;\n", nindex, last_coeff);
+				cmds.push_back(str);
+			}
+		}
+		int i = 0;
+		int j = 0;
+		while (i < cmds1.size() || j < cmds2.size()) {
+			if (i < cmds1.size()) {
+				tprint("%s", cmds1[i].c_str());
+				i++;
+			}
+			if (j < cmds2.size()) {
+				tprint("%s", cmds2[j].c_str());
+				j++;
 			}
 		}
 		tprint("return %i + do_phi * %i;\n", flops, phi_flops);
@@ -1355,7 +1385,7 @@ int main() {
 		array<int, NDIM> k;
 		double factor;
 	};
-	std::vector<mentry> mentries;
+	vector<mentry> mentries;
 	for (int n0 = 0; n0 <= P - 2; n0++) {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
@@ -1383,7 +1413,7 @@ int main() {
 		}
 		return false;
 	});
-	std::vector<mentry> entries1, entries2;
+	vector<mentry> entries1, entries2;
 	for (int i = 0; i < mentries.size(); i++) {
 		if (i < (mentries.size() + 1) / 2) {
 			entries1.push_back(mentries[i]);
