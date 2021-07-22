@@ -5,7 +5,6 @@
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
-
 void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -20,7 +19,6 @@ void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 		static thread_local vector<array<simd_int, NDIM>> Y;
 		M.resize(nsource);
 		Y.resize(nsource);
-		int count = 0;
 		for (int i = 0; i < tree_ptrs.size(); i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
@@ -58,7 +56,6 @@ void gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 			expansion<simd_float> D;
 			if (type == GRAVITY_CC_DIRECT) {
 				greens_function(D, dx);
-
 			} else {
 				ewald_greens_function(D, dx);
 			}
@@ -141,7 +138,6 @@ void gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, 
 	}
 
 }
-
 
 void gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
 	if (list.size()) {
@@ -301,9 +297,9 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 							rinv1 = far_flag * rinv1_far + (simd_float(1) - far_flag) * rinv1_near * mask;
 							rinv3 = far_flag * rinv3_far + (simd_float(1) - far_flag) * rinv3_near * mask;
 						}
-						gx = fma(rinv3, dx[XDIM], gx);																			// 2
-						gy = fma(rinv3, dx[YDIM], gy);																			// 2
-						gz = fma(rinv3, dx[ZDIM], gz);																			// 2
+						gx = fma(-rinv3, dx[XDIM], gx);																			// 2
+						gy = fma(-rinv3, dx[YDIM], gy);																			// 2
+						gz = fma(-rinv3, dx[ZDIM], gz);																			// 2
 						phi -= rinv1;																									// 1
 					}
 					const int j = i - range.first;

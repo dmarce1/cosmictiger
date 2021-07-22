@@ -269,7 +269,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		radius = std::min((double) radius, std::sqrt(r));
 		array<double, NDIM> dxl;
 		array<double, NDIM> dxr;
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			dxl[dim] = Xl[dim] - Xc[dim];
 			dxr[dim] = Xr[dim] - Xc[dim];
 		}
@@ -293,24 +293,29 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			Xmin[dim] = box.end[dim];
 		}
 		nactive = 0;
+		array<double, NDIM> dx;
 		for (int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				Xmax[dim] = std::max(Xmax[dim], x);
 				Xmin[dim] = std::min(Xmin[dim], x);
 			}
-			//	PRINT( "%e %e %e \n", particles_pos(0, i).to_double(), particles_pos(1, i).to_double(), particles_pos(2, i).to_double());
-
 			if (particles_rung(i) >= params.min_rung) {
 				nactive++;
-			}
-			const auto m = P2M(Xc);
-			for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-				M[i] += m[i];
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
+		}
+		for (int i = part_range.first; i < part_range.second; i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				const double x = particles_pos(dim, i).to_double();
+				dx[dim] = x - Xc[dim];
+			}
+			const auto m = P2M(dx);
+			for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+				M[i] += m[i];
+			}
 		}
 		r = 0.0;
 		for (int i = part_range.first; i < part_range.second; i++) {

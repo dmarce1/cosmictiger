@@ -109,9 +109,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	simd_float other_radius;
 	simd_int other_leaf;
 	for (int dim = 0; dim < NDIM; dim++) {
-		Ldx[dim] = self_ptr->pos[dim].to_double() - pos[dim].to_double();
+		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, do_phi);
+	multlist.resize(0);
 	for (int ci = 0; ci < echecklist.size(); ci += SIMD_FLOAT_SIZE) {
 		const int maxci = std::min((int) echecklist.size(), ci + SIMD_FLOAT_SIZE);
 		const int maxi = maxci - ci;
@@ -140,10 +141,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		}
 	}
 	std::swap(echecklist, nextlist);
-	//gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
+	gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
 	nextlist.resize(0);
 	multlist.resize(0);
-
+	partlist.resize(0);
+	leaflist.resize(0);
 	do {
 		for (int ci = 0; ci < dchecklist.size(); ci += SIMD_FLOAT_SIZE) {
 			const int maxci = std::min((int) dchecklist.size(), ci + SIMD_FLOAT_SIZE);
@@ -186,7 +188,6 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	} while (dchecklist.size() && self_ptr->sink_leaf);
 	gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
 	gravity_cp(L, partlist, self, params.min_rung == 0);
-
 	if (self_ptr->sink_leaf) {
 		partlist.resize(0);
 		multlist.resize(0);
@@ -235,7 +236,6 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		}
 		gravity_pc(forces, params.min_rung, self, multlist);
 		gravity_pp(forces, params.min_rung, self, partlist);
-	//	PRINT("%i %i\n", multlist.size(), partlist.size());
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;
@@ -244,13 +244,13 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				const int j = i - rng.first;
 				array<float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[XDIM] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
+					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
 				const auto L2 = L2P(L, dx, params.min_rung == 0);
-				forces.phi[j] += L2[0];
-				forces.gx[j] -= L2[XDIM + 1];
-				forces.gy[j] -= L2[YDIM + 1];
-				forces.gz[j] -= L2[ZDIM + 1];
+				forces.phi[j] += L2(0, 0, 0);
+				forces.gx[j] -= L2(1, 0, 0);
+				forces.gy[j] -= L2(0, 1, 0);
+				forces.gz[j] -= L2(0, 0, 1);
 				forces.gx[j] *= GM;
 				forces.gy[j] *= GM;
 				forces.gz[j] *= GM;
