@@ -656,7 +656,11 @@ void do_expansion(bool two) {
 	array<int, NDIM> n;
 	array<int, NDIM> k;
 	flops += const_reference_trless<P>("La");
-	tprint("Lb = La;\n");
+	tprint("for( int i = 0; i < %i; i++ ) {\n", Q);
+	indent();
+	tprint("Lb[i] = La[i];\n");
+	deindent();
+	tprint("}\n");
 	struct entry {
 		int Ldest;
 		array<int, NDIM> p;
@@ -936,12 +940,12 @@ void do_expansion_cuda() {
 	deindent();
 	tprint("}\n");
 	if (entries1.size() != entries2.size()) {
-		tprint( "if( tid == 0 ) {\n");
+		tprint("if( tid == 0 ) {\n");
 		indent();
 		tprint("Lb[Ldest1[%i]] = fmaf(factor1[%i] * dx[xsrc1[%i]], Lc[Lsrc1[%i]], Lb[Ldest1[%i]]);\n", entries2.size(), entries2.size(), entries2.size(),
 				entries2.size(), entries2.size());
 		deindent();
-		tprint( "}\n");
+		tprint("}\n");
 	}
 	tprint("if( do_phi ) {\n");
 	indent();
@@ -1005,7 +1009,7 @@ void ewald(int direct_flops) {
 	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
 	tprint("T exp0;\n");
 	tprint("T erfc0;\n");
-	tprint( "erfcexp(2.f * r, &erfc0, &exp0);\n");                          // 20
+	tprint("erfcexp(2.f * r, &erfc0, &exp0);\n");                          // 20
 	tprint("const T expfactor = fouroversqrtpi * exp0;\n");                  // 1
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
@@ -1114,7 +1118,7 @@ void ewald(int direct_flops) {
 
 int main() {
 
-	fprintf( stderr, "Generating FMM kernels for Pmax = %i\n", P - 1);
+	fprintf(stderr, "Generating FMM kernels for Pmax = %i\n", P - 1);
 
 	int flops = 0;
 
@@ -1192,7 +1196,7 @@ int main() {
 		tprint("\n\ntemplate<class T>\n");
 		tprint("CUDA_EXPORT\n");
 		tprint("inline int M2L(tensor_trless_sym<T, %i>& L, const tensor_trless_sym<T, %i>& M, const tensor_trless_sym<T, %i>& D, bool do_phi) {\n", Pmax,
-				P - 1, P);
+		P - 1, P);
 		indent();
 		int phi_flops = 0;
 		flops += const_reference_trless<P - 1>("M");

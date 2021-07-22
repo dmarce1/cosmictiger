@@ -40,6 +40,8 @@ struct particle {
 PARTICLES_EXTERN array<vector<fixed32>, NDIM> particles_x;
 PARTICLES_EXTERN array<vector<float, pinned_allocator<float>>, NDIM> particles_v;
 PARTICLES_EXTERN vector<char, pinned_allocator<char>> particles_r;
+PARTICLES_EXTERN array<vector<float, pinned_allocator<float>>, NDIM> particles_g;
+PARTICLES_EXTERN vector<float, pinned_allocator<float>> particles_p;
 
 struct particle_global_range {
 	int proc;
@@ -56,6 +58,14 @@ inline float& particles_vel(int dim, int index) {
 
 inline char& particles_rung(int index) {
 	return particles_r[index];
+}
+
+inline float& particles_gforce(int dim, int index) {
+	return particles_g[dim][index];
+}
+
+inline float& particles_pot(int index) {
+	return particles_p[index];
 }
 
 inline particle particles_get_particle(int index) {
@@ -78,8 +88,6 @@ inline void particles_set_particle(particle p, int index) {
 
 int particles_size();
 void particles_resize(int);
-int particles_size_pos();
-void particles_resize_pos(int);
 void particles_random_init();
 void particles_destroy();
 void particles_global_read_pos(particle_global_range, vector<fixed32>& x, vector<fixed32>& y, vector<fixed32>& z, int offset);

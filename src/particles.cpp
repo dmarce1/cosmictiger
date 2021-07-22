@@ -140,10 +140,6 @@ int particles_size() {
 	return particles_r.size();
 }
 
-int particles_size_pos() {
-	return particles_x[XDIM].size();
-}
-
 void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
@@ -162,11 +158,11 @@ void particles_resize(int sz) {
 		particles_v[dim].resize(sz);
 	}
 	particles_r.resize(sz);
-}
-
-void particles_resize_pos(int sz) {
-	for (int dim = 0; dim < NDIM; dim++) {
-		particles_x[dim].resize(sz);
+	if (get_options().save_force) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			particles_g[dim].resize(sz);
+		}
+		particles_p.resize(sz);
 	}
 }
 

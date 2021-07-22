@@ -216,6 +216,7 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 	timer tm;
 	tm.start();
 	constexpr int chunk_size = 32;
+	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float h(get_options().hsoft);
@@ -274,19 +275,19 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 						simd_float mask = *((simd_float*) masks.data() + k);
 						array<simd_float, NDIM> dx;
 						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = (X[dim] - Y[dim]) * _2float;
+							dx[dim] = (X[dim] - Y[dim]) * _2float;                                              // 3
 						}
-						const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                   // 6
-						const simd_float far_flag = r2 > h2;                                                                    // 1
+						const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                    // 5
+						const simd_float far_flag = r2 > h2;
 						simd_float rinv1, rinv3;
-						if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                                             // 7
-							rinv1 = mask * rsqrt(r2);                                      // 1 + FLOP_DIV + FLOP_SQRT
-							rinv3 = rinv1 * rinv1 * rinv1;                                                     // 2
+						if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                               // 4
+							rinv1 = mask * rsqrt(r2);                                                           // 5
+							rinv3 = rinv1 * rinv1 * rinv1;                                                      // 2
 						} else {
-							const simd_float rinv1_far = mask * simd_float(1) / sqrt(r2);                 // 1 + FLOP_DIV + FLOP_SQRT
-							const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                                      // 2
-							const simd_float r1overh1 = sqrt(r2) * hinv;                                             // FLOP_SQRT + 1
-							const simd_float r2oh2 = r1overh1 * r1overh1;                                                     // 1
+							const simd_float rinv1_far = mask * simd_float(1) / sqrt(r2);
+							const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;
+							const simd_float r1overh1 = sqrt(r2) * hinv;
+							const simd_float r2oh2 = r1overh1 * r1overh1;
 							simd_float rinv3_near = +15.0f / 8.0f;
 							rinv3_near = fma(rinv3_near, r2oh2, simd_float(-21.0f / 4.0f));
 							rinv3_near = fma(rinv3_near, r2oh2, simd_float(+35.0f / 8.0f));
@@ -296,13 +297,13 @@ void gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_
 							rinv1_near = fma(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));
 							rinv1_near = fma(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));
 							rinv1_near *= hinv;
-							rinv1 = far_flag * rinv1_far + (simd_float(1) - far_flag) * rinv1_near * mask;                  // 4
-							rinv3 = far_flag * rinv3_far + (simd_float(1) - far_flag) * rinv3_near * mask;                  // 4
+							rinv1 = far_flag * rinv1_far + (simd_float(1) - far_flag) * rinv1_near * mask;
+							rinv3 = far_flag * rinv3_far + (simd_float(1) - far_flag) * rinv3_near * mask;
 						}
-						gx = fma(rinv3, dx[XDIM], gx);                                                                // 2
-						gy = fma(rinv3, dx[YDIM], gy);                                                                // 2
-						gz = fma(rinv3, dx[ZDIM], gz);                                                                // 2
-						phi -= rinv1;                                                                                           // 1
+						gx = fma(rinv3, dx[XDIM], gx);																			// 2
+						gy = fma(rinv3, dx[YDIM], gy);																			// 2
+						gz = fma(rinv3, dx[ZDIM], gz);																			// 2
+						phi -= rinv1;																									// 1
 					}
 					const int j = i - range.first;
 					f.gx[j] += gx.sum();

@@ -4195,7 +4195,9 @@ tensor_trless_sym<T, 7> L2L(const tensor_trless_sym<T, 7>& La, const array<T, ND
 	const T& La501 =  (La[43]);
 	const T& La510 =  (La[22]);
 	const T& La600 =  (La[21]);
-	Lb = La;
+	for( int i = 0; i < 7; i++ ) {
+		Lb[i] = La[i];
+	}
 	if( do_phi ) {
 		Lb[0] = fmaf( x001, La001, Lb[0]);
 		Lb[0] = fmaf(T(5.00000000e-01) * x002, La002, Lb[0]);
@@ -5072,7 +5074,9 @@ tensor_trless_sym<T, 2> L2P(const tensor_trless_sym<T, 7>& La, const array<T, ND
 	const T& La501 =  (La[43]);
 	const T& La510 =  (La[22]);
 	const T& La600 =  (La[21]);
-	Lb = La;
+	for( int i = 0; i < 2; i++ ) {
+		Lb[i] = La[i];
+	}
 	if( do_phi ) {
 		Lb[0] = fmaf( x001, La001, Lb[0]);
 		Lb[0] = fmaf(T(5.00000000e-01) * x002, La002, Lb[0]);

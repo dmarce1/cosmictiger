@@ -19,6 +19,10 @@ struct kick_workspace {
 	kick_workspace& operator=(kick_workspace&&) = default;
 };
 
+float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0
+		/ (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0 / (1 << 16), 1.0
+		/ (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0 / (1 << 25), 1.0
+		/ (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 static thread_local std::stack<kick_workspace> workspaces;
 
 static kick_workspace get_workspace() {
@@ -75,7 +79,12 @@ fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 	kick_return kr;
+	kr.max_rung = 0;
 	const simd_float h = get_options().hsoft;
+	const float hfloat = get_options().hsoft;
+	const float GM = get_options().GM;
+	const float eta = get_options().eta;
+	const bool save_force = get_options().save_force;
 	auto workspace = get_workspace();
 	vector<tree_id>& nextlist = workspace.nextlist;
 	vector<tree_id>& partlist = workspace.partlist;
@@ -155,14 +164,21 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 			const simd_float far1 = R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + h);
 			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius + h);
+			simd_float verynear;
+			if (self_ptr->sink_leaf) {
+				const simd_float R = sqrt(R2);
+				verynear = R + other_radius <= sink_bias * self_radius * thetainv + h;
+			} else {
+				verynear = simd_float(0.0f);
+			}
 			const simd_float mult = far1;
-			const simd_float part = far2 * other_leaf;
+			const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
 			for (int i = 0; i < maxi; i++) {
 				if (mult[i]) {
 					multlist.push_back(dchecklist[ci + i]);
 				} else if (part[i]) {
 					partlist.push_back(dchecklist[ci + i]);
-				} else if (other_leaf[i]) {
+				} else if (other_leaf[i] || verynear[i]) {
 					leaflist.push_back(dchecklist[ci + i]);
 				} else {
 					const auto child_checks = other_ptrs[i]->children;
@@ -183,43 +199,97 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		multlist.resize(0);
 		const int mynparts = self_ptr->nparts();
 		force_vectors forces(mynparts);
+		for (int i = 0; i < mynparts; i++) {
+			forces.phi[i] = forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
+		}
 		for (int i = 0; i < leaflist.size(); i++) {
 			const tree_node* other_ptr = tree_get_node(leaflist[i]);
-			other_radius = other_ptr->radius;
-			for (int dim = 0; dim < NDIM; dim++) {
-				other_pos[dim] = other_ptr->pos[dim].raw();
-			}
-			const auto myrange = self_ptr->part_range;
-			bool pp = false;
-			for (int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
-				j = std::min(j, myrange.second - SIMD_FLOAT_SIZE);
+			if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
+				other_radius = other_ptr->radius;
 				for (int dim = 0; dim < NDIM; dim++) {
-					for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-						self_pos[dim][k] = particles_pos(dim, j + k).raw();
+					other_pos[dim] = other_ptr->pos[dim].raw();
+				}
+				const auto myrange = self_ptr->part_range;
+				bool pp = false;
+				for (int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
+					j = std::min(j, myrange.second - SIMD_FLOAT_SIZE);
+					for (int dim = 0; dim < NDIM; dim++) {
+						for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+							self_pos[dim][k] = particles_pos(dim, j + k).raw();
+						}
+					}
+					for (int dim = 0; dim < NDIM; dim++) {
+						dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+					}
+					//			PRINT("%e %e\n", self_pos[0][0] * fixed2float, other_pos[0][0] * fixed2float);
+					const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+					const simd_float rhs = sqr(h + other_radius * thetainv);
+					const simd_float near = R2 <= rhs;
+					if (near.sum()) {
+						pp = true;
+						break;
 					}
 				}
-				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+				if (pp) {
+					partlist.push_back(leaflist[i]);
+				} else {
+					multlist.push_back(leaflist[i]);
 				}
-				//			PRINT("%e %e\n", self_pos[0][0] * fixed2float, other_pos[0][0] * fixed2float);
-				const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-				const simd_float rhs = sqr(h + other_radius * thetainv);
-				const simd_float near = R2 <= rhs;
-				if (near.sum()) {
-					pp = true;
-					break;
-				}
-			}
-			if (pp) {
-				partlist.push_back(leaflist[i]);
-			} else {
-				multlist.push_back(leaflist[i]);
 			}
 		}
 		//	PRINT("%i %i\n", multlist.size(), partlist.size());
 		gravity_pc(forces, params.min_rung, self, multlist);
 		gravity_pp(forces, params.min_rung, self, partlist);
 		cleanup_workspace(std::move(workspace));
+
+		const auto rng = self_ptr->part_range;
+		for (int i = rng.first; i < rng.second; i++) {
+			if (particles_rung(i) >= params.min_rung) {
+				const int j = i - rng.first;
+				array<float, NDIM> dx;
+				for (int dim = 0; dim < NDIM; dim++) {
+					dx[XDIM] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
+				}
+				const auto L2 = L2P(L, dx, params.min_rung == 0);
+				forces.phi[j] += L2[0];
+				forces.gx[j] -= L2[XDIM + 1];
+				forces.gy[j] -= L2[YDIM + 1];
+				forces.gz[j] -= L2[ZDIM + 1];
+				forces.gx[j] *= GM;
+				forces.gy[j] *= GM;
+				forces.gz[j] *= GM;
+				forces.phi[j] *= GM;
+				if (save_force) {
+					particles_gforce(XDIM, i) = forces.gx[j];
+					particles_gforce(YDIM, i) = forces.gy[j];
+					particles_gforce(ZDIM, i) = forces.gz[j];
+					particles_pot(i) = forces.phi[j];
+				}
+				auto& vx = particles_vel(XDIM, i);
+				auto& vy = particles_vel(YDIM, i);
+				auto& vz = particles_vel(ZDIM, i);
+				auto& rung = particles_rung(i);
+				auto dt = 0.5f * rung_dt[rung] * params.t0;
+				if (!params.first_call) {
+					vx = fmaf(forces.gx[j], dt, vx);
+					vy = fmaf(forces.gy[j], dt, vy);
+					vz = fmaf(forces.gz[j], dt, vz);
+				}
+				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+				const float factor = eta * sqrtf(params.a * hfloat);
+				dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
+				rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
+				kr.max_rung = std::max(rung, kr.max_rung);
+				if (rung < 0 || rung >= MAX_RUNG) {
+					PRINT("Rung out of range %i\n", rung);
+				} else {
+					dt = 0.5f * rung_dt[rung] * params.t0;
+				}
+				vx = fmaf(forces.gx[j], dt, vx);
+				vy = fmaf(forces.gy[j], dt, vy);
+				vz = fmaf(forces.gz[j], dt, vz);
+			}
+		}
 	} else {
 		dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
 		cleanup_workspace(std::move(workspace));

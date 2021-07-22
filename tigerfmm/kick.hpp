@@ -11,7 +11,7 @@
 #include <tigerfmm/tree.hpp>
 
 struct kick_return {
-	int max_rung;
+	char max_rung;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & max_rung;
