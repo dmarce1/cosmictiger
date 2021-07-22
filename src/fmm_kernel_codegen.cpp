@@ -312,6 +312,87 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 }
 
 template<int P>
+int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
+	array<int, NDIM> m;
+	array<int, NDIM> k;
+	array<int, NDIM> n;
+
+	struct entry_type {
+		array<int, NDIM> src;
+		array<int, NDIM> dest;
+		double factor;
+	};
+	vector<entry_type> entries;
+	int flops = 0;
+	vector<std::string> asn;
+	vector<std::string> op;
+	op.resize(0);
+	asn.resize(0);
+	for (n[0] = 0; n[0] < P; n[0]++) {
+		for (n[1] = 0; n[1] < P - n[0]; n[1]++) {
+			const int nzmax = (n[0] == 0 && n[1] == 0) ? intmin(3, P) : intmin(P - n[0] - n[1], 2);
+			for (n[2] = 0; n[2] < nzmax; n[2]++) {
+				const int n0 = n[0] + n[1] + n[2];
+				bool first = true;
+				for (m[0] = 0; m[0] <= n[0] / 2; m[0]++) {
+					for (m[1] = 0; m[1] <= n[1] / 2; m[1]++) {
+						for (m[2] = 0; m[2] <= n[2] / 2; m[2]++) {
+							const int m0 = m[0] + m[1] + m[2];
+							double num = double(n1pow(m0) * dfactorial(2 * n0 - 2 * m0 - 1) * vfactorial(n));
+							double den = double((1 << m0) * vfactorial(m) * vfactorial(n - (m) * 2));
+							double factor = num / den;
+							const auto p = n - m * 2;
+							char* str;
+							if (first) {
+								if (close21(factor)) {
+									ASPRINTF(&str, "%s%i%i%i = %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+								} else if (close21(-factor)) {
+									ASPRINTF(&str, "%s%i%i%i = -%s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2],iname.c_str(), p[0], p[1], p[2]);
+									flops ++;
+								} else {
+									ASPRINTF(&str, "%s%i%i%i = T(%.8e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor,iname.c_str(), p[0], p[1],
+											p[2]);
+									flops ++;
+								}
+								asn.push_back(str);
+								free(str);
+								first = false;
+							} else {
+								if (close21(factor)) {
+									ASPRINTF(&str, "%s%i%i%i += %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+									flops += 1;
+								} else if (close21(-factor)) {
+									ASPRINTF(&str, "%s%i%i%i -= %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2],  iname.c_str(), p[0], p[1], p[2]);
+									flops += 1;
+								} else {
+									ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.8e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(),
+											p[0], p[1], p[2], oname.c_str(), n[0], n[1], n[2]);
+									flops += 1;
+								}
+								op.push_back(str);
+								free(str);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	int maxop = (op.size() + 1) / 2;
+	for (int i = 0; i < asn.size(); i++) {
+		tprint("%s", asn[i].c_str());
+	}
+	for (int i = 0; i < maxop; i++) {
+		tprint("%s", op[i].c_str());
+		if (i + maxop < op.size()) {
+			tprint("%s", op[i + maxop].c_str());
+		}
+	}
+
+	return flops;
+}
+
+template<int P>
 int compute_detrace_ewald(std::string iname, std::string oname) {
 	array<int, NDIM> m;
 	array<int, NDIM> k;
@@ -1146,6 +1227,7 @@ int main() {
 	flops = 0;
 	indent();
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
+	tprint("const T r0 = 1.f;\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("const T r = sqrt(r2);\n");
 	tprint("const T rinv1 = -(r > T(0)) / max(r, T(1e-20));\n");
@@ -1154,29 +1236,15 @@ int main() {
 		const int k = i - j;
 		tprint("const T rinv%i = -rinv%i * rinv%i;\n", i + 1, j + 1, k);
 	}
-//	tprint("const T scale = T(1) / max(SQRT(SQRT(r2)),T(1e-4));\n");
-//	tprint("const T sw = (r2 < T(25e-8));\n");
-//	tprint("constexpr float scale = 837.0f;\n", 38.0 / (2 * LORDER - 1));
-//	tprint("X[0] *= scale;\n");
-//	tprint("X[1] *= scale;\n");
-//	tprint("X[2] *= scale;\n");
 	tprint("X[0] *= rinv1;\n");
 	tprint("X[1] *= rinv1;\n");
 	tprint("X[2] *= rinv1;\n");
 	flops += 12;
 	flops += compute_dx(P);
 	reference_trless("D", P);
-	flops += compute_detrace<P>("x", "D");
+	flops += compute_detraceD<P>("x", "D");
 	flops += 11 + (P - 1) * 2;
 	array<int, NDIM> k;
-//	tprint("constexpr float scale0 = scale;\n");
-//	for (int l = 1; l < P; l++) {
-//		tprint("constexpr float scale%i = scale%i * scale;\n", l, l - 1);
-//	}
-	/*	for (int l = 0; l < P; l++) {
-	 tprint("rinv_pow[%i] *= scale%i;\n", l, l);
-	 }
-	 flops += P;*/
 	for (k[0] = 0; k[0] < P; k[0]++) {
 		for (k[1] = 0; k[1] < P - k[0]; k[1]++) {
 			const int zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, P) : intmin(P - k[0] - k[1], 2);

@@ -35,7 +35,7 @@
 #define MIN_PC_PARTS 47
 #define MIN_SORT_THREAD_PARTS (1024)
 #define NTREES_MIN (2*1024*1024)
-#define ORDER 7
+#define ORDER 8
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
