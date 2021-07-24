@@ -104,5 +104,7 @@ void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fi
 int particles_sort(pair<int, int> rng, double xm, int xdim);
 void particles_cache_free();
 vector<particle_sample> particles_sample(int cnt);
+void particles_load(FILE* fp);
+void particles_save(FILE* fp);
 
 #endif /* PARTICLES_HPP_ */

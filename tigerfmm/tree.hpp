@@ -128,6 +128,5 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 void tree_destroy();
 int tree_min_level(double theta);
 const tree_node* tree_get_node(tree_id);
-void tree_cache_free();
 
 #endif /* TREE_HPP_ */

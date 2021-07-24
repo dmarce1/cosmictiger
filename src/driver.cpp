@@ -1,5 +1,6 @@
 #include <tigerfmm/constants.hpp>
 #include <tigerfmm/drift.hpp>
+#include <tigerfmm/driver.hpp>
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/domain.hpp>
 #include <tigerfmm/kick.hpp>
@@ -42,10 +43,11 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	timer tm;
 	tm.start();
 	domains_begin();
-	PRINT("domains_begin: %e s\n", tm.read());
 	domains_end();
 	tree_create_params tparams(minrung, theta);
-	tree_create(tparams);
+//	PRINT( "Create tree %i %e\n", minrung, theta);
+	auto sr = tree_create(tparams);
+//	PRINT( "nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.a = scale;
 	kparams.first_call = first_call;
@@ -65,15 +67,19 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
+//	PRINT( "Do kick\n");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist);
+//	PRINT( "kick done\n");
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
+	particles_cache_free();
+	kr.nactive = sr.nactive;
 	return kr;
 }
 
 void driver() {
-	/*driver_params params;
+	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().check_num >= 0) {
 		read_checkpoint(params, get_options().check_num);
@@ -116,23 +122,11 @@ void driver() {
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		if (z > 20.0) {
-			theta = 0.4;
+			theta = 0.5;
 		} else if (z > 2.0) {
-			theta = 0.55;
+			theta = 0.65;
 		} else {
-			theta = 0.7;
-		}
-		if (z < 1.6 && get_options().chain_bw == 1) {
-			options opts = get_options();
-			opts.chain_bw = 2;
-			if (opts.four_o_chain % 2 == 1) {
-				opts.four_o_chain = opts.four_o_chain / 2 + 1;
-			} else {
-				opts.four_o_chain = opts.four_o_chain / 2;
-			}
-			opts.parts_o_chain = opts.parts_o_four * opts.four_o_chain;
-			opts.chain_dim = opts.parts_dim / opts.parts_o_chain;
-			set_options(opts);
+			theta = 0.8;
 		}
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		if (full_eval) {
@@ -180,9 +174,36 @@ void driver() {
 		drift_time = 0.0;
 		tau += dt;
 		this_iter++;
-		if (this_iter > get_options().max_iter) {
-			break;
-		}
-	}*/
+	}
 
+}
+
+
+
+void write_checkpoint(driver_params params) {
+	PRINT("Writing checkpoint\n");
+	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string(".dat");
+	FILE* fp = fopen(fname.c_str(), "wb");
+	if (fp == nullptr) {
+		PRINT("Unable to open %s for writing.\n", fname.c_str());
+		abort();
+	}
+	fwrite(&params, sizeof(driver_params), 1, fp);
+	particles_save(fp);
+
+	fclose(fp);
+}
+
+void read_checkpoint(driver_params& params, int checknum) {
+	PRINT("Reading checkpoint\n");
+	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string(".dat");
+	FILE* fp = fopen(fname.c_str(), "rb");
+	if (fp == nullptr) {
+		PRINT("Unable to open %s for reading.\n", fname.c_str());
+		abort();
+	}
+	FREAD(&params, sizeof(driver_params), 1, fp);
+	particles_load(fp);
+
+	fclose(fp);
 }

@@ -8,7 +8,7 @@
 #ifndef TIME_HPP_
 #define TIME_HPP_
 
-
+#include <cstdint>
 
 using rung_type = std::int8_t;
 using time_type = std::uint64_t;

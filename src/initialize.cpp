@@ -220,7 +220,7 @@ void initialize() {
 	for (int dim = 0; dim < NDIM; dim++) {
 		fft3d_init(N);
 		zeldovich_begin(dim);
-	//	fft3d_force_real();
+		fft3d_force_real();
 		fft3d_inv_execute();
 		float dxmax = zeldovich_end(dim);
 		fft3d_destroy();

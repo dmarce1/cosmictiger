@@ -49,4 +49,16 @@ inline void throw_error(const char* file, int line, const char* fmt, Args ...arg
 #endif
 }
 
+
+#define FREAD(a,b,c,d) __safe_fread(a,b,c,d,__LINE__,__FILE__)
+
+static void __safe_fread(void* src, size_t size, size_t count, FILE* fp, int line, const char* file) {
+	auto read = fread(src, size, count, fp);
+	if (read != count) {
+		PRINT("Attempt to read %li elements of size %li in %s on line %i failed - only %li elements read.\n", count, size,
+				file, line, read);
+		abort();
+	}
+}
+
 #endif /* SAFE_IO_HPP_ */

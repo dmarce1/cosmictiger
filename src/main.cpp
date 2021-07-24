@@ -1,3 +1,4 @@
+#include <tigerfmm/driver.hpp>
 #include <tigerfmm/ewald_indices.hpp>
 #include <tigerfmm/hpx.hpp>
 #include <tigerfmm/options.hpp>
@@ -11,6 +12,8 @@ int hpx_main(int argc, char *argv[]) {
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
 			test(get_options().test);
+		} else {
+			driver();
 		}
 	}
 	particles_destroy();

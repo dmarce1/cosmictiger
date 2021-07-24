@@ -10,6 +10,8 @@ struct options {
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
+	int check_num;
+	int check_freq;
 
 	double hsoft;
 	double GM;
@@ -45,6 +47,8 @@ struct options {
 		arc & test;
 		arc & tree_cache_line_size;
 		arc & part_cache_line_size;
+		arc & check_num;
+		arc & check_freq;
 	}
 };
 

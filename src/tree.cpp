@@ -11,7 +11,6 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
-HPX_PLAIN_ACTION (tree_cache_free);
 HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
@@ -24,6 +23,7 @@ public:
 	void reset();
 	bool is_ready();
 	tree_allocator();
+	~tree_allocator();
 	tree_allocator(const tree_allocator&) = default;
 	tree_allocator& operator=(const tree_allocator&) = default;
 	tree_allocator(tree_allocator&&) = default;
@@ -31,6 +31,7 @@ public:
 	int allocate();
 };
 
+static vector<tree_allocator*> allocator_list;
 static vector<tree_node> nodes;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
@@ -41,17 +42,6 @@ static thread_local tree_id last_line;
 static thread_local const tree_node* last_ptr = nullptr;
 
 static const tree_node* tree_cache_read(tree_id id);
-
-void tree_cache_free() {
-	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<tree_cache_free_action>(c));
-	}
-	for (int i = 0; i < PART_CACHE_SIZE; i++) {
-		tree_cache[i] = std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>();
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-}
 
 void tree_allocator::reset() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
@@ -64,6 +54,8 @@ void tree_allocator::reset() {
 
 tree_allocator::tree_allocator() {
 	ready = false;
+	std::lock_guard<spinlock_type> lock(mutex[0]);
+	allocator_list.push_back(this);
 }
 
 int tree_allocator::allocate() {
@@ -71,6 +63,17 @@ int tree_allocator::allocate() {
 		reset();
 	}
 	return next++;
+}
+
+tree_allocator::~tree_allocator() {
+	std::lock_guard<spinlock_type> lock(mutex[0]);
+	for (int i = 0; i < allocator_list.size(); i++) {
+		if (allocator_list[i] == this) {
+			allocator_list[i] = allocator_list.back();
+			allocator_list.pop_back();
+			break;
+		}
+	}
 }
 
 tree_create_params::tree_create_params(int min_rung_, double theta_) {
@@ -147,9 +150,9 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		last_ptr = nullptr;
 		next_id = -tree_cache_line_size;
 		nodes.resize(std::max(TREE_NODE_ALLOCATION_SIZE * particles_size() / bucket_size, NTREES_MIN));
-		PRINT("%i trees allocated\n", nodes.size());
-		for (int i = 0; i < MAX_DEPTH; i++) {
-			allocators[i].ready = false;
+//		PRINT("%i trees allocated\n", nodes.size());
+		for (int i = 0; i < allocator_list.size(); i++) {
+			allocator_list[i]->ready = false;
 		}
 	}
 	if (local_root) {
@@ -361,11 +364,12 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	rc.pos = node.pos;
 	rc.radius = node.radius;
 	rc.node_count = node.node_count;
+	rc.nactive = nactive;
 	if (local_root) {
-		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
+//		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}
 	if (depth == 0)
-		PRINT("%i %e\n", index, nodes[index].radius);
+//		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
 }
 

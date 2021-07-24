@@ -5,7 +5,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
 
-HPX_PLAIN_ACTION (kick);
+HPX_PLAIN_ACTION(kick);
 
 struct workspace {
 	vector<tree_id> nextlist;
@@ -81,6 +81,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	kick_return kr;
 	kr.flops = 0;
 	kr.max_rung = 0;
+	kr.pot = kr.fx = kr.fy = kr.fz = kr.fnorm = 0.0;
 	const simd_float h = get_options().hsoft;
 	const float hfloat = get_options().hsoft;
 	const float GM = get_options().GM;
@@ -287,6 +288,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				vx = fmaf(forces.gx[j], dt, vx);
 				vy = fmaf(forces.gy[j], dt, vy);
 				vz = fmaf(forces.gz[j], dt, vz);
+				kr.pot += forces.phi[j];
+				kr.fx += forces.gx[j];
+				kr.fy += forces.gy[j];
+				kr.fz += forces.gz[j];
+				kr.fnorm += g2;
 			}
 		}
 	} else {
@@ -298,11 +304,14 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		const auto rcr = futr.get();
 		kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
 		kr.flops = rcl.flops + rcr.flops;
+		kr.pot = rcl.pot + rcr.pot;
+		kr.fx = rcl.fx + rcr.fx;
+		kr.fy = rcl.fy + rcr.fy;
+		kr.fz = rcl.fz + rcr.fz;
+		kr.fnorm = rcl.fnorm + rcr.fnorm;
+
 	}
 
 	return kr;
 }
-
-
-
 
