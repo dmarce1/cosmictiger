@@ -368,7 +368,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	if (local_root) {
 //		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}
-	if (depth == 0)
+	//if (depth == 0)
 //		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
 }
