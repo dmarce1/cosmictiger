@@ -73,7 +73,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 }
 
 void driver() {
-	driver_params params;
+	/*driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().check_num >= 0) {
 		read_checkpoint(params, get_options().check_num);
@@ -183,6 +183,6 @@ void driver() {
 		if (this_iter > get_options().max_iter) {
 			break;
 		}
-	}
+	}*/
 
 }

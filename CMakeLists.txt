@@ -75,6 +75,7 @@ add_hpx_executable(
  )
  
  add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp tigerfmm/tensor.hpp )
+ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
  
  add_custom_command(

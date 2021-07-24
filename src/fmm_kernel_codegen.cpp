@@ -679,7 +679,7 @@ void do_expansion(bool two) {
 									e.factor = factor;
 									e.k = k;
 									e.p = p;
-									entries[e.Ldest ].push_back(e);
+									entries[e.Ldest].push_back(e);
 								}
 							}
 						}
@@ -1377,7 +1377,7 @@ int main() {
 		array<int, NDIM> k;
 		double factor;
 	};
-	vector<mentry> mentries;
+	vector<vector<mentry>> mentries((P - 1) * P * (P + 1) / 6);
 	for (int n0 = 0; n0 <= P - 2; n0++) {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
@@ -1391,7 +1391,8 @@ int main() {
 								e.n = n;
 								e.k = k;
 								e.factor = factor;
-								mentries.push_back(e);
+								const int index = sym_index(n[0], n[1], n[2]);
+								mentries[index].push_back(e);
 							}
 						}
 					}
@@ -1399,39 +1400,67 @@ int main() {
 			}
 		}
 	}
-	std::sort(mentries.begin(), mentries.end(), [](mentry a, mentry b) {
-		if( sym_index(a.n[0], a.n[1], a.n[2]) < sym_index(b.n[0], b.n[1], b.n[2])) {
-			return true;
-		}
-		return false;
-	});
-	vector<mentry> entries1, entries2;
+	for (auto& m : mentries) {
+		std::sort(m.begin(), m.end(), [](mentry a, mentry b) {
+			return a.factor > b.factor;
+		});
+	}
+	int total_size = 0;
 	for (int i = 0; i < mentries.size(); i++) {
-		if (i < (mentries.size() + 1) / 2) {
-			entries1.push_back(mentries[i]);
-		} else {
-			entries2.push_back(mentries[i]);
+		total_size += mentries[i].size();
+	}
+	int half_size = 0;
+	int mid;
+	for (int i = 0; i < mentries.size(); i++) {
+		if (half_size >= total_size / 2) {
+			mid = i;
+			break;
+		}
+		half_size += mentries[i].size();
+	}
+	vector<std::string> cmds1, cmds2;
+	char* str;
+	for (int i = 0; i < mentries.size(); i++) {
+		auto& cmds = i < mid ? cmds1 : cmds2;
+		double last_factor = 1.0;
+		if (mentries[i].size()) {
+			const auto n = mentries[i][0].n;
+			const int nindex = sym_index(n[0], n[1], n[2]);
+			for (int j = 0; j < mentries[i].size(); j++) {
+				const auto k = mentries[i][j].k;
+				const auto factor = mentries[i][j].factor;
+				if (!close21(last_factor / factor)) {
+					ASPRINTF(&str, "Mb[%i] *= %e;\n", nindex, last_factor / factor);
+					cmds.push_back(str);
+					flops++;
+					free(str);
+					last_factor = factor;
+				}
+				ASPRINTF(&str, "Mb[%i] = fmaf( x%i%i%i, Ma%i%i%i, Mb[%i]);\n", nindex, n[0] - k[0], n[1] - k[1], n[2] - k[2], k[0], k[1], k[2],
+						sym_index(n[0], n[1], n[2]));
+				cmds.push_back(str);
+				free(str);
+				flops += 2;
+			}
+			if (!close21(last_factor)) {
+				ASPRINTF(&str, "Mb[%i] *= %e;\n", nindex, last_factor);
+				cmds.push_back(str);
+				flops++;
+				free(str);
+			}
 		}
 	}
-	for (int i = 0; i < entries1.size(); i++) {
-		for (int pass = 0; pass < 2; pass++) {
-			if (pass == 1 && i >= entries2.size()) {
-				continue;
-			}
-			const auto n = pass == 0 ? entries1[i].n : entries2[i].n;
-			const auto k = pass == 0 ? entries1[i].k : entries2[i].k;
-			const auto factor = pass == 0 ? entries1[i].factor : entries2[i].factor;
-			if (close21(factor)) {
-				tprint("Mb[%i] = fmaf( x%i%i%i, Ma%i%i%i, Mb[%i]);\n", sym_index(n[0], n[1], n[2]), n[0] - k[0], n[1] - k[1], n[2] - k[2], k[0], k[1], k[2],
-						sym_index(n[0], n[1], n[2]));
-				flops += 2;
-			} else {
-				tprint("Mb[%i] = fmaf(T(%.8e) * x%i%i%i, Ma%i%i%i, Mb[%i]);\n", sym_index(n[0], n[1], n[2]), factor, n[0] - k[0], n[1] - k[1], n[2] - k[2], k[0],
-						k[1], k[2], sym_index(n[0], n[1], n[2]));
-				flops += 3;
-			}
+	int i = 0;
+	int j = 0;
+	while (i < cmds1.size() || j < cmds2.size()) {
+		if (i < cmds1.size()) {
+			tprint("%s", cmds1[i].c_str());
+			i++;
 		}
-
+		if (j < cmds2.size()) {
+			tprint("%s", cmds2[j].c_str());
+			j++;
+		}
 	}
 
 	flops += compute_detrace<P - 1>("Mb", "Mc", 'd');

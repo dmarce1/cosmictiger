@@ -79,6 +79,7 @@ fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 	kick_return kr;
+	kr.flops = 0;
 	kr.max_rung = 0;
 	const simd_float h = get_options().hsoft;
 	const float hfloat = get_options().hsoft;
@@ -126,11 +127,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			other_radius[i] = other_ptrs[i]->radius;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
-			dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+			dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;              // 3
 		}
-		const simd_float R2 = max(ewald_dist2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));
-		const simd_float r2 = sqr((sink_bias * self_radius + other_radius) * thetainv + h);
-		const simd_float far = R2 > r2;
+		const simd_float R2 = max(ewald_dist2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));          // 6
+		const simd_float r2 = sqr((sink_bias * self_radius + other_radius) * thetainv + h); // 5
+		const simd_float far = R2 > r2;                                                     // 1
 		for (int i = 0; i < maxi; i++) {
 			if (far[i]) {
 				multlist.push_back(echecklist[ci + i]);
@@ -139,9 +140,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				nextlist.push_back(other_ptrs[i]->children[RIGHT]);
 			}
 		}
+		kr.flops += maxi * 15;
 	}
 	std::swap(echecklist, nextlist);
-	gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
+	kr.flops += gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
 	nextlist.resize(0);
 	multlist.resize(0);
 	partlist.resize(0);
@@ -161,12 +163,12 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				other_leaf[i] = other_ptrs[i]->source_leaf;
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
 			}
-			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-			const simd_float far1 = R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + h);
-			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius + h);
-			const simd_float mult = far1;
+			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
+			const simd_float far1 = R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + h);     // 5
+			const simd_float far2 = R2 > sqr(sink_bias * self_radius * thetainv + other_radius + h);       // 5
+			const simd_float mult = far1;                                                                  // 4
 			const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
 			for (int i = 0; i < maxi; i++) {
 				if (mult[i]) {
@@ -182,12 +184,13 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 
 				}
 			}
+			kr.flops += maxi * 22;
 		}
 		std::swap(dchecklist, nextlist);
 		nextlist.resize(0);
 	} while (dchecklist.size() && self_ptr->sink_leaf);
-	gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
-	gravity_cp(L, partlist, self, params.min_rung == 0);
+	kr.flops += gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
+	kr.flops += gravity_cp(L, partlist, self, params.min_rung == 0);
 	if (self_ptr->sink_leaf) {
 		partlist.resize(0);
 		multlist.resize(0);
@@ -214,12 +217,12 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 						}
 					}
 					for (int dim = 0; dim < NDIM; dim++) {
-						dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;
+						dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;        // 3
 					}
-					//			PRINT("%e %e\n", self_pos[0][0] * fixed2float, other_pos[0][0] * fixed2float);
-					const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-					const simd_float rhs = sqr(h + other_radius * thetainv);
-					const simd_float near = R2 <= rhs;
+					const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
+					const simd_float rhs = sqr(h + other_radius * thetainv);                      // 3
+					const simd_float near = R2 <= rhs;                                            // 1
+					kr.flops += SIMD_FLOAT_SIZE * 12;
 					if (near.sum()) {
 						pp = true;
 						break;
@@ -234,8 +237,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				partlist.push_back(leaflist[i]);
 			}
 		}
-		gravity_pc(forces, params.min_rung, self, multlist);
-		gravity_pp(forces, params.min_rung, self, partlist);
+		kr.flops += gravity_pc(forces, params.min_rung, self, multlist);
+		kr.flops += gravity_pp(forces, params.min_rung, self, partlist);
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;
@@ -294,6 +297,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
+		kr.flops = rcl.flops + rcr.flops;
 	}
 
 	return kr;

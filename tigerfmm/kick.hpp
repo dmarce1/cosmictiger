@@ -12,9 +12,11 @@
 
 struct kick_return {
 	char max_rung;
+	double flops;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & max_rung;
+		arc & flops;
 	}
 };
 

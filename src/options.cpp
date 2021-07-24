@@ -91,6 +91,7 @@ bool process_options(int argc, char *argv[]) {
 			* (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
 	opts.omega_r = omega_r;
+	opts.z0 = 49.0;
 
 	PRINT("Simulation Options\n");
 	SHOW_STRING(config_file);

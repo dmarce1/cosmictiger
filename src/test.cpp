@@ -3,6 +3,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/analytic.hpp>
 #include <tigerfmm/domain.hpp>
 #include <tigerfmm/gravity.hpp>
+#include <tigerfmm/initialize.hpp>
 #include <tigerfmm/kick.hpp>
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/safe_io.hpp>
@@ -10,7 +11,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
-constexpr double theta = 0.7;
+constexpr double theta = 0.55;
 
 static void domain_test() {
 	timer tm;
@@ -81,9 +82,10 @@ static void kick_test() {
 	timer tm;
 
 	tm.start();
-	particles_random_init();
+	//particles_random_init();
+	initialize();
 	tm.stop();
-	PRINT("particles_random_init: %e s\n", tm.read());
+	PRINT("initialize: %e s\n", tm.read());
 	tm.reset();
 
 	tm.start();
@@ -125,9 +127,10 @@ static void kick_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	kick(kparams, L, pos, root_id, checklist, checklist);
+	auto kr = kick(kparams, L, pos, root_id, checklist, checklist);
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
+	PRINT("GFLOPS/s = %e\n", kr.flops / 1024 / 1024 / 1024 / tm.read());
 	tm.reset();
 
 	tm.start();
@@ -186,7 +189,7 @@ static void force_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	kick(kparams, L, pos, root_id, checklist, checklist);
+	auto kr = kick(kparams, L, pos, root_id, checklist, checklist);
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	tm.reset();
