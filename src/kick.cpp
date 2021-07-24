@@ -303,7 +303,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
-		kr.flops = rcl.flops + rcr.flops;
+		kr.flops += rcl.flops + rcr.flops;
 		kr.pot = rcl.pot + rcr.pot;
 		kr.fx = rcl.fx + rcr.fx;
 		kr.fy = rcl.fy + rcr.fy;

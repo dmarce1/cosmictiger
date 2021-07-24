@@ -121,7 +121,7 @@ int gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, b
 			expansion<simd_float> L0;
 			L0 = simd_float(0.0f);
 			for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
-				const int count = std::min(count - j, SIMD_FLOAT_SIZE);
+				const int cnt = std::min(count - j, SIMD_FLOAT_SIZE);
 				const int k = j / SIMD_FLOAT_SIZE;
 				Y[XDIM] = *((simd_int*) srcx.data() + k);
 				Y[YDIM] = *((simd_int*) srcy.data() + k);
@@ -131,13 +131,13 @@ int gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, b
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 				}
-				flops += count * 3;
+				flops += cnt * 3;
 				expansion<simd_float> D;
-				flops += count * greens_function(D, dx);
+				flops += cnt * greens_function(D, dx);
 				for (int l = 0; l < EXPANSION_SIZE; l++) {
 					L0[l] += mask * D[l];
 				}
-				flops += count * EXPANSION_SIZE;
+				flops += cnt * EXPANSION_SIZE;
 			}
 			for (int i = 0; i < EXPANSION_SIZE; i++) {
 				L[i] += L0[i].sum();
