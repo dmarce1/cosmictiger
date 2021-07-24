@@ -312,7 +312,7 @@ int gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 							rinv1_near *= hinv;                                                                // 1
 							const auto near_flag = (simd_float(1) - far_flag);                                // 1
 							rinv1 = far_flag * rinv1_far + near_flag * rinv1_near * mask;                      // 4
-							rinv3 = -far_flag * rinv3_far + near_flag * rinv3_near * mask;                     // 5
+							rinv3 = -(far_flag * rinv3_far + near_flag * rinv3_near * mask);                     // 5
 							near_count += count;
 							flops += 52;
 						}

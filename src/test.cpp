@@ -11,7 +11,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
-constexpr double theta = 0.55;
+constexpr double theta = 0.7;
 
 static void domain_test() {
 	timer tm;
@@ -145,7 +145,8 @@ static void force_test() {
 	timer tm;
 
 	tm.start();
-	particles_random_init();
+//	particles_random_init();
+	initialize();
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();

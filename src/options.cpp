@@ -43,6 +43,7 @@ bool process_options(int argc, char *argv[]) {
 	("help", "produce help message")                                                                 //
 	("config_file", po::value<std::string>(&(opts.config_file))->default_value(""), "configuration file") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
+	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "name of test to run") //
 			;
 
@@ -91,7 +92,6 @@ bool process_options(int argc, char *argv[]) {
 			* (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
 	opts.omega_r = omega_r;
-	opts.z0 = 49.0;
 
 	PRINT("Simulation Options\n");
 	SHOW_STRING(config_file);
