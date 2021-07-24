@@ -8,7 +8,7 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
-//#define CHECK_BOUNDS
+#define CHECK_BOUNDS
 
 #define NDIM 3
 #define XDIM 0
@@ -44,6 +44,8 @@
 #define SORT_OVERSUBSCRIPTION 8
 #define TREE_CACHE_SIZE 1024
 #define TREE_NODE_ALLOCATION_SIZE 8
+
+#define KICK_WORKSPACE_PART_SIZE 25 // In percent of total mem
 
 
 #define LORDER ORDER

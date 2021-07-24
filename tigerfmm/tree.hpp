@@ -53,6 +53,7 @@ struct tree_id_hash_hi {
 	}
 };
 
+
 struct tree_node {
 	multipole<float> multi;
 	array<tree_id, NCHILD> children;

@@ -17,6 +17,13 @@ int cuda_get_device() {
 }
 
 
+size_t cuda_total_mem() {
+	size_t total;
+	size_t free;
+	CUDA_CHECK(cudaMemGetInfo(&free, &total));
+	return total;
+}
+
 size_t cuda_free_mem() {
 	size_t total;
 	size_t free;

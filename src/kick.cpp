@@ -7,34 +7,34 @@ constexpr bool verbose = true;
 
 HPX_PLAIN_ACTION (kick);
 
-struct kick_workspace {
+struct workspace {
 	vector<tree_id> nextlist;
 	vector<tree_id> partlist;
 	vector<tree_id> multlist;
 	vector<tree_id> leaflist;
-	kick_workspace() = default;
-	kick_workspace(const kick_workspace&) = delete;
-	kick_workspace& operator=(const kick_workspace&) = delete;
-	kick_workspace(kick_workspace&&) = default;
-	kick_workspace& operator=(kick_workspace&&) = default;
+	workspace() = default;
+	workspace(const workspace&) = delete;
+	workspace& operator=(const workspace&) = delete;
+	workspace(workspace&&) = default;
+	workspace& operator=(workspace&&) = default;
 };
 
 float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0
 		/ (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0 / (1 << 16), 1.0
 		/ (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0 / (1 << 25), 1.0
 		/ (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
-static thread_local std::stack<kick_workspace> workspaces;
+static thread_local std::stack<workspace> workspaces;
 
-static kick_workspace get_workspace() {
+static workspace get_workspace() {
 	if (workspaces.empty()) {
-		workspaces.push(kick_workspace());
+		workspaces.push(workspace());
 	}
-	kick_workspace workspace = std::move(workspaces.top());
+	workspace workspace = std::move(workspaces.top());
 	workspaces.pop();
 	return std::move(workspace);
 }
 
-static void cleanup_workspace(kick_workspace&& workspace) {
+static void cleanup_workspace(workspace&& workspace) {
 	workspace.multlist.resize(0);
 	workspace.partlist.resize(0);
 	workspace.nextlist.resize(0);

@@ -93,17 +93,17 @@ int gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, b
 				nsource += tree_ptrs[i]->nparts();
 			}
 			nsource = round_up(nsource, SIMD_FLOAT_SIZE);
-			static thread_local vector<fixed32> srcx;
-			static thread_local vector<fixed32> srcy;
-			static thread_local vector<fixed32> srcz;
-			static thread_local vector<float> masks;
+			vector<fixed32> srcx;
+			vector<fixed32> srcy;
+			vector<fixed32> srcz;
+			vector<float> masks;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masks.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx, srcy, srcz, count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
 			for (int i = 0; i < count; i++) {
@@ -246,17 +246,17 @@ int gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 				nsource += tree_ptrs[i - li]->nparts();
 			}
 			nsource = round_up(nsource, SIMD_FLOAT_SIZE);
-			static thread_local vector<fixed32> srcx;
-			static thread_local vector<fixed32> srcy;
-			static thread_local vector<fixed32> srcz;
-			static thread_local vector<float> masks;
+			vector<fixed32> srcx;
+			vector<fixed32> srcy;
+			vector<fixed32> srcz;
+			vector<float> masks;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masks.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx, srcy, srcz, count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
 			for (int i = 0; i < count; i++) {

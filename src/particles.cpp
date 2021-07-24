@@ -66,15 +66,15 @@ void particles_cache_free() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void particles_global_read_pos(particle_global_range range, vector<fixed32>& x, vector<fixed32>& y, vector<fixed32>& z, int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, int offset) {
 	const int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
 			const int dif = offset - range.range.first;
 			const int sz = range.range.second - range.range.first;
-			std::memcpy(x.data() + offset, &particles_pos(XDIM, range.range.first), sizeof(float) * sz);
-			std::memcpy(y.data() + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
-			std::memcpy(z.data() + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
+			std::memcpy(x + offset, &particles_pos(XDIM, range.range.first), sizeof(float) * sz);
+			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
+			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
 		} else {
 			line_id_type line_id;
 			line_id.proc = range.proc;

@@ -101,6 +101,7 @@ void cuda_set_device();
 size_t cuda_free_mem();
 int cuda_smp_count();
 size_t cuda_free_mem();
+size_t cuda_total_mem();
 int cuda_smp_count();
 
 

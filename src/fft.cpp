@@ -93,8 +93,10 @@ void fft3d_force_real() {
 	array<int, NDIM> i;
 	range<int> mirror_box = box;
 	range<int> slim_box = box;
+	slim_box.begin[ZDIM] = 0;
 	slim_box.end[ZDIM] = 1;
 	ym.resize(slim_box.volume());
+	mirror_box.begin[ZDIM] = 0;
 	mirror_box.end[ZDIM] = 1;
 	for (int dim = 0; dim < NDIM - 1; dim++) {
 		mirror_box.begin[dim] = N - box.end[dim];
