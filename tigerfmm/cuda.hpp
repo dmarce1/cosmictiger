@@ -92,10 +92,16 @@ inline __device__ double atomicAdd(double* address, double val)
 #define CUDA_EXPORT __host__ __device__
 
 
+#include <thrust/system/cuda/experimental/pinned_allocator.h>
+
+template<class T>
+using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
+
 void cuda_set_device();
 size_t cuda_free_mem();
 int cuda_smp_count();
 size_t cuda_free_mem();
 int cuda_smp_count();
+
 
 #endif /* COSMICTIGER_CUDA_HPP_ */

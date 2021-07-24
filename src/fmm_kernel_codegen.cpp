@@ -23,6 +23,13 @@ void tprint(const char* str, Args&&...args) {
 	printf(str, std::forward<Args>(args)...);
 }
 
+void tprint(const char* str) {
+	for (int i = 0; i < ntab; i++) {
+		printf("\t");
+	}
+	printf("%s", str);
+}
+
 int compute_dx(int P, const char* name = "X") {
 	array<int, NDIM> n;
 	tprint("const T x000 = T(1);\n");
@@ -1292,13 +1299,13 @@ int main() {
 				const auto m = entries[i][j].m;
 				if (!close21(last_coeff / coeff)) {
 					double factor = last_coeff / coeff;
-					asprintf(&str, "L[%i] *= %e;\n", nindex, factor);
+					ASPRINTF(&str, "L[%i] *= %e;\n", nindex, factor);
 					cmds.push_back(str);
 					free(str);
 					last_coeff = coeff;
 					fl++;
 				}
-				asprintf(&str, "L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				ASPRINTF(&str, "L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				cmds.push_back(str);
 				free(str);
@@ -1306,7 +1313,7 @@ int main() {
 			}
 			if (!close21(last_coeff)) {
 				fl++;
-				asprintf(&str, "L[%i] *= %e;\n", nindex, last_coeff);
+				ASPRINTF(&str, "L[%i] *= %e;\n", nindex, last_coeff);
 				cmds.push_back(str);
 			}
 		}

@@ -28,6 +28,8 @@ set(tigerfmm_source_files
     src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
+    src/kick.cu
+    src/kick_workspace.cpp
     src/main.cpp
     src/options.cpp
     src/particles.cpp
@@ -53,6 +55,7 @@ set(tigerfmm_header_files
     tigerfmm/initialize.hpp
     tigerfmm/hpx.hpp
     tigerfmm/kick.hpp
+    tigerfmm/kick_workspace.hpp
     tigerfmm/math.hpp
     tigerfmm/options.hpp
     tigerfmm/particles.hpp

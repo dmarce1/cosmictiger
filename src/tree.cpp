@@ -167,6 +167,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		allocators[depth].reset();
 		allocators[depth].ready = true;
 	}
+	int node_count;
 	const int index = allocators[depth].allocate();
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
@@ -280,6 +281,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		}
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
+		node_count = rcl.node_count + rcr.node_count;
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
@@ -333,8 +335,10 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
 		}
+		node_count = 1;
 	}
 	tree_node node;
+	node.node_count = node_count;
 	node.radius = radius;
 	node.children = children;
 	node.local_root = local_root;
@@ -356,6 +360,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
+	rc.node_count = node.node_count;
 	if (local_root) {
 		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}

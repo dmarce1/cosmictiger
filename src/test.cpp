@@ -11,7 +11,11 @@ constexpr bool verbose = true;
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
-constexpr double theta = 0.7;
+//0.7, 0.8
+//0.55, 0.65
+//0.4, 0.5
+
+constexpr double theta = 0.5;
 
 static void domain_test() {
 	timer tm;

@@ -37,6 +37,8 @@ struct kick_params {
 };
 
 
+
+
 kick_return kick(kick_params, expansion<float> L, array<fixed32,NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist );
 void kick_show_timings();
 

@@ -64,6 +64,7 @@ struct tree_node {
 	bool local_root;
 	bool sink_leaf;
 	bool source_leaf;
+	int node_count;
 	inline int nparts() const {
 		return part_range.second - part_range.first;
 	}
@@ -83,6 +84,9 @@ struct tree_node {
 		arc & nactive;
 		arc & radius;
 		arc & local_root;
+		arc & sink_leaf;
+		arc & source_leaf;
+		arc & node_count;
 	}
 };
 
@@ -92,6 +96,7 @@ struct tree_create_return {
 	tree_id id;
 	size_t nactive;
 	float radius;
+	int node_count;
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & multi;
@@ -99,6 +104,7 @@ struct tree_create_return {
 		a & pos;
 		a & nactive;
 		a & radius;
+		a & node_count;
 	}
 };
 

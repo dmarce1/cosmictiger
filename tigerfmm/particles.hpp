@@ -8,20 +8,16 @@
 #ifndef PARTICLES_HPP_
 #define PARTICLES_HPP_
 
+#include <tigerfmm/cuda.hpp>
 #include <tigerfmm/containers.hpp>
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/fixed.hpp>
-
-#include <thrust/system/cuda/experimental/pinned_allocator.h>
 
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
 #else
 #define PARTICLES_EXTERN extern
 #endif
-
-template<class T>
-using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
 
 struct particle {
 	array<fixed32, NDIM> x;
