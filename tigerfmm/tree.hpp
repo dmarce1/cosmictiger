@@ -60,6 +60,7 @@ struct tree_node {
 	array<fixed32, NDIM> pos;
 	pair<int, int> proc_range;
 	pair<int, int> part_range;
+	pair<int, int> sink_part_range;
 	size_t nactive;
 	float radius;
 	bool local_root;
@@ -74,6 +75,9 @@ struct tree_node {
 		r.proc = proc_range.first;
 		r.range = part_range;
 		return r;
+	}
+	bool is_local() const {
+		return proc_range.second - proc_range.first == 1;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {

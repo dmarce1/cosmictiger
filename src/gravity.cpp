@@ -41,7 +41,7 @@ int gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, g
 				M[k][j][l] = 0.0;
 			}
 			for (int j = 0; j < NDIM; j++) {
-				Y[k][j][l] = Y[last][j][l];
+				Y[k][j][l] = Y[lastk][j][lastl];
 			}
 		}
 		array<simd_int, NDIM> X;

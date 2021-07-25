@@ -50,6 +50,7 @@ set(tigerfmm_header_files
     tigerfmm/driver.hpp
     tigerfmm/ewald_incides.hpp
     tigerfmm/fft.hpp
+    tigerfmm/fixedcapvec.hpp
     tigerfmm/fixes.hpp
     tigerfmm/gravity.hpp
     tigerfmm/initialize.hpp
@@ -62,6 +63,7 @@ set(tigerfmm_header_files
     tigerfmm/range.hpp
     tigerfmm/safe_io.hpp
     tigerfmm/simd.hpp
+    tigerfmm/stack_vector.hpp
     tigerfmm/test.hpp
     tigerfmm/tree.hpp
     tigerfmm/timer.hpp

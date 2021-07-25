@@ -4,7 +4,7 @@
 #include <string>
 
 struct options {
-
+	bool cuda;
 	bool save_force;
 
 	int parts_dim;
@@ -30,6 +30,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & cuda;
 		arc & code_to_s;
 		arc & code_to_cm;
 		arc & code_to_g;

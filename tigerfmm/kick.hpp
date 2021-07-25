@@ -47,10 +47,18 @@ struct kick_params {
 	}
 };
 
+struct kick_workitem {
+	expansion<float> L;
+	array<fixed32, NDIM> pos;
+	tree_id self;
+	vector<tree_id> dchecklist;
+	vector<tree_id> echecklist;
+};
 
-
-
-kick_return kick(kick_params, expansion<float> L, array<fixed32,NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist );
+kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist);
 void kick_show_timings();
+vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream);
+
+
 
 #endif /* KICK_HPP_ */

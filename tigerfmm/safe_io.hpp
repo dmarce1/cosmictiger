@@ -50,6 +50,18 @@ inline void throw_error(const char* file, int line, const char* fmt, Args ...arg
 }
 
 
+inline void throw_error(const char* file, int line, const char* str) {
+	printf("%s", str);
+	printf("Error in %s on line %i\n", file, line);
+#ifndef __CUDA_ARCH__
+	fflush(stdout);
+	abort();
+#else
+	__trap();
+#endif
+}
+
+
 #define FREAD(a,b,c,d) __safe_fread(a,b,c,d,__LINE__,__FILE__)
 
 static void __safe_fread(void* src, size_t size, size_t count, FILE* fp, int line, const char* file) {

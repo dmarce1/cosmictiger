@@ -23,30 +23,39 @@ struct kick_workspace_tree_id_hash {
 	}
 };
 
-struct kick_workspace {
+#ifndef __CUDACC__
+
+
+class kick_workspace {
+	vector<kick_workitem> workitems;
+	vector<hpx::promise<kick_return>> promises;
 	vector<tree_node, pinned_allocator<tree_node>> tree_space;
 	fixed32* dev_x;
 	fixed32* dev_y;
 	fixed32* dev_z;
 	tree_node* dev_tree_space;
-	std::atomic<int> lock;
-	int current_tree;
 	int current_part;
 	int nparts;
-	int ntrees;
+	kick_params params;
 	cudaStream_t stream;
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 
-	kick_workspace();
+	void add_tree_node(tree_id, int part_base);
+	void add_tree_node_descendants(tree_id, int part_offset);
+	bool add_tree_list(vector<tree_id>& nodes);
+
+public:
+	kick_workspace(kick_params);
 	kick_workspace(const kick_workspace&) = delete;
 	kick_workspace(kick_workspace&&) = delete;
 	kick_workspace& operator=(const kick_workspace&) = delete;
 	kick_workspace& operator=(kick_workspace&&) = delete;
 	~kick_workspace();
 
-	bool add_tree_list(vector<tree_id>& nodes);
-	void add_tree_node(tree_id, int part_base, int tree_base);
-	void add_tree_node_descendants(tree_id, int part_offset, int& index);
-	void to_gpu();
+	std::pair<bool, hpx::future<kick_return>> add_work(expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
+			vector<tree_id> echecklist);
+	void to_gpu(std::shared_ptr<kick_workspace> ptr);
 };
+
+#endif
 #endif /* KICK_WORKSPACE_HPP_ */

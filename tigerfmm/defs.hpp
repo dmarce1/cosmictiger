@@ -19,7 +19,10 @@
 #define LEFT 0
 #define RIGHT 1
 
-
+#define WARP_SIZE 32
+#define CUDA_CHECKLIST_SIZE 4096
+#define CUDA_STACK_SIZE 65536
+#define CUDA_PARTS_MAX (8*1024)
 #define SELF_PHI float(-35.0/16.0)
 #define ANALYTIC_BLOCK_SIZE 128
 #define SINK_BUCKET_SIZE 90
@@ -34,6 +37,7 @@
 #define MIN_KICK_THREAD_PARTS (1024)
 #define MIN_PC_PARTS 47
 #define MIN_SORT_THREAD_PARTS (1024)
+
 #define NTREES_MIN (2*1024*1024)
 #define ORDER 7
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)

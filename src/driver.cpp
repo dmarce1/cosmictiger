@@ -9,7 +9,6 @@
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/time.hpp>
 
-
 double cosmos_dadtau(double a) {
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const auto omega_m = get_options().omega_m;
@@ -31,24 +30,30 @@ double cosmos_age(double a0) {
 	return t;
 }
 
-double gravity_long_time = 0.0;
 double domain_time = 0.0;
-double chain_time = 0.0;
+double sort_time = 0.0;
 double kick_time = 0.0;
 double drift_time = 0.0;
 
 kick_return kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 
-
 	timer tm;
 	tm.start();
-	PRINT( "Domains\n", minrung, theta);
+//	PRINT( "Domains\n", minrung, theta);
 	domains_begin();
 	domains_end();
+	tm.stop();
+	domain_time += tm.read();
+	tm.reset();
+	tm.start();
 	tree_create_params tparams(minrung, theta);
-	PRINT( "Create tree %i %e\n", minrung, theta);
+//	PRINT( "Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
-	PRINT( "nactive = %li\n", sr.nactive);
+	tm.stop();
+	sort_time += tm.read();
+	tm.reset();
+	tm.start();
+//	PRINT( "nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.a = scale;
 	kparams.first_call = first_call;
@@ -68,14 +73,14 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	PRINT( "Do kick\n");
+//	PRINT( "Do kick\n");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist);
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;
-	PRINT( "kick done\n");
+//	PRINT( "kick done\n");
 	return kr;
 }
 
@@ -142,9 +147,9 @@ void driver() {
 		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		timer dtm;
 		dtm.start();
-		PRINT( "Drift\n");
+//		PRINT( "Drift\n");
 		drift_return dr = drift(a2, dt);
-		PRINT( "Drift done\n");
+//		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
 		cosmicK += dr.kin * (a - a1);
@@ -154,25 +159,23 @@ void driver() {
 		}
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
 		if (full_eval) {
-			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin",
-					"cosmicK", "pot err", "min rung", "max rung", "nactive", "dtime", "gltime", "chtime", "ktime", "dtime", "total", "pps", "GFLOPS/s");
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin",
+					"cosmicK", "pot err", "min rung", "max rung", "nactive", "dtime", "stime", "ktime", "dtime", "total", "pps", "GFLOPS/s");
 		}
 		iter++;
 		total_processed += kr.nactive;
 		total_time.stop();
 		runtime += total_time.read();
 		double pps = total_processed / runtime;
-		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n", iter - 1, z,
-				tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, domain_time, gravity_long_time, chain_time,
-				kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(), kr.flops / 1024.0 / 1024.0 / 1024.0 / kick_time);
+		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n", iter - 1, z,
+				tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, domain_time, sort_time, kick_time, drift_time,
+				runtime / iter, (double ) kr.nactive / total_time.read(), kr.flops / 1024.0 / 1024.0 / 1024.0 / kick_time);
 		total_time.reset();
 		total_time.start();
-		//	PRINT( "%e\n", total_time.read() - gravity_long_time - chain_time - kick_time - drift_time - domain_time);
+		//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
 		itime = inc(itime, kr.max_rung);
-
-		gravity_long_time = 0.0;
 		domain_time = 0.0;
-		chain_time = 0.0;
+		sort_time = 0.0;
 		kick_time = 0.0;
 		drift_time = 0.0;
 		tau += dt;
@@ -180,8 +183,6 @@ void driver() {
 	}
 
 }
-
-
 
 void write_checkpoint(driver_params params) {
 	PRINT("Writing checkpoint\n");
