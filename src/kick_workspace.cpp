@@ -4,7 +4,7 @@
 kick_workspace::kick_workspace(kick_params p)  {
 	params = p;
 	current_part = 0;
-	nparts = size_t(KICK_WORKSPACE_PART_SIZE) * cuda_free_mem() / (NDIM * sizeof(fixed32));
+	nparts = size_t(KICK_WORKSPACE_PART_SIZE) * cuda_free_mem() / (NDIM * sizeof(fixed32)) / 100;
 	CUDA_CHECK(cudaStreamCreate(&stream));
 	CUDA_CHECK(cudaMallocAsync(&dev_x, nparts * sizeof(fixed32), stream));
 	CUDA_CHECK(cudaMallocAsync(&dev_y, nparts * sizeof(fixed32), stream));

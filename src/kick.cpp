@@ -82,7 +82,7 @@ fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 	const tree_node* self_ptr = tree_get_node(self);
-	if (self_ptr->local_root) {
+	if (self_ptr->local_root && get_options().cuda) {
 		cuda_workspace = std::make_shared<kick_workspace>(params);
 		parts_covered = 0;
 	}
