@@ -4,13 +4,11 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/options.hpp>
 
+__global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
+		double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);
 
-
-__global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey,
-		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);
-
-std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx,
-		const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
+std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
+		const vector<fixed32>& sinkz) {
 	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
 	fixed32* dev_sinkx;
 	fixed32* dev_sinky;
@@ -30,9 +28,13 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	CUDA_CHECK(cudaMalloc(&dev_gx, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gy, Nsinks * sizeof(double)));
 	CUDA_CHECK(cudaMalloc(&dev_gz, Nsinks * sizeof(double)));
-	vector<double> self_phi(Nsinks, -SELF_PHI / get_options().hsoft);
 	vector<double> zero(Nsinks, 0.0);
-	CUDA_CHECK(cudaMemcpy(dev_phi, self_phi.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	if (hpx_rank() == 0) {
+		vector<double> self_phi(Nsinks, -SELF_PHI / get_options().hsoft);
+		CUDA_CHECK(cudaMemcpy(dev_phi, self_phi.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	} else {
+		CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
+	}
 	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_gz, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
@@ -92,8 +94,8 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	return rc;
 }
 
-__global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey,
-		fixed32* sourcez, int Nsource, double* rphi, double* rgx, double* rgy, double*rgz, float h) {
+__global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
+		double* rphi, double* rgx, double* rgy, double*rgz, float h) {
 
 	__shared__ double phi[ANALYTIC_BLOCK_SIZE];
 	__shared__ double gx[ANALYTIC_BLOCK_SIZE];
