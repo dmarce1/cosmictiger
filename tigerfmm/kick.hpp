@@ -19,6 +19,16 @@ struct kick_return {
 	double fz;
 	double fnorm;
 	int nactive;
+	kick_return() {
+		max_rung = 0;
+		flops = 0.0;
+		pot = 0.0;
+		fx = 0.0;
+		fy = 0.0;
+		fz = 0.0;
+		fnorm = 0.0;
+		nactive = 0;
+	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & max_rung;
@@ -56,7 +66,9 @@ struct kick_workitem {
 	vector<tree_id> echecklist;
 };
 
-kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist);
+#ifndef __CUDACC__
+hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist);
+#endif
 void kick_show_timings();
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream);
 

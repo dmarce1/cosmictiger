@@ -1,7 +1,7 @@
 #include <tigerfmm/kick_workspace.hpp>
 #include <tigerfmm/particles.hpp>
 
-kick_workspace::kick_workspace(kick_params p)  {
+kick_workspace::kick_workspace(kick_params p) {
 	params = p;
 	current_part = 0;
 	nparts = size_t(KICK_WORKSPACE_PART_SIZE) * cuda_free_mem() / (NDIM * sizeof(fixed32)) / 100;
@@ -28,15 +28,18 @@ void kick_workspace::add_tree_node_descendants(tree_id id, int part_offset) {
 	const auto children = node.children;
 	tree_map[id] = tree_space.size();
 	tree_space.push_back(node);
-	add_tree_node_descendants(children[LEFT], part_offset);
-	add_tree_node_descendants(children[RIGHT], part_offset);
+	if (children[LEFT].index != -1) {
+		add_tree_node_descendants(children[LEFT], part_offset);
+		add_tree_node_descendants(children[RIGHT], part_offset);
+	}
 }
 
 void kick_workspace::add_tree_node(tree_id id, int part_base) {
 	const tree_node* node_ptr = tree_get_node(id);
-	vector<fixed32, pinned_allocator<fixed32>> x;
-	vector<fixed32, pinned_allocator<fixed32>> y;
-	vector<fixed32, pinned_allocator<fixed32>> z;
+	const int nparts = node_ptr->nparts();
+	vector<fixed32, pinned_allocator<fixed32>> x(nparts);
+	vector<fixed32, pinned_allocator<fixed32>> y(nparts);
+	vector<fixed32, pinned_allocator<fixed32>> z(nparts);
 	particles_global_read_pos(node_ptr->global_part_range(), x.data(), y.data(), z.data(), 0);
 	const int part_offset = part_base - node_ptr->part_range.first;
 	CUDA_CHECK(cudaMemcpyAsync(dev_x + part_base, x.data(), node_ptr->nparts(), cudaMemcpyHostToDevice, stream));
@@ -83,10 +86,12 @@ bool kick_workspace::add_tree_list(vector<tree_id>& nodes) {
 }
 
 void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
+	PRINT( "To GPU\n");
 	CUDA_CHECK(cudaMallocAsync(&dev_tree_space, (int ) tree_space.size() * sizeof(tree_node), stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_tree_space, tree_space.data(), (int ) tree_space.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	hpx::apply([ptr]() {
 		auto returns = cuda_execute_kicks(ptr->params, ptr->dev_x, ptr->dev_y, ptr->dev_z, ptr->dev_tree_space, ptr->workitems, ptr->stream);
+		PRINT( "GPU done\n");
 		for( int i = 0; i < returns.size(); i++) {
 			ptr->promises[i].set_value(std::move(returns[i]));
 		}
@@ -96,6 +101,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 
 std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecks,
 		vector<tree_id> echecks) {
+	PRINT( "Adding work\n");
 	bool rc = add_tree_list(dchecks);
 	rc = rc && add_tree_list(echecks);
 	if (!rc) {
@@ -111,5 +117,6 @@ std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<flo
 	promises.resize(promises.size() + 1);
 	auto fut = promises.back().get_future();
 	workitems.push_back(std::move(item));
+	PRINT( "Done adding work\n");
 	return std::make_pair(true, std::move(fut));
 }

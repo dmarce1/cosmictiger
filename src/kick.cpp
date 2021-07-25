@@ -46,10 +46,10 @@ static void cleanup_workspace(workspace&& workspace) {
 	local_workspaces.push(std::move(workspace));
 }
 
-fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
+hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, bool threadme) {
 	static std::atomic<int> nthreads(0);
-	fast_future<kick_return> rc;
+	hpx::future<kick_return> rc;
 	const tree_node* self_ptr = tree_get_node(self);
 	bool remote = false;
 	if (self.proc != hpx_rank()) {
@@ -67,7 +67,7 @@ fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		}
 	}
 	if (!threadme) {
-		rc.set_value(kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist)));
+		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else if (remote) {
 		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
@@ -80,7 +80,8 @@ fast_future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 	return rc;
 }
 
-kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
+		vector<tree_id> echecklist) {
 	const tree_node* self_ptr = tree_get_node(self);
 	if (self_ptr->local_root && get_options().cuda) {
 		cuda_workspace = std::make_shared<kick_workspace>(params);
@@ -95,6 +96,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
 		if (rc.first) {
 			parts_covered += self_ptr->nparts();
+			PRINT("%i\n", (int ) parts_covered);
 		} else {
 			cuda_workspace->to_gpu(cuda_workspace);
 			cuda_workspace = std::make_shared<kick_workspace>(params);
@@ -108,12 +110,9 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			cuda_workspace = nullptr;
 		}
 		atomic_lock--;
-		return rc.second.get();
+		return std::move(rc.second);
 	} else {
 		kick_return kr;
-		kr.flops = 0;
-		kr.max_rung = 0;
-		kr.pot = kr.fx = kr.fy = kr.fz = kr.fnorm = 0.0;
 		const simd_float h = get_options().hsoft;
 		const float hfloat = get_options().hsoft;
 		const float GM = get_options().GM;
@@ -325,6 +324,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					kr.fnorm += g2;
 				}
 			}
+			return hpx::make_ready_future(kr);
 		} else {
 			dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
 			cleanup_workspace(std::move(workspace));
@@ -332,11 +332,27 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			const tree_node* cr = tree_get_node(self_ptr->children[RIGHT]);
 			const bool exec_left = cl->nactive > 0 || !cl->is_local();
 			const bool exec_right = cr->nactive > 0 || !cr->is_local();
+			std::array<hpx::future<kick_return>, NCHILD> futs;
 			if (exec_left && exec_right) {
-				auto futl = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, true);
-				auto futr = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
-				const auto rcl = futl.get();
-				const auto rcr = futr.get();
+				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, true);
+				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
+			} else if (exec_left) {
+				parts_covered += cr->nparts();
+				futs[RIGHT] = hpx::make_ready_future(kick_return());
+				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), false);
+			} else if (exec_right) {
+				parts_covered += cl->nparts();
+				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false);
+				futs[LEFT] = hpx::make_ready_future(kick_return());
+			} else {
+				parts_covered += cr->nparts();
+				parts_covered += cl->nparts();
+				futs[LEFT] = hpx::make_ready_future(kick_return());
+				futs[RIGHT] = hpx::make_ready_future(kick_return());
+			}
+			if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
+				const auto rcl = futs[LEFT].get();
+				const auto rcr = futs[RIGHT].get();
 				kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
 				kr.flops += rcl.flops + rcr.flops;
 				kr.pot = rcl.pot + rcr.pot;
@@ -344,18 +360,24 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				kr.fy = rcl.fy + rcr.fy;
 				kr.fz = rcl.fz + rcr.fz;
 				kr.fnorm = rcl.fnorm + rcr.fnorm;
-			} else if (exec_left) {
-				parts_covered += cr->nparts();
-				kr = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), false).get();
-			} else if (exec_right) {
-				parts_covered += cl->nparts();
-				kr = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), false).get();
+				return hpx::make_ready_future(kr);
 			} else {
-				parts_covered += cr->nparts();
-				parts_covered += cl->nparts();
+				return hpx::when_all(futs.begin(), futs.end()).then([](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
+					auto futs = futsfut.get();
+					kick_return kr;
+					const auto rcl = futs[LEFT].get();
+					const auto rcr = futs[RIGHT].get();
+					kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
+					kr.flops += rcl.flops + rcr.flops;
+					kr.pot = rcl.pot + rcr.pot;
+					kr.fx = rcl.fx + rcr.fx;
+					kr.fy = rcl.fy + rcr.fy;
+					kr.fz = rcl.fz + rcr.fz;
+					kr.fnorm = rcl.fnorm + rcr.fnorm;
+					return kr;
+				});
 			}
 		}
-		return kr;
 	}
 
 }
