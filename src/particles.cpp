@@ -91,6 +91,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					x[dest_index] = ptr[src_index][XDIM];
 					y[dest_index] = ptr[src_index][YDIM];
 					z[dest_index] = ptr[src_index][ZDIM];
+					dest_index++;
 				}
 			}
 		}
@@ -103,7 +104,6 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 	std::unique_lock<spinlock_type> lock(mutexes[bin]);
 	auto iter = part_cache[bin].find(line_id);
 	const array<fixed32, NDIM>* ptr;
-//	static std::atomic<int> hits(0), misses(0);
 	if (iter == part_cache[bin].end()) {
 		auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
 		part_cache[bin][line_id] = prms->get_future();
@@ -114,11 +114,7 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 		});
 		lock.lock();
 		iter = part_cache[bin].find(line_id);
-		//misses++;
-		//PRINT( "%i %i\n", (int) hits, (int) misses);
-	} //else {
-	  //	hits++;
-//	}
+	}
 	auto fut = iter->second;
 	lock.unlock();
 	return fut.get().data();
