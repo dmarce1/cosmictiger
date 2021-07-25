@@ -42,12 +42,13 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 
 	timer tm;
 	tm.start();
+	PRINT( "Domains\n", minrung, theta);
 	domains_begin();
 	domains_end();
 	tree_create_params tparams(minrung, theta);
-//	PRINT( "Create tree %i %e\n", minrung, theta);
+	PRINT( "Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
-//	PRINT( "nactive = %li\n", sr.nactive);
+	PRINT( "nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.a = scale;
 	kparams.first_call = first_call;
@@ -67,14 +68,14 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-//	PRINT( "Do kick\n");
+	PRINT( "Do kick\n");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist);
-//	PRINT( "kick done\n");
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;
+	PRINT( "kick done\n");
 	return kr;
 }
 
@@ -141,7 +142,9 @@ void driver() {
 		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		timer dtm;
 		dtm.start();
+		PRINT( "Drift\n");
 		drift_return dr = drift(a2, dt);
+		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
 		cosmicK += dr.kin * (a - a1);

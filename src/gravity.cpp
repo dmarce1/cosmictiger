@@ -32,7 +32,8 @@ int gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, g
 				Y[k][j][l] = y[j].raw();
 			}
 		}
-		const int last = (tree_ptrs.size() - 1) / SIMD_FLOAT_SIZE;
+		const int lastk = (tree_ptrs.size() - 1) / SIMD_FLOAT_SIZE;
+		const int lastl = (tree_ptrs.size() - 1) % SIMD_FLOAT_SIZE;
 		for (int i = tree_ptrs.size(); i < nsource * SIMD_FLOAT_SIZE; i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
@@ -175,7 +176,8 @@ int gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 				Y[k][j][l] = y[j].raw();
 			}
 		}
-		const int last = (tree_ptrs.size() - 1) / SIMD_FLOAT_SIZE;
+		const int lastk = (tree_ptrs.size() - 1) / SIMD_FLOAT_SIZE;
+		const int lastl = (tree_ptrs.size() - 1) % SIMD_FLOAT_SIZE;
 		for (int i = tree_ptrs.size(); i < nsource * SIMD_FLOAT_SIZE; i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
@@ -183,7 +185,7 @@ int gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 				M[k][j][l] = 0.0;
 			}
 			for (int j = 0; j < NDIM; j++) {
-				Y[k][j][l] = Y[last][j][l];
+				Y[k][j][l] = Y[lastk][j][lastl];
 			}
 		}
 		const auto range = self_ptr->part_range;
