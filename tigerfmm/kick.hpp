@@ -23,6 +23,7 @@ struct kick_return {
 	void serialize(A&& arc, unsigned) {
 		arc & max_rung;
 		arc & flops;
+		arc & pot;
 		arc & fx;
 		arc & fy;
 		arc & fz;

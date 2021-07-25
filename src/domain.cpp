@@ -23,7 +23,7 @@ static void domains_find_all(vector<range<double>>& domains, int begin, int end,
 static int find_particle_domain(const array<double, NDIM>& x);
 
 void domains_transmit_particles(vector<particle> parts) {
-	PRINT("Receiving %li particles on %i\n", parts.size(), hpx_rank());
+//	PRINT("Receiving %li particles on %i\n", parts.size(), hpx_rank());
 	std::lock_guard<mutex_type> lock(mutex);
 	const int start = trans_particles.size();
 	const int stop = start + parts.size();
@@ -61,7 +61,7 @@ void domains_begin() {
 					auto& send = sends[rank];
 					send.push_back(particles_get_particle(i));
 					if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-						PRINT( "%i sending %li particles to %i\n", hpx_rank(), send.size(), rank);
+//						PRINT( "%i sending %li particles to %i\n", hpx_rank(), send.size(), rank);
 						futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 					}
 					my_free_indices.push_back(i);
@@ -69,7 +69,7 @@ void domains_begin() {
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
-					PRINT( "%i sending %li particles to %i\n", hpx_rank(), i->second.size(), i->first);
+//					PRINT( "%i sending %li particles to %i\n", hpx_rank(), i->second.size(), i->first);
 					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 				}
 			}
@@ -99,7 +99,7 @@ void domains_end() {
 			}
 			return false;
 		};
-		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
+//		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
 		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
 		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
 		fut.get();
