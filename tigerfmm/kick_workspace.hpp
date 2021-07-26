@@ -31,7 +31,7 @@ class kick_workspace {
 	int nparts;
 	kick_params params;
 	cudaStream_t stream;
-	unordered_set_ts<tree_id, kick_workspace_tree_id_hash> tree_ids;
+	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
 
 public:
 	kick_workspace(kick_params);

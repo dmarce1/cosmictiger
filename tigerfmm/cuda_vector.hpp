@@ -34,13 +34,15 @@ public:
 	}
 	__device__
 	inline cuda_vector() {
-		const int& tid = threadIdx.x;
-		if (tid == 0) {
-			ptr = nullptr;
-			cap = 0;
-			sz = 0;
-		}
-		__syncwarp();
+		ptr = nullptr;
+		cap = 0;
+		sz = 0;
+	}
+	__device__ inline
+	void initialize() {
+		ptr = nullptr;
+		cap = 0;
+		sz = 0;
 	}
 	__device__
 	inline cuda_vector(unsigned _sz) {

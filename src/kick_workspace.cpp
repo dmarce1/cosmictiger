@@ -46,7 +46,8 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 				}
 		);
 	});
-	auto tree_ids_vector = tree_ids.to_vector();
+	PRINT("To vector\n");
+	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	PRINT("%i tree ids\n", tree_ids_vector.size());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
 	int node_count = 0;
@@ -60,9 +61,9 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	fixed32* dev_x;
 	fixed32* dev_y;
 	fixed32* dev_z;
-	CUDA_CHECK(cudaMallocAsync(&dev_x, sizeof(fixed32) * part_count, stream));
-	CUDA_CHECK(cudaMallocAsync(&dev_y, sizeof(fixed32) * part_count, stream));
-	CUDA_CHECK(cudaMallocAsync(&dev_z, sizeof(fixed32) * part_count, stream));
+	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 	std::atomic<int> next_index(0);
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
@@ -80,7 +81,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	}
 	vector<tree_node, pinned_allocator<tree_node>> tree_nodes(next_index);
 	tree_node* dev_trees;
-	CUDA_CHECK(cudaMallocAsync(&dev_trees, tree_nodes.size() * sizeof(tree_node), stream));
+	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
 		tree_nodes[i->second] = *tree_get_node(i->first);
 	}
@@ -154,19 +155,23 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 
 std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecks,
 		vector<tree_id> echecks) {
-//PRINT("Adding work\n");
+	PRINT("Adding work\n");
 	kick_workitem item;
 	item.L = L;
 	item.pos = pos;
 	item.self = self;
 	item.self.proc = 0;
-	for (int i = 0; i < dchecks.size(); i++) {
-		tree_ids.insert(dchecks[i]);
+	static mutex_type mutex;
+	{
+		std::lock_guard<mutex_type> lock(mutex);
+		for (int i = 0; i < dchecks.size(); i++) {
+			tree_ids.insert(dchecks[i]);
+		}
+		for (int i = 0; i < echecks.size(); i++) {
+			tree_ids.insert(echecks[i]);
+		}
+		tree_ids.insert(self);
 	}
-	for (int i = 0; i < echecks.size(); i++) {
-		tree_ids.insert(echecks[i]);
-	}
-	tree_ids.insert(self);
 	item.dchecklist = std::move(dchecks);
 	item.echecklist = std::move(echecks);
 	std::unique_lock<mutex_type> lock(mutex);

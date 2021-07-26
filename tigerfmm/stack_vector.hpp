@@ -30,6 +30,15 @@ public:
 	__device__ inline int depth() const {
 		return bounds.size() - 2;
 	}
+	__device__ inline void initialize() {
+		const int& tid = threadIdx.x;
+		bounds.reserve(CUDA_MAX_DEPTH + 1);
+		bounds.resize(2);
+		if (tid == 0) {
+			bounds[0] = 0;
+			bounds[1] = 0;
+		}
+	}
 	__device__ inline stack_vector() {
 		const int& tid = threadIdx.x;
 		bounds.reserve(CUDA_MAX_DEPTH + 1);

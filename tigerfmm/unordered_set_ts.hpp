@@ -36,6 +36,7 @@ public:
 		mutexes.resize(UNORDERED_SET_SIZE, std::make_shared<spinlock_type>());
 	}
 	void insert(const T& member) {
+		PRINT( "Inserting\n");
 		hash_lo hashlo;
 		const int set_index = hashlo(member);
 		std::lock_guard<spinlock_type> lock(*mutexes[set_index]);
