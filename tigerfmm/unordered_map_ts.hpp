@@ -42,6 +42,7 @@ public:
 	bool exists(const T& key) const {
 		hash_lo hash;
 		const int map_index = hash(key);
+		std::lock_guard<spinlock_type> lock(*mutexes[map_index]);
 		return maps[map_index].find(key) != maps[map_index].end();
 	}
 	V operator[](const T& key) const {

@@ -95,7 +95,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
 			if (rc.first) {
 				parts_covered += self_ptr->nparts();
-			//	PRINT("%i\n", (int ) parts_covered);
+				//	PRINT("%i\n", (int ) parts_covered);
 			} else {
 				cuda_workspace->to_gpu(cuda_workspace);
 				cuda_workspace = std::make_shared<kick_workspace>(params);

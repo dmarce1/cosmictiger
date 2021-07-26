@@ -14,7 +14,7 @@ kick_workspace::~kick_workspace() {
 	CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
-static void add_tree_node(unordered_map_ts<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index) {
+static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index) {
 	tree_map.insert(std::make_pair(id, index));
 	const tree_node* node = tree_get_node(id);
 	index++;
@@ -54,13 +54,13 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	CUDA_CHECK(cudaMallocAsync(&dev_x, sizeof(fixed32) * part_count, stream));
 	CUDA_CHECK(cudaMallocAsync(&dev_y, sizeof(fixed32) * part_count, stream));
 	CUDA_CHECK(cudaMallocAsync(&dev_z, sizeof(fixed32) * part_count, stream));
-	unordered_map_ts<tree_id, int, kick_workspace_tree_id_hash> tree_map;
-	int next_index = 0;
+	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
+	std::atomic<int> next_index(0);
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		if (ids.size()) {
 			for (int i = 0; i < ids.size(); i++) {
-				if (!tree_map.exists(ids[i])) {
+				if (tree_map.find(ids[i]) == tree_map.end()) {
 					const tree_node* node = tree_get_node(ids[i]);
 					int index = next_index;
 					next_index += node->node_count;
@@ -70,51 +70,71 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 		}
 	}
 	vector<tree_node, pinned_allocator<tree_node>> tree_nodes(next_index);
-	auto tree_map_vector = tree_map.to_vector();
 	tree_node* dev_trees;
 	CUDA_CHECK(cudaMallocAsync(&dev_trees, tree_nodes.size() * sizeof(tree_node), stream));
-	PRINT("%i %i\n", next_index, tree_map_vector.size());
-	for (int i = 0; i < tree_map_vector.size(); i++) {
-		tree_nodes[tree_map_vector[i].second] = *tree_get_node(tree_map_vector[i].first);
+	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
+		tree_nodes[i->second] = *tree_get_node(i->first);
 	}
-	for (int i = 0; i < tree_nodes.size(); i++) {
-		if (tree_nodes[i].children[LEFT].index != -1) {
-			tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
-			tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
-		}
+	vector<hpx::future<void>> futs;
+	const int nthreads = hpx::thread::hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads,&tree_nodes,&tree_map]() {
+			for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
+				if (tree_nodes[i].children[LEFT].index != -1) {
+					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
+					tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
+				}
+			}
+		}));
 	}
-	for (int i = 0; i < workitems.size(); i++) {
-		for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-			workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
-		}
-		for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-			workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
-		}
-		workitems[i].self.index = tree_map[workitems[i].self];
+	hpx::wait_all(futs.begin(), futs.end());
+	futs.resize(0);
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([this,proc,nthreads,&tree_nodes,&tree_map]() {
+			for (int i = proc; i < workitems.size(); i+=nthreads) {
+				for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
+					workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
+				}
+				for (int j = 0; j < workitems[i].echecklist.size(); j++) {
+					workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
+				}
+				workitems[i].self.index = tree_map[workitems[i].self];
+			}
+		}));
 	}
+	hpx::wait_all(futs.begin(), futs.end());
 	next_index = 0;
 	vector<fixed32, pinned_allocator<fixed32>> host_x(part_count);
 	vector<fixed32, pinned_allocator<fixed32>> host_y(part_count);
 	vector<fixed32, pinned_allocator<fixed32>> host_z(part_count);
-	for (int i = 0; i < tree_ids_vector.size(); i++) {
-		const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
-		const int local_index = tree_map[tree_ids_vector[i]];
-		int part_index = next_index;
-		particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
-		adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
-		next_index += ptr->nparts();
+	futs.resize(0);
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&host_x,&host_y,&host_z,&tree_nodes]() {
+			for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
+				const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
+				const int local_index = tree_map[tree_ids_vector[i]];
+				int part_index = next_index;
+				particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
+				adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
+				next_index += ptr->nparts();
+			}
+		}));
 	}
+	hpx::wait_all(futs.begin(), futs.end());
+
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
+	PRINT( "parts size = %li\n",  sizeof(fixed32) * part_count * NDIM);
+	CUDA_CHECK(cudaStreamSynchronize(stream));
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream);
 	CUDA_CHECK(cudaFreeAsync(dev_x, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_y, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_z, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_trees, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
-	for( int i = 0; i < kick_returns.size(); i++) {
+	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
 	tm.stop();
