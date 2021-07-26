@@ -155,7 +155,6 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 
 std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecks,
 		vector<tree_id> echecks) {
-	PRINT("Adding work\n");
 	kick_workitem item;
 	item.L = L;
 	item.pos = pos;

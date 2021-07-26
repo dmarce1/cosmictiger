@@ -142,6 +142,10 @@ public:
 			T* new_ptr;
 			if (tid == 0) {
 				new_ptr = (T*) malloc(new_cap * sizeof(T));
+				if( new_ptr == nullptr) {
+					printf("CUDA OOM\n");
+					__trap();
+				}
 			}
 			size_t new_ptr_int = (size_t) new_ptr;
 			new_ptr_int = __shfl_sync(0xFFFFFFFF, new_ptr_int, 0);
