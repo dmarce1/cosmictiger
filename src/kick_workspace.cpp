@@ -37,6 +37,14 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	timer tm;
 	tm.start();
 	PRINT("To GPU\n");
+	auto sort_fut = hpx::async([this]() {
+		std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
+					const auto* aptr = tree_get_node(a.self);
+					const auto* bptr = tree_get_node(b.self);
+					return aptr->nparts() > bptr->nparts();
+				}
+		);
+	});
 	auto tree_ids_vector = tree_ids.to_vector();
 	PRINT("%i tree ids\n", tree_ids_vector.size());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
@@ -87,6 +95,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 			}
 		}));
 	}
+	sort_fut.get();
 	hpx::wait_all(futs.begin(), futs.end());
 	futs.resize(0);
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -126,7 +135,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
-	PRINT( "parts size = %li\n",  sizeof(fixed32) * part_count * NDIM);
+	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	CUDA_CHECK(cudaStreamSynchronize(stream));
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream);
 	CUDA_CHECK(cudaFreeAsync(dev_x, stream));

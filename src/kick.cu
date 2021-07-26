@@ -1,12 +1,22 @@
 #include <tigerfmm/kick.hpp>
 
 #include <tigerfmm/cuda.hpp>
+#include <tigerfmm/cuda_vector.hpp>
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/fixedcapvec.hpp>
 #include <tigerfmm/kick.hpp>
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/stack_vector.hpp>
 #include <tigerfmm/timer.hpp>
+
+struct cuda_kick_shmem {
+	cuda_vector<int> nextlist;
+	cuda_vector<int> multlist;
+	cuda_vector<int> partlist;
+	cuda_vector<int> leaflist;
+	stack_vector<int> dchecks;
+	stack_vector<int> echecks;
+};
 
 struct cuda_kick_params {
 	tree_node* tree_nodes;
@@ -33,12 +43,18 @@ struct cuda_kick_params {
 };
 
 __global__ void cuda_kick_kernel(cuda_kick_params* params) {
+	extern __shared__ int shmem_ptr[];
+	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
+	new(&shmem) cuda_kick_shmem();
+
+	shmem.cuda_kick_shmem::~cuda_kick_shmem();
 
 }
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream) {
 	timer tm;
+	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
 	vector<kick_return, pinned_allocator<kick_return>> returns(workitems.size());
 	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params(workitems.size());
