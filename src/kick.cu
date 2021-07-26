@@ -44,10 +44,14 @@ struct cuda_kick_params {
 	kick_params kparams;
 };
 
-__device__ kick_return do_kick(cuda_kick_params* params, array<fixed32, NDIM> Lpos, const tree_node& self) {
+__device__ kick_return do_kick(cuda_kick_params* params, array<fixed32, NDIM> Lpos, const tree_node& self, int depth = 0 ) {
+	kick_return kr;
+	if( depth == 1 ) {
+		return kr;
+	}
 	const int& tid = threadIdx.x;
 	if (tid == 0) {
-		//	PRINT("%i\n", self.nactive);
+		PRINT("%i %i\n",depth, self.nactive);
 	}
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -57,10 +61,9 @@ __device__ kick_return do_kick(cuda_kick_params* params, array<fixed32, NDIM> Lp
 	auto& leaflist = shmem.leaflist;
 	auto& dchecks = shmem.dchecks;
 	auto& echecks = shmem.echecks;
+	auto& L = shmem.L;
 	const float& h = params->kparams.h;
 	const float thetainv = 1.f / params->kparams.theta;
-	auto& L = shmem.L;
-	kick_return kr;
 	array<float, NDIM> dx;
 	const float sink_bias = 1.5;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -176,7 +179,7 @@ __device__ kick_return do_kick(cuda_kick_params* params, array<fixed32, NDIM> Lp
 		nextlist.resize(0);
 
 	} while (dchecks.size() && self.sink_leaf);
-
+*/
 	if (self.sink_leaf) {
 
 	} else {
@@ -184,18 +187,20 @@ __device__ kick_return do_kick(cuda_kick_params* params, array<fixed32, NDIM> Lp
 		const tree_node& cl = params->tree_nodes[children[LEFT].index];
 		const tree_node& cr = params->tree_nodes[children[RIGHT].index];
 		if (cl.nactive && cr.nactive) {
-			L.push_back(L.back());
 			dchecks.push_top();
 			echecks.push_top();
-			do_kick(params, self.pos, cl);
+			const auto l = L.back();
+			__syncwarp();
+			L.push_back(l);
+			do_kick(params, self.pos, cl, depth + 1);
 			L.pop_back();
 			dchecks.pop_top();
 			echecks.pop_top();
-			do_kick(params, self.pos, cr);
+			do_kick(params, self.pos, cr, depth + 1);
 		} else if (cl.nactive) {
-			do_kick(params, self.pos, cl);
+			do_kick(params, self.pos, cl, depth + 1);
 		} else if (cr.nactive) {
-			do_kick(params, self.pos, cr);
+			do_kick(params, self.pos, cr, depth + 1);
 		}
 	}
 //	PRINT("Returning \n");

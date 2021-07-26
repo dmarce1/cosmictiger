@@ -147,7 +147,8 @@ public:
 			for (unsigned i = tid; i < sz; i += WARP_SIZE) {
 				new (new_ptr + i) T();
 				new_ptr[i] = std::move((*this)[i]);
-			}__syncwarp();
+			}
+			__syncwarp();
 			if (tid == 0) {
 				cap = new_cap;
 				if (ptr) {
