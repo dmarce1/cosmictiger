@@ -55,6 +55,10 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	tm.start();
 //	PRINT( "nactive = %li\n", sr.nactive);
 	kick_params kparams;
+	kparams.save_force = get_options().save_force;
+	kparams.GM = get_options().GM;
+	kparams.eta = get_options().eta;
+	kparams.h = get_options().hsoft;
 	kparams.a = scale;
 	kparams.first_call = first_call;
 	kparams.min_rung = minrung;

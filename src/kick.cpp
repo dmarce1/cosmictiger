@@ -113,11 +113,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		return hpx::async(func, params, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
 		kick_return kr;
-		const simd_float h = get_options().hsoft;
-		const float hfloat = get_options().hsoft;
-		const float GM = get_options().GM;
-		const float eta = get_options().eta;
-		const bool save_force = get_options().save_force;
+		const simd_float h = params.h;
+		const float hfloat = params.h;
+		const float GM = params.GM;
+		const float eta = params.eta;
+		const bool save_force = params.save_force;
 		auto workspace = get_workspace();
 		vector<tree_id>& nextlist = workspace.nextlist;
 		vector<tree_id>& partlist = workspace.partlist;
@@ -268,7 +268,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 			}
 			kr.flops += gravity_pc(forces, params.min_rung, self, multlist);
-			kr.flops += gravity_pp(forces, params.min_rung, self, partlist);
+			kr.flops += gravity_pp(forces, params.min_rung, self, partlist, params.h);
 			cleanup_workspace(std::move(workspace));
 
 			const auto rng = self_ptr->part_range;

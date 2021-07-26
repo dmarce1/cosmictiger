@@ -45,9 +45,13 @@ struct kick_return {
 
 struct kick_params {
 	int min_rung;
-	double a;
-	double t0;
-	double theta;
+	float a;
+	float t0;
+	float theta;
+	float h;
+	float eta;
+	float GM;
+	bool save_force;
 	bool first_call;
 	template<class A>
 	void serialize(A && arc, unsigned) {
@@ -56,6 +60,10 @@ struct kick_params {
 		arc & t0;
 		arc & theta;
 		arc & first_call;
+		arc & h;
+		arc & eta;
+		arc & GM;
+		arc & save_force;
 	}
 };
 

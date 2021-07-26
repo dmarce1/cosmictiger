@@ -67,16 +67,7 @@ public:
 		assert(i < size());
 		return data[begin() + i];
 	}
-	__device__  inline stack_vector copy_top() const {
-		const int& tid = threadIdx.x;
 
-		stack_vector res;
-		res.resize(size());
-		for (int i = tid; i < size(); i += WARP_SIZE) {
-			res[i] = (*this)[i];
-		}
-		return res;
-	}
 	__device__ inline void push_top() {
 		const int& tid = threadIdx.x;
 

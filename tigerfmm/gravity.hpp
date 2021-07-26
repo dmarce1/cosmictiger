@@ -37,6 +37,6 @@ enum gravity_cc_type {
 int gravity_cc(expansion<float>&, const vector<tree_id>&, tree_id, gravity_cc_type, bool do_phi);
 int gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
 int gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
-int gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&);
+int gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
 
 #endif /* GRAVITY_HPP_ */

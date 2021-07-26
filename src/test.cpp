@@ -113,6 +113,10 @@ static void kick_test() {
 
 	tm.start();
 	kick_params kparams;
+	kparams.save_force = get_options().save_force;
+	kparams.GM = get_options().GM;
+	kparams.h = get_options().hsoft;
+	kparams.eta = get_options().eta;
 	kparams.a = 1.0;
 	kparams.first_call = true;
 	kparams.min_rung = 0;
@@ -176,6 +180,10 @@ static void force_test() {
 
 	tm.start();
 	kick_params kparams;
+	kparams.save_force = get_options().save_force;
+	kparams.GM = get_options().GM;
+	kparams.h = get_options().hsoft;
+	kparams.eta = get_options().eta;
 	kparams.a = 1.0;
 	kparams.first_call = true;
 	kparams.min_rung = 0;

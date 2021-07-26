@@ -48,6 +48,7 @@ __device__ inline void erfcexpf(float x, float* ec, float *ex) {				// 18 + FLOP
 }
 
 template<class T>
+CUDA_EXPORT
 inline T round_up(T a, T b) {
 	return (((a - 1) / b) + 1) * b;
 }

@@ -77,12 +77,8 @@ int gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, b
 	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-		const simd_float h(get_options().hsoft);
-		const simd_float h2 = h * h;
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);
-		const simd_float hinv = simd_float(1) / h;
-		const simd_float hinv3 = hinv * hinv * hinv;
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		for (int li = 0; li < list.size(); li += chunk_size) {
@@ -222,7 +218,7 @@ int gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 	return flops;
 }
 
-int gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+int gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
 	int flops = 0;
 	timer tm;
 	tm.start();
@@ -231,7 +227,7 @@ int gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 	int far_count = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-		const simd_float h(get_options().hsoft);
+		const simd_float h = hfloat;
 		const simd_float h2 = h * h;
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);

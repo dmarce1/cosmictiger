@@ -44,6 +44,7 @@ set(tigerfmm_header_files
     tigerfmm/complex.hpp
     tigerfmm/containers.hpp
     tigerfmm/cuda.hpp
+    tigerfmm/cuda_reduce.hpp
     tigerfmm/cuda_vector.hpp
     tigerfmm/defs.hpp
     tigerfmm/domain.hpp
