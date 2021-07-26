@@ -86,8 +86,8 @@ static void kick_test() {
 	timer tm;
 
 	tm.start();
-	//particles_random_init();
-	initialize();
+	particles_random_init();
+//	/initialize();
 	tm.stop();
 	PRINT("initialize: %e s\n", tm.read());
 	tm.reset();

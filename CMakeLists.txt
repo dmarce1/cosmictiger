@@ -67,6 +67,8 @@ set(tigerfmm_header_files
     tigerfmm/test.hpp
     tigerfmm/tree.hpp
     tigerfmm/timer.hpp
+    tigerfmm/unordered_map_ts.hpp
+    tigerfmm/unordered_set_ts.hpp
 )
 
 add_hpx_executable(

@@ -12,37 +12,25 @@
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/kick.hpp>
 #include <tigerfmm/tree.hpp>
+#include <tigerfmm/unordered_set_ts.hpp>
 
 #include <unordered_map>
 
 struct kick_workspace_tree_id_hash {
 	inline size_t operator()(tree_id id) const {
-		const int line_size = get_options().tree_cache_line_size;
-		const int i = id.index / line_size;
-		return i * hpx_size() + id.proc;
+		return id.index * hpx_size() + id.proc;
 	}
 };
 
 #ifndef __CUDACC__
 
-
 class kick_workspace {
 	vector<kick_workitem> workitems;
 	vector<hpx::promise<kick_return>> promises;
-	vector<tree_node, pinned_allocator<tree_node>> tree_space;
-	fixed32* dev_x;
-	fixed32* dev_y;
-	fixed32* dev_z;
-	tree_node* dev_tree_space;
-	int current_part;
 	int nparts;
 	kick_params params;
 	cudaStream_t stream;
-	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
-
-	void add_tree_node(tree_id, int part_base);
-	void add_tree_node_descendants(tree_id, int part_offset);
-	bool add_tree_list(vector<tree_id>& nodes);
+	unordered_set_ts<tree_id, kick_workspace_tree_id_hash> tree_ids;
 
 public:
 	kick_workspace(kick_params);

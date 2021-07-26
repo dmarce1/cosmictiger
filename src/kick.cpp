@@ -87,30 +87,35 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		cuda_workspace = std::make_shared<kick_workspace>(params);
 		parts_covered = 0;
 	}
-	if (self_ptr->nparts() < CUDA_PARTS_MAX && self_ptr->is_local() && get_options().cuda) {
-		while (atomic_lock++ != 0) {
-			atomic_lock--;
-			hpx::this_thread::yield();
-		}
-		std::pair<bool, hpx::future<kick_return>> rc;
-		rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
-		if (rc.first) {
-			parts_covered += self_ptr->nparts();
-			PRINT("%i\n", (int ) parts_covered);
-		} else {
-			cuda_workspace->to_gpu(cuda_workspace);
-			cuda_workspace = std::make_shared<kick_workspace>(params);
-			rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
-			if (!rc.first) {
-				THROW_ERROR("cuda workspace error");
+	if (self_ptr->nparts() <= CUDA_PARTS_MAX && self_ptr->is_local() && get_options().cuda) {
+		const auto func = [](kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
+				vector<tree_id> echecklist) {
+			const tree_node* self_ptr = tree_get_node(self);
+			while (atomic_lock++ != 0) {
+				atomic_lock--;
+				hpx::this_thread::yield();
 			}
-		}
-		if (parts_covered == particles_size()) {
-			cuda_workspace->to_gpu(cuda_workspace);
-			cuda_workspace = nullptr;
-		}
-		atomic_lock--;
-		return std::move(rc.second);
+			std::pair<bool, hpx::future<kick_return>> rc;
+			rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
+			if (rc.first) {
+				parts_covered += self_ptr->nparts();
+			//	PRINT("%i\n", (int ) parts_covered);
+			} else {
+				cuda_workspace->to_gpu(cuda_workspace);
+				cuda_workspace = std::make_shared<kick_workspace>(params);
+				rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
+				if (!rc.first) {
+					THROW_ERROR("cuda workspace error");
+				}
+			}
+			if (parts_covered == particles_size()) {
+				cuda_workspace->to_gpu(cuda_workspace);
+				cuda_workspace = nullptr;
+			}
+			atomic_lock--;
+			return std::move(rc.second);
+		};
+		return hpx::async(func, params, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
 		kick_return kr;
 		const simd_float h = get_options().hsoft;

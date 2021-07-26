@@ -67,6 +67,7 @@ struct tree_node {
 	bool sink_leaf;
 	bool source_leaf;
 	int node_count;
+	int depth;
 	inline int nparts() const {
 		return part_range.second - part_range.first;
 	}
@@ -92,6 +93,8 @@ struct tree_node {
 		arc & sink_leaf;
 		arc & source_leaf;
 		arc & node_count;
+		arc & sink_part_range;
+		arc & depth;
 	}
 };
 

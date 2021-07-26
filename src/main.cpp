@@ -5,6 +5,8 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/simd.hpp>
 #include <tigerfmm/test.hpp>
+#include <tigerfmm/unordered_set_ts.hpp>
+#include <tigerfmm/unordered_map_ts.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();

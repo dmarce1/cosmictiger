@@ -284,7 +284,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		}
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
-		node_count = rcl.node_count + rcr.node_count;
+		node_count = 1 + rcl.node_count + rcr.node_count;
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
@@ -351,6 +351,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	node.pos = x;
 	node.multi = multi;
 	node.nactive = nactive;
+	node.depth = depth;
 	const int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
