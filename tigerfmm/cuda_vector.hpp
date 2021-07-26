@@ -40,6 +40,7 @@ public:
 			cap = 0;
 			sz = 0;
 		}
+		__syncwarp();
 	}
 	__device__
 	inline cuda_vector(unsigned _sz) {
@@ -129,15 +130,16 @@ public:
 	inline
 	void reserve(unsigned new_cap) {
 		const int& tid = threadIdx.x;
+		__syncwarp();
 		if (new_cap > cap) {
 			size_t i = 1;
-			while ((i) / sizeof(T) < new_cap) {
+			while (i < new_cap) {
 				i *= 2;
 			}
-			new_cap = (i) / sizeof(T);
+			new_cap = i;
 			T* new_ptr;
 			if (tid == 0) {
-				CUDA_CHECK(cudaMalloc(&new_ptr, new_cap));
+				new_ptr = (T*) malloc(new_cap * sizeof(T));
 			}
 			size_t new_ptr_int = (size_t) new_ptr;
 			new_ptr_int = __shfl_sync(0xFFFFFFFF, new_ptr_int, 0);
@@ -145,12 +147,11 @@ public:
 			for (unsigned i = tid; i < sz; i += WARP_SIZE) {
 				new (new_ptr + i) T();
 				new_ptr[i] = std::move((*this)[i]);
-			}
-			__syncwarp();
+			}__syncwarp();
 			if (tid == 0) {
 				cap = new_cap;
 				if (ptr) {
-					CUDA_CHECK(cudaFree(ptr));
+					free(ptr);
 				}
 				ptr = new_ptr;
 			}
@@ -158,8 +159,9 @@ public:
 	}
 	__device__
 	inline
-	void resize(unsigned new_size, unsigned pod = 0) {
+	void resize(unsigned new_size) {
 		const int& tid = threadIdx.x;
+		__syncwarp();
 		reserve(new_size);
 		if (tid == 0) {
 			sz = new_size;
@@ -210,7 +212,7 @@ public:
 	inline ~cuda_vector() {
 		const int& tid = threadIdx.x;
 		if (tid == 0 && ptr) {
-			CUDA_CHECK(cudaFree(ptr));
+			free(ptr);
 		}
 	}
 	__device__
