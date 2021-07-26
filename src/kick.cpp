@@ -91,10 +91,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const auto func = [](kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 				vector<tree_id> echecklist) {
 			const tree_node* self_ptr = tree_get_node(self);
-			while (atomic_lock++ != 0) {
-				atomic_lock--;
-				hpx::this_thread::yield();
-			}
 			std::pair<bool, hpx::future<kick_return>> rc;
 			rc = cuda_workspace->add_work(L, pos, self, std::move(dchecklist), std::move(echecklist));
 			if (rc.first) {
@@ -112,7 +108,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				cuda_workspace->to_gpu(cuda_workspace);
 				cuda_workspace = nullptr;
 			}
-			atomic_lock--;
 			return std::move(rc.second);
 		};
 		return hpx::async(func, params, L, pos, self, std::move(dchecklist), std::move(echecklist));

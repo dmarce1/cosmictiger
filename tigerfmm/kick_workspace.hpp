@@ -25,6 +25,7 @@ struct kick_workspace_tree_id_hash {
 #ifndef __CUDACC__
 
 class kick_workspace {
+	mutex_type mutex;
 	vector<kick_workitem> workitems;
 	vector<hpx::promise<kick_return>> promises;
 	int nparts;

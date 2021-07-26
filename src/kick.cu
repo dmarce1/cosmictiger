@@ -45,18 +45,18 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream) {
 	vector<kick_return, pinned_allocator<kick_return>> returns(workitems.size());
 	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params(workitems.size());
-	vector<cuda_list_set, pinned_allocator<cuda_list_set>> lists;
+	vector<cuda_list_set, pinned_allocator<cuda_list_set>> lists(workitems.size());
 	cuda_list_set* dev_lists;
 	for (int i = 0; i < workitems.size(); i++) {
-		for (int j = 0; j < workitems[i].dchecklist.size(); i++) {
-			lists[i].dchecklist.push(workitems[i].dchecklist[i].index);
+		for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
+			lists[i].dchecklist.push(workitems[i].dchecklist[j].index);
 		}
-		for (int j = 0; j < workitems[i].echecklist.size(); i++) {
-			lists[i].echecklist.push(workitems[i].echecklist[i].index);
+		for (int j = 0; j < workitems[i].echecklist.size(); j++) {
+			lists[i].echecklist.push(workitems[i].echecklist[j].index);
 		}
 		lists[i].L[0] = workitems[i].L;
 	}
-	CUDA_CHECK(cudaMalloc(&dev_lists, sizeof(cuda_list_set) * workitems.size()));
+	CUDA_CHECK(cudaMallocAsync(&dev_lists, sizeof(cuda_list_set) * workitems.size(), stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_lists, lists.data(), sizeof(cuda_list_set) * workitems.size(), cudaMemcpyHostToDevice, stream));
 	for (int i = 0; i < workitems.size(); i++) {
 		cuda_kick_params params;
@@ -83,6 +83,7 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 		kick_params.push_back(std::move(params));
 	}
 	cuda_kick_kernel<<<workitems.size(), WARP_SIZE, 0, stream>>>(kick_params.data());
+	CUDA_CHECK(cudaFreeAsync(dev_lists, stream));
 	cudaStreamSynchronize(stream);
 	return returns;
 }
