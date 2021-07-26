@@ -14,6 +14,7 @@ struct cuda_kick_shmem {
 	cuda_vector<int> multlist;
 	cuda_vector<int> partlist;
 	cuda_vector<int> leaflist;
+	cuda_vector<expansion<float>> L;
 	stack_vector<int> dchecks;
 	stack_vector<int> echecks;
 };
@@ -42,11 +43,28 @@ struct cuda_kick_params {
 	kick_params kparams;
 };
 
-__global__ void cuda_kick_kernel(cuda_kick_params* params) {
+__device__ kick_return do_kick(cuda_kick_params* params) {
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	new(&shmem) cuda_kick_shmem();
+	kick_return kr;
 
+	return kr;
+}
+
+__global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* next_item) {
+	extern __shared__ int shmem_ptr[];
+	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
+	const int tid = threadIdx.x;
+	new (&shmem) cuda_kick_shmem();
+	shmem.L.resize(MAX_DEPTH);
+	int index = atomicAdd(next_item, 1);
+	do {
+		kick_return kr = do_kick(params + index);
+		if( tid == 0 ) {
+			*(params[index].kreturn) = kr;
+		}
+		index = atomicAdd(next_item, 1);
+	} while (index < item_count);
 	shmem.cuda_kick_shmem::~cuda_kick_shmem();
 
 }
@@ -56,6 +74,10 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	timer tm;
 	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
+	int* current_index;
+	int zero = 0;
+	CUDA_CHECK(cudaMallocAsync(&current_index, sizeof(int), stream));
+	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return, pinned_allocator<kick_return>> returns(workitems.size());
 	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params(workitems.size());
 	vector<int, pinned_allocator<int>> dchecks;
@@ -118,7 +140,12 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 		params.kreturn = &returns[i];
 		kick_params.push_back(std::move(params));
 	}
-	cuda_kick_kernel<<<workitems.size(), WARP_SIZE, 0, stream>>>(kick_params.data());
+	int nblocks;
+	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
+	nblocks *= cuda_smp_count();
+	nblocks = std::min(nblocks, (int) workitems.size());
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, 0, stream>>>(kick_params.data(), kick_params.size(), current_index);
+	CUDA_CHECK(cudaFreeAsync(current_index, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
 	return returns;
 }

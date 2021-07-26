@@ -36,12 +36,13 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	timer tm;
 	tm.start();
+	cuda_set_device();
 	PRINT("To GPU\n");
 	auto sort_fut = hpx::async([this]() {
 		std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
 					const auto* aptr = tree_get_node(a.self);
 					const auto* bptr = tree_get_node(b.self);
-					return aptr->nparts() > bptr->nparts();
+					return aptr->nactive > bptr->nactive;
 				}
 		);
 	});

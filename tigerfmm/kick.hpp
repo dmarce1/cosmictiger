@@ -19,6 +19,7 @@ struct kick_return {
 	double fz;
 	double fnorm;
 	int nactive;
+	CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
 		flops = 0.0;

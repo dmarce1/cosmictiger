@@ -141,7 +141,7 @@ public:
 			}
 			size_t new_ptr_int = (size_t) new_ptr;
 			new_ptr_int = __shfl_sync(0xFFFFFFFF, new_ptr_int, 0);
-			new_ptr = (int*) new_ptr_int;
+			new_ptr = (T*) new_ptr_int;
 			for (unsigned i = tid; i < sz; i += WARP_SIZE) {
 				new (new_ptr + i) T();
 				new_ptr[i] = std::move((*this)[i]);
