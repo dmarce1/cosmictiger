@@ -8,7 +8,7 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/timer.hpp>
 
-struct cuda_kick_params {
+struct cuda_kick_data {
 	tree_node* tree_nodes;
 	fixed32* x;
 	fixed32* y;
@@ -21,6 +21,9 @@ struct cuda_kick_params {
 	float* gy;
 	float* gz;
 	float* pot;
+};
+
+struct cuda_kick_params {
 	array<fixed32, NDIM> Lpos;
 	expansion<float> L;
 	int self;
@@ -29,10 +32,9 @@ struct cuda_kick_params {
 	int dcount;
 	int ecount;
 	kick_return* kreturn;
-	kick_params kparams;
 };
 
-__global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
+__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
 
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -52,18 +54,19 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 	auto& Lpos = shmem.Lpos;
 	auto& self_index = shmem.self;
 	auto& rungs = shmem.rungs;
-	const float& h = params[0].kparams.h;
-	const float thetainv = 1.f / params[0].kparams.theta;
+	const float& h = global_params.h;
+	const float thetainv = 1.f / global_params.theta;
+	const int min_rung = global_params.min_rung;
 	const float sink_bias = 1.5;
-	const int min_rung = params[0].kparams.min_rung;
-	auto* tree_nodes = params[0].tree_nodes;
-	auto* all_rungs = params[0].rungs;
-	auto* src_x = params[0].x;
-	auto* src_y = params[0].y;
-	auto* src_z = params[0].z;
-	auto* gx = params[0].gx;
-	auto* gy = params[0].gy;
-	auto* gz = params[0].gz;
+	auto* tree_nodes = data.tree_nodes;
+	auto* all_rungs = data.rungs;
+	auto* src_x = data.x;
+	auto* src_y = data.y;
+	auto* src_z = data.z;
+	auto* pot = data.pot;
+	auto* gx = data.gx;
+	auto* gy = data.gy;
+	auto* gz = data.gz;
 	L.initialize();
 	dchecks.initialize();
 	echecks.initialize();
@@ -109,7 +112,7 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
-				L2L_cuda(L.back(), dx, params[index].kparams.min_rung == 0);
+				L2L_cuda(L.back(), dx, global_params.min_rung == 0);
 				// Do ewald walk
 				nextlist.resize(0);
 				multlist.resize(0);
@@ -380,16 +383,26 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	eindices[workitems.size()] = ecount;
 	tm.stop();
 
+	cuda_kick_data data;
+	data.x = dev_x;
+	data.y = dev_y;
+	data.z = dev_z;
+	data.tree_nodes = dev_tree_nodes;
+	data.vx = &particles_vel(XDIM, 0);
+	data.vy = &particles_vel(YDIM, 0);
+	data.vz = &particles_vel(ZDIM, 0);
+	data.rungs = &particles_rung(0);
+	if (kparams.save_force) {
+		data.gx = &particles_gforce(XDIM, 0);
+		data.gy = &particles_gforce(YDIM, 0);
+		data.gz = &particles_gforce(ZDIM, 0);
+		data.pot = &particles_pot(0);
+	} else {
+		data.gx = data.gy = data.gz = data.pot = nullptr;
+	}
+
 	for (int i = 0; i < workitems.size(); i++) {
 		cuda_kick_params params;
-		params.x = dev_x;
-		params.y = dev_y;
-		params.z = dev_z;
-		params.tree_nodes = dev_tree_nodes;
-		params.vx = &particles_vel(XDIM, 0);
-		params.vy = &particles_vel(YDIM, 0);
-		params.vz = &particles_vel(ZDIM, 0);
-		params.rungs = &particles_rung(0);
 		params.Lpos = workitems[i].pos;
 		params.L = workitems[i].L;
 		params.self = workitems[i].self.index;
@@ -397,15 +410,6 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 		params.echecks = echecks.data() + eindices[i];
 		params.dcount = dindices[i + 1] - dindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
-		params.kparams = kparams;
-		if (get_options().save_force) {
-			params.gx = &particles_gforce(XDIM, 0);
-			params.gy = &particles_gforce(YDIM, 0);
-			params.gz = &particles_gforce(ZDIM, 0);
-			params.pot = &particles_pot(0);
-		} else {
-			params.gx = params.gy = params.gz = params.pot = nullptr;
-		}
 		params.kreturn = &returns[i];
 		kick_params[i] = std::move(params);
 	}
@@ -416,7 +420,7 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
 	nblocks *= cuda_smp_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(dev_kick_params, kick_params.size(), current_index, ntrees);
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data, dev_kick_params, kick_params.size(), current_index, ntrees);
 	CUDA_CHECK(cudaFreeAsync(current_index, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_kick_params, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));

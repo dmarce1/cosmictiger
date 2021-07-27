@@ -26,6 +26,7 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 
 static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, int offset) {
 	tree_nodes[index].part_range.first += offset;
+	assert(tree_nodes[index].part_range.first >= 0);
 	tree_nodes[index].part_range.second += offset;
 	if (tree_nodes[index].children[LEFT].index != -1) {
 		adjust_part_references(tree_nodes, tree_nodes[index].children[RIGHT].index, offset);
@@ -66,6 +67,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 	std::atomic<int> next_index(0);
+	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_bases;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		if (ids.size()) {
@@ -75,6 +77,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 					int index = next_index;
 					next_index += node->node_count;
 					add_tree_node(tree_map, ids[i], index);
+					tree_bases.insert(ids[i]);
 				}
 			}
 		}
@@ -120,14 +123,15 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	vector<fixed32, pinned_allocator<fixed32>> host_z(part_count);
 	futs.resize(0);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&host_x,&host_y,&host_z,&tree_nodes]() {
+		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&host_x,&host_y,&host_z,&tree_nodes,&tree_bases]() {
 			for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
-				const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
-				const int local_index = tree_map[tree_ids_vector[i]];
-				int part_index = next_index;
-				particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
-				adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
-				next_index += ptr->nparts();
+				if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
+					const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
+					const int local_index = tree_map[tree_ids_vector[i]];
+					int part_index = (next_index += ptr->nparts()) - ptr->nparts();
+					particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
+					adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
+				}
 			}
 		}));
 	}
