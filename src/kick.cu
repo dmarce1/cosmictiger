@@ -47,7 +47,7 @@ struct cuda_kick_params {
 	kick_params kparams;
 };
 
-__global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* next_item) {
+__global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
 
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -62,6 +62,9 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 	auto& phase = shmem.phase;
 	auto& Lpos = shmem.Lpos;
 	auto& self_index = shmem.self;
+	const float& h = params[0].kparams.h;
+	const float thetainv = 1.f / params[0].kparams.theta;
+	const float sink_bias = 1.5;
 	L.initialize();
 	dchecks.initialize();
 	echecks.initialize();
@@ -98,8 +101,135 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 		Lpos.push_back(params[index].Lpos);
 		while (depth >= 0) {
 			const auto& self = params[index].tree_nodes[self_index.back()];
+
 			switch (phase.back()) {
+
 			case 0: {
+				// shift expansion
+				array<float, NDIM> dx;
+				for (int dim = 0; dim < NDIM; dim++) {
+					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
+				}
+				L2L_cuda(L.back(), dx, params[index].kparams.min_rung == 0);
+				// Do ewald walk
+				nextlist.resize(0);
+				multlist.resize(0);
+				const int maxi = round_up(echecks.size(), WARP_SIZE);
+				for (int i = tid; i < maxi; i += WARP_SIZE) {
+					bool mult = false;
+					bool next = false;
+					if (i < echecks.size()) {
+						const tree_node& other = params[index].tree_nodes[echecks[i]];
+						for (int dim = 0; dim < NDIM; dim++) {
+							dx[dim] = distance(self.pos[dim], other.pos[dim]);
+						}
+						float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+						R2 = fmaxf(R2, EWALD_DIST2);
+						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv + h); // 5
+						mult = R2 > r2;
+						next = !mult;
+					}
+					int index;
+					int total;
+					int start;
+					index = mult;
+					compute_indices(index, total);
+					start = multlist.size();
+					multlist.resize(start + total);
+					if (mult) {
+						multlist[index + start] = echecks[i];
+					}
+					index = next;
+					compute_indices(index, total);
+					start = nextlist.size();
+					nextlist.resize(start + total);
+					if (next) {
+						nextlist[index + start] = echecks[i];
+					}
+				}
+				__syncwarp();
+				echecks.resize(NCHILD * nextlist.size());
+				for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+					//	PRINT( "nextlist = %i\n", nextlist[i]);
+					const auto children = params[index].tree_nodes[nextlist[i]].children;
+					echecks[NCHILD * i + LEFT] = children[LEFT].index;
+					echecks[NCHILD * i + RIGHT] = children[RIGHT].index;
+				}
+				__syncwarp();
+				// Direct walk
+				nextlist.resize(0);
+				partlist.resize(0);
+				leaflist.resize(0);
+				multlist.resize(0);
+				do {
+					const int maxi = round_up(dchecks.size(), WARP_SIZE);
+					for (int i = tid; i < maxi; i += WARP_SIZE) {
+
+						bool mult = false;
+						bool next = false;
+						bool leaf = false;
+						bool part = false;
+						if (i < dchecks.size()) {
+							const tree_node& other = params[index].tree_nodes[dchecks[i]];
+							for (int dim = 0; dim < NDIM; dim++) {
+								dx[dim] = distance(self.pos[dim], other.pos[dim]);
+							}
+							const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+							const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
+							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
+							//				PRINT("%e %e\n", R2, sqr((sink_bias * self.radius + other.radius) * thetainv + h));
+							mult = far1;                                                                  // 4
+							part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
+							leaf = !mult && !part && other.source_leaf;
+							next = !mult && !part && !leaf;
+						}
+						int index;
+						int total;
+						int start;
+						index = mult;
+						compute_indices(index, total);
+						start = multlist.size();
+						multlist.resize(start + total);
+						if (mult) {
+							multlist[index + start] = dchecks[i];
+						}
+						index = next;
+						compute_indices(index, total);
+						start = nextlist.size();
+						nextlist.resize(start + total);
+						if (next) {
+							nextlist[index + start] = dchecks[i];
+						}
+						index = part;
+						compute_indices(index, total);
+						start = partlist.size();
+						partlist.resize(start + total);
+						if (part) {
+							partlist[index + start] = dchecks[i];
+						}
+						index = leaf;
+						compute_indices(index, total);
+						start = leaflist.size();
+						leaflist.resize(start + total);
+						if (leaf) {
+							leaflist[index + start] = dchecks[i];
+						}
+					}
+					__syncwarp();
+					dchecks.resize(NCHILD * nextlist.size());
+					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+						assert(index>=0);
+						assert(index<ntrees);
+						const auto& node = params[index].tree_nodes[nextlist[i]];
+						const auto& children = node.children;
+						dchecks[NCHILD * i + LEFT] = children[LEFT].index;
+						dchecks[NCHILD * i + RIGHT] = children[RIGHT].index;
+					}
+					nextlist.resize(0);
+					__syncwarp();
+
+				} while (dchecks.size() && self.sink_leaf);
+
 				if (self.sink_leaf) {
 					phase.pop_back();
 					self_index.pop_back();
@@ -124,8 +254,8 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 				Lpos.push_back(self.pos);
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back()++;
-				phase.push_back(0);
+				phase.back()++;phase
+				.push_back(0);
 				self_index.push_back(self.children[RIGHT].index);
 				depth++;
 			}
@@ -148,17 +278,17 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 	}
-	assert(L.size()==1);
-	assert(Lpos.size()==0);
-	assert(phase.size()==0);
-	assert(self_index.size()==0);
+	assert(L.size() == 1);
+	assert(Lpos.size() == 0);
+	assert(phase.size() == 0);
+	assert(self_index.size() == 0);
 	L.initialize();
 	dchecks.destroy();
 	echecks.destroy();
 	nextlist.destroy();
 	multlist.destroy();
 	leaflist.destroy();
-	nextlist.destroy();
+	partlist.destroy();
 	phase.destroy();
 	Lpos.destroy();
 	self_index.destroy();
@@ -167,7 +297,7 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 #define HEAP_SIZE (1024*1024*1024)
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream) {
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int ntrees) {
 	timer tm;
 	size_t value = HEAP_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, value));
@@ -250,7 +380,7 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
 	nblocks *= cuda_smp_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(dev_kick_params, kick_params.size(), current_index);
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(dev_kick_params, kick_params.size(), current_index, ntrees);
 	CUDA_CHECK(cudaFreeAsync(current_index, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_kick_params, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
