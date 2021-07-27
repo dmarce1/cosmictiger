@@ -156,6 +156,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		L.resize(0);
 		dchecks.resize(0);
 		echecks.resize(0);
+		phase.resize(0);
+		self_index.resize(0);
+		Lpos.resize(0);
 		L.push_back(params[index].L);
 		dchecks.resize(params[index].dcount);
 		echecks.resize(params[index].ecount);
@@ -165,12 +168,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
 			echecks[i] = params[index].echecks[i];
 		}
-		__syncwarp();
-		kick_return kr;
-		int depth = 0;
 		phase.push_back(0);
 		self_index.push_back(params[index].self);
 		Lpos.push_back(params[index].Lpos);
+		__syncwarp();
+		kick_return kr;
+		int depth = 0;
 		int maxi;
 		while (depth >= 0) {
 			const auto& self = tree_nodes[self_index.back()];
@@ -308,7 +311,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
 				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
-
 				if (self.sink_leaf) {
 					int nactive = 0;
 					const int begin = self.sink_part_range.first;
@@ -389,6 +391,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						phi[i] = -SELF_PHI * hinv;
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
+					__syncwarp();
 					cuda_gravity_pc(data, self, nactive, min_rung == 0);
 					cuda_gravity_pp(data, self, nactive, h, min_rung == 0);
 					__syncwarp();
@@ -416,8 +419,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				Lpos.push_back(self.pos);
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back()++;phase
-				.push_back(0);
+				phase.back()++;
+				phase.push_back(0);
 				self_index.push_back(self.children[RIGHT].index);
 				depth++;
 			}

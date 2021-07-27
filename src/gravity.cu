@@ -81,11 +81,9 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				const int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
 				for (int j = tid; j < sz; j += WARP_SIZE) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						src_x[part_index + j] = main_src_x[j + imin];
-						src_y[part_index + j] = main_src_y[j + imin];
-						src_z[part_index + j] = main_src_z[j + imin];
-					}
+					src_x[part_index + j] = main_src_x[j + imin];
+					src_y[part_index + j] = main_src_y[j + imin];
+					src_z[part_index + j] = main_src_z[j + imin];
 				}
 				these_parts.first += sz;
 				part_index += sz;
@@ -111,7 +109,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 		for (int k = 0; k < EXPANSION_SIZE; k++) {
 			shared_reduce_add(L[k]);
 		}
-		for (int i = tid; i < EXPANSION_SIZE; i += warpSize) {
+		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];
 		}
 
@@ -242,11 +240,9 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, int nacti
 				const int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
 				for (int j = tid; j < sz; j += WARP_SIZE) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						src_x[part_index + j] = main_src_x[j + imin];
-						src_y[part_index + j] = main_src_y[j + imin];
-						src_z[part_index + j] = main_src_z[j + imin];
-					}
+					src_x[part_index + j] = main_src_x[j + imin];
+					src_y[part_index + j] = main_src_y[j + imin];
+					src_z[part_index + j] = main_src_z[j + imin];
 				}
 				these_parts.first += sz;
 				part_index += sz;
