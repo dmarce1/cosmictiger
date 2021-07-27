@@ -8,7 +8,34 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
+#include <tigerfmm/cuda_vector.hpp>
+#include <tigerfmm/stack_vector.hpp>
 #include <tigerfmm/tree.hpp>
+
+
+#ifdef __CUDACC__
+struct cuda_kick_shmem {
+	array<fixed32, SINK_BUCKET_SIZE> sink_x;
+	array<fixed32, SINK_BUCKET_SIZE> sink_y;
+	array<fixed32, SINK_BUCKET_SIZE> sink_z;
+	array<float, SINK_BUCKET_SIZE> gx;
+	array<float, SINK_BUCKET_SIZE> gy;
+	array<float, SINK_BUCKET_SIZE> gz;
+	array<float, SINK_BUCKET_SIZE> phi;
+	array<int,SINK_BUCKET_SIZE> active;
+	array<char,SINK_BUCKET_SIZE> rungs;
+	cuda_vector<int> nextlist;
+	cuda_vector<int> multlist;
+	cuda_vector<int> partlist;
+	cuda_vector<int> leaflist;
+	cuda_vector<expansion<float>> L;
+	stack_vector<int> dchecks;
+	stack_vector<int> echecks;
+	cuda_vector<int> phase;
+	cuda_vector<int> self;
+	cuda_vector<array<fixed32, NDIM>> Lpos;
+};
+#endif
 
 struct kick_return {
 	char max_rung;

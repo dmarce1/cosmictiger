@@ -1,27 +1,12 @@
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/cuda_reduce.hpp>
-#include <tigerfmm/cuda_vector.hpp>
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/fixedcapvec.hpp>
 #include <tigerfmm/fmm_kernels.hpp>
 #include <tigerfmm/gravity.hpp>
 #include <tigerfmm/kick.hpp>
 #include <tigerfmm/particles.hpp>
-#include <tigerfmm/stack_vector.hpp>
 #include <tigerfmm/timer.hpp>
-
-struct cuda_kick_shmem {
-	cuda_vector<int> nextlist;
-	cuda_vector<int> multlist;
-	cuda_vector<int> partlist;
-	cuda_vector<int> leaflist;
-	cuda_vector<expansion<float>> L;
-	stack_vector<int> dchecks;
-	stack_vector<int> echecks;
-	cuda_vector<int> phase;
-	cuda_vector<int> self;
-	cuda_vector<array<fixed32, NDIM>> Lpos;
-};
 
 struct cuda_kick_params {
 	tree_node* tree_nodes;
@@ -59,12 +44,26 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 	auto& multlist = shmem.multlist;
 	auto& partlist = shmem.partlist;
 	auto& leaflist = shmem.leaflist;
+	auto& activei = shmem.active;
+	auto& sink_x = shmem.sink_x;
+	auto& sink_y = shmem.sink_y;
+	auto& sink_z = shmem.sink_z;
 	auto& phase = shmem.phase;
 	auto& Lpos = shmem.Lpos;
 	auto& self_index = shmem.self;
+	auto& rungs = shmem.rungs;
 	const float& h = params[0].kparams.h;
 	const float thetainv = 1.f / params[0].kparams.theta;
 	const float sink_bias = 1.5;
+	const int min_rung = params[0].kparams.min_rung;
+	auto* tree_nodes = params[0].tree_nodes;
+	auto* all_rungs = params[0].rungs;
+	auto* src_x = params[0].x;
+	auto* src_y = params[0].y;
+	auto* src_z = params[0].z;
+	auto* gx = params[0].gx;
+	auto* gy = params[0].gy;
+	auto* gz = params[0].gz;
 	L.initialize();
 	dchecks.initialize();
 	echecks.initialize();
@@ -100,7 +99,7 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 		self_index.push_back(params[index].self);
 		Lpos.push_back(params[index].Lpos);
 		while (depth >= 0) {
-			const auto& self = params[index].tree_nodes[self_index.back()];
+			const auto& self = tree_nodes[self_index.back()];
 
 			switch (phase.back()) {
 
@@ -119,7 +118,7 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 					bool mult = false;
 					bool next = false;
 					if (i < echecks.size()) {
-						const tree_node& other = params[index].tree_nodes[echecks[i]];
+						const tree_node& other = tree_nodes[echecks[i]];
 						for (int dim = 0; dim < NDIM; dim++) {
 							dx[dim] = distance(self.pos[dim], other.pos[dim]);
 						}
@@ -151,11 +150,14 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 				echecks.resize(NCHILD * nextlist.size());
 				for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
 					//	PRINT( "nextlist = %i\n", nextlist[i]);
-					const auto children = params[index].tree_nodes[nextlist[i]].children;
+					const auto children = tree_nodes[nextlist[i]].children;
 					echecks[NCHILD * i + LEFT] = children[LEFT].index;
 					echecks[NCHILD * i + RIGHT] = children[RIGHT].index;
 				}
 				__syncwarp();
+
+				cuda_gravity_cc(L.back(), self, GRAVITY_CC_EWALD, min_rung == 0);
+
 				// Direct walk
 				nextlist.resize(0);
 				partlist.resize(0);
@@ -170,7 +172,7 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 						bool leaf = false;
 						bool part = false;
 						if (i < dchecks.size()) {
-							const tree_node& other = params[index].tree_nodes[dchecks[i]];
+							const tree_node& other = tree_nodes[dchecks[i]];
 							for (int dim = 0; dim < NDIM; dim++) {
 								dx[dim] = distance(self.pos[dim], other.pos[dim]);
 							}
@@ -218,9 +220,9 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 					__syncwarp();
 					dchecks.resize(NCHILD * nextlist.size());
 					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-						assert(index>=0);
-						assert(index<ntrees);
-						const auto& node = params[index].tree_nodes[nextlist[i]];
+						assert(index >= 0);
+						assert(index < ntrees);
+						const auto& node = tree_nodes[nextlist[i]];
 						const auto& children = node.children;
 						dchecks[NCHILD * i + LEFT] = children[LEFT].index;
 						dchecks[NCHILD * i + RIGHT] = children[RIGHT].index;
@@ -230,7 +232,41 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 
 				} while (dchecks.size() && self.sink_leaf);
 
+				cuda_gravity_cc(L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
+				cuda_gravity_cp(L.back(), self, min_rung == 0);
+
 				if (self.sink_leaf) {
+					int nactive = 0;
+					const int begin = self.sink_part_range.first;
+					const int end = self.sink_part_range.second;
+					const int src_begin = self.part_range.first;
+					const int maxi = round_up(end - begin, WARP_SIZE);
+					for (int i = tid; i < maxi; i += WARP_SIZE) {
+						bool active = false;
+						char rung;
+						if (i < end - begin) {
+							rung = all_rungs[begin + i];
+							active = rung >= min_rung;
+						}
+						int index;
+						int total;
+						index = active;
+						compute_indices(index, total);
+						index += nactive;
+						if (active) {
+							const int srci = src_begin + i;
+							activei[index] = begin + i;
+							rungs[index] = rung;
+							sink_x[index] = src_x[srci];
+							sink_y[index] = src_y[srci];
+							sink_z[index] = src_z[srci];
+						}
+						nactive += total;
+						__syncwarp();
+					}
+					cuda_gravity_pc(self, nactive, min_rung == 0);
+					cuda_gravity_pp(self, nactive, h, min_rung == 0);
+
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();

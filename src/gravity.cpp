@@ -5,7 +5,7 @@
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
-int gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
+int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
 	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -72,7 +72,7 @@ int gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, g
 	return flops;
 }
 
-int gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+int cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
 	int flops = 0;
 	if (list.size()) {
@@ -144,7 +144,7 @@ int gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, b
 	return flops;
 }
 
-int gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+int cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
 	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -218,7 +218,7 @@ int gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_i
 	return flops;
 }
 
-int gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
+int cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
 	int flops = 0;
 	timer tm;
 	tm.start();

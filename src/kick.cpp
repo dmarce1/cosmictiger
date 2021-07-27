@@ -172,7 +172,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			kr.flops += maxi * 15;
 		}
 		std::swap(echecklist, nextlist);
-		kr.flops += gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
+		kr.flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
 		nextlist.resize(0);
 		multlist.resize(0);
 		partlist.resize(0);
@@ -218,8 +218,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			std::swap(dchecklist, nextlist);
 			nextlist.resize(0);
 		} while (dchecklist.size() && self_ptr->sink_leaf);
-		kr.flops += gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
-		kr.flops += gravity_cp(L, partlist, self, params.min_rung == 0);
+		kr.flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
+		kr.flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
 		if (self_ptr->sink_leaf) {
 			partlist.resize(0);
 			multlist.resize(0);
@@ -266,8 +266,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					partlist.push_back(leaflist[i]);
 				}
 			}
-			kr.flops += gravity_pc(forces, params.min_rung, self, multlist);
-			kr.flops += gravity_pp(forces, params.min_rung, self, partlist, params.h);
+			kr.flops += cpu_gravity_pc(forces, params.min_rung, self, multlist);
+			kr.flops += cpu_gravity_pp(forces, params.min_rung, self, partlist, params.h);
 			cleanup_workspace(std::move(workspace));
 
 			const auto rng = self_ptr->part_range;

@@ -25,6 +25,7 @@ set(tigerfmm_source_files
     src/ewald_indices.cu
     src/fft.cpp
     src/gravity.cpp
+    src/gravity.cu
     src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
