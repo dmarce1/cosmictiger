@@ -216,11 +216,15 @@ public:
 		return ptr;
 	}
 	__device__
-	inline ~cuda_vector() {
+	inline void destroy() {
 		const int& tid = threadIdx.x;
 		if (tid == 0 && ptr) {
 			free(ptr);
 		}
+	}
+	__device__
+	inline ~cuda_vector() {
+		destroy();
 	}
 	__device__
 	inline void pop_back() {

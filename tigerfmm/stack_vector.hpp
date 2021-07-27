@@ -30,6 +30,10 @@ public:
 	__device__ inline int depth() const {
 		return bounds.size() - 2;
 	}
+	__device__ inline void destroy() {
+		bounds.destroy();
+		data.destroy();
+	}
 	__device__ inline void initialize() {
 		const int& tid = threadIdx.x;
 		bounds.reserve(CUDA_MAX_DEPTH + 1);

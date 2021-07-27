@@ -18,6 +18,9 @@ struct cuda_kick_shmem {
 	cuda_vector<expansion<float>> L;
 	stack_vector<int> dchecks;
 	stack_vector<int> echecks;
+	cuda_vector<int> phase;
+	cuda_vector<int> self;
+	cuda_vector<array<fixed32, NDIM>> Lpos;
 };
 
 struct cuda_kick_params {
@@ -44,207 +47,99 @@ struct cuda_kick_params {
 	kick_params kparams;
 };
 
-__device__ kick_return do_kick(cuda_kick_params* params, array<fixed32, NDIM> Lpos, const tree_node& self, int depth) {
-	kick_return kr;
-	if (depth == 1) {
-		return kr;
-	}
-	const int& tid = threadIdx.x;
-	if (tid == 0) {
-//	PRINT("%i %li\n", depth, self.nactive);
-	}
-	extern __shared__ int shmem_ptr[];
-	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	auto& nextlist = shmem.nextlist;
-	auto& multlist = shmem.multlist;
-	auto& partlist = shmem.partlist;
-	auto& leaflist = shmem.leaflist;
-	auto& dchecks = shmem.dchecks;
-	auto& echecks = shmem.echecks;
-	const float& h = params->kparams.h;
-	const float thetainv = 1.f / params->kparams.theta;
-	const float sink_bias = 1.5;
-	auto& L = shmem.L;
-	array<float, NDIM> dx;
-	for (int dim = 0; dim < NDIM; dim++) {
-		dx[dim] = distance(self.pos[dim], Lpos[dim]);
-	}
-//	L2L_cuda(L.back(), dx, params->kparams.min_rung == 0);
-	nextlist.resize(0);
-	multlist.resize(0);
-	/*	const int maxi = round_up(echecks.size(), WARP_SIZE);
-	for (int i = tid; i < maxi; i += WARP_SIZE) {
-		bool mult = false;
-		bool next = false;
-		if (i < echecks.size()) {
-			const tree_node& other = params->tree_nodes[echecks[i]];
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.pos[dim], other.pos[dim]);
-			}
-			float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-			R2 = fmaxf(R2, EWALD_DIST2);
-			const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv + h); // 5
-			mult = R2 > r2;
-			next = !mult;
-		}
-		int index;
-		int total;
-		int start;
-		index = mult;
-		compute_indices(index, total);
-		start = multlist.size();
-		multlist.resize(start + total);
-		if (mult) {
-			multlist[index + start] = echecks[i];
-		}
-		index = next;
-		compute_indices(index, total);
-		start = nextlist.size();
-		nextlist.resize(start + total);
-		if (next) {
-			nextlist[index + start] = echecks[i];
-		}
-	}
-	__syncwarp();
-	echecks.resize(NCHILD * nextlist.size());
-	for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-		//	PRINT( "nextlist = %i\n", nextlist[i]);
-		const auto children = params->tree_nodes[nextlist[i]].children;
-		echecks[NCHILD * i + LEFT] = children[LEFT].index;
-		echecks[NCHILD * i + RIGHT] = children[RIGHT].index;
-	}*/
-	__syncwarp();
-	nextlist.resize(0);
-	partlist.resize(0);
-	leaflist.resize(0);
-	multlist.resize(0);
-//	do {
-		const int maxi = round_up(dchecks.size(), WARP_SIZE);
-		for (int i = tid; i < maxi; i += WARP_SIZE) {
-
-			bool mult = false;
-			bool next = false;
-			bool leaf = false;
-			bool part = false;
-			if (i < dchecks.size()) {
-				const tree_node& other = params->tree_nodes[dchecks[i]];
-				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(self.pos[dim], other.pos[dim]);
-				}
-				const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-				const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
-				const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
-				//				PRINT("%e %e\n", R2, sqr((sink_bias * self.radius + other.radius) * thetainv + h));
-				mult = far1;                                                                  // 4
-				part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
-				leaf = !mult && !part && other.source_leaf;
-				next = !mult && !part && !leaf;
-			}
-			int index;
-			int total;
-			int start;
-			index = mult;
-			compute_indices(index, total);
-			start = multlist.size();
-			multlist.resize(start + total);
-			if (mult) {
-				multlist[index + start] = dchecks[i];
-			}
-			index = next;
-			compute_indices(index, total);
-			start = nextlist.size();
-			nextlist.resize(start + total);
-			if (next) {
-				nextlist[index + start] = dchecks[i];
-			}
-			index = part;
-			compute_indices(index, total);
-			start = partlist.size();
-			partlist.resize(start + total);
-			if (part) {
-				partlist[index + start] = dchecks[i];
-			}
-			index = leaf;
-			compute_indices(index, total);
-			start = leaflist.size();
-			leaflist.resize(start + total);
-			if (leaf) {
-				leaflist[index + start] = dchecks[i];
-			}
-		}
-		__syncwarp();
-		dchecks.resize(NCHILD * nextlist.size());
-		for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-			const int index = nextlist[i];
-			const auto children = params->tree_nodes[index].children;
-			dchecks[NCHILD * i + LEFT] = children[LEFT].index;
-			dchecks[NCHILD * i + RIGHT] = children[RIGHT].index;
-		}
-		nextlist.resize(0);
-		__syncwarp();
-
-//	} while (dchecks.size() && self.sink_leaf);
-
-	if (self.sink_leaf) {
-
-	} else {
-		const auto& children = self.children;
-		const tree_node& cr = params->tree_nodes[children[RIGHT].index];
-		const tree_node& cl = params->tree_nodes[children[LEFT].index];
-		if (cl.nactive && cr.nactive) {
-			dchecks.push_top();
-			echecks.push_top();
-			const auto l = L.back();
-			__syncwarp();
-			L.push_back(l);
-			do_kick(params, self.pos, self, depth + 1);
-			L.pop_back();
-			dchecks.pop_top();
-			echecks.pop_top();
-			do_kick(params, self.pos, cr, depth + 1);
-		} else if (cl.nactive) {
-			do_kick(params, self.pos, cl, depth + 1);
-		} else if (cr.nactive) {
-			do_kick(params, self.pos, cr, depth + 1);
-		}
-	}
-//	PRINT("Returning \n");
-
-	return kr;
-}
-
 __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* next_item) {
 
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	shmem.L.initialize();
-	shmem.dchecks.initialize();
-	shmem.echecks.initialize();
-	shmem.nextlist.initialize();
-	shmem.multlist.initialize();
-	shmem.partlist.initialize();
-	shmem.leaflist.initialize();
+	auto& L = shmem.L;
+	auto& dchecks = shmem.dchecks;
+	auto& echecks = shmem.echecks;
+	auto& nextlist = shmem.nextlist;
+	auto& multlist = shmem.multlist;
+	auto& partlist = shmem.partlist;
+	auto& leaflist = shmem.leaflist;
+	auto& phase = shmem.phase;
+	auto& Lpos = shmem.Lpos;
+	auto& self_index = shmem.self;
+	L.initialize();
+	dchecks.initialize();
+	echecks.initialize();
+	nextlist.initialize();
+	multlist.initialize();
+	leaflist.initialize();
+	nextlist.initialize();
+	phase.initialize();
+	Lpos.initialize();
+	self_index.initialize();
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
 	while (index < item_count) {
-		shmem.L.resize(0);
-		shmem.dchecks.resize(0);
-		shmem.echecks.resize(0);
-		shmem.L.push_back(params[index].L);
-		shmem.dchecks.resize(params[index].dcount);
-		shmem.echecks.resize(params[index].ecount);
+		L.resize(0);
+		dchecks.resize(0);
+		echecks.resize(0);
+		L.push_back(params[index].L);
+		dchecks.resize(params[index].dcount);
+		echecks.resize(params[index].ecount);
 		for (int i = tid; i < params[index].dcount; i += WARP_SIZE) {
-			shmem.dchecks[i] = params[index].dchecks[i];
+			dchecks[i] = params[index].dchecks[i];
 		}
 		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
-			shmem.echecks[i] = params[index].echecks[i];
+			echecks[i] = params[index].echecks[i];
 		}
 		__syncwarp();
-		kick_return kr = do_kick(params + index, params[index].Lpos, params[index].tree_nodes[params[index].self], 0);
+		kick_return kr;
+		int depth = 0;
+		phase.push_back(0);
+		self_index.push_back(params[index].self);
+		Lpos.push_back(params[index].Lpos);
+		while (depth >= 0) {
+			const auto& self = params[index].tree_nodes[self_index.back()];
+			switch (phase.back()) {
+			case 0: {
+				if (self.sink_leaf) {
+					phase.pop_back();
+					self_index.pop_back();
+					Lpos.pop_back();
+					depth--;
+				} else {
+					const auto l = L.back();
+					L.push_back(l);
+					Lpos.push_back(self.pos);
+					dchecks.push_top();
+					echecks.push_top();
+					phase.back()++;phase
+					.push_back(0);
+					self_index.push_back(self.children[LEFT].index);
+					depth++;
+				}
+
+			}
+				break;
+			case 1: {
+				L.pop_back();
+				Lpos.push_back(self.pos);
+				dchecks.pop_top();
+				echecks.pop_top();
+				phase.back()++;
+				phase.push_back(0);
+				self_index.push_back(self.children[RIGHT].index);
+				depth++;
+			}
+				break;
+			case 2: {
+				self_index.pop_back();
+				phase.pop_back();
+				Lpos.pop_back();
+				depth--;
+			}
+				break;
+			}
+		}
+
 		if (tid == 0) {
 			*(params[index].kreturn) = kr;
 		}
@@ -253,10 +148,20 @@ __global__ void cuda_kick_kernel(cuda_kick_params* params, int item_count, int* 
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 	}
-	if (tid == 0) {
-		shmem.cuda_kick_shmem::~cuda_kick_shmem();
-	}
-
+	assert(L.size()==1);
+	assert(Lpos.size()==0);
+	assert(phase.size()==0);
+	assert(self_index.size()==0);
+	L.initialize();
+	dchecks.destroy();
+	echecks.destroy();
+	nextlist.destroy();
+	multlist.destroy();
+	leaflist.destroy();
+	nextlist.destroy();
+	phase.destroy();
+	Lpos.destroy();
+	self_index.destroy();
 }
 
 #define HEAP_SIZE (1024*1024*1024)
