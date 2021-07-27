@@ -8,6 +8,13 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/timer.hpp>
 
+
+
+static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
+		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
+		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+
 struct cuda_kick_data {
 	tree_node* tree_nodes;
 	fixed32* x;
@@ -34,6 +41,84 @@ struct cuda_kick_params {
 	kick_return* kreturn;
 };
 
+__device__ int do_kick(kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive, const tree_node& self) {
+	const int& tid = threadIdx.x;
+	extern __shared__ int shmem_ptr[];
+	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
+
+	auto* all_phi = data.pot;
+	auto* all_gx = data.gx;
+	auto* all_gy = data.gy;
+	auto* all_gz = data.gz;
+	auto* write_rungs = data.rungs;
+	auto* vel_x = data.vx;
+	auto* vel_y = data.vy;
+	auto* vel_z = data.vz;
+	auto& phi = shmem.phi;
+	auto& gx = shmem.gx;
+	auto& gy = shmem.gy;
+	auto& gz = shmem.gz;
+	auto& active_indexes = shmem.active;
+	const auto& sink_x = shmem.sink_x;
+	const auto& sink_y = shmem.sink_y;
+	const auto& sink_z = shmem.sink_z;
+	const auto& read_rungs = shmem.rungs;
+	const float log2ft0 = log2f(params.t0);
+	const float tfactor = params.eta * sqrtf(params.a * params.h);
+	int max_rung = 0;
+	for (int i = tid; i < nactive; i += WARP_SIZE) {
+		const int snki = active_indexes[i];
+		array<float, NDIM> dx;
+		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]);
+		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]);
+		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]);
+		const expansion2<float> L2 = L2P(L, dx, params.min_rung == 0);
+		phi[i] += L2(0,0,0);
+		gx[i] -= L2(1,0,0);
+		gy[i] -= L2(0,1,0);
+		gz[i] -= L2(0,0,1);
+		phi[i] *= params.GM;
+		gx[i] *= params.GM;
+		gy[i] *= params.GM;
+		gz[i] *= params.GM;
+		if (params.save_force) {
+			all_gx[snki] = gx[i];
+			all_gy[snki] = gy[i];
+			all_gz[snki] = gz[i];
+			all_phi[snki] = phi[i];
+		}
+		float vx = vel_x[snki];
+		float vy = vel_y[snki];
+		float vz = vel_z[snki];
+		int rung = read_rungs[i];
+		float dt = 0.5f * rung_dt[rung] * params.t0;
+		if (!params.first_call) {
+			vx = fmaf(gx[i], dt, vx);
+			vy = fmaf(gy[i], dt, vy);
+			vz = fmaf(gz[i], dt, vz);
+		}
+		const auto g2 = sqr(gx[i], gy[i], gz[i]);
+		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
+		rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
+		max_rung = max(rung, max_rung);
+		if (rung < 0 || rung >= MAX_RUNG) {
+			PRINT("Rung out of range %i\n", rung);
+		}
+		assert(rung >= 0);
+		assert(rung < MAX_RUNG);
+		dt = 0.5f * rung_dt[rung] * params.t0;
+		vx = fmaf(gx[i], dt, vx);
+		vy = fmaf(gy[i], dt, vy);
+		vz = fmaf(gz[i], dt, vz);
+		write_rungs[snki] = rung;
+		vel_x[snki] = vx;
+		vel_y[snki] = vy;
+		vel_z[snki] = vz;
+	}
+	shared_reduce_max(max_rung);
+	return max_rung;
+}
+
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
 
 	const int& tid = threadIdx.x;
@@ -54,7 +139,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& Lpos = shmem.Lpos;
 	auto& self_index = shmem.self;
 	auto& rungs = shmem.rungs;
+	auto& phi = shmem.phi;
+	auto& gx = shmem.gx;
+	auto& gy = shmem.gy;
+	auto& gz = shmem.gz;
 	const float& h = global_params.h;
+	const float hinv = 1.f / h;
 	const float thetainv = 1.f / global_params.theta;
 	const int min_rung = global_params.min_rung;
 	const float sink_bias = 1.5;
@@ -63,10 +153,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
-	auto* pot = data.pot;
-	auto* gx = data.gx;
-	auto* gy = data.gy;
-	auto* gz = data.gz;
 	L.initialize();
 	dchecks.initialize();
 	echecks.initialize();
@@ -267,9 +353,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						nactive += total;
 						__syncwarp();
 					}
+					for( int i = tid; i < nactive; i+= WARP_SIZE) {
+						phi[i] = -SELF_PHI * hinv;
+						gx[i] = gy[i] = gz[i] = 0.f;
+					}
 					cuda_gravity_pc(self, nactive, min_rung == 0);
 					cuda_gravity_pp(self, nactive, h, min_rung == 0);
-
+					__syncwarp();
+					do_kick(global_params, data, L.back(), nactive, self);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();

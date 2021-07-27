@@ -3,8 +3,6 @@
 #include <tigerfmm/defs.hpp>
 #include <tigerfmm/containers.hpp>
 
-
-
 inline
 int factorial(int n) {
 	assert(n >= 0);
@@ -15,11 +13,9 @@ int factorial(int n) {
 	}
 }
 
-
 inline int intmin(int a, int b) {
 	return a < b ? a : b;
 }
-
 
 inline
 int dfactorial(int n) {
@@ -32,11 +28,10 @@ int dfactorial(int n) {
 }
 
 template<int N>
- inline
+inline
 int vfactorial(const array<int, N>& n) {
 	return factorial(n[0]) * factorial(n[1]) * factorial(n[2]);
 }
-
 
 inline
 int n1pow(int n) {
@@ -52,14 +47,12 @@ public:
 
 	static constexpr int N = P * P + 1;
 
-
 	inline tensor_trless_sym& operator=(const T& other) {
 		for (int i = 0; i < N; i++) {
 			(*this)[i] = other;
 		}
 		return *this;
 	}
-
 
 	inline tensor_trless_sym operator+(const tensor_trless_sym& other) const {
 		tensor_trless_sym<T, P> result;
@@ -69,7 +62,6 @@ public:
 		return result;
 	}
 
-
 	inline tensor_trless_sym operator-(const tensor_trless_sym& other) const {
 		tensor_trless_sym<T, P> result;
 		for (int i = 0; i < N; i++) {
@@ -78,7 +70,7 @@ public:
 		return result;
 	}
 
-
+	CUDA_EXPORT
 	inline T& operator()(int l, int m, int n) {
 		l += m;
 		assert(l >= 0);
@@ -90,7 +82,7 @@ public:
 		return (*this)[l * (l + 1) / 2 + m + (P * (P + 1) / 2) * (n == 1) + (N - 1) * (n == 2)];
 	}
 
-
+	CUDA_EXPORT
 	inline T operator()(int l, int m, int n) const {
 		if (n > 1) {
 			if (l == 0 && m == 0 && n == 2) {
@@ -110,18 +102,15 @@ public:
 		}
 	}
 
-
 	T operator()(const array<int, NDIM>& n) const {
 		return (*this)(n[0], n[1], n[2]);
 	}
-
 
 	T& operator()(const array<int, NDIM>& n) {
 		return (*this)(n[0], n[1], n[2]);
 	}
 
 };
-
 
 inline vector<int> indices_begin(int P) {
 	vector<int> v;
@@ -131,7 +120,6 @@ inline vector<int> indices_begin(int P) {
 	}
 	return v;
 }
-
 
 inline bool indices_inc(vector<int>& i) {
 	if (i.size() == 0) {
@@ -150,7 +138,6 @@ inline bool indices_inc(vector<int>& i) {
 	return true;
 }
 
-
 inline vector<int> indices_end(int P) {
 	vector<int> v;
 	v.reserve(P);
@@ -162,7 +149,6 @@ inline vector<int> indices_end(int P) {
 
 }
 
-
 inline array<int, NDIM> indices_to_sym(const vector<int>& indices) {
 	array<int, NDIM> j;
 	j[0] = j[1] = j[2] = 0;
@@ -171,7 +157,6 @@ inline array<int, NDIM> indices_to_sym(const vector<int>& indices) {
 	}
 	return j;
 }
-
 
 inline vector<int> sym_to_indices(const array<int, NDIM>& i) {
 	vector<int> indices;
@@ -193,14 +178,12 @@ public:
 
 	static constexpr int N = (P * (P + 1) * (P + 2)) / 6;
 
-
 	inline tensor_sym& operator=(const T& other) {
 		for (int i = 0; i < N; i++) {
 			(*this)[i] = other;
 		}
 		return *this;
 	}
-
 
 	inline tensor_sym operator+(const tensor_sym& other) const {
 		tensor_sym<T, P> result;
@@ -209,7 +192,6 @@ public:
 		}
 		return result;
 	}
-
 
 	inline T operator()(int l, int m, int n) const {
 		m += n;
@@ -223,7 +205,6 @@ public:
 		return (*this)[l * (l + 1) * (l + 2) / 6 + m * (m + 1) / 2 + n];
 	}
 
-
 	inline T& operator()(int l, int m, int n) {
 		m += n;
 		l += m;
@@ -236,11 +217,9 @@ public:
 		return (*this)[l * (l + 1) * (l + 2) / 6 + m * (m + 1) / 2 + n];
 	}
 
-
 	T operator()(const array<int, NDIM>& n) const {
 		return (*this)(n[0], n[1], n[2]);
 	}
-
 
 	T& operator()(const array<int, NDIM>& n) {
 		return (*this)(n[0], n[1], n[2]);
@@ -289,8 +268,6 @@ public:
 	}
 
 };
-
-
 
 template<class T, int P>
 
