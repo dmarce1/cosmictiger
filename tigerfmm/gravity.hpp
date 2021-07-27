@@ -11,6 +11,8 @@
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/fixed.hpp>
 #include <tigerfmm/tree.hpp>
+#include <tigerfmm/kick.hpp>
+
 
 CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_float();
@@ -44,8 +46,8 @@ int cuda_gravity_cc(expansion<float>&, const tree_node&, gravity_cc_type, bool d
 __device__
 int cuda_gravity_cp(expansion<float>&, const tree_node&, bool do_phi);
 __device__
-int cuda_gravity_pc(const tree_node&, int, bool);
+int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, int, bool);
 __device__
-int cuda_gravity_pp(const tree_node&, int, float h, bool);
+int cuda_gravity_pp(const cuda_kick_data& data, const tree_node&, int, float h, bool);
 
 #endif /* GRAVITY_HPP_ */

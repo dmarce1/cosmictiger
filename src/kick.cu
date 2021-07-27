@@ -13,20 +13,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-struct cuda_kick_data {
-	tree_node* tree_nodes;
-	fixed32* x;
-	fixed32* y;
-	fixed32* z;
-	float* vx;
-	float* vy;
-	float* vz;
-	char* rungs;
-	float* gx;
-	float* gy;
-	float* gz;
-	float* pot;
-};
 
 struct cuda_kick_params {
 	array<fixed32, NDIM> Lpos;
@@ -403,8 +389,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						phi[i] = -SELF_PHI * hinv;
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
-					cuda_gravity_pc(self, nactive, min_rung == 0);
-					cuda_gravity_pp(self, nactive, h, min_rung == 0);
+					cuda_gravity_pc(data, self, nactive, min_rung == 0);
+					cuda_gravity_pp(data, self, nactive, h, min_rung == 0);
 					__syncwarp();
 					do_kick(global_params, data, L.back(), nactive, self);
 					phase.pop_back();

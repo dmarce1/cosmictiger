@@ -13,11 +13,29 @@
 #include <tigerfmm/tree.hpp>
 
 
+struct cuda_kick_data {
+	tree_node* tree_nodes;
+	fixed32* x;
+	fixed32* y;
+	fixed32* z;
+	float* vx;
+	float* vy;
+	float* vz;
+	char* rungs;
+	float* gx;
+	float* gy;
+	float* gz;
+	float* pot;
+};
+
 #ifdef __CUDACC__
 struct cuda_kick_shmem {
 	array<fixed32, SINK_BUCKET_SIZE> sink_x;
 	array<fixed32, SINK_BUCKET_SIZE> sink_y;
 	array<fixed32, SINK_BUCKET_SIZE> sink_z;
+	array<fixed32, KICK_PP_MAX> src_x;
+	array<fixed32, KICK_PP_MAX> src_y;
+	array<fixed32, KICK_PP_MAX> src_z;
 	array<float, SINK_BUCKET_SIZE> gx;
 	array<float, SINK_BUCKET_SIZE> gy;
 	array<float, SINK_BUCKET_SIZE> gz;
