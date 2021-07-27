@@ -8,12 +8,10 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/timer.hpp>
 
-
-
-static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
-		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
-		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
+		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
+		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 struct cuda_kick_data {
 	tree_node* tree_nodes;
@@ -73,10 +71,10 @@ __device__ int do_kick(kick_params params, const cuda_kick_data& data, const exp
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]);
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]);
 		const expansion2<float> L2 = L2P(L, dx, params.min_rung == 0);
-		phi[i] += L2(0,0,0);
-		gx[i] -= L2(1,0,0);
-		gy[i] -= L2(0,1,0);
-		gz[i] -= L2(0,0,1);
+		phi[i] += L2(0, 0, 0);
+		gx[i] -= L2(1, 0, 0);
+		gy[i] -= L2(0, 1, 0);
+		gz[i] -= L2(0, 0, 1);
 		phi[i] *= params.GM;
 		gx[i] *= params.GM;
 		gy[i] *= params.GM;
@@ -187,6 +185,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		phase.push_back(0);
 		self_index.push_back(params[index].self);
 		Lpos.push_back(params[index].Lpos);
+		int maxi;
 		while (depth >= 0) {
 			const auto& self = tree_nodes[self_index.back()];
 
@@ -202,7 +201,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				// Do ewald walk
 				nextlist.resize(0);
 				multlist.resize(0);
-				const int maxi = round_up(echecks.size(), WARP_SIZE);
+				maxi = round_up(echecks.size(), WARP_SIZE);
 				for (int i = tid; i < maxi; i += WARP_SIZE) {
 					bool mult = false;
 					bool next = false;
@@ -253,7 +252,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				leaflist.resize(0);
 				multlist.resize(0);
 				do {
-					const int maxi = round_up(dchecks.size(), WARP_SIZE);
+					maxi = round_up(dchecks.size(), WARP_SIZE);
 					for (int i = tid; i < maxi; i += WARP_SIZE) {
 
 						bool mult = false;
@@ -329,7 +328,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					const int begin = self.sink_part_range.first;
 					const int end = self.sink_part_range.second;
 					const int src_begin = self.part_range.first;
-					const int maxi = round_up(end - begin, WARP_SIZE);
+					maxi = round_up(end - begin, WARP_SIZE);
 					for (int i = tid; i < maxi; i += WARP_SIZE) {
 						bool active = false;
 						char rung;
@@ -353,7 +352,54 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						nactive += total;
 						__syncwarp();
 					}
-					for( int i = tid; i < nactive; i+= WARP_SIZE) {
+					__syncwarp();
+					partlist.resize(0);
+					multlist.resize(0);
+					maxi = round_up((int) leaflist.size(), WARP_SIZE);
+					for (int i = tid; i < maxi; i += WARP_SIZE) {
+						bool pc = false;
+						bool pp = false;
+						if (i < leaflist.size()) {
+							const tree_node& other = tree_nodes[leaflist[i]];
+							const int begin = other.part_range.first;
+							const int end = other.part_range.second;
+							bool far;
+							if (end - begin < MIN_PC_PARTS) {
+								far = false;
+							} else {
+								far = true;
+								for (int j = 0; j < nactive; j++) {
+									const float dx = distance(shmem.sink_x[j], other.pos[XDIM]);
+									const float dy = distance(shmem.sink_y[j], other.pos[YDIM]);
+									const float dz = distance(shmem.sink_z[j], other.pos[ZDIM]);
+									const float R2 = sqr(dx, dy, dz);
+									far = R2 > sqr(other.radius * thetainv) + h;
+									if (!far) {
+										break;
+									}
+								}
+							}
+							pp = !far;
+							pc = far;
+						}
+						int total;
+						int index = pp;
+						compute_indices(index, total);
+						index += partlist.size();
+						partlist.resize(partlist.size() + total);
+						if (pp) {
+							partlist[index] = leaflist[i];
+						}
+						index = pc;
+						compute_indices(index, total);
+						index += multlist.size();
+						multlist.resize(multlist.size() + total);
+						if (pc) {
+							multlist[index] = leaflist[i];
+						}
+					}
+					__syncwarp();
+					for (int i = tid; i < nactive; i += WARP_SIZE) {
 						phi[i] = -SELF_PHI * hinv;
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
