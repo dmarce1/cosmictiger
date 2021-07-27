@@ -47,6 +47,7 @@ public:
 
 	static constexpr int N = P * P + 1;
 
+	CUDA_EXPORT
 	inline tensor_trless_sym& operator=(const T& other) {
 		for (int i = 0; i < N; i++) {
 			(*this)[i] = other;
@@ -54,6 +55,7 @@ public:
 		return *this;
 	}
 
+	CUDA_EXPORT
 	inline tensor_trless_sym operator+(const tensor_trless_sym& other) const {
 		tensor_trless_sym<T, P> result;
 		for (int i = 0; i < N; i++) {
@@ -178,6 +180,7 @@ public:
 
 	static constexpr int N = (P * (P + 1) * (P + 2)) / 6;
 
+	CUDA_EXPORT
 	inline tensor_sym& operator=(const T& other) {
 		for (int i = 0; i < N; i++) {
 			(*this)[i] = other;

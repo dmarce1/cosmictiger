@@ -17,7 +17,6 @@ template<class T>
 CUDA_EXPORT
 inline int greens_function(tensor_trless_sym<T, 7>& D, array<T, NDIM> X) {
 	auto r2 = sqr(X[0], X[1], X[2]);
-	const T r0 = 1.f;
 	r2 = sqr(X[0], X[1], X[2]);
 	const T r = sqrt(r2);
 	const T rinv1 = -(r > T(0)) / max(r, T(1e-20));

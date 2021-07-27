@@ -230,7 +230,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				}
 				__syncwarp();
 
-				cuda_gravity_cc(L.back(), self, GRAVITY_CC_EWALD, min_rung == 0);
+				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_EWALD, min_rung == 0);
 
 				// Direct walk
 				nextlist.resize(0);
@@ -306,8 +306,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 				} while (dchecks.size() && self.sink_leaf);
 
-				cuda_gravity_cc(L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
-				cuda_gravity_cp(L.back(), self, min_rung == 0);
+				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
+				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
 
 				if (self.sink_leaf) {
 					int nactive = 0;

@@ -31,7 +31,7 @@ CUDA_EXPORT void constrain_range(T& x) {
 	}
 }
 
-__device__ inline void erfcexpf(float x, float* ec, float *ex) {				// 18 + FLOP_DIV + FLOP_EXP
+__device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_DIV + FLOP_EXP
 	const float p(0.3275911f);
 	const float a1(0.254829592f);
 	const float a2(-0.284496736f);

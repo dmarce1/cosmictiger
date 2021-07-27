@@ -1158,7 +1158,6 @@ int main() {
 	flops = 0;
 	indent();
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
-	tprint("const T r0 = 1.f;\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("const T r = sqrt(r2);\n");
 	tprint("const T rinv1 = -(r > T(0)) / max(r, T(1e-20));\n");

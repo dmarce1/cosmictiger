@@ -42,9 +42,9 @@ int cpu_gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
 int cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
 
 __device__
-int cuda_gravity_cc(expansion<float>&, const tree_node&, gravity_cc_type, bool do_phi);
+int cuda_gravity_cc(const cuda_kick_data&, expansion<float>&, const tree_node&, gravity_cc_type, bool do_phi);
 __device__
-int cuda_gravity_cp(expansion<float>&, const tree_node&, bool do_phi);
+int cuda_gravity_cp(const cuda_kick_data&, expansion<float>&, const tree_node&, bool do_phi);
 __device__
 int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, int, bool);
 __device__

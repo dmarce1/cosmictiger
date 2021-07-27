@@ -2,13 +2,47 @@
 #include <tigerfmm/gravity.hpp>
 
 __device__
-int cuda_gravity_cc(expansion<float>&, const tree_node&, gravity_cc_type, bool do_phi) {
+int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, gravity_cc_type type, bool do_phi) {
 	int flops = 0;
+	const int &tid = threadIdx.x;
+	__shared__
+	extern int shmem_ptr[];
+	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
+	const auto& tree_nodes = data.tree_nodes;
+	const auto& multlist = shmem.multlist;
+	if (multlist.size()) {
+		expansion<float> L;
+		expansion<float> D;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
+			const tree_node& other = tree_nodes[multlist[i]];
+			const multipole<float>& M = other.multi;
+			array<float, NDIM> dx;
+			for (int dim = 0; dim < NDIM; dim++) {
+				dx[dim] = distance(self.pos[dim], other.pos[dim]);
+			}
+			if (type == GRAVITY_CC_DIRECT) {
+				greens_function(D, dx);
+			} else {
+				ewald_greens_function(D, dx);
+			}
+			M2L(L, M, D, do_phi);
+		}
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			shared_reduce_add(L[i]);
+		}
+		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
+			Lacc[i] += L[i];
+		}
+		__syncwarp();
+	}
 	return flops;
 }
 
 __device__
-int cuda_gravity_cp(expansion<float>&, const tree_node&, bool do_phi) {
+int cuda_gravity_cp(const cuda_kick_data&, expansion<float>&, const tree_node&, bool do_phi) {
 	int flops = 0;
 	return flops;
 
