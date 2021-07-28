@@ -13,7 +13,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-
 struct cuda_kick_params {
 	array<fixed32, NDIM> Lpos;
 	expansion<float> L;
@@ -25,7 +24,7 @@ struct cuda_kick_params {
 	kick_return* kreturn;
 };
 
-__device__ int do_kick(kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive, const tree_node& self) {
+__device__ int __noinline__ do_kick(kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive, const tree_node& self) {
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -50,13 +49,21 @@ __device__ int do_kick(kick_params params, const cuda_kick_data& data, const exp
 	const float log2ft0 = log2f(params.t0);
 	const float tfactor = params.eta * sqrtf(params.a * params.h);
 	int max_rung = 0;
+	expansion2<float> L2;
+	float vx;
+	float vy;
+	float vz;
+	float dt;
+	float g2;
+	int rung;
+	array<float, NDIM> dx;
+	int snki;
 	for (int i = tid; i < nactive; i += WARP_SIZE) {
-		const int snki = active_indexes[i];
-		array<float, NDIM> dx;
+		snki = active_indexes[i];
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]);
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]);
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]);
-		const expansion2<float> L2 = L2P(L, dx, params.min_rung == 0);
+		L2 = L2P(L, dx, params.min_rung == 0);
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
@@ -71,17 +78,17 @@ __device__ int do_kick(kick_params params, const cuda_kick_data& data, const exp
 			all_gz[snki] = gz[i];
 			all_phi[snki] = phi[i];
 		}
-		float vx = vel_x[snki];
-		float vy = vel_y[snki];
-		float vz = vel_z[snki];
-		int rung = read_rungs[i];
-		float dt = 0.5f * rung_dt[rung] * params.t0;
+		vx = vel_x[snki];
+		vy = vel_y[snki];
+		vz = vel_z[snki];
+		rung = read_rungs[i];
+		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (!params.first_call) {
 			vx = fmaf(gx[i], dt, vx);
 			vy = fmaf(gy[i], dt, vy);
 			vz = fmaf(gz[i], dt, vz);
 		}
-		const auto g2 = sqr(gx[i], gy[i], gz[i]);
+		g2 = sqr(gx[i], gy[i], gz[i]);
 		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
 		rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
 		max_rung = max(rung, max_rung);
@@ -419,8 +426,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				Lpos.push_back(self.pos);
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back()++;
-				phase.push_back(0);
+				phase.back()++;phase
+				.push_back(0);
 				self_index.push_back(self.children[RIGHT].index);
 				depth++;
 			}
@@ -460,6 +467,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 }
 
 #define HEAP_SIZE (1024*1024*1024)
+#define STACK_SIZE (8*1024)
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int ntrees) {
@@ -469,6 +477,12 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMallocHeapSize));
 	if (value != HEAP_SIZE) {
 		THROW_ERROR("Unable to set heap to %li\n", HEAP_SIZE);
+	}
+	value = STACK_SIZE;
+	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
+	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
+	if (value != STACK_SIZE) {
+		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
 	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();

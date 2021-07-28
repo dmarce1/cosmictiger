@@ -3880,6 +3880,9 @@ tensor_trless_sym<T, 6> M2M(const tensor_trless_sym<T,6>& Ma, array<T, NDIM>& X)
 }
 template<class T>
 CUDA_EXPORT
+#ifdef __CUDACC__
+__noinline__
+#endif
 tensor_trless_sym<T, 7> L2L(const tensor_trless_sym<T, 7>& La, const array<T, NDIM>& X, bool do_phi) {
 	tensor_trless_sym<T, 7> Lb;
 //	const T x000 = T(1);
@@ -4858,6 +4861,9 @@ tensor_trless_sym<T, 7> L2L(const tensor_trless_sym<T, 7>& La, const array<T, ND
 }
 template<class T>
 CUDA_EXPORT
+#ifdef __CUDACC__
+__noinline__
+#endif
 tensor_trless_sym<T, 2> L2P(const tensor_trless_sym<T, 7>& La, const array<T, NDIM>& X, bool do_phi) {
 	tensor_trless_sym<T, 2> Lb;
 //	const T x000 = T(1);

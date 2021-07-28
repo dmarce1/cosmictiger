@@ -640,6 +640,9 @@ void do_expansion(bool two) {
 	int flops = 0;
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT\n");
+	tprint("#ifdef __CUDACC__\n");
+	tprint("__noinline__\n");
+	tprint("#endif\n");
 	if (two) {
 		tprint("tensor_trless_sym<T, %i> L2P(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
 	} else {

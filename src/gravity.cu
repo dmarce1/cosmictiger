@@ -94,6 +94,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 					}
 				}
 			}
+			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
@@ -278,7 +279,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, int nacti
 					dx0 = distance(sink_x[k], src_x[j]);
 					dx1 = distance(sink_y[k], src_y[j]);
 					dx2 = distance(sink_z[k], src_z[j]);
-					const auto r2 = fmaf(dx0, dx0, fmaf(dx1, dx1, sqr(dx2)));
+					const auto r2 = sqr(dx0, dx1, dx2);
 					if (r2 >= h2) {
 						r1inv = rsqrt(r2);
 						r3inv = r1inv * r1inv * r1inv;
@@ -315,7 +316,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, int nacti
 					dx0 = distance(sink_x[k], src_x[j]);
 					dx1 = distance(sink_y[k], src_y[j]);
 					dx2 = distance(sink_z[k], src_z[j]);
-					const auto r2 = fmaf(dx0, dx0, fmaf(dx1, dx1, sqr(dx2)));
+					const auto r2 = sqr(dx0, dx1, dx2);
 					if (r2 >= h2) {
 						r1inv = rsqrt(r2);
 						r3inv = r1inv * r1inv * r1inv;
