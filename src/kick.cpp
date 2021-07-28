@@ -83,6 +83,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist) {
 	const tree_node* self_ptr = tree_get_node(self);
+	assert(self.proc == hpx_rank());
 	if (self_ptr->local_root && get_options().cuda) {
 		cuda_workspace = std::make_shared<kick_workspace>(params);
 		parts_covered = 0;
@@ -92,6 +93,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				vector<tree_id> echecklist) {
 			const tree_node* self_ptr = tree_get_node(self);
 			std::pair<bool, hpx::future<kick_return>> rc;
+			assert(self.proc == hpx_rank());
 			rc = cuda_workspace->add_work(L, pos, self, dchecklist, echecklist);
 			if (rc.first) {
 				parts_covered += self_ptr->nparts();

@@ -14,13 +14,14 @@ kick_workspace::~kick_workspace() {
 	CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
-static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index) {
+static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index, int rank) {
 	tree_map.insert(std::make_pair(id, index));
 	const tree_node* node = tree_get_node(id);
+	assert(id.proc == rank);
 	index++;
 	if (node->children[LEFT].index != -1) {
-		add_tree_node(tree_map, node->children[LEFT], index);
-		add_tree_node(tree_map, node->children[RIGHT], index);
+		add_tree_node(tree_map, node->children[LEFT], index, rank);
+		add_tree_node(tree_map, node->children[RIGHT], index, rank);
 	}
 }
 
@@ -76,7 +77,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 					const tree_node* node = tree_get_node(ids[i]);
 					int index = next_index;
 					next_index += node->node_count;
-					add_tree_node(tree_map, ids[i], index);
+					add_tree_node(tree_map, ids[i], index, ids[i].proc);
 					tree_bases.insert(ids[i]);
 				}
 			}
@@ -113,6 +114,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 					workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
 				}
 				workitems[i].self.index = tree_map[workitems[i].self];
+				assert(workitems[i].self.proc == hpx_rank());
 			}
 		}));
 	}
@@ -143,7 +145,7 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	CUDA_CHECK(cudaStreamSynchronize(stream));
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, tree_nodes.size());
+	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size());
 	CUDA_CHECK(cudaFreeAsync(dev_x, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_y, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_z, stream));
@@ -163,7 +165,6 @@ std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<flo
 	item.L = L;
 	item.pos = pos;
 	item.self = self;
-	item.self.proc = 0;
 	static mutex_type mutex;
 	{
 		std::lock_guard<mutex_type> lock(mutex);
