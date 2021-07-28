@@ -423,6 +423,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					Lpos.pop_back();
 					depth--;
 				} else {
+					const int start = dchecks.size();
+					dchecks.resize(start + leaflist.size());
+					for( int i = tid; i < leaflist.size(); i += WARP_SIZE) {
+						dchecks[start + i] = leaflist[i];
+					}
+					__syncwarp();
 					const auto l = L.back();
 					L.push_back(l);
 					Lpos.push_back(self.pos);
