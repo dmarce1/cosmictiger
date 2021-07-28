@@ -188,6 +188,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		int depth = 0;
 		int maxi;
 		while (depth >= 0) {
+			assert(Lpos.size() == depth + 1);
+			assert(self_index.size() == depth + 1);
+			assert(phase.size() == depth + 1);
 			const auto& self = tree_nodes[self_index.back()];
 
 			switch (phase.back()) {
@@ -198,7 +201,10 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
-				L2L_cuda(L.back(), dx, global_params.min_rung == 0);
+				auto this_L = L2L_cuda(L.back(), dx, global_params.min_rung == 0);
+				if( tid == 0 ) {
+					L.back() = this_L;
+				}
 				// Do ewald walk
 				nextlist.resize(0);
 				multlist.resize(0);
@@ -240,6 +246,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
 					//	PRINT( "nextlist = %i\n", nextlist[i]);
 					const auto children = tree_nodes[nextlist[i]].children;
+					assert(children[LEFT].index!=-1);
+					assert(children[RIGHT].index!=-1);
 					echecks[NCHILD * i + LEFT] = children[LEFT].index;
 					echecks[NCHILD * i + RIGHT] = children[RIGHT].index;
 				}
@@ -371,9 +379,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							} else {
 								far = true;
 								for (int j = 0; j < nactive; j++) {
-									const float dx = distance(shmem.sink_x[j], other.pos[XDIM]);
-									const float dy = distance(shmem.sink_y[j], other.pos[YDIM]);
-									const float dz = distance(shmem.sink_z[j], other.pos[ZDIM]);
+									const float dx = distance(sink_x[j], other.pos[XDIM]);
+									const float dy = distance(sink_y[j], other.pos[YDIM]);
+									const float dz = distance(sink_z[j], other.pos[ZDIM]);
 									const float R2 = sqr(dx, dy, dz);
 									far = R2 > sqr(other.radius * thetainv) + h;
 									if (!far) {
@@ -420,12 +428,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					Lpos.push_back(self.pos);
 					dchecks.push_top();
 					echecks.push_top();
-					phase.back()++;phase
-					.push_back(0);
+					phase.back()++;
+					phase.push_back(0);
 					const tree_id child = self.children[LEFT];
-					if (child.proc != data.rank) {
-						printf("ERROR!!!!!!!! %i %i\n", child.proc, data.rank);
-					}
 					assert(child.proc == data.rank);
 					self_index.push_back(child.index);
 					depth++;
@@ -438,13 +443,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				Lpos.push_back(self.pos);
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back()++;phase
-				.push_back(0);
+				phase.back()++;
+				phase.push_back(0);
 				const tree_id child = self.children[RIGHT];
-				if (child.proc != data.rank) {
-					printf("ERROR!!!!!!!! %i %i\n", child.proc, data.rank);
-				}
-
 				assert(child.proc == data.rank);
 				self_index.push_back(child.index);
 				depth++;
