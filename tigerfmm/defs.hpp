@@ -19,7 +19,7 @@
 #define LEFT 0
 #define RIGHT 1
 
-#define KICK_PP_MAX (32*8)
+#define KICK_PP_MAX (32*11)
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024
 #define UNORDERED_MAP_SIZE 1024

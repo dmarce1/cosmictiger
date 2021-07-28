@@ -32,6 +32,8 @@ struct cuda_kick_data {
 	int rank;
 };
 
+struct kick_return;
+
 #ifdef __CUDACC__
 struct cuda_kick_shmem {
 	array<fixed32, SINK_BUCKET_SIZE> sink_x;
@@ -55,6 +57,7 @@ struct cuda_kick_shmem {
 	stack_vector<int> echecks;
 	cuda_vector<int> phase;
 	cuda_vector<int> self;
+	cuda_vector<kick_return> returns;
 	cuda_vector<array<fixed32, NDIM>> Lpos;
 };
 #endif
@@ -78,6 +81,20 @@ struct kick_return {
 		fz = 0.0;
 		fnorm = 0.0;
 		nactive = 0;
+	}
+	CUDA_EXPORT
+	kick_return& operator+=(const kick_return& other) {
+		if( other.max_rung > max_rung) {
+			max_rung = other.max_rung;
+		}
+		flops += other.flops;
+		pot += other.pot;
+		fx += other.fx;
+		fy += other.fy;
+		fz += other.fz;
+		fnorm += other.fnorm;
+		return *this;
+
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {

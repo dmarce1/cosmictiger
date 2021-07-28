@@ -1,7 +1,7 @@
 #include <tigerfmm/kick_workspace.hpp>
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/timer.hpp>
-#include <tigerfmm/unordered_map_ts.hpp>
+
 
 kick_workspace::kick_workspace(kick_params p) {
 	params = p;

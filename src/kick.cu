@@ -139,6 +139,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
+	auto& returns = shmem.returns;
 	const float& h = global_params.h;
 	const float hinv = 1.f / h;
 	const float thetainv = 1.f / global_params.theta;
@@ -158,6 +159,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	nextlist.initialize();
 	phase.initialize();
 	Lpos.initialize();
+	returns.initialize();
 	self_index.initialize();
 	int index;
 	if (tid == 0) {
@@ -182,9 +184,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		}
 		phase.push_back(0);
 		self_index.push_back(params[index].self);
+		returns.push_back(kick_return());
 		Lpos.push_back(params[index].Lpos);
 		__syncwarp();
-		kick_return kr;
 		int depth = 0;
 		int maxi;
 		while (depth >= 0) {
@@ -202,7 +204,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
 				auto this_L = L2L_cuda(L.back(), dx, global_params.min_rung == 0);
-				if( tid == 0 ) {
+				if (tid == 0) {
 					L.back() = this_L;
 				}
 				// Do ewald walk
@@ -417,7 +419,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					cuda_gravity_pc(data, self, nactive, min_rung == 0);
 					cuda_gravity_pp(data, self, nactive, h, min_rung == 0);
 					__syncwarp();
-					do_kick(global_params, data, L.back(), nactive, self);
+					returns.back().max_rung = do_kick(global_params, data, L.back(), nactive, self);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
@@ -425,20 +427,29 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				} else {
 					const int start = dchecks.size();
 					dchecks.resize(start + leaflist.size());
-					for( int i = tid; i < leaflist.size(); i += WARP_SIZE) {
+					for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
 						dchecks[start + i] = leaflist[i];
 					}
 					__syncwarp();
-					const auto l = L.back();
-					L.push_back(l);
+					const int active_left = tree_nodes[self.children[LEFT].index].nactive;
+					const int active_right = tree_nodes[self.children[RIGHT].index].nactive;
 					Lpos.push_back(self.pos);
-					dchecks.push_top();
-					echecks.push_top();
-					phase.back()++;
-					phase.push_back(0);
-					const tree_id child = self.children[LEFT];
-					assert(child.proc == data.rank);
-					self_index.push_back(child.index);
+					returns.push_back(kick_return());
+					if (active_left && active_right) {
+						const tree_id child = self.children[LEFT];
+						const auto l = L.back();
+						L.push_back(l);
+						dchecks.push_top();
+						echecks.push_top();
+						phase.back() += 1;
+						phase.push_back(0);
+						self_index.push_back(child.index);
+					} else {
+						const tree_id child = active_left ? self.children[LEFT] : self.children[RIGHT];
+						phase.back() += 2;
+						phase.push_back(0);
+						self_index.push_back(child.index);
+					}
 					depth++;
 				}
 
@@ -449,11 +460,17 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				Lpos.push_back(self.pos);
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back()++;
+				phase.back() += 1;
 				phase.push_back(0);
 				const tree_id child = self.children[RIGHT];
 				assert(child.proc == data.rank);
 				self_index.push_back(child.index);
+				const auto this_return = returns.back();
+				returns.pop_back();
+				if (tid == 0) {
+					returns.back() += this_return;
+				}
+				returns.push_back(kick_return());
 				depth++;
 			}
 				break;
@@ -461,6 +478,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				self_index.pop_back();
 				phase.pop_back();
 				Lpos.pop_back();
+				const auto this_return = returns.back();
+				returns.pop_back();
+				if (tid == 0) {
+					returns.back() += this_return;
+				}
 				depth--;
 			}
 				break;
@@ -468,13 +490,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		}
 
 		if (tid == 0) {
-			*(params[index].kreturn) = kr;
+			*(params[index].kreturn) = returns.back();
 		}
 		if (tid == 0) {
 			index = atomicAdd(next_item, 1);
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 	}
+	assert(returns.size() == 1);
 	assert(L.size() == 1);
 	assert(Lpos.size() == 0);
 	assert(phase.size() == 0);
@@ -487,6 +510,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	leaflist.destroy();
 	partlist.destroy();
 	phase.destroy();
+	returns.destroy();
 	Lpos.destroy();
 	self_index.destroy();
 }
@@ -587,6 +611,7 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
+	PRINT("Occupancy = %i\n", nblocks);
 	nblocks *= cuda_smp_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data, dev_kick_params, kick_params.size(), current_index, ntrees);

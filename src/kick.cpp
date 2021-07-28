@@ -354,13 +354,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
 				const auto rcl = futs[LEFT].get();
 				const auto rcr = futs[RIGHT].get();
-				kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
-				kr.flops += rcl.flops + rcr.flops;
-				kr.pot = rcl.pot + rcr.pot;
-				kr.fx = rcl.fx + rcr.fx;
-				kr.fy = rcl.fy + rcr.fy;
-				kr.fz = rcl.fz + rcr.fz;
-				kr.fnorm = rcl.fnorm + rcr.fnorm;
+				kr += rcl;
+				kr += rcr;
 				return hpx::make_ready_future(kr);
 			} else {
 				return hpx::when_all(futs.begin(), futs.end()).then([](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
@@ -368,13 +363,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kick_return kr;
 					const auto rcl = futs[LEFT].get();
 					const auto rcr = futs[RIGHT].get();
-					kr.max_rung = std::max(rcl.max_rung, rcr.max_rung);
-					kr.flops += rcl.flops + rcr.flops;
-					kr.pot = rcl.pot + rcr.pot;
-					kr.fx = rcl.fx + rcr.fx;
-					kr.fy = rcl.fy + rcr.fy;
-					kr.fz = rcl.fz + rcr.fz;
-					kr.fnorm = rcl.fnorm + rcr.fnorm;
+					kr += rcl;
+					kr += rcr;
 					return kr;
 				});
 			}
