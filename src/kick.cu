@@ -515,24 +515,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	self_index.destroy();
 }
 
-#define HEAP_SIZE (1024*1024*1024)
+#define HEAP_SIZE (3)
 #define STACK_SIZE (16*1024)
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees) {
 	timer tm;
-	size_t value = HEAP_SIZE;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMallocHeapSize));
-	if (value != HEAP_SIZE) {
-		THROW_ERROR("Unable to set heap to %li\n", HEAP_SIZE);
-	}
-	value = STACK_SIZE;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
-	if (value != STACK_SIZE) {
-		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
-	}
 	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
 	int* current_index;

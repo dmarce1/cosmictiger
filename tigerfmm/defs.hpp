@@ -8,7 +8,7 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
-#define CHECK_BOUNDS
+//#define CHECK_BOUNDS
 
 #define NDIM 3
 #define XDIM 0
@@ -19,6 +19,7 @@
 #define LEFT 0
 #define RIGHT 1
 
+#define KICK_WORKSPACE_PART_SIZE 25 // In % of total mem
 #define KICK_PP_MAX (32*11)
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024
@@ -41,7 +42,7 @@
 #define MIN_CP_PARTS 25
 #define MIN_KICK_THREAD_PARTS (1024)
 #define MIN_PC_PARTS 47
-#define MIN_SORT_THREAD_PARTS (1024)
+#define MIN_SORT_THREAD_PARTS (64*1024)
 
 #define NTREES_MIN (2*1024*1024)
 #define ORDER 7
@@ -52,9 +53,8 @@
 #define SIMD_INT_SIZE 8
 #define SORT_OVERSUBSCRIPTION 8
 #define TREE_CACHE_SIZE 1024
-#define TREE_NODE_ALLOCATION_SIZE 8
+#define TREE_NODE_ALLOCATION_SIZE 4
 
-#define KICK_WORKSPACE_PART_SIZE 25 // In percent of total mem
 
 
 #define LORDER ORDER

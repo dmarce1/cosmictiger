@@ -78,7 +78,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
 //	PRINT( "Do kick\n");
-	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist).get();
+	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();

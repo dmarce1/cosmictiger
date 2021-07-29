@@ -2,16 +2,13 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/timer.hpp>
 
-
-kick_workspace::kick_workspace(kick_params p) {
+kick_workspace::kick_workspace(kick_params p, int total_parts_) {
+	total_parts = total_parts_;
 	params = p;
-	nparts = size_t(KICK_WORKSPACE_PART_SIZE) * cuda_free_mem() / (NDIM * sizeof(fixed32)) / 100;
-	CUDA_CHECK(cudaStreamCreate(&stream));
+	nparts = 0;
 }
 
 kick_workspace::~kick_workspace() {
-	CUDA_CHECK(cudaStreamSynchronize(stream));
-	CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
 static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index, int rank) {
@@ -35,7 +32,7 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 	}
 }
 
-void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
+void kick_workspace::to_gpu() {
 	timer tm;
 	tm.start();
 	cuda_set_device();
@@ -138,19 +135,24 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-
+	auto stream = cuda_get_stream();
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
-	CUDA_CHECK(cudaStreamSynchronize(stream));
+	static std::atomic<int> cnt(0);
+	while( cnt++ != 0 ) {
+		cnt--;
+		hpx::this_thread::yield();
+	}
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size());
+	cnt--;
 	CUDA_CHECK(cudaFreeAsync(dev_x, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_y, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_z, stream));
 	CUDA_CHECK(cudaFreeAsync(dev_trees, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
+	cuda_end_stream(stream);
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
@@ -159,22 +161,29 @@ void kick_workspace::to_gpu(std::shared_ptr<kick_workspace> ptr) {
 
 }
 
-std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecks,
-		vector<tree_id> echecks) {
+void kick_workspace::add_parts(int n) {
+	std::lock_guard<mutex_type> lock(mutex);
+	nparts += n;
+
+}
+
+hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecks,
+		vector<tree_id> && echecks) {
 	kick_workitem item;
 	item.L = L;
 	item.pos = pos;
 	item.self = self;
-	static mutex_type mutex;
+	bool do_work = false;
 	{
+		const int these_nparts = tree_get_node(self)->nparts();
 		std::lock_guard<mutex_type> lock(mutex);
+		nparts += these_nparts;
+		if (nparts == total_parts) {
+			do_work = true;
+		}
 		for (int i = 0; i < dchecks.size(); i++) {
 			tree_ids.insert(dchecks[i]);
 		}
-		for (int i = 0; i < echecks.size(); i++) {
-			tree_ids.insert(echecks[i]);
-		}
-		tree_ids.insert(self);
 	}
 	item.dchecklist = std::move(dchecks);
 	item.echecklist = std::move(echecks);
@@ -183,5 +192,18 @@ std::pair<bool, hpx::future<kick_return>> kick_workspace::add_work(expansion<flo
 	auto fut = promises.back().get_future();
 	workitems.push_back(std::move(item));
 	lock.unlock();
-	return std::make_pair(true, std::move(fut));
+	if (do_work) {
+		PRINT( "%i of %i parts added\n", nparts, total_parts);
+		hpx::apply([ptr]() {
+			static std::atomic<int> cnt(0);
+			while( cnt++ > 1 ) {
+				cnt--;
+				hpx::this_thread::yield();
+			}
+			PRINT( "sending to gpu\n");
+			ptr->to_gpu();
+			cnt--;
+		});
+	}
+	return fut;
 }

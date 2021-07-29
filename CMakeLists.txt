@@ -34,6 +34,7 @@ set(tigerfmm_source_files
     src/main.cpp
     src/options.cpp
     src/particles.cpp
+    src/range_set.cpp
     src/test.cpp
     src/tree.cpp
 )      
@@ -64,6 +65,7 @@ set(tigerfmm_header_files
     tigerfmm/options.hpp
     tigerfmm/particles.hpp
     tigerfmm/range.hpp
+    tigerfmm/range_set.hpp
     tigerfmm/safe_io.hpp
     tigerfmm/simd.hpp
     tigerfmm/stack_vector.hpp

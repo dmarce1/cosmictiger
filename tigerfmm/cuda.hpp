@@ -103,6 +103,9 @@ int cuda_smp_count();
 size_t cuda_free_mem();
 size_t cuda_total_mem();
 int cuda_smp_count();
+void cuda_init();
+cudaStream_t cuda_get_stream();
+void cuda_end_stream(cudaStream_t stream);
 
 
 #endif /* COSMICTIGER_CUDA_HPP_ */

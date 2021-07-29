@@ -1,4 +1,5 @@
 #include <tigerfmm/hpx.hpp>
+#include <tigerfmm/cuda.hpp>
 
 static int rank;
 static int nranks;
@@ -21,6 +22,7 @@ void hpx_init() {
 	if (index2 < nranks) {
 		children.push_back(localities[index2]);
 	}
+	cuda_init();
 
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {

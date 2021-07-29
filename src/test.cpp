@@ -135,7 +135,7 @@ static void kick_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist).get();
+	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	PRINT("GFLOPS/s = %e\n", kr.flops / 1024 / 1024 / 1024 / tm.read());
@@ -153,8 +153,8 @@ static void force_test() {
 	timer tm;
 
 	tm.start();
-//	particles_random_init();
-	initialize();
+	particles_random_init();
+//	initialize();
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();
@@ -202,7 +202,7 @@ static void force_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist).get();
+	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	tm.reset();
