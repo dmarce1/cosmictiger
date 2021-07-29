@@ -550,10 +550,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock,
-		vector<float, pinned_allocator<float>>& host_phi, vector<float, pinned_allocator<float>>& host_gx, vector<float, pinned_allocator<float>>& host_gy,
-		vector<float, pinned_allocator<float>>& host_gz) {
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock, vector<float>& host_phi,
+		vector<float>& host_gx, vector<float>& host_gy, vector<float>& host_gz) {
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -572,10 +571,10 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 //	node_count = 0;
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
-	vector<kick_return, pinned_allocator<kick_return>> returns(workitems.size());
-	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params(workitems.size());
-	vector<int, pinned_allocator<int>> dchecks;
-	vector<int, pinned_allocator<int>> echecks;
+	vector<kick_return> returns(workitems.size());
+	vector<cuda_kick_params> kick_params(workitems.size());
+	vector<int> dchecks;
+	vector<int> echecks;
 	int* dev_dchecks;
 	int* dev_echecks;
 	kick_return* dev_returns;
@@ -624,10 +623,6 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	data.y = dev_y;
 	data.z = dev_z;
 	data.tree_nodes = dev_tree_nodes;
-	data.vx = &particles_vel(XDIM, 0);
-	data.vy = &particles_vel(YDIM, 0);
-	data.vz = &particles_vel(ZDIM, 0);
-	data.rungs = &particles_rung(0);
 	data.rank = hpx_rank();
 	data.gx = dev_gx;
 	data.gy = dev_gy;

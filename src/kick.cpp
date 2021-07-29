@@ -88,8 +88,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const tree_node* self_ptr = tree_get_node(self);
 	assert(self.proc == hpx_rank());
 	if (self_ptr->local_root && get_options().cuda) {
-		//	cuda_init();
-		//	ewald_const::init_gpu();
+		cuda_init();
+		ewald_const::init_gpu();
 		if( self_ptr->nactive < particles_size() / 1024 ) {
 			skip_gpu = true;
 		} else {

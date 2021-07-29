@@ -19,10 +19,6 @@ struct cuda_kick_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
-	float* vx;
-	float* vy;
-	float* vz;
-	char* rungs;
 	float* gx;
 	float* gy;
 	float* gz;
@@ -71,7 +67,8 @@ struct kick_return {
 	double fy;
 	double fz;
 	double fnorm;
-	int nactive;CUDA_EXPORT kick_return() {
+	int nactive;CUDA_EXPORT
+	kick_return() {
 		max_rung = 0;
 		flops = 0.0;
 		pot = 0.0;
@@ -147,9 +144,8 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 		std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
-vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*,
-		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>&, vector<float, pinned_allocator<float>>&,
-		vector<float, pinned_allocator<float>>&, vector<float, pinned_allocator<float>>&, vector<float, pinned_allocator<float>>&);
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
+		int part_count, int ntrees, std::atomic<int>&, vector<float>&, vector<float>&, vector<float>&, vector<float>&);
 int kick_block_count();
 
 #endif /* KICK_HPP_ */

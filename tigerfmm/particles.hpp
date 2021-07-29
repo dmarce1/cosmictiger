@@ -48,10 +48,10 @@ struct particle_sample {
 };
 
 PARTICLES_EXTERN array<vector<fixed32>, NDIM> particles_x;
-PARTICLES_EXTERN array<vector<float, pinned_allocator<float>>, NDIM> particles_v;
-PARTICLES_EXTERN vector<char, pinned_allocator<char>> particles_r;
-PARTICLES_EXTERN array<vector<float, pinned_allocator<float>>, NDIM> particles_g;
-PARTICLES_EXTERN vector<float, pinned_allocator<float>> particles_p;
+PARTICLES_EXTERN array<vector<float>, NDIM> particles_v;
+PARTICLES_EXTERN vector<char> particles_r;
+PARTICLES_EXTERN array<vector<float>, NDIM> particles_g;
+PARTICLES_EXTERN vector<float> particles_p;
 
 struct particle_global_range {
 	int proc;
