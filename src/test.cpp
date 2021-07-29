@@ -87,7 +87,7 @@ static void kick_test() {
 
 	tm.start();
 	particles_random_init();
-//	/initialize();
+//	initialize();
 	tm.stop();
 	PRINT("initialize: %e s\n", tm.read());
 	tm.reset();

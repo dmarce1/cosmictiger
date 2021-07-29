@@ -19,8 +19,11 @@
 #define LEFT 0
 #define RIGHT 1
 
-#define CUDA_KICK_OVERSUBSCRIPTION 8
-#define KICK_WORKSPACE_PART_SIZE 10 // In % of total mem
+#define CUDA_KICK_OVERSUBSCRIPTION 2
+#define CUDA_KICK_PARTS_MAX (8*1024)
+#define HEAP_SIZE 20
+#define STACK_SIZE (16*1024)
+#define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
 #define KICK_PP_MAX (32*11)
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024

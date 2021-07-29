@@ -10,6 +10,20 @@
 
 #include <atomic>
 
+/*__managed__ int node_count;
+ __managed__ double total_time;
+ __managed__ double tree_time;
+ __managed__ double gravity_time;
+ static __managed__ double kick_time;*/
+
+__managed__ int max_depth = 0;
+__managed__ int max_nextlist = 0;
+__managed__ int max_partlist = 0;
+__managed__ int max_leaflist = 0;
+__managed__ int max_multlist = 0;
+__managed__ int max_echecks = 0;
+__managed__ int max_dchecks = 0;
+
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
@@ -26,7 +40,9 @@ struct cuda_kick_params {
 	kick_return* kreturn;
 };
 
-__device__ int __noinline__ do_kick(kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive, const tree_node& self) {
+__device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive,
+		const tree_node& self) {
+//	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -57,14 +73,16 @@ __device__ int __noinline__ do_kick(kick_params params, const cuda_kick_data& da
 	float vz;
 	float dt;
 	float g2;
+	float phi_tot = 0.0f;
+	float fx_tot = 0.f;
+	float fy_tot = 0.f;
+	float fz_tot = 0.f;
+	float fnorm_tot = 0.f;
 	int rung;
 	array<float, NDIM> dx;
 	int snki;
 	for (int i = tid; i < nactive; i += WARP_SIZE) {
 		snki = active_indexes[i];
-		if (snki >= data.sink_size) {
-			PRINT("----------> %i %i\n", snki, data.sink_size);
-		}
 		assert(snki >= 0);
 		assert(snki < data.sink_size);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]);
@@ -112,13 +130,32 @@ __device__ int __noinline__ do_kick(kick_params params, const cuda_kick_data& da
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
+		phi_tot += phi[i];
+		fx_tot += gx[i];
+		fy_tot += gy[i];
+		fz_tot += gz[i];
+		fnorm_tot += g2;
 	}
+	shared_reduce_add(phi_tot);
+	shared_reduce_add(fx_tot);
+	shared_reduce_add(fy_tot);
+	shared_reduce_add(fz_tot);
+	shared_reduce_add(fnorm_tot);
 	shared_reduce_max(max_rung);
+	if (tid == 0) {
+		return_.max_rung = max(return_.max_rung, max_rung);
+		return_.pot += phi_tot;
+		return_.fx += fx_tot;
+		return_.fy += fy_tot;
+		return_.fz += fz_tot;
+		return_.fnorm += fnorm_tot;
+	}
+//	atomicAdd(&kick_time, (double) clock64() - tm);
 	return max_rung;
 }
 
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
-
+//	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -163,6 +200,17 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	Lpos.initialize();
 	returns.initialize();
 	self_index.initialize();
+	L.resize(max_depth);
+	dchecks.resize(max_dchecks);
+	echecks.resize(max_echecks);
+	nextlist.reserve(max_nextlist);
+	multlist.reserve(max_multlist);
+	leaflist.reserve(max_leaflist);
+	partlist.reserve(max_partlist);
+	phase.reserve(max_depth);
+	Lpos.reserve(max_depth);
+	returns.reserve(max_depth);
+	self_index.reserve(max_depth);
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -192,6 +240,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		int depth = 0;
 		int maxi;
 		while (depth >= 0) {
+//			auto tm2 = clock64();
+//			node_count++;
 			assert(Lpos.size() == depth + 1);
 			assert(self_index.size() == depth + 1);
 			assert(phase.size() == depth + 1);
@@ -257,7 +307,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				}
 				__syncwarp();
 
+//				auto tm = clock64();
 				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_EWALD, min_rung == 0);
+//				atomicAdd(&gravity_time, (double) clock64() - tm);
 
 				// Direct walk
 				nextlist.resize(0);
@@ -332,9 +384,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 
 				} while (dchecks.size() && self.sink_leaf);
-
+//				tm = clock64();
 				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
 				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
+//				atomicAdd(&gravity_time, (double) clock64() - tm);
+
 				if (self.sink_leaf) {
 					int nactive = 0;
 					const int begin = self.sink_part_range.first;
@@ -418,10 +472,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
 					__syncwarp();
+//					tm = clock64();
 					cuda_gravity_pc(data, self, nactive, min_rung == 0);
 					cuda_gravity_pp(data, self, nactive, h, min_rung == 0);
+//					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					returns.back().max_rung = do_kick(global_params, data, L.back(), nactive, self);
+					do_kick(returns.back(), global_params, data, L.back(), nactive, self);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
@@ -489,6 +545,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			}
 				break;
 			}
+//			atomicAdd(&tree_time, (double) clock64() - tm2);
 		}
 
 		if (tid == 0) {
@@ -504,6 +561,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	assert(Lpos.size() == 0);
 	assert(phase.size() == 0);
 	assert(self_index.size() == 0);
+	atomicMax(&max_depth, phase.capacity());
+	atomicMax(&max_nextlist, nextlist.capacity());
+	atomicMax(&max_multlist, multlist.capacity());
+	atomicMax(&max_partlist, partlist.capacity());
+	atomicMax(&max_leaflist, leaflist.capacity());
+	atomicMax(&max_dchecks, dchecks.data_capacity());
+	atomicMax(&max_echecks, echecks.data_capacity());
 	L.initialize();
 	dchecks.destroy();
 	echecks.destroy();
@@ -515,24 +579,32 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	returns.destroy();
 	Lpos.destroy();
 	self_index.destroy();
+//	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-#define HEAP_SIZE (3)
-#define STACK_SIZE (16*1024)
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock) {
 	timer tm;
-	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
+//	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
 	int* current_index;
 	int zero = 0;
+//	kick_time = total_time = tree_time = gravity_time = 0.0f;
+//	node_count = 0;
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return, pinned_allocator<kick_return>> returns(workitems.size());
 	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params(workitems.size());
 	vector<int, pinned_allocator<int>> dchecks;
 	vector<int, pinned_allocator<int>> echecks;
+	int* dev_dchecks;
+	int* dev_echecks;
+	kick_return* dev_returns;
+	cuda_kick_params* dev_kick_params;
+	CUDA_CHECK(cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
+	CUDA_CHECK(cudaMalloc(&dev_returns, sizeof(kick_return) * returns.size()));
+
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
 
@@ -561,6 +633,10 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	}
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
+	CUDA_CHECK(cudaMalloc(&dev_dchecks, sizeof(int) * dchecks.size()));
+	CUDA_CHECK(cudaMalloc(&dev_echecks, sizeof(int) * echecks.size()));
+	CUDA_CHECK(cudaMemcpyAsync(dev_dchecks, dchecks.data(), sizeof(int) * dchecks.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
 	cuda_kick_data data;
 	data.source_size = part_count;
@@ -589,15 +665,13 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 		params.Lpos = workitems[i].pos;
 		params.L = workitems[i].L;
 		params.self = workitems[i].self.index;
-		params.dchecks = dchecks.data() + dindices[i];
-		params.echecks = echecks.data() + eindices[i];
+		params.dchecks = dev_dchecks + dindices[i];
+		params.echecks = dev_echecks + eindices[i];
 		params.dcount = dindices[i + 1] - dindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
-		params.kreturn = &returns[i];
+		params.kreturn = dev_returns + i;
 		kick_params[i] = std::move(params);
 	}
-	cuda_kick_params* dev_kick_params;
-	CUDA_CHECK(cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
 	int nblocks = kick_block_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
@@ -608,12 +682,24 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 		hpx_yield();
 	}
 	outer_lock--;
+	tm.reset();
+	tm.start();
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data, dev_kick_params, kick_params.size(), current_index, ntrees);
+//	PRINT("One done\n");
+	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
-	PRINT("One done\n");
-	cnt--;
-	CUDA_CHECK(cudaFree(current_index));
+
+	tm.stop();
+//	PRINT( "%i %e\n", nblocks, tm.read());
+//	PRINT("%i nodes traversed\n", node_count);
+	CUDA_CHECK(cudaFree(dev_dchecks));
+	CUDA_CHECK(cudaFree(dev_echecks));
+	CUDA_CHECK(cudaFree(dev_returns));
 	CUDA_CHECK(cudaFree(dev_kick_params));
+	CUDA_CHECK(cudaFree(current_index));
+	cnt--;
+//	PRINT("%i %i %i %i %i %i %i\n", max_depth, max_dchecks, max_echecks, max_nextlist, max_leaflist, max_partlist, max_multlist);
+//	PRINT("%i %e %e %e\n", nblocks, tree_time / total_time, gravity_time / total_time,  kick_time / total_time);
 	return returns;
 }
 

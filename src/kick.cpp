@@ -28,9 +28,9 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 static thread_local std::stack<workspace> local_workspaces;
 static std::atomic<int> atomic_lock(0);
-static std::atomic<int> active_workspaces(0);
 static int cuda_workspace_max_parts;
 static int cuda_branch_max_parts;
+static bool skip_gpu;
 
 static workspace get_workspace() {
 	if (local_workspaces.empty()) {
@@ -88,15 +88,19 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const tree_node* self_ptr = tree_get_node(self);
 	assert(self.proc == hpx_rank());
 	if (self_ptr->local_root && get_options().cuda) {
+		//	cuda_init();
+		//	ewald_const::init_gpu();
+		if( self_ptr->nactive < particles_size() / 1024 ) {
+			skip_gpu = true;
+		} else {
+			skip_gpu = false;
+		}
 		cuda_workspace_max_parts = size_t(cuda_total_mem()) / (sizeof(fixed32) * NDIM) * KICK_WORKSPACE_PART_SIZE / 100;
-		cuda_branch_max_parts = std::min(cuda_workspace_max_parts,particles_size()) / kick_block_count() / CUDA_KICK_OVERSUBSCRIPTION;
-		cuda_branch_max_parts = std::max(cuda_branch_max_parts, 1);
-		PRINT( "cuda_branch_max_parts = %i\n", cuda_branch_max_parts);
 	}
-	if (self_ptr->is_local() && self_ptr->nparts() <= cuda_workspace_max_parts && cuda_workspace == nullptr) {
+	if (self_ptr->is_local() && self_ptr->nparts() <= cuda_workspace_max_parts && cuda_workspace == nullptr && !skip_gpu) {
 		cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 	}
-	if (self_ptr->nparts() <= cuda_branch_max_parts && self_ptr->is_local() && get_options().cuda) {
+	if (self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local() && get_options().cuda && !skip_gpu) {
 		return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
 		kick_return kr;
@@ -209,6 +213,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		kr.flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
 		kr.flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
 		if (self_ptr->sink_leaf) {
+			if( cuda_workspace != nullptr) {
+				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
+			}
 			partlist.resize(0);
 			multlist.resize(0);
 			const int mynparts = self_ptr->nparts();
@@ -325,13 +332,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 			} else if (exec_left) {
 				if (cuda_workspace != nullptr) {
-					cuda_workspace->add_parts(cr->nparts());
+					cuda_workspace->add_parts(cuda_workspace, cr->nparts());
 				}
 				futs[RIGHT] = hpx::make_ready_future(kick_return());
 				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 			} else {
 				if (cuda_workspace != nullptr) {
-					cuda_workspace->add_parts(cl->nparts());
+					cuda_workspace->add_parts(cuda_workspace, cl->nparts());
 				}
 				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 				futs[LEFT] = hpx::make_ready_future(kick_return());

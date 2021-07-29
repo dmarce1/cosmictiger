@@ -36,7 +36,6 @@ double kick_time = 0.0;
 double drift_time = 0.0;
 
 kick_return kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
-
 	timer tm;
 	tm.start();
 //	PRINT( "Domains\n", minrung, theta);

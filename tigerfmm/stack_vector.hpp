@@ -22,6 +22,9 @@ public:
 		arc & data;
 		arc & bounds;
 	}
+	__device__ inline int data_capacity() const {
+		return data.capacity();
+	}
 	__device__ inline void swap(stack_vector<T>& other) {
 		data.swap(other.data);
 		bounds.swap(other.bounds);

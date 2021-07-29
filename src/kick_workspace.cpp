@@ -36,7 +36,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	timer tm;
 	tm.start();
 	cuda_set_device();
-	PRINT("To GPU %i items\n", workitems.size());
+	//PRINT("To GPU %i items\n", workitems.size());
 	auto sort_fut = hpx::async([this]() {
 		std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
 					const auto* aptr = tree_get_node(a.self);
@@ -45,9 +45,9 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 				}
 		);
 	});
-	PRINT("To vector\n");
+//	PRINT("To vector\n");
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
-	PRINT("%i tree ids\n", tree_ids_vector.size());
+//	PRINT("%i tree ids\n", tree_ids_vector.size());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
 	int node_count = 0;
 	int part_count = 0;
@@ -140,9 +140,14 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
-	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
+	CUDA_CHECK(cudaStreamSynchronize(stream));
+	host_x = decltype(host_x)();
+	host_y = decltype(host_y)();
+	host_z = decltype(host_z)();
+//	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),
 			outer_lock);
+	cuda_end_stream(stream);
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
 	CUDA_CHECK(cudaFree(dev_z));
@@ -151,14 +156,29 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
 	tm.stop();
-	PRINT("To GPU Done %e\n", tm.read());
+//	PRINT("To GPU Done %e\n", tm.read());
 
 }
 
-void kick_workspace::add_parts(int n) {
-	std::lock_guard<mutex_type> lock(mutex);
+void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
+	bool do_work = false;
+	std::unique_lock<mutex_type> lock(mutex);
 	nparts += n;
-
+	if (nparts == total_parts) {
+		do_work = true;
+	}
+	lock.unlock();
+	if (do_work) {
+		hpx::apply([ptr]() {
+			static std::atomic<int> cnt(0);
+			while( cnt++ != 0 ) {
+				cnt--;
+				hpx::this_thread::yield();
+			}
+//			PRINT( "sending to gpu\n");
+				ptr->to_gpu(cnt);
+			});
+	}
 }
 
 hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
@@ -187,16 +207,15 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
-		PRINT("%i of %i parts added\n", nparts, total_parts);
 		hpx::apply([ptr]() {
 			static std::atomic<int> cnt(0);
 			while( cnt++ != 0 ) {
 				cnt--;
 				hpx::this_thread::yield();
 			}
-			PRINT( "sending to gpu\n");
-			ptr->to_gpu(cnt);
-		});
+//			PRINT( "sending to gpu\n");
+				ptr->to_gpu(cnt);
+			});
 	}
 	return fut;
 }

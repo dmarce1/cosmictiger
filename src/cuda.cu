@@ -36,8 +36,6 @@ int cuda_smp_count() {
 
 }
 
-#define HEAP_SIZE 5
-#define STACK_SIZE (16*1024)
 
 cudaStream_t cuda_get_stream() {
 	cudaStream_t stream;
