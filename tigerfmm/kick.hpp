@@ -37,18 +37,18 @@ struct kick_return;
 
 #ifdef __CUDACC__
 struct cuda_kick_shmem {
-	array<fixed32, SINK_BUCKET_SIZE> sink_x;
-	array<fixed32, SINK_BUCKET_SIZE> sink_y;
-	array<fixed32, SINK_BUCKET_SIZE> sink_z;
+	array<fixed32, BUCKET_SIZE> sink_x;
+	array<fixed32, BUCKET_SIZE> sink_y;
+	array<fixed32, BUCKET_SIZE> sink_z;
 	array<fixed32, KICK_PP_MAX> src_x;
 	array<fixed32, KICK_PP_MAX> src_y;
 	array<fixed32, KICK_PP_MAX> src_z;
-	array<float, SINK_BUCKET_SIZE> gx;
-	array<float, SINK_BUCKET_SIZE> gy;
-	array<float, SINK_BUCKET_SIZE> gz;
-	array<float, SINK_BUCKET_SIZE> phi;
-	array<int,SINK_BUCKET_SIZE> active;
-	array<char,SINK_BUCKET_SIZE> rungs;
+	array<float, BUCKET_SIZE> gx;
+	array<float, BUCKET_SIZE> gy;
+	array<float, BUCKET_SIZE> gz;
+	array<float, BUCKET_SIZE> phi;
+	array<int,BUCKET_SIZE> active;
+	array<char,BUCKET_SIZE> rungs;
 	cuda_vector<int> nextlist;
 	cuda_vector<int> multlist;
 	cuda_vector<int> partlist;

@@ -181,7 +181,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 					}
 					other_radius[i] = other_ptrs[i]->radius;
-					other_leaf[i] = other_ptrs[i]->source_leaf;
+					other_leaf[i] = other_ptrs[i]->leaf;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
@@ -209,10 +209,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			}
 			std::swap(dchecklist, nextlist);
 			nextlist.resize(0);
-		} while (dchecklist.size() && self_ptr->sink_leaf);
+		} while (dchecklist.size() && self_ptr->leaf);
 		kr.flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
 		kr.flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
-		if (self_ptr->sink_leaf) {
+		if (self_ptr->leaf) {
 			if( cuda_workspace != nullptr) {
 				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 			}

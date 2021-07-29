@@ -64,8 +64,7 @@ struct tree_node {
 	size_t nactive;
 	float radius;
 	bool local_root;
-	bool sink_leaf;
-	bool source_leaf;
+	bool leaf;
 	int node_count;
 	int depth;
 	inline int nparts() const {
@@ -90,8 +89,7 @@ struct tree_node {
 		arc & nactive;
 		arc & radius;
 		arc & local_root;
-		arc & sink_leaf;
-		arc & source_leaf;
+		arc & leaf;
 		arc & node_count;
 		arc & sink_part_range;
 		arc & depth;

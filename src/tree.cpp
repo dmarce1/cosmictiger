@@ -11,9 +11,9 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
-HPX_PLAIN_ACTION(tree_create);
-HPX_PLAIN_ACTION(tree_destroy);
-HPX_PLAIN_ACTION(tree_fetch_cache_line);
+HPX_PLAIN_ACTION (tree_create);
+HPX_PLAIN_ACTION (tree_destroy);
+HPX_PLAIN_ACTION (tree_fetch_cache_line);
 
 class tree_allocator {
 	int next;
@@ -141,7 +141,6 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range, pair<int, int> part_range, range<double> box, int depth, bool local_root) {
 	const double h = get_options().hsoft;
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	tree_create_return rc;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -149,7 +148,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	if (nodes.size() == 0) {
 		last_ptr = nullptr;
 		next_id = -tree_cache_line_size;
-		nodes.resize(std::max(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size, (size_t) NTREES_MIN));
+		nodes.resize(std::max(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / BUCKET_SIZE, (size_t) NTREES_MIN));
 //		PRINT("%i trees allocated\n", nodes.size());
 		for (int i = 0; i < allocator_list.size(); i++) {
 			allocator_list[i]->ready = false;
@@ -172,7 +171,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	}
 	int node_count;
 	const int index = allocator.allocate();
-	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
+	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > BUCKET_SIZE || depth < params.min_level) {
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -286,6 +285,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
 	} else {
+		nactive = particles_sort_active(part_range, params.min_rung);
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
 		array<double, NDIM> Xmax;
@@ -297,16 +297,12 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			Xmax[dim] = box.begin[dim];
 			Xmin[dim] = box.end[dim];
 		}
-		nactive = 0;
 		array<double, NDIM> dx;
 		for (int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				Xmax[dim] = std::max(Xmax[dim], x);
 				Xmin[dim] = std::min(Xmin[dim], x);
-			}
-			if (particles_rung(i) >= params.min_rung) {
-				nactive++;
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -354,8 +350,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	node.depth = depth;
 	const int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
-	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
-	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);
+	node.leaf = !global && (depth >= params.min_level) && (nparts <= BUCKET_SIZE);
 	nodes[index] = node;
 	if (index > nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");

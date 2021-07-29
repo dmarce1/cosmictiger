@@ -232,6 +232,40 @@ int particles_sort(pair<int, int> rng, double xm, int xdim) {
 
 }
 
+int particles_sort_active(pair<int, int> rng, int min_rung) {
+	int begin = rng.first;
+	int end = rng.second;
+	int lo = begin;
+	int hi = end;
+	auto& x = particles_x[XDIM];
+	auto& y = particles_x[YDIM];
+	auto& z = particles_x[ZDIM];
+	auto& ux = particles_v[XDIM];
+	auto& uy = particles_v[YDIM];
+	auto& uz = particles_v[ZDIM];
+	auto& rung = particles_r;
+	while (lo < hi) {
+		if (rung[lo] < min_rung) {
+			while (lo != hi) {
+				hi--;
+				if (rung[hi] >= min_rung) {
+					std::swap(x[hi], x[lo]);
+					std::swap(y[hi], y[lo]);
+					std::swap(z[hi], z[lo]);
+					std::swap(ux[hi], ux[lo]);
+					std::swap(uy[hi], uy[lo]);
+					std::swap(uz[hi], uz[lo]);
+					std::swap(rung[hi], rung[lo]);
+					break;
+				}
+			}
+		}
+		lo++;
+	}
+	return hi - rng.first;
+
+}
+
 vector<particle_sample> particles_sample(int cnt) {
 	const bool save_force = get_options().save_force;
 	const auto children = hpx_children();
@@ -270,8 +304,6 @@ vector<particle_sample> particles_sample(int cnt) {
 	}
 	return std::move(parts);
 }
-
-
 
 void particles_load(FILE* fp) {
 	int size;

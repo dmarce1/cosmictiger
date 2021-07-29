@@ -334,8 +334,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
 							//				PRINT("%e %e\n", R2, sqr((sink_bias * self.radius + other.radius) * thetainv + h));
 							mult = far1;                                                                  // 4
-							part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
-							leaf = !mult && !part && other.source_leaf;
+							part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
+							leaf = !mult && !part && other.leaf;
 							next = !mult && !part && !leaf;
 						}
 						int l;
@@ -383,13 +383,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					nextlist.resize(0);
 					__syncwarp();
 
-				} while (dchecks.size() && self.sink_leaf);
+				} while (dchecks.size() && self.leaf);
 //				tm = clock64();
 				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
 				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 
-				if (self.sink_leaf) {
+				if (self.leaf) {
 					int nactive = 0;
 					const int begin = self.sink_part_range.first;
 					const int end = self.sink_part_range.second;

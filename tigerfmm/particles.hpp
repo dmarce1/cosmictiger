@@ -102,6 +102,7 @@ void particles_random_init();
 void particles_destroy();
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, int offset);
 int particles_sort(pair<int, int> rng, double xm, int xdim);
+int particles_sort_active(pair<int, int> rng, int min_rung);
 void particles_cache_free();
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
