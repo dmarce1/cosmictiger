@@ -51,7 +51,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
 	auto* all_gz = data.gz;
-	auto* write_rungs = data.rungs;
+	auto* rungs = data.rungs;
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
@@ -59,11 +59,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
-	auto& active_indexes = shmem.active;
 	const auto& sink_x = shmem.sink_x;
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
-	const auto& read_rungs = shmem.rungs;
 	const float log2ft0 = log2f(params.t0);
 	const float tfactor = params.eta * sqrtf(params.a * params.h);
 	int max_rung = 0;
@@ -82,7 +80,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	array<float, NDIM> dx;
 	int snki;
 	for (int i = tid; i < nactive; i += WARP_SIZE) {
-		snki = active_indexes[i];
+		snki = i + self.sink_part_range.first;
 		assert(snki >= 0);
 		assert(snki < data.sink_size);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]);
@@ -106,7 +104,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vx = vel_x[snki];
 		vy = vel_y[snki];
 		vz = vel_z[snki];
-		rung = read_rungs[i];
+		rung = rungs[snki];
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (!params.first_call) {
 			vx = fmaf(gx[i], dt, vx);
@@ -126,7 +124,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vx = fmaf(gx[i], dt, vx);
 		vy = fmaf(gy[i], dt, vy);
 		vz = fmaf(gz[i], dt, vz);
-		write_rungs[snki] = rung;
+		rungs[snki] = rung;
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
@@ -166,14 +164,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& multlist = shmem.multlist;
 	auto& partlist = shmem.partlist;
 	auto& leaflist = shmem.leaflist;
-	auto& activei = shmem.active;
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
 	auto& phase = shmem.phase;
 	auto& Lpos = shmem.Lpos;
 	auto& self_index = shmem.self;
-	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
@@ -185,7 +181,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const int min_rung = global_params.min_rung;
 	const float sink_bias = 1.5;
 	auto* tree_nodes = data.tree_nodes;
-	auto* all_rungs = data.rungs;
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
@@ -389,37 +384,16 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 
-				if (self.sink_leaf) {
+				if (self.leaf) {
 					int nactive = 0;
-					const int begin = self.sink_part_range.first;
-					const int end = self.sink_part_range.second;
 					const int src_begin = self.part_range.first;
-					maxi = round_up(end - begin, WARP_SIZE);
-					for (int i = tid; i < maxi; i += WARP_SIZE) {
-						bool active = false;
-						char rung;
-						if (i < end - begin) {
-							assert(begin + i < data.sink_size);
-							rung = all_rungs[begin + i];
-							active = rung >= min_rung;
-						}
-						int l;
-						int total;
-						l = active;
-						compute_indices(l, total);
-						l += nactive;
-						if (active) {
-							const int srci = src_begin + i;
-							assert(begin + i < data.sink_size);
-							activei[l] = begin + i;
-							rungs[l] = rung;
-							sink_x[l] = src_x[srci];
-							sink_y[l] = src_y[srci];
-							sink_z[l] = src_z[srci];
-						}
-						nactive += total;
-						__syncwarp();
+					for (int i = tid; i < self.nactive; i += WARP_SIZE) {
+						const int srci = src_begin + i;
+						sink_x[i] = src_x[srci];
+						sink_y[i] = src_y[srci];
+						sink_z[i] = src_z[srci];
 					}
+					nactive = self.nactive;
 					__syncwarp();
 					partlist.resize(0);
 					multlist.resize(0);
@@ -581,7 +555,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	self_index.destroy();
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
-
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock) {
