@@ -389,7 +389,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 
-				if (self.leaf) {
+				if (self.sink_leaf) {
 					int nactive = 0;
 					const int begin = self.sink_part_range.first;
 					const int end = self.sink_part_range.second;
