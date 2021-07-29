@@ -211,6 +211,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		index = atomicAdd(next_item, 1);
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
+	returns.push_back(kick_return());
 	while (index < item_count) {
 		L.resize(0);
 		dchecks.resize(0);
@@ -229,7 +230,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		}
 		phase.push_back(0);
 		self_index.push_back(params[index].self);
-		returns.push_back(kick_return());
 		Lpos.push_back(params[index].Lpos);
 		__syncwarp();
 		int depth = 0;
@@ -535,7 +535,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	assert(Lpos.size() == 0);
 	assert(phase.size() == 0);
 	assert(self_index.size() == 0);
-	atomicMax(&max_depth, phase.capacity());
+	atomicMax(&max_depth, returns.capacity());
 	atomicMax(&max_nextlist, nextlist.capacity());
 	atomicMax(&max_multlist, multlist.capacity());
 	atomicMax(&max_partlist, partlist.capacity());
