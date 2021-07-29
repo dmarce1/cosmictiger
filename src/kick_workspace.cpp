@@ -22,6 +22,25 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 	}
 }
 
+static void create_sink_map(vector<pair<pair<int>>>& map, vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int self, int& index) {
+	tree_node& node = tree_nodes[self];
+	if (!node.leaf) {
+		create_sink_map(map, tree_nodes, node.children[LEFT].index, index);
+		create_sink_map(map, tree_nodes, node.children[RIGHT].index, index);
+	} else {
+		const pair<int> host = node.sink_part_range;
+		pair<int> dev;
+		dev.first = index;
+		index += node.sink_part_range.second - node.sink_part_range.first;
+		dev.second = index;
+		node.sink_part_range = dev;
+		pair<pair<int>> item;
+		item.first = dev;
+		item.second = host;
+		map.push_back(item);
+	}
+}
+
 static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, int offset) {
 	tree_nodes[index].part_range.first += offset;
 	assert(tree_nodes[index].part_range.first >= 0);
@@ -134,6 +153,15 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 			}
 		}));
 	}
+	vector<pair<pair<int>>> sink_map;
+	int nsinks = 0;
+	for (int i = 0; i < tree_ids_vector.size(); i++) {
+		if (tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
+			const int local_index = tree_map[tree_ids_vector[i]];
+			create_sink_map(sink_map, tree_nodes, local_index, nsinks);
+		}
+	}
+
 	hpx::wait_all(futs.begin(), futs.end());
 	auto stream = cuda_get_stream();
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
@@ -144,19 +172,75 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	host_x = decltype(host_x)();
 	host_y = decltype(host_y)();
 	host_z = decltype(host_z)();
+	vector<float, pinned_allocator<float>> phi(nsinks);
+	vector<float, pinned_allocator<float>> gx(nsinks);
+	vector<float, pinned_allocator<float>> gy(nsinks);
+	vector<float, pinned_allocator<float>> gz(nsinks);
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),
-			outer_lock);
+	cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), outer_lock, phi, gx, gy, gz);
 	cuda_end_stream(stream);
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
 	CUDA_CHECK(cudaFree(dev_z));
 	CUDA_CHECK(cudaFree(dev_trees));
-	for (int i = 0; i < kick_returns.size(); i++) {
-		promises[i].set_value(std::move(kick_returns[i]));
+
+	static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
+			/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+			/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
+			1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+
+	const float log2ft0 = log2f(params.t0);
+	const float tfactor = params.eta * sqrtf(params.a * params.h);
+
+	kick_return kr;
+	for (int i = 0; i < sink_map.size(); i++) {
+		const auto dev_range = sink_map[i].first;
+		const auto host_range = sink_map[i].second;
+		for (int j = dev_range.first; j < dev_range.second; j++) {
+			const int k = host_range.first - dev_range.first + j;
+			float& vx = particles_vel(XDIM, k);
+			float& vy = particles_vel(YDIM, k);
+			float& vz = particles_vel(ZDIM, k);
+			char& rung = particles_rung(k);
+			float dt = 0.5f * rung_dt[rung] * params.t0;
+			if (!params.first_call) {
+				vx = fmaf(gx[j], dt, vx);
+				vy = fmaf(gy[j], dt, vy);
+				vz = fmaf(gz[j], dt, vz);
+			}
+			float g2 = sqr(gx[j], gy[j], gz[j]);
+			dt = std::min(tfactor * sqrt(1.0f / sqrtf(g2)), params.t0);
+			rung = std::max((int) ceil(log2ft0 - log2f(dt)), std::max(rung - 1, params.min_rung));
+			if (rung < 0 || rung >= MAX_RUNG) {
+				PRINT("Rung out of range %i\n", rung);
+			}
+			assert(rung >= 0);
+			assert(rung < MAX_RUNG);
+			dt = 0.5f * rung_dt[rung] * params.t0;
+			vx = fmaf(gx[j], dt, vx);
+			vy = fmaf(gy[j], dt, vy);
+			vz = fmaf(gz[j], dt, vz);
+			kr.max_rung = std::max((int) kr.max_rung, (int) rung);
+			kr.pot += phi[j];
+			kr.fx += gx[j];
+			kr.fy += gy[j];
+			kr.fz += gz[j];
+			kr.fnorm += g2;
+			if( params.save_force) {
+				particles_gforce(XDIM,k) = gx[j];
+				particles_gforce(YDIM,k) = gy[j];
+				particles_gforce(ZDIM,k) = gz[j];
+				particles_pot(k) = phi[j];
+			}
+		}
+	}
+	promises[0].set_value(kr);
+
+	for (int i = 1; i < promises.size(); i++) {
+		promises[i].set_value(kick_return());
 	}
 	tm.stop();
-//	PRINT("To GPU Done %e\n", tm.read());
+	PRINT("To GPU Done %i\n", nsinks);
 
 }
 

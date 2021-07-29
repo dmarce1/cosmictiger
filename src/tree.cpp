@@ -342,7 +342,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	node.children = children;
 	node.local_root = local_root;
 	node.part_range = part_range;
-	node.sink_part_range = part_range;
+	node.sink_part_range.first = part_range.first;
+	node.sink_part_range.second = part_range.first + nactive;
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
