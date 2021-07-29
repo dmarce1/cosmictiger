@@ -6,7 +6,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
 
-HPX_PLAIN_ACTION(kick);
+HPX_PLAIN_ACTION (kick);
 
 #define MAX_ACTIVE_WORKSPACES 1
 
@@ -30,6 +30,7 @@ static thread_local std::stack<workspace> local_workspaces;
 static std::atomic<int> atomic_lock(0);
 static std::atomic<int> active_workspaces(0);
 static int cuda_workspace_max_parts;
+static int cuda_branch_max_parts;
 
 static workspace get_workspace() {
 	if (local_workspaces.empty()) {
@@ -88,11 +89,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	assert(self.proc == hpx_rank());
 	if (self_ptr->local_root && get_options().cuda) {
 		cuda_workspace_max_parts = size_t(cuda_total_mem()) / (sizeof(fixed32) * NDIM) * KICK_WORKSPACE_PART_SIZE / 100;
+		cuda_branch_max_parts = std::min(cuda_workspace_max_parts,particles_size()) / kick_block_count() / CUDA_KICK_OVERSUBSCRIPTION;
+		cuda_branch_max_parts = std::max(cuda_branch_max_parts, 1);
+		PRINT( "cuda_branch_max_parts = %i\n", cuda_branch_max_parts);
 	}
 	if (self_ptr->is_local() && self_ptr->nparts() <= cuda_workspace_max_parts && cuda_workspace == nullptr) {
 		cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 	}
-	if (self_ptr->nparts() <= CUDA_PARTS_MAX && self_ptr->is_local() && get_options().cuda) {
+	if (self_ptr->nparts() <= cuda_branch_max_parts && self_ptr->is_local() && get_options().cuda) {
 		return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
 		kick_return kr;

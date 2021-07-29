@@ -20,4 +20,5 @@ using shared_mutex_type = hpx::lcos::local::shared_mutex;
 
 int hpx_rank();
 int hpx_size();
+void hpx_yield();
 

@@ -12,6 +12,7 @@
 #include <tigerfmm/stack_vector.hpp>
 #include <tigerfmm/tree.hpp>
 
+#include <atomic>
 
 struct cuda_kick_data {
 	tree_node* tree_nodes;
@@ -147,8 +148,8 @@ struct kick_workspace;
 hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,  std::shared_ptr<kick_workspace> );
 #endif
 void kick_show_timings();
-vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees);
-
+vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>&);
+int kick_block_count();
 
 
 #endif /* KICK_HPP_ */

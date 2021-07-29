@@ -47,7 +47,7 @@ public:
 	}
 	hpx::future<kick_return> add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecklist, vector<tree_id> && echecklist);
 	void add_parts(int n);
-	void to_gpu();
+	void to_gpu(std::atomic<int>& outer_lock);
 };
 
 #endif

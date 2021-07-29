@@ -32,7 +32,7 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 	}
 }
 
-void kick_workspace::to_gpu() {
+void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	timer tm;
 	tm.start();
 	cuda_set_device();
@@ -141,18 +141,12 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
-	static std::atomic<int> cnt(0);
-	while( cnt++ != 0 ) {
-		cnt--;
-		hpx::this_thread::yield();
-	}
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size());
-	cnt--;
-	CUDA_CHECK(cudaFreeAsync(dev_x, stream));
-	CUDA_CHECK(cudaFreeAsync(dev_y, stream));
-	CUDA_CHECK(cudaFreeAsync(dev_z, stream));
-	CUDA_CHECK(cudaFreeAsync(dev_trees, stream));
-	cuda_end_stream(stream);
+	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),
+			outer_lock);
+	CUDA_CHECK(cudaFree(dev_x));
+	CUDA_CHECK(cudaFree(dev_y));
+	CUDA_CHECK(cudaFree(dev_z));
+	CUDA_CHECK(cudaFree(dev_trees));
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
@@ -167,8 +161,8 @@ void kick_workspace::add_parts(int n) {
 
 }
 
-hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecks,
-		vector<tree_id> && echecks) {
+hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
+		vector<tree_id> && dchecks, vector<tree_id> && echecks) {
 	kick_workitem item;
 	item.L = L;
 	item.pos = pos;
@@ -193,16 +187,15 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
-		PRINT( "%i of %i parts added\n", nparts, total_parts);
+		PRINT("%i of %i parts added\n", nparts, total_parts);
 		hpx::apply([ptr]() {
 			static std::atomic<int> cnt(0);
-			while( cnt++ > 1 ) {
+			while( cnt++ != 0 ) {
 				cnt--;
 				hpx::this_thread::yield();
 			}
 			PRINT( "sending to gpu\n");
-			ptr->to_gpu();
-			cnt--;
+			ptr->to_gpu(cnt);
 		});
 	}
 	return fut;

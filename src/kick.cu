@@ -8,6 +8,8 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/timer.hpp>
 
+#include <atomic>
+
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
@@ -519,7 +521,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 #define STACK_SIZE (16*1024)
 
 vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees) {
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock) {
 	timer tm;
 	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -533,6 +535,7 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	vector<int, pinned_allocator<int>> echecks;
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
+
 	int dcount = 0;
 	int ecount = 0;
 	for (int i = 0; i < workitems.size(); i++) {
@@ -559,7 +562,6 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
 	tm.stop();
-
 	cuda_kick_data data;
 	data.source_size = part_count;
 	data.tree_size = ntrees;
@@ -597,14 +599,28 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 	cuda_kick_params* dev_kick_params;
 	CUDA_CHECK(cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
+	int nblocks = kick_block_count();
+	nblocks = std::min(nblocks, (int) workitems.size());
+	CUDA_CHECK(cudaStreamSynchronize(stream));
+	static std::atomic<int> cnt(0);
+	while (cnt++ != 0) {
+		cnt--;
+		hpx_yield();
+	}
+	outer_lock--;
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data, dev_kick_params, kick_params.size(), current_index, ntrees);
+	CUDA_CHECK(cudaStreamSynchronize(stream));
+	PRINT("One done\n");
+	cnt--;
+	CUDA_CHECK(cudaFree(current_index));
+	CUDA_CHECK(cudaFree(dev_kick_params));
+	return returns;
+}
+
+int kick_block_count() {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-	PRINT("Occupancy = %i\n", nblocks);
 	nblocks *= cuda_smp_count();
-	nblocks = std::min(nblocks, (int) workitems.size());
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data, dev_kick_params, kick_params.size(), current_index, ntrees);
-	CUDA_CHECK(cudaFreeAsync(current_index, stream));
-	CUDA_CHECK(cudaFreeAsync(dev_kick_params, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
-	return returns;
+	return nblocks;
+
 }

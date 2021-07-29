@@ -8,6 +8,10 @@ static vector<hpx::id_type> children;
 
 HPX_PLAIN_ACTION (hpx_init);
 
+void hpx_yield() {
+	hpx::this_thread::yield();
+}
+
 void hpx_init() {
 	rank = hpx::get_locality_id();
 	auto tmp = hpx::find_all_localities();
