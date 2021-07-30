@@ -233,7 +233,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		index = atomicAdd(next_item, 1);
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
-	returns.push_back(kick_return());
 	while (index < item_count) {
 		L.resize(0);
 		dchecks.resize(0);
@@ -241,6 +240,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		phase.resize(0);
 		self_index.resize(0);
 		Lpos.resize(0);
+		returns.push_back(kick_return());
 		L.push_back(params[index].L);
 		dchecks.resize(params[index].dcount);
 		echecks.resize(params[index].ecount);
@@ -572,6 +572,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			index = atomicAdd(next_item, 1);
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
+		returns.pop_back();
 	}
 	assert(returns.size() == 1);
 	assert(L.size() == 1);
