@@ -16,13 +16,30 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
-__managed__ int max_depth = 0;
-__managed__ int max_nextlist = 0;
-__managed__ int max_partlist = 0;
-__managed__ int max_leaflist = 0;
-__managed__ int max_multlist = 0;
-__managed__ int max_echecks = 0;
-__managed__ int max_dchecks = 0;
+__device__ int max_depth = 0;
+__device__ int max_nextlist = 0;
+__device__ int max_partlist = 0;
+__device__ int max_leaflist = 0;
+__device__ int max_multlist = 0;
+__device__ int max_echecks = 0;
+__device__ int max_dchecks = 0;
+
+__global__ void kick_reset_list_sizes_kernel() {
+	if (threadIdx.x == 0) {
+		max_depth = 0;
+		max_nextlist = 0;
+		max_partlist = 0;
+		max_leaflist = 0;
+		max_multlist = 0;
+		max_echecks = 0;
+		max_dchecks = 0;
+	}
+}
+
+void kick_reset_list_sizes() {
+	kick_reset_list_sizes_kernel<<<1,1>>>();
+	CUDA_CHECK(cudaDeviceSynchronize());
+}
 
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
@@ -441,7 +458,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 									const float dy = distance(sink_y[j], other.pos[YDIM]);
 									const float dz = distance(sink_z[j], other.pos[ZDIM]);
 									const float R2 = sqr(dx, dy, dz);
-									far = R2 > sqr(other.radius * thetainv) + h;
+									far = R2 > sqr(other.radius * thetainv + h);
 									if (!far) {
 										break;
 									}
@@ -582,9 +599,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-
-vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock) {
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>& outer_lock) {
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -594,10 +610,10 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 //	node_count = 0;
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
-	vector<kick_return, pinned_allocator<kick_return>> returns(workitems.size());
-	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params(workitems.size());
-	vector<int, pinned_allocator<int>> dchecks;
-	vector<int, pinned_allocator<int>> echecks;
+	vector<kick_return> returns(workitems.size());
+	vector<cuda_kick_params> kick_params(workitems.size());
+	vector<int> dchecks;
+	vector<int> echecks;
 	int* dev_dchecks;
 	int* dev_echecks;
 	kick_return* dev_returns;
@@ -706,6 +722,7 @@ vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_param
 int kick_block_count() {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
+//	PRINT( "Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
 	nblocks *= cuda_smp_count();
 	return nblocks;
 

@@ -22,7 +22,7 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 	}
 }
 
-static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, int offset) {
+static void adjust_part_references(vector<tree_node>& tree_nodes, int index, int offset) {
 	tree_nodes[index].part_range.first += offset;
 	assert(tree_nodes[index].part_range.first >= 0);
 	tree_nodes[index].part_range.second += offset;
@@ -36,6 +36,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	timer tm;
 	tm.start();
 	cuda_set_device();
+	particles_pin();
 	//PRINT("To GPU %i items\n", workitems.size());
 	auto sort_fut = hpx::async([this]() {
 		std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
@@ -80,7 +81,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 			}
 		}
 	}
-	vector<tree_node, pinned_allocator<tree_node>> tree_nodes(next_index);
+	vector<tree_node> tree_nodes(next_index);
 	tree_node* dev_trees;
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
@@ -117,9 +118,9 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	next_index = 0;
-	vector<fixed32, pinned_allocator<fixed32>> host_x(part_count);
-	vector<fixed32, pinned_allocator<fixed32>> host_y(part_count);
-	vector<fixed32, pinned_allocator<fixed32>> host_z(part_count);
+	vector<fixed32> host_x(part_count);
+	vector<fixed32> host_y(part_count);
+	vector<fixed32> host_z(part_count);
 	futs.resize(0);
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&host_x,&host_y,&host_z,&tree_nodes,&tree_bases]() {
@@ -144,6 +145,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	host_x = decltype(host_x)();
 	host_y = decltype(host_y)();
 	host_z = decltype(host_z)();
+	tree_nodes = decltype(tree_nodes)();
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),
 			outer_lock);
@@ -155,6 +157,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
+	particles_unpin();
 	tm.stop();
 //	PRINT("To GPU Done %e\n", tm.read());
 

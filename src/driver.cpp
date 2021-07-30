@@ -119,6 +119,7 @@ void driver() {
 	timer total_time;
 	total_time.start();
 	int this_iter = 0;
+	double last_theta = -1.0;
 	while (tau < tau_max) {
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
@@ -137,6 +138,10 @@ void driver() {
 		} else {
 			theta = 0.8;
 		}
+		if (last_theta != theta) {
+			kick_reset_all_list_sizes();
+		}
+		last_theta = theta;
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		if (full_eval) {
 			pot = kr.pot * 0.5 / a;
@@ -162,8 +167,8 @@ void driver() {
 		}
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
 		if (full_eval) {
-			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin",
-					"cosmicK", "pot err", "min rung", "max rung", "nactive", "dtime", "stime", "ktime", "dtime", "total", "pps", "GFLOPS/s");
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin", "cosmicK",
+					"pot err", "min rung", "max rung", "nactive", "dtime", "stime", "ktime", "dtime", "total", "pps", "GFLOPS/s");
 		}
 		iter++;
 		total_processed += kr.nactive;

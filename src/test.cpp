@@ -15,7 +15,7 @@ constexpr bool verbose = true;
 //0.55, 0.65
 //0.4, 0.5
 
-constexpr double theta = 0.5;
+constexpr double theta = 0.8;
 
 static void domain_test() {
 	timer tm;
@@ -153,8 +153,8 @@ static void force_test() {
 	timer tm;
 
 	tm.start();
-	particles_random_init();
-//	initialize();
+//	particles_random_init();
+	initialize();
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();

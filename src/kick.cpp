@@ -7,6 +7,7 @@ constexpr bool verbose = true;
 #include <tigerfmm/safe_io.hpp>
 
 HPX_PLAIN_ACTION (kick);
+HPX_PLAIN_ACTION (kick_reset_all_list_sizes);
 
 #define MAX_ACTIVE_WORKSPACES 1
 
@@ -88,11 +89,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const tree_node* self_ptr = tree_get_node(self);
 	assert(self.proc == hpx_rank());
 	if (self_ptr->local_root && get_options().cuda) {
-		//	cuda_init();
-		//	ewald_const::init_gpu();
-		if( self_ptr->nactive < particles_size() / 1024 ) {
+		if (self_ptr->nactive < particles_size() / 1024) {
 			skip_gpu = true;
 		} else {
+			if (params.min_rung == 0) {
+				cuda_init();
+				ewald_const::init_gpu();
+			}
 			skip_gpu = false;
 		}
 		cuda_workspace_max_parts = size_t(cuda_total_mem()) / (sizeof(fixed32) * NDIM) * KICK_WORKSPACE_PART_SIZE / 100;
@@ -213,7 +216,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		kr.flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
 		kr.flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
 		if (self_ptr->sink_leaf) {
-			if( cuda_workspace != nullptr) {
+			if (cuda_workspace != nullptr) {
 				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 			}
 			partlist.resize(0);
@@ -362,6 +365,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			}
 		}
 	}
+}
 
+void kick_reset_all_list_sizes() {
+	vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<kick_reset_all_list_sizes_action>(c));
+	}
+	kick_reset_list_sizes();
+	hpx::wait_all(futs.begin(), futs.end());
 }
 

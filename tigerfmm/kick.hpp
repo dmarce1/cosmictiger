@@ -40,9 +40,11 @@ struct cuda_kick_shmem {
 	array<fixed32, SINK_BUCKET_SIZE> sink_x;
 	array<fixed32, SINK_BUCKET_SIZE> sink_y;
 	array<fixed32, SINK_BUCKET_SIZE> sink_z;
-	array<fixed32, KICK_PP_MAX> src_x;
-	array<fixed32, KICK_PP_MAX> src_y;
-	array<fixed32, KICK_PP_MAX> src_z;
+	struct {
+		array<fixed32, KICK_PP_MAX> x;
+		array<fixed32, KICK_PP_MAX> y;
+		array<fixed32, KICK_PP_MAX> z;
+	}src;
 	array<float, SINK_BUCKET_SIZE> gx;
 	array<float, SINK_BUCKET_SIZE> gy;
 	array<float, SINK_BUCKET_SIZE> gz;
@@ -71,8 +73,7 @@ struct kick_return {
 	double fy;
 	double fz;
 	double fnorm;
-	int nactive;
-	CUDA_EXPORT
+	int nactive;CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
 		flops = 0.0;
@@ -85,7 +86,7 @@ struct kick_return {
 	}
 	CUDA_EXPORT
 	kick_return& operator+=(const kick_return& other) {
-		if( other.max_rung > max_rung) {
+		if (other.max_rung > max_rung) {
 			max_rung = other.max_rung;
 		}
 		flops += other.flops;
@@ -145,11 +146,14 @@ struct kick_workitem {
 struct kick_workspace;
 
 #ifndef __CUDACC__
-hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,  std::shared_ptr<kick_workspace> );
+hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
+		std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
-vector<kick_return, pinned_allocator<kick_return>> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::atomic<int>&);
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
+		int part_count, int ntrees, std::atomic<int>&);
 int kick_block_count();
-
+void kick_reset_list_sizes();
+void kick_reset_all_list_sizes();
 
 #endif /* KICK_HPP_ */

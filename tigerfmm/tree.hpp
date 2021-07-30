@@ -15,6 +15,7 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/range.hpp>
 
+
 struct tree_id {
 	int proc;
 	int index;
@@ -53,11 +54,10 @@ struct tree_id_hash_hi {
 	}
 };
 
-
 struct tree_node {
 	multipole<float> multi;
+	array<fixed32,NDIM> pos;
 	array<tree_id, NCHILD> children;
-	array<fixed32, NDIM> pos;
 	pair<int, int> proc_range;
 	pair<int, int> part_range;
 	pair<int, int> sink_part_range;

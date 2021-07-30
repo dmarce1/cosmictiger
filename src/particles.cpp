@@ -137,6 +137,37 @@ int particles_size() {
 	return particles_r.size();
 }
 
+void particles_pin() {
+	const int flags = cudaHostRegisterDefault;
+	for( int dim = 0; dim < NDIM; dim++) {
+		CUDA_CHECK(cudaHostRegister(&particles_vel(dim,0), particles_size() * sizeof(float), flags));
+		if( get_options().save_force) {
+			CUDA_CHECK(cudaHostRegister(&particles_gforce(dim,0), particles_size() * sizeof(float), flags));
+		}
+	}
+	CUDA_CHECK(cudaHostRegister(&particles_rung(0), particles_size() * sizeof(char), flags));
+	if( get_options().save_force) {
+		CUDA_CHECK(cudaHostRegister(&particles_pot(0), particles_size() * sizeof(float), flags));
+	}
+}
+
+
+void particles_unpin() {
+	const int flags = cudaHostRegisterMapped;
+	for( int dim = 0; dim < NDIM; dim++) {
+		CUDA_CHECK(cudaHostUnregister(&particles_vel(dim,0)));
+		if( get_options().save_force) {
+			CUDA_CHECK(cudaHostUnregister(&particles_gforce(dim,0)));
+		}
+	}
+	CUDA_CHECK(cudaHostUnregister(&particles_rung(0)));
+	if( get_options().save_force) {
+		CUDA_CHECK(cudaHostUnregister(&particles_pot(0)));
+	}
+
+
+}
+
 void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
