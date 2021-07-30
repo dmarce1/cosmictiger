@@ -56,13 +56,15 @@ struct tree_id_hash_hi {
 
 struct tree_node {
 	multipole<float> multi;
-	array<fixed32,NDIM> pos;
+	array<fixed32,NDIM> Mpos;
+	array<fixed32,NDIM> Lpos;
 	array<tree_id, NCHILD> children;
 	pair<int, int> proc_range;
 	pair<int, int> part_range;
 	pair<int, int> sink_part_range;
 	size_t nactive;
-	float radius;
+	float Lradius;
+	float Mradius;
 	bool local_root;
 	bool sink_leaf;
 	bool source_leaf;
@@ -84,11 +86,13 @@ struct tree_node {
 	void serialize(A && arc, unsigned) {
 		arc & multi;
 		arc & children;
-		arc & pos;
+		arc & Mpos;
+		arc & Lpos;
 		arc & proc_range;
 		arc & part_range;
 		arc & nactive;
-		arc & radius;
+		arc & Mradius;
+		arc & Lradius;
 		arc & local_root;
 		arc & sink_leaf;
 		arc & source_leaf;
@@ -100,18 +104,22 @@ struct tree_node {
 
 struct tree_create_return {
 	multipole<float> multi;
-	array<fixed32, NDIM> pos;
+	array<fixed32, NDIM> Mpos;
+	array<fixed32, NDIM> Lpos;
 	tree_id id;
 	size_t nactive;
-	float radius;
+	float Mradius;
+	float Lradius;
 	int node_count;
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & multi;
 		a & id;
-		a & pos;
+		a & Mpos;
+		a & Lpos;
 		a & nactive;
-		a & radius;
+		a & Mradius;
+		a & Lradius;
 		a & node_count;
 	}
 };

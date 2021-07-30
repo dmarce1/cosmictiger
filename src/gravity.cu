@@ -21,7 +21,7 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 			const multipole<float>& M = other.multi;
 			array<float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.pos[dim], other.pos[dim]);
+				dx[dim] = distance(self.Lpos[dim], other.Mpos[dim]);
 			}
 			if (type == GRAVITY_CC_DIRECT) {
 				greens_function(D, dx);
@@ -101,9 +101,9 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
-				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
-				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
-				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
+				dx[XDIM] = distance(self.Lpos[XDIM], src_x[j]);
+				dx[YDIM] = distance(self.Lpos[YDIM], src_y[j]);
+				dx[ZDIM] = distance(self.Lpos[ZDIM], src_z[j]);
 				expansion<float> D;
 				greens_function(D, dx);
 				for (int k = 0; k < EXPANSION_SIZE; k++) {
@@ -154,9 +154,9 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, int nactive, b
 			for (int j = 0; j < multlist.size(); j++) {
 				array<float, NDIM> dx;
 				const auto& other = tree_nodes[multlist[j]];
-				dx[XDIM] = distance(sink_x[k], other.pos[XDIM]);
-				dx[YDIM] = distance(sink_y[k], other.pos[YDIM]);
-				dx[ZDIM] = distance(sink_z[k], other.pos[ZDIM]);
+				dx[XDIM] = distance(sink_x[k], other.Mpos[XDIM]);
+				dx[YDIM] = distance(sink_y[k], other.Mpos[YDIM]);
+				dx[ZDIM] = distance(sink_z[k], other.Mpos[ZDIM]);
 				const auto& M = other.multi;
 				expansion<float> D;
 				greens_function(D, dx);
@@ -174,9 +174,9 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, int nactive, b
 			for (int j = tid; j < multlist.size(); j += WARP_SIZE) {
 				array<float, NDIM> dx;
 				const auto& other = tree_nodes[multlist[j]];
-				dx[XDIM] = distance(sink_x[k], other.pos[XDIM]);
-				dx[YDIM] = distance(sink_y[k], other.pos[YDIM]);
-				dx[ZDIM] = distance(sink_z[k], other.pos[ZDIM]);
+				dx[XDIM] = distance(sink_x[k], other.Mpos[XDIM]);
+				dx[YDIM] = distance(sink_y[k], other.Mpos[YDIM]);
+				dx[ZDIM] = distance(sink_z[k], other.Mpos[ZDIM]);
 				const auto& M = other.multi;
 				expansion<float> D;
 				greens_function(D, dx);

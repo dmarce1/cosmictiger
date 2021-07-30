@@ -24,7 +24,7 @@ int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
 			const auto& m = tree_ptrs[i]->multi;
-			const auto& y = tree_ptrs[i]->pos;
+			const auto& y = tree_ptrs[i]->Mpos;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[k][j][l] = m[j];
 			}
@@ -46,7 +46,7 @@ int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 		}
 		array<simd_int, NDIM> X;
 		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = self_ptr->pos[dim].raw();
+			X[dim] = self_ptr->Lpos[dim].raw();
 		}
 		expansion<simd_float> L0;
 		L0 = simd_float(0.0f);
@@ -113,7 +113,7 @@ int cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
 			for (int dim = 0; dim < NDIM; dim++) {
-				X[dim] = self_ptr->pos[dim].raw();
+				X[dim] = self_ptr->Lpos[dim].raw();
 			}
 			expansion<simd_float> L0;
 			L0 = simd_float(0.0f);
@@ -164,7 +164,7 @@ int cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tr
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
 			const auto& m = tree_ptrs[i]->multi;
-			const auto& y = tree_ptrs[i]->pos;
+			const auto& y = tree_ptrs[i]->Mpos;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[k][j][l] = m[j];
 			}

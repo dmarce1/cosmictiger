@@ -121,17 +121,17 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
 		const bool do_phi = params.min_rung == 0;
 		array<float, NDIM> Ldx;
-		simd_float self_radius = self_ptr->radius;
+		simd_float self_radius = self_ptr->Lradius;
 		array<simd_int, NDIM> self_pos;
 		for (int dim = 0; dim < NDIM; dim++) {
-			self_pos[dim] = self_ptr->pos[dim].raw();
+			self_pos[dim] = self_ptr->Lpos[dim].raw();
 		}
 		array<simd_int, NDIM> other_pos;
 		array<simd_float, NDIM> dx;
 		simd_float other_radius;
 		simd_int other_leaf;
 		for (int dim = 0; dim < NDIM; dim++) {
-			Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
+			Ldx[dim] = distance(self_ptr->Lpos[dim], pos[dim]);
 		}
 		L = L2L(L, Ldx, do_phi);
 		multlist.resize(0);
@@ -143,9 +143,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			}
 			for (int i = 0; i < maxi; i++) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
+					other_pos[dim][i] = other_ptrs[i]->Mpos[dim].raw();
 				}
-				other_radius[i] = other_ptrs[i]->radius;
+				other_radius[i] = other_ptrs[i]->Mradius;
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;              // 3
@@ -178,9 +178,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				for (int i = 0; i < maxi; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
+						other_pos[dim][i] = other_ptrs[i]->Mpos[dim].raw();
 					}
-					other_radius[i] = other_ptrs[i]->radius;
+					other_radius[i] = other_ptrs[i]->Mradius;
 					other_leaf[i] = other_ptrs[i]->source_leaf;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -227,9 +227,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			for (int i = 0; i < leaflist.size(); i++) {
 				const tree_node* other_ptr = tree_get_node(leaflist[i]);
 				if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
-					other_radius = other_ptr->radius;
+					other_radius = other_ptr->Mradius;
 					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim] = other_ptr->pos[dim].raw();
+						other_pos[dim] = other_ptr->Mpos[dim].raw();
 					}
 					const auto myrange = self_ptr->part_range;
 					bool pp = false;
@@ -271,7 +271,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					const int j = i - rng.first;
 					array<float, NDIM> dx;
 					for (int dim = 0; dim < NDIM; dim++) {
-						dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
+						dx[dim] = distance(particles_pos(dim, i), self_ptr->Lpos[dim]);
 					}
 					const auto L2 = L2P(L, dx, params.min_rung == 0);
 					forces.phi[j] += L2(0, 0, 0);
@@ -328,19 +328,19 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			const bool exec_right = cr->nactive > 0 || !cr->is_local();
 			std::array<hpx::future<kick_return>, NCHILD> futs;
 			if (exec_left && exec_right) {
-				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, cuda_workspace, true);
-				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
+				futs[LEFT] = kick_fork(params, L, self_ptr->Lpos, self_ptr->children[LEFT], dchecklist, echecklist, cuda_workspace, true);
+				futs[RIGHT] = kick_fork(params, L, self_ptr->Lpos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 			} else if (exec_left) {
 				if (cuda_workspace != nullptr) {
 					cuda_workspace->add_parts(cuda_workspace, cr->nparts());
 				}
 				futs[RIGHT] = hpx::make_ready_future(kick_return());
-				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
+				futs[LEFT] = kick_fork(params, L, self_ptr->Lpos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 			} else {
 				if (cuda_workspace != nullptr) {
 					cuda_workspace->add_parts(cuda_workspace, cl->nparts());
 				}
-				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
+				futs[RIGHT] = kick_fork(params, L, self_ptr->Lpos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 				futs[LEFT] = hpx::make_ready_future(kick_return());
 			}
 			if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {

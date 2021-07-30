@@ -102,9 +102,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		snki = active_indexes[i];
 		assert(snki >= 0);
 		assert(snki < data.sink_size);
-		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]);
-		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]);
-		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]);
+		dx[XDIM] = distance(sink_x[i], self.Lpos[XDIM]);
+		dx[YDIM] = distance(sink_y[i], self.Lpos[YDIM]);
+		dx[ZDIM] = distance(sink_z[i], self.Lpos[ZDIM]);
 		L2 = L2P(L, dx, params.min_rung == 0);
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
@@ -270,7 +270,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				// shift expansion
 				array<float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
+					dx[dim] = distance(self.Lpos[dim], Lpos.back()[dim]);
 				}
 				auto this_L = L2L_cuda(L.back(), dx, global_params.min_rung == 0);
 				if (tid == 0) {
@@ -286,11 +286,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					if (i < echecks.size()) {
 						const tree_node& other = tree_nodes[echecks[i]];
 						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = distance(self.pos[dim], other.pos[dim]);
+							dx[dim] = distance(self.Lpos[dim], other.Mpos[dim]);
 						}
 						float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 						R2 = fmaxf(R2, EWALD_DIST2);
-						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv + h); // 5
+						const float r2 = sqr((sink_bias * self.Lradius + other.Mradius) * thetainv + h); // 5
 						mult = R2 > r2;
 						next = !mult;
 					}
@@ -344,12 +344,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						if (i < dchecks.size()) {
 							const tree_node& other = tree_nodes[dchecks[i]];
 							for (int dim = 0; dim < NDIM; dim++) {
-								dx[dim] = distance(self.pos[dim], other.pos[dim]);
+								dx[dim] = distance(self.Lpos[dim], other.Mpos[dim]);
 							}
 							const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-							const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
-							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
-							//				PRINT("%e %e\n", R2, sqr((sink_bias * self.radius + other.radius) * thetainv + h));
+							const bool far1 = R2 > sqr((sink_bias * self.Lradius + other.Mradius) * thetainv + h);     // 5
+							const bool far2 = R2 > sqr(sink_bias * self.Lradius * thetainv + other.Mradius + h);       // 5
+							//				PRINT("%e %e\n", R2, sqr((sink_bias * self.Lradius + other.Mradius) * thetainv + h));
 							mult = far1;                                                                  // 4
 							part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
 							leaf = !mult && !part && other.source_leaf;
@@ -454,11 +454,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							} else {
 								far = true;
 								for (int j = 0; j < nactive; j++) {
-									const float dx = distance(sink_x[j], other.pos[XDIM]);
-									const float dy = distance(sink_y[j], other.pos[YDIM]);
-									const float dz = distance(sink_z[j], other.pos[ZDIM]);
+									const float dx = distance(sink_x[j], other.Mpos[XDIM]);
+									const float dy = distance(sink_y[j], other.Mpos[YDIM]);
+									const float dz = distance(sink_z[j], other.Mpos[ZDIM]);
 									const float R2 = sqr(dx, dy, dz);
-									far = R2 > sqr(other.radius * thetainv + h);
+									far = R2 > sqr(other.Mradius * thetainv + h);
 									if (!far) {
 										break;
 									}
@@ -508,7 +508,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 					const int active_left = tree_nodes[self.children[LEFT].index].nactive;
 					const int active_right = tree_nodes[self.children[RIGHT].index].nactive;
-					Lpos.push_back(self.pos);
+					Lpos.push_back(self.Lpos);
 					returns.push_back(kick_return());
 					if (active_left && active_right) {
 						const tree_id child = self.children[LEFT];
@@ -532,7 +532,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				break;
 			case 1: {
 				L.pop_back();
-				Lpos.push_back(self.pos);
+				Lpos.push_back(self.Lpos);
 				dchecks.pop_top();
 				echecks.pop_top();
 				phase.back() += 1;
