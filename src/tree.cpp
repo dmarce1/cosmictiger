@@ -256,8 +256,9 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		}
 		radius = std::sqrt(r);
 		r = 0.0;
-		r = std::max(sqr((box.begin[XDIM] - box.end[XDIM]) * 0.5), sqr((box.begin[YDIM] - box.end[YDIM]) * 0.5));
-		r = std::max(sqr((box.begin[ZDIM] - box.end[ZDIM]) * 0.5), r);
+		for (int dim = 0; dim < NDIM; dim++) {
+			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);
+		}
 		r = std::sqrt(r);
 		if (r < radius) {
 			radius = r;
