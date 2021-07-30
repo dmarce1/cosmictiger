@@ -52,6 +52,34 @@ struct line_id_hash_hi {
 	}
 };
 
+
+void particles_unpin() {
+	CUDA_CHECK(cudaHostUnregister(&particles_vel(XDIM,0)));
+	CUDA_CHECK(cudaHostUnregister(&particles_vel(YDIM,0)));
+	CUDA_CHECK(cudaHostUnregister(&particles_vel(ZDIM,0)));
+	CUDA_CHECK(cudaHostUnregister(&particles_rung(0)));
+	if (get_options().save_force) {
+		CUDA_CHECK(cudaHostUnregister(&particles_gforce(XDIM,0)));
+		CUDA_CHECK(cudaHostUnregister(&particles_gforce(YDIM,0)));
+		CUDA_CHECK(cudaHostUnregister(&particles_gforce(ZDIM,0)));
+		CUDA_CHECK(cudaHostUnregister(&particles_pot(0)));
+	}
+}
+
+void particles_pin() {
+	CUDA_CHECK(cudaHostRegister(&particles_vel(XDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault ));
+	CUDA_CHECK(cudaHostRegister(&particles_vel(YDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
+	CUDA_CHECK(cudaHostRegister(&particles_vel(ZDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
+	CUDA_CHECK(cudaHostRegister(&particles_rung(0), sizeof(char) * particles_size(), cudaHostRegisterDefault));
+	if (get_options().save_force) {
+		CUDA_CHECK(cudaHostRegister(&particles_gforce(XDIM,0),sizeof(float) * particles_size(),cudaHostRegisterDefault));
+		CUDA_CHECK(cudaHostRegister(&particles_gforce(YDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
+		CUDA_CHECK(cudaHostRegister(&particles_gforce(ZDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
+		CUDA_CHECK(cudaHostRegister(&particles_pot(0), sizeof(float) * particles_size(), cudaHostRegisterDefault));
+	}
+
+}
+
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 

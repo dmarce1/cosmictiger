@@ -120,7 +120,20 @@ void driver() {
 	total_time.start();
 	int this_iter = 0;
 	double last_theta = -1.0;
+	timer reset;
+	reset.start();
 	while (tau < tau_max) {
+		reset.stop();
+		if (reset.read() > 60) {
+			PRINT( "Cycling device\n");
+			reset.reset();
+			reset.start();
+			cuda_cycle_devices();
+			reset.stop();
+			PRINT( "Took %e s\n", reset.read());
+			reset.reset();
+		}
+		reset.start();
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			write_checkpoint(params);

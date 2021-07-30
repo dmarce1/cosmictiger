@@ -101,6 +101,7 @@ int cuda_smp_count();
 void cuda_init();
 cudaStream_t cuda_get_stream();
 void cuda_end_stream(cudaStream_t stream);
+void cuda_cycle_devices();
 
 
 #endif /* COSMICTIGER_CUDA_HPP_ */

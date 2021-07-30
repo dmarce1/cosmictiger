@@ -17,7 +17,7 @@ set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 set(tigerfmm_source_files
     src/analytic.cu
     src/analytic.cpp
-    src/cuda.cu
+    src/cuda.cpp
     src/drift.cpp
     src/driver.cpp
     src/domain.cpp

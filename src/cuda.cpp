@@ -1,5 +1,10 @@
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/hpx.hpp>
+#include <tigerfmm/particles.hpp>
+#include <tigerfmm/ewald_indices.hpp>
+
+
+HPX_PLAIN_ACTION(cuda_cycle_devices);
 
 void cuda_set_device() {
 	int count;
@@ -78,3 +83,19 @@ void cuda_init() {
 
 
 }
+
+
+void cuda_cycle_devices() {
+	vector<hpx::future<void>> futs;
+	for( auto& c : hpx_children()) {
+		futs.push_back(hpx::async<cuda_cycle_devices_action>(c));
+	}
+
+	particles_unpin();
+	cuda_init();
+	ewald_const::init();
+	particles_pin();
+
+	hpx::wait_all(futs.begin(), futs.end());
+}
+

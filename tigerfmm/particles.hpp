@@ -97,6 +97,9 @@ inline void particles_set_particle(particle p, int index) {
 }
 
 
+
+void particles_unpin();
+void particles_pin();
 int particles_size();
 void particles_resize(int);
 void particles_random_init();
