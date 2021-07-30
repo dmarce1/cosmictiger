@@ -251,23 +251,24 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			Xc = Xl;
 			r = Rl * Rl;
 		}
+		radius = std::sqrt(r);
+		r = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);
+		}
+		r = std::sqrt(r);
+		if( r < radius ) {
+			radius = r;
+			for (int dim = 0; dim < NDIM; dim++) {
+				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
+			}
+		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
 		}
-		radius = std::sqrt(r);
-		r = 0.0;
-		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.begin[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.begin[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
-		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
-		radius = std::min((double) radius, std::sqrt(r));
-		array<simd_double,NDIM> mdx;
+		array<simd_double, NDIM> mdx;
 		multipole<simd_double> simdM;
-		for( int i = 0; i < MULTIPOLE_SIZE; i++) {
+		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			simdM[i][LEFT] = ml[i];
 			simdM[i][RIGHT] = mr[i];
 		}
