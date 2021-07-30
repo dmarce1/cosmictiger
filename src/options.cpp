@@ -45,6 +45,7 @@ bool process_options(int argc, char *argv[]) {
 	("check_num", po::value<int>(&(opts.check_num))->default_value(-1), "number of checkpoint file to read") //
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA") //
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
+	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "name of test to run") //

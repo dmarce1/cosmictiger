@@ -57,6 +57,14 @@ inline T round_up(T a, T b) {
 	}
 }
 
+template<class T>
+CUDA_EXPORT
+inline T round_down(T a, T b) {
+	return (a / b) * b;
+}
+
+
+
 CUDA_EXPORT inline float anytrue(float x) {
 	return x;
 }

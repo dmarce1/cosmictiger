@@ -133,41 +133,6 @@ static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index) {
 	return line;
 }
 
-int particles_size() {
-	return particles_r.size();
-}
-
-void particles_pin() {
-	const int flags = cudaHostRegisterDefault;
-	for( int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaHostRegister(&particles_vel(dim,0), particles_size() * sizeof(float), flags));
-		if( get_options().save_force) {
-			CUDA_CHECK(cudaHostRegister(&particles_gforce(dim,0), particles_size() * sizeof(float), flags));
-		}
-	}
-	CUDA_CHECK(cudaHostRegister(&particles_rung(0), particles_size() * sizeof(char), flags));
-	if( get_options().save_force) {
-		CUDA_CHECK(cudaHostRegister(&particles_pot(0), particles_size() * sizeof(float), flags));
-	}
-}
-
-
-void particles_unpin() {
-	const int flags = cudaHostRegisterMapped;
-	for( int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaHostUnregister(&particles_vel(dim,0)));
-		if( get_options().save_force) {
-			CUDA_CHECK(cudaHostUnregister(&particles_gforce(dim,0)));
-		}
-	}
-	CUDA_CHECK(cudaHostUnregister(&particles_rung(0)));
-	if( get_options().save_force) {
-		CUDA_CHECK(cudaHostUnregister(&particles_pot(0)));
-	}
-
-
-}
-
 void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
@@ -182,17 +147,32 @@ void particles_destroy() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+template<class T>
+void vector_pin_resize(vector<T>& v, int new_size) {
+	if (new_size > v.capacity()) {
+		if (v.size()) {
+			CUDA_CHECK(cudaHostUnregister(v.data()));
+		}
+		v.resize(new_size);
+		CUDA_CHECK(cudaHostRegister(v.data(), new_size * sizeof(T), cudaHostRegisterDefault));
+	}
+}
+
+int particles_size() {
+	return particles_r.size();
+}
+
 void particles_resize(int sz) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		particles_x[dim].resize(sz);
-		particles_v[dim].resize(sz);
+		vector_pin_resize(particles_v[dim], sz);
 	}
-	particles_r.resize(sz);
+	vector_pin_resize(particles_r, sz);
 	if (get_options().save_force) {
 		for (int dim = 0; dim < NDIM; dim++) {
-			particles_g[dim].resize(sz);
+			vector_pin_resize(particles_g[dim], sz);
 		}
-		particles_p.resize(sz);
+		vector_pin_resize(particles_p, sz);
 	}
 }
 
@@ -301,8 +281,6 @@ vector<particle_sample> particles_sample(int cnt) {
 	}
 	return std::move(parts);
 }
-
-
 
 void particles_load(FILE* fp) {
 	int size;

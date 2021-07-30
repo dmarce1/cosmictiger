@@ -12,6 +12,7 @@ struct options {
 	int part_cache_line_size;
 	int check_num;
 	int check_freq;
+	int max_iter;
 
 	double hsoft;
 	double GM;
@@ -50,6 +51,7 @@ struct options {
 		arc & part_cache_line_size;
 		arc & check_num;
 		arc & check_freq;
+		arc & max_iter;
 	}
 };
 

@@ -36,7 +36,6 @@ int cuda_smp_count() {
 
 }
 
-
 cudaStream_t cuda_get_stream() {
 	cudaStream_t stream;
 	CUDA_CHECK(cudaStreamCreate(&stream));
@@ -68,5 +67,14 @@ void cuda_init() {
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
+	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity));
+	PRINT( "L2 fetch granularity = %li\n", value);
+	value = L2FETCH;
+	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity, value));
+	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity));
+	if (value != L2FETCH) {
+		THROW_ERROR("Unable to set L2 fetch granularity to to %i\n", L2FETCH);
+	}
+
 
 }

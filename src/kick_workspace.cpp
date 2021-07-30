@@ -34,9 +34,7 @@ static void adjust_part_references(vector<tree_node>& tree_nodes, int index, int
 
 void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	timer tm;
-	tm.start();
 	cuda_set_device();
-	particles_pin();
 	//PRINT("To GPU %i items\n", workitems.size());
 	auto sort_fut = hpx::async([this]() {
 		std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
@@ -50,20 +48,14 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 //	PRINT("%i tree ids\n", tree_ids_vector.size());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	int node_count = 0;
 	int part_count = 0;
 	for (int i = 0; i < tree_ids_vector.size(); i++) {
 		const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
-		node_count += ptr->node_count;
-		part_count += ptr->nparts();
 		ids_by_depth[ptr->depth].push_back(tree_ids_vector[i]);
 	}
 	fixed32* dev_x;
 	fixed32* dev_y;
 	fixed32* dev_z;
-	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 	std::atomic<int> next_index(0);
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_bases;
@@ -75,12 +67,16 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 					const tree_node* node = tree_get_node(ids[i]);
 					int index = next_index;
 					next_index += node->node_count;
+					part_count += node->nparts();
 					add_tree_node(tree_map, ids[i], index, ids[i].proc);
 					tree_bases.insert(ids[i]);
 				}
 			}
 		}
 	}
+	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	vector<tree_node> tree_nodes(next_index);
 	tree_node* dev_trees;
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
@@ -99,9 +95,11 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 			}
 		}));
 	}
+
 	sort_fut.get();
 	hpx::wait_all(futs.begin(), futs.end());
 	futs.resize(0);
+
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([this,proc,nthreads,&tree_nodes,&tree_map]() {
 			for (int i = proc; i < workitems.size(); i+=nthreads) {
@@ -117,11 +115,14 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+	tm.start();
+
 	next_index = 0;
 	vector<fixed32> host_x(part_count);
 	vector<fixed32> host_y(part_count);
 	vector<fixed32> host_z(part_count);
 	futs.resize(0);
+
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&host_x,&host_y,&host_z,&tree_nodes,&tree_bases]() {
 			for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
@@ -136,6 +137,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+	tm.stop();
 	auto stream = cuda_get_stream();
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
@@ -147,6 +149,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	host_z = decltype(host_z)();
 	tree_nodes = decltype(tree_nodes)();
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
+//	PRINT("To GPU Done %e\n", tm.read());
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),
 			outer_lock);
 	cuda_end_stream(stream);
@@ -157,9 +160,6 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
-	particles_unpin();
-	tm.stop();
-//	PRINT("To GPU Done %e\n", tm.read());
 
 }
 

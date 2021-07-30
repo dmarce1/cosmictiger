@@ -705,7 +705,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
-
 	tm.stop();
 //	PRINT( "%i %e\n", nblocks, tm.read());
 //	PRINT("%i nodes traversed\n", node_count);

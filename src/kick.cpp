@@ -31,7 +31,7 @@ static thread_local std::stack<workspace> local_workspaces;
 static std::atomic<int> atomic_lock(0);
 static int cuda_workspace_max_parts;
 static int cuda_branch_max_parts;
-static bool skip_gpu;
+static bool cpu_only;
 
 static workspace get_workspace() {
 	if (local_workspaces.empty()) {
@@ -90,20 +90,17 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	assert(self.proc == hpx_rank());
 	if (self_ptr->local_root && get_options().cuda) {
 		if (self_ptr->nactive < particles_size() / 1024) {
-			skip_gpu = true;
+			cpu_only = true;
 		} else {
-			if (params.min_rung == 0) {
-				cuda_init();
-				ewald_const::init_gpu();
-			}
-			skip_gpu = false;
+			cpu_only = false;
+			cuda_branch_max_parts = (size_t) CUDA_KICK_PARTS_MAX * self_ptr->nactive / particles_size();
+			cuda_workspace_max_parts = size_t(cuda_total_mem()) / (sizeof(fixed32) * NDIM) * KICK_WORKSPACE_PART_SIZE / 100;
 		}
-		cuda_workspace_max_parts = size_t(cuda_total_mem()) / (sizeof(fixed32) * NDIM) * KICK_WORKSPACE_PART_SIZE / 100;
 	}
-	if (self_ptr->is_local() && self_ptr->nparts() <= cuda_workspace_max_parts && cuda_workspace == nullptr && !skip_gpu) {
+	if (self_ptr->is_local() && self_ptr->nparts() <= cuda_workspace_max_parts && cuda_workspace == nullptr && !cpu_only) {
 		cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 	}
-	if (self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local() && get_options().cuda && !skip_gpu) {
+	if (self_ptr->nactive <= cuda_branch_max_parts && self_ptr->is_local() && get_options().cuda && !cpu_only) {
 		return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
 		kick_return kr;

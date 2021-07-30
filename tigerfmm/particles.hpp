@@ -96,8 +96,7 @@ inline void particles_set_particle(particle p, int index) {
 	particles_rung(index) = p.r;
 }
 
-void particles_pin();
-void particles_unpin();
+
 int particles_size();
 void particles_resize(int);
 void particles_random_init();

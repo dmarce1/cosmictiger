@@ -188,6 +188,9 @@ void driver() {
 		drift_time = 0.0;
 		tau += dt;
 		this_iter++;
+		if (this_iter > get_options().max_iter) {
+			break;
+		}
 	}
 
 }
