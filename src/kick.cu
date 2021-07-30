@@ -722,7 +722,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 int kick_block_count() {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-//	PRINT( "Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
+	PRINT( "Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
 	nblocks *= cuda_smp_count();
 	return nblocks;
 

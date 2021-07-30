@@ -15,6 +15,10 @@
 #include <tigerfmm/particles.hpp>
 #include <tigerfmm/range.hpp>
 
+struct multipole_pos {
+	multipole<float> m;
+	array<fixed32,NDIM> pos;
+};
 
 struct tree_id {
 	int proc;
@@ -68,6 +72,10 @@ struct tree_node {
 	bool source_leaf;
 	int node_count;
 	int depth;
+	CUDA_EXPORT
+	inline const multipole_pos* get_multipole_ptr() const {
+		return (multipole_pos*) &multi;
+	}
 	inline int nparts() const {
 		return part_range.second - part_range.first;
 	}
