@@ -214,13 +214,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		array<double, NDIM> Xr;
 		array<double, NDIM> Xc;
 		array<double, NDIM> N;
-		multipole<double> Mr;
-		multipole<double> Ml;
 		float R;
-		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-			Mr[i] = mr[i];
-			Ml[i] = ml[i];
-		}
 		double norminv = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xl[dim] = xl[dim].to_double();
@@ -233,7 +227,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			N[dim] *= norminv;
 		}
 		r = 0.0;
-		if (Mr[0] != 0.0 && Ml[0.0] != 0.0) {
+		if (mr[0] != 0.0 && ml[0.0] != 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				double xmin, xmax;
 				if (N[dim] > 0.0) {
@@ -246,11 +240,11 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 				Xc[dim] = (xmax + xmin) * 0.5;
 				r += sqr((xmax - xmin) * 0.5);
 			}
-		} else if (Mr[0] == 0.0 && Ml[0.0] == 0) {
+		} else if (mr[0] == 0.0 && ml[0.0] == 0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
 			}
-		} else if (Mr[0] != 0.0) {
+		} else if (mr[0] != 0.0) {
 			Xc = Xr;
 			r = Rr * Rr;
 		} else {
@@ -271,16 +265,19 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.begin[ZDIM] - Xc[ZDIM]));
 		r = std::max(r, sqr(box.end[XDIM] - Xc[XDIM], box.end[YDIM] - Xc[YDIM], box.end[ZDIM] - Xc[ZDIM]));
 		radius = std::min((double) radius, std::sqrt(r));
-		array<double, NDIM> dxl;
-		array<double, NDIM> dxr;
-		for (int dim = 0; dim < NDIM; dim++) {
-			dxl[dim] = Xl[dim] - Xc[dim];
-			dxr[dim] = Xr[dim] - Xc[dim];
+		array<simd_double,NDIM> mdx;
+		multipole<simd_double> simdM;
+		for( int i = 0; i < MULTIPOLE_SIZE; i++) {
+			simdM[i][LEFT] = ml[i];
+			simdM[i][RIGHT] = mr[i];
 		}
-		Mr = M2M<double>(Mr, dxr);
-		Ml = M2M<double>(Ml, dxl);
+		for (int dim = 0; dim < NDIM; dim++) {
+			mdx[dim][LEFT] = Xl[dim] - Xc[dim];
+			mdx[dim][RIGHT] = Xr[dim] - Xc[dim];
+		}
+		simdM = M2M<simd_double>(simdM, mdx);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-			multi[i] = Mr[i] + Ml[i];
+			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
 		}
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;

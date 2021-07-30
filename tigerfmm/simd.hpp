@@ -99,6 +99,69 @@
 class simd_float;
 class simd_int;
 
+class simd_double {
+	__m128d v;
+public:
+	simd_double() = default;
+	inline double& operator[](int i) {
+		return v[i];
+	}
+	inline double operator[](int i) const {
+		return v[i];
+	}
+	inline simd_double(double a) {
+		v = _mm_set_pd(a, a);
+	}
+	inline simd_double operator+(const simd_double& other) const {
+		simd_double c;
+		c.v = _mm_add_pd(v, other.v);
+		return c;
+	}
+	inline simd_double operator-(const simd_double& other) const {
+		simd_double c;
+		c.v = _mm_sub_pd(v, other.v);
+		return c;
+	}
+	inline simd_double operator*(const simd_double& other) const {
+		simd_double c;
+		c.v = _mm_mul_pd(v, other.v);
+		return c;
+	}
+	inline simd_double operator/(const simd_double& other) const {
+		simd_double c;
+		c.v = _mm_div_pd(v, other.v);
+		return c;
+	}
+	inline simd_double operator-() const {
+		simd_double c(0.0);
+		c.v = _mm_sub_pd(c.v, v);
+		return c;
+	}
+	inline simd_double operator+=(const simd_double& other) {
+		(*this) = (*this) + other;
+		return *this;
+	}
+	inline simd_double operator-=(const simd_double& other) {
+		(*this) = (*this) - other;
+		return *this;
+	}
+	inline simd_double operator*=(const simd_double& other) {
+		(*this) = (*this) * other;
+		return *this;
+	}
+	inline simd_double operator/=(const simd_double& other) {
+		(*this) = (*this) / other;
+		return *this;
+	}
+	friend simd_double fmaf(const simd_double& a, const simd_double& b, const simd_double& c);
+};
+
+inline simd_double fmaf(const simd_double& a, const simd_double& b, const simd_double& c) {
+	simd_double d;
+	d.v = _mm_fmadd_pd(a.v, b.v, c.v);
+	return d;
+}
+
 class simd_float {
 private:
 	union {
