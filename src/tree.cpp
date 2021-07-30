@@ -11,9 +11,9 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
-HPX_PLAIN_ACTION(tree_create);
-HPX_PLAIN_ACTION(tree_destroy);
-HPX_PLAIN_ACTION(tree_fetch_cache_line);
+HPX_PLAIN_ACTION (tree_create);
+HPX_PLAIN_ACTION (tree_destroy);
+HPX_PLAIN_ACTION (tree_fetch_cache_line);
 
 class tree_allocator {
 	int next;
@@ -312,14 +312,36 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
-		for (int i = part_range.first; i < part_range.second; i++) {
+		const int maxi = round_down(part_range.second - part_range.first, SIMD_FLOAT_SIZE) + part_range.first;
+		array<simd_int, NDIM> Y;
+		for (int dim = 0; dim < NDIM; dim++) {
+			Y[dim] = fixed32(Xc[dim]).raw();
+		}
+		const simd_float _2float = fixed2float;
+		for (int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
+			array<simd_int, NDIM> X;
+			for (int j = i; j < i + SIMD_FLOAT_SIZE; j++) {
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim][j - i] = particles_pos(dim, j).raw();
+				}
+			}
+			array<simd_float, NDIM> dx;
+			for (int dim = 0; dim < NDIM; dim++) {
+				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
+			}
+			const auto m = P2M(dx);
+			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
+				M[j] += m[j].sum();
+			}
+		}
+		for (int i = maxi; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				dx[dim] = x - Xc[dim];
 			}
 			const auto m = P2M(dx);
-			for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-				M[i] += m[i];
+			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
+				M[j] += m[j];
 			}
 		}
 		r = 0.0;
