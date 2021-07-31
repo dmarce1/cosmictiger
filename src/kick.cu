@@ -27,6 +27,8 @@ struct cuda_lists_type {
 	fixedcapvec<int, CUDA_MAX_DEPTH> self;
 	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
 	fixedcapvec<array<fixed32,NDIM>, CUDA_MAX_DEPTH> Lpos;
+	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
+	stack_vector<int, ECHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
 };
 
 __device__ int max_depth = 0;
@@ -195,8 +197,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& Lpos = lists[bid].Lpos;
 	auto& self_index = lists[bid].self;
 	auto& returns = lists[bid].returns;
-	auto& dchecks = shmem.dchecks;
-	auto& echecks = shmem.echecks;
+	auto& dchecks = lists[bid].dchecks;
+	auto& echecks = lists[bid].echecks;
 	auto& nextlist = lists[bid].nextlist;
 	auto& multlist = lists[bid].multlist;
 	auto& partlist = lists[bid].partlist;
@@ -232,8 +234,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	returns.initialize();
 	self_index.initialize();
 	L.resize(max_depth);
-	dchecks.resize(max_dchecks);
-	echecks.resize(max_echecks);
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -585,10 +585,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	assert(Lpos.size() == 0);
 	assert(phase.size() == 0);
 	assert(self_index.size() == 0);
-	atomicMax(&max_dchecks, dchecks.data_capacity());
-	atomicMax(&max_echecks, echecks.data_capacity());
-	dchecks.destroy();
-	echecks.destroy();
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
@@ -705,6 +701,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaFree(dev_dchecks));
 	CUDA_CHECK(cudaFree(dev_echecks));
 	CUDA_CHECK(cudaFree(dev_returns));
+	CUDA_CHECK(cudaFree(dev_lists));
 	CUDA_CHECK(cudaFree(dev_kick_params));
 	CUDA_CHECK(cudaFree(current_index));
 	cnt--;
@@ -716,7 +713,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 int kick_block_count() {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-	PRINT("Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
+//	PRINT("Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
 	nblocks *= cuda_smp_count();
 	return nblocks;
 

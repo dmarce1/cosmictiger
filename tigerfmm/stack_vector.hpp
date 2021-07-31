@@ -1,13 +1,13 @@
 #pragma once
 
-#include <tigerfmm/cuda_vector.hpp>
+#include <tigerfmm/fixedcapvec.hpp>
 
 #ifdef __CUDACC__
 
-template<class T>
+template<class T, int SIZE, int DEPTH>
 class stack_vector {
-	cuda_vector<T> data;
-	cuda_vector<int> bounds;
+	fixedcapvec<T,SIZE> data;
+	fixedcapvec<int,DEPTH> bounds;
 	__device__ inline int begin() const {
 		assert(bounds.size() >= 2);
 		return bounds[bounds.size() - 2];
@@ -17,19 +17,6 @@ class stack_vector {
 		return bounds.back();
 	}
 public:
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & data;
-		arc & bounds;
-	}
-	__device__ inline int data_capacity() const {
-		return data.capacity();
-	}
-	__device__ inline void swap(stack_vector<T>& other) {
-		data.swap(other.data);
-		bounds.swap(other.bounds);
-
-	}
 	__device__ inline int depth() const {
 		return bounds.size() - 2;
 	}
@@ -39,7 +26,6 @@ public:
 	}
 	__device__ inline void initialize() {
 		const int& tid = threadIdx.x;
-		bounds.reserve(CUDA_MAX_DEPTH + 1);
 		bounds.resize(2);
 		if (tid == 0) {
 			bounds[0] = 0;
@@ -62,7 +48,7 @@ public:
 		if (tid == 0) {
 			bounds.back()++;}
 
-		}
+	}
 	__device__ inline int size() const {
 		assert(bounds.size() >= 2);
 		return end() - begin();
@@ -75,11 +61,11 @@ public:
 			bounds.back() = data.size();
 		}
 	}
-	__device__  inline T operator[](int i) const {
+	__device__ inline T operator[](int i) const {
 		assert(i < size());
 		return data[begin() + i];
 	}
-	__device__  inline T& operator[](int i) {
+	__device__ inline T& operator[](int i) {
 		assert(i < size());
 		return data[begin() + i];
 	}

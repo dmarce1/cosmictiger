@@ -124,7 +124,7 @@ void driver() {
 	reset.start();
 	while (tau < tau_max) {
 		reset.stop();
-		if (reset.read() > 60) {
+		if (false && reset.read() > 60) {
 			PRINT( "Cycling device\n");
 			reset.reset();
 			reset.start();

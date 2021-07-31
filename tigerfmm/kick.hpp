@@ -54,8 +54,6 @@ struct cuda_kick_shmem {
 	array<float, SINK_BUCKET_SIZE> phi;
 	array<int,SINK_BUCKET_SIZE> active;
 	array<char,SINK_BUCKET_SIZE> rungs;
-	stack_vector<int> dchecks;
-	stack_vector<int> echecks;
 };
 #endif
 
