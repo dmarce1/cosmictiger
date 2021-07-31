@@ -16,7 +16,6 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
-
 struct cuda_lists_type {
 	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
 	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
@@ -26,7 +25,7 @@ struct cuda_lists_type {
 	fixedcapvec<int, CUDA_MAX_DEPTH> phase;
 	fixedcapvec<int, CUDA_MAX_DEPTH> self;
 	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
-	fixedcapvec<array<fixed32,NDIM>, CUDA_MAX_DEPTH> Lpos;
+	fixedcapvec<array<fixed32, NDIM>, CUDA_MAX_DEPTH> Lpos;
 	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
 	stack_vector<int, ECHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
 };
@@ -78,7 +77,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-
+	int flops = 0;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
@@ -117,9 +116,10 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		snki = active_indexes[i];
 		assert(snki >= 0);
 		assert(snki < data.sink_size);
-		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]);
-		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]);
-		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]);
+		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
+		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
+		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
+		flops += 537 + (params.min_rung == 0) * 178;
 		L2 = L2P(L, dx, params.min_rung == 0);
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
@@ -167,6 +167,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		fy_tot += gy[i];
 		fz_tot += gz[i];
 		fnorm_tot += g2;
+		flops += 51;
 	}
 	shared_reduce_add(phi_tot);
 	shared_reduce_add(fx_tot);
@@ -174,6 +175,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	shared_reduce_add(fz_tot);
 	shared_reduce_add(fnorm_tot);
 	shared_reduce_max(max_rung);
+	shared_reduce_add(flops);
 	if (tid == 0) {
 		return_.max_rung = max(return_.max_rung, max_rung);
 		return_.pot += phi_tot;
@@ -183,10 +185,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		return_.fnorm += fnorm_tot;
 	}
 //	atomicAdd(&kick_time, (double) clock64() - tm);
-	return max_rung;
+	return flops;
 }
 
-__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
+__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count,
+		int* next_item, int ntrees) {
 //	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -269,7 +272,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			assert(self_index.size() == depth + 1);
 			assert(phase.size() == depth + 1);
 			const auto& self = tree_nodes[self_index.back()];
-
+			int node_flops = 0;
 			switch (phase.back()) {
 
 			case 0: {
@@ -278,7 +281,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
+				node_flops += 3;
 				auto this_L = L2L_cuda(L.back(), dx, global_params.min_rung == 0);
+				node_flops += 2650 + (global_params.min_level == 0) * 332;
 				if (tid == 0) {
 					L.back() = this_L;
 				}
@@ -286,19 +291,21 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				nextlist.resize(0);
 				multlist.resize(0);
 				maxi = round_up(echecks.size(), WARP_SIZE);
+				int ninteracts = 0;
 				for (int i = tid; i < maxi; i += WARP_SIZE) {
 					bool mult = false;
 					bool next = false;
 					if (i < echecks.size()) {
 						const tree_node& other = tree_nodes[echecks[i]];
 						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = distance(self.pos[dim], other.pos[dim]);
+							dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 						}
-						float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-						R2 = fmaxf(R2, EWALD_DIST2);
+						float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);         // 5
+						R2 = fmaxf(R2, EWALD_DIST2);                          // 1
 						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv + h); // 5
-						mult = R2 > r2;
+						mult = R2 > r2;                                       // 1
 						next = !mult;
+						ninteracts++;
 					}
 					int l;
 					int total;
@@ -331,7 +338,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				__syncwarp();
 
 //				auto tm = clock64();
-				cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_EWALD, min_rung == 0);
+				shared_reduce_add(ninteracts);
+				node_flops += ninteracts * 15;
+				node_flops += cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_EWALD, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 
 				// Direct walk
@@ -341,8 +350,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				multlist.resize(0);
 				do {
 					maxi = round_up(dchecks.size(), WARP_SIZE);
+					ninteracts = 0;
 					for (int i = tid; i < maxi; i += WARP_SIZE) {
-
 						bool mult = false;
 						bool next = false;
 						bool leaf = false;
@@ -350,16 +359,16 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						if (i < dchecks.size()) {
 							const tree_node& other = tree_nodes[dchecks[i]];
 							for (int dim = 0; dim < NDIM; dim++) {
-								dx[dim] = distance(self.pos[dim], other.pos[dim]);
+								dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 							}
-							const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+							const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
 							const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
 							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
-							//				PRINT("%e %e\n", R2, sqr((sink_bias * self.radius + other.radius) * thetainv + h));
-							mult = far1;                                                                  // 4
+							mult = far1;
 							part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
 							leaf = !mult && !part && other.source_leaf;
 							next = !mult && !part && !leaf;
+							ninteracts++;
 						}
 						int l;
 						int total;
@@ -393,6 +402,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							leaflist[l + start] = dchecks[i];
 						}
 					}
+					shared_reduce_add(ninteracts);
+					node_flops += 18 * ninteracts;
 					__syncwarp();
 					dchecks.resize(NCHILD * nextlist.size());
 					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
@@ -408,10 +419,10 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 				} while (dchecks.size() && self.sink_leaf);
 //				tm = clock64();
-				cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_DIRECT, min_rung == 0);
-				cuda_gravity_cp(data, L.back(), self, partlist, min_rung == 0);
+				node_flops += cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_DIRECT, min_rung == 0);
+				node_flops += cuda_gravity_cp(data, L.back(), self, partlist, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
-
+				int pflops = 0;
 				if (self.sink_leaf) {
 					int nactive = 0;
 					const int begin = self.sink_part_range.first;
@@ -460,14 +471,15 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							} else {
 								far = true;
 								for (int j = 0; j < nactive; j++) {
-									const float dx = distance(sink_x[j], other.pos[XDIM]);
-									const float dy = distance(sink_y[j], other.pos[YDIM]);
-									const float dz = distance(sink_z[j], other.pos[ZDIM]);
-									const float R2 = sqr(dx, dy, dz);
-									far = R2 > sqr(other.radius * thetainv + h);
+									const float dx = distance(sink_x[j], other.pos[XDIM]);  // 1
+									const float dy = distance(sink_y[j], other.pos[YDIM]);  // 1
+									const float dz = distance(sink_z[j], other.pos[ZDIM]);  // 1
+									const float R2 = sqr(dx, dy, dz);                       // 5
+									far = R2 > sqr(other.radius * thetainv + h);            // 3
 									if (!far) {
 										break;
 									}
+									pflops += 11;
 								}
 							}
 							pp = !far;
@@ -489,22 +501,28 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							multlist[l] = leaflist[i];
 						}
 					}
+					shared_reduce_add(pflops);
 					__syncwarp();
 					for (int i = tid; i < nactive; i += WARP_SIZE) {
 						phi[i] = -SELF_PHI * hinv;
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
+					pflops += nactive * 2;
 					__syncwarp();
 //					tm = clock64();
-					cuda_gravity_pc(data, self, multlist, nactive, min_rung == 0);
-					cuda_gravity_pp(data, self, partlist, nactive, h, min_rung == 0);
+					pflops += cuda_gravity_pc(data, self, multlist, nactive, min_rung == 0);
+					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, min_rung == 0);
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					do_kick(returns.back(), global_params, data, L.back(), nactive, self);
+					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
 					depth--;
+					if (tid == 0) {
+						returns.back().part_flops += pflops;
+						returns.back().node_flops += node_flops;
+					}
 				} else {
 					const int start = dchecks.size();
 					dchecks.resize(start + leaflist.size());

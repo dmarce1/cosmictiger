@@ -2,7 +2,8 @@
 #include <tigerfmm/gravity.hpp>
 
 __device__
-int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist, gravity_cc_type type, bool do_phi) {
+int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist,
+		gravity_cc_type type, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
 	const auto& tree_nodes = data.tree_nodes;
@@ -19,12 +20,13 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
+			flops += 3;
 			if (type == GRAVITY_CC_DIRECT) {
-				greens_function(D, dx);
+				flops += greens_function(D, dx);
 			} else {
-				ewald_greens_function(D, dx);
+				flops += ewald_greens_function(D, dx);
 			}
-			M2L(L, M, D, do_phi);
+			flops += M2L(L, M, D, do_phi);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			shared_reduce_add(L[i]);
@@ -34,6 +36,7 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 		}
 		__syncwarp();
 	}
+	shared_reduce_add(flops);
 	return flops;
 }
 
@@ -99,11 +102,13 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
+				flops += 3;
 				expansion<float> D;
-				greens_function(D, dx);
+				flops += greens_function(D, dx);
 				for (int k = 0; k < EXPANSION_SIZE; k++) {
 					L[k] += D[k];
 				}
+				flops += EXPANSION_SIZE;
 			}
 		}
 		for (int k = 0; k < EXPANSION_SIZE; k++) {
@@ -115,6 +120,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 
 		__syncwarp();
 	}
+	shared_reduce_add(flops);
 	return flops;
 
 }
@@ -163,9 +169,10 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
 					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
+					flops += 3;
 					expansion<float> D;
-					greens_function(D, dx);
-					M2L(L, M, D, do_phi);
+					flops += greens_function(D, dx);
+					flops += M2L(L, M, D, do_phi);
 				}
 				gx[k] -= L(1, 0, 0);
 				gy[k] -= L(0, 1, 0);
@@ -183,9 +190,10 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
 					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
+					flops += 3;
 					expansion<float> D;
-					greens_function(D, dx);
-					M2L(L, M, D, do_phi);
+					flops += greens_function(D, dx);
+					flops += M2L(L, M, D, do_phi);
 				}
 				shared_reduce_add(L(0, 0, 0));
 				shared_reduce_add(L(1, 0, 0));
@@ -200,6 +208,7 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 			}
 		}
 	}
+	shared_reduce_add(flops);
 	__syncwarp();
 	return flops;
 
@@ -207,7 +216,6 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 
 __device__
 int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive, float h, bool do_phi) {
-	int flops = 0;
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
@@ -230,6 +238,8 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	const float hinv = 1.f / h;
 	const float h3inv = hinv * hinv * hinv;
 	int part_index;
+	int nnear = 0;
+	int nfar = 0;
 	if (partlist.size()) {
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
@@ -289,30 +299,32 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 				fz = 0.f;
 				pot = 0.f;
 				for (int j = 0; j < part_index; j++) {
-					dx0 = distance(sink_x[k], src_x[j]);
-					dx1 = distance(sink_y[k], src_y[j]);
-					dx2 = distance(sink_z[k], src_z[j]);
-					const auto r2 = sqr(dx0, dx1, dx2);
-					if (r2 >= h2) {
-						r1inv = rsqrt(r2);
-						r3inv = r1inv * r1inv * r1inv;
+					dx0 = distance(sink_x[k], src_x[j]); // 1
+					dx1 = distance(sink_y[k], src_y[j]); // 1
+					dx2 = distance(sink_z[k], src_z[j]); // 1
+					const auto r2 = sqr(dx0, dx1, dx2);  // 5
+					if (r2 >= h2) {                      // 1
+						r1inv = rsqrt(r2);                // 4
+						r3inv = r1inv * r1inv * r1inv;    // 2
+						nnear++;
 					} else {
-						const float r1oh1 = sqrtf(r2) * hinv;
-						const float r2oh2 = r1oh1 * r1oh1;
+						const float r1oh1 = sqrtf(r2) * hinv; // 5
+						const float r2oh2 = r1oh1 * r1oh1;    // 1
 						r3inv = +15.0f / 8.0f;
 						r1inv = -5.0f / 16.0f;
-						r3inv = fmaf(r3inv, r2oh2, -21.0f / 4.0f);
-						r1inv = fmaf(r1inv, r2oh2, 21.0f / 16.0f);
-						r3inv = fmaf(r3inv, r2oh2, +35.0f / 8.0f);
-						r1inv = fmaf(r1inv, r2oh2, -35.0f / 16.0f);
-						r3inv *= h3inv;
-						r1inv = fmaf(r1inv, r2oh2, 35.0f / 16.0f);
-						r1inv *= hinv;
+						r3inv = fmaf(r3inv, r2oh2, -21.0f / 4.0f);  // 2
+						r1inv = fmaf(r1inv, r2oh2, 21.0f / 16.0f);  // 2
+						r3inv = fmaf(r3inv, r2oh2, +35.0f / 8.0f);  // 2
+						r1inv = fmaf(r1inv, r2oh2, -35.0f / 16.0f); // 2
+						r3inv *= h3inv;                             // 1
+						r1inv = fmaf(r1inv, r2oh2, 35.0f / 16.0f);  // 2
+						r1inv *= hinv;                              // 1
+						nfar++;
 					}
-					fx = fmaf(dx0, r3inv, fx);
-					fy = fmaf(dx1, r3inv, fy);
-					fz = fmaf(dx2, r3inv, fz);
-					pot -= r1inv;
+					fx = fmaf(dx0, r3inv, fx);                     // 2
+					fy = fmaf(dx1, r3inv, fy);                     // 2
+					fz = fmaf(dx2, r3inv, fz);                     // 2
+					pot -= r1inv;                                  // 1
 				}
 				gx[k] -= fx;
 				gy[k] -= fy;
@@ -333,6 +345,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					if (r2 >= h2) {
 						r1inv = rsqrt(r2);
 						r3inv = r1inv * r1inv * r1inv;
+						nnear++;
 					} else {
 						const float r1oh1 = sqrtf(r2) * hinv;
 						const float r2oh2 = r1oh1 * r1oh1;
@@ -345,6 +358,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						r3inv *= h3inv;
 						r1inv = fmaf(r1inv, r2oh2, 35.0f / 16.0f);
 						r1inv *= hinv;
+						nfar++;
 					}
 					fx = fmaf(dx0, r3inv, fx);
 					fy = fmaf(dx1, r3inv, fy);
@@ -364,7 +378,9 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 			}
 		}
 	}
+	shared_reduce_add(nnear);
+	shared_reduce_add(nfar);
 	__syncwarp();
-	return flops;
+	return nfar * 22 + 37 * nnear;
 
 }

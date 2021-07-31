@@ -59,29 +59,34 @@ struct cuda_kick_shmem {
 
 struct kick_return {
 	char max_rung;
-	double flops;
+	double part_flops;
+	double node_flops;
 	double pot;
 	double fx;
 	double fy;
 	double fz;
 	double fnorm;
+	double load;
 	int nactive;CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
-		flops = 0.0;
+		part_flops = 0.0;
+		node_flops = 0.0;
 		pot = 0.0;
 		fx = 0.0;
 		fy = 0.0;
 		fz = 0.0;
 		fnorm = 0.0;
 		nactive = 0;
+		load = 0.0;
 	}
 	CUDA_EXPORT
 	kick_return& operator+=(const kick_return& other) {
 		if (other.max_rung > max_rung) {
 			max_rung = other.max_rung;
 		}
-		flops += other.flops;
+		part_flops += other.part_flops;
+		node_flops += other.node_flops;
 		pot += other.pot;
 		fx += other.fx;
 		fy += other.fy;
@@ -92,8 +97,10 @@ struct kick_return {
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & load;
 		arc & max_rung;
-		arc & flops;
+		arc & part_flops;
+		arc & node_flops;
 		arc & pot;
 		arc & fx;
 		arc & fy;
@@ -104,6 +111,7 @@ struct kick_return {
 };
 
 struct kick_params {
+	int min_level;
 	int min_rung;
 	float a;
 	float t0;
@@ -113,9 +121,11 @@ struct kick_params {
 	float GM;
 	bool save_force;
 	bool first_call;
+	bool gpu;
 	template<class A>
 	void serialize(A && arc, unsigned) {
 		arc & min_rung;
+		arc & gpu;
 		arc & a;
 		arc & t0;
 		arc & theta;

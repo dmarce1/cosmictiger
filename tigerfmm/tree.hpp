@@ -111,10 +111,12 @@ struct tree_create_return {
 	array<fixed32, NDIM> pos;
 	tree_id id;
 	size_t nactive;
+	size_t active_nodes;
 	float radius;
 	int node_count;
 	template<class A>
 	void serialize(A&& a, unsigned) {
+		a & active_nodes;
 		a & multi;
 		a & id;
 		a & pos;

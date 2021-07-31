@@ -113,6 +113,8 @@ static void kick_test() {
 
 	tm.start();
 	kick_params kparams;
+	kparams.gpu = true;
+	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
 	kparams.GM = get_options().GM;
 	kparams.h = get_options().hsoft;
@@ -138,7 +140,6 @@ static void kick_test() {
 	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
-	PRINT("GFLOPS/s = %e\n", kr.flops / 1024 / 1024 / 1024 / tm.read());
 	tm.reset();
 
 	tm.start();
@@ -180,6 +181,8 @@ static void force_test() {
 
 	tm.start();
 	kick_params kparams;
+	kparams.gpu = true;
+	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
 	kparams.GM = get_options().GM;
 	kparams.h = get_options().hsoft;

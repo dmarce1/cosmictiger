@@ -11,9 +11,9 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
-HPX_PLAIN_ACTION (tree_create);
-HPX_PLAIN_ACTION (tree_destroy);
-HPX_PLAIN_ACTION (tree_fetch_cache_line);
+HPX_PLAIN_ACTION(tree_create);
+HPX_PLAIN_ACTION(tree_destroy);
+HPX_PLAIN_ACTION(tree_fetch_cache_line);
 
 class tree_allocator {
 	int next;
@@ -171,6 +171,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		allocator.ready = true;
 	}
 	int node_count;
+	int active_nodes = 0;
 	const int index = allocator.allocate();
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
@@ -257,7 +258,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);
 		}
 		r = std::sqrt(r);
-		if( r < radius ) {
+		if (r < radius) {
 			radius = r;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
@@ -283,6 +284,9 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
+		if (rcl.nactive || rcr.nactive) {
+			active_nodes += 1 + rcl.active_nodes + rcr.active_nodes;
+		}
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
@@ -359,6 +363,9 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			x[dim] = Xc[dim];
 		}
 		node_count = 1;
+		if (nactive) {
+			active_nodes++;
+		}
 	}
 	tree_node node;
 	node.node_count = node_count;
@@ -380,6 +387,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	if (index > nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
+	rc.active_nodes = active_nodes;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
 	rc.multi = node.multi;
