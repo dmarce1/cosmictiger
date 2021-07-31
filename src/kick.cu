@@ -22,6 +22,11 @@ struct cuda_lists_type {
 	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
 	fixedcapvec<int, PARTLIST_SIZE> partlist;
 	fixedcapvec<int, MULTLIST_SIZE> multlist;
+	fixedcapvec<expansion<float>, CUDA_MAX_DEPTH> L;
+	fixedcapvec<int, CUDA_MAX_DEPTH> phase;
+	fixedcapvec<int, CUDA_MAX_DEPTH> self;
+	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
+	fixedcapvec<array<fixed32,NDIM>, CUDA_MAX_DEPTH> Lpos;
 };
 
 __device__ int max_depth = 0;
@@ -185,7 +190,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	auto& L = shmem.L;
+	auto& L = lists[bid].L;
+	auto& phase = lists[bid].phase;
+	auto& Lpos = lists[bid].Lpos;
+	auto& self_index = lists[bid].self;
+	auto& returns = lists[bid].returns;
 	auto& dchecks = shmem.dchecks;
 	auto& echecks = shmem.echecks;
 	auto& nextlist = lists[bid].nextlist;
@@ -196,15 +205,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
-	auto& phase = shmem.phase;
-	auto& Lpos = shmem.Lpos;
-	auto& self_index = shmem.self;
 	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
-	auto& returns = shmem.returns;
 	const float& h = global_params.h;
 	const float hinv = 1.f / h;
 	const float thetainv = 1.f / global_params.theta;
@@ -229,10 +234,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	L.resize(max_depth);
 	dchecks.resize(max_dchecks);
 	echecks.resize(max_echecks);
-	phase.reserve(max_depth);
-	Lpos.reserve(max_depth);
-	returns.reserve(max_depth);
-	self_index.reserve(max_depth);
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -584,16 +585,10 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	assert(Lpos.size() == 0);
 	assert(phase.size() == 0);
 	assert(self_index.size() == 0);
-	atomicMax(&max_depth, returns.capacity());
 	atomicMax(&max_dchecks, dchecks.data_capacity());
 	atomicMax(&max_echecks, echecks.data_capacity());
-	L.initialize();
 	dchecks.destroy();
 	echecks.destroy();
-	phase.destroy();
-	returns.destroy();
-	Lpos.destroy();
-	self_index.destroy();
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 

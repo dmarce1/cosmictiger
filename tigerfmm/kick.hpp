@@ -54,17 +54,8 @@ struct cuda_kick_shmem {
 	array<float, SINK_BUCKET_SIZE> phi;
 	array<int,SINK_BUCKET_SIZE> active;
 	array<char,SINK_BUCKET_SIZE> rungs;
-	cuda_vector<int> nextlist;
-	cuda_vector<int> multlist;
-	cuda_vector<int> partlist;
-	cuda_vector<int> leaflist;
-	cuda_vector<expansion<float>> L;
 	stack_vector<int> dchecks;
 	stack_vector<int> echecks;
-	cuda_vector<int> phase;
-	cuda_vector<int> self;
-	cuda_vector<kick_return> returns;
-	cuda_vector<array<fixed32, NDIM>> Lpos;
 };
 #endif
 
