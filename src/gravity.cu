@@ -2,14 +2,10 @@
 #include <tigerfmm/gravity.hpp>
 
 __device__
-int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, gravity_cc_type type, bool do_phi) {
+int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist, gravity_cc_type type, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
-	__shared__
-	extern int shmem_ptr[];
-	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
 	const auto& tree_nodes = data.tree_nodes;
-	const auto& multlist = shmem.multlist;
 	if (multlist.size()) {
 		expansion<float> L;
 		expansion<float> D;
@@ -42,12 +38,11 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, bool do_phi) {
+int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, bool do_phi) {
 	int flops = 0;
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	const auto& partlist = shmem.partlist;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
@@ -125,13 +120,12 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, int nactive, bool do_phi) {
+int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>& multlist, int nactive, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	const auto& multlist = shmem.multlist;
 	auto &gx = shmem.gx;
 	auto &gy = shmem.gy;
 	auto &gz = shmem.gz;
@@ -212,13 +206,12 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, int nactive, b
 }
 
 __device__
-int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, int nactive, float h, bool do_phi) {
+int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive, float h, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	const auto& partlist = shmem.partlist;
 	auto &gx = shmem.gx;
 	auto &gy = shmem.gy;
 	auto &gz = shmem.gz;

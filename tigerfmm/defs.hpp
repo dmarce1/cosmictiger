@@ -49,6 +49,12 @@
 #define MIN_SORT_THREAD_PARTS (64*1024)
 #define L2FETCH 32
 
+#define NEXTLIST_SIZE 512
+#define LEAFLIST_SIZE 512
+#define PARTLIST_SIZE 256
+#define MULTLIST_SIZE 1024
+
+
 #define NTREES_MIN (2*1024*1024)
 #define ORDER 7
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)

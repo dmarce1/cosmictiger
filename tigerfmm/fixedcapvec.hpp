@@ -13,65 +13,93 @@
 #include <tigerfmm/cuda.hpp>
 #include <tigerfmm/safe_io.hpp>
 
+#ifdef __CUDACC__
 template<class T, int N>
 class fixedcapvec {
-	array<T, N> data;
+	array<T, N> data_;
 	int sz;
 public:
-	CUDA_EXPORT constexpr fixedcapvec() : sz(0){
+	__device__
+	constexpr fixedcapvec() {
+		const int tid = threadIdx.x;
+		if (tid == 0) {
+			sz = 0;
+		}
+		__syncwarp();
+	}
+	__device__
+	void initialize() {
+		const int tid = threadIdx.x;
+		if (tid == 0) {
+			sz = 0;
+		}
+		__syncwarp();
 	}
 	fixedcapvec(const fixedcapvec&) = default;
 	fixedcapvec& operator=(const fixedcapvec&) = default;
-	CUDA_EXPORT
+	__device__
 	inline int size() const {
 		return sz;
 	}
-	CUDA_EXPORT
+	__device__
 	inline void resize(int new_sz) {
-		sz = new_sz;
-		if( sz >= N ) {
-			PRINT( "fixedcapvec exceeded size of %i in %s on line %i\n", N, __FILE__, __LINE__);
+		const int tid = threadIdx.x;
+		if (tid == 0) {
+			sz = new_sz;
+			if (sz >= N) {
+				PRINT("fixedcapvec exceeded size of %i in %s on line %i\n", N, __FILE__, __LINE__);
 #ifdef __CUDA_ARCH__
-			__trap();
+				__trap();
 #else
-			abort();
+				abort();
 #endif
+			}
 		}
+		__syncwarp();
 	}
-	CUDA_EXPORT
+	__device__
 	inline void push_back(const T& item) {
-		data[sz] = item;
-		sz++;
-		if( sz >= N ) {
-			PRINT( "fixedcapvec exceeded size of %i in %s on line %i\n", N, __FILE__, __LINE__);
+		const int tid = threadIdx.x;
+		if (tid == 0) {
+			data_[sz] = item;
+			sz++;
+			if (sz >= N) {
+				PRINT("fixedcapvec exceeded size of %i in %s on line %i\n", N, __FILE__, __LINE__);
 #ifdef __CUDA_ARCH__
-			__trap();
+				__trap();
 #else
-			abort();
+				abort();
 #endif
+			}
 		}
+		__syncwarp();
 	}
-	CUDA_EXPORT
+	__device__
 	inline void pop_back() {
-		sz--;
+		const int tid = threadIdx.x;
+		if( tid == 0 ) {
+			sz--;
+		}
+		__syncwarp();
 	}
-	CUDA_EXPORT
+	__device__
 	inline T& back() {
-		return data[sz - 1];
+		return data_[sz - 1];
 	}
-	CUDA_EXPORT
+	__device__
 	inline T back() const {
-		return data[sz - 1];
+		return data_[sz - 1];
 	}
-	CUDA_EXPORT
+	__device__
 	T* begin() {
-		return data;
+		return data_;
 	}
-	CUDA_EXPORT
+	__device__
 	T* end() {
-		return data + sz;
+		return data_ + sz;
 	}
-	CUDA_EXPORT T& operator[](int i) {
+	__device__
+	T& operator[](int i) {
 #ifdef CHECK_BOUNDS
 		if( i < 0 || i >= sz) {
 			PRINT( "index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, sz);
@@ -82,9 +110,10 @@ public:
 #endif
 		}
 #endif
-		return data[i];
+		return data_[i];
 	}
-	CUDA_EXPORT T operator[](int i) const {
+	__device__
+	T operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if( i < 0 || i >= sz) {
 			PRINT( "index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, sz);
@@ -95,9 +124,13 @@ public:
 #endif
 		}
 #endif
-		return data[i];
+		return data_[i];
+	}
+	__device__
+	T* data() {
+		return data_;
 	}
 
 };
-
+#endif
 #endif /* FIXEDCAPVEC_HPP_ */

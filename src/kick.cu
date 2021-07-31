@@ -16,6 +16,14 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
+
+struct cuda_lists_type {
+	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
+	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
+	fixedcapvec<int, PARTLIST_SIZE> partlist;
+	fixedcapvec<int, MULTLIST_SIZE> multlist;
+};
+
 __device__ int max_depth = 0;
 __device__ int max_nextlist = 0;
 __device__ int max_partlist = 0;
@@ -171,18 +179,19 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	return max_rung;
 }
 
-__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
+__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count, int* next_item, int ntrees) {
 //	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
+	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	auto& L = shmem.L;
 	auto& dchecks = shmem.dchecks;
 	auto& echecks = shmem.echecks;
-	auto& nextlist = shmem.nextlist;
-	auto& multlist = shmem.multlist;
-	auto& partlist = shmem.partlist;
-	auto& leaflist = shmem.leaflist;
+	auto& nextlist = lists[bid].nextlist;
+	auto& multlist = lists[bid].multlist;
+	auto& partlist = lists[bid].partlist;
+	auto& leaflist = lists[bid].leaflist;
 	auto& activei = shmem.active;
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
@@ -220,10 +229,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	L.resize(max_depth);
 	dchecks.resize(max_dchecks);
 	echecks.resize(max_echecks);
-	nextlist.reserve(max_nextlist);
-	multlist.reserve(max_multlist);
-	leaflist.reserve(max_leaflist);
-	partlist.reserve(max_partlist);
 	phase.reserve(max_depth);
 	Lpos.reserve(max_depth);
 	returns.reserve(max_depth);
@@ -325,7 +330,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				__syncwarp();
 
 //				auto tm = clock64();
-				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_EWALD, min_rung == 0);
+				cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_EWALD, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 
 				// Direct walk
@@ -402,8 +407,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 				} while (dchecks.size() && self.sink_leaf);
 //				tm = clock64();
-				cuda_gravity_cc(data, L.back(), self, GRAVITY_CC_DIRECT, min_rung == 0);
-				cuda_gravity_cp(data, L.back(), self, min_rung == 0);
+				cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_DIRECT, min_rung == 0);
+				cuda_gravity_cp(data, L.back(), self, partlist, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 
 				if (self.sink_leaf) {
@@ -490,8 +495,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					}
 					__syncwarp();
 //					tm = clock64();
-					cuda_gravity_pc(data, self, nactive, min_rung == 0);
-					cuda_gravity_pp(data, self, nactive, h, min_rung == 0);
+					cuda_gravity_pc(data, self, multlist, nactive, min_rung == 0);
+					cuda_gravity_pp(data, self, partlist, nactive, h, min_rung == 0);
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
 					do_kick(returns.back(), global_params, data, L.back(), nactive, self);
@@ -580,19 +585,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	assert(phase.size() == 0);
 	assert(self_index.size() == 0);
 	atomicMax(&max_depth, returns.capacity());
-	atomicMax(&max_nextlist, nextlist.capacity());
-	atomicMax(&max_multlist, multlist.capacity());
-	atomicMax(&max_partlist, partlist.capacity());
-	atomicMax(&max_leaflist, leaflist.capacity());
 	atomicMax(&max_dchecks, dchecks.data_capacity());
 	atomicMax(&max_echecks, echecks.data_capacity());
 	L.initialize();
 	dchecks.destroy();
 	echecks.destroy();
-	nextlist.destroy();
-	multlist.destroy();
-	leaflist.destroy();
-	partlist.destroy();
 	phase.destroy();
 	returns.destroy();
 	Lpos.destroy();
@@ -701,7 +698,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	outer_lock--;
 	tm.reset();
 	tm.start();
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data, dev_kick_params, kick_params.size(), current_index, ntrees);
+	cuda_lists_type* dev_lists;
+	CUDA_CHECK(cudaMalloc(&dev_lists, sizeof(cuda_lists_type) * nblocks));
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
@@ -722,7 +721,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 int kick_block_count() {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-	PRINT( "Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
+	PRINT("Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
 	nblocks *= cuda_smp_count();
 	return nblocks;
 
