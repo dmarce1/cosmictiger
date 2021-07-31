@@ -55,32 +55,14 @@ void cuda_end_stream(cudaStream_t stream) {
 void cuda_init() {
 	cuda_set_device();
 	CUDA_CHECK(cudaDeviceReset());
-	size_t heap_size = size_t(cuda_total_mem()) * HEAP_SIZE / 100;
-	size_t value = 1;
-	while (value < heap_size) {
-		value *= 2;
-	}
-	heap_size = value;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMallocHeapSize));
-	if (value != heap_size) {
-		THROW_ERROR("Unable to set heap to %li\n", heap_size);
-	}
-	value = STACK_SIZE;
+#ifndef NDEBUG
+	size_t value = STACK_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity));
-	PRINT( "L2 fetch granularity = %li\n", value);
-	value = L2FETCH;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity));
-	if (value != L2FETCH) {
-		THROW_ERROR("Unable to set L2 fetch granularity to to %i\n", L2FETCH);
-	}
-
+#endif
 
 }
 
