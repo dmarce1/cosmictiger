@@ -107,7 +107,7 @@ target_include_directories(tigerfmm PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_options(tigerfmm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerfmm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math -march=native -G;
+                        --use_fast_math -march=native ;
                         >)
                         
 set_property(TARGET tigerfmm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})

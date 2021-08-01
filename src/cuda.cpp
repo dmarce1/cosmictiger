@@ -55,15 +55,12 @@ void cuda_end_stream(cudaStream_t stream) {
 void cuda_init() {
 	cuda_set_device();
 	CUDA_CHECK(cudaDeviceReset());
-#ifndef NDEBUG
 	size_t value = STACK_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
-#endif
-
 }
 
 

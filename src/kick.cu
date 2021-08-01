@@ -590,8 +590,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			}
 				break;
 			}
-			break;
-//			atomicAdd(&tree_time, (double) clock64() - tm2);
 		}
 
 		if (tid == 0) {
