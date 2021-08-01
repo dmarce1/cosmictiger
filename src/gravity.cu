@@ -87,6 +87,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 				}
+				__syncwarp();
 				these_parts.first += sz;
 				part_index += sz;
 				if (these_parts.first == these_parts.second) {
@@ -268,6 +269,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 				}
+				__syncwarp();
 				these_parts.first += sz;
 				part_index += sz;
 				if (these_parts.first == these_parts.second) {

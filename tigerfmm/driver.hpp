@@ -12,6 +12,7 @@ struct driver_params {
 	double esum0;
 	int iter;
 	size_t total_processed;
+	double flops;
 	double runtime;
 	time_type itime;
 };

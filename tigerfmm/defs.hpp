@@ -19,10 +19,10 @@
 #define LEFT 0
 #define RIGHT 1
 
-#define GPU_LOAD_MIN 0.01
+#define GPU_LOAD_MIN (1.0/50.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
 #define CUDA_KICK_PARTS_MAX (16*1024)
-#define STACK_SIZE 32767
+#define STACK_SIZE (16*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
 #define KICK_PP_MAX (32*12)
 #define MIN_KICK_PC_WARP 8
@@ -49,7 +49,7 @@
 
 #define CUDA_MAX_DEPTH 64
 #define NEXTLIST_SIZE 512
-#define LEAFLIST_SIZE 2048
+#define LEAFLIST_SIZE (2*2048)
 #define PARTLIST_SIZE 512
 #define MULTLIST_SIZE 2048
 #define DCHECKS_SIZE (16*1024)

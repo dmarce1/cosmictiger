@@ -17,17 +17,18 @@
  static __managed__ double kick_time;*/
 
 struct cuda_lists_type {
-	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
+	stack_vector<int, ECHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
+	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
 	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
-	fixedcapvec<int, PARTLIST_SIZE> partlist;
 	fixedcapvec<int, MULTLIST_SIZE> multlist;
 	fixedcapvec<expansion<float>, CUDA_MAX_DEPTH> L;
-	fixedcapvec<int, CUDA_MAX_DEPTH> phase;
-	fixedcapvec<int, CUDA_MAX_DEPTH> self;
+	fixedcapvec<int, PARTLIST_SIZE> partlist;
+	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
 	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
 	fixedcapvec<array<fixed32, NDIM>, CUDA_MAX_DEPTH> Lpos;
-	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
-	stack_vector<int, ECHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
+	fixedcapvec<int, CUDA_MAX_DEPTH> phase;
+	fixedcapvec<int, CUDA_MAX_DEPTH> self;
+
 };
 
 __device__ int max_depth = 0;
@@ -407,8 +408,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 					dchecks.resize(NCHILD * nextlist.size());
 					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-						assert(index >= 0);
-						assert(index < ntrees);
 						const auto& node = tree_nodes[nextlist[i]];
 						const auto& children = node.children;
 						dchecks[NCHILD * i + LEFT] = children[LEFT].index;
@@ -598,7 +597,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 		returns.pop_back();
 	}
-	assert(returns.size() == 1);
+	assert(returns.size() == 0);
 	assert(L.size() == 1);
 	assert(Lpos.size() == 0);
 	assert(phase.size() == 0);
