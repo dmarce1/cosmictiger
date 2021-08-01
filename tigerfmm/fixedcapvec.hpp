@@ -44,6 +44,7 @@ public:
 	__device__
 	inline void resize(int new_sz) {
 		const int tid = threadIdx.x;
+		__syncwarp();
 		if (tid == 0) {
 			sz = new_sz;
 			if (sz >= N) {
@@ -84,6 +85,7 @@ public:
 	}
 	__device__
 	inline T& back() {
+		assert(sz>=1);
 		return data_[sz - 1];
 	}
 	__device__
