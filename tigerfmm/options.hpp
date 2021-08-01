@@ -6,6 +6,7 @@
 struct options {
 	bool cuda;
 	bool save_force;
+	bool do_map;
 
 	int parts_dim;
 	int tree_cache_line_size;
@@ -13,6 +14,8 @@ struct options {
 	int check_num;
 	int check_freq;
 	int max_iter;
+	int map_count;
+	int map_size;
 
 	double hsoft;
 	double GM;
@@ -52,6 +55,9 @@ struct options {
 		arc & check_num;
 		arc & check_freq;
 		arc & max_iter;
+		arc & do_map;
+		arc & map_count;
+		arc & map_size;
 	}
 };
 

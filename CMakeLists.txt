@@ -32,6 +32,8 @@ set(tigerfmm_source_files
     src/kick.cu
     src/kick_workspace.cpp
     src/main.cpp
+    src/map.cpp
+    src/map.cu
     src/options.cpp
     src/particles.cpp
     src/range_set.cpp
@@ -61,6 +63,7 @@ set(tigerfmm_header_files
     tigerfmm/hpx.hpp
     tigerfmm/kick.hpp
     tigerfmm/kick_workspace.hpp
+    tigerfmm/map.hpp
     tigerfmm/math.hpp
     tigerfmm/options.hpp
     tigerfmm/particles.hpp

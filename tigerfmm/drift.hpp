@@ -16,16 +16,18 @@ struct drift_return {
 	double momx;
 	double momy;
 	double momz;
+	int nmapped;
 	template<class Arc>
 	void serialize(Arc&& a, unsigned) {
 		a & kin;
 		a & momx;
 		a & momy;
 		a & momz;
+		a & nmapped;
 	}
 };
 
-drift_return drift(double scale, double dt);
+drift_return drift(double scale, double t, double dt);
 
 
 #endif /* DRIFT_HPP_ */

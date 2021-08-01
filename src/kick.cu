@@ -232,7 +232,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	nextlist.initialize();
 	multlist.initialize();
 	leaflist.initialize();
-	nextlist.initialize();
+	partlist.initialize();
 	phase.initialize();
 	Lpos.initialize();
 	returns.initialize();
@@ -288,13 +288,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (tid == 0) {
 					L.back() = this_L;
 				}
-				__syncwarp();
 				// Do ewald walk
 				nextlist.resize(0);
 				multlist.resize(0);
 				maxi = round_up(echecks.size(), WARP_SIZE);
 				int ninteracts = 0;
 				for (int i = tid; i < maxi; i += WARP_SIZE) {
+					assert(echecks[i] < ntrees);
+					assert(echecks[i] >= 0);
 					bool mult = false;
 					bool next = false;
 					if (i < echecks.size()) {
@@ -330,7 +331,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				__syncwarp();
 				echecks.resize(NCHILD * nextlist.size());
 				for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-					//	PRINT( "nextlist = %i\n", nextlist[i]);
+					assert(nextlist[i] < ntrees);
+					assert(nextlist[i] >= 0);
 					const auto children = tree_nodes[nextlist[i]].children;
 					assert(children[LEFT].index!=-1);
 					assert(children[RIGHT].index!=-1);
@@ -339,13 +341,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				}
 				__syncwarp();
 
-//				auto tm = clock64();
 				shared_reduce_add(ninteracts);
 				node_flops += ninteracts * 15;
 				node_flops += cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_EWALD, min_rung == 0);
-//				atomicAdd(&gravity_time, (double) clock64() - tm);
-
-				// Direct walk
 				nextlist.resize(0);
 				partlist.resize(0);
 				leaflist.resize(0);
@@ -359,6 +357,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						bool leaf = false;
 						bool part = false;
 						if (i < dchecks.size()) {
+							assert(dchecks[i] < ntrees);
+							assert(dchecks[i] >= 0);
 							const tree_node& other = tree_nodes[dchecks[i]];
 							for (int dim = 0; dim < NDIM; dim++) {
 								dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
@@ -409,6 +409,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 					dchecks.resize(NCHILD * nextlist.size());
 					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+						assert(nextlist[i] < ntrees);
+						assert(nextlist[i] >= 0);
 						const auto& node = tree_nodes[nextlist[i]];
 						const auto& children = node.children;
 						dchecks[NCHILD * i + LEFT] = children[LEFT].index;
@@ -418,10 +420,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 
 				} while (dchecks.size() && self.sink_leaf);
-//				tm = clock64();
 				node_flops += cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_DIRECT, min_rung == 0);
 				node_flops += cuda_gravity_cp(data, L.back(), self, partlist, min_rung == 0);
-//				atomicAdd(&gravity_time, (double) clock64() - tm);
 				int pflops = 0;
 				if (self.sink_leaf) {
 					int nactive = 0;
@@ -509,10 +509,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					}
 					pflops += nactive * 2;
 					__syncwarp();
-//					tm = clock64();
 					pflops += cuda_gravity_pc(data, self, multlist, nactive, min_rung == 0);
 					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, min_rung == 0);
-//					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
 					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self);
 					phase.pop_back();
@@ -731,7 +729,11 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 int kick_block_count() {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-//	PRINT("Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
+	static bool shown = false;
+	if (!shown) {
+		PRINT("Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
+		shown = true;
+	}
 	nblocks *= cuda_smp_count();
 	return nblocks;
 

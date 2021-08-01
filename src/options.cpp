@@ -46,6 +46,9 @@ bool process_options(int argc, char *argv[]) {
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA") //
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
+	("do_map", po::value<bool>(&(opts.do_map))->default_value(true), "do healpix maps") //
+	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
+	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "healpix Nside") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("test", po::value<std::string>(&(opts.test))->default_value(""), "name of test to run") //
