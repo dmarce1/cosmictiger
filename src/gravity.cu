@@ -97,7 +97,6 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 					}
 				}
 			}
-			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
@@ -152,8 +151,8 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 				for (int j = tid; j < size; j += WARP_SIZE) {
 					dest[j] = src[j];
 				}
+				__syncwarp();
 			}
-			__syncwarp();
 			int kmid;
 			if ((nactive % WARP_SIZE) < MIN_KICK_PC_WARP) {
 				kmid = nactive - (nactive % WARP_SIZE);
@@ -288,7 +287,6 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 			float dx2;
 			float r3inv;
 			float r1inv;
-			__syncwarp();
 			int kmid;
 			if ((nactive % WARP_SIZE) < MIN_KICK_WARP) {
 				kmid = nactive - (nactive % WARP_SIZE);
