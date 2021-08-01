@@ -288,6 +288,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (tid == 0) {
 					L.back() = this_L;
 				}
+				__syncwarp();
 				// Do ewald walk
 				nextlist.resize(0);
 				multlist.resize(0);

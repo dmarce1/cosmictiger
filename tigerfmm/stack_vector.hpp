@@ -31,6 +31,7 @@ public:
 			bounds[0] = 0;
 			bounds[1] = 0;
 		}
+		__syncwarp();
 	}
 	__device__ inline stack_vector() {
 		const int& tid = threadIdx.x;
@@ -40,13 +41,16 @@ public:
 			bounds[0] = 0;
 			bounds[1] = 0;
 		}
+		__syncwarp();
 	}
 	__device__ inline void push(const T &a) {
 		const int& tid = threadIdx.x;
 		assert(bounds.size() >= 2);
 		data.push_back(a);
 		if (tid == 0) {
-			bounds.back()++;}
+			bounds.back()++;
+		}
+		__syncwarp();
 
 	}
 	__device__ inline int size() const {
@@ -60,6 +64,7 @@ public:
 		if (tid == 0) {
 			bounds.back() = data.size();
 		}
+		__syncwarp();
 	}
 	__device__ inline T operator[](int i) const {
 		assert(i < size());
@@ -79,6 +84,7 @@ public:
 		for (int i = begin() + tid; i < end(); i += WARP_SIZE) {
 			data[i] = data[i - sz];
 		}
+		__syncwarp();
 	}
 	__device__ inline void pop_top() {
 		assert(bounds.size() >= 2);

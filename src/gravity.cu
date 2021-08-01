@@ -208,6 +208,7 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 				}
 			}
 		}
+		__syncwarp();
 	}
 	shared_reduce_add(flops);
 	__syncwarp();
@@ -379,6 +380,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 				}
 			}
 		}
+		__syncwarp();
 	}
 	shared_reduce_add(nnear);
 	shared_reduce_add(nfar);
