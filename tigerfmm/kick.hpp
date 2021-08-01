@@ -40,14 +40,11 @@ struct cuda_kick_shmem {
 	array<fixed32, SINK_BUCKET_SIZE> sink_x;
 	array<fixed32, SINK_BUCKET_SIZE> sink_y;
 	array<fixed32, SINK_BUCKET_SIZE> sink_z;
-	union {
-		struct {
-			array<fixed32, KICK_PP_MAX> x;
-			array<fixed32, KICK_PP_MAX> y;
-			array<fixed32, KICK_PP_MAX> z;
-		}src;
-		array<multipole_pos,WARP_SIZE> m;
-	};
+	struct {
+		array<fixed32, KICK_PP_MAX> x;
+		array<fixed32, KICK_PP_MAX> y;
+		array<fixed32, KICK_PP_MAX> z;
+	}src;
 	array<float, SINK_BUCKET_SIZE> gx;
 	array<float, SINK_BUCKET_SIZE> gy;
 	array<float, SINK_BUCKET_SIZE> gz;

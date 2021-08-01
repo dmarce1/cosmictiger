@@ -141,70 +141,59 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 	const auto& sink_z = shmem.sink_z;
 	const auto* tree_nodes = data.tree_nodes;
 	if (multlist.size()) {
-		for (int n = 0; n < multlist.size(); n += WARP_SIZE) {
-			const int maxi = min(multlist.size(), n + WARP_SIZE) - n;
-			for (int i = 0; i < maxi; i++) {
-				const auto& other = tree_nodes[multlist[n + i]];
-				float* dest = (float*) &shmem.m[i];
-				float* src = (float*) other.get_multipole_ptr();
-				constexpr int size = sizeof(multipole_pos) / sizeof(float);
-				for (int j = tid; j < size; j += WARP_SIZE) {
-					dest[j] = src[j];
-				}
-				__syncwarp();
+		int kmid;
+		if ((nactive % WARP_SIZE) < MIN_KICK_PC_WARP) {
+			kmid = nactive - (nactive % WARP_SIZE);
+		} else {
+			kmid = nactive;
+		}
+		for (int k = tid; k < kmid; k += WARP_SIZE) {
+			expansion2<float> L;
+			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
+			for (int j = 0; j < multlist.size(); j++) {
+				array<float, NDIM> dx;
+				const auto& node = tree_nodes[multlist[j]];
+				const auto& pos = node.pos;
+				const auto& M = node.multi;
+				dx[XDIM] = distance(sink_x[k], pos[XDIM]);
+				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
+				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
+				flops += 3;
+				expansion<float> D;
+				flops += greens_function(D, dx);
+				flops += M2L(L, M, D, do_phi);
 			}
-			int kmid;
-			if ((nactive % WARP_SIZE) < MIN_KICK_PC_WARP) {
-				kmid = nactive - (nactive % WARP_SIZE);
-			} else {
-				kmid = nactive;
+			gx[k] -= L(1, 0, 0);
+			gy[k] -= L(0, 1, 0);
+			gz[k] -= L(0, 0, 1);
+			phi[k] += L(0, 0, 0);
+		}
+		__syncwarp();
+		for (int k = kmid; k < nactive; k++) {
+			expansion2<float> L;
+			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
+			for (int j = tid; j < multlist.size(); j += WARP_SIZE) {
+				array<float, NDIM> dx;
+				const auto& node = tree_nodes[multlist[j]];
+				const auto& pos = node.pos;
+				const auto& M = node.multi;
+				dx[XDIM] = distance(sink_x[k], pos[XDIM]);
+				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
+				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
+				flops += 3;
+				expansion<float> D;
+				flops += greens_function(D, dx);
+				flops += M2L(L, M, D, do_phi);
 			}
-			for (int k = tid; k < kmid; k += WARP_SIZE) {
-				expansion2<float> L;
-				L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
-				for (int j = 0; j < maxi; j++) {
-					array<float, NDIM> dx;
-					const auto& pos = shmem.m[j].pos;
-					const auto& M = shmem.m[j].m;
-					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
-					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
-					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
-					flops += 3;
-					expansion<float> D;
-					flops += greens_function(D, dx);
-					flops += M2L(L, M, D, do_phi);
-				}
+			shared_reduce_add(L(0, 0, 0));
+			shared_reduce_add(L(1, 0, 0));
+			shared_reduce_add(L(0, 1, 0));
+			shared_reduce_add(L(0, 0, 1));
+			if (tid == 0) {
 				gx[k] -= L(1, 0, 0);
 				gy[k] -= L(0, 1, 0);
 				gz[k] -= L(0, 0, 1);
 				phi[k] += L(0, 0, 0);
-			}
-			__syncwarp();
-			for (int k = kmid; k < nactive; k++) {
-				expansion2<float> L;
-				L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
-				for (int j = tid; j < maxi; j += WARP_SIZE) {
-					array<float, NDIM> dx;
-					const auto& pos = shmem.m[j].pos;
-					const auto& M = shmem.m[j].m;
-					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
-					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
-					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
-					flops += 3;
-					expansion<float> D;
-					flops += greens_function(D, dx);
-					flops += M2L(L, M, D, do_phi);
-				}
-				shared_reduce_add(L(0, 0, 0));
-				shared_reduce_add(L(1, 0, 0));
-				shared_reduce_add(L(0, 1, 0));
-				shared_reduce_add(L(0, 0, 1));
-				if (tid == 0) {
-					gx[k] -= L(1, 0, 0);
-					gy[k] -= L(0, 1, 0);
-					gz[k] -= L(0, 0, 1);
-					phi[k] += L(0, 0, 0);
-				}
 			}
 		}
 	}

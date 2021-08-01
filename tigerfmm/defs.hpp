@@ -24,7 +24,7 @@
 #define CUDA_KICK_PARTS_MAX (16*1024)
 #define STACK_SIZE (16*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
-#define KICK_PP_MAX (32*12)
+#define KICK_PP_MAX (32*16)
 #define MIN_KICK_PC_WARP 8
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024
