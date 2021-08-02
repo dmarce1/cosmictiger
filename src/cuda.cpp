@@ -23,6 +23,7 @@ int cuda_get_device() {
 size_t cuda_total_mem() {
 	size_t total;
 	size_t free;
+	cuda_set_device();
 	CUDA_CHECK(cudaMemGetInfo(&free, &total));
 	return total;
 }
@@ -30,12 +31,14 @@ size_t cuda_total_mem() {
 size_t cuda_free_mem() {
 	size_t total;
 	size_t free;
+	cuda_set_device();
 	CUDA_CHECK(cudaMemGetInfo(&free, &total));
 	return free;
 }
 
 int cuda_smp_count() {
 	int count;
+	cuda_set_device();
 	CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, cuda_get_device()));
 	return count;
 
@@ -43,6 +46,7 @@ int cuda_smp_count() {
 
 cudaStream_t cuda_get_stream() {
 	cudaStream_t stream;
+	cuda_set_device();
 	CUDA_CHECK(cudaStreamCreate(&stream));
 	return stream;
 }
