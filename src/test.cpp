@@ -15,7 +15,7 @@ constexpr bool verbose = true;
 //0.55, 0.65
 //0.4, 0.5
 
-constexpr double theta = 0.8;
+constexpr double theta = 0.5;
 
 static void domain_test() {
 	timer tm;

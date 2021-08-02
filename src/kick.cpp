@@ -87,14 +87,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
 	assert(self.proc == hpx_rank());
-	if (self_ptr->local_root && get_options().cuda && params.gpu) {
-		cuda_branch_max_parts = (size_t) CUDA_KICK_PARTS_MAX * self_ptr->nactive / particles_size();
-		cuda_workspace_max_parts = size_t(cuda_total_mem()) / (sizeof(fixed32) * NDIM) * KICK_WORKSPACE_PART_SIZE / 100;
+	size_t cuda_mem_usage;
+	if (params.gpu && cuda_workspace == nullptr) {
+		cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
 	}
-	if (self_ptr->is_local() && self_ptr->nparts() <= cuda_workspace_max_parts && cuda_workspace == nullptr && params.gpu) {
+	if (self_ptr->is_local() && cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage && cuda_workspace == nullptr && params.gpu) {
 		cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 	}
-	if (self_ptr->nactive <= cuda_branch_max_parts && self_ptr->is_local() && get_options().cuda && params.gpu) {
+	if (self_ptr->nparts() <=  CUDA_KICK_PARTS_MAX && self_ptr->is_local() && get_options().cuda && params.gpu) {
 		return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 	} else {
 		kick_return kr;

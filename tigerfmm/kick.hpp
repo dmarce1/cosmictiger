@@ -157,5 +157,6 @@ vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, f
 int kick_block_count();
 void kick_reset_list_sizes();
 void kick_reset_all_list_sizes();
+size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);
 
 #endif /* KICK_HPP_ */

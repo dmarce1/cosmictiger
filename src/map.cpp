@@ -124,32 +124,32 @@ void healpix_map::add_map(healpix_map&& other) {
 }
 
 int healpix_map::map_add_particle(float x0, float y0, float z0, float x1, float y1, float z1, float vx, float vy, float vz, float t, float dt) {
-	static simd_float images[NDIM] = { simd_float(0, -1, 0, -1, 0, -1, 0, -1), simd_float(0, 0, -1, -1, 0, 0, -1, -1), simd_float(0, 0, 0, 0, -1, -1, -1, -1) };
+	static simd_float8 images[NDIM] = { simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
 	static const float map_int = tau_max / Nmaps;
 	static const float map_int_inv = 1.0 / map_int;
-	const simd_float simd_c0 = simd_float(map_int_inv);
-	array<simd_float, NDIM> X0;
-	array<simd_float, NDIM> X1;
-	const simd_float simd_tau0 = simd_float(t);
-	const simd_float simd_tau1 = simd_float(t + dt);
-	simd_float dist0;
-	simd_float dist1;
+	const simd_float8 simd_c0 = simd_float8(map_int_inv);
+	array<simd_float8, NDIM> X0;
+	array<simd_float8, NDIM> X1;
+	const simd_float8 simd_tau0 = simd_float8(t);
+	const simd_float8 simd_tau1 = simd_float8(t + dt);
+	simd_float8 dist0;
+	simd_float8 dist1;
 	int rc = 0;
 	double x20, x21, R20, R21;
-	X0[XDIM] = simd_float(x0) + images[XDIM];
-	X0[YDIM] = simd_float(y0) + images[YDIM];
-	X0[ZDIM] = simd_float(z0) + images[ZDIM];
-	X1[XDIM] = simd_float(x1) + images[XDIM];
-	X1[YDIM] = simd_float(y1) + images[YDIM];
-	X1[ZDIM] = simd_float(z1) + images[ZDIM];
+	X0[XDIM] = simd_float8(x0) + images[XDIM];
+	X0[YDIM] = simd_float8(y0) + images[YDIM];
+	X0[ZDIM] = simd_float8(z0) + images[ZDIM];
+	X1[XDIM] = simd_float8(x1) + images[XDIM];
+	X1[YDIM] = simd_float8(y1) + images[YDIM];
+	X1[ZDIM] = simd_float8(z1) + images[ZDIM];
 	dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
 	dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
-	simd_float tau0 = simd_tau0 + dist0;
-	simd_float tau1 = simd_tau1 + dist1;
-	simd_int I0 = tau0 * simd_c0;
-	simd_int I1 = tau1 * simd_c0;
+	simd_float8 tau0 = simd_tau0 + dist0;
+	simd_float8 tau1 = simd_tau1 + dist1;
+	simd_int8 I0 = tau0 * simd_c0;
+	simd_int8 I1 = tau1 * simd_c0;
 
-	for (int ci = 0; ci < SIMD_FLOAT_SIZE; ci++) {
+	for (int ci = 0; ci < SIMD_FLOAT8_SIZE; ci++) {
 		if (dist1[ci] <= 1.0 || dist0[ci] <= 1.0) {
 			const int i0 = I0[ci];
 			const int i1 = I1[ci];

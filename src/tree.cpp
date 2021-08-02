@@ -102,7 +102,11 @@ int tree_min_level(double theta) {
 		r = (1.0 + SINK_BIAS) * a / theta + h * N;
 		lev++;
 	} while (dx <= r);
-	return lev + 1;
+	int i = 1;
+	while (i < hpx_size()) {
+		i *= 2;
+	}
+	return i == hpx_size() ? lev : lev + 1;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, const pair<int, int>& proc_range, const pair<int, int>& part_range,
@@ -277,7 +281,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			mdx[dim][LEFT] = Xl[dim] - Xc[dim];
 			mdx[dim][RIGHT] = Xr[dim] - Xc[dim];
 		}
-		simdM = M2M<simd_double>(simdM, mdx);
+		simdM = M2M < simd_double > (simdM, mdx);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
 		}

@@ -19,11 +19,12 @@
 #define LEFT 0
 #define RIGHT 1
 
-#define GPU_LOAD_MIN (1.0/50.0)
+#define GPU_LOAD_MIN (1.0/128.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
 #define CUDA_KICK_PARTS_MAX (16*1024)
 #define HEAP_SIZE 1
 #define L2FETCH 64
+#define CUDA_MAX_MEM 0.4
 #define STACK_SIZE (16*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
 #define KICK_PP_MAX (32*12)
@@ -65,9 +66,6 @@
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
-#define SIMD_FLOAT_SIZE 8
-#define SIMD_INT_SIZE 8
-#define SIMD_DOUBLE_SIZE 2
 #define SORT_OVERSUBSCRIPTION 8
 #define TREE_CACHE_SIZE 1024
 #define TREE_NODE_ALLOCATION_SIZE 4
