@@ -102,7 +102,7 @@ int tree_min_level(double theta) {
 		r = (1.0 + SINK_BIAS) * a / theta + h * N;
 		lev++;
 	} while (dx <= r);
-	return lev;
+	return lev + 1;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, const pair<int, int>& proc_range, const pair<int, int>& part_range,
