@@ -620,14 +620,22 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 //	node_count = 0;
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
-	vector<kick_return> returns(workitems.size());
-	vector<cuda_kick_params> kick_params(workitems.size());
-	vector<int> dchecks;
-	vector<int> echecks;
+	vector<kick_return> returns;
+	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
+	static vector<int, pinned_allocator<int>> dchecks;
+	static vector<int, pinned_allocator<int>> echecks;
+	dchecks.resize(0);
+	echecks.resize(0);
+	returns.resize(workitems.size());
+	kick_params.resize(workitems.size());
 	int* dev_dchecks;
 	int* dev_echecks;
 	kick_return* dev_returns;
 	cuda_kick_params* dev_kick_params;
+	int nblocks = kick_block_count();
+	nblocks = std::min(nblocks, (int) workitems.size());
+	cuda_lists_type* dev_lists;
+	CUDA_CHECK(cudaMallocAsync(&dev_lists, sizeof(cuda_lists_type) * nblocks, stream));
 	CUDA_CHECK(cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
 	CUDA_CHECK(cudaMalloc(&dev_returns, sizeof(kick_return) * returns.size()));
 
@@ -699,8 +707,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 		kick_params[i] = std::move(params);
 	}
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
-	int nblocks = kick_block_count();
-	nblocks = std::min(nblocks, (int) workitems.size());
 	CUDA_CHECK(cudaStreamSynchronize(stream));
 	static std::atomic<int> cnt(0);
 	while (cnt++ != 0) {
@@ -710,8 +716,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	outer_lock--;
 	tm.reset();
 	tm.start();
-	cuda_lists_type* dev_lists;
-	CUDA_CHECK(cudaMalloc(&dev_lists, sizeof(cuda_lists_type) * nblocks));
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));

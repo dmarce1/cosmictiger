@@ -33,7 +33,6 @@ set(tigerfmm_source_files
     src/kick_workspace.cpp
     src/main.cpp
     src/map.cpp
-    src/map.cu
     src/options.cpp
     src/particles.cpp
     src/range_set.cpp
@@ -82,7 +81,7 @@ set(tigerfmm_header_files
 add_hpx_executable(
   tigerfmm
   DEPENDENCIES
-    Boost::boost cudart fftw3 gsl gslcblas
+    Boost::boost cudart fftw3 gsl gslcblas chealpix
   SOURCES
     ${tigerfmm_source_files}
   HEADERS

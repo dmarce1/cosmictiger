@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <tigerfmm/time.hpp>
 #include <cstdio>
 
@@ -15,10 +14,22 @@ struct driver_params {
 	double flops;
 	double runtime;
 	time_type itime;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & a;
+		arc & tau;
+		arc & tau_max;
+		arc & cosmicK;
+		arc & esum0;
+		arc & iter;
+		arc & total_processed;
+		arc & flops;
+		arc & runtime;
+		arc & itime;
+	}
 };
 
 void write_checkpoint(driver_params params);
-void read_checkpoint(driver_params& params, int checknum);
-
+driver_params read_checkpoint(int checknum);
 
 void driver();

@@ -136,9 +136,6 @@ int fma(std::string a, array<int, NDIM> n, double b, std::string c, array<int, N
 bool close21(double a) {
 	return std::abs(1.0 - a) < 1.0e-20;
 }
-
-#define ASPRINTF(...) if( asprintf(__VA_ARGS__) == 0 ) printf( "asprintf failed\n")
-
 template<int P>
 int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 	array<int, NDIM> m;

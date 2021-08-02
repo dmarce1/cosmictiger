@@ -27,6 +27,7 @@ drift_return drift(double scale, double t, double dt) {
 			const double factor = 1.0 / scale;
 			const double a2inv = 1.0 / sqr(scale);
 			double kin = 0.0;
+			healpix_map this_map;
 			double momx = 0.0;
 			double momy = 0.0;
 			double momz = 0.0;
@@ -57,7 +58,7 @@ drift_return drift(double scale, double t, double dt) {
 				y += double(vy*dt);
 				z += double(vz*dt);
 				if( do_map) {
-					nmapped += map_add_particle(x0, y0, z0, x, y, z, t, dt);
+					nmapped += this_map.map_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt);
 				}
 				constrain_range(x);
 				constrain_range(y);
@@ -67,6 +68,7 @@ drift_return drift(double scale, double t, double dt) {
 				particles_pos(ZDIM,i) = z;
 			}
 			std::lock_guard<mutex_type> lock(mutex);
+			map_add_map(std::move(this_map));
 			dr.kin += kin;
 			dr.momx += momx;
 			dr.momy += momy;

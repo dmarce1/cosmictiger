@@ -22,7 +22,7 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 	}
 }
 
-static void adjust_part_references(vector<tree_node>& tree_nodes, int index, int offset) {
+static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, int offset) {
 	tree_nodes[index].part_range.first += offset;
 	assert(tree_nodes[index].part_range.first >= 0);
 	tree_nodes[index].part_range.second += offset;
@@ -77,7 +77,8 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
-	vector<tree_node> tree_nodes(next_index);
+	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
+	tree_nodes.resize(next_index);
 	tree_node* dev_trees;
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
@@ -86,7 +87,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	vector<hpx::future<void>> futs;
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&tree_nodes,&tree_map]() {
+		futs.push_back(hpx::async([proc,nthreads,&tree_map]() {
 			for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
 				if (tree_nodes[i].children[LEFT].index != -1) {
 					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
@@ -101,7 +102,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([this,proc,nthreads,&tree_nodes,&tree_map]() {
+		futs.push_back(hpx::async([this,proc,nthreads,&tree_map]() {
 			for (int i = proc; i < workitems.size(); i+=nthreads) {
 				for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 					workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
@@ -118,13 +119,16 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	tm.start();
 
 	next_index = 0;
-	vector<fixed32> host_x(part_count);
-	vector<fixed32> host_y(part_count);
-	vector<fixed32> host_z(part_count);
+	static vector<fixed32, pinned_allocator<fixed32>> host_x;
+	static vector<fixed32, pinned_allocator<fixed32>> host_y;
+	static vector<fixed32, pinned_allocator<fixed32>> host_z;
+	host_x.resize(part_count);
+	host_y.resize(part_count);
+	host_z.resize(part_count);
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&host_x,&host_y,&host_z,&tree_nodes,&tree_bases]() {
+		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases]() {
 			for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
 				if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
 					const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
@@ -144,10 +148,6 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
-	host_x = decltype(host_x)();
-	host_y = decltype(host_y)();
-	host_z = decltype(host_z)();
-	tree_nodes = decltype(tree_nodes)();
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 //	PRINT("To GPU Done %e\n", tm.read());
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),

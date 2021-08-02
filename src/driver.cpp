@@ -10,6 +10,9 @@
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/time.hpp>
 
+HPX_PLAIN_ACTION(write_checkpoint);
+HPX_PLAIN_ACTION(read_checkpoint);
+
 double cosmos_dadtau(double a) {
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const auto omega_m = get_options().omega_m;
@@ -105,7 +108,7 @@ void driver() {
 	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().check_num >= 0) {
-		read_checkpoint(params, get_options().check_num);
+		params = read_checkpoint(get_options().check_num);
 	} else {
 		initialize();
 		params.flops = 0;
@@ -199,7 +202,8 @@ void driver() {
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
 		if (full_eval) {
 			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin",
-					"cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "total", "gpu/cpu", "pps", "GFLOPS/s");
+					"cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "total", "gpu/cpu", "pps",
+					"GFLOPS/s");
 		}
 		iter++;
 		total_processed += kr.nactive;
@@ -208,9 +212,10 @@ void driver() {
 		double pps = total_processed / runtime;
 		const auto total_flops = kr.node_flops + kr.part_flops;
 		params.flops += total_flops;
-		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i %12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e \n", iter - 1,
-				z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time, sort_time, kick_time,
-				drift_time, runtime / iter, used_gpu ? 'G' : 'C', (double ) kr.nactive / total_time.read(), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i %12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e \n",
+				iter - 1, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time,
+				sort_time, kick_time, drift_time, runtime / iter, used_gpu ? 'G' : 'C', (double ) kr.nactive / total_time.read(),
+				params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		total_time.reset();
 		total_time.start();
 		//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
@@ -221,6 +226,7 @@ void driver() {
 		drift_time = 0.0;
 		tau += dt;
 		this_iter++;
+		map_flush(tau);
 		if (this_iter > get_options().max_iter) {
 			break;
 		}
@@ -229,29 +235,55 @@ void driver() {
 }
 
 void write_checkpoint(driver_params params) {
-	PRINT("Writing checkpoint\n");
-	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string(".dat");
+	if (hpx_rank() == 0) {
+		PRINT("Writing checkpoint\n");
+	}
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
+	}
+	const std::string command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter) + "\n";
+	if (system(command.c_str()) != 0) {
+		THROW_ERROR("Unable to execute : %s\n", command.c_str());
+	}
+	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
+			+ std::to_string(hpx_rank()) + std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "wb");
 	if (fp == nullptr) {
-		PRINT("Unable to open %s for writing.\n", fname.c_str());
-		abort();
+		THROW_ERROR("Unable to open %s for writing.\n", fname.c_str());
 	}
 	fwrite(&params, sizeof(driver_params), 1, fp);
 	particles_save(fp);
-
+	map_save(fp);
 	fclose(fp);
+	hpx::wait_all(futs.begin(), futs.end());
+	if (hpx_rank() == 0) {
+		PRINT("Done writing checkpoint\n");
+	}
 }
 
-void read_checkpoint(driver_params& params, int checknum) {
-	PRINT("Reading checkpoint\n");
-	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string(".dat");
+driver_params read_checkpoint(int checknum) {
+	driver_params params;
+	if (hpx_rank() == 0) {
+		PRINT("Reading checkpoint\n");
+	}
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<read_checkpoint_action>(c, checknum));
+	}
+	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string("/checkpoint.") + std::to_string(checknum) + "."
+			+ std::to_string(hpx_rank()) + std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "rb");
 	if (fp == nullptr) {
-		PRINT("Unable to open %s for reading.\n", fname.c_str());
-		abort();
+		THROW_ERROR("Unable to open %s for reading.\n", fname.c_str());
 	}
 	FREAD(&params, sizeof(driver_params), 1, fp);
 	particles_load(fp);
-
+	map_load(fp);
 	fclose(fp);
+	hpx::wait_all(futs.begin(), futs.end());
+	if (hpx_rank() == 0) {
+		PRINT("Done reading checkpoint\n");
+	}
+	return params;
 }
