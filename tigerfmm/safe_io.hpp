@@ -9,6 +9,7 @@
 #define SAFE_IO_HPP_
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #define PRINT(...) print(__VA_ARGS__)
 

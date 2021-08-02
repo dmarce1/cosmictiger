@@ -111,3 +111,12 @@ target_compile_options(tigerfmm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         
 set_property(TARGET tigerfmm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 
+
+add_executable(
+ 	healpix2silo
+ 	src/healpix2silo.cpp
+ )
+ 
+target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options)
+target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
+

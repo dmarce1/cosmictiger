@@ -231,7 +231,7 @@ void driver() {
 			break;
 		}
 	}
-
+	map_flush(tau);
 }
 
 void write_checkpoint(driver_params params) {

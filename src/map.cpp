@@ -53,9 +53,12 @@ void healpix_map::map_flush(float t) {
 				THROW_ERROR("Unable to open %s for writing\n", str);
 			}
 			auto& this_map = i->second;
+			int size = this_map.size();
+			fwrite(&Nside, sizeof(int), 1, fp);
+			fwrite(&size, sizeof(int), 1, fp);
 			for (auto j = this_map.begin(); j != this_map.end(); j++) {
 				fwrite(&j->first, sizeof(int), 1, fp);
-				fwrite(&j->second, sizeof(int), 1, fp);
+				fwrite(&j->second.i, sizeof(float), 1, fp);
 			}
 			fclose(fp);
 			map.erase(i);
@@ -146,13 +149,16 @@ int healpix_map::map_add_particle(float x0, float y0, float z0, float x1, float 
 	simd_int I0 = tau0 * simd_c0;
 	simd_int I1 = tau1 * simd_c0;
 
-	for (int ci = 0; ci < 8; ci++) {
+	for (int ci = 0; ci < SIMD_FLOAT_SIZE; ci++) {
 		if (dist1[ci] <= 1.0 || dist0[ci] <= 1.0) {
 			const int i0 = I0[ci];
 			const int i1 = I1[ci];
 			if (i0 != i1) {
 				for (int j = i0; j < i1; j++) {
 					rc++;
+					x0 = X0[XDIM][ci];
+					y0 = X0[YDIM][ci];
+					z0 = X0[ZDIM][ci];
 					const double ti = (j + 1) * map_int;
 					const double sqrtauimtau0 = sqr(ti - t);
 					const double tau0mtaui = t - ti;
