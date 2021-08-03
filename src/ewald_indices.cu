@@ -79,9 +79,9 @@ void ewald_const::init_gpu() {
 		four_expanse[count++] = D0.detraceD();
 	}
 	cuda_set_device();
-	real_indices_dev = real_indices;
-	four_indices_dev = four_indices;
-	four_expanse_dev = four_expanse;
+	CUDA_CHECK(cudaMemcpy(&real_indices_dev, &real_indices, sizeof(real_indices), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(&four_indices_dev, &four_indices, sizeof(four_indices), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(&four_expanse_dev, &four_expanse, sizeof(four_expanse), cudaMemcpyHostToDevice));
 }
 
 CUDA_EXPORT int ewald_const::nfour() {
