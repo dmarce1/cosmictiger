@@ -635,7 +635,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int nblocks = kick_block_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_lists_type* dev_lists;
-	CUDA_CHECK(cudaMallocAsync(&dev_lists, sizeof(cuda_lists_type) * nblocks, stream));
+	CUDA_CHECK(cudaMalloc(&dev_lists, sizeof(cuda_lists_type) * nblocks));
 	CUDA_CHECK(cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
 	CUDA_CHECK(cudaMalloc(&dev_returns, sizeof(kick_return) * returns.size()));
 
