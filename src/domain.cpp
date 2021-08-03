@@ -28,8 +28,12 @@ void domains_transmit_particles(vector<particle> parts) {
 	const int start = trans_particles.size();
 	const int stop = start + parts.size();
 	trans_particles.resize(stop);
+#ifdef HPX_LITE
+	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
+#else
 	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
 	fut.get();
+#endif
 }
 
 void domains_begin() {
@@ -62,21 +66,21 @@ void domains_begin() {
 					send.push_back(particles_get_particle(i));
 					if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
 //						PRINT( "%i sending %li particles to %i\n", hpx_rank(), send.size(), rank);
-						futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
-					}
-					my_free_indices.push_back(i);
-				}
+				futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 			}
-			for( auto i = sends.begin(); i != sends.end(); i++) {
-				if( i->second.size()) {
+			my_free_indices.push_back(i);
+		}
+	}
+	for( auto i = sends.begin(); i != sends.end(); i++) {
+		if( i->second.size()) {
 //					PRINT( "%i sending %li particles to %i\n", hpx_rank(), i->second.size(), i->first);
-					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
-				}
-			}
-			std::lock_guard<mutex_type> lock(mutex);
-			free_indices.insert(free_indices.end(),my_free_indices.begin(),my_free_indices.end());
-			hpx::wait_all(futs.begin(), futs.end());
-		}));
+			futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
+		}
+	}
+	std::lock_guard<mutex_type> lock(mutex);
+	free_indices.insert(free_indices.end(),my_free_indices.begin(),my_free_indices.end());
+	hpx::wait_all(futs.begin(), futs.end());
+}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
@@ -100,9 +104,14 @@ void domains_end() {
 			return false;
 		};
 //		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
+#ifdef HPX_LITE
+		std::sort(free_indices.begin(), free_indices.end());
+		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
+#else
 		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
 		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
 		fut.get();
+#endif
 		if (free_indices.size() < trans_particles.size()) {
 			const int diff = trans_particles.size() - free_indices.size();
 			for (int i = 0; i < diff; i++) {

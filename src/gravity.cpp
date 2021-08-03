@@ -5,6 +5,8 @@
 #include <tigerfmm/timer.hpp>
 #include <tigerfmm/tree.hpp>
 
+#include <boost/align/aligned_allocator.hpp>
+
 int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
 	int flops = 0;
 	if (list.size()) {
@@ -16,8 +18,8 @@ int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 		for (int i = 0; i < list.size(); i++) {
 			tree_ptrs[i] = tree_get_node(list[i]);
 		}
-		static thread_local vector<multipole<simd_float>> M;
-		static thread_local vector<array<simd_int, NDIM>> Y;
+		static thread_local vector<multipole<simd_float>, boost::alignment::aligned_allocator<multipole<simd_float>, SIMD_FLOAT_SIZE * sizeof(float)>> M;
+		static thread_local vector<array<simd_int, NDIM>, boost::alignment::aligned_allocator<array<simd_int, NDIM>, SIMD_FLOAT_SIZE * sizeof(float)>> Y;
 		M.resize(nsource);
 		Y.resize(nsource);
 		for (int i = 0; i < tree_ptrs.size(); i++) {
@@ -120,10 +122,13 @@ int cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 			for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 				const int cnt = std::min(count - j, SIMD_FLOAT_SIZE);
 				const int k = j / SIMD_FLOAT_SIZE;
-				Y[XDIM] = *((simd_int*) srcx.data() + k);
-				Y[YDIM] = *((simd_int*) srcy.data() + k);
-				Y[ZDIM] = *((simd_int*) srcz.data() + k);
-				simd_float mask = *((simd_float*) masks.data() + k);
+				simd_float mask;
+				for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+					Y[XDIM][l] = srcx[j + l].raw();
+					Y[YDIM][l] = srcy[j + l].raw();
+					Y[ZDIM][l] = srcz[j + l].raw();
+					mask[l] = masks[j + l];
+				}
 				array<simd_float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
@@ -155,8 +160,8 @@ int cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tr
 		for (int i = 0; i < list.size(); i++) {
 			tree_ptrs[i] = tree_get_node(list[i]);
 		}
-		static thread_local vector<multipole<simd_float>> M;
-		static thread_local vector<array<simd_int, NDIM>> Y;
+		static thread_local vector<multipole<simd_float>, boost::alignment::aligned_allocator<multipole<simd_float>, SIMD_FLOAT_SIZE * sizeof(float)>> M;
+		static thread_local vector<array<simd_int, NDIM>, boost::alignment::aligned_allocator<array<simd_int, NDIM>, SIMD_FLOAT_SIZE * sizeof(float)>> Y;
 		M.resize(nsource);
 		Y.resize(nsource);
 		int count = 0;
@@ -278,10 +283,13 @@ int cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tr
 					for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 						const int& count = maxi;
 						const int k = j / SIMD_FLOAT_SIZE;
-						Y[XDIM] = *((simd_int*) srcx.data() + k);
-						Y[YDIM] = *((simd_int*) srcy.data() + k);
-						Y[ZDIM] = *((simd_int*) srcz.data() + k);
-						simd_float mask = *((simd_float*) masks.data() + k);
+						simd_float mask;
+						for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+							Y[XDIM][l] = srcx[j + l].raw();
+							Y[YDIM][l] = srcy[j + l].raw();
+							Y[ZDIM][l] = srcz[j + l].raw();
+							mask[l] = masks[j + l];
+						}
 						array<simd_float, NDIM> dx;
 						for (int dim = 0; dim < NDIM; dim++) {
 							dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3

@@ -6,6 +6,8 @@ constexpr bool verbose = true;
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
 
+#include <stack>
+
 HPX_PLAIN_ACTION(kick);
 HPX_PLAIN_ACTION(kick_reset_all_list_sizes);
 

@@ -45,10 +45,23 @@ public:
 	template<class A>
 	void serialize(A&&, unsigned) {
 	}
-	hpx::future<kick_return> add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecklist, vector<tree_id> && echecklist);
+	hpx::future<kick_return> add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
+			vector<tree_id> && dchecklist, vector<tree_id> && echecklist);
 	void add_parts(std::shared_ptr<kick_workspace> ptr, int n);
 	void to_gpu(std::atomic<int>& outer_lock);
 };
+
+#ifdef HPX_LITE
+
+namespace hpx {
+	namespace serialization {
+		template<class Archive>
+		void serialize(Archive& ar, std::shared_ptr<kick_workspace>& m, unsigned int) {
+		}
+	}
+} // namespace boost::serialization
+
+#endif
 
 #endif
 #endif /* KICK_WORKSPACE_HPP_ */

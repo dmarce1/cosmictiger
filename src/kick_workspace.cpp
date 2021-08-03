@@ -172,7 +172,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
 	}
 	lock.unlock();
 	if (do_work) {
-		hpx::apply([ptr]() {
+		hpx::async([ptr]() {
 			static std::atomic<int> cnt(0);
 			while( cnt++ != 0 ) {
 				cnt--;
@@ -210,7 +210,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
-		hpx::apply([ptr]() {
+		hpx::async([ptr]() {
 			static std::atomic<int> cnt(0);
 			while( cnt++ != 0 ) {
 				cnt--;

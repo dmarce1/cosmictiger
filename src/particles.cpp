@@ -9,6 +9,7 @@ constexpr bool verbose = true;
 #include <gsl/gsl_rng.h>
 
 #include <shared_mutex>
+#include <unordered_map>
 
 struct line_id_type;
 
@@ -108,7 +109,7 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 		auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
 		part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
-		hpx::apply([prms,line_id]() {
+		hpx::async([prms,line_id]() {
 			auto line_fut = hpx::async<particles_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
