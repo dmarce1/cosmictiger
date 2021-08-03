@@ -42,7 +42,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	CUDA_CHECK(cudaMemcpy(dev_sinky, sinky.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinkz, sinkz.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	PRINT("%li free\n", cuda_free_mem());
-	const int parts_per_loop = cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
+	const size_t parts_per_loop = (size_t) cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
 	int occupancy;
 	CUDA_CHECK(
 			cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, analytic_gravity_kernel,ANALYTIC_BLOCK_SIZE, sizeof(double)*(NDIM+1)*ANALYTIC_BLOCK_SIZE ));
@@ -52,7 +52,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 		cudaStreamCreate(&streams[i]);
 	}
 	PRINT("%i particles per loop, %i kernels\n", parts_per_loop, num_kernels);
-	for (int i = 0; i < particles_size(); i += parts_per_loop) {
+	for (size_t i = 0; i < particles_size(); i += parts_per_loop) {
 		const int total_size = std::min(size_t(particles_size()), size_t(i) + size_t(parts_per_loop)) - size_t(i);
 		CUDA_CHECK(cudaMalloc(&dev_srcx, total_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMalloc(&dev_srcy, total_size * sizeof(fixed32)));

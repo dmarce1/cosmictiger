@@ -112,7 +112,7 @@
 class simd_float;
 class simd_int;
 
-class simd_double {
+class alignas(sizeof(__m128d)) simd_double {
 	__m128d v;
 public:
 	simd_double() = default;
@@ -179,7 +179,7 @@ inline simd_double fmaf(const simd_double& a, const simd_double& b, const simd_d
 	return d;
 }
 
-class simd_float {
+class alignas(sizeof(_simd_float)) simd_float {
 private:
 	union {
 		_simd_float v;
@@ -353,7 +353,7 @@ using simd_float8 = simd_float;
 using simd_int8 = simd_int;
 #else
 
-class simd_float8 {
+class alignas(sizeof(__m128)) simd_float8 {
 	__m128 v[2];
 
 public:
@@ -493,7 +493,7 @@ inline simd_float8 sqrt(const simd_float8 &vec) {
 	return r;
 }
 
-class simd_int8 {
+class alignas(sizeof(__m128i)) simd_int8 {
 	__m128i v[2];
 
 public:
@@ -567,7 +567,7 @@ public:
 
 #endif
 
-class simd_int {
+class alignas(sizeof(_simd_int)) simd_int {
 private:
 	union {
 		_simd_int v;
