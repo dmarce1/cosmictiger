@@ -7,13 +7,18 @@
 #define NREAL 147
 #define NFOUR 92
 
-static array<array<float, NDIM>, NREAL> real_indices;
-static array<array<float, NDIM>, NFOUR> four_indices;
-static array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
+struct ewald_constants {
+	array<array<float, NDIM>, NREAL> real_indices;
+	array<array<float, NDIM>, NFOUR> four_indices;
+	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
+};
 
-static __managed__ array<array<float, NDIM>, NREAL> real_indices_dev;
-static __managed__ array<array<float, NDIM>, NFOUR> four_indices_dev;
-static __managed__ array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse_dev;
+ewald_constants ec;
+__device__ ewald_constants* ec_dev;
+
+__global__ void set_ewald_constants(ewald_constants* consts) {
+	ec_dev = consts;
+}
 
 void ewald_const::init_gpu() {
 	int n2max = 10;
@@ -28,7 +33,7 @@ void ewald_const::init_gpu() {
 					this_h[0] = i;
 					this_h[1] = j;
 					this_h[2] = k;
-					real_indices[count++] = this_h;
+					ec.real_indices[count++] = this_h;
 				}
 			}
 		}
@@ -38,7 +43,7 @@ void ewald_const::init_gpu() {
 		const auto b2 = sqr(b[0],b[1],b[2]);
 		return a2 > b2;
 	};
-	std::sort(real_indices.begin(), real_indices.end(), sort_func);
+	std::sort(ec.real_indices.begin(), ec.real_indices.end(), sort_func);
 //	PRINT("nreal = %i\n", count);
 	n2max = 8;
 	nmax = std::sqrt(n2max) + 1;
@@ -52,17 +57,17 @@ void ewald_const::init_gpu() {
 					this_h[2] = k;
 					const auto hdot = sqr(this_h[0]) + sqr(this_h[1]) + sqr(this_h[2]);
 					if (hdot > 0) {
-						four_indices[count++] = this_h;
+						ec.four_indices[count++] = this_h;
 					}
 				}
 			}
 		}
 	}
-	std::sort(four_indices.begin(), four_indices.end(), sort_func);
+	std::sort(ec.four_indices.begin(), ec.four_indices.end(), sort_func);
 //	PRINT("nfour = %i\n", count);
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
-		array<float, NDIM> h = four_indices[i];
+		array<float, NDIM> h = ec.four_indices[i];
 		auto D0 = vector_to_sym_tensor<float, LORDER>(h);
 		const float h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
 		const float c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
@@ -76,12 +81,14 @@ void ewald_const::init_gpu() {
 				}
 			}
 		}
-		four_expanse[count++] = D0.detraceD();
+		ec.four_expanse[count++] = D0.detraceD();
 	}
 	cuda_set_device();
-	CUDA_CHECK(cudaMemcpy(&real_indices_dev, &real_indices, sizeof(real_indices), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(&four_indices_dev, &four_indices, sizeof(four_indices), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(&four_expanse_dev, &four_expanse, sizeof(four_expanse), cudaMemcpyHostToDevice));
+	ewald_constants* dev;
+	CUDA_CHECK(cudaMalloc(&dev, sizeof(ewald_constants)));
+	CUDA_CHECK(cudaMemcpy(dev, &ec, sizeof(ewald_constants), cudaMemcpyHostToDevice));
+	set_ewald_constants<<<1,1>>>(dev);
+	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 CUDA_EXPORT int ewald_const::nfour() {
@@ -94,24 +101,24 @@ CUDA_EXPORT int ewald_const::nreal() {
 
 CUDA_EXPORT const array<float, NDIM>& ewald_const::real_index(int i) {
 #ifdef __CUDA_ARCH__
-	return real_indices_dev[i];
+	return ec_dev->real_indices[i];
 #else
-	return real_indices[i];
+	return ec.real_indices[i];
 #endif
 }
 
 CUDA_EXPORT const array<float, NDIM>& ewald_const::four_index(int i) {
 #ifdef __CUDA_ARCH__
-	return four_indices_dev[i];
+	return ec_dev->four_indices[i];
 #else
-	return four_indices[i];
+	return ec.four_indices[i];
 #endif
 }
 
 CUDA_EXPORT const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
 #ifdef __CUDA_ARCH__
-	return four_expanse_dev[i];
+	return ec_dev->four_expanse[i];
 #else
-	return four_expanse[i];
+	return ec.four_expanse[i];
 #endif
 }
