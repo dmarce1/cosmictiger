@@ -8,6 +8,8 @@
 #ifndef COSMICTIGER_SIMD_HPP_
 #define COSMICTIGER_SIMD_HPP_
 
+#ifndef __CUDACC__
+
 #include <tigerfmm/defs.hpp>
 
 #include <immintrin.h>
@@ -809,5 +811,6 @@ inline bool isnan(const simd_float& f) {
 	return false;
 }
 
+#endif
 #endif /* COSMICTIGER_SIMD_HPP_ */
 

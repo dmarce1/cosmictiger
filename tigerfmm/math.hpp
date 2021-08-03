@@ -69,8 +69,12 @@ CUDA_EXPORT inline float anytrue(float x) {
 	return x;
 }
 
+#ifndef __CUDACC__
+
 inline float anytrue(const simd_float& x) {
 	return x.sum();
 }
+
+#endif
 
 #endif /* MATH_HPP_ */

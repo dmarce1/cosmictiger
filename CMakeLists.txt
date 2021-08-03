@@ -7,24 +7,30 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
 enable_language(CUDA)
+set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
 set(CMAKE_CXX_FLAGS "-ffast-math -Wno-deprecated-declarations -Wno-format-security")
 execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
 execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
 message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
+set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 
 
 set(tigerfmm_source_files
+    src/analytic.cu
     src/analytic.cpp
     src/cuda.cpp
     src/drift.cpp
     src/driver.cpp
     src/domain.cpp
     src/ewald_indices.cpp
+    src/ewald_indices.cu
     src/fft.cpp
     src/gravity.cpp
+    src/gravity.cu
     src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
+    src/kick.cu
     src/kick_workspace.cpp
     src/main.cpp
     src/map.cpp
@@ -33,13 +39,6 @@ set(tigerfmm_source_files
     src/range_set.cpp
     src/test.cpp
     src/tree.cpp
-)      
-                       
-set(tigerfmm_cuda_source_files
-    src/analytic.cu
-    src/ewald_indices.cu
-    src/gravity.cu
-    src/kick.cu
 )      
                        
                         
@@ -86,11 +85,10 @@ add_hpx_executable(
     Boost::boost cudart fftw3 gsl gslcblas chealpix
   SOURCES
     ${tigerfmm_source_files}
-    ${tigerfmm_cuda_source_files}
   HEADERS
     ${tigerfmm_header_files}
  )
- SET_SOURCE_FILES_PROPERTIES( ${tigerfmm_source_files} PROPERTIES COMPILE_FLAGS -march=native )
+ 
  add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp tigerfmm/tensor.hpp )
  execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
@@ -107,9 +105,8 @@ add_dependencies( tigerfmm generate_fmm_kernels )
 set_property(TARGET tigerfmm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(tigerfmm PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
-target_compile_options(tigerfmm PUBLIC "-DUSE_HPX")
 target_compile_options(tigerfmm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math -march=native ;
+                        --use_fast_math ;
                         >)
                         
 set_property(TARGET tigerfmm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
