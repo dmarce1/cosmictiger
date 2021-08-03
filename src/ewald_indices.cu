@@ -1,4 +1,3 @@
-
 #include <tigerfmm/ewald_indices.hpp>
 #include <tigerfmm/math.hpp>
 #include <tigerfmm/safe_io.hpp>
@@ -12,9 +11,9 @@ static array<array<float, NDIM>, NREAL> real_indices;
 static array<array<float, NDIM>, NFOUR> four_indices;
 static array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
 
-static __constant__ array<array<float, NDIM>, NREAL> real_indices_dev;
-static __constant__ array<array<float, NDIM>, NFOUR> four_indices_dev;
-static __constant__ array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse_dev;
+static __managed__ array<array<float, NDIM>, NREAL> real_indices_dev;
+static __managed__ array<array<float, NDIM>, NFOUR> four_indices_dev;
+static __managed__ array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse_dev;
 
 void ewald_const::init_gpu() {
 	int n2max = 10;
@@ -80,9 +79,9 @@ void ewald_const::init_gpu() {
 		four_expanse[count++] = D0.detraceD();
 	}
 	cuda_set_device();
-	CUDA_CHECK(cudaMemcpyToSymbol(real_indices_dev, &real_indices, sizeof(real_indices)));
-	CUDA_CHECK(cudaMemcpyToSymbol(four_indices_dev, &four_indices, sizeof(four_indices)));
-	CUDA_CHECK(cudaMemcpyToSymbol(four_expanse_dev, &four_expanse, sizeof(four_expanse)));
+	real_indices_dev = real_indices;
+	four_indices_dev = four_indices;
+	four_expanse_dev = four_expanse;
 }
 
 CUDA_EXPORT int ewald_const::nfour() {

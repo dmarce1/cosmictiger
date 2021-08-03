@@ -54,6 +54,7 @@ struct line_id_hash_hi {
 
 
 void particles_unpin() {
+	cuda_set_device();
 	CUDA_CHECK(cudaHostUnregister(&particles_vel(XDIM,0)));
 	CUDA_CHECK(cudaHostUnregister(&particles_vel(YDIM,0)));
 	CUDA_CHECK(cudaHostUnregister(&particles_vel(ZDIM,0)));
@@ -67,6 +68,7 @@ void particles_unpin() {
 }
 
 void particles_pin() {
+	cuda_set_device();
 	CUDA_CHECK(cudaHostRegister(&particles_vel(XDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault ));
 	CUDA_CHECK(cudaHostRegister(&particles_vel(YDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
 	CUDA_CHECK(cudaHostRegister(&particles_vel(ZDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
