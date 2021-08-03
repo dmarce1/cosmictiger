@@ -171,7 +171,11 @@ public:
 
 inline simd_double fmaf(const simd_double& a, const simd_double& b, const simd_double& c) {
 	simd_double d;
+#ifdef USE_AVX2
 	d.v = _mm_fmadd_pd(a.v, b.v, c.v);
+#else
+	d = a * b + c;
+#endif
 	return d;
 }
 
