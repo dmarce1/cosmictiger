@@ -74,10 +74,8 @@ void cuda_cycle_devices() {
 		futs.push_back(hpx::async<cuda_cycle_devices_action>(c));
 	}
 
-	particles_unpin();
 	cuda_init();
 	ewald_const::init();
-	particles_pin();
 
 	hpx::wait_all(futs.begin(), futs.end());
 }

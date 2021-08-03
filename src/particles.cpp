@@ -52,36 +52,6 @@ struct line_id_hash_hi {
 	}
 };
 
-
-void particles_unpin() {
-	cuda_set_device();
-	CUDA_CHECK(cudaHostUnregister(&particles_vel(XDIM,0)));
-	CUDA_CHECK(cudaHostUnregister(&particles_vel(YDIM,0)));
-	CUDA_CHECK(cudaHostUnregister(&particles_vel(ZDIM,0)));
-	CUDA_CHECK(cudaHostUnregister(&particles_rung(0)));
-	if (get_options().save_force) {
-		CUDA_CHECK(cudaHostUnregister(&particles_gforce(XDIM,0)));
-		CUDA_CHECK(cudaHostUnregister(&particles_gforce(YDIM,0)));
-		CUDA_CHECK(cudaHostUnregister(&particles_gforce(ZDIM,0)));
-		CUDA_CHECK(cudaHostUnregister(&particles_pot(0)));
-	}
-}
-
-void particles_pin() {
-	cuda_set_device();
-	CUDA_CHECK(cudaHostRegister(&particles_vel(XDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault ));
-	CUDA_CHECK(cudaHostRegister(&particles_vel(YDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
-	CUDA_CHECK(cudaHostRegister(&particles_vel(ZDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
-	CUDA_CHECK(cudaHostRegister(&particles_rung(0), sizeof(char) * particles_size(), cudaHostRegisterDefault));
-	if (get_options().save_force) {
-		CUDA_CHECK(cudaHostRegister(&particles_gforce(XDIM,0),sizeof(float) * particles_size(),cudaHostRegisterDefault));
-		CUDA_CHECK(cudaHostRegister(&particles_gforce(YDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
-		CUDA_CHECK(cudaHostRegister(&particles_gforce(ZDIM,0), sizeof(float) *particles_size(),cudaHostRegisterDefault));
-		CUDA_CHECK(cudaHostRegister(&particles_pot(0), sizeof(float) * particles_size(), cudaHostRegisterDefault));
-	}
-
-}
-
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 
@@ -177,16 +147,6 @@ void particles_destroy() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-template<class T>
-void vector_pin_resize(vector<T>& v, int new_size) {
-	if (new_size > v.capacity()) {
-		if (v.size()) {
-			CUDA_CHECK(cudaHostUnregister(v.data()));
-		}
-		v.resize(new_size);
-		CUDA_CHECK(cudaHostRegister(v.data(), new_size * sizeof(T), cudaHostRegisterDefault));
-	}
-}
 
 int particles_size() {
 	return particles_r.size();
@@ -195,14 +155,14 @@ int particles_size() {
 void particles_resize(int sz) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		particles_x[dim].resize(sz);
-		vector_pin_resize(particles_v[dim], sz);
+		particles_v[dim].resize(sz);
 	}
-	vector_pin_resize(particles_r, sz);
+	particles_r.resize(sz);
 	if (get_options().save_force) {
+		particles_p.resize(sz);
 		for (int dim = 0; dim < NDIM; dim++) {
-			vector_pin_resize(particles_g[dim], sz);
+			particles_g[dim].resize(sz);
 		}
-		vector_pin_resize(particles_p, sz);
 	}
 }
 
