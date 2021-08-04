@@ -16,11 +16,11 @@ static vector<array<fixed32, NDIM>> particles_fetch_cache_line(part_int index);
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
 void particles_cache_free();
 
-HPX_PLAIN_ACTION (particles_cache_free);
-HPX_PLAIN_ACTION (particles_destroy);
-HPX_PLAIN_ACTION (particles_fetch_cache_line);
-HPX_PLAIN_ACTION (particles_random_init);
-HPX_PLAIN_ACTION (particles_sample);
+HPX_PLAIN_ACTION(particles_cache_free);
+HPX_PLAIN_ACTION(particles_destroy);
+HPX_PLAIN_ACTION(particles_fetch_cache_line);
+HPX_PLAIN_ACTION(particles_random_init);
+HPX_PLAIN_ACTION(particles_sample);
 
 struct line_id_type {
 	int proc;

@@ -6,6 +6,10 @@ constexpr bool verbose = true;
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/safe_io.hpp>
 
+#ifdef HPX_LITE
+#include <boost/program_options.hpp>
+#endif
+
 #include <fstream>
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
@@ -30,7 +34,11 @@ void set_options(const options& opts) {
 
 bool process_options(int argc, char *argv[]) {
 	options opts;
+#ifdef HPX_LITE
+	namespace po = boost::program_options;
+#else
 	namespace po = hpx::program_options;
+#endif
 	bool rc;
 	po::options_description command_opts("options");
 

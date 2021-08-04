@@ -12,8 +12,6 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 
-
-
 HPX_PLAIN_ACTION (write_checkpoint);
 HPX_PLAIN_ACTION (read_checkpoint);
 
@@ -249,17 +247,15 @@ void write_checkpoint(driver_params params) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
+		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
 	}
-	futs.push_back(hpx::threads::run_as_os_thread([&]() {
-		const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
+	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");
-		std::ofstream fp(fname.c_str(), std::ios::out | std::ios::binary);
-		fp.write((const char*)&params, sizeof(driver_params));
-		particles_save(fp);
-		map_save(fp);
-		fp.close();
-	}));
+	std::ofstream fp(fname.c_str(), std::ios::out | std::ios::binary);
+	fp.write((const char*) &params, sizeof(driver_params));
+	particles_save(fp);
+	map_save(fp);
+	fp.close();
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");
@@ -273,7 +269,7 @@ driver_params read_checkpoint(int checknum) {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < read_checkpoint_action > (c, checknum));
+		futs.push_back(hpx::async<read_checkpoint_action>(c, checknum));
 	}
 	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string("/checkpoint.") + std::to_string(checknum) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");
