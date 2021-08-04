@@ -82,7 +82,7 @@ set(tigerfmm_header_files
 add_hpx_executable(
   tigerfmm
   DEPENDENCIES
-    Boost::boost cudart fftw3 gsl gslcblas chealpix
+    Boost::boost cudart fftw3f gsl gslcblas chealpix
   SOURCES
     ${tigerfmm_source_files}
   HEADERS

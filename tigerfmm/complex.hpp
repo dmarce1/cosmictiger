@@ -133,6 +133,6 @@ inline void swap(complex<T>& a, complex<T>& b) {
 	std::swap(a.imag(), b.imag());
 }
 
-using cmplx = complex<double>;
+using cmplx = complex<float>;
 
 #endif /* COMPLEX_HPP_ */
