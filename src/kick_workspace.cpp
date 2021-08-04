@@ -74,6 +74,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 			}
 		}
 	}
+	cuda_set_device();
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
