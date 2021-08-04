@@ -1,6 +1,6 @@
-#include <tigerfmm/ewald_indices.hpp>
-#include <tigerfmm/math.hpp>
-#include <tigerfmm/safe_io.hpp>
+#include <cosmictiger/ewald_indices.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/safe_io.hpp>
 
 #include <algorithm>
 

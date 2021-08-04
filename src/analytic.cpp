@@ -1,8 +1,8 @@
-#include <tigerfmm/analytic.hpp>
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/math.hpp>
-#include <tigerfmm/options.hpp>
-#include <tigerfmm/particles.hpp>
+#include <cosmictiger/analytic.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
 
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 

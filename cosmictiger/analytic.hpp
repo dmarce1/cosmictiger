@@ -9,8 +9,8 @@
 #define ANALYTIC_HPP_
 
 
-#include <tigerfmm/containers.hpp>
-#include <tigerfmm/fixed.hpp>
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/fixed.hpp>
 
 std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx,
 		const vector<fixed32>& sinky, const vector<fixed32>& sinkz);

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <tigerfmm/containers.hpp>
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/tensor.hpp>
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/tensor.hpp>
 
 struct ewald_const {
 	CUDA_EXPORT static int nfour();

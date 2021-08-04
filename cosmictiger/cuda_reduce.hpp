@@ -8,7 +8,7 @@
 #ifndef CUDA_REDUCE_HPP_
 #define CUDA_REDUCE_HPP_
 
-#include <tigerfmm/defs.hpp>
+#include <cosmictiger/defs.hpp>
 
 __device__ inline void compute_indices(int& index, int& total) {
 	const int& tid = threadIdx.x;

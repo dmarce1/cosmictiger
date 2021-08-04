@@ -1,7 +1,7 @@
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/ewald_indices.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/ewald_indices.hpp>
 
 
 HPX_PLAIN_ACTION(cuda_cycle_devices);

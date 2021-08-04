@@ -10,7 +10,7 @@
 
 #ifndef __CUDACC__
 
-#include <tigerfmm/defs.hpp>
+#include <cosmictiger/defs.hpp>
 
 #include <immintrin.h>
 

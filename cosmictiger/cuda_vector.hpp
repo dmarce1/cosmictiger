@@ -8,8 +8,8 @@
 #ifndef CUDA_cuda_vector_HPP_
 #define CUDA_cuda_vector_HPP_
 
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/cuda.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/cuda.hpp>
 
 #ifdef __CUDACC__
 

@@ -8,12 +8,12 @@
 #ifndef KICK_WORKSPACE_HPP_
 #define KICK_WORKSPACE_HPP_
 
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/kick.hpp>
-#include <tigerfmm/range_set.hpp>
-#include <tigerfmm/tree.hpp>
-#include <tigerfmm/unordered_set_ts.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/kick.hpp>
+#include <cosmictiger/range_set.hpp>
+#include <cosmictiger/tree.hpp>
+#include <cosmictiger/unordered_set_ts.hpp>
 
 #include <unordered_map>
 #include <set>

@@ -1,9 +1,9 @@
-#include <tigerfmm/containers.hpp>
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/map.hpp>
-#include <tigerfmm/math.hpp>
-#include <tigerfmm/options.hpp>
-#include <tigerfmm/simd.hpp>
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/map.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/simd.hpp>
 
 #include <chealpix.h>
 

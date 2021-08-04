@@ -1,15 +1,15 @@
 constexpr bool verbose = true;
 
-#include <tigerfmm/analytic.hpp>
-#include <tigerfmm/domain.hpp>
-#include <tigerfmm/gravity.hpp>
-#include <tigerfmm/initialize.hpp>
-#include <tigerfmm/kick.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/safe_io.hpp>
-#include <tigerfmm/test.hpp>
-#include <tigerfmm/timer.hpp>
-#include <tigerfmm/tree.hpp>
+#include <cosmictiger/analytic.hpp>
+#include <cosmictiger/domain.hpp>
+#include <cosmictiger/gravity.hpp>
+#include <cosmictiger/initialize.hpp>
+#include <cosmictiger/kick.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/test.hpp>
+#include <cosmictiger/timer.hpp>
+#include <cosmictiger/tree.hpp>
 
 //0.7, 0.8
 //0.55, 0.65

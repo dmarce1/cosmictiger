@@ -8,9 +8,9 @@
 #ifndef FFT_HPP_
 #define FFT_HPP_
 
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/range.hpp>
-#include <tigerfmm/complex.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/range.hpp>
+#include <cosmictiger/complex.hpp>
 
 void fft3d_init(int N);
 void fft3d_execute();

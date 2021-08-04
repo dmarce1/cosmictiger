@@ -1,6 +1,6 @@
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/fft.hpp>
-#include <tigerfmm/hpx.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/fft.hpp>
+#include <cosmictiger/hpx.hpp>
 
 #include <fftw3.h>
 

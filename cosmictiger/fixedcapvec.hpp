@@ -8,10 +8,10 @@
 #ifndef FIXEDCAPVEC_HPP_
 #define FIXEDCAPVEC_HPP_
 
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/containers.hpp>
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/safe_io.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/safe_io.hpp>
 
 #ifdef __CUDACC__
 template<class T, int N>

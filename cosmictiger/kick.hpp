@@ -8,9 +8,9 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
-#include <tigerfmm/cuda_vector.hpp>
-#include <tigerfmm/stack_vector.hpp>
-#include <tigerfmm/tree.hpp>
+#include <cosmictiger/cuda_vector.hpp>
+#include <cosmictiger/stack_vector.hpp>
+#include <cosmictiger/tree.hpp>
 
 #include <atomic>
 

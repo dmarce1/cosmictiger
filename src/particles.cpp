@@ -1,10 +1,10 @@
 constexpr bool verbose = true;
 #define PARTICLES_CPP
 
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/options.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/safe_io.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/safe_io.hpp>
 
 #include <gsl/gsl_rng.h>
 

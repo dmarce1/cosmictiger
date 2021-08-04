@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tigerfmm/fixedcapvec.hpp>
+#include <cosmictiger/fixedcapvec.hpp>
 
 #ifdef __CUDACC__
 

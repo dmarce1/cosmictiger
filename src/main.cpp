@@ -1,11 +1,11 @@
-#include <tigerfmm/driver.hpp>
-#include <tigerfmm/ewald_indices.hpp>
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/options.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/simd.hpp>
-#include <tigerfmm/test.hpp>
-#include <tigerfmm/unordered_set_ts.hpp>
+#include <cosmictiger/driver.hpp>
+#include <cosmictiger/ewald_indices.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/simd.hpp>
+#include <cosmictiger/test.hpp>
+#include <cosmictiger/unordered_set_ts.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();

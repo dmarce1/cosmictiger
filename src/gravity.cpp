@@ -1,9 +1,9 @@
-#include <tigerfmm/fmm_kernels.hpp>
-#include <tigerfmm/gravity.hpp>
-#include <tigerfmm/math.hpp>
-#include <tigerfmm/safe_io.hpp>
-#include <tigerfmm/timer.hpp>
-#include <tigerfmm/tree.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/gravity.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/timer.hpp>
+#include <cosmictiger/tree.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 

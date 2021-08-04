@@ -1,5 +1,5 @@
-#include <tigerfmm/cuda_reduce.hpp>
-#include <tigerfmm/gravity.hpp>
+#include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/gravity.hpp>
 
 __device__
 int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist,

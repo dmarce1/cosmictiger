@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tigerfmm/hpx.hpp>
+#include <cosmictiger/hpx.hpp>
 
 #ifndef __CUDACC__
 

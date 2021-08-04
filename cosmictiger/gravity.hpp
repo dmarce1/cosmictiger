@@ -8,11 +8,11 @@
 #ifndef GRAVITY_HPP_
 #define GRAVITY_HPP_
 
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/fixed.hpp>
-#include <tigerfmm/fixedcapvec.hpp>
-#include <tigerfmm/tree.hpp>
-#include <tigerfmm/kick.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/fixed.hpp>
+#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/tree.hpp>
+#include <cosmictiger/kick.hpp>
 
 CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_float();

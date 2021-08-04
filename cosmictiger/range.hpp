@@ -8,8 +8,8 @@
 #ifndef RANGE_HPP_
 #define RANGE_HPP_
 
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/containers.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/containers.hpp>
 
 inline array<int, NDIM> shift_up(array<int, NDIM> i) {
 	array<int, NDIM> j;

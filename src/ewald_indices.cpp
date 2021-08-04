@@ -1,5 +1,5 @@
-#include <tigerfmm/ewald_indices.hpp>
-#include <tigerfmm/hpx.hpp>
+#include <cosmictiger/ewald_indices.hpp>
+#include <cosmictiger/hpx.hpp>
 
 HPX_PLAIN_ACTION(ewald_const::init, ewald_const_init_action);
 

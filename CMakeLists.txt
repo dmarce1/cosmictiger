@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12.4)
 cmake_policy(VERSION 3.12.4)
 cmake_policy(SET CMP0003 NEW)
 cmake_policy(SET CMP0074 NEW)
-project(tigerfmm CXX C)
+project(cosmictiger CXX C)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
@@ -15,7 +15,7 @@ message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 
 
-set(tigerfmm_source_files
+set(cosmictiger_source_files
     src/analytic.cu
     src/analytic.cpp
     src/cuda.cpp
@@ -44,72 +44,72 @@ set(tigerfmm_source_files
                         
                         
 
-set(tigerfmm_header_files
-    tigerfmm/complex.hpp
-    tigerfmm/containers.hpp
-    tigerfmm/cuda.hpp
-    tigerfmm/cuda_reduce.hpp
-    tigerfmm/cuda_vector.hpp
-    tigerfmm/defs.hpp
-    tigerfmm/domain.hpp
-    tigerfmm/drift.hpp
-    tigerfmm/driver.hpp
-    tigerfmm/ewald_incides.hpp
-    tigerfmm/fft.hpp
-    tigerfmm/fixedcapvec.hpp
-    tigerfmm/fixes.hpp
-    tigerfmm/gravity.hpp
-    tigerfmm/initialize.hpp
-    tigerfmm/hpx.hpp
-    tigerfmm/kick.hpp
-    tigerfmm/kick_workspace.hpp
-    tigerfmm/map.hpp
-    tigerfmm/math.hpp
-    tigerfmm/options.hpp
-    tigerfmm/particles.hpp
-    tigerfmm/range.hpp
-    tigerfmm/range_set.hpp
-    tigerfmm/safe_io.hpp
-    tigerfmm/simd.hpp
-    tigerfmm/stack_vector.hpp
-    tigerfmm/test.hpp
-    tigerfmm/tree.hpp
-    tigerfmm/timer.hpp
-    tigerfmm/unordered_map_ts.hpp
-    tigerfmm/unordered_set_ts.hpp
+set(cosmictiger_header_files
+    cosmictiger/complex.hpp
+    cosmictiger/containers.hpp
+    cosmictiger/cuda.hpp
+    cosmictiger/cuda_reduce.hpp
+    cosmictiger/cuda_vector.hpp
+    cosmictiger/defs.hpp
+    cosmictiger/domain.hpp
+    cosmictiger/drift.hpp
+    cosmictiger/driver.hpp
+    cosmictiger/ewald_incides.hpp
+    cosmictiger/fft.hpp
+    cosmictiger/fixedcapvec.hpp
+    cosmictiger/fixes.hpp
+    cosmictiger/gravity.hpp
+    cosmictiger/initialize.hpp
+    cosmictiger/hpx.hpp
+    cosmictiger/kick.hpp
+    cosmictiger/kick_workspace.hpp
+    cosmictiger/map.hpp
+    cosmictiger/math.hpp
+    cosmictiger/options.hpp
+    cosmictiger/particles.hpp
+    cosmictiger/range.hpp
+    cosmictiger/range_set.hpp
+    cosmictiger/safe_io.hpp
+    cosmictiger/simd.hpp
+    cosmictiger/stack_vector.hpp
+    cosmictiger/test.hpp
+    cosmictiger/tree.hpp
+    cosmictiger/timer.hpp
+    cosmictiger/unordered_map_ts.hpp
+    cosmictiger/unordered_set_ts.hpp
 )
 
 add_hpx_executable(
-  tigerfmm
+  cosmictiger
   DEPENDENCIES
     Boost::boost cudart fftw3f gsl gslcblas chealpix
   SOURCES
-    ${tigerfmm_source_files}
+    ${cosmictiger_source_files}
   HEADERS
-    ${tigerfmm_header_files}
+    ${cosmictiger_header_files}
  )
  
- add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp tigerfmm/tensor.hpp )
+ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp )
  execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
  
  add_custom_command(
-    OUTPUT tigerfmm/fmm_kernels.hpp
-    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/tigerfmm/fmm_kernels.hpp
+    OUTPUT cosmictiger/fmm_kernels.hpp
+    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
     DEPENDS fmm_kernel_codegen
     COMMENT "Generating FFM kernels"
 )
-add_custom_target( generate_fmm_kernels DEPENDS tigerfmm/fmm_kernels.hpp COMMENT "" )
-add_dependencies( tigerfmm generate_fmm_kernels )
+add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
+add_dependencies( cosmictiger generate_fmm_kernels )
  
-set_property(TARGET tigerfmm PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-target_include_directories(tigerfmm PUBLIC ${PROJECT_SOURCE_DIR})
+set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
-target_compile_options(tigerfmm PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;
                         >)
                         
-set_property(TARGET tigerfmm PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
+set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 
 
 add_executable(

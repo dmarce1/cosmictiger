@@ -8,8 +8,8 @@
 #ifndef COSMICTIGER_FIXED_HPP_
 #define COSMICTIGER_FIXED_HPP_
 
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/simd.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/simd.hpp>
 
 #include <cstdint>
 #include <cassert>

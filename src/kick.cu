@@ -1,12 +1,12 @@
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/cuda_reduce.hpp>
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/fixedcapvec.hpp>
-#include <tigerfmm/fmm_kernels.hpp>
-#include <tigerfmm/gravity.hpp>
-#include <tigerfmm/kick.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/timer.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/gravity.hpp>
+#include <cosmictiger/kick.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/timer.hpp>
 
 #include <atomic>
 

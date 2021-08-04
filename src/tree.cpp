@@ -1,10 +1,10 @@
 constexpr bool verbose = true;
 
-#include <tigerfmm/fast_future.hpp>
-#include <tigerfmm/math.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/safe_io.hpp>
-#include <tigerfmm/tree.hpp>
+#include <cosmictiger/fast_future.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/tree.hpp>
 
 #include <shared_mutex>
 #include <unordered_map>

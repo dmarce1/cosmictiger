@@ -1,5 +1,5 @@
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/cuda.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/cuda.hpp>
 
 static int rank;
 static int nranks;

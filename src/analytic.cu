@@ -1,8 +1,8 @@
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/gravity.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/options.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/gravity.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/options.hpp>
 
 __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
 		double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);

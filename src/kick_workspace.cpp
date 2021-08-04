@@ -1,6 +1,6 @@
-#include <tigerfmm/kick_workspace.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/timer.hpp>
+#include <cosmictiger/kick_workspace.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/timer.hpp>
 
 kick_workspace::kick_workspace(kick_params p, int total_parts_) {
 	total_parts = total_parts_;

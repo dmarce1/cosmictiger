@@ -8,8 +8,8 @@
 #ifndef MATH_HPP_
 #define MATH_HPP_
 
-#include <tigerfmm/cuda.hpp>
-#include <tigerfmm/simd.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/simd.hpp>
 
 template<class T>
 CUDA_EXPORT inline T sqr(const T& a) {

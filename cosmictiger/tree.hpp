@@ -8,12 +8,12 @@
 #ifndef TREE_HPP_
 #define TREE_HPP_
 
-#include <tigerfmm/fixed.hpp>
-#include <tigerfmm/fmm_kernels.hpp>
-#include <tigerfmm/hpx.hpp>
-#include <tigerfmm/options.hpp>
-#include <tigerfmm/particles.hpp>
-#include <tigerfmm/range.hpp>
+#include <cosmictiger/fixed.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/range.hpp>
 
 struct multipole_pos {
 	multipole<float> m;

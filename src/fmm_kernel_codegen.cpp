@@ -1,7 +1,7 @@
-#include <tigerfmm/defs.hpp>
-#include <tigerfmm/containers.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/containers.hpp>
 #define CODE_GEN_CPP
-#include <tigerfmm/tensor.hpp>
+#include <cosmictiger/tensor.hpp>
 
 #include <algorithm>
 
@@ -1139,10 +1139,10 @@ int main() {
 	int flops = 0;
 
 	tprint("#pragma once\n");
-	tprint("#include <tigerfmm/tensor.hpp>\n");
-	tprint("#include <tigerfmm/cuda.hpp>\n");
-	tprint("#include <tigerfmm/ewald_indices.hpp>\n");
-	tprint("#include <tigerfmm/math.hpp>\n");
+	tprint("#include <cosmictiger/tensor.hpp>\n");
+	tprint("#include <cosmictiger/cuda.hpp>\n");
+	tprint("#include <cosmictiger/ewald_indices.hpp>\n");
+	tprint("#include <cosmictiger/math.hpp>\n");
 	tprint("template<class T>\n");
 	tprint("using expansion = tensor_trless_sym<T,%i>;\n", P);
 	tprint("template<class T>\n");
