@@ -120,3 +120,28 @@ add_executable(
 target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options)
 target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
 
+
+add_library(hpx_lite 
+	hpx_lite/src/hpx.cpp
+	hpx_lite/src/id_type.cpp
+	hpx_lite/src/thread.cpp
+	hpx_lite/src/future.cpp
+	hpx_lite/src/mutex.cpp
+	hpx_lite/src/serialize.cpp
+)
+
+
+add_executable( tigerfmm_lite ${tigerfmm_source_files} )
+
+#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
+target_link_libraries(tigerfmm_lite PUBLIC boost_program_options cudart fftw3 gsl gslcblas chealpix hpx_lite hwloc )
+target_include_directories(tigerfmm_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
+target_compile_options(tigerfmm_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                        --use_fast_math ;
+                        >)
+target_compile_options(tigerfmm_lite PUBLIC "-DHPX_LITE" )
+set_property(TARGET tigerfmm_lite PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET tigerfmm_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
+add_dependencies( tigerfmm_lite generate_fmm_kernels )
+

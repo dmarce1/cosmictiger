@@ -3,9 +3,13 @@
 
 #ifndef __CUDACC__
 
+#ifndef HPX_LITE
 #include <hpx/hpx.hpp>
 #include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/parallel/algorithms/copy.hpp>
+#else
+#include <hpx/hpx_lite.hpp>
+#endif
 
 const vector<hpx::id_type>& hpx_localities();
 const vector<hpx::id_type>& hpx_children();

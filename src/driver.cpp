@@ -267,7 +267,7 @@ driver_params read_checkpoint(int checknum) {
 	if (hpx_rank() == 0) {
 		PRINT("Reading checkpoint\n");
 	}
-	vector<hpx::future<void>> futs;
+	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<read_checkpoint_action>(c, checknum));
 	}

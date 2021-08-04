@@ -38,7 +38,7 @@ static std::atomic<int> next_id;
 static thread_local tree_allocator allocator;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
-static thread_local tree_id last_line;
+static thread_local tree_id last_line = {-1,-1};
 static thread_local const tree_node* last_ptr = nullptr;
 
 static const tree_node* tree_cache_read(tree_id id);

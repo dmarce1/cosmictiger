@@ -179,9 +179,9 @@ static float zeldovich_end(int dim) {
 		}
 	}
 	for (auto& f : futs) {
-		dxmax = std::max(dxmax, f.get());
+		const auto tmp = f.get();
+		dxmax = std::max(dxmax, tmp);
 	}
-	hpx::wait_all(futs.begin(), futs.end());
 	return dxmax;
 }
 
