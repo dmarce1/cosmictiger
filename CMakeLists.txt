@@ -133,9 +133,10 @@ add_library(hpx_lite
 
 add_executable( tigerfmm_lite ${tigerfmm_source_files} )
 
-#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+target_compile_options( tigerfmm_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
-target_link_libraries(tigerfmm_lite PUBLIC boost_program_options cudart fftw3 gsl gslcblas chealpix hpx_lite hwloc )
+target_link_libraries(tigerfmm_lite PUBLIC boost_program_options cudart fftw3 gsl gslcblas chealpix hpx_lite hwloc mpi )
 target_include_directories(tigerfmm_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
 target_compile_options(tigerfmm_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;

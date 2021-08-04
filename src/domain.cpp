@@ -28,12 +28,12 @@ void domains_transmit_particles(vector<particle> parts) {
 	const int start = trans_particles.size();
 	const int stop = start + parts.size();
 	trans_particles.resize(stop);
-#ifdef HPX_LITE
+//#ifdef HPX_LITE
 	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
-#else
-	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
-	fut.get();
-#endif
+//#else
+//	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
+//	fut.get();
+//#endif
 }
 
 void domains_begin() {
@@ -104,14 +104,14 @@ void domains_end() {
 			return false;
 		};
 //		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
-#ifdef HPX_LITE
+//#ifdef HPX_LITE
 		std::sort(free_indices.begin(), free_indices.end());
 		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
-#else
-		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
-		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
-		fut.get();
-#endif
+//#else
+//		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
+//		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
+//		fut.get();
+//#endif
 		if (free_indices.size() < trans_particles.size()) {
 			const int diff = trans_particles.size() - free_indices.size();
 			for (int i = 0; i < diff; i++) {

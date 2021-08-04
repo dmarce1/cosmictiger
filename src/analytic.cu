@@ -51,7 +51,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	for (int i = 0; i < num_kernels; i++) {
 		cudaStreamCreate(&streams[i]);
 	}
-	PRINT("%i particles per loop, %i kernels\n", parts_per_loop, num_kernels);
+	PRINT("%li particles per loop, %li kernels\n", parts_per_loop, num_kernels);
 	for (size_t i = 0; i < particles_size(); i += parts_per_loop) {
 		const int total_size = std::min(size_t(particles_size()), size_t(i) + size_t(parts_per_loop)) - size_t(i);
 		CUDA_CHECK(cudaMalloc(&dev_srcx, total_size * sizeof(fixed32)));
