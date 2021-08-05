@@ -203,7 +203,7 @@ void driver() {
 		double pps = total_processed / runtime;
 		const auto total_flops = kr.node_flops + kr.part_flops;
 		params.flops += total_flops;
-		PRINT("%12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12i %12i %12i %12i %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e \n",
+		PRINT("%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e \n",
 				iter - 1, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time,
 				sort_time, kick_time, drift_time, runtime / iter, used_gpu ? 'G' : 'C', (double ) kr.nactive / total_time.read(),
 				params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
