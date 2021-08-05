@@ -29,10 +29,10 @@ void domains_transmit_particles(vector<particle> parts) {
 	const int stop = start + parts.size();
 	trans_particles.resize(stop);
 //#ifdef HPX_LITE
-	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
+//	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
 //#else
-//	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
-//	fut.get();
+	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
+	fut.get();
 //#endif
 }
 
@@ -103,14 +103,14 @@ void domains_end() {
 			}
 			return false;
 		};
-//		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
+		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
 //#ifdef HPX_LITE
-		std::sort(free_indices.begin(), free_indices.end());
-		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
+//		std::sort(free_indices.begin(), free_indices.end());
+//		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
 //#else
-//		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
-//		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
-//		fut.get();
+		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
+		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
+		fut.get();
 //#endif
 		if (free_indices.size() < trans_particles.size()) {
 			const int diff = trans_particles.size() - free_indices.size();
@@ -125,7 +125,9 @@ void domains_end() {
 				free_indices.pop_back();
 				particles_resize(particles_size() - 1);
 			}
-		}
+		
+		} 
+		PRINT( "unloading particles on %i\n", hpx_rank() );
 		const int nthreads = hpx::thread::hardware_concurrency();
 		for (int proc = 0; proc < nthreads; proc++) {
 			futs.push_back(hpx::async([nthreads, proc]() {
@@ -138,6 +140,7 @@ void domains_end() {
 		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+	PRINT( "Done on %i\n", hpx_rank() );
 	trans_particles = decltype(trans_particles)();
 	free_indices = decltype(free_indices)();
 }

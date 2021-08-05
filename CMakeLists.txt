@@ -87,7 +87,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost cudart fftw3f gsl gslcblas chealpix
+    Boost::boost fftw3f gsl gslcblas chealpix
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
@@ -106,6 +106,7 @@ if( COSMICTIGER_WITH_CUDA )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
 	target_compile_options(cosmictiger PRIVATE -DUSE_CUDA )
 	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
+	set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 endif()
  
  
@@ -119,7 +120,6 @@ add_custom_command(
 add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
 add_dependencies( cosmictiger generate_fmm_kernels )
  
-set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
