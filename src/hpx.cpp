@@ -26,7 +26,9 @@ void hpx_init() {
 	if (index2 < nranks) {
 		children.push_back(localities[index2]);
 	}
+#ifdef USE_CUDA
 	cuda_init();
+#endif
 
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {

@@ -144,17 +144,6 @@ void driver() {
 		map_init(tau_max);
 	}
 	while (tau < tau_max) {
-		reset.stop();
-		if (false && reset.read() > 60) {
-			PRINT("Cycling device\n");
-			reset.reset();
-			reset.start();
-			cuda_cycle_devices();
-			reset.stop();
-			PRINT("Took %e s\n", reset.read());
-			reset.reset();
-		}
-		reset.start();
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			write_checkpoint(params);
@@ -172,9 +161,11 @@ void driver() {
 		} else {
 			theta = 0.8;
 		}
+#ifdef USE_CUDA
 		if (last_theta != theta) {
 			kick_reset_all_list_sizes();
 		}
+#endif
 		last_theta = theta;
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		if (full_eval) {

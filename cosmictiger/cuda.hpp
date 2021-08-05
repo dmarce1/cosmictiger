@@ -3,6 +3,9 @@
 #ifndef COSMICTIGER_CUDA_HPP_
 #define COSMICTIGER_CUDA_HPP_
 
+#include <cosmictiger/defs.hpp>
+
+#ifdef USE_CUDA
 
 #include <cuda_runtime.h>
 #include <cufft.h>
@@ -107,6 +110,15 @@ void cuda_init();
 cudaStream_t cuda_get_stream();
 void cuda_end_stream(cudaStream_t stream);
 void cuda_cycle_devices();
+#else
 
+#include <memory>
+
+template<class T>
+using pinned_allocator = std::allocator< T >;
+
+#define CUDA_EXPORT
+
+#endif
 
 #endif /* COSMICTIGER_CUDA_HPP_ */

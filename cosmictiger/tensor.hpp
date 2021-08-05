@@ -3,6 +3,8 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 
+#include <cassert>
+
 inline
 int factorial(int n) {
 	assert(n >= 0);

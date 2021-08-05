@@ -4,6 +4,7 @@
 #include <cosmictiger/tensor.hpp>
 
 #include <algorithm>
+#include <cmath>
 
 static int ntab = 0;
 
@@ -1482,6 +1483,8 @@ int main() {
 
 	do_expansion<2>(true);
 
+#ifdef USE_CUDA
 	do_expansion_cuda<P>();
+#endif
 
 }

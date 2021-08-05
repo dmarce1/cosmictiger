@@ -33,6 +33,7 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 }
 
 void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
+#ifdef USE_CUDA
 	timer tm;
 	cuda_set_device();
 	//PRINT("To GPU %i items\n", workitems.size());
@@ -161,7 +162,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
-
+#endif
 }
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {

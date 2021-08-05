@@ -6,12 +6,17 @@ project(cosmictiger CXX C)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
-enable_language(CUDA)
-set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
+option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
+set(COSMICTIGER_WITH_ORDER "7" )
+if( COSMICTIGER_WITH_CUDA ) 
+	enable_language(CUDA)
+	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
+	execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
+	execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
+	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
+endif()
+message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
 set(CMAKE_CXX_FLAGS "-ffast-math -Wno-deprecated-declarations -Wno-format-security")
-execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
-execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
-message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 
 
@@ -89,11 +94,23 @@ add_hpx_executable(
     ${cosmictiger_header_files}
  )
  
+ 
  add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp )
  execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
+if( COSMICTIGER_WITH_CUDA )
+	target_link_libraries(cosmictiger PUBLIC cudart)
+	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                        --use_fast_math ;
+                        >)
+	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
+	target_compile_options(cosmictiger PRIVATE -DUSE_CUDA )
+	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
+endif()
  
- add_custom_command(
+ 
+ 
+add_custom_command(
     OUTPUT cosmictiger/fmm_kernels.hpp
     COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
     DEPENDS fmm_kernel_codegen
@@ -105,12 +122,8 @@ add_dependencies( cosmictiger generate_fmm_kernels )
 set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
-target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math ;
-                        >)
-                        
-set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
-
+target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
+target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
 add_executable(
  	healpix2silo

@@ -9,7 +9,9 @@ constexpr bool verbose = true;
 #include <stack>
 
 HPX_PLAIN_ACTION(kick);
+#ifdef USE_CUDA
 HPX_PLAIN_ACTION(kick_reset_all_list_sizes);
+#endif
 
 #define MAX_ACTIVE_WORKSPACES 1
 
@@ -89,6 +91,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
 	assert(self.proc == hpx_rank());
+#ifdef USE_CUDA
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
 		if (params.gpu && cuda_workspace == nullptr) {
@@ -103,6 +106,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 		}
 	}
+#endif
 	kick_return kr;
 	const simd_float h = params.h;
 	const float hfloat = params.h;
@@ -364,6 +368,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	}
 }
 
+#ifdef USE_CUDA
 void kick_reset_all_list_sizes() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -373,3 +378,4 @@ void kick_reset_all_list_sizes() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+#endif

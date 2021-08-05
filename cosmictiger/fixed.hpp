@@ -16,6 +16,8 @@
 #include <limits>
 #include <utility>
 
+#include <limits.h>
+
 
 template<class >
 class fixed;

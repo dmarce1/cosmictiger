@@ -3,6 +3,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 
+#ifdef USE_CUDA
 
 HPX_PLAIN_ACTION(cuda_cycle_devices);
 
@@ -80,3 +81,4 @@ void cuda_cycle_devices() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+#endif

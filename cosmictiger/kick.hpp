@@ -152,8 +152,10 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 		std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
+#ifdef USE_CUDA
 vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
 		int part_count, int ntrees, std::atomic<int>&);
+#endif
 int kick_block_count();
 void kick_reset_list_sizes();
 void kick_reset_all_list_sizes();

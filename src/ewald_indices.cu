@@ -13,6 +13,7 @@ struct ewald_constants {
 	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
 };
 
+
 ewald_constants ec;
 __device__ ewald_constants* ec_dev;
 

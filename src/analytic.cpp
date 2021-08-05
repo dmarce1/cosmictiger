@@ -13,6 +13,7 @@ HPX_PLAIN_ACTION(do_analytic);
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
 static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
+#ifdef USE_CUDA
 	vector<hpx::future<return_type>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<do_analytic_action>(c, sinkx, sinky, sinkz));
@@ -30,9 +31,13 @@ static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed3
 		}
 	}
 	return results;
+#else
+	return return_type();
+#endif
 }
 
 void analytic_compare(int Nsamples) {
+#ifdef USE_CUDA
 	auto samples = particles_sample(Nsamples);
 	vector<fixed32> sinkx(Nsamples);
 	vector<fixed32> sinky(Nsamples);
@@ -73,4 +78,7 @@ void analytic_compare(int Nsamples) {
 	PRINT("Force Max Error     = %e\n", lmax_force);
 	PRINT("Potential RMS Error = %e\n", lerr_phi);
 	PRINT("Potential Max Error = %e\n", lmax_phi);
+#else
+	PRINT( "analytic compare not available without CUDA\n");
+#endif
 }

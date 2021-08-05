@@ -8,6 +8,7 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
+
 //#define CHECK_BOUNDS
 
 #define NDIM 3
@@ -18,6 +19,15 @@
 #define NCHILD 2
 #define LEFT 0
 #define RIGHT 1
+
+#ifdef USE_CUDA
+#define SINK_BUCKET_SIZE 160
+#define SOURCE_BUCKET_SIZE 160
+#else
+#define SINK_BUCKET_SIZE 90
+#define SOURCE_BUCKET_SIZE 90
+#endif
+
 
 #define GPU_LOAD_MIN (1.0/128.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
@@ -37,8 +47,6 @@
 #define CUDA_STACK_SIZE 32767
 #define SELF_PHI float(-35.0/16.0)
 #define ANALYTIC_BLOCK_SIZE 128
-#define SINK_BUCKET_SIZE 160
-#define SOURCE_BUCKET_SIZE 160 
 #define EWALD_DIST float(0.25)
 #define EWALD_REAL_CUTOFF2 (2.6*2.6)
 #define KICK_OVERSUBSCRIPTION 8
@@ -62,7 +70,6 @@
 
 
 #define NTREES_MIN (2*1024*1024)
-#define ORDER 7
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
