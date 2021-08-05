@@ -174,8 +174,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		allocator.reset();
 		allocator.ready = true;
 	}
-	int node_count;
-	int active_nodes = 0;
+	size_t node_count;
+	size_t active_nodes = 0;
 	const int index = allocator.allocate();
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
