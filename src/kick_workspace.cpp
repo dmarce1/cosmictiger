@@ -32,19 +32,24 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 	}
 }
 
-void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
+hpx::lcos::local::counting_semaphore lock1(1);
+
+hpx::lcos::local::counting_semaphore lock2(1);
+
+void kick_workspace::to_gpu() {
 #ifdef USE_CUDA
 	timer tm;
+	lock1.wait();
 	cuda_set_device();
 	PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 	auto sort_fut = hpx::async([this]() {
-		std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
-					const auto* aptr = tree_get_node(a.self);
-					const auto* bptr = tree_get_node(b.self);
-					return aptr->nactive > bptr->nactive;
-				}
-		);
-	});
+				std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
+							const auto* aptr = tree_get_node(a.self);
+							const auto* bptr = tree_get_node(b.self);
+							return aptr->nactive > bptr->nactive;
+						}
+				);
+			});
 //	PRINT("To vector\n");
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 //	PRINT("%i tree ids\n", tree_ids_vector.size());
@@ -90,13 +95,13 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&tree_map]() {
-			for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
-				if (tree_nodes[i].children[LEFT].index != -1) {
-					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
-					tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
-				}
-			}
-		}));
+							for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
+								if (tree_nodes[i].children[LEFT].index != -1) {
+									tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
+									tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
+								}
+							}
+						}));
 	}
 
 	sort_fut.get();
@@ -105,17 +110,17 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([this,proc,nthreads,&tree_map]() {
-			for (int i = proc; i < workitems.size(); i+=nthreads) {
-				for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-					workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
-				}
-				for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-					workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
-				}
-				workitems[i].self.index = tree_map[workitems[i].self];
-				assert(workitems[i].self.proc == hpx_rank());
-			}
-		}));
+							for (int i = proc; i < workitems.size(); i+=nthreads) {
+								for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
+									workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
+								}
+								for (int j = 0; j < workitems[i].echecklist.size(); j++) {
+									workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
+								}
+								workitems[i].self.index = tree_map[workitems[i].self];
+								assert(workitems[i].self.proc == hpx_rank());
+							}
+						}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.start();
@@ -131,16 +136,16 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases]() {
-			for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
-				if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
-					const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
-					const int local_index = tree_map[tree_ids_vector[i]];
-					int part_index = (next_index += ptr->nparts()) - ptr->nparts();
-					particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
-					adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
-				}
-			}
-		}));
+							for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
+								if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
+									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
+									const int local_index = tree_map[tree_ids_vector[i]];
+									int part_index = (next_index += ptr->nparts()) - ptr->nparts();
+									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
+									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
+								}
+							}
+						}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.stop();
@@ -151,8 +156,7 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaStreamSynchronize(stream));
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(),
-			outer_lock);
+	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_end_stream(stream);
 	PRINT("To GPU Done %i\n", hpx_rank());
 	CUDA_CHECK(cudaFree(dev_x));
@@ -162,12 +166,13 @@ void kick_workspace::to_gpu(std::atomic<int>& outer_lock) {
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
+	lock2.signal();
 #endif
 }
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
 	bool do_work = false;
-	std::unique_lock<mutex_type> lock(mutex);
+	std::unique_lock < mutex_type > lock(mutex);
 	nparts += n;
 	if (nparts == total_parts) {
 		do_work = true;
@@ -175,14 +180,8 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
 	lock.unlock();
 	if (do_work) {
 		hpx::apply([ptr]() {
-			static std::atomic<int> cnt(0);
-			while( cnt++ != 0 ) {
-				cnt--;
-				hpx::this_thread::yield();
-			}
-//			PRINT( "sending to gpu\n");
-				ptr->to_gpu(cnt);
-			});
+			ptr->to_gpu();
+		});
 	}
 }
 
@@ -195,7 +194,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	bool do_work = false;
 	{
 		const int these_nparts = tree_get_node(self)->nparts();
-		std::lock_guard<mutex_type> lock(mutex);
+		std::lock_guard < mutex_type > lock(mutex);
 		nparts += these_nparts;
 		if (nparts == total_parts) {
 			do_work = true;
@@ -206,21 +205,15 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	}
 	item.dchecklist = std::move(dchecks);
 	item.echecklist = std::move(echecks);
-	std::unique_lock<mutex_type> lock(mutex);
+	std::unique_lock < mutex_type > lock(mutex);
 	promises.resize(promises.size() + 1);
 	auto fut = promises.back().get_future();
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
 		hpx::apply([ptr]() {
-			static std::atomic<int> cnt(0);
-			while( cnt++ != 0 ) {
-				cnt--;
-				hpx::this_thread::yield();
-			}
-//			PRINT( "sending to gpu\n");
-				ptr->to_gpu(cnt);
-			});
+			ptr->to_gpu();
+		});
 	}
 	return fut;
 }
