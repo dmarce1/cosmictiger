@@ -24,5 +24,6 @@ void fft3d_force_real();
 range<int> fft3d_complex_range();
 range<int> fft3d_real_range();
 vector<cmplx>& fft3d_complex_vector();
+vector<float> fft3d_power_spectrum();
 
 #endif /* FFT_HPP_ */

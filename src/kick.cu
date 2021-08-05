@@ -712,7 +712,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	tm.start();
 	acquire_inner();
 	release_outer();
-	PRINT( "Invoking kernel\n");
+//	PRINT( "Invoking kernel\n");
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));

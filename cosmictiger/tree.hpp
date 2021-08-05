@@ -70,7 +70,7 @@ struct tree_node {
 	bool local_root;
 	bool sink_leaf;
 	bool source_leaf;
-	int node_count;
+	size_t node_count;
 	int depth;
 	CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
