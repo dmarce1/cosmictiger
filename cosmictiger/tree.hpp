@@ -113,7 +113,7 @@ struct tree_create_return {
 	size_t nactive;
 	size_t active_nodes;
 	float radius;
-	int node_count;
+	size_t node_count;
 	double flops;
 	template<class A>
 	void serialize(A&& a, unsigned) {
