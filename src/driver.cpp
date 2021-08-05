@@ -10,8 +10,8 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 
-HPX_PLAIN_ACTION(write_checkpoint);
-HPX_PLAIN_ACTION(read_checkpoint);
+HPX_PLAIN_ACTION (write_checkpoint);
+HPX_PLAIN_ACTION (read_checkpoint);
 
 double cosmos_dadtau(double a) {
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
@@ -55,7 +55,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	tree_create_params tparams(minrung, theta);
 //	PRINT( "Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
-	const double load_max = sr.node_count * flops_per_node + particles_size() * flops_per_particle;
+	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
 	tm.stop();
 	sort_time += tm.read();
@@ -231,7 +231,7 @@ void write_checkpoint(driver_params params) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
+		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
 	}
 	const std::string command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter) + "\n";
 	if (system(command.c_str()) != 0) {
@@ -260,7 +260,7 @@ driver_params read_checkpoint(int checknum) {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<read_checkpoint_action>(c, checknum));
+		futs.push_back(hpx::async < read_checkpoint_action > (c, checknum));
 	}
 	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string("/checkpoint.") + std::to_string(checknum) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");
