@@ -107,9 +107,20 @@ void domains_end() {
 //		std::sort(free_indices.begin(), free_indices.end());
 //		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
 //#else
-		auto fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
-		hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare).get();
-		fut.get();
+		hpx::future<void> fut1;
+		hpx::future<void> fut2;
+		if (free_indices.size()) {
+			fut1 = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
+		} else {
+			fut1 = hpx::make_ready_future();
+		}
+		if (trans_particles.size()) {
+			fut2 = hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare);
+		} else {
+			fut2 = hpx::make_ready_future();
+		}
+		fut1.get();
+		fut2.get();
 //#endif
 		if (free_indices.size() < trans_particles.size()) {
 			const int diff = trans_particles.size() - free_indices.size();
