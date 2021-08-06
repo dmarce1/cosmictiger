@@ -8,7 +8,7 @@ constexpr bool verbose = true;
 
 #include <stack>
 
-HPX_PLAIN_ACTION(kick);
+HPX_PLAIN_ACTION (kick);
 #ifdef USE_CUDA
 HPX_PLAIN_ACTION(kick_reset_all_list_sizes);
 #endif
@@ -76,7 +76,8 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 	if (!threadme) {
 		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace));
 	} else if (remote) {
-		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
+		rc = hpx::async < kick_action
+				> (hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
 		rc = hpx::async([params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 			auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace);
@@ -91,6 +92,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
 	assert(self.proc == hpx_rank());
+	bool thread_left = true;
 #ifdef USE_CUDA
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
@@ -105,6 +107,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if (self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local()) {
 			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 		}
+		thread_left = cuda_workspace != nullptr;
 	}
 #endif
 	kick_return kr;
@@ -333,7 +336,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const bool exec_right = cr->nactive > 0 || !cr->is_local();
 		std::array<hpx::future<kick_return>, NCHILD> futs;
 		if (exec_left && exec_right) {
-			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, cuda_workspace, true);
+			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, cuda_workspace, thread_left);
 			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else if (exec_left) {
 			if (cuda_workspace != nullptr) {

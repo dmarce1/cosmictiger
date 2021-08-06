@@ -95,7 +95,7 @@ static void zeldovich_begin(int dim) {
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int, NDIM> I;
-	PRINT( "factor = %e\n", factor);
+///	PRINT( "factor = %e\n", factor);
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,&power,factor](array<int,NDIM> I) {
@@ -153,8 +153,8 @@ static float zeldovich_end(int dim) {
 	const double H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const double H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
 	double prefac1 = f1 * H * a0 * a0;
-	PRINT("D1 = %e\n", D1);
-	PRINT("prefac1 = %e\n", prefac1);
+//	PRINT("D1 = %e\n", D1);
+//	PRINT("prefac1 = %e\n", prefac1);
 
 	if (dim == 0) {
 		particles_resize(box.volume());
