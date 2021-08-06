@@ -84,4 +84,6 @@ inline double sinc(double x) {
 		return sin(x) / x;
 	}
 }
+
+
 #endif /* MATH_HPP_ */

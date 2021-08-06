@@ -1,4 +1,5 @@
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/initialize.hpp>
@@ -71,14 +72,6 @@ static power_spectrum_function read_power_spectrum();
 HPX_PLAIN_ACTION (zeldovich_begin);
 HPX_PLAIN_ACTION (zeldovich_end);
 
-double growth_factor(double omega_m, float a) {
-	const double omega_l = 1.f - omega_m;
-	const double a3 = a * sqr(a);
-	const double deninv = 1.f / (omega_m + a3 * omega_l);
-	const double Om = omega_m * deninv;
-	const double Ol = a3 * omega_l * deninv;
-	return a * 2.5 * Om / (pow(Om, 4.f / 7.f) - Ol + (1.f + 0.5f * Om) * (1.f + 0.014285714f * Ol));
-}
 
 inline cmplx expc(cmplx z) {
 	float x, y;
@@ -92,6 +85,7 @@ inline cmplx expc(cmplx z) {
 static void zeldovich_begin(int dim) {
 	const int N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -101,11 +95,11 @@ static void zeldovich_begin(int dim) {
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int, NDIM> I;
-	const float factor = std::pow(box_size, -1.5) * N * N * N;
+	PRINT( "factor = %e\n", factor);
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,&power,factor](array<int,NDIM> I) {
-			const int seed = I[0] * 1234 + 42;
+			const int seed = I[0] * 441245 + 42;
 			gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 			gsl_rng_set(rndgen, seed);
 			const int i = I[0] < N / 2 ? I[0] : I[0] - N;
@@ -153,7 +147,7 @@ static float zeldovich_end(int dim) {
 		futs.push_back(hpx::async < zeldovich_end_action > (c, dim));
 	}
 	const auto Y = fft3d_read_real(box);
-	const float D1 = growth_factor(omega_m, a0) / growth_factor(omega_m, 1.0);
+	const float D1 = cosmos_growth_factor(omega_m, a0) / cosmos_growth_factor(omega_m, 1.0);
 	const double Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
 	const double f1 = std::pow(Om, 5.f / 9.f);
 	const double H0 = constants::H0 * get_options().code_to_s * get_options().hubble;

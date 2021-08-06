@@ -1,4 +1,5 @@
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/driver.hpp>
 #include <cosmictiger/defs.hpp>
@@ -13,27 +14,6 @@
 
 HPX_PLAIN_ACTION (write_checkpoint);
 HPX_PLAIN_ACTION (read_checkpoint);
-
-double cosmos_dadtau(double a) {
-	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
-	const auto omega_m = get_options().omega_m;
-	const auto omega_r = get_options().omega_r;
-	const auto omega_lambda = 1.0 - omega_m - omega_r;
-	return H * a * a * std::sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_lambda);
-}
-
-double cosmos_age(double a0) {
-	double a = a0;
-	double t = 0.0;
-	while (a < 1.0) {
-		const double dadt1 = cosmos_dadtau(a);
-		const double dt = (a / dadt1) * 1.e-5;
-		const double dadt2 = cosmos_dadtau(a + dadt1 * dt);
-		a += 0.5 * (dadt1 + dadt2) * dt;
-		t += dt;
-	}
-	return t;
-}
 
 double domain_time = 0.0;
 double sort_time = 0.0;
@@ -105,18 +85,22 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	return kr;
 }
 
-void do_power_spectrum(int num) {
+void do_power_spectrum(int num, double a) {
 	const float h = get_options().hubble;
+	const float omega_m = get_options().omega_m;
+	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const int N = get_options().parts_dim;
+	const double D1 = cosmos_growth_factor(omega_m, a) / cosmos_growth_factor(omega_m, 1.0);
+	const float factor = pow(box_size, 3) / pow(N, 6) / sqr(D1);
 	auto power = power_spectrum_compute();
 	std::string filename = "power." + std::to_string(num) + ".txt";
 	FILE* fp = fopen(filename.c_str(), "wt");
 	if (fp == NULL) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
 	}
-	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	for (int i = 0; i < power.size(); i++) {
 		const double k = 2.0 * M_PI * i / box_size;
-		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h);
+		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h * factor);
 	}
 	fclose(fp);
 }
@@ -160,8 +144,8 @@ void driver() {
 	if (get_options().do_map) {
 		map_init(tau_max);
 	}
-	do_power_spectrum(0);
 	while (tau < tau_max) {
+
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			write_checkpoint(params);
@@ -170,6 +154,9 @@ void driver() {
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
+		if (full_eval) {
+			do_power_spectrum(tau / t0 + 1e-6, a);
+		}
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		if (z > 20.0) {

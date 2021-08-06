@@ -23,6 +23,7 @@ set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
 set(cosmictiger_source_files
     src/analytic.cu
     src/analytic.cpp
+    src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp
     src/driver.cpp
@@ -53,6 +54,7 @@ set(cosmictiger_source_files
 set(cosmictiger_header_files
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
+    cosmictiger/cosmology.hpp
     cosmictiger/cuda.hpp
     cosmictiger/cuda_reduce.hpp
     cosmictiger/cuda_vector.hpp

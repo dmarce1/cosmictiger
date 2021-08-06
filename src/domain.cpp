@@ -139,7 +139,7 @@ void domains_end() {
 		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	PRINT("Done on %i\n", hpx_rank());
+//	PRINT("Done on %i\n", hpx_rank());
 	trans_particles = decltype(trans_particles)();
 	free_indices = decltype(free_indices)();
 }

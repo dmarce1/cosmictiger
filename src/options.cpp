@@ -50,7 +50,7 @@ bool process_options(int argc, char *argv[]) {
 #endif
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
-	("do_map", po::value<bool>(&(opts.do_map))->default_value(true), "do healpix maps") //
+	("do_map", po::value<bool>(&(opts.do_map))->default_value(false), "do healpix maps") //
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
 	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(32*1024), "size of particle cache line") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
@@ -91,6 +91,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
+	PRINT( "box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.code_to_g = 1.989e33;
 	opts.omega_m = 0.3;

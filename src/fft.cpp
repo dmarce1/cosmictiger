@@ -1,6 +1,8 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/constants.hpp>
 
 #include <fftw3.h>
 
@@ -102,12 +104,13 @@ static std::pair<vector<float>, vector<int>> power_spectrum_compute() {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < power_spectrum_compute_action > (c));
 	}
+	const int N = get_options().parts_dim;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int, NDIM> I;
 	const float nmax = std::sqrt(NDIM) * N / 2 + 2;
 	vector<float> power(nmax,0.0);
 	vector<int> count(nmax,0);
-	const double N3inv = 1.0 / (N*N*N);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		const int i = I[0] < N / 2 ? I[0] : I[0] - N;
 		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
@@ -115,7 +118,7 @@ static std::pair<vector<float>, vector<int>> power_spectrum_compute() {
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 				const int k = I[2];
 				const int n = std::sqrt(i*i+j*j+k*k);
-				const float pwr = Y[box.index(I)].norm() * N3inv / 2.0;
+				const float pwr = Y[box.index(I)].norm();
 				count[n]++;
 				power[n] += pwr;
 			}
