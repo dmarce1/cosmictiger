@@ -154,9 +154,6 @@ void driver() {
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
-		if (full_eval) {
-			do_power_spectrum(tau / t0 + 1e-6, a);
-		}
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		if (z > 20.0) {
@@ -175,6 +172,8 @@ void driver() {
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		if (full_eval) {
 			pot = kr.pot * 0.5 / a;
+			do_power_spectrum(tau / t0 + 1e-6, a);
+
 		}
 		double dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);
