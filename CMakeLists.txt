@@ -41,6 +41,7 @@ set(cosmictiger_source_files
     src/map.cpp
     src/options.cpp
     src/particles.cpp
+    src/power.cpp
     src/range_set.cpp
     src/test.cpp
     src/tree.cpp
@@ -72,6 +73,7 @@ set(cosmictiger_header_files
     cosmictiger/math.hpp
     cosmictiger/options.hpp
     cosmictiger/particles.hpp
+    cosmictiger/power.hpp
     cosmictiger/range.hpp
     cosmictiger/range_set.hpp
     cosmictiger/safe_io.hpp

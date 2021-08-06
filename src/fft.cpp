@@ -89,8 +89,10 @@ vector<float> fft3d_power_spectrum() {
 	auto pr = power_spectrum_compute();
 	const auto& count = pr.second;
 	auto& power = pr.first;
-	for( int i = 0; i < power.size(); i++) {
-		power[i] /= count[i];
+	for (int i = 0; i < power.size(); i++) {
+		if (count[i] > 0) {
+			power[i] /= count[i];
+		}
 	}
 	return power;
 }
@@ -102,23 +104,20 @@ static std::pair<vector<float>, vector<int>> power_spectrum_compute() {
 	}
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int, NDIM> I;
-	const float nmax = std::sqrt(NDIM) * N + 1;
+	const float nmax = std::sqrt(NDIM) * N / 2 + 2;
 	vector<float> power(nmax,0.0);
 	vector<int> count(nmax,0);
+	const double N3inv = 1.0 / (N*N*N);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		const int i = I[0] < N / 2 ? I[0] : I[0] - N;
 		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 			const int j = I[1] < N / 2 ? I[1] : I[1] - N;
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-				const int k1 = I[2];
-				const int k2 = I[2] - N;
-				const int n1 = std::sqrt(i*i+j*j+k1*k1);
-				const int n2 = std::sqrt(i*i+j*j+k2*k2);
-				const float pwr = Y[box.index(I)].norm();
-				count[n1]++;
-				count[n2]++;
-				power[n1] += pwr;
-				power[n2] += pwr;
+				const int k = I[2];
+				const int n = std::sqrt(i*i+j*j+k*k);
+				const float pwr = Y[box.index(I)].norm() * N3inv / 2.0;
+				count[n]++;
+				power[n] += pwr;
 			}
 		}
 	}

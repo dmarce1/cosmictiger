@@ -7,6 +7,7 @@
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/map.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/power.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 
@@ -104,6 +105,22 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	return kr;
 }
 
+void do_power_spectrum(int num) {
+	const float h = get_options().hubble;
+	auto power = power_spectrum_compute();
+	std::string filename = "power." + std::to_string(num) + ".txt";
+	FILE* fp = fopen(filename.c_str(), "wt");
+	if (fp == NULL) {
+		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+	}
+	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	for (int i = 0; i < power.size(); i++) {
+		const double k = 2.0 * M_PI * i / box_size;
+		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h);
+	}
+	fclose(fp);
+}
+
 void driver() {
 	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
@@ -143,6 +160,7 @@ void driver() {
 	if (get_options().do_map) {
 		map_init(tau_max);
 	}
+	do_power_spectrum(0);
 	while (tau < tau_max) {
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {

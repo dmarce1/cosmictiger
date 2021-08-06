@@ -68,8 +68,8 @@ static void zeldovich_begin(int dim);
 static float zeldovich_end(int dim);
 static power_spectrum_function read_power_spectrum();
 
-HPX_PLAIN_ACTION(zeldovich_begin);
-HPX_PLAIN_ACTION(zeldovich_end);
+HPX_PLAIN_ACTION (zeldovich_begin);
+HPX_PLAIN_ACTION (zeldovich_end);
 
 double growth_factor(double omega_m, float a) {
 	const double omega_l = 1.f - omega_m;
@@ -95,7 +95,7 @@ static void zeldovich_begin(int dim) {
 	vector<cmplx> Y;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_begin_action>(c, dim));
+		futs.push_back(hpx::async < zeldovich_begin_action > (c, dim));
 	}
 	auto power = read_power_spectrum();
 	const auto box = fft3d_complex_range();
@@ -150,7 +150,7 @@ static float zeldovich_end(int dim) {
 	const auto box = fft3d_real_range();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_end_action>(c, dim));
+		futs.push_back(hpx::async < zeldovich_end_action > (c, dim));
 	}
 	const auto Y = fft3d_read_real(box);
 	const float D1 = growth_factor(omega_m, a0) / growth_factor(omega_m, 1.0);
@@ -159,6 +159,8 @@ static float zeldovich_end(int dim) {
 	const double H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const double H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
 	double prefac1 = f1 * H * a0 * a0;
+	PRINT("D1 = %e\n", D1);
+	PRINT("prefac1 = %e\n", prefac1);
 
 	if (dim == 0) {
 		particles_resize(box.volume());

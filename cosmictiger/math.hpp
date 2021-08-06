@@ -39,20 +39,20 @@ __device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_
 	const float a3(1.421413741f);
 	const float a4(-1.453152027f);
 	const float a5(1.061405429f);
-	const float t1 = 1.f / fma(p, x, 1.f);			            // FLOP_DIV + 2
-	const float t2 = t1 * t1;											// 1
-	const float t3 = t2 * t1;											// 1
-	const float t4 = t2 * t2;											// 1
-	const float t5 = t2 * t3;											// 1
-	*ex = expf(-x * x);												  // 2 + FLOP_EXP
-	*ec = fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *ex; 			// 10
+	const float t1 = 1.f / fma(p, x, 1.f);// FLOP_DIV + 2
+	const float t2 = t1 * t1;// 1
+	const float t3 = t2 * t1;// 1
+	const float t4 = t2 * t2;// 1
+	const float t5 = t2 * t3;// 1
+	*ex = expf(-x * x);// 2 + FLOP_EXP
+	*ec = fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *ex;// 10
 }
 #endif
 
 template<class T>
 CUDA_EXPORT
 inline T round_up(T a, T b) {
-	if( a > 0 ) {
+	if (a > 0) {
 		return (((a - 1) / b) + 1) * b;
 	} else {
 		return 0;
@@ -64,8 +64,6 @@ CUDA_EXPORT
 inline T round_down(T a, T b) {
 	return (a / b) * b;
 }
-
-
 
 CUDA_EXPORT inline float anytrue(float x) {
 	return x;
@@ -79,4 +77,11 @@ inline float anytrue(const simd_float& x) {
 
 #endif
 
+inline double sinc(double x) {
+	if (x == 0.0) {
+		return 1.0;
+	} else {
+		return sin(x) / x;
+	}
+}
 #endif /* MATH_HPP_ */
