@@ -336,8 +336,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const bool exec_right = cr->nactive > 0 || !cr->is_local();
 		std::array<hpx::future<kick_return>, NCHILD> futs;
 		if (exec_left && exec_right) {
-			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, echecklist, cuda_workspace, thread_left);
-			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
+			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
+			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else if (exec_left) {
 			if (cuda_workspace != nullptr) {
 				cuda_workspace->add_parts(cuda_workspace, cr->nparts());

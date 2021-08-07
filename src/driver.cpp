@@ -253,8 +253,8 @@ void write_checkpoint(driver_params params) {
 	}
 	futs.push_back(hpx::threads::run_as_os_thread([&]() {
 		const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
-		+ std::to_string(hpx_rank()) + std::string(".dat");
-		std::ofstream fp("fname.c_str()", std::ios::out | std::ios::binary);
+			+ std::to_string(hpx_rank()) + std::string(".dat");
+		std::ofstream fp(fname.c_str(), std::ios::out | std::ios::binary);
 		fp.write((const char*)&params, sizeof(driver_params));
 		particles_save(fp);
 		map_save(fp);
