@@ -12,13 +12,13 @@ static int Nside;
 static int Nmaps;
 static healpix_map main_map;
 
-HPX_PLAIN_ACTION(map_init);
-HPX_PLAIN_ACTION(map_flush);
+HPX_PLAIN_ACTION (map_init);
+HPX_PLAIN_ACTION (map_flush);
 
 void map_init(float tmax) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<map_init_action>(c, tmax));
+		futs.push_back(hpx::async < map_init_action > (c, tmax));
 	}
 	tau_max = tmax;
 	Nside = get_options().map_size;
@@ -33,7 +33,7 @@ void map_flush(float t) {
 void healpix_map::map_flush(float t) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<map_flush_action>(c, t));
+		futs.push_back(hpx::async < map_flush_action > (c, t));
 	}
 	static const float map_int = tau_max / Nmaps;
 	for (auto i = map.begin(); i != map.end(); i++) {
@@ -88,17 +88,17 @@ void healpix_map::map_load(FILE* fp) {
 
 }
 
-void healpix_map::map_save(FILE* fp) {
+void healpix_map::map_save(std::ofstream& fp) {
 	int size = map.size();
-	fwrite(&size, sizeof(int), 1, fp);
+	fp.write((const char*) &size, sizeof(int));
 	for (auto i = map.begin(); i != map.end(); i++) {
 		int rank = i->first;
 		int size = i->second.size();
-		fwrite(&rank, sizeof(int), 1, fp);
-		fwrite(&size, sizeof(int), 1, fp);
+		fp.write((const char*) &rank, sizeof(int));
+		fp.write((const char*) &size, sizeof(int));
 		for (auto j = i->second.begin(); j != i->second.end(); j++) {
-			fwrite(&j->first, sizeof(int), 1, fp);
-			fwrite(&j->second.i, sizeof(int), 1, fp);
+			fp.write((const char*) &j->first, sizeof(int));
+			fp.write((const char*) &j->second.i, sizeof(int));
 		}
 	}
 }
@@ -107,7 +107,7 @@ void map_load(FILE* fp) {
 	main_map.map_load(fp);
 }
 
-void map_save(FILE* fp) {
+void map_save(std::ofstream& fp) {
 	main_map.map_save(fp);
 }
 
@@ -124,7 +124,8 @@ void healpix_map::add_map(healpix_map&& other) {
 }
 
 int healpix_map::map_add_particle(float x0, float y0, float z0, float x1, float y1, float z1, float vx, float vy, float vz, float t, float dt) {
-	static simd_float8 images[NDIM] = { simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
+	static simd_float8 images[NDIM] =
+			{ simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
 	static const float map_int = tau_max / Nmaps;
 	static const float map_int_inv = 1.0 / map_int;
 	const simd_float8 simd_c0 = simd_float8(map_int_inv);

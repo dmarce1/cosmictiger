@@ -12,6 +12,8 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 
+
+
 HPX_PLAIN_ACTION (write_checkpoint);
 HPX_PLAIN_ACTION (read_checkpoint);
 
@@ -26,7 +28,7 @@ bool used_gpu;
 kick_return kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
-	PRINT( "Domains\n", minrung, theta);
+	PRINT("Domains\n", minrung, theta);
 	domains_begin();
 	domains_end();
 	tm.stop();
@@ -34,7 +36,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	tm.reset();
 	tm.start();
 	tree_create_params tparams(minrung, theta);
-	PRINT( "Create tree %i %e\n", minrung, theta);
+	PRINT("Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
@@ -42,7 +44,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	sort_time += tm.read();
 	tm.reset();
 	tm.start();
-	PRINT( "nactive = %li\n", sr.nactive);
+	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.gpu = load > GPU_LOAD_MIN;
 	used_gpu = kparams.gpu;
@@ -69,14 +71,14 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	PRINT( "Do kick\n");
+	PRINT("Do kick\n");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;
-	PRINT( "kick done\n");
+	PRINT("kick done\n");
 	if (min_rung == 0) {
 		flops_per_node = kr.node_flops / sr.active_nodes;
 		flops_per_particle = kr.part_flops / kr.nactive;
@@ -151,7 +153,7 @@ void driver() {
 			write_checkpoint(params);
 			tmr.reset();
 		}
-		PRINT( "Next iteration\n");
+		PRINT("Next iteration\n");
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
@@ -175,9 +177,9 @@ void driver() {
 #endif
 		}
 		last_theta = theta;
-		PRINT( "Kicking\n");
+		PRINT("Kicking\n");
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
-		PRINT( "Done kicking\n");
+		PRINT("Done kicking\n");
 		if (full_eval) {
 			pot = kr.pot * 0.5 / a;
 			do_power_spectrum(tau / t0 + 1e-6, a);
@@ -240,10 +242,10 @@ void driver() {
 void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
-	        const std::string command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter) + "\n";
-        	if (system(command.c_str()) != 0) {
-                	THROW_ERROR("Unable to execute : %s\n", command.c_str());
-	        }
+		const std::string command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter) + "\n";
+		if (system(command.c_str()) != 0) {
+			THROW_ERROR("Unable to execute : %s\n", command.c_str());
+		}
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
@@ -251,15 +253,12 @@ void write_checkpoint(driver_params params) {
 	}
 	futs.push_back(hpx::threads::run_as_os_thread([&]() {
 		const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
-			+ std::to_string(hpx_rank()) + std::string(".dat");
-		FILE* fp = fopen(fname.c_str(), "wb");
-		if (fp == nullptr) {
-			THROW_ERROR("Unable to open %s for writing.\n", fname.c_str());
-		}
-		fwrite(&params, sizeof(driver_params), 1, fp);
+		+ std::to_string(hpx_rank()) + std::string(".dat");
+		std::ofstream fp("fname.c_str()", std::ios::out | std::ios::binary);
+		fp.write((const char*)&params, sizeof(driver_params));
 		particles_save(fp);
 		map_save(fp);
-		fclose(fp);
+		fp.close();
 	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {

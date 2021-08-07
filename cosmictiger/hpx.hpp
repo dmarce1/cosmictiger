@@ -8,6 +8,7 @@
 #include <hpx/parallel/algorithms/copy.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
+#include <hpx/include/run_as.hpp>
 
 
 const vector<hpx::id_type>& hpx_localities();

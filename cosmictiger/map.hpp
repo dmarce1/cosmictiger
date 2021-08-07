@@ -10,6 +10,8 @@
 
 #include <unordered_map>
 
+#include <fstream>
+
 class healpix_map {
 	struct pixel {
 		float i;
@@ -23,13 +25,13 @@ public:
 	void add_map(healpix_map&& other);
 	void map_flush(float t);
 	void map_load(FILE* fp);
-	void map_save(FILE* fp);
+	void map_save(std::ofstream&);
 };
 
 void map_init(float tmax);
 void map_add_map(healpix_map&& other);
 void map_flush(float t);
 void map_load(FILE* fp);
-void map_save(FILE* fp);
+void map_save(std::ofstream&);
 
 #endif /* MAP_HPP_ */

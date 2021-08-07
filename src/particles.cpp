@@ -302,15 +302,15 @@ void particles_load(FILE* fp) {
 
 }
 
-void particles_save(FILE* fp) {
+void particles_save(std::ofstream& fp) {
 	part_int size = particles_size();
-	fwrite(&size, sizeof(part_int), 1, fp);
-	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
-	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
-	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
-	fwrite(&particles_vel(XDIM, 0), sizeof(float), particles_size(), fp);
-	fwrite(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
-	fwrite(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
-	fwrite(&particles_rung(0), sizeof(char), particles_size(), fp);
+	fp.write((const char*) &size, sizeof(part_int));
+	fp.write((const char*) &particles_pos(XDIM, 0), sizeof(fixed32) * particles_size());
+	fp.write((const char*) &particles_pos(YDIM, 0), sizeof(fixed32) * particles_size());
+	fp.write((const char*) &particles_pos(ZDIM, 0), sizeof(fixed32) * particles_size());
+	fp.write((const char*) &particles_vel(XDIM, 0), sizeof(float) * particles_size());
+	fp.write((const char*) &particles_vel(YDIM, 0), sizeof(float) * particles_size());
+	fp.write((const char*) &particles_vel(ZDIM, 0), sizeof(float) * particles_size());
+	fp.write((const char*) &particles_rung(0), sizeof(char) * particles_size());
 
 }

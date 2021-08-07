@@ -13,6 +13,8 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixed.hpp>
 
+#include <fstream>
+
 using part_int = long long;
 
 #ifdef PARTICLES_CPP
@@ -111,6 +113,6 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
-void particles_save(FILE* fp);
+void particles_save(std::ofstream& fp);
 
 #endif /* PARTICLES_HPP_ */
