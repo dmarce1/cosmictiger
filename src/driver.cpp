@@ -240,25 +240,27 @@ void driver() {
 void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
+	        const std::string command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter) + "\n";
+        	if (system(command.c_str()) != 0) {
+                	THROW_ERROR("Unable to execute : %s\n", command.c_str());
+	        }
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
 	}
-	const std::string command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter) + "\n";
-	if (system(command.c_str()) != 0) {
-		THROW_ERROR("Unable to execute : %s\n", command.c_str());
-	}
-	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
+	futs.push_back(hpx::threads::run_as_os_thread([&]() {
+		const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");
-	FILE* fp = fopen(fname.c_str(), "wb");
-	if (fp == nullptr) {
-		THROW_ERROR("Unable to open %s for writing.\n", fname.c_str());
-	}
-	fwrite(&params, sizeof(driver_params), 1, fp);
-	particles_save(fp);
-	map_save(fp);
-	fclose(fp);
+		FILE* fp = fopen(fname.c_str(), "wb");
+		if (fp == nullptr) {
+			THROW_ERROR("Unable to open %s for writing.\n", fname.c_str());
+		}
+		fwrite(&params, sizeof(driver_params), 1, fp);
+		particles_save(fp);
+		map_save(fp);
+		fclose(fp);
+	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");

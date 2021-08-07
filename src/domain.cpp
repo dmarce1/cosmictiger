@@ -64,7 +64,7 @@ void domains_begin() {
 					auto& send = sends[rank];
 					send.push_back(particles_get_particle(i));
 					if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-//						PRINT( "%i sending %li particles to %i\n", hpx_rank(), send.size(), rank);
+						PRINT( "%i sending %li particles to %i\n", hpx_rank(), send.size(), rank);
 				futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 			}
 			my_free_indices.push_back(i);
@@ -72,7 +72,7 @@ void domains_begin() {
 	}
 	for( auto i = sends.begin(); i != sends.end(); i++) {
 		if( i->second.size()) {
-//					PRINT( "%i sending %li particles to %i\n", hpx_rank(), i->second.size(), i->first);
+					PRINT( "%i sending %li particles to %i\n", hpx_rank(), i->second.size(), i->first);
 			futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 		}
 	}
@@ -102,7 +102,7 @@ void domains_end() {
 			}
 			return false;
 		};
-//		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
+		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
 //#ifdef HPX_LITE
 //		std::sort(free_indices.begin(), free_indices.end());
 //		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
@@ -137,7 +137,7 @@ void domains_end() {
 			}
 
 		}
-//		PRINT("unloading particles on %i\n", hpx_rank());
+		PRINT("unloading particles on %i\n", hpx_rank());
 		const int nthreads = hpx::thread::hardware_concurrency();
 		for (int proc = 0; proc < nthreads; proc++) {
 			futs.push_back(hpx::async([nthreads, proc]() {
@@ -150,7 +150,7 @@ void domains_end() {
 		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-//	PRINT("Done on %i\n", hpx_rank());
+	PRINT("Done on %i\n", hpx_rank());
 	trans_particles = decltype(trans_particles)();
 	free_indices = decltype(free_indices)();
 }
