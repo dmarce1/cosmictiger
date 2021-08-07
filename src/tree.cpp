@@ -202,8 +202,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
-		auto futl = tree_create_fork(params, left_range, left_parts, left_box, depth + 1, left_local_root, true);
-		auto futr = tree_create_fork(params, right_range, right_parts, right_box, depth + 1, right_local_root, false);
+		auto futr = tree_create_fork(params, right_range, right_parts, right_box, depth + 1, right_local_root, true);
+		auto futl = tree_create_fork(params, left_range, left_parts, left_box, depth + 1, left_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		const auto xl = rcl.pos;
