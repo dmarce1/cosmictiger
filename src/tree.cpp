@@ -109,7 +109,7 @@ int tree_min_level(double theta) {
 	return i == hpx_size() ? lev : lev + 1;
 }
 
-fast_future<tree_create_return> tree_create_fork(tree_create_params params, const pair<int, int>& proc_range, const pair<int, int>& part_range,
+fast_future<tree_create_return> tree_create_fork(tree_create_params params, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<tree_create_return> rc;
@@ -142,7 +142,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 	return rc;
 }
 
-tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range, pair<int, int> part_range, range<double> box, int depth, bool local_root) {
+tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth, bool local_root) {
 	const double h = get_options().hsoft;
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
@@ -153,7 +153,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	if (nodes.size() == 0) {
 		last_ptr = nullptr;
 		next_id = -tree_cache_line_size;
-		nodes.resize(std::max(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size, (size_t) NTREES_MIN));
+		nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
 //		PRINT("%i trees allocated\n", nodes.size());
 		for (int i = 0; i < allocator_list.size(); i++) {
 			allocator_list[i]->ready = false;
@@ -198,7 +198,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		} else {
 			const int xdim = box.longest_dim();
 			const double xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
-			const int mid = particles_sort(part_range, xmid, xdim);
+			const part_int mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
@@ -318,13 +318,13 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
-		const int maxi = round_down(part_range.second - part_range.first, SIMD_FLOAT_SIZE) + part_range.first;
+		const int maxi = round_down(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
 		array<simd_int, NDIM> Y;
 		for (int dim = 0; dim < NDIM; dim++) {
 			Y[dim] = fixed32(Xc[dim]).raw();
 		}
 		const simd_float _2float = fixed2float;
-		for (int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
+		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
 			for (int j = i; j < i + SIMD_FLOAT_SIZE; j++) {
 				for (int dim = 0; dim < NDIM; dim++) {

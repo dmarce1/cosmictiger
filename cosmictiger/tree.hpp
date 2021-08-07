@@ -63,8 +63,8 @@ struct tree_node {
 	array<fixed32,NDIM> pos;
 	array<tree_id, NCHILD> children;
 	pair<int, int> proc_range;
-	pair<int, int> part_range;
-	pair<int, int> sink_part_range;
+	pair<part_int> part_range;
+	pair<part_int> sink_part_range;
 	size_t nactive;
 	float radius;
 	bool local_root;
@@ -142,7 +142,7 @@ struct tree_create_params {
 	}
 };
 
-tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<int, int> part_range = pair<int>(-1, -1),
+tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range = pair<part_int>(-1, -1),
 		range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy();
 int tree_min_level(double theta);

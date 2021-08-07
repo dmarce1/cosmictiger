@@ -13,6 +13,8 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixed.hpp>
 
+using part_int = long long;
+
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
 #else
@@ -55,30 +57,31 @@ PARTICLES_EXTERN vector<float, pinned_allocator<float>> particles_p;
 
 struct particle_global_range {
 	int proc;
-	pair<int> range;
+	pair<part_int> range;
 };
 
-inline fixed32& particles_pos(int dim, int index) {
-	return particles_x[dim][index];
-}
-
-inline float& particles_vel(int dim, int index) {
-	return particles_v[dim][index];
-}
-
-inline char& particles_rung(int index) {
-	return particles_r[index];
-}
-
-inline float& particles_gforce(int dim, int index) {
-	return particles_g[dim][index];
-}
-
-inline float& particles_pot(int index) {
+inline float& particles_pot(part_int index) {
 	return particles_p[index];
 }
 
-inline particle particles_get_particle(int index) {
+inline fixed32& particles_pos(int dim, part_int index) {
+	return particles_x[dim][index];
+}
+
+inline float& particles_vel(int dim, part_int index) {
+	return particles_v[dim][index];
+}
+
+inline char& particles_rung(part_int index) {
+	return particles_r[index];
+}
+
+inline float& particles_gforce(int dim, part_int index) {
+	return particles_g[dim][index];
+}
+
+
+inline particle particles_get_particle(part_int index) {
 	particle p;
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.x[dim] = particles_pos(dim, index);
@@ -88,7 +91,7 @@ inline particle particles_get_particle(int index) {
 	return p;
 }
 
-inline void particles_set_particle(particle p, int index) {
+inline void particles_set_particle(particle p, part_int index) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		particles_pos(dim, index) = p.x[dim];
 		particles_vel(dim, index) = p.v[dim];
@@ -98,13 +101,13 @@ inline void particles_set_particle(particle p, int index) {
 
 
 
-int particles_size();
-void particles_resize(int);
+part_int particles_size();
+void particles_resize(part_int);
 void particles_random_init();
 void particles_destroy();
-void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, int offset);
+void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void particles_global_touch_pos(particle_global_range range);
-int particles_sort(pair<int, int> rng, double xm, int xdim);
+part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
