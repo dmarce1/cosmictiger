@@ -35,6 +35,7 @@ class kick_workspace {
 	kick_params params;
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
 public:
+	void touch_cache_entries(const tree_node* node);
 	kick_workspace() = default;
 	kick_workspace(kick_params, int);
 	kick_workspace(const kick_workspace&) = delete;

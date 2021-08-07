@@ -52,7 +52,7 @@ bool process_options(int argc, char *argv[]) {
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
 	("do_map", po::value<bool>(&(opts.do_map))->default_value(false), "do healpix maps") //
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
-	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(32*1024), "size of particle cache line") //
+	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(16*1024), "size of particle cache line") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
 	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "healpix Nside") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //

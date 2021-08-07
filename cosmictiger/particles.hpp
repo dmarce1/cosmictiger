@@ -103,6 +103,7 @@ void particles_resize(int);
 void particles_random_init();
 void particles_destroy();
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, int offset);
+void particles_global_touch_pos(particle_global_range range);
 int particles_sort(pair<int, int> rng, double xm, int xdim);
 void particles_cache_free();
 vector<particle_sample> particles_sample(int cnt);

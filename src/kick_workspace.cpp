@@ -41,7 +41,7 @@ void kick_workspace::to_gpu() {
 	timer tm;
 	lock1.wait();
 	cuda_set_device();
-	PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
+	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 	auto sort_fut = hpx::async([this]() {
 				std::sort(workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
 							const auto* aptr = tree_get_node(a.self);
@@ -158,7 +158,7 @@ void kick_workspace::to_gpu() {
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_end_stream(stream);
-	PRINT("To GPU Done %i\n", hpx_rank());
+//	PRINT("To GPU Done %i\n", hpx_rank());
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
 	CUDA_CHECK(cudaFree(dev_z));
@@ -172,7 +172,7 @@ void kick_workspace::to_gpu() {
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
 	bool do_work = false;
-	std::unique_lock < mutex_type > lock(mutex);
+	std::unique_lock<mutex_type> lock(mutex);
 	nparts += n;
 	if (nparts == total_parts) {
 		do_work = true;
@@ -185,6 +185,13 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
 	}
 }
 
+void kick_workspace::touch_cache_entries(const tree_node* node) {
+	if (node->children[LEFT].index != -1) {
+		touch_cache_entries(tree_get_node(node->children[LEFT]));
+		touch_cache_entries(tree_get_node(node->children[RIGHT]));
+	}
+}
+
 hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
 		vector<tree_id> && dchecks, vector<tree_id> && echecks) {
 	kick_workitem item;
@@ -194,7 +201,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	bool do_work = false;
 	{
 		const int these_nparts = tree_get_node(self)->nparts();
-		std::lock_guard < mutex_type > lock(mutex);
+		std::lock_guard<mutex_type> lock(mutex);
 		nparts += these_nparts;
 		if (nparts == total_parts) {
 			do_work = true;
@@ -205,7 +212,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	}
 	item.dchecklist = std::move(dchecks);
 	item.echecklist = std::move(echecks);
-	std::unique_lock < mutex_type > lock(mutex);
+	std::unique_lock<mutex_type> lock(mutex);
 	promises.resize(promises.size() + 1);
 	auto fut = promises.back().get_future();
 	workitems.push_back(std::move(item));

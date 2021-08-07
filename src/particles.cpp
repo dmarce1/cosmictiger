@@ -16,11 +16,11 @@ static vector<array<fixed32, NDIM>> particles_fetch_cache_line(int index);
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
 void particles_cache_free();
 
-HPX_PLAIN_ACTION(particles_cache_free);
-HPX_PLAIN_ACTION(particles_destroy);
-HPX_PLAIN_ACTION(particles_fetch_cache_line);
-HPX_PLAIN_ACTION(particles_random_init);
-HPX_PLAIN_ACTION(particles_sample);
+HPX_PLAIN_ACTION (particles_cache_free);
+HPX_PLAIN_ACTION (particles_destroy);
+HPX_PLAIN_ACTION (particles_fetch_cache_line);
+HPX_PLAIN_ACTION (particles_random_init);
+HPX_PLAIN_ACTION (particles_sample);
 
 struct line_id_type {
 	int proc;
@@ -58,7 +58,7 @@ static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 void particles_cache_free() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_cache_free_action>(c));
+		futs.push_back(hpx::async < particles_cache_free_action > (c));
 	}
 	for (int i = 0; i < PART_CACHE_SIZE; i++) {
 		part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>();
@@ -93,6 +93,23 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					z[dest_index] = ptr[src_index][ZDIM];
 					dest_index++;
 				}
+			}
+		}
+	}
+}
+
+void particles_global_touch_pos(particle_global_range range) {
+	const int line_size = get_options().part_cache_line_size;
+	if (range.range.first != range.range.second) {
+		if (range.proc == hpx_rank()) {
+		} else {
+			line_id_type line_id;
+			line_id.proc = range.proc;
+			const int start_line = (range.range.first / line_size) * line_size;
+			const int stop_line = ((range.range.second - 1) / line_size) * line_size;
+			for (int line = start_line; line <= stop_line; line += line_size) {
+				line_id.index = line;
+				particles_cache_read_line(line_id);
 			}
 		}
 	}
@@ -137,7 +154,7 @@ void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<particles_destroy_action>(c));
+		futs.push_back(hpx::async < particles_destroy_action > (c));
 	}
 	particles_x = decltype(particles_x)();
 	particles_g = decltype(particles_g)();
@@ -169,11 +186,11 @@ void particles_random_init() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<particles_random_init_action>(c));
+		futs.push_back(hpx::async < particles_random_init_action > (c));
 	}
 	const size_t total_num_parts = std::pow(get_options().parts_dim, NDIM);
-	const size_t begin = (size_t) (hpx_rank()) * total_num_parts / hpx_size();
-	const size_t end = (size_t) (hpx_rank() + 1) * total_num_parts / hpx_size();
+	const size_t begin = (size_t)(hpx_rank()) * total_num_parts / hpx_size();
+	const size_t end = (size_t)(hpx_rank() + 1) * total_num_parts / hpx_size();
 	const size_t my_num_parts = end - begin;
 	particles_resize(my_num_parts);
 	const int nthreads = hpx::thread::hardware_concurrency();
@@ -241,7 +258,7 @@ vector<particle_sample> particles_sample(int cnt) {
 		const int begin = size_t(cnt) * nparts / (children.size() + 1);
 		const int end = size_t(cnt + 1) * nparts / (children.size() + 1);
 		const int this_cnt = end - begin;
-		futs.push_back(hpx::async<particles_sample_action>(children[i], this_cnt));
+		futs.push_back(hpx::async < particles_sample_action > (children[i], this_cnt));
 	}
 	const int begin = size_t(children.size()) * nparts / (children.size() + 1);
 	const int this_cnt = nparts - begin;

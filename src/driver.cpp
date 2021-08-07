@@ -156,18 +156,23 @@ void driver() {
 		bool full_eval = minrung == 0;
 		double theta;
 		const double z = 1.0 / a - 1.0;
+		auto opts = get_options();
 		if (z > 20.0) {
 			theta = 0.5;
+			opts.part_cache_line_size = 64 * 1024;
 		} else if (z > 2.0) {
 			theta = 0.65;
+			opts.part_cache_line_size = 32 * 1024;
 		} else {
 			theta = 0.8;
+			opts.part_cache_line_size = 16 * 1024;
 		}
-#ifdef USE_CUDA
 		if (last_theta != theta) {
+			set_options(opts);
+#ifdef USE_CUDA
 			kick_reset_all_list_sizes();
-		}
 #endif
+		}
 		last_theta = theta;
 		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		if (full_eval) {
