@@ -69,7 +69,7 @@
 
 
 #define NTREES_MIN (2*1024*1024)
-#define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
+#define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
 #define SORT_OVERSUBSCRIPTION 8

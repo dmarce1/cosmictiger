@@ -30,7 +30,7 @@ void domains_transmit_particles(vector<particle> parts) {
 //#ifdef HPX_LITE
 //	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
 //#else
-	auto fut = hpx::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
+	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
 	fut.get();
 //#endif
 }
