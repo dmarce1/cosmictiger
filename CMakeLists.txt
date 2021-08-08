@@ -152,12 +152,14 @@ add_executable( cosmictiger_lite ${cosmictiger_source_files} )
 
 #target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
-target_link_libraries(cosmictiger_lite PUBLIC boost_program_options fftw3f gsl gslcblas chealpix hpx_lite hwloc )
+target_link_libraries(cosmictiger_lite PUBLIC boost_program_options fftw3f gsl gslcblas chealpix hpx_lite hwloc dl )
 target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
 target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;
                         >)
-target_compile_options(cosmictiger_lite PUBLIC "-DHPX_LITE" )
+target_link_options(cosmictiger_lite PUBLIC -no-pie -fno-pie )
+target_compile_options(cosmictiger_lite PUBLIC -DHPX_LITE -DBOOST_STACKTRACE_USE_ADDR2LINE -no-pie -fno-pie )
+target_compile_options(hpx_lite PUBLIC -DBOOST_STACKTRACE_USE_ADDR2LINE -no-pie -fno-pie )
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger_lite PUBLIC cudart)
 	target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:

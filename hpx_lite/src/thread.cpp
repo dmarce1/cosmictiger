@@ -7,6 +7,7 @@
 
 #include <mpi.h>
 #include <hwloc.h>
+#include <boost/stacktrace.hpp>
 
 #include "hpx/thread.hpp"
 
@@ -21,6 +22,10 @@
 #include <unordered_map>
 #include <vector>
 #include <queue>
+
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
 
 #define HWLOC_OBJ_QUEUE HWLOC_OBJ_SOCKET
 
@@ -39,6 +44,13 @@ static std::shared_ptr<context> queue_pop(int);
 static void queue_push(int, const std::shared_ptr<context>& ptr);
 static void delayed_push(int);
 static std::size_t& num_queues();
+
+// ... somewhere inside the bar(int) function that is called recursively:
+
+void stack_trace_handler(int sig) {
+	std::cout << boost::stacktrace::stacktrace();
+	exit(1);
+}
 
 thread_exit::thread_exit() :
 		exit_func(nullptr) {
@@ -117,7 +129,6 @@ public:
 		yield_bit = b;
 	}
 };
-
 
 bool context::add_continuation(std::function<void()>& func) {
 	std::unique_lock < std::mutex > lock(mtx);
@@ -587,7 +598,7 @@ void yield(const std::shared_ptr<bool> yield_bit) {
 				}
 				if (next_ptr->is_active()) {
 //					if (next_ptr->get_yield_bit()) {
-						found_thread = true;
+					found_thread = true;
 //					} else {
 //						queue_push(queue_num, next_ptr);
 //						found_thread = false;

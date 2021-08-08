@@ -9,13 +9,28 @@
 #define THREAD_IMPL_HPP_
 
 #include <fenv.h>
+#include <signal.h>
+
 namespace hpx {
+
+
+namespace detail {
+void stack_trace_handler(int sig);
+}
+
 
 template<class F, class ...Args>
 void thread::wrapper(void* arg) {
 /*	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);*/
+	signal(SIGABRT, detail::stack_trace_handler);
+//	signal(SIGINT, detail::stack_trace_handler);
+	signal(SIGSEGV, detail::stack_trace_handler);
+	signal(SIGFPE, detail::stack_trace_handler);
+	signal(SIGILL, detail::stack_trace_handler);
+//	signal(SIGTERM, detail::stack_trace_handler);
+//	signal(SIGHUP, detail::stack_trace_handler);
 
 	auto tup_ptr = reinterpret_cast<tuple_type<F, Args...>*>(arg);
 	typedef typename std::result_of<F(Args...)>::type return_type;
