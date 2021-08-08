@@ -20,6 +20,8 @@
 #define LEFT 0
 #define RIGHT 1
 
+
+
 #ifdef USE_CUDA
 #define SINK_BUCKET_SIZE 160
 #define SOURCE_BUCKET_SIZE 160
@@ -69,7 +71,6 @@
 
 
 #define NTREES_MIN (2*1024*1024)
-#define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
 #define SORT_OVERSUBSCRIPTION 8

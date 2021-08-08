@@ -14,6 +14,19 @@
 #include <hpx/hpx_lite.hpp>
 #endif
 
+#if (HPX_VERSION_FULL < ((1<<16) | (6<<8)))
+#define HPX_EARLY
+#else
+#define HPX_LATE
+#endif
+
+#ifdef HPX_EARLY
+#define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
+#else
+#define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
+#endif
+
+
 const vector<hpx::id_type>& hpx_localities();
 const vector<hpx::id_type>& hpx_children();
 void hpx_init();
