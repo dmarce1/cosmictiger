@@ -101,16 +101,18 @@ public:
 	}
 };
 
-inline array<int, NDIM> operator*(const array<int, NDIM>& a, int b) {
-	array<int, NDIM> c;
+template<class T>
+inline array<T, NDIM> operator*(const array<T, NDIM>& a, T b) {
+	array<T, NDIM> c;
 	for (int dim = 0; dim < NDIM; dim++) {
 		c[dim] = a[dim] * b;
 	}
 	return c;
 }
 
-inline bool operator==(const array<int, NDIM>& a, const array<int, NDIM>& b) {
-	for (int dim = 0; dim < NDIM; dim++) {
+template<class T>
+inline bool operator==(const array<T, NDIM>& a, const array<T, NDIM>& b) {
+	for (T dim = 0; dim < NDIM; dim++) {
 		if (a[dim] != b[dim]) {
 			return false;
 		}
@@ -118,20 +120,23 @@ inline bool operator==(const array<int, NDIM>& a, const array<int, NDIM>& b) {
 	return true;
 }
 
-inline bool operator!=(const array<int, NDIM>& a, const array<int, NDIM>& b) {
+template<class T>
+inline bool operator!=(const array<T, NDIM>& a, const array<T, NDIM>& b) {
 	return !(a == b);
 }
 
-inline array<int, NDIM> operator+(const array<int, NDIM>& a, const array<int, NDIM>& b) {
-	array<int, NDIM> c;
+template<class T>
+inline array<T, NDIM> operator+(const array<T, NDIM>& a, const array<T, NDIM>& b) {
+	array<T, NDIM> c;
 	for (int dim = 0; dim < NDIM; dim++) {
 		c[dim] = a[dim] + b[dim];
 	}
 	return c;
 }
 
-inline array<int, NDIM> operator-(const array<int, NDIM>& a, const array<int, NDIM>& b) {
-	array<int, NDIM> c;
+template<class T>
+inline array<T, NDIM> operator-(const array<T, NDIM>& a, const array<T, NDIM>& b) {
+	array<T, NDIM> c;
 	for (int dim = 0; dim < NDIM; dim++) {
 		c[dim] = a[dim] - b[dim];
 	}

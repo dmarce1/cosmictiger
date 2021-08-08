@@ -52,7 +52,7 @@ struct cuda_kick_shmem {
 	array<float, SINK_BUCKET_SIZE> gy;
 	array<float, SINK_BUCKET_SIZE> gz;
 	array<float, SINK_BUCKET_SIZE> phi;
-	array<int,SINK_BUCKET_SIZE> active;
+	array<part_int,SINK_BUCKET_SIZE> active;
 	array<char,SINK_BUCKET_SIZE> rungs;
 };
 #endif
@@ -157,8 +157,6 @@ vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, f
 		int part_count, int ntrees, std::function<void()>, std::function<void()>);
 #endif
 int kick_block_count();
-void kick_reset_list_sizes();
-void kick_reset_all_list_sizes();
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);
 
 #endif /* KICK_HPP_ */

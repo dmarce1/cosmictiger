@@ -2,7 +2,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
 
-kick_workspace::kick_workspace(kick_params p, int total_parts_) {
+kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
 	total_parts = total_parts_;
 	params = p;
 	nparts = 0;
@@ -22,7 +22,7 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 	}
 }
 
-static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, int offset) {
+static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, part_int offset) {
 	tree_nodes[index].part_range.first += offset;
 	assert(tree_nodes[index].part_range.first >= 0);
 	tree_nodes[index].part_range.second += offset;
@@ -54,7 +54,7 @@ void kick_workspace::to_gpu() {
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 //	PRINT("%i tree ids\n", tree_ids_vector.size());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	int part_count = 0;
+	part_int part_count = 0;
 	for (int i = 0; i < tree_ids_vector.size(); i++) {
 		const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 		ids_by_depth[ptr->depth].push_back(tree_ids_vector[i]);
@@ -63,7 +63,7 @@ void kick_workspace::to_gpu() {
 	fixed32* dev_y;
 	fixed32* dev_z;
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
-	std::atomic<int> next_index(0);
+	std::atomic<part_int> next_index(0);
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_bases;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
@@ -140,7 +140,7 @@ void kick_workspace::to_gpu() {
 								if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 									const int local_index = tree_map[tree_ids_vector[i]];
-									int part_index = (next_index += ptr->nparts()) - ptr->nparts();
+									part_int part_index = (next_index += ptr->nparts()) - ptr->nparts();
 									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), part_index);
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
@@ -170,7 +170,7 @@ void kick_workspace::to_gpu() {
 #endif
 }
 
-void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, int n) {
+void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) {
 	bool do_work = false;
 	std::unique_lock<mutex_type> lock(mutex);
 	nparts += n;
@@ -200,7 +200,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	item.self = self;
 	bool do_work = false;
 	{
-		const int these_nparts = tree_get_node(self)->nparts();
+		const part_int these_nparts = tree_get_node(self)->nparts();
 		std::lock_guard<mutex_type> lock(mutex);
 		nparts += these_nparts;
 		if (nparts == total_parts) {

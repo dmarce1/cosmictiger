@@ -11,16 +11,18 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 
-inline array<int, NDIM> shift_up(array<int, NDIM> i) {
-	array<int, NDIM> j;
+template<class T>
+inline array<T, NDIM> shift_up(array<T, NDIM> i) {
+	array<T, NDIM> j;
 	j[2] = i[0];
 	j[0] = i[1];
 	j[1] = i[2];
 	return j;
 }
 
-inline array<int, NDIM> shift_down(array<int, NDIM> i) {
-	array<int, NDIM> j;
+template<class T>
+inline array<T, NDIM> shift_down(array<T, NDIM> i) {
+	array<T, NDIM> j;
 	j[1] = i[0];
 	j[2] = i[1];
 	j[0] = i[2];
@@ -146,25 +148,25 @@ struct range {
 	}
 
 	CUDA_EXPORT
-	inline int index(int xi, int yi, int zi) const {
+	inline T index(T xi, T yi, T zi) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
 		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
 	}
 
 	CUDA_EXPORT
-	inline int index(const array<T, NDIM> & i) const {
+	inline T index(const array<T, NDIM> & i) const {
 		return index(i.data());
 	}
 
 	CUDA_EXPORT
-	inline int index(const T * i) const {
+	inline T index(const T * i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
 		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
 	}
 
-	inline range<int> transpose(int dim1, int dim2) const {
+	inline range<T> transpose(int dim1, int dim2) const {
 		auto rc = *this;
 		std::swap(rc.begin[dim1], rc.begin[dim2]);
 		std::swap(rc.end[dim1], rc.end[dim2]);

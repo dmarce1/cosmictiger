@@ -75,12 +75,12 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 						break;
 					}
 				}
-				const int imin = these_parts.first;
-				const int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
+				const part_int imin = these_parts.first;
+				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
 				for (int j = tid; j < sz; j += WARP_SIZE) {
 					const int i1 = part_index + j;
-					const int i2 = j + imin;
+					const part_int i2 = j + imin;
 					assert(i2 >= 0);
 					assert(i2 < data.source_size);
 					src_x[i1] = main_src_x[i2];
@@ -258,12 +258,12 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						break;
 					}
 				}
-				const int imin = these_parts.first;
-				const int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
+				const part_int imin = these_parts.first;
+				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
 				for (int j = tid; j < sz; j += WARP_SIZE) {
 					const int i1 = part_index + j;
-					const int i2 = j + imin;
+					const part_int i2 = j + imin;
 					assert(i2 >= 0);
 					assert(i2 < data.source_size);
 					src_x[i1] = main_src_x[i2];

@@ -3,7 +3,6 @@
 #include <cosmictiger/map.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
-#include <cosmictiger/particles.hpp>
 
 HPX_PLAIN_ACTION(drift);
 
@@ -31,10 +30,10 @@ drift_return drift(double scale, double t, double dt) {
 			double momx = 0.0;
 			double momy = 0.0;
 			double momz = 0.0;
-			int nmapped = 0;
-			const int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
-			const int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
-			for( int i = begin; i < end; i++) {
+			part_int nmapped = 0;
+			const part_int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
+			const part_int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
+			for( part_int i = begin; i < end; i++) {
 				double x = particles_pos(XDIM,i).to_double();
 				double y = particles_pos(YDIM,i).to_double();
 				double z = particles_pos(ZDIM,i).to_double();

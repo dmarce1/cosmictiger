@@ -83,7 +83,7 @@ inline cmplx expc(cmplx z) {
 }
 
 static void zeldovich_begin(int dim) {
-	const int N = get_options().parts_dim;
+	const int64_t N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
@@ -94,23 +94,23 @@ static void zeldovich_begin(int dim) {
 	auto power = read_power_spectrum();
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
-	array<int, NDIM> I;
-///	PRINT( "factor = %e\n", factor);
+	array<int64_t, NDIM> I;
+///	PRint64_t( "factor = %e\n", factor);
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,&power,factor](array<int,NDIM> I) {
+		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,&power,factor](array<int64_t,NDIM> I) {
 			const int seed = I[0] * 441245 + 42;
 			gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 			gsl_rng_set(rndgen, seed);
-			const int i = I[0] < N / 2 ? I[0] : I[0] - N;
+			const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				const int j = I[1] < N / 2 ? I[1] : I[1] - N;
+				const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
 				const float ky = 2.f * (float) M_PI / box_size * float(j);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-					const int k = I[2] < N / 2 ? I[2] : I[2] - N;
-					const int i2 = sqr(i, j, k);
-					const int index = box.index(I);
+					const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
+					const int64_t i2 = sqr(i, j, k);
+					const int64_t index = box.index(I);
 					if (i2 > 0 && i2 < N * N / 4) {
 						const float kz = 2.f * (float) M_PI / box_size * float(k);
 						const float k2 = kx * kx + ky * ky + kz * kz;
@@ -137,7 +137,7 @@ static void zeldovich_begin(int dim) {
 static float zeldovich_end(int dim) {
 	float dxmax = 0.0;
 	spinlock_type mutex;
-	const int N = get_options().parts_dim;
+	const int64_t N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float omega_m = get_options().omega_m;
 	const float a0 = 1.0 / (get_options().z0 + 1.0);
@@ -159,17 +159,17 @@ static float zeldovich_end(int dim) {
 	if (dim == 0) {
 		particles_resize(box.volume());
 	}
-	array<int, NDIM> I;
+	array<int64_t, NDIM> I;
 	vector<hpx::future<void>> futs1;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs1.push_back(hpx::async([box,box_size,D1,prefac1,dim,&Y,N,&mutex,&dxmax](array<int,NDIM> I) {
+		futs1.push_back(hpx::async([box,box_size,D1,prefac1,dim,&Y,N,&mutex,&dxmax](array<int64_t,NDIM> I) {
 			const float Ninv = 1.0 / N;
 			const float box_size_inv = 1.0 / box_size;
 			float this_dxmax = 0.0;
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 					float x = (I[dim] + 0.5) * Ninv;
-					const int index = box.index(I);
+					const int64_t index = box.index(I);
 					const float dx = -D1 * Y[index] * box_size_inv;
 					this_dxmax = std::max(this_dxmax, std::abs(dx * N));
 					x += dx;
@@ -226,7 +226,7 @@ static power_spectrum_function read_power_spectrum() {
 }
 
 void initialize() {
-	const int N = get_options().parts_dim;
+	const int64_t N = get_options().parts_dim;
 	for (int dim = 0; dim < NDIM; dim++) {
 		fft3d_init(N);
 		zeldovich_begin(dim);

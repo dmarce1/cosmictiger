@@ -9,9 +9,6 @@ constexpr bool verbose = true;
 #include <stack>
 
 HPX_PLAIN_ACTION (kick);
-#ifdef USE_CUDA
-HPX_PLAIN_ACTION(kick_reset_all_list_sizes);
-#endif
 
 #define MAX_ACTIVE_WORKSPACES 1
 
@@ -32,9 +29,8 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 static thread_local std::stack<workspace> local_workspaces;
-static std::atomic<int> atomic_lock(0);
-static int cuda_workspace_max_parts;
-static int cuda_branch_max_parts;
+static part_int cuda_workspace_max_parts;
+static part_int cuda_branch_max_parts;
 
 static workspace get_workspace() {
 	if (local_workspaces.empty()) {
@@ -226,9 +222,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		partlist.resize(0);
 		multlist.resize(0);
-		const int mynparts = self_ptr->nparts();
+		const part_int mynparts = self_ptr->nparts();
 		force_vectors forces(mynparts);
-		for (int i = 0; i < mynparts; i++) {
+		for (part_int i = 0; i < mynparts; i++) {
 			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
 			forces.phi[i] = -SELF_PHI / hfloat;
 		}
@@ -274,11 +270,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;
-		for (int i = rng.first; i < rng.second; i++) {
+		for (part_int i = rng.first; i < rng.second; i++) {
 			if (particles_rung(i) >= params.min_rung) {
-				const int j = i - rng.first;
+				const part_int j = i - rng.first;
 				array<float, NDIM> dx;
-				for (int dim = 0; dim < NDIM; dim++) {
+				for (part_int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
 				const auto L2 = L2P(L, dx, params.min_rung == 0);
@@ -371,14 +367,3 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	}
 }
 
-#ifdef USE_CUDA
-void kick_reset_all_list_sizes() {
-	vector<hpx::future<void>> futs;
-	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<kick_reset_all_list_sizes_action>(c));
-	}
-	kick_reset_list_sizes();
-	hpx::wait_all(futs.begin(), futs.end());
-}
-
-#endif

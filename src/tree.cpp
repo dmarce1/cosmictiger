@@ -305,7 +305,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		}
 		nactive = 0;
 		array<double, NDIM> dx;
-		for (int i = part_range.first; i < part_range.second; i++) {
+		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				Xmax[dim] = std::max(Xmax[dim], x);
@@ -318,7 +318,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
-		const int maxi = round_down(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
+		const part_int maxi = round_down(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
 		array<simd_int, NDIM> Y;
 		for (int dim = 0; dim < NDIM; dim++) {
 			Y[dim] = fixed32(Xc[dim]).raw();
@@ -340,7 +340,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 				M[j] += m[j].sum();
 			}
 		}
-		for (int i = maxi; i < part_range.second; i++) {
+		for (part_int i = maxi; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				dx[dim] = x - Xc[dim];
@@ -351,7 +351,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			}
 		}
 		r = 0.0;
-		for (int i = part_range.first; i < part_range.second; i++) {
+		for (part_int i = part_range.first; i < part_range.second; i++) {
 			double this_radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
@@ -383,7 +383,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	node.multi = multi;
 	node.nactive = nactive;
 	node.depth = depth;
-	const int nparts = part_range.second - part_range.first;
+	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
 	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);

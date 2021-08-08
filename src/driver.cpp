@@ -170,9 +170,6 @@ void driver() {
 		}
 		if (last_theta != theta) {
 			set_options(opts);
-#ifdef USE_CUDA
-			kick_reset_all_list_sizes();
-#endif
 		}
 		last_theta = theta;
 		PRINT("Kicking\n");

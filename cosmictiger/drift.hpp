@@ -9,6 +9,7 @@
 #define DRIFT_HPP_
 
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/particles.hpp>
 
 
 struct drift_return {
@@ -16,7 +17,7 @@ struct drift_return {
 	double momx;
 	double momy;
 	double momz;
-	int nmapped;
+	part_int nmapped;
 	template<class Arc>
 	void serialize(Arc&& a, unsigned) {
 		a & kin;

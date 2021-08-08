@@ -31,31 +31,6 @@ struct cuda_lists_type {
 
 };
 
-__device__ int max_depth = 0;
-__device__ int max_nextlist = 0;
-__device__ int max_partlist = 0;
-__device__ int max_leaflist = 0;
-__device__ int max_multlist = 0;
-__device__ int max_echecks = 0;
-__device__ int max_dchecks = 0;
-
-__global__ void kick_reset_list_sizes_kernel() {
-	if (threadIdx.x == 0) {
-		max_depth = 0;
-		max_nextlist = 0;
-		max_partlist = 0;
-		max_leaflist = 0;
-		max_multlist = 0;
-		max_echecks = 0;
-		max_dchecks = 0;
-	}
-}
-
-void kick_reset_list_sizes() {
-	kick_reset_list_sizes_kernel<<<1,1>>>();
-	CUDA_CHECK(cudaDeviceSynchronize());
-}
-
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
@@ -237,7 +212,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	Lpos.initialize();
 	returns.initialize();
 	self_index.initialize();
-	L.resize(max_depth);
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -424,10 +398,10 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				int pflops = 0;
 				if (self.sink_leaf) {
 					int nactive = 0;
-					const int begin = self.sink_part_range.first;
-					const int end = self.sink_part_range.second;
-					const int src_begin = self.part_range.first;
-					maxi = round_up(end - begin, WARP_SIZE);
+					const part_int begin = self.sink_part_range.first;
+					const part_int end = self.sink_part_range.second;
+					const part_int src_begin = self.part_range.first;
+					maxi = round_up(end - begin, (part_int) WARP_SIZE);
 					for (int i = tid; i < maxi; i += WARP_SIZE) {
 						bool active = false;
 						char rung;
@@ -442,7 +416,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						compute_indices(l, total);
 						l += nactive;
 						if (active) {
-							const int srci = src_begin + i;
+							const part_int srci = src_begin + i;
 							assert(begin + i < data.sink_size);
 							activei[l] = begin + i;
 							rungs[l] = rung;
@@ -462,8 +436,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						bool pp = false;
 						if (i < leaflist.size()) {
 							const tree_node& other = tree_nodes[leaflist[i]];
-							const int begin = other.part_range.first;
-							const int end = other.part_range.second;
+							const part_int begin = other.part_range.first;
+							const part_int end = other.part_range.second;
 							bool far;
 							if (end - begin < MIN_PC_PARTS) {
 								far = false;

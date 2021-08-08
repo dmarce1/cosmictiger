@@ -29,13 +29,13 @@ static void compute_density() {
 	}
 	const int N = get_options().parts_dim;
 	const auto dblbox = domains_find_my_box();
-	range<int> intbox;
+	range<int64_t> intbox;
 	for (int dim = 0; dim < NDIM; dim++) {
 		intbox.begin[dim] = dblbox.begin[dim] * N;
 		intbox.end[dim] = dblbox.end[dim] * N + 2;
 	}
 	rho.resize(intbox.volume(), 0.0);
-	array<int, NDIM> I;
+	array<int64_t, NDIM> I;
 	for (I[0] = intbox.begin[XDIM]; I[0] < intbox.end[XDIM] - 2; I[0]++) {
 		for (I[1] = intbox.begin[YDIM]; I[1] < intbox.end[YDIM] - 2; I[1]++) {
 			for (I[2] = intbox.begin[ZDIM]; I[2] < intbox.end[ZDIM] - 2; I[2]++) {
@@ -48,19 +48,19 @@ static void compute_density() {
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc,nthreads,N,intbox,&rho]() {
-			const int begin = (size_t) proc * particles_size() / nthreads;
-			const int end = (size_t) (proc+1) * particles_size() / nthreads;
+			const part_int begin = (size_t) proc * particles_size() / nthreads;
+			const part_int end = (size_t) (proc+1) * particles_size() / nthreads;
 			const double Ninv = 1.0 / N;
 			for( int i = begin; i < end; i++) {
 				const double x = particles_pos(XDIM,i).to_double();
 				const double y = particles_pos(YDIM,i).to_double();
 				const double z = particles_pos(ZDIM,i).to_double();
-				const int i0 = x * N;
-				const int j0 = y * N;
-				const int k0 = z * N;
-				const int i1 = i0 + 1;
-				const int j1 = j0 + 1;
-				const int k1 = k0 + 1;
+				const part_int i0 = x * N;
+				const part_int j0 = y * N;
+				const part_int k0 = z * N;
+				const part_int i1 = i0 + 1;
+				const part_int j1 = j0 + 1;
+				const part_int k1 = k0 + 1;
 				const double wx1 = x * N - i0;
 				const double wy1 = y * N - j0;
 				const double wz1 = z * N - k0;
@@ -75,14 +75,14 @@ static void compute_density() {
 				const double w101 = wx1 * wy0 * wz1;
 				const double w110 = wx1 * wy1 * wz0;
 				const double w111 = wx1 * wy1 * wz1;
-				const int i000 = intbox.index(i0,j0,k0);
-				const int i001 = intbox.index(i0,j0,k1);
-				const int i010 = intbox.index(i0,j1,k0);
-				const int i011 = intbox.index(i0,j1,k1);
-				const int i100 = intbox.index(i1,j0,k0);
-				const int i101 = intbox.index(i1,j0,k1);
-				const int i110 = intbox.index(i1,j1,k0);
-				const int i111 = intbox.index(i1,j1,k1);
+				const part_int i000 = intbox.index(i0,j0,k0);
+				const part_int i001 = intbox.index(i0,j0,k1);
+				const part_int i010 = intbox.index(i0,j1,k0);
+				const part_int i011 = intbox.index(i0,j1,k1);
+				const part_int i100 = intbox.index(i1,j0,k0);
+				const part_int i101 = intbox.index(i1,j0,k1);
+				const part_int i110 = intbox.index(i1,j1,k0);
+				const part_int i111 = intbox.index(i1,j1,k1);
 				{
 					std::lock_guard<spinlock_type> lock(mutexes[i0 - intbox.begin[XDIM]]);
 					rho[i000] += w000;

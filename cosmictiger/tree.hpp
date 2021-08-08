@@ -76,7 +76,7 @@ struct tree_node {
 	inline const multipole_pos* get_multipole_ptr() const {
 		return (multipole_pos*) &multi;
 	}
-	inline int nparts() const {
+	inline part_int nparts() const {
 		return part_range.second - part_range.first;
 	}
 	inline particle_global_range global_part_range() const {
