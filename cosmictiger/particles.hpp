@@ -15,7 +15,7 @@
 
 #include <fstream>
 
-using part_int = long long;
+using part_int = int;
 
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
