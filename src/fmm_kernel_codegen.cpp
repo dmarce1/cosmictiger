@@ -31,7 +31,7 @@ void tprint(const char* str) {
 	printf("%s", str);
 }
 
-int compute_dx(int P, const char* name = "X") {
+int compute_dx(int P, const char* name = "X", bool trless = false) {
 	array<int, NDIM> n;
 	tprint("const T x000 = T(1);\n");
 	tprint("const T& x100 = %s[0];\n", name);
@@ -42,6 +42,9 @@ int compute_dx(int P, const char* name = "X") {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
 				n[2] = n0 - n[0] - n[1];
+				if (trless && ((n[2] > 2) || (n[2] > 1 && !(n[0] == 0 && n[1] == 0)))) {
+					continue;
+				}
 				array<int, NDIM> j = n;
 				int j0 = n0;
 				const int jmin = std::max(1, n0 / 2);
@@ -1171,7 +1174,7 @@ int main() {
 	tprint("X[1] *= rinv1;\n");
 	tprint("X[2] *= rinv1;\n");
 	flops += 12;
-	flops += compute_dx(P);
+	flops += compute_dx(P, "X", true);
 	reference_trless("D", P);
 	flops += compute_detraceD<P>("x", "D");
 	flops += 11 + (P - 1) * 2;

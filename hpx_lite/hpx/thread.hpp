@@ -14,6 +14,8 @@
 #include <chrono>
 #include <functional>
 
+#include <iostream>
+
 #include "detail/thread_detail.hpp"
 
 namespace hpx {

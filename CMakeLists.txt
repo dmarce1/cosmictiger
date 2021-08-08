@@ -157,9 +157,9 @@ target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJE
 target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;
                         >)
-target_link_options(cosmictiger_lite PUBLIC -no-pie -fno-pie )
-target_compile_options(cosmictiger_lite PUBLIC -DHPX_LITE -DBOOST_STACKTRACE_USE_ADDR2LINE -no-pie -fno-pie )
-target_compile_options(hpx_lite PUBLIC -DBOOST_STACKTRACE_USE_ADDR2LINE -no-pie -fno-pie )
+target_link_options(cosmictiger_lite PUBLIC)
+target_compile_options(cosmictiger_lite PUBLIC -DHPX_LITE -DBOOST_STACKTRACE_USE_ADDR2LINE )
+target_compile_options(hpx_lite PUBLIC -DBOOST_STACKTRACE_USE_ADDR2LINE  )
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger_lite PUBLIC cudart)
 	target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:

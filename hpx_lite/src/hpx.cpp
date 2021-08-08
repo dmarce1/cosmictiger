@@ -103,7 +103,6 @@ static void local_finalize();
 
 HPX_PLAIN_ACTION(local_finalize, finalize_action);
 
-
 int main(int argc, char* argv[]) {
 	hwloc_topology_t topology;
 	hwloc_topology_init(&(topology));
@@ -303,7 +302,22 @@ static int handle_outgoing_message(std::shared_ptr<message_type> message) {
 	int rc, mpi_rc;
 	int flag;
 	if (!message->sent) {
+		int max_tag;
+		void* ptr;
+		int found;
+		HPX_MPI_CALL(MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &ptr, &found));
+		max_tag = *(int*) ptr;
+		assert(found);
 		int count = message->buffer.size();
+		static bool first = true;
+		if (found && first) {
+			first = false;
+			printf("Maximum message size = %i MB\n", max_tag / 1024 / 1024);
+		}
+		if (count > max_tag) {
+			printf("Attempted to send message with size greater than maxtag = %i\n", max_tag);
+			abort();
+		}
 		int dest = message->target_rank;
 		void* buffer = message->buffer.data();
 		MPI_Request* const request = &(message->mpi_request);
