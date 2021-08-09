@@ -117,7 +117,6 @@ struct tree_create_return {
 	double flops;
 	template<class A>
 	void serialize(A&& a, unsigned) {
-		a & flops;
 		a & active_nodes;
 		a & multi;
 		a & id;
@@ -125,6 +124,7 @@ struct tree_create_return {
 		a & nactive;
 		a & radius;
 		a & node_count;
+		a & flops;
 	}
 };
 

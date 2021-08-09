@@ -21,7 +21,6 @@ int hpx_main(int argc, char *argv[]) {
 	return hpx::finalize();
 }
 
-#ifndef HPX_LITE
 
 int main(int argc, char *argv[]) {
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
@@ -35,4 +34,3 @@ int main(int argc, char *argv[]) {
 #endif
 }
 
-#endif

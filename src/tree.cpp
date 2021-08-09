@@ -11,9 +11,9 @@ constexpr bool verbose = true;
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
-HPX_PLAIN_ACTION(tree_create);
-HPX_PLAIN_ACTION(tree_destroy);
-HPX_PLAIN_ACTION(tree_fetch_cache_line);
+HPX_PLAIN_ACTION (tree_create);
+HPX_PLAIN_ACTION (tree_destroy);
+HPX_PLAIN_ACTION (tree_fetch_cache_line);
 
 class tree_allocator {
 	int next;
@@ -38,7 +38,7 @@ static std::atomic<int> next_id;
 static thread_local tree_allocator allocator;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
-static thread_local tree_id last_line = {-1,-1};
+static thread_local tree_id last_line = { -1, -1 };
 static thread_local const tree_node* last_ptr = nullptr;
 
 static const tree_node* tree_cache_read(tree_id id);
@@ -131,7 +131,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 	if (!threadme) {
 		rc.set_value(tree_create(params, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async < tree_create_action > (hpx_localities()[proc_range.first], params, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,part_range,depth,local_root, box]() {
 			auto rc = tree_create(params,proc_range,part_range,box,depth,local_root);
@@ -168,6 +168,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	array<double, NDIM> Xc;
 	multipole<float> multi;
 	size_t nactive;
+	int flops = 0;
+	double total_flops = 0.0;
 	float radius;
 	double r;
 	if (!allocator.ready) {
@@ -195,12 +197,14 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			left_range.second = right_range.first = mid;
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
+			flops += 7;
 		} else {
 			const int xdim = box.longest_dim();
 			const double xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
 			const part_int mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
+			flops += 2;
 		}
 		auto futr = tree_create_fork(params, right_range, right_parts, right_box, depth + 1, right_local_root, true);
 		auto futl = tree_create_fork(params, left_range, left_parts, left_box, depth + 1, left_local_root, false);
@@ -212,6 +216,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
+		total_flops += rcl.flops + rcr.flops;
 		nactive = rcl.nactive + rcr.nactive;
 		double rr;
 		double rl;
@@ -226,15 +231,20 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			Xr[dim] = xr[dim].to_double();
 			N[dim] = Xl[dim] - Xr[dim];
 			norminv += sqr(N[dim]);
+			flops += 5;
 		}
 		norminv = 1.0 / std::sqrt(norminv);
+		flops += 8;
 		for (int dim = 0; dim < NDIM; dim++) {
 			N[dim] *= norminv;
+			flops += 1;
 		}
 		r = 0.0;
+		flops += 2;
 		if (mr[0] != 0.0 && ml[0.0] != 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				double xmin, xmax;
+				flops += 1;
 				if (N[dim] > 0.0) {
 					xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
 					xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
@@ -244,15 +254,20 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 				}
 				Xc[dim] = (xmax + xmin) * 0.5;
 				r += sqr((xmax - xmin) * 0.5);
+				flops += 14;
 			}
 		} else if (mr[0] == 0.0 && ml[0.0] == 0) {
+			flops += 2;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
+				flops == 2;
 			}
 		} else if (mr[0] != 0.0) {
+			flops += 4;
 			Xc = Xr;
 			r = Rr * Rr;
 		} else {
+			flops += 4;
 			Xc = Xl;
 			r = Rl * Rl;
 		}
@@ -262,11 +277,13 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);
 		}
 		r = std::sqrt(r);
+		flops += 8 + 3 * NDIM;
 		if (r < radius) {
 			radius = r;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
 			}
+			flops += 2 * NDIM;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
@@ -281,10 +298,13 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			mdx[dim][LEFT] = Xl[dim] - Xc[dim];
 			mdx[dim][RIGHT] = Xr[dim] - Xc[dim];
 		}
-		simdM = M2M < simd_double > (simdM, mdx);
+		flops += 2 * NDIM;
+		simdM = M2M<simd_double>(simdM, mdx);
+		flops += 1203 * NCHILD;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
 		}
+		flops += MULTIPOLE_SIZE;
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
@@ -311,6 +331,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 				Xmax[dim] = std::max(Xmax[dim], x);
 				Xmin[dim] = std::min(Xmin[dim], x);
 			}
+			flops += 3 * NDIM;
 			if (particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
@@ -318,6 +339,7 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
+		flops += 2 * NDIM;
 		const part_int maxi = round_down(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
 		array<simd_int, NDIM> Y;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -335,20 +357,26 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 			}
+			flops += SIMD_FLOAT_SIZE * NDIM * 3;
 			const auto m = P2M(dx);
+			flops += 211 * SIMD_FLOAT_SIZE;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[j] += m[j].sum();
 			}
+			flops += MULTIPOLE_SIZE;
 		}
 		for (part_int i = maxi; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				dx[dim] = x - Xc[dim];
 			}
+			flops += NDIM * 2;
 			const auto m = P2M(dx);
+			flops += 211;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[j] += m[j];
 			}
+			flops += MULTIPOLE_SIZE;
 		}
 		r = 0.0;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
@@ -358,8 +386,10 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 				this_radius += sqr(x - Xc[dim]);
 			}
 			r = std::max(r, this_radius);
+			flops += 3 * NDIM + 1;
 		}
 		radius = std::sqrt(r);
+		flops += 4;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}
@@ -399,6 +429,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 	rc.radius = node.radius;
 	rc.node_count = node.node_count;
 	rc.nactive = nactive;
+	total_flops += flops;
+	rc.flops = total_flops;
 	if (local_root) {
 //		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}
@@ -411,7 +443,7 @@ void tree_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<tree_destroy_action>(c));
+		futs.push_back(hpx::async < tree_destroy_action > (c));
 	}
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();

@@ -15,12 +15,14 @@ struct line_id_type;
 static vector<array<fixed32, NDIM>> particles_fetch_cache_line(part_int index);
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
 void particles_cache_free();
+static part_int size = 0;
+static part_int capacity = 0;
 
-HPX_PLAIN_ACTION(particles_cache_free);
-HPX_PLAIN_ACTION(particles_destroy);
-HPX_PLAIN_ACTION(particles_fetch_cache_line);
-HPX_PLAIN_ACTION(particles_random_init);
-HPX_PLAIN_ACTION(particles_sample);
+HPX_PLAIN_ACTION (particles_cache_free);
+HPX_PLAIN_ACTION (particles_destroy);
+HPX_PLAIN_ACTION (particles_fetch_cache_line);
+HPX_PLAIN_ACTION (particles_random_init);
+HPX_PLAIN_ACTION (particles_sample);
 
 struct line_id_type {
 	int proc;
@@ -165,21 +167,54 @@ void particles_destroy() {
 }
 
 part_int particles_size() {
-	return particles_r.size();
+	return size;
+}
+
+template<class T>
+void array_resize(T*& ptr, part_int new_capacity, bool reg) {
+	T* new_ptr;
+	if (capacity > 0) {
+#ifdef USE_CUDA
+		if( reg ) {
+			CUDA_CHECK(cudaHostUnregister(ptr));
+		}
+#endif
+	}
+	new_ptr = (T*) malloc(sizeof(T) * new_capacity);
+#ifdef USE_CUDA
+	if( reg ) {
+		CUDA_CHECK(cudaHostRegister(new_ptr, new_capacity * sizeof(T), cudaHostRegisterPortable | cudaHostRegisterMapped));
+	}
+#endif
+	if (capacity > 0) {
+		hpx_copy(PAR_EXECUTION_POLICY, ptr, ptr + size, new_ptr).get();
+		free(ptr);
+	}
+	ptr = new_ptr;
+
 }
 
 void particles_resize(part_int sz) {
-	for (int dim = 0; dim < NDIM; dim++) {
-		particles_x[dim].resize(sz);
-		particles_v[dim].resize(sz);
-	}
-	particles_r.resize(sz);
-	if (get_options().save_force) {
-		particles_p.resize(sz);
-		for (int dim = 0; dim < NDIM; dim++) {
-			particles_g[dim].resize(sz);
+	if (sz > capacity) {
+		part_int new_capacity = std::max(capacity, 20);
+		while (new_capacity < sz) {
+			new_capacity = size_t(21) * new_capacity / size_t(20);
 		}
+		PRINT( "Resizing particles to %li from %li\n", new_capacity, capacity);
+		for (int dim = 0; dim < NDIM; dim++) {
+			array_resize(particles_x[dim], new_capacity, false);
+			array_resize(particles_v[dim], new_capacity, true);
+		}
+		array_resize(particles_r, new_capacity, true);
+		if (get_options().save_force) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				array_resize(particles_g[dim], new_capacity, true);
+			}
+			array_resize(particles_p, new_capacity, true);
+		}
+		capacity = new_capacity;
 	}
+	size = sz;
 }
 
 void particles_random_init() {

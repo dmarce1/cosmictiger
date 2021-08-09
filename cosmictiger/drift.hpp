@@ -17,6 +17,7 @@ struct drift_return {
 	double momx;
 	double momy;
 	double momz;
+	double flops;
 	part_int nmapped;
 	template<class Arc>
 	void serialize(Arc&& a, unsigned) {
@@ -25,6 +26,7 @@ struct drift_return {
 		a & momy;
 		a & momz;
 		a & nmapped;
+		a & flops;
 	}
 };
 

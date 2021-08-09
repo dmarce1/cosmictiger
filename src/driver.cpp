@@ -23,7 +23,7 @@ double flops_per_node = 1e6;
 double flops_per_particle = 1e5;
 bool used_gpu;
 
-kick_return kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
+std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
 	PRINT("Domains\n", minrung, theta);
@@ -44,7 +44,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 	tm.start();
 	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
-	kparams.gpu = load > GPU_LOAD_MIN;
+	kparams.gpu = load > GPU_LOAD_MIN && get_options().cuda;
 	used_gpu = kparams.gpu;
 	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
@@ -82,7 +82,7 @@ kick_return kick_step(int minrung, double scale, double t0, double theta, bool f
 		flops_per_particle = kr.part_flops / kr.nactive;
 	}
 	kr.load = load;
-	return kr;
+	return std::make_pair(kr, sr);
 }
 
 void do_power_spectrum(int num, double a) {
@@ -173,7 +173,9 @@ void driver() {
 		}
 		last_theta = theta;
 		PRINT("Kicking\n");
-		kick_return kr = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+		auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+		kick_return kr = tmp.first;
+		tree_create_return sr = tmp.second;
 		PRINT("Done kicking\n");
 		if (full_eval) {
 			pot = kr.pot * 0.5 / a;
@@ -210,12 +212,13 @@ void driver() {
 		total_time.stop();
 		runtime += total_time.read();
 		double pps = total_processed / runtime;
-		const auto total_flops = kr.node_flops + kr.part_flops;
+		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
 		params.flops += total_flops;
-		PRINT("%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e \n",
+		PRINT(
+				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e %12.3e \n",
 				iter - 1, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time,
 				sort_time, kick_time, drift_time, runtime / iter, used_gpu ? 'G' : 'C', (double ) kr.nactive / total_time.read(),
-				params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		total_time.reset();
 		total_time.start();
 		//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
@@ -244,7 +247,7 @@ void write_checkpoint(driver_params params) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
+		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
 	}
 	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");
@@ -266,7 +269,7 @@ driver_params read_checkpoint(int checknum) {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<read_checkpoint_action>(c, checknum));
+		futs.push_back(hpx::async < read_checkpoint_action > (c, checknum));
 	}
 	const std::string fname = std::string("checkpoint.") + std::to_string(checknum) + std::string("/checkpoint.") + std::to_string(checknum) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");

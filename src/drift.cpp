@@ -17,12 +17,14 @@ drift_return drift(double scale, double t, double dt) {
 	dr.momx = 0.0;
 	dr.momy = 0.0;
 	dr.momz = 0.0;
+	dr.flops = 0.0;
 	dr.nmapped = 0;
 	mutex_type mutex;
 	std::vector<hpx::future<void>> futs;
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		const auto func = [&mutex, &dr, dt, scale, proc, nthreads, do_map, t]() {
+			int64_t flops = 0;
 			const double factor = 1.0 / scale;
 			const double a2inv = 1.0 / sqr(scale);
 			double kin = 0.0;
@@ -65,6 +67,7 @@ drift_return drift(double scale, double t, double dt) {
 				particles_pos(XDIM,i) = x;
 				particles_pos(YDIM,i) = y;
 				particles_pos(ZDIM,i) = z;
+				flops += 31;
 			}
 			std::lock_guard<mutex_type> lock(mutex);
 			map_add_map(std::move(this_map));
@@ -73,6 +76,7 @@ drift_return drift(double scale, double t, double dt) {
 			dr.momy += momy;
 			dr.momz += momz;
 			dr.nmapped += nmapped;
+			dr.flops += flops;
 		};
 		futs.push_back(hpx::async(func));
 	}
@@ -83,6 +87,7 @@ drift_return drift(double scale, double t, double dt) {
 		dr.kin += this_dr.kin;
 		dr.momx += this_dr.momx;
 		dr.momy += this_dr.momy;
+		dr.flops += this_dr.flops;
 		dr.momz += this_dr.momz;
 	}
 	return dr;

@@ -27,16 +27,8 @@ void domains_transmit_particles(vector<particle> parts) {
 	const part_int start = trans_particles.size();
 	const part_int stop = start + parts.size();
 	trans_particles.resize(stop);
-#ifdef HPX_LITE
-	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
-#else
-#ifdef HPX_EARLY
-	auto fut = hpx::parallel::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
-#else
-	auto fut = hpx::copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
-#endif
+	auto fut = hpx_copy(PAR_EXECUTION_POLICY, parts.begin(), parts.end(), trans_particles.begin() + start);
 	fut.get();
-#endif
 }
 
 void domains_begin() {
@@ -108,10 +100,6 @@ void domains_end() {
 		};
 		/** THIS SORT IS REQUIRED FOR DETERMINISM!!!*/
 //		PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
-#ifdef HPX_LITE
-		std::sort(free_indices.begin(), free_indices.end());
-		std::sort(trans_particles.begin(), trans_particles.end(), particle_compare);
-#else
 		hpx::future<void> fut1;
 		hpx::future<void> fut2;
 		if (free_indices.size()) {
@@ -127,7 +115,6 @@ void domains_end() {
 		}
 		fut1.get();
 		fut2.get();
-#endif
 		if (free_indices.size() < trans_particles.size()) {
 			const part_int diff = trans_particles.size() - free_indices.size();
 			for (part_int i = 0; i < diff; i++) {

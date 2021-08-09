@@ -3,16 +3,11 @@
 
 #ifndef __CUDACC__
 
-#ifndef HPX_LITE
 #include <hpx/hpx.hpp>
 #include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/parallel/algorithms/copy.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
-#include <hpx/include/run_as.hpp>
-#else
-#include <hpx/hpx_lite.hpp>
-#endif
 
 #if (HPX_VERSION_FULL < ((1<<16) | (6<<8)))
 #define HPX_EARLY
@@ -22,9 +17,12 @@
 
 #ifdef HPX_EARLY
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
+#define hpx_copy hpx::parallel::copy
 #else
 #define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
+#define hpx_copy hpx::copy
 #endif
+
 
 
 const vector<hpx::id_type>& hpx_localities();

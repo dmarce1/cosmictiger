@@ -135,6 +135,7 @@ static void zeldovich_begin(int dim) {
 }
 
 static float zeldovich_end(int dim) {
+	PRINT( "enter zeldovich_end\n");
 	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
@@ -155,14 +156,14 @@ static float zeldovich_end(int dim) {
 	double prefac1 = f1 * H * a0 * a0;
 //	PRINT("D1 = %e\n", D1);
 //	PRINT("prefac1 = %e\n", prefac1);
-
+	PRINT( "zeldovich_end almost done\n");
 	if (dim == 0) {
 		particles_resize(box.volume());
 	}
 	array<int64_t, NDIM> I;
 	vector<hpx::future<void>> futs1;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs1.push_back(hpx::async([box,box_size,D1,prefac1,dim,&Y,N,&mutex,&dxmax](array<int64_t,NDIM> I) {
+	//	futs1.push_back(hpx::async([box,box_size,D1,prefac1,dim,&Y,N,&mutex,&dxmax](array<int64_t,NDIM> I) {
 			const float Ninv = 1.0 / N;
 			const float box_size_inv = 1.0 / box_size;
 			float this_dxmax = 0.0;
@@ -183,15 +184,17 @@ static float zeldovich_end(int dim) {
 					particles_rung(index) = 0;
 				}
 			}
-			std::lock_guard<spinlock_type> lock(mutex);
+	//		std::lock_guard<spinlock_type> lock(mutex);
 			dxmax = std::max(dxmax, this_dxmax);
-		}, I));
+	//	}, I));
 	}
-	hpx::wait_all(futs1.begin(), futs1.end());
+//	hpx::wait_all(futs1.begin(), futs1.end());
+	PRINT( "zeldovich_end almost done\n");
 	for (auto& f : futs) {
 		const auto tmp = f.get();
 		dxmax = std::max(dxmax, tmp);
 	}
+	PRINT( "leave zeldovich_end\n");
 	return dxmax;
 }
 
