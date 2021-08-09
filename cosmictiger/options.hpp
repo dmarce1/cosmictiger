@@ -7,6 +7,8 @@ struct options {
 	bool cuda;
 	bool save_force;
 	bool do_map;
+	bool do_power;
+	bool do_groups;
 
 	int parts_dim;
 	int tree_cache_line_size;
@@ -34,6 +36,8 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & do_power;
+		arc & do_groups;
 		arc & cuda;
 		arc & code_to_s;
 		arc & code_to_cm;

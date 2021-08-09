@@ -12,10 +12,15 @@
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixed.hpp>
+#include <cosmictiger/hpx.hpp>
 
 #include <fstream>
+#include <unordered_map>
 
 using part_int = int;
+using group_int = long long;
+
+#define NO_GROUP group_int(-1)
 
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
@@ -62,14 +67,22 @@ PARTICLES_EXTERN array<float*, NDIM> particles_v;
 PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_p;
+PARTICLES_EXTERN group_int* particles_grp
+#ifdef PARTICLES_CPP
+ 	 	 	 	 	 	 	 	 	 	 	 	 	 	= nullptr
+#endif
+ 	 	 	 	 	 	 	 	 	 	 	 	 	 	;
+PARTICLES_EXTERN group_int* particles_lgrp;
+PARTICLES_EXTERN size_t particles_global_offset;
 
 struct particle_global_range {
 	int proc;
 	pair<part_int> range;
 };
 
-
 part_int particles_size();
+std::unordered_map<int, part_int> particles_groups_init();
+void particles_groups_destroy();
 void particles_resize(part_int);
 void particles_random_init();
 void particles_destroy();
@@ -126,5 +139,15 @@ inline void particles_set_particle(particle p, part_int index) {
 	particles_rung(index) = p.r;
 }
 
+inline group_int particles_group_init(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_global_offset + index;
+}
+
+inline group_int& particles_group(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	ASSERT(particles_grp);
+	return particles_grp[index];
+}
 
 #endif /* PARTICLES_HPP_ */

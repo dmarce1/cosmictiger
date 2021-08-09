@@ -8,6 +8,7 @@ constexpr bool verbose = true;
 
 #include <shared_mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 static vector<tree_node> tree_fetch_cache_line(int);
 
@@ -38,8 +39,37 @@ static std::atomic<int> next_id;
 static thread_local tree_allocator allocator;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
-static thread_local tree_id last_line = { -1, -1 };
-static thread_local const tree_node* last_ptr = nullptr;
+
+struct last_cache_entry_t;
+
+static std::unordered_set<last_cache_entry_t*> last_cache_entries;
+static spinlock_type last_cache_entry_mtx;
+
+struct last_cache_entry_t {
+	tree_id line;
+	const tree_node* ptr;
+	void reset() {
+		line.proc = line.index = -1;
+		ptr = nullptr;
+	}
+	last_cache_entry_t() {
+		line.proc = line.index = -1;
+		ptr = nullptr;
+		std::lock_guard<spinlock_type> lock(last_cache_entry_mtx);
+		last_cache_entries.insert(this);
+	}
+	~last_cache_entry_t() {
+		last_cache_entries.erase(this);
+	}
+};
+
+static thread_local last_cache_entry_t last_cache_entry;
+
+static void reset_last_cache_entries() {
+	for (auto i = last_cache_entries.begin(); i != last_cache_entries.end(); i++) {
+		(*i)->reset();
+	}
+}
 
 static const tree_node* tree_cache_read(tree_id id);
 
@@ -151,7 +181,6 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
 	if (nodes.size() == 0) {
-		last_ptr = nullptr;
 		next_id = -tree_cache_line_size;
 		nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
 //		PRINT("%i trees allocated\n", nodes.size());
@@ -447,6 +476,7 @@ void tree_destroy() {
 	}
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
+	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -464,8 +494,9 @@ static const tree_node* tree_cache_read(tree_id id) {
 	tree_id line_id;
 	const tree_node* ptr;
 	line_id.proc = id.proc;
+	ASSERT(line_id.proc >= 0 && line_id.proc < hpx_size());
 	line_id.index = (id.index / line_size) * line_size;
-	if (line_id != last_line || last_ptr == nullptr) {
+	if (line_id != last_cache_entry.line || last_cache_entry.ptr == nullptr) {
 		const size_t bin = tree_id_hash_lo()(id);
 		std::unique_lock<spinlock_type> lock(mutex[bin]);
 		auto iter = tree_cache[bin].find(line_id);
@@ -484,10 +515,10 @@ static const tree_node* tree_cache_read(tree_id id) {
 		lock.unlock();
 		ptr = fut.get().data();
 	} else {
-		ptr = last_ptr;
+		ptr = last_cache_entry.ptr;
 	}
-	last_ptr = ptr;
-	last_line = line_id;
+	last_cache_entry.ptr = ptr;
+	last_cache_entry.line = line_id;
 	return ptr + id.index - line_id.index;
 }
 

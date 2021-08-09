@@ -14,6 +14,7 @@ struct line_id_type;
 
 static vector<array<fixed32, NDIM>> particles_fetch_cache_line(part_int index);
 static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_id);
+static void particles_set_global_offset(std::unordered_map<int, part_int>);
 void particles_cache_free();
 static part_int size = 0;
 static part_int capacity = 0;
@@ -23,6 +24,9 @@ HPX_PLAIN_ACTION (particles_destroy);
 HPX_PLAIN_ACTION (particles_fetch_cache_line);
 HPX_PLAIN_ACTION (particles_random_init);
 HPX_PLAIN_ACTION (particles_sample);
+HPX_PLAIN_ACTION (particles_groups_init);
+HPX_PLAIN_ACTION (particles_groups_destroy);
+HPX_PLAIN_ACTION (particles_set_global_offset);
 
 struct line_id_type {
 	int proc;
@@ -56,6 +60,63 @@ struct line_id_hash_hi {
 
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
+
+std::unordered_map<int, part_int> particles_groups_init() {
+	vector<hpx::future<std::unordered_map<int, part_int>>>futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < particles_groups_init_action > (c));
+	}
+
+	ALWAYS_ASSERT(!particles_grp);
+	particles_grp = (group_int*) malloc(sizeof(group_int) * capacity);
+
+	std::unordered_map<int, part_int> map;
+	map[hpx_rank()] = particles_size();
+	for (auto& f : futs) {
+		auto this_map = f.get();
+		for (auto i = this_map.begin(); i != this_map.end(); i++) {
+			map[i->first] = i->second;
+		}
+	}
+
+	if( hpx_rank() == 0 ) {
+		vector<size_t> offsets(hpx_size());
+		offsets[0] = 0;
+		for( int i = 0; i < hpx_size() - 1; i++) {
+			offsets[i + 1] = map[i] + offsets[i];
+		}
+		for( int i = 0; i < hpx_size(); i++) {
+			map[i] = offsets[i];
+		}
+		particles_set_global_offset(map);
+	}
+
+	return map;
+}
+
+static void particles_set_global_offset(std::unordered_map<int, part_int> map) {
+	particles_global_offset = map[hpx_rank()];
+	map.erase(hpx_rank());
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < particles_set_global_offset_action > (c, map));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
+
+void particles_groups_destroy() {
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < particles_groups_destroy_action > (c));
+	}
+
+	ALWAYS_ASSERT(particles_grp);
+	free(particles_grp);
+	particles_grp = nullptr;
+
+	hpx::wait_all(futs.begin(), futs.end());
+
+}
 
 void particles_cache_free() {
 	vector<hpx::future<void>> futs;
@@ -200,7 +261,7 @@ void particles_resize(part_int sz) {
 		while (new_capacity < sz) {
 			new_capacity = size_t(21) * new_capacity / size_t(20);
 		}
-		PRINT( "Resizing particles to %li from %li\n", new_capacity, capacity);
+		PRINT("Resizing particles to %li from %li\n", new_capacity, capacity);
 		for (int dim = 0; dim < NDIM; dim++) {
 			array_resize(particles_x[dim], new_capacity, false);
 			array_resize(particles_v[dim], new_capacity, true);

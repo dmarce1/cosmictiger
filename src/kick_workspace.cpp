@@ -81,12 +81,12 @@ void kick_workspace::to_gpu() {
 		}
 	}
 	cuda_set_device();
+	tree_node* dev_trees;
+	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
+	tree_nodes.resize(next_index);
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
-	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
-	tree_nodes.resize(next_index);
-	tree_node* dev_trees;
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
 		tree_nodes[i->second] = *tree_get_node(i->first);

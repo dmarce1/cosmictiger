@@ -6,6 +6,7 @@
 #include <hpx/hpx.hpp>
 #include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/parallel/algorithms/copy.hpp>
+#include <hpx/serialization/unordered_map.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
 

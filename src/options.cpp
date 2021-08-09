@@ -54,6 +54,8 @@ bool process_options(int argc, char *argv[]) {
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
 	("do_map", po::value<bool>(&(opts.do_map))->default_value(false), "do healpix maps") //
+	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum") //
+	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do groups") //
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
 	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(16*1024), "size of particle cache line") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
