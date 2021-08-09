@@ -1,3 +1,6 @@
+#pragma once
+
+#ifndef CODE_GEN_CPP
 
 #ifdef NDEBUG
 #define ASSERT(a)
@@ -19,4 +22,13 @@
 __device__ void cosmictiger_cuda_assert( const char*, bool, const char*, int);
 #else
 void cosmictiger_assert( const char*, bool, const char*, int);
+#endif
+
+#else
+
+#include <cassert>
+
+#define ASSERT assert
+#define ALWAYS_ASSERT assert
+
 #endif

@@ -102,7 +102,7 @@ add_hpx_executable(
  )
  
  
- add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp src/assert.cpp cosmictiger/tensor.hpp )
+ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
  target_link_libraries( fmm_kernel_codegen PUBLIC dl )
  execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
@@ -136,7 +136,6 @@ target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_OR
 add_executable(
  	healpix2silo
  	src/healpix2silo.cpp
- 	src/assert.cpp
  )
  
 target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options dl)

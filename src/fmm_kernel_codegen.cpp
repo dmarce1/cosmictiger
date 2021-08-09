@@ -1,6 +1,6 @@
+#define CODE_GEN_CPP
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
-#define CODE_GEN_CPP
 #include <cosmictiger/tensor.hpp>
 
 #include <algorithm>

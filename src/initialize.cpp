@@ -135,7 +135,7 @@ static void zeldovich_begin(int dim) {
 }
 
 static float zeldovich_end(int dim) {
-	PRINT( "enter zeldovich_end\n");
+	//PRINT( "enter zeldovich_end\n");
 	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
@@ -156,7 +156,7 @@ static float zeldovich_end(int dim) {
 	double prefac1 = f1 * H * a0 * a0;
 //	PRINT("D1 = %e\n", D1);
 //	PRINT("prefac1 = %e\n", prefac1);
-	PRINT( "zeldovich_end almost done\n");
+//	PRINT( "zeldovich_end almost done\n");
 	if (dim == 0) {
 		particles_resize(box.volume());
 	}
@@ -189,12 +189,12 @@ static float zeldovich_end(int dim) {
 	//	}, I));
 	}
 //	hpx::wait_all(futs1.begin(), futs1.end());
-	PRINT( "zeldovich_end almost done\n");
+//	PRINT( "zeldovich_end almost done\n");
 	for (auto& f : futs) {
 		const auto tmp = f.get();
 		dxmax = std::max(dxmax, tmp);
 	}
-	PRINT( "leave zeldovich_end\n");
+//	PRINT( "leave zeldovich_end\n");
 	return dxmax;
 }
 

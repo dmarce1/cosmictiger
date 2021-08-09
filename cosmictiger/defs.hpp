@@ -10,6 +10,7 @@
 
 
 #define CHECK_BOUNDS
+#define DOMAINS_CHECK
 
 #define NDIM 3
 #define XDIM 0

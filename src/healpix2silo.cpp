@@ -70,7 +70,8 @@ int main(int argc, char **argv) {
 		const std::string fname = indir + "/healpix." + std::to_string(rank);
 		FILE* fp = fopen(fname.c_str(), "rb");
 		if (rank == 0 && fp == nullptr) {
-			THROW_ERROR("Unable to open files in %s\n", indir.c_str());
+			printf("Unable to open files in %s\n", indir.c_str());
+			abort();
 		}
 		if (fp == nullptr) {
 			found_file = false;

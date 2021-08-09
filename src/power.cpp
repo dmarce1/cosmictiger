@@ -84,6 +84,9 @@ static void compute_density() {
 				const part_int i110 = intbox.index(i1,j1,k0);
 				const part_int i111 = intbox.index(i1,j1,k1);
 				{
+					if( hpx_rank() == 0 && i0 >= mutexes.size()) {
+						PRINT( "%i %i %e\n", i0, intbox.begin[XDIM], x);
+					}
 					std::lock_guard<spinlock_type> lock(mutexes[i0 - intbox.begin[XDIM]]);
 					rho[i000] += w000;
 					rho[i001] += w001;
