@@ -136,9 +136,10 @@ target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_OR
 add_executable(
  	healpix2silo
  	src/healpix2silo.cpp
+ 	src/assert.cpp
  )
  
-target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options)
+target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options dl)
 target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
 
 

@@ -45,7 +45,7 @@ inline void throw_error(const char* file, int line, const char* fmt, Args ...arg
 	printf("Error in %s on line %i\n", file, line);
 #ifndef __CUDA_ARCH__
 	fflush(stdout);
-	ASSERT(false);
+	ALWAYS_ASSERT(false);
 #else
 	__trap();
 #endif
@@ -57,7 +57,7 @@ inline void throw_error(const char* file, int line, const char* str) {
 	printf("Error in %s on line %i\n", file, line);
 #ifndef __CUDA_ARCH__
 	fflush(stdout);
-	abort();
+	ALWAYS_ASSERT(false);
 #else
 	__trap();
 #endif

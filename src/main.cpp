@@ -9,7 +9,6 @@
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
-	ASSERT(false);
 	ewald_const::init();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
