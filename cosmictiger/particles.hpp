@@ -56,11 +56,16 @@ struct particle_sample {
 	}
 };
 
-#define CHECK_PART_BOUNDS(i)                                                                                                                   \
-	if( i < 0 || i >= particles_size()) {                                                                                                       \
+#ifdef CHECK_BOUNDS
+#define CHECK_PART_BOUNDS(i)                                                                                                                            \
+	if( i < 0 || i >= particles_size()) {                                                                                                            \
 		PRINT( "particle bound check failure %li should be between %li and %li\n", (long long) i, (long long) 0, (long long) particles_size());  \
-		ASSERT(false);                                                                                                                           \
+		ALWAYS_ASSERT(false);                                                                                                                           \
 	}
+#else
+#define CHECK_PART_BOUNDS(i)
+#endif
+
 
 PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
 PARTICLES_EXTERN array<float*, NDIM> particles_v;

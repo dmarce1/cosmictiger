@@ -102,9 +102,7 @@ void domains_end() {
 	hpx::future<void> fut1;
 	hpx::future<void> fut2;
 	if (free_indices.size()) {
-		fut1 = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end(), [](part_int a, part_int b) {
-			return a > b;
-		});
+		fut1 = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
 	} else {
 		fut1 = hpx::make_ready_future();
 	}
