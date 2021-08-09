@@ -26,7 +26,7 @@ bool used_gpu;
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
-	PRINT("Domains\n", minrung, theta);
+//	PRINT("Domains\n", minrung, theta);
 	domains_begin();
 	domains_end();
 	tm.stop();
@@ -34,7 +34,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.reset();
 	tm.start();
 	tree_create_params tparams(minrung, theta);
-	PRINT("Create tree %i %e\n", minrung, theta);
+//	PRINT("Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
@@ -42,7 +42,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	sort_time += tm.read();
 	tm.reset();
 	tm.start();
-	PRINT("nactive = %li\n", sr.nactive);
+//	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.gpu = load > GPU_LOAD_MIN && get_options().cuda;
 	used_gpu = kparams.gpu;
@@ -69,14 +69,14 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	PRINT("Do kick\n");
+//	PRINT("Do kick\n");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;
-	PRINT("kick done\n");
+//	PRINT("kick done\n");
 	if (min_rung == 0) {
 		flops_per_node = kr.node_flops / sr.active_nodes;
 		flops_per_particle = kr.part_flops / kr.nactive;
@@ -151,7 +151,7 @@ void driver() {
 			write_checkpoint(params);
 			tmr.reset();
 		}
-		PRINT("Next iteration\n");
+//		PRINT("Next iteration\n");
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
@@ -172,11 +172,11 @@ void driver() {
 			set_options(opts);
 		}
 		last_theta = theta;
-		PRINT("Kicking\n");
+//		PRINT("Kicking\n");
 		auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 		kick_return kr = tmp.first;
 		tree_create_return sr = tmp.second;
-		PRINT("Done kicking\n");
+		//PRINT("Done kicking\n");
 		if (full_eval) {
 			pot = kr.pot * 0.5 / a;
 			do_power_spectrum(tau / t0 + 1e-6, a);

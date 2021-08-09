@@ -9,11 +9,11 @@ class stack_vector {
 	fixedcapvec<T,SIZE> data;
 	fixedcapvec<int,DEPTH> bounds;
 	__device__ inline int begin() const {
-		assert(bounds.size() >= 2);
+		ASSERT(bounds.size() >= 2);
 		return bounds[bounds.size() - 2];
 	}
 	__device__ inline int end() const {
-		assert(bounds.size() >= 2);
+		ASSERT(bounds.size() >= 2);
 		return bounds.back();
 	}
 public:
@@ -45,7 +45,7 @@ public:
 	}
 	__device__ inline void push(const T &a) {
 		const int& tid = threadIdx.x;
-		assert(bounds.size() >= 2);
+		ASSERT(bounds.size() >= 2);
 		data.push_back(a);
 		if (tid == 0) {
 			bounds.back()++;
@@ -54,12 +54,12 @@ public:
 
 	}
 	__device__ inline int size() const {
-		assert(bounds.size() >= 2);
+		ASSERT(bounds.size() >= 2);
 		return end() - begin();
 	}
 	__device__ inline void resize(int sz) {
 		const int& tid = threadIdx.x;
-		assert(bounds.size() >= 2);
+		ASSERT(bounds.size() >= 2);
 		data.resize(begin() + sz);
 		if (tid == 0) {
 			bounds.back() = data.size();
@@ -67,11 +67,11 @@ public:
 		__syncwarp();
 	}
 	__device__ inline T operator[](int i) const {
-		assert(i < size());
+		ASSERT(i < size());
 		return data[begin() + i];
 	}
 	__device__ inline T& operator[](int i) {
-		assert(i < size());
+		ASSERT(i < size());
 		return data[begin() + i];
 	}
 
@@ -87,7 +87,7 @@ public:
 		__syncwarp();
 	}
 	__device__ inline void pop_top() {
-		assert(bounds.size() >= 2);
+		ASSERT(bounds.size() >= 2);
 		data.resize(begin());
 		bounds.pop_back();
 	}

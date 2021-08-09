@@ -16,13 +16,15 @@ if( COSMICTIGER_WITH_CUDA )
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-set(CMAKE_CXX_FLAGS "-ffast-math -Wno-deprecated-declarations -Wno-format-security")
-set(CMAKE_CXX_FLAGS "-ffast-math -march=native")
+#set(CMAKE_CXX_FLAGS "-ffast-math -Wno-deprecated-declarations -Wno-format-security")
+set(CMAKE_CXX_FLAGS "-ffast-math -march=native  -no-pie -fno-pie")
 
 
 set(cosmictiger_source_files
     src/analytic.cu
     src/analytic.cpp
+    src/assert.cpp
+    src/assert.cu
     src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp
@@ -52,6 +54,7 @@ set(cosmictiger_source_files
                         
 
 set(cosmictiger_header_files
+    cosmictiger/assert.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
     cosmictiger/cosmology.hpp
@@ -91,7 +94,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas chealpix
+    Boost::boost fftw3f gsl gslcblas chealpix dl
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
@@ -99,7 +102,8 @@ add_hpx_executable(
  )
  
  
- add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp )
+ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp src/assert.cpp cosmictiger/tensor.hpp )
+ target_link_libraries( fmm_kernel_codegen PUBLIC dl )
  execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
 if( COSMICTIGER_WITH_CUDA )
@@ -107,8 +111,8 @@ if( COSMICTIGER_WITH_CUDA )
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math ;
                         >)
+   target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
-	target_compile_options(cosmictiger PRIVATE -DUSE_CUDA )
 	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 	set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 endif()

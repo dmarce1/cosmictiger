@@ -84,4 +84,5 @@
 #define EWALD_DIST2 float(EWALD_DIST*EWALD_DIST)
 
 
+
 #endif /* DEFS_HPP_ */

@@ -8,11 +8,11 @@
 #ifndef COSMICTIGER_FIXED_HPP_
 #define COSMICTIGER_FIXED_HPP_
 
+#include <cosmictiger/assert.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/simd.hpp>
 
 #include <cstdint>
-#include <cassert>
 #include <limits>
 #include <utility>
 

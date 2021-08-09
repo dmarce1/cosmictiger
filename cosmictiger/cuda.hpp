@@ -3,6 +3,7 @@
 #ifndef COSMICTIGER_CUDA_HPP_
 #define COSMICTIGER_CUDA_HPP_
 
+#include <cosmictiger/assert.hpp>
 #include <cosmictiger/defs.hpp>
 
 #ifdef USE_CUDA
@@ -11,7 +12,6 @@
 #include <cufft.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <assert.h>
 
 
 #define CUDA_CHECK( a ) if( a != cudaSuccess ) printf( "CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a))
@@ -59,7 +59,7 @@ inline void _cuda_fft_check(cufftResult err, const char *file, const int line) {
 		fprintf(stderr, "CUFFT error in file '%s', line %d\nerror %d: %s\nterminating!\n", file, line, err,
 				_cudaGetErrorEnum(err));
 		cudaDeviceReset();
-		assert(0);
+		ASSERT(0);
 	}
 }
 

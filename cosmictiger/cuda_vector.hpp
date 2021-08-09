@@ -177,12 +177,12 @@ public:
 	}
 	__device__
 	inline T operator[](unsigned i) const {
-		assert(i < sz);
+		ASSERT(i < sz);
 		return ptr[i];
 	}
 	__device__
 	inline T& operator[](unsigned i) {
-		assert(i < sz);
+		ASSERT(i < sz);
 		return ptr[i];
 	}
 	__device__
@@ -228,7 +228,7 @@ public:
 	}
 	__device__
 	inline void pop_back() {
-		assert(size());
+		ASSERT(size());
 		resize(size() - 1);
 	}
 	__device__

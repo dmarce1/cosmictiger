@@ -25,7 +25,6 @@
 #define DO_BOUNDS_CHECK(i) \
 		if( i < 0 || i >= this->size() ) { \
 			THROW_ERROR( "Bounds error - %i is not between 0 and %i\n",  i, this->size()); \
-			abort(); \
 		}
 #endif
 

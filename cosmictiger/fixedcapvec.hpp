@@ -85,7 +85,7 @@ public:
 	}
 	__device__
 	inline T& back() {
-		assert(sz>=1);
+		ASSERT(sz>=1);
 		return data_[sz - 1];
 	}
 	__device__

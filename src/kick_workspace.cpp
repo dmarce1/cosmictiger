@@ -14,7 +14,7 @@ kick_workspace::~kick_workspace() {
 static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index, int rank) {
 	tree_map.insert(std::make_pair(id, index));
 	const tree_node* node = tree_get_node(id);
-	assert(id.proc == rank);
+	ASSERT(id.proc == rank);
 	index++;
 	if (node->children[LEFT].index != -1) {
 		add_tree_node(tree_map, node->children[LEFT], index, rank);
@@ -24,7 +24,7 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 
 static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>>& tree_nodes, int index, part_int offset) {
 	tree_nodes[index].part_range.first += offset;
-	assert(tree_nodes[index].part_range.first >= 0);
+	ASSERT(tree_nodes[index].part_range.first >= 0);
 	tree_nodes[index].part_range.second += offset;
 	if (tree_nodes[index].children[LEFT].index != -1) {
 		adjust_part_references(tree_nodes, tree_nodes[index].children[RIGHT].index, offset);
@@ -118,7 +118,7 @@ void kick_workspace::to_gpu() {
 									workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
 								}
 								workitems[i].self.index = tree_map[workitems[i].self];
-								assert(workitems[i].self.proc == hpx_rank());
+								ASSERT(workitems[i].self.proc == hpx_rank());
 							}
 						}));
 	}

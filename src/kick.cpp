@@ -87,7 +87,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
-	assert(self.proc == hpx_rank());
+	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
 #ifdef USE_CUDA
 	size_t cuda_mem_usage;

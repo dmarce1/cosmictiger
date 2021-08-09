@@ -81,8 +81,8 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				for (int j = tid; j < sz; j += WARP_SIZE) {
 					const int i1 = part_index + j;
 					const part_int i2 = j + imin;
-					assert(i2 >= 0);
-					assert(i2 < data.source_size);
+					ASSERT(i2 >= 0);
+					ASSERT(i2 < data.source_size);
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
@@ -264,8 +264,8 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 				for (int j = tid; j < sz; j += WARP_SIZE) {
 					const int i1 = part_index + j;
 					const part_int i2 = j + imin;
-					assert(i2 >= 0);
-					assert(i2 < data.source_size);
+					ASSERT(i2 >= 0);
+					ASSERT(i2 < data.source_size);
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];

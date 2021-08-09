@@ -90,8 +90,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	int snki;
 	for (int i = tid; i < nactive; i += WARP_SIZE) {
 		snki = active_indexes[i];
-		assert(snki >= 0);
-		assert(snki < data.sink_size);
+		ASSERT(snki >= 0);
+		ASSERT(snki < data.sink_size);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
@@ -128,8 +128,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		if (rung < 0 || rung >= MAX_RUNG) {
 			PRINT("Rung out of range %i\n", rung);
 		}
-		assert(rung >= 0);
-		assert(rung < MAX_RUNG);
+		ASSERT(rung >= 0);
+		ASSERT(rung < MAX_RUNG);
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		vx = fmaf(gx[i], dt, vx);
 		vy = fmaf(gy[i], dt, vy);
@@ -243,9 +243,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		while (depth >= 0) {
 //			auto tm2 = clock64();
 //			node_count++;
-			assert(Lpos.size() == depth + 1);
-			assert(self_index.size() == depth + 1);
-			assert(phase.size() == depth + 1);
+			ASSERT(Lpos.size() == depth + 1);
+			ASSERT(self_index.size() == depth + 1);
+			ASSERT(phase.size() == depth + 1);
 			const auto& self = tree_nodes[self_index.back()];
 			int node_flops = 0;
 			switch (phase.back()) {
@@ -305,8 +305,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
 					//	PRINT( "nextlist = %i\n", nextlist[i]);
 					const auto children = tree_nodes[nextlist[i]].children;
-					assert(children[LEFT].index!=-1);
-					assert(children[RIGHT].index!=-1);
+					ASSERT(children[LEFT].index!=-1);
+					ASSERT(children[RIGHT].index!=-1);
 					echecks[NCHILD * i + LEFT] = children[LEFT].index;
 					echecks[NCHILD * i + RIGHT] = children[RIGHT].index;
 				}
@@ -406,7 +406,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						bool active = false;
 						char rung;
 						if (i < end - begin) {
-							assert(begin + i < data.sink_size);
+							ASSERT(begin + i < data.sink_size);
 							rung = all_rungs[begin + i];
 							active = rung >= min_rung;
 						}
@@ -417,7 +417,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						l += nactive;
 						if (active) {
 							const part_int srci = src_begin + i;
-							assert(begin + i < data.sink_size);
+							ASSERT(begin + i < data.sink_size);
 							activei[l] = begin + i;
 							rungs[l] = rung;
 							sink_x[l] = src_x[srci];
@@ -540,7 +540,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				phase.back() += 1;
 				phase.push_back(0);
 				const tree_id child = self.children[RIGHT];
-				assert(child.proc == data.rank);
+				ASSERT(child.proc == data.rank);
 				self_index.push_back(child.index);
 				const auto this_return = returns.back();
 				returns.pop_back();
@@ -575,11 +575,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 		returns.pop_back();
 	}
-	assert(returns.size() == 0);
-	assert(L.size() == 1);
-	assert(Lpos.size() == 0);
-	assert(phase.size() == 0);
-	assert(self_index.size() == 0);
+	ASSERT(returns.size() == 0);
+	ASSERT(L.size() == 1);
+	ASSERT(Lpos.size() == 0);
+	ASSERT(phase.size() == 0);
+	ASSERT(self_index.size() == 0);
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 

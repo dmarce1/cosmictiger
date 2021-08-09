@@ -348,8 +348,8 @@ void fft3d_accumulate_real(const range<int64_t>& this_box, const vector<float>& 
 												j[dim] -= si[dim];
 											}
 											const int64_t l = this_box.index(j);
-											assert(k < this_data.size());
-											assert(l < data.size());
+											ASSERT(k < this_data.size());
+											ASSERT(l < data.size());
 											this_data[k] = data[l];
 										}
 									}
@@ -532,12 +532,12 @@ static void fft3d_phase2(int dim, bool inv) {
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[dim].begin[1]; i[1] != cmplx_mybox[dim].end[1]; i[1]++) {
-				assert(cmplx_mybox[dim].begin[2]==0);
-				assert(cmplx_mybox[dim].end[2]==N);
+				ASSERT(cmplx_mybox[dim].begin[2]==0);
+				ASSERT(cmplx_mybox[dim].end[2]==N);
 				for (i[2] = 0; i[2] < N; i[2]++) {
 					const auto l = cmplx_mybox[dim].index(i);
-					assert(l >= 0 );
-					assert( l < Y.size());
+					ASSERT(l >= 0 );
+					ASSERT( l < Y.size());
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
 				}
@@ -634,8 +634,8 @@ static void transpose(int dim1, int dim2) {
 							for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
 								const int k = inter.index(i);
 								const int64_t l = cmplx_mybox[dim1].index(i);
-								assert(k < data.size());
-								assert(l < Y1.size());
+								ASSERT(k < data.size());
+								ASSERT(l < Y1.size());
 								Y1[l] = data[k];
 							}
 						}
@@ -651,7 +651,7 @@ static void transpose(int dim1, int dim2) {
 
 static vector<cmplx> transpose_read(const range<int64_t>& this_box, int dim1, int dim2) {
 	vector<cmplx> data(this_box.volume());
-	assert(cmplx_mybox[dim2].contains(this_box));
+	ASSERT(cmplx_mybox[dim2].contains(this_box));
 	auto tbox = this_box.transpose(dim1, dim2);
 	array<int64_t,NDIM> i;
 	for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
@@ -692,8 +692,8 @@ static void shift(bool inv) {
 							for (i[2] = inter.begin[2]; i[2] != inter.end[2]; i[2]++) {
 								const int64_t k = inter.index(i);
 								const int64_t l = cmplx_mybox[dim2].index(i);
-								assert(k < data.size());
-								assert(l < Y1.size());
+								ASSERT(k < data.size());
+								ASSERT(l < Y1.size());
 								Y1[l] = data[k];
 							}
 						}

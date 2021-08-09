@@ -51,6 +51,12 @@ struct particle_sample {
 	}
 };
 
+#define CHECK_PART_BOUNDS(i)                                                                                                                   \
+	if( i < 0 || i >= particles_size()) {                                                                                                       \
+		PRINT( "particle bound check failure %li should be between %li and %li\n", (long long) i, (long long) 0, (long long) particles_size());  \
+		ASSERT(false);                                                                                                                           \
+	}
+
 PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
 PARTICLES_EXTERN array<float*, NDIM> particles_v;
 PARTICLES_EXTERN char* particles_r;
@@ -61,46 +67,6 @@ struct particle_global_range {
 	int proc;
 	pair<part_int> range;
 };
-
-inline float& particles_pot(part_int index) {
-	return particles_p[index];
-}
-
-inline fixed32& particles_pos(int dim, part_int index) {
-	return particles_x[dim][index];
-}
-
-inline float& particles_vel(int dim, part_int index) {
-	return particles_v[dim][index];
-}
-
-inline char& particles_rung(part_int index) {
-	return particles_r[index];
-}
-
-inline float& particles_gforce(int dim, part_int index) {
-	return particles_g[dim][index];
-}
-
-
-inline particle particles_get_particle(part_int index) {
-	particle p;
-	for (int dim = 0; dim < NDIM; dim++) {
-		p.x[dim] = particles_pos(dim, index);
-		p.v[dim] = particles_vel(dim, index);
-	}
-	p.r = particles_rung(index);
-	return p;
-}
-
-inline void particles_set_particle(particle p, part_int index) {
-	for (int dim = 0; dim < NDIM; dim++) {
-		particles_pos(dim, index) = p.x[dim];
-		particles_vel(dim, index) = p.v[dim];
-	}
-	particles_rung(index) = p.r;
-}
-
 
 
 part_int particles_size();
@@ -114,5 +80,51 @@ void particles_cache_free();
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
 void particles_save(std::ofstream& fp);
+
+inline float& particles_pot(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_p[index];
+}
+
+inline fixed32& particles_pos(int dim, part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_x[dim][index];
+}
+
+inline float& particles_vel(int dim, part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_v[dim][index];
+}
+
+inline char& particles_rung(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_r[index];
+}
+
+inline float& particles_gforce(int dim, part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_g[dim][index];
+}
+
+inline particle particles_get_particle(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	particle p;
+	for (int dim = 0; dim < NDIM; dim++) {
+		p.x[dim] = particles_pos(dim, index);
+		p.v[dim] = particles_vel(dim, index);
+	}
+	p.r = particles_rung(index);
+	return p;
+}
+
+inline void particles_set_particle(particle p, part_int index) {
+	CHECK_PART_BOUNDS(index);
+	for (int dim = 0; dim < NDIM; dim++) {
+		particles_pos(dim, index) = p.x[dim];
+		particles_vel(dim, index) = p.v[dim];
+	}
+	particles_rung(index) = p.r;
+}
+
 
 #endif /* PARTICLES_HPP_ */

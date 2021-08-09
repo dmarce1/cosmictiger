@@ -1,13 +1,13 @@
 #pragma once
 
+#include <cosmictiger/assert.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 
-#include <cassert>
 
 inline
 int factorial(int n) {
-	assert(n >= 0);
+	ASSERT(n >= 0);
 	if (n == 0) {
 		return 1;
 	} else {
@@ -21,7 +21,7 @@ inline int intmin(int a, int b) {
 
 inline
 int dfactorial(int n) {
-	assert(n >= -1);
+	ASSERT(n >= -1);
 	if (n >= -1 && n <= 1) {
 		return 1;
 	} else {
@@ -77,12 +77,12 @@ public:
 	CUDA_EXPORT
 	inline T& operator()(int l, int m, int n) {
 		l += m;
-		assert(l >= 0);
-		assert(m >= 0);
-		assert(n >= 0);
-		assert(l < P);
-		assert(m <= l);
-		assert(n <= 1 || (n == 2 && l == 0 && m == 0));
+		ASSERT(l >= 0);
+		ASSERT(m >= 0);
+		ASSERT(n >= 0);
+		ASSERT(l < P);
+		ASSERT(m <= l);
+		ASSERT(n <= 1 || (n == 2 && l == 0 && m == 0));
 		return (*this)[l * (l + 1) / 2 + m + (P * (P + 1) / 2) * (n == 1) + (N - 1) * (n == 2)];
 	}
 
@@ -96,12 +96,12 @@ public:
 			}
 		} else {
 			l += m;
-			assert(l >= 0);
-			assert(m >= 0);
-			assert(n >= 0);
-			assert(l < P);
-			assert(m <= l);
-			assert(n <= 1);
+			ASSERT(l >= 0);
+			ASSERT(m >= 0);
+			ASSERT(n >= 0);
+			ASSERT(l < P);
+			ASSERT(m <= l);
+			ASSERT(n <= 1);
 			return (*this)[l * (l + 1) / 2 + m + (P * (P + 1) / 2) * n];
 		}
 	}
@@ -201,24 +201,24 @@ public:
 	inline T operator()(int l, int m, int n) const {
 		m += n;
 		l += m;
-		assert(l >= 0);
-		assert(m >= 0);
-		assert(n >= 0);
-		assert(l < P);
-		assert(m <= l);
-		assert(n <= m);
+		ASSERT(l >= 0);
+		ASSERT(m >= 0);
+		ASSERT(n >= 0);
+		ASSERT(l < P);
+		ASSERT(m <= l);
+		ASSERT(n <= m);
 		return (*this)[l * (l + 1) * (l + 2) / 6 + m * (m + 1) / 2 + n];
 	}
 
 	inline T& operator()(int l, int m, int n) {
 		m += n;
 		l += m;
-		assert(l >= 0);
-		assert(m >= 0);
-		assert(n >= 0);
-		assert(l < P);
-		assert(m <= l);
-		assert(n <= m);
+		ASSERT(l >= 0);
+		ASSERT(m >= 0);
+		ASSERT(n >= 0);
+		ASSERT(l < P);
+		ASSERT(m <= l);
+		ASSERT(n <= m);
 		return (*this)[l * (l + 1) * (l + 2) / 6 + m * (m + 1) / 2 + n];
 	}
 
