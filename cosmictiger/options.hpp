@@ -18,7 +18,9 @@ struct options {
 	int max_iter;
 	int map_count;
 	int map_size;
+	int min_group;
 
+	double link_len;
 	double hsoft;
 	double GM;
 	double eta;

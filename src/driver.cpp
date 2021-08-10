@@ -4,6 +4,8 @@
 #include <cosmictiger/driver.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/domain.hpp>
+#include <cosmictiger/groups_find.hpp>
+#include <cosmictiger/group_tree.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/map.hpp>
@@ -22,6 +24,46 @@ double drift_time = 0.0;
 double flops_per_node = 1e6;
 double flops_per_particle = 1e5;
 bool used_gpu;
+
+void do_groups() {
+	timer total;
+	total.start();
+	PRINT( "Doing groups\n");
+	timer tm;
+	tm.start();
+	group_tree_create();
+	tm.stop();
+	PRINT("group_tree_create = %e\n", tm.read());
+	tm.reset();
+	tm.start();
+	particles_groups_init();
+	tm.stop();
+	PRINT("particles_group_init = %e\n", tm.read());
+	tm.reset();
+	size_t active;
+	int iter = 1;
+	do {
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		tm.start();
+		active = groups_find(root_id, std::move(checklist), get_options().link_len).get();
+		tm.stop();
+		PRINT("%i groups_find = %e active = %li\n", iter, tm.read(), active);
+		tm.reset();
+		particles_refresh_group_cache();
+		iter++;
+	} while (active > 0);
+	tm.start();
+	particles_groups_destroy();
+	group_tree_destroy();
+	tm.stop();
+	PRINT("Cleanup = %e\n", tm.read());
+	total.stop();
+	PRINT( "Total time = %e\n", total.read());
+}
 
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
@@ -145,6 +187,7 @@ void driver() {
 		map_init(tau_max);
 	}
 	while (tau < tau_max) {
+		do_groups();
 
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
@@ -179,8 +222,12 @@ void driver() {
 		//PRINT("Done kicking\n");
 		if (full_eval) {
 			pot = kr.pot * 0.5 / a;
-			do_power_spectrum(tau / t0 + 1e-6, a);
-
+			if (get_options().do_power) {
+				do_power_spectrum(tau / t0 + 1e-6, a);
+			}
+			if (get_options().do_groups) {
+				do_groups();
+			}
 		}
 		double dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);

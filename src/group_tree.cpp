@@ -157,11 +157,17 @@ tree_id group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, 
 	node.proc_range = proc_range;
 	node.part_range = part_range;
 	node.box = box;
+	node.active = true;
 	node.local_root = local_root;
+	nodes[index] = node;
 	tree_id myid;
 	myid.index = index;
 	myid.proc = hpx_rank();
 	return myid;
+}
+
+void group_tree_set_active(tree_id id, bool b) {
+	nodes[id.index].active = b;
 }
 
 void group_tree_allocator::reset() {

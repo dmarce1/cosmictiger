@@ -43,6 +43,23 @@ struct range {
 		return I;
 	}
 
+	inline range periodic_intersection(const range& other) const {
+		range I;
+		for (int dim = 0; dim < NDIM; dim++) {
+			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
+			I.end[dim] = std::min(end[dim], other.end[dim]);
+			if (I.end[dim] <= I.begin[dim]) {
+				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
+				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+				if (I.end[dim] <= I.begin[dim]) {
+					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+				}
+			}
+		}
+		return I;
+	}
+
 	inline bool empty() const {
 		return volume() == T(0);
 	}
@@ -207,7 +224,7 @@ struct range {
 template<class T>
 inline range<T> unit_box() {
 	range<T> r;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		r.begin[dim] = T(0);
 		r.end[dim] = T(1);
 	}

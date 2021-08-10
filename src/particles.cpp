@@ -29,7 +29,6 @@ static part_int capacity = 0;
 
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_refresh_group_cache);
-HPX_PLAIN_ACTION (particles_group_cache_free);
 HPX_PLAIN_ACTION (particles_destroy);
 HPX_PLAIN_ACTION (particles_fetch_cache_line);
 HPX_PLAIN_ACTION (particles_group_refresh_cache_line);
@@ -83,7 +82,10 @@ std::unordered_map<int, part_int> particles_groups_init() {
 	}
 
 	ALWAYS_ASSERT(!particles_grp);
-	particles_grp = new std::atomic<group_int>[capacity];
+	particles_grp = new std::atomic<group_int>[size];
+	for( int i = 0; i < particles_size(); i++) {
+		particles_grp[i] = NO_GROUP;
+	}
 
 	std::unordered_map<int, part_int> map;
 	map[hpx_rank()] = particles_size();
@@ -128,6 +130,9 @@ void particles_groups_destroy() {
 	ALWAYS_ASSERT(particles_grp);
 	delete[] (particles_grp);
 	particles_grp = nullptr;
+	for (int i = 0; i < PART_CACHE_SIZE; i++) {
+		group_part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<group_particle>>, line_id_hash_hi>();
+	}
 
 	hpx::wait_all(futs.begin(), futs.end());
 
@@ -140,17 +145,6 @@ void particles_cache_free() {
 	}
 	for (int i = 0; i < PART_CACHE_SIZE; i++) {
 		part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>();
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-}
-
-void particles_group_cache_free() {
-	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_group_cache_free_action > (c));
-	}
-	for (int i = 0; i < PART_CACHE_SIZE; i++) {
-		group_part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<group_particle>>, line_id_hash_hi>();
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }

@@ -21,7 +21,7 @@
 using part_int = int;
 using group_int = long long;
 
-#define NO_GROUP group_int(-1)
+#define NO_GROUP group_int(0x7FFFFFFFFFFFFFFFLL)
 
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
