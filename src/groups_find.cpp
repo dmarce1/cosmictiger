@@ -90,7 +90,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 	if (self_ptr->children[LEFT].index == -1) {
 		if (leaflist.size()) {
 			const auto my_rng = self_ptr->part_range;
-			const fixed<int64_t> link_len2 = sqr(link_len);
+			const float link_len2 = sqr(link_len);
 			bool found_link = false;
 			bool found_any_link = false;
 			for (int i = 0; i < leaflist.size(); i++) {
@@ -99,9 +99,9 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				for (part_int j = other_rng.first; j < other_rng.second; j++) {
 					for (part_int k = my_rng.first; k < my_rng.second; k++) {
 						if (j != k) {
-							const auto x = fixed<int64_t>(particles_pos(XDIM, k)) - fixed<int64_t>(particles_pos(XDIM, j));
-							const auto y = fixed<int64_t>(particles_pos(YDIM, k)) - fixed<int64_t>(particles_pos(YDIM, j));
-							const auto z = fixed<int64_t>(particles_pos(ZDIM, k)) - fixed<int64_t>(particles_pos(ZDIM, j));
+							const float x = distance(particles_pos(XDIM, k), particles_pos(XDIM, j));
+							const float y = distance(particles_pos(YDIM, k), particles_pos(YDIM, j));
+							const float z = distance(particles_pos(ZDIM, k), particles_pos(ZDIM, j));
 							if (sqr(x, y, z) < link_len2) {
 								auto& grp = particles_group(k);
 								const group_int start_group = particles_group(k);
@@ -123,9 +123,9 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				for (part_int j = my_rng.first; j < my_rng.second; j++) {
 					for (part_int k = my_rng.first; k < my_rng.second; k++) {
 						if (j != k) {
-							const auto x = fixed<int64_t>(particles_pos(XDIM, k)) - fixed<int64_t>(particles_pos(XDIM, j));
-							const auto y = fixed<int64_t>(particles_pos(YDIM, k)) - fixed<int64_t>(particles_pos(YDIM, j));
-							const auto z = fixed<int64_t>(particles_pos(ZDIM, k)) - fixed<int64_t>(particles_pos(ZDIM, j));
+							const float x = distance(particles_pos(XDIM, k), particles_pos(XDIM, j));
+							const float y = distance(particles_pos(YDIM, k), particles_pos(YDIM, j));
+							const float z = distance(particles_pos(ZDIM, k), particles_pos(ZDIM, j));
 							if (sqr(x, y, z) < link_len2) {
 								const group_int start_group = particles_group(k);
 								atomic_min(particles_group(k), particles_group(j));

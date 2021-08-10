@@ -187,7 +187,6 @@ void driver() {
 		map_init(tau_max);
 	}
 	while (tau < tau_max) {
-		do_groups();
 
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
