@@ -9,8 +9,8 @@
 #define DEFS_HPP_
 
 
-#define CHECK_BOUNDS
-#define DOMAINS_CHECK
+//#define CHECK_BOUNDS
+//#define DOMAINS_CHECK
 
 #define NDIM 3
 #define XDIM 0
@@ -30,6 +30,8 @@
 #define SINK_BUCKET_SIZE 90
 #define SOURCE_BUCKET_SIZE 90
 #endif
+
+#define GROUP_BUCKET_SIZE 100
 
 #define CUDA_MAX_MEM 0.4
 #define GPU_LOAD_MIN (1.0/128.0)

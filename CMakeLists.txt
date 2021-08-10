@@ -35,6 +35,7 @@ set(cosmictiger_source_files
     src/fft.cpp
     src/gravity.cpp
     src/gravity.cu
+    src/group_tree.cpp
     src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
@@ -71,6 +72,7 @@ set(cosmictiger_header_files
     cosmictiger/fixes.hpp
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
+    cosmictiger/group_tree.hpp
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
@@ -123,7 +125,7 @@ add_custom_command(
     OUTPUT cosmictiger/fmm_kernels.hpp
     COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
     DEPENDS fmm_kernel_codegen
-    COMMENT "Generating FFM kernels"
+    COMMENT "generating cosmictiger/fmm_kernels.hpp"
 )
 add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
 add_dependencies( cosmictiger generate_fmm_kernels )

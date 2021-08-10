@@ -33,10 +33,10 @@ public:
 };
 
 static vector<tree_allocator*> allocator_list;
+static thread_local tree_allocator allocator;
 static vector<tree_node> nodes;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
-static thread_local tree_allocator allocator;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 
@@ -148,9 +148,9 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 		threadme = true;
 		remote = true;
 	} else if (threadme) {
-		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS || proc_range.second - proc_range.first > 1;
+		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency()) {
+			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -496,7 +496,7 @@ static const tree_node* tree_cache_read(tree_id id) {
 	line_id.proc = id.proc;
 	ASSERT(line_id.proc >= 0 && line_id.proc < hpx_size());
 	line_id.index = (id.index / line_size) * line_size;
-	if (line_id != last_cache_entry.line || last_cache_entry.ptr == nullptr) {
+	if (line_id != last_cache_entry.line) {
 		const size_t bin = tree_id_hash_lo()(id);
 		std::unique_lock<spinlock_type> lock(mutex[bin]);
 		auto iter = tree_cache[bin].find(line_id);
