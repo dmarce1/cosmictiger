@@ -135,8 +135,23 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 			for (int i = 0; i < leaflist.size(); i++) {
 				const group_tree_node* other_ptr = group_tree_get_node(leaflist[i]);
 				const auto& other_rng = other_ptr->part_range;
-				const int other_size = other_rng.second - other_rng.first;
+				int other_size = other_rng.second - other_rng.first;
 				particles_global_read_pos_and_group(other_ptr->global_part_range(), X.data(), Y.data(), Z.data(), G.data(), total_size);
+				for (int i = total_size; i < total_size + other_size; i++) {
+					array<double, NDIM> x;
+					x[XDIM] = X[i].to_double();
+					x[YDIM] = Y[i].to_double();
+					x[ZDIM] = Z[i].to_double();
+					if (!self_box.contains(x)) {
+						const int j = i + other_size - 1;
+						X[i] = X[j];
+						Y[i] = Y[j];
+						Z[i] = Z[j];
+						G[i] = G[j];
+						other_size--;
+						i--;
+					}
+				}
 				total_size += other_size;
 			}
 			for (part_int k = my_rng.first; k < my_rng.second; k++) {
