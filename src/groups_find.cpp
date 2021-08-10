@@ -34,8 +34,8 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	if (!threadme) {
 		rc = groups_find(self, std::move(checklist), link_len);
 	} else if (remote) {
-		ALWAYS_ASSERT(self_ptr->proc_range.first>=0);
-		ALWAYS_ASSERT(self_ptr->proc_range.first<hpx_size());
+		ALWAYS_ASSERT(self_ptr->proc_range.first >= 0);
+		ALWAYS_ASSERT(self_ptr->proc_range.first < hpx_size());
 		rc = hpx::async < groups_find_action > (hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
 	} else {
 		rc = hpx::async([self,link_len] (vector<tree_id> checklist) {
@@ -47,6 +47,14 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	return rc;
 }
 
+struct leaf_workspace {
+	vector<fixed32> X;
+	vector<fixed32> Y;
+	vector<fixed32> Z;
+	vector<group_int> G;
+};
+
+static thread_local std::stack<leaf_workspace> leaf_workspaces;
 static thread_local std::stack<vector<tree_id>> lists;
 
 static vector<tree_id> get_list() {
@@ -60,6 +68,19 @@ static vector<tree_id> get_list() {
 
 static void cleanup_list(vector<tree_id> && list) {
 	lists.push(std::move(list));
+}
+
+static leaf_workspace get_leaf_workspace() {
+	if (leaf_workspaces.empty()) {
+		leaf_workspaces.push(leaf_workspace());
+	}
+	auto list = std::move(leaf_workspaces.top());
+	leaf_workspaces.pop();
+	return std::move(list);
+}
+
+static void cleanup_leaf_workspace(leaf_workspace && list) {
+	leaf_workspaces.push(std::move(list));
 }
 
 hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double link_len) {
@@ -88,12 +109,12 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 		std::swap(nextlist, checklist);
 		nextlist.resize(0);
 	} while (iamleaf && nextlist.size());
-
-	vector<fixed32> X;
-	vector<fixed32> Y;
-	vector<fixed32> Z;
-	vector<group_int> G;
 	if (self_ptr->children[LEFT].index == -1) {
+		leaf_workspace ws = get_leaf_workspace();
+		vector<fixed32>& X = ws.X;
+		vector<fixed32>& Y = ws.Y;
+		vector<fixed32>& Z = ws.Z;
+		vector<group_int>& G = ws.G;
 		if (leaflist.size()) {
 			const auto my_rng = self_ptr->part_range;
 			const float link_len2 = sqr(link_len);
@@ -122,7 +143,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				const auto myx = particles_pos(XDIM, k);
 				const auto myy = particles_pos(YDIM, k);
 				const auto myz = particles_pos(ZDIM, k);
-				for (part_int j = 0; j < total_size; j++) {
+				for (int j = 0; j < total_size; j++) {
 					const float x = distance(myx, X[j]);
 					const float y = distance(myy, Y[j]);
 					const float z = distance(myz, Z[j]);
@@ -130,12 +151,12 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 					if (r2 < link_len2 && r2 > 0.0) {
 						auto& grp = particles_group(k);
 						const group_int start_group = particles_group(k);
-						if ((group_int) particles_group(k) == NO_GROUP) {
-							particles_group(k) = particles_group_init(k);
+						if ((group_int) grp == NO_GROUP) {
+							grp = particles_group_init(k);
 							found_link = true;
 						}
-						if (particles_group(k) > G[j]) {
-							particles_group(k) = G[j];
+						if (grp > G[j]) {
+							grp = G[j];
 							found_link = true;
 						}
 					}
@@ -151,8 +172,9 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 							const float y = distance(particles_pos(YDIM, k), particles_pos(YDIM, j));
 							const float z = distance(particles_pos(ZDIM, k), particles_pos(ZDIM, j));
 							if (sqr(x, y, z) < link_len2) {
-								if (particles_group(k) > particles_group(j)) {
-									particles_group(k) = (group_int) particles_group(j);
+								auto& grp = particles_group(k);
+								if (grp > particles_group(j)) {
+									grp = (group_int) particles_group(j);
 									found_link = true;
 								}
 							}
@@ -174,6 +196,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 			cleanup_list(std::move(leaflist));
 			return hpx::make_ready_future((size_t) 0);
 		}
+		cleanup_leaf_workspace(std::move(ws));
 	} else {
 		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		cleanup_list(std::move(nextlist));
