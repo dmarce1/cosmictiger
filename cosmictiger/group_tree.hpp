@@ -23,6 +23,12 @@ struct group_tree_node {
 		arc & proc_range;
 		arc & local_root;
 	}
+	inline particle_global_range global_part_range() const {
+		particle_global_range r;
+		r.proc = proc_range.first;
+		r.range = part_range;
+		return r;
+	}
 };
 
 tree_id group_tree_create(pair<int, int> proc_range = { 0, hpx_size() }, pair<part_int> part_range = { -1, -1 }, group_range box = unit_box<double>(),
@@ -30,3 +36,4 @@ tree_id group_tree_create(pair<int, int> proc_range = { 0, hpx_size() }, pair<pa
 void group_tree_destroy();
 const group_tree_node* group_tree_get_node(tree_id id);
 void group_tree_set_active(tree_id, bool);
+void group_tree_inc_cache_epoch();

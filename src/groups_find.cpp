@@ -34,6 +34,8 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	if (!threadme) {
 		rc = groups_find(self, std::move(checklist), link_len);
 	} else if (remote) {
+		ALWAYS_ASSERT(self_ptr->proc_range.first>=0);
+		ALWAYS_ASSERT(self_ptr->proc_range.first<hpx_size());
 		rc = hpx::async < groups_find_action > (hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
 	} else {
 		rc = hpx::async([self,link_len] (vector<tree_id> checklist) {
@@ -87,32 +89,54 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 		nextlist.resize(0);
 	} while (iamleaf && nextlist.size());
 
+	vector<fixed32> X;
+	vector<fixed32> Y;
+	vector<fixed32> Z;
+	vector<group_int> G;
 	if (self_ptr->children[LEFT].index == -1) {
 		if (leaflist.size()) {
 			const auto my_rng = self_ptr->part_range;
 			const float link_len2 = sqr(link_len);
 			bool found_link = false;
 			bool found_any_link = false;
+			int total_size = 0;
 			for (int i = 0; i < leaflist.size(); i++) {
 				const group_tree_node* other_ptr = group_tree_get_node(leaflist[i]);
 				const auto& other_rng = other_ptr->part_range;
-				for (part_int j = other_rng.first; j < other_rng.second; j++) {
-					for (part_int k = my_rng.first; k < my_rng.second; k++) {
-						if (j != k) {
-							const float x = distance(particles_pos(XDIM, k), particles_pos(XDIM, j));
-							const float y = distance(particles_pos(YDIM, k), particles_pos(YDIM, j));
-							const float z = distance(particles_pos(ZDIM, k), particles_pos(ZDIM, j));
-							if (sqr(x, y, z) < link_len2) {
-								auto& grp = particles_group(k);
-								const group_int start_group = particles_group(k);
-								if ((group_int) particles_group(k) == NO_GROUP) {
-									particles_group(k) = particles_group_init(k);
-								}
-								atomic_min(particles_group(k), particles_group(j));
-								if ((group_int) particles_group(k) != start_group) {
-									found_link = true;
-								}
-							}
+				const int other_size = other_rng.second - other_rng.first;
+				total_size += other_size;
+			}
+			X.resize(total_size);
+			Y.resize(total_size);
+			Z.resize(total_size);
+			G.resize(total_size);
+			total_size = 0;
+			for (int i = 0; i < leaflist.size(); i++) {
+				const group_tree_node* other_ptr = group_tree_get_node(leaflist[i]);
+				const auto& other_rng = other_ptr->part_range;
+				const int other_size = other_rng.second - other_rng.first;
+				particles_global_read_pos_and_group(other_ptr->global_part_range(), X.data(), Y.data(), Z.data(), G.data(), total_size);
+				total_size += other_size;
+			}
+			for (part_int k = my_rng.first; k < my_rng.second; k++) {
+				const auto myx = particles_pos(XDIM, k);
+				const auto myy = particles_pos(YDIM, k);
+				const auto myz = particles_pos(ZDIM, k);
+				for (part_int j = 0; j < total_size; j++) {
+					const float x = distance(myx, X[j]);
+					const float y = distance(myy, Y[j]);
+					const float z = distance(myz, Z[j]);
+					const float r2 = sqr(x, y, z);
+					if (r2 < link_len2 && r2 > 0.0) {
+						auto& grp = particles_group(k);
+						const group_int start_group = particles_group(k);
+						if ((group_int) particles_group(k) == NO_GROUP) {
+							particles_group(k) = particles_group_init(k);
+							found_link = true;
+						}
+						if (particles_group(k) > G[j]) {
+							particles_group(k) = G[j];
+							found_link = true;
 						}
 					}
 				}
@@ -127,9 +151,8 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 							const float y = distance(particles_pos(YDIM, k), particles_pos(YDIM, j));
 							const float z = distance(particles_pos(ZDIM, k), particles_pos(ZDIM, j));
 							if (sqr(x, y, z) < link_len2) {
-								const group_int start_group = particles_group(k);
-								atomic_min(particles_group(k), particles_group(j));
-								if ((group_int) particles_group(k) != start_group) {
+								if (particles_group(k) > particles_group(j)) {
+									particles_group(k) = (group_int) particles_group(j);
 									found_link = true;
 								}
 							}

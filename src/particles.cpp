@@ -28,7 +28,7 @@ static part_int size = 0;
 static part_int capacity = 0;
 
 HPX_PLAIN_ACTION (particles_cache_free);
-HPX_PLAIN_ACTION (particles_refresh_group_cache);
+HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
 HPX_PLAIN_ACTION (particles_destroy);
 HPX_PLAIN_ACTION (particles_fetch_cache_line);
 HPX_PLAIN_ACTION (particles_group_refresh_cache_line);
@@ -71,8 +71,13 @@ struct line_id_hash_hi {
 
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
+static int group_cache_epoch = 0;
 
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<group_particle>>, line_id_hash_hi>, PART_CACHE_SIZE> group_part_cache;
+struct group_cache_entry {
+	hpx::shared_future<vector<group_particle>> data;
+	int epoch;
+};
+static array<std::unordered_map<line_id_type, group_cache_entry, line_id_hash_hi>, PART_CACHE_SIZE> group_part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> group_mutexes;
 
 std::unordered_map<int, part_int> particles_groups_init() {
@@ -86,6 +91,7 @@ std::unordered_map<int, part_int> particles_groups_init() {
 	for( int i = 0; i < particles_size(); i++) {
 		particles_grp[i] = NO_GROUP;
 	}
+	group_cache_epoch = 0;
 
 	std::unordered_map<int, part_int> map;
 	map[hpx_rank()] = particles_size();
@@ -130,10 +136,7 @@ void particles_groups_destroy() {
 	ALWAYS_ASSERT(particles_grp);
 	delete[] (particles_grp);
 	particles_grp = nullptr;
-	for (int i = 0; i < PART_CACHE_SIZE; i++) {
-		group_part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<group_particle>>, line_id_hash_hi>();
-	}
-
+	group_part_cache = decltype(group_part_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
 
 }
@@ -158,7 +161,9 @@ void particles_global_read_pos_and_group(particle_global_range range, fixed32* x
 			std::memcpy(x + offset, &particles_pos(XDIM, range.range.first), sizeof(float) * sz);
 			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
 			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
-			std::memcpy(g + offset, &particles_group(range.range.first), sizeof(group_int) * sz);
+			for (int i = 0; i < sz; i++) {
+				g[i + offset] = particles_group(range.range.first + i);
+			}
 		} else {
 			line_id_type line_id;
 			line_id.proc = range.proc;
@@ -223,7 +228,9 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	const group_particle* ptr;
 	if (iter == group_part_cache[bin].end()) {
 		auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_particle>> >();
-		group_part_cache[bin][line_id] = prms->get_future();
+		auto& entry = group_part_cache[bin][line_id];
+		entry.data = prms->get_future();
+		entry.epoch = group_cache_epoch;
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
 			auto line_fut = hpx::async<particles_group_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
@@ -231,8 +238,26 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		});
 		lock.lock();
 		iter = group_part_cache[bin].find(line_id);
+	} else if (iter->second.epoch < group_cache_epoch) {
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_particle>> >();
+		auto old_fut = std::move(iter->second.data);
+		auto& entry = group_part_cache[bin][line_id];
+		entry.data = prms->get_future();
+		entry.epoch = group_cache_epoch;
+		lock.unlock();
+		auto old_data = old_fut.get();
+		hpx::apply([prms,line_id](vector<group_particle> data) {
+			auto grp_fut = hpx::async<particles_group_refresh_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+			const auto grps = grp_fut.get();
+			for( int i = 0; i < grps.size(); i++) {
+				data[i].g = grps[i];
+			}
+			prms->set_value(std::move(data));
+		}, std::move(old_data));
+		lock.lock();
+		iter = group_part_cache[bin].find(line_id);
 	}
-	auto fut = iter->second;
+	auto fut = iter->second.data;
 	lock.unlock();
 	return fut.get().data();
 }
@@ -286,27 +311,14 @@ static vector<group_particle> particles_group_fetch_cache_line(part_int index) {
 	return line;
 }
 
-void particles_refresh_group_cache() {
+void particles_inc_group_cache_epoch() {
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_refresh_group_cache_action > (c));
+		futs.push_back(hpx::async < particles_inc_group_cache_epoch_action > (c));
 	}
-
-	for (int i = 0; i < PART_CACHE_SIZE; i++) {
-		for (auto j = group_part_cache[i].begin(); j != group_part_cache[i].end(); j++) {
-			auto fut = hpx::async < particles_group_refresh_cache_line_action > (hpx_localities()[j->first.proc], j->first.index);
-			futs.push_back(fut.then([line_size,j](hpx::future<vector<group_int>> fut) {
-				auto data = fut.get();
-				auto line = j->second.get();
-				for( int k = 0; k < line_size; k++) {
-					line[k].g = data[k];
-				}
-				j->second = hpx::make_ready_future(std::move(line));
-			}));
-		}
-	}
+	group_cache_epoch++;
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -503,14 +515,6 @@ void particles_load(FILE* fp) {
 	FREAD(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
 	FREAD(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
 	FREAD(&particles_rung(0), sizeof(char), particles_size(), fp);
-	if (get_options().do_groups) {
-		for (part_int i = 0; i < particles_size(); i++) {
-			group_int grp;
-			FREAD(&grp, sizeof(group_int), 1, fp);
-			particles_group(i) = grp;
-		}
-	}
-
 }
 
 void particles_save(std::ofstream& fp) {
@@ -523,11 +527,5 @@ void particles_save(std::ofstream& fp) {
 	fp.write((const char*) &particles_vel(YDIM, 0), sizeof(float) * particles_size());
 	fp.write((const char*) &particles_vel(ZDIM, 0), sizeof(float) * particles_size());
 	fp.write((const char*) &particles_rung(0), sizeof(char) * particles_size());
-	if (get_options().do_groups) {
-		for (part_int i = 0; i < particles_size(); i++) {
-			group_int grp = particles_group(i);
-			fp.write((const char*) &grp, sizeof(group_int));
-		}
-	}
 
 }

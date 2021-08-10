@@ -3,14 +3,15 @@
 
 #include <unordered_set>
 
-
 static vector<group_tree_node> group_tree_fetch_cache_line(int index);
 static const group_tree_node* group_tree_cache_read(tree_id id);
-
+static vector<unsigned> group_tree_refresh_cache_line(int index);
 
 HPX_PLAIN_ACTION (group_tree_create);
 HPX_PLAIN_ACTION (group_tree_destroy);
 HPX_PLAIN_ACTION (group_tree_fetch_cache_line);
+HPX_PLAIN_ACTION (group_tree_refresh_cache_line);
+HPX_PLAIN_ACTION (group_tree_inc_cache_epoch);
 
 class group_tree_allocator {
 	int next;
@@ -33,10 +34,17 @@ static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static thread_local group_tree_allocator allocator;
 static std::atomic<int> next_id;
 static vector<group_tree_node> nodes;
-static array<std::unordered_map<tree_id, hpx::shared_future<vector<group_tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
+
+struct tree_cache_entry {
+	hpx::shared_future<vector<group_tree_node>> data;
+	int epoch;
+};
+
+static int tree_cache_epoch;
+
+static array<std::unordered_map<tree_id, tree_cache_entry, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 
 struct last_cache_entry_t;
-
 
 static std::unordered_set<last_cache_entry_t*> last_cache_entries;
 static spinlock_type last_cache_entry_mtx;
@@ -115,6 +123,7 @@ tree_id group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, 
 	if (local_root) {
 		part_range.first = 0;
 		part_range.second = particles_size();
+		tree_cache_epoch = 0;
 	}
 	if (!allocator.ready) {
 		allocator.reset();
@@ -215,14 +224,15 @@ void group_tree_destroy() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-
-
 const group_tree_node* group_tree_get_node(tree_id id) {
+	const group_tree_node* ptr;
 	if (id.proc == hpx_rank()) {
-		return &nodes[id.index];
+		ptr = &nodes[id.index];
+//		PRINT( "%i %i\n", id.index, ptr->children[LEFT].index);
 	} else {
-		return group_tree_cache_read(id);
+		ptr = group_tree_cache_read(id);
 	}
+	return ptr;
 }
 
 static const group_tree_node* group_tree_cache_read(tree_id id) {
@@ -238,7 +248,9 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 		auto iter = tree_cache[bin].find(line_id);
 		if (iter == tree_cache[bin].end()) {
 			auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_tree_node>>>();
-			tree_cache[bin][line_id] = prms->get_future();
+			auto& entry = tree_cache[bin][line_id];
+			entry.data = prms->get_future();
+			entry.epoch = tree_cache_epoch;
 			lock.unlock();
 			hpx::apply([prms,line_id]() {
 				auto line_fut = hpx::async<group_tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
@@ -246,8 +258,26 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 			});
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);
+		} else if (iter->second.epoch < tree_cache_epoch) {
+			auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_tree_node>>>();
+			auto old_fut = std::move(iter->second.data);
+			auto& entry = tree_cache[bin][line_id];
+			entry.data = prms->get_future();
+			entry.epoch = tree_cache_epoch;
+			lock.unlock();
+			auto old_data = old_fut.get();
+			hpx::apply([prms,line_id](vector<group_tree_node> data) {
+				auto line_fut = hpx::async<group_tree_refresh_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+				auto new_data = line_fut.get();
+				for( int i = 0; i < new_data.size(); i++) {
+					data[i].active = new_data[i];
+				}
+				prms->set_value(std::move(data));
+			}, std::move(old_data));
+			lock.lock();
+			iter = tree_cache[bin].find(line_id);
 		}
-		auto fut = iter->second;
+		auto fut = iter->second.data;
 		lock.unlock();
 		ptr = fut.get().data();
 	} else {
@@ -269,4 +299,28 @@ static vector<group_tree_node> group_tree_fetch_cache_line(int index) {
 	}
 	return std::move(line);
 
+}
+
+static vector<unsigned> group_tree_refresh_cache_line(int index) {
+	const int line_size = get_options().tree_cache_line_size;
+	vector<unsigned> line;
+	line.reserve(line_size);
+	const int begin = (index / line_size) * line_size;
+	const int end = begin + line_size;
+	for (int i = begin; i < end; i++) {
+		line.push_back(nodes[i].active);
+	}
+	return std::move(line);
+
+}
+
+void group_tree_inc_cache_epoch() {
+	const part_int line_size = get_options().part_cache_line_size;
+	vector<hpx::future<void>> futs;
+	const auto children = hpx_children();
+	for (const auto& c : children) {
+		futs.push_back(hpx::async < group_tree_inc_cache_epoch_action > (c));
+	}
+	tree_cache_epoch++;
+	hpx::wait_all(futs.begin(), futs.end());
 }
