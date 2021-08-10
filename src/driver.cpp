@@ -53,15 +53,13 @@ void do_groups() {
 		tm.stop();
 		PRINT("%i groups_find = %e active = %li\n", iter, tm.read(), active);
 		tm.reset();
-		auto fut1 = hpx::async(particles_inc_group_cache_epoch);
+		particles_inc_group_cache_epoch();
 		group_tree_inc_cache_epoch();
-		fut1.get();
 		iter++;
 	} while (active > 0);
 	tm.start();
-	auto fut1 = hpx::async(particles_groups_destroy);
+	particles_groups_destroy();
 	group_tree_destroy();
-	fut1.get();
 	tm.stop();
 	PRINT("Cleanup = %e\n", tm.read());
 	total.stop();

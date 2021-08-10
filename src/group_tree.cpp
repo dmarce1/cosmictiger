@@ -322,5 +322,6 @@ void group_tree_inc_cache_epoch() {
 		futs.push_back(hpx::async < group_tree_inc_cache_epoch_action > (c));
 	}
 	tree_cache_epoch++;
+	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
 }

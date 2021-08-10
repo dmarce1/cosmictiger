@@ -9,8 +9,10 @@
 #define DEFS_HPP_
 
 
-//#define CHECK_BOUNDS
-//#define DOMAINS_CHECK
+#ifndef NDEBUG
+#define CHECK_BOUNDS
+#define DOMAINS_CHECK
+#endif
 
 #define NDIM 3
 #define XDIM 0
