@@ -75,9 +75,10 @@ static void reset_last_cache_entries() {
 	}
 }
 
-fast_future<tree_id> group_tree_create_fork(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root, bool threadme) {
+fast_future<group_tree_return> group_tree_create_fork(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root,
+		bool threadme) {
 	static std::atomic<int> nthreads(0);
-	fast_future<tree_id> rc;
+	fast_future<group_tree_return> rc;
 	bool remote = false;
 	if (proc_range.first != hpx_rank()) {
 		threadme = true;
@@ -108,7 +109,7 @@ fast_future<tree_id> group_tree_create_fork(pair<int, int> proc_range, pair<part
 
 }
 
-tree_id group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root) {
+group_tree_return group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root) {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -131,6 +132,7 @@ tree_id group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, 
 	}
 	const int index = allocator.allocate();
 	group_tree_node node;
+	group_range part_box;
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > GROUP_BUCKET_SIZE) {
 		auto left_box = box;
 		auto right_box = box;
@@ -158,21 +160,41 @@ tree_id group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, 
 		}
 		auto futr = group_tree_create_fork(right_range, right_parts, right_box, depth + 1, right_local_root, true);
 		auto futl = group_tree_create_fork(left_range, left_parts, left_box, depth + 1, left_local_root, false);
-		node.children[LEFT] = futl.get();
-		node.children[RIGHT] = futr.get();
+		const auto rcl = futl.get();
+		const auto rcr = futr.get();
+		node.children[LEFT] = rcl.id;
+		node.children[RIGHT] = rcr.id;
+		for (int dim = 0; dim < NDIM; dim++) {
+			part_box.begin[dim] = std::min(rcr.box.begin[dim], rcl.box.begin[dim]);
+			part_box.end[dim] = std::max(rcr.box.end[dim], rcl.box.end[dim]);
+		}
 	} else {
+		for (int dim = 0; dim < NDIM; dim++) {
+			part_box.begin[dim] = 1.0;
+			part_box.end[dim] = 0.0;
+		}
+		for (part_int i = part_range.first; i < part_range.second; i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				const double x = particles_pos(dim, i).to_double();
+				part_box.begin[dim] = std::min(part_box.begin[dim], x);
+				part_box.end[dim] = std::max(part_box.end[dim], x);
+			}
+		}
 		node.children[LEFT].index = node.children[RIGHT].index = -1;
 	}
 	node.proc_range = proc_range;
 	node.part_range = part_range;
-	node.box = box;
+	node.box = part_box;
 	node.active = true;
 	node.local_root = local_root;
 	nodes[index] = node;
 	tree_id myid;
 	myid.index = index;
 	myid.proc = hpx_rank();
-	return myid;
+	group_tree_return rc;
+	rc.id = myid;
+	rc.box = part_box;
+	return rc;
 }
 
 void group_tree_set_active(tree_id id, bool b) {
