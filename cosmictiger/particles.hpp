@@ -14,6 +14,7 @@
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/hpx.hpp>
 
+#include <atomic>
 #include <fstream>
 #include <unordered_map>
 
@@ -27,6 +28,16 @@ using group_int = long long;
 #else
 #define PARTICLES_EXTERN extern
 #endif
+
+struct group_particle {
+	array<fixed32, NDIM> x;
+	group_int g;
+	template<class A>
+	void serialize(A && arc, unsigned) {
+		arc & x;
+		arc & g;
+	}
+};
 
 struct particle {
 	array<fixed32, NDIM> x;
@@ -66,17 +77,16 @@ struct particle_sample {
 #define CHECK_PART_BOUNDS(i)
 #endif
 
-
 PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
 PARTICLES_EXTERN array<float*, NDIM> particles_v;
 PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_p;
-PARTICLES_EXTERN group_int* particles_grp
+PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 #ifdef PARTICLES_CPP
- 	 	 	 	 	 	 	 	 	 	 	 	 	 	= nullptr
+= nullptr
 #endif
- 	 	 	 	 	 	 	 	 	 	 	 	 	 	;
+;
 PARTICLES_EXTERN group_int* particles_lgrp;
 PARTICLES_EXTERN size_t particles_global_offset;
 
@@ -92,12 +102,14 @@ void particles_resize(part_int);
 void particles_random_init();
 void particles_destroy();
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void particles_global_touch_pos(particle_global_range range);
+void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
+void particles_group_cache_free();
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
 void particles_save(std::ofstream& fp);
+void particles_refresh_group_cache();
 
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);
@@ -149,7 +161,7 @@ inline group_int particles_group_init(part_int index) {
 	return particles_global_offset + index;
 }
 
-inline group_int& particles_group(part_int index) {
+inline std::atomic<group_int>& particles_group(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	ASSERT(particles_grp);
 	return particles_grp[index];

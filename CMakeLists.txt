@@ -36,6 +36,7 @@ set(cosmictiger_source_files
     src/gravity.cpp
     src/gravity.cu
     src/group_tree.cpp
+    src/groups_find.cpp
     src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
@@ -73,6 +74,7 @@ set(cosmictiger_header_files
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
     cosmictiger/group_tree.hpp
+    cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp

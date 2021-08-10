@@ -59,9 +59,9 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		threadme = true;
 		remote = true;
 	} else if (threadme) {
-		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS || !self_ptr->is_local();
+		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency()) {
+			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || !self_ptr->is_local()) {
 				threadme = true;
 			} else {
 				threadme = false;

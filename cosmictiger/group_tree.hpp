@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
@@ -21,4 +23,7 @@ struct group_tree_node {
 	}
 };
 
-tree_id group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root);
+tree_id group_tree_create(pair<int, int> proc_range = { 0, hpx_size() }, pair<part_int> part_range = { -1, -1 }, group_range box = unit_box<double>(),
+		int depth = 0, bool local_root = hpx_size() == 1);
+void group_tree_destroy();
+const group_tree_node* group_tree_get_node(tree_id id);
