@@ -3,6 +3,12 @@
 
 HPX_PLAIN_ACTION (groups_find);
 
+void atomic_min(std::atomic<group_int>& min_value, group_int value) {
+	group_int prev_value = min_value;
+	while (prev_value > value && !min_value.compare_exchange_strong(prev_value, value)) {
+	}
+}
+
 hpx::future<void> groups_find_fork(tree_id self, vector<tree_id> checklist, double link_len, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	hpx::future<void> rc;
@@ -72,7 +78,9 @@ hpx::future<void> groups_find(tree_id self, vector<tree_id> checklist, double li
 					const double y = (particles_pos(YDIM, k) - particles_pos(YDIM, j)).to_double();
 					const double z = (particles_pos(ZDIM, k) - particles_pos(ZDIM, j)).to_double();
 					if (sqr(x, y, z) < R2) {
-
+						group_int void_group = NO_GROUP;
+						particles_group(k).compare_exchange_strong(void_group, particles_group_init(k));
+						atomic_min(particles_group(k), particles_group(j));
 					}
 				}
 			}
