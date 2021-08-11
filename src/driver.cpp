@@ -6,6 +6,7 @@
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/groups_find.hpp>
 #include <cosmictiger/group_tree.hpp>
+#include <cosmictiger/groups.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/map.hpp>
@@ -25,7 +26,7 @@ double flops_per_node = 1e6;
 double flops_per_particle = 1e5;
 bool used_gpu;
 
-void do_groups() {
+void do_groups(int number) {
 	timer total;
 	total.start();
 	PRINT("Doing groups\n");
@@ -58,12 +59,35 @@ void do_groups() {
 		iter++;
 	} while (active > 0);
 	tm.start();
-	particles_groups_destroy();
 	group_tree_destroy();
 	tm.stop();
-	PRINT("Cleanup = %e\n", tm.read());
+	PRINT("tree cleanup = %e\n", tm.read());
+
+	for (int wave = 0; wave < GROUP_WAVES; wave++) {
+		tm.start();
+		groups_add_particles(wave);
+		tm.stop();
+		PRINT("%i groups_add_particles %e\n", wave, tm.read());
+		tm.reset();
+		tm.start();
+		groups_reduce();
+		tm.stop();
+		PRINT("groups_reduce %e\n", tm.read());
+		tm.reset();
+	}
+	tm.start();
+	groups_cull();
+	tm.stop();
+	PRINT("groups_cull %e\n", tm.read());
+	tm.reset();
+	tm.start();
+	groups_save(number);
+	tm.stop();
+	PRINT("groups_save %e\n", tm.read());
 	total.stop();
 	PRINT("Total time = %e\n", total.read());
+	particles_groups_destroy();
+
 }
 
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
@@ -188,7 +212,7 @@ void driver() {
 		map_init(tau_max);
 	}
 	while (tau < tau_max) {
-		do_groups();
+		do_groups(0);
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			write_checkpoint(params);
@@ -226,7 +250,7 @@ void driver() {
 				do_power_spectrum(tau / t0 + 1e-6, a);
 			}
 			if (get_options().do_groups) {
-				do_groups();
+				do_groups(tau / t0 + 1e-6);
 			}
 		}
 		double dt = t0 / (1 << kr.max_rung);

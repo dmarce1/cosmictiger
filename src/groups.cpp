@@ -92,8 +92,10 @@ void groups_cull() {
 			const part_int begin = (size_t)proc * particles_size() / nthreads;
 			const part_int end = (size_t)proc * particles_size() / nthreads;
 			for( part_int i = begin; i < end; i++) {
-				if( final_existing.find(particles_group(i)) == final_existing.end()) {
-					particles_group(i) = NO_GROUP;
+				if( particles_group(i) != NO_GROUP) {
+					if( final_existing.find(particles_group(i)) == final_existing.end()) {
+						particles_group(i) = NO_GROUP;
+					}
 				}
 			}
 		}));
@@ -260,19 +262,21 @@ void groups_add_particles(int wave) {
 			const part_int end = (size_t) (proc+1) * particles_size() / nthreads;
 			for( part_int i = begin; i < end; i++) {
 				const auto grp = (group_int) particles_group(i);
-				const int home = particles_group_home(grp);
-				if( grp % GROUP_WAVES == wave) {
-					if( local_groups[home].find(grp) == local_groups[home].end()) {
-						std::lock_guard<spinlock_type> lock(mutex);
-						local_existing_groups.push_back(grp);
+				if( grp != NO_GROUP) {
+					const int home = particles_group_home(grp);
+					if( grp % GROUP_WAVES == wave) {
+						if( local_groups[home].find(grp) == local_groups[home].end()) {
+							std::lock_guard<spinlock_type> lock(mutex);
+							local_existing_groups.push_back(grp);
+						}
+						auto& entry = local_groups[home][grp];
+						particle_data part;
+						for( int dim = 0; dim < NDIM; dim++) {
+							part.x[dim] = particles_pos(dim,i);
+							part.v[dim] = particles_vel(dim,i);
+						}
+						entry.push_back(part);
 					}
-					auto& entry = local_groups[home][grp];
-					particle_data part;
-					for( int dim = 0; dim < NDIM; dim++) {
-						part.x[dim] = particles_pos(dim,i);
-						part.v[dim] = particles_vel(dim,i);
-					}
-					entry.push_back(part);
 				}
 			}
 			for( auto iter = local_groups.begin(); iter != local_groups.end(); iter++) {

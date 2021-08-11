@@ -145,7 +145,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 						x[YDIM] = Y[i].to_double();
 						x[ZDIM] = Z[i].to_double();
 						if (!self_box.contains(x)) {
-							const int j = i + other_size - 1;
+							const int j = total_size + other_size - 1;
 							X[i] = X[j];
 							Y[i] = Y[j];
 							Z[i] = Z[j];
