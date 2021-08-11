@@ -33,6 +33,7 @@
 #define SOURCE_BUCKET_SIZE 90
 #endif
 
+#define GROUP_WAVES 8
 #define GROUP_BUCKET_SIZE 25
 
 #define CUDA_MAX_MEM 0.4

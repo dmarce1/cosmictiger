@@ -110,6 +110,7 @@ vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
 void particles_save(std::ofstream& fp);
 void particles_inc_group_cache_epoch();
+int particles_group_home(group_int);
 
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);

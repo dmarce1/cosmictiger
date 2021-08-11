@@ -22,10 +22,11 @@ static vector<group_particle> particles_group_fetch_cache_line(part_int index);
 static const group_particle* particles_group_cache_read_line(line_id_type line_id);
 void particles_group_cache_free();
 
-static void particles_set_global_offset(std::unordered_map<int, part_int>);
+static void particles_set_global_offset(vector<part_int>);
 
 static part_int size = 0;
 static part_int capacity = 0;
+static vector<part_int> global_offsets;
 
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
@@ -111,19 +112,38 @@ std::unordered_map<int, part_int> particles_groups_init() {
 		for( int i = 0; i < hpx_size(); i++) {
 			map[i] = offsets[i];
 		}
-		particles_set_global_offset(map);
+		vector<part_int> vmap(hpx_size());
+		for( int i = 0; i < hpx_size(); i++) {
+			vmap[i] = map[i];
+		}
+		particles_set_global_offset(std::move(vmap));
 	}
 
 	return map;
 }
 
-static void particles_set_global_offset(std::unordered_map<int, part_int> map) {
+int particles_group_home(group_int grp) {
+	int begin = 0;
+	int end = hpx_size();
+	while (end - begin > 1) {
+		int mid = (begin + end) / 2;
+		if (grp >= global_offsets[mid]) {
+			begin = mid;
+		} else {
+			end = mid;
+		}
+	}
+	return begin;
+}
+
+static void particles_set_global_offset(vector<part_int> map) {
 	particles_global_offset = map[hpx_rank()];
-	map.erase(hpx_rank());
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < particles_set_global_offset_action > (c, map));
 	}
+	particles_global_offset = map[hpx_rank()];
+	global_offsets = std::move(map);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
