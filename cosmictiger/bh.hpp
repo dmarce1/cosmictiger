@@ -15,9 +15,9 @@
 #include <cosmictiger/range.hpp>
 
 struct bh_tree_node {
-	array<fixed32, NDIM> pos;
+	array<float, NDIM> pos;
 	array<int, NDIM> children;
-	int count;
+	float count;
 	float radius;
 	bh_tree_node() {
 		children[LEFT] = children[RIGHT] = -1;
@@ -27,6 +27,6 @@ struct bh_tree_node {
 
 
 vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x);
-vector<float> bh_cuda_tree_evaluate(const vector<bh_tree_node>& nodes, const vector<array<fixed32, NDIM>>& sinks, float theta);
+vector<float> bh_cuda_tree_evaluate(const vector<bh_tree_node>& nodes, const vector<array<float, NDIM>>& sinks, float theta);
 
 #endif /* BH_HPP_ */

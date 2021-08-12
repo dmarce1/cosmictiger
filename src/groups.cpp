@@ -144,12 +144,14 @@ void groups_save(int number) {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+#define GROUPS_REDUCE_OVERSUBSCRIBE  2
+
 void groups_reduce() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < groups_reduce_action > (c));
 	}
-	const int nthreads = hpx::threads::hardware_concurrency();
+	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::threads::hardware_concurrency();
 	spinlock_type mutex;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&mutex]() {
@@ -212,7 +214,7 @@ void groups_reduce() {
 							ravg += r;
 						}
 						std::sort(radii.begin(),radii.end());
-						const double dr = 1.0 / radii.size();
+						const double dr = 1.0 / (radii.size() - 1);
 						const auto radial_percentile = [&radii,dr](double r) {
 							double r0 = r / dr;
 							int n0 = r0;

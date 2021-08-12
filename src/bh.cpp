@@ -4,10 +4,12 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/gravity.hpp>
 
-int bh_sort(vector<array<fixed32, NDIM>>& parts, int begin, int end, double xm, int xdim) {
+#include <fenv.h>
+
+int bh_sort(vector<array<float, NDIM>>& parts, int begin, int end, float xm, int xdim) {
 	int lo = begin;
 	int hi = end;
-	fixed32 xmid(xm);
+	float xmid(xm);
 	while (lo < hi) {
 		if (parts[lo][xdim] >= xmid) {
 			while (lo != hi) {
@@ -26,9 +28,11 @@ int bh_sort(vector<array<fixed32, NDIM>>& parts, int begin, int end, double xm, 
 
 }
 
-void bh_create_tree(vector<bh_tree_node>& nodes, int self, vector<array<fixed32, NDIM>>& parts, range<double> box, int begin, int end, int depth = 0) {
+void bh_create_tree(vector<bh_tree_node>& nodes, int self, vector<array<float, NDIM>>& parts, range<float> box, int begin, int end, int depth = 0) {
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
 	auto* node_ptr = &nodes[self];
-	const float h = get_options().hsoft;
 	bool leaf = true;
 	for (int i = begin + 1; i < end; i++) {
 		if (parts[i] != parts[begin]) {
@@ -38,11 +42,15 @@ void bh_create_tree(vector<bh_tree_node>& nodes, int self, vector<array<fixed32,
 	}
 	if (leaf) {
 		node_ptr->count = end - begin;
-		node_ptr->pos = parts[begin];
-		node_ptr->radius = h;
+		if (node_ptr->count) {
+			node_ptr->pos = parts[begin];
+		} else {
+			node_ptr->pos = box.begin;
+		}
+		node_ptr->radius = 0.0;
 	} else {
 		const int xdim = box.longest_dim();
-		const double xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
+		const float xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
 		const int mid = bh_sort(parts, begin, end, xmid, xdim);
 		auto boxl = box;
 		auto boxr = box;
@@ -58,32 +66,29 @@ void bh_create_tree(vector<bh_tree_node>& nodes, int self, vector<array<fixed32,
 		const auto& childl = nodes[node_ptr->children[LEFT]];
 		const auto& childr = nodes[node_ptr->children[RIGHT]];
 		node_ptr->count = childl.count + childr.count;
-		//if (depth == 0) {
-		//	PRINT("%i %i %i %i %i\n", depth, node_ptr->count, childr.count, childl.count, nodes.size());
-		//	}
-		array<double, NDIM> com;
+		array<float, NDIM> com;
 		float radius;
 		if (childl.count == 0) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				com[dim] = childr.pos[dim].to_double();
+				com[dim] = childr.pos[dim];
 			}
 			radius = childr.radius;
 		} else if (childr.count == 0) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				com[dim] = childl.pos[dim].to_double();
+				com[dim] = childl.pos[dim];
 			}
 			radius = childl.radius;
 		} else {
+			const float countinv = 1.0f / node_ptr->count;
 			for (int dim = 0; dim < NDIM; dim++) {
-				com[dim] = (childl.count * childl.pos[dim].to_double() + childr.count * childr.pos[dim].to_double()) / node_ptr->count;
+				com[dim] = (childl.count * childl.pos[dim] + childr.count * childr.pos[dim]) * countinv;
 			}
 			float r2l = 0.0;
 			float r2r = 0.0;
 			float r2 = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
-				r2l += sqr(com[dim] - childl.pos[dim].to_double());
-				r2r += sqr(com[dim] - childr.pos[dim].to_double());
-				node_ptr->pos[dim] = com[dim];
+				r2l += sqr(com[dim] - childl.pos[dim]);
+				r2r += sqr(com[dim] - childr.pos[dim]);
 			}
 			r2 = std::max(r2, (float) sqr(box.begin[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM], box.begin[ZDIM] - com[ZDIM]));
 			r2 = std::max(r2, (float) sqr(box.begin[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM], box.end[ZDIM] - com[ZDIM]));
@@ -93,13 +98,15 @@ void bh_create_tree(vector<bh_tree_node>& nodes, int self, vector<array<fixed32,
 			r2 = std::max(r2, (float) sqr(box.end[XDIM] - com[XDIM], box.begin[YDIM] - com[YDIM], box.end[ZDIM] - com[ZDIM]));
 			r2 = std::max(r2, (float) sqr(box.end[XDIM] - com[XDIM], box.end[YDIM] - com[YDIM], box.begin[ZDIM] - com[ZDIM]));
 			r2 = std::max(r2, (float) sqr(box.end[XDIM] - com[XDIM], box.end[YDIM] - com[YDIM], box.end[ZDIM] - com[ZDIM]));
-			radius = std::min(std::max(std::sqrt(r2l) + childl.radius, std::sqrt(r2r) + childr.radius), std::sqrt(r2) + h);
+			radius = std::sqrt(r2);
 		}
 		node_ptr->radius = radius;
+		node_ptr->pos = com;
+
 	}
 }
 
-float bh_tree_evaluate(const vector<bh_tree_node>& nodes, const array<fixed32, NDIM>& sink, float theta) {
+float bh_tree_evaluate(const vector<bh_tree_node>& nodes, const array<float, NDIM>& sink, float theta) {
 	const float h = get_options().hsoft;
 	const float GM = get_options().GM;
 	const float hinv = 1.0 / h;
@@ -115,9 +122,9 @@ float bh_tree_evaluate(const vector<bh_tree_node>& nodes, const array<fixed32, N
 		for (int ci = 0; ci < checklist.size(); ci++) {
 			const auto& node = nodes[checklist[ci]];
 			if (node.count) {
-				const float dx = distance(sink[XDIM], node.pos[XDIM]);
-				const float dy = distance(sink[YDIM], node.pos[YDIM]);
-				const float dz = distance(sink[ZDIM], node.pos[ZDIM]);
+				const float dx = sink[XDIM] - node.pos[XDIM];
+				const float dy = sink[YDIM] - node.pos[YDIM];
+				const float dz = sink[ZDIM] - node.pos[ZDIM];
 				const float r2 = sqr(dx, dy, dz);
 				if (r2 > thetainv * node.radius || node.children[LEFT] == -1) {
 					if (r2 > h2) {
@@ -145,17 +152,26 @@ float bh_tree_evaluate(const vector<bh_tree_node>& nodes, const array<fixed32, N
 	return phi;
 }
 
-vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x) {
+vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed) {
+	vector<array<float, NDIM>> x(x_fixed.size());
+	array<fixed32, NDIM> x0 = x_fixed[0];
+	for (int i = 0; i < x_fixed.size(); i++) {
+		array<float, NDIM> this_x;
+		for (int dim = 0; dim < NDIM; dim++) {
+			this_x[dim] = distance(x_fixed[i][dim], x0[dim]);
+		}
+		x[i] = this_x;
+	}
 	auto xcopy = x;
 	vector<bh_tree_node> nodes(1);
-	range<double> box;
+	range<float> box;
 	for (int dim = 0; dim < NDIM; dim++) {
-		box.begin[dim] = 1.0;
-		box.end[dim] = 0.0;
+		box.begin[dim] = std::numeric_limits<float>::max();
+		box.end[dim] = -std::numeric_limits<float>::max();
 	}
 	for (const auto& pos : x) {
 		for (int dim = 0; dim < NDIM; dim++) {
-			const auto this_x = pos[dim].to_double();
+			const auto this_x = pos[dim];
 			box.begin[dim] = std::min(box.begin[dim], this_x);
 			box.end[dim] = std::max(box.end[dim], this_x);
 		}

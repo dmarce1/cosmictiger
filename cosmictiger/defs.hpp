@@ -8,9 +8,9 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
+#define CHECK_BOUNDS
 
 #ifndef NDEBUG
-#define CHECK_BOUNDS
 #define DOMAINS_CHECK
 #endif
 
