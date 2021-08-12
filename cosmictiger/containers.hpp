@@ -111,7 +111,7 @@ inline array<T, NDIM> operator*(const array<T, NDIM>& a, T b) {
 
 template<class T>
 inline bool operator==(const array<T, NDIM>& a, const array<T, NDIM>& b) {
-	for (T dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		if (a[dim] != b[dim]) {
 			return false;
 		}

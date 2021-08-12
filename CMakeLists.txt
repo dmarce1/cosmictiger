@@ -25,6 +25,8 @@ set(cosmictiger_source_files
     src/analytic.cpp
     src/assert.cpp
     src/assert.cu
+    src/bh.cpp
+    src/bh.cu
     src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp
@@ -58,6 +60,7 @@ set(cosmictiger_source_files
 
 set(cosmictiger_header_files
     cosmictiger/assert.hpp
+    cosmictiger/bh.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
     cosmictiger/cosmology.hpp
@@ -115,7 +118,7 @@ add_hpx_executable(
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math ;
+                        --use_fast_math;
                         >)
    target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )

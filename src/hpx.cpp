@@ -12,6 +12,11 @@ void hpx_yield() {
 	hpx::this_thread::yield();
 }
 
+
+int hpx_hardware_concurrency() {
+	return hpx::thread::hardware_concurrency();
+}
+
 void hpx_init() {
 	rank = hpx::get_locality_id();
 	auto tmp = hpx::find_all_localities();

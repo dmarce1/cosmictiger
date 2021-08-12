@@ -1,9 +1,10 @@
-#include <cosmictiger/groups.hpp>
+#include <cosmictiger/bh.hpp>
 #include <cosmictiger/containers.hpp>
+#include <cosmictiger/groups.hpp>
+#include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/hpx.hpp>
 
 #include <unordered_set>
 
@@ -156,6 +157,16 @@ void groups_reduce() {
 				for (auto iter = group_data[bin].begin(); iter != group_data[bin].end(); iter++) {
 					const vector<particle_data>& parts = iter->second;
 					if( parts.size() >= get_options().min_group) {
+						vector<array<fixed32,NDIM>> X(parts.size());
+
+						for( int i = 0; i < parts.size(); i++) {
+							for( int dim = 0; dim < NDIM; dim++) {
+								const double x = parts[i].x[dim].to_double();
+								X[i][dim] = x;
+							}
+						}
+						const auto pot = bh_evaluate_potential(X);
+
 						group_entry entry;
 						entry.id = iter->first;
 						int count = 0;
@@ -168,10 +179,11 @@ void groups_reduce() {
 						}
 						for( int i = 0; i < parts.size(); i++) {
 							for( int dim = 0; dim < NDIM; dim++) {
+								const double x = parts[i].x[dim].to_double();
 								const float v = parts[i].v[dim];
 								vel[dim] += v;
 								ekin += v * v * 0.5;
-								double this_dx = parts[i].x[dim].to_double() - xcom[dim];
+								double this_dx = x - xcom[dim];
 								if( this_dx > 0.5 ) {
 									this_dx -= 1.0;
 								} else if( this_dx < -0.5 ) {
