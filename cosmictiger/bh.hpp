@@ -17,16 +17,23 @@
 struct bh_tree_node {
 	array<float, NDIM> pos;
 	array<int, NDIM> children;
-	float count;
+	pair<int> parts;
+	float mass;
 	float radius;
 	bh_tree_node() {
 		children[LEFT] = children[RIGHT] = -1;
-		count = 0;
+		mass = 0;
 	}
 };
 
 
+struct bh_source {
+	array<float, NDIM> x;
+	float m;
+};
+
+
 vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x);
-vector<float> bh_cuda_tree_evaluate(const vector<bh_tree_node>& nodes, const vector<array<float, NDIM>>& sinks, float theta);
+vector<float> bh_cuda_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_buckets, vector<array<float, NDIM>>& parts, float theta);
 
 #endif /* BH_HPP_ */

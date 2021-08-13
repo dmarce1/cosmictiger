@@ -8,9 +8,9 @@
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
-#define CHECK_BOUNDS
 
 #ifndef NDEBUG
+#define CHECK_BOUNDS
 #define DOMAINS_CHECK
 #endif
 
@@ -23,7 +23,7 @@
 #define LEFT 0
 #define RIGHT 1
 
-
+#define BH_BUCKET_SIZE 32
 
 #ifdef USE_CUDA
 #define SINK_BUCKET_SIZE 160
@@ -68,7 +68,7 @@
 
 
 #define CUDA_MAX_DEPTH 64
-#define NEXTLIST_SIZE 512
+#define NEXTLIST_SIZE 1024
 #define LEAFLIST_SIZE 4196
 #define PARTLIST_SIZE 1024
 #define MULTLIST_SIZE 4196

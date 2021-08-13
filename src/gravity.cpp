@@ -317,8 +317,8 @@ int cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tr
 							rinv1_near = fma(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                    // 2
 							rinv1_near *= hinv;                                                                // 1
 							const auto near_flag = (simd_float(1) - far_flag);                                // 1
-							rinv1 = far_flag * rinv1_far + near_flag * rinv1_near * mask;                      // 4
-							rinv3 = -(far_flag * rinv3_far + near_flag * rinv3_near * mask);                     // 5
+							rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4
+							rinv3 = -(far_flag * rinv3_far + near_flag * rinv3_near) * mask;                     // 5
 							near_count += count;
 							flops += 52;
 						}
