@@ -9,9 +9,10 @@
 #define BH_LIST_SIZE 32767
 
 struct bh_lists {
-	fixedcapvec<int, 2048> checklist;
-	fixedcapvec<int, 1024> nextlist;
-	fixedcapvec<bh_source, 16384> sourcelist;
+	fixedcapvec<int, 4095> checklist;
+	fixedcapvec<int, 2048> nextlist;
+	fixedcapvec<bh_source, 8192> sourcelist;
+	fixedcapvec<int, 4096> leaflist;
 };
 
 __global__ void bh_kernel(bh_lists* lists, bh_tree_node* nodes, int* sink_buckets, array<float, NDIM>* parts, float* phi, int nsink_buckets, int* current,
@@ -33,8 +34,10 @@ __global__ void bh_kernel(bh_lists* lists, bh_tree_node* nodes, int* sink_bucket
 		auto& checklist = lists[bid].checklist;
 		auto& nextlist = lists[bid].nextlist;
 		auto& sourcelist = lists[bid].sourcelist;
+		auto& leaflist = lists[bid].leaflist;
 		nextlist.resize(0);
 		sourcelist.resize(0);
+		leaflist.resize(0);
 		checklist.resize(1);
 		checklist[0] = 0;
 		const auto& mynode = nodes[sink_buckets[index]];
@@ -58,7 +61,7 @@ __global__ void bh_kernel(bh_lists* lists, bh_tree_node* nodes, int* sink_bucket
 					const float dy = mypos[YDIM] - node_ptr->pos[YDIM];
 					const float dz = mypos[ZDIM] - node_ptr->pos[ZDIM];
 					r2 = sqr(dx, dy, dz);
-					if (r2 > thetainv * (node_ptr->radius + mynode.radius)) {
+					if (r2 > thetainv * (node_ptr->radius + myradius)) {
 						pc = true;
 					} else if (node_ptr->children[LEFT] == -1) {
 						pp = true;
@@ -85,6 +88,15 @@ __global__ void bh_kernel(bh_lists* lists, bh_tree_node* nodes, int* sink_bucket
 					bh_source src;
 					src.x = node_ptr->pos;
 					src.m = node_ptr->mass;
+					sourcelist[index] = src;
+				}
+
+				index = pp;
+				compute_indices(index, total);
+				index += leaflist.size();
+				leaflist.resize(leaflist.size() + total);
+				if (pp) {
+					leaflist[index] = checklist[ci];
 				}
 
 			}
@@ -94,88 +106,51 @@ __global__ void bh_kernel(bh_lists* lists, bh_tree_node* nodes, int* sink_bucket
 				checklist[NCHILD * i + LEFT] = this_node.children[LEFT];
 				checklist[NCHILD * i + RIGHT] = this_node.children[RIGHT];
 			}
+			nextlist.resize(0);
+			for (int i = 0; i < leaflist.size(); i++) {
+				const auto& other_node = nodes[leaflist[i]];
+				const auto& other_parts = other_node.parts;
+				const auto other_size = other_parts.second - other_parts.first;
+				const int offset = sourcelist.size();
+				sourcelist.resize(other_size + offset);
+				for (int j = other_parts.first + tid; i < other_parts.second; i += WARP_SIZE) {
+					bh_source src;
+					src.x = parts[j];
+					src.m = 1.f;
+					sourcelist[offset + j - other_parts.first] = src;
+				}
+			}
+			leaflist.resize(0);
+			__syncwarp();
 
 		}
+		for (int i = 0; i < sourcelist.size(); i++) {
+			for (int j = myparts.first + tid; j < myparts.second; j += WARP_SIZE) {
+				const auto& sink = parts[j];
+				const auto& source = sourcelist[i];
+				const auto& m = source.m;
+				const float dx = sink[XDIM] - source.x[XDIM];
+				const float dy = sink[YDIM] - source.x[YDIM];
+				const float dz = sink[ZDIM] - source.x[ZDIM];
+				const float r2 = sqr(dx, dy, dz);
+				if (r2 > h2) {
+					phi[j] -= m * rsqrt(r2);
+				} else {
+					const float q2 = r2 * h2inv;
+					float rinv = -5.0f / 16.0f;
+					rinv = fmaf(rinv, q2, 21.0f / 16.0f);
+					rinv = fmaf(rinv, q2, -35.0f / 16.0f);
+					rinv = fmaf(rinv, q2, 35.0f / 16.0f);
+					rinv *= hinv;
+					phi[j] -= m * rinv;
+				}
 
-		/*	 const array<float, NDIM>& sink = sinks[index];
-		 phi[index] = -SELF_PHI * hinv;
-		 int depth = 0;
-		 while (checklist.size()) {
-		 const int maxi = round_up(checklist.size(), WARP_SIZE);
-		 for (int ci = tid; ci < maxi; ci += WARP_SIZE) {
-		 bool next = false;
-		 bool interact = false;
-		 float r2;
-		 const bh_tree_node* node_ptr;
-		 if (ci < checklist.size()) {
-		 node_ptr = &nodes[checklist[ci]];
-		 if (node_ptr->count) {
-		 const float dx = sink[XDIM] - node_ptr->pos[XDIM];
-		 const float dy = sink[YDIM] - node_ptr->pos[YDIM];
-		 const float dz = sink[ZDIM] - node_ptr->pos[ZDIM];
-		 r2 = sqr(dx, dy, dz);
-		 if ((node_ptr->children[LEFT] == -1) || (r2 > thetainv * node_ptr->radius)) {
-		 interact = true;
-		 } else {
-		 next = true;
-		 }
-		 }
-		 }
-		 int total;
-		 int index;
+			}
+		}
+		for (int i = myparts.first + tid; i < myparts.second; i += WARP_SIZE) {
+			phi[i] *= GM;
+		}
 
-		 index = next;
-		 compute_indices(index, total);
-		 index += nextlist.size();
-		 nextlist.resize(nextlist.size() + total);
-		 if (next) {
-		 nextlist[index] = checklist[ci];
-		 }
-
-		 index = interact;
-		 compute_indices(index, total);
-		 index += dist2list.size();
-		 dist2list.resize(dist2list.size() + total);
-		 masslist.resize(masslist.size() + total);
-		 if (interact) {
-		 dist2list[index] = r2;
-		 masslist[index] = node_ptr->count;
-		 }
-
-		 }
-		 checklist.resize(NCHILD * nextlist.size());
-		 for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-		 const auto& this_node = nodes[nextlist[i]];
-		 checklist[NCHILD * i + LEFT] = this_node.children[LEFT];
-		 checklist[NCHILD * i + RIGHT] = this_node.children[RIGHT];
-		 }
-		 float this_phi = 0.f;
-		 for (int ci = tid; ci < dist2list.size(); ci += WARP_SIZE) {
-		 const auto& r2 = dist2list[ci];
-		 const float m = masslist[ci];
-		 if (r2 > h2) {
-		 this_phi -= m * rsqrtf(dist2list[ci]);
-		 } else {
-		 const float q2 = r2 * h2inv;
-		 float rinv = -5.0f / 16.0f;
-		 rinv = fmaf(rinv, q2, 21.0f / 16.0f);
-		 rinv = fmaf(rinv, q2, -35.0f / 16.0f);
-		 rinv = fmaf(rinv, q2, 35.0f / 16.0f);
-		 rinv *= hinv;
-		 this_phi -= m * rinv;
-		 }
-		 }
-		 shared_reduce_add(this_phi);
-		 if (tid == 0) {
-		 phi[index] += this_phi;
-		 }
-		 __syncwarp();
-		 dist2list.resize(0);
-		 masslist.resize(0);
-		 nextlist.resize(0);
-		 depth++;
-		 }
-		 phi[index] *= GM;*/
 		if (tid == 0) {
 			index = atomicAdd(current, 1);
 		}
@@ -199,7 +174,7 @@ vector<float> bh_cuda_tree_evaluate(const vector<bh_tree_node>& nodes, vector<in
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks_per, (const void*) bh_kernel, WARP_SIZE, sizeof(int)));
 	max_blocks = cuda_smp_count() * blocks_per;
 //	blocks *= std::min(std::max((cuda_smp_count() - 1) / hpx_hardware_concurrency() + 1, 1), max_blocks);
-	int blocks = std::min((int) (((sink_buckets.size() - 1) / blocks_per + 1) * blocks_per), max_blocks);
+	int blocks = std::min((int) sink_buckets.size(), max_blocks);
 	CUDA_CHECK(cudaMalloc(&dev_lists, sizeof(bh_lists) * blocks));
 	CUDA_CHECK(cudaMalloc(&dev_nodes, sizeof(bh_tree_node) * nodes.size()));
 	CUDA_CHECK(cudaMalloc(&dev_phi, sizeof(float) * parts.size()));

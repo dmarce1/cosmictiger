@@ -29,12 +29,12 @@ int bh_sort(vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begi
 }
 
 void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int self, vector<array<float, NDIM>>& parts, vector<int>& sort_order,
-		range<float> box, int begin, int end, int depth = 0) {
+		range<float> box, int begin, int end, int bucket_size, int depth = 0) {
 	auto* node_ptr = &nodes[self];
 	bool leaf = true;
 	array<float, NDIM> com;
 	float radius;
-	if (end - begin <= BH_BUCKET_SIZE) {
+	if (end - begin <= bucket_size) {
 		node_ptr->parts.first = begin;
 		node_ptr->parts.second = end;
 		sink_buckets.push_back(self);
@@ -72,9 +72,9 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 		node_ptr->children[RIGHT] = nodes.size() + 1;
 		nodes.resize(nodes.size() + NCHILD);
 		node_ptr = &nodes[self];
-		bh_create_tree(nodes, sink_buckets, node_ptr->children[LEFT], parts, sort_order, boxl, begin, mid, depth + 1);
+		bh_create_tree(nodes, sink_buckets, node_ptr->children[LEFT], parts, sort_order, boxl, begin, mid, bucket_size, depth + 1);
 		node_ptr = &nodes[self];
-		bh_create_tree(nodes, sink_buckets, node_ptr->children[RIGHT], parts, sort_order, boxr, mid, end, depth + 1);
+		bh_create_tree(nodes, sink_buckets, node_ptr->children[RIGHT], parts, sort_order, boxr, mid, end, bucket_size, depth + 1);
 		node_ptr = &nodes[self];
 		const auto& childl = nodes[node_ptr->children[LEFT]];
 		const auto& childr = nodes[node_ptr->children[RIGHT]];
@@ -223,9 +223,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 }
 
 vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed) {
-	if (x_fixed.size() > 10000) {
-		PRINT("%i\n", x_fixed.size());
-	}
+	const bool gpu = x_fixed.size() >= BH_CUDA_MIN;
 	vector<array<float, NDIM>> x(x_fixed.size());
 	array<fixed32, NDIM> x0 = x_fixed[0];
 	for (int i = 0; i < x_fixed.size(); i++) {
@@ -248,18 +246,23 @@ vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed)
 			box.end[dim] = std::max(box.end[dim], this_x);
 		}
 	}
-	vector<float> pot(x.size());
-	vector<float> rpot(x.size());
+	vector<float> rpot;
 	vector<int> sink_buckets;
 	vector<int> sort_order;
 	sort_order.reserve(x.size());
 	for (int i = 0; i < x.size(); i++) {
 		sort_order.push_back(i);
 	}
-	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size());
-	bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.5);
-	for (int i = 0; i < sort_order.size(); i++) {
-		rpot[sort_order[i]] = pot[i];
+	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), gpu ? BH_CUDA_BUCKET_SIZE : BH_CPU_BUCKET_SIZE);
+	if (gpu) {
+		rpot = bh_cuda_tree_evaluate(nodes, sink_buckets, x, 0.5);
+	} else {
+		vector<float> pot(x.size());
+		rpot.resize(x.size());
+		bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.5);
+		for (int i = 0; i < sort_order.size(); i++) {
+			rpot[sort_order[i]] = pot[i];
+		}
 	}
 	return rpot;
 }

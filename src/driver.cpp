@@ -62,7 +62,8 @@ void do_groups(int number) {
 	group_tree_destroy();
 	tm.stop();
 	PRINT("tree cleanup = %e\n", tm.read());
-
+	timer reduce;
+	reduce.start();
 	for (int wave = 0; wave < GROUP_WAVES; wave++) {
 		tm.start();
 		groups_add_particles(wave);
@@ -75,6 +76,7 @@ void do_groups(int number) {
 		PRINT("groups_reduce %e\n", tm.read());
 		tm.reset();
 	}
+	reduce.stop();
 	tm.start();
 	groups_cull();
 	tm.stop();
@@ -85,6 +87,7 @@ void do_groups(int number) {
 	tm.stop();
 	PRINT("groups_save %e\n", tm.read());
 	total.stop();
+	PRINT( "Reduction time = %e\n", reduce.read());
 	PRINT("Total time = %e\n", total.read());
 	particles_groups_destroy();
 

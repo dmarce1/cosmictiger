@@ -23,7 +23,9 @@
 #define LEFT 0
 #define RIGHT 1
 
-#define BH_BUCKET_SIZE 32
+#define BH_CPU_BUCKET_SIZE 32
+#define BH_CUDA_BUCKET_SIZE 64
+#define BH_CUDA_MIN 512
 
 #ifdef USE_CUDA
 #define SINK_BUCKET_SIZE 160
