@@ -38,32 +38,37 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & do_power;
-		arc & do_groups;
-		arc & cuda;
-		arc & code_to_s;
-		arc & code_to_cm;
-		arc & code_to_g;
-		arc & omega_m;
-		arc & omega_r;
-		arc & z0;
-		arc & hubble;
-		arc & sigma8;
-		arc & eta;
-		arc & save_force;
-		arc & hsoft;
-		arc & parts_dim;
+		arc &  cuda;
+		arc &  save_force;
+		arc &  do_map;
+		arc &  do_power;
+		arc &  do_groups;
+
+		arc &  parts_dim;
+		arc &  tree_cache_line_size;
+		arc &  part_cache_line_size;
+		arc &  check_num;
+		arc &  check_freq;
+		arc &  max_iter;
+		arc &  map_count;
+		arc &  map_size;
+		arc &  min_group;
+
+		arc &  link_len;
+		arc &  hsoft;
+		arc &  GM;
+		arc &  eta;
+		arc &  code_to_s;
+		arc &  code_to_cm;
+		arc &  code_to_g;
+		arc &  omega_m;
+		arc &  omega_r;
+		arc &  z0;
+		arc &  hubble;
+		arc &  sigma8;
+
 		arc & config_file;
-		arc & GM;
 		arc & test;
-		arc & tree_cache_line_size;
-		arc & part_cache_line_size;
-		arc & check_num;
-		arc & check_freq;
-		arc & max_iter;
-		arc & do_map;
-		arc & map_count;
-		arc & map_size;
 	}
 };
 

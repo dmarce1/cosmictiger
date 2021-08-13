@@ -61,7 +61,7 @@ __global__ void bh_kernel(bh_lists* lists, bh_tree_node* nodes, int* sink_bucket
 					const float dy = mypos[YDIM] - node_ptr->pos[YDIM];
 					const float dz = mypos[ZDIM] - node_ptr->pos[ZDIM];
 					r2 = sqr(dx, dy, dz);
-					if (r2 > thetainv * (node_ptr->radius + myradius)) {
+					if (r2 > sqr(thetainv * (node_ptr->radius + myradius))) {
 						pc = true;
 					} else if (node_ptr->children[LEFT] == -1) {
 						pp = true;

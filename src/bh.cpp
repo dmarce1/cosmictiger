@@ -5,6 +5,8 @@
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/simd.hpp>
 
+#include <fenv.h>
+
 int bh_sort(vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begin, int end, float xm, int xdim) {
 	int lo = begin;
 	int hi = end;
@@ -30,8 +32,10 @@ int bh_sort(vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begi
 
 void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int self, vector<array<float, NDIM>>& parts, vector<int>& sort_order,
 		range<float> box, int begin, int end, int bucket_size, int depth = 0) {
+	/*feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);*/
 	auto* node_ptr = &nodes[self];
-	bool leaf = true;
 	array<float, NDIM> com;
 	float radius;
 	if (end - begin <= bucket_size) {
@@ -42,14 +46,16 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 		for (int dim = 0; dim < NDIM; dim++) {
 			com[dim] = 0.0;
 		}
-		for (int i = begin; i < end; i++) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				com[dim] += parts[i][dim];
+		if (node_ptr->mass > 0.0) {
+			for (int i = begin; i < end; i++) {
+				for (int dim = 0; dim < NDIM; dim++) {
+					com[dim] += parts[i][dim];
+				}
 			}
-		}
-		const float massinv = 1.0f / node_ptr->mass;
-		for (int dim = 0; dim < NDIM; dim++) {
-			com[dim] *= massinv;
+			const float massinv = 1.0f / node_ptr->mass;
+			for (int dim = 0; dim < NDIM; dim++) {
+				com[dim] *= massinv;
+			}
 		}
 		radius = 0.0;
 		for (int i = begin; i < end; i++) {
@@ -61,6 +67,7 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 		}
 		radius = std::sqrt(radius);
 		node_ptr->radius = radius;
+		node_ptr->pos = com;
 	} else {
 		const int xdim = box.longest_dim();
 		const float xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
@@ -79,12 +86,12 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 		const auto& childl = nodes[node_ptr->children[LEFT]];
 		const auto& childr = nodes[node_ptr->children[RIGHT]];
 		node_ptr->mass = childl.mass + childr.mass;
-		if (childl.mass == 0) {
+		if (childl.mass == 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				com[dim] = childr.pos[dim];
 			}
 			radius = childr.radius;
-		} else if (childr.mass == 0) {
+		} else if (childr.mass == 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				com[dim] = childl.pos[dim];
 			}
@@ -148,7 +155,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 						const float dy = mypos[YDIM] - node.pos[YDIM];
 						const float dz = mypos[ZDIM] - node.pos[ZDIM];
 						const float r2 = sqr(dx, dy, dz);
-						if (r2 > thetainv * (node.radius + myradius)) {
+						if (r2 > sqr(thetainv * (node.radius + myradius))) {
 							bh_source source;
 							source.x = node.pos;
 							source.m = node.mass;
@@ -222,8 +229,41 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+vector<float> direct_evaluate(const vector<array<float, NDIM>>& x) {
+	const float h = get_options().hsoft;
+	const float GM = get_options().GM;
+	const float hinv = 1.0 / h;
+	const float h2inv = 1.0 / (h * h);
+	const float h2 = h * h;
+	vector<float> phi(x.size(), 0.0);
+	for (int i = 0; i < x.size(); i++) {
+		for (int j = i + 1; j < x.size(); j++) {
+			const float dx = x[i][XDIM] - x[j][XDIM];
+			const float dy = x[i][YDIM] - x[j][YDIM];
+			const float dz = x[i][ZDIM] - x[j][ZDIM];
+			const float r2 = sqr(dx, dy, dz);
+			float pot;
+			if (r2 > h2) {
+				pot = 1.0f / sqrtf(r2);
+			} else {
+				const float q2 = r2 * h2inv;
+				pot = -5.0f / 16.0f;
+				pot = fmaf(pot, q2, 21.0f / 16.0f);
+				pot = fmaf(pot, q2, -35.0f / 16.0f);
+				pot = fmaf(pot, q2, 35.0f / 16.0f);
+				pot *= hinv;
+			}
+			phi[i] -= GM * pot;
+			phi[j] -= GM * pot;
+		}
+	}
+	return phi;
+}
+
 vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed) {
-	const bool gpu = x_fixed.size() >= BH_CUDA_MIN;
+	ALWAYS_ASSERT(x_fixed.size() > 1);
+//	const bool gpu = x_fixed.size() >= BH_CUDA_MIN;
+	const bool gpu = false;
 	vector<array<float, NDIM>> x(x_fixed.size());
 	array<fixed32, NDIM> x0 = x_fixed[0];
 	for (int i = 0; i < x_fixed.size(); i++) {
@@ -233,6 +273,7 @@ vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed)
 		}
 		x[i] = this_x;
 	}
+	auto xcopy = x;
 	vector<bh_tree_node> nodes(1);
 	range<float> box;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -253,16 +294,29 @@ vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed)
 	for (int i = 0; i < x.size(); i++) {
 		sort_order.push_back(i);
 	}
+	vector<float> pot(x.size());
 	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), gpu ? BH_CUDA_BUCKET_SIZE : BH_CPU_BUCKET_SIZE);
 	if (gpu) {
-		rpot = bh_cuda_tree_evaluate(nodes, sink_buckets, x, 0.5);
+		pot = bh_cuda_tree_evaluate(nodes, sink_buckets, x, 1.0);
 	} else {
-		vector<float> pot(x.size());
-		rpot.resize(x.size());
-		bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.5);
-		for (int i = 0; i < sort_order.size(); i++) {
-			rpot[sort_order[i]] = pot[i];
-		}
+		bh_tree_evaluate(nodes, sink_buckets, pot, x, 1.0);
 	}
+	rpot.resize(x.size());
+	for (int i = 0; i < sort_order.size(); i++) {
+		rpot[sort_order[i]] = pot[i];
+	}
+/*	auto apot = direct_evaluate(xcopy);
+	double err = 0.0;
+	if (x.size() > 1024) {
+		for (int i = 0; i < rpot.size(); i++) {
+			err +=sqr((rpot[i] - apot[i]) / apot[i]);
+	//		PRINT("%e %e\n", rpot[i], apot[i]);
+		}
+		err /= rpot.size();
+		err = std::sqrt(err);
+		if (rpot.size() > 1024) {
+			PRINT("%e %i\n", err, rpot.size());
+		}
+	}*/
 	return rpot;
 }
