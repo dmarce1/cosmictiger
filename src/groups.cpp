@@ -21,6 +21,12 @@ struct group_entry {
 	float r90;
 	float rmax;
 	float ravg;
+	float vxdisp;
+	float vydisp;
+	float vzdisp;
+	float xdisp;
+	float ydisp;
+	float zdisp;
 };
 
 struct particle_data {
@@ -230,13 +236,14 @@ void groups_reduce() {
 								}
 								count++;
 							}
+							float countinv = 1.0 / count;
 							float pot = 0.0;
 							for( const auto& p : phi) {
 								pot += p;
 							}
-							pot /= count;
+							pot *= countinv;
 							pot *= 0.5;
-							ekin /= count;
+							ekin *= countinv;
 							for( int dim = 0; dim < NDIM; dim++) {
 								vel[dim] /= count;
 								constrain_range(xcom[dim]);
@@ -244,14 +251,35 @@ void groups_reduce() {
 							vector<float> radii;
 							float ravg = 0.0;
 							radii.reserve(parts.size());
+							float vxdisp = 0.0;
+							float vydisp = 0.0;
+							float vzdisp = 0.0;
+							float xdisp = 0.0;
+							float ydisp = 0.0;
+							float zdisp = 0.0;
 							for( int i = 0; i < parts.size(); i++) {
 								const double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
 								const double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
 								const double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+								const double vx = parts[i].v[XDIM] - vel[XDIM];
+								const double vy = parts[i].v[YDIM] - vel[YDIM];
+								const double vz = parts[i].v[ZDIM] - vel[ZDIM];
+								xdisp += dx * dx;
+								ydisp += dy * dy;
+								zdisp += dz * dz;
+								vxdisp += vx * vx;
+								vydisp += vy * vy;
+								vzdisp += vz * vz;
 								const double r = sqrt(sqr(dx,dy,dz));
 								radii.push_back(r);
 								ravg += r;
 							}
+							xdisp = sqrt(xdisp*countinv);
+							ydisp = sqrt(xdisp*countinv);
+							zdisp = sqrt(xdisp*countinv);
+							vxdisp = sqrt(vxdisp*countinv);
+							vydisp = sqrt(vydisp*countinv);
+							vzdisp = sqrt(vzdisp*countinv);
 							std::sort(radii.begin(),radii.end());
 							const double dr = 1.0 / (radii.size() - 1);
 							const auto radial_percentile = [&radii,dr](double r) {
@@ -263,6 +291,12 @@ void groups_reduce() {
 								return w0*radii[n0] + w1*radii[n1];
 							};
 							ravg / count;
+							entry.vxdisp = vxdisp;
+							entry.vydisp = vydisp;
+							entry.vzdisp = vzdisp;
+							entry.xdisp = xdisp;
+							entry.ydisp = ydisp;
+							entry.zdisp = zdisp;
 							entry.ekin = ekin;
 							entry.epot = pot;
 							entry.r25 = radial_percentile(0.25);
