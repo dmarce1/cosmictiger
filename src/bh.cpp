@@ -33,8 +33,8 @@ int bh_sort(vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begi
 void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int self, vector<array<float, NDIM>>& parts, vector<int>& sort_order,
 		range<float> box, int begin, int end, int bucket_size, int depth = 0) {
 	/*feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);*/
+	 feenableexcept (FE_INVALID);
+	 feenableexcept (FE_OVERFLOW);*/
 	auto* node_ptr = &nodes[self];
 	array<float, NDIM> com;
 	float radius;
@@ -131,7 +131,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 	const float h2inv = 1.0 / (h * h);
 	const float h2 = h * h;
 	const simd_float tiny(1e-20);
-	const int nthreads = std::max(std::min((int) parts.size() / 512, 8 * (int) hpx::threads::hardware_concurrency()), 1);
+	const int nthreads = std::max(std::min((int) parts.size() / 512, 2 * (int) hpx::threads::hardware_concurrency()), 1);
 	vector<hpx::future<void>> futs;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&sink_buckets,&nodes,&phi,&parts,h,GM,hinv,h2inv,h2,theta,tiny]() {
@@ -295,28 +295,24 @@ vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed)
 		sort_order.push_back(i);
 	}
 	vector<float> pot(x.size());
-	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), gpu ? BH_CUDA_BUCKET_SIZE : BH_CPU_BUCKET_SIZE);
-	if (gpu) {
-		pot = bh_cuda_tree_evaluate(nodes, sink_buckets, x, 1.0);
-	} else {
-		bh_tree_evaluate(nodes, sink_buckets, pot, x, 1.0);
-	}
+	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
+	bh_tree_evaluate(nodes, sink_buckets, pot, x, 1.0);
 	rpot.resize(x.size());
 	for (int i = 0; i < sort_order.size(); i++) {
 		rpot[sort_order[i]] = pot[i];
 	}
-/*	auto apot = direct_evaluate(xcopy);
-	double err = 0.0;
-	if (x.size() > 1024) {
-		for (int i = 0; i < rpot.size(); i++) {
-			err +=sqr((rpot[i] - apot[i]) / apot[i]);
-	//		PRINT("%e %e\n", rpot[i], apot[i]);
-		}
-		err /= rpot.size();
-		err = std::sqrt(err);
-		if (rpot.size() > 1024) {
-			PRINT("%e %i\n", err, rpot.size());
-		}
-	}*/
+	/*	auto apot = direct_evaluate(xcopy);
+	 double err = 0.0;
+	 if (x.size() > 1024) {
+	 for (int i = 0; i < rpot.size(); i++) {
+	 err +=sqr((rpot[i] - apot[i]) / apot[i]);
+	 //		PRINT("%e %e\n", rpot[i], apot[i]);
+	 }
+	 err /= rpot.size();
+	 err = std::sqrt(err);
+	 if (rpot.size() > 1024) {
+	 PRINT("%e %i\n", err, rpot.size());
+	 }
+	 }*/
 	return rpot;
 }

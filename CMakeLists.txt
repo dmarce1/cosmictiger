@@ -26,8 +26,7 @@ set(cosmictiger_source_files
     src/assert.cpp
     src/assert.cu
     src/bh.cpp
-    src/bh.cu
-    src/cosmology.cpp
+ 	src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp
     src/driver.cpp

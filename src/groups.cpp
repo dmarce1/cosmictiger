@@ -12,6 +12,7 @@ struct group_entry {
 	group_int id;
 	int count;
 	float ekin;
+	float epot;
 	array<double, NDIM> com;
 	array<float, NDIM> vel;
 	float r25;
@@ -25,16 +26,21 @@ struct group_entry {
 struct particle_data {
 	array<fixed32, NDIM> x;
 	array<float, NDIM> v;
+	part_int index;
+	int rank;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & x;
 		arc & v;
+		arc & index;
+		arc & rank;
 	}
 };
 
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries);
 void groups_reduce();
 vector<group_int> groups_exist(vector<group_int>);
+static void groups_remove_indexes(vector<part_int> indexes);
 
 HPX_PLAIN_ACTION (groups_add_particles);
 HPX_PLAIN_ACTION (groups_transmit_particles);
@@ -42,6 +48,7 @@ HPX_PLAIN_ACTION (groups_reduce);
 HPX_PLAIN_ACTION (groups_save);
 HPX_PLAIN_ACTION (groups_exist);
 HPX_PLAIN_ACTION (groups_cull);
+HPX_PLAIN_ACTION (groups_remove_indexes);
 
 #define GROUP_TABLE_SIZE 1024
 
@@ -56,6 +63,12 @@ static array<std::unordered_map<group_int, vector<particle_data>, group_hash_hi>
 static vector<group_entry> groups;
 static std::unordered_set<group_int> existing_groups;
 static vector<group_int> local_existing_groups;
+
+void groups_remove_indexes(vector<part_int> indexes) {
+	for (int i = 0; i < indexes.size(); i++) {
+		particles_group(indexes[i]) = NO_GROUP;
+	}
+}
 
 void groups_cull() {
 	vector<hpx::future<void>> futs1;
@@ -155,90 +168,125 @@ void groups_reduce() {
 	spinlock_type mutex;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&mutex]() {
-			for (int bin = proc; bin < GROUP_TABLE_SIZE; bin+=nthreads) {
+			std::unordered_map<int,vector<part_int>> remove_indexes;
+			for (int bin = proc; bin < GROUP_TABLE_SIZE; bin += nthreads) {
 				for (auto iter = group_data[bin].begin(); iter != group_data[bin].end(); iter++) {
-					const vector<particle_data>& parts = iter->second;
+					vector<particle_data>& parts = iter->second;
 					if( parts.size() >= get_options().min_group) {
 						vector<array<fixed32,NDIM>> X(parts.size());
-
 						for( int i = 0; i < parts.size(); i++) {
 							for( int dim = 0; dim < NDIM; dim++) {
 								const double x = parts[i].x[dim].to_double();
 								X[i][dim] = x;
 							}
 						}
-						const auto pot = bh_evaluate_potential(X);
-
-						group_entry entry;
-						entry.id = iter->first;
-						int count = 0;
-						float ekin = 0.0;
-						array<double, NDIM> xcom;
-						array<float, NDIM> vel;
-						for( int dim = 0; dim < NDIM; dim++) {
-							xcom[dim] = 0.0;
-							vel[dim] = 0.0;
-						}
-						for( int i = 0; i < parts.size(); i++) {
+						auto phi = bh_evaluate_potential(X);
+						int i = 0;
+						while( i < parts.size() ) {
+							float kin = 0.0;
 							for( int dim = 0; dim < NDIM; dim++) {
-								const double x = parts[i].x[dim].to_double();
-								const float v = parts[i].v[dim];
-								vel[dim] += v;
-								ekin += v * v * 0.5;
-								double this_dx = x - xcom[dim];
-								if( this_dx > 0.5 ) {
-									this_dx -= 1.0;
-								} else if( this_dx < -0.5 ) {
-									this_dx += 1.0;
-								}
-								const double xsum = (count + 1) * xcom[dim] + this_dx;
-								xcom[dim] = xsum / (count + 1);
+								kin += sqr(parts[i].v[dim]);
 							}
-							count++;
+							kin *= 0.5;
+							if( kin + phi[i] > 0.0 ) {
+								remove_indexes[parts[i].rank].push_back(parts[i].index);
+								parts[i] = parts.back();
+								phi[i] = phi.back();
+								parts.pop_back();
+								phi.pop_back();
+							} else {
+								i++;
+							}
 						}
-						ekin /= count;
-						for( int dim = 0; dim < NDIM; dim++) {
-							vel[dim] /= count;
-							constrain_range(xcom[dim]);
+						if( parts.size() < get_options().min_group) {
+							for( int i = 0; i < parts.size(); i++) {
+								remove_indexes[parts[i].rank].push_back(parts[i].index);
+							}
+						} else {
+							group_entry entry;
+							entry.id = iter->first;
+							int count = 0;
+							float ekin = 0.0;
+							array<double, NDIM> xcom;
+							array<float, NDIM> vel;
+							for( int dim = 0; dim < NDIM; dim++) {
+								xcom[dim] = 0.0;
+								vel[dim] = 0.0;
+							}
+							for( int i = 0; i < parts.size(); i++) {
+								for( int dim = 0; dim < NDIM; dim++) {
+									const double x = parts[i].x[dim].to_double();
+									const float v = parts[i].v[dim];
+									vel[dim] += v;
+									ekin += v * v * 0.5;
+									double this_dx = x - xcom[dim];
+									if( this_dx > 0.5 ) {
+										this_dx -= 1.0;
+									} else if( this_dx < -0.5 ) {
+										this_dx += 1.0;
+									}
+									const double xsum = (count + 1) * xcom[dim] + this_dx;
+									xcom[dim] = xsum / (count + 1);
+								}
+								count++;
+							}
+							float pot = 0.0;
+							for( const auto& p : phi) {
+								pot += p;
+							}
+							pot /= count;
+							pot *= 0.5;
+							ekin /= count;
+							for( int dim = 0; dim < NDIM; dim++) {
+								vel[dim] /= count;
+								constrain_range(xcom[dim]);
+							}
+							vector<float> radii;
+							float ravg = 0.0;
+							radii.reserve(parts.size());
+							for( int i = 0; i < parts.size(); i++) {
+								const double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
+								const double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
+								const double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+								const double r = sqrt(sqr(dx,dy,dz));
+								radii.push_back(r);
+								ravg += r;
+							}
+							std::sort(radii.begin(),radii.end());
+							const double dr = 1.0 / (radii.size() - 1);
+							const auto radial_percentile = [&radii,dr](double r) {
+								double r0 = r / dr;
+								int n0 = r0;
+								int n1 = n0 + 1;
+								double w1 = r0 - n0;
+								double w0 = 1.0 - w1;
+								return w0*radii[n0] + w1*radii[n1];
+							};
+							ravg / count;
+							entry.ekin = ekin;
+							entry.epot = pot;
+							entry.r25 = radial_percentile(0.25);
+							entry.r50 = radial_percentile(0.50);
+							entry.r75 = radial_percentile(0.75);
+							entry.r90 = radial_percentile(0.90);
+							entry.rmax = radii.back();
+							entry.ravg = ravg;
+							entry.com = xcom;
+							entry.count = count;
+							entry.vel = vel;
+							std::lock_guard<spinlock_type> lock(mutex);
+							groups.push_back(entry);
+							existing_groups.insert(entry.id);
 						}
-
-						vector<float> radii;
-						float ravg = 0.0;
-						radii.reserve(parts.size());
-						for( int i = 0; i < parts.size(); i++) {
-							const double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
-							const double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
-							const double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
-							const double r = sqrt(sqr(dx,dy,dz));
-							radii.push_back(r);
-							ravg += r;
-						}
-						std::sort(radii.begin(),radii.end());
-						const double dr = 1.0 / (radii.size() - 1);
-						const auto radial_percentile = [&radii,dr](double r) {
-							double r0 = r / dr;
-							int n0 = r0;
-							int n1 = n0 + 1;
-							double w1 = r0 - n0;
-							double w0 = 1.0 - w1;
-							return w0*radii[n0] + w1*radii[n1];
-						};
-						ravg / count;
-						entry.r25 = radial_percentile(0.25);
-						entry.r50 = radial_percentile(0.50);
-						entry.r75 = radial_percentile(0.75);
-						entry.r90 = radial_percentile(0.90);
-						entry.rmax = radii.back();
-						entry.ravg = ravg;
-						entry.com = xcom;
-						entry.count = count;
-						entry.vel = vel;
-						std::lock_guard<spinlock_type> lock(mutex);
-						groups.push_back(entry);
-						existing_groups.insert(entry.id);
 					}
 				}
-			}}));
+				vector<hpx::future<void>> futs;
+				for( auto iter = remove_indexes.begin(); iter != remove_indexes.end(); iter++) {
+					futs.push_back(hpx::async<groups_remove_indexes_action>(hpx_localities()[iter->first], std::move(iter->second)));
+				}
+				hpx::wait_all(futs.begin(),futs.end());
+			}
+		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	group_data = decltype(group_data)();
@@ -288,6 +336,8 @@ void groups_add_particles(int wave) {
 						for( int dim = 0; dim < NDIM; dim++) {
 							part.x[dim] = particles_pos(dim,i);
 							part.v[dim] = particles_vel(dim,i);
+							part.index = i;
+							part.rank = hpx_rank();
 						}
 						entry.push_back(part);
 					}

@@ -34,6 +34,5 @@ struct bh_source {
 
 
 vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x);
-vector<float> bh_cuda_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_buckets, vector<array<float, NDIM>>& parts, float theta);
 
 #endif /* BH_HPP_ */

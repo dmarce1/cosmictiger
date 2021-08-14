@@ -109,7 +109,7 @@ bool process_options(int argc, char *argv[]) {
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
 	opts.omega_r = omega_r;
 	opts.link_len = 1.0 / opts.parts_dim / 6.0;
-	opts.min_group = 10;
+	opts.min_group = 20;
 
 	PRINT("Simulation Options\n");
 	SHOW_STRING(config_file);
