@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
 
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
-	("in", po::value<std::string>(&indir)->default_value(""), "input file") //
-	("out", po::value<std::string>(&outfile)->default_value(""), "output file") //
+	("in", po::value < std::string > (&indir)->default_value(""), "input file") //
+	("out", po::value < std::string > (&outfile)->default_value(""), "output file") //
 			;
 
 	boost::program_options::variables_map vm;
@@ -65,7 +65,9 @@ int main(int argc, char **argv) {
 	int Nside;
 	int npix;
 	std::vector<float> healpix_data;
-	PRINT( "Reading files\n");
+	PRINT("Reading files\n");
+	int max_pix = 0;
+	int min_pix = 1000000000;
 	while (found_file) {
 		const std::string fname = indir + "/healpix." + std::to_string(rank);
 		FILE* fp = fopen(fname.c_str(), "rb");
@@ -79,16 +81,19 @@ int main(int argc, char **argv) {
 			found_file = true;
 			FREAD(&Nside, sizeof(int), 1, fp);
 			if (rank == 0) {
-				PRINT( "Nside = %i\n", Nside);
+				PRINT("Nside = %i\n", Nside);
 				npix = 12 * Nside * Nside;
 				healpix_data.resize(npix, 0.0);
 			}
+			PRINT("file %i\n", rank);
 			int size;
 			FREAD(&size, sizeof(int), 1, fp);
 			for (int i = 0; i < size; i++) {
 				int pix;
 				float value;
 				FREAD(&pix, sizeof(int), 1, fp);
+				max_pix = std::max(max_pix, pix);
+				min_pix = std::min(min_pix, pix);
 				FREAD(&value, sizeof(float), 1, fp);
 				healpix_data[pix] += value;
 			}
@@ -96,12 +101,14 @@ int main(int argc, char **argv) {
 		}
 		rank++;
 	}
-	PRINT( "Done reading files\n");
+	PRINT("Done reading files\n");
 
-	const int res = Nside * std::sqrt(1.5) + 0.5;
+	const int res = (Nside * std::sqrt(1.5) + 0.5);
 
 	int ORDER = 3;
 	std::vector<float> mw_data;
+	size_t iter = 0;
+	size_t max_iter = res * res * 8;
 	for (int iy = -res; iy < res; iy++) {
 		for (int ix = -2 * res; ix < 2 * res; ix++) {
 			double value = 0.0;
@@ -118,7 +125,10 @@ int main(int argc, char **argv) {
 				}
 			}
 			mw_data.push_back(value);
-
+			if (iter % 1000 == 0) {
+				PRINT("%i%%\r", iter * 100 / max_iter);
+			}
+			iter++;
 		}
 	}
 

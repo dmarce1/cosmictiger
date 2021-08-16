@@ -41,7 +41,7 @@ struct group_tree_return {
 	}
 };
 
-group_tree_return group_tree_create(pair<int, int> proc_range = { 0, hpx_size() }, pair<part_int> part_range = { -1, -1 }, group_range box = unit_box<double>(),
+group_tree_return group_tree_create(size_t key = 1, pair<int, int> proc_range = { 0, hpx_size() }, pair<part_int> part_range = { -1, -1 }, group_range box = unit_box<double>(),
 		int depth = 0, bool local_root = hpx_size() == 1);
 void group_tree_destroy();
 const group_tree_node* group_tree_get_node(tree_id id);

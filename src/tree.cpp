@@ -1,6 +1,7 @@
 constexpr bool verbose = true;
 
 #include <cosmictiger/fast_future.hpp>
+#include <cosmictiger/domain.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
@@ -139,7 +140,7 @@ int tree_min_level(double theta) {
 	return i == hpx_size() ? lev : lev + 1;
 }
 
-fast_future<tree_create_return> tree_create_fork(tree_create_params params, const pair<int, int>& proc_range, const pair<part_int>& part_range,
+fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<tree_create_return> rc;
@@ -159,12 +160,12 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 		}
 	}
 	if (!threadme) {
-		rc.set_value(tree_create(params, proc_range, part_range, box, depth, local_root));
+		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async < tree_create_action > (hpx_localities()[proc_range.first], params, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async < tree_create_action > (hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
-		rc = hpx::async([params,proc_range,part_range,depth,local_root, box]() {
-			auto rc = tree_create(params,proc_range,part_range,box,depth,local_root);
+		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
+			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
 			nthreads--;
 			return rc;
 		});
@@ -172,7 +173,8 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, cons
 	return rc;
 }
 
-tree_create_return tree_create(tree_create_params params, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth, bool local_root) {
+tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
+		bool local_root) {
 	const double h = get_options().hsoft;
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
@@ -219,10 +221,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 		bool right_local_root = false;
 		if (proc_range.second - proc_range.first > 1) {
 			const int mid = (proc_range.first + proc_range.second) / 2;
-			const double wt = double(proc_range.second - mid) / double(proc_range.second - proc_range.first);
-			const int dim = box.longest_dim();
-			const double xmid = box.begin[dim] * wt + box.end[dim] * (1.0 - wt);
-			left_box.end[dim] = right_box.begin[dim] = xmid;
+			left_box = domains_range(key << 1);
+			right_box = domains_range((key << 1) + 1);
 			left_range.second = right_range.first = mid;
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
@@ -235,8 +235,8 @@ tree_create_return tree_create(tree_create_params params, pair<int, int> proc_ra
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
 		}
-		auto futr = tree_create_fork(params, right_range, right_parts, right_box, depth + 1, right_local_root, true);
-		auto futl = tree_create_fork(params, left_range, left_parts, left_box, depth + 1, left_local_root, false);
+		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
+		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		const auto xl = rcl.pos;

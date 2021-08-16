@@ -215,7 +215,6 @@ void driver() {
 		map_init(tau_max);
 	}
 	while (tau < tau_max) {
-		do_groups(0);
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			write_checkpoint(params);
@@ -225,6 +224,9 @@ void driver() {
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
+		if( full_eval ) {
+			domains_rebound();
+		}
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		auto opts = get_options();
@@ -328,6 +330,7 @@ void write_checkpoint(driver_params params) {
 	std::ofstream fp(fname.c_str(), std::ios::out | std::ios::binary);
 	fp.write((const char*) &params, sizeof(driver_params));
 	particles_save(fp);
+	domains_save(fp);
 	map_save(fp);
 	fp.close();
 	hpx::wait_all(futs.begin(), futs.end());
@@ -353,6 +356,7 @@ driver_params read_checkpoint(int checknum) {
 	}
 	FREAD(&params, sizeof(driver_params), 1, fp);
 	particles_load(fp);
+	domains_load(fp);
 	map_load(fp);
 	fclose(fp);
 	hpx::wait_all(futs.begin(), futs.end());

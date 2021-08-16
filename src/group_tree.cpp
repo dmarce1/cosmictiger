@@ -1,5 +1,6 @@
 #include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/group_tree.hpp>
+#include <cosmictiger/domain.hpp>
 
 #include <unordered_set>
 
@@ -75,8 +76,8 @@ static void reset_last_cache_entries() {
 	}
 }
 
-fast_future<group_tree_return> group_tree_create_fork(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root,
-		bool threadme) {
+fast_future<group_tree_return> group_tree_create_fork(size_t key, pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth,
+		bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<group_tree_return> rc;
 	bool remote = false;
@@ -95,12 +96,12 @@ fast_future<group_tree_return> group_tree_create_fork(pair<int, int> proc_range,
 		}
 	}
 	if (!threadme) {
-		rc.set_value(group_tree_create(proc_range, part_range, box, depth, local_root));
+		rc.set_value(group_tree_create(key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async < group_tree_create_action > (hpx_localities()[proc_range.first], proc_range, part_range, box, depth, local_root);
+		rc = hpx::async < group_tree_create_action > (hpx_localities()[proc_range.first], key, proc_range, part_range, box, depth, local_root);
 	} else {
-		rc = hpx::async([proc_range,part_range,depth,local_root, box]() {
-			auto rc = group_tree_create(proc_range,part_range,box,depth,local_root);
+		rc = hpx::async([proc_range, part_range, depth, local_root, box, key]() {
+			auto rc = group_tree_create(key, proc_range, part_range, box,depth, local_root);
 			nthreads--;
 			return rc;
 		});
@@ -109,7 +110,7 @@ fast_future<group_tree_return> group_tree_create_fork(pair<int, int> proc_range,
 
 }
 
-group_tree_return group_tree_create(pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root) {
+group_tree_return group_tree_create(size_t key, pair<int, int> proc_range, pair<part_int> part_range, group_range box, int depth, bool local_root) {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -145,10 +146,9 @@ group_tree_return group_tree_create(pair<int, int> proc_range, pair<part_int> pa
 		if (proc_range.second - proc_range.first > 1) {
 			const int mid = (proc_range.first + proc_range.second) / 2;
 			const double wt = double(proc_range.second - mid) / double(proc_range.second - proc_range.first);
-			const int dim = box.longest_dim();
-			const double xmid = box.begin[dim] * wt + box.end[dim] * (1.0 - wt);
-			left_box.end[dim] = right_box.begin[dim] = xmid;
 			left_range.second = right_range.first = mid;
+			left_box = domains_range(key << 1);
+			right_box = domains_range((key << 1) + 1);
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
@@ -158,8 +158,8 @@ group_tree_return group_tree_create(pair<int, int> proc_range, pair<part_int> pa
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
-		auto futr = group_tree_create_fork(right_range, right_parts, right_box, depth + 1, right_local_root, true);
-		auto futl = group_tree_create_fork(left_range, left_parts, left_box, depth + 1, left_local_root, false);
+		auto futr = group_tree_create_fork((key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
+		auto futl = group_tree_create_fork((key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		node.children[LEFT] = rcl.id;

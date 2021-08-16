@@ -27,6 +27,12 @@ static void domain_test() {
 	tm.reset();
 
 	tm.start();
+	domains_rebound();
+	tm.stop();
+	PRINT("domains_rebound: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
 	domains_begin();
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
@@ -47,6 +53,12 @@ static void tree_test() {
 	particles_random_init();
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_rebound();
+	tm.stop();
+	PRINT("domains_rebound: %e s\n", tm.read());
 	tm.reset();
 
 	tm.start();
@@ -90,6 +102,12 @@ static void kick_test() {
 //	initialize();
 	tm.stop();
 	PRINT("initialize: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_rebound();
+	tm.stop();
+	PRINT("domains_rebound: %e s\n", tm.read());
 	tm.reset();
 
 	tm.start();
@@ -158,6 +176,12 @@ static void force_test() {
 	initialize();
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
+	tm.reset();
+
+	tm.start();
+	domains_rebound();
+	tm.stop();
+	PRINT("domains_rebound: %e s\n", tm.read());
 	tm.reset();
 
 	tm.start();

@@ -25,6 +25,7 @@
 
 #define BH_BUCKET_SIZE 8
 #define BH_CUDA_MIN 512
+#define DOMAIN_REBOUND_ITERS 10
 
 #ifdef USE_CUDA
 #define SINK_BUCKET_SIZE 160
