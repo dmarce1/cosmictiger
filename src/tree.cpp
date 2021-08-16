@@ -441,6 +441,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.pos = x;
 	node.multi = multi;
 	node.nactive = nactive;
+	node.active_nodes = active_nodes;
 	node.depth = depth;
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;

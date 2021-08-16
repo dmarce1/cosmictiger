@@ -114,7 +114,8 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 //	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
-	kparams.gpu = load > GPU_LOAD_MIN && get_options().cuda;
+	kparams.node_load = flops_per_node / flops_per_particle;
+	kparams.gpu = true;
 	used_gpu = kparams.gpu;
 	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
@@ -281,8 +282,8 @@ void driver() {
 		}
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
 		if (full_eval) {
-			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "imbalance", "Z", "time", "dt", "pot", "kin",
-					"cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "total", "gpu/cpu", "pps",
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "imbalance", "Z", "time", "dt",
+					"pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "total", "pps",
 					"GFLOPS/s");
 		}
 		iter++;
@@ -293,9 +294,9 @@ void driver() {
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
 		params.flops += total_flops;
 		PRINT(
-				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e %12.3e \n",
-				iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time,
-				sort_time, kick_time, drift_time, runtime / iter, used_gpu ? 'G' : 'C', (double ) kr.nactive / total_time.read(),
+				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n",
+				iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load,
+				domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
 				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		total_time.reset();
 		total_time.start();

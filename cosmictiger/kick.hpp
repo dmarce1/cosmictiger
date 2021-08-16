@@ -122,6 +122,7 @@ struct kick_params {
 	bool save_force;
 	bool first_call;
 	bool gpu;
+	float node_load;
 	template<class A>
 	void serialize(A && arc, unsigned) {
 		arc & min_rung;
@@ -134,6 +135,7 @@ struct kick_params {
 		arc & eta;
 		arc & GM;
 		arc & save_force;
+		arc & node_load;
 	}
 };
 
