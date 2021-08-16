@@ -13,8 +13,8 @@ void domains_transmit_particles(vector<particle>);
 void domains_init_rebounds();
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes);
 void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth);
-vector<part_int> domains_count_below(vector<double> bounds, vector<int> dims, int depth);
-vector<part_int> domains_get_loads();
+vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int depth);
+vector<size_t> domains_get_loads();
 
 HPX_PLAIN_ACTION (domains_count_below);
 HPX_PLAIN_ACTION (domains_get_loads);
@@ -36,7 +36,7 @@ static vector<domain_local> local_domains;
 
 double domains_get_load_imbalance() {
 	const auto loads = domains_get_loads();
-	part_int max = 0;
+	size_t max = 0;
 	double avg = 0;
 	for (const auto load : loads) {
 		max = std::max(load, max);
@@ -47,12 +47,12 @@ double domains_get_load_imbalance() {
 	return imbalance;
 }
 
-vector<part_int> domains_get_loads() {
-	vector<hpx::future<vector<part_int>>> futs;
+vector<size_t> domains_get_loads() {
+	vector<hpx::future<vector<size_t>>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < domains_get_loads_action > (c));
 	}
-	vector<part_int> loads;
+	vector<size_t> loads;
 	loads.push_back(particles_size());
 	for (auto& f : futs) {
 		auto these_loads = f.get();
@@ -109,9 +109,9 @@ void domains_init_rebounds() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-vector<part_int> domains_count_below(vector<double> bounds, vector<int> dims, int depth) {
+vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int depth) {
 	assert(bounds.size() == local_domains.size());
-	vector<part_int> counts(bounds.size());
+	vector<size_t> counts(bounds.size());
 	vector<hpx::future<void>> futs;
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].depth == depth) {
@@ -122,12 +122,12 @@ vector<part_int> domains_count_below(vector<double> bounds, vector<int> dims, in
 					vector<hpx::future<void>> futs;
 					const int xdim = dims[i];
 					const fixed32 xmid = bounds[i];
-					std::atomic<part_int> count(0);
+					std::atomic<size_t> count(0);
 					const auto func = [nthreads,rng, xdim, xmid, &count, &counts](int proc) {
-						const part_int begin = rng.first + (size_t) proc * (rng.second-rng.first) / nthreads;
-						const part_int end = rng.first + (size_t) (proc+1) * (rng.second-rng.first) / nthreads;
-						part_int this_count = 0;
-						for( part_int i = begin; i < end; i++) {
+						const size_t begin = rng.first + (size_t) proc * (rng.second-rng.first) / nthreads;
+						const size_t end = rng.first + (size_t) (proc+1) * (rng.second-rng.first) / nthreads;
+						size_t this_count = 0;
+						for( size_t i = begin; i < end; i++) {
 							if( particles_pos(xdim,i) < xmid) {
 								this_count++;
 							}
@@ -150,7 +150,7 @@ vector<part_int> domains_count_below(vector<double> bounds, vector<int> dims, in
 
 void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth) {
 	assert(bounds.size() == local_domains.size());
-	vector<part_int> mids(bounds.size());
+	vector<size_t> mids(bounds.size());
 	vector<hpx::future<void>> futs;
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].depth == depth) {
@@ -188,7 +188,7 @@ void domains_rebound() {
 	domains[0].box = unit_box<double>();
 	domains[0].proc_range.first = 0;
 	domains[0].proc_range.second = hpx_size();
-	domains[0].total_count = std::pow((part_int) get_options().parts_dim, NDIM);
+	domains[0].total_count = std::pow((size_t) get_options().parts_dim, NDIM);
 	domains[0].midhi = 1.0;
 	domains[0].midlo = 0.0;
 	domains[0].key = 1;
@@ -209,7 +209,7 @@ void domains_rebound() {
 	};
 	while (!all_leaves(new_domains)) {
 		domains = std::move(new_domains);
-		vector<part_int> counts(domains.size());
+		vector<size_t> counts(domains.size());
 		for (int iter = 0; iter < DOMAIN_REBOUND_ITERS; iter++) {
 			for (auto& c : counts) {
 				c = 0;
@@ -222,7 +222,7 @@ void domains_rebound() {
 				bounds.push_back(midx);
 				dims.push_back(xdim);
 			}
-			vector<hpx::future<vector<part_int>>>count_futs;
+			vector<hpx::future<vector<size_t>>>count_futs;
 			for (int i = 0; i < hpx_size(); i++) {
 				count_futs.push_back(hpx::async < domains_count_below_action > (hpx_localities()[i], bounds, dims, depth));
 			}
@@ -236,7 +236,7 @@ void domains_rebound() {
 				const int first_proc = domains[i].proc_range.first;
 				const int last_proc = domains[i].proc_range.second;
 				const int mid_proc = (first_proc + last_proc) / 2;
-				const part_int target_count = (size_t)(mid_proc - first_proc) * domains[i].total_count / (last_proc - first_proc);
+				const size_t target_count = (size_t)(mid_proc - first_proc) * domains[i].total_count / (last_proc - first_proc);
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
 				if (counts[i] < target_count) {
 					domains[i].midlo = midx;
