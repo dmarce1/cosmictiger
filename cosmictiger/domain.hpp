@@ -36,8 +36,8 @@ struct domain_t {
 struct domain_global {
 	range<double> box;
 	pair<int> proc_range;
-	part_int total_count;
-	part_int lo_count;
+	size_t total_count;
+	size_t lo_count;
 	double midhi;
 	double midlo;
 	size_t key;
