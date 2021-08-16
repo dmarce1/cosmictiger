@@ -281,10 +281,14 @@ void driver() {
 			esum0 = esum;
 		}
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
+		FILE* textfp = fopen("progress.txt", "at");
+		if (textfp == nullptr) {
+			THROW_ERROR("unable to open progress.txt for writing\n");
+		}
 		if (full_eval) {
-			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "imbalance", "Z", "time", "dt",
-					"pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "total", "pps",
-					"GFLOPS/s");
+			PRINT_BOTH(textfp, "\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "imbalance", "Z",
+					"time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime",
+					"total", "pps", "GFLOPS/s");
 		}
 		iter++;
 		total_processed += kr.nactive;
@@ -293,11 +297,12 @@ void driver() {
 		double pps = total_processed / runtime;
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
 		params.flops += total_flops;
-		PRINT(
+		PRINT_BOTH(textfp,
 				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n",
 				iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load,
 				domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
 				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+		fclose(textfp);
 		total_time.reset();
 		total_time.start();
 		//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);

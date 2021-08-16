@@ -14,6 +14,8 @@
 
 #define PRINT(...) print(__VA_ARGS__)
 
+#define PRINT_BOTH(fp, ...) print_both(fp, __VA_ARGS__)
+
 #define THROW_ERROR(...) throw_error(__FILE__, __LINE__, __VA_ARGS__)
 
 template<class ...Args>
@@ -26,6 +28,16 @@ inline void print(const char* fmt, Args ...args) {
 	fflush(stdout);
 #endif
 }
+
+template<class ...Args>
+inline void print_both(FILE* fp, const char* fmt, Args ...args) {
+	printf(fmt, args...);
+	fprintf(fp, fmt, args...);
+	fflush(stdout);
+	fflush(fp);
+}
+
+
 
 #ifdef __CUDA_ARCH__
 __device__
