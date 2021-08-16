@@ -179,9 +179,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	tree_create_return rc;
-	if( depth < 3 ) {
-		PRINT( "%s\n", domains_range(key).to_string().c_str());
-	}
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
