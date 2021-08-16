@@ -286,7 +286,7 @@ void driver() {
 			THROW_ERROR("unable to open progress.txt for writing\n");
 		}
 		if (full_eval) {
-			PRINT_BOTH(textfp, "\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "imbalance", "Z",
+			PRINT_BOTH(textfp, "\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "runtime", "i", "imbalance", "Z",
 					"time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime",
 					"total", "pps", "GFLOPS/s");
 		}
@@ -298,9 +298,9 @@ void driver() {
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
 		params.flops += total_flops;
 		PRINT_BOTH(textfp,
-				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n",
-				iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load,
-				domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
+				"%12.3e %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n",
+				runtime, iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped,
+				kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
 				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		fclose(textfp);
 		total_time.reset();
