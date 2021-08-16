@@ -177,6 +177,8 @@ void do_power_spectrum(int num, double a) {
 }
 
 void driver() {
+	timer total_time;
+	total_time.start();
 	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().check_num >= 0) {
@@ -207,8 +209,6 @@ void driver() {
 	double pot;
 	timer tmr;
 	tmr.start();
-	timer total_time;
-	total_time.start();
 	int this_iter = 0;
 	double last_theta = -1.0;
 	timer reset;
@@ -219,6 +219,10 @@ void driver() {
 	while (tau < tau_max) {
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
+			total_time.stop();
+			runtime += total_time.read();
+			total_time.reset();
+			total_time.start();
 			write_checkpoint(params);
 			tmr.reset();
 		}
@@ -286,13 +290,15 @@ void driver() {
 			THROW_ERROR("unable to open progress.txt for writing\n");
 		}
 		if (full_eval) {
-			PRINT_BOTH(textfp, "\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "runtime", "i", "imbalance", "Z",
-					"time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime",
-					"total", "pps", "GFLOPS/s");
+			PRINT_BOTH(textfp, "\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "runtime", "i",
+					"imbalance", "Z", "time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime",
+					"ktime", "dtime", "total", "pps", "GFLOPS/s");
 		}
 		iter++;
 		total_processed += kr.nactive;
+		timer remaining_time;
 		total_time.stop();
+		remaining_time.start();
 		runtime += total_time.read();
 		double pps = total_processed / runtime;
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
@@ -304,6 +310,8 @@ void driver() {
 				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		fclose(textfp);
 		total_time.reset();
+		remaining_time.stop();
+		runtime += remaining_time.read();
 		total_time.start();
 		//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
 		itime = inc(itime, kr.max_rung);
