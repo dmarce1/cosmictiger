@@ -71,7 +71,7 @@ void domains_init_rebounds() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < domains_init_rebounds_action > (c));
 	}
-	local_domains.resize(0);
+	local_domains.resize(1);
 	local_domains[0].box = unit_box<double>();
 	local_domains[0].proc_range.first = 0;
 	local_domains[0].proc_range.second = hpx_size();
@@ -88,6 +88,7 @@ vector<part_int> domains_count_below(vector<double> bounds, vector<int> dims, in
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].depth == depth) {
 			futs.push_back(hpx::async([i, &bounds, &dims, &counts]() {
+			//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
 				const auto rng = local_domains[i].part_range;
 				const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / particles_size(), (size_t) 1);
 				vector<hpx::future<void>> futs;
@@ -127,9 +128,11 @@ void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth) {
 		if (local_domains[i].depth == depth) {
 			futs.push_back(hpx::async([i, &bounds, &dims, &mids]() {
 				mids[i] = particles_sort(local_domains[i].part_range, bounds[i], dims[i]);
+			///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i], local_domains[i].part_range.first, local_domains[i].part_range.second);
 			}));
 		}
 	}
+	hpx::wait_all(futs.begin(), futs.end());
 	vector<domain_local> new_domains;
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].proc_range.second - local_domains[i].proc_range.first > 1) {
@@ -148,7 +151,6 @@ void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth) {
 		}
 	}
 	local_domains = std::move(new_domains);
-	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void domains_rebound() {
@@ -179,8 +181,11 @@ void domains_rebound() {
 	};
 	while (!all_leaves(new_domains)) {
 		domains = std::move(new_domains);
-		vector<part_int> counts(domains.size(), 0);
+		vector<part_int> counts(domains.size());
 		for (int iter = 0; iter < DOMAIN_REBOUND_ITERS; iter++) {
+			for (auto& c : counts) {
+				c = 0;
+			}
 			vector<double> bounds;
 			vector<int> dims;
 			for (int i = 0; i < domains.size(); i++) {
@@ -210,6 +215,7 @@ void domains_rebound() {
 				} else {
 					domains[i].midhi = midx;
 				}
+				PRINT("%i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
 			}
 		}
 		vector<double> bounds;
