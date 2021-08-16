@@ -152,8 +152,18 @@ void particles_groups_destroy() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < particles_groups_destroy_action > (c));
 	}
-
-	ALWAYS_ASSERT(particles_grp);
+	const int nthreads = hpx::thread::hardware_concurrency();
+	vector<hpx::future<void>> futs2;
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs2.push_back(hpx::async([nthreads,proc]() {
+			const part_int begin = (size_t) proc * particles_size() / nthreads;
+			const part_int end = (size_t) (proc + 1) * particles_size() / nthreads;
+			for( part_int i = begin; i < end; i++) {
+				particles_lastgroup(i) = particles_group(i);
+			}
+		}));
+	}
+	hpx::wait_all(futs2.begin(), futs2.end());
 	delete[] (particles_grp);
 	particles_grp = nullptr;
 	group_part_cache = decltype(group_part_cache)();
@@ -407,6 +417,12 @@ void particles_resize(part_int sz) {
 			array_resize(particles_v[dim], new_capacity, true);
 		}
 		array_resize(particles_r, new_capacity, true);
+		if (get_options().do_groups) {
+			array_resize(particles_lgrp, new_capacity, false);
+			for (part_int i = 0; i < new_capacity; i++) {
+				particles_lgrp[i] = NO_GROUP;
+			}
+		}
 		if (get_options().save_force) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				array_resize(particles_g[dim], new_capacity, true);
@@ -456,6 +472,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	part_int lo = begin;
 	part_int hi = end;
 	fixed32 xmid(xm);
+	const bool do_groups = get_options().do_groups;
 	auto& xptr_dim = particles_x[xdim];
 	auto& x = particles_x[XDIM];
 	auto& y = particles_x[YDIM];
@@ -475,6 +492,9 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 					std::swap(uy[hi], uy[lo]);
 					std::swap(uz[hi], uz[lo]);
 					std::swap(particles_r[hi], particles_r[lo]);
+					if (do_groups) {
+						std::swap(particles_lgrp[hi], particles_lgrp[lo]);
+					}
 					break;
 				}
 			}
@@ -535,6 +555,9 @@ void particles_load(FILE* fp) {
 	FREAD(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
 	FREAD(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
 	FREAD(&particles_rung(0), sizeof(char), particles_size(), fp);
+	if (get_options().do_groups) {
+		FREAD(&particles_lastgroup(0), sizeof(group_int), particles_size(), fp);
+	}
 }
 
 void particles_save(std::ofstream& fp) {
@@ -547,5 +570,8 @@ void particles_save(std::ofstream& fp) {
 	fp.write((const char*) &particles_vel(YDIM, 0), sizeof(float) * particles_size());
 	fp.write((const char*) &particles_vel(ZDIM, 0), sizeof(float) * particles_size());
 	fp.write((const char*) &particles_rung(0), sizeof(char) * particles_size());
+	if (get_options().do_groups) {
+		fp.write((const char*) &particles_lastgroup(0), sizeof(group_int) * particles_size());
+	}
 
 }

@@ -16,8 +16,7 @@ if( COSMICTIGER_WITH_CUDA )
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-#set(CMAKE_CXX_FLAGS "-ffast-math -Wno-deprecated-declarations -Wno-format-security")
-set(CMAKE_CXX_FLAGS "-ffast-math -march=native  -no-pie -fno-pie")
+set(CMAKE_CXX_FLAGS "-ffast-math -march=native  -no-pie -fno-pie -Wno-attributes")
 
 
 set(cosmictiger_source_files

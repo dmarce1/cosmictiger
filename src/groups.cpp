@@ -8,13 +8,19 @@
 
 #include <unordered_set>
 
+template<class T>
+void fwrite_single(FILE* fp, const T& data) {
+	fwrite(&data, sizeof(T), 1, fp);
+}
+
 struct group_entry {
 	group_int id;
+	array<double, NDIM> com;
+	array<float, NDIM> vel;
+	array<float, NDIM> lang;
 	int count;
 	float ekin;
 	float epot;
-	array<double, NDIM> com;
-	array<float, NDIM> vel;
 	float r25;
 	float r50;
 	float r75;
@@ -27,17 +33,58 @@ struct group_entry {
 	float xdisp;
 	float ydisp;
 	float zdisp;
+	float Ixx;
+	float Ixy;
+	float Ixz;
+	float Iyy;
+	float Iyz;
+	float Izz;
+	int parent_count;
+	std::unordered_map<group_int, int> parents;
+	void write(FILE* fp) {
+		fwrite_single(fp, id);
+		fwrite_single(fp, com);
+		fwrite_single(fp, vel);
+		fwrite_single(fp, lang);
+		fwrite_single(fp, count);
+		fwrite_single(fp, ekin);
+		fwrite_single(fp, epot);
+		fwrite_single(fp, r25);
+		fwrite_single(fp, r50);
+		fwrite_single(fp, r75);
+		fwrite_single(fp, r90);
+		fwrite_single(fp, rmax);
+		fwrite_single(fp, ravg);
+		fwrite_single(fp, vxdisp);
+		fwrite_single(fp, vydisp);
+		fwrite_single(fp, vzdisp);
+		fwrite_single(fp, xdisp);
+		fwrite_single(fp, ydisp);
+		fwrite_single(fp, zdisp);
+		fwrite_single(fp, Ixx);
+		fwrite_single(fp, Ixy);
+		fwrite_single(fp, Ixz);
+		fwrite_single(fp, Iyy);
+		fwrite_single(fp, Iyz);
+		fwrite_single(fp, Izz);
+		fwrite_single(fp, parent_count);
+		for (auto i = parents.begin(); i != parents.end(); i++) {
+			fwrite_single(fp, *i);
+		}
+	}
 };
 
 struct particle_data {
 	array<fixed32, NDIM> x;
 	array<float, NDIM> v;
+	group_int last_group;
 	part_int index;
 	int rank;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & x;
 		arc & v;
+		arc & last_group;
 		arc & index;
 		arc & rank;
 	}
@@ -215,9 +262,11 @@ void groups_reduce() {
 							float ekin = 0.0;
 							array<double, NDIM> xcom;
 							array<float, NDIM> vel;
+							array<float, NDIM> lang;
 							for( int dim = 0; dim < NDIM; dim++) {
 								xcom[dim] = 0.0;
 								vel[dim] = 0.0;
+								lang[dim] = 0.0;
 							}
 							for( int i = 0; i < parts.size(); i++) {
 								for( int dim = 0; dim < NDIM; dim++) {
@@ -237,6 +286,17 @@ void groups_reduce() {
 								count++;
 							}
 							float countinv = 1.0 / count;
+							for( int i = 0; i < parts.size(); i++) {
+								const double x = parts[i].x[XDIM].to_double() - xcom[XDIM];
+								const double y = parts[i].x[YDIM].to_double() - xcom[YDIM];
+								const double z = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+								const double vx = parts[i].v[XDIM];
+								const double vy = parts[i].v[YDIM];
+								const double vz = parts[i].v[ZDIM];
+								lang[XDIM] = (y * vz - z * vy)*countinv;
+								lang[YDIM] = (-x * vz + z * vx)*countinv;
+								lang[ZDIM] = (x * vy - y * vx)*countinv;
+							}
 							float pot = 0.0;
 							for( const auto& p : phi) {
 								pot += p;
@@ -257,6 +317,7 @@ void groups_reduce() {
 							float xdisp = 0.0;
 							float ydisp = 0.0;
 							float zdisp = 0.0;
+							float Ixx = 0.0, Ixy = 0.0, Ixz = 0.0, Iyy = 0.0, Iyz = 0.0, Izz = 0.0;
 							for( int i = 0; i < parts.size(); i++) {
 								const double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
 								const double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
@@ -264,6 +325,12 @@ void groups_reduce() {
 								const double vx = parts[i].v[XDIM] - vel[XDIM];
 								const double vy = parts[i].v[YDIM] - vel[YDIM];
 								const double vz = parts[i].v[ZDIM] - vel[ZDIM];
+								Ixx += dy * dy + dz * dz;
+								Iyy += dx * dx + dz * dz;
+								Izz += dy * dy + dx * dx;
+								Ixy += dx * dy;
+								Iyz += dy * dz;
+								Ixz += dx * dz;
 								xdisp += dx * dx;
 								ydisp += dy * dy;
 								zdisp += dz * dz;
@@ -291,6 +358,24 @@ void groups_reduce() {
 								return w0*radii[n0] + w1*radii[n1];
 							};
 							ravg / count;
+							for( int i = 0; i <parts.size(); i++) {
+								const auto lgrp = parts[i].last_group;
+								if( lgrp != NO_GROUP) {
+									if( entry.parents.find(lgrp) == entry.parents.end()) {
+										entry.parents[lgrp] = 1;
+									} else {
+										entry.parents[lgrp]++;
+									}
+								}
+							}
+							entry.lang = lang;
+							entry.parent_count = entry.parents.size();
+							entry.Ixx = Ixx;
+							entry.Ixy = Ixy;
+							entry.Ixz = Ixz;
+							entry.Iyy = Iyy;
+							entry.Iyz = Iyz;
+							entry.Izz = Izz;
 							entry.vxdisp = vxdisp;
 							entry.vydisp = vydisp;
 							entry.vzdisp = vzdisp;
@@ -371,6 +456,7 @@ void groups_add_particles(int wave) {
 							part.x[dim] = particles_pos(dim,i);
 							part.v[dim] = particles_vel(dim,i);
 							part.index = i;
+							part.last_group = particles_lastgroup(i);
 							part.rank = hpx_rank();
 						}
 						entry.push_back(part);

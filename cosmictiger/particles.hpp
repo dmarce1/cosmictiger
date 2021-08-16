@@ -168,4 +168,10 @@ inline std::atomic<group_int>& particles_group(part_int index) {
 	return particles_grp[index];
 }
 
+inline group_int& particles_lastgroup(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	ASSERT(particles_lgrp);
+	return particles_lgrp[index];
+}
+
 #endif /* PARTICLES_HPP_ */

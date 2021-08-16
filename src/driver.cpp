@@ -233,6 +233,7 @@ void driver() {
 		double imbalance = domains_get_load_imbalance();
 		if (imbalance > 0.01) {
 			domains_rebound();
+			imbalance = domains_get_load_imbalance();
 		}
 		double theta;
 		const double z = 1.0 / a - 1.0;
