@@ -28,7 +28,6 @@ static vector<particle> trans_particles;
 static mutex_type mutex;
 static std::unordered_map<size_t, domain_t> boxes_by_key;
 
-static void domains_find_all(vector<range<double>>& domains, part_int begin, part_int end, range<double> box);
 static int find_particle_domain(const array<double, NDIM>& x, size_t key = 1);
 static void domains_check();
 static vector<domain_local> local_domains;
@@ -286,9 +285,7 @@ void domains_begin() {
 	for (auto& c : children) {
 		futs.push_back(hpx::async < domains_begin_action > (c));
 	}
-	vector<range<double>> domains(hpx_size());
-	domains_find_all(domains, 0, hpx_size(), unit_box<double>());
-	const auto my_domain = domains[hpx_rank()];
+	const auto my_domain = domains_find_my_box();
 	free_indices.resize(0);
 	mutex_type mutex;
 	const int nthreads = hpx::thread::hardware_concurrency();
@@ -398,22 +395,6 @@ void domains_end() {
 #endif
 }
 
-static void domains_find_all(vector<range<double>>& domains, part_int begin, part_int end, range<double> box) {
-	if (end - begin == 1) {
-		domains[begin] = box;
-	} else {
-		auto left = box;
-		auto right = box;
-		part_int mid = (begin + end) / 2;
-		const double wt = double(end - mid) / double(end - begin);
-		const int dim = box.longest_dim();
-		const double mid_x = box.begin[dim] * wt + box.end[dim] * (1.0 - wt);
-		left.end[dim] = right.begin[dim] = mid_x;
-		domains_find_all(domains, begin, mid, left);
-		domains_find_all(domains, mid, end, right);
-	}
-}
-
 range<double> domains_find_my_box() {
 	return local_domains[hpx_rank()].box;
 }
@@ -427,6 +408,7 @@ static void domains_check() {
 		}
 		if (find_particle_domain(x) != hpx_rank()) {
 			PRINT("particle out of range %li of %li %e %e %e\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2]);
+			PRINT("%s\n", domains_find_my_box().to_string().c_str());
 			fail = true;
 		}
 	}
