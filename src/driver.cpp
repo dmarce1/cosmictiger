@@ -87,7 +87,7 @@ void do_groups(int number) {
 	tm.stop();
 	PRINT("groups_save %e\n", tm.read());
 	total.stop();
-	PRINT( "Reduction time = %e\n", reduce.read());
+	PRINT("Reduction time = %e\n", reduce.read());
 	PRINT("Total time = %e\n", total.read());
 	particles_groups_destroy();
 
@@ -182,6 +182,7 @@ void driver() {
 		params = read_checkpoint(get_options().check_num);
 	} else {
 		initialize();
+		domains_rebound();
 		params.flops = 0;
 		params.tau_max = cosmos_age(a0);
 		params.tau = 0.0;
@@ -224,7 +225,8 @@ void driver() {
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
-		if( full_eval ) {
+		double imbalance = domains_get_load_imbalance();
+		if (imbalance > 0.01) {
 			domains_rebound();
 		}
 		double theta;
@@ -279,7 +281,7 @@ void driver() {
 		}
 		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
 		if (full_eval) {
-			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "Z", "time", "dt", "pot", "kin",
+			PRINT("\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "i", "imbalance", "Z", "time", "dt", "pot", "kin",
 					"cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "total", "gpu/cpu", "pps",
 					"GFLOPS/s");
 		}
@@ -291,8 +293,8 @@ void driver() {
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
 		params.flops += total_flops;
 		PRINT(
-				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e %12.3e \n",
-				iter - 1, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time,
+				"%12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12c %12.3e %12.3e %12.3e \n",
+				iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time,
 				sort_time, kick_time, drift_time, runtime / iter, used_gpu ? 'G' : 'C', (double ) kr.nactive / total_time.read(),
 				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		total_time.reset();
