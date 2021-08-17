@@ -41,12 +41,12 @@
 #define CUDA_MAX_MEM 0.4
 #define GPU_MIN_LOAD (1.0/40.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
-#define CUDA_KICK_PARTS_MAX (12*1024)
+#define CUDA_KICK_PARTS_MAX (8*1024)
 #define HEAP_SIZE 1
 #define L2FETCH 64
 #define STACK_SIZE (16*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
-#define KICK_PP_MAX (32*12)
+#define KICK_PP_MAX (32*5)
 #define MIN_KICK_PC_WARP 8
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024

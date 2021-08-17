@@ -46,7 +46,7 @@ struct cuda_kick_shmem {
 			array<fixed32, KICK_PP_MAX> y;
 			array<fixed32, KICK_PP_MAX> z;
 		}src;
-		array<multipole_pos,WARP_SIZE> m;
+//		array<multipole_pos,WARP_SIZE> m;
 	};
 	array<float, SINK_BUCKET_SIZE> gx;
 	array<float, SINK_BUCKET_SIZE> gy;

@@ -128,39 +128,39 @@ static void kick_test() {
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
-
-	tm.start();
-	kick_params kparams;
-	kparams.gpu = true;
-	kparams.node_load = 10;
-	kparams.min_level = tparams.min_level;
-	kparams.save_force = get_options().save_force;
-	kparams.GM = get_options().GM;
-	kparams.h = get_options().hsoft;
-	kparams.eta = get_options().eta;
-	kparams.a = 1.0;
-	kparams.first_call = true;
-	kparams.min_rung = 0;
-	kparams.t0 = 1.0;
-	kparams.theta = theta;
-	expansion<float> L;
-	for (int i = 0; i < EXPANSION_SIZE; i++) {
-		L[i] = 0.0f;
+	for (int pass = 0; pass < 2; pass++) {
+		tm.start();
+		kick_params kparams;
+		kparams.gpu = true;
+		kparams.node_load = 10;
+		kparams.min_level = tparams.min_level;
+		kparams.save_force = get_options().save_force;
+		kparams.GM = get_options().GM;
+		kparams.h = get_options().hsoft;
+		kparams.eta = get_options().eta;
+		kparams.a = 1.0;
+		kparams.first_call = true;
+		kparams.min_rung = 0;
+		kparams.t0 = 1.0;
+		kparams.theta = theta;
+		expansion<float> L;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		array<fixed32, NDIM> pos;
+		for (int dim = 0; dim < NDIM; dim++) {
+			pos[dim] = 0.f;
+		}
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		tm.stop();
+		PRINT("tree_kick: %e s\n", tm.read());
+		tm.reset();
 	}
-	array<fixed32, NDIM> pos;
-	for (int dim = 0; dim < NDIM; dim++) {
-		pos[dim] = 0.f;
-	}
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	tm.stop();
-	PRINT("tree_kick: %e s\n", tm.read());
-	tm.reset();
-
 	tm.start();
 	tree_destroy();
 	tm.stop();
