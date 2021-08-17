@@ -41,6 +41,11 @@ struct group_entry {
 	float Izz;
 	int parent_count;
 	std::unordered_map<group_int, int> parents;
+	group_entry() = default;
+	group_entry(group_entry&&) = default;
+	group_entry(const group_entry&) = delete;
+	group_entry& operator=(group_entry&&) = default;
+	group_entry& operator=(const group_entry&) = delete;
 	void write(FILE* fp) {
 		fwrite_single(fp, id);
 		fwrite_single(fp, com);
@@ -203,7 +208,12 @@ void groups_save(int number) {
 	if (fp == NULL) {
 		THROW_ERROR("Unable to open %s\n", fname.c_str());
 	}
-	fwrite(groups.data(), sizeof(group_entry), groups.size(), fp);
+	hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
+		return a.id < b.id;
+	}).get();
+	for (int i = 0; i < groups.size(); i++) {
+		groups[i].write(fp);
+	}
 	fclose(fp);
 	groups = decltype(groups)();
 	existing_groups = decltype(existing_groups)();
@@ -394,7 +404,7 @@ void groups_reduce() {
 							entry.count = count;
 							entry.vel = vel;
 							std::lock_guard<spinlock_type> lock(mutex);
-							groups.push_back(entry);
+							groups.push_back(std::move(entry));
 							existing_groups.insert(entry.id);
 						}
 					}

@@ -2,7 +2,6 @@ constexpr bool verbose = true;
 #define PARTICLES_CPP
 
 #include <cosmictiger/hpx.hpp>
-#include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 
@@ -39,6 +38,9 @@ HPX_PLAIN_ACTION (particles_sample);
 HPX_PLAIN_ACTION (particles_groups_init);
 HPX_PLAIN_ACTION (particles_groups_destroy);
 HPX_PLAIN_ACTION (particles_set_global_offset);
+HPX_PLAIN_ACTION (particles_set_tracers);
+HPX_PLAIN_ACTION (particles_get_tracers);
+HPX_PLAIN_ACTION (particles_get_sample);
 
 struct line_id_type {
 	int proc;
@@ -80,6 +82,82 @@ struct group_cache_entry {
 };
 static array<std::unordered_map<line_id_type, group_cache_entry, line_id_hash_hi>, PART_CACHE_SIZE> group_part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> group_mutexes;
+
+vector<output_particle> particles_get_sample(const range<double>& box) {
+	vector<hpx::future<vector<output_particle>>>futs;
+	vector<output_particle> output;
+	for( const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_get_sample_action>(c, box));
+	}
+	for( part_int i = 0; i < particles_size(); i++) {
+		array<double,NDIM> x;
+		for( int dim = 0; dim < NDIM; dim++) {
+			x[dim] = particles_pos(dim,i).to_double();
+		}
+		if( box.contains(x)) {
+			output_particle data;
+			for( int dim = 0; dim < NDIM; dim++) {
+				data.x[dim] = particles_pos(dim,i);
+				data.v[dim] = particles_vel(dim,i);
+			}
+			data.r = particles_rung(i);
+			output.push_back(data);
+		}
+	}
+	for( auto& f : futs) {
+		auto vec = f.get();
+		output.insert(output.end(), vec.begin(), vec.end());
+	}
+	return std::move(output);
+}
+
+vector<output_particle> particles_get_tracers() {
+	vector<hpx::future<vector<output_particle>>>futs;
+	vector<output_particle> output;
+	for( const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_get_tracers_action>(c));
+	}
+	for( part_int i = 0; i < particles_size(); i++) {
+		if( particles_tracer(i) ) {
+			output_particle data;
+			for( int dim = 0; dim < NDIM; dim++) {
+				data.x[dim] = particles_pos(dim,i);
+				data.v[dim] = particles_vel(dim,i);
+			}
+			data.r = particles_rung(i);
+			output.push_back(data);
+		}
+	}
+	for( auto& f : futs) {
+		auto vec = f.get();
+		output.insert(output.end(), vec.begin(), vec.end());
+	}
+	return std::move(output);
+}
+
+void particles_set_tracers(size_t count) {
+	hpx::future<void> fut;
+	if (hpx_rank() < hpx_size() - 1) {
+		fut = hpx::async < particles_set_tracers_action > (hpx_localities()[hpx_rank() + 1], count + particles_size());
+	}
+
+	double particles_per_tracer = std::pow((double) get_options().parts_dim, NDIM) / get_options().tracer_count;
+	size_t cycles = count / particles_per_tracer;
+	double start = cycles * particles_per_tracer;
+	start -= count;
+	if (start < 0) {
+		start += particles_per_tracer;
+	}
+	memset(&particles_tracer(0), 0, particles_size());
+	for (double r = start; r < particles_size(); r += particles_per_tracer) {
+		particles_tracer((part_int) r) = 1;
+	}
+
+	if (hpx_rank() < hpx_size() - 1) {
+		fut.get();
+	}
+
+}
 
 std::unordered_map<int, part_int> particles_groups_init() {
 	vector<hpx::future<std::unordered_map<int, part_int>>>futs;
@@ -429,6 +507,9 @@ void particles_resize(part_int sz) {
 			}
 			array_resize(particles_p, new_capacity, true);
 		}
+		if (get_options().do_tracers) {
+			array_resize(particles_tr, new_capacity, false);
+		}
 		capacity = new_capacity;
 	}
 	size = sz;
@@ -473,6 +554,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	part_int hi = end;
 	fixed32 xmid(xm);
 	const bool do_groups = get_options().do_groups;
+	const bool do_tracers = get_options().do_tracers;
 	auto& xptr_dim = particles_x[xdim];
 	auto& x = particles_x[XDIM];
 	auto& y = particles_x[YDIM];
@@ -494,6 +576,9 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 					std::swap(particles_r[hi], particles_r[lo]);
 					if (do_groups) {
 						std::swap(particles_lgrp[hi], particles_lgrp[lo]);
+					}
+					if (do_tracers) {
+						std::swap(particles_tr[hi], particles_tr[lo]);
 					}
 					break;
 				}
@@ -558,6 +643,9 @@ void particles_load(FILE* fp) {
 	if (get_options().do_groups) {
 		FREAD(&particles_lastgroup(0), sizeof(group_int), particles_size(), fp);
 	}
+	if (get_options().do_tracers) {
+		FREAD(&particles_tracer(0), sizeof(char), particles_size(), fp);
+	}
 }
 
 void particles_save(std::ofstream& fp) {
@@ -572,6 +660,9 @@ void particles_save(std::ofstream& fp) {
 	fp.write((const char*) &particles_rung(0), sizeof(char) * particles_size());
 	if (get_options().do_groups) {
 		fp.write((const char*) &particles_lastgroup(0), sizeof(group_int) * particles_size());
+	}
+	if (get_options().do_tracers) {
+		fp.write((const char*) &particles_tracer(0), sizeof(char) * particles_size());
 	}
 
 }

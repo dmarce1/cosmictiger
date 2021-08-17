@@ -46,6 +46,7 @@ set(cosmictiger_source_files
     src/main.cpp
     src/map.cpp
     src/options.cpp
+    src/output.cpp
     src/particles.cpp
     src/power.cpp
     src/range_set.cpp
@@ -84,6 +85,7 @@ set(cosmictiger_header_files
     cosmictiger/map.hpp
     cosmictiger/math.hpp
     cosmictiger/options.hpp
+    cosmictiger/output.hpp
     cosmictiger/particles.hpp
     cosmictiger/power.hpp
     cosmictiger/range.hpp
@@ -101,7 +103,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas chealpix dl
+    Boost::boost fftw3f gsl gslcblas chealpix dl silo
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
@@ -145,7 +147,7 @@ add_executable(
  	src/healpix2silo.cpp
  )
  
-target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options dl)
+target_link_libraries(healpix2silo PUBLIC chealpix silo boost_program_options dl)
 target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
 
 

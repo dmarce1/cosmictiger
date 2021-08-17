@@ -10,6 +10,7 @@
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/map.hpp>
+#include <cosmictiger/output.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/timer.hpp>
@@ -185,6 +186,9 @@ void driver() {
 		params = read_checkpoint(get_options().check_num);
 	} else {
 		initialize();
+		if (get_options().do_tracers) {
+			particles_set_tracers();
+		}
 		domains_rebound();
 		params.flops = 0;
 		params.tau_max = cosmos_age(a0);
@@ -230,6 +234,14 @@ void driver() {
 		tmr.start();
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
+		if (full_eval) {
+			if (get_options().do_tracers) {
+				output_tracers(tau / t0 + 1e-6);
+			}
+			if (get_options().do_sample) {
+				output_sample(tau / t0 + 1e-6);
+			}
+		}
 		double imbalance = domains_get_load_imbalance();
 		if (imbalance > MAX_LOAD_IMBALANCE) {
 			domains_rebound();
@@ -326,6 +338,12 @@ void driver() {
 		if (this_iter > get_options().max_iter) {
 			break;
 		}
+	}
+	if (get_options().do_tracers) {
+		output_tracers(tau / t0 + 1e-6);
+	}
+	if (get_options().do_sample) {
+		output_sample(tau / t0 + 1e-6);
 	}
 	map_flush(tau);
 }

@@ -9,7 +9,10 @@ struct options {
 	bool do_map;
 	bool do_power;
 	bool do_groups;
+	bool do_tracers;
+	bool do_sample;
 
+	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
@@ -20,6 +23,7 @@ struct options {
 	int map_size;
 	int min_group;
 
+	double sample_dim;
 	double link_len;
 	double hsoft;
 	double GM;
@@ -43,7 +47,10 @@ struct options {
 		arc &  do_map;
 		arc &  do_power;
 		arc &  do_groups;
+		arc &  do_tracers;
+		arc &  do_sample;
 
+		arc &  tracer_count;
 		arc &  parts_dim;
 		arc &  tree_cache_line_size;
 		arc &  part_cache_line_size;
@@ -54,6 +61,7 @@ struct options {
 		arc &  map_size;
 		arc &  min_group;
 
+		arc &  sample_dim;
 		arc &  link_len;
 		arc &  hsoft;
 		arc &  GM;

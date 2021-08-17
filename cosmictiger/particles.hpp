@@ -13,6 +13,8 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/range.hpp>
 
 #include <atomic>
 #include <fstream>
@@ -39,17 +41,39 @@ struct group_particle {
 	}
 };
 
-struct particle {
+struct output_particle {
 	array<fixed32, NDIM> x;
 	array<float, NDIM> v;
 	char r;
 	template<class A>
 	void serialize(A && a, unsigned) {
+		a & x;
+		a & v;
+		a & r;
+	}
+};
+
+struct particle {
+	array<fixed32, NDIM> x;
+	array<float, NDIM> v;
+	group_int lg;
+	char r;
+	char t;
+	template<class A>
+	void serialize(A && a, unsigned) {
+		static bool do_groups = get_options().do_groups;
+		static bool do_tracers = get_options().do_tracers;
 		for (int dim = 0; dim < NDIM; dim++) {
 			a & x[dim];
 			a & v[dim];
 		}
 		a & r;
+		if (do_groups) {
+			a & lg;
+		}
+		if (do_tracers) {
+			a & t;
+		}
 	}
 };
 
@@ -88,6 +112,7 @@ PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 #endif
 ;
 PARTICLES_EXTERN group_int* particles_lgrp;
+PARTICLES_EXTERN char* particles_tr;
 PARTICLES_EXTERN size_t particles_global_offset;
 
 struct particle_global_range {
@@ -106,11 +131,15 @@ void particles_global_read_pos_and_group(particle_global_range range, fixed32* x
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
 void particles_group_cache_free();
+vector<output_particle> particles_get_sample(const range<double>& box);
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
 void particles_save(std::ofstream& fp);
 void particles_inc_group_cache_epoch();
 int particles_group_home(group_int);
+void particles_set_tracers(size_t count=0);
+vector<output_particle> particles_get_tracers();
+
 
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);
@@ -137,26 +166,6 @@ inline float& particles_gforce(int dim, part_int index) {
 	return particles_g[dim][index];
 }
 
-inline particle particles_get_particle(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	particle p;
-	for (int dim = 0; dim < NDIM; dim++) {
-		p.x[dim] = particles_pos(dim, index);
-		p.v[dim] = particles_vel(dim, index);
-	}
-	p.r = particles_rung(index);
-	return p;
-}
-
-inline void particles_set_particle(particle p, part_int index) {
-	CHECK_PART_BOUNDS(index);
-	for (int dim = 0; dim < NDIM; dim++) {
-		particles_pos(dim, index) = p.x[dim];
-		particles_vel(dim, index) = p.v[dim];
-	}
-	particles_rung(index) = p.r;
-}
-
 inline group_int particles_group_init(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_global_offset + index;
@@ -172,6 +181,48 @@ inline group_int& particles_lastgroup(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	ASSERT(particles_lgrp);
 	return particles_lgrp[index];
+}
+
+inline char& particles_tracer(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_tr[index];
+}
+
+
+inline particle particles_get_particle(part_int index) {
+	static bool do_groups = get_options().do_groups;
+	static bool do_tracers = get_options().do_tracers;
+	CHECK_PART_BOUNDS(index);
+	particle p;
+	for (int dim = 0; dim < NDIM; dim++) {
+		p.x[dim] = particles_pos(dim, index);
+		p.v[dim] = particles_vel(dim, index);
+	}
+	p.r = particles_rung(index);
+	if (do_groups) {
+		p.lg = particles_lastgroup(index);
+	}
+	if (do_tracers) {
+		p.t = particles_tracer(index);
+	}
+	return p;
+}
+
+inline void particles_set_particle(particle p, part_int index) {
+	static bool do_groups = get_options().do_groups;
+	static bool do_tracers = get_options().do_tracers;
+	CHECK_PART_BOUNDS(index);
+	for (int dim = 0; dim < NDIM; dim++) {
+		particles_pos(dim, index) = p.x[dim];
+		particles_vel(dim, index) = p.v[dim];
+	}
+	particles_rung(index) = p.r;
+	if (do_groups) {
+		particles_lastgroup(index) = p.lg;
+	}
+	if (do_tracers) {
+		particles_tracer(index) = p.t;
+	}
 }
 
 #endif /* PARTICLES_HPP_ */
