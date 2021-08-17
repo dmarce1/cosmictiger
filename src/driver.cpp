@@ -231,7 +231,7 @@ void driver() {
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
 		double imbalance = domains_get_load_imbalance();
-		if (imbalance > 0.01) {
+		if (imbalance > MAX_LOAD_IMBALANCE) {
 			domains_rebound();
 			imbalance = domains_get_load_imbalance();
 		}
