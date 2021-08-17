@@ -48,7 +48,7 @@ double domains_get_load_imbalance() {
 }
 
 vector<size_t> domains_get_loads() {
-	vector<hpx::future<vector<size_t>>> futs;
+	vector<hpx::future<vector<size_t>>>futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < domains_get_loads_action > (c));
 	}
@@ -67,6 +67,7 @@ void domains_save(std::ofstream& fp) {
 	for (auto i = boxes_by_key.begin(); i != boxes_by_key.end(); i++) {
 		fp.write((const char*) &(*i), sizeof(std::pair<size_t, domain_t>));
 	}
+	fp.write((const char*) local_domains.data(), sizeof(domain_local) * hpx_size());
 }
 
 void domains_load(FILE *fp) {
@@ -78,7 +79,8 @@ void domains_load(FILE *fp) {
 		FREAD(&entry, sizeof(entry), 1, fp);
 		boxes_by_key[entry.first] = entry.second;
 	}
-
+	local_domains.resize(hpx_size());
+	FREAD(local_domains.data(), sizeof(domain_local), hpx_size(), fp);
 }
 
 range<double> domains_range(size_t key) {
