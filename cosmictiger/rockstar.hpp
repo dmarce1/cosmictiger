@@ -10,7 +10,7 @@
 
 
 struct seed_halo {
-	array<float, NDIM> x;
+	array<double, NDIM> x;
 	array<float, NDIM> v;
 };
 

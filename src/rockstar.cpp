@@ -6,6 +6,8 @@
 
 #define ROCKSTAR_BUCKET_SIZE 8
 #define ROCKSTAR_THRESHOLD 0.7
+#define ROCKSTAR_MIN_PARTS 14
+#define ROCKSTAR_NO_GROUP -1
 
 using phase_range = range<float, 2 * NDIM>;
 
@@ -147,7 +149,7 @@ int rock_star_groups_find(vector<rockstar_tree_node>& nodes, vector<phase_t>& pa
 					if (r2 < link_len2) {
 						auto& grp = groups[k];
 						const int start_group = grp;
-						if ((int) grp == NO_GROUP) {
+						if ((int) grp == ROCKSTAR_NO_GROUP) {
 							grp = k;
 							found_any_link = true;
 						}
@@ -170,12 +172,12 @@ int rock_star_groups_find(vector<rockstar_tree_node>& nodes, vector<phase_t>& pa
 						if (r2 < link_len2) {
 							auto& grpa = groups[k];
 							auto& grpb = groups[j];
-							if ((int) grpa == NO_GROUP) {
+							if ((int) grpa == ROCKSTAR_NO_GROUP) {
 								grpa = k;
 								found_link = true;
 								found_any_link = true;
 							}
-							if ((int) grpb == NO_GROUP) {
+							if ((int) grpb == ROCKSTAR_NO_GROUP) {
 								grpb = j;
 								found_link = true;
 								found_any_link = true;
@@ -287,7 +289,7 @@ static double max_boxdist(phase_range box) {
 static double fraction_in_groups(const vector<std::atomic<int>>& groups) {
 	int ngroup = 0;
 	for (int i = 0; i < groups.size(); i++) {
-		if (groups[i] != NO_GROUP) {
+		if (groups[i] != ROCKSTAR_NO_GROUP) {
 			ngroup++;
 		}
 	}
@@ -297,7 +299,7 @@ static double fraction_in_groups(const vector<std::atomic<int>>& groups) {
 static vector<vector<phase_t>> separate_groups(const vector<phase_t>& parts, const vector<std::atomic<int>>& groups) {
 	std::unordered_map<int, vector<phase_t>> sep_parts;
 	for (int i = 0; i < parts.size(); i++) {
-		if (groups[i] != NO_GROUP) {
+		if (groups[i] != ROCKSTAR_NO_GROUP) {
 			sep_parts[groups[i]].push_back(parts[i]);
 		}
 	}
@@ -309,46 +311,82 @@ static vector<vector<phase_t>> separate_groups(const vector<phase_t>& parts, con
 }
 
 vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
-	pair<float> norms = compute_norms(parts);
-	const float sigma_x = norms.first;
-	const float sigma_v = norms.second;
-	normalize(parts, sigma_x, sigma_v);
-	vector<std::atomic<int>> groups(parts.size());
-	vector<rockstar_tree_node> nodes;
-	pair<int> root_range;
-	root_range.first = 0;
-	root_range.second = parts.size();
-	const auto root_box = compute_root_box(parts);
-	int root_index = rockstar_tree_create(nodes, parts, root_box, root_range);
-	double max_link_len = max_boxdist(root_box);
-	for (double link_len = 0.05 * max_link_len; link_len <= max_link_len * 1.001; link_len += 0.05 * max_link_len) {
-		for (auto& g : groups) {
-			g = NO_GROUP;
+	if (parts.size() >= ROCKSTAR_MIN_PARTS) {
+		pair<float> norms = compute_norms(parts);
+		const float sigma_x = norms.first;
+		const float sigma_v = norms.second;
+		normalize(parts, sigma_x, sigma_v);
+		vector<std::atomic<int>> groups(parts.size());
+		vector<rockstar_tree_node> nodes;
+		pair<int> root_range;
+		root_range.first = 0;
+		root_range.second = parts.size();
+		const auto root_box = compute_root_box(parts);
+		int root_index = rockstar_tree_create(nodes, parts, root_box, root_range);
+		double max_link_len = max_boxdist(root_box);
+		for (double link_len = 0.05 * max_link_len; link_len <= max_link_len * 1.001; link_len += 0.05 * max_link_len) {
+			for (auto& g : groups) {
+				g = ROCKSTAR_NO_GROUP;
+			}
+			while (rock_star_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len) > 0) {
+			}
+			if (fraction_in_groups(groups) > ROCKSTAR_THRESHOLD) {
+				max_link_len = link_len;
+				break;
+			}
 		}
-		while (rock_star_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len) > 0) {
+		double min_link_len = 0.0;
+		double dif;
+		do {
+			double link_len = (max_link_len + min_link_len) * 0.5;
+			for (auto& g : groups) {
+				g = ROCKSTAR_NO_GROUP;
+			}
+			while (rock_star_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len) > 0) {
+			}
+			dif = fraction_in_groups(groups) - ROCKSTAR_THRESHOLD;
+			if (dif > 0.0) {
+				max_link_len = link_len;
+			} else {
+				min_link_len = link_len;
+			}
+		} while (dif * parts.size() >= 1.0);
+		auto subgroups = separate_groups(parts, groups);
+		vector<seed_halo> halos;
+		for( int i = 0; i < subgroups.size(); i++) {
+			 auto these_halos = rockstar_seed_halos_find(subgroups[i]);
+			 for( int j = 0; j < these_halos.size(); j++) {
+				 for( int dim = 0; dim < NDIM; dim++) {
+					 these_halos[j].x[dim] *= sigma_x;
+					 these_halos[j].v[dim] *= sigma_v;
+				 }
+				 halos.push_back(these_halos[j]);
+			 }
 		}
-		if (fraction_in_groups(groups) > ROCKSTAR_THRESHOLD) {
-			max_link_len = link_len;
-			break;
+		return halos;
+	} else {
+		seed_halo halo;
+		array<double, NDIM> x;
+		array<float, NDIM> v;
+		for (int dim = 0; dim < NDIM; dim++) {
+			x[dim] = 0.0;
+			v[dim] = 0.0;
 		}
+		for (int i = 0; i < parts.size(); i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				x[dim] += parts[i][dim];
+				v[dim] += parts[i][NDIM + dim];
+			}
+		}
+		for (int dim = 0; dim < NDIM; dim++) {
+			x[dim] /= parts.size();
+			v[dim] /= parts.size();
+		}
+		halo.x = x;
+		halo.v = v;
+		vector<seed_halo> halos(1, halo);
+		return halos;
 	}
-	double min_link_len = 0.0;
-	double dif;
-	do {
-		double link_len = (max_link_len + min_link_len) * 0.5;
-		for (auto& g : groups) {
-			g = NO_GROUP;
-		}
-		while (rock_star_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len) > 0) {
-		}
-		dif = fraction_in_groups(groups) - ROCKSTAR_THRESHOLD;
-		if (dif > 0.0) {
-			max_link_len = link_len;
-		} else {
-			min_link_len = link_len;
-		}
-	} while (dif * parts.size() >= 1.0);
-	const auto subgroups = separate_groups(parts, groups);
 }
 
 vector<seed_halo> rockstar_seed_halos(const vector<particle_data>& in_parts) {
@@ -365,5 +403,12 @@ vector<seed_halo> rockstar_seed_halos(const vector<particle_data>& in_parts) {
 			parts[i][NDIM + dim] = in_parts[i].v[dim];
 		}
 	}
+	auto halos = rockstar_seed_halos_find(parts);
+	for( auto& halo : halos) {
+		for( int dim = 0; dim < NDIM; dim++) {
+			halo.x[dim] += x0[dim].to_double();
+		}
+	}
+	return halos;
 }
 
