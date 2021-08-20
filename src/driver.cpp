@@ -8,6 +8,7 @@
 #include <cosmictiger/group_tree.hpp>
 #include <cosmictiger/groups.hpp>
 #include <cosmictiger/kick.hpp>
+#include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/map.hpp>
 #include <cosmictiger/output.hpp>
@@ -27,7 +28,7 @@ double flops_per_node = 1e6;
 double flops_per_particle = 1e5;
 bool used_gpu;
 
-void do_groups(int number) {
+void do_groups(int number, double scale) {
 	timer total;
 	total.start();
 	PRINT("Doing groups\n");
@@ -67,12 +68,12 @@ void do_groups(int number) {
 	reduce.start();
 	for (int wave = 0; wave < GROUP_WAVES; wave++) {
 		tm.start();
-		groups_add_particles(wave);
+		groups_add_particles(wave, scale);
 		tm.stop();
 		PRINT("%i groups_add_particles %e\n", wave, tm.read());
 		tm.reset();
 		tm.start();
-		groups_reduce();
+		groups_reduce(scale);
 		tm.stop();
 		PRINT("groups_reduce %e\n", tm.read());
 		tm.reset();
@@ -84,12 +85,13 @@ void do_groups(int number) {
 	PRINT("groups_cull %e\n", tm.read());
 	tm.reset();
 	tm.start();
-	groups_save(number);
+	auto ngroups = groups_save(number);
 	tm.stop();
 	PRINT("groups_save %e\n", tm.read());
 	total.stop();
 	PRINT("Reduction time = %e\n", reduce.read());
 	PRINT("Total time = %e\n", total.read());
+	PRINT("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
 	particles_groups_destroy();
 
 }
@@ -270,12 +272,13 @@ void driver() {
 		tree_create_return sr = tmp.second;
 		//PRINT("Done kicking\n");
 		if (full_eval) {
+			kick_workspace::clear_buffers();
 			pot = kr.pot * 0.5 / a;
 			if (get_options().do_power) {
 				do_power_spectrum(tau / t0 + 1e-6, a);
 			}
 			if (get_options().do_groups) {
-				do_groups(tau / t0 + 1e-6);
+				do_groups(tau / t0 + 1e-6, a);
 			}
 		}
 		double dt = t0 / (1 << kr.max_rung);
@@ -339,12 +342,15 @@ void driver() {
 			break;
 		}
 	}
+	/*if (get_options().do_groups) {
+		do_groups(tau / t0 + 1e-6, a);
+	}
 	if (get_options().do_tracers) {
 		output_tracers(tau / t0 + 1e-6);
 	}
 	if (get_options().do_sample) {
 		output_sample(tau / t0 + 1e-6);
-	}
+	}*/
 	map_flush(tau);
 }
 

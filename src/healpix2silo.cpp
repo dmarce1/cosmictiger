@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 	}
 
 	auto db = DBCreate(outfile.c_str(), DB_CLOBBER, DB_LOCAL, NULL, DB_PDB);
-	std::vector<float> x, y;
+		std::vector<float> x, y;
 	for (int ix = -2 * res; ix <= 2 * res; ix++) {
 		const double x0 = double(ix) / double(res);
 		x.push_back(x0);

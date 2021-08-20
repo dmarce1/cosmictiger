@@ -8,95 +8,7 @@
 
 #include <unordered_set>
 
-template<class T>
-void fwrite_single(FILE* fp, const T& data) {
-	fwrite(&data, sizeof(T), 1, fp);
-}
-
-struct group_entry {
-	group_int id;
-	array<double, NDIM> com;
-	array<float, NDIM> vel;
-	array<float, NDIM> lang;
-	int count;
-	float ekin;
-	float epot;
-	float r25;
-	float r50;
-	float r75;
-	float r90;
-	float rmax;
-	float ravg;
-	float vxdisp;
-	float vydisp;
-	float vzdisp;
-	float xdisp;
-	float ydisp;
-	float zdisp;
-	float Ixx;
-	float Ixy;
-	float Ixz;
-	float Iyy;
-	float Iyz;
-	float Izz;
-	int parent_count;
-	std::unordered_map<group_int, int> parents;
-	group_entry() = default;
-	group_entry(group_entry&&) = default;
-	group_entry(const group_entry&) = delete;
-	group_entry& operator=(group_entry&&) = default;
-	group_entry& operator=(const group_entry&) = delete;
-	void write(FILE* fp) {
-		fwrite_single(fp, id);
-		fwrite_single(fp, com);
-		fwrite_single(fp, vel);
-		fwrite_single(fp, lang);
-		fwrite_single(fp, count);
-		fwrite_single(fp, ekin);
-		fwrite_single(fp, epot);
-		fwrite_single(fp, r25);
-		fwrite_single(fp, r50);
-		fwrite_single(fp, r75);
-		fwrite_single(fp, r90);
-		fwrite_single(fp, rmax);
-		fwrite_single(fp, ravg);
-		fwrite_single(fp, vxdisp);
-		fwrite_single(fp, vydisp);
-		fwrite_single(fp, vzdisp);
-		fwrite_single(fp, xdisp);
-		fwrite_single(fp, ydisp);
-		fwrite_single(fp, zdisp);
-		fwrite_single(fp, Ixx);
-		fwrite_single(fp, Ixy);
-		fwrite_single(fp, Ixz);
-		fwrite_single(fp, Iyy);
-		fwrite_single(fp, Iyz);
-		fwrite_single(fp, Izz);
-		fwrite_single(fp, parent_count);
-		for (auto i = parents.begin(); i != parents.end(); i++) {
-			fwrite_single(fp, *i);
-		}
-	}
-};
-
-struct particle_data {
-	array<fixed32, NDIM> x;
-	array<float, NDIM> v;
-	group_int last_group;
-	part_int index;
-	int rank;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & x;
-		arc & v;
-		arc & last_group;
-		arc & index;
-		arc & rank;
-	}
-};
-
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries);
-void groups_reduce();
 vector<group_int> groups_exist(vector<group_int>);
 static void groups_remove_indexes(vector<part_int> indexes);
 
@@ -121,6 +33,7 @@ static array<std::unordered_map<group_int, vector<particle_data>, group_hash_hi>
 static vector<group_entry> groups;
 static std::unordered_set<group_int> existing_groups;
 static vector<group_int> local_existing_groups;
+static std::atomic<size_t> group_candidates;
 
 void groups_remove_indexes(vector<part_int> indexes) {
 	for (int i = 0; i < indexes.size(); i++) {
@@ -188,7 +101,7 @@ vector<group_int> groups_exist(vector<group_int> grps) {
 	return std::move(grps);
 }
 
-void groups_save(int number) {
+std::pair<size_t, size_t> groups_save(int number) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing group database\n");
 		const std::string command = std::string("mkdir -p groups.") + std::to_string(number) + "\n";
@@ -197,7 +110,7 @@ void groups_save(int number) {
 		}
 	}
 
-	vector<hpx::future<void>> futs;
+	vector<hpx::future<std::pair<size_t, size_t>>>futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < groups_save_action > (c, number));
 	}
@@ -208,59 +121,90 @@ void groups_save(int number) {
 	if (fp == NULL) {
 		THROW_ERROR("Unable to open %s\n", fname.c_str());
 	}
-	hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
-		return a.id < b.id;
-	}).get();
+	if (groups.size()) {
+		hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
+			return a.id < b.id;
+		}).get();
+	}
 	for (int i = 0; i < groups.size(); i++) {
 		groups[i].write(fp);
 	}
 	fclose(fp);
+	size_t count = groups.size();
 	groups = decltype(groups)();
 	existing_groups = decltype(existing_groups)();
-	hpx::wait_all(futs.begin(), futs.end());
+	for (auto& f : futs) {
+		const auto tmp = f.get();
+		count += tmp.first;
+		group_candidates += tmp.second;
+	}
+	return std::make_pair(count, (size_t) group_candidates);;
 }
 
 #define GROUPS_REDUCE_OVERSUBSCRIBE  2
 
-void groups_reduce() {
+void groups_reduce(double scale_factor) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < groups_reduce_action > (c));
+		futs.push_back(hpx::async < groups_reduce_action > (c, scale_factor));
 	}
 	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::threads::hardware_concurrency();
 	spinlock_type mutex;
+	const float ainv = 1.0 / scale_factor;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&mutex]() {
+		futs.push_back(hpx::async([proc,nthreads,&mutex,&ainv]() {
 			std::unordered_map<int,vector<part_int>> remove_indexes;
 			for (int bin = proc; bin < GROUP_TABLE_SIZE; bin += nthreads) {
 				for (auto iter = group_data[bin].begin(); iter != group_data[bin].end(); iter++) {
+					group_candidates++;
 					vector<particle_data>& parts = iter->second;
+					vector<float> phi;
 					if( parts.size() >= get_options().min_group) {
-						vector<array<fixed32,NDIM>> X(parts.size());
-						for( int i = 0; i < parts.size(); i++) {
+						bool removed_one;
+						do {
+							vector<array<fixed32,NDIM>> X(parts.size());
+							for( int i = 0; i < parts.size(); i++) {
+								for( int dim = 0; dim < NDIM; dim++) {
+									const double x = parts[i].x[dim].to_double();
+									X[i][dim] = x;
+								}
+							}
+							phi = bh_evaluate_potential(X);
+							for( auto& p : phi ) {
+								p *= ainv;
+							}
+							array<float, NDIM> vel;
 							for( int dim = 0; dim < NDIM; dim++) {
-								const double x = parts[i].x[dim].to_double();
-								X[i][dim] = x;
+								vel[dim] = 0.0;
 							}
-						}
-						auto phi = bh_evaluate_potential(X);
-						int i = 0;
-						while( i < parts.size() ) {
-							float kin = 0.0;
+							for( int i = 0; i < parts.size(); i++) {
+								for( int dim = 0; dim < NDIM; dim++) {
+									vel[dim] += parts[i].v[dim];
+								}
+							}
 							for( int dim = 0; dim < NDIM; dim++) {
-								kin += sqr(parts[i].v[dim]);
+								vel[dim] /= parts.size();
 							}
-							kin *= 0.5;
-							if( kin + phi[i] > 0.0 ) {
-								remove_indexes[parts[i].rank].push_back(parts[i].index);
-								parts[i] = parts.back();
-								phi[i] = phi.back();
-								parts.pop_back();
-								phi.pop_back();
-							} else {
-								i++;
+							int i = 0;
+							removed_one = false;
+							while( i < parts.size() ) {
+								float kin = 0.0;
+								for( int dim = 0; dim < NDIM; dim++) {
+									kin += sqr(parts[i].v[dim] - vel[dim]);
+								}
+								kin *= 0.5;
+								if( kin + phi[i] > 0.0 ) {
+									remove_indexes[parts[i].rank].push_back(parts[i].index);
+									parts[i] = parts.back();
+									phi[i] = phi.back();
+									parts.pop_back();
+									phi.pop_back();
+									removed_one = true;
+								} else {
+									i++;
+								}
 							}
-						}
+						} while( removed_one && parts.size() >= get_options().min_group );
 						if( parts.size() < get_options().min_group) {
 							for( int i = 0; i < parts.size(); i++) {
 								remove_indexes[parts[i].rank].push_back(parts[i].index);
@@ -278,17 +222,21 @@ void groups_reduce() {
 								vel[dim] = 0.0;
 								lang[dim] = 0.0;
 							}
+							const auto constrain_range_half = [](double& x) {
+								if( x < -0.5 ) {
+									x += 1.0;
+								} else if( x > 0.5) {
+									x -= 1.0;
+								}
+							};
 							for( int i = 0; i < parts.size(); i++) {
 								for( int dim = 0; dim < NDIM; dim++) {
 									const double x = parts[i].x[dim].to_double();
 									const float v = parts[i].v[dim];
 									vel[dim] += v;
-									ekin += v * v * 0.5;
 									double this_dx = x - xcom[dim];
-									if( this_dx > 0.5 ) {
-										this_dx -= 1.0;
-									} else if( this_dx < -0.5 ) {
-										this_dx += 1.0;
+									if( i > 0 ) {
+										constrain_range_half(this_dx);
 									}
 									const double xsum = (count + 1) * xcom[dim] + this_dx;
 									xcom[dim] = xsum / (count + 1);
@@ -296,13 +244,21 @@ void groups_reduce() {
 								count++;
 							}
 							float countinv = 1.0 / count;
+							for( int dim = 0; dim < NDIM; dim++) {
+								vel[dim] *= countinv;
+								constrain_range(xcom[dim]);
+							}
 							for( int i = 0; i < parts.size(); i++) {
-								const double x = parts[i].x[XDIM].to_double() - xcom[XDIM];
-								const double y = parts[i].x[YDIM].to_double() - xcom[YDIM];
-								const double z = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
-								const double vx = parts[i].v[XDIM];
-								const double vy = parts[i].v[YDIM];
-								const double vz = parts[i].v[ZDIM];
+								double x = parts[i].x[XDIM].to_double() - xcom[XDIM];
+								double y = parts[i].x[YDIM].to_double() - xcom[YDIM];
+								double z = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+								constrain_range_half(x);
+								constrain_range_half(y);
+								constrain_range_half(z);
+								const double vx = parts[i].v[XDIM] - vel[XDIM];
+								const double vy = parts[i].v[YDIM] - vel[YDIM];
+								const double vz = parts[i].v[ZDIM] - vel[ZDIM];
+								ekin += sqr(vx, vy, vz) * 0.5;
 								lang[XDIM] = (y * vz - z * vy)*countinv;
 								lang[YDIM] = (-x * vz + z * vx)*countinv;
 								lang[ZDIM] = (x * vy - y * vx)*countinv;
@@ -314,10 +270,7 @@ void groups_reduce() {
 							pot *= countinv;
 							pot *= 0.5;
 							ekin *= countinv;
-							for( int dim = 0; dim < NDIM; dim++) {
-								vel[dim] /= count;
-								constrain_range(xcom[dim]);
-							}
+					//		PRINT( "%i %e %e %e\n", parts.size(), ekin, pot, (2*ekin + pot) / (ekin - pot));
 							vector<float> radii;
 							float ravg = 0.0;
 							radii.reserve(parts.size());
@@ -329,9 +282,12 @@ void groups_reduce() {
 							float zdisp = 0.0;
 							float Ixx = 0.0, Ixy = 0.0, Ixz = 0.0, Iyy = 0.0, Iyz = 0.0, Izz = 0.0;
 							for( int i = 0; i < parts.size(); i++) {
-								const double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
-								const double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
-								const double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+								double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
+								double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
+								double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+								constrain_range_half(dx);
+								constrain_range_half(dy);
+								constrain_range_half(dz);
 								const double vx = parts[i].v[XDIM] - vel[XDIM];
 								const double vy = parts[i].v[YDIM] - vel[YDIM];
 								const double vz = parts[i].v[ZDIM] - vel[ZDIM];
@@ -352,8 +308,8 @@ void groups_reduce() {
 								ravg += r;
 							}
 							xdisp = sqrt(xdisp*countinv);
-							ydisp = sqrt(xdisp*countinv);
-							zdisp = sqrt(xdisp*countinv);
+							ydisp = sqrt(ydisp*countinv);
+							zdisp = sqrt(zdisp*countinv);
 							vxdisp = sqrt(vxdisp*countinv);
 							vydisp = sqrt(vydisp*countinv);
 							vzdisp = sqrt(vzdisp*countinv);
@@ -438,15 +394,16 @@ void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void groups_add_particles(int wave) {
+void groups_add_particles(int wave, double scale) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < groups_add_particles_action > (c, wave));
+		futs.push_back(hpx::async < groups_add_particles_action > (c, wave, scale));
 	}
 	const int nthreads = hpx::threads::hardware_concurrency();
 	spinlock_type mutex;
+	const float ainv = 1.0 / scale;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,wave,&mutex]() {
+		futs.push_back(hpx::async([proc,nthreads,wave,&mutex,ainv]() {
 			vector<hpx::future<void>> futs;
 			std::unordered_map<int,std::unordered_map<group_int, vector<particle_data>>> local_groups;
 			const part_int begin = (size_t) proc * particles_size() / nthreads;
@@ -464,7 +421,7 @@ void groups_add_particles(int wave) {
 						particle_data part;
 						for( int dim = 0; dim < NDIM; dim++) {
 							part.x[dim] = particles_pos(dim,i);
-							part.v[dim] = particles_vel(dim,i);
+							part.v[dim] = particles_vel(dim,i) * ainv;
 							part.index = i;
 							part.last_group = particles_lastgroup(i);
 							part.rank = hpx_rank();
@@ -483,6 +440,9 @@ void groups_add_particles(int wave) {
 			}
 			hpx::wait_all(futs.begin(), futs.end());
 		}));
+	}
+	if (wave == 0) {
+		group_candidates = 0;
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }

@@ -34,8 +34,14 @@ class kick_workspace {
 	part_int nparts;
 	kick_params params;
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
+	static vector<fixed32, pinned_allocator<fixed32>> host_x;
+	static vector<fixed32, pinned_allocator<fixed32>> host_y;
+	static vector<fixed32, pinned_allocator<fixed32>> host_z;
+	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
+	static hpx::lcos::local::counting_semaphore lock1;
+	static hpx::lcos::local::counting_semaphore lock2;
 public:
-	void touch_cache_entries(const tree_node* node);
+	static void clear_buffers();
 	kick_workspace() = default;
 	kick_workspace(kick_params, part_int);
 	kick_workspace(const kick_workspace&) = delete;

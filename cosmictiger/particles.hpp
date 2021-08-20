@@ -12,6 +12,7 @@
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixed.hpp>
+#include <cosmictiger/group_entry.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/range.hpp>
@@ -21,7 +22,6 @@
 #include <unordered_map>
 
 using part_int = int;
-using group_int = long long;
 
 #define NO_GROUP group_int(0x7FFFFFFFFFFFFFFFLL)
 

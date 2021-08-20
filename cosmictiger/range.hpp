@@ -9,6 +9,7 @@
 #define RANGE_HPP_
 
 #include <cosmictiger/cuda.hpp>
+#include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 
 template<class T>
@@ -29,14 +30,14 @@ inline array<T, NDIM> shift_down(array<T, NDIM> i) {
 	return j;
 }
 
-template<class T>
+template<class T, int N = NDIM>
 struct range {
-	array<T, NDIM> begin;
-	array<T, NDIM> end;
+	array<T, N> begin;
+	array<T, N> end;
 
-	inline range intersection(const range& other) const {
-		range I;
-		for (int dim = 0; dim < NDIM; dim++) {
+	inline range<T,N> intersection(const range<T,N>& other) const {
+		range<T,N> I;
+		for (int dim = 0; dim < N; dim++) {
 			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
 			I.end[dim] = std::min(end[dim], other.end[dim]);
 		}
@@ -45,7 +46,7 @@ struct range {
 
 	inline range periodic_intersection(const range& other) const {
 		range I;
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
 			I.end[dim] = std::min(end[dim], other.end[dim]);
 			if (I.end[dim] <= I.begin[dim]) {
@@ -70,9 +71,9 @@ struct range {
 	range& operator=(const range&) = default;
 	range& operator=(range&&) = default;
 
-	inline range shift(const array<T, NDIM>& s) const {
+	inline range shift(const array<T, N>& s) const {
 		range r = *this;
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			r.begin[dim] += s[dim];
 			r.end[dim] += s[dim];
 		}
@@ -80,15 +81,15 @@ struct range {
 	}
 
 	range(const T& sz) {
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			begin[dim] = T(0);
 			end[dim] = sz;
 		}
 	}
 
-	inline bool contains(const range<T>& box) const {
+	inline bool contains(const range<T,N>& box) const {
 		bool rc = true;
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			if (begin[dim] > box.begin[dim]) {
 				rc = false;
 				break;
@@ -101,8 +102,8 @@ struct range {
 		return rc;
 	}
 
-	inline bool contains(const array<T, NDIM>& p) const {
-		for (int dim = 0; dim < NDIM; dim++) {
+	inline bool contains(const array<T, N>& p) const {
+		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				return false;
 			}
@@ -112,7 +113,7 @@ struct range {
 
 	inline std::string to_string() const {
 		std::string str;
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			str += std::to_string(dim) + ":(";
 			str += std::to_string(begin[dim]) + ",";
 			str += std::to_string(end[dim]) + ") ";
@@ -123,7 +124,7 @@ struct range {
 	inline int longest_dim() const {
 		int max_dim;
 		T max_span = T(-1);
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			const T span = end[dim] - begin[dim];
 			if (span > max_span) {
 				max_span = span;
@@ -133,12 +134,12 @@ struct range {
 		return max_dim;
 	}
 
-	inline std::pair<range<T>, range<T>> split() const {
+	inline std::pair<range<T,N>, range<T,N>> split() const {
 		auto left = *this;
 		auto right = *this;
 		int max_dim;
 		T max_span = 0;
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			const T span = end[dim] - begin[dim];
 			if (span > max_span) {
 				max_span = span;
@@ -150,15 +151,15 @@ struct range {
 		return std::make_pair(left, right);
 	}
 
-	range<T> shift_up() const {
-		range<T> rc;
+	range<T,N> shift_up() const {
+		range<T,N> rc;
 		rc.begin = ::shift_up(begin);
 		rc.end = ::shift_up(end);
 		return rc;
 	}
 
-	range<T> shift_down() const {
-		range<T> rc;
+	range<T,N> shift_down() const {
+		range<T,N> rc;
 		rc.begin = ::shift_down(begin);
 		rc.end = ::shift_down(end);
 		return rc;
@@ -172,7 +173,7 @@ struct range {
 	}
 
 	CUDA_EXPORT
-	inline T index(const array<T, NDIM> & i) const {
+	inline T index(const array<T, N> & i) const {
 		return index(i.data());
 	}
 
@@ -183,7 +184,7 @@ struct range {
 		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
 	}
 
-	inline range<T> transpose(int dim1, int dim2) const {
+	inline range<T,N> transpose(int dim1, int dim2) const {
 		auto rc = *this;
 		std::swap(rc.begin[dim1], rc.begin[dim2]);
 		std::swap(rc.end[dim1], rc.end[dim2]);
@@ -192,7 +193,7 @@ struct range {
 
 	inline T volume() const {
 		T vol = T(1);
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			const T span = end[dim] - begin[dim];
 			if (span < T(0)) {
 				return T(0);
@@ -204,15 +205,15 @@ struct range {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		for (int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < N; dim++) {
 			arc & begin[dim];
 			arc & end[dim];
 		}
 	}
 
-	inline range<T> pad(T dx = T(1)) const {
-		range<T> r;
-		for (int dim = 0; dim < NDIM; dim++) {
+	inline range<T,N> pad(T dx = T(1)) const {
+		range<T,N> r;
+		for (int dim = 0; dim < N; dim++) {
 			r.begin[dim] = begin[dim] - dx;
 			r.end[dim] = end[dim] + dx;
 		}
@@ -221,10 +222,10 @@ struct range {
 
 };
 
-template<class T>
-inline range<T> unit_box() {
-	range<T> r;
-	for (int dim = 0; dim < NDIM; dim++) {
+template<class T, int N = NDIM>
+inline range<T,N> unit_box() {
+	range<T,N> r;
+	for (int dim = 0; dim < N; dim++) {
 		r.begin[dim] = T(0);
 		r.end[dim] = T(1);
 	}

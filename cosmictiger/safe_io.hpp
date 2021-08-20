@@ -89,7 +89,4 @@ static void __safe_fread(void* src, size_t size, size_t count, FILE* fp, int lin
 
 
 #define ASPRINTF(...) if( asprintf(__VA_ARGS__) == 0 ) printf( "asprintf failed\n")
-
-
-
 #endif /* SAFE_IO_HPP_ */

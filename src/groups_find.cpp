@@ -34,8 +34,8 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	if (!threadme) {
 		rc = groups_find(self, std::move(checklist), link_len);
 	} else if (remote) {
-		ALWAYS_ASSERT(self_ptr->proc_range.first >= 0);
-		ALWAYS_ASSERT(self_ptr->proc_range.first < hpx_size());
+		ASSERT(self_ptr->proc_range.first >= 0);
+		ASSERT(self_ptr->proc_range.first < hpx_size());
 		rc = hpx::async < groups_find_action > (hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
 	} else {
 		rc = hpx::async([self,link_len] (vector<tree_id> checklist) {

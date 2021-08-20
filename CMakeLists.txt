@@ -37,6 +37,7 @@ set(cosmictiger_source_files
     src/gravity.cu
     src/group_tree.cpp
     src/groups.cpp
+    src/group_entry.cpp
     src/groups_find.cpp
     src/initialize.cpp
     src/hpx.cpp
@@ -50,6 +51,7 @@ set(cosmictiger_source_files
     src/particles.cpp
     src/power.cpp
     src/range_set.cpp
+    src/rockstar.cpp
     src/test.cpp
     src/tree.cpp
 )      
@@ -78,6 +80,7 @@ set(cosmictiger_header_files
     cosmictiger/initialize.hpp
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
+    cosmictiger/group_entry.hpp
     cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
@@ -90,6 +93,7 @@ set(cosmictiger_header_files
     cosmictiger/power.hpp
     cosmictiger/range.hpp
     cosmictiger/range_set.hpp
+    cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp
     cosmictiger/simd.hpp
     cosmictiger/stack_vector.hpp
@@ -147,9 +151,17 @@ add_executable(
  	src/healpix2silo.cpp
  )
  
+ 
 target_link_libraries(healpix2silo PUBLIC chealpix silo boost_program_options dl)
 target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
 
 
 
+add_executable(
+ 	groups2silo
+ 	src/groups2silo.cpp
+ 	src/group_entry.cpp
+ )
 
+target_link_libraries(groups2silo PUBLIC silo boost_program_options)
+target_include_directories(groups2silo PUBLIC ${PROJECT_SOURCE_DIR})

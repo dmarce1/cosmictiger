@@ -2,6 +2,13 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
 
+vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_x;
+vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_y;
+vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_z;
+hpx::lcos::local::counting_semaphore kick_workspace::lock1(1);
+hpx::lcos::local::counting_semaphore kick_workspace::lock2(1);
+vector<tree_node, pinned_allocator<tree_node>> kick_workspace::tree_nodes;
+
 kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
 	total_parts = total_parts_;
 	params = p;
@@ -32,9 +39,7 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 	}
 }
 
-hpx::lcos::local::counting_semaphore lock1(1);
 
-hpx::lcos::local::counting_semaphore lock2(1);
 
 void kick_workspace::to_gpu() {
 #ifdef USE_CUDA
@@ -82,7 +87,6 @@ void kick_workspace::to_gpu() {
 	}
 	cuda_set_device();
 	tree_node* dev_trees;
-	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
 	tree_nodes.resize(next_index);
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
@@ -93,6 +97,7 @@ void kick_workspace::to_gpu() {
 	}
 	vector<hpx::future<void>> futs;
 	const int nthreads = hpx::thread::hardware_concurrency();
+	futs.reserve(nthreads);
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&tree_map]() {
 							for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
@@ -126,9 +131,6 @@ void kick_workspace::to_gpu() {
 	tm.start();
 
 	next_index = 0;
-	static vector<fixed32, pinned_allocator<fixed32>> host_x;
-	static vector<fixed32, pinned_allocator<fixed32>> host_y;
-	static vector<fixed32, pinned_allocator<fixed32>> host_z;
 	host_x.resize(part_count);
 	host_y.resize(part_count);
 	host_z.resize(part_count);
@@ -145,7 +147,9 @@ void kick_workspace::to_gpu() {
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
 							}
-						}));
+						}
+				)
+		);
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.stop();
@@ -185,11 +189,11 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 	}
 }
 
-void kick_workspace::touch_cache_entries(const tree_node* node) {
-	if (node->children[LEFT].index != -1) {
-		touch_cache_entries(tree_get_node(node->children[LEFT]));
-		touch_cache_entries(tree_get_node(node->children[RIGHT]));
-	}
+void kick_workspace::clear_buffers() {
+	host_x = decltype(host_x)();
+	host_y = decltype(host_y)();
+	host_z = decltype(host_z)();
+	tree_nodes = decltype(tree_nodes)();
 }
 
 hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
