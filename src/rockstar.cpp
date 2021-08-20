@@ -1,0 +1,369 @@
+#include <cosmictiger/gravity.hpp>
+#include <cosmictiger/groups.hpp>
+#include <cosmictiger/rockstar.hpp>
+
+#include <unordered_set>
+
+#define ROCKSTAR_BUCKET_SIZE 8
+#define ROCKSTAR_THRESHOLD 0.7
+
+using phase_range = range<float, 2 * NDIM>;
+
+struct rockstar_tree_node {
+	phase_range box;
+	array<int, NCHILD> children;
+	pair<int> parts;
+	bool active;
+};
+
+using phase_t = array<float,2*NDIM>;
+
+int rockstar_particles_sort(vector<phase_t>& parts, pair<int> rng, double xmid, int xdim) {
+	int lo = rng.first;
+	int hi = rng.second;
+	while (lo < hi) {
+		if (parts[lo][xdim] >= xmid) {
+			while (lo != hi) {
+				hi--;
+				if (parts[hi][xdim] < xmid) {
+					std::swap(parts[hi], parts[lo]);
+					break;
+				}
+			}
+		}
+		lo++;
+	}
+	return hi;
+
+}
+
+int rockstar_tree_create(vector<rockstar_tree_node>& nodes, vector<phase_t>& parts, phase_range box, pair<int> part_range) {
+	rockstar_tree_node node;
+	const int nparts = part_range.second - part_range.first;
+	if (nparts > ROCKSTAR_BUCKET_SIZE) {
+		const int xdim = box.longest_dim();
+		const float xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
+		const int imid = rockstar_particles_sort(parts, part_range, xmid, xdim);
+		phase_range left_box = box;
+		phase_range right_box = box;
+		pair<int> left_parts = part_range;
+		pair<int> right_parts = part_range;
+		left_box.end[xdim] = right_box.begin[xdim] = xmid;
+		left_parts.second = right_parts.first = imid;
+		node.children[LEFT] = rockstar_tree_create(nodes, parts, left_box, left_parts);
+		node.children[RIGHT] = rockstar_tree_create(nodes, parts, right_box, right_parts);
+		left_box = nodes[node.children[LEFT]].box;
+		right_box = nodes[node.children[RIGHT]].box;
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			box.begin[dim] = std::min(left_box.begin[dim], right_box.begin[dim]);
+			box.end[dim] = std::min(left_box.end[dim], right_box.end[dim]);
+		}
+	} else {
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			box.begin[dim] = std::numeric_limits<float>::max();
+			box.end[dim] = -std::numeric_limits<float>::max();
+		}
+		for (int i = 0; i < parts.size(); i++) {
+			for (int dim = 0; dim < 2 * NDIM; dim++) {
+				box.begin[dim] = std::min(box.begin[dim], parts[i][dim]);
+				box.end[dim] = std::max(box.end[dim], parts[i][dim]);
+			}
+		}
+		for (int ci = 0; ci < NCHILD; ci++) {
+			node.children[ci] = -1;
+		}
+	}
+	node.box = box;
+	node.active = true;
+	node.parts = part_range;
+	int myindex = nodes.size();
+	nodes.push_back(node);
+	return myindex;
+}
+
+int rock_star_groups_find(vector<rockstar_tree_node>& nodes, vector<phase_t>& parts, vector<std::atomic<int>>& groups, int self_index, vector<int> checklist,
+		double link_len) {
+	rockstar_tree_node& self = nodes[self_index];
+	vector<int> nextlist;
+	vector<int> leaflist;
+	nextlist.resize(0);
+	leaflist.resize(0);
+	const auto self_box = self.box.pad(link_len * 1.001);
+	const bool iamleaf = self.children[LEFT] == -1;
+	do {
+		for (int ci = 0; ci < checklist.size(); ci++) {
+			const rockstar_tree_node& other = nodes[checklist[ci]];
+			if (other.active) {
+				if (self_box.intersection(other.box).volume() > 0) {
+					if (other.children[LEFT] == -1) {
+						leaflist.push_back(checklist[ci]);
+					} else {
+						nextlist.push_back(other.children[LEFT]);
+						nextlist.push_back(other.children[RIGHT]);
+					}
+				}
+			}
+		}
+		std::swap(nextlist, checklist);
+		nextlist.resize(0);
+	} while (iamleaf && nextlist.size());
+	if (self.children[LEFT] == -1) {
+		vector<phase_t> X;
+		vector<int> G;
+		if (leaflist.size()) {
+			const auto my_rng = self.parts;
+			const float link_len2 = sqr(link_len);
+			bool found_any_link = false;
+			int total_size = 0;
+			for (int i = 0; i < leaflist.size(); i++) {
+				const rockstar_tree_node& other = nodes[leaflist[i]];
+				if (leaflist[i] != self_index) {
+					const auto& other_rng = other.parts;
+					const int other_size = other_rng.second - other_rng.first;
+					total_size += other_size;
+				}
+			}
+			X.reserve(total_size);
+			G.reserve(total_size);
+			for (int i = 0; i < leaflist.size(); i++) {
+				const rockstar_tree_node& other = nodes[leaflist[i]];
+				if (leaflist[i] != self_index) {
+					const auto& other_rng = other.parts;
+					int other_size = other_rng.second - other_rng.first;
+					for (int i = other_rng.first; i < other_rng.second; i++) {
+						if (self_box.contains(parts[i])) {
+							X.push_back(parts[i]);
+							G.push_back(groups[i]);
+						}
+					}
+				}
+			}
+			for (part_int k = my_rng.first; k < my_rng.second; k++) {
+				for (int j = 0; j < X.size(); j++) {
+					float r2 = 0.0f;
+					for (int dim = 0; dim < 2 * NDIM; dim++) {
+						r2 += sqr(parts[k][dim] - X[j][dim]);
+					}
+					if (r2 < link_len2) {
+						auto& grp = groups[k];
+						const int start_group = grp;
+						if ((int) grp == NO_GROUP) {
+							grp = k;
+							found_any_link = true;
+						}
+						if (grp > G[j]) {
+							grp = G[j];
+							found_any_link = true;
+						}
+					}
+				}
+			}
+			bool found_link;
+			do {
+				found_link = false;
+				for (part_int j = my_rng.first; j < my_rng.second; j++) {
+					for (part_int k = j + 1; k < my_rng.second; k++) {
+						float r2 = 0.0f;
+						for (int dim = 0; dim < 2 * NDIM; dim++) {
+							r2 += sqr(parts[j][dim] - parts[k][dim]);
+						}
+						if (r2 < link_len2) {
+							auto& grpa = groups[k];
+							auto& grpb = groups[j];
+							if ((int) grpa == NO_GROUP) {
+								grpa = k;
+								found_link = true;
+								found_any_link = true;
+							}
+							if ((int) grpb == NO_GROUP) {
+								grpb = j;
+								found_link = true;
+								found_any_link = true;
+							}
+							if (grpa != grpb) {
+								if (grpa < grpb) {
+									grpb = (int) grpa;
+								} else {
+									grpa = (int) grpb;
+								}
+								found_link = true;
+								found_any_link = true;
+							}
+						}
+					}
+				}
+			} while (found_link);
+			if (found_any_link) {
+				self.active = true;
+				return 1;
+			} else {
+				self.active = false;
+				return 0;
+			}
+		} else {
+			return 0;
+		}
+	} else {
+		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+		if (checklist.size()) {
+			const rockstar_tree_node& cl = nodes[self.children[LEFT]];
+			const rockstar_tree_node& cr = nodes[self.children[RIGHT]];
+			const int rcount = rock_star_groups_find(nodes, parts, groups, self.children[LEFT], checklist, link_len);
+			const int lcount = rock_star_groups_find(nodes, parts, groups, self.children[RIGHT], std::move(checklist), link_len);
+			const int tot = rcount + lcount;
+			self.active = tot != 0;
+			return tot;
+		} else {
+			return 0;
+		}
+	}
+}
+
+static pair<float> compute_norms(const vector<phase_t>& parts) {
+	phase_t com;
+	for (int dim = 0; dim < 2 * NDIM; dim++) {
+		com[dim] = 0.0f;
+	}
+	for (int i = 0; i < parts.size(); i++) {
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			com[dim] += parts[i][dim];
+		}
+	}
+	for (int dim = 0; dim < 2 * NDIM; dim++) {
+		com[dim] /= parts.size();
+	}
+	float x2 = 0.0;
+	float v2 = 0.0;
+	for (int i = 0; i < parts.size(); i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			x2 += sqr(parts[i][dim] - com[dim]);
+		}
+		for (int dim = NDIM; dim < 2 * NDIM; dim++) {
+			v2 += sqr(parts[i][dim] - com[dim]);
+		}
+	}
+	pair<float> rc;
+	rc.first = sqrtf(x2);
+	rc.second = sqrtf(v2);
+	return rc;
+}
+
+static phase_range compute_root_box(const vector<phase_t>& parts) {
+	phase_range box;
+	for (int dim = 0; dim < 2 * NDIM; dim++) {
+		box.begin[dim] = std::numeric_limits<float>::max();
+		box.end[dim] = -std::numeric_limits<float>::max();
+	}
+	for (int i = 0; i < parts.size(); i++) {
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			box.begin[dim] = std::min(box.begin[dim], parts[i][dim]);
+			box.end[dim] = std::max(box.end[dim], parts[i][dim]);
+		}
+	}
+	return box;
+}
+
+static void normalize(vector<phase_t>& parts, float sigma_x, float sigma_v) {
+	const float sigma_x_inv = 1.0f / sigma_x_inv;
+	const float sigma_v_inv = 1.0f / sigma_v_inv;
+	for (int i = 0; i < parts.size(); i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			parts[i][dim] *= sigma_x_inv;
+		}
+		for (int dim = NDIM; dim < 2 * NDIM; dim++) {
+			parts[i][dim] *= sigma_v_inv;
+		}
+	}
+}
+
+static double max_boxdist(phase_range box) {
+	double r2 = 0.0;
+	for (int dim = 0; dim < 2 * NDIM; dim++) {
+		r2 += sqr(box.begin[dim] - box.end[dim]);
+	}
+	return sqrtf(r2);
+}
+
+static double fraction_in_groups(const vector<std::atomic<int>>& groups) {
+	int ngroup = 0;
+	for (int i = 0; i < groups.size(); i++) {
+		if (groups[i] != NO_GROUP) {
+			ngroup++;
+		}
+	}
+	return (double) ngroup / groups.size();
+}
+
+static vector<vector<phase_t>> separate_groups(const vector<phase_t>& parts, const vector<std::atomic<int>>& groups) {
+	std::unordered_map<int, vector<phase_t>> sep_parts;
+	for (int i = 0; i < parts.size(); i++) {
+		if (groups[i] != NO_GROUP) {
+			sep_parts[groups[i]].push_back(parts[i]);
+		}
+	}
+	vector<vector<phase_t>> rc;
+	for (auto i = sep_parts.begin(); i != sep_parts.end(); i++) {
+		rc.push_back(std::move(i->second));
+	}
+	return rc;
+}
+
+vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
+	pair<float> norms = compute_norms(parts);
+	const float sigma_x = norms.first;
+	const float sigma_v = norms.second;
+	normalize(parts, sigma_x, sigma_v);
+	vector<std::atomic<int>> groups(parts.size());
+	vector<rockstar_tree_node> nodes;
+	pair<int> root_range;
+	root_range.first = 0;
+	root_range.second = parts.size();
+	const auto root_box = compute_root_box(parts);
+	int root_index = rockstar_tree_create(nodes, parts, root_box, root_range);
+	double max_link_len = max_boxdist(root_box);
+	for (double link_len = 0.05 * max_link_len; link_len <= max_link_len * 1.001; link_len += 0.05 * max_link_len) {
+		for (auto& g : groups) {
+			g = NO_GROUP;
+		}
+		while (rock_star_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len) > 0) {
+		}
+		if (fraction_in_groups(groups) > ROCKSTAR_THRESHOLD) {
+			max_link_len = link_len;
+			break;
+		}
+	}
+	double min_link_len = 0.0;
+	double dif;
+	do {
+		double link_len = (max_link_len + min_link_len) * 0.5;
+		for (auto& g : groups) {
+			g = NO_GROUP;
+		}
+		while (rock_star_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len) > 0) {
+		}
+		dif = fraction_in_groups(groups) - ROCKSTAR_THRESHOLD;
+		if (dif > 0.0) {
+			max_link_len = link_len;
+		} else {
+			min_link_len = link_len;
+		}
+	} while (dif * parts.size() >= 1.0);
+	const auto subgroups = separate_groups(parts, groups);
+}
+
+vector<seed_halo> rockstar_seed_halos(const vector<particle_data>& in_parts) {
+	vector<phase_t> parts(in_parts.size());
+	array<fixed32, NDIM> x0;
+	for (int dim = 0; dim < NDIM; dim++) {
+		x0[dim] = in_parts[0].x[dim];
+	}
+	for (int i = 0; i < parts.size(); i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			parts[i][dim] = distance(in_parts[i].x[dim], x0[dim]);
+		}
+		for (int dim = 0; dim < NDIM; dim++) {
+			parts[i][NDIM + dim] = in_parts[i].v[dim];
+		}
+	}
+}
+
