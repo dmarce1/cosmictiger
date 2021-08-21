@@ -16,6 +16,7 @@ struct rockstar_tree_node {
 	array<int, NCHILD> children;
 	pair<int> parts;
 	bool active;
+	bool last_active;
 };
 
 int rockstar_particles_sort(vector<phase_t>& parts, pair<int> rng, double xmid, int xdim) {
@@ -93,7 +94,7 @@ int rockstar_groups_find(vector<rockstar_tree_node>& nodes, const vector<phase_t
 	do {
 		for (int ci = 0; ci < checklist.size(); ci++) {
 			const rockstar_tree_node& other = nodes[checklist[ci]];
-			if (other.active) {
+			if (other.last_active) {
 				if (self_box.intersection(other.box).volume() > 0) {
 					if (other.children[LEFT] == -1) {
 						leaflist.push_back(checklist[ci]);
@@ -343,6 +344,9 @@ vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
 			}
 			int nactive;
 			do {
+				for( auto& n : nodes) {
+					n.last_active = n.active;
+				}
 				nactive = rockstar_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len);
 				PRINT( "%i\n", nactive);
 			} while (nactive > 0);
@@ -364,8 +368,10 @@ vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
 			}
 			int nactive;
 			do {
+				for( auto& n : nodes) {
+					n.last_active = n.active;
+				}
 				nactive = rockstar_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len);
-				PRINT( "%i\n", nactive);
 			} while (nactive > 0);
 			const double frac = fraction_in_groups(groups);
 			dif = frac - ROCKSTAR_THRESHOLD;

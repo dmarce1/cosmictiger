@@ -35,8 +35,8 @@ struct range {
 	array<T, N> begin;
 	array<T, N> end;
 
-	inline range<T,N> intersection(const range<T,N>& other) const {
-		range<T,N> I;
+	inline range<T, N> intersection(const range<T, N>& other) const {
+		range<T, N> I;
 		for (int dim = 0; dim < N; dim++) {
 			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
 			I.end[dim] = std::min(end[dim], other.end[dim]);
@@ -87,7 +87,7 @@ struct range {
 		}
 	}
 
-	inline bool contains(const range<T,N>& box) const {
+	inline bool contains(const range<T, N>& box) const {
 		bool rc = true;
 		for (int dim = 0; dim < N; dim++) {
 			if (begin[dim] > box.begin[dim]) {
@@ -106,6 +106,19 @@ struct range {
 		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				return false;
+			}
+		}
+		return true;
+	}
+
+	inline bool periodic_contains(const array<T, N>& p) const {
+		for (int dim = 0; dim < N; dim++) {
+			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
+				if (p[dim] + T(1) < begin[dim] || p[dim] + T(1) >= end[dim]) {
+					if (p[dim] - T(1) < begin[dim] || p[dim] - T(1) >= end[dim]) {
+						return false;
+					}
+				}
 			}
 		}
 		return true;
@@ -134,7 +147,7 @@ struct range {
 		return max_dim;
 	}
 
-	inline std::pair<range<T,N>, range<T,N>> split() const {
+	inline std::pair<range<T, N>, range<T, N>> split() const {
 		auto left = *this;
 		auto right = *this;
 		int max_dim;
@@ -151,15 +164,15 @@ struct range {
 		return std::make_pair(left, right);
 	}
 
-	range<T,N> shift_up() const {
-		range<T,N> rc;
+	range<T, N> shift_up() const {
+		range<T, N> rc;
 		rc.begin = ::shift_up(begin);
 		rc.end = ::shift_up(end);
 		return rc;
 	}
 
-	range<T,N> shift_down() const {
-		range<T,N> rc;
+	range<T, N> shift_down() const {
+		range<T, N> rc;
 		rc.begin = ::shift_down(begin);
 		rc.end = ::shift_down(end);
 		return rc;
@@ -184,7 +197,7 @@ struct range {
 		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
 	}
 
-	inline range<T,N> transpose(int dim1, int dim2) const {
+	inline range<T, N> transpose(int dim1, int dim2) const {
 		auto rc = *this;
 		std::swap(rc.begin[dim1], rc.begin[dim2]);
 		std::swap(rc.end[dim1], rc.end[dim2]);
@@ -211,8 +224,8 @@ struct range {
 		}
 	}
 
-	inline range<T,N> pad(T dx = T(1)) const {
-		range<T,N> r;
+	inline range<T, N> pad(T dx = T(1)) const {
+		range<T, N> r;
 		for (int dim = 0; dim < N; dim++) {
 			r.begin[dim] = begin[dim] - dx;
 			r.end[dim] = end[dim] + dx;
@@ -223,8 +236,8 @@ struct range {
 };
 
 template<class T, int N = NDIM>
-inline range<T,N> unit_box() {
-	range<T,N> r;
+inline range<T, N> unit_box() {
+	range<T, N> r;
 	for (int dim = 0; dim < N; dim++) {
 		r.begin[dim] = T(0);
 		r.end[dim] = T(1);

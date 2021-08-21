@@ -16,7 +16,7 @@ void group_entry::write(FILE* fp) {
 	fwrite_single(fp, com);
 	fwrite_single(fp, vel);
 	fwrite_single(fp, lang);
-	fwrite_single(fp, count);
+	fwrite_single(fp, mass);
 	fwrite_single(fp, ekin);
 	fwrite_single(fp, epot);
 	fwrite_single(fp, r25);
@@ -50,7 +50,7 @@ bool group_entry::read(FILE* fp) {
 	fread_single(fp, com);
 	fread_single(fp, vel);
 	fread_single(fp, lang);
-	fread_single(fp, count);
+	fread_single(fp, mass);
 	fread_single(fp, ekin);
 	fread_single(fp, epot);
 	fread_single(fp, r25);

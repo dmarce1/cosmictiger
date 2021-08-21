@@ -296,7 +296,7 @@ vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed)
 	}
 	vector<float> pot(x.size());
 	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
-	bh_tree_evaluate(nodes, sink_buckets, pot, x, 1.0);
+	bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.85);
 	rpot.resize(x.size());
 	for (int i = 0; i < sort_order.size(); i++) {
 		rpot[sort_order[i]] = pot[i];

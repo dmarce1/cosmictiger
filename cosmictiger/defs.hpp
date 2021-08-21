@@ -36,7 +36,7 @@
 #endif
 
 #define GROUP_WAVES 8
-#define GROUP_BUCKET_SIZE 25
+#define GROUP_BUCKET_SIZE 90
 
 #define MAX_LOAD_IMBALANCE 0.005
 #define CUDA_MAX_MEM 0.4

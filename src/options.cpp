@@ -59,7 +59,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO") //
 	("do_sample", po::value<bool>(&(opts.do_sample))->default_value(false), "output the box bounded by (0,sample_dim) in all directions to SILO") //
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
-	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(16*1024), "size of particle cache line") //
+	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(16 * 1024), "size of particle cache line") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
 	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "healpix Nside") //
@@ -100,15 +100,15 @@ bool process_options(int argc, char *argv[]) {
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
-	PRINT( "box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
+	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
-	opts.code_to_g = 1.989e33;
 	opts.omega_m = 0.3;
 	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
 	const double Neff = 3.086;
 	const double Theta = 1.0;
 	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
+	opts.code_to_g = 3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble) / (8.0 * M_PI) / nparts / constants::G * std::pow(opts.code_to_cm, 3);
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
 	opts.omega_r = omega_r;
@@ -116,6 +116,8 @@ bool process_options(int argc, char *argv[]) {
 	opts.min_group = 20;
 
 	PRINT("Simulation Options\n");
+	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
+	PRINT("Box size = %e\n", opts.code_to_cm / constants::mpc_to_cm);
 	SHOW_STRING(config_file);
 	SHOW(hsoft);
 	SHOW(parts_dim);
