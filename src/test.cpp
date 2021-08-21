@@ -28,7 +28,7 @@ static void rockstar_test() {
 	feenableexcept(FE_DIVBYZERO);
 	feenableexcept(FE_OVERFLOW);
 	feenableexcept(FE_INVALID);
-	constexpr int NPARTS = 256;
+	constexpr int NPARTS = 10000;
 	constexpr int NHALOS = 2;
 	vector<particle_data> parts;
 	std::array<std::array<double, NDIM>, NHALOS> x;

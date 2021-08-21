@@ -335,7 +335,7 @@ vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
 		int root_index = rockstar_tree_create(nodes, parts, root_box, root_range);
 //		PRINT("Tree created with %i nodes\n", root_index);
 		double max_link_len = max_boxdist(root_box);
-//		PRINT("max_link_len = %e\n", max_link_len);
+		PRINT("max_link_len = %e\n", max_link_len);
 		for (double link_len = 0.05 * max_link_len; link_len <= max_link_len * 1.001; link_len += 0.05 * max_link_len) {
 			std::fill(groups.begin(), groups.end(), ROCKSTAR_NO_GROUP);
 			for (auto& n : nodes) {
@@ -344,6 +344,7 @@ vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
 			int nactive;
 			do {
 				nactive = rockstar_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len);
+				PRINT( "%i\n", nactive);
 			} while (nactive > 0);
 			const double frac = fraction_in_groups(groups);
 			if (frac > ROCKSTAR_THRESHOLD) {
@@ -364,6 +365,7 @@ vector<seed_halo> rockstar_seed_halos_find(vector<phase_t>& parts) {
 			int nactive;
 			do {
 				nactive = rockstar_groups_find(nodes, parts, groups, root_index, vector<int>(1, root_index), link_len);
+				PRINT( "%i\n", nactive);
 			} while (nactive > 0);
 			const double frac = fraction_in_groups(groups);
 			dif = frac - ROCKSTAR_THRESHOLD;

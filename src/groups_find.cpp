@@ -95,7 +95,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 	do {
 		for (int ci = 0; ci < checklist.size(); ci++) {
 			const group_tree_node* other_ptr = group_tree_get_node(checklist[ci]);
-			if (other_ptr->active) {
+			if (other_ptr->last_active) {
 				if (self_box.periodic_intersection(other_ptr->box).volume() > 0) {
 					if (other_ptr->children[LEFT].index == -1) {
 						leaflist.push_back(checklist[ci]);
@@ -225,6 +225,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				return hpx::make_ready_future((size_t) 0);
 			}
 		} else {
+			group_tree_set_active(self, false);
 			cleanup_list(std::move(nextlist));
 			cleanup_list(std::move(leaflist));
 			cleanup_leaf_workspace(std::move(ws));
@@ -255,6 +256,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				});
 			}
 		} else {
+			group_tree_set_active(self, false);
 			return hpx::make_ready_future((size_t) 0);
 		}
 	}

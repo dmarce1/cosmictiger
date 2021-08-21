@@ -112,7 +112,7 @@ bool process_options(int argc, char *argv[]) {
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
 	opts.omega_r = omega_r;
-	opts.link_len = 1.0 / opts.parts_dim / 6.0;
+	opts.link_len = 1.0 / opts.parts_dim / 5.0;
 	opts.min_group = 20;
 
 	PRINT("Simulation Options\n");

@@ -223,6 +223,7 @@ void driver() {
 		map_init(tau_max);
 	}
 	while (tau < tau_max) {
+		do_groups(tau / t0 + 1e-6, a);
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			total_time.stop();
@@ -279,7 +280,7 @@ void driver() {
 			}
 			if (get_options().do_groups) {
 				do_groups(tau / t0 + 1e-6, a);
-			}
+				}
 		}
 		double dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);

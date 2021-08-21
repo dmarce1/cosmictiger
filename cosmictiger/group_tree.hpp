@@ -14,9 +14,11 @@ struct group_tree_node {
 	pair<int> proc_range;
 	bool local_root;
 	bool active;
+	bool last_active;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & active;
+		arc & last_active;
 		arc & box;
 		arc & children;
 		arc & part_range;

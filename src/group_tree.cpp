@@ -186,6 +186,7 @@ group_tree_return group_tree_create(size_t key, pair<int, int> proc_range, pair<
 	node.part_range = part_range;
 	node.box = part_box;
 	node.active = true;
+	node.last_active = true;
 	node.local_root = local_root;
 	nodes[index] = node;
 	tree_id myid;
@@ -342,6 +343,9 @@ void group_tree_inc_cache_epoch() {
 	const auto children = hpx_children();
 	for (const auto& c : children) {
 		futs.push_back(hpx::async < group_tree_inc_cache_epoch_action > (c));
+	}
+	for (auto& node : nodes) {
+		node.last_active = node.active;
 	}
 	tree_cache_epoch++;
 	reset_last_cache_entries();
