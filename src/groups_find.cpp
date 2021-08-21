@@ -108,7 +108,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 		}
 		std::swap(nextlist, checklist);
 		nextlist.resize(0);
-	} while (iamleaf && nextlist.size());
+	} while (iamleaf && checklist.size());
 	if (self_ptr->children[LEFT].index == -1) {
 		leaf_workspace ws = get_leaf_workspace();
 		vector<fixed32>& X = ws.X;

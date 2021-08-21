@@ -157,11 +157,11 @@ target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
 
 
 
-add_executable(
- 	groups2silo
- 	src/groups2silo.cpp
- 	src/group_entry.cpp
- )
+#add_executable(
+# 	groups2silo
+# 	src/groups2silo.cpp
+# 	src/group_entry.cpp
+# )
 
-target_link_libraries(groups2silo PUBLIC silo boost_program_options)
-target_include_directories(groups2silo PUBLIC ${PROJECT_SOURCE_DIR})
+#target_link_libraries(groups2silo PUBLIC silo boost_program_options)
+#target_include_directories(groups2silo PUBLIC ${PROJECT_SOURCE_DIR})
