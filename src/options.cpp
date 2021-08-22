@@ -58,13 +58,16 @@ bool process_options(int argc, char *argv[]) {
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do groups") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO") //
 	("do_sample", po::value<bool>(&(opts.do_sample))->default_value(false), "output the box bounded by (0,sample_dim) in all directions to SILO") //
+	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "instantaneous maps") //
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
 	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(16 * 1024), "size of particle cache line") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
-	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "healpix Nside") //
+	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "map healpix Nside") //
+	("view_size", po::value<int>(&(opts.view_size))->default_value(1000), "view healpix Nside") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
+	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("sample_dim", po::value<double>(&(opts.sample_dim))->default_value(0.01), "size of box to output to SILO") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 			;

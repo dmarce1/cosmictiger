@@ -16,6 +16,7 @@
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
+#include <cosmictiger/view.hpp>
 
 HPX_PLAIN_ACTION (write_checkpoint);
 HPX_PLAIN_ACTION (read_checkpoint);
@@ -222,8 +223,8 @@ void driver() {
 	if (get_options().do_map) {
 		map_init(tau_max);
 	}
-	while (tau < tau_max) {
-	//	do_groups(tau / t0 + 1e-6, a);
+	while (1.0 / a  > get_options().z1 + 1.0) {
+		//	do_groups(tau / t0 + 1e-6, a);
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
 			total_time.stop();
@@ -238,11 +239,19 @@ void driver() {
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
 		if (full_eval) {
+			const int number = tau / t0 + 1e-20;
 			if (get_options().do_tracers) {
-				output_tracers(tau / t0 + 1e-6);
+				output_tracers(number);
 			}
 			if (get_options().do_sample) {
-				output_sample(tau / t0 + 1e-6);
+				output_sample(number);
+			}
+			if (get_options().do_views) {
+				timer tm;
+				tm.start();
+				output_view(number);
+				tm.stop();
+				PRINT("View %i took %e \n", number, tm.read());
 			}
 		}
 		double imbalance = domains_get_load_imbalance();
@@ -280,7 +289,7 @@ void driver() {
 			}
 			if (get_options().do_groups) {
 				do_groups(tau / t0 + 1e-6, a);
-				}
+			}
 		}
 		double dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);
@@ -343,15 +352,16 @@ void driver() {
 			break;
 		}
 	}
+	kick_workspace::clear_buffers();
 	/*if (get_options().do_groups) {
-		do_groups(tau / t0 + 1e-6, a);
-	}
-	if (get_options().do_tracers) {
-		output_tracers(tau / t0 + 1e-6);
-	}
-	if (get_options().do_sample) {
-		output_sample(tau / t0 + 1e-6);
-	}*/
+	 do_groups(tau / t0 + 1e-6, a);
+	 }
+	 if (get_options().do_tracers) {
+	 output_tracers(tau / t0 + 1e-6);
+	 }
+	 if (get_options().do_sample) {
+	 output_sample(tau / t0 + 1e-6);
+	 }*/
 	map_flush(tau);
 }
 

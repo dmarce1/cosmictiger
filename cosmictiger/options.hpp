@@ -11,6 +11,7 @@ struct options {
 	bool do_groups;
 	bool do_tracers;
 	bool do_sample;
+	bool do_views;
 
 	int tracer_count;
 	int parts_dim;
@@ -21,6 +22,7 @@ struct options {
 	int max_iter;
 	int map_count;
 	int map_size;
+	int view_size;
 	int min_group;
 
 	double sample_dim;
@@ -34,6 +36,7 @@ struct options {
 	double omega_m;
 	double omega_r;
 	double z0;
+	double z1;
 	double hubble;
 	double sigma8;
 
@@ -49,6 +52,7 @@ struct options {
 		arc &  do_groups;
 		arc &  do_tracers;
 		arc &  do_sample;
+		arc &  do_views;
 
 		arc &  tracer_count;
 		arc &  parts_dim;
@@ -60,6 +64,7 @@ struct options {
 		arc &  map_count;
 		arc &  map_size;
 		arc &  min_group;
+		arc &  view_size;
 
 		arc &  sample_dim;
 		arc &  link_len;
@@ -72,6 +77,7 @@ struct options {
 		arc &  omega_m;
 		arc &  omega_r;
 		arc &  z0;
+		arc &  z1;
 		arc &  hubble;
 		arc &  sigma8;
 

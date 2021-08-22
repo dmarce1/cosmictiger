@@ -26,46 +26,72 @@ void map_init(float tmax) {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void map_flush(float t) {
-	main_map.map_flush(t);
+vector<float> map_flush(float t) {
+	return main_map.map_flush(t);
 }
 
-void healpix_map::map_flush(float t) {
-	vector<hpx::future<void>> futs;
+vector<float> healpix_map::map_flush(float t) {
+	vector<hpx::future<vector<float>>>futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < map_flush_action > (c, t));
 	}
+	const int Npix = 12 * Nside * Nside;
 	static const float map_int = tau_max / Nmaps;
+	for (auto& fut : futs) {
+		auto other_map = fut.get();
+		for (auto i = map.begin(); i != map.end(); i++) {
+			const float this_t = i->first * map_int;
+			if (t > this_t) {
+				for (int j = 0; j < Npix; j++) {
+					atomic_add(i->second[j], other_map[j]);
+				}
+				break;
+			}
+		}
+	}
+	if (hpx_rank() == 0) {
+		for (auto i = map.begin(); i != map.end(); i++) {
+			const float this_t = i->first * map_int;
+			if (t > this_t) {
+				PRINT("Writing map %i\n", i->first);
+				char* str;
+				ASPRINTF(&str, "mkdir -p healpix_%i\n", i->first);
+				if (system(str) != 0) {
+					THROW_ERROR("Unable to execute \"%s\"", str);
+				}
+				free(str);
+				ASPRINTF(&str, "map.%i.dat", i->first);
+				FILE* fp = fopen(str, "wb");
+				free(str);
+				if (fp == NULL) {
+					THROW_ERROR("Unable to open %s for writing\n", str);
+				}
+				auto& this_map = i->second;
+				int size = this_map.size();
+				fwrite(&Nside, sizeof(int), 1, fp);
+				fwrite(&size, sizeof(int), 1, fp);
+				for (auto j = this_map.begin(); j != this_map.end(); j++) {
+					fwrite(&(*j), sizeof(float), 1, fp);
+				}
+				fclose(fp);
+				map.erase(i);
+				break;
+			}
+		}
+	}
+	vector<float> rmap;
 	for (auto i = map.begin(); i != map.end(); i++) {
 		const float this_t = i->first * map_int;
 		if (t > this_t) {
-			PRINT("Writing map %i\n", i->first);
-			char* str;
-			ASPRINTF(&str, "mkdir -p healpix_%i\n", i->first);
-			if (system(str) != 0) {
-				THROW_ERROR("Unable to execute \"%s\"", str);
+			rmap.resize(Npix);
+			for( int j = 0; j < rmap.size(); j++) {
+				rmap[j] = i->second[j];
 			}
-			free(str);
-			ASPRINTF(&str, "healpix_%i/healpix.%i", i->first, hpx_rank());
-			FILE* fp = fopen(str, "wb");
-			free(str);
-			if (fp == NULL) {
-				THROW_ERROR("Unable to open %s for writing\n", str);
-			}
-			auto& this_map = i->second;
-			int size = this_map.size();
-			fwrite(&Nside, sizeof(int), 1, fp);
-			fwrite(&size, sizeof(int), 1, fp);
-			for (auto j = this_map.begin(); j != this_map.end(); j++) {
-				fwrite(&j->first, sizeof(int), 1, fp);
-				fwrite(&j->second.i, sizeof(float), 1, fp);
-			}
-			fclose(fp);
 			map.erase(i);
 			break;
 		}
 	}
-
+	return rmap;
 }
 
 void healpix_map::map_load(FILE* fp) {
@@ -78,11 +104,9 @@ void healpix_map::map_load(FILE* fp) {
 		FREAD(&size, sizeof(int), 1, fp);
 		auto& this_map = map[rank];
 		for (int j = 0; j < size; j++) {
-			int pix;
 			float value;
-			FREAD(&pix, sizeof(int), 1, fp);
 			FREAD(&value, sizeof(int), 1, fp);
-			this_map[pix].i = value;
+			this_map[j] = value;
 		}
 	}
 
@@ -97,8 +121,7 @@ void healpix_map::map_save(std::ofstream& fp) {
 		fp.write((const char*) &rank, sizeof(int));
 		fp.write((const char*) &size, sizeof(int));
 		for (auto j = i->second.begin(); j != i->second.end(); j++) {
-			fp.write((const char*) &j->first, sizeof(int));
-			fp.write((const char*) &j->second.i, sizeof(int));
+			fp.write((const char*) &(*j), sizeof(int));
 		}
 	}
 }
@@ -116,9 +139,19 @@ void map_add_map(healpix_map&& other) {
 }
 
 void healpix_map::add_map(healpix_map&& other) {
+	const int Npix = 12 * Nside * Nside;
 	for (auto i = other.map.begin(); i != other.map.end(); i++) {
-		for (auto j = i->second.begin(); j != i->second.end(); j++) {
-			map[i->first][j->first].i += j->second.i;
+		std::unique_lock<mutex_type> lock(mutex);
+		if (map.find(i->first) == map.end()) {
+			map[i->first] = std::move(vector<pixel>(Npix));
+			auto iter = map.find(i->first);
+			for (int l = 0; l < Npix; l++) {
+				iter->second[l] = 0.0;
+			}
+		}
+		lock.unlock();
+		for (int j = 0; j < i->second.size(); j++) {
+			atomic_add(map[i->first][j], other.map[i->first][j]);
 		}
 	}
 }
@@ -137,6 +170,7 @@ int healpix_map::map_add_particle(float x0, float y0, float z0, float x1, float 
 	simd_float8 dist1;
 	int rc = 0;
 	double x20, x21, R20, R21;
+	const int Npix = sqr(Nside) * 12;
 	X0[XDIM] = simd_float8(x0) + images[XDIM];
 	X0[YDIM] = simd_float8(y0) + images[YDIM];
 	X0[ZDIM] = simd_float8(z0) + images[ZDIM];
@@ -181,7 +215,15 @@ int healpix_map::map_add_particle(float x0, float y0, float z0, float x1, float 
 						vec[1] = y1;
 						vec[2] = z1;
 						vec2pix_ring(Nside, vec, &ipix);
-						map[j + 1][ipix].i += mag;
+						auto iter = map.find(j + 1);
+						if (iter == map.end()) {
+							map[j + 1] = std::move(vector<pixel>(Npix));
+							iter = map.find(j + 1);
+							for (int l = 0; l < Npix; l++) {
+								iter->second[l] = 0.0;
+							}
+						}
+						atomic_add(iter->second[ipix], mag);
 					}
 				}
 			}

@@ -11,6 +11,9 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/simd.hpp>
 
+
+#include <atomic>
+
 template<class T>
 CUDA_EXPORT inline T sqr(const T& a) {
 	return a * a;
@@ -83,6 +86,13 @@ inline double sinc(double x) {
 	} else {
 		return sin(x) / x;
 	}
+}
+
+inline void atomic_add(std::atomic<float>& y, float x) {
+	float z = y;
+	while (!y.compare_exchange_strong(z, z + x)) {
+	}
+
 }
 
 

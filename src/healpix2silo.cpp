@@ -35,14 +35,14 @@ bool cart_to_sph(double x, double y, double* psi, double* lambda) {
 }
 
 int main(int argc, char **argv) {
-	std::string indir, outfile;
+	std::string infile, outfile;
 
 	namespace po = boost::program_options;
 	po::options_description command_opts("options");
 
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
-	("in", po::value < std::string > (&indir)->default_value(""), "input file") //
+	("in", po::value < std::string > (&infile)->default_value(""), "input file") //
 	("out", po::value < std::string > (&outfile)->default_value(""), "output file") //
 			;
 
@@ -50,8 +50,8 @@ int main(int argc, char **argv) {
 	po::store(po::parse_command_line(argc, argv, command_opts), vm);
 	po::notify(vm);
 
-	if (indir == "") {
-		printf("Input directory not specified. Use --in=\n");
+	if (infile == "") {
+		printf("Input file not specified. Use --in=\n");
 		return -1;
 	}
 
@@ -65,43 +65,35 @@ int main(int argc, char **argv) {
 	int Nside;
 	int npix;
 	std::vector<float> healpix_data;
-	PRINT("Reading files\n");
+	PRINT("Reading file\n");
 	int max_pix = 0;
 	int min_pix = 1000000000;
-	while (found_file) {
-		const std::string fname = indir + "/healpix." + std::to_string(rank);
-		FILE* fp = fopen(fname.c_str(), "rb");
-		if (rank == 0 && fp == nullptr) {
-			printf("Unable to open files in %s\n", indir.c_str());
-			abort();
-		}
-		if (fp == nullptr) {
-			found_file = false;
-		} else {
-			found_file = true;
-			FREAD(&Nside, sizeof(int), 1, fp);
-			if (rank == 0) {
-				PRINT("Nside = %i\n", Nside);
-				npix = 12 * Nside * Nside;
-				healpix_data.resize(npix, 0.0);
-			}
-			PRINT("file %i\n", rank);
-			int size;
-			FREAD(&size, sizeof(int), 1, fp);
-			for (int i = 0; i < size; i++) {
-				int pix;
-				float value;
-				FREAD(&pix, sizeof(int), 1, fp);
-				max_pix = std::max(max_pix, pix);
-				min_pix = std::min(min_pix, pix);
-				FREAD(&value, sizeof(float), 1, fp);
-				healpix_data[pix] += value;
-			}
-			fclose(fp);
-		}
-		rank++;
+	const std::string fname = infile;
+	FILE* fp = fopen(fname.c_str(), "rb");
+	if (rank == 0 && fp == nullptr) {
+		printf("Unable to open %s\n", infile.c_str());
+		abort();
 	}
-	PRINT("Done reading files\n");
+	if (fp == nullptr) {
+		found_file = false;
+	} else {
+		found_file = true;
+		FREAD(&Nside, sizeof(int), 1, fp);
+		if (rank == 0) {
+			PRINT("Nside = %i\n", Nside);
+			npix = 12 * Nside * Nside;
+			healpix_data.resize(npix, 0.0);
+		}
+		int size;
+		FREAD(&size, sizeof(int), 1, fp);
+		for (int pix = 0; pix < size; pix++) {
+			float value;
+			FREAD(&value, sizeof(float), 1, fp);
+			healpix_data[pix] += value;
+		}
+		fclose(fp);
+	}
+	PRINT("Done reading file\n");
 
 	const int res = (Nside * std::sqrt(1.5) + 0.5);
 
@@ -109,6 +101,7 @@ int main(int argc, char **argv) {
 	std::vector<float> mw_data;
 	size_t iter = 0;
 	size_t max_iter = res * res * 8;
+	PRINT("Converting data\n");
 	for (int iy = -res; iy < res; iy++) {
 		for (int ix = -2 * res; ix < 2 * res; ix++) {
 			double value = 0.0;
@@ -133,7 +126,7 @@ int main(int argc, char **argv) {
 	}
 
 	auto db = DBCreate(outfile.c_str(), DB_CLOBBER, DB_LOCAL, NULL, DB_PDB);
-		std::vector<float> x, y;
+	std::vector<float> x, y;
 	for (int ix = -2 * res; ix <= 2 * res; ix++) {
 		const double x0 = double(ix) / double(res);
 		x.push_back(x0);

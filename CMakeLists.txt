@@ -54,6 +54,7 @@ set(cosmictiger_source_files
     src/rockstar.cpp
     src/test.cpp
     src/tree.cpp
+    src/view.cpp
 )      
                        
                         
@@ -102,6 +103,7 @@ set(cosmictiger_header_files
     cosmictiger/timer.hpp
     cosmictiger/unordered_map_ts.hpp
     cosmictiger/unordered_set_ts.hpp
+    cosmictiger/view.hpp
 )
 
 add_hpx_executable(

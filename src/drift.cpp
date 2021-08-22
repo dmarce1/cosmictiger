@@ -69,8 +69,8 @@ drift_return drift(double scale, double t, double dt) {
 				particles_pos(ZDIM,i) = z;
 				flops += 31;
 			}
-			std::lock_guard<mutex_type> lock(mutex);
 			map_add_map(std::move(this_map));
+			std::lock_guard<mutex_type> lock(mutex);
 			dr.kin += kin;
 			dr.momx += momx;
 			dr.momy += momy;
