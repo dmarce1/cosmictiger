@@ -223,7 +223,7 @@ void driver() {
 	if (get_options().do_map) {
 		map_init(tau_max);
 	}
-	while (1.0 / a  > get_options().z1 + 1.0) {
+	while (1.0 / a > get_options().z1 + 1.0) {
 		//	do_groups(tau / t0 + 1e-6, a);
 		tmr.stop();
 		if (tmr.read() > get_options().check_freq) {
@@ -239,7 +239,7 @@ void driver() {
 		int minrung = min_rung(itime);
 		bool full_eval = minrung == 0;
 		if (full_eval) {
-			const int number = tau / t0 + 1e-20;
+			const int number = tau / t0 + 0.001 / t0;
 			if (get_options().do_tracers) {
 				output_tracers(number);
 			}
@@ -285,10 +285,10 @@ void driver() {
 			kick_workspace::clear_buffers();
 			pot = kr.pot * 0.5 / a;
 			if (get_options().do_power) {
-				do_power_spectrum(tau / t0 + 1e-6, a);
+				do_power_spectrum(tau / t0 + 0.001 / t0, a);
 			}
 			if (get_options().do_groups) {
-				do_groups(tau / t0 + 1e-6, a);
+				do_groups(tau / t0 + .001 / t0, a);
 			}
 		}
 		double dt = t0 / (1 << kr.max_rung);
