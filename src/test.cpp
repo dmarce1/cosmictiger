@@ -182,6 +182,7 @@ static void kick_test() {
 		if (pass == 1) {
 			total_time.start();
 		}
+		tm.reset();
 		tm.start();
 		tree_create_params tparams(0, theta);
 		tree_create(tparams);
