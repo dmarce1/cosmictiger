@@ -495,7 +495,8 @@ void tree_destroy() {
 
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
-		//	PRINT( "%i %e\n", id.index, nodes[id.index].radius);
+		ASSERT(id.index >= 0);
+		ASSERT(id.index < nodes.size());
 		return &nodes[id.index];
 	} else {
 		return tree_cache_read(id);
