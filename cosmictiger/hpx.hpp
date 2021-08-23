@@ -18,13 +18,13 @@
 
 #ifdef HPX_EARLY
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
+#define HPX_PRIORITY_BOOST hpx::launch::async(hpx::threads::thread_priority_boost)
 #define hpx_copy hpx::parallel::copy
 #else
 #define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
+#define HPX_PRIORITY_BOOST hpx::launch::async(thread_priority::priority)
 #define hpx_copy hpx::copy
 #endif
-
-#define HPX_PRIORITY_BOOST hpx::launch::async(hpx::threads::thread_priority_boost)
 
 
 const vector<hpx::id_type>& hpx_localities();

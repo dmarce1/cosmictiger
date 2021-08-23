@@ -12,7 +12,9 @@ constexpr bool verbose = true;
 #include <unordered_set>
 
 static vector<tree_node> tree_fetch_cache_line(int);
+static void tree_allocate_nodes();
 
+HPX_PLAIN_ACTION (tree_allocate_nodes);
 HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
@@ -173,25 +175,34 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	return rc;
 }
 
+static void tree_allocate_nodes() {
+	const int tree_cache_line_size = get_options().tree_cache_line_size;
+	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < tree_allocate_nodes_action > (HPX_THREAD_PRIORITY_BOOST, c));
+	}
+	next_id = -tree_cache_line_size;
+	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
+	for (int i = 0; i < allocator_list.size(); i++) {
+		allocator_list[i]->ready = false;
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
+
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
 	const double h = get_options().hsoft;
-	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	tree_create_return rc;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
-	if (nodes.size() == 0) {
-		next_id = -tree_cache_line_size;
-		nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
-//		PRINT("%i trees allocated\n", nodes.size());
-		for (int i = 0; i < allocator_list.size(); i++) {
-			allocator_list[i]->ready = false;
-		}
+	if (depth == 0) {
+		tree_allocate_nodes();
 	}
 	if (local_root) {
-		PRINT( "Sorting on %i\n", hpx_rank());
+		PRINT("Sorting on %i\n", hpx_rank());
 		part_range.first = 0;
 		part_range.second = particles_size();
 	}
