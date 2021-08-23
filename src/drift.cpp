@@ -12,6 +12,7 @@ drift_return drift(double scale, double t, double dt) {
 	for (auto c : hpx_children()) {
 		rfuts.push_back(hpx::async<drift_action>(HPX_PRIORITY_BOOST, c, scale, t, dt));
 	}
+	PRINT( "Drifting on %i\n", hpx_rank());
 	drift_return dr;
 	dr.kin = 0.0;
 	dr.momx = 0.0;
@@ -78,7 +79,7 @@ drift_return drift(double scale, double t, double dt) {
 			dr.nmapped += nmapped;
 			dr.flops += flops;
 		};
-		futs.push_back(hpx::async(func));
+		futs.push_back(hpx::async(HPX_PRIORITY_BOOST, func));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 

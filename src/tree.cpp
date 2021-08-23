@@ -180,7 +180,7 @@ static void tree_allocate_nodes() {
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < tree_allocate_nodes_action > (HPX_THREAD_PRIORITY_BOOST, c));
+		futs.push_back(hpx::async < tree_allocate_nodes_action > (HPX_PRIORITY_BOOST, c));
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
