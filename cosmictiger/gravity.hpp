@@ -36,10 +36,10 @@ enum gravity_cc_type {
 	GRAVITY_CC_DIRECT, GRAVITY_CC_EWALD
 };
 
-int cpu_gravity_cc(expansion<float>&, const vector<tree_id>&, tree_id, gravity_cc_type, bool do_phi);
-int cpu_gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
-int cpu_gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
-int cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
+size_t cpu_gravity_cc(expansion<float>&, const vector<tree_id>&, tree_id, gravity_cc_type, bool do_phi);
+size_t cpu_gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
+size_t cpu_gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
+size_t cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
 
 #ifdef __CUDACC__
 __device__

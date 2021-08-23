@@ -328,6 +328,7 @@ void driver() {
 		runtime += total_time.read();
 		double pps = total_processed / runtime;
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
+	//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 		params.flops += total_flops;
 		PRINT_BOTH(textfp,
 				"%12.3e %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n",

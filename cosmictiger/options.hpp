@@ -12,6 +12,7 @@ struct options {
 	bool do_tracers;
 	bool do_sample;
 	bool do_views;
+	bool twolpt;
 
 	int tracer_count;
 	int parts_dim;
@@ -53,6 +54,7 @@ struct options {
 		arc &  do_tracers;
 		arc &  do_sample;
 		arc &  do_views;
+		arc &  twolpt;
 
 		arc &  tracer_count;
 		arc &  parts_dim;

@@ -7,8 +7,8 @@
 
 #include <boost/align/aligned_allocator.hpp>
 
-int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
-	int flops = 0;
+size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
+	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -74,9 +74,9 @@ int cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 	return flops;
 }
 
-int cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
-	int flops = 0;
+	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -149,8 +149,8 @@ int cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id sel
 	return flops;
 }
 
-int cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
-	int flops = 0;
+size_t cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -223,13 +223,13 @@ int cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tr
 	return flops;
 }
 
-int cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
-	int flops = 0;
+size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
+	size_t flops = 0;
 	timer tm;
 	tm.start();
 	constexpr int chunk_size = 32;
-	int near_count = 0;
-	int far_count = 0;
+	size_t near_count = 0;
+	size_t far_count = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float h = hfloat;
