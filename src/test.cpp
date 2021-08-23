@@ -4,9 +4,11 @@ constexpr bool verbose = true;
 
 #include <cosmictiger/analytic.hpp>
 #include <cosmictiger/domain.hpp>
+#include <cosmictiger/drift.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/kick.hpp>
+#include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/safe_io.hpp>
@@ -25,9 +27,9 @@ double rand1() {
 }
 
 static void rockstar_test() {
-	feenableexcept(FE_DIVBYZERO);
-	feenableexcept(FE_OVERFLOW);
-	feenableexcept(FE_INVALID);
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_OVERFLOW);
+	feenableexcept (FE_INVALID);
 	constexpr int NPARTS = 10000;
 	constexpr int NHALOS = 2;
 	vector<particle_data> parts;
@@ -65,7 +67,8 @@ static void rockstar_test() {
 	}
 	auto halos = rockstar_seed_halos(parts);
 	for (int i = 0; i < halos.size(); i++) {
-		PRINT("%i : %e %e %e : %e %e %e : %i\n", i,  halos[i].x[XDIM], halos[i].x[YDIM], halos[i].x[ZDIM], halos[i].v[XDIM], halos[i].v[YDIM, halos[i].v[ZDIM]], halos[i].parts.size());
+		PRINT("%i : %e %e %e : %e %e %e : %i\n", i, halos[i].x[XDIM], halos[i].x[YDIM], halos[i].x[ZDIM], halos[i].v[XDIM], halos[i].v[YDIM, halos[i].v[ZDIM]],
+				halos[i].parts.size());
 	}
 }
 
@@ -174,13 +177,17 @@ static void kick_test() {
 	PRINT("domains_end: %e s\n", tm.read());
 	tm.reset();
 
-	tm.start();
-	tree_create_params tparams(0, theta);
-	tree_create(tparams);
-	tm.stop();
-	PRINT("tree_create: %e s\n", tm.read());
-	tm.reset();
-	for (int pass = 0; pass < 2; pass++) {
+	timer total_time;
+	for (int pass = 0; pass < 4; pass++) {
+		if (pass == 1) {
+			total_time.start();
+		}
+		tm.start();
+		tree_create_params tparams(0, theta);
+		tree_create(tparams);
+		tm.stop();
+		PRINT("tree_create: %e s\n", tm.read());
+		tm.reset();
 		tm.start();
 		kick_params kparams;
 		kparams.gpu = true;
@@ -212,13 +219,19 @@ static void kick_test() {
 		tm.stop();
 		PRINT("tree_kick: %e s\n", tm.read());
 		tm.reset();
+		tm.start();
+		tree_destroy();
+		tm.stop();
+		PRINT("tree_destroy: %e s\n", tm.read());
+		tm.reset();
+		tm.start();
+		drift(1.0, 0.0, 0.0);
+		tm.stop();
+		PRINT("drift: %e s\n", tm.read());
 	}
-	tm.start();
-	tree_destroy();
-	tm.stop();
-	PRINT("tree_destroy: %e s\n", tm.read());
-	tm.reset();
-
+	total_time.stop();
+	PRINT("avg time per step = %e\n", total_time.read() / 3);
+	kick_workspace::clear_buffers();
 }
 
 static void force_test() {
@@ -299,6 +312,8 @@ static void force_test() {
 	tm.stop();
 	PRINT("analytic_compare: %e s\n", tm.read());
 	tm.reset();
+
+	kick_workspace::clear_buffers();
 
 }
 

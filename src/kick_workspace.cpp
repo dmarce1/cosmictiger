@@ -9,6 +9,8 @@ hpx::lcos::local::counting_semaphore kick_workspace::lock1(1);
 hpx::lcos::local::counting_semaphore kick_workspace::lock2(1);
 vector<tree_node, pinned_allocator<tree_node>> kick_workspace::tree_nodes;
 
+HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
+
 kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
 	total_parts = total_parts_;
 	params = p;
@@ -38,8 +40,6 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 		adjust_part_references(tree_nodes, tree_nodes[index].children[LEFT].index, offset);
 	}
 }
-
-
 
 void kick_workspace::to_gpu() {
 #ifdef USE_CUDA
@@ -190,10 +190,15 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 }
 
 void kick_workspace::clear_buffers() {
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < clear_buffers_action > (c));
+	}
 	host_x = decltype(host_x)();
 	host_y = decltype(host_y)();
 	host_z = decltype(host_z)();
 	tree_nodes = decltype(tree_nodes)();
+	hpx::wait_all(futs.begin(), futs.end());
 }
 
 hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
