@@ -4,13 +4,15 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 
-HPX_PLAIN_ACTION(drift);
+HPX_PLAIN_ACTION (drift);
+
+#define CHUNK_SIZE 1024
 
 drift_return drift(double scale, double t, double dt) {
 	const bool do_map = get_options().do_map;
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
-		rfuts.push_back(hpx::async<drift_action>(HPX_PRIORITY_BOOST, c, scale, t, dt));
+		rfuts.push_back(hpx::async < drift_action > (HPX_PRIORITY_BOOST, c, scale, t, dt));
 	}
 	PRINT( "Drifting on %i\n", hpx_rank());
 	drift_return dr;
@@ -22,9 +24,10 @@ drift_return drift(double scale, double t, double dt) {
 	dr.nmapped = 0;
 	mutex_type mutex;
 	std::vector<hpx::future<void>> futs;
+	std::atomic<part_int> next(0);
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		const auto func = [&mutex, &dr, dt, scale, proc, nthreads, do_map, t]() {
+		const auto func = [&mutex, &dr, dt, scale, proc, nthreads, do_map, t, &next]() {
 			int64_t flops = 0;
 			const double factor = 1.0 / scale;
 			const double a2inv = 1.0 / sqr(scale);
@@ -34,43 +37,48 @@ drift_return drift(double scale, double t, double dt) {
 			double momy = 0.0;
 			double momz = 0.0;
 			part_int nmapped = 0;
-			const part_int begin = size_t(proc) * size_t(particles_size()) / size_t(nthreads);
-			const part_int end = size_t(proc+1) * size_t(particles_size()) / size_t(nthreads);
-			for( part_int i = begin; i < end; i++) {
-				double x = particles_pos(XDIM,i).to_double();
-				double y = particles_pos(YDIM,i).to_double();
-				double z = particles_pos(ZDIM,i).to_double();
-				float vx = particles_vel(XDIM,i);
-				float vy = particles_vel(YDIM,i);
-				float vz = particles_vel(ZDIM,i);
-				kin += 0.5 * sqr(vx,vy,vz) * a2inv;
-				momx += vx;
-				momy += vy;
-				momz += vz;
-				vx *= factor;
-				vy *= factor;
-				vz *= factor;
-				double x0, y0, z0;
-				if( do_map) {
-					x0 = x;
-					y0 = y;
-					z0 = z;
+			part_int begin = (next+=CHUNK_SIZE) - CHUNK_SIZE;
+			while( begin < particles_size()) {
+				part_int end = std::min(begin+CHUNK_SIZE,particles_size());
+				for( part_int i = begin; i < end; i++) {
+					double x = particles_pos(XDIM,i).to_double();
+					double y = particles_pos(YDIM,i).to_double();
+					double z = particles_pos(ZDIM,i).to_double();
+					float vx = particles_vel(XDIM,i);
+					float vy = particles_vel(YDIM,i);
+					float vz = particles_vel(ZDIM,i);
+					kin += 0.5 * sqr(vx,vy,vz) * a2inv;
+					momx += vx;
+					momy += vy;
+					momz += vz;
+					vx *= factor;
+					vy *= factor;
+					vz *= factor;
+					double x0, y0, z0;
+					if( do_map) {
+						x0 = x;
+						y0 = y;
+						z0 = z;
+					}
+					x += double(vx*dt);
+					y += double(vy*dt);
+					z += double(vz*dt);
+					if( do_map) {
+						nmapped += this_map.map_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt);
+					}
+					constrain_range(x);
+					constrain_range(y);
+					constrain_range(z);
+					particles_pos(XDIM,i) = x;
+					particles_pos(YDIM,i) = y;
+					particles_pos(ZDIM,i) = z;
+					flops += 31;
 				}
-				x += double(vx*dt);
-				y += double(vy*dt);
-				z += double(vz*dt);
-				if( do_map) {
-					nmapped += this_map.map_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt);
-				}
-				constrain_range(x);
-				constrain_range(y);
-				constrain_range(z);
-				particles_pos(XDIM,i) = x;
-				particles_pos(YDIM,i) = y;
-				particles_pos(ZDIM,i) = z;
-				flops += 31;
+				begin = (next+=CHUNK_SIZE) - CHUNK_SIZE;
 			}
-			map_add_map(std::move(this_map));
+			if( do_map ) {
+				map_add_map(std::move(this_map));
+			}
 			std::lock_guard<mutex_type> lock(mutex);
 			dr.kin += kin;
 			dr.momx += momx;
