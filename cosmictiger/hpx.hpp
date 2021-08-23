@@ -24,6 +24,7 @@
 #define hpx_copy hpx::copy
 #endif
 
+#define HPX_PRIORITY_BOOST hpx::launch::async(hpx::threads::thread_priority_boost)
 
 
 const vector<hpx::id_type>& hpx_localities();

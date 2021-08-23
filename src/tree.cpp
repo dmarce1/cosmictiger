@@ -162,7 +162,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	if (!threadme) {
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async < tree_create_action > (hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async < tree_create_action > (HPX_PRIORITY_BOOST, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
 			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
@@ -191,6 +191,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 	}
 	if (local_root) {
+		PRINT( "Sorting on %i\n", hpx_rank());
 		part_range.first = 0;
 		part_range.second = particles_size();
 	}
