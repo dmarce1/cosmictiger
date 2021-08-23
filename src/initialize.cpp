@@ -224,7 +224,7 @@ void twolpt_correction2(int dim) {
 					if (i2 > 0) {
 						float kz = 2.f * (float) M_PI / box_size * float(k);
 						float k2 = kx * kx + ky * ky + kz * kz;
-						const float K[NDIM + 1] = {kx, ky, kz};
+						const float K[NDIM] = {kx, ky, kz};
 						Y[index] = -cmplx(0, 1) * K[dim] * Y[index] / k2;
 					} else {
 						Y[index] = cmplx(0, 0);
@@ -271,7 +271,7 @@ void twolpt_generate(int dim1, int dim2) {
 						const float k = sqrtf(kx * kx + ky * ky + kz * kz);
 						const float x = gsl_rng_uniform(rndgen);
 						const float y = gsl_rng_uniform(rndgen);
-						const float K[NDIM + 1] = {kx, ky, kz, 1};
+						const cmplx K[NDIM + 1] = {{kx,0}, {ky,0}, {kz,0}, {0,-1}};
 						const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * std::sqrt(-std::log(std::abs(x)));
 						Y[index] = rand_normal * std::sqrt(power(k)) * factor * K[dim1] * K[dim2] / k2;
 					} else {
