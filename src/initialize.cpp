@@ -118,14 +118,14 @@ void initialize() {
 	}
 	if (get_options().twolpt) {
 		twolpt_init();
-		printf("2LPT phase 1\n");
 
-		twolpt(0, 0);
+		printf("2LPT phase 1\n");
+		twolpt(1, 1);
 		twolpt_phase(0);
 		fft3d_destroy();
 
 		printf("2LPT phase 2\n");
-		twolpt(1, 1);
+		twolpt(2, 2);
 		twolpt_phase(1);
 		fft3d_destroy();
 
@@ -140,12 +140,12 @@ void initialize() {
 		fft3d_destroy();
 
 		printf("2LPT phase 5\n");
-		twolpt(1, 1);
+		twolpt(0, 0);
 		twolpt_phase(4);
 		fft3d_destroy();
 
 		printf("2LPT phase 6\n");
-		twolpt(2, 2);
+		twolpt(1, 1);
 		twolpt_phase(5);
 		fft3d_destroy();
 
@@ -167,6 +167,7 @@ void initialize() {
 		twolpt_correction1();
 		twolpt_f2delta2_inv();
 		fft3d_destroy();
+
 		for (int dim = 0; dim < NDIM; dim++) {
 			printf("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
 			twolpt_correction2(dim);
@@ -222,16 +223,16 @@ void twolpt_correction2(int dim) {
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,factor](array<int64_t,NDIM> I) {
-			const int i = I[0] == N/2 ? 0 : (I[0] < N / 2 ? I[0] : I[0] - N);
+			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				const int j = I[1] == N/2 ? 0 : (I[1] < N / 2 ? I[1] : I[1] - N);
+				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
 				const float ky = 2.f * (float) M_PI / box_size * float(j);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-					const int k = I[2] == N/2 ? 0 : (I[2] < N / 2 ? I[2] : I[2] - N);
+					const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 					const int i2 = sqr(i, j, k);
 					const int64_t index = box.index(I);
-					if (i2 > 0) {
+					if (i2 > 0 && i2 < N * N / 4) {
 						float kz = 2.f * (float) M_PI / box_size * float(k);
 						float k2 = kx * kx + ky * ky + kz * kz;
 						const float K[NDIM] = {kx, ky, kz};
@@ -263,16 +264,16 @@ void twolpt_generate(int dim1, int dim2) {
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor](array<int64_t,NDIM> I) {
-			const int seed = I[0] * 44145 + 425;
+			const int seed = I[0] * 44145 + 45;
 			gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 			gsl_rng_set(rndgen, seed);
-			const int i = I[0] < N / 2 ? I[0] : I[0] - N;
+			const int i =  (I[0] < N / 2 ? I[0] : I[0] - N);
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				const int j = I[1] < N / 2 ? I[1] : I[1] - N;
+				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
 				const float ky = 2.f * (float) M_PI / box_size * float(j);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-					const int k = I[2] < N / 2 ? I[2] : I[2] - N;
+					const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 					const int i2 = sqr(i, j, k);
 					const int64_t index = box.index(I);
 					if (i2 > 0 && i2 < N * N / 4) {

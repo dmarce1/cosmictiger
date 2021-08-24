@@ -141,7 +141,6 @@ void fft3d_force_real() {
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < fft3d_force_real_action > (c));
 	}
-
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int64_t, NDIM> i;
 	range<int64_t> mirror_box = box;
@@ -580,6 +579,16 @@ static void fft3d_phase3() {
 					const int64_t l = cmplx_mybox[ZDIM].index(i);
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
+					if( i[2] == 0 || i[2] == N / 2) {
+						const double value = Y[l].imag() / (Y[l].abs()+1e-20);
+						if(std::abs(value) > 5.0e-3) {
+							PRINT( "!!!! %i %i %i %e\n", i[0], i[1], i[2], value);
+						}
+						if(std::abs(value) > 5.0e-2) {
+							PRINT( "%i %i %i %e\n", i[0], i[1], i[2], value);
+							THROW_ERROR( "This FFTinv isn't of a real\n");
+						}
+					}
 				}
 				fftwf_execute(p);
 				for (i[2] = 0; i[2] != N; i[2]++) {

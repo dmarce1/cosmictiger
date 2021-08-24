@@ -5,6 +5,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/analytic.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/drift.hpp>
+#include <cosmictiger/fft.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/kick.hpp>
@@ -22,6 +23,62 @@ constexpr bool verbose = true;
 
 double rand1() {
 	return ((double) rand() + 0.5) / (double) RAND_MAX;
+}
+
+static void fft1_test() {
+	const int N = 100;
+	range<int64_t> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = 0;
+		box.end[dim] = N;
+	}
+	vector<float> A(box.volume());
+	for (int i = 0; i < box.volume(); i++) {
+		A[i] = 0.1 + (double) rand() / RAND_MAX;
+	}
+	fft3d_init(N);
+	fft3d_accumulate_real(box, A);
+	fft3d_execute();
+	fft3d_inv_execute();
+	auto B = fft3d_read_real(box);
+	fft3d_destroy();
+	for (int i = 0; i < box.volume(); i++) {
+		const double err = std::abs(A[i] - B[i]) / A[i];
+		if (err > 1.0e-5) {
+			PRINT("%e %e %e\n", err, A[i], B[i]);
+		}
+	}
+}
+
+static void fft2_test() {
+	const int N = 4;
+	range<int64_t> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = 0;
+		box.end[dim] = N;
+	}
+	vector<float> A(box.volume());
+	array<int64_t,NDIM> I;
+	for (I[0] = 0; I[0] < N; I[0]++) {
+		for (I[1] = 0; I[1] < N; I[1]++) {
+			for (I[2] = 0; I[2] < N; I[2]++) {
+				A[box.index(I)] = cos(M_PI*I[2]);
+			}
+		}
+	}
+	fft3d_init(N);
+	fft3d_accumulate_real(box, A);
+	fft3d_execute();
+	box.end[ZDIM] = N / 2 + 1;
+	auto B = fft3d_read_complex(box);
+	fft3d_destroy();
+	for (I[0] = 0; I[0] < N; I[0]++) {
+		for (I[1] = 0; I[1] < N; I[1]++) {
+			for (I[2] = 0; I[2] < N / 2 + 1; I[2]++) {
+				PRINT("%i %i %i %e %e\n", I[0], I[1], I[2], B[box.index(I)].real(), B[box.index(I)].imag());
+			}
+		}
+	}
 }
 
 static void rockstar_test() {
@@ -319,6 +376,10 @@ static void force_test() {
 void test(std::string test) {
 	if (test == "domain") {
 		domain_test();
+	} else if (test == "fft1") {
+		fft1_test();
+	} else if (test == "fft2") {
+		fft2_test();
 	} else if (test == "force") {
 		force_test();
 	} else if (test == "kick") {
