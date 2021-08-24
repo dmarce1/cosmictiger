@@ -17,26 +17,18 @@ drift_return drift(double scale, double t, double dt) {
 	}
 	const int nthreads = hpx::thread::hardware_concurrency() - 1;
 	PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
-	drift_return dr;
-	dr.kin = 0.0;
-	dr.momx = 0.0;
-	dr.momy = 0.0;
-	dr.momz = 0.0;
-	dr.flops = 0.0;
-	dr.nmapped = 0;
-	mutex_type mutex;
-	std::vector<hpx::future<void>> futs;
 	std::atomic<part_int> next(0);
-	const auto func = [&mutex, &dr, dt, scale, do_map, t, &next]() {
-		int64_t flops = 0;
+	const auto func = [dt, scale, do_map, t, &next]() {
 		const double factor = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
-		double kin = 0.0;
+		drift_return this_dr;
 		healpix_map this_map;
-		double momx = 0.0;
-		double momy = 0.0;
-		double momz = 0.0;
-		part_int nmapped = 0;
+		this_dr.kin = 0.0;
+		this_dr.momx = 0.0;
+		this_dr.momy = 0.0;
+		this_dr.momz = 0.0;
+		this_dr.flops = 0.0;
+		this_dr.nmapped = 0;
 		part_int begin = (next+=CHUNK_SIZE) - CHUNK_SIZE;
 		while( begin < particles_size()) {
 			part_int end = std::min(begin+CHUNK_SIZE,particles_size());
@@ -47,10 +39,10 @@ drift_return drift(double scale, double t, double dt) {
 				float vx = particles_vel(XDIM,i);
 				float vy = particles_vel(YDIM,i);
 				float vz = particles_vel(ZDIM,i);
-				kin += 0.5 * sqr(vx,vy,vz) * a2inv;
-				momx += vx;
-				momy += vy;
-				momz += vz;
+				this_dr.kin += 0.5 * sqr(vx,vy,vz) * a2inv;
+				this_dr.momx += vx;
+				this_dr.momy += vy;
+				this_dr.momz += vz;
 				vx *= factor;
 				vy *= factor;
 				vz *= factor;
@@ -64,7 +56,7 @@ drift_return drift(double scale, double t, double dt) {
 				y += double(vy*dt);
 				z += double(vz*dt);
 				if( do_map) {
-					nmapped += this_map.map_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt);
+					this_dr.nmapped += this_map.map_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt);
 				}
 				constrain_range(x);
 				constrain_range(y);
@@ -72,30 +64,21 @@ drift_return drift(double scale, double t, double dt) {
 				particles_pos(XDIM,i) = x;
 				particles_pos(YDIM,i) = y;
 				particles_pos(ZDIM,i) = z;
-				flops += 31;
+				this_dr.flops += 31;
 			}
 			begin = (next+=CHUNK_SIZE) - CHUNK_SIZE;
 		}
 		if( do_map ) {
 			map_add_map(std::move(this_map));
 		}
-		std::lock_guard<mutex_type> lock(mutex);
-		dr.kin += kin;
-		dr.momx += momx;
-		dr.momy += momy;
-		dr.momz += momz;
-		dr.nmapped += nmapped;
-		dr.flops += flops;
+		return this_dr;
 	};
 	timer tm;
 	tm.start();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async(func));
+		rfuts.push_back(hpx::async(func));
 	}
-	func();
-	hpx::wait_all(futs.begin(), futs.end());
-	tm.stop();
-	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
+	auto dr = func();
 	for (auto& fut : rfuts) {
 		auto this_dr = fut.get();
 		dr.kin += this_dr.kin;
@@ -104,5 +87,7 @@ drift_return drift(double scale, double t, double dt) {
 		dr.flops += this_dr.flops;
 		dr.momz += this_dr.momz;
 	}
+	tm.stop();
+	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }
