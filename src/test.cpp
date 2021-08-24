@@ -20,8 +20,6 @@ constexpr bool verbose = true;
 //0.55, 0.65
 //0.4, 0.5
 
-constexpr double theta = 0.8;
-
 double rand1() {
 	return ((double) rand() + 0.5) / (double) RAND_MAX;
 }
@@ -184,7 +182,7 @@ static void kick_test() {
 		}
 		tm.reset();
 		tm.start();
-		tree_create_params tparams(0, theta);
+		tree_create_params tparams(0, get_options().theta);
 		tree_create(tparams);
 		tm.stop();
 		PRINT("tree_create: %e s\n", tm.read());
@@ -202,7 +200,7 @@ static void kick_test() {
 		kparams.first_call = true;
 		kparams.min_rung = 0;
 		kparams.t0 = 1.0;
-		kparams.theta = theta;
+		kparams.theta = get_options().theta;
 		expansion<float> L;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] = 0.0f;
@@ -264,7 +262,7 @@ static void force_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create_params tparams(0, theta);
+	tree_create_params tparams(0, get_options().theta);
 	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
@@ -283,7 +281,7 @@ static void force_test() {
 	kparams.first_call = true;
 	kparams.min_rung = 0;
 	kparams.t0 = 1.0;
-	kparams.theta = theta;
+	kparams.theta = get_options().theta;
 	expansion<float> L;
 	for (int i = 0; i < EXPANSION_SIZE; i++) {
 		L[i] = 0.0f;

@@ -40,6 +40,7 @@ struct options {
 	double z1;
 	double hubble;
 	double sigma8;
+	double theta;
 
 	std::string config_file;
 	std::string test;
@@ -68,6 +69,7 @@ struct options {
 		arc &  min_group;
 		arc &  view_size;
 
+		arc &  theta;
 		arc &  sample_dim;
 		arc &  link_len;
 		arc &  hsoft;

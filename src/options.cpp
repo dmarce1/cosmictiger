@@ -70,7 +70,8 @@ bool process_options(int argc, char *argv[]) {
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("sample_dim", po::value<double>(&(opts.sample_dim))->default_value(0.01), "size of box to output to SILO") //
-	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
+	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
+		("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 			;
 
 	po::variables_map vm;
@@ -119,6 +120,9 @@ bool process_options(int argc, char *argv[]) {
 	opts.link_len = 1.0 / opts.parts_dim / 5.0;
 	opts.min_group = 20;
 
+	if( opts.parts_dim % 2 == 1 ) {
+		THROW_ERROR( "parts_dim must be an even number\n");
+	}
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
 	PRINT("Box size = %e\n", opts.code_to_cm / constants::mpc_to_cm);

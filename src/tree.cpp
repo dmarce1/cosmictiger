@@ -202,7 +202,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		tree_allocate_nodes();
 	}
 	if (local_root) {
-		PRINT("Sorting on %i\n", hpx_rank());
+//		PRINT("Sorting on %i\n", hpx_rank());
 		part_range.first = 0;
 		part_range.second = particles_size();
 	}
@@ -215,6 +215,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	double total_flops = 0.0;
 	float radius;
 	double r;
+	int min_depth = depth;
+	int max_depth = depth;
 	if (!allocator.ready) {
 		allocator.reset();
 		allocator.ready = true;
@@ -257,6 +259,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
+		min_depth = std::min(rcl.min_depth, rcr.min_depth);
+		max_depth = std::max(rcl.max_depth, rcr.max_depth);
 		total_flops += rcl.flops + rcr.flops;
 		nactive = rcl.nactive + rcr.nactive;
 		double rr;
@@ -473,6 +477,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.nactive = nactive;
 	total_flops += flops;
 	rc.flops = total_flops;
+	rc.min_depth = min_depth;
+	rc.max_depth = max_depth;
 	if (local_root) {
 //		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
 	}

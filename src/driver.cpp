@@ -194,7 +194,7 @@ void driver() {
 		}
 		domains_rebound();
 		params.flops = 0;
-		params.tau_max = cosmos_age(a0);
+		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		params.tau = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;
@@ -202,7 +202,9 @@ void driver() {
 		params.iter = 0;
 		params.runtime = 0.0;
 		params.total_processed = 0;
+		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 	}
+	auto& years = params.years;
 	auto& a = params.a;
 	auto& tau = params.tau;
 	auto& tau_max = params.tau_max;
@@ -297,6 +299,7 @@ void driver() {
 		a += dadt1 * dt;
 		const double dadt2 = cosmos_dadtau(a);
 		a += 0.5 * (dadt2 - dadt1) * dt;
+		const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
 		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		timer dtm;
 		dtm.start();
@@ -316,9 +319,10 @@ void driver() {
 			THROW_ERROR("unable to open progress.txt for writing\n");
 		}
 		if (full_eval) {
-			PRINT_BOTH(textfp, "\n%12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s %12s\n", "runtime", "i",
-					"imbalance", "Z", "time", "dt", "pot", "kin", "cosmicK", "pot err", "min rung", "max rung", "nactive", "nmapped", "load", "dtime", "stime",
-					"ktime", "dtime", "total", "pps", "GFLOPS/s");
+			PRINT_BOTH(textfp,
+					"\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
+					"runtime", "i", "imbalance", "min depth", "max depth", "Z", "a", "cfl. time", "years", "dt", "pot", "kin", "cosmicK", "pot err", "min rung",
+					"max rung", "nactive", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "avg total", "pps", "GFLOPSins", "GFLOPS");
 		}
 		iter++;
 		total_processed += kr.nactive;
@@ -328,13 +332,14 @@ void driver() {
 		runtime += total_time.read();
 		double pps = total_processed / runtime;
 		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
-	//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
+		//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 		params.flops += total_flops;
 		PRINT_BOTH(textfp,
-				"%12.3e %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12li %12li %12li %12li %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e %12.3e \n",
-				runtime, iter - 1, imbalance, z, tau / tau_max, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, kr.nactive, dr.nmapped,
-				kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
-				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+				"%10.3e %10li %10.3e %10i %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10li %10li %10li %10li %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
+				runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, z, a1, tau / tau_max, years, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung,
+				kr.max_rung, kr.nactive, dr.nmapped, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter,
+				(double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
+				params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		fclose(textfp);
 		total_time.reset();
 		remaining_time.stop();
@@ -349,6 +354,7 @@ void driver() {
 		tau += dt;
 		this_iter++;
 		map_flush(tau);
+		years += dyears;
 		if (this_iter > get_options().max_iter) {
 			break;
 		}

@@ -13,6 +13,7 @@ struct driver_params {
 	size_t total_processed;
 	double flops;
 	double runtime;
+	double years;
 	time_type itime;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -26,6 +27,7 @@ struct driver_params {
 		arc & flops;
 		arc & runtime;
 		arc & itime;
+		arc & years;
 	}
 };
 

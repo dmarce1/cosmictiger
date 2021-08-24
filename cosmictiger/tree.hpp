@@ -115,6 +115,8 @@ struct tree_create_return {
 	size_t active_nodes;
 	float radius;
 	size_t node_count;
+	int max_depth;
+	int min_depth;
 	double flops;
 	template<class A>
 	void serialize(A&& a, unsigned) {
@@ -126,6 +128,8 @@ struct tree_create_return {
 		a & radius;
 		a & node_count;
 		a & flops;
+		a & max_depth;
+		a & min_depth;
 	}
 };
 
