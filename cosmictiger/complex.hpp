@@ -135,7 +135,7 @@ inline void swap(complex<T>& a, complex<T>& b) {
 
 
 
-using cmplx = complex<float>;
+using cmplx = complex<double>;
 
 
 inline cmplx expc(cmplx z) {

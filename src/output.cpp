@@ -5,7 +5,7 @@
 
 void output_particles(const std::string filename, const vector<output_particle>& parts) {
 	DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
-	vector<double> x(parts.size());
+		vector<double> x(parts.size());
 	vector<double> y(parts.size());
 	vector<double> z(parts.size());
 	for (int i = 0; i < parts.size(); i++) {

@@ -10,7 +10,7 @@ static void compute_density();
 HPX_PLAIN_ACTION (compute_density);
 
 
-vector<float> power_spectrum_compute() {
+vector<double> power_spectrum_compute() {
 	const int N = get_options().parts_dim;
 	fft3d_init(N);
 	compute_density();
@@ -21,7 +21,7 @@ vector<float> power_spectrum_compute() {
 }
 
 static void compute_density() {
-	vector<float> rho;
+	vector<double> rho;
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (auto c : hpx_children()) {

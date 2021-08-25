@@ -109,7 +109,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas chealpix dl silo
+    Boost::boost fftw3 gsl gslcblas chealpix dl silo
   SOURCES
     ${cosmictiger_source_files}
   HEADERS

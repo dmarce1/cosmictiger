@@ -9,7 +9,7 @@
 #define POWER_HPP_
 
 
-vector<float> power_spectrum_compute();
+vector<double> power_spectrum_compute();
 
 
 
