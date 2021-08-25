@@ -10,7 +10,7 @@ static void compute_density();
 HPX_PLAIN_ACTION (compute_density);
 
 
-vector<double> power_spectrum_compute() {
+vector<float> power_spectrum_compute() {
 	const int N = get_options().parts_dim;
 	fft3d_init(N);
 	compute_density();
@@ -21,7 +21,7 @@ vector<double> power_spectrum_compute() {
 }
 
 static void compute_density() {
-	vector<double> rho;
+	vector<float> rho;
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (auto c : hpx_children()) {
@@ -50,31 +50,31 @@ static void compute_density() {
 		futs2.push_back(hpx::async([proc,nthreads,N,intbox,&rho]() {
 			const part_int begin = (size_t) proc * particles_size() / nthreads;
 			const part_int end = (size_t) (proc+1) * particles_size() / nthreads;
-			const double Ninv = 1.0 / N;
+			const float Ninv = 1.0 / N;
 			for( int i = begin; i < end; i++) {
-				const double x = particles_pos(XDIM,i).to_double();
-				const double y = particles_pos(YDIM,i).to_double();
-				const double z = particles_pos(ZDIM,i).to_double();
+				const float x = particles_pos(XDIM,i).to_float();
+				const float y = particles_pos(YDIM,i).to_float();
+				const float z = particles_pos(ZDIM,i).to_float();
 				const part_int i0 = x * N;
 				const part_int j0 = y * N;
 				const part_int k0 = z * N;
 				const part_int i1 = i0 + 1;
 				const part_int j1 = j0 + 1;
 				const part_int k1 = k0 + 1;
-				const double wx1 = x * N - i0;
-				const double wy1 = y * N - j0;
-				const double wz1 = z * N - k0;
-				const double wx0 = 1.0 - wx1;
-				const double wy0 = 1.0 - wy1;
-				const double wz0 = 1.0 - wz1;
-				const double w000 = wx0 * wy0 * wz0;
-				const double w001 = wx0 * wy0 * wz1;
-				const double w010 = wx0 * wy1 * wz0;
-				const double w011 = wx0 * wy1 * wz1;
-				const double w100 = wx1 * wy0 * wz0;
-				const double w101 = wx1 * wy0 * wz1;
-				const double w110 = wx1 * wy1 * wz0;
-				const double w111 = wx1 * wy1 * wz1;
+				const float wx1 = x * N - i0;
+				const float wy1 = y * N - j0;
+				const float wz1 = z * N - k0;
+				const float wx0 = 1.0 - wx1;
+				const float wy0 = 1.0 - wy1;
+				const float wz0 = 1.0 - wz1;
+				const float w000 = wx0 * wy0 * wz0;
+				const float w001 = wx0 * wy0 * wz1;
+				const float w010 = wx0 * wy1 * wz0;
+				const float w011 = wx0 * wy1 * wz1;
+				const float w100 = wx1 * wy0 * wz0;
+				const float w101 = wx1 * wy0 * wz1;
+				const float w110 = wx1 * wy1 * wz0;
+				const float w111 = wx1 * wy1 * wz1;
 				const part_int i000 = intbox.index(i0,j0,k0);
 				const part_int i001 = intbox.index(i0,j0,k1);
 				const part_int i010 = intbox.index(i0,j1,k0);

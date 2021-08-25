@@ -17,7 +17,7 @@
 
 struct multipole_pos {
 	multipole<float> m;
-	array<fixed32,NDIM> pos;
+	array<fixed32, NDIM> pos;
 };
 
 struct tree_id {
@@ -60,7 +60,7 @@ struct tree_id_hash_hi {
 
 struct tree_node {
 	multipole<float> multi;
-	array<fixed32,NDIM> pos;
+	array<fixed32, NDIM> pos;
 	array<tree_id, NCHILD> children;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
@@ -72,8 +72,7 @@ struct tree_node {
 	bool source_leaf;
 	size_t node_count;
 	size_t active_nodes;
-	int depth;
-	CUDA_EXPORT
+	int depth;CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
 		return (multipole_pos*) &multi;
 	}
@@ -86,8 +85,11 @@ struct tree_node {
 		r.range = part_range;
 		return r;
 	}
-	bool is_local() const {
+	inline bool is_local() const {
 		return proc_range.second - proc_range.first == 1;
+	}
+	inline bool is_local_here() const {
+		return is_local() && proc_range.first == hpx_rank();
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
@@ -147,8 +149,8 @@ struct tree_create_params {
 	}
 };
 
-tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range = pair<part_int>(-1, -1),
-		range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
+tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
+		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy();
 int tree_min_level(double theta);
 const tree_node* tree_get_node(tree_id);

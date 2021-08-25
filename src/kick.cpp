@@ -114,6 +114,19 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 			}
 		}
+		if( eligible && !self_ptr->sink_leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
+			const auto all_local = [](const vector<tree_id>& list) {
+				bool all = true;
+				for( int i = 0; i < list.size(); i++) {
+					if( !tree_get_node(list[i])->is_local_here() ) {
+						all = false;
+						break;
+					}
+				}
+				return all;
+			};
+			eligible = all_local(dchecklist) && all_local(echecklist);
+		}
 		if (eligible) {
 			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 		}

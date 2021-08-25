@@ -95,5 +95,18 @@ inline void atomic_add(std::atomic<float>& y, float x) {
 
 }
 
+CUDA_EXPORT
+inline float tsc(float x) {
+	const float absx = fabsf(x);
+	if (absx < 0.5) {
+		return 0.75 - sqr(x);
+	} else if (absx < 1.5) {
+		return 0.5 * sqr(1.5 - absx);
+	} else {
+		return 0.0;
+	}
+}
+
+
 
 #endif /* MATH_HPP_ */

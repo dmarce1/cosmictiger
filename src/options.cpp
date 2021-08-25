@@ -61,7 +61,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "instantaneous maps") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "Use 2LPT initial conditions") //
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
-	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(16 * 1024), "size of particle cache line") //
+	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(8*1024), "size of particle cache line") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
 	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "map healpix Nside") //

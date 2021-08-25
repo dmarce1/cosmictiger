@@ -10,51 +10,51 @@
 #include <gsl/gsl_rng.h>
 
 struct power_spectrum_function {
-	vector<double> P;
-	double logkmin;
-	double logkmax;
-	double dlogk;
-	double operator()(double k) const {
-		double logk = std::log(k);
-		const double k0 = (logk - logkmin) / dlogk;
+	vector<float> P;
+	float logkmin;
+	float logkmax;
+	float dlogk;
+	float operator()(float k) const {
+		float logk = std::log(k);
+		const float k0 = (logk - logkmin) / dlogk;
 		int i0 = int(k0) - 1;
 		i0 = std::max(0, i0);
 		i0 = std::min((int) (P.size() - 4), i0);
 		int i1 = i0 + 1;
 		int i2 = i0 + 2;
 		int i3 = i0 + 3;
-		double x = k0 - i1;
-		double y0 = std::log(P[i0]);
-		double y1 = std::log(P[i1]);
-		double y2 = std::log(P[i2]);
-		double y3 = std::log(P[i3]);
-		double k1 = (y2 - y0) * 0.5;
-		double k2 = (y3 - y1) * 0.5;
-		double a = y1;
-		double b = k1;
-		double c = -2 * k1 - k2 - 3 * y1 + 3 * y2;
-		double d = k1 + k2 + 2 * y1 - 2 * y2;
+		float x = k0 - i1;
+		float y0 = std::log(P[i0]);
+		float y1 = std::log(P[i1]);
+		float y2 = std::log(P[i2]);
+		float y3 = std::log(P[i3]);
+		float k1 = (y2 - y0) * 0.5;
+		float k2 = (y3 - y1) * 0.5;
+		float a = y1;
+		float b = k1;
+		float c = -2 * k1 - k2 - 3 * y1 + 3 * y2;
+		float d = k1 + k2 + 2 * y1 - 2 * y2;
 		return std::exp(a + b * x + c * x * x + d * x * x * x);
 	}
-	double sigma8_integrand(double x) const {
-		double R = 8 / get_options().hubble;
-		const double c0 = double(9) / (2. * double(M_PI) * double(M_PI)) / powf(R, 6);
-		double k = std::exp(x);
-		double P = (*this)(k);
-		double tmp = (std::sin(k * R) - k * R * std::cos(k * R));
+	float sigma8_integrand(float x) const {
+		float R = 8 / get_options().hubble;
+		const float c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(R, 6);
+		float k = std::exp(x);
+		float P = (*this)(k);
+		float tmp = (std::sin(k * R) - k * R * std::cos(k * R));
 		return c0 * P * tmp * tmp * std::pow(k, -3);
 	}
 	void normalize() {
 		const int N = 8 * 1024;
-		double sum = 0.0;
-		double dlogk = (logkmax - logkmin) / N;
+		float sum = 0.0;
+		float dlogk = (logkmax - logkmin) / N;
 		sum = (1.0 / 3.0) * (sigma8_integrand(logkmax) + sigma8_integrand(logkmin)) * dlogk;
 		for (int i = 1; i < N; i += 2) {
-			double logk = logkmin + i * dlogk;
+			float logk = logkmin + i * dlogk;
 			sum += (4.0 / 3.0) * sigma8_integrand(logk) * dlogk;
 		}
 		for (int i = 2; i < N; i += 2) {
-			double logk = logkmin + i * dlogk;
+			float logk = logkmin + i * dlogk;
 			sum += (2.0 / 3.0) * sigma8_integrand(logk) * dlogk;
 		}
 		sum = sqr(get_options().sigma8) / sum;
@@ -66,7 +66,7 @@ struct power_spectrum_function {
 };
 
 static void zeldovich_begin(int dim1, int dim2);
-static double zeldovich_end(int dim, bool, double, double);
+static float zeldovich_end(int dim, bool, float, float);
 static void twolpt_init();
 static void twolpt_destroy();
 static void twolpt(int, int);
@@ -86,23 +86,23 @@ HPX_PLAIN_ACTION (twolpt_correction2);
 HPX_PLAIN_ACTION (twolpt);
 HPX_PLAIN_ACTION (twolpt_destroy);
 
-static vector<double> delta2;
+static vector<float> delta2;
 static vector<cmplx> delta2_inv;
-static vector<double> delta2_part;
+static vector<float> delta2_part;
 
 void initialize() {
 	const int64_t N = get_options().parts_dim;
-	const double omega_m = get_options().omega_m;
-	const double a0 = 1.0 / (get_options().z0 + 1.0);
-	const double D1 = cosmos_growth_factor(omega_m, a0) / cosmos_growth_factor(omega_m, 1.0);
-	const double Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
-	const double f1 = std::pow(Om, 5.f / 9.f);
-	const double H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
-	const double H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
-	double prefac1 = f1 * H * a0 * a0;
-	const double D2 = -3.f * sqr(D1) / 7.f;
-	const double f2 = 2.f * std::pow(Om, 6.f / 11.f);
-	double prefac2 = f2 * H * a0 * a0;
+	const float omega_m = get_options().omega_m;
+	const float a0 = 1.0 / (get_options().z0 + 1.0);
+	const float D1 = cosmos_growth_factor(omega_m, a0) / cosmos_growth_factor(omega_m, 1.0);
+	const float Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
+	const float f1 = std::pow(Om, 5.f / 9.f);
+	const float H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
+	const float H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
+	float prefac1 = f1 * H * a0 * a0;
+	const float D2 = -3.f * sqr(D1) / 7.f;
+	const float f2 = 2.f * std::pow(Om, 6.f / 11.f);
+	float prefac2 = f2 * H * a0 * a0;
 	PRINT("D1 = %e\n", D1);
 	PRINT("D2 = %e\n", D2);
 	PRINT("prefac1 = %e\n", prefac1 / a0);
@@ -112,7 +112,7 @@ void initialize() {
 		zeldovich_begin(dim, NDIM);
 //		fft3d_force_real();
 		fft3d_inv_execute();
-		double dxmax = zeldovich_end(dim, dim == 0, D1, prefac1);
+		float dxmax = zeldovich_end(dim, dim == 0, D1, prefac1);
 		fft3d_destroy();
 		PRINT("%e\n", dxmax);
 	}
@@ -173,7 +173,7 @@ void initialize() {
 		for (int dim = 0; dim < NDIM; dim++) {
 			printf("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
 			twolpt_correction2(dim);
-			double dxmax = zeldovich_end(dim, false, -D2, prefac2);
+			float dxmax = zeldovich_end(dim, false, -D2, prefac2);
 			fft3d_destroy();
 			PRINT("%e\n", dxmax);
 		}
@@ -218,8 +218,8 @@ void twolpt_correction2(int dim) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < twolpt_correction2_action > (c, dim));
 	}
-	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const double factor = std::pow(box_size, -1.5) * N * N * N;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	const auto box = fft3d_complex_range();
 	auto Y = delta2_inv;
 	array<int64_t, NDIM> I;
@@ -227,18 +227,18 @@ void twolpt_correction2(int dim) {
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,factor](array<int64_t,NDIM> I) {
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
-			const double kx = 2.f * (double) M_PI / box_size * double(i);
+			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
-				const double ky = 2.f * (double) M_PI / box_size * double(j);
+				const float ky = 2.f * (float) M_PI / box_size * float(j);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 					const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 					const int i2 = sqr(i, j, k);
 					const int64_t index = box.index(I);
 					if (i2 > 0 && i2 < N * N / 4) {
-						double kz = 2.f * (double) M_PI / box_size * double(k);
-						double k2 = kx * kx + ky * ky + kz * kz;
-						const double K[NDIM] = {kx, ky, kz};
+						float kz = 2.f * (float) M_PI / box_size * float(k);
+						float k2 = kx * kx + ky * ky + kz * kz;
+						const float K[NDIM] = {kx, ky, kz};
 						Y[index] = -cmplx(0, 1) * K[dim] * Y[index] / k2;
 					} else {
 						Y[index] = cmplx(0, 0);
@@ -260,8 +260,8 @@ void twolpt_correction2(int dim) {
 
 void twolpt_generate(int dim1, int dim2) {
 	const int64_t N = get_options().parts_dim;
-	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const double factor = std::pow(box_size, -1.5) * N * N * N;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
 	static auto power = read_power_spectrum();
 	const auto box = fft3d_complex_range();
@@ -272,7 +272,7 @@ void twolpt_generate(int dim1, int dim2) {
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor](array<int64_t,NDIM> I) {
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
-			const double kx = 2.f * (double) M_PI / box_size * double(i);
+			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				int seed = (I[0] * N + I[1])*1234 + 42;
 				gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
@@ -281,20 +281,20 @@ void twolpt_generate(int dim1, int dim2) {
 					gsl_rng_uniform(rndgen);
 				}
 				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
-				const double ky = 2.f * (double) M_PI / box_size * double(j);
+				const float ky = 2.f * (float) M_PI / box_size * float(j);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 					const int64_t index = box.index(I);
 					if( I[2] > 0 ) {
 						const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 						const int i2 = sqr(i, j, k);
 						if (i2 > 0 && i2 < N * N / 4) {
-							const double kz = 2.f * (double) M_PI / box_size * double(k);
-							const double k2 = kx * kx + ky * ky + kz * kz;
-							const double K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-							const double x = gsl_rng_uniform(rndgen);
-							const double y = gsl_rng_uniform(rndgen);
+							const float kz = 2.f * (float) M_PI / box_size * float(k);
+							const float k2 = kx * kx + ky * ky + kz * kz;
+							const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
+							const float x = gsl_rng_uniform(rndgen);
+							const float y = gsl_rng_uniform(rndgen);
 							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
-							const auto rand_normal = expc(cmplx(0, 1) * 2.f * double(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
 							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
 						} else {
 							Y[index] = cmplx(0.f, 0.f);
@@ -314,7 +314,7 @@ void twolpt_generate(int dim1, int dim2) {
 				}
 				const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 				const int i2 = sqr(i, j, k);
-				double sgn = 1.0;
+				float sgn = 1.0;
 				if( dim1 != NDIM) {
 					sgn *= -1.0;
 				}
@@ -322,13 +322,13 @@ void twolpt_generate(int dim1, int dim2) {
 					sgn *= -1.0;
 				}
 				if (i2 > 0 && i2 < N * N / 4) {
-					const double kz = 2.f * (double) M_PI / box_size * double(k);
-					const double k2 = kx * kx + ky * ky + kz * kz;
-					const double K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-					const double x = gsl_rng_uniform(rndgen);
-					const double y = gsl_rng_uniform(rndgen);
+					const float kz = 2.f * (float) M_PI / box_size * float(k);
+					const float k2 = kx * kx + ky * ky + kz * kz;
+					const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
+					const float x = gsl_rng_uniform(rndgen);
+					const float y = gsl_rng_uniform(rndgen);
 					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
-					const auto rand_normal = expc(cmplx(0, 1) * 2.f * double(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
 					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
 					if( I[0] > N / 2 ) {
 						Y[index] = Y[index].conj() * sgn;
@@ -428,28 +428,28 @@ static void zeldovich_begin(int dim1, int dim2) {
 
 }
 
-static double zeldovich_end(int dim, bool init_parts, double D1, double prefac1) {
+static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	//PRINT( "enter zeldovich_end\n");
-	double dxmax = 0.0;
+	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
-	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const auto box = fft3d_real_range();
-	vector<hpx::future<double>> futs;
+	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < zeldovich_end_action > (c, dim, init_parts, D1, prefac1));
 	}
 	const auto Y = fft3d_read_real(box);
 	array<int64_t, NDIM> I;
-	const double Ninv = 1.0 / N;
-	const double box_size_inv = 1.0 / box_size;
+	const float Ninv = 1.0 / N;
+	const float box_size_inv = 1.0 / box_size;
 	if (init_parts) {
 		particles_resize(box.volume());
 		for (int dim1 = 0; dim1 < NDIM; dim1++) {
 			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-						double x = (I[dim1] + 0.5) * Ninv;
+						float x = (I[dim1] + 0.5) * Ninv;
 						const int64_t index = box.index(I);
 						particles_pos(dim1, index) = x;
 						particles_vel(dim1, index) = 0.0;
@@ -467,14 +467,14 @@ static double zeldovich_end(int dim, bool init_parts, double D1, double prefac1)
 		}
 	}
 	vector<hpx::future<void>> futs1;
-	double this_dxmax = 0.0;
+	float this_dxmax = 0.0;
 	array<int64_t, NDIM> Imax;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 				const int64_t index = box.index(I);
-				double x = particles_pos(dim, index).to_double();
-				const double dx = -D1 * Y[index] * box_size_inv;
+				float x = particles_pos(dim, index).to_float();
+				const float dx = -D1 * Y[index] * box_size_inv;
 				if (std::abs(dx * N) > this_dxmax) {
 					Imax = I;
 					this_dxmax = std::abs(dx * N);
@@ -502,15 +502,15 @@ static double zeldovich_end(int dim, bool init_parts, double D1, double prefac1)
 
 static power_spectrum_function read_power_spectrum() {
 	power_spectrum_function func;
-	const double h = get_options().hubble;
+	const float h = get_options().hubble;
 	FILE* fp = fopen("power.init", "rt");
-	vector<std::pair<double, double>> data;
+	vector<std::pair<float, float>> data;
 	if (!fp) {
 		PRINT("Fatal - unable to open power.init\n");
 		abort();
 	}
-	double kmax = 0.0;
-	double kmin = std::numeric_limits<double>::max();
+	float kmax = 0.0;
+	float kmin = std::numeric_limits<float>::max();
 	while (!feof(fp)) {
 		float k;
 		float p;
@@ -518,8 +518,8 @@ static power_spectrum_function read_power_spectrum() {
 			k *= h;
 			p /= (h * h * h);
 			func.P.push_back(p);
-			kmax = std::max(kmax, (double) k);
-			kmin = std::min(kmin, (double) k);
+			kmax = std::max(kmax, (float) k);
+			kmin = std::min(kmin, (float) k);
 		}
 	}
 	func.logkmin = std::log(kmin);

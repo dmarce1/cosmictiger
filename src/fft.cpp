@@ -16,7 +16,7 @@ static range<int64_t> real_mybox;
 static array<range<int64_t>, NDIM> cmplx_mybox;
 static vector<std::shared_ptr<spinlock_type>> mutexes;
 
-static vector<double> R;
+static vector<float> R;
 static vector<cmplx> Y;
 static vector<cmplx> ym;
 static vector<cmplx> Y1;
@@ -32,7 +32,7 @@ static void fft3d_phase3();
 static void finish_force_real();
 static vector<cmplx> transpose_read(const range<int64_t>&, int dim1, int dim2);
 static vector<cmplx> shift_read(const range<int64_t>&, bool);
-static std::pair<vector<double>, vector<int64_t>> power_spectrum_compute();
+static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute();
 
 HPX_PLAIN_ACTION (fft3d_accumulate_real);
 HPX_PLAIN_ACTION (fft3d_accumulate_complex);
@@ -57,9 +57,9 @@ void fft3d2silo(bool real) {
 	if (real) {
 		DBfile *db = DBCreateReal("real.silo", DB_CLOBBER, DB_LOCAL, "", DB_PDB);
 		const char* coordnames[] = { "x", "y", "z" };
-		vector<double> x;
-		vector<double> y;
-		vector<double> z;
+		vector<float> x;
+		vector<float> y;
+		vector<float> z;
 		auto box = real_mybox;
 		for (int i = 0; i < N; i++) {
 			x.push_back(i);
@@ -70,17 +70,17 @@ void fft3d2silo(bool real) {
 		for (int i = 0; i < N; i++) {
 			z.push_back(i);
 		}
-		double* coords[NDIM] = { x.data(), y.data(), z.data() };
+		float* coords[NDIM] = { x.data(), y.data(), z.data() };
 		int dims[NDIM] = { (int) N, (int) N, (int) N };
-		DBPutQuadmesh(db, "real_mesh", coordnames, coords, dims, NDIM, DB_DOUBLE, DB_COLLINEAR, NULL);
-		DBPutQuadvar1(db, "real_data", "real_mesh", R.data(), dims, NDIM, NULL, 0, DB_DOUBLE, DB_NODECENT, NULL);
+		DBPutQuadmesh(db, "real_mesh", coordnames, coords, dims, NDIM, DB_FLOAT, DB_COLLINEAR, NULL);
+		DBPutQuadvar1(db, "real_data", "real_mesh", R.data(), dims, NDIM, NULL, 0, DB_FLOAT, DB_NODECENT, NULL);
 		DBClose(db);
 	} else {
 		DBfile *db = DBCreateReal("complex.silo", DB_CLOBBER, DB_LOCAL, "", DB_PDB);
 		const char* coordnames[] = { "z", "y", "x" };
-		vector<double> x;
-		vector<double> y;
-		vector<double> z;
+		vector<float> x;
+		vector<float> y;
+		vector<float> z;
 		auto box = cmplx_mybox[ZDIM];
 		for (int i = 0; i < N; i++) {
 			x.push_back(i);
@@ -91,17 +91,17 @@ void fft3d2silo(bool real) {
 		for (int i = 0; i < N / 2 + 1; i++) {
 			z.push_back(i);
 		}
-		double* coords[NDIM] = { z.data(), y.data(), x.data() };
+		float* coords[NDIM] = { z.data(), y.data(), x.data() };
 		int dims[NDIM] = { (int) N / 2 + 1, (int) N, (int) N };
-		DBPutQuadmesh(db, "complex_mesh", coordnames, coords, dims, NDIM, DB_DOUBLE, DB_COLLINEAR, NULL);
-		vector<double> i;
-		vector<double> r;
+		DBPutQuadmesh(db, "complex_mesh", coordnames, coords, dims, NDIM, DB_FLOAT, DB_COLLINEAR, NULL);
+		vector<float> i;
+		vector<float> r;
 		for (int j = 0; j < box.volume(); j++) {
 			i.push_back(Y[j].imag());
 			r.push_back(Y[j].real());
 		}
-		DBPutQuadvar1(db, "complex_real", "complex_mesh", r.data(), dims, NDIM, NULL, 0, DB_DOUBLE, DB_NODECENT, NULL);
-		DBPutQuadvar1(db, "complex_imag", "complex_mesh", i.data(), dims, NDIM, NULL, 0, DB_DOUBLE, DB_NODECENT, NULL);
+		DBPutQuadvar1(db, "complex_real", "complex_mesh", r.data(), dims, NDIM, NULL, 0, DB_FLOAT, DB_NODECENT, NULL);
+		DBPutQuadvar1(db, "complex_imag", "complex_mesh", i.data(), dims, NDIM, NULL, 0, DB_FLOAT, DB_NODECENT, NULL);
 		DBClose(db);
 	}
 
@@ -142,7 +142,7 @@ void fft3d_inv_execute() {
 
 }
 
-vector<double> fft3d_power_spectrum() {
+vector<float> fft3d_power_spectrum() {
 	auto pr = power_spectrum_compute();
 	const auto& count = pr.second;
 	auto& power = pr.first;
@@ -154,17 +154,17 @@ vector<double> fft3d_power_spectrum() {
 	return power;
 }
 
-static std::pair<vector<double>, vector<int64_t>> power_spectrum_compute() {
-	vector<hpx::future<std::pair<vector<double>, vector<int64_t>>> >futs;
+static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute() {
+	vector<hpx::future<std::pair<vector<float>, vector<int64_t>>> >futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < power_spectrum_compute_action > (c));
 	}
 	const int64_t N = get_options().parts_dim;
-	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int64_t,NDIM> I;
-	const double nmax = std::sqrt(NDIM) * N / 2 + 2;
-	vector<double> power(nmax,0.0);
+	const float nmax = N / 2 + 1;
+	vector<float> power(nmax,0.0);
 	vector<int64_t> count(nmax,0);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
@@ -172,10 +172,12 @@ static std::pair<vector<double>, vector<int64_t>> power_spectrum_compute() {
 			const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 				const int64_t k = I[2];
-				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5;
-				const double pwr = Y[box.index(I)].norm();
-				count[n]++;
-				power[n] += pwr;
+				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5f;
+				const float pwr = Y[box.index(I)].norm();
+				if( n < N / 2 + 1 ) {
+					count[n]++;
+					power[n] += pwr;
+				}
 			}
 		}
 	}
@@ -261,9 +263,9 @@ void finish_force_real() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-vector<double> fft3d_read_real(const range<int64_t>& this_box) {
+vector<float> fft3d_read_real(const range<int64_t>& this_box) {
 	vector<hpx::future<void>> futs;
-	vector<double> data(this_box.volume());
+	vector<float> data(this_box.volume());
 	if (real_mybox.contains(this_box)) {
 		array<int64_t, NDIM> i;
 		for (i[0] = this_box.begin[0]; i[0] != this_box.end[0]; i[0]++) {
@@ -286,7 +288,7 @@ vector<double> fft3d_read_real(const range<int64_t>& this_box) {
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
 								auto fut = hpx::async < fft3d_read_real_action > (hpx_localities()[ri], this_inter);
-								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<double>> fut) {
+								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<float>> fut) {
 									auto this_data = fut.get();
 									array<int64_t,NDIM> i;
 									for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
@@ -364,7 +366,7 @@ vector<cmplx> fft3d_read_complex(const range<int64_t>& this_box) {
 	return std::move(data);
 }
 
-void fft3d_accumulate_real(const range<int64_t>& this_box, const vector<double>& data) {
+void fft3d_accumulate_real(const range<int64_t>& this_box, const vector<float>& data) {
 	vector<hpx::future<void>> futs;
 	if (real_mybox.contains(this_box)) {
 		array<int64_t, NDIM> i;
@@ -390,7 +392,7 @@ void fft3d_accumulate_real(const range<int64_t>& this_box, const vector<double>&
 							vector < range < int64_t >> inters;
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
-								vector<double> this_data;
+								vector<float> this_data;
 								this_data.resize(this_inter.volume());
 								array<int64_t, NDIM> i;
 								for (i[0] = this_inter.begin[0]; i[0] != this_inter.end[0]; i[0]++) {
@@ -540,18 +542,18 @@ static void fft3d_phase1() {
 	Y.resize(cmplx_mybox[ZDIM].volume());
 	for (i[0] = real_mybox.begin[0]; i[0] != real_mybox.end[0]; i[0]++) {
 		futs.push_back(hpx::async([](array<int64_t,NDIM> j) {
-			fftw_plan p;
-			fftw_complex out[N / 2 + 1];
-			double in[N];
+			fftwf_plan p;
+			fftwf_complex out[N / 2 + 1];
+			float in[N];
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftw_plan_dft_r2c_1d(N, in, out, 0);
+			p = fftwf_plan_dft_r2c_1d(N, in, out, 0);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = real_mybox.begin[1]; i[1] != real_mybox.end[1]; i[1]++) {
 				for (i[2] = 0; i[2] != N; i[2]++) {
 					in[i[2]] = R[real_mybox.index(i)];
 				}
-				fftw_execute(p);
+				fftwf_execute(p);
 				for (i[2] = 0; i[2] < N / 2 + 1; i[2]++) {
 					const int64_t l = cmplx_mybox[ZDIM].index(i);
 					Y[l].real() = out[i[2]][0];
@@ -559,7 +561,7 @@ static void fft3d_phase1() {
 				}
 			}
 			lock.lock();
-			fftw_destroy_plan(p);
+			fftwf_destroy_plan(p);
 			lock.unlock();
 		}, i));
 	}
@@ -575,14 +577,14 @@ static void fft3d_phase2(int dim, bool inv) {
 	}
 	Y = std::move(Y1);
 	array<int64_t, NDIM> i;
-	const double norm = inv ? 1.0f / N : 1.0;
+	const float norm = inv ? 1.0f / N : 1.0;
 	for (i[0] = cmplx_mybox[dim].begin[0]; i[0] != cmplx_mybox[dim].end[0]; i[0]++) {
 		futs.push_back(hpx::async([dim,inv,norm](array<int64_t,NDIM> j) {
-			fftw_complex out[N];
-			fftw_complex in[N];
-			fftw_plan p;
+			fftwf_complex out[N];
+			fftwf_complex in[N];
+			fftwf_plan p;
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftw_plan_dft_1d(N, in, out, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
+			p = fftwf_plan_dft_1d(N, in, out, inv ? FFTW_BACKWARD : FFTW_FORWARD, FFTW_ESTIMATE);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[dim].begin[1]; i[1] != cmplx_mybox[dim].end[1]; i[1]++) {
@@ -595,7 +597,7 @@ static void fft3d_phase2(int dim, bool inv) {
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
 				}
-				fftw_execute(p);
+				fftwf_execute(p);
 				for (i[2] = 0; i[2] < N; i[2]++) {
 					const int64_t l = cmplx_mybox[dim].index(i);
 					Y[l].real() = out[i[2]][0] * norm;
@@ -603,7 +605,7 @@ static void fft3d_phase2(int dim, bool inv) {
 				}
 			}
 			lock.lock();
-			fftw_destroy_plan(p);
+			fftwf_destroy_plan(p);
 			lock.unlock();
 		}, i));
 	}
@@ -619,14 +621,14 @@ static void fft3d_phase3() {
 	array<int64_t, NDIM> i;
 	Y = std::move(Y1);
 	R.resize(real_mybox.volume());
-	const double Ninv = 1.0 / N;
+	const float Ninv = 1.0 / N;
 	for (i[0] = cmplx_mybox[ZDIM].begin[0]; i[0] != cmplx_mybox[ZDIM].end[0]; i[0]++) {
 		futs.push_back(hpx::async([Ninv](array<int64_t,NDIM> j) {
-			fftw_plan p;
-			fftw_complex in[N / 2 + 1];
-			double out[N];
+			fftwf_plan p;
+			fftwf_complex in[N / 2 + 1];
+			float out[N];
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftw_plan_dft_c2r_1d(N, in, out, 0);
+			p = fftwf_plan_dft_c2r_1d(N, in, out, 0);
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[ZDIM].begin[1]; i[1] !=cmplx_mybox[ZDIM].end[1]; i[1]++) {
@@ -634,20 +636,20 @@ static void fft3d_phase3() {
 					const int64_t l = cmplx_mybox[ZDIM].index(i);
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
-/*					if( i[2] == 0 || i[2] == N / 2) {
-						const double value = Y[l].imag() / (Y[l].abs()+1e-20);
-						if(std::abs(value) > 5.0e-3) {
-							PRINT( "!!!! %i %i %i %e %e\n", i[0], i[1], i[2], Y[l].real(), Y[l].imag());
-						}
-					}*/
+					/*					if( i[2] == 0 || i[2] == N / 2) {
+					 const float value = Y[l].imag() / (Y[l].abs()+1e-20);
+					 if(std::abs(value) > 5.0e-3) {
+					 PRINT( "!!!! %i %i %i %e %e\n", i[0], i[1], i[2], Y[l].real(), Y[l].imag());
+					 }
+					 }*/
 				}
-				fftw_execute(p);
+				fftwf_execute(p);
 				for (i[2] = 0; i[2] != N; i[2]++) {
 					R[real_mybox.index(i)] = out[i[2]] * Ninv;
 				}
 			}
 			lock.lock();
-			fftw_destroy_plan(p);
+			fftwf_destroy_plan(p);
 			lock.unlock();
 		}, i));
 	}
@@ -663,7 +665,7 @@ static void find_boxes(range<int64_t> box, vector<range<int64_t>>& boxes, int be
 		auto left = box;
 		auto right = box;
 		const int mid = (begin + end) / 2;
-		const double w = double(mid - begin) / double(end - begin);
+		const float w = float(mid - begin) / float(end - begin);
 		left.end[xdim] = right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
 		find_boxes(left, boxes, begin, mid);
 		find_boxes(right, boxes, mid, end);
@@ -679,7 +681,7 @@ static void transpose(int dim1, int dim2) {
 	Y1.resize(cmplx_mybox[dim1].volume());
 	for (int64_t bi = 0; bi < cmplx_boxes[dim2].size(); bi++) {
 		const auto tinter = cmplx_boxes[dim2][bi].intersection(tbox);
-		vector<double> data;
+		vector<float> data;
 		if (!tinter.empty()) {
 			vector < range < int64_t >> tinters;
 			split_box(tinter, tinters);
@@ -737,7 +739,7 @@ static void shift(bool inv) {
 	Y1.resize(cmplx_mybox[dim2].volume());
 	for (int64_t bi = 0; bi < cmplx_boxes[dim1].size(); bi++) {
 		const auto tinter = cmplx_boxes[dim1][bi].intersection(tbox);
-		vector<double> data;
+		vector<float> data;
 		if (!tinter.empty()) {
 			vector < range < int64_t >> tinters;
 			split_box(tinter, tinters);

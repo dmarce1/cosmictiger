@@ -32,7 +32,7 @@ static void fft1_test() {
 		box.begin[dim] = 0;
 		box.end[dim] = N;
 	}
-	vector<double> A(box.volume());
+	vector<float> A(box.volume());
 	for (int i = 0; i < box.volume(); i++) {
 		A[i] = 0.1 + (double) rand() / RAND_MAX;
 	}
@@ -57,7 +57,7 @@ static void fft2_test() {
 		box.begin[dim] = 0;
 		box.end[dim] = N;
 	}
-	vector<double> A(box.volume());
+	vector<float> A(box.volume());
 	array<int64_t,NDIM> I;
 	for (I[0] = 0; I[0] < N; I[0]++) {
 		for (I[1] = 0; I[1] < N; I[1]++) {
