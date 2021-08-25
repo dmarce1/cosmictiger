@@ -175,7 +175,9 @@ void do_power_spectrum(int num, double a) {
 	}
 	for (int i = 0; i < power.size(); i++) {
 		const double k = 2.0 * M_PI * i / box_size;
-		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h * factor);
+		const double s = sinc(M_PI * i / N);
+		const double invs2 = 1.0 / sqr(s);
+		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h * factor * invs2);
 	}
 	fclose(fp);
 }

@@ -267,6 +267,7 @@ void twolpt_generate(int dim1, int dim2) {
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int64_t, NDIM> I;
+	constexpr int rand_init_iters = 8;
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor](array<int64_t,NDIM> I) {
@@ -276,6 +277,9 @@ void twolpt_generate(int dim1, int dim2) {
 				int seed = (I[0] * N + I[1])*1234 + 42;
 				gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 				gsl_rng_set(rndgen, seed);
+				for( int l = 0; l < rand_init_iters; l++) {
+					gsl_rng_uniform(rndgen);
+				}
 				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
 				const double ky = 2.f * (double) M_PI / box_size * double(j);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
@@ -287,12 +291,11 @@ void twolpt_generate(int dim1, int dim2) {
 							const double kz = 2.f * (double) M_PI / box_size * double(k);
 							const double k2 = kx * kx + ky * ky + kz * kz;
 							const double K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-							const double z = gsl_rng_uniform(rndgen);
 							const double x = gsl_rng_uniform(rndgen);
 							const double y = gsl_rng_uniform(rndgen);
-							const cmplx K[NDIM + 1] = { {kx,0}, {ky,0}, {kz,0}, {0,-1}};
-							const auto rand_normal = expc(cmplx(0, 1) * 2.f * double(M_PI) * y) * std::sqrt(-std::log(std::abs(x)));
-							Y[index] = rand_normal * std::sqrt(power(K0)) * factor * K[dim1] * K[dim2] / k2;
+							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
+							const auto rand_normal = expc(cmplx(0, 1) * 2.f * double(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
 						} else {
 							Y[index] = cmplx(0.f, 0.f);
 						}
@@ -306,24 +309,27 @@ void twolpt_generate(int dim1, int dim2) {
 				seed = (J0 * N + J1)*1234 + 42;
 				rndgen = gsl_rng_alloc(gsl_rng_taus);
 				gsl_rng_set(rndgen, seed);
+				for( int l = 0; l < rand_init_iters; l++) {
+					gsl_rng_uniform(rndgen);
+				}
 				const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 				const int i2 = sqr(i, j, k);
-				double sgn;
-				if( dim2 == NDIM) {
-					sgn = -1.0;
-				} else {
-					sgn = 1.0;
+				double sgn = 1.0;
+				if( dim1 != NDIM) {
+					sgn *= -1.0;
+				}
+				if( dim2 != NDIM) {
+					sgn *= -1.0;
 				}
 				if (i2 > 0 && i2 < N * N / 4) {
 					const double kz = 2.f * (double) M_PI / box_size * double(k);
 					const double k2 = kx * kx + ky * ky + kz * kz;
 					const double K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-					const double z = gsl_rng_uniform(rndgen);
 					const double x = gsl_rng_uniform(rndgen);
 					const double y = gsl_rng_uniform(rndgen);
-					const cmplx K[NDIM + 1] = { {kx,0}, {ky,0}, {kz,0}, {0,-1}};
-					const auto rand_normal = expc(cmplx(0, 1) * 2.f * double(M_PI) * y) * std::sqrt(-std::log(std::abs(x)));
-					Y[index] = rand_normal * std::sqrt(power(K0)) * factor * K[dim1] * K[dim2] / k2;
+					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
+					const auto rand_normal = expc(cmplx(0, 1) * 2.f * double(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
 					if( I[0] > N / 2 ) {
 						Y[index] = Y[index].conj() * sgn;
 					} else if( I[0] == 0 ) {

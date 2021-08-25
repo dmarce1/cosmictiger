@@ -172,7 +172,7 @@ static std::pair<vector<double>, vector<int64_t>> power_spectrum_compute() {
 			const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 				const int64_t k = I[2];
-				const int64_t n = std::sqrt(i*i+j*j+k*k);
+				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5;
 				const double pwr = Y[box.index(I)].norm();
 				count[n]++;
 				power[n] += pwr;
@@ -634,12 +634,12 @@ static void fft3d_phase3() {
 					const int64_t l = cmplx_mybox[ZDIM].index(i);
 					in[i[2]][0] = Y[l].real();
 					in[i[2]][1] = Y[l].imag();
-					if( i[2] == 0 || i[2] == N / 2) {
+/*					if( i[2] == 0 || i[2] == N / 2) {
 						const double value = Y[l].imag() / (Y[l].abs()+1e-20);
 						if(std::abs(value) > 5.0e-3) {
 							PRINT( "!!!! %i %i %i %e %e\n", i[0], i[1], i[2], Y[l].real(), Y[l].imag());
 						}
-					}
+					}*/
 				}
 				fftw_execute(p);
 				for (i[2] = 0; i[2] != N; i[2]++) {
