@@ -38,7 +38,11 @@ static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed3
 
 void analytic_compare(int Nsamples) {
 #ifdef USE_CUDA
+	timer tm;
+	tm.start();
 	auto samples = particles_sample(Nsamples);
+	tm.stop();
+	PRINT( "particles_sample: %e\n", tm.read());
 	vector<fixed32> sinkx(Nsamples);
 	vector<fixed32> sinky(Nsamples);
 	vector<fixed32> sinkz(Nsamples);
