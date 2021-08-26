@@ -592,22 +592,25 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 
 vector<particle_sample> particles_sample(int cnt) {
 	const bool save_force = get_options().save_force;
-	const auto children = hpx_children();
-	const size_t nparts = std::pow(get_options().parts_dim, NDIM);
-	vector<hpx::future<vector<particle_sample>>>futs;
-	for (int i = 0; i < children.size(); i++) {
-		const part_int begin = size_t(cnt) * nparts / (children.size() + 1);
-		const part_int end = size_t(cnt + 1) * nparts / (children.size() + 1);
-		const part_int this_cnt = end - begin;
-		futs.push_back(hpx::async < particles_sample_action > (children[i], this_cnt));
-	}
-	const part_int begin = size_t(children.size()) * nparts / (children.size() + 1);
-	const part_int this_cnt = nparts - begin;
 	vector<particle_sample> parts;
+	vector<hpx::future<vector<particle_sample>>>futs;
+	if (hpx_rank() == 0) {
+		const auto& localities = hpx_localities();
+		for (int i = 1; i < localities.size(); i++) {
+			const part_int b = (size_t) i * cnt / localities.size();
+			const part_int e = (size_t)(i + 1) * cnt / localities.size();
+			const part_int this_cnt = e - b;
+			futs.push_back(hpx::async < particles_sample_action > (localities[i], this_cnt));
+		}
+		const part_int b = 0;
+		const part_int e = (size_t)(1) * cnt / localities.size();
+		cnt = e - b;
+	}
 	const int seed = 4321 * hpx_rank() + 42;
 	gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
 	gsl_rng_set(rndgen, seed);
-	for (part_int i = 0; i < this_cnt; i++) {
+	PRINT( "Selecting %i particles\n", cnt);
+	for (part_int i = 0; i < cnt; i++) {
 		particle_sample sample;
 		const part_int index = ((size_t) gsl_rng_get(rndgen) * (size_t) gsl_rng_get(rndgen)) % particles_size();
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -622,9 +625,10 @@ vector<particle_sample> particles_sample(int cnt) {
 		parts.push_back(sample);
 	}
 	gsl_rng_free(rndgen);
+	PRINT( "Done\n");
 	for (auto& f : futs) {
-		auto v = f.get();
-		parts.insert(parts.end(), v.begin(), v.end());
+		const auto these_parts = f.get();
+		parts.insert(parts.end(), these_parts.begin(), these_parts.end());
 	}
 	return std::move(parts);
 }
