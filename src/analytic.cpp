@@ -3,6 +3,7 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/timer.hpp>
 
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
