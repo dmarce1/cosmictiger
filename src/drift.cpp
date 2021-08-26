@@ -76,7 +76,7 @@ drift_return drift(double scale, double t, double dt) {
 	timer tm;
 	tm.start();
 	for (int proc = 0; proc < nthreads; proc++) {
-		rfuts.push_back(hpx::async(func));
+		rfuts.push_back(hpx::threads::run_as_os_thread(func));
 	}
 	auto dr = func();
 	for (auto& fut : rfuts) {
