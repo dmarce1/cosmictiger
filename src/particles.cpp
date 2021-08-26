@@ -609,7 +609,7 @@ vector<particle_sample> particles_sample(int cnt) {
 	gsl_rng_set(rndgen, seed);
 	for (part_int i = 0; i < this_cnt; i++) {
 		particle_sample sample;
-		const part_int index = ((part_int) gsl_rng_get(rndgen) * (part_int) gsl_rng_get(rndgen)) % particles_size();
+		const part_int index = ((size_t) gsl_rng_get(rndgen) * (size_t) gsl_rng_get(rndgen)) % particles_size();
 		for (int dim = 0; dim < NDIM; dim++) {
 			sample.x[dim] = particles_pos(dim, index);
 		}
