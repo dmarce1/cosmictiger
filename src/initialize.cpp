@@ -468,7 +468,6 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	}
 	vector<hpx::future<void>> futs1;
 	float this_dxmax = 0.0;
-	array<int64_t, NDIM> Imax;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
@@ -476,7 +475,6 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 				float x = particles_pos(dim, index).to_float();
 				const float dx = -D1 * Y[index] * box_size_inv;
 				if (std::abs(dx * N) > this_dxmax) {
-					Imax = I;
 					this_dxmax = std::abs(dx * N);
 				}
 				x += dx;
@@ -491,7 +489,6 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 			}
 		}
 	}
-	PRINT("%i %i %i\n", Imax[0], Imax[1], Imax[2]);
 	dxmax = std::max(dxmax, this_dxmax);
 	for (auto& f : futs) {
 		const auto tmp = f.get();
