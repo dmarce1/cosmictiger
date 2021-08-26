@@ -278,7 +278,7 @@ void twolpt_generate(int dim1, int dim2) {
 				gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 				gsl_rng_set(rndgen, seed);
 				for( int l = 0; l < rand_init_iters; l++) {
-					gsl_rng_uniform(rndgen);
+					gsl_rng_uniform_pos(rndgen);
 				}
 				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
 				const float ky = 2.f * (float) M_PI / box_size * float(j);
@@ -291,8 +291,8 @@ void twolpt_generate(int dim1, int dim2) {
 							const float kz = 2.f * (float) M_PI / box_size * float(k);
 							const float k2 = kx * kx + ky * ky + kz * kz;
 							const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-							const float x = gsl_rng_uniform(rndgen);
-							const float y = gsl_rng_uniform(rndgen);
+							const float x = gsl_rng_uniform_pos(rndgen);
+							const float y = gsl_rng_uniform_pos(rndgen);
 							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
 							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
@@ -310,7 +310,7 @@ void twolpt_generate(int dim1, int dim2) {
 				rndgen = gsl_rng_alloc(gsl_rng_taus);
 				gsl_rng_set(rndgen, seed);
 				for( int l = 0; l < rand_init_iters; l++) {
-					gsl_rng_uniform(rndgen);
+					gsl_rng_uniform_pos(rndgen);
 				}
 				const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 				const int i2 = sqr(i, j, k);
@@ -325,8 +325,8 @@ void twolpt_generate(int dim1, int dim2) {
 					const float kz = 2.f * (float) M_PI / box_size * float(k);
 					const float k2 = kx * kx + ky * ky + kz * kz;
 					const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-					const float x = gsl_rng_uniform(rndgen);
-					const float y = gsl_rng_uniform(rndgen);
+					const float x = gsl_rng_uniform_pos(rndgen);
+					const float y = gsl_rng_uniform_pos(rndgen);
 					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
 					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
