@@ -26,11 +26,17 @@ CUDA_EXPORT inline T sqr(const T& a, const T& b, const T& c) {
 
 template<class T>
 CUDA_EXPORT void constrain_range(T& x) {
-	while (x >= T(1)) {
+	if (x >= T(1)) {
 		x -= T(1);
 	}
-	while (x < T(0)) {
+	if (x < T(0)) {
 		x += T(1);
+	}
+	if (x >= T(1)) {
+		PRINT( "Print particle out of range %e\n", x);
+	}
+	if (x < T(0)) {
+		PRINT( "Print particle out of range %e\n", x);
 	}
 }
 
