@@ -254,9 +254,7 @@ void particles_cache_free() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < particles_cache_free_action > (c));
 	}
-	for (int i = 0; i < PART_CACHE_SIZE; i++) {
-		part_cache[i] = std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>();
-	}
+	part_cache = decltype(part_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -459,18 +457,6 @@ part_int particles_size() {
 	return size;
 }
 
-void particles_to_cpu() {
-#ifdef USE_CUDA
-	cudaStream_t stream;
-	CUDA_CHECK(cudaStreamCreate(&stream));
-	for (int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaMemPrefetchAsync(particles_v[dim], sizeof(float) * capacity, cudaCpuDeviceId, stream));
-	}
-	CUDA_CHECK(cudaMemPrefetchAsync(particles_r, sizeof(char) * capacity, cudaCpuDeviceId, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
-	CUDA_CHECK(cudaStreamDestroy(stream));
-#endif
-}
 
 template<class T>
 void array_resize(T*& ptr, part_int new_capacity, bool reg) {

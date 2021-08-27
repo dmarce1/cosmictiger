@@ -201,10 +201,17 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (depth == 0) {
 		tree_allocate_nodes();
 	}
+#ifdef USE_CUDA
+	cudaStream_t stream;
+#endif
 	if (local_root) {
 //		PRINT("Sorting on %i\n", hpx_rank());
 		part_range.first = 0;
 		part_range.second = particles_size();
+#ifdef USE_CUDA
+		CUDA_CHECK(cudaStreamCreate(&stream));
+		CUDA_CHECK(cudaMemPrefetchAsync(&particles_rung(0), particles_size() * sizeof(char), cudaCpuDeviceId, stream));
+#endif
 	}
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM> x;
@@ -479,9 +486,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
+#ifdef USE_CUDA
 	if (local_root) {
-//		PRINT("%i tree nodes remaining\n", nodes.size() - (int ) next_id);
+		CUDA_CHECK(cudaStreamSynchronize(stream));
+		CUDA_CHECK(cudaStreamDestroy(stream));
 	}
+#endif
 	//if (depth == 0)
 //		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
@@ -496,7 +506,6 @@ void tree_destroy() {
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
-	particles_to_cpu();
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
