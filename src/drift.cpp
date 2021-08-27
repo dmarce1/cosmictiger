@@ -10,6 +10,7 @@ HPX_PLAIN_ACTION (drift);
 #define CHUNK_SIZE (1024*1024)
 
 drift_return drift(double scale, double t, double dt) {
+	particles_memadvise_cpu();
 	const bool do_map = get_options().do_map;
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {

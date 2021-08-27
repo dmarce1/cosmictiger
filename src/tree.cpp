@@ -490,6 +490,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (local_root) {
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		CUDA_CHECK(cudaStreamDestroy(stream));
+		particles_memadvise_gpu();
 	}
 #endif
 	//if (depth == 0)

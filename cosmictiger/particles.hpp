@@ -139,6 +139,8 @@ void particles_inc_group_cache_epoch();
 int particles_group_home(group_int);
 void particles_set_tracers(size_t count=0);
 vector<output_particle> particles_get_tracers();
+void particles_memadvise_cpu();
+void particles_memadvise_gpu();
 
 
 
