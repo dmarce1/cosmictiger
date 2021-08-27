@@ -459,25 +459,44 @@ part_int particles_size() {
 	return size;
 }
 
+void particles_to_cpu() {
+#ifdef USE_CUDA
+	cudaStream_t stream;
+	CUDA_CHECK(cudaStreamCreate(&stream));
+	for (int dim = 0; dim < NDIM; dim++) {
+		CUDA_CHECK(cudaMemPrefetchAsync(particles_v[dim], sizeof(float) * capacity, cudaCpuDeviceId, stream));
+	}
+	CUDA_CHECK(cudaMemPrefetchAsync(particles_r, sizeof(char) * capacity, cudaCpuDeviceId, stream));
+	CUDA_CHECK(cudaStreamSynchronize(stream));
+	CUDA_CHECK(cudaStreamDestroy(stream));
+#endif
+}
+
 template<class T>
 void array_resize(T*& ptr, part_int new_capacity, bool reg) {
 	T* new_ptr;
 	if (capacity > 0) {
-#ifdef USE_CUDA
-		if( reg ) {
-			CUDA_CHECK(cudaHostUnregister(ptr));
-		}
-#endif
 	}
-	new_ptr = (T*) malloc(sizeof(T) * new_capacity);
 #ifdef USE_CUDA
 	if( reg ) {
-		CUDA_CHECK(cudaHostRegister(new_ptr, new_capacity * sizeof(T), cudaHostRegisterPortable | cudaHostRegisterMapped));
+		cudaMallocManaged(&new_ptr,sizeof(T) * new_capacity);
+	} else {
+		new_ptr = (T*) malloc(sizeof(T) * new_capacity);
 	}
+#else
+	new_ptr = (T*) malloc(sizeof(T) * new_capacity);
 #endif
 	if (capacity > 0) {
 		hpx_copy(PAR_EXECUTION_POLICY, ptr, ptr + size, new_ptr).get();
+#ifdef USE_CUDA
+		if( reg ) {
+			cudaFree(ptr);
+		} else {
+			free(ptr);
+		}
+#else
 		free(ptr);
+#endif
 	}
 	ptr = new_ptr;
 
@@ -609,7 +628,7 @@ vector<particle_sample> particles_sample(int cnt) {
 	const int seed = 4321 * hpx_rank() + 42;
 	gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
 	gsl_rng_set(rndgen, seed);
-	PRINT( "Selecting %i particles\n", cnt);
+	PRINT("Selecting %i particles\n", cnt);
 	for (part_int i = 0; i < cnt; i++) {
 		particle_sample sample;
 		const part_int index = ((size_t) gsl_rng_get(rndgen) * (size_t) gsl_rng_get(rndgen)) % particles_size();
@@ -625,7 +644,7 @@ vector<particle_sample> particles_sample(int cnt) {
 		parts.push_back(sample);
 	}
 	gsl_rng_free(rndgen);
-	PRINT( "Done\n");
+	PRINT("Done\n");
 	for (auto& f : futs) {
 		const auto these_parts = f.get();
 		parts.insert(parts.end(), these_parts.begin(), these_parts.end());

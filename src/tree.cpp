@@ -496,6 +496,7 @@ void tree_destroy() {
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
+	particles_to_cpu();
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
