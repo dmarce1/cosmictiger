@@ -5,26 +5,19 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/timer.hpp>
 
-#include <hpx/collectives/broadcast.hpp>
-
 HPX_PLAIN_ACTION (drift);
 
 #define CHUNK_SIZE 1024
 
 drift_return drift(double scale, double t, double dt) {
-
 	const bool do_map = get_options().do_map;
-	hpx::future < std::vector < drift_return >> rfut;
-	if (hpx_rank() == 0) {
-		auto localities = hpx_localities();
-		localities[0] = localities.back();
-		localities.pop_back();
-		rfut = hpx::lcos::broadcast < drift_action > (localities, scale, t, dt);
+	vector<hpx::future<drift_return>> rfuts;
+	for (auto c : hpx_children()) {
+		rfuts.push_back(hpx::async < drift_action > (HPX_PRIORITY_BOOST, c, scale, t, dt));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency() - 1;
 	PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
-	vector<hpx::future<drift_return>> rfuts;
 	const auto func = [dt, scale, do_map, t, &next]() {
 		const double factor = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
@@ -95,16 +88,6 @@ drift_return drift(double scale, double t, double dt) {
 		dr.momz += this_dr.momz;
 	}
 	tm.stop();
-	if (hpx_rank() == 0) {
-		const auto vec = rfut.get();
-		for (auto& this_dr : vec) {
-			dr.kin += this_dr.kin;
-			dr.momx += this_dr.momx;
-			dr.momy += this_dr.momy;
-			dr.flops += this_dr.flops;
-			dr.momz += this_dr.momz;
-		}
-	}
 	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }
