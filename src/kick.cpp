@@ -362,15 +362,19 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
 			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else if (exec_left) {
+#ifdef USE_CUDA
 			if (cuda_workspace != nullptr) {
 				cuda_workspace->add_parts(cuda_workspace, cr->nparts());
 			}
+#endif
 			futs[RIGHT] = hpx::make_ready_future(kick_return());
 			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else {
+#ifdef USE_CUDA
 			if (cuda_workspace != nullptr) {
 				cuda_workspace->add_parts(cuda_workspace, cl->nparts());
 			}
+#endif
 			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 			futs[LEFT] = hpx::make_ready_future(kick_return());
 		}
