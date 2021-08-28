@@ -245,7 +245,7 @@ void domains_rebound() {
 				} else {
 					domains[i].midhi = midx;
 				}
-				PRINT("%i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
+//				PRINT("%i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
 			}
 		}
 		vector<double> bounds;

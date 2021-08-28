@@ -17,7 +17,7 @@ drift_return drift(double scale, double t, double dt) {
 		rfuts.push_back(hpx::async < drift_action > (HPX_PRIORITY_BOOST, c, scale, t, dt));
 	}
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
-	PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
+	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
 	const auto func = [dt, scale, do_map, t, &next](int proc, int nthreads) {
 		const double factor = 1.0 / scale;
@@ -98,6 +98,6 @@ drift_return drift(double scale, double t, double dt) {
 		dr.momz += this_dr.momz;
 	}
 	tm.stop();
-	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
+//	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }
