@@ -32,6 +32,7 @@ drift_return drift(double scale, double t, double dt) {
 		this_dr.nmapped = 0;
 		part_int begin = (size_t) proc * particles_size() / nthreads;
 		part_int end = (size_t) (proc+1) * particles_size() / nthreads;
+#ifdef USE_CUDA
 		cudaStream_t stream;
 		CUDA_CHECK(cudaStreamCreate(&stream));
 		CUDA_CHECK(cudaMemPrefetchAsync(&particles_vel(XDIM,begin), (end-begin)*sizeof(float), cudaCpuDeviceId));
@@ -42,6 +43,7 @@ drift_return drift(double scale, double t, double dt) {
 		}
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		CUDA_CHECK(cudaStreamDestroy(stream));
+#endif
 		for( part_int i = begin; i < end; i++) {
 			double x = particles_pos(XDIM,i).to_double();
 			double y = particles_pos(YDIM,i).to_double();

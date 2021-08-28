@@ -10,6 +10,9 @@
 
 #include <algorithm>
 
+
+#include <math.h>
+
 template<class T = float>
 class complex {
 	T x, y;
