@@ -58,11 +58,11 @@ static void fft2_test() {
 		box.end[dim] = N;
 	}
 	vector<float> A(box.volume());
-	array<int64_t,NDIM> I;
+	array<int64_t, NDIM> I;
 	for (I[0] = 0; I[0] < N; I[0]++) {
 		for (I[1] = 0; I[1] < N; I[1]++) {
 			for (I[2] = 0; I[2] < N; I[2]++) {
-				A[box.index(I)] = cos(M_PI*I[2]);
+				A[box.index(I)] = cos(M_PI * I[2]);
 			}
 		}
 	}
@@ -287,6 +287,9 @@ static void kick_test() {
 	}
 	total_time.stop();
 	PRINT("avg time per step = %e\n", total_time.read() / 3);
+	FILE* fp = fopen("results.txt", "at");
+	fprintf(fp, "%i %e\n", hpx_size(), total_time.read() / 3.0);
+	fclose(fp);
 	kick_workspace::clear_buffers();
 }
 
