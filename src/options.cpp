@@ -60,8 +60,13 @@ bool process_options(int argc, char *argv[]) {
 	("do_sample", po::value<bool>(&(opts.do_sample))->default_value(false), "output the box bounded by (0,sample_dim) in all directions to SILO") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "instantaneous maps") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "Use 2LPT initial conditions") //
+#ifdef USE_CUDA
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
-	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(8*1024), "size of particle cache line") //
+	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(8 * 1024), "size of particle cache line") //
+#else
+	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(1024), "size of tree cache line") //
+	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(64 * 1024), "size of particle cache line") //
+#endif
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
 	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "map healpix Nside") //
@@ -71,7 +76,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("sample_dim", po::value<double>(&(opts.sample_dim))->default_value(0.01), "size of box to output to SILO") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-		("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
+	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 			;
 
 	po::variables_map vm;
@@ -120,8 +125,8 @@ bool process_options(int argc, char *argv[]) {
 	opts.link_len = 1.0 / opts.parts_dim / 5.0;
 	opts.min_group = 20;
 
-	if( opts.parts_dim % 2 == 1 ) {
-		THROW_ERROR( "parts_dim must be an even number\n");
+	if (opts.parts_dim % 2 == 1) {
+		THROW_ERROR("parts_dim must be an even number\n");
 	}
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
