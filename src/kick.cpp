@@ -1,5 +1,4 @@
 constexpr bool verbose = true;
-#include <cosmictiger/domain.hpp>
 #include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
@@ -88,7 +87,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
 	ASSERT(self.proc == hpx_rank());
-	bool thread_right = true;
+	bool thread_left = true;
 #ifdef USE_CUDA
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
@@ -131,7 +130,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if (eligible) {
 			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 		}
-		thread_right = cuda_workspace != nullptr;
+		thread_left = cuda_workspace != nullptr;
 	}
 #endif
 	kick_return kr;
@@ -360,25 +359,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const bool exec_right = cr->nactive > 0 || !cr->is_local();
 		std::array<hpx::future<kick_return>, NCHILD> futs;
 		if (exec_left && exec_right) {
-			const auto pos_right = tree_get_node(self_ptr->children[RIGHT])->pos;
-			const auto pos_left = tree_get_node(self_ptr->children[LEFT])->pos;
-			const auto box = domains_find_my_box();
-			const auto bound_dist = [box](const array<fixed32,NDIM>& pos) {
-				double nearest = std::numeric_limits<double>::max();
-				for( int dim = 0; dim < NDIM; dim++) {
-					const auto x = pos[dim].to_double();
-					nearest = std::min(nearest, x - box.begin[dim]);
-					nearest = std::min(nearest, box.end[dim] - x);
-				}
-				return nearest;
-			};
-			if (bound_dist(pos_right) < bound_dist(pos_left)) {
-				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_right);
-				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
-			} else {
-				futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], dchecklist, std::move(echecklist), cuda_workspace, thread_right);
-				futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), echecklist, cuda_workspace, false);
-			}
+			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
+			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else if (exec_left) {
 #ifdef USE_CUDA
 			if (cuda_workspace != nullptr) {
