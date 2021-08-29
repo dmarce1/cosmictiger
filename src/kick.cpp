@@ -145,7 +145,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		triggered = true;
 		for (int i = 0; i < dchecklist.size(); i++) {
 			kick_touch_tree_cache(dchecklist[i]);
-			particles_global_touch_cache (tree_get_node(dchecklist[i])->global_part_range());}
+			particles_global_touch_cache (tree_get_node(dhecklist[i])->global_part_range());}
 		}
 #endif
 	kick_return kr;
