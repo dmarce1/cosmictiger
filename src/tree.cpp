@@ -164,7 +164,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	if (!threadme) {
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async < tree_create_action > (HPX_PRIORITY_BOOST, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async < tree_create_action > (HPX_PRIORITY_HI, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
 			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
@@ -180,7 +180,7 @@ static void tree_allocate_nodes() {
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < tree_allocate_nodes_action > (HPX_PRIORITY_BOOST, c));
+		futs.push_back(hpx::async < tree_allocate_nodes_action > (HPX_PRIORITY_HI, c));
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
@@ -535,9 +535,9 @@ static const tree_node* tree_cache_read(tree_id id) {
 			auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
 			tree_cache[bin][line_id] = prms->get_future();
 			lock.unlock();
-			hpx::async(HPX_PRIORITY_BOOST, [prms,line_id]() {
-				auto line_fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
-				prms->set_value(line_fut.get());
+			hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
+				const tree_fetch_cache_line_action action;
+				prms->set_value(action(hpx_localities()[line_id.proc],line_id.index));
 			});
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);

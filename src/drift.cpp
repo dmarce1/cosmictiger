@@ -14,7 +14,7 @@ drift_return drift(double scale, double t, double dt) {
 	const bool do_map = get_options().do_map;
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
-		rfuts.push_back(hpx::async < drift_action > (HPX_PRIORITY_BOOST, c, scale, t, dt));
+		rfuts.push_back(hpx::async < drift_action > (HPX_PRIORITY_HI, c, scale, t, dt));
 	}
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);

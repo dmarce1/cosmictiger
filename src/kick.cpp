@@ -55,6 +55,13 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 	hpx::future<kick_return> rc;
 	const tree_node* self_ptr = tree_get_node(self);
 	bool remote = false;
+	bool all_local = true;
+	for (const auto& i : dchecklist) {
+		if (i.proc != hpx_rank()) {
+			all_local = false;
+			break;
+		}
+	}
 	if (self.proc != hpx_rank()) {
 		threadme = true;
 		remote = true;
@@ -70,11 +77,15 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		}
 	}
 	if (!threadme) {
+		if (all_local) {
+			hpx_yield();
+		}
 		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace));
 	} else if (remote) {
-		rc = hpx::async < kick_action > (HPX_PRIORITY_BOOST, hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
+		rc = hpx::async < kick_action > (HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
-		rc = hpx::async([params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+		const auto thread_priority = all_local ? HPX_PRIORITY_LO : HPX_PRIORITY_NORMAL;
+		rc = hpx::async(thread_priority, [params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 			auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace);
 			nthreads--;
 			return rc;

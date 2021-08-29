@@ -308,13 +308,13 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							const simd_float r1overh1 = r * hinv;                                             // 1
 							const simd_float r2oh2 = r1overh1 * r1overh1;                                     // 1
 							simd_float rinv3_near = +15.0f / 8.0f;
-							rinv3_near = fma(rinv3_near, r2oh2, simd_float(-21.0f / 4.0f));                    // 2
-							rinv3_near = fma(rinv3_near, r2oh2, simd_float(+35.0f / 8.0f));                    // 2
+							rinv3_near = fmaf(rinv3_near, r2oh2, simd_float(-21.0f / 4.0f));                    // 2
+							rinv3_near = fmaf(rinv3_near, r2oh2, simd_float(+35.0f / 8.0f));                    // 2
 							rinv3_near *= hinv3;                                                               // 1
 							simd_float rinv1_near = -5.0f / 16.0f;
-							rinv1_near = fma(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                    // 2
-							rinv1_near = fma(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                   // 2
-							rinv1_near = fma(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                    // 2
+							rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                    // 2
+							rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                   // 2
+							rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                    // 2
 							rinv1_near *= hinv;                                                                // 1
 							const auto near_flag = (simd_float(1) - far_flag);                                // 1
 							rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4
@@ -322,9 +322,9 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							near_count += count;
 							flops += 52;
 						}
-						gx = fma(rinv3, dx[XDIM], gx);																			// 2
-						gy = fma(rinv3, dx[YDIM], gy);																			// 2
-						gz = fma(rinv3, dx[ZDIM], gz);																			// 2
+						gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
+						gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
+						gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
 						phi -= rinv1;																									// 1
 					}
 					const int j = i - range.first;

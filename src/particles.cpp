@@ -368,9 +368,9 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		entry.data = prms->get_future();
 		entry.epoch = group_cache_epoch;
 		lock.unlock();
-		hpx::async(HPX_PRIORITY_BOOST, [prms,line_id]() {
-			auto line_fut = hpx::async<particles_group_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
-			prms->set_value(line_fut.get());
+		hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
+			const particles_group_fetch_cache_line_action action;
+			prms->set_value(action(hpx_localities()[line_id.proc],line_id.index));
 		});
 		lock.lock();
 		iter = group_part_cache[bin].find(line_id);
@@ -486,7 +486,6 @@ void particles_destroy() {
 part_int particles_size() {
 	return size;
 }
-
 
 template<class T>
 void array_resize(T*& ptr, part_int new_capacity, bool reg) {
