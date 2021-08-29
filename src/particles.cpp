@@ -324,6 +324,23 @@ void particles_global_read_pos_and_group(particle_global_range range, fixed32* x
 	}
 }
 
+void particles_global_touch_cache(particle_global_range range) {
+	const part_int line_size = get_options().part_cache_line_size;
+	if (range.range.first != range.range.second) {
+		if (range.proc != hpx_rank()) {
+			line_id_type line_id;
+			line_id.proc = range.proc;
+			const part_int start_line = (range.range.first / line_size) * line_size;
+			const part_int stop_line = ((range.range.second - 1) / line_size) * line_size;
+			for (part_int line = start_line; line <= stop_line; line += line_size) {
+				line_id.index = line;
+				particles_cache_read_line(line_id);
+			}
+		}
+	}
+}
+
+
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
@@ -368,7 +385,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		entry.data = prms->get_future();
 		entry.epoch = group_cache_epoch;
 		lock.unlock();
-		hpx::async(HPX_PRIORITY_BOOST, [prms,line_id]() {
+		hpx::apply([prms,line_id]() {
 			auto line_fut = hpx::async<particles_group_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
