@@ -151,7 +151,7 @@ struct kick_workspace;
 
 #ifndef __CUDACC__
 hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
-		std::shared_ptr<kick_workspace>, bool triggered = false);
+		std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
 #ifdef USE_CUDA

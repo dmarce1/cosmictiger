@@ -535,7 +535,7 @@ static const tree_node* tree_cache_read(tree_id id) {
 			auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
 			tree_cache[bin][line_id] = prms->get_future();
 			lock.unlock();
-			hpx::apply([prms,line_id]() {
+			hpx::async(HPX_PRIORITY_BOOST, [prms,line_id]() {
 				auto line_fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 				prms->set_value(line_fut.get());
 			});
