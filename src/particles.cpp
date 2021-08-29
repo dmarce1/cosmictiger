@@ -284,7 +284,7 @@ void particles_memadvise_cpu() {
 	CUDA_CHECK(cudaMemAdvise(&particles_vel(XDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
 	CUDA_CHECK(cudaMemAdvise(&particles_vel(YDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
 	CUDA_CHECK(cudaMemAdvise(&particles_vel(ZDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_rung(0), particles_size() * sizeof(char), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));a
+	CUDA_CHECK(cudaMemAdvise(&particles_rung(0), particles_size() * sizeof(char), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
 #endif
 }
 
@@ -368,7 +368,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		entry.data = prms->get_future();
 		entry.epoch = group_cache_epoch;
 		lock.unlock();
-		hpx::apply([prms,line_id]() {
+		hpx::async(HPX_PRIORITY_BOOST, [prms,line_id]() {
 			auto line_fut = hpx::async<particles_group_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
