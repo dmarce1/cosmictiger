@@ -16,10 +16,7 @@
 
 #include <cmath>
 
-#if defined(__AVX512F__)
-#define USE_AVX512
-
-#elif defined(__AVX2__)
+#if defined(__AVX2__)
 #define USE_AVX2
 
 #elif defined(__AVX__)
