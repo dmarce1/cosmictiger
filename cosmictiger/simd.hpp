@@ -42,7 +42,7 @@ using simd_float = simd_float8;
 using simd_int = simd_int8;
 #define SIMD_FLOAT_SIZE SIMD_FLOAT8_SIZE
 
-#elif define(USE_AVX512)
+#elif defined(USE_AVX512)
 using simd_float = simd_float16;
 using simd_int = simd_int16;
 #define SIMD_FLOAT_SIZE SIMD_FLOAT16_SIZE

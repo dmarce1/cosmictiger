@@ -651,7 +651,7 @@ public:
 		simd_float16 rc;
 		static const simd_float16 one(1);
 		static const simd_float16 zero(0);
-		auto mask0 = _mm512_cmp_ps(v, other.v, _CMP_LE_OQ);
+		auto mask0 = _mm512_cmp_ps_mask(v, other.v, _CMP_LE_OQ);
 		rc.v = _mm512_mask_mov_ps(zero.v, mask0, one.v);
 		return rc;
 	}
@@ -659,7 +659,7 @@ public:
 		simd_float16 rc;
 		static const simd_float16 one(1);
 		static const simd_float16 zero(0);
-		auto mask0 = _mm512_cmp_ps(v, other.v, _CMP_LT_OQ);
+		auto mask0 = _mm512_cmp_ps_mask(v, other.v, _CMP_LT_OQ);
 		rc.v = _mm512_mask_mov_ps(zero.v, mask0, one.v);
 		return rc;
 	}
@@ -667,7 +667,7 @@ public:
 		simd_float16 rc;
 		static const simd_float16 one(1);
 		static const simd_float16 zero(0);
-		auto mask0 = _mm512_cmp_ps(v, other.v, _CMP_GT_OQ);
+		auto mask0 = _mm512_cmp_ps_mask(v, other.v, _CMP_GT_OQ);
 		rc.v = _mm512_mask_mov_ps(zero.v, mask0, one.v);
 		return rc;
 	}
@@ -675,7 +675,7 @@ public:
 		simd_float16 rc;
 		static const simd_float16 one(1);
 		static const simd_float16 zero(0);
-		auto mask0 = _mm512_cmp_ps(v, other.v, _CMP_GE_OQ);
+		auto mask0 = _mm512_cmp_ps_mask(v, other.v, _CMP_GE_OQ);
 		rc.v = _mm512_mask_mov_ps(zero.v, mask0, one.v);
 		return rc;
 	}
