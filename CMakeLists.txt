@@ -18,6 +18,10 @@ endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
 set(CMAKE_CXX_FLAGS "-ffast-math -march=native  -no-pie -fno-pie -Wno-attributes")
 
+execute_process(COMMAND g++ ${PROJECT_SOURCE_DIR}/src/simd_type.cpp -march=native -o simd_detect)
+execute_process(COMMAND ./simd_detect OUTPUT_VARIABLE SIMD_ARCH)
+message(STATUS "${SIMD_ARCH}")
+
 
 set(cosmictiger_source_files
     src/analytic.cu

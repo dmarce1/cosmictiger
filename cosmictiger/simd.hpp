@@ -18,10 +18,13 @@
 
 #if defined(__AVX512F__)
 #define USE_AVX512
+
 #elif defined(__AVX2__)
 #define USE_AVX2
+
 #elif defined(__AVX__)
 #define USE_AVX
+
 #else
 #error "No AVX"
 #endif
@@ -29,16 +32,21 @@
 #include <cosmictiger/simd_float.hpp>
 #include <cosmictiger/simd_int.hpp>
 
-#ifdef USE_AVX2
-using simd_float = simd_float8;
-using simd_int = simd_int8;
-#define SIMD_FLOAT_SIZE SIMD_FLOAT8_SIZE
-#elif defined(USE_AVX)
+#ifdef USE_AVX
 using simd_float = simd_float4;
 using simd_int = simd_int4;
 #define SIMD_FLOAT_SIZE SIMD_FLOAT4_SIZE
-#else
-#error "CosmicTiger requires AVX or AVX2"
+
+#elif defined(USE_AVX2)
+using simd_float = simd_float8;
+using simd_int = simd_int8;
+#define SIMD_FLOAT_SIZE SIMD_FLOAT8_SIZE
+
+#elif define(USE_AVX512)
+using simd_float = simd_float16;
+using simd_int = simd_int16;
+#define SIMD_FLOAT_SIZE SIMD_FLOAT16_SIZE
+
 #endif
 
 inline simd_float two_pow(const simd_float &r) {											// 21
