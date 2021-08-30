@@ -50,7 +50,7 @@ static void cleanup_workspace(workspace&& workspace) {
 }
 
 hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
-		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, int depth_from_local_root, bool threadme) {
+		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	hpx::future<kick_return> rc;
 	const tree_node* self_ptr = tree_get_node(self);
@@ -80,13 +80,13 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		if (all_local) {
 			hpx_yield();
 		}
-		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace), depth_from_local_root);
+		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace));
 	} else if (remote) {
-		rc = hpx::async < kick_action > (HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr, depth_from_local_root);
+		rc = hpx::async < kick_action > (HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
 		const auto thread_priority = all_local ? HPX_PRIORITY_LO : HPX_PRIORITY_NORMAL;
-		rc = hpx::async(thread_priority, [params,self,L,pos, cuda_workspace, depth_from_local_root] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
-			auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace, depth_from_local_root);
+		rc = hpx::async(thread_priority, [params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+			auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace);
 			nthreads--;
 			return rc;
 		}, std::move(dchecklist), std::move(echecklist));
@@ -95,13 +95,10 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 }
 
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
-		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, int depth_from_local_root) {
+		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
 	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
-	if (self_ptr->local_root) {
-		depth_from_local_root = 0;
-	}
 #ifdef USE_CUDA
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
@@ -145,10 +142,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 		}
 		thread_left = cuda_workspace != nullptr;
-	}
-#else
-	if (depth_from_local_root >= 0 && depth_from_local_root <= 2) {
-		thread_left = false;
 	}
 #endif
 	kick_return kr;
@@ -369,9 +362,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		return hpx::make_ready_future(kr);
 	} else {
-		if (depth_from_local_root != -1) {
-			depth_from_local_root++;
-		}
 		dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
 		cleanup_workspace(std::move(workspace));
 		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);
@@ -380,10 +370,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const bool exec_right = cr->nactive > 0 || !cr->is_local();
 		std::array<hpx::future<kick_return>, NCHILD> futs;
 		if (exec_left && exec_right) {
-			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, depth_from_local_root,
-					thread_left);
-			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace,
-					depth_from_local_root, false);
+			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
+			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else if (exec_left) {
 #ifdef USE_CUDA
 			if (cuda_workspace != nullptr) {
@@ -391,16 +379,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			}
 #endif
 			futs[RIGHT] = hpx::make_ready_future(kick_return());
-			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace,
-					depth_from_local_root, false);
+			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		} else {
 #ifdef USE_CUDA
 			if (cuda_workspace != nullptr) {
 				cuda_workspace->add_parts(cuda_workspace, cl->nparts());
 			}
 #endif
-			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace,
-					depth_from_local_root, false);
+			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 			futs[LEFT] = hpx::make_ready_future(kick_return());
 		}
 		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
