@@ -55,7 +55,6 @@ set(cosmictiger_source_files
     src/particles.cpp
     src/power.cpp
     src/range_set.cpp
-    src/rockstar.cpp
     src/test.cpp
     src/tree.cpp
     src/view.cpp
@@ -98,7 +97,6 @@ set(cosmictiger_header_files
     cosmictiger/power.hpp
     cosmictiger/range.hpp
     cosmictiger/range_set.hpp
-    cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp
     cosmictiger/simd.hpp
     cosmictiger/stack_vector.hpp

@@ -249,7 +249,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			right_local_root = right_range.second - right_range.first == 1;
 			flops += 7;
 		} else {
-			const int xdim = box.longest_dim();
+			const int xdim = box.longest_dim(true);
 			const double xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
 			const part_int mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;

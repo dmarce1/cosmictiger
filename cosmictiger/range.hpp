@@ -134,14 +134,21 @@ struct range {
 		return str;
 	}
 
-	inline int longest_dim() const {
+	inline int longest_dim(bool xfirst) const {
 		int max_dim;
 		T max_span = T(-1);
 		for (int dim = 0; dim < N; dim++) {
 			const T span = end[dim] - begin[dim];
-			if (span > max_span) {
-				max_span = span;
-				max_dim = dim;
+			if (xfirst) {
+				if (span > max_span) {
+					max_span = span;
+					max_dim = dim;
+				}
+			} else {
+				if (span >= max_span) {
+					max_span = span;
+					max_dim = dim;
+				}
 			}
 		}
 		return max_dim;
