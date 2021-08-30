@@ -155,7 +155,11 @@ inline simd_float4 round(const simd_float4& a) {
 
 inline simd_float4 fmaf(const simd_float4& a, const simd_float4& b, const simd_float4& c) {
 	simd_float4 d;
+#ifdef USE_AVX
+	return a * b + c;
+	#else
 	d.v = _mm_fmadd_ps(a.v, b.v, c.v);
+#endif
 	return d;
 }
 
