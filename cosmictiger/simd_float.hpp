@@ -697,7 +697,7 @@ inline simd_float16 sqrt(const simd_float16& a) {
 
 inline simd_float16 rsqrt(const simd_float16& a) {
 	simd_float16 b;
-	b.v = _mm512_rsqrt_ps(a.v);
+	b.v = _mm512_rsqrt14_ps(a.v);
 	return b;
 }
 
