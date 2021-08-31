@@ -200,7 +200,6 @@ static void kick_test() {
 		total_time.start();
 		tm.reset();
 		tm.start();
-		tree_create_params tparams(0, get_options().theta);
 		tree_create(tparams);
 		tm.stop();
 		PRINT("tree_create: %e s\n", tm.read());

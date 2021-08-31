@@ -443,53 +443,52 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	array<int64_t, NDIM> I;
 	const float Ninv = 1.0 / N;
 	const float box_size_inv = 1.0 / box_size;
+	vector<hpx::future<void>> local_futs;
 	if (init_parts) {
 		particles_resize(box.volume());
-		for (int dim1 = 0; dim1 < NDIM; dim1++) {
-			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+			local_futs.push_back(hpx::async([box,Ninv](array<int64_t,NDIM> I) {
 				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-						float x = (I[dim1] + 0.5) * Ninv;
 						const int64_t index = box.index(I);
-						particles_pos(dim1, index) = x;
-						particles_vel(dim1, index) = 0.0;
+						for (int dim1 = 0; dim1 < NDIM; dim1++) {
+							float x = (I[dim1] + 0.5) * Ninv;
+							particles_pos(dim1, index) = x;
+							particles_vel(dim1, index) = 0.0;
+						}
+						particles_rung(index) = 0;
 					}
 				}
-			}
+			}, I));
 		}
-		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+		hpx::wait_all(local_futs.begin(), local_futs.end());
+		local_futs.resize(0);
+	}
+	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+		futs.push_back(hpx::async([box, D1, prefac1, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {
+			float this_dxmax = 0.0;
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 					const int64_t index = box.index(I);
+					float x = particles_pos(dim, index).to_float();
+					const float dx = -D1 * Y[index] * box_size_inv;
+					if (std::abs(dx * N) > this_dxmax) {
+						this_dxmax = std::abs(dx * N);
+					}
+					x += dx;
+					if (x >= 1.0) {
+						x -= 1.0;
+					} else if (x < 0.0) {
+						x += 1.0;
+					}
+					particles_pos(dim, index) = x;
+					particles_vel(dim, index) += prefac1 * dx;
 					particles_rung(index) = 0;
 				}
 			}
-		}
+			return this_dxmax;
+		}, I));
 	}
-	vector<hpx::future<void>> futs1;
-	float this_dxmax = 0.0;
-	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-				const int64_t index = box.index(I);
-				float x = particles_pos(dim, index).to_float();
-				const float dx = -D1 * Y[index] * box_size_inv;
-				if (std::abs(dx * N) > this_dxmax) {
-					this_dxmax = std::abs(dx * N);
-				}
-				x += dx;
-				if (x >= 1.0) {
-					x -= 1.0;
-				} else if (x < 0.0) {
-					x += 1.0;
-				}
-				particles_pos(dim, index) = x;
-				particles_vel(dim, index) += prefac1 * dx;
-				particles_rung(index) = 0;
-			}
-		}
-	}
-	dxmax = std::max(dxmax, this_dxmax);
 	for (auto& f : futs) {
 		const auto tmp = f.get();
 		dxmax = std::max(dxmax, tmp);
