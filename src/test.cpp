@@ -162,6 +162,7 @@ static void kick_test() {
 	constexpr double z0[] = { 50, 20, 2, 0 };
 
 	timer total_time;
+	double total_flops = 0.0;
 	for (int pass = 0; pass < 4; pass++) {
 		tm.start();
 		initialize(z0[pass]);
@@ -189,10 +190,11 @@ static void kick_test() {
 		tm.reset();
 		tm.start();
 		tree_create_params tparams(0, get_options().theta);
-		tree_create(tparams);
+		auto sr = tree_create(tparams);
+		total_flops += sr.flops;
 		tm.stop();
-		tm.reset();
 		PRINT("tree_create: %e s\n", tm.read());
+		tm.reset();
 		tm.start();
 		tree_destroy();
 		tm.stop();
@@ -232,6 +234,7 @@ static void kick_test() {
 		vector<tree_id> checklist;
 		checklist.push_back(root_id);
 		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		total_flops += kr.part_flops + kr.node_flops;
 		tm.stop();
 		PRINT("tree_kick: %e s\n", tm.read());
 		tm.reset();
@@ -241,14 +244,17 @@ static void kick_test() {
 		PRINT("tree_destroy: %e s\n", tm.read());
 		tm.reset();
 		tm.start();
-		drift(1.0, 0.0, 0.0);
+		auto dr = drift(1.0, 0.0, 0.0);
+		total_flops += dr.flops;
 		tm.stop();
 		PRINT("drift: %e s\n", tm.read());
 		total_time.stop();
 	}
 	PRINT("avg time per step = %e\n", total_time.read() / 4);
+	const double flops_measure = total_flops / total_time.read() / hpx_size();
+	PRINT("FLOPS / s / locality = %e\n", flops_measure);
 	FILE* fp = fopen("results.txt", "at");
-	fprintf(fp, "%i %e\n", hpx_size(), total_time.read() / 4.0);
+	fprintf(fp, "%i %e %e\n", hpx_size(), total_time.read() / 4, flops_measure);
 	fclose(fp);
 	kick_workspace::clear_buffers();
 }
