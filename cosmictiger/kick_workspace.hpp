@@ -11,7 +11,6 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/kick.hpp>
-#include <cosmictiger/range_set.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 
