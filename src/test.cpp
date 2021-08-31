@@ -206,37 +206,35 @@ static void tree_test() {
 
 static void kick_test() {
 	timer tm;
-
-	tm.start();
-	particles_random_init();
-//	initialize();
-	tm.stop();
-	PRINT("initialize: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	domains_rebound();
-	tm.stop();
-	PRINT("domains_rebound: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	domains_begin();
-	tm.stop();
-	PRINT("domains_begin: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	domains_end();
-	tm.stop();
-	PRINT("domains_end: %e s\n", tm.read());
-	tm.reset();
+	constexpr double z0[] = { 50, 20, 2, 0 };
 
 	timer total_time;
 	for (int pass = 0; pass < 4; pass++) {
-		if (pass == 1) {
-			total_time.start();
-		}
+		tm.start();
+		initialize(z0[pass]);
+		tm.stop();
+		PRINT("initialize: %e s\n", tm.read());
+		tm.reset();
+
+		tm.start();
+		domains_rebound();
+		tm.stop();
+		PRINT("domains_rebound: %e s\n", tm.read());
+		tm.reset();
+
+		tm.start();
+		domains_begin();
+		tm.stop();
+		PRINT("domains_begin: %e s\n", tm.read());
+		tm.reset();
+
+		tm.start();
+		domains_end();
+		tm.stop();
+		PRINT("domains_end: %e s\n", tm.read());
+		tm.reset();
+
+		total_time.start();
 		tm.reset();
 		tm.start();
 		tree_create_params tparams(0, get_options().theta);
@@ -284,11 +282,11 @@ static void kick_test() {
 		drift(1.0, 0.0, 0.0);
 		tm.stop();
 		PRINT("drift: %e s\n", tm.read());
+		total_time.stop();
 	}
-	total_time.stop();
-	PRINT("avg time per step = %e\n", total_time.read() / 3);
+	PRINT("avg time per step = %e\n", total_time.read() / 4);
 	FILE* fp = fopen("results.txt", "at");
-	fprintf(fp, "%i %e\n", hpx_size(), total_time.read() / 3.0);
+	fprintf(fp, "%i %e\n", hpx_size(), total_time.read() / 4.0);
 	fclose(fp);
 	kick_workspace::clear_buffers();
 }
@@ -298,7 +296,7 @@ static void force_test() {
 
 	tm.start();
 //	particles_random_init();
-	initialize();
+	initialize(get_options().z0);
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();

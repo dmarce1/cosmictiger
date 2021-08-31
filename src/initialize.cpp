@@ -90,10 +90,10 @@ static vector<float> delta2;
 static vector<cmplx> delta2_inv;
 static vector<float> delta2_part;
 
-void initialize() {
+void initialize(double z0) {
 	const int64_t N = get_options().parts_dim;
 	const float omega_m = get_options().omega_m;
-	const float a0 = 1.0 / (get_options().z0 + 1.0);
+	const float a0 = 1.0 / (z0 + 1.0);
 	const float D1 = cosmos_growth_factor(omega_m, a0) / cosmos_growth_factor(omega_m, 1.0);
 	const float Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
 	const float f1 = std::pow(Om, 5.f / 9.f);

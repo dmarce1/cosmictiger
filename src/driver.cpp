@@ -190,7 +190,7 @@ void driver() {
 	if (get_options().check_num >= 0) {
 		params = read_checkpoint(get_options().check_num);
 	} else {
-		initialize();
+		initialize(get_options().z0);
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}

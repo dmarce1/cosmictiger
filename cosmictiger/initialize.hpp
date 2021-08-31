@@ -12,6 +12,6 @@
 
 
 
-void initialize();
+void initialize(double);
 
 #endif /* INITIALIZE_HPP_ */
