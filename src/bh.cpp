@@ -69,7 +69,7 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 		node_ptr->radius = radius;
 		node_ptr->pos = com;
 	} else {
-		const int xdim = box.longest_dim(true);
+		const int xdim = box.longest_dim();
 		const float xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
 		const int mid = bh_sort(parts, sort_order, begin, end, xmid, xdim);
 		auto boxl = box;

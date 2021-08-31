@@ -11,6 +11,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/timer.hpp>
@@ -80,6 +81,51 @@ static void fft2_test() {
 	}
 }
 
+static void rockstar_test() {
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_OVERFLOW);
+	feenableexcept (FE_INVALID);
+	constexpr int NPARTS = 10000;
+	constexpr int NHALOS = 2;
+	vector<particle_data> parts;
+	std::array<std::array<double, NDIM>, NHALOS> x;
+	x[0][0] = x[0][1] = x[1][0] = x[1][1] = 0.5;
+	x[0][2] = 0.6;
+	x[1][2] = 0.5;
+	std::array<double, NHALOS> rad = { 0.1, 0.1 };
+	for (int j = 0; j < NHALOS; j++) {
+		for (int i = 0; i < NPARTS; i++) {
+			double s, rnd;
+			double X, Y, Z;
+			double vx, vy, vz;
+			do {
+				X = rand1();
+				Y = rand1();
+				Z = rand1();
+				const double q2 = sqr(X - x[j][XDIM], Y - x[j][YDIM], Z - x[j][ZDIM]) / sqr(rad[j]);
+				const double q = std::sqrt(q2);
+				s = std::pow(1 + q2, -2.5);
+				rnd = rand1();
+			} while (s < rnd);
+			vx = rand1();
+			vy = rand1();
+			vz = rand1();
+			particle_data part;
+			part.x[XDIM] = X;
+			part.x[YDIM] = Y;
+			part.x[ZDIM] = Z;
+			part.v[XDIM] = vx;
+			part.v[YDIM] = vy;
+			part.v[ZDIM] = vz;
+			parts.push_back(part);
+		}
+	}
+	auto halos = rockstar_seed_halos(parts);
+	for (int i = 0; i < halos.size(); i++) {
+		PRINT("%i : %e %e %e : %e %e %e : %i\n", i, halos[i].x[XDIM], halos[i].x[YDIM], halos[i].x[ZDIM], halos[i].v[XDIM], halos[i].v[YDIM, halos[i].v[ZDIM]],
+				halos[i].parts.size());
+	}
+}
 
 static void domain_test() {
 	timer tm;
@@ -341,6 +387,8 @@ void test(std::string test) {
 		force_test();
 	} else if (test == "kick") {
 		kick_test();
+	} else if (test == "rockstar") {
+		rockstar_test();
 	} else if (test == "tree") {
 		tree_test();
 	} else {

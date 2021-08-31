@@ -220,7 +220,7 @@ void domains_rebound() {
 			vector<int> dims;
 			for (int i = 0; i < domains.size(); i++) {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-				const int xdim = domains[i].box.longest_dim(false);
+				const int xdim = domains[i].box.longest_dim();
 				bounds.push_back(midx);
 				dims.push_back(xdim);
 			}
@@ -253,7 +253,7 @@ void domains_rebound() {
 		for (int i = 0; i < domains.size(); i++) {
 			if (domains[i].proc_range.second - domains[i].proc_range.first) {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-				const int xdim = domains[i].box.longest_dim(false);
+				const int xdim = domains[i].box.longest_dim();
 				boxes_by_key[domains[i].key].midx = midx;
 				bounds.push_back(midx);
 				dims.push_back(xdim);
@@ -276,8 +276,8 @@ void domains_rebound() {
 				right = domains[i];
 				left.box.end[dims[i]] = right.box.begin[dims[i]] = bounds[i];
 				left.proc_range.second = right.proc_range.first = (domains[i].proc_range.first + domains[i].proc_range.second) / 2;
-				const int leftdim = left.box.longest_dim(false);
-				const int rightdim = right.box.longest_dim(false);
+				const int leftdim = left.box.longest_dim();
+				const int rightdim = right.box.longest_dim();
 				left.total_count = counts[i];
 				right.total_count = domains[i].total_count - counts[i];
 				left.midhi = left.box.end[leftdim];
@@ -451,7 +451,7 @@ static void domains_check() {
 static int find_particle_domain(const array<double, NDIM>& x, size_t key) {
 	const auto& entry = boxes_by_key[key];
 	if (entry.rank == -1) {
-		const int xdim = entry.box.longest_dim(false);
+		const int xdim = entry.box.longest_dim();
 		key <<= 1;
 		if (x[xdim] >= entry.midx) {
 			key += 1;

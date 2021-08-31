@@ -152,7 +152,7 @@ group_tree_return group_tree_create(size_t key, pair<int, int> proc_range, pair<
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
-			const int xdim = box.longest_dim(true);
+			const int xdim = box.longest_dim();
 			const double xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
 			const part_int mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;
