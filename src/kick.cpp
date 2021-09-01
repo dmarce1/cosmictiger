@@ -7,6 +7,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/timer.hpp>
 
+#include <unistd.h>
 #include <stack>
 
 HPX_PLAIN_ACTION (kick);
@@ -99,7 +100,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
 	timer tm;
-	if( self_ptr->local_root ) {
+	if (self_ptr->local_root) {
 		tm.start();
 	}
 	ASSERT(self.proc == hpx_rank());
@@ -399,9 +400,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			const auto rcr = futs[RIGHT].get();
 			kr += rcl;
 			kr += rcr;
-			if( self_ptr->local_root) {
+			if (self_ptr->local_root) {
 				tm.stop();
-				PRINT( "Kick took %e s on %i\n", tm.read(), hpx_rank());
+				char hostname[33];
+				gethostname(hostname, 32);
+				PRINT("Kick took %e s on %s\n", tm.read(), hostname);
 			}
 			return hpx::make_ready_future(kr);
 		} else {
@@ -415,7 +418,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if( self_ptr->local_root) {
 					timer tm1 = tm;
 					tm1.stop();
-					PRINT( "Kick took %e s on %i\n", tm1.read(), hpx_rank());
+					char hostname[33];
+					gethostname(hostname,32);
+					PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
 				}
 				return kr;
 			});
