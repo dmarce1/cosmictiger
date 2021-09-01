@@ -5,6 +5,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/timer.hpp>
 
 #include <stack>
 
@@ -97,6 +98,10 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	const tree_node* self_ptr = tree_get_node(self);
+	timer tm;
+	if( self_ptr->local_root ) {
+		tm.start();
+	}
 	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
 #ifdef USE_CUDA
@@ -394,15 +399,24 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			const auto rcr = futs[RIGHT].get();
 			kr += rcl;
 			kr += rcr;
+			if( self_ptr->local_root) {
+				tm.stop();
+				PRINT( "Kick took %e s on %i\n", tm.read(), hpx_rank());
+			}
 			return hpx::make_ready_future(kr);
 		} else {
-			return hpx::when_all(futs.begin(), futs.end()).then([](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
+			return hpx::when_all(futs.begin(), futs.end()).then([tm,self_ptr](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
 				auto futs = futsfut.get();
 				kick_return kr;
 				const auto rcl = futs[LEFT].get();
 				const auto rcr = futs[RIGHT].get();
 				kr += rcl;
 				kr += rcr;
+				if( self_ptr->local_root) {
+					timer tm1 = tm;
+					tm1.stop();
+					PRINT( "Kick took %e s on %i\n", tm1.read(), hpx_rank());
+				}
 				return kr;
 			});
 		}
