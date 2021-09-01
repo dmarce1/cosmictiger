@@ -428,13 +428,41 @@ static void zeldovich_begin(int dim1, int dim2) {
 
 }
 
+static range<int64_t> find_my_box(range<int64_t> box, int begin, int end) {
+	if (end - begin == 1) {
+		return box;
+	} else {
+		const int xdim = (box.end[0] - box.begin[0] > 1) ? 0 : 1;
+		const int mid = (begin + end) / 2;
+		const float w = float(mid - begin) / float(end - begin);
+		if (hpx_rank() < mid) {
+			auto left = box;
+			left.end[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
+			return find_my_box(left, begin, mid);
+		} else {
+			auto right = box;
+			right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
+			return find_my_box(right, mid, end);
+		}
+	}
+}
+
+static range<int64_t> find_my_box() {
+	range<int64_t> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = 0;
+		box.end[dim] = get_options().parts_dim;
+	}
+	return find_my_box(box, 0, hpx_size());
+}
+
 static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	//PRINT( "enter zeldovich_end\n");
 	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const auto box = fft3d_real_range();
+	const auto box = find_my_box();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < zeldovich_end_action > (c, dim, init_parts, D1, prefac1));
