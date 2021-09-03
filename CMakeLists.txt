@@ -48,6 +48,7 @@ set(cosmictiger_source_files
     src/kick.cpp
     src/kick.cu
     src/kick_workspace.cpp
+    src/lightcone.cpp
     src/main.cpp
     src/map.cpp
     src/options.cpp
@@ -88,6 +89,7 @@ set(cosmictiger_header_files
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
+    cosmictiger/lightcone.hpp
     cosmictiger/map.hpp
     cosmictiger/math.hpp
     cosmictiger/options.hpp
@@ -109,7 +111,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas chealpix dl silo
+    Boost::boost fftw3f gsl gslcblas chealpix dl silo healpix_cxx
   SOURCES
     ${cosmictiger_source_files}
   HEADERS

@@ -70,6 +70,7 @@ bool process_options(int argc, char *argv[]) {
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
 	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
 	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "map healpix Nside") //
+	("lc_nside", po::value<int>(&(opts.lc_nside))->default_value(1000), "Nside for lightcone") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1000), "view healpix Nside") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //

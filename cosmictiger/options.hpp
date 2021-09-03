@@ -25,6 +25,7 @@ struct options {
 	int map_size;
 	int view_size;
 	int min_group;
+	int lc_nside;
 
 	double sample_dim;
 	double link_len;

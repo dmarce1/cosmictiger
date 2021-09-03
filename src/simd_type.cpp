@@ -4,10 +4,10 @@
 
 int main() {
 #if defined(__AVX2__)
-	printf( "Using AVX2\n");
+	printf( "Using AVX2");
 #elif defined(__AVX__)
-	printf( "Using AVX\n");
+	printf( "Using AVX");
 #else
-	printf( "Error! No AVX!\n");
+	printf( "Error! No AVX!");
 #endif
 }
