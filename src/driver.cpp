@@ -197,6 +197,7 @@ void driver() {
 		domains_rebound();
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
+		PRINT( "tau_max = %e\n", params.tau_max);
 		params.tau = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;

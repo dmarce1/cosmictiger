@@ -25,8 +25,8 @@ struct options {
 	int map_size;
 	int view_size;
 	int min_group;
-	int lc_nside;
 
+	double lc_b;
 	double sample_dim;
 	double link_len;
 	double hsoft;
@@ -70,6 +70,7 @@ struct options {
 		arc &  min_group;
 		arc &  view_size;
 
+		arc &  lc_b;
 		arc &  theta;
 		arc &  sample_dim;
 		arc &  link_len;
