@@ -478,7 +478,8 @@ void lc_particle_boundaries() {
 	vector<hpx::future<vector<lc_particle>>>pfuts;
 	pfuts.reserve(bnd_pix.size());
 	for (auto pix : bnd_pix) {
-		pfuts.push_back(hpx::async < lc_get_particles_action > (hpx_localities()[pix2rank(pix)], pix));
+		const int rank = pix2rank(pix);
+		pfuts.push_back(hpx::async < lc_get_particles_action > (hpx_localities()[rank], pix));
 	}
 	int i = 0;
 	for (auto pix : bnd_pix) {
@@ -567,6 +568,10 @@ void lc_init(double tau, double tau_max_) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < lc_init_action > (c, tau, tau_max_));
 	}
+	tree_map = decltype(tree_map)();
+	part_map = decltype(part_map)();
+	mutex_map = decltype(mutex_map)();
+	bnd_pix = decltype(bnd_pix)();
 	tau_max = tau_max_;
 	Nside = compute_nside(tau);
 	Npix = Nside == 0 ? 1 : 12 * sqr(Nside);
