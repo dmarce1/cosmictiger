@@ -399,7 +399,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 		self.active = found_any_link;
 		return int(found_any_link);
 	} else {
-		checklist.insert(checklist.begin(), leaflist.begin(), leaflist.end());
+		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		int nactive = lc_find_groups_local(self.children[LEFT], checklist, link_len);
 		nactive += lc_find_groups_local(self.children[RIGHT], std::move(checklist), link_len);
 		self.active = nactive;
