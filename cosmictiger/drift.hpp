@@ -30,7 +30,7 @@ struct drift_return {
 	}
 };
 
-drift_return drift(double scale, double t, double dt);
+drift_return drift(double scale, double t, double dt, double tau_max);
 
 
 #endif /* DRIFT_HPP_ */

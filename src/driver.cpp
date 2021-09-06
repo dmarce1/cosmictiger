@@ -10,7 +10,7 @@
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/initialize.hpp>
-#include <cosmictiger/map.hpp>
+#include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/output.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
@@ -197,7 +197,6 @@ void driver() {
 		domains_rebound();
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
-		PRINT( "tau_max = %e\n", params.tau_max);
 		params.tau = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;
@@ -207,6 +206,7 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 	}
+	PRINT( "tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
 	auto& a = params.a;
 	auto& tau = params.tau;
@@ -225,8 +225,8 @@ void driver() {
 	double last_theta = -1.0;
 	timer reset;
 	reset.start();
-	if (get_options().do_map) {
-		map_init(tau_max);
+	if( get_options().do_lc) {
+		lc_init(tau_max);
 	}
 	while (1.0 / a > get_options().z1 + 1.0) {
 		//	do_groups(tau / t0 + 1e-6, a);
@@ -307,7 +307,7 @@ void driver() {
 		timer dtm;
 		dtm.start();
 //		PRINT( "Drift\n");
-		drift_return dr = drift(a2, tau, dt);
+		drift_return dr = drift(a2, tau, dt, tau_max);
 //		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
@@ -356,23 +356,12 @@ void driver() {
 		drift_time = 0.0;
 		tau += dt;
 		this_iter++;
-		map_flush(tau);
 		years += dyears;
 		if (this_iter > get_options().max_iter) {
 			break;
 		}
 	}
 	kick_workspace::clear_buffers();
-	/*if (get_options().do_groups) {
-	 do_groups(tau / t0 + 1e-6, a);
-	 }
-	 if (get_options().do_tracers) {
-	 output_tracers(tau / t0 + 1e-6);
-	 }
-	 if (get_options().do_sample) {
-	 output_sample(tau / t0 + 1e-6);
-	 }*/
-	map_flush(tau);
 }
 
 void write_checkpoint(driver_params params) {
@@ -393,7 +382,6 @@ void write_checkpoint(driver_params params) {
 	fp.write((const char*) &params, sizeof(driver_params));
 	particles_save(fp);
 	domains_save(fp);
-	map_save(fp);
 	fp.close();
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
@@ -419,7 +407,6 @@ driver_params read_checkpoint(int checknum) {
 	FREAD(&params, sizeof(driver_params), 1, fp);
 	particles_load(fp);
 	domains_load(fp);
-	map_load(fp);
 	fclose(fp);
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {

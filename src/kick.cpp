@@ -404,7 +404,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				tm.stop();
 				char hostname[33];
 				gethostname(hostname, 32);
-				PRINT("Kick took %e s on %s\n", tm.read(), hostname);
+			//	PRINT("Kick took %e s on %s\n", tm.read(), hostname);
 			}
 			return hpx::make_ready_future(kr);
 		} else {
@@ -420,7 +420,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					tm1.stop();
 					char hostname[33];
 					gethostname(hostname,32);
-					PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
+	//				PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
 				}
 				return kr;
 			});

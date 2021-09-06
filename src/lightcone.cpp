@@ -1,5 +1,6 @@
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/range.hpp>
@@ -13,8 +14,6 @@
 #include <healpix_cxx/healpix_base.h>
 
 using healpix_type = T_Healpix_Base< int >;
-
-using lc_real = double;
 
 class lc_group: public std::atomic<long long> {
 public:
@@ -61,6 +60,10 @@ struct lc_particle {
 	}
 };
 
+struct lc_group_data {
+	vector<lc_particle> parts;
+};
+
 struct lc_tree_id {
 	int pix;
 	int index;
@@ -91,20 +94,15 @@ static double tau_max;
 static int Nside;
 static int Npix;
 
-void lc_buffer2homes();
-void lc_groups2homes();
-void lc_init(double);
-vector<lc_particle> lc_get_particles(int pix);
-void lc_form_trees(double tmax, double link_len);
-void lc_particle_boundaries();
-void lc_send_particles(vector<lc_particle>);
-void lc_send_buffer_particles(vector<lc_particle>);
-size_t lc_find_groups();
-
+static vector<lc_particle> lc_get_particles(int pix);
+static void lc_send_particles(vector<lc_particle>);
+static void lc_send_buffer_particles(vector<lc_particle>);
 static int vec2pix(double x, double y, double z);
 static int pix2rank(int pix);
 static vector<int> pix_neighbors(int pix);
 
+HPX_PLAIN_ACTION (lc_parts_waiting);
+HPX_PLAIN_ACTION (lc_parts2groups);
 HPX_PLAIN_ACTION (lc_init);
 HPX_PLAIN_ACTION (lc_get_particles);
 HPX_PLAIN_ACTION (lc_form_trees);
@@ -114,6 +112,49 @@ HPX_PLAIN_ACTION (lc_send_buffer_particles);
 HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
+
+size_t lc_parts_waiting() {
+	vector < hpx::future < size_t >> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < lc_parts_waiting_action > (c));
+	}
+	size_t nparts = 0;
+	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
+		nparts += part_map[pix].size();
+	}
+	for (auto& f : futs) {
+		nparts += f.get();
+	}
+	return nparts;
+}
+
+void lc_parts2groups() {
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < lc_parts2groups_action > (c));
+	}
+	std::unordered_map<long long, lc_group_data> groups;
+	int i = 0;
+	while (i < part_buffer.size()) {
+		const auto grp = part_buffer[i].group;
+		if (grp != LC_EDGE_GROUP) {
+			groups[grp].parts.push_back(part_buffer[i]);
+			part_buffer[i] = part_buffer.back();
+			part_buffer.pop_back();
+		} else {
+			i++;
+		}
+	}
+	auto groups_old = std::move(groups);
+	for (auto i = groups_old.begin(); i != groups_old.end(); i++) {
+		auto tmp = std::move(i->second);
+		if (i->second.parts.size() >= get_options().lc_min_group) {
+			groups[i->first] = std::move(tmp);
+		}
+	}
+	groups_old = decltype(groups_old)();
+	hpx::wait_all(futs.begin(), futs.end());
+}
 
 static long long next_group_id() {
 	return group_id_counter++ * hpx_size() + hpx_rank() + 1;
@@ -127,7 +168,7 @@ static int rank_from_group_id(long long id) {
 	}
 }
 
-void lc_send_particles(vector<lc_particle> parts) {
+static void lc_send_particles(vector<lc_particle> parts) {
 	for (const auto& part : parts) {
 		const int pix = vec2pix(part.pos[XDIM], part.pos[YDIM], part.pos[ZDIM]);
 		std::lock_guard<spinlock_type> lock(*mutex_map[pix]);
@@ -135,7 +176,7 @@ void lc_send_particles(vector<lc_particle> parts) {
 	}
 }
 
-void lc_send_buffer_particles(vector<lc_particle> parts) {
+static void lc_send_buffer_particles(vector<lc_particle> parts) {
 	int start, stop;
 	std::unique_lock<shared_mutex_type> ulock(mutex);
 	start = part_buffer.size();
@@ -194,8 +235,10 @@ void lc_groups2homes() {
 			std::unordered_map<int,vector<lc_particle>> sends;
 			for( int i = 0; i < parts.size(); i++) {
 				int rank = rank_from_group_id(parts[i].group);
-				if( rank == -1 && parts[i].group == LC_EDGE_GROUP) {
-					rank = hpx_rank();
+				if( rank == -1 ) {
+					if( parts[i].group == LC_EDGE_GROUP ) {
+						rank = hpx_rank();
+					}
 				}
 				if( rank != -1 ) {
 					sends[rank].push_back(parts[i]);
@@ -400,6 +443,16 @@ size_t lc_find_groups() {
 	}
 	size_t rc = 0;
 	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
+	vector<hpx::future<void>> futs2;
+	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
+		futs2.push_back(hpx::async([pix]() {
+			auto& nodes = tree_map[pix];
+			for( int i = 0; i < nodes.size(); i++) {
+				nodes[i].last_active = nodes[i].active;
+			}
+		}));
+	}
+	hpx::wait_all(futs2.begin(), futs2.end());
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix, link_len]() {
 			auto check_pix = pix_neighbors(pix);
@@ -418,7 +471,7 @@ size_t lc_find_groups() {
 	return rc;
 }
 
-vector<lc_particle> lc_get_particles(int pix) {
+static vector<lc_particle> lc_get_particles(int pix) {
 	return part_map[pix];
 }
 
@@ -525,8 +578,9 @@ void lc_init(double tau_max_) {
 		futs.push_back(hpx::async < lc_init_action > (c, tau_max_));
 	}
 
-	Nside = std::ceil(std::sqrt(2 * hpx::thread::hardware_concurrency() * hpx_size() / 12));
-	Nside = std::min(Nside, (int) (std::pow(get_options().parts_dim, 1.0 / 3.0) * std::sqrt(3) / get_options().lc_b / 100.0 / 2.0));
+	Nside = std::ceil(std::sqrt(2.0 * hpx::thread::hardware_concurrency() * hpx_size() / 12.0));
+	Nside = std::min(Nside, (int) (get_options().parts_dim * std::sqrt(3) / get_options().lc_b / 100.0 / 2.0));
+	PRINT("Nside = %i\n", Nside);
 	Npix = 12 * sqr(Nside);
 	healpix = std::make_shared < healpix_type > (Nside, NEST, SET_NSIDE);
 	tau_max = tau_max_;
@@ -573,7 +627,6 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 	simd_float8 tau1 = simd_tau1 + dist1;
 	simd_int8 I0 = tau0 * simd_c0;
 	simd_int8 I1 = tau1 * simd_c0;
-
 	for (int ci = 0; ci < SIMD_FLOAT8_SIZE; ci++) {
 		if (dist1[ci] <= 1.0 || dist0[ci] <= 1.0) {
 			const int i0 = I0[ci];
@@ -597,6 +650,7 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 				const double z1 = z0 + vz * t;                                            // 2
 				long int ipix;
 				if (sqr(x1, y1, z1) <= 1.f) {                                                 // 6
+					rc++;
 					const auto pix = vec2pix(x1, y1, z1);
 					lc_particle part;
 					part.pos[XDIM] = x1;
@@ -605,7 +659,8 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 					part.vel[XDIM] = vx;
 					part.vel[YDIM] = vy;
 					part.vel[ZDIM] = vz;
-					part_buffer.push_back(part);
+		//			std::unique_lock<shared_mutex_type> lock(mutex);
+		//			part_buffer.push_back(part);
 				}
 			}
 		}

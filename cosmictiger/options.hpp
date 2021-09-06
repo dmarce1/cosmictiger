@@ -6,7 +6,7 @@
 struct options {
 	bool cuda;
 	bool save_force;
-	bool do_map;
+	bool do_lc;
 	bool do_power;
 	bool do_groups;
 	bool do_tracers;
@@ -21,9 +21,8 @@ struct options {
 	int check_num;
 	int check_freq;
 	int max_iter;
-	int map_count;
-	int map_size;
 	int view_size;
+	int lc_min_group;
 	int min_group;
 
 	double lc_b;
@@ -49,8 +48,8 @@ struct options {
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc &  cuda;
+		arc &  do_lc;
 		arc &  save_force;
-		arc &  do_map;
 		arc &  do_power;
 		arc &  do_groups;
 		arc &  do_tracers;
@@ -65,8 +64,7 @@ struct options {
 		arc &  check_num;
 		arc &  check_freq;
 		arc &  max_iter;
-		arc &  map_count;
-		arc &  map_size;
+		arc &  lc_min_group;
 		arc &  min_group;
 		arc &  view_size;
 

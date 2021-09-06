@@ -50,7 +50,6 @@ set(cosmictiger_source_files
     src/kick_workspace.cpp
     src/lightcone.cpp
     src/main.cpp
-    src/map.cpp
     src/options.cpp
     src/output.cpp
     src/particles.cpp
@@ -90,7 +89,6 @@ set(cosmictiger_header_files
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lightcone.hpp
-    cosmictiger/map.hpp
     cosmictiger/math.hpp
     cosmictiger/options.hpp
     cosmictiger/output.hpp

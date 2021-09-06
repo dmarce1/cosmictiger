@@ -160,7 +160,7 @@ public:
 	simd_int8() = default;
 	simd_int8(const simd_int8&) = default;
 	simd_int8(simd_float8 r) {
-		v = _mm256_cvtps_epi32(r.v);
+		v = _mm256_cvtps_epi32(_mm256_floor_ps(r.v));
 	}
 	simd_int8(int i) {
 		v = _mm256_set_epi32(i, i, i, i, i, i, i, i);

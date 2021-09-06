@@ -46,7 +46,7 @@ void kick_workspace::to_gpu() {
 	timer tm;
 	lock1.wait();
 	cuda_set_device();
-	PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
+	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 
 	auto sort_fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
 				const auto* aptr = tree_get_node(a.self);

@@ -244,7 +244,7 @@ static void kick_test() {
 		PRINT("tree_destroy: %e s\n", tm.read());
 		tm.reset();
 		tm.start();
-		auto dr = drift(1.0, 0.0, 0.0);
+		auto dr = drift(1.0, 0.0, 0.0, 0.0);
 		total_flops += dr.flops;
 		tm.stop();
 		PRINT("drift: %e s\n", tm.read());

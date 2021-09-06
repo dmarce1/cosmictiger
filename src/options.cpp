@@ -53,7 +53,7 @@ bool process_options(int argc, char *argv[]) {
 #endif
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
-	("do_map", po::value<bool>(&(opts.do_map))->default_value(false), "do healpix maps") //
+	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do groups") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO") //
@@ -68,8 +68,6 @@ bool process_options(int argc, char *argv[]) {
 	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(64 * 1024), "size of particle cache line") //
 #endif
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
-	("map_count", po::value<int>(&(opts.map_count))->default_value(100), "number of healpix maps") //
-	("map_size", po::value<int>(&(opts.map_size))->default_value(1000), "map healpix Nside") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "b for lightcone group finder") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1000), "view healpix Nside") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
@@ -125,6 +123,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.omega_r = omega_r;
 	opts.link_len = 1.0 / opts.parts_dim / 5.0;
 	opts.min_group = 20;
+	opts.lc_min_group = 20;
 
 	if (opts.parts_dim % 2 == 1) {
 		THROW_ERROR("parts_dim must be an even number\n");
