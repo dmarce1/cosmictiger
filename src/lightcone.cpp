@@ -15,50 +15,8 @@
 
 using healpix_type = T_Healpix_Base< int >;
 
-class lc_group: public std::atomic<long long> {
-public:
-	lc_group() {
-	}
-	lc_group(const lc_group& other) {
-		std::atomic<long long>::operator=((long long) other);
-	}
-	lc_group(lc_group&& other) {
-		std::atomic<long long>::operator=((long long) other);
-	}
-	lc_group& operator=(const lc_group& other) {
-		std::atomic<long long>::operator=((long long) other);
-		return *this;
-	}
-	lc_group& operator=(lc_group&& other) {
-		std::atomic<long long>::operator=((long long) other);
-		return *this;
-	}
-	lc_group& operator=(long long other) {
-		std::atomic<long long>::operator=(other);
-		return *this;
-	}
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		long long number = (long long) *((std::atomic<long long>*) (this));
-		arc & number;
-		*((std::atomic<long long>*) (this)) = number;
-	}
-};
-
 #define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFLL)
 #define LC_EDGE_GROUP (0x0LL)
-
-struct lc_particle {
-	array<lc_real, NDIM> pos;
-	array<float, NDIM> vel;
-	lc_group group;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & pos;
-		arc & vel;
-		arc & group;
-	}
-};
 
 struct lc_group_data {
 	vector<lc_particle> parts;
@@ -99,9 +57,10 @@ static void lc_send_particles(vector<lc_particle>);
 static void lc_send_buffer_particles(vector<lc_particle>);
 static int vec2pix(double x, double y, double z);
 static int pix2rank(int pix);
+static int compute_nside(double tau);
 static vector<int> pix_neighbors(int pix);
 
-HPX_PLAIN_ACTION (lc_parts_waiting);
+HPX_PLAIN_ACTION (lc_time_to_flush);
 HPX_PLAIN_ACTION (lc_parts2groups);
 HPX_PLAIN_ACTION (lc_init);
 HPX_PLAIN_ACTION (lc_get_particles);
@@ -113,19 +72,29 @@ HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
 
-size_t lc_parts_waiting() {
+size_t lc_time_to_flush(double tau, double tau_max_) {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_parts_waiting_action > (c));
+		futs.push_back(hpx::async < lc_time_to_flush_action > (c, tau, tau_max_));
 	}
-	size_t nparts = 0;
-	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
-		nparts += part_map[pix].size();
-	}
+	size_t nparts = part_buffer.size();
 	for (auto& f : futs) {
-		nparts += f.get();
+		nparts = std::max(nparts, f.get());
 	}
-	return nparts;
+	if (hpx_rank() == 0) {
+		tau_max = tau_max_;
+		const int nside = compute_nside(tau);
+		const int npix = nside == 0 ? 1 : 12 * sqr(nside);
+		const size_t ranks = std::min(npix, hpx_size());
+		const size_t parts_per_rank = std::pow(get_options().parts_dim, NDIM) / hpx_size();
+		if (8 * nparts >= parts_per_rank) {
+			return 1;
+		} else {
+			return 0;
+		}
+	} else {
+		return nparts;
+	}
 }
 
 void lc_parts2groups() {
@@ -145,10 +114,11 @@ void lc_parts2groups() {
 			i++;
 		}
 	}
+	PRINT("%li particles remaining in buffer\n", part_buffer.size());
 	auto groups_old = std::move(groups);
 	for (auto i = groups_old.begin(); i != groups_old.end(); i++) {
 		auto tmp = std::move(i->second);
-		if (i->second.parts.size() >= get_options().lc_min_group) {
+		if (tmp.parts.size() >= get_options().lc_min_group) {
 			groups[i->first] = std::move(tmp);
 		}
 	}
@@ -391,10 +361,10 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 		do {
 			found_link = false;
 			for (int pi = self.part_range.first; pi < self.part_range.second; pi++) {
-				auto A = part_map[self.pix][pi];
+				auto& A = part_map[self.pix][pi];
 				for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 					if (pi != pj) {
-						auto B = part_map[self.pix][pj];
+						auto& B = part_map[self.pix][pj];
 						const double dx = A.pos[XDIM] - B.pos[XDIM];
 						const double dy = A.pos[YDIM] - B.pos[YDIM];
 						const double dz = A.pos[ZDIM] - B.pos[ZDIM];
@@ -411,6 +381,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 								found_link = true;
 							}
 							if (A.group != B.group) {
+								//					PRINT( "%li %li\n", (long long) A.group, (long long) B.group);
 								if (A.group < B.group) {
 									B.group = A.group;
 								} else {
@@ -428,6 +399,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 		self.active = found_any_link;
 		return int(found_any_link);
 	} else {
+		checklist.insert(checklist.begin(), leaflist.begin(), leaflist.end());
 		int nactive = lc_find_groups_local(self.children[LEFT], checklist, link_len);
 		nactive += lc_find_groups_local(self.children[RIGHT], std::move(checklist), link_len);
 		self.active = nactive;
@@ -476,11 +448,15 @@ static vector<lc_particle> lc_get_particles(int pix) {
 }
 
 static int vec2pix(double x, double y, double z) {
-	vec3 vec;
-	vec.x = x;
-	vec.y = y;
-	vec.z = z;
-	return healpix->vec2pix(vec);
+	if (Nside == 0) {
+		return 0;
+	} else {
+		vec3 vec;
+		vec.x = x;
+		vec.y = y;
+		vec.z = z;
+		return healpix->vec2pix(vec);
+	}
 }
 
 static int pix2rank(int pix) {
@@ -546,7 +522,7 @@ void lc_form_trees(double tau, double link_len) {
 				const double z = parts[i].pos[ZDIM];
 				const double R2 = sqr(x, y, z);
 				const double R = sqrt(R2);
-				if( R < (tau_max - tau) + link_len * 1.0001) {
+				if( R < (tau_max - tau) + link_len * 1.0001 && tau < tau_max) {
 					parts[i].group = LC_EDGE_GROUP;
 				} else {
 					parts[i].group = LC_NO_GROUP;
@@ -561,29 +537,44 @@ void lc_form_trees(double tau, double link_len) {
 
 static vector<int> pix_neighbors(int pix) {
 	vector<int> neighbors;
-	neighbors.reserve(8);
-	fix_arr<int, 8> result;
-	healpix->neighbors(pix, result);
-	for (int i = 0; i < 8; i++) {
-		if (result[i] != -1) {
-			neighbors.push_back(result[i]);
+	if (Nside != 0) {
+		neighbors.reserve(8);
+		fix_arr<int, 8> result;
+		healpix->neighbors(pix, result);
+		for (int i = 0; i < 8; i++) {
+			if (result[i] != -1) {
+				neighbors.push_back(result[i]);
+			}
 		}
 	}
 	return neighbors;
 }
 
-void lc_init(double tau_max_) {
+static int compute_nside(double tau) {
+	double nside = std::sqrt(2.0 * hpx::thread::hardware_concurrency() * hpx_size() / 12.0);
+	const double w0 = std::max((tau_max - tau) / tau_max, 0.0);
+	nside = std::min(nside, (get_options().parts_dim * std::sqrt(3) / get_options().lc_b / 2.0 * w0));
+	Nside = 1;
+	while (Nside <= nside) {
+		Nside *= 2;
+	}
+	Nside /= 2;
+	return Nside;
+}
+
+void lc_init(double tau, double tau_max_) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_init_action > (c, tau_max_));
+		futs.push_back(hpx::async < lc_init_action > (c, tau, tau_max_));
 	}
-
-	Nside = std::ceil(std::sqrt(2.0 * hpx::thread::hardware_concurrency() * hpx_size() / 12.0));
-	Nside = std::min(Nside, (int) (get_options().parts_dim * std::sqrt(3) / get_options().lc_b / 100.0 / 2.0));
-	PRINT("Nside = %i\n", Nside);
-	Npix = 12 * sqr(Nside);
-	healpix = std::make_shared < healpix_type > (Nside, NEST, SET_NSIDE);
 	tau_max = tau_max_;
+	Nside = compute_nside(tau);
+	Npix = Nside == 0 ? 1 : 12 * sqr(Nside);
+	if (Nside > 0) {
+		healpix = std::make_shared < healpix_type > (Nside, NEST, SET_NSIDE);
+	} else {
+		healpix = nullptr;
+	}
 	my_pix_range.first = (size_t) hpx_rank() * Npix / hpx_size();
 	my_pix_range.second = (size_t)(hpx_rank() + 1) * Npix / hpx_size();
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
@@ -603,7 +594,8 @@ void lc_init(double tau_max_) {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt) {
+int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt,
+		vector<lc_particle>& this_part_buffer) {
 	static simd_float8 images[NDIM] =
 			{ simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
 	const float tau_max_inv = 1.0 / tau_max;
@@ -654,16 +646,32 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 					const auto pix = vec2pix(x1, y1, z1);
 					lc_particle part;
 					part.pos[XDIM] = x1;
-					part.pos[XDIM] = y1;
-					part.pos[XDIM] = z1;
+					part.pos[YDIM] = y1;
+					part.pos[ZDIM] = z1;
 					part.vel[XDIM] = vx;
 					part.vel[YDIM] = vy;
 					part.vel[ZDIM] = vz;
-		//			std::unique_lock<shared_mutex_type> lock(mutex);
-		//			part_buffer.push_back(part);
+					this_part_buffer.push_back(part);
 				}
 			}
 		}
 	}
 	return rc;
+}
+
+void lc_add_parts(vector<lc_particle> && these_parts) {
+	std::unique_lock<shared_mutex_type> ulock(mutex);
+	const int start = part_buffer.size();
+	part_buffer.resize(start + these_parts.size());
+	const int stop = part_buffer.size();
+	ulock.unlock();
+	const int chunk_size = 64;
+	for (int i = 0; i < these_parts.size(); i += chunk_size) {
+		std::shared_lock<shared_mutex_type> slock(mutex);
+		const int jend = std::min(i + chunk_size, (int) these_parts.size());
+		for (int j = i; j < jend; j++) {
+			part_buffer[j + start] = these_parts[j];
+		}
+	}
+
 }

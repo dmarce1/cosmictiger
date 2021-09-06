@@ -19,6 +19,7 @@ drift_return drift(double scale, double t, double dt, double t_max) {
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
 	const auto func = [dt, scale, t, &next, t_max](int proc, int nthreads) {
+		vector<lc_particle> this_part_buffer;
 		const double factor = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
 		drift_return this_dr;
@@ -66,7 +67,7 @@ drift_return drift(double scale, double t, double dt, double t_max) {
 				y += double(vy*dt);
 				z += double(vz*dt);
 				if( do_lc) {
-					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt);
+					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt, this_part_buffer);
 				}
 				constrain_range(x);
 				constrain_range(y);
@@ -75,6 +76,9 @@ drift_return drift(double scale, double t, double dt, double t_max) {
 				particles_pos(YDIM,i) = y;
 				particles_pos(ZDIM,i) = z;
 				this_dr.flops += 31;
+			}
+			if( do_lc) {
+				lc_add_parts(std::move(this_part_buffer));
 			}
 			return this_dr;
 		};

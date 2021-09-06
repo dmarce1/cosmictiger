@@ -206,7 +206,7 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 	}
-	PRINT( "tau_max = %e\n", params.tau_max);
+	PRINT("tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
 	auto& a = params.a;
 	auto& tau = params.tau;
@@ -225,9 +225,29 @@ void driver() {
 	double last_theta = -1.0;
 	timer reset;
 	reset.start();
-	if( get_options().do_lc) {
-		lc_init(tau_max);
+	if (get_options().do_lc) {
+		lc_init(tau, tau_max);
 	}
+	double dt;
+	const auto check_lc = [&tau,&dt,&tau_max](bool force) {
+		if (force || lc_time_to_flush(tau + dt, tau_max)) {
+			PRINT("Flushing light cone\n");
+			lc_init(tau + dt, tau_max);
+			lc_buffer2homes();
+			lc_particle_boundaries();
+			const double link_len = get_options().lc_b / get_options().parts_dim;
+			lc_form_trees(tau + dt, link_len);
+			PRINT( "Trees formed\n");
+			size_t cnt;
+			do {
+				lc_particle_boundaries();
+				cnt = lc_find_groups();
+				PRINT( "%li\n", cnt);
+			}while( cnt > 0);
+			lc_groups2homes();
+			lc_parts2groups();
+		}
+	};
 	while (1.0 / a > get_options().z1 + 1.0) {
 		//	do_groups(tau / t0 + 1e-6, a);
 		tmr.stop();
@@ -296,7 +316,7 @@ void driver() {
 				do_groups(tau / t0 + .001 / t0, a);
 			}
 		}
-		double dt = t0 / (1 << kr.max_rung);
+		dt = t0 / (1 << kr.max_rung);
 		const double dadt1 = cosmos_dadtau(a);
 		const double a1 = a;
 		a += dadt1 * dt;
@@ -308,6 +328,9 @@ void driver() {
 		dtm.start();
 //		PRINT( "Drift\n");
 		drift_return dr = drift(a2, tau, dt, tau_max);
+		if (get_options().do_lc) {
+			check_lc(false);
+		}
 //		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
@@ -360,6 +383,9 @@ void driver() {
 		if (this_iter > get_options().max_iter) {
 			break;
 		}
+	}
+	if (get_options().do_lc) {
+		check_lc(true);
 	}
 	kick_workspace::clear_buffers();
 }
