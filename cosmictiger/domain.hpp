@@ -17,7 +17,7 @@ void domains_end();
 void domains_rebound();
 range<double> domains_find_my_box();
 range<double> domains_range(size_t key);
-void domains_save(std::ofstream& fp);
+void domains_save(FILE* fp);
 void domains_load(FILE *fp);
 double domains_get_load_imbalance();
 

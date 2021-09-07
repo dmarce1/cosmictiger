@@ -229,7 +229,7 @@ void driver() {
 		lc_init(tau, tau_max);
 	}
 	double dt;
-	const auto check_lc = [&tau,&dt,&tau_max](bool force) {
+	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
 			PRINT("Flushing light cone\n");
 			lc_init(tau + dt, tau_max);
@@ -245,7 +245,7 @@ void driver() {
 				PRINT( "%li\n", cnt);
 			}while( cnt > 0);
 			lc_groups2homes();
-			lc_parts2groups();
+			lc_parts2groups(a, link_len);
 		}
 	};
 	while (1.0 / a > get_options().z1 + 1.0) {
@@ -404,11 +404,14 @@ void write_checkpoint(driver_params params) {
 	}
 	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
 			+ std::to_string(hpx_rank()) + std::string(".dat");
-	std::ofstream fp(fname.c_str(), std::ios::out | std::ios::binary);
-	fp.write((const char*) &params, sizeof(driver_params));
+	FILE* fp = fopen(fname.c_str(), "wb");
+	fwrite(&params, sizeof(driver_params), 1, fp);
 	particles_save(fp);
 	domains_save(fp);
-	fp.close();
+	if( get_options().do_lc) {
+		lc_save(fp);
+	}
+	fclose(fp);
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");
@@ -433,6 +436,9 @@ driver_params read_checkpoint(int checknum) {
 	FREAD(&params, sizeof(driver_params), 1, fp);
 	particles_load(fp);
 	domains_load(fp);
+	if( get_options().do_lc) {
+		lc_load(fp);
+	}
 	fclose(fp);
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {

@@ -55,4 +55,8 @@ void lc_particle_boundaries();
 void lc_form_trees(double tmax, double link_len);
 size_t lc_find_groups();
 void lc_groups2homes();
-void lc_parts2groups();
+void lc_parts2groups(double a, double link_len);
+void lc_save(FILE* fp);
+void lc_load(FILE* fp);
+
+

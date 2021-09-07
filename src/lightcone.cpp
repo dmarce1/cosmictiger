@@ -1,9 +1,13 @@
+#include <cosmictiger/bh.hpp>
+#include <cosmictiger/constants.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/fixed.hpp>
+#include <cosmictiger/safe_io.hpp>
 
 #include <atomic>
 #include <memory>
@@ -18,8 +22,51 @@ using healpix_type = T_Healpix_Base< int >;
 #define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFLL)
 #define LC_EDGE_GROUP (0x0LL)
 
+struct lc_group_archive {
+	long long id;
+	array<double, NDIM> com;
+	array<float, NDIM> vel;
+	array<float, NDIM> lang;
+	float mass;
+	float ekin;
+	float epot;
+	float r25;
+	float r50;
+	float r75;
+	float r90;
+	float rmax;
+	float ravg;
+	float vxdisp;
+	float vydisp;
+	float vzdisp;
+	float Ixx;
+	float Ixy;
+	float Ixz;
+	float Iyy;
+	float Iyz;
+	float Izz;
+	bool incomplete;
+	void printme() {
+		PRINT("id = %lli\n", id);
+		PRINT("mass = %e\n", mass);
+		PRINT("xcom = %e %e %e\n", com[XDIM], com[YDIM], com[ZDIM]);
+		PRINT("vcom = %e %e %e\n", vel[XDIM], vel[YDIM], vel[ZDIM]);
+		PRINT("J    = %e %e %e\n", lang[XDIM], lang[YDIM], lang[ZDIM]);
+		PRINT("ekin = %e epot = %e\n", ekin, epot);
+		PRINT("ravg = %e\n", ravg);
+		PRINT("r's = %e %e %e %e %e\n", r25, r50, r75, r90, rmax);
+		PRINT("vel disp = %e %e %e\n", vxdisp, vydisp, vzdisp);
+		PRINT("I = %e %e %e\n", Ixx, Ixy, Ixz);
+		PRINT("    %e %e %e\n", Ixy, Iyy, Iyz);
+		PRINT("    %e %e %e\n", Ixz, Iyz, Izz);
+		PRINT("incomplete = %i\n", incomplete);
+	}
+
+};
+
 struct lc_group_data {
 	vector<lc_particle> parts;
+	lc_group_archive arc;
 };
 
 struct lc_tree_id {
@@ -72,6 +119,20 @@ HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
 
+void lc_save(FILE* fp) {
+	size_t sz = part_buffer.size();
+	fwrite(&sz, sizeof(size_t), 1, fp);
+	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
+}
+
+void lc_load(FILE* fp) {
+	size_t sz;
+	FREAD(&sz, sizeof(size_t), 1, fp);
+	part_buffer.resize(sz);
+	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
+
+}
+
 size_t lc_time_to_flush(double tau, double tau_max_) {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
@@ -97,17 +158,17 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 	}
 }
 
-void lc_parts2groups() {
+void lc_parts2groups(double a, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_parts2groups_action > (c));
+		futs.push_back(hpx::async < lc_parts2groups_action > (c, a, link_len));
 	}
-	std::unordered_map<long long, lc_group_data> groups;
+	std::unordered_map<long long, lc_group_data> groups_map;
 	int i = 0;
 	while (i < part_buffer.size()) {
 		const auto grp = part_buffer[i].group;
 		if (grp != LC_EDGE_GROUP) {
-			groups[grp].parts.push_back(part_buffer[i]);
+			groups_map[grp].parts.push_back(part_buffer[i]);
 			part_buffer[i] = part_buffer.back();
 			part_buffer.pop_back();
 		} else {
@@ -115,14 +176,170 @@ void lc_parts2groups() {
 		}
 	}
 	PRINT("%li particles remaining in buffer\n", part_buffer.size());
-	auto groups_old = std::move(groups);
-	for (auto i = groups_old.begin(); i != groups_old.end(); i++) {
+	vector<lc_group_data> groups;
+	for (auto i = groups_map.begin(); i != groups_map.end(); i++) {
 		auto tmp = std::move(i->second);
 		if (tmp.parts.size() >= get_options().lc_min_group) {
-			groups[i->first] = std::move(tmp);
+			tmp.arc.id = i->first;
+			groups.push_back(std::move(tmp));
 		}
 	}
-	groups_old = decltype(groups_old)();
+	groups_map = decltype(groups_map)();
+	vector<hpx::future<void>> futs2;
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs2.push_back(hpx::async([proc,nthreads,&groups,a,link_len]() {
+			const double ainv = 1.0 / a;
+			const int begin = (size_t) (proc) * groups.size() / nthreads;
+			const int end = (size_t) (proc+1) * groups.size() / nthreads;
+			for( int i = begin; i < end; i++) {
+				auto& parts = groups[i].parts;
+				bool incomplete = false;
+				for( int i = 0; i < parts.size(); i++) {
+					const double x = parts[i].pos[XDIM];
+					const double y = parts[i].pos[YDIM];
+					const double z = parts[i].pos[ZDIM];
+					const double r = sqrt(sqr(x,y,z));
+					if( r + link_len > 1.0 ) {
+						incomplete = true;
+						break;
+					}
+				}
+				vector<array<fixed32, NDIM>> bh_x(parts.size());
+				for( int j = 0; j < parts.size(); j++) {
+					for( int dim = 0; dim < NDIM; dim++) {
+						bh_x[j][dim] = 0.5 + parts[j].pos[dim] - parts[0].pos[dim];
+					}
+				}
+				auto pot = bh_evaluate_potential(bh_x);
+				for( auto& phi : pot) {
+					phi *= ainv;
+				}
+				array<double, NDIM> xcom;
+				array<float, NDIM> vcom;
+				array<float, NDIM> J;
+				for( int dim = 0; dim < NDIM; dim++) {
+					xcom[dim] = 0.0;
+					vcom[dim] = 0.0;
+					J[dim] = 0.0;
+				}
+				for( int i = 0; i < parts.size(); i++) {
+					for( int dim = 0; dim < NDIM; dim++) {
+						xcom[dim] += parts[i].pos[dim];
+						vcom[dim] += parts[i].vel[dim];
+					}
+				}
+				for( int dim = 0; dim < NDIM; dim++) {
+					xcom[dim] /= parts.size();
+					vcom[dim] /= parts.size();
+				}
+				for( int i = 0; i < parts.size(); i++) {
+					for( int dim = 0; dim < NDIM; dim++) {
+						parts[i].pos[dim] -= xcom[dim];
+						parts[i].vel[dim] -= vcom[dim];
+					}
+				}
+				double ekin = 0.0;
+				double epot = 0.0;
+				double vxdisp = 0.0;
+				double vydisp = 0.0;
+				double vzdisp = 0.0;
+				double rmax = 0.0;
+				double ravg = 0.0;
+				double Ixx = 0.0;
+				double Iyy = 0.0;
+				double Izz = 0.0;
+				double Ixy = 0.0;
+				double Ixz = 0.0;
+				double Iyz = 0.0;
+				vector<double> radii;
+				for( int i = 0; i < parts.size(); i++) {
+					const double vx = parts[i].vel[XDIM];
+					const double vy = parts[i].vel[YDIM];
+					const double vz = parts[i].vel[ZDIM];
+					const double x = parts[i].pos[XDIM];
+					const double y = parts[i].pos[YDIM];
+					const double z = parts[i].pos[ZDIM];
+					const double r = sqrt(sqr(x, y, z));
+					J[XDIM] += y * vz - z * vy;
+					J[YDIM] -= x * vz - z * vx;
+					J[ZDIM] += x * vy - y * vx;
+					Ixx += sqr(y) + sqr(z);
+					Iyy += sqr(x) + sqr(z);
+					Izz += sqr(x) + sqr(y);
+					Ixy -= x * y;
+					Ixz -= x * z;
+					Iyz -= y * z;
+					rmax = std::max(r, rmax);
+					ravg += r;
+					radii.push_back(r);
+					vxdisp += sqr(vx);
+					vydisp += sqr(vy);
+					vzdisp += sqr(vz);
+					ekin += sqr(vx, vy, vz);
+					epot += pot[i];
+				}
+				std::sort(radii.begin(), radii.end());
+				const double countinv = 1.0 / parts.size();
+				ekin *= countinv;
+				epot *= countinv;
+				vxdisp *= countinv;
+				vydisp *= countinv;
+				vzdisp *= countinv;
+				vxdisp = sqrt(vxdisp);
+				vydisp = sqrt(vydisp);
+				vzdisp = sqrt(vzdisp);
+				ravg *= countinv;
+				Ixx *= countinv;
+				Iyy *= countinv;
+				Izz *= countinv;
+				Ixy *= countinv;
+				Iyz *= countinv;
+				Ixz *= countinv;
+				for( int dim = 0; dim < NDIM; dim++) {
+					J[dim] *= countinv;
+				}
+				const auto radial_percentile = [&radii](double r) {
+					const double dr = 1.0 / (radii.size() - 1);
+					double r0 = r / dr;
+					int n0 = r0;
+					int n1 = n0 + 1;
+					double w1 = r0 - n0;
+					double w0 = 1.0 - w1;
+					return w0*radii[n0] + w1*radii[n1];
+				};
+				const double code_to_mpc = get_options().code_to_cm / constants::mpc_to_cm;
+				const double code_to_mpc2 = sqr(code_to_mpc);
+				groups[i].arc.r25 = radial_percentile(0.25) * code_to_mpc;
+				groups[i].arc.r50 = radial_percentile(0.5) * code_to_mpc;
+				groups[i].arc.r75 = radial_percentile(0.75) * code_to_mpc;
+				groups[i].arc.r90 = radial_percentile(0.9) * code_to_mpc;
+				groups[i].arc.rmax = rmax * code_to_mpc;
+				groups[i].arc.ravg = ravg * code_to_mpc;
+				groups[i].arc.Ixx = Ixx * code_to_mpc2;
+				groups[i].arc.Iyy = Iyy * code_to_mpc2;
+				groups[i].arc.Izz = Izz * code_to_mpc2;
+				groups[i].arc.Ixy = Ixy * code_to_mpc2;
+				groups[i].arc.Iyz = Iyz * code_to_mpc2;
+				groups[i].arc.Ixz = Ixz * code_to_mpc2;
+				for( int dim = 0; dim < NDIM; dim++) {
+					groups[i].arc.lang[dim] = J[dim];
+					groups[i].arc.vel[dim] = vcom[dim];
+					groups[i].arc.com[dim] = xcom[dim] * code_to_mpc;
+				}
+				groups[i].arc.mass = parts.size() * get_options().code_to_g / constants::M0;
+				groups[i].arc.vxdisp = vxdisp;
+				groups[i].arc.vydisp = vydisp;
+				groups[i].arc.vzdisp = vzdisp;
+				groups[i].arc.incomplete = incomplete;
+				groups[i].arc.epot = epot;
+				groups[i].arc.ekin = ekin;
+			//	groups[i].arc.printme();
+			//	printf( "\n");
+			}
+		}));
+	}
+	hpx::wait_all(futs2.begin(), futs2.end());
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -188,7 +405,6 @@ void lc_buffer2homes() {
 			hpx::wait_all(futs.begin(), futs.end());
 		}));
 	}
-
 	hpx::wait_all(futs2.begin(), futs2.end());
 	part_buffer = decltype(part_buffer)();
 	hpx::wait_all(futs1.begin(), futs1.end());
@@ -400,8 +616,11 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 		return int(found_any_link);
 	} else {
 		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-		int nactive = lc_find_groups_local(self.children[LEFT], checklist, link_len);
-		nactive += lc_find_groups_local(self.children[RIGHT], std::move(checklist), link_len);
+		int nactive = 0;
+		if (checklist.size()) {
+			nactive += lc_find_groups_local(self.children[LEFT], checklist, link_len);
+			nactive += lc_find_groups_local(self.children[RIGHT], std::move(checklist), link_len);
+		}
 		self.active = nactive;
 		return nactive;
 	}

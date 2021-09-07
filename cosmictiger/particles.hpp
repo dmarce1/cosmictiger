@@ -134,7 +134,7 @@ void particles_group_cache_free();
 vector<output_particle> particles_get_sample(const range<double>& box);
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
-void particles_save(std::ofstream& fp);
+void particles_save(FILE* fp);
 void particles_inc_group_cache_epoch();
 int particles_group_home(group_int);
 void particles_set_tracers(size_t count=0);

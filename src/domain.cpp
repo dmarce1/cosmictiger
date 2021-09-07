@@ -61,13 +61,13 @@ vector<size_t> domains_get_loads() {
 	return loads;
 }
 
-void domains_save(std::ofstream& fp) {
+void domains_save(FILE* fp) {
 	size_t size = boxes_by_key.size();
-	fp.write((const char*) &size, sizeof(size_t));
+	fwrite((const char*) &size, sizeof(size_t), 1, fp);
 	for (auto i = boxes_by_key.begin(); i != boxes_by_key.end(); i++) {
-		fp.write((const char*) &(*i), sizeof(std::pair<size_t, domain_t>));
+		fwrite(&(*i), sizeof(std::pair<size_t, domain_t>), 1, fp);
 	}
-	fp.write((const char*) local_domains.data(), sizeof(domain_local) * hpx_size());
+	fwrite(local_domains.data(), sizeof(domain_local), hpx_size(), fp);
 }
 
 void domains_load(FILE *fp) {
