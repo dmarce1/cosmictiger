@@ -22,48 +22,6 @@ using healpix_type = T_Healpix_Base< int >;
 #define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFLL)
 #define LC_EDGE_GROUP (0x0LL)
 
-struct lc_group_archive {
-	long long id;
-	array<double, NDIM> com;
-	array<float, NDIM> vel;
-	array<float, NDIM> lang;
-	float mass;
-	float ekin;
-	float epot;
-	float r25;
-	float r50;
-	float r75;
-	float r90;
-	float rmax;
-	float ravg;
-	float vxdisp;
-	float vydisp;
-	float vzdisp;
-	float Ixx;
-	float Ixy;
-	float Ixz;
-	float Iyy;
-	float Iyz;
-	float Izz;
-	bool incomplete;
-	void printme() {
-		PRINT("id = %lli\n", id);
-		PRINT("mass = %e\n", mass);
-		PRINT("xcom = %e %e %e\n", com[XDIM], com[YDIM], com[ZDIM]);
-		PRINT("vcom = %e %e %e\n", vel[XDIM], vel[YDIM], vel[ZDIM]);
-		PRINT("J    = %e %e %e\n", lang[XDIM], lang[YDIM], lang[ZDIM]);
-		PRINT("ekin = %e epot = %e\n", ekin, epot);
-		PRINT("ravg = %e\n", ravg);
-		PRINT("r's = %e %e %e %e %e\n", r25, r50, r75, r90, rmax);
-		PRINT("vel disp = %e %e %e\n", vxdisp, vydisp, vzdisp);
-		PRINT("I = %e %e %e\n", Ixx, Ixy, Ixz);
-		PRINT("    %e %e %e\n", Ixy, Iyy, Iyz);
-		PRINT("    %e %e %e\n", Ixz, Iyz, Izz);
-		PRINT("incomplete = %i\n", incomplete);
-	}
-
-};
-
 struct lc_group_data {
 	vector<lc_particle> parts;
 	lc_group_archive arc;
@@ -97,6 +55,7 @@ static vector<lc_particle> part_buffer;
 static shared_mutex_type mutex;
 static double tau_max;
 static int Nside;
+static int dump_num(0);
 static int Npix;
 
 static vector<lc_particle> lc_get_particles(int pix);
@@ -119,10 +78,27 @@ HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
 
+void lc_group_archive::printme() {
+	PRINT("id = %lli\n", id);
+	PRINT("mass = %e\n", mass);
+	PRINT("xcom = %e %e %e\n", com[XDIM], com[YDIM], com[ZDIM]);
+	PRINT("vcom = %e %e %e\n", vel[XDIM], vel[YDIM], vel[ZDIM]);
+	PRINT("J    = %e %e %e\n", lang[XDIM], lang[YDIM], lang[ZDIM]);
+	PRINT("ekin = %e epot = %e\n", ekin, epot);
+	PRINT("ravg = %e\n", ravg);
+	PRINT("r's = %e %e %e %e %e\n", r25, r50, r75, r90, rmax);
+	PRINT("vel disp = %e %e %e\n", vxdisp, vydisp, vzdisp);
+	PRINT("I = %e %e %e\n", Ixx, Ixy, Ixz);
+	PRINT("    %e %e %e\n", Ixy, Iyy, Iyz);
+	PRINT("    %e %e %e\n", Ixz, Iyz, Izz);
+	PRINT("incomplete = %i\n", incomplete);
+}
+
 void lc_save(FILE* fp) {
 	size_t sz = part_buffer.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
+	fwrite(&dump_num, sizeof(int), 1, fp);
 }
 
 void lc_load(FILE* fp) {
@@ -130,7 +106,7 @@ void lc_load(FILE* fp) {
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	part_buffer.resize(sz);
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
-
+	FREAD(&dump_num, sizeof(int), 1, fp);
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -334,12 +310,24 @@ void lc_parts2groups(double a, double link_len) {
 				groups[i].arc.incomplete = incomplete;
 				groups[i].arc.epot = epot;
 				groups[i].arc.ekin = ekin;
-			//	groups[i].arc.printme();
-			//	printf( "\n");
 			}
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
+	std::string cmd = "mkdir -p lc_groups";
+	if( system(cmd.c_str()) != 0 ) {
+		THROW_ERROR( "unable to create lc_groups directory\n");
+	}
+	std::string filename = "lc_groups/lc_groups." + std::to_string(hpx_rank()) + "." + std::to_string(dump_num) + ".dat";
+	FILE* fp = fopen(filename.c_str(), "wb");
+	if (!fp) {
+		THROW_ERROR("Could not open %s for writing\n", filename.c_str());
+	}
+	for (int i = 0; i < groups.size(); i++) {
+		fwrite(&groups[i].arc, sizeof(lc_group_archive), 1, fp);
+	}
+	fclose(fp);
+	dump_num++;
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
