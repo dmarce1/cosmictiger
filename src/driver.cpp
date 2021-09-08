@@ -268,8 +268,8 @@ void driver() {
 			if (get_options().do_tracers) {
 				output_tracers(number);
 			}
-			if (get_options().do_sample) {
-				output_sample(number);
+			if (get_options().do_slice) {
+				output_slice(number);
 			}
 			if (get_options().do_views) {
 				timer tm;

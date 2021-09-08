@@ -9,6 +9,6 @@
 #define OUTPUT_HPP_
 
 void output_tracers(int number);
-void output_sample(int number);
+void output_slice(int number);
 
 #endif /* OUTPUT_HPP_ */

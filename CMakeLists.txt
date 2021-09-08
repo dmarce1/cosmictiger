@@ -88,6 +88,7 @@ set(cosmictiger_header_files
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
+    cosmictiger/lc_group_archive.hpp
     cosmictiger/lightcone.hpp
     cosmictiger/math.hpp
     cosmictiger/options.hpp
@@ -154,8 +155,16 @@ add_executable(
  )
  
  
+add_executable(
+ 	lc_stats
+ 	src/lc_stats.cpp
+ 	cosmictiger/lc_group_archive.hpp
+ )
+ 
+ 
 target_link_libraries(healpix2silo PUBLIC chealpix silo boost_program_options dl)
 target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(lc_stats PUBLIC ${PROJECT_SOURCE_DIR})
 
 
 

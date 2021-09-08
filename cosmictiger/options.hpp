@@ -10,7 +10,7 @@ struct options {
 	bool do_power;
 	bool do_groups;
 	bool do_tracers;
-	bool do_sample;
+	bool do_slice;
 	bool do_views;
 	bool twolpt;
 
@@ -24,9 +24,10 @@ struct options {
 	int view_size;
 	int lc_min_group;
 	int min_group;
+	int slice_res;
 
 	double lc_b;
-	double sample_dim;
+	double slice_size;
 	double link_len;
 	double hsoft;
 	double GM;
@@ -53,7 +54,7 @@ struct options {
 		arc &  do_power;
 		arc &  do_groups;
 		arc &  do_tracers;
-		arc &  do_sample;
+		arc &  do_slice;
 		arc &  do_views;
 		arc &  twolpt;
 
@@ -67,10 +68,11 @@ struct options {
 		arc &  lc_min_group;
 		arc &  min_group;
 		arc &  view_size;
+		arc & slice_res;
 
 		arc &  lc_b;
 		arc &  theta;
-		arc &  sample_dim;
+		arc &  slice_size;
 		arc &  link_len;
 		arc &  hsoft;
 		arc &  GM;

@@ -46,33 +46,7 @@ struct lc_particle {
 	}
 };
 
-
-struct lc_group_archive {
-	long long id;
-	array<double, NDIM> com;
-	array<float, NDIM> vel;
-	array<float, NDIM> lang;
-	float mass;
-	float ekin;
-	float epot;
-	float r25;
-	float r50;
-	float r75;
-	float r90;
-	float rmax;
-	float ravg;
-	float vxdisp;
-	float vydisp;
-	float vzdisp;
-	float Ixx;
-	float Ixy;
-	float Ixz;
-	float Iyy;
-	float Iyz;
-	float Izz;
-	bool incomplete;
-	void printme();
-};
+#include <cosmictiger/lc_group_archive.hpp>
 
 void lc_init(double, double);
 int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);

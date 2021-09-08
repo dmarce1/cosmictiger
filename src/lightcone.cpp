@@ -78,21 +78,6 @@ HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
 
-void lc_group_archive::printme() {
-	PRINT("id = %lli\n", id);
-	PRINT("mass = %e\n", mass);
-	PRINT("xcom = %e %e %e\n", com[XDIM], com[YDIM], com[ZDIM]);
-	PRINT("vcom = %e %e %e\n", vel[XDIM], vel[YDIM], vel[ZDIM]);
-	PRINT("J    = %e %e %e\n", lang[XDIM], lang[YDIM], lang[ZDIM]);
-	PRINT("ekin = %e epot = %e\n", ekin, epot);
-	PRINT("ravg = %e\n", ravg);
-	PRINT("r's = %e %e %e %e %e\n", r25, r50, r75, r90, rmax);
-	PRINT("vel disp = %e %e %e\n", vxdisp, vydisp, vzdisp);
-	PRINT("I = %e %e %e\n", Ixx, Ixy, Ixz);
-	PRINT("    %e %e %e\n", Ixy, Iyy, Iyz);
-	PRINT("    %e %e %e\n", Ixz, Iyz, Izz);
-	PRINT("incomplete = %i\n", incomplete);
-}
 
 void lc_save(FILE* fp) {
 	size_t sz = part_buffer.size();
