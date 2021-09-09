@@ -57,6 +57,12 @@ set(cosmictiger_source_files
     src/test.cpp
     src/tree.cpp
     src/view.cpp
+    healpix/error_handling.cc
+    healpix/geom_utils.cc
+    healpix/healpix_base.cc
+    healpix/healpix_tables.cc
+    healpix/pointing.cc
+    healpix/string_utils.cc
 )      
                        
                         
@@ -110,7 +116,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas chealpix dl silo healpix_cxx
+    Boost::boost fftw3f gsl gslcblas dl silo chealpix
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
