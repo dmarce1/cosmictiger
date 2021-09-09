@@ -15,7 +15,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
-#include <healpix_cxx/healpix_base.h>
+#include <healpix/healpix_base.h>
 
 using healpix_type = T_Healpix_Base< int >;
 
