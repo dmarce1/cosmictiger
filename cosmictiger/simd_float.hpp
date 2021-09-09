@@ -275,8 +275,8 @@ public:
 	}
 	inline simd_float8 operator*(const simd_float8& other) const {
 		simd_float8 a;
-		a.v[0] = _mm_sub_ps(v[0], other.v[0]);
-		a.v[1] = _mm_sub_ps(v[1], other.v[1]);
+		a.v[0] = _mm_mul_ps(v[0], other.v[0]);
+		a.v[1] = _mm_mul_ps(v[1], other.v[1]);
 		return a;
 	}
 	inline simd_float8 operator/(const simd_float8& other) const {
