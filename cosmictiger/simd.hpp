@@ -23,7 +23,9 @@
 #define USE_AVX
 
 #else
+#ifndef __VEC__
 #error "No AVX"
+#endif
 #endif
 
 #include <cosmictiger/simd_float.hpp>
@@ -45,6 +47,8 @@ using simd_int = simd_int16;
 #define SIMD_FLOAT_SIZE SIMD_FLOAT16_SIZE
 
 #endif
+
+#include <cosmictiger/simd_altivec.hpp>
 
 inline simd_float two_pow(const simd_float &r) {											// 21
 	static const simd_float zero = simd_float(0.0);
