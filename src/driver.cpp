@@ -386,6 +386,8 @@ void driver() {
 	}
 	if (get_options().do_lc) {
 		check_lc(true);
+		particles_free();
+		lc_flush_healpix();
 	}
 	kick_workspace::clear_buffers();
 }

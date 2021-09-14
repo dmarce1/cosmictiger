@@ -69,7 +69,8 @@ bool process_options(int argc, char *argv[]) {
 #endif
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "b for lightcone group finder") //
-	("view_size", po::value<int>(&(opts.view_size))->default_value(1000), "view healpix Nside") //
+	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
+	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //

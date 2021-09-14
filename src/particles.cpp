@@ -549,6 +549,42 @@ void particles_resize(part_int sz) {
 	size = sz;
 }
 
+void particles_free() {
+	for (int dim = 0; dim < NDIM; dim++) {
+		free(particles_x[dim]);
+#ifdef USE_CUDA
+		cudaFree(particles_v[dim]);
+#else
+		free(particles_v[dim]);
+#endif
+	}
+#ifdef USE_CUDA
+	cudaFree(particles_r);
+#else
+	free(particles_r);
+#endif
+	if (get_options().do_groups) {
+		free(particles_lgrp);
+	}
+	if (get_options().save_force) {
+		for (int dim = 0; dim < NDIM; dim++) {
+#ifdef USE_CUDA
+			cudaFree(particles_g[dim]);
+#else
+			free(particles_g[dim]);
+#endif
+		}
+#ifdef USE_CUDA
+		cudaFree(particles_p);
+#else
+		free(particles_p);
+#endif
+	}
+	if (get_options().do_tracers) {
+		free(particles_tr);
+	}
+}
+
 void particles_random_init() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();

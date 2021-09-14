@@ -23,6 +23,7 @@ struct options {
 	int max_iter;
 	int view_size;
 	int lc_min_group;
+	int lc_map_size;
 	int min_group;
 	int slice_res;
 
@@ -68,7 +69,8 @@ struct options {
 		arc &  lc_min_group;
 		arc &  min_group;
 		arc &  view_size;
-		arc & slice_res;
+		arc &  slice_res;
+		arc &  lc_map_size;
 
 		arc &  lc_b;
 		arc &  theta;

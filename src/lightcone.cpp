@@ -16,6 +16,7 @@
 #include <unordered_map>
 
 #include <healpix/healpix_base.h>
+#include <chealpix.h>
 
 using healpix_type = T_Healpix_Base< int >;
 
@@ -44,12 +45,39 @@ struct lc_tree_node {
 	int pix;
 };
 
+struct pixel {
+	float pix;
+	pixel() {
+		pix = 0.0;
+	}
+	pixel(const pixel& other) {
+		pix = (float) other.pix;
+	}
+	pixel(pixel&& other) {
+		pix = (float) other.pix;
+	}
+	pixel& operator=(const pixel& other) {
+		pix = (float) other.pix;
+		return *this;
+	}
+	pixel& operator=(pixel&& other) {
+		pix = (float) other.pix;
+		return *this;
+	}
+	pixel& operator=(float other) {
+		pix = other;
+		return *this;
+	}
+
+};
+
 static std::shared_ptr<healpix_type> healpix;
 static pair<int> my_pix_range;
 static std::unordered_set<int> bnd_pix;
 static std::unordered_map<int, vector<lc_particle>> part_map;
 static std::unordered_map<int, vector<lc_tree_node>> tree_map;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
+static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
 static vector<lc_particle> part_buffer;
 static shared_mutex_type mutex;
@@ -77,13 +105,52 @@ HPX_PLAIN_ACTION (lc_send_buffer_particles);
 HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
+HPX_PLAIN_ACTION (lc_flush_healpix);
 
+vector<float> lc_flush_healpix() {
+	vector<hpx::future<vector<float>>>futs;
+	for( const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<lc_flush_healpix_action>(c));
+	}
+	const int nside = get_options().lc_map_size;
+	const int npix = 12 * nside * nside;
+	vector<float> pix(npix,0.0f);
+	for(auto i = healpix_map.begin(); i != healpix_map.end(); i++) {
+		pix[i->first] += i->second.pix;
+	}
+	for( auto& f : futs) {
+		const auto v = f.get();
+		for( int i = 0; i < npix; i++) {
+			pix[i] += v[i];
+		}
+	}
+	if( hpx_rank() == 0 ) {
+		FILE* fp = fopen("lc_map.dat", "wb");
+		if (fp == NULL) {
+			THROW_ERROR("unable to open lc_map.dat for writing\n");
+		}
+		fwrite(&nside, sizeof(int), 1, fp);
+		fwrite(&npix, sizeof(int), 1, fp);
+		fwrite(pix.data(), sizeof(float), npix, fp);
+		fclose(fp);
+
+	}
+	return std::move(pix);
+}
 
 void lc_save(FILE* fp) {
 	size_t sz = part_buffer.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	fwrite(&dump_num, sizeof(int), 1, fp);
+	sz = healpix_map.size();
+	fwrite(&sz, sizeof(size_t), 1, fp);
+	for (auto iter = healpix_map.begin(); iter != healpix_map.end(); iter++) {
+		int pix = iter->first;
+		float value = iter->second.pix;
+		fwrite(&pix, sizeof(int), 1, fp);
+		fwrite(&value, sizeof(float), 1, fp);
+	}
 }
 
 void lc_load(FILE* fp) {
@@ -92,6 +159,14 @@ void lc_load(FILE* fp) {
 	part_buffer.resize(sz);
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	FREAD(&dump_num, sizeof(int), 1, fp);
+	FREAD(&sz, sizeof(size_t), 1, fp);
+	for (int i = 0; i < sz; i++) {
+		int pix;
+		float value;
+		FREAD(&pix, sizeof(int), 1, fp);
+		FREAD(&value, sizeof(float), 1, fp);
+		healpix_map[pix].pix = value;
+	}
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -300,8 +375,8 @@ void lc_parts2groups(double a, double link_len) {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	std::string cmd = "mkdir -p lc_groups";
-	if( system(cmd.c_str()) != 0 ) {
-		THROW_ERROR( "unable to create lc_groups directory\n");
+	if (system(cmd.c_str()) != 0) {
+		THROW_ERROR("unable to create lc_groups directory\n");
 	}
 	std::string filename = "lc_groups/lc_groups." + std::to_string(hpx_rank()) + "." + std::to_string(dump_num) + ".dat";
 	FILE* fp = fopen(filename.c_str(), "wb");
@@ -360,21 +435,39 @@ void lc_buffer2homes() {
 		futs1.push_back(hpx::async < lc_buffer2homes_action > (c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
+	static mutex_type map_mutex;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc,nthreads]() {
 			const int begin = (size_t) proc * part_buffer.size() / nthreads;
 			const int end = (size_t) (proc+1) * part_buffer.size() / nthreads;
 			std::unordered_map<int,vector<lc_particle>> sends;
+			std::unordered_map<int,float> my_healpix;
 			for( int i = begin; i < end; i++) {
 				const auto& part = part_buffer[i];
 				const int pix = vec2pix(part.pos[XDIM],part.pos[YDIM],part.pos[ZDIM]);
 				const int rank = pix2rank(pix);
 				sends[rank].push_back(part);
+				double vec[NDIM];
+				vec[XDIM] = part.pos[XDIM];
+				vec[YDIM] = part.pos[YDIM];
+				vec[ZDIM] = part.pos[ZDIM];
+				long int ipix;
+				vec2pix_ring(get_options().lc_map_size, vec, &ipix);
+				auto iter = my_healpix.find(ipix);
+				if( iter == my_healpix.end()) {
+					iter = my_healpix.insert(std::make_pair(ipix,0.0)).first;
+				}
+				iter->second += 1.0 / sqr(vec[XDIM], vec[YDIM], vec[ZDIM]);
 			}
 			vector<hpx::future<void>> futs;
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				futs.push_back(hpx::async<lc_send_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 			}
+			std::unique_lock<mutex_type> lock(map_mutex);
+			for( auto i = my_healpix.begin(); i != my_healpix.end(); i++) {
+				healpix_map[i->first].pix += i->second;
+			}
+			lock.unlock();
 			hpx::wait_all(futs.begin(), futs.end());
 		}));
 	}
@@ -818,6 +911,7 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 	simd_int8 I1 = tau1 * simd_c0;
 	for (int ci = 0; ci < SIMD_FLOAT8_SIZE; ci++) {
 		if (dist1[ci] <= 1.0 || dist0[ci] <= 1.0) {
+			static const int map_nside = get_options().lc_map_size;
 			const int i0 = I0[ci];
 			const int i1 = I1[ci];
 			if (i0 != i1) {
