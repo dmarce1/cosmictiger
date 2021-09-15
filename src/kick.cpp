@@ -349,7 +349,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				const float factor = eta * sqrtf(params.a * hfloat);
 				dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
-				rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
+				rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)),1);
 				kr.max_rung = std::max(rung, kr.max_rung);
 				if (rung < 0 || rung >= MAX_RUNG) {
 					PRINT("Rung out of range %i\n", rung);

@@ -740,3 +740,55 @@ void particles_save(FILE* fp) {
 	}
 
 }
+
+void particles_save_glass() {
+	FILE* fp = fopen("glass.dat", "wb");
+	if (fp == NULL) {
+		THROW_ERROR("Unable to write to glass.dat\n");
+	}
+	part_int size = particles_size();
+	fwrite(&size, sizeof(part_int), 1, fp);
+	for (part_int i = 0; i < particles_size(); i++) {
+		fwrite(&particles_pos(XDIM, i), sizeof(fixed32), 1, fp);
+		fwrite(&particles_pos(YDIM, i), sizeof(fixed32), 1, fp);
+		fwrite(&particles_pos(ZDIM, i), sizeof(fixed32), 1, fp);
+	}
+	fclose(fp);
+}
+
+void particles_load_glass(const range<double> box) {
+	const int ntile = get_options().glass_ntile;
+	for (int i = box.begin[XDIM] * ntile; i <= box.end[XDIM] * ntile; i++) {
+		for (int j = box.begin[YDIM] * ntile; j <= box.end[YDIM] * ntile; j++) {
+			for (int k = box.begin[ZDIM] * ntile; k <= box.end[ZDIM] * ntile; k++) {
+				FILE* fp = fopen("glass.dat", "rb");
+				if (fp == NULL) {
+					THROW_ERROR("Unable to open glass.dat for reading\n");
+				}
+				part_int sz;
+				FREAD(&sz, sizeof(part_int), 1, fp);
+				for (part_int l = 0; l < sz; l++) {
+					array<double, NDIM> x;
+					fixed32 X, Y, Z;
+					FREAD(&X, sizeof(fixed32), 1, fp);
+					FREAD(&Y, sizeof(fixed32), 1, fp);
+					FREAD(&Z, sizeof(fixed32), 1, fp);
+					x[XDIM] = (X.to_double() + i) / ntile;
+					x[YDIM] = (Y.to_double() + j) / ntile;
+					x[ZDIM] = (Z.to_double() + k) / ntile;
+					if (box.contains(x)) {
+						const part_int index = particles_size();
+						particles_resize(particles_size() + 1);
+						for (int dim = 0; dim < NDIM; dim++) {
+							particles_pos(dim, index) = x[dim];
+							particles_vel(dim, index) = 0.f;
+						}
+						particles_rung(index) = 0;
+					}
+				}
+				fclose(fp);
+			}
+		}
+	}
+}
+

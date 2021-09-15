@@ -187,10 +187,15 @@ void driver() {
 	total_time.start();
 	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
+	const bool glass = get_options().do_glass;
 	if (get_options().check_num >= 0) {
 		params = read_checkpoint(get_options().check_num);
 	} else {
-		initialize(get_options().z0);
+		if (glass) {
+			particles_random_init();
+		} else {
+			initialize(get_options().z0);
+		}
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
@@ -287,15 +292,28 @@ void driver() {
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		auto opts = get_options();
-		if (z > 20.0) {
-			theta = 0.5;
-			opts.part_cache_line_size = 64 * 1024;
-		} else if (z > 2.0) {
-			theta = 0.65;
-			opts.part_cache_line_size = 32 * 1024;
+		if (glass) {
+			if (z > 20.0) {
+				theta = 0.8;
+				opts.part_cache_line_size = 16 * 1024;
+			} else if (z > 2.0) {
+				theta = 0.65;
+				opts.part_cache_line_size = 32 * 1024;
+			} else {
+				theta = 0.5;
+				opts.part_cache_line_size = 64 * 1024;
+			}
 		} else {
-			theta = 0.8;
-			opts.part_cache_line_size = 16 * 1024;
+			if (z > 20.0) {
+				theta = 0.5;
+				opts.part_cache_line_size = 64 * 1024;
+			} else if (z > 2.0) {
+				theta = 0.65;
+				opts.part_cache_line_size = 32 * 1024;
+			} else {
+				theta = 0.8;
+				opts.part_cache_line_size = 16 * 1024;
+			}
 		}
 		if (last_theta != theta) {
 			set_options(opts);
@@ -384,6 +402,9 @@ void driver() {
 			break;
 		}
 	}
+	if (get_options().do_glass) {
+		particles_save_glass();
+	}
 	if (get_options().do_lc) {
 		check_lc(true);
 		particles_free();
@@ -410,7 +431,7 @@ void write_checkpoint(driver_params params) {
 	fwrite(&params, sizeof(driver_params), 1, fp);
 	particles_save(fp);
 	domains_save(fp);
-	if( get_options().do_lc) {
+	if (get_options().do_lc) {
 		lc_save(fp);
 	}
 	fclose(fp);
@@ -438,7 +459,7 @@ driver_params read_checkpoint(int checknum) {
 	FREAD(&params, sizeof(driver_params), 1, fp);
 	particles_load(fp);
 	domains_load(fp);
-	if( get_options().do_lc) {
+	if (get_options().do_lc) {
 		lc_load(fp);
 	}
 	fclose(fp);

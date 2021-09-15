@@ -4,6 +4,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 
 #ifdef HPX_LITE
@@ -54,11 +55,13 @@ bool process_options(int argc, char *argv[]) {
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone") //
+	("do_glass", po::value<bool>(&(opts.do_glass))->default_value(false), "make glass") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do groups") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a slice") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "instantaneous maps") //
+	("load_glass", po::value<bool>(&(opts.load_glass))->default_value(false), "use glass IC in glass.dat") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "Use 2LPT initial conditions") //
 #ifdef USE_CUDA
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
@@ -126,6 +129,23 @@ bool process_options(int argc, char *argv[]) {
 	opts.link_len = 1.0 / opts.parts_dim / 5.0;
 	opts.min_group = 20;
 	opts.lc_min_group = 20;
+	if (opts.load_glass) {
+		FILE* fp = fopen("glass.dat", "rb");
+		part_int size;
+		FREAD(&size, sizeof(part_int), 1, fp);
+		const int dim = std::round(std::pow(size, 1.0 / 3.0));
+		PRINT("Glass tile has dimensions %i x %i x %i\n", dim, dim, dim);
+		if (opts.parts_dim % dim != 0) {
+			THROW_ERROR("parts_dim must be a multiple of %i\n", dim);
+		}
+		opts.glass_ntile = opts.parts_dim / dim;
+	}
+	if (opts.do_glass) {
+		if (hpx_size() > 1) {
+			THROW_ERROR("Creating glass IC available only on single process runs\n");
+		}
+		opts.GM = -opts.GM;
+	}
 
 	if (opts.parts_dim % 2 == 1) {
 		THROW_ERROR("parts_dim must be an even number\n");

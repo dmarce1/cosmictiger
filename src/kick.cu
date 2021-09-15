@@ -123,7 +123,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
-		rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
+		rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)),1);
 		max_rung = max(rung, max_rung);
 		if (rung < 0 || rung >= MAX_RUNG) {
 			PRINT("Rung out of range %i\n", rung);

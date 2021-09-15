@@ -463,6 +463,11 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	const int64_t N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const auto box = find_my_box();
+	const auto bigbox = box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim]--;
+		box.end[dim] += 2;
+	}
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async < zeldovich_end_action > (c, dim, init_parts, D1, prefac1));
@@ -473,24 +478,28 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	const float box_size_inv = 1.0 / box_size;
 	vector<hpx::future<void>> local_futs;
 	if (init_parts) {
-		particles_resize(box.volume());
-		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-			local_futs.push_back(hpx::async([box,Ninv](array<int64_t,NDIM> I) {
-				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-						const int64_t index = box.index(I);
-						for (int dim1 = 0; dim1 < NDIM; dim1++) {
-							float x = (I[dim1] + 0.5) * Ninv;
-							particles_pos(dim1, index) = x;
-							particles_vel(dim1, index) = 0.0;
+		if (get_options().load_glass) {
+			particles_load_glass();
+		} else {
+			particles_resize(box.volume());
+			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+				local_futs.push_back(hpx::async([box,Ninv](array<int64_t,NDIM> I) {
+					for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+						for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+							const int64_t index = box.index(I);
+							for (int dim1 = 0; dim1 < NDIM; dim1++) {
+								float x = (I[dim1] + 0.5) * Ninv;
+								particles_pos(dim1, index) = x;
+								particles_vel(dim1, index) = 0.0;
+							}
+							particles_rung(index) = 0;
 						}
-						particles_rung(index) = 0;
 					}
-				}
-			}, I));
+				}, I));
+			}
+			hpx::wait_all(local_futs.begin(), local_futs.end());
+			local_futs.resize(0);
 		}
-		hpx::wait_all(local_futs.begin(), local_futs.end());
-		local_futs.resize(0);
 	}
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs.push_back(hpx::async([box, D1, prefac1, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {

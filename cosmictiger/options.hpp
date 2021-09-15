@@ -12,7 +12,9 @@ struct options {
 	bool do_tracers;
 	bool do_slice;
 	bool do_views;
+	bool do_glass;
 	bool twolpt;
+	bool load_glass;
 
 	int tracer_count;
 	int parts_dim;
@@ -26,6 +28,7 @@ struct options {
 	int lc_map_size;
 	int min_group;
 	int slice_res;
+	int glass_ntile;
 
 	double lc_b;
 	double slice_size;
@@ -58,6 +61,7 @@ struct options {
 		arc &  do_slice;
 		arc &  do_views;
 		arc &  twolpt;
+		arc &  load_glass;
 
 		arc &  tracer_count;
 		arc &  parts_dim;
@@ -71,6 +75,7 @@ struct options {
 		arc &  view_size;
 		arc &  slice_res;
 		arc &  lc_map_size;
+		arc &  glass_ntile;
 
 		arc &  lc_b;
 		arc &  theta;
