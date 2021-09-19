@@ -185,6 +185,8 @@ void do_power_spectrum(int num, double a) {
 void driver() {
 	timer total_time;
 	total_time.start();
+	timer tmr;
+	tmr.start();
 	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().check_num >= 0) {
@@ -219,8 +221,6 @@ void driver() {
 	auto& runtime = params.runtime;
 	double t0 = tau_max / 100.0;
 	double pot;
-	timer tmr;
-	tmr.start();
 	int this_iter = 0;
 	double last_theta = -1.0;
 	timer reset;
@@ -258,6 +258,7 @@ void driver() {
 			total_time.start();
 			write_checkpoint(params);
 			tmr.reset();
+			break;
 		}
 //		PRINT("Next iteration\n");
 		tmr.start();

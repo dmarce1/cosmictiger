@@ -162,50 +162,17 @@ void groups_reduce(double scale_factor) {
 					vector<float> phi;
 					if( parts.size() >= get_options().min_group) {
 						bool removed_one;
-						do {
-							vector<array<fixed32,NDIM>> X(parts.size());
-							for( int i = 0; i < parts.size(); i++) {
-								for( int dim = 0; dim < NDIM; dim++) {
-									const double x = parts[i].x[dim].to_double();
-									X[i][dim] = x;
-								}
-							}
-							phi = bh_evaluate_potential(X);
-							for( auto& p : phi ) {
-								p *= ainv;
-							}
-							array<float, NDIM> vel;
+						vector<array<fixed32,NDIM>> X(parts.size());
+						for( int i = 0; i < parts.size(); i++) {
 							for( int dim = 0; dim < NDIM; dim++) {
-								vel[dim] = 0.0;
+								const double x = parts[i].x[dim].to_double();
+								X[i][dim] = x;
 							}
-							for( int i = 0; i < parts.size(); i++) {
-								for( int dim = 0; dim < NDIM; dim++) {
-									vel[dim] += parts[i].v[dim];
-								}
-							}
-							for( int dim = 0; dim < NDIM; dim++) {
-								vel[dim] /= parts.size();
-							}
-							int i = 0;
-							removed_one = false;
-							while( i < parts.size() ) {
-								float kin = 0.0;
-								for( int dim = 0; dim < NDIM; dim++) {
-									kin += sqr(parts[i].v[dim] - vel[dim]);
-								}
-								kin *= 0.5;
-								if( kin + phi[i] > 0.0 ) {
-									remove_indexes[parts[i].rank].push_back(parts[i].index);
-									parts[i] = parts.back();
-									phi[i] = phi.back();
-									parts.pop_back();
-									phi.pop_back();
-									removed_one = true;
-								} else {
-									i++;
-								}
-							}
-						}while( removed_one && parts.size() >= get_options().min_group );
+						}
+						phi = bh_evaluate_potential(X);
+						for( auto& p : phi ) {
+							p *= ainv;
+						}
 						if( parts.size() < get_options().min_group) {
 							for( int i = 0; i < parts.size(); i++) {
 								remove_indexes[parts[i].rank].push_back(parts[i].index);
