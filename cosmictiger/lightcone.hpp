@@ -60,6 +60,7 @@ void lc_groups2homes();
 void lc_parts2groups(double a, double link_len);
 void lc_save(FILE* fp);
 void lc_load(FILE* fp);
-vector<float> lc_flush_healpix();
+vector<float> lc_flush_final();
+
 
 

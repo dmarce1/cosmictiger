@@ -8,31 +8,25 @@
 int main() {
 
 	int rank = 0;
-	int dump_num = 0;
 
 	std::vector<float> masses;
 
-	const auto filename = [&rank,&dump_num]() {
-		return std::string("lc_groups/lc_groups.") + std::to_string(rank) + "." + std::to_string(dump_num) + ".dat";
+	const auto filename = [&rank]() {
+		return std::string("lc/lc.") + std::to_string(rank) + ".dat";
 	};
 
 	FILE * fp = fopen(filename().c_str(), "rb");
 	while (fp) {
-		printf("Reading rank %i dump # %i\n", rank, dump_num);
+		printf("Reading rank %i\n", rank);
 		lc_group_archive arc;
 		while (!feof(fp)) {
 			if (fread(&arc, sizeof(lc_group_archive), 1, fp)) {
 				masses.push_back(arc.mass);
 			}
 		}
-		dump_num++;
 		fclose(fp);
+		rank++;
 		fp = fopen(filename().c_str(), "rb");
-		if (fp == NULL) {
-			dump_num = 0;
-			rank++;
-			fp = fopen(filename().c_str(), "rb");
-		}
 	}
 
 	float mass_min = 1.0e20;

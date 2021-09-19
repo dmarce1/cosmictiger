@@ -79,11 +79,11 @@ static std::unordered_map<int, vector<lc_tree_node>> tree_map;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
 static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
+static vector<lc_group_archive> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type mutex;
 static double tau_max;
 static int Nside;
-static int dump_num(0);
 static int Npix;
 
 static vector<lc_particle> lc_get_particles(int pix);
@@ -105,26 +105,40 @@ HPX_PLAIN_ACTION (lc_send_buffer_particles);
 HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_particle_boundaries);
-HPX_PLAIN_ACTION (lc_flush_healpix);
+HPX_PLAIN_ACTION (lc_flush_final);
 
-vector<float> lc_flush_healpix() {
-	vector<hpx::future<vector<float>>>futs;
-	for( const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_flush_healpix_action>(c));
+vector<float> lc_flush_final() {
+	if (hpx_rank() == 0) {
+		if (system("mkdir -p lc") != 0) {
+			THROW_ERROR("Unable to make directory lc\n");
+		}
 	}
+	vector<hpx::future<vector<float>>>futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < lc_flush_final_action > (c));
+	}
+
+	std::string filename = "./lc/lc." + std::to_string(hpx_rank()) + ".dat";
+	FILE* fp = fopen(filename.c_str(), "wb");
+	if (fp == NULL) {
+		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+	}
+	fwrite(saved_groups.data(), sizeof(lc_group_archive), saved_groups.size(), fp);
+	fclose(fp);
+
 	const int nside = get_options().lc_map_size;
 	const int npix = 12 * nside * nside;
-	vector<float> pix(npix,0.0f);
-	for(auto i = healpix_map.begin(); i != healpix_map.end(); i++) {
+	vector<float> pix(npix, 0.0f);
+	for (auto i = healpix_map.begin(); i != healpix_map.end(); i++) {
 		pix[i->first] += i->second.pix;
 	}
-	for( auto& f : futs) {
+	for (auto& f : futs) {
 		const auto v = f.get();
-		for( int i = 0; i < npix; i++) {
+		for (int i = 0; i < npix; i++) {
 			pix[i] += v[i];
 		}
 	}
-	if( hpx_rank() == 0 ) {
+	if (hpx_rank() == 0) {
 		FILE* fp = fopen("lc_map.dat", "wb");
 		if (fp == NULL) {
 			THROW_ERROR("unable to open lc_map.dat for writing\n");
@@ -139,10 +153,11 @@ vector<float> lc_flush_healpix() {
 }
 
 void lc_save(FILE* fp) {
+	int dummy;
 	size_t sz = part_buffer.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
-	fwrite(&dump_num, sizeof(int), 1, fp);
+	fwrite(&dummy, sizeof(int), 1, fp);
 	sz = healpix_map.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	for (auto iter = healpix_map.begin(); iter != healpix_map.end(); iter++) {
@@ -151,14 +166,18 @@ void lc_save(FILE* fp) {
 		fwrite(&pix, sizeof(int), 1, fp);
 		fwrite(&value, sizeof(float), 1, fp);
 	}
+	sz = saved_groups.size();
+	fwrite(&sz, sizeof(size_t), 1, fp);
+	fwrite(saved_groups.data(), sizeof(lc_group_archive), sz, fp);
 }
 
 void lc_load(FILE* fp) {
 	size_t sz;
+	int dummy;
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	part_buffer.resize(sz);
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
-	FREAD(&dump_num, sizeof(int), 1, fp);
+	FREAD(&dummy, sizeof(int), 1, fp);
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	for (int i = 0; i < sz; i++) {
 		int pix;
@@ -167,6 +186,9 @@ void lc_load(FILE* fp) {
 		FREAD(&value, sizeof(float), 1, fp);
 		healpix_map[pix].pix = value;
 	}
+	FREAD(&sz, sizeof(size_t), 1, fp);
+	saved_groups.resize(sz);
+	FREAD(saved_groups.data(), sizeof(lc_group_archive), sz, fp);
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -374,20 +396,9 @@ void lc_parts2groups(double a, double link_len) {
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
-	std::string cmd = "mkdir -p lc_groups";
-	if (system(cmd.c_str()) != 0) {
-		THROW_ERROR("unable to create lc_groups directory\n");
-	}
-	std::string filename = "lc_groups/lc_groups." + std::to_string(hpx_rank()) + "." + std::to_string(dump_num) + ".dat";
-	FILE* fp = fopen(filename.c_str(), "wb");
-	if (!fp) {
-		THROW_ERROR("Could not open %s for writing\n", filename.c_str());
-	}
 	for (int i = 0; i < groups.size(); i++) {
-		fwrite(&groups[i].arc, sizeof(lc_group_archive), 1, fp);
+		saved_groups.push_back(groups[i].arc);
 	}
-	fclose(fp);
-	dump_num++;
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
