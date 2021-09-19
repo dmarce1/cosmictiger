@@ -8,7 +8,6 @@ find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 set(COSMICTIGER_WITH_ORDER "7" )
-enable_language(Fortran)
 if( COSMICTIGER_WITH_CUDA ) 
 	enable_language(CUDA)
 	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
@@ -45,7 +44,6 @@ set(cosmictiger_source_files
     src/drift.cpp
     src/driver.cpp
     src/domain.cpp
-    src/eb.cpp
     src/ewald_indices.cpp
     src/ewald_indices.cu
     src/fft.cpp
@@ -93,7 +91,6 @@ set(cosmictiger_header_files
     cosmictiger/domain.hpp
     cosmictiger/drift.hpp
     cosmictiger/driver.hpp
-    cosmictiger/eb.hpp
     cosmictiger/ewald_incides.hpp
     cosmictiger/fft.hpp
     cosmictiger/fixedcapvec.hpp
@@ -136,7 +133,6 @@ add_hpx_executable(
     ${cosmictiger_header_files}
  )
  
- add_executable( recfast recfast/recfast.f )
  
  add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
  target_link_libraries( fmm_kernel_codegen PUBLIC dl )

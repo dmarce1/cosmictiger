@@ -6,16 +6,11 @@
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
-#include <cosmictiger/eb.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
-
 	ewald_const::init();
-
 	if (process_options(argc, argv)) {
-		eb_compute();
-		return hpx::finalize();
 		if (get_options().test != "") {
 			test(get_options().test);
 		} else {
