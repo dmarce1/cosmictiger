@@ -232,7 +232,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 	size_t far_count = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-		const simd_float h = hfloat;
+		const simd_float h = 2.0f * hfloat;
 		const simd_float h2 = h * h;
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);

@@ -349,6 +349,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				const float factor = eta * sqrtf(params.a * hfloat);
 				dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
+				dt = std::min(dt, params.dt_max);
 				rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
 				kr.max_rung = std::max(rung, kr.max_rung);
 				if (rung < 0 || rung >= MAX_RUNG) {
@@ -404,7 +405,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				tm.stop();
 				char hostname[33];
 				gethostname(hostname, 32);
-			//	PRINT("Kick took %e s on %s\n", tm.read(), hostname);
+				//	PRINT("Kick took %e s on %s\n", tm.read(), hostname);
 			}
 			return hpx::make_ready_future(kr);
 		} else {
@@ -420,7 +421,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					tm1.stop();
 					char hostname[33];
 					gethostname(hostname,32);
-	//				PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
+					//				PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
 				}
 				return kr;
 			});

@@ -14,8 +14,6 @@ double cosmos_growth_factor(double omega_m, float a) {
 	return a * 2.5 * Om / (pow(Om, 4.f / 7.f) - Ol + (1.f + 0.5f * Om) * (1.f + 0.014285714f * Ol));
 }
 
-
-
 double cosmos_dadt(double a) {
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const auto omega_m = get_options().omega_m;
@@ -24,11 +22,27 @@ double cosmos_dadt(double a) {
 	return H * a * std::sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_lambda);
 }
 
-
 double cosmos_dadtau(double a) {
 	return a * cosmos_dadt(a);
 }
 
+double cosmos_ainv(double a0, double a1) {
+	double a = a0;
+	double ainv = 0.0;
+	const int N = 1024;
+	const double da = (a1 - a0) / N;
+	double t = 0.0;
+	for (int i = 0; i < N; i++) {
+		double dadt = cosmos_dadt(a);
+		ainv += 0.5 * da / (a * dadt);
+		t += 0.5 * da / dadt;
+		a += da;
+		dadt = cosmos_dadt(a);
+		ainv += 0.5 * da / (a * dadt);
+		t += 0.5 * da / dadt;
+	}
+	return ainv / t;
+}
 
 double cosmos_time(double a0, double a1) {
 	double a = a0;

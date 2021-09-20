@@ -119,12 +119,14 @@ struct kick_params {
 	float h;
 	float eta;
 	float GM;
+	float dt_max;
 	bool save_force;
 	bool first_call;
 	bool gpu;
 	float node_load;
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & dt_max;
 		arc & min_rung;
 		arc & gpu;
 		arc & a;

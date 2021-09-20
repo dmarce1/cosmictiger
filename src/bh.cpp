@@ -127,9 +127,9 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_buckets, vector<float>& phi, vector<array<float, NDIM>>& parts, float theta) {
 	const float h = get_options().hsoft;
 	const float GM = get_options().GM;
-	const float hinv = 1.0 / h;
-	const float h2inv = 1.0 / (h * h);
-	const float h2 = h * h;
+	const float hinv = 1.0 / (2.f * h);
+	const float h2inv = 1.0 / (4.f * h * h);
+	const float h2 = 4.f * h * h;
 	const simd_float tiny(1e-20);
 	const int nthreads = std::max(std::min((int) parts.size() / 512, 2 * (int) hpx::threads::hardware_concurrency()), 1);
 	vector<hpx::future<void>> futs;
@@ -232,9 +232,9 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 vector<float> direct_evaluate(const vector<array<float, NDIM>>& x) {
 	const float h = get_options().hsoft;
 	const float GM = get_options().GM;
-	const float hinv = 1.0 / h;
-	const float h2inv = 1.0 / (h * h);
-	const float h2 = h * h;
+	const float hinv = 1.0 / (2.f * h);
+	const float h2inv = 1.0 / (4.f * h * h);
+	const float h2 = 4.f * h * h;
 	vector<float> phi(x.size(), 0.0);
 	for (int i = 0; i < x.size(); i++) {
 		for (int j = i + 1; j < x.size(); j++) {

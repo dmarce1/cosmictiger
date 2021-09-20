@@ -224,8 +224,8 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
 	const auto* tree_nodes = data.tree_nodes;
-	const float h2 = h * h;
-	const float hinv = 1.f / h;
+	const float h2 = sqr(2.f * h);
+	const float hinv = 1.f / (2.f * h);
 	const float h3inv = hinv * hinv * hinv;
 	int part_index;
 	int nnear = 0;

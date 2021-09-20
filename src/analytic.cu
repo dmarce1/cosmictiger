@@ -109,8 +109,8 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-	float h2 = h * h;
-	float hinv = 1.0 / h;
+	float h2 = 4.f * h * h;
+	float hinv = 1.0 / (2.f * h);
 	float h3inv = hinv * hinv * hinv;
 	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
 	for (int sourcei = tid; sourcei < Nsource; sourcei += ANALYTIC_BLOCK_SIZE) {

@@ -97,7 +97,7 @@ void do_groups(int number, double scale) {
 
 }
 
-std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
+std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double dt_max, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
 //	PRINT("Domains\n", minrung, theta);
@@ -118,6 +118,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 //	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
+	kparams.dt_max = dt_max;
 	kparams.node_load = flops_per_node / flops_per_particle;
 	kparams.gpu = true;
 	used_gpu = kparams.gpu;
@@ -188,7 +189,9 @@ void driver() {
 	timer tmr;
 	tmr.start();
 	driver_params params;
+
 	double a0 = 1.0 / (1.0 + get_options().z0);
+	drift_return dr;
 	if (get_options().check_num >= 0) {
 		params = read_checkpoint(get_options().check_num);
 	} else {
@@ -207,7 +210,11 @@ void driver() {
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
+		dr = drift(a0, 0.0, 0.0, 0.0);
+		params.ekin0 = dr.kin;
+
 	}
+	PRINT("ekin0 = %e\n", dr.kin);
 	PRINT("tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
 	auto& a = params.a;
@@ -220,6 +227,7 @@ void driver() {
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
 	double t0 = tau_max / 100.0;
+	auto& ekin0 = params.ekin0;
 	double pot;
 	int this_iter = 0;
 	double last_theta = -1.0;
@@ -288,7 +296,10 @@ void driver() {
 		double theta;
 		const double z = 1.0 / a - 1.0;
 		auto opts = get_options();
-		if (z > 20.0) {
+		if (z > 50.0) {
+			theta = 0.4;
+			opts.part_cache_line_size = 64 * 1024;
+		} else if (z > 20.0) {
 			theta = 0.5;
 			opts.part_cache_line_size = 64 * 1024;
 		} else if (z > 2.0) {
@@ -303,7 +314,8 @@ void driver() {
 		}
 		last_theta = theta;
 //		PRINT("Kicking\n");
-		auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+		const double dt_max = get_options().scale_dtlim * a / cosmos_dadtau(a);
+		auto tmp = kick_step(minrung, a, t0, dt_max, theta, tau == 0.0, full_eval);
 		kick_return kr = tmp.first;
 		tree_create_return sr = tmp.second;
 		//PRINT("Done kicking\n");
@@ -328,14 +340,14 @@ void driver() {
 		timer dtm;
 		dtm.start();
 //		PRINT( "Drift\n");
-		drift_return dr = drift(a2, tau, dt, tau_max);
+		dr = drift(a2, tau, dt, tau_max);
 		if (get_options().do_lc) {
 			check_lc(false);
 		}
 //		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
-		cosmicK += dr.kin * (a - a1);
+		cosmicK += 0.5 * (dr.kin + ekin0) * (a - a1);
 		const double esum = (a * (pot + dr.kin) + cosmicK);
 		if (tau == 0.0) {
 			esum0 = esum;
@@ -380,6 +392,7 @@ void driver() {
 		drift_time = 0.0;
 		tau += dt;
 		this_iter++;
+		ekin0 = dr.kin;
 		years += dyears;
 		if (this_iter > get_options().max_iter) {
 			break;
@@ -411,7 +424,7 @@ void write_checkpoint(driver_params params) {
 	fwrite(&params, sizeof(driver_params), 1, fp);
 	particles_save(fp);
 	domains_save(fp);
-	if( get_options().do_lc) {
+	if (get_options().do_lc) {
 		lc_save(fp);
 	}
 	fclose(fp);
@@ -439,7 +452,7 @@ driver_params read_checkpoint(int checknum) {
 	FREAD(&params, sizeof(driver_params), 1, fp);
 	particles_load(fp);
 	domains_load(fp);
-	if( get_options().do_lc) {
+	if (get_options().do_lc) {
 		lc_load(fp);
 	}
 	fclose(fp);

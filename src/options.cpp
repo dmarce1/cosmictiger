@@ -68,6 +68,7 @@ bool process_options(int argc, char *argv[]) {
 	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(64 * 1024), "size of particle cache line") //
 #endif
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
+	("scale_dtlim", po::value<double>(&(opts.scale_dtlim))->default_value(0.01), "maximum change in scale factor time-step limit") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "b for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
@@ -76,6 +77,7 @@ bool process_options(int argc, char *argv[]) {
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 			;
 
@@ -105,8 +107,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 	opts.groups_funnel_output = true;
 	opts.save_force = opts.test == "force";
-	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
-	opts.eta = 0.2 / sqrt(2);
+	opts.hsoft = 1.0 / 50.0 / opts.parts_dim;
 	opts.hubble = 0.7;
 	opts.sigma8 = 0.84;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;

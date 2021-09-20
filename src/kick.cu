@@ -123,6 +123,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
+		dt = fminf(dt, params.dt_max);
 		rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
 		max_rung = max(rung, max_rung);
 		if (rung < 0 || rung >= MAX_RUNG) {
@@ -143,7 +144,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		fy_tot += gy[i];
 		fz_tot += gz[i];
 		fnorm_tot += g2;
-		flops += 51;
+		flops += 52;
 	}
 	shared_reduce_add(phi_tot);
 	shared_reduce_add(fx_tot);

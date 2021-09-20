@@ -116,7 +116,7 @@ std::pair<size_t, size_t> groups_save(int number) {
 		FILE* fp = fopen(fname.c_str(), "wb");
 		auto fut = hpx::async < groups_get_action > (localities[0]);
 		for (int i = 0; i < localities.size(); i++) {
-			const auto these_groups = fut.get();
+			auto these_groups = fut.get();
 			if (i < localities.size() - 1) {
 				fut = hpx::async < groups_get_action > (localities[i + 1]);
 			}

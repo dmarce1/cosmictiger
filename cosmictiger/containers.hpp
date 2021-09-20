@@ -39,7 +39,7 @@ public:
 		DO_BOUNDS_CHECK(i);
 		return (*((std::vector<T>*) this))[i];
 	}
-	inline const T operator[](int i) const {
+	inline const T& operator[](int i) const {
 		DO_BOUNDS_CHECK(i);
 		return (*((std::vector<T>*) this))[i];
 	}

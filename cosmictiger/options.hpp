@@ -44,6 +44,7 @@ struct options {
 	double hubble;
 	double sigma8;
 	double theta;
+	double scale_dtlim;
 
 	std::string config_file;
 	std::string test;
@@ -90,6 +91,7 @@ struct options {
 		arc &  z1;
 		arc &  hubble;
 		arc &  sigma8;
+		arc &  scale_dtlim;
 
 		arc & config_file;
 		arc & test;
