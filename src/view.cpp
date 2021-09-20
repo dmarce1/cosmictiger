@@ -8,15 +8,13 @@
 
 #include <chealpix.h>
 
-vector<float> output_view(int number);
-
 HPX_PLAIN_ACTION (output_view);
 
-vector<float> output_view(int number) {
+vector<float> output_view(int number, double time) {
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<vector<float>>>val_futs;
 	for (const auto& c : hpx_children()) {
-		val_futs.push_back(hpx::async < output_view_action > (c, number));
+		val_futs.push_back(hpx::async < output_view_action > (c, number, time));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	const int Nside = get_options().view_size;

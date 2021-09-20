@@ -10,7 +10,7 @@
 
 
 
-vector<float> output_view(int number);
+vector<float> output_view(int number, double time);
 
 
 #endif /* VIEW_HPP_ */
