@@ -13,6 +13,7 @@ struct options {
 	bool do_slice;
 	bool do_views;
 	bool twolpt;
+	bool groups_funnel_output;
 
 	int tracer_count;
 	int parts_dim;
@@ -58,6 +59,7 @@ struct options {
 		arc &  do_slice;
 		arc &  do_views;
 		arc &  twolpt;
+		arc &  groups_funnel_output;
 
 		arc &  tracer_count;
 		arc &  parts_dim;

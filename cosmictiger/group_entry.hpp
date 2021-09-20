@@ -46,12 +46,42 @@ struct group_entry {
 	float Izz;
 	int parent_count;
 	std::unordered_map<group_int, int> parents;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & id;
+		arc & com;
+		arc & vel;
+		arc & lang;
+		arc & mass;
+		arc & ekin;
+		arc & epot;
+		arc & r25;
+		arc & r50;
+		arc & r75;
+		arc & r90;
+		arc & rmax;
+		arc & ravg;
+		arc & vxdisp;
+		arc & vydisp;
+		arc & vzdisp;
+		arc & xdisp;
+		arc & ydisp;
+		arc & zdisp;
+		arc & Ixx;
+		arc & Ixy;
+		arc & Ixz;
+		arc & Iyy;
+		arc & Iyz;
+		arc & Izz;
+		arc & parent_count;
+		arc & parents;
+	}
 	group_entry() = default;
 	group_entry(group_entry&&) = default;
 	group_entry(const group_entry&) = delete;
 	group_entry& operator=(group_entry&&) = default;
 	group_entry& operator=(const group_entry&) = delete;
-	void write(FILE* fp);
+	void write(FILE* fp) const;
 	bool read(FILE* fp);
 };
 

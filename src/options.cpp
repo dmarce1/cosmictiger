@@ -103,7 +103,7 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
-
+	opts.groups_funnel_output = true;
 	opts.save_force = opts.test == "force";
 	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
 	opts.eta = 0.2 / sqrt(2);
