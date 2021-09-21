@@ -330,26 +330,31 @@ void domains_begin() {
 	free_indices.resize(0);
 	mutex_type mutex;
 	const int nthreads = hpx::thread::hardware_concurrency();
+	std::atomic<part_int> next_begin(0);
+	constexpr int chunk_size = 1024;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&mutex,my_domain]() {
+		futs.push_back(hpx::async([proc,nthreads,&mutex,&next_begin,my_domain]() {
 			std::unordered_map<int,vector<particle>> sends;
 			vector<hpx::future<void>> futs;
 			vector<part_int> my_free_indices;
-			const part_int begin = (size_t) proc * particles_size() / nthreads;
-			const part_int end = (size_t) (proc+1) * particles_size() / nthreads;
-			for( part_int i = begin; i < end; i++) {
-				array<double, NDIM> x;
-				for( part_int dim = 0; dim < NDIM; dim++) {
-					x[dim] = particles_pos(dim,i).to_double();
-				}
-				if( !my_domain.contains(x)) {
-					const part_int rank = find_particle_domain(x);
-					auto& send = sends[rank];
-					send.push_back(particles_get_particle(i));
-					if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-						futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+			part_int begin = next_begin++ * chunk_size;
+			while( begin < particles_size()) {
+				const part_int end = std::min(begin + chunk_size, particles_size());
+				for( part_int i = begin; i < end; i++) {
+					array<double, NDIM> x;
+					for( part_int dim = 0; dim < NDIM; dim++) {
+						x[dim] = particles_pos(dim,i).to_double();
 					}
-					my_free_indices.push_back(i);
+					if( !my_domain.contains(x)) {
+						const part_int rank = find_particle_domain(x);
+						auto& send = sends[rank];
+						send.push_back(particles_get_particle(i));
+						if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
+							futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+						}
+						my_free_indices.push_back(i);
+					}
+					begin = next_begin++ * chunk_size;
 				}
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
