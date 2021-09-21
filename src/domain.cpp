@@ -431,19 +431,29 @@ range<double> domains_find_my_box() {
 }
 
 static void domains_check() {
-	bool fail = false;
-	for (part_int i = 0; i < particles_size(); i++) {
-		array<double, NDIM> x;
-		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = particles_pos(dim, i).to_double();
-		}
-		if (find_particle_domain(x) != hpx_rank()) {
-			PRINT("particle out of range %li of %li %e %e %e\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2]);
-			PRINT("%s\n", domains_find_my_box().to_string().c_str());
-			fail = true;
-		}
+	std::atomic<int> fail(0);
+	const auto my_domain = domains_find_my_box();
+	const int nthreads = hpx_hardware_concurrency();
+	vector<hpx::future<void>> futs;
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads,&fail,my_domain]() {
+			const int begin = size_t(proc) * particles_size() / nthreads;
+			const int end = size_t(proc + 1) * particles_size() / nthreads;
+			for (part_int i = begin; i < end; i++) {
+				array<double, NDIM> x;
+				for (int dim = 0; dim < NDIM; dim++) {
+					x[dim] = particles_pos(dim, i).to_double();
+				}
+				if (!my_domain.contains(x)) {
+					PRINT("particle out of range %li of %li %e %e %e\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2]);
+					PRINT("%s\n", domains_find_my_box().to_string().c_str());
+					fail++;
+				}
+			}
+		}));
 	}
-	if (fail) {
+	hpx::wait_all(futs.begin(),futs.end());
+	if (int(fail)) {
 		THROW_ERROR("particle out of range!\n");
 	}
 }
