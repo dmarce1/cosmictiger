@@ -100,15 +100,16 @@ void do_groups(int number, double scale) {
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double dt_max, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
-//	PRINT("Domains\n", minrung, theta);
+	PRINT("domains_begin\n");
 	domains_begin();
+	PRINT("domains_end \n");
 	domains_end();
 	tm.stop();
 	domain_time += tm.read();
 	tm.reset();
 	tm.start();
 	tree_create_params tparams(minrung, theta);
-//	PRINT("Create tree %i %e\n", minrung, theta);
+	PRINT("Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
@@ -116,7 +117,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	sort_time += tm.read();
 	tm.reset();
 	tm.start();
-//	PRINT("nactive = %li\n", sr.nactive);
+	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.dt_max = dt_max;
 	kparams.node_load = flops_per_node / flops_per_particle;
@@ -145,14 +146,14 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-//	PRINT("Do kick\n");
+	PRINT("Do kick\n");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;
-//	PRINT("kick done\n");
+	PRINT("kick done\n");
 	if (min_rung == 0) {
 		flops_per_node = kr.node_flops / sr.active_nodes;
 		flops_per_particle = kr.part_flops / kr.nactive;
@@ -312,12 +313,12 @@ void driver() {
 			set_options(opts);
 		}
 		last_theta = theta;
-//		PRINT("Kicking\n");
+		PRINT("Kicking\n");
 		const double dt_max = get_options().scale_dtlim * a / cosmos_dadtau(a);
 		auto tmp = kick_step(minrung, a, t0, dt_max, theta, tau == 0.0, full_eval);
 		kick_return kr = tmp.first;
 		tree_create_return sr = tmp.second;
-		//PRINT("Done kicking\n");
+		PRINT("Done kicking\n");
 		if (full_eval) {
 			kick_workspace::clear_buffers();
 			pot = kr.pot * 0.5 / a;
@@ -338,12 +339,12 @@ void driver() {
 		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		timer dtm;
 		dtm.start();
-//		PRINT( "Drift\n");
+		PRINT( "Drift\n");
 		dr = drift(a2, tau, dt, tau_max);
 		if (get_options().do_lc) {
 			check_lc(false);
 		}
-//		PRINT( "Drift done\n");
+		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
 		cosmicK += dr.kin * (a - a1);
