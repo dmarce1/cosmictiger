@@ -337,22 +337,22 @@ void domains_begin() {
 					auto& send = sends[rank];
 					send.push_back(particles_get_particle(i));
 					if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-						//PRINT( "%i sending %li particles to %i\n", hpx_rank(), send.size(), rank);
-				futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+						futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+					}
+					my_free_indices.push_back(i);
+				}
 			}
-			my_free_indices.push_back(i);
-		}
-	}
-	for( auto i = sends.begin(); i != sends.end(); i++) {
-		if( i->second.size()) {
-			//PRINT( "%i sending %li particles to %i\n", hpx_rank(), i->second.size(), i->first);
-			futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
-		}
-	}
-	std::lock_guard<mutex_type> lock(mutex);
-	free_indices.insert(free_indices.end(),my_free_indices.begin(),my_free_indices.end());
-	hpx::wait_all(futs.begin(), futs.end());
-}));
+			for( auto i = sends.begin(); i != sends.end(); i++) {
+				if( i->second.size()) {
+					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
+				}
+			}
+			{
+				std::lock_guard<mutex_type> lock(mutex);
+				free_indices.insert(free_indices.end(),my_free_indices.begin(),my_free_indices.end());
+			}
+			hpx::wait_all(futs.begin(), futs.end());
+		}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
@@ -452,7 +452,7 @@ static void domains_check() {
 			}
 		}));
 	}
-	hpx::wait_all(futs.begin(),futs.end());
+	hpx::wait_all(futs.begin(), futs.end());
 	if (int(fail)) {
 		THROW_ERROR("particle out of range!\n");
 	}
