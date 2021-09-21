@@ -8,6 +8,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/options.hpp>
 
 #include <unordered_map>
+#include <shared_mutex>
 
 void domains_transmit_particles(vector<particle>);
 void domains_init_rebounds();
@@ -27,7 +28,7 @@ HPX_PLAIN_ACTION (domains_transmit_boxes);
 
 static vector<part_int> free_indices;
 static vector<particle> trans_particles;
-static mutex_type mutex;
+static shared_mutex_type mutex;
 static std::unordered_map<size_t, domain_t> boxes_by_key;
 
 static int find_particle_domain(const array<double, NDIM>& x, size_t key = 1);
@@ -303,11 +304,20 @@ void domains_rebound() {
 
 void domains_transmit_particles(vector<particle> parts) {
 //	PRINT("Receiving %li particles on %i\n", parts.size(), hpx_rank());
-	std::unique_lock<mutex_type> lock(mutex);
+	std::unique_lock<shared_mutex_type> ulock(mutex);
 	const part_int start = trans_particles.size();
 	const part_int stop = start + parts.size();
 	trans_particles.resize(stop);
-	std::copy(parts.begin(), parts.end(), trans_particles.begin() + start);
+	ulock.unlock();
+	constexpr int chunk_size = 1024;
+	std::shared_lock<shared_mutex_type> slock(mutex);
+	for (int i = 0; i < parts.size(); i++) {
+		if (i % chunk_size == chunk_size - 1) {
+			slock.unlock();
+			slock.lock();
+		}
+		trans_particles[start + i] = parts[i];
+	}
 }
 
 void domains_begin() {
@@ -349,7 +359,7 @@ void domains_begin() {
 			}
 			{
 				std::lock_guard<mutex_type> lock(mutex);
-				free_indices.insert(free_indices.end(),my_free_indices.begin(),my_free_indices.end());
+				free_indices.insert(free_indices.end(), my_free_indices.begin(), my_free_indices.end());
 			}
 			hpx::wait_all(futs.begin(), futs.end());
 		}));
