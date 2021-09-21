@@ -264,7 +264,6 @@ void driver() {
 			total_time.start();
 			write_checkpoint(params);
 			tmr.reset();
-			return;
 		}
 //		PRINT("Next iteration\n");
 		tmr.start();
