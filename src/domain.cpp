@@ -354,8 +354,8 @@ void domains_begin() {
 						}
 						my_free_indices.push_back(i);
 					}
-					begin = next_begin++ * chunk_size;
 				}
+				begin = next_begin++ * chunk_size;
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
