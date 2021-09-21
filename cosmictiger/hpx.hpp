@@ -16,7 +16,7 @@
 #include <hpx/runtime/threads/run_as_os_thread.hpp>
 #else
 #define HPX_LATE
-#include <hpx/runtime/threads/run_as.hpp>
+#include <hpx/include/run_as.hpp>
 #endif
 
 #ifdef HPX_EARLY
