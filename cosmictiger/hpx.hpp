@@ -9,6 +9,8 @@
 #include <hpx/serialization/unordered_map.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
+#include <hpx/runtime/threads/run_as_os_thread.hpp>
+
 
 #if (HPX_VERSION_FULL < ((1<<16) | (6<<8)))
 #define HPX_EARLY

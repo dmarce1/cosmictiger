@@ -264,7 +264,8 @@ void driver() {
 			total_time.start();
 			write_checkpoint(params);
 			tmr.reset();
-			return;
+//			kick_workspace::clear_buffers();
+//			return;
 		}
 //		PRINT("Next iteration\n");
 		tmr.start();
@@ -345,7 +346,7 @@ void driver() {
 //		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
-		cosmicK +=dr.kin * (a - a1);
+		cosmicK += dr.kin * (a - a1);
 		const double esum = (a * (pot + dr.kin) + cosmicK);
 		if (tau == 0.0) {
 			esum0 = esum;
@@ -415,16 +416,18 @@ void write_checkpoint(driver_params params) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
 	}
-	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
-			+ std::to_string(hpx_rank()) + std::string(".dat");
-	FILE* fp = fopen(fname.c_str(), "wb");
-	fwrite(&params, sizeof(driver_params), 1, fp);
-	particles_save(fp);
-	domains_save(fp);
-	if (get_options().do_lc) {
-		lc_save(fp);
-	}
-	fclose(fp);
+	futs.push_back(hpx::threads::run_as_os_thread([&]() {
+		const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(params.iter) + "."
+		+ std::to_string(hpx_rank()) + std::string(".dat");
+		FILE* fp = fopen(fname.c_str(), "wb");
+		fwrite(&params, sizeof(driver_params), 1, fp);
+		particles_save(fp);
+		domains_save(fp);
+		if (get_options().do_lc) {
+			lc_save(fp);
+		}
+		fclose(fp);
+	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");

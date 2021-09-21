@@ -51,7 +51,7 @@ bool process_options(int argc, char *argv[]) {
 #else
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA") //
 #endif
-	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "checkpoint frequency in seconds") //
+	("check_freq", po::value<int>(&(opts.check_freq))->default_value(11*3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum") //
