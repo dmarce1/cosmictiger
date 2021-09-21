@@ -211,7 +211,6 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 		dr = drift(a0, 0.0, 0.0, 0.0);
-		params.ekin0 = dr.kin;
 
 	}
 	PRINT("ekin0 = %e\n", dr.kin);
@@ -227,7 +226,6 @@ void driver() {
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
 	double t0 = tau_max / 100.0;
-	auto& ekin0 = params.ekin0;
 	double pot;
 	int this_iter = 0;
 	double last_theta = -1.0;
@@ -347,7 +345,7 @@ void driver() {
 //		PRINT( "Drift done\n");
 		dtm.stop();
 		drift_time += dtm.read();
-		cosmicK += 0.5 * (dr.kin + ekin0) * (a - a1);
+		cosmicK +=dr.kin * (a - a1);
 		const double esum = (a * (pot + dr.kin) + cosmicK);
 		if (tau == 0.0) {
 			esum0 = esum;
@@ -392,7 +390,6 @@ void driver() {
 		drift_time = 0.0;
 		tau += dt;
 		this_iter++;
-		ekin0 = dr.kin;
 		years += dyears;
 		if (this_iter > get_options().max_iter) {
 			break;

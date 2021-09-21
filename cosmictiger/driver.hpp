@@ -9,7 +9,6 @@ struct driver_params {
 	double tau_max;
 	double cosmicK;
 	double esum0;
-	double ekin0;
 	int iter;
 	size_t total_processed;
 	double flops;
@@ -29,7 +28,6 @@ struct driver_params {
 		arc & runtime;
 		arc & itime;
 		arc & years;
-		arc & ekin0;
 	}
 };
 
