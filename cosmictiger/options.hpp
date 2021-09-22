@@ -13,12 +13,13 @@ struct options {
 	bool do_views;
 	bool twolpt;
 	bool groups_funnel_output;
+	bool use_power_file;
+	bool read_check;
 
 	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
-	int check_num;
 	int check_freq;
 	int max_iter;
 	int view_size;
@@ -68,12 +69,13 @@ struct options {
 		arc & do_views;
 		arc & twolpt;
 		arc & groups_funnel_output;
+		arc & use_power_file;
 
 		arc & tracer_count;
 		arc & parts_dim;
 		arc & tree_cache_line_size;
 		arc & part_cache_line_size;
-		arc & check_num;
+		arc & read_check;
 		arc & check_freq;
 		arc & max_iter;
 		arc & lc_min_group;

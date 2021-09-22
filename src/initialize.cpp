@@ -11,13 +11,10 @@
 
 #include <gsl/gsl_rng.h>
 
-
-
 #define RECFAST_N 1000
 #define RECFAST_Z0 9990
 #define RECFAST_Z1 0
 #define RECFAST_DZ 10
-
 
 std::function<double(double)> run_recfast(cosmic_params params) {
 	std::function<double(double)> func;
@@ -25,39 +22,34 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 	if (fp != NULL) {
 		fclose(fp);
 		if (system("rm recfast.out") != 0) {
-			printf("Unable to erase recfast.out\n");
-			abort();
+			THROW_ERROR("Unable to erase recfast.out\n");
 		}
 	}
 	fp = fopen("recfast.in", "wb");
 	if (fp == NULL) {
-		printf("Unable to write to recfast.in\n");
-		abort();
+		THROW_ERROR("Unable to write to recfast.in\n");
 	}
 	fprintf(fp, "recfast.out\n");
 	fprintf(fp, "%f %f %f\n", params.omega_b, params.omega_c, 1.0 - params.omega_b - params.omega_c);
 	fprintf(fp, "%f %f %f\n", 100 * params.hubble, params.Theta * 2.73, params.Y);
-	fprintf(fp, "0\n");
-	fprintf(fp, "0\n");
+	fprintf(fp, "1\n");
+	fprintf(fp, "6\n");
 	fclose(fp);
 	if (system("cat recfast.in | ./recfast 1> /dev/null 2> /dev/null") != 0) {
-		printf("Unable to run RECFAST\n");
-		abort();
+		THROW_ERROR("Unable to run RECFAST\n");
 	}
 	fp = fopen("recfast.out", "rb");
 	char d1[2];
 	char d2[4];
 	if (fscanf(fp, " %s %s\n", d1, d2) == 0) {
-		printf("unable to read recfast.out\n");
-		abort();
+		THROW_ERROR("unable to read recfast.out\n");
 	}
 	std::vector<double> xe;
 	for (int i = 0; i < RECFAST_N; i++) {
 		float z;
 		float this_xe;
 		if (fscanf(fp, "%f %f\n", &z, &this_xe) == 0) {
-			printf("unable to read recfast.out\n");
-			abort();
+			THROW_ERROR("unable to read recfast.out\n");
 		}
 		xe.push_back(this_xe);
 	}
@@ -91,9 +83,6 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 	};
 	return std::move(inter_func);
 }
-
-
-
 
 struct power_spectrum_function {
 	vector<float> P;
@@ -196,7 +185,7 @@ power_spectrum_function compute_power_spectrum() {
 	params.Theta = get_options().Theta;
 	params.hubble = get_options().hubble;
 	PRINT("Computing zero order universe...");
-	fflush(stdout);
+	fflush (stdout);
 	auto fxe = run_recfast(params);
 	create_zero_order_universe(&uni, fxe, 1.1, params);
 	PRINT("Done.\n");
@@ -206,8 +195,7 @@ power_spectrum_function compute_power_spectrum() {
 	double kmax;
 	kmin = 1e-5 * params.hubble;
 	kmax = 25.271 * params.hubble;
-	einstein_boltzmann_interpolation_function(&m_k, &vel_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0,
-			false, ns);
+	einstein_boltzmann_interpolation_function(&m_k, &vel_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
 
 	const auto sigma8_integrand = [params,m_k](double x) {
 		double R = 8 / params.hubble;
@@ -233,19 +221,21 @@ power_spectrum_function compute_power_spectrum() {
 		sum += ((1.0 / 6.0) * (Ia + Ic) + (2.0 / 3.0) * Ib) * dlogk;
 	}
 	const double norm = sqr(get_options().sigma8) / sum;
-	PRINT( "Normalization = %e\n", norm);
-	FILE* fp = fopen("power.dat", "wt");
-	const double lh = params.hubble;
-	const double lh3 = lh * lh * lh;
-	for (int i = 0; i < M; i++) {
-		double k = exp(logkmin + (double) i * dlogk);
-		fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
+	if (hpx_rank() == 0) {
+		PRINT("Normalization = %e\n", norm);
+		FILE* fp = fopen("power.dat", "wt");
+		const double lh = params.hubble;
+		const double lh3 = lh * lh * lh;
+		for (int i = 0; i < M; i++) {
+			double k = exp(logkmin + (double) i * dlogk);
+			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
+		}
+		fclose(fp);
 	}
-	fclose(fp);
 	func.logkmin = log(kmin);
 	func.logkmax = log(kmax);
 	func.dlogk = (func.logkmax - func.logkmin) / Nk;
-	for( int i = 0; i < Nk; i++) {
+	for (int i = 0; i < Nk; i++) {
 		double k = exp(func.logkmin + (double) i * func.dlogk);
 		func.P.push_back(m_k(k));
 	}
@@ -282,47 +272,47 @@ void initialize(double z0) {
 	if (get_options().twolpt) {
 		twolpt_init();
 
-		printf("2LPT phase 1\n");
+		PRINT("2LPT phase 1\n");
 		twolpt(1, 1);
 		twolpt_phase(0);
 		fft3d_destroy();
 
-		printf("2LPT phase 2\n");
+		PRINT("2LPT phase 2\n");
 		twolpt(2, 2);
 		twolpt_phase(1);
 		fft3d_destroy();
 
-		printf("2LPT phase 3\n");
+		PRINT("2LPT phase 3\n");
 		twolpt(0, 0);
 		twolpt_phase(2);
 		fft3d_destroy();
 
-		printf("2LPT phase 4\n");
+		PRINT("2LPT phase 4\n");
 		twolpt(2, 2);
 		twolpt_phase(3);
 		fft3d_destroy();
 
-		printf("2LPT phase 5\n");
+		PRINT("2LPT phase 5\n");
 		twolpt(0, 0);
 		twolpt_phase(4);
 		fft3d_destroy();
 
-		printf("2LPT phase 6\n");
+		PRINT("2LPT phase 6\n");
 		twolpt(1, 1);
 		twolpt_phase(5);
 		fft3d_destroy();
 
-		printf("2LPT phase 7\n");
+		PRINT("2LPT phase 7\n");
 		twolpt(0, 1);
 		twolpt_phase(6);
 		fft3d_destroy();
 
-		printf("2LPT phase 8\n");
+		PRINT("2LPT phase 8\n");
 		twolpt(0, 2);
 		twolpt_phase(7);
 		fft3d_destroy();
 
-		printf("2LPT phase 9\n");
+		PRINT("2LPT phase 9\n");
 		twolpt(1, 2);
 		twolpt_phase(8);
 		fft3d_destroy();
@@ -334,7 +324,7 @@ void initialize(double z0) {
 		fft3d_destroy();
 
 		for (int dim = 0; dim < NDIM; dim++) {
-			printf("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
+			PRINT("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
 			twolpt_correction2(dim);
 			float dxmax = zeldovich_end(dim, false, -D2, prefac2);
 			fft3d_destroy();
@@ -426,8 +416,7 @@ void twolpt_generate(int dim1, int dim2) {
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
-//	static auto power = read_power_spectrum();
-	static auto power = compute_power_spectrum();
+	static auto power = get_options().use_power_file ? read_power_spectrum() : compute_power_spectrum();
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int64_t, NDIM> I;

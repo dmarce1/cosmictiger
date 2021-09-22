@@ -32,6 +32,6 @@ struct driver_params {
 };
 
 void write_checkpoint(driver_params params);
-driver_params read_checkpoint(int checknum);
+driver_params read_checkpoint();
 
 void driver();

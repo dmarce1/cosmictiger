@@ -45,7 +45,7 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
 	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file") //
-	("check_num", po::value<int>(&(opts.check_num))->default_value(-1), "number of checkpoint file to read") //
+	("read_check", po::value<bool>(&(opts.read_check))->default_value(false), "read from checkpoint.hello") //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA") //
 #else
@@ -59,6 +59,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a slice") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "instantaneous maps") //
+	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(false), "read initial power spectrum from power.init") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "Use 2LPT initial conditions") //
 #ifdef USE_CUDA
 	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
