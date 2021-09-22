@@ -51,7 +51,7 @@ bool process_options(int argc, char *argv[]) {
 #else
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA") //
 #endif
-	("check_freq", po::value<int>(&(opts.check_freq))->default_value(11*3600), "checkpoint frequency in seconds") //
+	("check_freq", po::value<int>(&(opts.check_freq))->default_value(11 * 3600), "checkpoint frequency in seconds") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum") //
@@ -79,6 +79,15 @@ bool process_options(int argc, char *argv[]) {
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
+	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049388983), "") //
+	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.265027508), "") //
+	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
+	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255/2.73), "") //
+	("Y", po::value<double>(&(opts.Y))->default_value(0.2454006), "") //
+	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8120), "") //
+	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
+	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
+
 			;
 
 	po::variables_map vm;
@@ -108,12 +117,10 @@ bool process_options(int argc, char *argv[]) {
 	opts.groups_funnel_output = true;
 	opts.save_force = opts.test == "force";
 	opts.hsoft = 1.0 / 50.0 / opts.parts_dim;
-	opts.hubble = 0.7;
-	opts.sigma8 = 0.84;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
-	opts.omega_m = 0.3;
+	opts.omega_m = opts.omega_b + opts.omega_c;
 	opts.slice_size = std::min((20.0 / opts.hubble) / (opts.code_to_cm / constants::mpc_to_cm), 1.0);
 	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
@@ -123,6 +130,8 @@ bool process_options(int argc, char *argv[]) {
 	opts.code_to_g = 3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble) / (8.0 * M_PI) / nparts / constants::G * std::pow(opts.code_to_cm, 3);
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
+	opts.omega_nu = omega_r * opts.Neff / (8.0 / 7.0 * std::pow(11.0 / 4.0, 4.0 / 3.0) + opts.Neff);
+	opts.omega_gam = omega_r - opts.omega_nu;
 	opts.omega_r = omega_r;
 	opts.link_len = 1.0 / opts.parts_dim / 5.0;
 	opts.min_group = 20;

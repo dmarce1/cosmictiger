@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.12.4)
 cmake_policy(VERSION 3.12.4)
 cmake_policy(SET CMP0003 NEW)
 cmake_policy(SET CMP0074 NEW)
-project(cosmictiger CXX C)
+project(cosmictiger CXX C Fortran)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
@@ -34,11 +34,18 @@ message(STATUS "${SIMD_ARCH}")
 
 
 set(cosmictiger_source_files
+    healpix/error_handling.cc
+    healpix/geom_utils.cc
+    healpix/healpix_base.cc
+    healpix/healpix_tables.cc
+    healpix/pointing.cc
+    healpix/string_utils.cc
     src/analytic.cu
     src/analytic.cpp
     src/assert.cpp
     src/assert.cu
     src/bh.cpp
+    src/boltzmann.cpp
  	src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp
@@ -67,12 +74,7 @@ set(cosmictiger_source_files
     src/test.cpp
     src/tree.cpp
     src/view.cpp
-    healpix/error_handling.cc
-    healpix/geom_utils.cc
-    healpix/healpix_base.cc
-    healpix/healpix_tables.cc
-    healpix/pointing.cc
-    healpix/string_utils.cc
+    src/zero_order.cpp
 )      
                        
                         
@@ -81,6 +83,7 @@ set(cosmictiger_source_files
 set(cosmictiger_header_files
     cosmictiger/assert.hpp
     cosmictiger/bh.hpp
+    cosmictiger/boltzmann.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
     cosmictiger/cosmology.hpp
@@ -97,6 +100,7 @@ set(cosmictiger_header_files
     cosmictiger/fixes.hpp
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
+    cosmictiger/interp.hpp
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
     cosmictiger/group_entry.hpp
@@ -121,6 +125,7 @@ set(cosmictiger_header_files
     cosmictiger/unordered_map_ts.hpp
     cosmictiger/unordered_set_ts.hpp
     cosmictiger/view.hpp
+    cosmictiger/zero_order.hpp
 )
 
 add_hpx_executable(
@@ -134,7 +139,8 @@ add_hpx_executable(
  )
  
  
- add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
+ add_executable( recfast recfast/recfast.f )
+  add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
  target_link_libraries( fmm_kernel_codegen PUBLIC dl )
  execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
