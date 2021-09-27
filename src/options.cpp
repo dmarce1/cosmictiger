@@ -64,32 +64,25 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
 	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file") //
-	("read_check", po::value<bool>(&(opts.read_check))->default_value(false), "read from checkpoint.hello") //
+	("read_check", po::value<bool>(&(opts.read_check))->default_value(false), "read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)") //
 #ifdef USE_CUDA
-	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA") //
+	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
 #else
-	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA") //
+	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA (not enabled for this build)") //
 #endif
-	("check_freq", po::value<int>(&(opts.check_freq))->default_value(11 * 3600), "checkpoint frequency in seconds") //
-	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of iterations") //
-	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone") //
-	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum") //
-	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do groups") //
-	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO") //
-	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a slice") //
-	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "instantaneous maps") //
-	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(false), "read initial power spectrum from power.init") //
-	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "Use 2LPT initial conditions") //
-#ifdef USE_CUDA
-	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(512), "size of tree cache line") //
-	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(8 * 1024), "size of particle cache line")//
-#else
-	("tree_cache_line_size", po::value<int>(&(opts.tree_cache_line_size))->default_value(1024), "size of tree cache line") //
-	("part_cache_line_size", po::value<int>(&(opts.part_cache_line_size))->default_value(64 * 1024), "size of particle cache line") //
-#endif
-	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles") //
+	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
+	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
+	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
+	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
+	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
+	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
+	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
+	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
+	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
+	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(false), "read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
+	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
 	("scale_dtlim", po::value<double>(&(opts.scale_dtlim))->default_value(0.01), "maximum change in scale factor time-step limit") //
-	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "b for lightcone group finder") //
+	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
@@ -109,6 +102,8 @@ bool process_options(int argc, char *argv[]) {
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 
 			;
+
+
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, command_opts), vm);
@@ -134,6 +129,14 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
+#ifdef USE_CUDA
+	opts.tree_cache_line_size = 512;
+	opts.part_cache_line_size = 8 * 1024;//
+#else
+	opts.tree_cache_line_size = 1024;
+	opts.part_cache_line_size = 64 * 1024;
+#endif
+
 	opts.groups_funnel_output = true;
 	opts.save_force = opts.test == "force";
 	opts.hsoft = 1.0 / 50.0 / opts.parts_dim;
