@@ -600,7 +600,7 @@ static range<int64_t> find_my_box(range<int64_t> box, int begin, int end) {
 	if (end - begin == 1) {
 		return box;
 	} else {
-		const int xdim = (box.end[0] - box.begin[0] > 1) ? 0 : 1;
+		const int xdim = box.longest_dim();
 		const int mid = (begin + end) / 2;
 		const float w = float(mid - begin) / float(end - begin);
 		if (hpx_rank() < mid) {
