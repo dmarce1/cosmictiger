@@ -37,38 +37,34 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 std::function<double(double)> run_recfast(cosmic_params params) {
 	std::function<double(double)> func;
-	FILE* fp = fopen("recfast.out", "rb");
-	if (fp != NULL) {
-		fclose(fp);
-		if (system("rm recfast.out") != 0) {
-			THROW_ERROR("Unable to erase recfast.out\n");
-		}
-	}
-	fp = fopen("recfast.in", "wb");
+	std::string filename = "recfast.in." + std::to_string(hpx_rank());
+	FILE* fp = fopen(filename.c_str(), "wb");
 	if (fp == NULL) {
-		THROW_ERROR("Unable to write to recfast.in\n");
+		THROW_ERROR("Unable to write to %s\n", filename.c_str());
 	}
-	fprintf(fp, "recfast.out\n");
+	filename = "recfast.out." + std::to_string(hpx_rank());
+	fprintf(fp, "%s\n", filename.c_str());
 	fprintf(fp, "%f %f %f\n", params.omega_b, params.omega_c, 1.0 - params.omega_b - params.omega_c);
 	fprintf(fp, "%f %f %f\n", 100 * params.hubble, params.Theta * 2.73, params.Y);
 	fprintf(fp, "1\n");
 	fprintf(fp, "6\n");
 	fclose(fp);
-	if (system("cat recfast.in | ./recfast 1> /dev/null 2> /dev/null") != 0) {
-		THROW_ERROR("Unable to run RECFAST\n");
+	std::string cmd = "cat recfast.in." + std::to_string(hpx_rank()) +   " | ./recfast 1> /dev/null 2> /dev/null";
+	if (system(cmd.c_str()) != 0) {
+		THROW_ERROR("Unable to run %s\n", cmd.c_str());
 	}
-	fp = fopen("recfast.out", "rb");
+	fp = fopen(filename.c_str(), "rb");
 	char d1[2];
 	char d2[4];
 	if (fscanf(fp, " %s %s\n", d1, d2) == 0) {
-		THROW_ERROR("unable to read recfast.out\n");
+		THROW_ERROR("unable to read %s\n", filename.c_str());
 	}
 	std::vector<double> xe;
 	for (int i = 0; i < RECFAST_N; i++) {
 		float z;
 		float this_xe;
 		if (fscanf(fp, "%f %f\n", &z, &this_xe) == 0) {
-			THROW_ERROR("unable to read recfast.out\n");
+			THROW_ERROR("unable to read %s\n", filename.c_str());
 		}
 		xe.push_back(this_xe);
 	}
