@@ -390,6 +390,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
 			const particles_group_fetch_cache_line_action action;
 			prms->set_value(action(hpx_localities()[line_id.proc],line_id.index));
+			return 'a';
 		});
 		lock.lock();
 		iter = group_part_cache[bin].find(line_id);

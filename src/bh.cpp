@@ -150,7 +150,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 	const float h2inv = 1.0 / (4.f * h * h);
 	const float h2 = 4.f * h * h;
 	const simd_float tiny(1e-20);
-	const int nthreads = std::max(std::min((int) parts.size() / 512, 2 * (int) hpx::threads::hardware_concurrency()), 1);
+	const int nthreads = std::max(std::min((int) parts.size() / 512, 2 * (int) hpx::thread::hardware_concurrency()), 1);
 	vector<hpx::future<void>> futs;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&sink_buckets,&nodes,&phi,&parts,h,GM,hinv,h2inv,h2,theta,tiny]() {

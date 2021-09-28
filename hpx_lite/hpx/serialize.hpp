@@ -15,6 +15,7 @@
 #include <set>
 #include <valarray>
 #include <vector>
+#include <unordered_map>
 
 #define HPX_SERIALIZATION_SPLIT_MEMBER() \
 		void serialize(hpx::detail::ibuffer_type& arc, const unsigned v) {                           \
@@ -132,6 +133,12 @@ void serialize(hpx::detail::ibuffer_type& arc, std::valarray<Type>& list, const 
 
 template<class Type>
 void serialize(hpx::detail::obuffer_type& arc, std::valarray<Type>& list, const unsigned v);
+
+template<class T, class V>
+void serialize(hpx::detail::ibuffer_type& arc, std::unordered_map<T, V>& s, const unsigned v);
+
+template<class T, class V>
+void serialize(hpx::detail::obuffer_type& arc, std::unordered_map<T, V>& s, const unsigned v);
 
 template<class Arc, class Type1, class Type2>
 void serialize(Arc& arc, std::pair<Type1, Type2>& a, const unsigned);

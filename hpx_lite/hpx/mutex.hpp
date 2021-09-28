@@ -64,10 +64,11 @@ class shared_mutex {
 private:
 	mutex mtx;
 	int read_cnt;
-	bool writing;
+	int write_cnt;
+	int write_waiting;
 public:
 	constexpr shared_mutex() :
-			read_cnt(0), writing(false) {
+			read_cnt(0), write_waiting(0), write_cnt(0) {
 	}
 	shared_mutex(const mutex&) = delete;
 	shared_mutex(mutex&&) = delete;
@@ -77,11 +78,12 @@ public:
 	void lock() {
 		bool done = false;
 		mtx.lock();
-		writing = true;
+		write_waiting++;
 		mtx.unlock();
 		do {
 			mtx.lock();
-			if (read_cnt == 0) {
+			if (read_cnt == 0 && write_cnt == 0) {
+				write_cnt++;
 				done = true;
 			}
 			mtx.unlock();
@@ -91,14 +93,15 @@ public:
 	}
 	void unlock() {
 		mtx.lock();
-		writing = false;
+		write_waiting--;
+		write_cnt--;
 		mtx.unlock();
 	}
 	void lock_shared() {
 		bool done = false;
 		do {
 			mtx.lock();
-			if (!writing) {
+			if (!write_waiting) {
 				read_cnt++;
 				done = true;
 			}

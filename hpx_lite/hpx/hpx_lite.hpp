@@ -86,6 +86,32 @@ public:
 };
 }
 }
+
+enum class execution {
+	par
+};
+
+namespace parallel {
+template<class T, class F>
+future<void> sort(execution exec_type, T&& begin, T&& end, F&& less) {
+	std::sort(std::forward < T > (begin), std::forward < T > (end), std::forward < F > (less));
+	return hpx::make_ready_future();
+}
+
+template<class T>
+future<void> sort(execution exec_type, T&& begin, T&& end) {
+	std::sort(std::forward < T > (begin), std::forward < T > (end));
+	return hpx::make_ready_future();
+}
+
+
+template<class T, class V, class U>
+future<void> copy(execution exec_type, T&& a1, V&& a2, U&& a3) {
+	std::copy(std::forward < T > (a1), std::forward < V > (a2), std::forward<U>(a3));
+	return hpx::make_ready_future();
+}
+}
+
 }
 
 #endif /* HPX_HPP_ */

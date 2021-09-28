@@ -36,7 +36,7 @@ future<typename std::result_of<Function(Args...)>::type> async(Function &&f, Arg
 
 template<class Function, class ... Args>
 void apply(Function &&f, Args &&... args) {
-	async(std::forward<Function>(f), std::forward<Args>(args)...);
+	hpx::async(std::forward<Function>(f), std::forward<Args>(args)...);
 }
 
 template<class Function, class ... Args>

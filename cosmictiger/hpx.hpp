@@ -22,14 +22,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifndef __CUDACC__
 
+#ifndef HPX_LITE
 #include <hpx/hpx.hpp>
 #include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/parallel/algorithms/copy.hpp>
 #include <hpx/serialization/unordered_map.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
-
-
 #if (HPX_VERSION_FULL < ((1<<16) | (6<<8)))
 #define HPX_EARLY
 #include <hpx/runtime/threads/run_as_os_thread.hpp>
@@ -37,7 +36,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define HPX_LATE
 #include <hpx/include/run_as.hpp>
 #endif
+#else
+#define HPX_EARLY
+#include <hpx/hpx_lite.hpp>
+#endif
 
+#ifndef HPX_LITE
 #ifdef HPX_EARLY
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define hpx_copy hpx::parallel::copy
@@ -49,6 +53,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority_critical)
 #define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority_normal)
 #define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority_low)
+#else
+#define HPX_PRIORITY_HI hpx::launch::async
+#define HPX_PRIORITY_NORMAL hpx::launch::async
+#define HPX_PRIORITY_LO hpx::launch::async
+#define PAR_EXECUTION_POLICY hpx::execution::par
+#define hpx_copy hpx::parallel::copy
+#endif
 
 const vector<hpx::id_type>& hpx_localities();
 const vector<hpx::id_type>& hpx_children();

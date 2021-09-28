@@ -193,7 +193,7 @@ void groups_reduce(double scale_factor) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < groups_reduce_action > (c, scale_factor));
 	}
-	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::threads::hardware_concurrency();
+	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::thread::hardware_concurrency();
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale_factor;
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -391,7 +391,7 @@ void groups_reduce(double scale_factor) {
 
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries) {
 	vector<hpx::future<void>> futs;
-	const int nthreads = hpx::threads::hardware_concurrency();
+	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([nthreads,proc,&entries]() {
 					for( int i = proc; i < entries.size(); i+= nthreads) {
@@ -411,7 +411,7 @@ void groups_add_particles(int wave, double scale) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async < groups_add_particles_action > (c, wave, scale));
 	}
-	const int nthreads = hpx::threads::hardware_concurrency();
+	const int nthreads = hpx::thread::hardware_concurrency();
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale;
 	for (int proc = 0; proc < nthreads; proc++) {

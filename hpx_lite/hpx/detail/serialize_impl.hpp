@@ -15,16 +15,14 @@ namespace hpx {
 namespace serialization {
 
 template<class Type>
-typename std::enable_if<std::is_fundamental<typename std::remove_reference<Type>::type>::value>::type serialize(
-		oarchive& arc, Type& data_out, const unsigned) {
+typename std::enable_if<std::is_fundamental<typename std::remove_reference<Type>::type>::value>::type serialize(oarchive& arc, Type& data_out, const unsigned) {
 	assert(arc.start + sizeof(Type) <= arc.size());
 	std::memcpy(&data_out, arc.data() + arc.start, sizeof(Type));
 	arc.start += sizeof(Type);
 }
 
 template<class Type>
-typename std::enable_if<std::is_fundamental<typename std::remove_reference<Type>::type>::value>::type serialize(
-		iarchive& arc, Type& data_in, const unsigned) {
+typename std::enable_if<std::is_fundamental<typename std::remove_reference<Type>::type>::value>::type serialize(iarchive& arc, Type& data_in, const unsigned) {
 	auto new_size = arc.size() + sizeof(Type);
 	if (arc.capacity() < new_size) {
 		arc.reserve(std::max(2 * arc.capacity(), arc.initial_size));
@@ -140,6 +138,27 @@ void serialize(Arc& arc, std::string& vec, const unsigned) {
 	}
 	for (auto i = vec.begin(); i != vec.end(); ++i) {
 		arc & (*i);
+	}
+}
+
+template<class T, class V>
+void serialize(hpx::detail::ibuffer_type& arc, std::unordered_map<T, V>& s, const unsigned v) {
+	const std::size_t sz = s.size();
+	arc << sz;
+	for (auto i = s.begin(); i != s.end(); ++i) {
+		arc << (*i);
+	}
+}
+
+template<class T, class V>
+void serialize(hpx::detail::obuffer_type& arc, std::unordered_map<T, V>& s, const unsigned v) {
+	std::size_t sz;
+	arc >> sz;
+	s.clear();
+	std::pair<T, V> element;
+	for (std::size_t i = 0; i != sz; ++i) {
+		arc >> element;
+		s.insert(element);
 	}
 }
 

@@ -557,6 +557,7 @@ static const tree_node* tree_cache_read(tree_id id) {
 			hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
 				const tree_fetch_cache_line_action action;
 				prms->set_value(action(hpx_localities()[line_id.proc],line_id.index));
+				return 'a';
 			});
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);

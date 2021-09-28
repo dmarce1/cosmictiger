@@ -12,7 +12,6 @@
 #include "future.hpp"
 #include "mutex.hpp"
 
-
 #define HPX_DEFINE_PLAIN_ACTION(func, action_name)                                                \
 		struct action_name : public hpx::detail::action_base<decltype(func)>  {                   \
 			static void invoke( hpx::detail::ibuffer_type&, hpx::detail::obuffer_type);      \
@@ -45,7 +44,6 @@
 #define HPX_GET_PLAIN_ACTION(_1,_2,NAME,...) NAME
 
 #define HPX_PLAIN_ACTION(...) HPX_GET_PLAIN_ACTION(__VA_ARGS__, HPX_PLAIN_ACTION2, HPX_PLAIN_ACTION1)(__VA_ARGS__)
-
 
 #include "hpx/detail/id_type_detail.hpp"
 
@@ -88,12 +86,17 @@ public:
 	HPX_SERIALIZATION_SPLIT_MEMBER()
 	;
 
-
 };
-
 
 template<class Function, class ... Args>
 future<typename Function::return_type> async(const id_type& id, Args&& ... args);
+
+
+template<class Function, class ... Args>
+future<typename Function::return_type> async(hpx::launch policy, const id_type& id, Args&& ... args) {
+	return async<Function,Args...>(id, std::forward<Args>(args)...);
+}
+
 
 }
 
