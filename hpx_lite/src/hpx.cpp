@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	int rank, provided, rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-	if (provided < MPI_THREAD_FUNNELED) {
+	if (provided != MPI_THREAD_FUNNELED && provided != MPI_THREAD_MULTIPLE) {
 		printf("MPI threading insufficient\n");
 		rc = EXIT_FAILURE;
 	} else {
