@@ -152,16 +152,16 @@ add_executable( cosmictiger_lite ${cosmictiger_source_files} )
 
 #target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
-target_link_libraries(cosmictiger_lite PUBLIC boost_program_options fftw3f gsl gslcblas chealpix hpx_lite hwloc silo )
+target_link_libraries(cosmictiger_lite PUBLIC boost_program_options mpi fftw3f gsl gslcblas chealpix hpx_lite hwloc silo )
 target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
-target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math ;
-                        >)
+target_compile_features(cosmictiger_lite PUBLIC cxx_std_14)
+
+target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 target_compile_options(cosmictiger_lite PUBLIC "-DHPX_LITE" )
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger_lite PUBLIC cudart)
 	target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math ;
+                        --use_fast_math  --maxrregcount=160;
                         >)
 	target_compile_options(cosmictiger_lite PRIVATE -DUSE_CUDA )
 	set_property(TARGET cosmictiger_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
@@ -183,7 +183,7 @@ if( COSMICTIGER_WITH_CUDA )
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                         --use_fast_math --maxrregcount=160;
                         >)
-   target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
+        target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
 	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 	set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
