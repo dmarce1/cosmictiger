@@ -119,8 +119,8 @@ int main(int argc, char* argv[]) {
 		abort();
 	}
 
-	int rank, provided, rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-	if (provided != MPI_THREAD_FUNNELED && provided != MPI_THREAD_MULTIPLE) {
+	int rank, provided, rc = MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
+	if (provided != MPI_THREAD_SERIALIZED) {
 		printf("MPI threading insufficient\n");
 		rc = EXIT_FAILURE;
 	} else {
@@ -228,6 +228,10 @@ int server(int argc, char* argv[]) {
 				count = stat.MPI_TAG;
 				buffer = obuffer_type(count);
 				rc = MPI_Recv(buffer.data(), count, MPI_BYTE, src, count, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+				if( *((char*) buffer.data()) == 0 ) {
+					printf( "Received message starting with zero with size = %i\n", count);
+					fflush(stdout);
+				}
 				HPX_MPI_CALL(rc);
 				auto buffer_ptr = std::make_shared < obuffer_type > (std::move(buffer));
 				hpx::thread([=]() {
@@ -239,18 +243,17 @@ int server(int argc, char* argv[]) {
 		auto i = message_queue().begin();
 		while (i != message_queue().end() && !exit_signal) {
 			found_stuff = true;
+			auto tmp = *i;
 			lock.unlock();
-			int rc = handle_outgoing_message(*i);
+			int rc = handle_outgoing_message(tmp);
+			lock.lock();
 			if (rc == +1) {
-				lock.lock();
 				i = message_queue().erase(i);
 			} else {
-				auto tmp = *i;
 				++i;
 				if (rc == -1) {
 					found_stuff = true;
 				}
-				lock.lock();
 			}
 		}
 		if (!found_stuff) {
@@ -276,7 +279,8 @@ static void handle_incoming_message(int return_rank, obuffer_type message) {
 			func_ptr = reinterpret_cast<naked_action_type>(function_name);
 		} else {
 			printf("Corrupt message received itype = %i\n", itype);
-			abort();
+			fflush(stdout);
+			MPI_Abort(MPI_COMM_WORLD, -1);
 			assert(false);
 			func_ptr = nullptr;
 		}
