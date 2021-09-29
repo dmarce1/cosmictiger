@@ -54,7 +54,7 @@ using mutex = hpx::mutex;
 }
 }
 
-#include "hpx/thread.hpp"
+#include "hpx_lite/thread.hpp"
 
 
 namespace hpx {

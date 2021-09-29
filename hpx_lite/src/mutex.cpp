@@ -5,5 +5,5 @@
  *      Author: dmarce1
  */
 
-#include "hpx/mutex.hpp"
+#include "hpx_lite/mutex.hpp"
 

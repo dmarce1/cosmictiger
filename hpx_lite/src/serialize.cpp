@@ -8,7 +8,7 @@
 
 
 
-#include "hpx/serialize.hpp"
+#include "hpx_lite/serialize.hpp"
 
 
 namespace hpx {

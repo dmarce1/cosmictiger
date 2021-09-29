@@ -5,7 +5,7 @@
  *      Author: dmarce1
  */
 
-#include "hpx/future.hpp"
+#include "hpx_lite/future.hpp"
 
 namespace hpx {
 

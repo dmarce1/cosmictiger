@@ -8,7 +8,7 @@
 #include <mpi.h>
 #include <hwloc.h>
 
-#include "hpx/thread.hpp"
+#include "hpx_lite/thread.hpp"
 
 #include <cmath>
 #include <cassert>

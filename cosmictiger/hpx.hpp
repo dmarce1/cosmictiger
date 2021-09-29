@@ -38,7 +38,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #endif
 #else
 #define HPX_EARLY
-#include <hpx/hpx_lite.hpp>
+#include <hpx_lite/hpx_lite.hpp>
 #endif
 
 #ifndef HPX_LITE

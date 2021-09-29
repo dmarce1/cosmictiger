@@ -8,8 +8,8 @@
 #ifndef FUTURE_DETAIL_HPP_
 #define FUTURE_DETAIL_HPP_
 
-#include "hpx/thread.hpp"
-#include "hpx/mutex.hpp"
+#include "hpx_lite/thread.hpp"
+#include "hpx_lite/mutex.hpp"
 
 namespace hpx {
 

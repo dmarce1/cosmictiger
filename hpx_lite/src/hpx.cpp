@@ -5,7 +5,7 @@
  *      Author: dmarce1
  */
 
-#include "hpx/hpx_lite.hpp"
+#include "hpx_lite/hpx_lite.hpp"
 #include <hwloc.h>
 #include <list>
 #include <unistd.h>

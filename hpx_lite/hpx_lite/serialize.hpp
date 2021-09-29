@@ -163,6 +163,6 @@ const Arc& operator>>(const Arc& arc, T& data);
 
 }
 
-#include "hpx/detail/serialize_impl.hpp"
+#include "hpx_lite/detail/serialize_impl.hpp"
 
 #endif /* SERIALIZE_HPP_ */

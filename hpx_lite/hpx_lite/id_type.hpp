@@ -45,7 +45,7 @@
 
 #define HPX_PLAIN_ACTION(...) HPX_GET_PLAIN_ACTION(__VA_ARGS__, HPX_PLAIN_ACTION2, HPX_PLAIN_ACTION1)(__VA_ARGS__)
 
-#include "hpx/detail/id_type_detail.hpp"
+#include "hpx_lite/detail/id_type_detail.hpp"
 
 namespace hpx {
 
@@ -100,6 +100,6 @@ future<typename Function::return_type> async(hpx::launch policy, const id_type& 
 
 }
 
-#include "hpx/detail/id_type_impl.hpp"
+#include "hpx_lite/detail/id_type_impl.hpp"
 
 #endif /* ID_TYPE_HPP_ */

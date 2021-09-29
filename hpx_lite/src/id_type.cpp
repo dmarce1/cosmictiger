@@ -6,7 +6,7 @@
  */
 
 
-#include "hpx/id_type.hpp"
+#include "hpx_lite/id_type.hpp"
 
 namespace hpx {
 
