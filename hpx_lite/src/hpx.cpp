@@ -103,7 +103,6 @@ static void local_finalize();
 
 HPX_PLAIN_ACTION(local_finalize, finalize_action);
 
-
 int main(int argc, char* argv[]) {
 	hwloc_topology_t topology;
 	hwloc_topology_init(&(topology));
@@ -276,6 +275,8 @@ static void handle_incoming_message(int return_rank, obuffer_type message) {
 			message >> function_name;
 			func_ptr = reinterpret_cast<naked_action_type>(function_name);
 		} else {
+			printf("Corrupt message received itype = %i\n", itype);
+			abort();
 			assert(false);
 			func_ptr = nullptr;
 		}
