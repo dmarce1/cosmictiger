@@ -284,8 +284,8 @@ void driver() {
 			total_time.start();
 			write_checkpoint(params);
 			tmr.reset();
-			kick_workspace::clear_buffers();
-			return;
+			//kick_workspace::clear_buffers();
+		//	return;
 		}
 //		PRINT("Next iteration\n");
 		tmr.start();
@@ -427,7 +427,13 @@ void driver() {
 void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
-		const std::string command = std::string("mkdir -p checkpoint.hello\n");
+                std::string command = "rm -r checkpoint.goodbye\n";
+                if (system(command.c_str()) != 0) {
+                }
+                command = "mv checkpoint.hello checkpoint.goodbye\n";
+                if (system(command.c_str()) != 0) {
+                }
+		command = std::string("mkdir -p checkpoint.hello\n");
 		if (system(command.c_str()) != 0) {
 			THROW_ERROR("Unable to execute : %s\n", command.c_str());
 		}
@@ -483,10 +489,6 @@ driver_params read_checkpoint() {
 		PRINT("Done reading checkpoint\n");
 		std::string command = "rm -r checkpoint.goodbye\n";
 		if (system(command.c_str()) != 0) {
-		}
-		command = "mv checkpoint.hello checkpoint.goodbye\n";
-		if (system(command.c_str()) != 0) {
-			THROW_ERROR("Unable to execute : %s\n", command.c_str());
 		}
 	}
 	return params;
