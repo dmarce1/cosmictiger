@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -36,6 +36,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/view.hpp>
+
+#include <sys/types.h>
+#include <dirent.h>
 
 HPX_PLAIN_ACTION (write_checkpoint);
 HPX_PLAIN_ACTION (read_checkpoint);
@@ -285,7 +288,7 @@ void driver() {
 			write_checkpoint(params);
 			tmr.reset();
 			//kick_workspace::clear_buffers();
-		//	return;
+			//	return;
 		}
 //		PRINT("Next iteration\n");
 		tmr.start();
@@ -424,15 +427,32 @@ void driver() {
 	kick_workspace::clear_buffers();
 }
 
+bool dir_exists(const char *path) {
+	DIR* dir = opendir(path);
+	if (dir) {
+		closedir(dir);
+		return true;
+	} else {
+		return false;
+	}
+}
+
 void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
-                std::string command = "rm -r checkpoint.goodbye\n";
-                if (system(command.c_str()) != 0) {
-                }
-                command = "mv checkpoint.hello checkpoint.goodbye\n";
-                if (system(command.c_str()) != 0) {
-                }
+		std::string  command;
+		if (dir_exists("checkpoint.hello")) {
+			if (dir_exists("checkpoint.goodbye")) {
+				command = "rm -r checkpoint.goodbye\n";
+				if (system(command.c_str()) != 0) {
+					THROW_ERROR("Unable to execute %s\n", command.c_str());
+				}
+			}
+			command = "mv checkpoint.hello checkpoint.goodbye\n";
+			if (system(command.c_str()) != 0) {
+				THROW_ERROR("Unable to execute %s\n", command.c_str());
+			}
+		}
 		command = std::string("mkdir -p checkpoint.hello\n");
 		if (system(command.c_str()) != 0) {
 			THROW_ERROR("Unable to execute : %s\n", command.c_str());
@@ -443,19 +463,19 @@ void write_checkpoint(driver_params params) {
 		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
 	}
 //	futs.push_back(hpx::threads::run_as_os_thread([&]() {
-		const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
-		FILE* fp = fopen(fname.c_str(), "wb");
-		fwrite(&params, sizeof(driver_params), 1, fp);
-		particles_save(fp);
+	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
+	FILE* fp = fopen(fname.c_str(), "wb");
+	fwrite(&params, sizeof(driver_params), 1, fp);
+	particles_save(fp);
 	//	PRINT( "parts saved\n");
-		domains_save(fp);
-		//PRINT( "domains saved\n");
-		if (get_options().do_lc) {
-			lc_save(fp);
-		}
-		//PRINT( "lc_saved\n");
-		fclose(fp);
-		PRINT( "closed\n");
+	domains_save(fp);
+	//PRINT( "domains saved\n");
+	if (get_options().do_lc) {
+		lc_save(fp);
+	}
+	//PRINT( "lc_saved\n");
+	fclose(fp);
+	PRINT("closed\n");
 //	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {

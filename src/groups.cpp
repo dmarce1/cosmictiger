@@ -31,9 +31,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries);
 vector<group_int> groups_exist(vector<group_int>);
 static void groups_remove_indexes(vector<part_int> indexes);
-vector<group_entry> groups_get();
 
-HPX_PLAIN_ACTION (groups_get);
 HPX_PLAIN_ACTION (groups_add_particles);
 HPX_PLAIN_ACTION (groups_transmit_particles);
 HPX_PLAIN_ACTION (groups_reduce);
@@ -56,10 +54,6 @@ static vector<group_entry> groups;
 static std::unordered_set<group_int> existing_groups;
 static vector<group_int> local_existing_groups;
 static std::atomic<size_t> group_candidates;
-
-vector<group_entry> groups_get() {
-	return std::move(groups);
-}
 
 void groups_remove_indexes(vector<part_int> indexes) {
 	for (int i = 0; i < indexes.size(); i++) {
@@ -128,62 +122,43 @@ vector<group_int> groups_exist(vector<group_int> grps) {
 }
 
 std::pair<size_t, size_t> groups_save(int number) {
-	if (get_options().groups_funnel_output) {
-		std::pair < size_t, size_t > dummy;
-		const auto localities = hpx_localities();
-		const std::string fname = std::string("groups.") + std::to_string(number) + std::string(".dat");
-		FILE* fp = fopen(fname.c_str(), "wb");
-		auto fut = hpx::async < groups_get_action > (localities[0]);
-		for (int i = 0; i < localities.size(); i++) {
-			auto these_groups = fut.get();
-			if (i < localities.size() - 1) {
-				fut = hpx::async < groups_get_action > (localities[i + 1]);
-			}
-			for (int i = 0; i < these_groups.size(); i++) {
-				these_groups[i].write(fp);
-			}
+	if (hpx_rank() == 0) {
+		PRINT("Writing group database\n");
+		const std::string command = std::string("mkdir -p groups.") + std::to_string(number) + "\n";
+		if (system(command.c_str()) != 0) {
+			THROW_ERROR("Unable to execute : %s\n", command.c_str());
 		}
-		fclose(fp);
-		return dummy;
-	} else {
-		if (hpx_rank() == 0) {
-			PRINT("Writing group database\n");
-			const std::string command = std::string("mkdir -p groups.") + std::to_string(number) + "\n";
-			if (system(command.c_str()) != 0) {
-				THROW_ERROR("Unable to execute : %s\n", command.c_str());
-			}
-		}
-
-		vector<hpx::future<std::pair<size_t, size_t>>>futs;
-		for (const auto& c : hpx_children()) {
-			futs.push_back(hpx::async < groups_save_action > (c, number));
-		}
-
-		const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."
-				+ std::to_string(hpx_rank()) + std::string(".dat");
-		FILE* fp = fopen(fname.c_str(), "wb");
-		if (fp == NULL) {
-			THROW_ERROR("Unable to open %s\n", fname.c_str());
-		}
-		if (groups.size()) {
-			hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
-				return a.id < b.id;
-			}).get();
-		}
-		for (int i = 0; i < groups.size(); i++) {
-			groups[i].write(fp);
-		}
-		fclose(fp);
-		size_t count = groups.size();
-		groups = decltype(groups)();
-		existing_groups = decltype(existing_groups)();
-		for (auto& f : futs) {
-			const auto tmp = f.get();
-			count += tmp.first;
-			group_candidates += tmp.second;
-		}
-		return std::make_pair(count, (size_t) group_candidates);
 	}
+
+	vector<hpx::future<std::pair<size_t, size_t>>>futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async < groups_save_action > (c, number));
+	}
+
+	const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."
+			+ std::to_string(hpx_rank()) + std::string(".dat");
+	FILE* fp = fopen(fname.c_str(), "wb");
+	if (fp == NULL) {
+		THROW_ERROR("Unable to open %s\n", fname.c_str());
+	}
+	if (groups.size()) {
+		hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
+			return a.id < b.id;
+		}).get();
+	}
+	for (int i = 0; i < groups.size(); i++) {
+		groups[i].write(fp);
+	}
+	fclose(fp);
+	size_t count = groups.size();
+	groups = decltype(groups)();
+	existing_groups = decltype(existing_groups)();
+	for (auto& f : futs) {
+		const auto tmp = f.get();
+		count += tmp.first;
+		group_candidates += tmp.second;
+	}
+	return std::make_pair(count, (size_t) group_candidates);;
 }
 
 #define GROUPS_REDUCE_OVERSUBSCRIBE  2

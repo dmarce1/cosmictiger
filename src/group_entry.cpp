@@ -31,7 +31,7 @@ void fread_single(FILE* fp, T& data) {
 	FREAD(&data, sizeof(T), 1, fp);
 }
 
-void group_entry::write(FILE* fp) const {
+void group_entry::write(FILE* fp) {
 	fwrite_single(fp, id);
 	fwrite_single(fp, com);
 	fwrite_single(fp, vel);

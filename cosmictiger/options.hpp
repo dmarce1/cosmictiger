@@ -31,7 +31,6 @@ struct options {
 	bool do_slice;
 	bool do_views;
 	bool twolpt;
-	bool groups_funnel_output;
 	bool use_power_file;
 	bool read_check;
 
@@ -87,9 +86,7 @@ struct options {
 		arc & do_slice;
 		arc & do_views;
 		arc & twolpt;
-		arc & groups_funnel_output;
 		arc & use_power_file;
-
 		arc & tracer_count;
 		arc & parts_dim;
 		arc & tree_cache_line_size;
