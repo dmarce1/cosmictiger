@@ -81,6 +81,7 @@ struct last_cache_entry_t {
 		last_cache_entries.insert(this);
 	}
 	~last_cache_entry_t() {
+		std::lock_guard<spinlock_type> lock(last_cache_entry_mtx);
 		last_cache_entries.erase(this);
 	}
 };

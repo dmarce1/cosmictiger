@@ -33,7 +33,6 @@ struct options {
 	bool twolpt;
 	bool use_power_file;
 	bool read_check;
-
 	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
@@ -45,7 +44,6 @@ struct options {
 	int lc_map_size;
 	int min_group;
 	int slice_res;
-
 	double lc_b;
 	double slice_size;
 	double link_len;
@@ -71,7 +69,6 @@ struct options {
 	double ns;
 	double Y;
 	double Neff;
-
 	std::string config_file;
 	std::string test;
 
@@ -99,7 +96,6 @@ struct options {
 		arc & view_size;
 		arc & slice_res;
 		arc & lc_map_size;
-
 		arc & lc_b;
 		arc & theta;
 		arc & slice_size;
@@ -125,7 +121,6 @@ struct options {
 		arc & ns;
 		arc & Y;
 		arc & Neff;
-
 		arc & config_file;
 		arc & test;
 	}
