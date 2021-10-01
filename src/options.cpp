@@ -92,8 +92,8 @@ bool process_options(int argc, char *argv[]) {
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
-	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049388983), "") //
-	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.265027508), "") //
+	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
+	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
 	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255/2.73), "") //
 	("Y", po::value<double>(&(opts.Y))->default_value(0.2454006), "") //
@@ -136,8 +136,6 @@ bool process_options(int argc, char *argv[]) {
 	opts.tree_cache_line_size = 1024;
 	opts.part_cache_line_size = 64 * 1024;
 #endif
-
-	opts.groups_funnel_output = true;
 	opts.save_force = opts.test == "force";
 	opts.hsoft = 1.0 / 50.0 / opts.parts_dim;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;

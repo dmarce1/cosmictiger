@@ -745,7 +745,7 @@ void do_expansion(bool two) {
 	deindent();
 	phi_flops++;
 	tprint("}\n");
-	int total_size;
+	int total_size = 0;
 	for (int i = 1; i < entries.size(); i++) {
 		total_size += entries[i].size();
 	}
