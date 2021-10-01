@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -49,7 +49,7 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 	fprintf(fp, "1\n");
 	fprintf(fp, "6\n");
 	fclose(fp);
-	std::string cmd = "cat recfast.in." + std::to_string(hpx_rank()) +   " | ./recfast 1> /dev/null 2> /dev/null";
+	std::string cmd = "cat recfast.in." + std::to_string(hpx_rank()) + " | ./recfast 1> /dev/null 2> /dev/null";
 	if (system(cmd.c_str()) != 0) {
 		THROW_ERROR("Unable to run %s\n", cmd.c_str());
 	}
@@ -108,11 +108,15 @@ struct power_spectrum_function {
 		float logk = std::log(k);
 		const float k0 = (logk - logkmin) / dlogk;
 		int i0 = int(k0) - 1;
-		i0 = std::max(0, i0);
-		i0 = std::min((int) (P.size() - 4), i0);
+		if (i0 < 0) {
+			THROW_ERROR("power.init does not have sufficient range\n");
+		}
 		int i1 = i0 + 1;
 		int i2 = i0 + 2;
 		int i3 = i0 + 3;
+		if (i3 > P.size() - 1) {
+			THROW_ERROR("power.init does not have sufficient range\n");
+		}
 		float x = k0 - i1;
 		float y0 = std::log(P[i0]);
 		float y1 = std::log(P[i1]);
