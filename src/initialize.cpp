@@ -108,27 +108,15 @@ struct power_spectrum_function {
 		float logk = std::log(k);
 		const float k0 = (logk - logkmin) / dlogk;
 		int i0 = int(k0) - 1;
-		if (i0 < -1) {
-			THROW_ERROR("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
+		if (i0 < 0) {
+			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
 		}
+                if (i0 > P.size() - 4) {
+                        PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
+                }
 		int i1 = i0 + 1;
 		int i2 = i0 + 2;
 		int i3 = i0 + 3;
-		if (i3 > P.size()) {
-			THROW_ERROR("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
-		}
-		if (i0 == -1) {
-			i0++;
-			i1++;
-			i2++;
-			i3++;
-		}
-		if (i3 == P.size()) {
-			i0--;
-			i1--;
-			i2--;
-			i3--;
-		}
 		float x = k0 - i1;
 		float y0 = std::log(P[i0]);
 		float y1 = std::log(P[i1]);
@@ -153,6 +141,8 @@ struct power_spectrum_function {
 	void normalize() {
 		const int N = 8 * 1024;
 		float sum = 0.0;
+		float logkmax = this->logkmax - 1.5 * dlogk;
+		float logkmin = this->logkmin + 1.5 * dlogk;
 		float dlogk = (logkmax - logkmin) / N;
 		sum = (1.0 / 3.0) * (sigma8_integrand(logkmax) + sigma8_integrand(logkmin)) * dlogk;
 		for (int i = 1; i < N; i += 2) {
@@ -257,7 +247,7 @@ power_spectrum_function compute_power_spectrum() {
 		FILE* fp = fopen("power.dat", "wt");
 		const double lh = params.hubble;
 		const double lh3 = lh * lh * lh;
-		for (int i = 0; i < M; i++) {
+		for (int i = 1; i < M-1; i++) {
 			double k = exp(logkmin + (double) i * dlogk);
 			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
 		}
