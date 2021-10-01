@@ -43,6 +43,14 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 		THROW_ERROR("Unable to write to %s\n", filename.c_str());
 	}
 	filename = "recfast.out." + std::to_string(hpx_rank());
+	FILE* fp1 = fopen(filename.c_str(), "rb");
+	if (fp1) {
+		fclose(fp1);
+		std::string command = "rm " + filename + "\n";
+		if (system(command.c_str()) != 0) {
+			THROW_ERROR("Unable to execute %s\n", command.c_str());
+		}
+	}
 	fprintf(fp, "%s\n", filename.c_str());
 	fprintf(fp, "%f %f %f\n", params.omega_b, params.omega_c, 1.0 - params.omega_b - params.omega_c);
 	fprintf(fp, "%f %f %f\n", 100 * params.hubble, params.Theta * 2.73, params.Y);
@@ -138,10 +146,10 @@ struct power_spectrum_function {
 		float tmp = (std::sin(k * R) - k * R * std::cos(k * R));
 		return c0 * P * tmp * tmp * std::pow(k, -3);
 	}
-	void normalize() {
+	float normalize() {
 		const int N = 8 * 1024;
 		float sum = 0.0;
-		float logkmax = this->logkmax - 1.5 * dlogk;
+		float logkmax = this->logkmax - 2.5 * dlogk;
 		float logkmin = this->logkmin + 1.5 * dlogk;
 		float dlogk = (logkmax - logkmin) / N;
 		sum = (1.0 / 3.0) * (sigma8_integrand(logkmax) + sigma8_integrand(logkmin)) * dlogk;
@@ -157,6 +165,10 @@ struct power_spectrum_function {
 		for (int i = 0; i < P.size(); i++) {
 			P[i] *= sum;
 		}
+		if( hpx_rank() == 0 ) {
+			PRINT( "Normalization = %e\n", sum);
+		}
+		return sum;
 	}
 
 };
@@ -218,41 +230,6 @@ power_spectrum_function compute_power_spectrum() {
 	kmax = 25.271 * params.hubble;
 	einstein_boltzmann_interpolation_function(&m_k, &vel_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
 
-	const auto sigma8_integrand = [params,m_k](double x) {
-		double R = 8 / params.hubble;
-		const double c0 = double(9) / (2. * double(M_PI) * double(M_PI)) / powf(R, 6);
-		double k = exp(x);
-		double P = m_k(k);
-		double tmp = (sin(k * R) - k * R * cos(k * R));
-		return c0 * P * tmp * tmp * pow(k, -3);
-	};
-
-	const int M = 2 * Nk;
-	const double logkmin = log(kmin);
-	const double logkmax = log(kmax);
-	const double dlogk = (logkmax - logkmin) / M;
-	double sum = 0.0;
-	for (int i = 0; i < M; i++) {
-		const double logka = logkmin + i * dlogk;
-		const double logkb = logkmin + (i + 0.5) * dlogk;
-		const double logkc = logkmin + (i + 1) * dlogk;
-		const double Ia = sigma8_integrand(logka);
-		const double Ib = sigma8_integrand(logkb);
-		const double Ic = sigma8_integrand(logkc);
-		sum += ((1.0 / 6.0) * (Ia + Ic) + (2.0 / 3.0) * Ib) * dlogk;
-	}
-	const double norm = sqr(get_options().sigma8) / sum;
-	if (hpx_rank() == 0) {
-		PRINT("Normalization = %e\n", norm);
-		FILE* fp = fopen("power.dat", "wt");
-		const double lh = params.hubble;
-		const double lh3 = lh * lh * lh;
-		for (int i = 1; i < M-1; i++) {
-			double k = exp(logkmin + (double) i * dlogk);
-			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
-		}
-		fclose(fp);
-	}
 	func.logkmin = log(kmin);
 	func.logkmax = log(kmax);
 	func.dlogk = (func.logkmax - func.logkmin) / Nk;
@@ -260,7 +237,21 @@ power_spectrum_function compute_power_spectrum() {
 		double k = exp(func.logkmin + (double) i * func.dlogk);
 		func.P.push_back(m_k(k));
 	}
-	func.normalize();
+	const auto norm = func.normalize();
+	if (hpx_rank() == 0) {
+		const int M = 2 * Nk;
+		const double logkmin = log(kmin);
+		const double logkmax = log(kmax);
+		const double dlogk = (logkmax - logkmin) / M;
+		FILE* fp = fopen("power.dat", "wt");
+		const double lh = params.hubble;
+		const double lh3 = lh * lh * lh;
+		for (int i = 1; i < M-2; i++) {
+			double k = exp(logkmin + (double) i * dlogk);
+			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
+		}
+		fclose(fp);
+	}
 	return func;
 }
 
