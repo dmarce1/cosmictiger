@@ -56,7 +56,7 @@ vector<float> output_view(int number, double time) {
 							vec[YDIM] = particles_pos(YDIM,i).to_float() + yi;
 							vec[ZDIM] = particles_pos(ZDIM,i).to_float() + zi;
 							const float r2 = sqr(vec[XDIM],vec[YDIM],vec[ZDIM]);
-							if( r2 < 1.0 ) {
+							if( r2 < 1.0 && r2 > 0.0) {
 								vec2pix_ring(Nside, vec, &ipix);
 								atomic_add(values[ipix], 1.0 / r2);
 							}
