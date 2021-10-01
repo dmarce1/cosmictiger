@@ -109,13 +109,13 @@ struct power_spectrum_function {
 		const float k0 = (logk - logkmin) / dlogk;
 		int i0 = int(k0) - 1;
 		if (i0 < 0) {
-			THROW_ERROR("power.init does not have sufficient range\n");
+			THROW_ERROR("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
 		}
 		int i1 = i0 + 1;
 		int i2 = i0 + 2;
 		int i3 = i0 + 3;
 		if (i3 > P.size() - 1) {
-			THROW_ERROR("power.init does not have sufficient range\n");
+			THROW_ERROR("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
 		}
 		float x = k0 - i1;
 		float y0 = std::log(P[i0]);
