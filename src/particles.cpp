@@ -187,7 +187,7 @@ std::unordered_map<int, part_int> particles_groups_init() {
 	ALWAYS_ASSERT(!particles_grp);
 	particles_grp = new std::atomic<group_int>[size];
 	for( int i = 0; i < particles_size(); i++) {
-		particles_grp[i] = NO_GROUP;
+		hpx_fill(PAR_EXECUTION_POLICY, particles_grp, particles_grp + particles_size(), NO_GROUP).get();
 	}
 	group_cache_epoch = 0;
 
