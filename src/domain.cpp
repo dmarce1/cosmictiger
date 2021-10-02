@@ -32,8 +32,8 @@ constexpr bool verbose = true;
 void domains_transmit_particles(vector<particle>);
 void domains_init_rebounds();
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes);
-void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth);
-vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int depth);
+void domains_rebound_sort(vector<double> bounds, int depth);
+vector<size_t> domains_count_below(vector<double> bounds, int depth);
 vector<size_t> domains_get_loads();
 
 HPX_PLAIN_ACTION (domains_count_below);
@@ -130,18 +130,18 @@ void domains_init_rebounds() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int depth) {
+vector<size_t> domains_count_below(vector<double> bounds, int depth) {
 	assert(bounds.size() == local_domains.size());
 	vector<size_t> counts(bounds.size());
 	vector<hpx::future<void>> futs;
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].depth == depth) {
-			futs.push_back(hpx::async([i, &bounds, &dims, &counts]() {
+			futs.push_back(hpx::async([i, &bounds, depth, &counts]() {
 				//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
 					const auto rng = local_domains[i].part_range;
 					const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
 					vector<hpx::future<void>> futs;
-					const int xdim = dims[i];
+					const int xdim = depth % NDIM;
 					const fixed32 xmid = bounds[i];
 					std::atomic<size_t> count(0);
 					const auto func = [nthreads,rng, xdim, xmid, &count, &counts](int proc) {
@@ -169,14 +169,14 @@ vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int 
 	return counts;
 }
 
-void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth) {
+void domains_rebound_sort(vector<double> bounds, int depth) {
 	assert(bounds.size() == local_domains.size());
 	vector<size_t> mids(bounds.size());
 	vector<hpx::future<void>> futs;
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].depth == depth) {
-			futs.push_back(hpx::async([i, &bounds, &dims, &mids]() {
-				mids[i] = particles_sort(local_domains[i].part_range, bounds[i], dims[i]);
+			futs.push_back(hpx::async([i, &bounds, depth, &mids]() {
+				mids[i] = particles_sort(local_domains[i].part_range, bounds[i], depth % NDIM);
 				///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i], local_domains[i].part_range.first, local_domains[i].part_range.second);
 				}));
 		}
@@ -189,7 +189,7 @@ void domains_rebound_sort(vector<double> bounds, vector<int> dims, int depth) {
 			domain_local right;
 			left = local_domains[i];
 			right = local_domains[i];
-			left.box.end[dims[i]] = right.box.begin[dims[i]] = bounds[i];
+			left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
 			left.part_range.second = right.part_range.first = mids[i];
 			left.proc_range.second = right.proc_range.first = (local_domains[i].proc_range.first + local_domains[i].proc_range.second) / 2;
 			left.depth = right.depth = local_domains[i].depth + 1;
@@ -236,16 +236,14 @@ void domains_rebound() {
 				c = 0;
 			}
 			vector<double> bounds;
-			vector<int> dims;
 			for (int i = 0; i < domains.size(); i++) {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
 				const int xdim = domains[i].box.longest_dim();
 				bounds.push_back(midx);
-				dims.push_back(xdim);
 			}
 			vector<hpx::future<vector<size_t>>>count_futs;
 			for (int i = 0; i < hpx_size(); i++) {
-				count_futs.push_back(hpx::async<domains_count_below_action>(hpx_localities()[i], bounds, dims, depth));
+				count_futs.push_back(hpx::async<domains_count_below_action>(hpx_localities()[i], bounds, depth));
 			}
 			for (auto& f : count_futs) {
 				const auto count = f.get();
@@ -268,22 +266,19 @@ void domains_rebound() {
 			}
 		}
 		vector<double> bounds;
-		vector<int> dims;
 		for (int i = 0; i < domains.size(); i++) {
 			if (domains[i].proc_range.second - domains[i].proc_range.first) {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
 				const int xdim = domains[i].box.longest_dim();
 				boxes_by_key[domains[i].key].midx = midx;
 				bounds.push_back(midx);
-				dims.push_back(xdim);
 			} else {
 				bounds.push_back(0.0);
-				dims.push_back(-1);
 			}
 		}
 		vector<hpx::future<void>> sort_futs;
 		for (int i = 0; i < hpx_size(); i++) {
-			sort_futs.push_back(hpx::async<domains_rebound_sort_action>(hpx_localities()[i], bounds, dims, depth));
+			sort_futs.push_back(hpx::async<domains_rebound_sort_action>(hpx_localities()[i], bounds, depth));
 		}
 		hpx::wait_all(sort_futs.begin(), sort_futs.end());
 		new_domains.resize(0);
@@ -293,7 +288,7 @@ void domains_rebound() {
 				domain_global right;
 				left = domains[i];
 				right = domains[i];
-				left.box.end[dims[i]] = right.box.begin[dims[i]] = bounds[i];
+				left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
 				left.proc_range.second = right.proc_range.first = (domains[i].proc_range.first + domains[i].proc_range.second) / 2;
 				const int leftdim = left.box.longest_dim();
 				const int rightdim = right.box.longest_dim();

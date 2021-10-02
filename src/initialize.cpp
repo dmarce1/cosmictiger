@@ -593,21 +593,21 @@ static void zeldovich_begin(int dim1, int dim2) {
 
 }
 
-static range<int64_t> find_my_box(range<int64_t> box, int begin, int end) {
+static range<int64_t> find_my_box(range<int64_t> box, int begin, int end, int depth) {
 	if (end - begin == 1) {
 		return box;
 	} else {
-		const int xdim = box.longest_dim();
+		const int xdim = depth % NDIM;
 		const int mid = (begin + end) / 2;
 		const float w = float(mid - begin) / float(end - begin);
 		if (hpx_rank() < mid) {
 			auto left = box;
 			left.end[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
-			return find_my_box(left, begin, mid);
+			return find_my_box(left, begin, mid, depth + 1);
 		} else {
 			auto right = box;
 			right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
-			return find_my_box(right, mid, end);
+			return find_my_box(right, mid, end, depth + 1);
 		}
 	}
 }
@@ -618,7 +618,7 @@ static range<int64_t> find_my_box() {
 		box.begin[dim] = 0;
 		box.end[dim] = get_options().parts_dim;
 	}
-	return find_my_box(box, 0, hpx_size());
+	return find_my_box(box, 0, hpx_size(), 0);
 }
 
 static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
