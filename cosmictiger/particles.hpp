@@ -35,7 +35,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <fstream>
 #include <unordered_map>
 
-using part_int = int;
+using part_int = long long;
 
 #define NO_GROUP group_int(0x7FFFFFFFFFFFFFFFLL)
 

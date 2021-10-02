@@ -140,7 +140,7 @@ vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int 
 			futs.push_back(hpx::async([i, &bounds, &dims, &counts]() {
 				//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
 					const auto rng = local_domains[i].part_range;
-					const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / particles_size(), (size_t) 1);
+					const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
 					vector<hpx::future<void>> futs;
 					const int xdim = dims[i];
 					const fixed32 xmid = bounds[i];
