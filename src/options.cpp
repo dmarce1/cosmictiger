@@ -28,7 +28,7 @@ constexpr bool verbose = true;
 #ifdef HPX_LITE
 #include <boost/program_options.hpp>
 #endif
-
+#include <iostream>
 #include <fstream>
 
 #define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
