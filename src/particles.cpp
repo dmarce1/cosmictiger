@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 constexpr bool verbose = true;
 #define PARTICLES_CPP
@@ -40,11 +40,11 @@ static vector<group_particle> particles_group_fetch_cache_line(part_int index);
 static const group_particle* particles_group_cache_read_line(line_id_type line_id);
 void particles_group_cache_free();
 
-static void particles_set_global_offset(vector<part_int>);
+static void particles_set_global_offset(vector<size_t>);
 
 static part_int size = 0;
 static part_int capacity = 0;
-static vector<part_int> global_offsets;
+static vector<size_t> global_offsets;
 
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
@@ -186,9 +186,7 @@ std::unordered_map<int, part_int> particles_groups_init() {
 
 	ALWAYS_ASSERT(!particles_grp);
 	particles_grp = new std::atomic<group_int>[size];
-	for( int i = 0; i < particles_size(); i++) {
-		particles_grp[i] = NO_GROUP;
-	}
+	hpx_fill(PAR_EXECUTION_POLICY, particles_grp, particles_grp + particles_size(), NO_GROUP).get();
 	group_cache_epoch = 0;
 
 	std::unordered_map<int, part_int> map;
@@ -206,14 +204,7 @@ std::unordered_map<int, part_int> particles_groups_init() {
 		for( int i = 0; i < hpx_size() - 1; i++) {
 			offsets[i + 1] = map[i] + offsets[i];
 		}
-		for( int i = 0; i < hpx_size(); i++) {
-			map[i] = offsets[i];
-		}
-		vector<part_int> vmap(hpx_size());
-		for( int i = 0; i < hpx_size(); i++) {
-			vmap[i] = map[i];
-		}
-		particles_set_global_offset(std::move(vmap));
+		particles_set_global_offset(std::move(offsets));
 	}
 
 	return map;
@@ -233,7 +224,7 @@ int particles_group_home(group_int grp) {
 	return begin;
 }
 
-static void particles_set_global_offset(vector<part_int> map) {
+static void particles_set_global_offset(vector<size_t> map) {
 	particles_global_offset = map[hpx_rank()];
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {

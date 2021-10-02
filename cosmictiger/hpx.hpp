@@ -24,8 +24,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifndef HPX_LITE
 #include <hpx/hpx.hpp>
-#include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/parallel/algorithms/copy.hpp>
+#include <hpx/parallel/algorithms/fill.hpp>
+#include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/serialization/unordered_map.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
@@ -45,9 +46,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifdef HPX_EARLY
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define hpx_copy hpx::parallel::copy
+#define hpx_fill hpx::parallel::fill
 #else
 #define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
 #define hpx_copy hpx::copy
+#define hpx_fill hpx::fill
 #endif
 
 #define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority_critical)
@@ -59,6 +62,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define HPX_PRIORITY_LO hpx::launch::async
 #define PAR_EXECUTION_POLICY hpx::execution::par
 #define hpx_copy hpx::parallel::copy
+#define hpx_fill hpx::parallel::fill
 #endif
 
 const vector<hpx::id_type>& hpx_localities();

@@ -110,6 +110,12 @@ future<void> copy(execution exec_type, T&& a1, V&& a2, U&& a3) {
 	std::copy(std::forward < T > (a1), std::forward < V > (a2), std::forward<U>(a3));
 	return hpx::make_ready_future();
 }
+
+template<class T, class V, class U>
+future<void> fill(execution exec_type, T&& a1, V&& a2, U&& a3) {
+	std::fill(std::forward < T > (a1), std::forward < V > (a2), std::forward<U>(a3));
+	return hpx::make_ready_future();
+}
 }
 
 }
