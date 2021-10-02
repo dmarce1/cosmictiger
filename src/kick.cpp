@@ -24,6 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 
 #include <unistd.h>
@@ -117,6 +118,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
+	stack_trace_activate();
 	const tree_node* self_ptr = tree_get_node(self);
 	timer tm;
 	if (self_ptr->local_root) {
