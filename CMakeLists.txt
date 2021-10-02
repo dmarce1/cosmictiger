@@ -22,7 +22,7 @@ include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 CHECK_CXX_COMPILER_FLAG("-maltivec" COMPILER_SUPPORTS_MALTIVEC)
 if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fno-pie -no-pie")
 endif()
 if(COMPILER_SUPPORTS_MALTIVEC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -maltivec")
@@ -71,6 +71,7 @@ set(cosmictiger_source_files
     src/output.cpp
     src/particles.cpp
     src/power.cpp
+    src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp
     src/view.cpp
@@ -119,6 +120,7 @@ set(cosmictiger_header_files
     cosmictiger/safe_io.hpp
     cosmictiger/simd.hpp
     cosmictiger/stack_vector.hpp
+    cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp

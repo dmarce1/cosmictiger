@@ -62,6 +62,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define HPX_PRIORITY_LO hpx::launch::async
 #define PAR_EXECUTION_POLICY hpx::execution::par
 #define hpx_copy hpx::parallel::copy
+#define hpx_fill hpx::parallel::fill
 #endif
 
 const vector<hpx::id_type>& hpx_localities();
