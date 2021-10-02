@@ -21,6 +21,9 @@ static void handler(int sig) {
 	case SIGBUS:
 		PRINT("SIGBUS\n");
 		break;
+	case SIGABRT:
+		PRINT("SIGBUS\n");
+		break;
 	}
 	std::cout << "\nStack trace:\n" << boost::stacktrace::stacktrace() << "\n";
 	std::ofstream fp("stack_trace.txt", std::ios::app);
@@ -31,6 +34,7 @@ static void handler(int sig) {
 
 struct stack_trace_activator {
 	stack_trace_activator() {
+		signal(SIGABRT, handler);
 		signal(SIGSEGV, handler);
 		signal(SIGFPE, handler);
 		signal(SIGILL, handler);
