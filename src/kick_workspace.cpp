@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
@@ -95,8 +95,8 @@ void kick_workspace::to_gpu() {
 			for (int i = 0; i < ids.size(); i++) {
 				if (tree_map.find(ids[i]) == tree_map.end()) {
 					const tree_node* node = tree_get_node(ids[i]);
-					int index = next_index;
-					next_index += node->node_count;
+					int index = (next_index += node->node_count);
+					index -= node->node_count;
 					part_count += node->nparts();
 					add_tree_node(tree_map, ids[i], index, ids[i].proc);
 					tree_bases.insert(ids[i]);
@@ -217,7 +217,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 void kick_workspace::clear_buffers() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < clear_buffers_action > (c));
+		futs.push_back(hpx::async<clear_buffers_action>(c));
 	}
 	host_x = decltype(host_x)();
 	host_y = decltype(host_y)();

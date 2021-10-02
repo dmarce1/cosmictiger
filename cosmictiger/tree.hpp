@@ -85,7 +85,8 @@ struct tree_node {
 	bool source_leaf;
 	size_t node_count;
 	size_t active_nodes;
-	int depth;CUDA_EXPORT
+	int depth;
+	CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
 		return (multipole_pos*) &multi;
 	}
