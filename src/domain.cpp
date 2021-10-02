@@ -395,8 +395,6 @@ void domains_end() {
 		}
 		return false;
 	};
-	/** THIS SORT IS REQUIRED FOR DETERMINISM!!!*/
-	//PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
 	hpx::future<void> fut1;
 	hpx::future<void> fut2;
 	if (free_indices.size()) {
@@ -404,7 +402,6 @@ void domains_end() {
 	} else {
 		fut1 = hpx::make_ready_future();
 	}
-	/********************************************/
 	vector<particle> all_trans_particles;
 	vector<part_int> offsets(trans_particles.size());
 	part_int sz = 0;

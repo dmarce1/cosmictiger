@@ -43,15 +43,18 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define hpx_copy hpx::parallel::copy
 #define hpx_fill hpx::parallel::fill
+#define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority_critical)
+#define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority_normal)
+#define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority_low)
 #else
 #define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
 #define hpx_copy hpx::copy
 #define hpx_fill hpx::fill
-#endif
-
 #define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority::critical)
 #define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority::normal)
 #define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority::low)
+#endif
+
 
 const vector<hpx::id_type>& hpx_localities();
 const vector<hpx::id_type>& hpx_children();
