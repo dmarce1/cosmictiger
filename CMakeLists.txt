@@ -7,6 +7,7 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
+option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
 set(COSMICTIGER_WITH_ORDER "7" )
 if( COSMICTIGER_WITH_CUDA ) 
 	enable_language(CUDA)
@@ -152,13 +153,14 @@ add_library(hpx_lite
 
 add_executable( cosmictiger_lite ${cosmictiger_source_files} )
 
-#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+target_compile_definitions(cosmictiger_lite PUBLIC LONG_LONG_PART_INT=${COSMICTIGER_WITH_LONG_LONG_PART_INT})
 target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
 target_link_libraries(cosmictiger_lite PUBLIC boost_program_options mpi fftw3f gsl gslcblas chealpix hpx_lite hwloc silo )
 target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
 target_compile_features(cosmictiger_lite PUBLIC cxx_std_14)
 
-#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 target_compile_options(cosmictiger_lite PUBLIC "-DHPX_LITE" )
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger_lite PUBLIC cudart)
@@ -205,6 +207,7 @@ add_dependencies( cosmictiger generate_fmm_kernels )
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
+target_compile_definitions(cosmictiger PUBLIC LONG_LONG_PART_INT=${COSMICTIGER_WITH_LONG_LONG_PART_INT})
 target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
 add_executable(

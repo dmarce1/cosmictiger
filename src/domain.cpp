@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 constexpr bool verbose = true;
 
@@ -46,8 +46,7 @@ HPX_PLAIN_ACTION (domains_transmit_particles);
 HPX_PLAIN_ACTION (domains_transmit_boxes);
 
 static vector<part_int> free_indices;
-static vector<particle> trans_particles;
-static shared_mutex_type mutex;
+static vector<vector<particle>> trans_particles;
 static std::unordered_map<size_t, domain_t> boxes_by_key;
 
 static int find_particle_domain(const array<double, NDIM>& x, size_t key = 1);
@@ -110,7 +109,7 @@ range<double> domains_range(size_t key) {
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < domains_transmit_boxes_action > (c, boxes));
+		futs.push_back(hpx::async<domains_transmit_boxes_action>(c, boxes));
 	}
 	boxes_by_key = std::move(boxes);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -119,7 +118,7 @@ void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes) {
 void domains_init_rebounds() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < domains_init_rebounds_action > (c));
+		futs.push_back(hpx::async<domains_init_rebounds_action>(c));
 	}
 	local_domains.resize(1);
 	local_domains[0].box = unit_box<double>();
@@ -140,7 +139,7 @@ vector<size_t> domains_count_below(vector<double> bounds, vector<int> dims, int 
 			futs.push_back(hpx::async([i, &bounds, &dims, &counts]() {
 				//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
 					const auto rng = local_domains[i].part_range;
-					const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / particles_size(), (size_t) 1);
+					const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
 					vector<hpx::future<void>> futs;
 					const int xdim = dims[i];
 					const fixed32 xmid = bounds[i];
@@ -246,7 +245,7 @@ void domains_rebound() {
 			}
 			vector<hpx::future<vector<size_t>>>count_futs;
 			for (int i = 0; i < hpx_size(); i++) {
-				count_futs.push_back(hpx::async < domains_count_below_action > (hpx_localities()[i], bounds, dims, depth));
+				count_futs.push_back(hpx::async<domains_count_below_action>(hpx_localities()[i], bounds, dims, depth));
 			}
 			for (auto& f : count_futs) {
 				const auto count = f.get();
@@ -284,7 +283,7 @@ void domains_rebound() {
 		}
 		vector<hpx::future<void>> sort_futs;
 		for (int i = 0; i < hpx_size(); i++) {
-			sort_futs.push_back(hpx::async < domains_rebound_sort_action > (hpx_localities()[i], bounds, dims, depth));
+			sort_futs.push_back(hpx::async<domains_rebound_sort_action>(hpx_localities()[i], bounds, dims, depth));
 		}
 		hpx::wait_all(sort_futs.begin(), sort_futs.end());
 		new_domains.resize(0);
@@ -322,28 +321,16 @@ void domains_rebound() {
 }
 
 void domains_transmit_particles(vector<particle> parts) {
-//	PRINT("Receiving %li particles on %i\n", parts.size(), hpx_rank());
-	std::unique_lock<shared_mutex_type> ulock(mutex);
-	const part_int start = trans_particles.size();
-	const part_int stop = start + parts.size();
-	trans_particles.resize(stop);
-	ulock.unlock();
-	constexpr int chunk_size = 1024;
-	std::shared_lock<shared_mutex_type> slock(mutex);
-	for (int i = 0; i < parts.size(); i++) {
-		if (i % chunk_size == chunk_size - 1) {
-			slock.unlock();
-			slock.lock();
-		}
-		trans_particles[start + i] = parts[i];
-	}
+	static mutex_type mutex;
+	std::lock_guard<mutex_type> lock(mutex);
+	trans_particles.push_back(parts);
 }
 
 void domains_begin() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
-		futs.push_back(hpx::async < domains_begin_action > (c));
+		futs.push_back(hpx::async<domains_begin_action>(c));
 	}
 	const auto my_domain = domains_find_my_box();
 	free_indices.resize(0);
@@ -396,7 +383,7 @@ void domains_end() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
-		futs.push_back(hpx::async < domains_end_action > (c));
+		futs.push_back(hpx::async<domains_end_action>(c));
 	}
 	const auto particle_compare = [](particle a, particle b) {
 		for( part_int dim = 0; dim < NDIM; dim++) {
@@ -408,8 +395,6 @@ void domains_end() {
 		}
 		return false;
 	};
-	/** THIS SORT IS REQUIRED FOR DETERMINISM!!!*/
-	//PRINT("Processing %li particles on %i\n", trans_particles.size(), hpx_rank());
 	hpx::future<void> fut1;
 	hpx::future<void> fut2;
 	if (free_indices.size()) {
@@ -417,22 +402,44 @@ void domains_end() {
 	} else {
 		fut1 = hpx::make_ready_future();
 	}
-	/********************************************/
-	if (trans_particles.size()) {
-		fut2 = hpx::parallel::sort(PAR_EXECUTION_POLICY, trans_particles.begin(), trans_particles.end(), particle_compare);
+	vector<particle> all_trans_particles;
+	vector<part_int> offsets(trans_particles.size());
+	part_int sz = 0;
+	for (int i = 0; i < trans_particles.size(); i++) {
+		offsets[i] = sz;
+		sz += trans_particles[i].size();
+	}
+	all_trans_particles.resize(sz);
+	vector<hpx::future<void>> futs1;
+	const int nthreads = hpx_hardware_concurrency();
+	std::atomic<int> index(0);
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs1.push_back(hpx::async([&index, &all_trans_particles, &offsets]() {
+			int i;
+			while( (i = index++) < trans_particles.size() ) {
+				for( part_int j = 0; j < trans_particles[i].size(); j++) {
+					all_trans_particles[offsets[i] + j] = trans_particles[i][j];
+				}
+			}
+		}));
+	}
+	hpx::wait_all(futs1.begin(), futs1.end());
+	trans_particles = decltype(trans_particles)();
+	if (all_trans_particles.size()) {
+		fut2 = hpx::parallel::sort(PAR_EXECUTION_POLICY, all_trans_particles.begin(), all_trans_particles.end(), particle_compare);
 	} else {
 		fut2 = hpx::make_ready_future();
 	}
 	fut1.get();
 	fut2.get();
-	if (free_indices.size() < trans_particles.size()) {
-		const part_int diff = trans_particles.size() - free_indices.size();
+	if (free_indices.size() < all_trans_particles.size()) {
+		const part_int diff = all_trans_particles.size() - free_indices.size();
 		for (part_int i = 0; i < diff; i++) {
 			free_indices.push_back(particles_size() + i);
 		}
 		particles_resize(particles_size() + diff);
 	} else {
-		while (free_indices.size() > trans_particles.size()) {
+		while (free_indices.size() > all_trans_particles.size()) {
 			const auto p = particles_get_particle(particles_size() - 1);
 			particles_set_particle(p, free_indices.back());
 			free_indices.pop_back();
@@ -441,19 +448,17 @@ void domains_end() {
 
 	}
 	//PRINT("unloading particles on %i\n", hpx_rank());
-	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc]() {
+		futs.push_back(hpx::async([nthreads, proc, &all_trans_particles]() {
 			const part_int begin = (size_t) proc * free_indices.size() / nthreads;
 			const part_int end = (size_t) (proc+1) * free_indices.size() / nthreads;
 			for( part_int i = begin; i < end; i++) {
-				particles_set_particle(trans_particles[i],free_indices[i]);
+				particles_set_particle(all_trans_particles[i],free_indices[i]);
 			}
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	//PRINT("Done on %i\n", hpx_rank());
-	trans_particles = decltype(trans_particles)();
 	free_indices = decltype(free_indices)();
 #ifdef DOMAINS_CHECK
 	domains_check();
