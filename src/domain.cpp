@@ -350,7 +350,7 @@ void domains_begin() {
 						auto& send = sends[rank];
 						send.push_back(particles_get_particle(i));
 						if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-							PRINT( "%i sending %i to %i\n", hpx_rank(), send.size(), rank);
+//							PRINT( "%i sending %i to %i\n", hpx_rank(), send.size(), rank);
 							futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 						}
 						my_free_indices.push_back(i);
@@ -360,7 +360,7 @@ void domains_begin() {
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
-               PRINT( "--1  %i sending %i to %i\n", hpx_rank(), i->second.size(), i->first);
+  //             PRINT( "--1  %i sending %i to %i\n", hpx_rank(), i->second.size(), i->first);
 					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 				}
 			}
