@@ -164,12 +164,63 @@ bool process_options(int argc, char *argv[]) {
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
 	PRINT("Box size = %e\n", opts.code_to_cm / constants::mpc_to_cm);
-	SHOW_STRING(config_file);
+
+
+
+	SHOW(check_freq);
+	SHOW(code_to_cm);
+	SHOW(code_to_g);
+	SHOW(code_to_s);
+	SHOW(cuda);
+	SHOW(do_lc);
+	SHOW(do_groups);
+	SHOW(do_power);
+	SHOW(do_slice);
+	SHOW(do_tracers);
+	SHOW(do_views);
+	SHOW(eta);
+	SHOW(GM);
 	SHOW(hsoft);
+	SHOW(hubble);
+	SHOW(lc_b);
+	SHOW(lc_min_group);
+	SHOW(lc_map_size);
+	SHOW(link_len);
+	SHOW(max_iter);
+	SHOW(min_group);
+	SHOW(omega_b);
+	SHOW(omega_c);
+	SHOW(omega_gam);
+	SHOW(omega_m);
+	SHOW(omega_nu);
+	SHOW(omega_r);
+	SHOW(part_cache_line_size);
 	SHOW(parts_dim);
-	SHOW_STRING(save_force);
-	SHOW_STRING(test);
+	SHOW(read_check);
+	SHOW(save_force);
+	SHOW(scale_dtlim);
+	SHOW(sigma8);
+	SHOW(slice_res);
+	SHOW(slice_size);
+	SHOW(Theta);
+	SHOW(theta);
+	SHOW(tracer_count);
 	SHOW(tree_cache_line_size);
+	SHOW(twolpt);
+	SHOW(use_power_file);
+	SHOW(view_size);
+	SHOW(z0);
+	SHOW(z1);
+
+
+
+
+
+	SHOW(ns);
+	SHOW(Y);
+	SHOW(Neff);
+	SHOW_STRING(config_file);
+	SHOW_STRING(test);
 #ifndef USE_CUDA
 	if (opts.cuda) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
