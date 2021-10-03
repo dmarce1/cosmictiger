@@ -49,7 +49,7 @@ static vector<part_int> free_indices;
 static vector<vector<particle>> trans_particles;
 static std::unordered_map<size_t, domain_t> boxes_by_key;
 
-static int find_particle_domain(const array<double, NDIM>& x, size_t key = 1);
+static int find_particle_domain(const array<double, NDIM>& x, size_t key = 1, int depth = 0);
 static void domains_check();
 static vector<domain_local> local_domains;
 
@@ -136,33 +136,34 @@ vector<size_t> domains_count_below(vector<double> bounds, int depth) {
 	vector<hpx::future<void>> futs;
 	for (int i = 0; i < local_domains.size(); i++) {
 		if (local_domains[i].depth == depth) {
-			futs.push_back(hpx::async([i, &bounds, depth, &counts]() {
-				//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
-					const auto rng = local_domains[i].part_range;
-					const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
-					vector<hpx::future<void>> futs;
-					const int xdim = depth % NDIM;
-					const fixed32 xmid = bounds[i];
-					std::atomic<size_t> count(0);
-					const auto func = [nthreads,rng, xdim, xmid, &count, &counts](int proc) {
-						const size_t begin = rng.first + (size_t) proc * (rng.second-rng.first) / nthreads;
-						const size_t end = rng.first + (size_t) (proc+1) * (rng.second-rng.first) / nthreads;
-						size_t this_count = 0;
-						for( size_t i = begin; i < end; i++) {
-							if( particles_pos(xdim,i) < xmid) {
-								this_count++;
-							}
-						}
-						count += this_count;
-					};
+			futs.push_back(
+					hpx::async([i, &bounds, depth, &counts]() {
+						//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
+							const auto rng = local_domains[i].part_range;
+							const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
+							vector<hpx::future<void>> futs;
+							const int xdim = depth % NDIM;
+							const fixed32 xmid = bounds[i];
+							std::atomic<size_t> count(0);
+							const auto func = [nthreads,rng, xdim, xmid, &count, &counts](int proc) {
+								const size_t begin = rng.first + (size_t) proc * (rng.second-rng.first) / nthreads;
+								const size_t end = rng.first + (size_t) (proc+1) * (rng.second-rng.first) / nthreads;
+								size_t this_count = 0;
+								for( size_t i = begin; i < end; i++) {
+									if( particles_pos(xdim,i) < xmid) {
+										this_count++;
+									}
+								}
+								count += this_count;
+							};
 
-					for( int proc = 1; proc < nthreads; proc++) {
-						futs.push_back(hpx::async(func, proc));
-					}
-					func(0);
-					hpx::wait_all(futs.begin(), futs.end());
-					counts[i] = count;
-				}));
+							for( int proc = 1; proc < nthreads; proc++) {
+								futs.push_back(hpx::async(func, proc));
+							}
+							func(0);
+							hpx::wait_all(futs.begin(), futs.end());
+							counts[i] = count;
+						}));
 		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
@@ -351,6 +352,7 @@ void domains_begin() {
 						auto& send = sends[rank];
 						send.push_back(particles_get_particle(i));
 						if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
+							PRINT( "%i sending %i to %i\n", hpx_rank(), send.size(), rank);
 							futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 						}
 						my_free_indices.push_back(i);
@@ -360,6 +362,7 @@ void domains_begin() {
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
+               PRINT( "--1  %i sending %i to %i\n", hpx_rank(), i->second.size(), i->first);
 					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 				}
 			}
@@ -492,15 +495,15 @@ static void domains_check() {
 	}
 }
 
-static int find_particle_domain(const array<double, NDIM>& x, size_t key) {
+static int find_particle_domain(const array<double, NDIM>& x, size_t key, int depth) {
 	const auto& entry = boxes_by_key[key];
 	if (entry.rank == -1) {
-		const int xdim = entry.box.longest_dim();
+		const int xdim = depth % NDIM;
 		key <<= 1;
 		if (x[xdim] >= entry.midx) {
 			key += 1;
 		}
-		return find_particle_domain(x, key);
+		return find_particle_domain(x, key, depth + 1);
 	} else {
 		return entry.rank;
 	}
