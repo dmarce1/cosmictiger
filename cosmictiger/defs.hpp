@@ -74,7 +74,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define EWALD_REAL_CUTOFF2 (2.6*2.6)
 #define KICK_OVERSUBSCRIPTION 8
 #define MAX_DEPTH 64
-#define MAX_PARTICLES_PER_PARCEL (16*1024*1024)
+#define MAX_PARTICLES_PER_PARCEL (8*1024*1024)
 #define MAX_RUNG 64
 #define MIN_CP_PARTS 25
 #define MIN_KICK_THREAD_PARTS (1024)

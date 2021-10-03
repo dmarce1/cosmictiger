@@ -312,7 +312,7 @@ void worker::join() {
 	thread.join();
 }
 
-#define STACK_ALLOCATOR
+//#define STACK_ALLOCATOR
 static void* stacks_alloc() {
 	void* ptr;
 #ifdef STACK_ALLOCATOR
