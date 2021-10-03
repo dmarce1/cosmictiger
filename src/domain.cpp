@@ -239,7 +239,6 @@ void domains_rebound() {
 			vector<double> bounds;
 			for (int i = 0; i < domains.size(); i++) {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-				const int xdim = domains[i].box.longest_dim();
 				bounds.push_back(midx);
 			}
 			vector<hpx::future<vector<size_t>>>count_futs;
@@ -270,7 +269,6 @@ void domains_rebound() {
 		for (int i = 0; i < domains.size(); i++) {
 			if (domains[i].proc_range.second - domains[i].proc_range.first) {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
-				const int xdim = domains[i].box.longest_dim();
 				boxes_by_key[domains[i].key].midx = midx;
 				bounds.push_back(midx);
 			} else {
@@ -291,8 +289,8 @@ void domains_rebound() {
 				right = domains[i];
 				left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
 				left.proc_range.second = right.proc_range.first = (domains[i].proc_range.first + domains[i].proc_range.second) / 2;
-				const int leftdim = left.box.longest_dim();
-				const int rightdim = right.box.longest_dim();
+				const int leftdim = (depth + 1) % NDIM;
+				const int rightdim = (depth + 1) % NDIM;
 				left.total_count = counts[i];
 				right.total_count = domains[i].total_count - counts[i];
 				left.midhi = left.box.end[leftdim];
