@@ -225,7 +225,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	cudaStream_t stream;
 #endif
 	if (local_root) {
-//		PRINT("Sorting on %i\n", hpx_rank());
+		PRINT("Sorting on %i at %li\n", hpx_rank(), time(NULL));
 		part_range.first = 0;
 		part_range.second = particles_size();
 #ifdef USE_CUDA

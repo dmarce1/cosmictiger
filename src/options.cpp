@@ -79,7 +79,7 @@ bool process_options(int argc, char *argv[]) {
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
-	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(false), "read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
+	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true), "read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
 	("scale_dtlim", po::value<double>(&(opts.scale_dtlim))->default_value(0.01), "maximum change in scale factor time-step limit") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
