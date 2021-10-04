@@ -24,6 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/tree.hpp>
 
 #include <shared_mutex>
@@ -184,6 +185,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	if (!threadme) {
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
+//		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
 		rc = hpx::async < tree_create_action > (HPX_PRIORITY_HI, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
@@ -212,6 +214,7 @@ static void tree_allocate_nodes() {
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
+	stack_trace_activate();
 	const double h = get_options().hsoft;
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	tree_create_return rc;
@@ -225,7 +228,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	cudaStream_t stream;
 #endif
 	if (local_root) {
-		PRINT("Sorting on %i at %li\n", hpx_rank(), time(NULL));
+//		PRINT("Sorting on %i at %li\n", hpx_rank(), time(NULL));
 		part_range.first = 0;
 		part_range.second = particles_size();
 #ifdef USE_CUDA
