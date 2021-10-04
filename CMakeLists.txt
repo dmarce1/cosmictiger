@@ -234,13 +234,13 @@ target_include_directories(lc_stats PUBLIC ${PROJECT_SOURCE_DIR})
 
 
 add_hpx_executable(
- 	groups2silo
+ 	groups2halofunc
    SOURCES
  	src/assert.cpp
  	src/hpx.cpp
- 	src/groups2silo.cpp
+ 	src/groups2halofunc.cpp
  	src/group_entry.cpp
  )
 
-target_link_libraries(groups2silo PUBLIC silo boost_program_options)
-target_include_directories(groups2silo PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(groups2halofunc PUBLIC boost_program_options)
+target_include_directories(groups2halofunc PUBLIC ${PROJECT_SOURCE_DIR})
