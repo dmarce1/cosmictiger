@@ -210,7 +210,7 @@ size_t cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector
 		}
 		const auto range = self_ptr->part_range;
 		array<simd_int, NDIM> X;
-		for (int i = range.first; i < range.second; i++) {
+		for (part_int i = range.first; i < range.second; i++) {
 			if (particles_rung(i) >= min_rung) {
 				expansion2<simd_float> L;
 				L(0, 0, 0) = simd_float(0.0f);
@@ -290,7 +290,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			const auto range = self_ptr->part_range;
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
-			for (int i = range.first; i < range.second; i++) {
+			for (part_int i = range.first; i < range.second; i++) {
 				if (particles_rung(i) >= min_rung) {
 					simd_float gx(0.0);
 					simd_float gy(0.0);
