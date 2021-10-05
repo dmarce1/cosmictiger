@@ -1,24 +1,25 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/output.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/constants.hpp>
 #include <cosmictiger/math.hpp>
 
 #include <silo.h>
@@ -64,7 +65,7 @@ void output_tracers(int number) {
 	output_particles(filename, particles_get_tracers());
 }
 
-void output_slice(int number) {
+void output_slice(int number, double time) {
 	constexpr int ndim = 2;
 	auto pixels = output_get_slice();
 	const int res = get_options().slice_res;
@@ -72,15 +73,27 @@ void output_slice(int number) {
 	DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Data", DB_PDB);
 	vector<float> x(res + 1);
 	vector<float> y(res + 1);
+	const float hubble = get_options().hubble;
+	const float c0 = get_options().code_to_cm * hubble / constants::mpc_to_cm;
 	for (int i = 0; i < res + 1; i++) {
-		y[i] = x[i] = (float) i / res;
+		y[i] = x[i] = (float) i / res * c0;
 	}
 	const char* coordnames[] = { "x", "y" };
 	const float* coords[] = { x.data(), y.data() };
 	const int dims1[] = { res + 1, res + 1 };
 	const int dims2[] = { res, res };
-	DBPutQuadmesh(db, "mesh", coordnames, coords, dims1, ndim, DB_FLOAT, DB_COLLINEAR, NULL);
-	DBPutQuadvar1(db, "intensity", "mesh", pixels.data(), dims2, ndim, NULL, 0, DB_FLOAT, DB_ZONECENT, NULL);
+	auto optlist = DBMakeOptlist(5);
+	float ftime = time;
+	char label[6];
+	strcpy(label, "Mpc/h");
+	DBAddOption(optlist, DBOPT_CYCLE, &number);
+	DBAddOption(optlist, DBOPT_TIME, &ftime);
+	DBAddOption(optlist, DBOPT_DTIME, &time);
+	DBAddOption(optlist, DBOPT_XLABEL, label);
+	DBAddOption(optlist, DBOPT_YLABEL, label);
+	DBPutQuadmesh(db, "mesh", coordnames, coords, dims1, ndim, DB_FLOAT, DB_COLLINEAR, optlist);
+	DBPutQuadvar1(db, "intensity", "mesh", pixels.data(), dims2, ndim, NULL, 0, DB_FLOAT, DB_ZONECENT, optlist);
+	DBFreeOptlist(optlist);
 	DBClose(db);
 }
 

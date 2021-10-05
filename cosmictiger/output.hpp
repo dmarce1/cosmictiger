@@ -22,6 +22,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define OUTPUT_HPP_
 
 void output_tracers(int number);
-void output_slice(int number);
+void output_slice(int number, double time);
 
 #endif /* OUTPUT_HPP_ */

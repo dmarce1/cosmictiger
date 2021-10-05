@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/safe_io.hpp>
 
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
 			FREAD(&value, sizeof(float), 1, fp);
 			healpix_data[pix] += value;
 		}
-		if( fread(&cycle, sizeof(int), 1, fp) == 0 ) {
+		if (fread(&cycle, sizeof(int), 1, fp) == 0) {
 			cycle = 0;
 			time = 0.0;
 		} else {
@@ -153,12 +153,12 @@ int main(int argc, char **argv) {
 	}
 
 	auto db = DBCreate(outfile.c_str(), DB_CLOBBER, DB_LOCAL, NULL, DB_PDB);
-	auto optlist = DBMakeOptlist (3);
+	auto optlist = DBMakeOptlist(3);
 	float ftime = time;
 	DBAddOption(optlist, DBOPT_CYCLE, &cycle);
 	DBAddOption(optlist, DBOPT_TIME, &ftime);
 	DBAddOption(optlist, DBOPT_DTIME, &time);
-		std::vector<float> x, y;
+	std::vector<float> x, y;
 	for (int ix = -2 * res; ix <= 2 * res; ix++) {
 		const double x0 = double(ix) / double(res);
 		x.push_back(x0);

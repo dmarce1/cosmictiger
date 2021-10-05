@@ -331,7 +331,7 @@ void driver() {
 				output_tracers(number);
 			}
 			if (get_options().do_slice) {
-				output_slice(number);
+				output_slice(number, years);
 			}
 			if (get_options().do_views) {
 				timer tm;
