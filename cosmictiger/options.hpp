@@ -75,6 +75,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & tpwr;
 		arc & cuda;
 		arc & do_lc;
 		arc & save_force;
