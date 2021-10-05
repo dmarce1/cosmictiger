@@ -914,7 +914,7 @@ void lc_init(double tau, double tau_max_) {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt,
+int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t0, float t1,
 		vector<lc_particle>& this_part_buffer) {
 	static simd_float8 images[NDIM] =
 			{ simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
@@ -922,8 +922,8 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 	const simd_float8 simd_c0 = simd_float8(tau_max_inv);
 	array<simd_float8, NDIM> X0;
 	array<simd_float8, NDIM> X1;
-	const simd_float8 simd_tau0 = simd_float8(t);
-	const simd_float8 simd_tau1 = simd_float8(t + dt);
+	const simd_float8 simd_tau0 = simd_float8(t0);
+	const simd_float8 simd_tau1 = simd_float8(t1);
 	simd_float8 dist0;
 	simd_float8 dist1;
 	int rc = 0;
@@ -949,8 +949,8 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 				y0 = X0[YDIM][ci];
 				z0 = X0[ZDIM][ci];
 				const double ti = (i0 + 1) * tau_max;
-				const double sqrtauimtau0 = sqr(ti - t);
-				const double tau0mtaui = t - ti;
+				const double sqrtauimtau0 = sqr(ti - t0);
+				const double tau0mtaui = t0 - ti;
 				const double u2 = sqr(vx, vy, vz);                                    // 5
 				const double x2 = sqr(x0, y0, z0);                                       // 5
 				const double udotx = vx * x0 + vy * y0 + vz * z0;               // 5

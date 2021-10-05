@@ -69,6 +69,7 @@ struct options {
 	double ns;
 	double Y;
 	double Neff;
+	double tpwr;
 	std::string config_file;
 	std::string test;
 

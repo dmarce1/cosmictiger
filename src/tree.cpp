@@ -423,7 +423,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const simd_float _2float = fixed2float;
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
-			for (int j = i; j < i + SIMD_FLOAT_SIZE; j++) {
+			for (part_int j = i; j < i + SIMD_FLOAT_SIZE; j++) {
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, j).raw();
 				}

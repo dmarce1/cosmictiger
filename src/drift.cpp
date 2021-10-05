@@ -1,22 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/drift.hpp>
@@ -29,19 +28,21 @@ HPX_PLAIN_ACTION (drift);
 
 #define CHUNK_SIZE (1024*1024)
 
-drift_return drift(double scale, double t, double dt, double t_max) {
+drift_return drift(double scale, double dt, double tau0, double tau1, double tau_max) {
 	particles_memadvise_cpu();
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
-		rfuts.push_back(hpx::async < drift_action > (HPX_PRIORITY_HI, c, scale, t, dt, t_max));
+		rfuts.push_back(hpx::async<drift_action>(HPX_PRIORITY_HI, c, scale, dt, tau0, tau1, tau_max));
 	}
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
-	const auto func = [dt, scale, t, &next, t_max](int proc, int nthreads) {
+	const auto func = [dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
 		vector<lc_particle> this_part_buffer;
-		const double factor = 1.0 / scale;
+		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
+		const double tpwr = get_options().tpwr;
+		const double factor = pow(scale, tpwr - 1.0);
 		drift_return this_dr;
 		this_dr.kin = 0.0;
 		this_dr.momx = 0.0;
@@ -64,7 +65,7 @@ drift_return drift(double scale, double t, double dt, double t_max) {
 			CUDA_CHECK(cudaStreamDestroy(stream));
 #endif
 			bool do_lc = get_options().do_lc;
-			do_lc = do_lc && (t_max - (t+dt) <= 1.0);
+			do_lc = do_lc && (tau_max - tau1 <= 1.0);
 			for( part_int i = begin; i < end; i++) {
 				double x = particles_pos(XDIM,i).to_double();
 				double y = particles_pos(YDIM,i).to_double();
@@ -76,18 +77,18 @@ drift_return drift(double scale, double t, double dt, double t_max) {
 				this_dr.momx += vx;
 				this_dr.momy += vy;
 				this_dr.momz += vz;
-				vx *= factor;
-				vy *= factor;
-				vz *= factor;
+				vx *= ainv;
+				vy *= ainv;
+				vz *= ainv;
 				double x0, y0, z0;
 				x0 = x;
 				y0 = y;
 				z0 = z;
-				x += double(vx*dt);
-				y += double(vy*dt);
-				z += double(vz*dt);
+				x += double(vx*dt*factor);
+				y += double(vy*dt*factor);
+				z += double(vz*dt*factor);
 				if( do_lc) {
-					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, t, dt, this_part_buffer);
+					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
 				}
 				constrain_range(x);
 				constrain_range(y);
@@ -95,7 +96,7 @@ drift_return drift(double scale, double t, double dt, double t_max) {
 				particles_pos(XDIM,i) = x;
 				particles_pos(YDIM,i) = y;
 				particles_pos(ZDIM,i) = z;
-				this_dr.flops += 31;
+				this_dr.flops += 34;
 			}
 			if( do_lc) {
 				lc_add_parts(std::move(this_part_buffer));

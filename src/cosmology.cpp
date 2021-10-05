@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -43,24 +43,6 @@ double cosmos_dadt(double a) {
 
 double cosmos_dadtau(double a) {
 	return a * cosmos_dadt(a);
-}
-
-double cosmos_ainv(double a0, double a1) {
-	double a = a0;
-	double ainv = 0.0;
-	const int N = 16 * 1024;
-	const double da = (a1 - a0) / N;
-	double t = 0.0;
-	for (int i = 0; i < N; i++) {
-		double dadt = cosmos_dadt(a);
-		ainv += 0.5 * da / (a * dadt);
-		t += 0.5 * da / dadt;
-		a += da;
-		dadt = cosmos_dadt(a);
-		ainv += 0.5 * da / (a * dadt);
-		t += 0.5 * da / dadt;
-	}
-	return ainv / t;
 }
 
 double cosmos_time(double a0, double a1) {
@@ -98,6 +80,27 @@ double cosmos_conformal_time(double a0, double a1) {
 		loga = loga0 + dloga * (i + 1);
 		a = exp(loga);
 		dadt = cosmos_dadtau(a);
+		t += 0.5 * a / dadt * dloga;
+	}
+	return t;
+}
+
+double cosmos_cosmictiger_time(double a0, double a1) {
+	double a = a0;
+	double t = 0.0;
+	const int N = 1024 * 1024;
+	const double loga0 = log(a0);
+	const double loga1 = log(a1);
+	const double dloga = (loga1 - loga0) / N;
+	double loga = loga0;
+	a = exp(loga);
+	const double tpwr = get_options().tpwr;
+	double dadt = pow(a, tpwr) * cosmos_dadt(a);
+	for (int i = 0; i < N; i++) {
+		t += 0.5 * a / dadt * dloga;
+		loga = loga0 + dloga * (i + 1);
+		a = exp(loga);
+		dadt = pow(a, tpwr) * cosmos_dadt(a);
 		t += 0.5 * a / dadt * dloga;
 	}
 	return t;

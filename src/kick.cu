@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
@@ -91,7 +91,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	const auto& sink_z = shmem.sink_z;
 	const auto& read_rungs = shmem.rungs;
 	const float log2ft0 = log2f(params.t0);
-	const float tfactor = params.eta * sqrtf(params.a * params.h);
+	const auto ffac = pow(params.a, params.tpwr - 1.0);
+	const auto tfac = pow(params.a, 3.0 - 2.0 * params.tpwr);
+	const float tfactor = params.eta * sqrtf(tfac * params.h);
 	int max_rung = 0;
 	expansion2<float> L2;
 	float vx;
@@ -136,9 +138,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (!params.first_call) {
-			vx = fmaf(gx[i], dt, vx);
-			vy = fmaf(gy[i], dt, vy);
-			vz = fmaf(gz[i], dt, vz);
+			vx = fmaf(gx[i], dt * ffac, vx);
+			vy = fmaf(gy[i], dt * ffac, vy);
+			vz = fmaf(gz[i], dt * ffac, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
@@ -151,9 +153,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		ASSERT(rung >= 0);
 		ASSERT(rung < MAX_RUNG);
 		dt = 0.5f * rung_dt[rung] * params.t0;
-		vx = fmaf(gx[i], dt, vx);
-		vy = fmaf(gy[i], dt, vy);
-		vz = fmaf(gz[i], dt, vz);
+		vx = fmaf(gx[i], dt * ffac, vx);
+		vy = fmaf(gy[i], dt * ffac, vy);
+		vz = fmaf(gz[i], dt * ffac, vz);
 		write_rungs[snki] = rung;
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
@@ -604,7 +606,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 }
 
 vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
-		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner, std::function<void()> release_outer) {
+		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
+		std::function<void()> release_outer) {
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -737,8 +740,6 @@ int kick_block_count() {
 	return nblocks;
 
 }
-
-
 
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
 	size_t mem = 0;

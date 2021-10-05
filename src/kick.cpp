@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 constexpr bool verbose = true;
 #include <cosmictiger/fast_future.hpp>
@@ -104,7 +104,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		}
 		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace));
 	} else if (remote) {
-		rc = hpx::async < kick_action > (HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
+		rc = hpx::async<kick_action>(HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
 		const auto thread_priority = all_local ? HPX_PRIORITY_LO : HPX_PRIORITY_NORMAL;
 		rc = hpx::async(thread_priority, [params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
@@ -335,6 +335,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;
+		const auto ffac = pow(params.a, params.tpwr - 1.0);
+		const auto tfac = pow(params.a, 3.0 - 2.0 * params.tpwr);
 		for (part_int i = rng.first; i < rng.second; i++) {
 			if (particles_rung(i) >= params.min_rung) {
 				const part_int j = i - rng.first;
@@ -363,12 +365,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				auto& rung = particles_rung(i);
 				auto dt = 0.5f * rung_dt[rung] * params.t0;
 				if (!params.first_call) {
-					vx = fmaf(forces.gx[j], dt, vx);
-					vy = fmaf(forces.gy[j], dt, vy);
-					vz = fmaf(forces.gz[j], dt, vz);
+					vx = fmaf(forces.gx[j] * ffac, dt, vx);
+					vy = fmaf(forces.gy[j] * ffac, dt, vy);
+					vz = fmaf(forces.gz[j] * ffac, dt, vz);
 				}
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				const float factor = eta * sqrtf(params.a * hfloat);
+				const float factor = eta * sqrtf(tfac * hfloat);
 				dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
 				dt = std::min(dt, params.dt_max);
 				rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
@@ -378,9 +380,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				} else {
 					dt = 0.5f * rung_dt[rung] * params.t0;
 				}
-				vx = fmaf(forces.gx[j], dt, vx);
-				vy = fmaf(forces.gy[j], dt, vy);
-				vz = fmaf(forces.gz[j], dt, vz);
+				vx = fmaf(forces.gx[j] * ffac, dt, vx);
+				vy = fmaf(forces.gy[j] * ffac, dt, vy);
+				vz = fmaf(forces.gz[j] * ffac, dt, vz);
 				kr.pot += forces.phi[j];
 				kr.fx += forces.gx[j];
 				kr.fy += forces.gy[j];

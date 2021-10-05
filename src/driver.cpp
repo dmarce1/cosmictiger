@@ -141,6 +141,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
+	kparams.tpwr = get_options().tpwr;
 	kparams.dt_max = dt_max;
 	kparams.node_load = flops_per_node / flops_per_particle;
 	kparams.gpu = true;
@@ -206,6 +207,36 @@ void do_power_spectrum(int num, double a) {
 	fclose(fp);
 }
 
+void output_time_file() {
+	const double a0 = 1.0 / (1.0 + get_options().z0);
+	const double tau_max = cosmos_conformal_time(a0, 1.0);
+	double a = a0;
+	int M = 100;
+	int N = 64;
+	const double dtau = tau_max / (M * N);
+	double tau = cosmos_conformal_time(a0 * 1.0e-6, a0);
+	double t = cosmos_time(a0 * 1.0e-6, a0);
+	double z;
+	FILE* fp = fopen("time.txt", "wt");
+	if (fp == NULL) {
+		THROW_ERROR("Unable to open time.txt for reading\n");
+	}
+	fprintf(fp, "%4s %13s %13s %13s %13s\n", "step", "real yrs", "conformal yrs", "scale", "redshift");
+	for (int i = 0; i <= M; i++) {
+		z = 1.0 / a - 1.0;
+		const double c0 = get_options().code_to_s / constants::spyr;
+		fprintf(fp, "%4i %13.4e %13.4e %13.4e %13.4e\n", i, t * c0, tau * c0, a, z);
+		for (int j = 0; j < N; j++) {
+			const double dadt1 = cosmos_dadtau(a);
+			const double dadt2 = cosmos_dadtau(a + dadt1 * dtau);
+			t += 0.5 * (2.0 * a + dadt1 * dtau) * dtau;
+			a += 0.5 * (dadt1 + dadt2) * dtau;
+			tau += dtau;
+		}
+	}
+	fclose(fp);
+}
+
 void driver() {
 	timer total_time;
 	total_time.start();
@@ -218,13 +249,14 @@ void driver() {
 	if (get_options().read_check) {
 		params = read_checkpoint();
 	} else {
+		output_time_file();
 		initialize(get_options().z0);
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
 		domains_rebound();
 		params.flops = 0;
-		params.tau_max = cosmos_conformal_time(a0, 1.0);
+		params.tau_max = cosmos_cosmictiger_time(a0, 1.0);
 		params.tau = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;
@@ -233,7 +265,7 @@ void driver() {
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
-		dr = drift(a0, 0.0, 0.0, 0.0);
+		dr = drift(a0, 0.0, 0.0, 0.0, 0.0);
 
 	}
 	PRINT("ekin0 = %e\n", dr.kin);
@@ -277,6 +309,7 @@ void driver() {
 			lc_parts2groups(a, link_len);
 		}
 	};
+	const auto tpwr = get_options().tpwr;
 	while (1.0 / a > get_options().z1 + 1.0) {
 		//	do_groups(tau / t0 + 1e-6, a);
 		tmr.stop();
@@ -336,7 +369,7 @@ void driver() {
 		}
 		last_theta = theta;
 		PRINT("Kicking\n");
-		const double dt_max = get_options().scale_dtlim * a / cosmos_dadtau(a);
+		const double dt_max = get_options().scale_dtlim * pow(a, 1 - tpwr) / cosmos_dadt(a);
 		auto tmp = kick_step(minrung, a, t0, dt_max, theta, tau == 0.0, full_eval);
 		kick_return kr = tmp.first;
 		tree_create_return sr = tmp.second;
@@ -352,17 +385,21 @@ void driver() {
 			}
 		}
 		dt = t0 / (1 << kr.max_rung);
-		const double dadt1 = cosmos_dadtau(a);
+		const double dadt1 = pow(a, tpwr) * cosmos_dadt(a);
 		const double a1 = a;
 		a += dadt1 * dt;
-		const double dadt2 = cosmos_dadtau(a);
+		const double dadt2 = pow(a, tpwr) * cosmos_dadt(a);
 		a += 0.5 * (dadt2 - dadt1) * dt;
-		const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
-		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
+		const double dyears = pow(0.5 * (a1 + a), tpwr) * dt * get_options().code_to_s / constants::spyr;
+		const double a2 = pow(2.0 / (1.0 / pow(a, 1 + tpwr) + 1.0 / pow(a1, 1 + tpwr)), 1.0 / (1.0 + tpwr));
+		PRINT("%e %e\n", a1, a);
 		timer dtm;
 		dtm.start();
 		PRINT("Drift\n");
-		dr = drift(a2, tau, dt, tau_max);
+		const double cnfl1 = cosmos_conformal_time(a0 * 1.0e-6, a1);
+		const double cnfl2 = cosmos_conformal_time(a0 * 1.0e-6, a);
+		const double cnfl3 = cosmos_conformal_time(a0 * 1.0e-6, 1.0);
+		dr = drift(a2, dt, cnfl1, cnfl2, cnfl3);
 		if (get_options().do_lc) {
 			check_lc(false);
 		}
@@ -440,7 +477,7 @@ bool dir_exists(const char *path) {
 void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
-		std::string  command;
+		std::string command;
 		if (dir_exists("checkpoint.hello")) {
 			if (dir_exists("checkpoint.goodbye")) {
 				command = "rm -r checkpoint.goodbye\n";
@@ -460,7 +497,7 @@ void write_checkpoint(driver_params params) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < write_checkpoint_action > (c, params));
+		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
 	}
 //	futs.push_back(hpx::threads::run_as_os_thread([&]() {
 	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
@@ -490,7 +527,7 @@ driver_params read_checkpoint() {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < read_checkpoint_action > (c));
+		futs.push_back(hpx::async<read_checkpoint_action>(c));
 	}
 	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "rb");
