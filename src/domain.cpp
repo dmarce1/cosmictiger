@@ -472,8 +472,8 @@ static void domains_check() {
 	vector<hpx::future<void>> futs;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&fail,my_domain]() {
-			const int begin = size_t(proc) * particles_size() / nthreads;
-			const int end = size_t(proc + 1) * particles_size() / nthreads;
+			const part_int begin = size_t(proc) * particles_size() / nthreads;
+			const part_int end = size_t(proc + 1) * particles_size() / nthreads;
 			for (part_int i = begin; i < end; i++) {
 				array<double, NDIM> x;
 				for (int dim = 0; dim < NDIM; dim++) {
