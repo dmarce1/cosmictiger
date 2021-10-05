@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 constexpr bool verbose = true;
 #include <cosmictiger/constants.hpp>
@@ -31,8 +31,23 @@ constexpr bool verbose = true;
 #include <iostream>
 #include <fstream>
 
-#define SHOW( opt ) PRINT( "%s = %e\n",  #opt, (double) opts.opt)
-#define SHOW_STRING( opt ) std::cout << std::string( #opt ) << " = " << opts.opt << '\n';
+#define SHOW( opt ) show(#opt, opts.opt)
+
+void show(const char* name, bool opt) {
+	PRINT("%-20s: %c\n", name, opt ? 'T' : 'F');
+}
+
+void show(const char* name, int opt) {
+	PRINT("%-20s: %i\n", name, opt);
+}
+
+void show(const char* name, double opt) {
+	PRINT("%-20s: %e\n", name, opt);
+}
+
+void show(const char* name, std::string opt) {
+	PRINT("%-20s: %e\n", name, opt.c_str());
+}
 
 options global_opts;
 
@@ -45,7 +60,7 @@ const options& get_options() {
 void set_options(const options& opts) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < set_options_action > (c, opts));
+		futs.push_back(hpx::async<set_options_action>(c, opts));
 	}
 	global_opts = opts;
 	hpx::wait_all(futs.begin(), futs.end());
@@ -64,13 +79,15 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                 //
 	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file") //
-	("read_check", po::value<bool>(&(opts.read_check))->default_value(false), "read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)") //
+	("read_check", po::value<bool>(&(opts.read_check))->default_value(false),
+			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)") //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
 #else
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA (not enabled for this build)") //
 #endif
-	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600), "time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
+	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600),
+			"time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
@@ -79,7 +96,8 @@ bool process_options(int argc, char *argv[]) {
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
-	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true), "read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
+	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
+			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
 	("scale_dtlim", po::value<double>(&(opts.scale_dtlim))->default_value(0.01), "maximum change in scale factor time-step limit") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
@@ -95,15 +113,13 @@ bool process_options(int argc, char *argv[]) {
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
-	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255/2.73), "") //
+	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255 / 2.73), "") //
 	("Y", po::value<double>(&(opts.Y))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8120), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 
 			;
-
-
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, command_opts), vm);
@@ -131,7 +147,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 #ifdef USE_CUDA
 	opts.tree_cache_line_size = 512;
-	opts.part_cache_line_size = 8 * 1024;//
+	opts.part_cache_line_size = 8 * 1024; //
 #else
 	opts.tree_cache_line_size = 1024;
 	opts.part_cache_line_size = 64 * 1024;
@@ -164,8 +180,6 @@ bool process_options(int argc, char *argv[]) {
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
 	PRINT("Box size = %e\n", opts.code_to_cm / constants::mpc_to_cm);
-
-
 
 	SHOW(check_freq);
 	SHOW(code_to_cm);
@@ -212,15 +226,11 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(z0);
 	SHOW(z1);
 
-
-
-
-
 	SHOW(ns);
 	SHOW(Y);
 	SHOW(Neff);
-	SHOW_STRING(config_file);
-	SHOW_STRING(test);
+	SHOW(config_file);
+	SHOW(test);
 #ifndef USE_CUDA
 	if (opts.cuda) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
