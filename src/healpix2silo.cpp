@@ -83,6 +83,8 @@ int main(int argc, char **argv) {
 	int rank = 0;
 	int Nside;
 	int npix;
+	int cycle;
+	double time;
 	std::vector<float> healpix_data;
 	PRINT("Reading file\n");
 	int max_pix = 0;
@@ -109,6 +111,12 @@ int main(int argc, char **argv) {
 			float value;
 			FREAD(&value, sizeof(float), 1, fp);
 			healpix_data[pix] += value;
+		}
+		if( fread(&cycle, sizeof(int), 1, fp) == 0 ) {
+			cycle = 0;
+			time = 0.0;
+		} else {
+			FREAD(&time, sizeof(double), 1, fp);
 		}
 		fclose(fp);
 	}
@@ -145,7 +153,12 @@ int main(int argc, char **argv) {
 	}
 
 	auto db = DBCreate(outfile.c_str(), DB_CLOBBER, DB_LOCAL, NULL, DB_PDB);
-	std::vector<float> x, y;
+	auto optlist = DBMakeOptlist (3);
+	float ftime = time;
+	DBAddOption(optlist, DBOPT_CYCLE, &cycle);
+	DBAddOption(optlist, DBOPT_TIME, &ftime);
+	DBAddOption(optlist, DBOPT_DTIME, &time);
+		std::vector<float> x, y;
 	for (int ix = -2 * res; ix <= 2 * res; ix++) {
 		const double x0 = double(ix) / double(res);
 		x.push_back(x0);
@@ -160,8 +173,9 @@ int main(int argc, char **argv) {
 	const int dims2[ndim] = { 4 * res, 2 * res };
 	const float* coords[ndim] = { x.data(), y.data() };
 	const char* coord_names[ndim] = { "x", "y" };
-	DBPutQuadmesh(db, "mesh", coord_names, coords, dims1, ndim, DB_FLOAT, DB_COLLINEAR, nullptr);
-	DBPutQuadvar1(db, "intensity", "mesh", mw_data.data(), dims2, ndim, nullptr, 0, DB_FLOAT, DB_ZONECENT, nullptr);
+	DBPutQuadmesh(db, "mesh", coord_names, coords, dims1, ndim, DB_FLOAT, DB_COLLINEAR, optlist);
+	DBPutQuadvar1(db, "intensity", "mesh", mw_data.data(), dims2, ndim, nullptr, 0, DB_FLOAT, DB_ZONECENT, optlist);
+	DBFreeOptlist(optlist);
 	DBClose(db);
 	return 0;
 }

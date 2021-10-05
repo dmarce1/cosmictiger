@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/hpx.hpp>
@@ -33,7 +33,7 @@ vector<float> output_view(int number, double time) {
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<vector<float>>>val_futs;
 	for (const auto& c : hpx_children()) {
-		val_futs.push_back(hpx::async < output_view_action > (c, number, time));
+		val_futs.push_back(hpx::async<output_view_action>(c, number, time));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	const int Nside = get_options().view_size;
@@ -86,6 +86,8 @@ vector<float> output_view(int number, double time) {
 		fwrite(&Nside, sizeof(int), 1, fp);
 		fwrite(&Npix, sizeof(int), 1, fp);
 		fwrite(results.data(), sizeof(float), Npix, fp);
+		fwrite(&number, sizeof(int), 1, fp);
+		fwrite(&time, sizeof(double), 1, fp);
 		fclose(fp);
 	}
 	return results;

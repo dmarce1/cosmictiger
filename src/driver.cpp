@@ -336,7 +336,7 @@ void driver() {
 			if (get_options().do_views) {
 				timer tm;
 				tm.start();
-				output_view(number, cosmos_time(1e-6 * a, a));
+				output_view(number, years);
 				tm.stop();
 				PRINT("View %i took %e \n", number, tm.read());
 			}
