@@ -91,9 +91,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	const auto& sink_z = shmem.sink_z;
 	const auto& read_rungs = shmem.rungs;
 	const float log2ft0 = log2f(params.t0);
-	const auto ffac = pow(params.a, params.tpwr - 1.0);
-	const auto tfac = pow(params.a, 3.0 - 2.0 * params.tpwr);
-	const float tfactor = params.eta * sqrtf(tfac * params.h);
+	const float tfactor = params.eta * sqrtf(params.a * params.h);
 	int max_rung = 0;
 	expansion2<float> L2;
 	float vx;
@@ -138,9 +136,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (!params.first_call) {
-			vx = fmaf(gx[i], dt * ffac, vx);
-			vy = fmaf(gy[i], dt * ffac, vy);
-			vz = fmaf(gz[i], dt * ffac, vz);
+			vx = fmaf(gx[i], dt, vx);
+			vy = fmaf(gy[i], dt, vy);
+			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
@@ -153,9 +151,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		ASSERT(rung >= 0);
 		ASSERT(rung < MAX_RUNG);
 		dt = 0.5f * rung_dt[rung] * params.t0;
-		vx = fmaf(gx[i], dt * ffac, vx);
-		vy = fmaf(gy[i], dt * ffac, vy);
-		vz = fmaf(gz[i], dt * ffac, vz);
+		vx = fmaf(gx[i], dt, vx);
+		vy = fmaf(gy[i], dt, vy);
+		vz = fmaf(gz[i], dt, vz);
 		write_rungs[snki] = rung;
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;

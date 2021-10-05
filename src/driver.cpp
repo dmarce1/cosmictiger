@@ -141,7 +141,6 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
-	kparams.tpwr = get_options().tpwr;
 	kparams.dt_max = dt_max;
 	kparams.node_load = flops_per_node / flops_per_particle;
 	kparams.gpu = true;
@@ -256,7 +255,7 @@ void driver() {
 		}
 		domains_rebound();
 		params.flops = 0;
-		params.tau_max = cosmos_cosmictiger_time(a0, 1.0);
+		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		params.tau = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;
@@ -309,7 +308,6 @@ void driver() {
 			lc_parts2groups(a, link_len);
 		}
 	};
-	const auto tpwr = get_options().tpwr;
 	while (1.0 / a > get_options().z1 + 1.0) {
 		//	do_groups(tau / t0 + 1e-6, a);
 		tmr.stop();
@@ -369,7 +367,7 @@ void driver() {
 		}
 		last_theta = theta;
 		PRINT("Kicking\n");
-		const double dt_max = get_options().scale_dtlim * pow(a, 1 - tpwr) / cosmos_dadt(a);
+		const double dt_max = get_options().scale_dtlim  / cosmos_dadt(a);
 		auto tmp = kick_step(minrung, a, t0, dt_max, theta, tau == 0.0, full_eval);
 		kick_return kr = tmp.first;
 		tree_create_return sr = tmp.second;
@@ -385,21 +383,18 @@ void driver() {
 			}
 		}
 		dt = t0 / (1 << kr.max_rung);
-		const double dadt1 = pow(a, tpwr) * cosmos_dadt(a);
+		const double dadt1 = a * cosmos_dadt(a);
 		const double a1 = a;
 		a += dadt1 * dt;
-		const double dadt2 = pow(a, tpwr) * cosmos_dadt(a);
+		const double dadt2 = a * cosmos_dadt(a);
 		a += 0.5 * (dadt2 - dadt1) * dt;
-		const double dyears = pow(0.5 * (a1 + a), tpwr) * dt * get_options().code_to_s / constants::spyr;
-		const double a2 = pow(2.0 / (1.0 / pow(a, 1 + tpwr) + 1.0 / pow(a1, 1 + tpwr)), 1.0 / (1.0 + tpwr));
+		const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
+		const double a2 = 2.0 / (1.0 / a) + 1.0 / a1;
 		PRINT("%e %e\n", a1, a);
 		timer dtm;
 		dtm.start();
 		PRINT("Drift\n");
-		const double cnfl1 = cosmos_conformal_time(a0 * 1.0e-6, a1);
-		const double cnfl2 = cosmos_conformal_time(a0 * 1.0e-6, a);
-		const double cnfl3 = cosmos_conformal_time(a0 * 1.0e-6, 1.0);
-		dr = drift(a2, dt, cnfl1, cnfl2, cnfl3);
+		dr = drift(a2, dt, tau, tau + dt, tau_max);
 		if (get_options().do_lc) {
 			check_lc(false);
 		}
