@@ -48,11 +48,11 @@ class vector: public std::vector<T, Alloc> {
 
 public:
 #ifdef CHECK_BOUNDS
-	inline T& operator[](int i) {
+	inline T& operator[](size_t i) {
 		DO_BOUNDS_CHECK(i);
 		return (*((std::vector<T>*) this))[i];
 	}
-	inline const T& operator[](int i) const {
+	inline const T& operator[](size_t i) const {
 		DO_BOUNDS_CHECK(i);
 		return (*((std::vector<T>*) this))[i];
 	}
