@@ -129,6 +129,7 @@ void cuda_init();
 cudaStream_t cuda_get_stream(int dvc);
 void cuda_end_stream(cudaStream_t stream);
 int cuda_get_device_id(int i);
+void cuda_stream_synchronize(cudaStream_t stream);
 #else
 
 #include <memory>

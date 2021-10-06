@@ -208,9 +208,10 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
+	cuda_stream_synchronize(stream);
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(device, params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
+	cuda_stream_synchronize(stream);
 	cuda_end_stream(stream);
 	PRINT("GPU %i done on %i\n", device, hpx_rank());
 	CUDA_CHECK(cudaFree(dev_x));

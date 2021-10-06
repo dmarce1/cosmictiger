@@ -100,6 +100,21 @@ void cuda_end_stream(cudaStream_t stream) {
 	CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
+void cuda_stream_synchronize(cudaStream_t stream) {
+	bool done;
+	int device;
+	CUDA_CHECK(cudaGetDevice(&device));
+	do {
+		if( cudaStreamQuery(stream)==cudaSuccess) {
+			done = true;
+		} else {
+			done = false;
+			hpx_yield();
+			CUDA_CHECK(cudaSetDevice(device));
+		}
+	}while(!done);
+}
+
 const vector<int>& cuda_get_devices() {
 	return mydevices;
 }

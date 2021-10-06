@@ -617,9 +617,9 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
-	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
-	static vector<int, pinned_allocator<int>> dchecks;
-	static vector<int, pinned_allocator<int>> echecks;
+	static thread_local vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
+	static thread_local vector<int, pinned_allocator<int>> dchecks;
+	static thread_local vector<int, pinned_allocator<int>> echecks;
 	dchecks.resize(0);
 	echecks.resize(0);
 	returns.resize(workitems.size());
@@ -713,7 +713,7 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
+	cuda_stream_synchronize(stream);
 	tm.stop();
 //	PRINT( "%i %e\n", nblocks, tm.read());
 //	PRINT("%i nodes traversed\n", node_count);
