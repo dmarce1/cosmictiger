@@ -617,9 +617,9 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
-	static thread_local vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
-	static thread_local vector<int, pinned_allocator<int>> dchecks;
-	static thread_local vector<int, pinned_allocator<int>> echecks;
+	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
+	vector<int, pinned_allocator<int>> dchecks;
+	vector<int, pinned_allocator<int>> echecks;
 	dchecks.resize(0);
 	echecks.resize(0);
 	returns.resize(workitems.size());
@@ -706,6 +706,7 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	tm.reset();
 	tm.start();
 	acquire_inner();
+	cuda_stream_synchronize(stream);
 	release_outer();
 	cuda_set_device(dvc);
 	PRINT( "Invoking kernel on GPU %i and rank %i\n", dvc, hpx_rank());
