@@ -146,7 +146,7 @@ void kick_workspace::to_gpu() {
 	const int nthreads = hpx::thread::hardware_concurrency();
 	futs.reserve(nthreads);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&tree_map,&tree_nodes]() {
+		futs.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes]() {
 							for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
 								if (tree_nodes[i].children[LEFT].index != -1) {
 									tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
