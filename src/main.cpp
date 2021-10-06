@@ -31,7 +31,6 @@
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
 	ewald_const::init();
-	kick_workspace::initialize();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
 			test(get_options().test);

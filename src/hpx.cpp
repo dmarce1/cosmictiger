@@ -19,6 +19,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/cuda.hpp>
+#include <cosmictiger/kick_workspace.hpp>
 
 static int rank;
 static int nranks;
@@ -52,6 +53,7 @@ void hpx_init() {
 	}
 #ifdef USE_CUDA
 	cuda_init();
+	kick_workspace::initialize();
 #endif
 
 	vector<hpx::future<void>> futs;
