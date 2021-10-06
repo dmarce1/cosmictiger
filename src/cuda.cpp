@@ -30,6 +30,18 @@ HPX_PLAIN_ACTION (get_hostnames);
 
 static vector<int> mydevices;
 
+void cuda_malloc(void** ptr, size_t size, const char* file, int line ) {
+	static mutex_type mutex;
+	std::lock_guard<mutex_type> lock(mutex);
+	double free_mem = cuda_free_mem();
+	double total_mem = cuda_total_mem();
+	if( (free_mem - (double) size) / total_mem < 0.15 ) {
+		PRINT( "Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% memory\n", size, hpx_rank(), file, line);
+		abort();
+	}
+	CUDA_CHECK(cudaMalloc(ptr,size));
+}
+
 std::set<std::string> get_hostnames() {
 	std::set < std::string > hostnames;
 	std::vector < hpx::future<std::set<std::string>>>futs;

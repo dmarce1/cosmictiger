@@ -105,7 +105,7 @@ void ewald_const::init_gpu() {
 	for (int dvc = 0; dvc < cuda_device_count(); dvc++) {
 		cuda_set_device(dvc);
 		ewald_constants* dev;
-		CUDA_CHECK(cudaMalloc(&dev, sizeof(ewald_constants)));
+		(CUDA_MALLOC(&dev, sizeof(ewald_constants)));
 		CUDA_CHECK(cudaMemcpy(dev, &ec, sizeof(ewald_constants), cudaMemcpyHostToDevice));
 		set_ewald_constants<<<1,1>>>(dev);
 		CUDA_CHECK(cudaDeviceSynchronize());

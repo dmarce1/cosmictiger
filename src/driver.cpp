@@ -414,7 +414,7 @@ void driver() {
 		if (full_eval) {
 			PRINT_BOTH(textfp,
 					"\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
-					"runtime", "i", "imbalance", "min depth", "max depth", "Z", "a", "cfl. time", "years", "dt", "pot", "kin", "cosmicK", "pot err", "min rung",
+					"runtime", "i", "imbalance", "min depth", "max depth", "Z", "a", "timestep", "years", "dt", "pot", "kin", "cosmicK", "pot err", "min rung",
 					"max rung", "active pct", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "avg total", "pps", "GFLOPSins", "GFLOPS");
 		}
 		iter++;
@@ -430,7 +430,7 @@ void driver() {
 		double act_pct = 100.0 * kr.nactive / std::pow((double) get_options().parts_dim, (double) NDIM);
 		PRINT_BOTH(textfp,
 				"%10.3e %10li %10.3e %10i %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10li %10li %9.2e%% %10li %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
-				runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, z, a1, tau / tau_max, years, dt / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung,
+				runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, z, a1, tau / t0, years, dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung,
 				kr.max_rung, act_pct, dr.nmapped, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
 				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 		fclose(textfp);
