@@ -703,7 +703,6 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 		kick_params[i] = std::move(params);
 	}
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
-	cuda_stream_synchronize(stream);
 	tm.reset();
 	tm.start();
 	acquire_inner();
