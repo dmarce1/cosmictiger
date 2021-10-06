@@ -27,7 +27,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 
 std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
 		const vector<fixed32>& sinkz) {
-	cuda_set_device();
+	cuda_set_device(0);
 	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
 	fixed32* dev_sinkx;
 	fixed32* dev_sinky;
@@ -60,7 +60,6 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	CUDA_CHECK(cudaMemcpy(dev_sinkx, sinkx.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinky, sinky.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(dev_sinkz, sinkz.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
-	PRINT("%li free\n", cuda_free_mem());
 	const size_t parts_per_loop = (size_t) cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
 	int occupancy;
 	CUDA_CHECK(

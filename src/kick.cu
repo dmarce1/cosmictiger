@@ -106,7 +106,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	float fnorm_tot = 0.f;
 	int rung;
 	array<float, NDIM> dx;
-	int snki;
+	part_int snki;
 	for (int i = tid; i < nactive; i += WARP_SIZE) {
 		snki = active_indexes[i];
 		ASSERT(snki >= 0);
@@ -603,10 +603,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
 		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	timer tm;
+	cuda_set_device(dvc);
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
 	int* current_index;
@@ -616,9 +617,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
-	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
-	static vector<int, pinned_allocator<int>> dchecks;
-	static vector<int, pinned_allocator<int>> echecks;
+	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
+	vector<int, pinned_allocator<int>> dchecks;
+	vector<int, pinned_allocator<int>> echecks;
 	dchecks.resize(0);
 	echecks.resize(0);
 	returns.resize(workitems.size());
@@ -660,6 +661,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 			ecount++;
 		}
 	}
+
+//	PRINT("Step 4 GPU %i on %i\n", dvc, hpx_rank());
+
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
 	CUDA_CHECK(cudaMalloc(&dev_dchecks, sizeof(int) * dchecks.size()));
@@ -702,16 +706,18 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 		kick_params[i] = std::move(params);
 	}
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
 	tm.reset();
 	tm.start();
 	acquire_inner();
+//	PRINT("Step 5 GPU %i on %i\n", dvc, hpx_rank());
+	cuda_stream_synchronize(stream);
 	release_outer();
-//	PRINT( "Invoking kernel\n");
+	cuda_set_device(dvc);
+//	PRINT( "Invoking kernel on GPU %i and rank %i\n", dvc, hpx_rank());
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
-	CUDA_CHECK(cudaStreamSynchronize(stream));
+	cuda_stream_synchronize(stream);
 	tm.stop();
 //	PRINT( "%i %e\n", nblocks, tm.read());
 //	PRINT("%i nodes traversed\n", node_count);
@@ -739,7 +745,7 @@ int kick_block_count() {
 
 }
 
-size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
+size_t kick_estimate_cuda_mem_usage(double theta, part_int nparts, int check_count) {
 	size_t mem = 0;
 	size_t innerblocks = nparts / CUDA_KICK_PARTS_MAX;
 	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);

@@ -25,6 +25,8 @@ constexpr bool verbose = true;
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/safe_io.hpp>
 
+#include <set>
+
 #ifdef HPX_LITE
 #include <boost/program_options.hpp>
 #endif
@@ -51,11 +53,13 @@ void show(const char* name, std::string opt) {
 
 options global_opts;
 
+
 HPX_PLAIN_ACTION (set_options);
 
 const options& get_options() {
 	return global_opts;
 }
+
 
 void set_options(const options& opts) {
 	std::vector<hpx::future<void>> futs;
@@ -102,6 +106,7 @@ bool process_options(int argc, char *argv[]) {
 	("scale_dtlim", po::value<double>(&(opts.scale_dtlim))->default_value(0.01), "maximum change in scale factor time-step limit") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
+	("nsteps", po::value<int>(&(opts.nsteps))->default_value(100), "number of super time-steps (default=100)") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
@@ -118,7 +123,6 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8120), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-
 			;
 
 	po::variables_map vm;

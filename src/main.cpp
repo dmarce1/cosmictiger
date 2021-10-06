@@ -24,6 +24,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/test.hpp>
+#include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 
 
