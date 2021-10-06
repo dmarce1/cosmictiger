@@ -210,7 +210,7 @@ void output_time_file() {
 	const double a0 = 1.0 / (1.0 + get_options().z0);
 	const double tau_max = cosmos_conformal_time(a0, 1.0);
 	double a = a0;
-	int M = 100;
+	int M = get_options().nsteps;
 	int N = 64;
 	const double dtau = tau_max / (M * N);
 	double tau = cosmos_conformal_time(a0 * 1.0e-6, a0);
@@ -279,7 +279,7 @@ void driver() {
 	auto& iter = params.iter;
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
-	double t0 = tau_max / 100.0;
+	double t0 = tau_max / get_options().nsteps;
 	double pot;
 	int this_iter = 0;
 	double last_theta = -1.0;
@@ -389,7 +389,7 @@ void driver() {
 		const double dadt2 = a * cosmos_dadt(a);
 		a += 0.5 * (dadt2 - dadt1) * dt;
 		const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
-		const double a2 = 2.0 / (1.0 / a) + 1.0 / a1;
+		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		PRINT("%e %e\n", a1, a);
 		timer dtm;
 		dtm.start();

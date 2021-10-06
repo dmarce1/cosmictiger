@@ -662,7 +662,7 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 		}
 	}
 
-	PRINT("Step 4 GPU %i on %i\n", dvc, hpx_rank());
+//	PRINT("Step 4 GPU %i on %i\n", dvc, hpx_rank());
 
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
@@ -709,11 +709,11 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	tm.reset();
 	tm.start();
 	acquire_inner();
-	PRINT("Step 5 GPU %i on %i\n", dvc, hpx_rank());
+//	PRINT("Step 5 GPU %i on %i\n", dvc, hpx_rank());
 	cuda_stream_synchronize(stream);
 	release_outer();
 	cuda_set_device(dvc);
-	PRINT( "Invoking kernel on GPU %i and rank %i\n", dvc, hpx_rank());
+//	PRINT( "Invoking kernel on GPU %i and rank %i\n", dvc, hpx_rank());
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
