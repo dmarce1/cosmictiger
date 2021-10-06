@@ -21,14 +21,31 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
 
-vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_x;
-vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_y;
-vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_z;
-hpx::lcos::local::counting_semaphore kick_workspace::lock1(1);
-hpx::lcos::local::counting_semaphore kick_workspace::lock2(1);
-vector<tree_node, pinned_allocator<tree_node>> kick_workspace::tree_nodes;
+vector<vector<fixed32, pinned_allocator<fixed32>>> kick_workspace::host_xs;
+vector<vector<fixed32, pinned_allocator<fixed32>>> kick_workspace::host_ys;
+vector<vector<fixed32, pinned_allocator<fixed32>>> kick_workspace::host_zs;
+vector<std::shared_ptr<hpx::lcos::local::counting_semaphore>> kick_workspace::lock1s;
+vector<std::shared_ptr<hpx::lcos::local::counting_semaphore>> kick_workspace::lock2s;
+vector<vector<tree_node, pinned_allocator<tree_node>>> kick_workspace::tree_nodess;
+std::atomic<int> kick_workspace::next_device(0);
 
 HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
+
+void kick_workspace::initialize() {
+#ifdef USE_CUDA
+	const int dvccnt = cuda_device_count();
+	host_xs.resize(dvccnt);
+	host_ys.resize(dvccnt);
+	host_zs.resize(dvccnt);
+	lock1s.resize(dvccnt);
+	lock2s.resize(dvccnt);
+	tree_nodess.resize(dvccnt);
+	for( int i = 0; i < dvccnt; i++) {
+		lock1s[i] = std::make_shared<hpx::lcos::local::counting_semaphore>(1);
+		lock2s[i] = std::make_shared<hpx::lcos::local::counting_semaphore>(1);
+	}
+#endif
+}
 
 kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
 	total_parts = total_parts_;
@@ -62,9 +79,19 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 
 void kick_workspace::to_gpu() {
 #ifdef USE_CUDA
+	int device = next_device++ % cuda_device_count();
+	while( !lock1s[device]->try_wait()) {
+		hpx_yield();
+		device = next_device++ % cuda_device_count();
+	}
+	cuda_set_device(device);
+	auto& lock1 = *(lock1s[device]);
+	auto& lock2 = *(lock2s[device]);
+	auto& tree_nodes = tree_nodess[device];
+	auto& host_x = host_xs[device];
+	auto& host_y = host_ys[device];
+	auto& host_z = host_zs[device];
 	timer tm;
-	lock1.wait();
-	cuda_set_device();
 	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 
 	auto sort_fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
@@ -104,7 +131,7 @@ void kick_workspace::to_gpu() {
 			}
 		}
 	}
-	cuda_set_device();
+	cuda_set_device(device);
 	tree_node* dev_trees;
 	tree_nodes.resize(next_index);
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
@@ -118,7 +145,7 @@ void kick_workspace::to_gpu() {
 	const int nthreads = hpx::thread::hardware_concurrency();
 	futs.reserve(nthreads);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&tree_map]() {
+		futs.push_back(hpx::async([proc,nthreads,&tree_map,&tree_nodes]() {
 							for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
 								if (tree_nodes[i].children[LEFT].index != -1) {
 									tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
@@ -142,12 +169,10 @@ void kick_workspace::to_gpu() {
 									workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
 								}
 								workitems[i].self.index = tree_map[workitems[i].self];
-								cuda_set_device();
 								const tree_node& node = *tree_get_node(workitems[i].self);
 								const part_int begin = node.sink_part_range.first;
 								const part_int end = node.sink_part_range.second;
 								const size_t size = end - begin;
-								const int deviceid = cuda_get_device();
 								ASSERT(workitems[i].self.proc == hpx_rank());
 							}
 						}));
@@ -162,7 +187,7 @@ void kick_workspace::to_gpu() {
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases]() {
+		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases,&host_x,&host_y,&host_z,&tree_nodes]() {
 							for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
 								if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
@@ -178,7 +203,7 @@ void kick_workspace::to_gpu() {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.stop();
-	auto stream = cuda_get_stream();
+	auto stream = cuda_get_stream(device);
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
@@ -219,10 +244,12 @@ void kick_workspace::clear_buffers() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<clear_buffers_action>(c));
 	}
-	host_x = decltype(host_x)();
-	host_y = decltype(host_y)();
-	host_z = decltype(host_z)();
-	tree_nodes = decltype(tree_nodes)();
+	for (int dvc = 0; dvc < cuda_device_count(); dvc++) {
+		host_xs[dvc] = vector<fixed32, pinned_allocator<fixed32>>();
+		host_ys[dvc] = vector<fixed32, pinned_allocator<fixed32>>();
+		host_zs[dvc] = vector<fixed32, pinned_allocator<fixed32>>();
+		tree_nodess[dvc] = vector<tree_node, pinned_allocator<tree_node>>();
+	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
 

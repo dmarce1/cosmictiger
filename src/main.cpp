@@ -24,12 +24,14 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/test.hpp>
+#include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
 	ewald_const::init();
+	kick_workspace::initialize();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
 			test(get_options().test);

@@ -46,13 +46,15 @@ class kick_workspace {
 	part_int nparts;
 	kick_params params;
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
-	static vector<fixed32, pinned_allocator<fixed32>> host_x;
-	static vector<fixed32, pinned_allocator<fixed32>> host_y;
-	static vector<fixed32, pinned_allocator<fixed32>> host_z;
-	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
-	static hpx::lcos::local::counting_semaphore lock1;
-	static hpx::lcos::local::counting_semaphore lock2;
+	static vector<vector<fixed32, pinned_allocator<fixed32>>> host_xs;
+	static vector<vector<fixed32, pinned_allocator<fixed32>>> host_ys;
+	static vector<vector<fixed32, pinned_allocator<fixed32>>> host_zs;
+	static vector<vector<tree_node, pinned_allocator<tree_node>>> tree_nodess;
+	static vector<std::shared_ptr<hpx::lcos::local::counting_semaphore>> lock1s;
+	static vector<std::shared_ptr<hpx::lcos::local::counting_semaphore>> lock2s;
+	static std::atomic<int> next_device;
 public:
+	static void initialize();
 	static void clear_buffers();
 	kick_workspace() = default;
 	kick_workspace(kick_params, part_int);

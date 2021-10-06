@@ -28,6 +28,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <hpx/parallel/algorithms/fill.hpp>
 #include <hpx/parallel/algorithms/sort.hpp>
 #include <hpx/serialization/unordered_map.hpp>
+#include <hpx/serialization/set.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
 #if (HPX_VERSION_FULL < ((1<<16) | (6<<8)))

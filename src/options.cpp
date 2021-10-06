@@ -25,6 +25,8 @@ constexpr bool verbose = true;
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/safe_io.hpp>
 
+#include <set>
+
 #ifdef HPX_LITE
 #include <boost/program_options.hpp>
 #endif
@@ -51,11 +53,13 @@ void show(const char* name, std::string opt) {
 
 options global_opts;
 
+
 HPX_PLAIN_ACTION (set_options);
 
 const options& get_options() {
 	return global_opts;
 }
+
 
 void set_options(const options& opts) {
 	std::vector<hpx::future<void>> futs;
@@ -118,7 +122,6 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8120), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-
 			;
 
 	po::variables_map vm;

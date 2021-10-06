@@ -27,7 +27,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 
 std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
 		const vector<fixed32>& sinkz) {
-	cuda_set_device();
+	cuda_set_device(0);
 	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
 	fixed32* dev_sinkx;
 	fixed32* dev_sinky;
