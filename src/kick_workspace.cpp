@@ -101,6 +101,7 @@ void kick_workspace::to_gpu() {
 			}
 	);
 
+	PRINT("Step 1 GPU %i on %i\n", device, hpx_rank());
 //	PRINT("To vector\n");
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 //	PRINT("%i tree ids\n", tree_ids_vector.size());
@@ -158,6 +159,7 @@ void kick_workspace::to_gpu() {
 	sort_fut.get();
 	hpx::wait_all(futs.begin(), futs.end());
 	futs.resize(0);
+	PRINT("Step 2 GPU %i on %i\n", device, hpx_rank());
 
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([this,proc,nthreads,&tree_map]() {
@@ -208,6 +210,7 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
+	PRINT("Step 3 GPU %i on %i\n", device, hpx_rank());
 	//cuda_stream_synchronize(stream);
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(device, params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
