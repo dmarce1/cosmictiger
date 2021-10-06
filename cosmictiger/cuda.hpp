@@ -120,7 +120,7 @@ int cuda_device_count();
 int cuda_smp_count();
 size_t cuda_free_mem();
 size_t cuda_total_mem();
-void cuda_init();
+void cuda_init(int);
 cudaStream_t cuda_get_stream(int dvc);
 void cuda_end_stream(cudaStream_t stream);
 int cuda_get_device_id(int i);

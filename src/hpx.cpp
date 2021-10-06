@@ -52,7 +52,6 @@ void hpx_init() {
 		children.push_back(localities[index2]);
 	}
 #ifdef USE_CUDA
-	cuda_init();
 	kick_workspace::initialize();
 #endif
 

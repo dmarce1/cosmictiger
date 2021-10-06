@@ -24,9 +24,8 @@
 
 #ifdef USE_CUDA
 
-std::set<std::string> get_hostnames();
 
-HPX_PLAIN_ACTION (get_hostnames);
+HPX_PLAIN_ACTION(cuda_init);
 
 static vector<int> mydevices;
 
@@ -40,28 +39,6 @@ void cuda_malloc(void** ptr, size_t size, const char* file, int line ) {
 		abort();
 	}
 	CUDA_CHECK(cudaMalloc(ptr,size));
-}
-
-std::set<std::string> get_hostnames() {
-	std::set < std::string > hostnames;
-	std::vector < hpx::future<std::set<std::string>>>futs;
-	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<get_hostnames_action>(c));
-	}
-	char hostname[256];
-	gethostname(hostname, 255);
-	hostnames.insert(std::string(hostname));
-	for (auto& f : futs) {
-		const auto tmp = f.get();
-		for (const auto& hname : tmp) {
-			hostnames.insert(hname);
-		}
-	}
-	return hostnames;
-}
-
-static int compute_procs_per_node() {
-	return hpx_size() / get_hostnames().size();
 }
 
 void cuda_set_device() {
@@ -135,8 +112,12 @@ int cuda_get_device_id(int i) {
 	return mydevices[i];
 }
 
-void cuda_init() {
-	const int procs_per_node = compute_procs_per_node();
+
+void cuda_init(int procs_per_node) {
+	vector<hpx::future<void>> futs;
+	for( auto& c : hpx_children()) {
+		futs.push_back(hpx::async<cuda_init_action>(c,procs_per_node));
+	}
 	int device_count;
 	CUDA_CHECK(cudaGetDeviceCount ( &device_count) );
 	const int local_num = hpx_rank() % procs_per_node;
@@ -158,6 +139,7 @@ void cuda_init() {
 			THROW_ERROR("Unable to set stack size to %li on device %i and rank %i\n", STACK_SIZE, dvc, hpx_rank());
 		}
 	}
+	hpx::wait_all(futs.begin(), futs.end());
 }
 
 #endif

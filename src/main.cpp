@@ -27,9 +27,40 @@
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 
+std::set<std::string> get_hostnames();
+
+HPX_PLAIN_ACTION (get_hostnames);
+
+std::set<std::string> get_hostnames() {
+	std::set < std::string > hostnames;
+	std::vector < hpx::future<std::set<std::string>>>futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<get_hostnames_action>(c));
+	}
+	char hostname[256];
+	gethostname(hostname, 255);
+	hostnames.insert(std::string(hostname));
+	for (auto& f : futs) {
+		const auto tmp = f.get();
+		for (const auto& hname : tmp) {
+			if (hostnames.find(hname) == hostnames.end()) {
+				hostnames.insert(hname);
+			}
+		}
+	}
+	return hostnames;
+}
+
+static int compute_procs_per_node() {
+	return hpx_size() / get_hostnames().size();
+}
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
+#ifdef USE_CUDA
+	const int procs_per_node = compute_procs_per_node();
+	cuda_init(procs_per_node);
+#endif
 	ewald_const::init();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
