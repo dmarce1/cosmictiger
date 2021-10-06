@@ -132,16 +132,15 @@ void kick_workspace::to_gpu() {
 			}
 		}
 	}
+	PRINT("Step 1.25 GPU %i on %i\n", device, hpx_rank());
 	cuda_set_device(device);
+	PRINT("Step 1.5 GPU %i on %i\n", device, hpx_rank());
 	tree_node* dev_trees;
 	tree_nodes.resize(next_index);
-	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
-	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
+		for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
 		tree_nodes[i->second] = *tree_get_node(i->first);
 	}
+	PRINT("Step 1.75 GPU %i on %i\n", device, hpx_rank());
 	vector<hpx::future<void>> futs;
 	const int nthreads = hpx::thread::hardware_concurrency();
 	futs.reserve(nthreads);
@@ -208,6 +207,10 @@ void kick_workspace::to_gpu() {
 
 	tm.stop();
 	auto stream = cuda_get_stream(device);
+	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
@@ -239,7 +242,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 	}
 	lock.unlock();
 	if (do_work) {
-		hpx::async(HPX_PRIORITY_HI, [ptr]() {
+		hpx::apply([ptr]() {
 			ptr->to_gpu();
 		});
 	}
@@ -285,7 +288,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
-		hpx::async(HPX_PRIORITY_HI, [ptr]() {
+		hpx::apply([ptr]() {
 			ptr->to_gpu();
 		});
 	}

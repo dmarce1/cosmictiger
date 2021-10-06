@@ -106,7 +106,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	float fnorm_tot = 0.f;
 	int rung;
 	array<float, NDIM> dx;
-	int snki;
+	part_int snki;
 	for (int i = tid; i < nactive; i += WARP_SIZE) {
 		snki = active_indexes[i];
 		ASSERT(snki >= 0);
@@ -745,7 +745,7 @@ int kick_block_count() {
 
 }
 
-size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
+size_t kick_estimate_cuda_mem_usage(double theta, part_int nparts, int check_count) {
 	size_t mem = 0;
 	size_t innerblocks = nparts / CUDA_KICK_PARTS_MAX;
 	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);

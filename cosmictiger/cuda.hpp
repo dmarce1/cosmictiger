@@ -33,7 +33,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdio.h>
 
 
-#define CUDA_CHECK( a ) if( a != cudaSuccess ) printf( "CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a))
+#define CUDA_CHECK( a ) if( a != cudaSuccess ) { printf( "CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a)); abort(); }
 
 
 /* error checker from https://forums.developer.nvidia.com/t/cufft-error-handling/29231 */

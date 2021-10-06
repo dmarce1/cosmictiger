@@ -174,6 +174,6 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params params, fixed32*, fi
 		int part_count, int ntrees, std::function<void()>, std::function<void()>);
 #endif
 int kick_block_count();
-size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);
+size_t kick_estimate_cuda_mem_usage(double theta, part_int nparts, int check_count);
 
 #endif /* KICK_HPP_ */
