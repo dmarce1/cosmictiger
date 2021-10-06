@@ -208,7 +208,7 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
-	cuda_stream_synchronize(stream);
+	//cuda_stream_synchronize(stream);
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(device, params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_stream_synchronize(stream);
@@ -234,7 +234,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 	}
 	lock.unlock();
 	if (do_work) {
-		hpx::apply([ptr]() {
+		hpx::async(HPX_PRIORITY_HI, [ptr]() {
 			ptr->to_gpu();
 		});
 	}
@@ -280,7 +280,7 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
-		hpx::apply([ptr]() {
+		hpx::async(HPX_PRIORITY_HI, [ptr]() {
 			ptr->to_gpu();
 		});
 	}
