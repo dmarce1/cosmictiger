@@ -41,8 +41,6 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		vector<lc_particle> this_part_buffer;
 		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
-		const double tpwr = get_options().tpwr;
-		const double factor = pow(scale, tpwr - 1.0);
 		drift_return this_dr;
 		this_dr.kin = 0.0;
 		this_dr.momx = 0.0;
@@ -84,9 +82,9 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				x0 = x;
 				y0 = y;
 				z0 = z;
-				x += double(vx*dt*factor);
-				y += double(vy*dt*factor);
-				z += double(vz*dt*factor);
+				x += double(vx*dt);
+				y += double(vy*dt);
+				z += double(vz*dt);
 				if( do_lc) {
 					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
 				}
