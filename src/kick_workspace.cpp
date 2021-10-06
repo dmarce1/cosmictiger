@@ -162,7 +162,7 @@ void kick_workspace::to_gpu() {
 	PRINT("Step 2 GPU %i on %i\n", device, hpx_rank());
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([this,proc,nthreads,&tree_map]() {
+		futs.push_back(hpx::async(HPX_PRIORITY_HI, [this,proc,nthreads,&tree_map]() {
 							for (int i = proc; i < workitems.size(); i+=nthreads) {
 								for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 									workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
@@ -189,7 +189,7 @@ void kick_workspace::to_gpu() {
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases,&host_x,&host_y,&host_z,&tree_nodes]() {
+		futs.push_back(hpx::async(HPX_PRIORITY_HI, [&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases,&host_x,&host_y,&host_z,&tree_nodes]() {
 							for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
 								if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
@@ -204,6 +204,8 @@ void kick_workspace::to_gpu() {
 		);
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+	PRINT("Step 2.5 GPU %i on %i\n", device, hpx_rank());
+
 	tm.stop();
 	auto stream = cuda_get_stream(device);
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
