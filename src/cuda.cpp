@@ -27,7 +27,6 @@
 std::set<std::string> get_hostnames();
 
 HPX_PLAIN_ACTION (get_hostnames);
-HPX_PLAIN_ACTION(cuda_cycle_devices);
 
 static vector<int> mydevices;
 
@@ -68,17 +67,9 @@ int cuda_device_count() {
 	return mydevices.size();
 }
 
-int cuda_get_device() {
-	int count;
-	CUDA_CHECK(cudaGetDeviceCount(&count));
-	const int device_num = hpx_rank() % count;
-	return device_num;
-}
-
 size_t cuda_total_mem() {
 	size_t total;
 	size_t free;
-	cuda_set_device();
 	CUDA_CHECK(cudaMemGetInfo(&free, &total));
 	return total;
 }
@@ -86,15 +77,13 @@ size_t cuda_total_mem() {
 size_t cuda_free_mem() {
 	size_t total;
 	size_t free;
-	cuda_set_device();
 	CUDA_CHECK(cudaMemGetInfo(&free, &total));
 	return free;
 }
 
 int cuda_smp_count() {
 	int count;
-	cuda_set_device();
-	CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, cuda_get_device()));
+	CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, mydevices[0]));
 	return count;
 
 }
@@ -129,6 +118,9 @@ void cuda_init() {
 	for( int i = device_begin; i < device_end; i++) {
 		mydevices.push_back(i);
 	}
+	if( hpx_rank() == 0 ) {
+		PRINT( "Running with %i processes per node and %i GPUs per process\n", procs_per_node, mydevices.size());
+	}
 	for( int dvc = 0; dvc < cuda_device_count(); dvc++) {
 		cuda_set_device(dvc);
 		CUDA_CHECK(cudaDeviceReset());
@@ -139,18 +131,6 @@ void cuda_init() {
 			THROW_ERROR("Unable to set stack size to %li on device %i and rank %i\n", STACK_SIZE, dvc, hpx_rank());
 		}
 	}
-}
-
-void cuda_cycle_devices() {
-	vector<hpx::future<void>> futs;
-	for( auto& c : hpx_children()) {
-		futs.push_back(hpx::async<cuda_cycle_devices_action>(c));
-	}
-
-	cuda_init();
-	ewald_const::init();
-
-	hpx::wait_all(futs.begin(), futs.end());
 }
 
 #endif

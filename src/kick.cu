@@ -603,10 +603,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
 		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	timer tm;
+	cuda_set_device(dvc);
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
 	int* current_index;
@@ -707,7 +708,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	tm.start();
 	acquire_inner();
 	release_outer();
-//	PRINT( "Invoking kernel\n");
+	cuda_set_device(dvc);
+	PRINT( "Invoking kernel on GPU %i and rank %i\n", dvc, hpx_rank());
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));

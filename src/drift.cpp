@@ -29,7 +29,12 @@ HPX_PLAIN_ACTION (drift);
 #define CHUNK_SIZE (1024*1024)
 
 drift_return drift(double scale, double dt, double tau0, double tau1, double tau_max) {
-	particles_memadvise_cpu();
+	static bool first_call = true;
+	if (first_call) {
+		first_call = false;
+	} else {
+		particles_memadvise_cpu();
+	}
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
 		rfuts.push_back(hpx::async<drift_action>(HPX_PRIORITY_HI, c, scale, dt, tau0, tau1, tau_max));
