@@ -84,24 +84,3 @@ double cosmos_conformal_time(double a0, double a1) {
 	}
 	return t;
 }
-
-double cosmos_cosmictiger_time(double a0, double a1) {
-	double a = a0;
-	double t = 0.0;
-	const int N = 1024 * 1024;
-	const double loga0 = log(a0);
-	const double loga1 = log(a1);
-	const double dloga = (loga1 - loga0) / N;
-	double loga = loga0;
-	a = exp(loga);
-	const double tpwr = get_options().tpwr;
-	double dadt = pow(a, tpwr) * cosmos_dadt(a);
-	for (int i = 0; i < N; i++) {
-		t += 0.5 * a / dadt * dloga;
-		loga = loga0 + dloga * (i + 1);
-		a = exp(loga);
-		dadt = pow(a, tpwr) * cosmos_dadt(a);
-		t += 0.5 * a / dadt * dloga;
-	}
-	return t;
-}
