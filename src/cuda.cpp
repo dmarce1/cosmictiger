@@ -139,6 +139,7 @@ void cuda_init(int procs_per_node) {
 			THROW_ERROR("Unable to set stack size to %li on device %i and rank %i\n", STACK_SIZE, dvc, hpx_rank());
 		}
 	}
+	kick_workspace::initialize();
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
