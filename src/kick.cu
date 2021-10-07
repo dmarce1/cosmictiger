@@ -631,9 +631,9 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	int nblocks = kick_block_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_lists_type* dev_lists;
-	(CUDA_MALLOC(&dev_lists, sizeof(cuda_lists_type) * nblocks));
-	(CUDA_MALLOC(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
-	(CUDA_MALLOC(&dev_returns, sizeof(kick_return) * returns.size()));
+	CUDA_MALLOC(&dev_lists, sizeof(cuda_lists_type) * nblocks);
+	CUDA_MALLOC(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size());
+	CUDA_MALLOC(&dev_returns, sizeof(kick_return) * returns.size());
 
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
@@ -666,8 +666,8 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
-	(CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size()));
-	(CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size()));
+	CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size());
+	CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size());
 	CUDA_CHECK(cudaMemcpyAsync(dev_dchecks, dchecks.data(), sizeof(int) * dchecks.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
@@ -709,7 +709,7 @@ vector<kick_return> cuda_execute_kicks(int dvc, kick_params kparams, fixed32* de
 	tm.reset();
 	tm.start();
 	acquire_inner();
-//	PRINT("Step 5 GPU %i on %i\n", dvc, hpx_rank());
+	cuda_set_device(dvc);
 	cuda_stream_synchronize(stream);
 	release_outer();
 	cuda_set_device(dvc);
