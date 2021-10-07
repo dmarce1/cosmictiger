@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/hpx.hpp>
@@ -24,7 +24,17 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifdef USE_CUDA
 
-HPX_PLAIN_ACTION(cuda_cycle_devices);
+void cuda_malloc(void** ptr, size_t size, const char* file, int line ) {
+	static mutex_type mutex;
+	std::lock_guard<mutex_type> lock(mutex);
+	double free_mem = cuda_free_mem();
+	double total_mem = cuda_total_mem();
+	if( (free_mem - (double) size) / total_mem < 0.15 ) {
+		PRINT( "Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% memory\n", size, hpx_rank(), file, line);
+		abort();
+	}
+	CUDA_CHECK(cudaMalloc(ptr,size));
+}
 
 void cuda_set_device() {
 	int count;
@@ -71,6 +81,15 @@ cudaStream_t cuda_get_stream() {
 	return stream;
 }
 
+void cuda_stream_synchronize(cudaStream_t stream) {
+	int device;
+	CUDA_CHECK(cudaGetDevice(&device));
+	while(cudaStreamQuery(stream) != cudaSuccess) {
+		hpx_yield();
+	}
+	CUDA_CHECK(cudaSetDevice(device));
+}
+
 void cuda_end_stream(cudaStream_t stream) {
 	CUDA_CHECK(cudaStreamSynchronize(stream));
 	CUDA_CHECK(cudaStreamDestroy(stream));
@@ -87,17 +106,5 @@ void cuda_init() {
 	}
 }
 
-
-void cuda_cycle_devices() {
-	vector<hpx::future<void>> futs;
-	for( auto& c : hpx_children()) {
-		futs.push_back(hpx::async<cuda_cycle_devices_action>(c));
-	}
-
-	cuda_init();
-	ewald_const::init();
-
-	hpx::wait_all(futs.begin(), futs.end());
-}
 
 #endif
