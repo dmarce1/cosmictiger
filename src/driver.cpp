@@ -389,7 +389,7 @@ void driver() {
 		const double dadt2 = a * cosmos_dadt(a);
 		a += 0.5 * (dadt2 - dadt1) * dt;
 		const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
-		const double a2 = 2.0 / (1.0 / a) + 1.0 / a1;
+		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
 		PRINT("%e %e\n", a1, a);
 		timer dtm;
 		dtm.start();
