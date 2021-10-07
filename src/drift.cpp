@@ -61,7 +61,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 			while(cudaStreamQuery(stream)!=cudaSuccess) {
 				hpx_yield();
 			}
-			CUDA_CHECK(cudaStreamSynchronize(stream));
+			cuda_stream_synchronize(stream);
 			CUDA_CHECK(cudaStreamDestroy(stream));
 #endif
 			bool do_lc = get_options().do_lc;
