@@ -40,13 +40,13 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	double* dev_gy;
 	double* dev_gz;
 	const int Nsinks = sinkx.size();
-	(CUDA_MALLOC(&dev_sinkx, Nsinks * sizeof(fixed32)));
-	(CUDA_MALLOC(&dev_sinky, Nsinks * sizeof(fixed32)));
-	(CUDA_MALLOC(&dev_sinkz, Nsinks * sizeof(fixed32)));
-	(CUDA_MALLOC(&dev_phi, Nsinks * sizeof(double)));
-	(CUDA_MALLOC(&dev_gx, Nsinks * sizeof(double)));
-	(CUDA_MALLOC(&dev_gy, Nsinks * sizeof(double)));
-	(CUDA_MALLOC(&dev_gz, Nsinks * sizeof(double)));
+	CUDA_CHECK(cudaMalloc(&dev_sinkx, Nsinks * sizeof(fixed32)));
+	CUDA_CHECK(cudaMalloc(&dev_sinky, Nsinks * sizeof(fixed32)));
+	CUDA_CHECK(cudaMalloc(&dev_sinkz, Nsinks * sizeof(fixed32)));
+	CUDA_CHECK(cudaMalloc(&dev_phi, Nsinks * sizeof(double)));
+	CUDA_CHECK(cudaMalloc(&dev_gx, Nsinks * sizeof(double)));
+	CUDA_CHECK(cudaMalloc(&dev_gy, Nsinks * sizeof(double)));
+	CUDA_CHECK(cudaMalloc(&dev_gz, Nsinks * sizeof(double)));
 	vector<double> zero(Nsinks, 0.0);
 	if (hpx_rank() == 0) {
 		vector<double> self_phi(Nsinks, -SELF_PHI / get_options().hsoft);
@@ -73,9 +73,9 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	PRINT("%li particles per loop, %li kernels\n", parts_per_loop, num_kernels);
 	for (size_t i = 0; i < particles_size(); i += parts_per_loop) {
 		const int total_size = std::min(size_t(particles_size()), size_t(i) + size_t(parts_per_loop)) - size_t(i);
-		(CUDA_MALLOC(&dev_srcx, total_size * sizeof(fixed32)));
-		(CUDA_MALLOC(&dev_srcy, total_size * sizeof(fixed32)));
-		(CUDA_MALLOC(&dev_srcz, total_size * sizeof(fixed32)));
+		CUDA_CHECK(cudaMalloc(&dev_srcx, total_size * sizeof(fixed32)));
+		CUDA_CHECK(cudaMalloc(&dev_srcy, total_size * sizeof(fixed32)));
+		CUDA_CHECK(cudaMalloc(&dev_srcz, total_size * sizeof(fixed32)));
 		CUDA_CHECK(cudaMemcpy(dev_srcx, &particles_pos(0, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
 		CUDA_CHECK(cudaMemcpy(dev_srcy, &particles_pos(1, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
 		CUDA_CHECK(cudaMemcpy(dev_srcz, &particles_pos(2, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
@@ -86,7 +86,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz, get_options().hsoft);
 		}
 		for (int i = 0; i < num_kernels; i++) {
-			cuda_stream_synchronize(streams[i]);
+			cudaStreamSynchronize(streams[i]);
 		}
 		CUDA_CHECK(cudaFree(dev_srcx));
 		CUDA_CHECK(cudaFree(dev_srcy));

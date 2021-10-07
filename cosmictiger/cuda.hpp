@@ -32,7 +32,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <stdlib.h>
 #include <stdio.h>
 
-#define CUDA_MALLOC(a,b) cuda_malloc2(a,b,__FILE__,__LINE__)
+
 #define CUDA_CHECK( a ) if( a != cudaSuccess ) printf( "CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a))
 
 
@@ -128,15 +128,8 @@ int cuda_smp_count();
 void cuda_init();
 cudaStream_t cuda_get_stream();
 void cuda_end_stream(cudaStream_t stream);
+void cuda_cycle_devices();
 int cuda_get_device();
-void cuda_stream_synchronize(cudaStream_t stream);
-
-void cuda_malloc(void** ptr, size_t size, const char* file, int line );
-
-template<class T>
-void cuda_malloc2(T** ptr, size_t size, const char* file, int line ) {
-	cuda_malloc((void**)ptr,size,file,line);
-}
 #else
 
 #include <memory>
