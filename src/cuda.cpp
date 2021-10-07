@@ -20,6 +20,7 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 
 #ifdef USE_CUDA
