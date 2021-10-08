@@ -44,6 +44,7 @@ struct options {
 	int lc_map_size;
 	int min_group;
 	int slice_res;
+	int nsteps;
 	double lc_b;
 	double slice_size;
 	double link_len;
@@ -74,6 +75,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;
 		arc & save_force;
