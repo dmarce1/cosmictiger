@@ -61,7 +61,6 @@ struct options {
 	double hubble;
 	double sigma8;
 	double theta;
-	double scale_dtlim;
 	double omega_b;
 	double omega_c;
 	double omega_gam;
@@ -114,7 +113,6 @@ struct options {
 		arc & z1;
 		arc & hubble;
 		arc & sigma8;
-		arc & scale_dtlim;
 		arc & omega_b;
 		arc & omega_c;
 		arc & omega_gam;

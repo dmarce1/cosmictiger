@@ -24,11 +24,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 struct driver_params {
 	double a;
+	double tau0;
 	double tau;
 	double tau_max;
 	double cosmicK;
 	double esum0;
 	int iter;
+	int step;
 	size_t total_processed;
 	double flops;
 	double runtime;
@@ -36,7 +38,9 @@ struct driver_params {
 	time_type itime;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & step;
 		arc & a;
+		arc & tau0;
 		arc & tau;
 		arc & tau_max;
 		arc & cosmicK;

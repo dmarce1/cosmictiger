@@ -121,7 +121,7 @@ vector<group_int> groups_exist(vector<group_int> grps) {
 	return std::move(grps);
 }
 
-std::pair<size_t, size_t> groups_save(int number, double time) {
+std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing group database\n");
 		const std::string command = std::string("mkdir -p groups.") + std::to_string(number) + "\n";
@@ -137,13 +137,14 @@ std::pair<size_t, size_t> groups_save(int number, double time) {
 		header.box_len = get_options().code_to_cm / constants::mpc_to_cm;
 		header.time = time;
 		header.number = number;
+		header.scale = scale;
 		fwrite(&header, sizeof(group_header), 1, fp);
 		fclose(fp);
 	}
 
 	vector<hpx::future<std::pair<size_t, size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_save_action>(c, number, time));
+		futs.push_back(hpx::async<groups_save_action>(c, number, scale, time));
 	}
 
 	const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."

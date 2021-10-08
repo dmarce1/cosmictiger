@@ -46,7 +46,7 @@ void show(const char* name, double opt) {
 }
 
 void show(const char* name, std::string opt) {
-	PRINT("%-20s: %e\n", name, opt.c_str());
+	PRINT("%-20s: %s\n", name, opt.c_str());
 }
 
 options global_opts;
@@ -99,7 +99,6 @@ bool process_options(int argc, char *argv[]) {
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
-	("scale_dtlim", po::value<double>(&(opts.scale_dtlim))->default_value(0.02), "maximum change in scale factor time-step limit") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
@@ -213,7 +212,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(parts_dim);
 	SHOW(read_check);
 	SHOW(save_force);
-	SHOW(scale_dtlim);
 	SHOW(sigma8);
 	SHOW(slice_res);
 	SHOW(slice_size);

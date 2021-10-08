@@ -253,6 +253,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	}
 	size_t node_count;
 	size_t active_nodes = 0;
+	size_t leaf_nodes = 0;
+	size_t active_leaf_nodes = 0;
 	const int index = allocator.allocate();
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
@@ -383,6 +385,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
+		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
+		active_leaf_nodes = rcl.active_leaf_nodes + rcr.active_leaf_nodes;
 		if (rcl.nactive || rcr.nactive) {
 			active_nodes += 1 + rcl.active_nodes + rcr.active_nodes;
 		}
@@ -472,7 +476,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			x[dim] = Xc[dim];
 		}
 		node_count = 1;
+		leaf_nodes = 1;
 		if (nactive) {
+			active_leaf_nodes++;
 			active_nodes++;
 		}
 	}
@@ -503,6 +509,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
+	rc.leaf_nodes = leaf_nodes;
+	rc.active_leaf_nodes = active_leaf_nodes;
 	rc.node_count = node.node_count;
 	rc.nactive = nactive;
 	total_flops += flops;

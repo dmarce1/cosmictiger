@@ -35,6 +35,7 @@ struct group_header {
 	int number;
 	double time;
 	double box_len;
+	double scale;
 };
 
 struct group_entry {

@@ -108,7 +108,7 @@ void do_groups(int number, double scale) {
 	PRINT("groups_cull %e\n", tm.read());
 	tm.reset();
 	tm.start();
-	auto ngroups = groups_save(number, cosmos_time(1.0e-6 * scale, scale) * get_options().code_to_s / constants::spyr);
+	auto ngroups = groups_save(number, scale, cosmos_time(1.0e-6 * scale, scale) * get_options().code_to_s / constants::spyr);
 	tm.stop();
 	PRINT("groups_save %e\n", tm.read());
 	total.stop();
@@ -119,7 +119,7 @@ void do_groups(int number, double scale) {
 
 }
 
-std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double dt_max, double theta, bool first_call, bool full_eval) {
+std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
 	PRINT("domains_begin\n");
@@ -139,9 +139,8 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	sort_time += tm.read();
 	tm.reset();
 	tm.start();
-	PRINT("nactive = %li\n", sr.nactive);
+//	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
-	kparams.dt_max = dt_max;
 	kparams.node_load = flops_per_node / flops_per_particle;
 	kparams.gpu = true;
 	used_gpu = kparams.gpu;
@@ -185,6 +184,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 }
 
 void do_power_spectrum(int num, double a) {
+	PRINT("Computing power spectrum\n");
 	const float h = get_options().hubble;
 	const float omega_m = get_options().omega_m;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
@@ -205,6 +205,7 @@ void do_power_spectrum(int num, double a) {
 	}
 	fclose(fp);
 }
+
 
 void output_time_file() {
 	const double a0 = 1.0 / (1.0 + get_options().z0);
@@ -254,9 +255,11 @@ void driver() {
 			particles_set_tracers();
 		}
 		domains_rebound();
+		params.step = 0;
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		params.tau = 0.0;
+		params.tau0 = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;
 		params.itime = 0;
@@ -272,14 +275,18 @@ void driver() {
 	auto& years = params.years;
 	auto& a = params.a;
 	auto& tau = params.tau;
+	auto& tau0 = params.tau0;
 	auto& tau_max = params.tau_max;
 	auto& cosmicK = params.cosmicK;
 	auto& esum0 = params.esum0;
 	auto& itime = params.itime;
 	auto& iter = params.iter;
+	int& step = params.step;
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
-	double t0 = tau_max / get_options().nsteps;
+	int nsteps = get_options().nsteps;
+	double z0 = get_options().z0;
+	double dloga = log(z0 + 1.0) / nsteps;
 	double pot;
 	int this_iter = 0;
 	double last_theta = -1.0;
@@ -289,6 +296,7 @@ void driver() {
 		lc_init(tau, tau_max);
 	}
 	double dt;
+
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
 			PRINT("Flushing light cone\n");
@@ -308,146 +316,166 @@ void driver() {
 			lc_parts2groups(a, link_len);
 		}
 	};
-	while (1.0 / a > get_options().z1 + 1.0) {
-		//	do_groups(tau / t0 + 1e-6, a);
-		tmr.stop();
-		if (tmr.read() > get_options().check_freq) {
+
+	for (;; step++) {
+		double t0 = tau_max / get_options().nsteps;
+		do {
+			tmr.stop();
+			if (tmr.read() > get_options().check_freq) {
+				total_time.stop();
+				runtime += total_time.read();
+				total_time.reset();
+				total_time.start();
+				write_checkpoint(params);
+				tmr.reset();
+			}
+			tmr.start();
+			int minrung = min_rung(itime);
+			bool full_eval = minrung == 0;
+			if (full_eval) {
+				const int number = step;
+				if (get_options().do_tracers) {
+					output_tracers(number);
+				}
+				if (get_options().do_slice) {
+					output_slice(number, years);
+				}
+				if (get_options().do_views) {
+					timer tm;
+					tm.start();
+					output_view(number, years);
+					tm.stop();
+					PRINT("View %i took %e \n", number, tm.read());
+				}
+			}
+			double imbalance = domains_get_load_imbalance();
+			if (imbalance > MAX_LOAD_IMBALANCE) {
+				domains_rebound();
+				imbalance = domains_get_load_imbalance();
+			}
+			double theta;
+			const double z = 1.0 / a - 1.0;
+			auto opts = get_options();
+			if (z > 50.0) {
+				theta = 0.4;
+				opts.part_cache_line_size = 64 * 1024;
+			} else if (z > 20.0) {
+				theta = 0.5;
+				opts.part_cache_line_size = 64 * 1024;
+			} else if (z > 2.0) {
+				theta = 0.65;
+				opts.part_cache_line_size = 32 * 1024;
+			} else {
+				theta = 0.8;
+				opts.part_cache_line_size = 16 * 1024;
+			}
+			if (last_theta != theta) {
+				set_options(opts);
+			}
+			last_theta = theta;
+			PRINT("Kicking\n");
+			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+			kick_return kr = tmp.first;
+			tree_create_return sr = tmp.second;
+			PRINT("Done kicking\n");
+			if (full_eval) {
+				kick_workspace::clear_buffers();
+				pot = kr.pot * 0.5 / a;
+				if (get_options().do_power) {
+					do_power_spectrum(step, a);
+				}
+				if (get_options().do_groups) {
+					do_groups(step, a);
+				}
+			}
+			dt = t0 / (1 << kr.max_rung);
+			const double dadt1 = a * cosmos_dadt(a);
+			const double a1 = a;
+			a += dadt1 * dt;
+			const double dadt2 = a * cosmos_dadt(a);
+			a += 0.5 * (dadt2 - dadt1) * dt;
+			const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
+			const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
+//			PRINT("%e %e\n", a1, a);
+			timer dtm;
+			dtm.start();
+			PRINT("Drift\n");
+			dr = drift(a2, dt, tau, tau + dt, tau_max);
+			if (get_options().do_lc) {
+				check_lc(false);
+			}
+			PRINT("Drift done\n");
+			dtm.stop();
+			drift_time += dtm.read();
+			cosmicK += dr.kin * (a - a1);
+			const double esum = (a * (pot + dr.kin) + cosmicK);
+			if (tau == 0.0) {
+				esum0 = esum;
+			}
+			const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
+			FILE* textfp = fopen("progress.txt", "at");
+			if (textfp == nullptr) {
+				THROW_ERROR("unable to open progress.txt for writing\n");
+			}
+			if (full_eval) {
+				PRINT_BOTH(textfp,
+						"\n%10s %6s %10s %4s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
+						"runtime", "i", "imbalance", "mind", "maxd", "ed", "ppnode", "appanode", "Z", "a", "timestep", "years", "dt", "pot", "kin", "cosmicK",
+						"pot err", "minr", "maxr", "active", "nmapped", "load", "dotime", "stime", "ktime", "drtime", "avg total", "pps", "GFLOPSins", "GFLOPS");
+			}
+			iter++;
+			total_processed += kr.nactive;
+			timer remaining_time;
 			total_time.stop();
+			remaining_time.start();
 			runtime += total_time.read();
-			total_time.reset();
-			total_time.start();
-			write_checkpoint(params);
-			tmr.reset();
-			//kick_workspace::clear_buffers();
-			//	return;
-		}
-//		PRINT("Next iteration\n");
-		tmr.start();
-		int minrung = min_rung(itime);
-		bool full_eval = minrung == 0;
-		if (full_eval) {
-			const int number = tau / t0 + 0.001 / t0;
-			if (get_options().do_tracers) {
-				output_tracers(number);
+			double pps = total_processed / runtime;
+			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
+			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
+			params.flops += total_flops;
+			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
+			double act_pct = kr.nactive / nparts;
+			const double parts_per_node = nparts / sr.leaf_nodes;
+			const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
+			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
+			if( full_eval ) {
+				FILE* fp = fopen( "energy.txt", "at");
+				if( fp == NULL) {
+					THROW_ERROR( "Unable to open energy.txt\n");
+				}
+				fprintf( fp, "%i %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, cosmicK, eerr);
+				fclose(fp);
 			}
-			if (get_options().do_slice) {
-				output_slice(number, years);
-			}
-			if (get_options().do_views) {
-				timer tm;
-				tm.start();
-				output_view(number, years);
-				tm.stop();
-				PRINT("View %i took %e \n", number, tm.read());
-			}
-		}
-		double imbalance = domains_get_load_imbalance();
-		if (imbalance > MAX_LOAD_IMBALANCE) {
-			domains_rebound();
-			imbalance = domains_get_load_imbalance();
-		}
-		double theta;
-		const double z = 1.0 / a - 1.0;
-		auto opts = get_options();
-		if (z > 50.0) {
-			theta = 0.4;
-			opts.part_cache_line_size = 64 * 1024;
-		} else if (z > 20.0) {
-			theta = 0.5;
-			opts.part_cache_line_size = 64 * 1024;
-		} else if (z > 2.0) {
-			theta = 0.65;
-			opts.part_cache_line_size = 32 * 1024;
-		} else {
-			theta = 0.8;
-			opts.part_cache_line_size = 16 * 1024;
-		}
-		if (last_theta != theta) {
-			set_options(opts);
-		}
-		last_theta = theta;
-		PRINT("Kicking\n");
-		const double dt_max = get_options().scale_dtlim / cosmos_dadt(a);
-		auto tmp = kick_step(minrung, a, t0, dt_max, theta, tau == 0.0, full_eval);
-		kick_return kr = tmp.first;
-		tree_create_return sr = tmp.second;
-		PRINT("Done kicking\n");
-		if (full_eval) {
-			kick_workspace::clear_buffers();
-			pot = kr.pot * 0.5 / a;
-			if (get_options().do_power) {
-				do_power_spectrum(tau / t0 + 0.001 / t0, a);
-			}
-			if (get_options().do_groups) {
-				do_groups(tau / t0 + .001 / t0, a);
-			}
-		}
-		dt = t0 / (1 << kr.max_rung);
-		const double dadt1 = a * cosmos_dadt(a);
-		const double a1 = a;
-		a += dadt1 * dt;
-		const double dadt2 = a * cosmos_dadt(a);
-		a += 0.5 * (dadt2 - dadt1) * dt;
-		const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
-		const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
-		PRINT("%e %e\n", a1, a);
-		timer dtm;
-		dtm.start();
-		PRINT("Drift\n");
-		dr = drift(a2, dt, tau, tau + dt, tau_max);
-		if (get_options().do_lc) {
-			check_lc(false);
-		}
-		PRINT("Drift done\n");
-		dtm.stop();
-		drift_time += dtm.read();
-		cosmicK += dr.kin * (a - a1);
-		const double esum = (a * (pot + dr.kin) + cosmicK);
-		if (tau == 0.0) {
-			esum0 = esum;
-		}
-		const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
-		FILE* textfp = fopen("progress.txt", "at");
-		if (textfp == nullptr) {
-			THROW_ERROR("unable to open progress.txt for writing\n");
-		}
-		if (full_eval) {
 			PRINT_BOTH(textfp,
-					"\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
-					"runtime", "i", "imbalance", "min depth", "max depth", "Z", "a", "cfl. time", "years", "dt", "pot", "kin", "cosmicK", "pot err", "min rung",
-					"max rung", "active pct", "nmapped", "load", "dtime", "stime", "ktime", "dtime", "avg total", "pps", "GFLOPSins", "GFLOPS");
-		}
-		iter++;
-		total_processed += kr.nactive;
-		timer remaining_time;
-		total_time.stop();
-		remaining_time.start();
-		runtime += total_time.read();
-		double pps = total_processed / runtime;
-		const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
-		//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
-		params.flops += total_flops;
-		double act_pct = 100.0 * kr.nactive / std::pow((double) get_options().parts_dim, (double) NDIM);
-		PRINT_BOTH(textfp,
-				"%10.3e %10li %10.3e %10i %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10li %10li %9.2e%% %10li %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
-				runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, z, a1, tau / tau_max * get_options().nsteps, years, dt * get_options().nsteps / tau_max, a * pot, a * dr.kin, cosmicK, eerr, minrung,
-				kr.max_rung, act_pct, dr.nmapped, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
-				total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
-		fclose(textfp);
-		total_time.reset();
-		remaining_time.stop();
-		runtime += remaining_time.read();
-		total_time.start();
-		//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
-		itime = inc(itime, kr.max_rung);
-		domain_time = 0.0;
-		sort_time = 0.0;
-		kick_time = 0.0;
-		drift_time = 0.0;
-		tau += dt;
-		this_iter++;
-		years += dyears;
-		if (this_iter > get_options().max_iter) {
+					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
+					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1,
+					step + (tau - tau0) / t0, years, dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, act_pct, (double ) dr.nmapped, kr.load,
+					domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
+					total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+			fclose(textfp);
+			total_time.reset();
+			remaining_time.stop();
+			runtime += remaining_time.read();
+			total_time.start();
+			//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
+//			PRINT("%llx\n", itime);
+			itime = inc(itime, kr.max_rung);
+			domain_time = 0.0;
+			sort_time = 0.0;
+			kick_time = 0.0;
+			drift_time = 0.0;
+			tau += dt;
+			this_iter++;
+			years += dyears;
+			if (1.0 / a < get_options().z1 + 1.0) {
+				PRINT("Reached minimum redshift, exiting...\n");
+				break;
+			} else if (this_iter > get_options().max_iter) {
+				PRINT("Reached maximum iteration, exiting...\n");
+				break;
+			}
+		} while (itime != 0);
+		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
 		}
 	}
@@ -507,7 +535,7 @@ void write_checkpoint(driver_params params) {
 	}
 	//PRINT( "lc_saved\n");
 	fclose(fp);
-	PRINT("closed\n");
+//	PRINT("closed\n");
 //	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {

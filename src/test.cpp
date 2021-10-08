@@ -227,7 +227,6 @@ static void kick_test() {
 		tm.reset();
 		tm.start();
 		kick_params kparams;
-		kparams.dt_max = 1.0;
 		kparams.gpu = true;
 		kparams.node_load = 10;
 		kparams.min_level = tparams.min_level;
@@ -316,7 +315,6 @@ static void force_test() {
 
 	tm.start();
 	kick_params kparams;
-	kparams.dt_max = 1.0;
 	kparams.node_load = 10;
 	kparams.gpu = true;
 	kparams.min_level = tparams.min_level;
