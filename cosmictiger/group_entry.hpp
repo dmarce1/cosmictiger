@@ -31,6 +31,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 using group_int = long long;
 
 
+struct group_header {
+	int number;
+	double time;
+	double box_len;
+};
+
 struct group_entry {
 	group_int id;
 	array<double, NDIM> com;
@@ -48,16 +54,13 @@ struct group_entry {
 	float vxdisp;
 	float vydisp;
 	float vzdisp;
-	float xdisp;
-	float ydisp;
-	float zdisp;
 	float Ixx;
 	float Ixy;
 	float Ixz;
 	float Iyy;
 	float Iyz;
 	float Izz;
-	int parent_count;
+	bool incomplete;
 	std::unordered_map<group_int, int> parents;
 	group_entry() = default;
 	group_entry(group_entry&&) = default;

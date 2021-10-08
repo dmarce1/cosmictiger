@@ -20,6 +20,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/bh.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/containers.hpp>
+#include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/math.hpp>
@@ -27,6 +28,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/range.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/group_entry.hpp>
 
 #include <atomic>
 #include <memory>
@@ -44,7 +46,7 @@ using healpix_type = T_Healpix_Base< int >;
 
 struct lc_group_data {
 	vector<lc_particle> parts;
-	lc_group_archive arc;
+	group_entry arc;
 };
 
 struct lc_tree_id {
@@ -98,7 +100,7 @@ static std::unordered_map<int, vector<lc_tree_node>> tree_map;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
 static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
-static vector<lc_group_archive> saved_groups;
+static vector<group_entry> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type mutex;
 static double tau_max;
@@ -142,7 +144,9 @@ vector<float> lc_flush_final() {
 	if (fp == NULL) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
 	}
-	fwrite(saved_groups.data(), sizeof(lc_group_archive), saved_groups.size(), fp);
+	for( int i = 0; i < saved_groups.size(); i++) {
+		saved_groups[i].write(fp);
+	}
 	fclose(fp);
 
 	const int nside = get_options().lc_map_size;
@@ -165,6 +169,10 @@ vector<float> lc_flush_final() {
 		fwrite(&nside, sizeof(int), 1, fp);
 		fwrite(&npix, sizeof(int), 1, fp);
 		fwrite(pix.data(), sizeof(float), npix, fp);
+		int number = 0;
+		double time = cosmos_time(1.0e-6, 1.0) * get_options().code_to_s / constants::spyr;
+		fwrite(&number, sizeof(int), 1, fp);
+		fwrite(&time, sizeof(double), 1, fp);
 		fclose(fp);
 
 	}
@@ -187,7 +195,9 @@ void lc_save(FILE* fp) {
 	}
 	sz = saved_groups.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
-	fwrite(saved_groups.data(), sizeof(lc_group_archive), sz, fp);
+	for( int i = 0; i < sz; i++) {
+		saved_groups[i].write(fp);
+	}
 }
 
 void lc_load(FILE* fp) {
@@ -207,7 +217,9 @@ void lc_load(FILE* fp) {
 	}
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	saved_groups.resize(sz);
-	FREAD(saved_groups.data(), sizeof(lc_group_archive), sz, fp);
+	for( int i = 0; i < sz; i++) {
+		saved_groups[i].read(fp);
+	}
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -416,7 +428,7 @@ void lc_parts2groups(double a, double link_len) {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	for (int i = 0; i < groups.size(); i++) {
-		saved_groups.push_back(groups[i].arc);
+		saved_groups.push_back(std::move(groups[i].arc));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }

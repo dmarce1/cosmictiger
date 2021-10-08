@@ -108,7 +108,7 @@ void do_groups(int number, double scale) {
 	PRINT("groups_cull %e\n", tm.read());
 	tm.reset();
 	tm.start();
-	auto ngroups = groups_save(number);
+	auto ngroups = groups_save(number, cosmos_time(1.0e-6 * scale, scale) * get_options().code_to_s / constants::spyr);
 	tm.stop();
 	PRINT("groups_save %e\n", tm.read());
 	total.stop();
@@ -367,7 +367,7 @@ void driver() {
 		}
 		last_theta = theta;
 		PRINT("Kicking\n");
-		const double dt_max = get_options().scale_dtlim  / cosmos_dadt(a);
+		const double dt_max = get_options().scale_dtlim / cosmos_dadt(a);
 		auto tmp = kick_step(minrung, a, t0, dt_max, theta, tau == 0.0, full_eval);
 		kick_return kr = tmp.first;
 		tree_create_return sr = tmp.second;

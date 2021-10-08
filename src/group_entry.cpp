@@ -48,15 +48,13 @@ void group_entry::write(FILE* fp) {
 	fwrite_single(fp, vxdisp);
 	fwrite_single(fp, vydisp);
 	fwrite_single(fp, vzdisp);
-	fwrite_single(fp, xdisp);
-	fwrite_single(fp, ydisp);
-	fwrite_single(fp, zdisp);
 	fwrite_single(fp, Ixx);
 	fwrite_single(fp, Ixy);
 	fwrite_single(fp, Ixz);
 	fwrite_single(fp, Iyy);
 	fwrite_single(fp, Iyz);
 	fwrite_single(fp, Izz);
+	int parent_count = parents.size();
 	fwrite_single(fp, parent_count);
 	for (auto i = parents.begin(); i != parents.end(); i++) {
 		fwrite_single(fp, *i);
@@ -82,15 +80,13 @@ bool group_entry::read(FILE* fp) {
 	fread_single(fp, vxdisp);
 	fread_single(fp, vydisp);
 	fread_single(fp, vzdisp);
-	fread_single(fp, xdisp);
-	fread_single(fp, ydisp);
-	fread_single(fp, zdisp);
 	fread_single(fp, Ixx);
 	fread_single(fp, Ixy);
 	fread_single(fp, Ixz);
 	fread_single(fp, Iyy);
 	fread_single(fp, Iyz);
 	fread_single(fp, Izz);
+	int parent_count;
 	fread_single(fp, parent_count);
 	for (int i = 0; i < parent_count; i++) {
 		std::pair<group_int, int> entry;

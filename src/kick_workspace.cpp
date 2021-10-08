@@ -121,6 +121,7 @@ void kick_workspace::to_gpu() {
 									tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
 								}
 							}
+							return 'a';
 						}));
 	}
 
@@ -146,6 +147,7 @@ void kick_workspace::to_gpu() {
 								const int deviceid = cuda_get_device();
 								ASSERT(workitems[i].self.proc == hpx_rank());
 							}
+							return 'a';
 						}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
@@ -168,6 +170,7 @@ void kick_workspace::to_gpu() {
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
 							}
+							return 'a';
 						}
 				)
 		);

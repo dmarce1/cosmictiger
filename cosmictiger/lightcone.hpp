@@ -65,8 +65,6 @@ struct lc_particle {
 	}
 };
 
-#include <cosmictiger/lc_group_archive.hpp>
-
 void lc_init(double, double);
 int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);

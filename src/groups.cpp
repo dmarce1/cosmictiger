@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/bh.hpp>
 #include <cosmictiger/containers.hpp>
@@ -65,7 +65,7 @@ void groups_cull() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async < groups_cull_action > (c));
+		futs1.push_back(hpx::async<groups_cull_action>(c));
 	}
 	std::unordered_set<group_int> final_existing;
 	mutex_type mutex;
@@ -121,18 +121,29 @@ vector<group_int> groups_exist(vector<group_int> grps) {
 	return std::move(grps);
 }
 
-std::pair<size_t, size_t> groups_save(int number) {
+std::pair<size_t, size_t> groups_save(int number, double time) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing group database\n");
 		const std::string command = std::string("mkdir -p groups.") + std::to_string(number) + "\n";
 		if (system(command.c_str()) != 0) {
 			THROW_ERROR("Unable to execute : %s\n", command.c_str());
 		}
+		const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.dat");
+		FILE* fp = fopen(fname.c_str(), "wb");
+		if (fp == NULL) {
+			THROW_ERROR("Unable to open %s for writing\n", fname.c_str());
+		}
+		group_header header;
+		header.box_len = get_options().code_to_cm / constants::mpc_to_cm;
+		header.time = time;
+		header.number = number;
+		fwrite(&header, sizeof(group_header), 1, fp);
+		fclose(fp);
 	}
 
 	vector<hpx::future<std::pair<size_t, size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < groups_save_action > (c, number));
+		futs.push_back(hpx::async<groups_save_action>(c, number, time));
 	}
 
 	const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."
@@ -166,7 +177,7 @@ std::pair<size_t, size_t> groups_save(int number) {
 void groups_reduce(double scale_factor) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < groups_reduce_action > (c, scale_factor));
+		futs.push_back(hpx::async<groups_reduce_action>(c, scale_factor));
 	}
 	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::thread::hardware_concurrency();
 	spinlock_type mutex;
@@ -264,9 +275,6 @@ void groups_reduce(double scale_factor) {
 				float vxdisp = 0.0;
 				float vydisp = 0.0;
 				float vzdisp = 0.0;
-				float xdisp = 0.0;
-				float ydisp = 0.0;
-				float zdisp = 0.0;
 				float Ixx = 0.0, Ixy = 0.0, Ixz = 0.0, Iyy = 0.0, Iyz = 0.0, Izz = 0.0;
 				for( int i = 0; i < parts.size(); i++) {
 					double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
@@ -284,9 +292,6 @@ void groups_reduce(double scale_factor) {
 					Ixy += dx * dy;
 					Iyz += dy * dz;
 					Ixz += dx * dz;
-					xdisp += dx * dx;
-					ydisp += dy * dy;
-					zdisp += dz * dz;
 					vxdisp += vx * vx;
 					vydisp += vy * vy;
 					vzdisp += vz * vz;
@@ -294,9 +299,6 @@ void groups_reduce(double scale_factor) {
 					radii.push_back(r);
 					ravg += r;
 				}
-				xdisp = sqrt(xdisp*countinv);
-				ydisp = sqrt(ydisp*countinv);
-				zdisp = sqrt(zdisp*countinv);
 				vxdisp = sqrt(vxdisp*countinv);
 				vydisp = sqrt(vydisp*countinv);
 				vzdisp = sqrt(vzdisp*countinv);
@@ -322,7 +324,6 @@ void groups_reduce(double scale_factor) {
 					}
 				}
 				entry.lang = lang;
-				entry.parent_count = entry.parents.size();
 				entry.Ixx = Ixx;
 				entry.Ixy = Ixy;
 				entry.Ixz = Ixz;
@@ -332,9 +333,7 @@ void groups_reduce(double scale_factor) {
 				entry.vxdisp = vxdisp;
 				entry.vydisp = vydisp;
 				entry.vzdisp = vzdisp;
-				entry.xdisp = xdisp;
-				entry.ydisp = ydisp;
-				entry.zdisp = zdisp;
+				entry.incomplete = false;
 				entry.ekin = ekin;
 				entry.epot = pot;
 				entry.r25 = radial_percentile(0.25);
@@ -384,7 +383,7 @@ void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>
 void groups_add_particles(int wave, double scale) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < groups_add_particles_action > (c, wave, scale));
+		futs.push_back(hpx::async<groups_add_particles_action>(c, wave, scale));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	spinlock_type mutex;

@@ -47,7 +47,7 @@ struct particle_data {
 
 void groups_add_particles(int wave, double scale);
 void groups_reduce(double);
-std::pair<size_t,size_t> groups_save(int number);
+std::pair<size_t,size_t> groups_save(int number, double time);
 void groups_cull();
 
 #endif /* GROUPS_HPP_ */
