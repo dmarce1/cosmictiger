@@ -449,7 +449,7 @@ void driver() {
 			PRINT_BOTH(textfp,
 					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
 					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1,
-					step + (tau - tau0) / t0, years, dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, act_pct, (double ) dr.nmapped, kr.load,
+				   tau / t0, years, dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, act_pct, (double ) dr.nmapped, kr.load,
 					domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
 					total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
