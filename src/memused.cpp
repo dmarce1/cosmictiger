@@ -33,7 +33,7 @@ static size_t cpu_mem_use() { //Note: this value is in KB!
 		}
 	}
 	fclose(file);
-	return result;
+	return size_t(result) * 1024;
 }
 
 static bool stop_daemon = false;
