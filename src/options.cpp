@@ -145,13 +145,8 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
-#ifdef USE_CUDA
-	opts.tree_cache_line_size = 512;
-	opts.part_cache_line_size = 8 * 1024; //
-#else
 	opts.tree_cache_line_size = 262144 / sizeof(tree_node);
 	opts.part_cache_line_size = 1048576 / (sizeof(fixed32) * NDIM);
-#endif
 	opts.save_force = opts.test == "force";
 	opts.hsoft = 1.0 / 50.0 / opts.parts_dim;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
