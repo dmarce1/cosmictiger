@@ -5,9 +5,8 @@
 #include "stdio.h"
 #include "string.h"
 
-
 size_t max_cpu_mem_use();
-HPX_PLAIN_ACTION(max_cpu_mem_use);
+HPX_PLAIN_ACTION (max_cpu_mem_use);
 
 // some of this code adapted from https://stackoverflow.com/questions/63166/how-to-determine-cpu-and-memory-consumption-from-inside-a-process
 
@@ -41,12 +40,12 @@ static bool stop_daemon = false;
 static bool daemon_stopped = false;
 
 size_t max_cpu_mem_use() {
-	vector<hpx::future<size_t>> futs;
-	for( auto& c : hpx_children()) {
+	vector < hpx::future < size_t >> futs;
+	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<max_cpu_mem_use_action>(c));
 	}
 	size_t max_use = cpu_mem_use();
-	for( auto& f : futs) {
+	for (auto& f : futs) {
 		max_use = std::max(max_use, f.get());
 	}
 
@@ -57,11 +56,11 @@ static void memuse_daemon() {
 	static size_t max_memused = 0;
 	timer tm;
 	tm.start();
-	while (true) {
+	while (!stop_daemon) {
 		tm.stop();
 		if (tm.read() >= 1.0) {
 			const auto thismemused = max_cpu_mem_use();
-			if( thismemused > max_memused) {
+			if (thismemused > max_memused) {
 				max_memused = thismemused;
 				PRINT("MAX MEMUSED = %f GB\n", thismemused / 1024. / 1024. / 1024.);
 			}
@@ -70,6 +69,7 @@ static void memuse_daemon() {
 		tm.start();
 		hpx::this_thread::yield();
 	}
+	daemon_stopped = true;
 }
 
 void start_memuse_daemon() {
