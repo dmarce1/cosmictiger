@@ -23,6 +23,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/tree.hpp>
 #include <cosmictiger/safe_io.hpp>
 
 #ifdef HPX_LITE
