@@ -25,11 +25,13 @@
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
+#include <cosmictiger/memused.hpp>
 
 
 int hpx_main(int argc, char *argv[]) {
 	hpx_init();
 	ewald_const::init();
+	start_memuse_daemon();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
 			test(get_options().test);
@@ -38,6 +40,7 @@ int hpx_main(int argc, char *argv[]) {
 		}
 	}
 	particles_destroy();
+	stop_memuse_daemon();
 	return hpx::finalize();
 }
 

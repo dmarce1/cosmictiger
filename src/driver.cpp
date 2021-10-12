@@ -259,7 +259,6 @@ void driver() {
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		params.tau = 0.0;
-		params.tau0 = 0.0;
 		params.a = a0;
 		params.cosmicK = 0.0;
 		params.itime = 0;
@@ -275,7 +274,6 @@ void driver() {
 	auto& years = params.years;
 	auto& a = params.a;
 	auto& tau = params.tau;
-	auto& tau0 = params.tau0;
 	auto& tau_max = params.tau_max;
 	auto& cosmicK = params.cosmicK;
 	auto& esum0 = params.esum0;

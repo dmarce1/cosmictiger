@@ -68,6 +68,7 @@ set(cosmictiger_source_files
     src/kick_workspace.cpp
     src/lightcone.cpp
     src/main.cpp
+    src/memused.cpp
     src/options.cpp
     src/output.cpp
     src/particles.cpp
@@ -113,6 +114,7 @@ set(cosmictiger_header_files
     cosmictiger/lc_group_archive.hpp
     cosmictiger/lightcone.hpp
     cosmictiger/math.hpp
+    cosmictiger/memused.hpp
     cosmictiger/options.hpp
     cosmictiger/output.hpp
     cosmictiger/particles.hpp
