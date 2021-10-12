@@ -532,7 +532,7 @@ void particles_resize(part_int sz) {
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
-			new_capacity = size_t(21) * new_capacity / size_t(100);
+			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
 		PRINT("Resizing particles to %li from %li\n", new_capacity, capacity);
 		for (int dim = 0; dim < NDIM; dim++) {
