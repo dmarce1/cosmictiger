@@ -24,11 +24,13 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/test.hpp>
+#include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
 
 
 int hpx_main(int argc, char *argv[]) {
+	PRINT( "tree_node size = %i\n", sizeof(tree_node));
 	hpx_init();
 	ewald_const::init();
 	start_memuse_daemon();

@@ -356,16 +356,12 @@ void driver() {
 			auto opts = get_options();
 			if (z > 50.0) {
 				theta = 0.4;
-				opts.part_cache_line_size = 64 * 1024;
 			} else if (z > 20.0) {
 				theta = 0.5;
-				opts.part_cache_line_size = 64 * 1024;
 			} else if (z > 2.0) {
 				theta = 0.65;
-				opts.part_cache_line_size = 32 * 1024;
 			} else {
 				theta = 0.8;
-				opts.part_cache_line_size = 16 * 1024;
 			}
 			if (last_theta != theta) {
 				set_options(opts);
