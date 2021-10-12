@@ -27,13 +27,13 @@ static size_t cpu_mem_use() { //Note: this value is in KB!
 	char line[128];
 
 	while (fgets(line, 128, file) != NULL) {
-		if (strncmp(line, "VmSize:", 7) == 0) {
+		if (strncmp(line, "VmRSS:", 6) == 0) {
 			result = parseLine(line);
 			break;
 		}
 	}
 	fclose(file);
-	return size_t(result) * size_t(1024);
+	return result;
 }
 
 static bool stop_daemon = false;
@@ -63,6 +63,12 @@ static void memuse_daemon() {
 			if (thismemused > max_memused) {
 				max_memused = thismemused;
 				PRINT("MAX MEMUSED = %f GB\n", thismemused / 1024. / 1024. / 1024.);
+				FILE* fp = fopen("maxmem.txt", "wt");
+				if (fp == NULL) {
+					THROW_ERROR("Unable to open maxmem.txt\n");
+				}
+				fprintf(fp, "%f GB\n", thismemused / 1024. / 1024. / 1024.);
+				fclose(fp);
 			}
 			tm.reset();
 		}
