@@ -178,11 +178,11 @@ static void tree_test() {
 
 static void kick_test() {
 	timer tm;
-	constexpr double z0[] = { 50, 20, 2, 0 };
+	constexpr double z0[] = { 35, 11, 1 };
 
 	timer total_time;
 	double total_flops = 0.0;
-	for (int pass = 0; pass < 4; pass++) {
+	for (int pass = 0; pass < 3; pass++) {
 		tm.start();
 		initialize(z0[pass]);
 		tm.stop();
@@ -238,7 +238,13 @@ static void kick_test() {
 		kparams.first_call = true;
 		kparams.min_rung = 0;
 		kparams.t0 = 1.0;
-		kparams.theta = get_options().theta;
+		if( pass == 0  ) {
+			kparams.theta = 0.5;
+		} else if( pass == 1 ) {
+			kparams.theta = 0.65;
+		} else {
+			kparams.theta = 0.8;
+		}
 		expansion<float> L;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] = 0.0f;
@@ -269,11 +275,11 @@ static void kick_test() {
 		PRINT("drift: %e s\n", tm.read());
 		total_time.stop();
 	}
-	PRINT("avg time per step = %e\n", total_time.read() / 4);
+	PRINT("avg time per step = %e\n", total_time.read() / 3);
 	const double flops_measure = total_flops / total_time.read() / hpx_size();
 	PRINT("FLOPS / s / locality = %e\n", flops_measure);
 	FILE* fp = fopen("results.txt", "at");
-	fprintf(fp, "%i %e %e\n", hpx_size(), total_time.read() / 4, flops_measure);
+	fprintf(fp, "%i %e %e\n", hpx_size(), total_time.read() / 3, flops_measure);
 	fclose(fp);
 	kick_workspace::clear_buffers();
 }
