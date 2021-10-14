@@ -100,7 +100,7 @@ static const tree_node* tree_cache_read(tree_id id);
 void tree_allocator::reset() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	next = (next_id += tree_cache_line_size);
-	last = next + tree_cache_line_size;
+	last = std::min(next + tree_cache_line_size, (int) nodes.size());
 	if (last > nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full");
 	}
