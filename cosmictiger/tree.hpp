@@ -45,38 +45,38 @@ struct tree_id {
 	}
 #ifndef __CUDA_ARCH__
 	inline tree_id operator=(const tree_id& other) {
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
 		proc = other.proc;
 		index = other.index;
+		if (proc == hpx_rank())
+			ASSERT(index < tree_nodes_size());
 		return *this;
 	}
 	inline tree_id operator=(tree_id&& other) {
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
 		proc = other.proc;
 		index = other.index;
+		if (proc == hpx_rank())
+			ASSERT(index < tree_nodes_size());
 		return *this;
 	}
 	inline tree_id(const tree_id& other) {
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
 		proc = other.proc;
 		index = other.index;
+		if (proc == hpx_rank())
+			ASSERT(index < tree_nodes_size());
 	}
 	inline tree_id(tree_id&& other) {
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
 		proc = other.proc;
 		index = other.index;
+		if (proc == hpx_rank())
+			ASSERT(index < tree_nodes_size());
 	}
 	inline tree_id() = default;
 	template<class A>
 	void serialize(A&& a, unsigned) {
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
 		a & proc;
 		a & index;
+		if (proc == hpx_rank())
+			ASSERT(index < tree_nodes_size());
 	}
 #endif
 };
