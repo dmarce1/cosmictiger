@@ -1,21 +1,22 @@
 /*
- CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+CosmicTiger - A cosmological N-Body code
+Copyright (C) 2021  Dominic C. Marcello
 
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+*/
+
 
 #ifndef TREE_HPP_
 #define TREE_HPP_
@@ -32,8 +33,6 @@ struct multipole_pos {
 	array<fixed32, NDIM> pos;
 };
 
-long long tree_nodes_size();
-
 struct tree_id {
 	int proc;
 	int index;
@@ -43,42 +42,11 @@ struct tree_id {
 	inline bool operator!=(tree_id other) const {
 		return proc != other.proc || index != other.index;
 	}
-#ifndef __CUDA_ARCH__
-	inline tree_id operator=(const tree_id& other) {
-		proc = other.proc;
-		index = other.index;
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
-		return *this;
-	}
-	inline tree_id operator=(tree_id&& other) {
-		proc = other.proc;
-		index = other.index;
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
-		return *this;
-	}
-	inline tree_id(const tree_id& other) {
-		proc = other.proc;
-		index = other.index;
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
-	}
-	inline tree_id(tree_id&& other) {
-		proc = other.proc;
-		index = other.index;
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
-	}
-	inline tree_id() = default;
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & proc;
 		a & index;
-		if (proc == hpx_rank())
-			ASSERT(index < tree_nodes_size());
 	}
-#endif
 };
 
 struct tree_id_hash {
@@ -117,7 +85,8 @@ struct tree_node {
 	bool source_leaf;
 	size_t node_count;
 	size_t active_nodes;
-	int depth;CUDA_EXPORT
+	int depth;
+	CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
 		return (multipole_pos*) &multi;
 	}

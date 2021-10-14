@@ -139,12 +139,12 @@ void kick_workspace::to_gpu() {
 									workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
 								}
 								workitems[i].self.index = tree_map[workitems[i].self];
-								cuda_set_device();
+/*								cuda_set_device();
 								const tree_node& node = *tree_get_node(workitems[i].self);
 								const part_int begin = node.sink_part_range.first;
 								const part_int end = node.sink_part_range.second;
 								const size_t size = end - begin;
-								const int deviceid = cuda_get_device();
+								const int deviceid = cuda_get_device();*/
 								ASSERT(workitems[i].self.proc == hpx_rank());
 							}
 							return 'a';
