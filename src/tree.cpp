@@ -101,7 +101,7 @@ void tree_allocator::reset() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	next = (next_id += tree_cache_line_size);
 	last = std::min(next + tree_cache_line_size, (int) nodes.size());
-	if (last > nodes.size()) {
+	if (next >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full");
 	}
 }
@@ -544,7 +544,11 @@ void tree_destroy() {
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
 		ASSERT(id.index >= 0);
-		ASSERT(id.index < nodes.size());
+#ifdef DEBUG
+		if(id.index >= nodes.size()) {
+			THROW_ERROR( "id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
+		}
+#endif
 		return &nodes[id.index];
 	} else {
 		return tree_cache_read(id);
