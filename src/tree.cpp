@@ -63,6 +63,11 @@ static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 
+
+size_t tree_nodes_size() {
+	return nodes.size();
+}
+
 struct last_cache_entry_t;
 
 static std::unordered_set<last_cache_entry_t*> last_cache_entries;
