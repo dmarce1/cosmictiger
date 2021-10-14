@@ -32,7 +32,7 @@ struct multipole_pos {
 	array<fixed32, NDIM> pos;
 };
 
-size_t tree_nodes_size();
+long long tree_nodes_size();
 
 struct tree_id {
 	int proc;

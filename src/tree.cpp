@@ -64,7 +64,7 @@ static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, 
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 
 
-size_t tree_nodes_size() {
+long long tree_nodes_size() {
 	return nodes.size();
 }
 
