@@ -500,7 +500,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
 	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);
-	if (index > nodes.size()) {
+	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
 	nodes[index] = node;
