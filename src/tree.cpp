@@ -116,6 +116,7 @@ int tree_allocator::allocate() {
 	if (next == last) {
 		reset();
 	}
+	ASSERT(next < nodes.size());
 	return next++;
 }
 
@@ -499,10 +500,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
 	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);
-	nodes[index] = node;
 	if (index > nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
+	nodes[index] = node;
 	rc.active_nodes = active_nodes;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
@@ -544,7 +545,7 @@ void tree_destroy() {
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
 		ASSERT(id.index >= 0);
-#ifdef DEBUG
+#ifndef NDEBUG
 		if(id.index >= nodes.size()) {
 			THROW_ERROR( "id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
 		}
