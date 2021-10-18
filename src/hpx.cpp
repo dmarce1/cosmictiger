@@ -56,7 +56,7 @@ void hpx_init() {
 
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < hpx_init_action > (c));
+		futs.push_back(hpx::async < hpx_init_action > (HPX_PRIORITY_HI, c));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 

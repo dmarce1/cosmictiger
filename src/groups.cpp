@@ -65,7 +65,7 @@ void groups_cull() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async<groups_cull_action>(c));
+		futs1.push_back(hpx::async<groups_cull_action>(HPX_PRIORITY_HI, c));
 	}
 	std::unordered_set<group_int> final_existing;
 	mutex_type mutex;
@@ -144,7 +144,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 
 	vector<hpx::future<std::pair<size_t, size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_save_action>(c, number, scale, time));
+		futs.push_back(hpx::async<groups_save_action>(HPX_PRIORITY_HI, c, number, scale, time));
 	}
 
 	const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."
@@ -178,7 +178,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 void groups_reduce(double scale_factor) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_reduce_action>(c, scale_factor));
+		futs.push_back(hpx::async<groups_reduce_action>(HPX_PRIORITY_HI, c, scale_factor));
 	}
 	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::thread::hardware_concurrency();
 	spinlock_type mutex;
@@ -384,7 +384,7 @@ void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>
 void groups_add_particles(int wave, double scale) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_add_particles_action>(c, wave, scale));
+		futs.push_back(hpx::async<groups_add_particles_action>(HPX_PRIORITY_HI, c, wave, scale));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	spinlock_type mutex;

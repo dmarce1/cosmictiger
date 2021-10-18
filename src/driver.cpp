@@ -514,7 +514,7 @@ void write_checkpoint(driver_params params) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
+		futs.push_back(hpx::async<write_checkpoint_action>(HPX_PRIORITY_HI, c, params));
 	}
 //	futs.push_back(hpx::threads::run_as_os_thread([&]() {
 	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
@@ -544,7 +544,7 @@ driver_params read_checkpoint() {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<read_checkpoint_action>(c));
+		futs.push_back(hpx::async<read_checkpoint_action>(HPX_PRIORITY_HI, c));
 	}
 	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "rb");

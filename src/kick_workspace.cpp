@@ -139,12 +139,6 @@ void kick_workspace::to_gpu() {
 									workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
 								}
 								workitems[i].self.index = tree_map[workitems[i].self];
-/*								cuda_set_device();
-								const tree_node& node = *tree_get_node(workitems[i].self);
-								const part_int begin = node.sink_part_range.first;
-								const part_int end = node.sink_part_range.second;
-								const size_t size = end - begin;
-								const int deviceid = cuda_get_device();*/
 								ASSERT(workitems[i].self.proc == hpx_rank());
 							}
 							return 'a';
@@ -219,7 +213,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 void kick_workspace::clear_buffers() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<clear_buffers_action>(c));
+		futs.push_back(hpx::async<clear_buffers_action>(HPX_PRIORITY_HI, c));
 	}
 	host_x = decltype(host_x)();
 	host_y = decltype(host_y)();

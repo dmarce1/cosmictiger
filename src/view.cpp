@@ -33,7 +33,7 @@ vector<float> output_view(int number, double time) {
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<vector<float>>>val_futs;
 	for (const auto& c : hpx_children()) {
-		val_futs.push_back(hpx::async<output_view_action>(c, number, time));
+		val_futs.push_back(hpx::async<output_view_action>(HPX_PRIORITY_HI, c, number, time));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	const int Nside = get_options().view_size;

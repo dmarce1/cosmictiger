@@ -106,7 +106,7 @@ vector<output_particle> particles_get_sample(const range<double>& box) {
 	vector<hpx::future<vector<output_particle>>>futs;
 	vector<output_particle> output;
 	for( const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_get_sample_action>(c, box));
+		futs.push_back(hpx::async<particles_get_sample_action>(HPX_PRIORITY_HI, c, box));
 	}
 	for( part_int i = 0; i < particles_size(); i++) {
 		array<double,NDIM> x;
@@ -134,7 +134,7 @@ vector<output_particle> particles_get_tracers() {
 	vector<hpx::future<vector<output_particle>>>futs;
 	vector<output_particle> output;
 	for( const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_get_tracers_action>(c));
+		futs.push_back(hpx::async<particles_get_tracers_action>(HPX_PRIORITY_HI, c));
 	}
 	for( part_int i = 0; i < particles_size(); i++) {
 		if( particles_tracer(i) ) {
@@ -181,7 +181,7 @@ void particles_set_tracers(size_t count) {
 std::unordered_map<int, part_int> particles_groups_init() {
 	vector<hpx::future<std::unordered_map<int, part_int>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_groups_init_action > (c));
+		futs.push_back(hpx::async < particles_groups_init_action > (HPX_PRIORITY_HI, c));
 	}
 
 	ALWAYS_ASSERT(!particles_grp);
@@ -228,7 +228,7 @@ static void particles_set_global_offset(vector<size_t> map) {
 	particles_global_offset = map[hpx_rank()];
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_set_global_offset_action > (c, map));
+		futs.push_back(hpx::async < particles_set_global_offset_action > (HPX_PRIORITY_HI, c, map));
 	}
 	particles_global_offset = map[hpx_rank()];
 	global_offsets = std::move(map);
@@ -238,7 +238,7 @@ static void particles_set_global_offset(vector<size_t> map) {
 void particles_groups_destroy() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_groups_destroy_action > (c));
+		futs.push_back(hpx::async < particles_groups_destroy_action > (HPX_PRIORITY_HI, c));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	vector<hpx::future<void>> futs2;
@@ -262,7 +262,7 @@ void particles_groups_destroy() {
 void particles_cache_free() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_cache_free_action > (c));
+		futs.push_back(hpx::async < particles_cache_free_action > (HPX_PRIORITY_HI, c));
 	}
 	part_cache = decltype(part_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
@@ -463,7 +463,7 @@ void particles_inc_group_cache_epoch() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_inc_group_cache_epoch_action > (c));
+		futs.push_back(hpx::async < particles_inc_group_cache_epoch_action > (HPX_PRIORITY_HI, c));
 	}
 	group_cache_epoch++;
 	hpx::wait_all(futs.begin(), futs.end());
@@ -484,7 +484,7 @@ void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_destroy_action > (c));
+		futs.push_back(hpx::async < particles_destroy_action > (HPX_PRIORITY_HI, c));
 	}
 	particles_x = decltype(particles_x)();
 	particles_g = decltype(particles_g)();
@@ -600,7 +600,7 @@ void particles_random_init() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_random_init_action > (c));
+		futs.push_back(hpx::async < particles_random_init_action > (HPX_PRIORITY_HI, c));
 	}
 	const size_t total_num_parts = std::pow(get_options().parts_dim, NDIM);
 	const size_t begin = (size_t)(hpx_rank()) * total_num_parts / hpx_size();

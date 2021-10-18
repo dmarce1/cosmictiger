@@ -102,7 +102,7 @@ vector<float> output_get_slice() {
 	const int res = get_options().slice_res;
 	vector<float> pixels(sqr(res), 0.0);
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < output_get_slice_action > (c));
+		futs.push_back(hpx::async < output_get_slice_action > (HPX_PRIORITY_HI, c));
 	}
 	for (int i = 0; i < particles_size(); i++) {
 		const double z = particles_pos(ZDIM, i).to_double();

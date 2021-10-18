@@ -44,7 +44,7 @@ static void compute_density() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (auto c : hpx_children()) {
-		futs1.push_back(hpx::async<compute_density_action>(c));
+		futs1.push_back(hpx::async<compute_density_action>(HPX_PRIORITY_HI, c));
 	}
 	const int N = get_options().parts_dim;
 	const auto dblbox = domains_find_my_box();

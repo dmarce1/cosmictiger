@@ -136,7 +136,7 @@ vector<float> lc_flush_final() {
 	}
 	vector<hpx::future<vector<float>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_flush_final_action > (c));
+		futs.push_back(hpx::async < lc_flush_final_action > (HPX_PRIORITY_HI, c));
 	}
 
 	std::string filename = "./lc/lc." + std::to_string(hpx_rank()) + ".dat";
@@ -225,7 +225,7 @@ void lc_load(FILE* fp) {
 size_t lc_time_to_flush(double tau, double tau_max_) {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_time_to_flush_action > (c, tau, tau_max_));
+		futs.push_back(hpx::async < lc_time_to_flush_action > (HPX_PRIORITY_HI, c, tau, tau_max_));
 	}
 	size_t nparts = part_buffer.size();
 	for (auto& f : futs) {
@@ -250,7 +250,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 void lc_parts2groups(double a, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_parts2groups_action > (c, a, link_len));
+		futs.push_back(hpx::async < lc_parts2groups_action > (HPX_PRIORITY_HI, c, a, link_len));
 	}
 	std::unordered_map<long long, lc_group_data> groups_map;
 	int i = 0;
@@ -474,7 +474,7 @@ void lc_buffer2homes() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async < lc_buffer2homes_action > (c));
+		futs1.push_back(hpx::async < lc_buffer2homes_action > (HPX_PRIORITY_HI, c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	static mutex_type map_mutex;
@@ -521,7 +521,7 @@ void lc_buffer2homes() {
 void lc_groups2homes() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_groups2homes_action > (c));
+		futs.push_back(hpx::async < lc_groups2homes_action > (HPX_PRIORITY_HI, c));
 	}
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix]() {
@@ -738,7 +738,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 size_t lc_find_groups() {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_find_groups_action > (c));
+		futs.push_back(hpx::async < lc_find_groups_action > (HPX_PRIORITY_HI, c));
 	}
 	size_t rc = 0;
 	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
@@ -800,7 +800,7 @@ static int pix2rank(int pix) {
 void lc_particle_boundaries() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_particle_boundaries_action > (c));
+		futs.push_back(hpx::async < lc_particle_boundaries_action > (HPX_PRIORITY_HI, c));
 	}
 	vector<hpx::future<vector<lc_particle>>>pfuts;
 	pfuts.reserve(bnd_pix.size());
@@ -821,7 +821,7 @@ void lc_particle_boundaries() {
 void lc_form_trees(double tau, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_form_trees_action > (c, tau, link_len));
+		futs.push_back(hpx::async < lc_form_trees_action > (HPX_PRIORITY_HI, c, tau, link_len));
 	}
 	for (auto iter = part_map.begin(); iter != part_map.end(); iter++) {
 		const int pix = iter->first;
@@ -893,7 +893,7 @@ static int compute_nside(double tau) {
 void lc_init(double tau, double tau_max_) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_init_action > (c, tau, tau_max_));
+		futs.push_back(hpx::async < lc_init_action > (HPX_PRIORITY_HI, c, tau, tau_max_));
 	}
 	tree_map = decltype(tree_map)();
 	part_map = decltype(part_map)();

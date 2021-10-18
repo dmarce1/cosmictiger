@@ -61,7 +61,7 @@ const options& get_options() {
 void set_options(const options& opts) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<set_options_action>(c, opts));
+		futs.push_back(hpx::async<set_options_action>(HPX_PRIORITY_HI, c, opts));
 	}
 	global_opts = opts;
 	hpx::wait_all(futs.begin(), futs.end());

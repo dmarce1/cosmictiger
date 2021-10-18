@@ -539,7 +539,7 @@ void tree_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < tree_destroy_action > (c));
+		futs.push_back(hpx::async < tree_destroy_action > (HPX_PRIORITY_HI, c));
 	}
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();

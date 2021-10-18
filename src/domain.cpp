@@ -69,7 +69,7 @@ double domains_get_load_imbalance() {
 vector<size_t> domains_get_loads() {
 	vector<hpx::future<vector<size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < domains_get_loads_action > (c));
+		futs.push_back(hpx::async < domains_get_loads_action > (HPX_PRIORITY_HI, c));
 	}
 	vector<size_t> loads;
 	loads.push_back(particles_size());
@@ -109,7 +109,7 @@ range<double> domains_range(size_t key) {
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<domains_transmit_boxes_action>(c, boxes));
+		futs.push_back(hpx::async<domains_transmit_boxes_action>(HPX_PRIORITY_HI, c, boxes));
 	}
 	boxes_by_key = std::move(boxes);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -118,7 +118,7 @@ void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes) {
 void domains_init_rebounds() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<domains_init_rebounds_action>(c));
+		futs.push_back(hpx::async<domains_init_rebounds_action>(HPX_PRIORITY_HI, c));
 	}
 	local_domains.resize(1);
 	local_domains[0].box = unit_box<double>();
@@ -324,7 +324,7 @@ void domains_begin() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
-		futs.push_back(hpx::async<domains_begin_action>(c));
+		futs.push_back(hpx::async<domains_begin_action>(HPX_PRIORITY_HI, c));
 	}
 	const auto my_domain = domains_find_my_box();
 	free_indices.resize(0);
@@ -379,7 +379,7 @@ void domains_end() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
-		futs.push_back(hpx::async<domains_end_action>(c));
+		futs.push_back(hpx::async<domains_end_action>(HPX_PRIORITY_HI, c));
 	}
 	const auto particle_compare = [](particle a, particle b) {
 		for( part_int dim = 0; dim < NDIM; dim++) {

@@ -349,7 +349,7 @@ void initialize(double z0) {
 void twolpt_f2delta2_inv() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_f2delta2_inv_action > (c));
+		futs.push_back(hpx::async < twolpt_f2delta2_inv_action > (HPX_PRIORITY_HI, c));
 	}
 	const auto box = fft3d_complex_range();
 	delta2_inv = fft3d_read_complex(box);
@@ -363,7 +363,7 @@ void twolpt_correction1() {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_correction1_action > (c));
+		futs.push_back(hpx::async < twolpt_correction1_action > (HPX_PRIORITY_HI, c));
 	}
 	const auto box = fft3d_real_range();
 	fft3d_accumulate_real(box, delta2);
@@ -381,7 +381,7 @@ void twolpt_correction2(int dim) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_correction2_action > (c, dim));
+		futs.push_back(hpx::async < twolpt_correction2_action > (HPX_PRIORITY_HI, c, dim));
 	}
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
@@ -540,7 +540,7 @@ void twolpt(int dim1, int dim2) {
 void twolpt_phase(int phase) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_phase_action > (c, phase));
+		futs.push_back(hpx::async < twolpt_phase_action > (HPX_PRIORITY_HI, c, phase));
 	}
 	const auto box = fft3d_real_range();
 	const auto vol = box.volume();
@@ -566,16 +566,17 @@ void twolpt_phase(int phase) {
 void twolpt_init() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_init_action > (c));
+		futs.push_back(hpx::async < twolpt_init_action > (HPX_PRIORITY_HI, c));
 	}
 	const auto box = fft3d_real_range();
 	delta2.resize(box.volume(), 0.0);
 	hpx::wait_all(futs.begin(), futs.end());
 }
+
 void twolpt_destroy() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_destroy_action > (c));
+		futs.push_back(hpx::async < twolpt_destroy_action > (HPX_PRIORITY_HI, c));
 	}
 	delta2 = decltype(delta2)();
 	delta2_inv = decltype(delta2_inv)();
@@ -586,7 +587,7 @@ void twolpt_destroy() {
 static void zeldovich_begin(int dim1, int dim2) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < zeldovich_begin_action > (c, dim1, dim2));
+		futs.push_back(hpx::async < zeldovich_begin_action > (HPX_PRIORITY_HI, c, dim1, dim2));
 	}
 	twolpt_generate(dim1, dim2);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -630,7 +631,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	const auto box = find_my_box();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < zeldovich_end_action > (c, dim, init_parts, D1, prefac1));
+		futs.push_back(hpx::async < zeldovich_end_action > (HPX_PRIORITY_HI, c, dim, init_parts, D1, prefac1));
 	}
 	const auto Y = fft3d_read_real(box);
 	array<int64_t, NDIM> I;
