@@ -380,7 +380,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		lock.unlock();
 		hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
 			const particles_group_fetch_cache_line_action action;
-			prms->set_value(action(hpx_localities()[line_id.proc],line_id.index));
+			prms->set_value(action(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index));
 			return 'a';
 		});
 		lock.lock();
@@ -394,7 +394,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		lock.unlock();
 		auto old_data = old_fut.get();
 		hpx::apply([prms,line_id](vector<group_particle> data) {
-			auto grp_fut = hpx::async<particles_group_refresh_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+			auto grp_fut = hpx::async<particles_group_refresh_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
 			const auto grps = grp_fut.get();
 			for( int i = 0; i < grps.size(); i++) {
 				data[i].g = grps[i];
@@ -420,7 +420,7 @@ static const array<fixed32, NDIM>* particles_cache_read_line(line_id_type line_i
 		part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<particles_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<particles_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();

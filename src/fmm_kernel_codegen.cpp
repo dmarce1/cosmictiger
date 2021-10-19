@@ -732,7 +732,7 @@ void do_expansion(bool two) {
 		const auto k = entries[0][j].k;
 		const auto index = entries[0][j].Ldest;
 		if (!close21(last_factor / factor)) {
-			tprint("Lb[0] *= %e;\n", last_factor / factor);
+			tprint("Lb[0] *= %.9e;\n", last_factor / factor);
 			last_factor = factor;
 			phi_flops++;
 		}
@@ -740,7 +740,7 @@ void do_expansion(bool two) {
 		phi_flops += 2;
 	}
 	if (!close21(last_factor)) {
-		tprint("Lb[0] *= %e;\n", last_factor);
+		tprint("Lb[0] *= %.9e;\n", last_factor);
 	}
 	deindent();
 	phi_flops++;
@@ -770,7 +770,7 @@ void do_expansion(bool two) {
 				const auto p = entries[i][j].p;
 				const auto k = entries[i][j].k;
 				if (!close21(factor / last_factor)) {
-					ASPRINTF(&str, "Lb[%i] *= %e;\n", index, last_factor / factor);
+					ASPRINTF(&str, "Lb[%i] *= %.9e;\n", index, last_factor / factor);
 					cmds.push_back(str);
 					free(str);
 					flops++;
@@ -782,7 +782,7 @@ void do_expansion(bool two) {
 				flops += 2;
 			}
 			if (!close21(last_factor)) {
-				ASPRINTF(&str, "Lb[%i] *= %e;\n", index, last_factor);
+				ASPRINTF(&str, "Lb[%i] *= %.9e;\n", index, last_factor);
 				cmds.push_back(str);
 				free(str);
 			}
@@ -1300,7 +1300,7 @@ int main() {
 				const auto m = entries[i][j].m;
 				if (!close21(last_coeff / coeff)) {
 					double factor = last_coeff / coeff;
-					tprint("L[%i] *= %e;\n", nindex, factor);
+					tprint("L[%i] *= %.9e;\n", nindex, factor);
 					last_coeff = coeff;
 					fl++;
 				}
@@ -1310,7 +1310,7 @@ int main() {
 			}
 			if (!close21(last_coeff)) {
 				fl++;
-				tprint("L[%i] *= %e;\n", nindex, last_coeff);
+				tprint("L[%i] *= %.9e;\n", nindex, last_coeff);
 			}
 			if (nindex == 0) {
 				deindent();
@@ -1343,7 +1343,7 @@ int main() {
 				const auto m = entries[i][j].m;
 				if (!close21(last_coeff / coeff)) {
 					double factor = last_coeff / coeff;
-					ASPRINTF(&str, "L[%i] *= %e;\n", nindex, factor);
+					ASPRINTF(&str, "L[%i] *= %.9e;\n", nindex, factor);
 					cmds.push_back(str);
 					free(str);
 					last_coeff = coeff;
@@ -1357,7 +1357,7 @@ int main() {
 			}
 			if (!close21(last_coeff)) {
 				fl++;
-				ASPRINTF(&str, "L[%i] *= %e;\n", nindex, last_coeff);
+				ASPRINTF(&str, "L[%i] *= %.9e;\n", nindex, last_coeff);
 				cmds.push_back(str);
 			}
 		}
@@ -1481,7 +1481,7 @@ int main() {
 				const auto k = mentries[i][j].k;
 				const auto factor = mentries[i][j].factor;
 				if (!close21(last_factor / factor)) {
-					ASPRINTF(&str, "Mb[%i] *= %e;\n", nindex, last_factor / factor);
+					ASPRINTF(&str, "Mb[%i] *= %.9e;\n", nindex, last_factor / factor);
 					cmds.push_back(str);
 					flops++;
 					free(str);
@@ -1494,7 +1494,7 @@ int main() {
 				flops += 2;
 			}
 			if (!close21(last_factor)) {
-				ASPRINTF(&str, "Mb[%i] *= %e;\n", nindex, last_factor);
+				ASPRINTF(&str, "Mb[%i] *= %.9e;\n", nindex, last_factor);
 				cmds.push_back(str);
 				flops++;
 				free(str);
