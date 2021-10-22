@@ -133,10 +133,18 @@ void kick_workspace::to_gpu() {
 		futs.push_back(hpx::async(HPX_PRIORITY_HI, [this,proc,nthreads,&tree_map]() {
 							for (int i = proc; i < workitems.size(); i+=nthreads) {
 								for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-									workitems[i].dchecklist[j].index = tree_map[workitems[i].dchecklist[j]];
+									auto iter = tree_map.find(workitems[i].dchecklist[j]);
+									if( iter == tree_map.end()) {
+										THROW_ERROR( "Tree map error\n");
+									}
+									workitems[i].dchecklist[j].index = iter->second;
 								}
 								for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-									workitems[i].echecklist[j].index = tree_map[workitems[i].echecklist[j]];
+									auto iter = tree_map.find(workitems[i].echecklist[j]);
+									if( iter == tree_map.end()) {
+										THROW_ERROR( "Tree map error\n");
+									}
+									workitems[i].echecklist[j].index = iter->second;
 								}
 								workitems[i].self.index = tree_map[workitems[i].self];
 								ASSERT(workitems[i].self.proc == hpx_rank());
