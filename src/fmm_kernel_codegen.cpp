@@ -147,12 +147,12 @@ int eqn(std::string a, array<int, NDIM> n, std::string c, array<int, NDIM> j) {
 }
 
 int mul(std::string a, array<int, NDIM> n, double b, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = T(%.8e) * %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2]);
+	tprint("%s%i%i%i = T(%.9e) * %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2]);
 	return 1;
 }
 
 int fma(std::string a, array<int, NDIM> n, double b, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = fmaf(T(%.8e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
+	tprint("%s%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
 	return 2;
 }
 
@@ -200,7 +200,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = -%s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), p[0], p[1], p[2]);
 									flops++;
 								} else {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = T(%.8e) * %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor, iname.c_str(), p[0],
+									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = T(%.9e) * %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor, iname.c_str(), p[0],
 											p[1], p[2]);
 									flops++;
 								}
@@ -215,7 +215,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "%s_%i_%i_%i%i%i -= %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), p[0], p[1], p[2]);
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i = fmaf(T(%.8e), %s%i%i%i, %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
+									ASPRINTF(&str, "%s_%i_%i_%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
 											iname.c_str(), p[0], p[1], p[2], iname.c_str(), n0, m0, j[0], j[1], j[2]);
 									flops += 2;
 								}
@@ -269,7 +269,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 										ASPRINTF(&str, "%s%i%i%i = -%s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), n0, m0, p[0], p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i = T(%.8e) * %s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), n0, m0, p[0],
+										ASPRINTF(&str, "%s%i%i%i = T(%.9e) * %s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), n0, m0, p[0],
 												p[1], p[2]);
 										flops++;
 									}
@@ -280,7 +280,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 										ASPRINTF(&str, "%s%i%i%i = -%s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i = T(%.8e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s%i%i%i = T(%.9e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1], p[2]);
 										flops++;
 									}
 								}
@@ -306,11 +306,11 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									}
 								} else {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.8e), %s_%i_%i_%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(),
+										ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.9e), %s_%i_%i_%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(),
 												n0, m0, p[0], p[1], p[2], oname.c_str(), n[0], n[1], n[2]);
 										flops += 2;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.8e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0],
+										ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0],
 												p[1], p[2], oname.c_str(), n[0], n[1], n[2]);
 										flops += 2;
 									}
@@ -377,7 +377,7 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "%s%i%i%i = -%s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s%i%i%i = T(%.8e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s%i%i%i = T(%.9e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1], p[2]);
 									flops++;
 								}
 								asn.push_back(str);
@@ -391,7 +391,7 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "%s%i%i%i -= %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
 									flops += 1;
 								} else {
-									ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.8e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1],
+									ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1],
 											p[2], oname.c_str(), n[0], n[1], n[2]);
 									flops += 1;
 								}
@@ -459,7 +459,7 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 										n0 - m0, m0);
 								flops += 2;
 							} else {
-								ASPRINTF(&str, "%s[%i] = fmaf(T(%.8e), %s%i%i%i*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
+								ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s%i%i%i*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
 										iname.c_str(), p[0], p[1], p[2], n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 
 								flops += 3;
@@ -878,7 +878,7 @@ void do_expansion_cuda() {
 	tprint("};\n");
 	tprint("static __constant__ float factor1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
-		printf("%.8e", entries1[i].factor);
+		printf("%.9e", entries1[i].factor);
 		if (i != entries1.size() - 1) {
 			printf(",");
 		}
@@ -911,7 +911,7 @@ void do_expansion_cuda() {
 	tprint("};\n");
 	tprint("static __constant__ float factor2[%i] = { ", entries2.size());
 	for (int i = 0; i < entries2.size(); i++) {
-		printf("%.8e", entries2[i].factor);
+		printf("%.9e", entries2[i].factor);
 		if (i != entries2.size() - 1) {
 			printf(",");
 		}
@@ -936,7 +936,7 @@ void do_expansion_cuda() {
 
 	tprint("static __constant__ float phi_factor[%i] = { ", phi_entries.size());
 	for (int i = 0; i < phi_entries.size(); i++) {
-		printf("%.8e", phi_entries[i].factor);
+		printf("%.9e", phi_entries[i].factor);
 		if (i != phi_entries.size() - 1) {
 			printf(",");
 		}
@@ -1021,7 +1021,7 @@ void ewald(int direct_flops) {
 	tprint("ewald_const econst;\n");
 	tprint("int flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
-	tprint("const T fouroversqrtpi = T(%.8e);\n", 4.0 / sqrt(M_PI));
+	tprint("const T fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
 	tprint("tensor_sym<T, %i> Dreal;\n", P);
 	tprint("tensor_trless_sym<T,%i> Dfour;\n", P);
 	tprint("Dreal = 0.0f;\n");
@@ -1134,7 +1134,7 @@ void ewald(int direct_flops) {
 	tprint("D = D + Dfour;\n");                                    // P*P+1
 	tprint("expansion<T> D1;\n");
 	tprint("greens_function(D1,X);\n");
-	tprint("D(0, 0, 0) = T(%.8e) + D(0, 0, 0); \n", M_PI / 4.0);                                    // 1
+	tprint("D(0, 0, 0) = T(%.9e) + D(0, 0, 0); \n", M_PI / 4.0);                                    // 1
 	tprint("for (int i = 0; i < EXPANSION_SIZE; i++) {\n");
 	tprint("D[i] -= D1[i];\n");                                    // 2*(P*P+1)
 	indent();
@@ -1144,9 +1144,9 @@ void ewald(int direct_flops) {
 	tprint("D[0] += 2.837291e+00 * (T(1) - zero_mask);\n");                                    // 3
 	tprint("if ( LORDER > 2) {\n");
 	indent();
-	tprint("D[3] += T(%.8e) * (T(1) - zero_mask);\n", -4.0 / 3.0 * M_PI);                                    // 3
-	tprint("D[5] += T(%.8e) * (T(1) - zero_mask);\n", -4.0 / 3.0 * M_PI);                                    // 3
-	tprint("D[EXPANSION_SIZE - 1] += T(%.8e) * (T(1) - zero_mask);\n", -4.0 / 3.0 * M_PI);                                 // 3
+	tprint("D[3] += T(%.9e) * (T(1) - zero_mask);\n", -4.0 / 3.0 * M_PI);                                    // 3
+	tprint("D[5] += T(%.9e) * (T(1) - zero_mask);\n", -4.0 / 3.0 * M_PI);                                    // 3
+	tprint("D[EXPANSION_SIZE - 1] += T(%.9e) * (T(1) - zero_mask);\n", -4.0 / 3.0 * M_PI);                                 // 3
 	deindent();
 	tprint("}\n");
 	tprint("return flops;\n");
