@@ -612,7 +612,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int zero = 0;
 //	kick_time = total_time = tree_time = gravity_time = 0.0f;
 //	node_count = 0;
-	(CUDA_MALLOC(&current_index, sizeof(int)));
+	CUDA_MALLOC(&current_index, sizeof(int));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
 	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
@@ -704,8 +704,10 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	tm.reset();
 	tm.start();
 	acquire_inner();
+	cuda_set_device();
 	cuda_stream_synchronize(stream);
 	release_outer();
+	cuda_set_device();
 //	PRINT( "Invoking kernel\n");
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
 //	PRINT("One done\n");
