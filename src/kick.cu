@@ -661,8 +661,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	}
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
-	(CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size()));
-	(CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size()));
+	CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size());
+	CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size());
 	CUDA_CHECK(cudaMemcpyAsync(dev_dchecks, dchecks.data(), sizeof(int) * dchecks.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();

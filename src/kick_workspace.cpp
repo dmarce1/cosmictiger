@@ -24,8 +24,8 @@
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_x;
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_y;
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_z;
-hpx::lcos::local::counting_semaphore kick_workspace::lock1(1);
-hpx::lcos::local::counting_semaphore kick_workspace::lock2(1);
+semaphore kick_workspace::lock1(1);
+semaphore kick_workspace::lock2(1);
 vector<tree_node, pinned_allocator<tree_node>> kick_workspace::tree_nodes;
 
 HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);

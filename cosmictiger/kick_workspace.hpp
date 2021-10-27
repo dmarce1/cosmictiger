@@ -26,6 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
+#include <cosmictiger/semaphore.hpp>
 
 #include <unordered_map>
 #include <set>
@@ -50,8 +51,8 @@ class kick_workspace {
 	static vector<fixed32, pinned_allocator<fixed32>> host_y;
 	static vector<fixed32, pinned_allocator<fixed32>> host_z;
 	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
-	static hpx::lcos::local::counting_semaphore lock1;
-	static hpx::lcos::local::counting_semaphore lock2;
+	static semaphore lock1;
+	static semaphore lock2;
 public:
 	static void clear_buffers();
 	kick_workspace() = default;
