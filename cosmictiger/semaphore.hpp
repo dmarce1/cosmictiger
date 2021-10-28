@@ -25,7 +25,6 @@ public:
 			available++;
 			hpx_yield();
 		}
-
 	}
 	void signal() {
 		available++;

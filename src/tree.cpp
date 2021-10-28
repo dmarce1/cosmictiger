@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 constexpr bool verbose = true;
 
@@ -62,7 +62,6 @@ static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
-
 
 long long tree_nodes_size() {
 	return nodes.size();
@@ -192,7 +191,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
 //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
-		rc = hpx::async < tree_create_action > (HPX_PRIORITY_HI, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async<tree_create_action>(HPX_PRIORITY_HI, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
 			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
@@ -208,7 +207,7 @@ static void tree_allocate_nodes() {
 	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < tree_allocate_nodes_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
@@ -438,7 +437,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 					X[dim][j - i] = particles_pos(dim, j).raw();
 				}
 			}
-			array<simd_float, NDIM> dx;
+			array < simd_float, NDIM > dx;
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 			}
@@ -539,7 +538,7 @@ void tree_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < tree_destroy_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<tree_destroy_action>(HPX_PRIORITY_HI, c));
 	}
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
@@ -551,8 +550,8 @@ const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
 		ASSERT(id.index >= 0);
 #ifndef NDEBUG
-		if(id.index >= nodes.size()) {
-			THROW_ERROR( "id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
+		if (id.index >= nodes.size()) {
+			THROW_ERROR("id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
 		}
 #endif
 		return &nodes[id.index];
@@ -576,10 +575,10 @@ static const tree_node* tree_cache_read(tree_id id) {
 			auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
 			tree_cache[bin][line_id] = prms->get_future();
 			lock.unlock();
-			hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
+			hpx::apply([prms,line_id]() {
 				const tree_fetch_cache_line_action action;
-				prms->set_value(action(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index));
-				return 'a';
+				auto fut = hpx::async<tree_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+				prms->set_value(fut.get());
 			});
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);
