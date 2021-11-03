@@ -157,7 +157,7 @@ vector<output_particle> particles_get_tracers() {
 void particles_set_tracers(size_t count) {
 	hpx::future<void> fut;
 	if (hpx_rank() < hpx_size() - 1) {
-		fut = hpx::async < particles_set_tracers_action > (hpx_localities()[hpx_rank() + 1], count + particles_size());
+		fut = hpx::async<particles_set_tracers_action>(hpx_localities()[hpx_rank() + 1], count + particles_size());
 	}
 
 	double particles_per_tracer = std::pow((double) get_options().parts_dim, NDIM) / get_options().tracer_count;
@@ -228,7 +228,7 @@ static void particles_set_global_offset(vector<size_t> map) {
 	particles_global_offset = map[hpx_rank()];
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_set_global_offset_action > (HPX_PRIORITY_HI, c, map));
+		futs.push_back(hpx::async<particles_set_global_offset_action>(HPX_PRIORITY_HI, c, map));
 	}
 	particles_global_offset = map[hpx_rank()];
 	global_offsets = std::move(map);
@@ -238,7 +238,7 @@ static void particles_set_global_offset(vector<size_t> map) {
 void particles_groups_destroy() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_groups_destroy_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_groups_destroy_action>(HPX_PRIORITY_HI, c));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	vector<hpx::future<void>> futs2;
@@ -262,7 +262,7 @@ void particles_groups_destroy() {
 void particles_cache_free() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_cache_free_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_cache_free_action>(HPX_PRIORITY_HI, c));
 	}
 	part_cache = decltype(part_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
@@ -379,8 +379,8 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		entry.epoch = group_cache_epoch;
 		lock.unlock();
 		hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
-			const particles_group_fetch_cache_line_action action;
-			prms->set_value(action(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index));
+			auto fut = hpx::async<particles_group_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			prms->set_value(fut.get());
 			return 'a';
 		});
 		lock.lock();
@@ -463,7 +463,7 @@ void particles_inc_group_cache_epoch() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_inc_group_cache_epoch_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_inc_group_cache_epoch_action>(HPX_PRIORITY_HI, c));
 	}
 	group_cache_epoch++;
 	hpx::wait_all(futs.begin(), futs.end());
@@ -484,7 +484,7 @@ void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_destroy_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_destroy_action>(HPX_PRIORITY_HI, c));
 	}
 	particles_x = decltype(particles_x)();
 	particles_g = decltype(particles_g)();
@@ -600,7 +600,7 @@ void particles_random_init() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < particles_random_init_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_random_init_action>(HPX_PRIORITY_HI, c));
 	}
 	const size_t total_num_parts = std::pow(get_options().parts_dim, NDIM);
 	const size_t begin = (size_t)(hpx_rank()) * total_num_parts / hpx_size();
@@ -681,7 +681,7 @@ vector<particle_sample> particles_sample(int cnt) {
 			const part_int b = (size_t) i * cnt / localities.size();
 			const part_int e = (size_t)(i + 1) * cnt / localities.size();
 			const part_int this_cnt = e - b;
-			futs.push_back(hpx::async < particles_sample_action > (localities[i], this_cnt));
+			futs.push_back(hpx::async<particles_sample_action>(localities[i], this_cnt));
 		}
 		const part_int b = 0;
 		const part_int e = (size_t)(1) * cnt / localities.size();
