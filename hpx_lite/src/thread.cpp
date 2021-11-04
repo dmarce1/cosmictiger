@@ -441,7 +441,7 @@ void thread_initialize() {
 #endif
 	worker_ptr().resize(nproc);
 	for (std::size_t ci = 0; ci != ncore; ++ci) {
-#ifdef SERIAL
+#ifndef SERIAL
 		hwloc_obj_t core = hwloc_get_obj_by_type(topology(), HWLOC_OBJ_CORE, ci);
 #else
 		hwloc_obj_t core = hwloc_get_obj_by_type(topology(), HWLOC_OBJ_MACHINE, 0);

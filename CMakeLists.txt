@@ -155,7 +155,7 @@ add_library(hpx_lite
 
 add_executable( cosmictiger_lite ${cosmictiger_source_files} )
 
-target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 if( COSMICTIGER_WITH_LONG_LONG_PART_INT ) 
 	target_compile_definitions(cosmictiger_lite PUBLIC LONG_LONG_PART_INT)
 endif()
@@ -164,7 +164,7 @@ target_link_libraries(cosmictiger_lite PUBLIC boost_program_options mpi fftw3f g
 target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
 target_compile_features(cosmictiger_lite PUBLIC cxx_std_14)
 
-target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
 target_compile_options(cosmictiger_lite PUBLIC "-DHPX_LITE" )
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger_lite PUBLIC cudart)
