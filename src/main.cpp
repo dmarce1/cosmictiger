@@ -36,6 +36,8 @@ int hpx_main(int argc, char *argv[]) {
 		PRINT( "std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
 		PRINT( "Exiting...\n");
 		return hpx::finalize();
+	} else {
+		PRINT( "std::atomic<int> is lock free!\n" );
 	}
 	PRINT( "tree_node size = %i\n", sizeof(tree_node));
 	hpx_init();

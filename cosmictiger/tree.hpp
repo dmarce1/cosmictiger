@@ -36,49 +36,11 @@ struct tree_id {
 	int proc;
 	int index;
 	inline bool operator==(tree_id other) const {
-		ASSERT(proc != -1);
-		ASSERT(proc >= 0 && proc < hpx_size());
 		return proc == other.proc && index == other.index;
 	}
 	inline bool operator!=(tree_id other) const {
-		ASSERT(proc != -1);
-		ASSERT(proc >= 0 && proc < hpx_size());
 		return proc != other.proc || index != other.index;
 	}
-#ifndef NDEBUG
-	CUDA_EXPORT
-	tree_id() {
-		proc = -1;
-	}
-	CUDA_EXPORT
-	tree_id(const tree_id& other) {
-		proc = other.proc;
-		index = other.index;
-	}
-	CUDA_EXPORT
-	tree_id& operator=(const tree_id& other) {
-		ASSERT(proc != -1);
-		ASSERT(proc >= 0 && proc < hpx_size());
-		proc = other.proc;
-		index = other.index;
-		return *this;
-	}
-	CUDA_EXPORT
-	tree_id(tree_id&& other) {
-		ASSERT(proc != -1);
-		ASSERT(proc >= 0 && proc < hpx_size());
-		proc = other.proc;
-		index = other.index;
-	}
-	CUDA_EXPORT
-	tree_id& operator=(tree_id&& other) {
-		ASSERT(proc != -1);
-		ASSERT(proc >= 0 && proc < hpx_size());
-		proc = other.proc;
-		index = other.index;
-		return *this;
-	}
-#endif
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & proc;
