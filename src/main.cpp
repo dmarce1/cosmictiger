@@ -30,6 +30,13 @@
 
 
 int hpx_main(int argc, char *argv[]) {
+	std::atomic<int> i;
+	if( !i.is_lock_free() ) {
+		PRINT( "std::atomic<int> is not lock free!\n");
+		PRINT( "std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
+		PRINT( "Exiting...\n");
+		return hpx::finalize();
+	}
 	PRINT( "tree_node size = %i\n", sizeof(tree_node));
 	hpx_init();
 	ewald_const::init();
