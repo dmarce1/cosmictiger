@@ -70,7 +70,7 @@ long long tree_nodes_size() {
 struct last_cache_entry_t;
 
 static std::unordered_set<last_cache_entry_t*> last_cache_entries;
-static spinlock_type last_cache_entry_mtx;
+static std::atomic<int> last_cache_entry_mtx(0);
 
 struct last_cache_entry_t {
 	tree_id line;
@@ -82,12 +82,18 @@ struct last_cache_entry_t {
 	last_cache_entry_t() {
 		line.proc = line.index = -1;
 		ptr = nullptr;
-		std::lock_guard<spinlock_type> lock(last_cache_entry_mtx);
+		while (last_cache_entry_mtx++ != 0) {
+			last_cache_entry_mtx--;
+		}
 		last_cache_entries.insert(this);
+		last_cache_entry_mtx--;
 	}
 	~last_cache_entry_t() {
-		std::lock_guard<spinlock_type> lock(last_cache_entry_mtx);
+		while (last_cache_entry_mtx++ != 0) {
+			last_cache_entry_mtx--;
+		}
 		last_cache_entries.erase(this);
+		last_cache_entry_mtx--;
 	}
 };
 
