@@ -199,8 +199,8 @@ void kick_workspace::to_gpu() {
 		CUDA_CHECK(cudaFree(dev_x));
 		CUDA_CHECK(cudaFree(dev_y));
 		CUDA_CHECK(cudaFree(dev_z));
+		CUDA_CHECK(cudaFree(dev_trees));
 	}).get();
-	CUDA_CHECK(cudaFree(dev_trees));
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
