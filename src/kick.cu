@@ -612,7 +612,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int zero = 0;
 //	kick_time = total_time = tree_time = gravity_time = 0.0f;
 //	node_count = 0;
-	CUDA_MALLOC(&current_index, sizeof(int));
+	CUDA_CHECK(cudaMallocAsync(&current_index, sizeof(int), stream));
+	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
 	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
@@ -629,10 +630,10 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int nblocks = kick_block_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_lists_type* dev_lists;
-	(CUDA_MALLOC(&dev_lists, sizeof(cuda_lists_type) * nblocks));
-	(CUDA_MALLOC(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
-	(CUDA_MALLOC(&dev_returns, sizeof(kick_return) * returns.size()));
-
+	CUDA_CHECK(cudaMallocAsync(&dev_lists, sizeof(cuda_lists_type) * nblocks, stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size(), stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_returns, sizeof(kick_return) * returns.size(), stream));
+	cuda_stream_synchronize(stream);
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
 
@@ -661,8 +662,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	}
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
-	CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size());
-	CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size());
+	CUDA_CHECK(cudaMallocAsync(&dev_dchecks, sizeof(int) * dchecks.size(), stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_echecks, sizeof(int) * echecks.size(), stream));
+	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaMemcpyAsync(dev_dchecks, dchecks.data(), sizeof(int) * dchecks.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
@@ -716,12 +718,12 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	tm.stop();
 //	PRINT( "%i %e\n", nblocks, tm.read());
 //	PRINT("%i nodes traversed\n", node_count);
-	CUDA_CHECK(cudaFree(dev_dchecks));
-	CUDA_CHECK(cudaFree(dev_echecks));
-	CUDA_CHECK(cudaFree(dev_returns));
-	CUDA_CHECK(cudaFree(dev_lists));
-	CUDA_CHECK(cudaFree(dev_kick_params));
-	CUDA_CHECK(cudaFree(current_index));
+	CUDA_CHECK(cudaFreeAsync(dev_dchecks, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_echecks, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_returns, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_lists, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_kick_params, stream));
+	CUDA_CHECK(cudaFreeAsync(current_index, stream));
 //	PRINT("%i %i %i %i %i %i %i\n", max_depth, max_dchecks, max_echecks, max_nextlist, max_leaflist, max_partlist, max_multlist);
 //	PRINT("%i %e %e %e\n", nblocks, tree_time / total_time, gravity_time / total_time,  kick_time / total_time);
 	return returns;

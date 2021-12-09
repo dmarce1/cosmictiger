@@ -180,22 +180,23 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.stop();
 	auto stream = cuda_get_stream();
-	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
-	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
+	CUDA_CHECK(cudaMallocAsync(&dev_x, sizeof(fixed32) * part_count, stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_y, sizeof(fixed32) * part_count, stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_z, sizeof(fixed32) * part_count, stream));
+	CUDA_CHECK(cudaMallocAsync(&dev_trees, tree_nodes.size() * sizeof(tree_node), stream));
+	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
-	cuda_end_stream(stream);
 //	PRINT("To GPU Done %i\n", hpx_rank());
-	CUDA_CHECK(cudaFree(dev_x));
-	CUDA_CHECK(cudaFree(dev_y));
-	CUDA_CHECK(cudaFree(dev_z));
-	CUDA_CHECK(cudaFree(dev_trees));
+	CUDA_CHECK(cudaFreeAsync(dev_x, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_y, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_z, stream));
+	CUDA_CHECK(cudaFreeAsync(dev_trees, stream));
+	cuda_end_stream(stream);
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
