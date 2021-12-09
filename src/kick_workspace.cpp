@@ -181,10 +181,10 @@ void kick_workspace::to_gpu() {
 	tm.stop();
 	auto stream = cuda_get_stream();
 	hpx::threads::run_as_os_thread([&]() {
-		CUDA_MALLOC(&dev_x, sizeof(fixed32) * part_count);
-		CUDA_MALLOC(&dev_y, sizeof(fixed32) * part_count);
-		CUDA_MALLOC(&dev_z, sizeof(fixed32) * part_count);
-		CUDA_MALLOC(&dev_trees, tree_nodes.size() * sizeof(tree_node));
+		CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
+		CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
+		CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
+		CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	}).get();
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
