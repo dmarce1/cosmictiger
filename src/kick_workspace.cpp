@@ -70,7 +70,7 @@ void kick_workspace::to_gpu() {
 	auto sort_fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
 				const auto* aptr = tree_get_node(a.self);
 				const auto* bptr = tree_get_node(b.self);
-				return 10 * aptr->active_nodes + aptr->nactive > 10 * aptr->active_nodes + bptr->nactive;
+				return 10 * aptr->active_nodes + aptr->nactive > 10 * bptr->active_nodes + bptr->nactive;
 			}
 	);
 
