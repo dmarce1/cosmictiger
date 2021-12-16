@@ -41,13 +41,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define BH_CUDA_MIN 512
 #define DOMAIN_REBOUND_ITERS 20
 
-#ifdef USE_CUDA
-#define SINK_BUCKET_SIZE 160
-#define SOURCE_BUCKET_SIZE 160
-#else
-#define SINK_BUCKET_SIZE 90
-#define SOURCE_BUCKET_SIZE 90
-#endif
+#define GPU_BUCKET_SIZE 160
+#define CPU_BUCKET_SIZE 90
 
 #define USE_CONFORMAL_TIME
 
@@ -55,8 +50,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define GROUP_BUCKET_SIZE 90
 
 #define MAX_LOAD_IMBALANCE 0.005
-#define CUDA_MAX_MEM 0.60
-#define GPU_MIN_LOAD (1.0/40.0)
+#define CUDA_MAX_MEM 0.333333333333
+#define GPU_MIN_LOAD (1.0/128.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
 #define CUDA_KICK_PARTS_MAX (16*1024)
 #define HEAP_SIZE 1

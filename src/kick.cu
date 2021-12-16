@@ -359,8 +359,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
 							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
 							mult = far1;
-							part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
-							leaf = !mult && !part && other.source_leaf;
+							part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
+							leaf = !mult && !part && other.leaf;
 							next = !mult && !part && !leaf;
 							ninteracts++;
 						}
@@ -409,13 +409,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					nextlist.resize(0);
 					__syncwarp();
 
-				} while (dchecks.size() && self.sink_leaf);
+				} while (dchecks.size() && self.leaf);
 //				tm = clock64();
 				node_flops += cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_DIRECT, min_rung == 0);
 				node_flops += cuda_gravity_cp(data, L.back(), self, partlist, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 				int pflops = 0;
-				if (self.sink_leaf) {
+				if (self.leaf) {
 					int nactive = 0;
 					const part_int begin = self.sink_part_range.first;
 					const part_int end = self.sink_part_range.second;
@@ -745,7 +745,7 @@ size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
 	size_t innerblocks = nparts / CUDA_KICK_PARTS_MAX;
 	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);
 	size_t total_parts = CUDA_KICK_PARTS_MAX * nblocks;
-	size_t ntrees = 3 * total_parts / std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	size_t ntrees = 3 * total_parts / GPU_BUCKET_SIZE;
 	size_t nchecks = 2 * innerblocks * check_count;
 	mem += total_parts * NDIM * sizeof(fixed32);
 	mem += ntrees * sizeof(tree_node);

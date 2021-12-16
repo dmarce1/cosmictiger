@@ -141,9 +141,10 @@ tree_allocator::~tree_allocator() {
 	}
 }
 
-tree_create_params::tree_create_params(int min_rung_, double theta_) {
+tree_create_params::tree_create_params(int min_rung_, double theta_, bool use_gpu_) {
 	theta = theta_;
 	min_rung = min_rung_;
+	use_gpu = use_gpu_;
 	min_level = tree_min_level(theta);
 }
 
@@ -210,7 +211,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 
 static void tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	static const int bucket_size = std::min(GPU_BUCKET_SIZE, CPU_BUCKET_SIZE);
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
@@ -227,7 +228,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		bool local_root) {
 	stack_trace_activate();
 	const double h = get_options().hsoft;
-	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	static const int bucket_size =  params.use_gpu ? GPU_BUCKET_SIZE : CPU_BUCKET_SIZE;
 	tree_create_return rc;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -508,8 +509,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.depth = depth;
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
-	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
-	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);
+	node.leaf = !global && (depth >= params.min_level) && (nparts <= bucket_size);
 	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}

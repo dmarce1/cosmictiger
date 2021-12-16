@@ -160,6 +160,7 @@ vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
 void particles_memadvise_gpu();
 void particles_free();
+std::int64_t particles_active_count(int);
 
 
 

@@ -121,6 +121,7 @@ void do_groups(int number, double scale) {
 
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
+	std::int64_t active_count = particles_active_count(minrung);
 	tm.start();
 	PRINT("domains_begin\n");
 	domains_begin();
@@ -130,7 +131,14 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	domain_time += tm.read();
 	tm.reset();
 	tm.start();
-	tree_create_params tparams(minrung, theta);
+	double active_pct = (double) active_count / std::pow((double) get_options().parts_dim, NDIM);
+	const bool use_gpu =  active_pct > GPU_MIN_LOAD && get_options().cuda;
+	tree_create_params tparams(minrung, theta, use_gpu );
+	if( !use_gpu) {
+		PRINT( "Using cpu\n");
+	} else {
+		PRINT( "Using GPU\n");
+	}
 	PRINT("Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
@@ -142,7 +150,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 //	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
 	kparams.node_load = flops_per_node / flops_per_particle;
-	kparams.gpu = true;
+	kparams.gpu = use_gpu;
 	used_gpu = kparams.gpu;
 	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
@@ -174,6 +182,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;
+	PRINT( "%lli %lli\n", sr.nactive, active_count);
 	PRINT("kick done\n");
 	if (min_rung == 0) {
 		flops_per_node = kr.node_flops / sr.active_nodes;

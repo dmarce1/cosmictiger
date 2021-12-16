@@ -156,7 +156,7 @@ static void tree_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create_params tparams(0, 0.7);
+	tree_create_params tparams(0, 0.7, get_options().cuda);
 	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
@@ -206,7 +206,7 @@ static void kick_test() {
 	tm.reset();
 	tm.reset();
 	tm.start();
-	tree_create_params tparams(0, get_options().theta);
+	tree_create_params tparams(0, get_options().theta, get_options().cuda);
 	auto sr = tree_create(tparams);
 	total_flops += sr.flops;
 	tm.stop();
@@ -304,7 +304,7 @@ static void force_test() {
 	tm.reset();
 
 	tm.start();
-	tree_create_params tparams(0, get_options().theta);
+	tree_create_params tparams(0, get_options().theta, get_options().cuda);
 	tree_create(tparams);
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());

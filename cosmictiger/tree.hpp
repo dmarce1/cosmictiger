@@ -80,8 +80,7 @@ struct tree_node {
 	size_t nactive;
 	float radius;
 	bool local_root;
-	bool sink_leaf;
-	bool source_leaf;
+	bool leaf;
 	size_t node_count;
 	size_t active_nodes;
 	int depth;CUDA_EXPORT
@@ -113,8 +112,7 @@ struct tree_node {
 		arc & nactive;
 		arc & radius;
 		arc & local_root;
-		arc & sink_leaf;
-		arc & source_leaf;
+		arc & leaf;
 		arc & node_count;
 		arc & sink_part_range;
 		arc & depth;
@@ -155,13 +153,15 @@ struct tree_create_params {
 	int min_rung;
 	double theta;
 	int min_level;
+	int use_gpu;
 	tree_create_params() = default;
-	tree_create_params(int min_rung, double theta);
+	tree_create_params(int min_rung, double theta, bool use_gpu);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & min_rung;
 		arc & theta;
 		arc & min_level;
+		arc & use_gpu;
 	}
 };
 

@@ -129,13 +129,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 #ifdef USE_CUDA
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
-		if( self_ptr->local_root) {
+/*		if( self_ptr->local_root) {
 			const double max_load = self_ptr->node_count * params.node_load + (self_ptr->part_range.second - self_ptr->part_range.first);
 			const double load = self_ptr->active_nodes * params.node_load + self_ptr->nactive;
 			if( load / max_load < GPU_MIN_LOAD) {
 				params.gpu = false;
 			}
-		}
+		}*/
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
 			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
@@ -152,7 +152,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 			}
 		}
-		if( eligible && !self_ptr->sink_leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
+		if( eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			const auto all_local = [](const vector<tree_id>& list) {
 				bool all = true;
 				for( int i = 0; i < list.size(); i++) {
@@ -250,7 +250,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 				}
 				other_radius[i] = other_ptrs[i]->radius;
-				other_leaf[i] = other_ptrs[i]->source_leaf;
+				other_leaf[i] = other_ptrs[i]->leaf;
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
@@ -278,10 +278,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		std::swap(dchecklist, nextlist);
 		nextlist.resize(0);
-	} while (dchecklist.size() && self_ptr->sink_leaf);
+	} while (dchecklist.size() && self_ptr->leaf);
 	these_flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
 	these_flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
-	if (self_ptr->sink_leaf) {
+	if (self_ptr->leaf) {
 		if (cuda_workspace != nullptr) {
 			cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 		}

@@ -46,6 +46,7 @@ static part_int size = 0;
 static part_int capacity = 0;
 static vector<size_t> global_offsets;
 
+HPX_PLAIN_ACTION (particles_active_count);
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
 HPX_PLAIN_ACTION (particles_destroy);
@@ -101,6 +102,34 @@ struct group_cache_entry {
 };
 static array<std::unordered_map<line_id_type, group_cache_entry, line_id_hash_hi>, PART_CACHE_SIZE> group_part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> group_mutexes;
+
+std::int64_t particles_active_count(int rung) {
+	vector < hpx::future < std::int64_t >> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_active_count_action>(HPX_PRIORITY_HI, c, rung));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int ti = 0; ti < nthreads; ti++) {
+		futs.push_back(hpx::async([nthreads, rung, ti]() {
+			const part_int start = (std::int64_t) (ti) * (std::int64_t)particles_size() / (std::int64_t)nthreads;
+			const part_int stop = (std::int64_t) (ti+1) * (std::int64_t)particles_size() / (std::int64_t)nthreads;
+			std::int64_t count = 0;
+			for( part_int i = start; i < stop; i++) {
+				if( particles_rung(i) >= rung ) {
+					count++;
+				}
+			}
+			return count;
+		}));
+	}
+
+	std::int64_t count = 0;
+	for (auto& fut : futs) {
+		count += fut.get();
+	}
+	return count;
+
+}
 
 vector<output_particle> particles_get_sample(const range<double>& box) {
 	vector<hpx::future<vector<output_particle>>>futs;

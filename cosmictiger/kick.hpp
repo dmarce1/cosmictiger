@@ -50,9 +50,9 @@ struct kick_return;
 
 #ifdef __CUDACC__
 struct cuda_kick_shmem {
-	array<fixed32, SINK_BUCKET_SIZE> sink_x;
-	array<fixed32, SINK_BUCKET_SIZE> sink_y;
-	array<fixed32, SINK_BUCKET_SIZE> sink_z;
+	array<fixed32, GPU_BUCKET_SIZE> sink_x;
+	array<fixed32, GPU_BUCKET_SIZE> sink_y;
+	array<fixed32, GPU_BUCKET_SIZE> sink_z;
 	union {
 		struct {
 			array<fixed32, KICK_PP_MAX> x;
@@ -61,12 +61,12 @@ struct cuda_kick_shmem {
 		}src;
 //		array<multipole_pos,WARP_SIZE> m;
 	};
-	array<float, SINK_BUCKET_SIZE> gx;
-	array<float, SINK_BUCKET_SIZE> gy;
-	array<float, SINK_BUCKET_SIZE> gz;
-	array<float, SINK_BUCKET_SIZE> phi;
-	array<part_int,SINK_BUCKET_SIZE> active;
-	array<char,SINK_BUCKET_SIZE> rungs;
+	array<float, GPU_BUCKET_SIZE> gx;
+	array<float, GPU_BUCKET_SIZE> gy;
+	array<float, GPU_BUCKET_SIZE> gz;
+	array<float, GPU_BUCKET_SIZE> phi;
+	array<part_int,GPU_BUCKET_SIZE> active;
+	array<char,GPU_BUCKET_SIZE> rungs;
 };
 #endif
 
