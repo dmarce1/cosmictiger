@@ -546,7 +546,7 @@ void tree_destroy() {
 	for (const auto& c : children) {
 		futs.push_back(hpx::async<tree_destroy_action>(HPX_PRIORITY_HI, c));
 	}
-	nodes = decltype(nodes)();
+//	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
