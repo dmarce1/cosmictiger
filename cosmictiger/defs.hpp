@@ -55,7 +55,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define GROUP_BUCKET_SIZE 90
 
 #define MAX_LOAD_IMBALANCE 0.005
-#define CUDA_MAX_MEM 0.33333333333
+#define CUDA_MAX_MEM 0.3
 #define GPU_MIN_LOAD (1.0/64.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
 #define CUDA_KICK_PARTS_MAX (16*1024)

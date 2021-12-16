@@ -561,9 +561,6 @@ driver_params read_checkpoint() {
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done reading checkpoint\n");
-		std::string command = "rm -r checkpoint.goodbye\n";
-		if (system(command.c_str()) != 0) {
-		}
 	}
 	return params;
 }
