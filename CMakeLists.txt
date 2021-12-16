@@ -144,39 +144,40 @@ add_hpx_executable(
  )
  
 
-add_library(hpx_lite 
-	hpx_lite/src/hpx.cpp
-	hpx_lite/src/id_type.cpp
-	hpx_lite/src/thread.cpp
-	hpx_lite/src/future.cpp
-	hpx_lite/src/mutex.cpp
-	hpx_lite/src/serialize.cpp
-)
 
-add_executable( cosmictiger_lite ${cosmictiger_source_files} )
+#add_library(hpx_lite 
+#	hpx_lite/src/hpx.cpp
+#	hpx_lite/src/id_type.cpp
+#	hpx_lite/src/thread.cpp
+#	hpx_lite/src/future.cpp
+#	hpx_lite/src/mutex.cpp
+#	hpx_lite/src/serialize.cpp
+#)
 
-#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
-if( COSMICTIGER_WITH_LONG_LONG_PART_INT ) 
-	target_compile_definitions(cosmictiger_lite PUBLIC LONG_LONG_PART_INT)
-endif()
-target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
-target_link_libraries(cosmictiger_lite PUBLIC boost_program_options mpi fftw3f gsl gslcblas chealpix hpx_lite hwloc silo dl pthread )
-target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
-target_compile_features(cosmictiger_lite PUBLIC cxx_std_14)
+#add_executable( cosmictiger_lite ${cosmictiger_source_files} )
 
 #target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
-target_compile_options(cosmictiger_lite PUBLIC "-DHPX_LITE" )
-if( COSMICTIGER_WITH_CUDA )
-	target_link_libraries(cosmictiger_lite PUBLIC cudart)
-	target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math  --maxrregcount=160;
-                        >)
-	target_compile_options(cosmictiger_lite PRIVATE -DUSE_CUDA )
-	set_property(TARGET cosmictiger_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
-	set_property(TARGET cosmictiger_lite PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-endif()
-add_dependencies( cosmictiger_lite generate_fmm_kernels )
-target_compile_definitions(cosmictiger_lite PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
+#if( COSMICTIGER_WITH_LONG_LONG_PART_INT ) 
+#	target_compile_definitions(cosmictiger_lite PUBLIC LONG_LONG_PART_INT)
+#endif()
+#target_include_directories(hpx_lite PUBLIC ${PROJECT_SOURCE_DIR}/hpx_lite)
+#target_link_libraries(cosmictiger_lite PUBLIC boost_program_options mpi fftw3f gsl gslcblas chealpix hpx_lite hwloc silo dl pthread )
+#target_include_directories(cosmictiger_lite PUBLIC ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/hpx_lite)
+#target_compile_features(cosmictiger_lite PUBLIC cxx_std_14)
+
+#target_compile_options( hpx_lite PUBLIC "-D_GLIBCXX_USE_CXX11_ABI=0")
+#target_compile_options(cosmictiger_lite PUBLIC "-DHPX_LITE" )
+#if( COSMICTIGER_WITH_CUDA )
+#	target_link_libraries(cosmictiger_lite PUBLIC cudart)
+#	target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+#                       --use_fast_math  --maxrregcount=160;
+#                        >)
+#	target_compile_options(cosmictiger_lite PRIVATE -DUSE_CUDA )
+#	set_property(TARGET cosmictiger_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
+#	set_property(TARGET cosmictiger_lite PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+#endif()
+#add_dependencies( cosmictiger_lite generate_fmm_kernels )
+#target_compile_definitions(cosmictiger_lite PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
 
 
