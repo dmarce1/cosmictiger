@@ -83,14 +83,14 @@ struct last_cache_entry_t {
 			last_cache_entry_mtx--;
 		}
 		last_cache_entries.insert(this);
-		last_cache_entry_mtx++;
+		last_cache_entry_mtx--;
 	}
 	~last_cache_entry_t() {
 		while (last_cache_entry_mtx++ != 0) {
 			last_cache_entry_mtx--;
 		}
 		last_cache_entries.erase(this);
-		last_cache_entry_mtx++;
+		last_cache_entry_mtx--;
 	}
 };
 
