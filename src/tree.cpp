@@ -540,13 +540,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	return rc;
 }
 
-void tree_destroy() {
+void tree_destroy(bool free_tree) {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<tree_destroy_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<tree_destroy_action>(HPX_PRIORITY_HI, c, free_tree));
 	}
-//	nodes = decltype(nodes)();
+	if( free_tree ) {
+		nodes = decltype(nodes)();
+	}
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());

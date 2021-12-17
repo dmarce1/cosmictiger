@@ -206,7 +206,6 @@ void do_power_spectrum(int num, double a) {
 	fclose(fp);
 }
 
-
 void output_time_file() {
 	const double a0 = 1.0 / (1.0 + get_options().z0);
 	const double tau_max = cosmos_conformal_time(a0, 1.0);
@@ -298,6 +297,8 @@ void driver() {
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
 			PRINT("Flushing light cone\n");
+			kick_workspace::clear_buffers();
+			tree_destroy(true);
 			lc_init(tau + dt, tau_max);
 			lc_buffer2homes();
 			lc_particle_boundaries();
@@ -374,6 +375,7 @@ void driver() {
 			PRINT("Done kicking\n");
 			if (full_eval) {
 				kick_workspace::clear_buffers();
+				tree_destroy(true);
 				pot = kr.pot * 0.5 / a;
 				if (get_options().do_power) {
 					do_power_spectrum(step, a);
@@ -432,20 +434,20 @@ void driver() {
 			const double parts_per_node = nparts / sr.leaf_nodes;
 			const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
 			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
-			if( full_eval ) {
-				FILE* fp = fopen( "energy.txt", "at");
-				if( fp == NULL) {
-					THROW_ERROR( "Unable to open energy.txt\n");
+			if (full_eval) {
+				FILE* fp = fopen("energy.txt", "at");
+				if (fp == NULL) {
+					THROW_ERROR("Unable to open energy.txt\n");
 				}
-				fprintf( fp, "%i %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, cosmicK, eerr);
+				fprintf(fp, "%i %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, cosmicK, eerr);
 				fclose(fp);
 			}
 			PRINT_BOTH(textfp,
 					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
-					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1,
-				   tau / t0, years, dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, act_pct, (double ) dr.nmapped, kr.load,
-					domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
-					total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1, tau / t0, years,
+					dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time,
+					drift_time, runtime / iter, (double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
+					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
