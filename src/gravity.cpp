@@ -30,7 +30,7 @@ size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id 
 	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-		vector<const tree_node*> tree_ptrs(list.size());
+			vector<const tree_node*> tree_ptrs(list.size());
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		const int nsource = round_up((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;

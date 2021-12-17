@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/groups_find.hpp>
 #include <cosmictiger/group_tree.hpp>
@@ -33,7 +33,7 @@ void atomic_min(std::atomic<group_int>& min_value, group_int value) {
 
 hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, double link_len, bool threadme) {
 	static std::atomic<int> nthreads(0);
-	hpx::future < size_t > rc;
+	hpx::future<size_t> rc;
 	const group_tree_node* self_ptr = group_tree_get_node(self);
 	bool remote = false;
 	if (self.proc != hpx_rank()) {
@@ -55,7 +55,7 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	} else if (remote) {
 		ASSERT(self_ptr->proc_range.first >= 0);
 		ASSERT(self_ptr->proc_range.first < hpx_size());
-		rc = hpx::async < groups_find_action > (HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
+		rc = hpx::async<groups_find_action>(HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
 	} else {
 		rc = hpx::async([self,link_len] (vector<tree_id> checklist) {
 			auto rc = groups_find(self,std::move(checklist), link_len);
@@ -177,24 +177,39 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				}
 			}
 			for (part_int k = my_rng.first; k < my_rng.second; k++) {
-				const auto myx = particles_pos(XDIM, k);
-				const auto myy = particles_pos(YDIM, k);
-				const auto myz = particles_pos(ZDIM, k);
-				for (int j = 0; j < total_size; j++) {
-					const float x = distance(myx, X[j]);
-					const float y = distance(myy, Y[j]);
-					const float z = distance(myz, Z[j]);
-					const float r2 = sqr(x, y, z);
-					if (r2 < link_len2) {
-						auto& grp = particles_group(k);
-						const group_int start_group = particles_group(k);
-						if ((group_int) grp == NO_GROUP) {
-							grp = particles_group_init(k);
-							found_any_link = true;
-						}
-						if (grp > G[j]) {
-							grp = G[j];
-							found_any_link = true;
+				simd_int sink_x = particles_pos(XDIM, k).raw();
+				simd_int sink_y = particles_pos(YDIM, k).raw();
+				simd_int sink_z = particles_pos(ZDIM, k).raw();
+				for (int j = 0; j < total_size; j += SIMD_FLOAT_SIZE) {
+					static const simd_float _2float(fixed2float);
+					const int lmax = std::min(total_size, j + SIMD_FLOAT_SIZE);
+					simd_int src_x;
+					simd_int src_y;
+					simd_int src_z;
+					for (int l = j; l < lmax; l++) {
+						const int l0 = l - j;
+						src_x[l0] = X[l].raw();
+						src_y[l0] = Y[l].raw();
+						src_z[l0] = Z[l].raw();
+					}
+					const simd_float x = simd_float(src_x - sink_x) * _2float;
+					const simd_float y = simd_float(src_y - sink_y) * _2float;
+					const simd_float z = simd_float(src_z - sink_z) * _2float;
+					const simd_float dist = sqr(x, y, z);
+					const simd_float lt = dist < link_len2;
+					for (int l = j; l < lmax; l++) {
+						const int l0 = l - j;
+						if (lt[l0]) {
+							auto& grp = particles_group(k);
+							const group_int start_group = particles_group(k);
+							if ((group_int) grp == NO_GROUP) {
+								grp = particles_group_init(k);
+								found_any_link = true;
+							}
+							if (grp > G[l]) {
+								grp = G[l];
+								found_any_link = true;
+							}
 						}
 					}
 				}
@@ -203,31 +218,49 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 			do {
 				found_link = false;
 				for (part_int j = my_rng.first; j < my_rng.second; j++) {
-					for (part_int k = j + 1; k < my_rng.second; k++) {
-						const float x = distance(particles_pos(XDIM, k), particles_pos(XDIM, j));
-						const float y = distance(particles_pos(YDIM, k), particles_pos(YDIM, j));
-						const float z = distance(particles_pos(ZDIM, k), particles_pos(ZDIM, j));
-						if (sqr(x, y, z) < link_len2) {
-							auto& grpa = particles_group(k);
-							auto& grpb = particles_group(j);
-							if ((group_int) grpa == NO_GROUP) {
-								grpa = particles_group_init(k);
-								found_link = true;
-								found_any_link = true;
-							}
-							if ((group_int) grpb == NO_GROUP) {
-								grpb = particles_group_init(j);
-								found_link = true;
-								found_any_link = true;
-							}
-							if (grpa != grpb) {
-								if (grpa < grpb) {
-									grpb = (group_int) grpa;
-								} else {
-									grpa = (group_int) grpb;
+					simd_int sink_x = particles_pos(XDIM, j).raw();
+					simd_int sink_y = particles_pos(YDIM, j).raw();
+					simd_int sink_z = particles_pos(ZDIM, j).raw();
+					for (part_int k = j + 1; k < my_rng.second; k += SIMD_FLOAT_SIZE) {
+						static const simd_float _2float(fixed2float);
+						const int lmax = std::min(my_rng.second, k + SIMD_FLOAT_SIZE);
+						simd_int src_x;
+						simd_int src_y;
+						simd_int src_z;
+						for (int l = k; l < lmax; l++) {
+							const int l0 = l - k;
+							src_x[l0] = particles_pos(XDIM, l).raw();
+							src_y[l0] = particles_pos(YDIM, l).raw();
+							src_z[l0] = particles_pos(ZDIM, l).raw();
+						}
+						const simd_float x = simd_float(src_x - sink_x) * _2float;
+						const simd_float y = simd_float(src_y - sink_y) * _2float;
+						const simd_float z = simd_float(src_z - sink_z) * _2float;
+						const simd_float dist = sqr(x, y, z);
+						const simd_float lt = dist < link_len2;
+						for (int l = k; l < lmax; l++) {
+							if (lt[l - k] == 1.0) {
+								auto& grpa = particles_group(l);
+								auto& grpb = particles_group(j);
+								if ((group_int) grpa == NO_GROUP) {
+									grpa = particles_group_init(l);
+									found_link = true;
+									found_any_link = true;
 								}
-								found_link = true;
-								found_any_link = true;
+								if ((group_int) grpb == NO_GROUP) {
+									grpb = particles_group_init(j);
+									found_link = true;
+									found_any_link = true;
+								}
+								if (grpa != grpb) {
+									if (grpa < grpb) {
+										grpb = (group_int) grpa;
+									} else {
+										grpa = (group_int) grpb;
+									}
+									found_link = true;
+									found_any_link = true;
+								}
 							}
 						}
 					}
