@@ -302,7 +302,7 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 			entry.epoch = tree_cache_epoch;
 			lock.unlock();
 			hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
-				auto line_fut = hpx::async<group_tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+				auto line_fut = hpx::async<group_tree_fetch_cache_line_action>(HPX_PRIORITY_HI,hpx_localities()[line_id.proc],line_id.index);
 				prms->set_value(line_fut.get());
 				return 'a';
 			});
@@ -317,10 +317,10 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 			lock.unlock();
 			auto old_data = old_fut.get();
 			hpx::async(HPX_PRIORITY_HI, [prms,line_id](vector<group_tree_node> data) {
-				auto line_fut = hpx::async<group_tree_refresh_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+				auto line_fut = hpx::async<group_tree_refresh_cache_line_action>(HPX_PRIORITY_HI,hpx_localities()[line_id.proc],line_id.index);
 				auto new_data = line_fut.get();
 				for( int i = 0; i < new_data.size(); i++) {
-					data[i].active = new_data[i];
+					data[i].last_active = new_data[i];
 				}
 				prms->set_value(std::move(data));
 				return 'a';
@@ -359,7 +359,7 @@ static vector<unsigned> group_tree_refresh_cache_line(int index) {
 	const int begin = (index / line_size) * line_size;
 	const int end = begin + line_size;
 	for (int i = begin; i < end; i++) {
-		line.push_back(nodes[i].active);
+		line.push_back(nodes[i].last_active);
 	}
 	return std::move(line);
 
