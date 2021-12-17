@@ -316,13 +316,14 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 			entry.epoch = tree_cache_epoch;
 			lock.unlock();
 			auto old_data = old_fut.get();
-			hpx::apply([prms,line_id](vector<group_tree_node> data) {
+			hpx::async(HPX_PRIORITY_HI, [prms,line_id](vector<group_tree_node> data) {
 				auto line_fut = hpx::async<group_tree_refresh_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 				auto new_data = line_fut.get();
 				for( int i = 0; i < new_data.size(); i++) {
 					data[i].active = new_data[i];
 				}
 				prms->set_value(std::move(data));
+				return 'a';
 			}, std::move(old_data));
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);
