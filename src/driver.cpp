@@ -301,15 +301,18 @@ void driver() {
 			tree_destroy(true);
 			lc_init(tau + dt, tau_max);
 			lc_buffer2homes();
-			lc_particle_boundaries();
+			lc_particle_boundaries(false);
 			const double link_len = get_options().lc_b / get_options().parts_dim;
 			lc_form_trees(tau + dt, link_len);
 			PRINT( "Trees formed\n");
 			size_t cnt;
 			do {
-				lc_particle_boundaries();
+				timer tm;
+				tm.start();
+				lc_particle_boundaries(true);
 				cnt = lc_find_groups();
-				PRINT( "%li\n", cnt);
+				tm.stop();
+				PRINT( "%e %li\n", cnt, tm.read());
 			}while( cnt > 0);
 			lc_groups2homes();
 			lc_parts2groups(a, link_len);

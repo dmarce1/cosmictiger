@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/bh.hpp>
 #include <cosmictiger/constants.hpp>
@@ -107,7 +107,7 @@ static double tau_max;
 static int Nside;
 static int Npix;
 
-static vector<lc_particle> lc_get_particles(int pix);
+static pair<vector<lc_particle>, vector<char>> lc_get_particles(int pix, bool with_trees);
 static void lc_send_particles(vector<lc_particle>);
 static void lc_send_buffer_particles(vector<lc_particle>);
 static int vec2pix(double x, double y, double z);
@@ -136,7 +136,7 @@ vector<float> lc_flush_final() {
 	}
 	vector<hpx::future<vector<float>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_flush_final_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<lc_flush_final_action>(HPX_PRIORITY_HI, c));
 	}
 
 	std::string filename = "./lc/lc." + std::to_string(hpx_rank()) + ".dat";
@@ -144,7 +144,7 @@ vector<float> lc_flush_final() {
 	if (fp == NULL) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
 	}
-	for( int i = 0; i < saved_groups.size(); i++) {
+	for (int i = 0; i < saved_groups.size(); i++) {
 		saved_groups[i].write(fp);
 	}
 	fclose(fp);
@@ -195,7 +195,7 @@ void lc_save(FILE* fp) {
 	}
 	sz = saved_groups.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
-	for( int i = 0; i < sz; i++) {
+	for (int i = 0; i < sz; i++) {
 		saved_groups[i].write(fp);
 	}
 }
@@ -217,7 +217,7 @@ void lc_load(FILE* fp) {
 	}
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	saved_groups.resize(sz);
-	for( int i = 0; i < sz; i++) {
+	for (int i = 0; i < sz; i++) {
 		saved_groups[i].read(fp);
 	}
 }
@@ -225,7 +225,7 @@ void lc_load(FILE* fp) {
 size_t lc_time_to_flush(double tau, double tau_max_) {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_time_to_flush_action > (HPX_PRIORITY_HI, c, tau, tau_max_));
+		futs.push_back(hpx::async<lc_time_to_flush_action>(HPX_PRIORITY_HI, c, tau, tau_max_));
 	}
 	size_t nparts = part_buffer.size();
 	for (auto& f : futs) {
@@ -250,7 +250,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 void lc_parts2groups(double a, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_parts2groups_action > (HPX_PRIORITY_HI, c, a, link_len));
+		futs.push_back(hpx::async<lc_parts2groups_action>(HPX_PRIORITY_HI, c, a, link_len));
 	}
 	std::unordered_map<long long, lc_group_data> groups_map;
 	int i = 0;
@@ -474,7 +474,7 @@ void lc_buffer2homes() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async < lc_buffer2homes_action > (HPX_PRIORITY_HI, c));
+		futs1.push_back(hpx::async<lc_buffer2homes_action>(HPX_PRIORITY_HI, c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	static mutex_type map_mutex;
@@ -521,7 +521,7 @@ void lc_buffer2homes() {
 void lc_groups2homes() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_groups2homes_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<lc_groups2homes_action>(HPX_PRIORITY_HI, c));
 	}
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix]() {
@@ -738,7 +738,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 size_t lc_find_groups() {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_find_groups_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<lc_find_groups_action>(HPX_PRIORITY_HI, c));
 	}
 	size_t rc = 0;
 	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
@@ -770,8 +770,16 @@ size_t lc_find_groups() {
 	return rc;
 }
 
-static vector<lc_particle> lc_get_particles(int pix) {
-	return part_map[pix];
+static pair<vector<lc_particle>, vector<char>> lc_get_particles(int pix, bool with_trees) {
+	pair<vector<lc_particle>, vector<char>> rc;
+	rc.first = part_map[pix];
+	if (with_trees) {
+		const auto& nodes = tree_map[pix];
+		for (int i = 0; i < nodes.size(); i++) {
+			rc.second.push_back(nodes[i].active);
+		}
+	}
+	return rc;
 }
 
 static int vec2pix(double x, double y, double z) {
@@ -797,20 +805,36 @@ static int pix2rank(int pix) {
 	return n;
 }
 
-void lc_particle_boundaries() {
+void lc_particle_boundaries(bool with_trees) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_particle_boundaries_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<lc_particle_boundaries_action>(HPX_PRIORITY_HI, c, with_trees));
 	}
-	vector<hpx::future<vector<lc_particle>>>pfuts;
+	vector<hpx::future<pair<vector<lc_particle>, vector<char>>> >pfuts;
 	pfuts.reserve(bnd_pix.size());
 	for (auto pix : bnd_pix) {
 		const int rank = pix2rank(pix);
-		pfuts.push_back(hpx::async < lc_get_particles_action > (hpx_localities()[rank], pix));
+		pfuts.push_back(hpx::async<lc_get_particles_action>(hpx_localities()[rank], pix, with_trees));
 	}
 	int i = 0;
 	for (auto pix : bnd_pix) {
-		part_map[pix] = pfuts[i].get();
+		const auto p = pfuts[i].get();
+		part_map[pix] = std::move(p.first);
+		if (with_trees) {
+			auto& nodes = tree_map[pix];
+			const int nthreads = hpx_hardware_concurrency();
+			vector<hpx::future<void>> futs;
+			for (int thread = 0; thread < nthreads; thread++) {
+				futs.push_back(hpx::async([thread,nthreads,&p,&nodes]() {
+					const int jmin = thread * nodes.size() / nthreads;
+					const int jmax = (thread+1) * nodes.size() / nthreads;
+					for (int j = jmin; j < jmax; j++) {
+						nodes[j].last_active = p.second[j];
+					}
+				}));
+			}
+			hpx::wait_all(futs.begin(), futs.end());
+		}
 		i++;
 	}
 
@@ -821,7 +845,7 @@ void lc_particle_boundaries() {
 void lc_form_trees(double tau, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_form_trees_action > (HPX_PRIORITY_HI, c, tau, link_len));
+		futs.push_back(hpx::async<lc_form_trees_action>(HPX_PRIORITY_HI, c, tau, link_len));
 	}
 	for (auto iter = part_map.begin(); iter != part_map.end(); iter++) {
 		const int pix = iter->first;
@@ -893,7 +917,7 @@ static int compute_nside(double tau) {
 void lc_init(double tau, double tau_max_) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < lc_init_action > (HPX_PRIORITY_HI, c, tau, tau_max_));
+		futs.push_back(hpx::async<lc_init_action>(HPX_PRIORITY_HI, c, tau, tau_max_));
 	}
 	tree_map = decltype(tree_map)();
 	part_map = decltype(part_map)();
