@@ -312,8 +312,10 @@ void driver() {
 				timer tm;
 				tm.start();
 				lc_particle_boundaries(true);
-				cnt = lc_find_groups();
 				tm.stop();
+				PRINT( "%e ", tm.read());
+				tm.start();
+				cnt = lc_find_groups();
 				PRINT( "%e %li\n", cnt, tm.read());
 			}while( cnt > 0);
 			lc_groups2homes();
