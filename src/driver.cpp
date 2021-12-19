@@ -296,6 +296,8 @@ void driver() {
 
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
+			timer tm;
+			tm.start();
 			PRINT("Flushing light cone\n");
 			kick_workspace::clear_buffers();
 			tree_destroy(true);
@@ -316,6 +318,8 @@ void driver() {
 			}while( cnt > 0);
 			lc_groups2homes();
 			lc_parts2groups(a, link_len);
+			tm.stop();
+			PRINT( "Light cone flush took %e seconds\n", tm.read());
 		}
 	};
 
