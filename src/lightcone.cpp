@@ -241,7 +241,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 		const size_t ranks = std::min(npix, hpx_size());
 		const size_t parts_per_rank = std::pow(get_options().parts_dim, NDIM) / hpx_size();
 		double factor = 1.0 / 8.0;
-		double tm = tau_max / tau * 64;
+		double tm = tau / tau_max * 64;
 		if (tm > 63.0) {
 			factor = (64.0 - tm) / 8.0;
 		}
