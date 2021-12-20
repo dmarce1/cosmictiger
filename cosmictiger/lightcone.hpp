@@ -70,7 +70,8 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 void lc_add_parts(vector<lc_particle>&&);
 void lc_buffer2homes();
 size_t lc_time_to_flush(double, double);
-void lc_particle_boundaries(bool with_trees);
+void lc_particle_boundaries1();
+void lc_particle_boundaries2();
 void lc_form_trees(double tmax, double link_len);
 size_t lc_find_groups();
 void lc_groups2homes();

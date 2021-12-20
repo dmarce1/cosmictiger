@@ -303,7 +303,7 @@ void driver() {
 			tree_destroy(true);
 			lc_init(tau + dt, tau_max);
 			lc_buffer2homes();
-			lc_particle_boundaries(false);
+			lc_particle_boundaries1();
 			const double link_len = get_options().lc_b / get_options().parts_dim;
 			lc_form_trees(tau + dt, link_len);
 			PRINT( "Trees formed\n");
@@ -311,7 +311,7 @@ void driver() {
 			do {
 				timer tm;
 				tm.start();
-				lc_particle_boundaries(true);
+				lc_particle_boundaries2();
 				tm.stop();
 				PRINT( "%e ", tm.read());
 				tm.reset();
