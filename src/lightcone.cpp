@@ -240,7 +240,12 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 		const int npix = nside == 0 ? 1 : 12 * sqr(nside);
 		const size_t ranks = std::min(npix, hpx_size());
 		const size_t parts_per_rank = std::pow(get_options().parts_dim, NDIM) / hpx_size();
-		if (8 * nparts >= parts_per_rank) {
+		double factor = 1.0 / 8.0;
+		double tm = tau_max / tau * 64;
+		if (tm > 63.0) {
+			factor = (64.0 - tm) / 8.0;
+		}
+		if (nparts >= factor * parts_per_rank) {
 			return 1;
 		} else {
 			return 0;
@@ -818,7 +823,7 @@ void lc_particle_boundaries1() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_particle_boundaries1_action>(HPX_PRIORITY_HI, c));
 	}
-	vector < hpx::future<vector<lc_particle>>>  pfuts;
+	vector<hpx::future<vector<lc_particle>>>pfuts;
 	pfuts.reserve(bnd_pix.size());
 	for (auto pix : bnd_pix) {
 		const int rank = pix2rank(pix);
@@ -837,7 +842,7 @@ void lc_particle_boundaries2() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_particle_boundaries2_action>(HPX_PRIORITY_HI, c));
 	}
-	vector < hpx::future < pair<vector<long long>, vector<char>>> > pfuts;
+	vector<hpx::future<pair<vector<long long>, vector<char>>> >pfuts;
 	pfuts.reserve(bnd_pix.size());
 	for (auto pix : bnd_pix) {
 		const int rank = pix2rank(pix);
