@@ -943,7 +943,7 @@ static vector<int> pix_neighbors(int pix) {
 }
 
 static int compute_nside(double tau) {
-	double nside = std::sqrt(2.0 * hpx::thread::hardware_concurrency() * hpx_size() / 12.0);
+	double nside = std::sqrt(8.0 * hpx::thread::hardware_concurrency() * hpx_size() / 12.0);
 	const double w0 = std::max((tau_max - tau) / tau_max, 0.0);
 	nside = std::min(nside, (get_options().parts_dim * std::sqrt(3) / get_options().lc_b / 2.0 * w0));
 	Nside = 1;
@@ -951,6 +951,7 @@ static int compute_nside(double tau) {
 		Nside *= 2;
 	}
 	Nside /= 2;
+	PRINT( "compute_nside = %i\n", Nside);
 	return Nside;
 }
 
