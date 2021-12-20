@@ -947,7 +947,7 @@ static int compute_nside(double tau) {
 	const double w0 = std::max((tau_max - tau) / tau_max, 0.0);
 	nside = std::min(nside, (get_options().parts_dim * std::sqrt(3) / get_options().lc_b / 2.0 * w0));
 	Nside = 1;
-	while (Nside <= nside) {
+	while (Nside < nside) {
 		Nside *= 2;
 	}
 	Nside /= 2;
