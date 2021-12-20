@@ -1,66 +1,71 @@
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/math.hpp>
 
-static int rockstar_find_subgroups(vector<rockstar_particle>& parts, float link_len2) {
-	int next_group = 1;
-	for (int i = 0; i < parts.size(); i++) {
-		parts[i].subgroup = 0;
-	}
-	bool change;
-	do {
-		change = false;
-		for (int i = 0; i < parts.size(); i++) {
-			for (int j = i + 1; j < parts.size(); j++) {
-				const float dx2 = sqr(parts[i].x - parts[j].x);
-				const float dy2 = sqr(parts[i].y - parts[j].y);
-				const float dz2 = sqr(parts[i].z - parts[j].z);
-				const float dvx2 = sqr(parts[i].vx - parts[j].vx);
-				const float dvy2 = sqr(parts[i].vy - parts[j].vy);
-				const float dvz2 = sqr(parts[i].vz - parts[j].vz);
-				if (dx2 + dy2 + dz2 + dvx2 + dvy2 + dvz2 < link_len2) {
-					if (parts[i].subgroup == 0) {
-						parts[i].subgroup = next_group++;
-						change = true;
-					}
-					if (parts[j].subgroup == 0) {
-						change = true;
-						parts[j].subgroup = next_group++;
-					}
-					if (parts[i].subgroup < parts[j].subgroup) {
-						change = true;
-						parts[j].subgroup = parts[i].subgroup;
-					} else if (parts[i].subgroup > parts[j].subgroup) {
-						change = true;
-						parts[i].subgroup = parts[j].subgroup;
-					}
+#define ROCKSTAR_BUCKET_SIZE 90
+
+struct rockstar_tree {
+	int part_begin;
+	int part_end;
+	array<int, NCHILD> children;
+	range<float, 2 * NDIM> box;
+};
+
+int rockstar_particles_sort(vector<rockstar_particle>& parts, int begin, int end, float xmid, int xdim) {
+	int lo = begin;
+	int hi = end;
+	while (lo < hi) {
+		if (parts[lo].X[xdim] >= xmid) {
+			while (lo != hi) {
+				hi--;
+				if (parts[hi].X[xdim] < xmid) {
+					std::swap(parts[hi], parts[lo]);
+					break;
 				}
 			}
 		}
-	} while (change);
-	int cnt = 0;
-	for (int i = 0; i < parts.size(); i++) {
-		bool in_grp = false;
-		for (int j = 0; j < parts.size(); j++) {
-			if (i != j) {
-				const float dx2 = sqr(parts[i].x - parts[j].x);
-				const float dy2 = sqr(parts[i].y - parts[j].y);
-				const float dz2 = sqr(parts[i].z - parts[j].z);
-				const float dvx2 = sqr(parts[i].vx - parts[j].vx);
-				const float dvy2 = sqr(parts[i].vy - parts[j].vy);
-				const float dvz2 = sqr(parts[i].vz - parts[j].vz);
-				if (dx2 + dy2 + dz2 + dvx2 + dvy2 + dvz2 < link_len2) {
-					in_grp = true;
-				}
-			}
-			if (in_grp) {
-				break;
-			}
-		}
-		if (in_grp) {
-			cnt++;
-		}
+		lo++;
 	}
-	return cnt;
+	return hi;
+
+}
+
+int rockstar_form_tree(vector<rockstar_particle>& parts, vector<rockstar_tree>& trees, range<float, 2 * NDIM> rng, int part_begin, int part_end) {
+	array<int, NCHILD> children;
+	rockstar_tree node;
+	if (part_begin - part_end <= ROCKSTAR_BUCKET_SIZE) {
+		children[LEFT] = children[RIGHT] = -1;
+	} else {
+		float midx;
+		int max_dim;
+		float total_max = 0.0;
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			float x_max = -std::numeric_limits<float>::max();
+			float x_min = std::numeric_limits<float>::max();
+			for (int i = part_begin; i < part_end; i++) {
+				const float x = parts[i].X[dim];
+				x_max = std::max(x_max, x);
+				x_min = std::min(x_min, x);
+			}
+			if (x_max - x_min > total_max) {
+				total_max = x_max - x_min;
+				max_dim = dim;
+				midx = (x_max + x_min) * 0.5f;
+			}
+		}
+		const int part_mid = rockstar_particles_sort(parts, part_begin, part_end, midx, max_dim);
+		range<float, 2 * NDIM> rng_left = rng;
+		range<float, 2 * NDIM> rng_right = rng;
+		rng_right.begin[max_dim] = midx;
+		rng_left.end[max_dim] = midx;
+		children[LEFT] = rockstar_form_tree(parts, trees, rng_left, part_begin, part_mid);
+		children[RIGHT] = rockstar_form_tree(parts, trees, rng_right, part_mid, part_end);
+	}
+	node.part_begin = part_begin;
+	node.part_end = part_end;
+	node.children = children;
+	node.box = rng;
+	trees.push_back(node);
+	return trees.size() - 1;
 }
 
 vector<rockstar_particle> rockstar_seeds(vector<rockstar_particle>& parts) {
@@ -121,19 +126,19 @@ vector<rockstar_particle> rockstar_seeds(vector<rockstar_particle>& parts) {
 
 	float link_len2 = 3.0 * (sigma2_x + sigma2_v);
 	int target_cnt = parts.size() * ff;
-	while (rockstar_find_subgroups(parts, link_len2) < target_cnt) {
-		link_len2 *= 2.0;
-	}
-	float link_len2_max = link_len2;
-	float link_len2_min = 0.0;
-	while (link_len2_max / link_len2_min > 1.01) {
-		float link_len2_mid = (link_len2_max + link_len2_min) * 0.5;
-		if ((rockstar_find_subgroups(parts, link_len2_mid) - target_cnt) * (rockstar_find_subgroups(parts, link_len2_max) - target_cnt)) {
-			link_len2_min = link_len2_mid;
-		} else {
-			link_len2_max = link_len2_mid;
-		}
-	}
+	/*	while (rockstar_find_subgroups(parts, link_len2) < target_cnt) {
+	 link_len2 *= 2.0;
+	 }
+	 float link_len2_max = link_len2;
+	 float link_len2_min = 0.0;
+	 while (link_len2_max / link_len2_min > 1.01) {
+	 float link_len2_mid = (link_len2_max + link_len2_min) * 0.5;
+	 if ((rockstar_find_subgroups(parts, link_len2_mid) - target_cnt) * (rockstar_find_subgroups(parts, link_len2_max) - target_cnt)) {
+	 link_len2_min = link_len2_mid;
+	 } else {
+	 link_len2_max = link_len2_mid;
+	 }
+	 }*/
 	for (int i = 0; i < parts.size(); i++) {
 		parts[i].x *= sigma_x;
 		parts[i].y *= sigma_x;

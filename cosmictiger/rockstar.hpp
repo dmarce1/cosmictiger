@@ -5,12 +5,17 @@
 #include <cosmictiger/groups.hpp>
 
 struct rockstar_particle {
-	float x;
-	float y;
-	float z;
-	float vx;
-	float vy;
-	float vz;
+	union {
+		float X[2 * NDIM];
+		struct {
+			float x;
+			float y;
+			float z;
+			float vx;
+			float vy;
+			float vz;
+		};
+	};
 	int subgroup;
 };
 
