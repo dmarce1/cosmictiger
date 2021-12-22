@@ -17,6 +17,7 @@ struct rockstar_particle {
 		};
 	};
 	int subgroup;
+	int depth;
 	part_int index;
 	float min_dist2;
 };

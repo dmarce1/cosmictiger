@@ -108,7 +108,10 @@ int main(int argc, char* argv[]) {
 		halo_t halo;
 		masses.push_back(entry.mass);
 		mass_min = std::min(mass_min, entry.mass);
-		mass_max = std::max(mass_max, entry.mass);
+		if (entry.mass > mass_max) {
+			mass_max = entry.mass;
+			PRINT("%i %i\n", (int) (mass_min / 1.481962e+09 + 0.5), (int)(mass_max / 1.481962e+09 + 0.5));
+		}
 	}
 	const float logmax = log10(mass_max);
 	const float logmin = log10(mass_min);

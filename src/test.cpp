@@ -53,7 +53,7 @@ float rand_normal() {
 
 static void rockstar_test() {
 	const int N = 100000;
-	const int M = 4;
+	const int M = 2;
 	vector<rockstar_particle> parts;
 	array<array<float, 2 * NDIM>, M> X;
 	for (int i = 0; i < M; i++) {
@@ -64,10 +64,28 @@ static void rockstar_test() {
 	for (int n = 0; n < M; n++) {
 		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
 			rockstar_particle part;
-			for (int dim = 0; dim < 2 * NDIM; dim++) {
-				float rn = rand_normal();
-				part.X[dim] = rn * 0.1 + X[n][dim];
-			}
+			float r;
+			float y;
+			float r0 = 0.01;
+			float rinv = 1.0 / r0;
+			do {
+				r = 10.0 * rand1() * r0;
+				y = rand1();
+			} while (y > 1.0 / (r * rinv * (1 + r * rinv) * (1 + r * rinv)));
+			float nx = 2.0 * rand1() - 1.0;
+			float ny = 2.0 * rand1() - 1.0;
+			float nz = 2.0 * rand1() - 1.0;
+			float norm = sqrt(nx * nx + ny * ny + nz * nz);
+			nx /= norm;
+			ny /= norm;
+			nz /= norm;
+			part.x = r * nx + X[n][XDIM];
+			part.y = r * ny + X[n][YDIM];
+			part.z = r * nz + X[n][ZDIM];
+	//		PRINT( "%e\n", r );
+			part.vx = rand_normal() * 0.1 + X[n][NDIM + XDIM];
+			part.vy = rand_normal() * 0.1 + X[n][NDIM + YDIM];
+			part.vz = rand_normal() * 0.1 + X[n][NDIM + ZDIM];
 			parts.push_back(part);
 		}
 	}
