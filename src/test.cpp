@@ -52,8 +52,8 @@ float rand_normal() {
 }
 
 static void rockstar_test() {
-	const int N = 10000;
-	const int M = 10;
+	const int N = 100000;
+	const int M = 4;
 	vector<rockstar_particle> parts;
 	array<array<float, 2 * NDIM>, M> X;
 	for (int i = 0; i < M; i++) {
@@ -65,8 +65,8 @@ static void rockstar_test() {
 		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
 			rockstar_particle part;
 			for (int dim = 0; dim < 2 * NDIM; dim++) {
-				const float rn = rand_normal() ;
-				part.X[dim] = rn * 0.0001 + X[n][dim];
+				float rn = rand_normal();
+				part.X[dim] = rn * 0.1 + X[n][dim];
 			}
 			parts.push_back(part);
 		}

@@ -68,7 +68,7 @@ void rockstar_assign_link_len(const vector<rockstar_tree>& trees, vector<rocksta
 		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		if (checklist.size()) {
 			rockstar_assign_link_len(trees, parts, self.children[LEFT], checklist, link_len);
-			rockstar_assign_link_len(trees, parts, self.children[RIGHT], checklist, link_len);
+			rockstar_assign_link_len(trees, parts, self.children[RIGHT], std::move(checklist), link_len);
 		}
 	}
 }
@@ -102,13 +102,8 @@ int rockstar_form_tree(vector<rockstar_particle>& parts, vector<rockstar_tree>& 
 		int max_dim;
 		float total_max = 0.0;
 		for (int dim = 0; dim < 2 * NDIM; dim++) {
-			float x_max = -std::numeric_limits<float>::max();
-			float x_min = std::numeric_limits<float>::max();
-			for (int i = part_begin; i < part_end; i++) {
-				const float x = parts[i].X[dim];
-				x_max = std::max(x_max, x);
-				x_min = std::min(x_min, x);
-			}
+			const float x_max = rng.end[dim];
+			const float x_min = rng.begin[dim];
 			if (x_max - x_min > total_max) {
 				total_max = x_max - x_min;
 				max_dim = dim;
@@ -147,7 +142,7 @@ int rockstar_form_tree(vector<rockstar_tree>& trees, vector<rockstar_particle>& 
 
 float rockstar_find_link_len(const vector<rockstar_tree>& trees, vector<rockstar_particle>& parts, int tree_root) {
 	range<float, 2 * NDIM> rng = trees[tree_root].box;
-	PRINT("V %e\n", rng.volume());
+//	PRINT("V %e\n", rng.volume());
 	float mean_sep = pow(rng.volume() / parts.size(), 1.0f / 6.0f);
 	float max_link_len = 2.0 * mean_sep;
 	bool done = false;
@@ -155,17 +150,19 @@ float rockstar_find_link_len(const vector<rockstar_tree>& trees, vector<rockstar
 		for (auto& p : parts) {
 			p.min_dist2 = std::numeric_limits<float>::max();
 		}
-		PRINT("%e\n", max_link_len);
+//		PRINT("%e\n", max_link_len);
 		rockstar_assign_link_len(trees, parts, tree_root, vector<int>(1, tree_root), max_link_len);
-		std::sort(parts.begin(), parts.end(), [](const rockstar_particle& a, const rockstar_particle& b) {
-			return a.min_dist2 < b.min_dist2;
-		});
+		vector<float> dist2s(parts.size());
+		for (int i = 0; i < parts.size(); i++) {
+			dist2s[i] = parts[i].min_dist2;
+		}
+		std::sort(dist2s.begin(), dist2s.end());
 		const int i0 = ROCKSTAR_FF * parts.size();
 		const int i1 = ROCKSTAR_FF * parts.size() + 1;
-		if (parts[i1].min_dist2 == std::numeric_limits<float>::max()) {
+		if (dist2s[i1] == std::numeric_limits<float>::max()) {
 			max_link_len *= 2.0;
 		} else {
-			max_link_len = (sqrt(parts[i0].min_dist2) + sqrt(parts[i1].min_dist2)) * 0.5f;
+			max_link_len = (sqrt(dist2s[i0]) + sqrt(dist2s[i1])) * 0.5f;
 			done = true;
 		}
 	} while (!done);
@@ -303,7 +300,13 @@ void rockstar_find_subgroups(vector<rockstar_tree>& trees, vector<rockstar_parti
 		}
 		int root_id = trees.size() - 1;
 		cnt = rockstar_find_subgroups(trees, parts, root_id, vector<int>(1, root_id), link_len, next_id);
-		PRINT("%i %i %i\n", root_id + 1, parts.size(), cnt);
+		int ngrp_cnt = 0;
+		for (int i = 0; i < parts.size(); i++) {
+			if (parts[i].subgroup == ROCKSTAR_NO_GROUP) {
+				ngrp_cnt++;
+			}
+		}
+//		PRINT("%i %i %i\n", root_id + 1, parts.size(), ngrp_cnt);
 	} while (cnt != 0);
 }
 
@@ -322,8 +325,10 @@ std::unordered_map<int, number> rockstar_subgroup_cnts(vector<rockstar_particle>
 		}
 	}
 	for (int i = 0; i < parts.size(); i++) {
-		if (table[parts[i].subgroup].n < ROCKSTAR_MIN_GROUP) {
-			parts[i].subgroup = ROCKSTAR_NO_GROUP;
+		if (parts[i].subgroup != ROCKSTAR_NO_GROUP) {
+			if (table[parts[i].subgroup].n < ROCKSTAR_MIN_GROUP) {
+				parts[i].subgroup = ROCKSTAR_NO_GROUP;
+			}
 		}
 	}
 	for (auto i = table.begin(); i != table.end();) {
@@ -466,7 +471,7 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 			sigma2_v += sqr(dvx, dvy, dvz);
 			sigma2_x += sqr(dx, dy, dz);
 			const float cx = dy * dvz - dz * dvy;
-			const float cy = dx * dvz - dz * dvx;
+			const float cy = -dx * dvz + dz * dvx;
 			const float cz = dx * dvy - dy * dvx;
 			const float vcirc = sqrt(sqr(cx, cy, cz)) / sqrt(sqr(dx, dy, dz));
 			vcirc_max = std::max(vcirc_max, vcirc);
@@ -491,11 +496,11 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 		while (j < parts.size()) {
 			if (parts[j].subgroup == i->first) {
 				these_parts.push_back(parts[j]);
-				parts[j] = parts.back();
-				parts.pop_back();
 				for (int dim = 0; dim < 2 * NDIM; dim++) {
 					sg.X[dim] += parts[j].X[dim];
 				}
+				parts[j] = parts.back();
+				parts.pop_back();
 			} else {
 				j++;
 			}
@@ -536,7 +541,7 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 						const float dvx = (subgroups[k].vx - subgroups[l].vx) * sigma_v_inv;
 						const float dvy = (subgroups[k].vy - subgroups[l].vy) * sigma_v_inv;
 						const float dvz = (subgroups[k].vz - subgroups[l].vz) * sigma_v_inv;
-						PRINT("%e %i\n", sqr(dx, dy, dz) + sqr(dvx, dvy, dvz), subgroups[k].parts.size());
+//						PRINT("%e %i\n", sqr(dx, dy, dz) + sqr(dvx, dvy, dvz), subgroups[k].parts.size());
 						if (sqr(dx, dy, dz) + sqr(dvx, dvy, dvz) < 200.0) {
 							const int kcnt = subgroups[k].parts.size();
 							const int lcnt = subgroups[l].parts.size();
