@@ -30,6 +30,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/timer.hpp>
@@ -41,6 +42,36 @@ constexpr bool verbose = true;
 
 double rand1() {
 	return ((double) rand() + 0.5) / (double) RAND_MAX;
+}
+
+float rand_normal() {
+	float x = 2.0 * rand1() - 1.0;
+	float y = 2.0 * rand1() - 1.0;
+	auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+	return normal.real();
+}
+
+static void rockstar_test() {
+	const int N = 10000;
+	const int M = 10;
+	vector<rockstar_particle> parts;
+	array<array<float, 2 * NDIM>, M> X;
+	for (int i = 0; i < M; i++) {
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			X[i][dim] = 2.0 * rand1() - 1.0;
+		}
+	}
+	for (int n = 0; n < M; n++) {
+		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
+			rockstar_particle part;
+			for (int dim = 0; dim < 2 * NDIM; dim++) {
+				const float rn = rand_normal() ;
+				part.X[dim] = rn * 0.0001 + X[n][dim];
+			}
+			parts.push_back(part);
+		}
+	}
+	rockstar_find_subgroups(parts);
 }
 
 static void fft1_test() {
@@ -182,7 +213,7 @@ static void kick_test() {
 	timer total_time;
 	double total_flops = 0.0;
 	tm.start();
-	initialize (get_options().z0);
+	initialize(get_options().z0);
 	tm.stop();
 	PRINT("initialize: %e s\n", tm.read());
 	tm.reset();
@@ -367,6 +398,8 @@ void test(std::string test) {
 		fft2_test();
 	} else if (test == "force") {
 		force_test();
+	} else if (test == "rockstar") {
+		rockstar_test();
 	} else if (test == "kick") {
 		kick_test();
 	} else if (test == "tree") {

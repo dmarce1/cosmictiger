@@ -17,8 +17,10 @@ struct rockstar_particle {
 		};
 	};
 	int subgroup;
+	part_int index;
 	float min_dist2;
 };
 
-vector<rockstar_particle> rockstar_seeds(vector<rockstar_particle>& parts);
 
+
+void rockstar_find_subgroups(vector<rockstar_particle>& parts);
