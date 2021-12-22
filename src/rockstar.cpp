@@ -412,7 +412,6 @@ struct subgroup {
 	float vcirc_max;
 };
 
-
 void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, float vfac, int depth = 0) {
 
 	float avg_x = 0.0;
@@ -472,6 +471,7 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 //	PRINT("Finding link_len\n");
 	timer tm;
 	tm.start();
+	PRINT("forming trees = %e\n");
 	const int root_id = rockstar_form_tree(trees, parts);
 	tm.stop();
 	PRINT("form_trees = %e\n", tm.read());
@@ -491,8 +491,8 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 //	PRINT("Finding group_cnts\n");
 	tm.start();
 	auto group_cnts = rockstar_subgroup_cnts(parts);
-	PRINT("subgroups_cnts = %e\n", tm.read());
 	tm.stop();
+	PRINT("subgroups_cnts = %e\n", tm.read());
 	tm.reset();
 //	PRINT("Found %i groups\n", group_cnts.size());
 
@@ -530,6 +530,17 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 		float sigma2_x = 0.0;
 		vector<rockstar_particle>& these_parts = sg.parts;
 		vector<float> radii;
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			sg.X[dim] = 0.0;
+		}
+		for( int j = 0; j < these_parts.size(); j++) {
+			for (int dim = 0; dim < 2 * NDIM; dim++) {
+				sg.X[dim] += these_parts[j].X[dim];
+			}
+		}
+		for (int dim = 0; dim < 2 * NDIM; dim++) {
+			sg.X[dim] /= these_parts.size();
+		}
 		for (int j = 0; j < these_parts.size(); j++) {
 			const auto& p = these_parts[j];
 			const float dx = p.x - sg.x;
@@ -548,6 +559,7 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 			radii.push_back(sqrt(dv2 + dx2));
 		}
 		float vcirc_max = 0.0;
+		std::sort(radii.begin(), radii.end());
 		const float H = get_options().hubble * constants::H0 * get_options().code_to_s;
 		const float nparts = pow(get_options().parts_dim,3);
 		for( int n = 0; n < radii.size(); n++) {
@@ -567,24 +579,15 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 		subgroups.resize(subgroups.size() + 1);
 		auto& sg = subgroups.back();
 		vector<rockstar_particle>& these_parts = sg.parts;
-		for (int dim = 0; dim < 2 * NDIM; dim++) {
-			sg.X[dim] = 0.0;
-		}
 		int j = 0;
 		while (j < parts.size()) {
 			if (parts[j].subgroup == i->first) {
 				these_parts.push_back(parts[j]);
-				for (int dim = 0; dim < 2 * NDIM; dim++) {
-					sg.X[dim] += parts[j].X[dim];
-				}
 				parts[j] = parts.back();
 				parts.pop_back();
 			} else {
 				j++;
 			}
-		}
-		for (int dim = 0; dim < 2 * NDIM; dim++) {
-			sg.X[dim] /= these_parts.size();
 		}
 		find_sigmas(sg);
 	}
@@ -662,11 +665,14 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 			}
 			parts[j].subgroup = subgroups[min_index].parts[0].subgroup;
 		}
+		for (int k = 0; k < subgroups.size(); k++) {
+			parts.insert(parts.end(), subgroups[k].parts.begin(), subgroups[k].parts.end());
+		}
 	}
 	for (int i = 0; i < depth; i++) {
 		PRINT("\t");
 	}
-	PRINT("%i II parts_size = %i group_cnt = %i\n", depth, parts.size(), group_cnts.size());
+	PRINT("%i II parts_size = %i group_cnt = %i\n", depth, parts.size(), subgroups.size());
 	for (int i = 0; i < parts.size(); i++) {
 		parts[i].x *= sigma_x;
 		parts[i].y *= sigma_x;
@@ -691,6 +697,6 @@ void rockstar_find_subgroups(vector<rockstar_particle>& parts) {
 	rockstar_seeds(parts, next_id, 1.0, 1.0);
 	const auto group_cnts = rockstar_subgroup_cnts(parts);
 	for (auto i = group_cnts.begin(); i != group_cnts.end(); i++) {
-//		PRINT("%i %i\n", i->first, i->second.n);
+		PRINT("%i %i\n", i->first, i->second.n);
 	}
 }
