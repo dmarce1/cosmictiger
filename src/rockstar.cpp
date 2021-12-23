@@ -412,22 +412,7 @@ struct subgroup {
 	float vcirc_max;
 };
 
-struct halo_props {
-	union {
-		array<float, NDIM * 2> X;
-		struct {
-			float x;
-			float y;
-			float z;
-			float vx;
-			float vy;
-			float vz;
-		};
-	};
-	float sigma_x;
-};
-
-void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, float vfac, int depth = 0) {
+std::vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, float rfac, float vfac, int depth = 0) {
 
 	float avg_x = 0.0;
 	float avg_y = 0.0;
@@ -519,9 +504,7 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 	}
 	PRINT("%i I parts_size = %i group_cnt = %i\n", depth, parts.size(), group_cnts.size());
 	for (auto i = group_cnts.begin(); i != group_cnts.end(); i++) {
-		subgroups.resize(subgroups.size() + 1);
-		auto& sg = subgroups.back();
-		vector<rockstar_particle>& these_parts = sg.parts;
+		vector<rockstar_particle> these_parts;
 		int j = 0;
 		while (j < parts.size()) {
 			if (parts[j].subgroup == i->first) {
@@ -532,12 +515,8 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 				j++;
 			}
 		}
-		rockstar_seeds(these_parts, next_id, rfac, vfac, depth + 1);
-	}
-	for (int i = 0; i < subgroups.size(); i++) {
-		for (int j = 0; j < subgroups[i].parts.size(); j++) {
-			parts.push_back(subgroups[i].parts[j]);
-		}
+		auto these_groups = rockstar_seeds(these_parts, next_id, rfac, vfac, depth + 1);
+		subgroups.insert(subgroups.end(), these_groups.begin(), these_groups.end());
 	}
 
 	const auto find_sigmas = [rfac,vfac](subgroup& sg) {
@@ -588,36 +567,23 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 		sg.vcirc_max = vcirc_max;
 		sg.r_dyn = vcirc_max * rfac / vfac / H / sqrt(180);
 	};
-	group_cnts = rockstar_subgroup_cnts(parts);
-	subgroups.resize(0);
-	for (auto i = group_cnts.begin(); i != group_cnts.end(); i++) {
-		subgroups.resize(subgroups.size() + 1);
-		auto& sg = subgroups.back();
-		vector<rockstar_particle>& these_parts = sg.parts;
-		int j = 0;
-		while (j < parts.size()) {
-			if (parts[j].subgroup == i->first) {
-				these_parts.push_back(parts[j]);
-				parts[j] = parts.back();
-				parts.pop_back();
-			} else {
-				j++;
-			}
-		}
-		find_sigmas(sg);
+	for (int k = 0; k < subgroups.size(); k++) {
+		find_sigmas(subgroups[k]);
 	}
-	if (group_cnts.size() == 0) {
+	if (subgroups.size() == 0) {
 		const int subgrp = next_id++;
 		for (int i = 0; i < parts.size(); i++) {
 			parts[i].subgroup = subgrp;
 		}
+		subgroup sg;
+		sg.parts = std::move(parts);
+		find_sigmas(sg);
+		subgroups.push_back(sg);
 	} else if (group_cnts.size() == 1) {
 		const int subgrp = subgroups[0].parts[0].subgroup;
 		for (int i = 0; i < parts.size(); i++) {
 			parts[i].subgroup = subgrp;
-		}
-		for (int i = 0; i < subgroups[0].parts.size(); i++) {
-			parts.push_back(subgroups[0].parts[i]);
+			subgroups[0].parts.push_back(parts[i]);
 		}
 	} else {
 		bool found_merge;
@@ -679,39 +645,54 @@ void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, 
 				}
 			}
 			parts[j].subgroup = subgroups[min_index].parts[0].subgroup;
-		}
-		for (int k = 0; k < subgroups.size(); k++) {
-			parts.insert(parts.end(), subgroups[k].parts.begin(), subgroups[k].parts.end());
+			subgroups[min_index].parts.push_back(parts[j]);
 		}
 	}
 	for (int i = 0; i < depth; i++) {
 		PRINT("\t");
 	}
 	PRINT("%i II parts_size = %i group_cnt = %i\n", depth, parts.size(), subgroups.size());
-	for (int i = 0; i < parts.size(); i++) {
-		parts[i].x *= sigma_x;
-		parts[i].y *= sigma_x;
-		parts[i].z *= sigma_x;
-		parts[i].vx *= sigma_v;
-		parts[i].vy *= sigma_v;
-		parts[i].vz *= sigma_v;
+	for (int k = 0; k < subgroups.size(); k++) {
+		PRINT("%i %i\n", subgroups[k].parts[0].subgroup, subgroups[k].parts.size());
+		auto& parts = subgroups[k].parts;
+		auto& sg = subgroups[k];
+		sg.x *= sigma_x;
+		sg.y *= sigma_x;
+		sg.z *= sigma_x;
+		sg.vx *= sigma_v;
+		sg.vy *= sigma_v;
+		sg.vz *= sigma_v;
+		sg.x += avg_x;
+		sg.y += avg_y;
+		sg.z += avg_z;
+		sg.vx += avg_vx;
+		sg.vy += avg_vy;
+		sg.vz += avg_vz;
+		sg.r_dyn *= sigma_x;
+		sg.sigma2_v *= sigma_v * sigma_v;
+		sg.sigma2_x *= sigma_x * sigma_x;
+		sg.vcirc_max *= sigma_v;
+		for (int i = 0; i < parts.size(); i++) {
+			parts[i].x *= sigma_x;
+			parts[i].y *= sigma_x;
+			parts[i].z *= sigma_x;
+			parts[i].vx *= sigma_v;
+			parts[i].vy *= sigma_v;
+			parts[i].vz *= sigma_v;
+		}
+		for (int i = 0; i < parts.size(); i++) {
+			parts[i].x += avg_x;
+			parts[i].y += avg_y;
+			parts[i].z += avg_z;
+			parts[i].vx += avg_vx;
+			parts[i].vy += avg_vy;
+			parts[i].vz += avg_vz;
+		}
 	}
-	for (int i = 0; i < parts.size(); i++) {
-		parts[i].x += avg_x;
-		parts[i].y += avg_y;
-		parts[i].z += avg_z;
-		parts[i].vx += avg_vx;
-		parts[i].vy += avg_vy;
-		parts[i].vz += avg_vz;
-	}
-
+	return subgroups;
 }
 
 void rockstar_find_subgroups(vector<rockstar_particle>& parts) {
 	int next_id = 1;
 	rockstar_seeds(parts, next_id, 1.0, 1.0);
-	const auto group_cnts = rockstar_subgroup_cnts(parts);
-	for (auto i = group_cnts.begin(); i != group_cnts.end(); i++) {
-		PRINT("%i %i\n", i->first, i->second.n);
-	}
 }
