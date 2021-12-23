@@ -65,9 +65,9 @@ static void rockstar_test() {
 		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
 			rockstar_particle part;
 	//		PRINT( "%e\n", r );
-			part.vx = rand_normal() * 0.001 + X[n][NDIM + XDIM];
-			part.vy = rand_normal() * 0.001 + X[n][NDIM + YDIM];
-			part.vz = rand_normal() * 0.001 + X[n][NDIM + ZDIM];
+			part.vx = rand_normal() * 0.001 + X[n][XDIM];
+			part.vy = rand_normal() * 0.001 + X[n][YDIM];
+			part.vz = rand_normal() * 0.001 + X[n][ZDIM];
 			part.x = rand_normal() * 0.001 + X[n][NDIM + XDIM];
 			part.y = rand_normal() * 0.001 + X[n][NDIM + YDIM];
 			part.z = rand_normal() * 0.001 + X[n][NDIM + ZDIM];

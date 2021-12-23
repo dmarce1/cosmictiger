@@ -412,6 +412,21 @@ struct subgroup {
 	float vcirc_max;
 };
 
+struct halo_props {
+	union {
+		array<float, NDIM * 2> X;
+		struct {
+			float x;
+			float y;
+			float z;
+			float vx;
+			float vy;
+			float vz;
+		};
+	};
+	float sigma_x;
+};
+
 void rockstar_seeds(vector<rockstar_particle>& parts, int& next_id, float rfac, float vfac, int depth = 0) {
 
 	float avg_x = 0.0;
