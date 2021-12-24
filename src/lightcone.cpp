@@ -308,7 +308,7 @@ void lc_parts2groups(double a, double link_len) {
 						bh_x[j][dim] = 0.5 + parts[j].pos[dim] - parts[0].pos[dim];
 					}
 				}
-				auto pot = bh_evaluate_potential(bh_x);
+				auto pot = bh_evaluate_potential_fixed(bh_x);
 				for( auto& phi : pot) {
 					phi *= ainv;
 				}

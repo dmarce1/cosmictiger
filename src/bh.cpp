@@ -279,20 +279,8 @@ vector<float> direct_evaluate(const vector<array<float, NDIM>>& x) {
 	return phi;
 }
 
-vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed) {
-	ALWAYS_ASSERT(x_fixed.size() > 1);
-//	const bool gpu = x_fixed.size() >= BH_CUDA_MIN;
-	const bool gpu = false;
-	vector<array<float, NDIM>> x(x_fixed.size());
-	array<fixed32, NDIM> x0 = x_fixed[0];
-	for (int i = 0; i < x_fixed.size(); i++) {
-		array<float, NDIM> this_x;
-		for (int dim = 0; dim < NDIM; dim++) {
-			this_x[dim] = distance(x_fixed[i][dim], x0[dim]);
-		}
-		x[i] = this_x;
-	}
-	auto xcopy = x;
+vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x) {
+	ALWAYS_ASSERT(x.size() > 1);
 	vector<bh_tree_node> nodes(1);
 	range<float> box;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -320,18 +308,46 @@ vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x_fixed)
 	for (int i = 0; i < sort_order.size(); i++) {
 		rpot[sort_order[i]] = pot[i];
 	}
-	/*	auto apot = direct_evaluate(xcopy);
-	 double err = 0.0;
-	 if (x.size() > 1024) {
-	 for (int i = 0; i < rpot.size(); i++) {
-	 err +=sqr((rpot[i] - apot[i]) / apot[i]);
-	 //		PRINT("%e %e\n", rpot[i], apot[i]);
-	 }
-	 err /= rpot.size();
-	 err = std::sqrt(err);
-	 if (rpot.size() > 1024) {
-	 PRINT("%e %i\n", err, rpot.size());
-	 }
-	 }*/
+	return rpot;
+}
+
+vector<float> bh_evaluate_potential_fixed(const vector<array<fixed32, NDIM>>& x_fixed) {
+	ALWAYS_ASSERT(x_fixed.size() > 1);
+	vector<array<float, NDIM>> x(x_fixed.size());
+	array<fixed32, NDIM> x0 = x_fixed[0];
+	for (int i = 0; i < x_fixed.size(); i++) {
+		array<float, NDIM> this_x;
+		for (int dim = 0; dim < NDIM; dim++) {
+			this_x[dim] = distance(x_fixed[i][dim], x0[dim]);
+		}
+		x[i] = this_x;
+	}
+	vector<bh_tree_node> nodes(1);
+	range<float> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = std::numeric_limits<float>::max();
+		box.end[dim] = -std::numeric_limits<float>::max();
+	}
+	for (const auto& pos : x) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			const auto this_x = pos[dim];
+			box.begin[dim] = std::min(box.begin[dim], this_x);
+			box.end[dim] = std::max(box.end[dim], this_x);
+		}
+	}
+	vector<float> rpot;
+	vector<int> sink_buckets;
+	vector<int> sort_order;
+	sort_order.reserve(x.size());
+	for (int i = 0; i < x.size(); i++) {
+		sort_order.push_back(i);
+	}
+	vector<float> pot(x.size());
+	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
+	bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.85);
+	rpot.resize(x.size());
+	for (int i = 0; i < sort_order.size(); i++) {
+		rpot[sort_order[i]] = pot[i];
+	}
 	return rpot;
 }

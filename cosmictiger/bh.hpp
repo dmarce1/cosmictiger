@@ -46,6 +46,8 @@ struct bh_source {
 };
 
 
-vector<float> bh_evaluate_potential(const vector<array<fixed32, NDIM>>& x);
+vector<float> bh_evaluate_potential_fixed(const vector<array<fixed32, NDIM>>& x);
+vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x);
+
 
 #endif /* BH_HPP_ */

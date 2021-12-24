@@ -6,22 +6,22 @@
 
 struct rockstar_particle {
 	union {
-		array<float, 2 * NDIM> X;
+		array<double, 2 * NDIM> X;
 		struct {
-			float x;
-			float y;
-			float z;
-			float vx;
-			float vy;
-			float vz;
+			double x;
+			double y;
+			double z;
+			double vx;
+			double vy;
+			double vz;
 		};
 	};
 	int subgroup;
 	int depth;
 	part_int index;
-	float min_dist2;
+	double min_dist2;
 };
 
 
 
-void rockstar_find_subgroups(vector<rockstar_particle>& parts);
+void rockstar_find_subgroups(vector<rockstar_particle>& parts, double scale = 1.0);

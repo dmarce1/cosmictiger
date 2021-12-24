@@ -52,7 +52,11 @@ float rand_normal() {
 }
 
 static void rockstar_test() {
-	const int N = 10000;
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
+
+	const int N = 100000;
 	const int M = 2;
 	vector<rockstar_particle> parts;
 	array<array<float, 2 * NDIM>, M> X;
@@ -64,15 +68,28 @@ static void rockstar_test() {
 	for (int n = 0; n < M; n++) {
 		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
 			rockstar_particle part;
-	//		PRINT( "%e\n", r );
-			part.vx = rand_normal() * 0.001 + X[n][XDIM];
-			part.vy = rand_normal() * 0.001 + X[n][YDIM];
-			part.vz = rand_normal() * 0.001 + X[n][ZDIM];
-			part.x = rand_normal() * 0.001 + X[n][NDIM + XDIM];
-			part.y = rand_normal() * 0.001 + X[n][NDIM + YDIM];
-			part.z = rand_normal() * 0.001 + X[n][NDIM + ZDIM];
+			//		PRINT( "%e\n", r );
+			part.x = rand_normal() * 0.1 + X[n][XDIM];
+			part.y = rand_normal() * 0.1 + X[n][YDIM];
+			part.z = rand_normal() * 0.1 + X[n][ZDIM];
+			float r = sqrt(sqr(part.x - X[n][XDIM], part.y - X[n][YDIM], part.z - X[n][ZDIM]));
+			float v0 = sqrt(get_options().GM / r * N / M) / sqrt(3);
+			part.vx = rand_normal() * v0 + X[n][NDIM + XDIM];
+			part.vy = rand_normal() * v0 + X[n][NDIM + YDIM];
+			part.vz = rand_normal() * v0 + X[n][NDIM + ZDIM];
 			parts.push_back(part);
 		}
+	}
+	for (int i = (M - 1) * N / M; i < N; i++) {
+		rockstar_particle part;
+		part.x = 2.0 * rand1() - 1.0;
+		part.y = 2.0 * rand1() - 1.0;
+		part.z = 2.0 * rand1() - 1.0;
+		part.vx = 2.0 * rand1() - 1.0;
+		part.vy = 2.0 * rand1() - 1.0;
+		part.vz = 2.0 * rand1() - 1.0;
+	//	parts.push_back(part);
+
 	}
 	rockstar_find_subgroups(parts);
 }

@@ -200,7 +200,7 @@ void groups_reduce(double scale_factor) {
 								X[i][dim] = x;
 							}
 						}
-						phi = bh_evaluate_potential(X);
+						phi = bh_evaluate_potential_fixed(X);
 						for( auto& p : phi ) {
 							p *= ainv;
 						}
