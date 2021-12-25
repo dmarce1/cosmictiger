@@ -47,7 +47,7 @@ double rand1() {
 float rand_normal() {
 	float x = 2.0 * rand1() - 1.0;
 	float y = 2.0 * rand1() - 1.0;
-	auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+	auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
 	return normal.real();
 }
 
@@ -65,15 +65,23 @@ static void rockstar_test() {
 			X[i][dim] = 2.0 * rand1() - 1.0;
 		}
 	}
+	for (int dim = 0; dim < 2 * NDIM; dim++) {
+		X[0][dim] = 0.0;
+		X[1][dim] = 0.0;
+	}
+	X[1][0] = 0.5;
+	X[1][NDIM] = 0.0000005;
+	X[0][0] = -.5;
+	X[0][NDIM] = -0.0000005;
 	for (int n = 0; n < M; n++) {
 		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
 			rockstar_particle part;
 			//		PRINT( "%e\n", r );
-			part.x = rand_normal() * 0.1 + X[n][XDIM];
-			part.y = rand_normal() * 0.1 + X[n][YDIM];
-			part.z = rand_normal() * 0.1 + X[n][ZDIM];
+			part.x = rand_normal() * 0.001 + X[n][XDIM];
+			part.y = rand_normal() * 0.001 + X[n][YDIM];
+			part.z = rand_normal() * 0.001 + X[n][ZDIM];
 			float r = sqrt(sqr(part.x - X[n][XDIM], part.y - X[n][YDIM], part.z - X[n][ZDIM]));
-			float v0 = sqrt(get_options().GM / r * N / M) / sqrt(3);
+			float v0 = 0.75*sqrt(get_options().GM / r * N / M) / sqrt(3);
 			part.vx = rand_normal() * v0 + X[n][NDIM + XDIM];
 			part.vy = rand_normal() * v0 + X[n][NDIM + YDIM];
 			part.vz = rand_normal() * v0 + X[n][NDIM + ZDIM];

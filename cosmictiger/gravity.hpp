@@ -31,6 +31,10 @@ CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_float();
 }
 
+CUDA_EXPORT inline float double_distance(fixed32 a, fixed32 b) {
+	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_double();
+}
+
 struct force_vectors {
 	vector<float> phi;
 	vector<float> gx;

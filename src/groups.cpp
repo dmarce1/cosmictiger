@@ -25,6 +25,8 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/rockstar.hpp>
+
 
 #include <unordered_set>
 
@@ -184,14 +186,24 @@ void groups_reduce(double scale_factor) {
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale_factor;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&mutex,&ainv]() {
+		futs.push_back(hpx::async([proc,nthreads,&mutex,&ainv, scale_factor]() {
 			std::unordered_map<int,vector<part_int>> remove_indexes;
 			for (int bin = proc; bin < GROUP_TABLE_SIZE; bin += nthreads) {
 				for (auto iter = group_data[bin].begin(); iter != group_data[bin].end(); iter++) {
 					group_candidates++;
 					vector<particle_data>& parts = iter->second;
+
 					vector<float> phi;
 					if( parts.size() >= get_options().min_group) {
+						PRINT( "Doing rockstar on %i particles\n", parts.size());
+						auto rockstar_groups = rockstar_find_subgroups(parts, scale_factor);
+						int halo_cnt = 0;
+						for( int i = 0; i < rockstar_groups.size(); i++) {
+							if( rockstar_groups[i].parent == ROCKSTAR_NO_GROUP && rockstar_groups[i].id != ROCKSTAR_NO_GROUP) {
+								halo_cnt++;
+							}
+						}
+						PRINT( "%i halos and %i subhalos found in group of %i\n", halo_cnt, rockstar_groups.size() - halo_cnt - 1, parts.size());
 						bool removed_one;
 						vector<array<fixed32,NDIM>> X(parts.size());
 						for( int i = 0; i < parts.size(); i++) {
