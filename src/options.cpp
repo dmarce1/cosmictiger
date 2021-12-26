@@ -166,7 +166,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.omega_nu = omega_r * opts.Neff / (8.0 / 7.0 * std::pow(11.0 / 4.0, 4.0 / 3.0) + opts.Neff);
 	opts.omega_gam = omega_r - opts.omega_nu;
 	opts.omega_r = omega_r;
-	opts.link_len = 1.0 / opts.parts_dim / 5.0;
+	opts.link_len = 1.0 / opts.parts_dim * 0.28;
 	opts.min_group = 20;
 	opts.lc_min_group = 20;
 

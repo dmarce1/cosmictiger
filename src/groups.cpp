@@ -195,7 +195,6 @@ void groups_reduce(double scale_factor) {
 
 					vector<float> phi;
 					if( parts.size() >= get_options().min_group) {
-						PRINT( "Doing rockstar on %i particles\n", parts.size());
 						auto rockstar_groups = rockstar_find_subgroups(parts, scale_factor);
 						int halo_cnt = 0;
 						for( int i = 0; i < rockstar_groups.size(); i++) {
@@ -203,7 +202,9 @@ void groups_reduce(double scale_factor) {
 								halo_cnt++;
 							}
 						}
-						PRINT( "%i halos and %i subhalos found in group of %i\n", halo_cnt, rockstar_groups.size() - halo_cnt - 1, parts.size());
+						if( halo_cnt > 1 ) {
+							PRINT( "%i halos and %i subhalos found in group of %i\n", halo_cnt, rockstar_groups.size() - halo_cnt - 1, parts.size());
+						}
 						bool removed_one;
 						vector<array<fixed32,NDIM>> X(parts.size());
 						for( int i = 0; i < parts.size(); i++) {

@@ -6,7 +6,6 @@
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/timer.hpp>
 
-
 struct rockstar_tree {
 	int part_begin;
 	int part_end;
@@ -817,7 +816,7 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 		subgroups.insert(subgroups.end(), these_groups.begin(), these_groups.end());
 	}
 
-	const auto find_sigmas = [rfac,vfac](subgroup& sg) {
+	const auto find_sigmas = [rfac,vfac,scale](subgroup& sg) {
 		double sigma2_v = 0.0;
 		double sigma2_x = 0.0;
 		array<double,NDIM> X;
@@ -843,7 +842,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 		}
 		sigma2_x /= these_parts.size();
 		double this_xfactor = sqrt(sigma2_x / these_parts.size());
-//		PRINT( "%e %e\n", this_xfactor, sg.min_xfactor);
 		if( this_xfactor < sg.min_xfactor) {
 			sg.min_xfactor = this_xfactor;
 			for( int dim = 0; dim < NDIM; dim++) {
@@ -851,60 +849,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 			}
 		}
 		sigma2_x = 0.0;
-		double r_vir2 = 0.0;
-		for (int j = 0; j < these_parts.size(); j++) {
-			const auto& p = these_parts[j];
-			const double dx = p.x - sg.x;
-			const double dy = p.y - sg.y;
-			const double dz = p.z - sg.z;
-			const double dx2 = sqr(dx, dy, dz);
-			sigma2_x += dx2;
-			r_vir2 = std::max(r_vir2, dx2);
-		}
-		sigma2_x /= these_parts.size();
-		sg.sigma2_x = sigma2_x;
-		sg.r_vir = sqrt(r_vir2);
-		int n;
-		double rfrac = 0.1;
-		do {
-			n = 0;
-			sg.vx = 0.0;
-			sg.vy = 0.0;
-			sg.vz = 0.0;
-			for (int j = 0; j < these_parts.size(); j++) {
-				const auto& p = these_parts[j];
-				const double dx = p.x - sg.x;
-				const double dy = p.y - sg.y;
-				const double dz = p.z - sg.z;
-				const double dx2 = sqr(dx, dy, dz);
-				if( dx2 < sqr(rfrac * sg.r_vir) ) {
-					sg.vx += these_parts[j].vx;
-					sg.vy += these_parts[j].vy;
-					sg.vz += these_parts[j].vz;
-					n++;
-				}
-			}
-			if( n ) {
-				sg.vx /= n;
-				sg.vy /= n;
-				sg.vz /= n;
-			}
-			rfrac *= 1.1;
-		} while( n < ROCKSTAR_MIN_GROUP );
-//		PRINT( "n = %i\n", n);
-		for (int j = 0; j < these_parts.size(); j++) {
-			const auto& p = these_parts[j];
-			const double dvx = p.vx - sg.vx;
-			const double dvy = p.vy - sg.vy;
-			const double dvz = p.vz - sg.vz;
-			const double dv2 = sqr(dvx, dvy, dvz);
-			sigma2_v += dv2;
-		}
-		sigma2_v /= these_parts.size();
-		sg.sigma2_v = sigma2_v;
-	};
-	const auto find_vcirc_max = [rfac,vfac](subgroup& sg) {
-		vector<rockstar_particle>& these_parts = sg.parts;
 		vector<double> radii;
 		for (int j = 0; j < these_parts.size(); j++) {
 			const auto& p = these_parts[j];
@@ -912,19 +856,84 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 			const double dy = p.y - sg.y;
 			const double dz = p.z - sg.z;
 			const double dx2 = sqr(dx, dy, dz);
+			sigma2_x += dx2;
 			radii.push_back(sqrt(dx2));
 		}
-		double vcirc_max = 0.0;
 		std::sort(radii.begin(), radii.end());
-		const double H = get_options().hubble * constants::H0 * get_options().code_to_s;
-		const double nparts = pow(get_options().parts_dim,3);
-		for( int n = 0; n < radii.size(); n++) {
-			double vcirc = sqrt(3.0 * get_options().omega_m * sqr(H) * n / nparts / radii[n]);
-			vcirc_max = std::max(vcirc_max,vcirc);
+		double mass = 0.0;
+		double volume = 0.0;
+		double r_vir;
+		const double a = scale;
+		const double Om = get_options().omega_m;
+		const double Or = get_options().omega_r;
+		const double Ol = 1.0 - Om - Or;
+		double H = get_options().hubble * constants::H0 * sqrt((Or/(a*a*a*a) +Om/(a*a*a)+Ol));
+		const double density_crit = 200.0 * 3.0 * H * H / constants::G / (8.0*M_PI) * a*a*a;
+		double rmax = radii.back();
+		for( int i = 0; i < radii.size(); i++) {
+			mass += get_options().code_to_g;
+			const double r = radii[i] * get_options().code_to_cm / rfac;
+			volume = std::pow(r,3) * (4.0/3.0*M_PI);
+			double density = mass / volume;
+			if( density > density_crit || i == 0) {
+				r_vir = radii[i];
+			}
 		}
-		sg.vcirc_max = vcirc_max * vfac;
-		sg.r_dyn = vcirc_max / H / sqrt(180) * rfac;
-	};
+		if( r_vir == radii.back()) {
+			r_vir = std::pow(mass / (4.0*M_PI/3.0*density_crit),1.0/3.0) / get_options().code_to_cm * rfac;
+		}
+		sigma2_x /= these_parts.size();
+		sg.sigma2_x = sigma2_x;
+		sg.r_vir = r_vir;
+//		PRINT( "%e %e\n", r_vir, rmax);
+			int n;
+			double rfrac = 0.1;
+			do {
+				n = 0;
+				sg.vx = 0.0;
+				sg.vy = 0.0;
+				sg.vz = 0.0;
+				for (int j = 0; j < these_parts.size(); j++) {
+					const auto& p = these_parts[j];
+					const double dx = p.x - sg.x;
+					const double dy = p.y - sg.y;
+					const double dz = p.z - sg.z;
+					const double dx2 = sqr(dx, dy, dz);
+					if( dx2 < sqr(rfrac * sg.r_vir) ) {
+						sg.vx += these_parts[j].vx;
+						sg.vy += these_parts[j].vy;
+						sg.vz += these_parts[j].vz;
+						n++;
+					}
+				}
+				if( n ) {
+					sg.vx /= n;
+					sg.vy /= n;
+					sg.vz /= n;
+				}
+				rfrac *= 1.1;
+			}while( n < ROCKSTAR_MIN_GROUP );
+//		PRINT( "n = %i\n", n);
+			for (int j = 0; j < these_parts.size(); j++) {
+				const auto& p = these_parts[j];
+				const double dvx = p.vx - sg.vx;
+				const double dvy = p.vy - sg.vy;
+				const double dvz = p.vz - sg.vz;
+				const double dv2 = sqr(dvx, dvy, dvz);
+				sigma2_v += dv2;
+			}
+			sigma2_v /= these_parts.size();
+			sg.sigma2_v = sigma2_v;
+			double vcirc_max = 0.0;
+			H = get_options().hubble * constants::H0 * get_options().code_to_s;
+			const double nparts = pow(get_options().parts_dim,3);
+			for( int n = 0; n < radii.size(); n++) {
+				double vcirc = sqrt(3.0 * get_options().omega_m * sqr(H) * n / nparts / radii[n]);
+				vcirc_max = std::max(vcirc_max,vcirc);
+			}
+			sg.vcirc_max = vcirc_max * vfac;
+			sg.r_dyn = vcirc_max / H / sqrt(180) * rfac;
+		};
 	if (subgroups.size() == 0) {
 		const int subgrp = next_id++;
 		for (int i = 0; i < parts.size(); i++) {
@@ -934,7 +943,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 		sg.parts = std::move(parts);
 		sg.id = subgrp;
 		find_sigmas(sg);
-		find_vcirc_max(sg);
 		subgroups.push_back(sg);
 	} else if (subgroups.size() == 1) {
 		const int subgrp = subgroups[0].parts[0].subgroup;
@@ -943,7 +951,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 			subgroups[0].parts.push_back(parts[i]);
 		}
 		find_sigmas(subgroups[0]);
-		find_vcirc_max(subgroups[0]);
 	} else {
 		bool found_merge;
 //		PRINT("Finding merges for %i subgroups\n", subgroups.size());
@@ -969,7 +976,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 					}
 					subgroups[l].min_xfactor = std::numeric_limits<float>::max();
 					find_sigmas(subgroups[l]);
-					find_vcirc_max(subgroups[l]);
 					subgroups[k] = subgroups.back();
 					subgroups.pop_back();
 					found_merge = true;
@@ -985,7 +991,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 //			PRINT("rdyn %e sigma_x %e\n", subgroups[i].r_dyn, sqrt(subgroups[i].sigma2_x));
 		}
 		for (int j = 0; j < parts.size(); j++) {
-
 
 			double min_dist = std::numeric_limits<double>::max();
 			int min_index = -1;
@@ -1011,7 +1016,6 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 		}
 		for (int k = 0; k < subgroups.size(); k++) {
 			find_sigmas(subgroups[k]);
-			find_vcirc_max(subgroups[k]);
 		}
 	}
 	for (int i = 0; i < depth; i++) {
@@ -1054,7 +1058,7 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, d
 			parts[i].vz += avg_vz;
 		}
 	}
-	if (depth == 0 ) {
+	if (depth == 0) {
 		for (int k = 0; k < subgroups.size(); k++) {
 			auto& sgA = subgroups[k];
 			double min_dist = std::numeric_limits<double>::max();
@@ -1167,12 +1171,12 @@ void rockstar_find_subgroups(vector<rockstar_particle>& parts, double scale) {
 vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, double scale) {
 	vector<rockstar_particle> rock_parts;
 	array<fixed32, NDIM> x0;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		x0[dim] = parts[0].x[dim];
 	}
-	for( int i = 0; i < parts.size(); i++) {
-		array<double,NDIM> x;
-		for( int dim = 0; dim < NDIM; dim++) {
+	for (int i = 0; i < parts.size(); i++) {
+		array<double, NDIM> x;
+		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = double_distance(parts[i].x[dim], x0[dim]);
 		}
 		rockstar_particle part;
