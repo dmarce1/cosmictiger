@@ -13,21 +13,29 @@
 
 struct rockstar_particle {
 	union {
-		array<double, 2 * NDIM> X;
+		array<float, 2 * NDIM> X;
 		struct {
-			double x;
-			double y;
-			double z;
-			double vx;
-			double vy;
-			double vz;
+			float x;
+			float y;
+			float z;
+			float vx;
+			float vy;
+			float vz;
 		};
 	};
 	int subgroup;
 	part_int index;
-	double min_dist2;
+	float min_dist2;
 };
 
+struct rockstar_tree {
+	int part_begin;
+	int part_end;
+	array<int, NCHILD> children;
+	range<float, 2 * NDIM> box;
+	bool active;
+	bool last_active;
+};
 
 struct subgroup {
 	int id;
@@ -35,33 +43,32 @@ struct subgroup {
 	vector<int> children;
 	vector<rockstar_particle> parts;
 	union {
-		array<double, NDIM * 2> X;
+		array<float, NDIM * 2> X;
 		struct {
-			double x;
-			double y;
-			double z;
-			double vx;
-			double vy;
-			double vz;
+			float x;
+			float y;
+			float z;
+			float vx;
+			float vy;
+			float vz;
 		};
 	};
-	double min_xfactor;
-	double r_dyn;
-	double sigma2_v;
-	double sigma2_x;
-	double vcirc_max;
-	double r_vir;
+	float min_xfactor;
+	float r_dyn;
+	float sigma2_v;
+	float sigma2_x;
+	float vcirc_max;
+	float r_vir;
 	int host_part_cnt;
 	int depth;
 	subgroup() {
 		depth = -1;
-		min_xfactor = std::numeric_limits<double>::max();
+		min_xfactor = std::numeric_limits<float>::max();
 		parent = ROCKSTAR_NO_GROUP;
 	}
 };
 
+void rockstar_find_subgroups(vector<rockstar_particle>& parts, float scale = 1.0);
+vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, float scale);
+int rockstar_find_subgroups_gpu(vector<rockstar_tree>& trees, vector<rockstar_particle>& parts, float link_len, int& next_index);
 
-
-
-void rockstar_find_subgroups(vector<rockstar_particle>& parts, double scale = 1.0);
-vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, double scale);

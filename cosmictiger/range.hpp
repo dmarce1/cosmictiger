@@ -48,11 +48,16 @@ struct range {
 	array<T, N> begin;
 	array<T, N> end;
 
-	inline range<T, N> intersection(const range<T, N>& other) const {
+	CUDA_EXPORT inline range<T, N> intersection(const range<T, N>& other) const {
 		range<T, N> I;
 		for (int dim = 0; dim < N; dim++) {
+#ifdef __CUDA_ARCH__
+			I.begin[dim] = max(begin[dim], other.begin[dim]);
+			I.end[dim] = min(end[dim], other.end[dim]);
+#else
 			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
 			I.end[dim] = std::min(end[dim], other.end[dim]);
+#endif
 		}
 		return I;
 	}
@@ -100,7 +105,7 @@ struct range {
 		}
 	}
 
-	inline bool contains(const range<T, N>& box) const {
+	CUDA_EXPORT inline bool contains(const range<T, N>& box) const {
 		bool rc = true;
 		for (int dim = 0; dim < N; dim++) {
 			if (begin[dim] > box.begin[dim]) {
@@ -115,7 +120,7 @@ struct range {
 		return rc;
 	}
 
-	inline bool contains(const array<T, N>& p) const {
+	CUDA_EXPORT inline bool contains(const array<T, N>& p) const {
 		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				return false;
@@ -217,7 +222,7 @@ struct range {
 		return rc;
 	}
 
-	inline T volume() const {
+	CUDA_EXPORT inline T volume() const {
 		T vol = T(1);
 		for (int dim = 0; dim < N; dim++) {
 			const T span = end[dim] - begin[dim];
@@ -237,7 +242,7 @@ struct range {
 		}
 	}
 
-	inline range<T, N> pad(T dx = T(1)) const {
+	CUDA_EXPORT inline range<T, N> pad(T dx = T(1)) const {
 		range<T, N> r;
 		for (int dim = 0; dim < N; dim++) {
 			r.begin[dim] = begin[dim] - dx;

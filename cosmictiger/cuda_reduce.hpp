@@ -1,27 +1,52 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef CUDA_REDUCE_HPP_
 #define CUDA_REDUCE_HPP_
 
 #include <cosmictiger/defs.hpp>
+
+template<int NTHREADS>
+__device__ inline void compute_indices_shmem(int& index, int& total) {
+	__shared__ int indices[NTHREADS];
+	const int& tid = threadIdx.x;
+	indices[tid] = index;
+	__syncthreads();
+	for (int P = 1; P < NTHREADS; P *= 2) {
+		int tmp = indices[tid];
+		if (tid >= P) {
+			tmp += indices[tid - P];
+		}
+		__syncthreads();
+		indices[tid] = tmp;
+	}
+	__syncthreads();
+	total = indices[NTHREADS - 1];
+	int tmp;
+	if (tid > 0) {
+		tmp = indices[tid - 1];
+	} else {
+		tmp = 0;
+	}
+	__syncthreads();
+	indices[tid] = tmp;
+}
 
 __device__ inline void compute_indices(int& index, int& total) {
 	const int& tid = threadIdx.x;
@@ -58,6 +83,5 @@ __device__ inline void shared_reduce_max(int& number) {
 		number = max(number, __shfl_xor_sync(0xffffffff, number, P));
 	}
 }
-
 
 #endif /* CUDA_REDUCE_HPP_ */

@@ -74,6 +74,7 @@ set(cosmictiger_source_files
     src/particles.cpp
     src/power.cpp
     src/rockstar.cpp
+    src/rockstar.cu
     src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp

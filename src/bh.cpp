@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/assert.hpp>
 #include <cosmictiger/bh.hpp>
@@ -243,9 +243,102 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 		}
 		phi[i] *= GM;
 	}
-}}));
+}
+}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+}
+
+void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM> pt, float& phi, vector<array<float, NDIM>>& parts, float theta) {
+	const float h = get_options().hsoft;
+	const float GM = get_options().GM;
+	const float hinv = 1.0 / (2.f * h);
+	const float h2inv = 1.0 / (4.f * h * h);
+	const float h2 = 4.f * h * h;
+	const simd_float tiny(1e-20);
+	const int nthreads = std::max(std::min((int) parts.size() / 512, 2 * (int) hpx::thread::hardware_concurrency()), 1);
+	vector<hpx::future<void>> futs;
+	vector<int> checklist(1, 0);
+	vector<int> nextlist;
+	vector<bh_source> sourcelist;
+	phi = 0.0;
+	const float thetainv = 1.0f / theta;
+	while (checklist.size()) {
+		nextlist.resize(0);
+		for (int ci = 0; ci < checklist.size(); ci++) {
+			const auto& node = nodes[checklist[ci]];
+			const float dx = pt[XDIM] - node.pos[XDIM];
+			const float dy = pt[YDIM] - node.pos[YDIM];
+			const float dz = pt[ZDIM] - node.pos[ZDIM];
+			const float r2 = sqr(dx, dy, dz);
+			if (r2 > sqr(thetainv * node.radius)) {
+				bh_source source;
+				source.x = node.pos;
+				source.m = node.mass;
+				sourcelist.push_back(source);
+			} else if (node.children[LEFT] == -1) {
+				for (int i = node.parts.first; i < node.parts.second; i++) {
+					bh_source source;
+					source.x = parts[i];
+					source.m = 1.0f;
+					sourcelist.push_back(source);
+				}
+			} else {
+				nextlist.push_back(node.children[LEFT]);
+				nextlist.push_back(node.children[RIGHT]);
+			}
+		}
+		std::swap(nextlist, checklist);
+	}
+	const int maxi = round_up((int) sourcelist.size(), SIMD_FLOAT_SIZE);
+	while (sourcelist.size() < maxi) {
+		bh_source src;
+		src.m = 0.0f;
+		for (int dim = 0; dim < NDIM; dim++) {
+			src.x[dim] = 0.f;
+		}
+		sourcelist.push_back(src);
+	}
+	array<simd_float, NDIM> X;
+	for (int dim = 0; dim < NDIM; dim++) {
+		X[dim] = pt[dim];
+	}
+	for (int j = 0; j < sourcelist.size(); j += SIMD_FLOAT_SIZE) {
+		array<simd_float, NDIM> Y;
+		simd_float M;
+		for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+			const auto& src = sourcelist[j + k];
+			for (int dim = 0; dim < NDIM; dim++) {
+				Y[dim][k] = src.x[dim];
+			}
+			M[k] = src.m;
+		}
+		array<simd_float, NDIM> dx;
+		for (int dim = 0; dim < NDIM; dim++) {
+			dx[dim] = X[dim] - Y[dim];                                 // 3
+		}
+		const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
+		const simd_float far_flag = r2 > h2;                 // 1
+		simd_float rinv1;
+		if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+			rinv1 = rsqrt(r2);                                            // 5
+		} else {
+			const simd_float r = sqrt(r2);                                                    // 4
+			const simd_float rinv1_far = simd_float(1) / r;                                                    // 5
+			const simd_float r1overh1 = r * hinv;                                                    // 1
+			const simd_float r2oh2 = r1overh1 * r1overh1;                                                    // 1
+			simd_float rinv1_near = -5.0f / 16.0f;
+			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                                                    // 2
+			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                                                    // 2
+			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                                                    // 2
+			rinv1_near *= hinv;                                                    // 1
+			const auto near_flag = (simd_float(1) - far_flag);                                                    // 1
+			rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;                                                    // 4
+		}
+		phi -= (M * rinv1).sum();																									// 1
+	}
+	phi *= GM;
+
 }
 
 vector<float> direct_evaluate(const vector<array<float, NDIM>>& x) {
@@ -309,6 +402,36 @@ vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x) {
 		rpot[sort_order[i]] = pot[i];
 	}
 	return rpot;
+}
+
+vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x) {
+	ALWAYS_ASSERT(x.size() > 1);
+	vector<bh_tree_node> nodes(1);
+	range<float> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = std::numeric_limits<float>::max();
+		box.end[dim] = -std::numeric_limits<float>::max();
+	}
+	for (const auto& pos : x) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			const auto this_x = pos[dim];
+			box.begin[dim] = std::min(box.begin[dim], this_x);
+			box.end[dim] = std::max(box.end[dim], this_x);
+		}
+	}
+	vector<float> rpot;
+	vector<int> sink_buckets;
+	vector<int> sort_order;
+	sort_order.reserve(x.size());
+	for (int i = 0; i < x.size(); i++) {
+		sort_order.push_back(i);
+	}
+	vector<float> pot(x.size());
+	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
+	for (int i = 0; i < y.size(); i++) {
+		bh_tree_evaluate_point(nodes, y[i], pot[i], x, 0.85);
+	}
+	return pot;
 }
 
 vector<float> bh_evaluate_potential_fixed(const vector<array<fixed32, NDIM>>& x_fixed) {
