@@ -56,7 +56,7 @@ static void rockstar_test() {
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
 
-	const int N = 100000;
+	const int N = 1000000;
 	const int M = 2;
 	vector<rockstar_particle> parts;
 	array<array<float, 2 * NDIM>, M> X;
