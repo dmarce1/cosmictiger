@@ -70,7 +70,7 @@ public:
 		return A[i];
 	}
 	CUDA_EXPORT
-	inline T operator[](int i) const {
+	inline const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		DO_BOUNDS_CHECK(i);
 #endif

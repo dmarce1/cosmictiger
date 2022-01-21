@@ -414,7 +414,7 @@ void rockstar_find_subgroups(vector<rockstar_tree>& trees, vector<rockstar_parti
 		trees[i].active = true;
 	}
 	int cnt;
-	bool gpu = true;
+	bool gpu = false;
 	rockstar_particles part_ptrs;
 	vector<float, pinned_allocator<float>> x;
 	vector<float, pinned_allocator<float>> y;
@@ -978,32 +978,33 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, f
 			}
 		}
 		sigma2_x = 0.0;
-		vector<float> radii;
+		vector<double> radii;
 		for (int j = 0; j < these_parts.size(); j++) {
 			const auto& p = these_parts[j];
-			const float dx = p.x - sg.x;
-			const float dy = p.y - sg.y;
-			const float dz = p.z - sg.z;
-			const float dx2 = sqr(dx, dy, dz);
+			const double dx = p.x - sg.x;
+			const double dy = p.y - sg.y;
+			const double dz = p.z - sg.z;
+			const double dx2 = sqr(dx, dy, dz);
 			sigma2_x += dx2;
 			radii.push_back(sqrt(dx2));
 		}
 		std::sort(radii.begin(), radii.end());
-		float mass = 0.0;
-		float volume = 0.0;
-		float r_vir;
-		const float a = scale;
-		const float Om = get_options().omega_m;
-		const float Or = get_options().omega_r;
-		const float Ol = 1.0 - Om - Or;
-		float H = get_options().hubble * constants::H0 * sqrt((Or/(a*a*a*a) +Om/(a*a*a)+Ol));
-		const float density_crit = 200.0 * 3.0 * H * H / constants::G / (8.0*M_PI) * a*a*a;
-		float rmax = radii.back();
+		double mass = 0.0;
+		double volume = 0.0;
+		double r_vir;
+		const double a = scale;
+		const double Om = get_options().omega_m;
+		const double Or = get_options().omega_r;
+		const double Ol = 1.0 - Om - Or;
+		double H = get_options().hubble * constants::H0 * sqrt((Or/(a*a*a*a) +Om/(a*a*a)+Ol));
+		const double density_crit = 200.0 * 3.0 * H * H / constants::G / (8.0*M_PI) * a*a*a;
+		double rmax = radii.back();
+		const auto part_mass = get_options().code_to_g;
 		for( int i = 0; i < radii.size(); i++) {
-			mass += get_options().code_to_g;
-			const float r = radii[i] * get_options().code_to_cm / rfac;
+			mass += part_mass;
+			const double r = radii[i] * get_options().code_to_cm / rfac;
 			volume = std::pow(r,3) * (4.0/3.0*M_PI);
-			float density = mass / volume;
+			double density = mass / volume;
 			if( density > density_crit || i == 0) {
 				r_vir = radii[i];
 			}
@@ -1082,7 +1083,7 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, f
 		find_sigmas(subgroups[0]);
 	} else {
 		bool found_merge;
-//		PRINT("Finding merges for %i subgroups\n", subgroups.size());
+		PRINT("Finding merges for %i subgroups\n", subgroups.size());
 		for (int k = 0; k < subgroups.size();) {
 			found_merge = false;
 			std::sort(subgroups.begin(), subgroups.end(), [](const subgroup& a, const subgroup& b) {
@@ -1117,7 +1118,7 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, f
 			}
 		}
 		for (int i = 0; i < subgroups.size(); i++) {
-//			PRINT("rdyn %e sigma_x %e\n", subgroups[i].r_dyn, sqrt(subgroups[i].sigma2_x));
+			PRINT("rdyn %e sigma_x %e\n", subgroups[i].r_dyn, sqrt(subgroups[i].sigma2_x));
 		}
 		for (int j = 0; j < parts.size(); j++) {
 
@@ -1200,8 +1201,8 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, f
 					const float dz = sgA.z - sgB.z;
 					const float r = sqrt(sqr(dx, dy, dz));
 					if (r < sgB.r_vir) {
-						if (rockstar_halo_bound(sgB, sgA, scale)) {
-//						PRINT("Testing subhalo\n");
+			//			if (rockstar_halo_bound(sgB, sgA, scale)) {
+							PRINT("Testing subhalo\n");
 							const float rdyn_inv = 1.0 / sgB.r_dyn;
 							const float dvx = sgA.vx - sgB.vx;
 							const float dvy = sgA.vy - sgB.vy;
@@ -1212,7 +1213,7 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, f
 								min_dist = dist;
 								min_index = l;
 							}
-						}
+				//		}
 					}
 				}
 			}
@@ -1228,9 +1229,9 @@ vector<subgroup> rockstar_seeds(vector<rockstar_particle> parts, int& next_id, f
 				checklist.push_back(k);
 			}
 		}
-//		PRINT("CHECLIST.SIZE = %i\n", checklist.size());
+		PRINT("CHECLIST.SIZE = %i\n", checklist.size());
 		auto all_parts = rockstar_unbind(subgroups, checklist, scale, 0);
-//		PRINT("%i\n", all_parts.size());
+		PRINT("%i\n", all_parts.size());
 		int k = 0;
 		while (k < subgroups.size()) {
 			if (subgroups[k].parts.size() == 0) {

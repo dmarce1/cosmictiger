@@ -23,6 +23,7 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/simd.hpp>
+#include <cosmictiger/timer.hpp>
 
 #include <fenv.h>
 
@@ -372,7 +373,7 @@ vector<float> direct_evaluate(const vector<array<float, NDIM>>& x) {
 	return phi;
 }
 
-vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x) {
+vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu) {
 	ALWAYS_ASSERT(x.size() > 1);
 	vector<bh_tree_node> nodes(1);
 	range<float> box;
@@ -396,7 +397,15 @@ vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x) {
 	}
 	vector<float> pot(x.size());
 	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
-	bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.85);
+	if (!gpu) {
+		bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.85);
+	} else {
+		timer tm1;
+		tm1.start();
+		pot = bh_evaluate_potential_gpu(nodes, x, sink_buckets, 0.85, get_options().hsoft, get_options().GM);
+		tm1.stop();
+		PRINT("1 %e\n", tm1.read());
+	}
 	rpot.resize(x.size());
 	for (int i = 0; i < sort_order.size(); i++) {
 		rpot[sort_order[i]] = pot[i];
@@ -404,7 +413,7 @@ vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x) {
 	return rpot;
 }
 
-vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x) {
+vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x, bool gpu) {
 	ALWAYS_ASSERT(x.size() > 1);
 	vector<bh_tree_node> nodes(1);
 	range<float> box;
@@ -426,10 +435,14 @@ vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<flo
 	for (int i = 0; i < x.size(); i++) {
 		sort_order.push_back(i);
 	}
-	vector<float> pot(x.size());
+	vector<float> pot(y.size());
 	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
-	for (int i = 0; i < y.size(); i++) {
-		bh_tree_evaluate_point(nodes, y[i], pot[i], x, 0.85);
+	if (gpu) {
+		pot = bh_evaluate_potential_points_gpu(nodes, x, y, 0.85, get_options().hsoft, get_options().GM);
+	} else {
+		for (int i = 0; i < y.size(); i++) {
+			bh_tree_evaluate_point(nodes, y[i], pot[i], x, 0.85);
+		}
 	}
 	return pot;
 }

@@ -35,6 +35,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/bh.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
@@ -81,7 +82,7 @@ static void rockstar_test() {
 			part.y = rand_normal() * 0.001 + X[n][YDIM];
 			part.z = rand_normal() * 0.001 + X[n][ZDIM];
 			float r = sqrt(sqr(part.x - X[n][XDIM], part.y - X[n][YDIM], part.z - X[n][ZDIM]));
-			float v0 = 0.75*sqrt(get_options().GM / r * N / M) / sqrt(3);
+			float v0 = 0.75 * sqrt(get_options().GM / r * N / M) / sqrt(3);
 			part.vx = rand_normal() * v0 + X[n][NDIM + XDIM];
 			part.vy = rand_normal() * v0 + X[n][NDIM + YDIM];
 			part.vz = rand_normal() * v0 + X[n][NDIM + ZDIM];
@@ -96,7 +97,7 @@ static void rockstar_test() {
 		part.vx = 2.0 * rand1() - 1.0;
 		part.vy = 2.0 * rand1() - 1.0;
 		part.vz = 2.0 * rand1() - 1.0;
-	//	parts.push_back(part);
+		//	parts.push_back(part);
 
 	}
 	rockstar_find_subgroups(parts);
@@ -417,6 +418,44 @@ static void force_test() {
 
 }
 
+void bh_test() {
+	int N = 100000;
+	int M = 10;
+	vector<array<float, NDIM>> x(N);
+	vector<array<float, NDIM>> y(M);
+	for (int i = 0; i < N; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			x[i][dim] = rand1();
+		}
+	}
+	for (int i = 0; i < M; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			y[i][dim] = rand1();
+		}
+	}
+	auto x0 = x;
+//	auto phi0 = direct_evaluate(x0);
+	x0 = x;
+	timer tm1, tm2;
+	tm1.start();
+	auto phi1 = bh_evaluate_points(y, x0, false);
+	tm1.stop();
+	x0 = x;
+	tm2.start();
+	PRINT( "Doing gpu\n");
+	auto phi2 = bh_evaluate_points(y, x0, true);
+	tm2.stop();
+	PRINT( "%e %e\n", tm1.read(), tm2.read());
+	double err_tot = 0.0;
+	for (int i = 0; i < phi1.size(); i++) {
+		double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
+		PRINT("%e %e %e\n", phi1[i], phi2[i], err);
+		err_tot += err;
+	}
+	PRINT( "%e\n", err_tot / phi1.size());
+
+}
+
 void test(std::string test) {
 	if (test == "domain") {
 		domain_test();
@@ -432,6 +471,8 @@ void test(std::string test) {
 		kick_test();
 	} else if (test == "tree") {
 		tree_test();
+	} else if (test == "bh") {
+		bh_test();
 	} else {
 		THROW_ERROR("test %s is not known\n", test.c_str());
 	}

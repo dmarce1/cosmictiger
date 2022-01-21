@@ -119,6 +119,7 @@ public:
 		if( i < 0 || i >= sz) {
 			PRINT( "index out of bounds for fixedcapvec %i should be between 0 and %i.\n", i, sz);
 #ifdef __CUDA_ARCH__
+			assert(false);
 			__trap();
 #else
 			abort();

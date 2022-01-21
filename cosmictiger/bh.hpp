@@ -47,9 +47,13 @@ struct bh_source {
 
 
 vector<float> bh_evaluate_potential_fixed(const vector<array<fixed32, NDIM>>& x);
-vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x);
-vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x);
-
+vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu = false);
+vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x, bool gpu = false);
+vector<float> direct_evaluate(const vector<array<float, NDIM>>& x);
+vector<float> bh_evaluate_potential_gpu(const vector<bh_tree_node>& tree_nodes, const vector<array<float, NDIM>>& x, const vector<int> sink_buckets,
+		float theta, float hsoft, float GM);
+vector<float> bh_evaluate_potential_points_gpu(const vector<bh_tree_node>& tree_nodes, const vector<array<float, NDIM>>& x, const vector<array<float, NDIM>>& y,
+		float theta, float hsoft, float GM);
 
 
 #endif /* BH_HPP_ */
