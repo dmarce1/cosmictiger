@@ -33,6 +33,7 @@ struct options {
 	bool twolpt;
 	bool use_power_file;
 	bool read_check;
+	bool sph;
 	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
@@ -74,6 +75,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & sph;
 		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;
