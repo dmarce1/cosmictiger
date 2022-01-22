@@ -498,8 +498,9 @@ part_int particles_size() {
 	return size;
 }
 
+
 template<class T>
-void array_resize(T*& ptr, part_int new_capacity, bool reg) {
+void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 	T* new_ptr;
 	if (capacity > 0) {
 	}
@@ -528,6 +529,7 @@ void array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 }
 
+
 void particles_resize(part_int sz) {
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
@@ -536,24 +538,27 @@ void particles_resize(part_int sz) {
 		}
 		PRINT("Resizing particles to %li from %li\n", new_capacity, capacity);
 		for (int dim = 0; dim < NDIM; dim++) {
-			array_resize(particles_x[dim], new_capacity, false);
-			array_resize(particles_v[dim], new_capacity, true);
+			particles_array_resize(particles_x[dim], new_capacity, false);
+			particles_array_resize(particles_v[dim], new_capacity, true);
 		}
-		array_resize(particles_r, new_capacity, true);
+		particles_array_resize(particles_r, new_capacity, true);
 		if (get_options().do_groups) {
-			array_resize(particles_lgrp, new_capacity, false);
+			particles_array_resize(particles_lgrp, new_capacity, false);
 			for (part_int i = 0; i < new_capacity; i++) {
 				particles_lgrp[i] = NO_GROUP;
 			}
 		}
 		if (get_options().save_force) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				array_resize(particles_g[dim], new_capacity, true);
+				particles_array_resize(particles_g[dim], new_capacity, true);
 			}
-			array_resize(particles_p, new_capacity, true);
+			particles_array_resize(particles_p, new_capacity, true);
 		}
 		if (get_options().do_tracers) {
-			array_resize(particles_tr, new_capacity, false);
+			particles_array_resize(particles_tr, new_capacity, false);
+		}
+		if( get_options().sph) {
+			particles_array_resize(particles_sph, new_capacity, false);
 		}
 		capacity = new_capacity;
 	}
@@ -593,6 +598,9 @@ void particles_free() {
 	}
 	if (get_options().do_tracers) {
 		free(particles_tr);
+	}
+	if( get_options().sph) {
+		free(particles_sph);
 	}
 }
 

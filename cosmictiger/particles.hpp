@@ -129,6 +129,7 @@ PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 = nullptr
 #endif
 ;
+PARTICLES_EXTERN part_int* particles_sph;
 PARTICLES_EXTERN group_int* particles_lgrp;
 PARTICLES_EXTERN char* particles_tr;
 PARTICLES_EXTERN size_t particles_global_offset;
@@ -210,6 +211,10 @@ inline char& particles_tracer(part_int index) {
 	return particles_tr[index];
 }
 
+inline part_int& particles_sph_index(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_sph[index];
+}
 
 inline particle particles_get_particle(part_int index) {
 	static bool do_groups = get_options().do_groups;
@@ -246,5 +251,7 @@ inline void particles_set_particle(particle p, part_int index) {
 		particles_tracer(index) = p.t;
 	}
 }
+
+
 
 #endif /* PARTICLES_HPP_ */

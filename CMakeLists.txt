@@ -76,6 +76,7 @@ set(cosmictiger_source_files
     src/power.cpp
     src/rockstar.cpp
     src/rockstar.cu
+    src/sph_particles.cpp
     src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp
@@ -126,6 +127,7 @@ set(cosmictiger_header_files
     cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp
     cosmictiger/simd.hpp
+    cosmictiger/sph_particles.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp

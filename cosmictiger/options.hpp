@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <string>
 
 struct options {
+	bool sph;
 	bool cuda;
 	bool save_force;
 	bool do_lc;
@@ -74,6 +75,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & sph;
 		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;

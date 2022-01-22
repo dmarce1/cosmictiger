@@ -90,6 +90,7 @@ bool process_options(int argc, char *argv[]) {
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600),
 			"time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
+	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
@@ -211,6 +212,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(sigma8);
 	SHOW(slice_res);
 	SHOW(slice_size);
+	SHOW(sph);
 	SHOW(Theta);
 	SHOW(theta);
 	SHOW(tracer_count);
