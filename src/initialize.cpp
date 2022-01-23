@@ -25,6 +25,7 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/zero_order.hpp>
 #include <cosmictiger/boltzmann.hpp>
 
@@ -119,9 +120,9 @@ struct power_spectrum_function {
 		if (i0 < 0) {
 			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
 		}
-                if (i0 > P.size() - 4) {
-                        PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
-                }
+		if (i0 > P.size() - 4) {
+			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
+		}
 		int i1 = i0 + 1;
 		int i2 = i0 + 2;
 		int i3 = i0 + 3;
@@ -165,8 +166,8 @@ struct power_spectrum_function {
 		for (int i = 0; i < P.size(); i++) {
 			P[i] *= sum;
 		}
-		if( hpx_rank() == 0 ) {
-			PRINT( "Normalization = %e\n", sum);
+		if (hpx_rank() == 0) {
+			PRINT("Normalization = %e\n", sum);
 		}
 		return sum;
 	}
@@ -246,7 +247,7 @@ power_spectrum_function compute_power_spectrum() {
 		FILE* fp = fopen("power.dat", "wt");
 		const double lh = params.hubble;
 		const double lh3 = lh * lh * lh;
-		for (int i = 1; i < M-2; i++) {
+		for (int i = 1; i < M - 2; i++) {
 			double k = exp(logkmin + (double) i * dlogk);
 			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
 		}
@@ -349,7 +350,7 @@ void initialize(double z0) {
 void twolpt_f2delta2_inv() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_f2delta2_inv_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_f2delta2_inv_action>(HPX_PRIORITY_HI, c));
 	}
 	const auto box = fft3d_complex_range();
 	delta2_inv = fft3d_read_complex(box);
@@ -363,7 +364,7 @@ void twolpt_correction1() {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_correction1_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_correction1_action>(HPX_PRIORITY_HI, c));
 	}
 	const auto box = fft3d_real_range();
 	fft3d_accumulate_real(box, delta2);
@@ -381,7 +382,7 @@ void twolpt_correction2(int dim) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_correction2_action > (HPX_PRIORITY_HI, c, dim));
+		futs.push_back(hpx::async<twolpt_correction2_action>(HPX_PRIORITY_HI, c, dim));
 	}
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
@@ -522,7 +523,7 @@ void twolpt(int dim1, int dim2) {
 	vector<hpx::future<void>> futs;
 	if (hpx_rank() == 0) {
 		for (int i = 1; i < hpx_size(); i++) {
-			futs.push_back(hpx::async < twolpt_action > (hpx_localities()[i], dim1, dim2));
+			futs.push_back(hpx::async<twolpt_action>(hpx_localities()[i], dim1, dim2));
 		}
 	}
 	vector<cmplx> Y;
@@ -540,7 +541,7 @@ void twolpt(int dim1, int dim2) {
 void twolpt_phase(int phase) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_phase_action > (HPX_PRIORITY_HI, c, phase));
+		futs.push_back(hpx::async<twolpt_phase_action>(HPX_PRIORITY_HI, c, phase));
 	}
 	const auto box = fft3d_real_range();
 	const auto vol = box.volume();
@@ -566,7 +567,7 @@ void twolpt_phase(int phase) {
 void twolpt_init() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_init_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_init_action>(HPX_PRIORITY_HI, c));
 	}
 	const auto box = fft3d_real_range();
 	delta2.resize(box.volume(), 0.0);
@@ -576,7 +577,7 @@ void twolpt_init() {
 void twolpt_destroy() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < twolpt_destroy_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_destroy_action>(HPX_PRIORITY_HI, c));
 	}
 	delta2 = decltype(delta2)();
 	delta2_inv = decltype(delta2_inv)();
@@ -587,7 +588,7 @@ void twolpt_destroy() {
 static void zeldovich_begin(int dim1, int dim2) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < zeldovich_begin_action > (HPX_PRIORITY_HI, c, dim1, dim2));
+		futs.push_back(hpx::async<zeldovich_begin_action>(HPX_PRIORITY_HI, c, dim1, dim2));
 	}
 	twolpt_generate(dim1, dim2);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -623,7 +624,7 @@ static range<int64_t> find_my_box() {
 }
 
 static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
-	//PRINT( "enter zeldovich_end\n");
+	const bool sph = get_options().sph;
 	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
@@ -631,7 +632,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	const auto box = find_my_box();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < zeldovich_end_action > (HPX_PRIORITY_HI, c, dim, init_parts, D1, prefac1));
+		futs.push_back(hpx::async<zeldovich_end_action>(HPX_PRIORITY_HI, c, dim, init_parts, D1, prefac1));
 	}
 	const auto Y = fft3d_read_real(box);
 	array<int64_t, NDIM> I;
@@ -640,17 +641,32 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	vector<hpx::future<void>> local_futs;
 	if (init_parts) {
 		particles_resize(box.volume());
+		if (sph) {
+			sph_particles_resize(box.volume());
+		}
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-			local_futs.push_back(hpx::async([box,Ninv](array<int64_t,NDIM> I) {
+			local_futs.push_back(hpx::async([box,Ninv,sph](array<int64_t,NDIM> I) {
+				const float omega_m = get_options().omega_m;
+				const float omega_b = get_options().omega_b;
+				const float omega = omega_m + omega_b;
+				const float dm_shift = sph ? 0.5 * omega_b / get_options().parts_dim : 0.0;
+				const float gas_shift = -0.5 * omega_m / get_options().parts_dim;
 				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 						const int64_t index = box.index(I);
 						for (int dim1 = 0; dim1 < NDIM; dim1++) {
 							float x = (I[dim1] + 0.5) * Ninv;
-							particles_pos(dim1, index) = x;
+							particles_pos(dim1, index) = x + dm_shift;
 							particles_vel(dim1, index) = 0.0;
+							if( sph ) {
+								sph_particles_pos(dim1, index) = x + gas_shift;
+								sph_particles_vel(dim1, index) = 0.0;
+							}
 						}
 						particles_rung(index) = 0;
+						if( sph ) {
+							sph_particles_rung(index) = 0;
+						}
 					}
 				}
 			}, I));
@@ -659,7 +675,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 		local_futs.resize(0);
 	}
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs.push_back(hpx::async([box, D1, prefac1, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {
+		futs.push_back(hpx::async([sph, box, D1, prefac1, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {
 			float this_dxmax = 0.0;
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
@@ -677,7 +693,21 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 					}
 					particles_pos(dim, index) = x;
 					particles_vel(dim, index) += prefac1 * dx;
-					particles_rung(index) = 0;
+					if( sph ) {
+						float x = sph_particles_pos(dim, index).to_float();
+						const float dx = -D1 * Y[index] * box_size_inv;
+						if (std::abs(dx * N) > this_dxmax) {
+							this_dxmax = std::abs(dx * N);
+						}
+						x += dx;
+						if (x >= 1.0) {
+							x -= 1.0;
+						} else if (x < 0.0) {
+							x += 1.0;
+						}
+						sph_particles_pos(dim, index) = x;
+						sph_particles_vel(dim, index) += prefac1 * dx;
+					}
 				}
 			}
 			return this_dxmax;

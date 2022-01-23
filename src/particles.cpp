@@ -23,6 +23,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/sph_particles.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -498,7 +499,6 @@ part_int particles_size() {
 	return size;
 }
 
-
 template<class T>
 void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 	T* new_ptr;
@@ -529,7 +529,6 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 }
 
-
 void particles_resize(part_int sz) {
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
@@ -557,10 +556,15 @@ void particles_resize(part_int sz) {
 		if (get_options().do_tracers) {
 			particles_array_resize(particles_tr, new_capacity, false);
 		}
-		if( get_options().sph) {
+		if (get_options().sph) {
 			particles_array_resize(particles_sph, new_capacity, false);
 		}
 		capacity = new_capacity;
+	}
+	if (get_options().sph) {
+		for (int i = size; i < sz; i++) {
+			particles_sph_index(i) = NOT_SPH;
+		}
 	}
 	size = sz;
 }
@@ -599,7 +603,7 @@ void particles_free() {
 	if (get_options().do_tracers) {
 		free(particles_tr);
 	}
-	if( get_options().sph) {
+	if (get_options().sph) {
 		free(particles_sph);
 	}
 }
