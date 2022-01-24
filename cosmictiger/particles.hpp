@@ -1,23 +1,22 @@
 /*
 
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef PARTICLES_HPP_
 #define PARTICLES_HPP_
@@ -34,6 +33,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <atomic>
 #include <fstream>
 #include <unordered_map>
+
+
+#define NOT_SPH ((part_int) 0xFFFFFFFFU)
 
 #ifdef LONG_LONG_PART_INT
 using part_int = long long;
@@ -75,12 +77,14 @@ struct particle {
 	array<fixed32, NDIM> x;
 	array<float, NDIM> v;
 	group_int lg;
+	part_int sph_index;
 	char r;
 	char t;
 	template<class A>
 	void serialize(A && a, unsigned) {
 		static bool do_groups = get_options().do_groups;
 		static bool do_tracers = get_options().do_tracers;
+		static bool sph = get_options().sph;
 		for (int dim = 0; dim < NDIM; dim++) {
 			a & x[dim];
 			a & v[dim];
@@ -91,6 +95,9 @@ struct particle {
 		}
 		if (do_tracers) {
 			a & t;
+		}
+		if (sph) {
+			a & sph_index;
 		}
 	}
 };
@@ -144,8 +151,10 @@ std::unordered_map<int, part_int> particles_groups_init();
 void particles_groups_destroy();
 void particles_resize(part_int);
 void particles_random_init();
+void particles_resolve_with_sph_particles();
 void particles_destroy();
-void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
+void particles_sort_by_sph(pair<part_int> rng);
+void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* sph, part_int offset);
 void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
@@ -156,13 +165,11 @@ void particles_load(FILE* fp);
 void particles_save(FILE* fp);
 void particles_inc_group_cache_epoch();
 int particles_group_home(group_int);
-void particles_set_tracers(size_t count=0);
+void particles_set_tracers(size_t count = 0);
 vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
 void particles_memadvise_gpu();
 void particles_free();
-
-
 
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);
@@ -219,6 +226,7 @@ inline part_int& particles_sph_index(part_int index) {
 inline particle particles_get_particle(part_int index) {
 	static bool do_groups = get_options().do_groups;
 	static bool do_tracers = get_options().do_tracers;
+	static bool sph = get_options().sph;
 	CHECK_PART_BOUNDS(index);
 	particle p;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -232,12 +240,16 @@ inline particle particles_get_particle(part_int index) {
 	if (do_tracers) {
 		p.t = particles_tracer(index);
 	}
+	if (sph) {
+		p.sph_index = particles_sph_index(index);
+	}
 	return p;
 }
 
 inline void particles_set_particle(particle p, part_int index) {
 	static bool do_groups = get_options().do_groups;
 	static bool do_tracers = get_options().do_tracers;
+	static bool sph = get_options().sph;
 	CHECK_PART_BOUNDS(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		particles_pos(dim, index) = p.x[dim];
@@ -250,8 +262,13 @@ inline void particles_set_particle(particle p, part_int index) {
 	if (do_tracers) {
 		particles_tracer(index) = p.t;
 	}
+	if( sph) {
+		particles_sph_index(index) = p.sph_index;
+	}
 }
 
-
+inline bool particles_is_sph(int index) {
+	return particles_sph_index(index) != NOT_SPH;
+}
 
 #endif /* PARTICLES_HPP_ */

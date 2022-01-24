@@ -23,6 +23,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/tree.hpp>
@@ -38,6 +39,7 @@ HPX_PLAIN_ACTION (tree_allocate_nodes);
 HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
+HPX_PLAIN_ACTION (tree_sort_particles_by_sph_particles);
 
 class tree_allocator {
 	int next;
@@ -58,6 +60,8 @@ public:
 static vector<tree_allocator*> allocator_list;
 static thread_local tree_allocator allocator;
 static vector<tree_node> nodes;
+static vector<pair<part_int>> leaf_part_ranges;
+static mutex_type leaf_part_range_mutex;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
@@ -210,7 +214,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 
 static void tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	static const int bucket_size = BUCKET_SIZE;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
@@ -227,8 +231,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		bool local_root) {
 	stack_trace_activate();
 	const double h = get_options().hsoft;
-	static const int bucket_size = std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	static const int bucket_size = BUCKET_SIZE;
 	tree_create_return rc;
+	const static bool sph = get_options().sph;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
@@ -430,17 +435,31 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
 		flops += 2 * NDIM;
-		const part_int maxi = round_down(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
+		const part_int maxi = round_up(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
 		array<simd_int, NDIM> Y;
 		for (int dim = 0; dim < NDIM; dim++) {
 			Y[dim] = fixed32(Xc[dim]).raw();
 		}
 		const simd_float _2float = fixed2float;
+		const double dm_mass = get_options().dm_mass;
+		const double sph_mass = get_options().sph_mass;
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
-			for (part_int j = i; j < i + SIMD_FLOAT_SIZE; j++) {
+			simd_float mask;
+			for (part_int j = i; j < maxi; j++) {
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, j).raw();
+				}
+				if (sph) {
+					mask[j - i] = particles_sph_index(j) == NOT_SPH ? dm_mass : sph_mass;
+				} else {
+					mask[j - i] = 1.0f;
+				}
+			}
+			for (part_int j = maxi; j < i + SIMD_FLOAT_SIZE; j++) {
+				mask[j - i] = 0.f;
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim][j - i] = particles_pos(dim, maxi - 1).raw();
 				}
 			}
 			array < simd_float, NDIM > dx;
@@ -448,25 +467,16 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 			}
 			flops += SIMD_FLOAT_SIZE * NDIM * 3;
-			const auto m = P2M(dx);
+			auto m = P2M(dx);
 			flops += 211 * SIMD_FLOAT_SIZE;
+			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
+				m[j] *= mask;
+			}
+			flops += SIMD_FLOAT_SIZE * MULTIPOLE_SIZE;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[j] += m[j].sum();
 			}
-			flops += MULTIPOLE_SIZE;
-		}
-		for (part_int i = maxi; i < part_range.second; i++) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = particles_pos(dim, i).to_double();
-				dx[dim] = x - Xc[dim];
-			}
-			flops += NDIM * 2;
-			const auto m = P2M(dx);
-			flops += 211;
-			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-				M[j] += m[j];
-			}
-			flops += MULTIPOLE_SIZE;
+			flops += MULTIPOLE_SIZE * (1 + 3);
 		}
 		r = 0.0;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
@@ -508,8 +518,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.depth = depth;
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
-	node.sink_leaf = !global && (depth >= params.min_level) && (nparts <= SINK_BUCKET_SIZE);
-	node.source_leaf = !global && (depth >= params.min_level) && (nparts <= SOURCE_BUCKET_SIZE);
+	node.leaf = !global && (depth >= params.min_level) && (nparts <= BUCKET_SIZE);
+	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
+		if (node.leaf) {
+			std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
+			leaf_part_ranges.push_back(part_range);
+		}
+	}
 	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
@@ -528,13 +543,14 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
-#ifdef USE_CUDA
 	if (local_root) {
+		particles_resolve_with_sph_particles();
+#ifdef USE_CUDA
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		CUDA_CHECK(cudaStreamDestroy(stream));
 		particles_memadvise_gpu();
-	}
 #endif
+	}
 	//if (depth == 0)
 //		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
@@ -546,7 +562,7 @@ void tree_destroy(bool free_tree) {
 	for (const auto& c : children) {
 		futs.push_back(hpx::async<tree_destroy_action>(HPX_PRIORITY_HI, c, free_tree));
 	}
-	if( free_tree ) {
+	if (free_tree) {
 		nodes = decltype(nodes)();
 	}
 	tree_cache = decltype(tree_cache)();
@@ -614,4 +630,23 @@ static vector<tree_node> tree_fetch_cache_line(int index) {
 	}
 	return std::move(line);
 
+}
+
+void tree_sort_particles_by_sph_particles() {
+	const int nthreads = hpx_hardware_concurrency();
+	vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<tree_sort_particles_by_sph_particles_action>(c));
+	}
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc, nthreads]() {
+			const int b = (size_t) proc * leaf_part_ranges.size() / nthreads;
+			const int e = (size_t) (proc + 1) * leaf_part_ranges.size() / nthreads;
+			for( int i = b; i < e; i++) {
+				particles_sort_by_sph(leaf_part_ranges[i]);
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	leaf_part_ranges.resize(0);
 }

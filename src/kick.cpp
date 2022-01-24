@@ -26,6 +26,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/sph_particles.hpp>
 
 #include <unistd.h>
 #include <stack>
@@ -119,6 +120,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	stack_trace_activate();
+	const static bool sph = get_options().sph;
 	const tree_node* self_ptr = tree_get_node(self);
 	timer tm;
 	if (self_ptr->local_root) {
@@ -152,7 +154,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 			}
 		}
-		if( eligible && !self_ptr->sink_leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
+		if( eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			const auto all_local = [](const vector<tree_id>& list) {
 				bool all = true;
 				for( int i = 0; i < list.size(); i++) {
@@ -250,7 +252,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 				}
 				other_radius[i] = other_ptrs[i]->radius;
-				other_leaf[i] = other_ptrs[i]->source_leaf;
+				other_leaf[i] = other_ptrs[i]->leaf;
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
@@ -278,10 +280,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		std::swap(dchecklist, nextlist);
 		nextlist.resize(0);
-	} while (dchecklist.size() && self_ptr->sink_leaf);
+	} while (dchecklist.size() && self_ptr->leaf);
 	these_flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
 	these_flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
-	if (self_ptr->sink_leaf) {
+	if (self_ptr->leaf) {
 		if (cuda_workspace != nullptr) {
 			cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 		}
@@ -357,6 +359,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					particles_gforce(ZDIM, i) = forces.gz[j];
 					particles_pot(i) = forces.phi[j];
 				}
+				const bool part_sph = sph && particles_is_sph(i);
 				auto& vx = particles_vel(XDIM, i);
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);
@@ -368,18 +371,25 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					vz = fmaf(forces.gz[j], dt, vz);
 				}
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				const float factor = eta * sqrtf(params.a * hfloat);
-				dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
-				rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
-				kr.max_rung = std::max(std::max(rung, kr.max_rung),(char)1);
-				if (rung < 0 || rung >= MAX_RUNG) {
-					PRINT("Rung out of range %i\n", rung);
+				if (part_sph) {
+					const int j = particles_sph_index(i);
+					sph_particles_gforce(XDIM, j) = forces.gx[j];
+					sph_particles_gforce(YDIM, j) = forces.gy[j];
+					sph_particles_gforce(ZDIM, j) = forces.gz[j];
 				} else {
-					dt = 0.5f * rung_dt[rung] * params.t0;
+					const float factor = eta * sqrtf(params.a * hfloat);
+					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
+					rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
+					kr.max_rung = std::max(std::max(rung, kr.max_rung), (char) 1);
+					if (rung < 0 || rung >= MAX_RUNG) {
+						PRINT("Rung out of range %i\n", rung);
+					} else {
+						dt = 0.5f * rung_dt[rung] * params.t0;
+					}
+					vx = fmaf(forces.gx[j], dt, vx);
+					vy = fmaf(forces.gy[j], dt, vy);
+					vz = fmaf(forces.gz[j], dt, vz);
 				}
-				vx = fmaf(forces.gx[j], dt, vx);
-				vy = fmaf(forces.gy[j], dt, vy);
-				vz = fmaf(forces.gz[j], dt, vz);
 				kr.pot += forces.phi[j];
 				kr.fx += forces.gx[j];
 				kr.fy += forces.gy[j];

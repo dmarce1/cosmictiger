@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/gravity.hpp>
@@ -30,7 +30,7 @@ size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id 
 	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-			vector<const tree_node*> tree_ptrs(list.size());
+		vector<const tree_node*> tree_ptrs(list.size());
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		const int nsource = round_up((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
@@ -95,7 +95,10 @@ size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id 
 
 size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
+	const static bool do_sph = get_options().sph;
 	size_t flops = 0;
+	const static float dm_mass = get_options().dm_mass;
+	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -114,18 +117,28 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
+			vector<char> sph;
 			vector<float> masks;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masks.resize(nsource);
+			if (do_sph) {
+				sph.resize(nsource);
+			}
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), sph.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
-			for (int i = 0; i < count; i++) {
-				masks[i] = 1.0;
+			if (do_sph) {
+				for (int i = 0; i < count; i++) {
+					masks[i] = sph[i] ? sph_mass : dm_mass;;
+				}
+			} else {
+				for (int i = 0; i < count; i++) {
+					masks[i] = 1.0;
+				}
 			}
 			for (int i = count; i < nsource; i++) {
 				masks[i] = 0.0;
@@ -249,6 +262,9 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 	constexpr int chunk_size = 32;
 	size_t near_count = 0;
 	size_t far_count = 0;
+	const static bool do_sph = get_options().sph;
+	const static float dm_mass = get_options().dm_mass;
+	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float h = 2.0f * hfloat;
@@ -271,18 +287,28 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
+			vector<char> sph;
 			vector<float> masks;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masks.resize(nsource);
+			if (do_sph) {
+				sph.resize(nsource);
+			}
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), sph.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
-			for (int i = 0; i < count; i++) {
-				masks[i] = 1.0;
+			if (do_sph) {
+				for (int i = 0; i < count; i++) {
+					masks[i] = sph[i] ? sph_mass : dm_mass;;
+				}
+			} else {
+				for (int i = 0; i < count; i++) {
+					masks[i] = 1.0;
+				}
 			}
 			for (int i = count; i < nsource; i++) {
 				masks[i] = 0.0;
@@ -341,6 +367,8 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							near_count += count;
 							flops += 52;
 						}
+						rinv3 *= mask;
+						rinv1 *= mask;
 						gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
 						gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
 						gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2

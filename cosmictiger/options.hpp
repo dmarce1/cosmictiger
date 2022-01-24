@@ -70,6 +70,8 @@ struct options {
 	double ns;
 	double Y;
 	double Neff;
+	double dm_mass;
+	double sph_mass;
 	std::string config_file;
 	std::string test;
 
@@ -125,6 +127,8 @@ struct options {
 		arc & Neff;
 		arc & config_file;
 		arc & test;
+		arc & dm_mass;
+		arc & sph_mass;
 	}
 };
 

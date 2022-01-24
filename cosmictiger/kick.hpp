@@ -1,22 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef KICK_HPP_
 #define KICK_HPP_
@@ -35,6 +34,11 @@ struct cuda_kick_data {
 	float* vx;
 	float* vy;
 	float* vz;
+	float* sph_gx;
+	float* sph_gy;
+	float* sph_gz;
+	part_int* sph_index;
+	char* sph;
 	char* rungs;
 	float* gx;
 	float* gy;
@@ -50,23 +54,21 @@ struct kick_return;
 
 #ifdef __CUDACC__
 struct cuda_kick_shmem {
-	array<fixed32, SINK_BUCKET_SIZE> sink_x;
-	array<fixed32, SINK_BUCKET_SIZE> sink_y;
-	array<fixed32, SINK_BUCKET_SIZE> sink_z;
-	union {
-		struct {
-			array<fixed32, KICK_PP_MAX> x;
-			array<fixed32, KICK_PP_MAX> y;
-			array<fixed32, KICK_PP_MAX> z;
-		}src;
-//		array<multipole_pos,WARP_SIZE> m;
-	};
-	array<float, SINK_BUCKET_SIZE> gx;
-	array<float, SINK_BUCKET_SIZE> gy;
-	array<float, SINK_BUCKET_SIZE> gz;
-	array<float, SINK_BUCKET_SIZE> phi;
-	array<part_int,SINK_BUCKET_SIZE> active;
-	array<char,SINK_BUCKET_SIZE> rungs;
+	array<fixed32, BUCKET_SIZE> sink_x;
+	array<fixed32, BUCKET_SIZE> sink_y;
+	array<fixed32, BUCKET_SIZE> sink_z;
+	struct {
+		array<fixed32, KICK_PP_MAX> x;
+		array<fixed32, KICK_PP_MAX> y;
+		array<fixed32, KICK_PP_MAX> z;
+		array<char, KICK_PP_MAX> sph;
+	}src;
+	array<float, BUCKET_SIZE> gx;
+	array<float, BUCKET_SIZE> gy;
+	array<float, BUCKET_SIZE> gz;
+	array<float, BUCKET_SIZE> phi;
+	array<part_int,BUCKET_SIZE> active;
+	array<char,BUCKET_SIZE> rungs;
 };
 #endif
 
@@ -132,12 +134,20 @@ struct kick_params {
 	float h;
 	float eta;
 	float GM;
+	float dm_mass;
+	float sph_mass;
 	bool save_force;
 	bool first_call;
 	bool gpu;
 	float node_load;
+	kick_params() {
+		dm_mass = get_options().dm_mass;
+		sph_mass = get_options().sph_mass;
+	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & dm_mass;
+		arc & sph_mass;
 		arc & min_rung;
 		arc & gpu;
 		arc & a;
@@ -168,7 +178,7 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 #endif
 void kick_show_timings();
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, char*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
 		int part_count, int ntrees, std::function<void()>, std::function<void()>);
 #endif
 int kick_block_count();

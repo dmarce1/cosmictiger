@@ -25,6 +25,7 @@
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/timer.hpp>
 
 #include <atomic>
@@ -73,6 +74,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
+	const bool sph = data.sph;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
@@ -81,6 +83,10 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
+	auto* sph_gx = data.sph_gx;
+	auto* sph_gy = data.sph_gy;
+	auto* sph_gz = data.sph_gz;
+	auto* sph_index = data.sph_index;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
@@ -141,22 +147,29 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
-		rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
-		max_rung = max(max(rung, max_rung),1);
-		if (rung < 0 || rung >= MAX_RUNG) {
-			PRINT("Rung out of range %i\n", rung);
+		if (sph) {
+			const int j = sph_index[snki];
+			sph_gx[j] = gx[i];
+			sph_gy[j] = gy[i];
+			sph_gz[j] = gz[i];
+		} else {
+			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
+			rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
+			max_rung = max(max(rung, max_rung), 1);
+			if (rung < 0 || rung >= MAX_RUNG) {
+				PRINT("Rung out of range %i\n", rung);
+			}
+			ASSERT(rung >= 0);
+			ASSERT(rung < MAX_RUNG);
+			dt = 0.5f * rung_dt[rung] * params.t0;
+			vx = fmaf(gx[i], dt, vx);
+			vy = fmaf(gy[i], dt, vy);
+			vz = fmaf(gz[i], dt, vz);
+			write_rungs[snki] = rung;
+			vel_x[snki] = vx;
+			vel_y[snki] = vy;
+			vel_z[snki] = vz;
 		}
-		ASSERT(rung >= 0);
-		ASSERT(rung < MAX_RUNG);
-		dt = 0.5f * rung_dt[rung] * params.t0;
-		vx = fmaf(gx[i], dt, vx);
-		vy = fmaf(gy[i], dt, vy);
-		vz = fmaf(gz[i], dt, vz);
-		write_rungs[snki] = rung;
-		vel_x[snki] = vx;
-		vel_y[snki] = vy;
-		vel_z[snki] = vz;
 		phi_tot += phi[i];
 		fx_tot += gx[i];
 		fy_tot += gy[i];
@@ -186,6 +199,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count,
 		int* next_item, int ntrees) {
 //	auto tm1 = clock64();
+	const bool sph = data.sph;
+	const float dm_mass = !sph ? 1.0f : global_params.dm_mass;
+	const float sph_mass = global_params.sph_mass;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -359,8 +375,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
 							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
 							mult = far1;
-							part = !mult && (far2 && other.source_leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
-							leaf = !mult && !part && other.source_leaf;
+							part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
+							leaf = !mult && !part && other.leaf;
 							next = !mult && !part && !leaf;
 							ninteracts++;
 						}
@@ -409,13 +425,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					nextlist.resize(0);
 					__syncwarp();
 
-				} while (dchecks.size() && self.sink_leaf);
+				} while (dchecks.size() && self.leaf);
 //				tm = clock64();
 				node_flops += cuda_gravity_cc(data, L.back(), self, multlist, GRAVITY_CC_DIRECT, min_rung == 0);
-				node_flops += cuda_gravity_cp(data, L.back(), self, partlist, min_rung == 0);
+				node_flops += cuda_gravity_cp(data, L.back(), self, partlist, dm_mass, sph_mass, min_rung == 0);
 //				atomicAdd(&gravity_time, (double) clock64() - tm);
 				int pflops = 0;
-				if (self.sink_leaf) {
+				if (self.leaf) {
 					int nactive = 0;
 					const part_int begin = self.sink_part_range.first;
 					const part_int end = self.sink_part_range.second;
@@ -503,7 +519,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 //					tm = clock64();
 					pflops += cuda_gravity_pc(data, self, multlist, nactive, min_rung == 0);
-					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, min_rung == 0);
+					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
 					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self);
@@ -602,9 +618,10 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_sph, tree_node* dev_tree_nodes,
 		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
+	static const bool do_sph = get_options().sph;
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -673,6 +690,13 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
+	data.sph = do_sph ? dev_sph : nullptr;
+	if (data.sph) {
+		data.sph_gx = &sph_particles_gforce(XDIM, 0);
+		data.sph_gy = &sph_particles_gforce(YDIM, 0);
+		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
+		data.sph_index = &particles_sph_index(0);
+	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);
 	data.vy = &particles_vel(YDIM, 0);
@@ -745,7 +769,7 @@ size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
 	size_t innerblocks = nparts / CUDA_KICK_PARTS_MAX;
 	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);
 	size_t total_parts = CUDA_KICK_PARTS_MAX * nblocks;
-	size_t ntrees = 3 * total_parts / std::min(SINK_BUCKET_SIZE, SOURCE_BUCKET_SIZE);
+	size_t ntrees = 3 * total_parts / BUCKET_SIZE;
 	size_t nchecks = 2 * innerblocks * check_count;
 	mem += total_parts * NDIM * sizeof(fixed32);
 	mem += ntrees * sizeof(tree_node);

@@ -80,8 +80,7 @@ struct tree_node {
 	size_t nactive;
 	float radius;
 	bool local_root;
-	bool sink_leaf;
-	bool source_leaf;
+	bool leaf;
 	size_t node_count;
 	size_t active_nodes;
 	int depth;CUDA_EXPORT
@@ -113,8 +112,7 @@ struct tree_node {
 		arc & nactive;
 		arc & radius;
 		arc & local_root;
-		arc & sink_leaf;
-		arc & source_leaf;
+		arc & leaf;
 		arc & node_count;
 		arc & sink_part_range;
 		arc & depth;
@@ -170,5 +168,6 @@ tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<i
 void tree_destroy(bool free_tree = false);
 int tree_min_level(double theta);
 const tree_node* tree_get_node(tree_id);
+void tree_sort_particles_by_sph_particles();
 
 #endif /* TREE_HPP_ */

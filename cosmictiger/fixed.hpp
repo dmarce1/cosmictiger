@@ -273,4 +273,17 @@ template<class T>
 inline void swap(fixed<T> &first, fixed<T> &second) {
 	std::swap(first, second);
 }
+
+CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
+	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_float();
+}
+
+CUDA_EXPORT inline fixed32 sum(fixed32 a, fixed32 b) {
+	return (fixed<int32_t>(a) + fixed<int32_t>(b));
+}
+
+CUDA_EXPORT inline float double_distance(fixed32 a, fixed32 b) {
+	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_double();
+}
+
 #endif /* COSMICTIGER_FIXED_HPP_ */

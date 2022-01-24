@@ -177,12 +177,17 @@ bool process_options(int argc, char *argv[]) {
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
 	PRINT("Box size = %e\n", opts.code_to_cm / constants::mpc_to_cm);
-
+	if( opts.sph ) {
+		const double omega_inv = 1.0 / (opts.omega_m);
+		opts.dm_mass = opts.omega_c * omega_inv;
+		opts.sph_mass = opts.omega_b * omega_inv;
+	}
 	SHOW(check_freq);
 	SHOW(code_to_cm);
 	SHOW(code_to_g);
 	SHOW(code_to_s);
 	SHOW(cuda);
+	SHOW(dm_mass);
 	SHOW(do_lc);
 	SHOW(do_groups);
 	SHOW(do_power);
@@ -213,6 +218,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(slice_res);
 	SHOW(slice_size);
 	SHOW(sph);
+	SHOW(sph_mass);
 	SHOW(Theta);
 	SHOW(theta);
 	SHOW(tracer_count);

@@ -1,3 +1,21 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 #pragma once
 
 #include <cosmictiger/particles.hpp>
@@ -7,9 +25,6 @@
 #else
 #define SPH_PARTICLES_EXTERN extern
 #endif
-
-#define NOT_SPH ((part_int) 0xFFFFFFFFU)
-
 #ifdef CHECK_BOUNDS
 #define CHECK_SPH_PART_BOUNDS(i)                                                                                                                            \
 	if( i < 0 || i >= sph_particles_size()) {                                                                                                            \
@@ -20,18 +35,38 @@
 #define CHECK_SPH_PART_BOUNDS(i)
 #endif
 
+struct sph_particle {
+	float ent;
+	array<float, NDIM> v;
+	template<class T>
+	void serialize(T&&arc, unsigned) {
+		arc & ent;
+		arc & v;
+	}
+};
+
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;
 SPH_PARTICLES_EXTERN float* sph_particles_h;
-SPH_PARTICLES_EXTERN float* sph_particles_r;
-SPH_PARTICLES_EXTERN float* sph_particles_drdh;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
+SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
 
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz);
 void sph_particles_free();
+void sph_particles_resolve_with_particles();
+void sph_particles_sort_by_particles(pair<part_int> rng);
+part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
+void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset);
+void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, vector<char>&, vector<float>&, part_int offset);
+void sph_particles_cache_free();
 
+inline char& sph_particles_semi_active(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_sa[index];
+}
 
 inline part_int& sph_particles_dm_index(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -50,15 +85,6 @@ inline char& sph_particles_rung(int index) {
 	return particles_rung(sph_particles_dm_index(index));
 }
 
-inline float& sph_particles_rho(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r[index];
-}
-
-inline float& sph_particles_drhodh(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_drdh[index];
-}
 
 inline float& sph_particles_dent(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -70,15 +96,26 @@ inline float& sph_particles_ent(part_int index) {
 	return sph_particles_e[index];
 }
 
-
 inline float& sph_particles_dvel(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dv[dim][index];
 }
 
-
+inline float& sph_particles_gforce(int dim, part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dv[dim][index];
+}
 
 inline float& sph_particles_smooth_len(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_h[index];
+}
+
+inline sph_particle sph_particles_get_particle(part_int index) {
+	sph_particle p;
+	p.ent = sph_particles_ent(index);
+	for( int dim = 0; dim < NDIM; dim++) {
+		p.v[dim] = sph_particles_vel(dim, index);
+	}
+	return p;
 }

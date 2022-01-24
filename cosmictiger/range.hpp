@@ -263,4 +263,24 @@ inline range<T, N> unit_box() {
 	return r;
 }
 
+#include <cosmictiger/fixed.hpp>
+
+inline range<fixed32> fixed32_unit_box() {
+	range<fixed32> r;
+	for (int dim = 0; dim < NDIM; dim++) {
+		r.begin[dim] = 0.0;
+		r.end[dim] = fixed32::max();
+	}
+	return r;
+}
+
+inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
+	range<fixed32> rc;
+	for( int dim = 0; dim < NDIM; dim++) {
+		rc.begin[dim] = other.begin[dim];
+		rc.end[dim] = other.end[dim];
+	}
+	return rc;
+}
+
 #endif /* RANGE_HPP_ */
