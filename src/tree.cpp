@@ -446,7 +446,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
 			simd_float mask;
-			for (part_int j = i; j < maxi; j++) {
+			const int maxj = std::min(i + SIMD_FLOAT_SIZE, part_range.second);
+			for (part_int j = i; j < maxj; j++) {
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, j).raw();
 				}
@@ -456,7 +457,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 					mask[j - i] = 1.0f;
 				}
 			}
-			for (part_int j = maxi; j < i + SIMD_FLOAT_SIZE; j++) {
+			for (part_int j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
 				mask[j - i] = 0.f;
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, maxi - 1).raw();
