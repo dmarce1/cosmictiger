@@ -622,6 +622,7 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 #endif
 	if (capacity > 0) {
 		hpx_copy(PAR_EXECUTION_POLICY, ptr, ptr + size, new_ptr).get();
+		memcpy(new_ptr, ptr, size);
 #ifdef USE_CUDA
 		if( reg ) {
 			cudaFree(ptr);
@@ -668,12 +669,13 @@ void particles_resize(part_int sz) {
 		}
 		capacity = new_capacity;
 	}
+	int oldsz = size;
+	size = sz;
 	if (get_options().sph) {
-		for (int i = size; i < sz; i++) {
+		for (int i = oldsz; i < sz; i++) {
 			particles_sph_index(i) = NOT_SPH;
 		}
 	}
-	size = sz;
 }
 
 void particles_free() {

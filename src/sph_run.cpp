@@ -162,6 +162,11 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		do_outer = false;
 		active_only = true;
 		break;
+	case SPH_RUN_FVELS:
+		do_inner = true;
+		do_outer = true;
+		active_only = false;
+		break;
 	case SPH_RUN_HYDRO:
 		do_inner = true;
 		do_outer = true;
@@ -220,85 +225,88 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 	vector<float> vxs;
 	vector<float> vys;
 	vector<float> vzs;
+	vector<float> fvels;
 
-	const auto load_data = [&xs,&ys,&zs,&rungs, &hs,&leaflist,self_ptr,&ents,&vxs,&vys,&vzs](bool do_rungs, bool do_smoothlens, bool do_sph, bool check_inner, bool check_outer) {
-		part_int offset;
-		for (int ci = 0; ci < leaflist.size(); ci++) {
-			const auto* other = sph_tree_get_node(leaflist[ci]);
-			const auto this_sz = other->part_range.second - other->part_range.first;
-			offset = xs.size();
-			const int new_sz = xs.size() + this_sz;
-			xs.resize(new_sz);
-			ys.resize(new_sz);
-			zs.resize(new_sz);
-			if( do_rungs) {
-				rungs.resize(new_sz);
-			}
-			if( do_smoothlens) {
-				hs.resize(new_sz);
-			}
-			if( do_sph ) {
-				ents.resize(new_sz);
-				vxs.resize(new_sz);
-				vys.resize(new_sz);
-				vzs.resize(new_sz);
-			}
-			sph_particles_global_read_pos(other->global_part_range(), xs.data(), ys.data(), zs.data(), offset);
-			if( do_rungs || do_smoothlens) {
-				sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), rungs, hs, offset);
-			}
-			if( do_sph ) {
-				sph_particles_global_read_sph(other->global_part_range(), ents, vxs, vys, vzs, offset);
-			}
-			int i = offset;
-			while (i < xs.size()) {
-				array<fixed32, NDIM> X;
-				X[XDIM] = xs[i];
-				X[YDIM] = ys[i];
-				X[ZDIM] = zs[i];
-				const bool test1 = check_inner && !range_contains(self_ptr->outer_box, X);
-				bool test2 = false;
-				if( check_outer && !test1) {
-					assert(do_rungs);
-					test2 = true;
-					const auto& box = self_ptr->inner_box;
-					for( int dim = 0; dim < NDIM; dim++) {
-						if( distance(box.begin[dim], X[dim]) + hs[i] >= 0.0 && distance(X[dim], box.end[dim]) + hs[i] ) {
+	const auto load_data =
+			[&xs,&ys,&zs,&rungs,&fvels, &hs,&leaflist,self_ptr,&ents,&vxs,&vys,&vzs](bool do_rungs, bool do_smoothlens, bool do_sph, bool check_inner, bool check_outer) {
+				part_int offset;
+				for (int ci = 0; ci < leaflist.size(); ci++) {
+					const auto* other = sph_tree_get_node(leaflist[ci]);
+					const auto this_sz = other->part_range.second - other->part_range.first;
+					offset = xs.size();
+					const int new_sz = xs.size() + this_sz;
+					xs.resize(new_sz);
+					ys.resize(new_sz);
+					zs.resize(new_sz);
+					if( do_rungs) {
+						rungs.resize(new_sz);
+					}
+					if( do_smoothlens) {
+						hs.resize(new_sz);
+					}
+					if( do_sph ) {
+						ents.resize(new_sz);
+						vxs.resize(new_sz);
+						vys.resize(new_sz);
+						vzs.resize(new_sz);
+						fvels.resize(new_sz);
+					}
+					sph_particles_global_read_pos(other->global_part_range(), xs.data(), ys.data(), zs.data(), offset);
+					if( do_rungs || do_smoothlens) {
+						sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), rungs, hs, offset);
+					}
+					if( do_sph ) {
+						sph_particles_global_read_sph(other->global_part_range(), ents, fvels, vxs, vys, vzs, offset);
+					}
+					int i = offset;
+					while (i < xs.size()) {
+						array<fixed32, NDIM> X;
+						X[XDIM] = xs[i];
+						X[YDIM] = ys[i];
+						X[ZDIM] = zs[i];
+						const bool test1 = check_inner && !range_contains(self_ptr->outer_box, X);
+						bool test2 = false;
+						if( check_outer && !test1) {
+							assert(do_rungs);
+							test2 = true;
+							const auto& box = self_ptr->inner_box;
+							for( int dim = 0; dim < NDIM; dim++) {
+								if( distance(box.begin[dim], X[dim]) + hs[i] >= 0.0 && distance(X[dim], box.end[dim]) + hs[i] ) {
+								} else {
+									test2 = false;
+									break;
+								}
+							}
+						}
+						if (test1 || test2) {
+							xs[i] = xs.back();
+							ys[i] = ys.back();
+							zs[i] = zs.back();
+							xs.pop_back();
+							ys.pop_back();
+							zs.pop_back();
+							if( do_rungs ) {
+								rungs[i] = rungs.back();
+								rungs.pop_back();
+								hs[i] = hs.back();
+								hs.pop_back();
+							}
+							if( do_sph) {
+								ents[i] = ents.back();
+								vxs[i] = vxs.back();
+								vys[i] = vys.back();
+								vzs[i] = vzs.back();
+								ents.pop_back();
+								vxs.pop_back();
+								vys.pop_back();
+								vzs.pop_back();
+							}
 						} else {
-							test2 = false;
-							break;
+							i++;
 						}
 					}
 				}
-				if (test1 || test2) {
-					xs[i] = xs.back();
-					ys[i] = ys.back();
-					zs[i] = zs.back();
-					xs.pop_back();
-					ys.pop_back();
-					zs.pop_back();
-					if( do_rungs ) {
-						rungs[i] = rungs.back();
-						rungs.pop_back();
-						hs[i] = hs.back();
-						hs.pop_back();
-					}
-					if( do_sph) {
-						ents[i] = ents.back();
-						vxs[i] = vxs.back();
-						vys[i] = vys.back();
-						vzs[i] = vzs.back();
-						ents.pop_back();
-						vxs.pop_back();
-						vys.pop_back();
-						vzs.pop_back();
-					}
-				} else {
-					i++;
-				}
-			}
-		}
-	};
+			};
 
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTH_LEN: {
@@ -425,6 +433,67 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 	}
 		break;
 
+	case SPH_RUN_FVELS: {
+		load_data(true, false, true, true, false);
+		const float ainv = 1.0f / params.a;
+		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			const bool test1 = sph_particles_rung(i) >= params.min_rung;
+			const bool test2 = sph_particles_semi_active(i);
+			if (test1 || test2) {
+				const float h = sph_particles_smooth_len(i);
+				const float h2 = sqr(h);
+				const float hinv = 1.0f / h;
+				const float hinv3 = hinv * sqr(hinv);
+				const float rho = sph_den(hinv3);
+				const float rhoinv = 1.0f / rho;
+				const auto myx = sph_particles_pos(XDIM, i);
+				const auto myy = sph_particles_pos(YDIM, i);
+				const auto myz = sph_particles_pos(ZDIM, i);
+				const int k = i - self_ptr->part_range.first;
+				float dvx_dx = 0.0f;
+				float dvx_dy = 0.0f;
+				float dvx_dz = 0.0f;
+				float dvy_dx = 0.0f;
+				float dvy_dy = 0.0f;
+				float dvy_dz = 0.0f;
+				float dvz_dx = 0.0f;
+				float dvz_dy = 0.0f;
+				float dvz_dz = 0.0f;
+				for (int j = 0; j < xs.size(); j++) {
+					const float dx = distance(myx, xs[j]);
+					const float dy = distance(myy, ys[j]);
+					const float dz = distance(myz, zs[j]);
+					const float r2 = sqr(dx, dy, dz);
+					if (r2 < h2) {
+						const float r = sqrt(r2);
+						const float rinv = 1.0f / r;
+						const float dWdr = sph_dWdr(r, hinv, hinv3) * rinv;
+						const float dWdr_x = dx * dWdr * rhoinv;
+						const float dWdr_y = dy * dWdr * rhoinv;
+						const float dWdr_z = dz * dWdr * rhoinv;
+						dvx_dx += vxs[j] * dWdr_x;
+						dvx_dy += vxs[j] * dWdr_y;
+						dvx_dz += vxs[j] * dWdr_z;
+						dvy_dx += vys[j] * dWdr_x;
+						dvy_dy += vys[j] * dWdr_y;
+						dvy_dz += vys[j] * dWdr_z;
+						dvz_dx += vzs[j] * dWdr_x;
+						dvz_dy += vzs[j] * dWdr_y;
+						dvz_dz += vzs[j] * dWdr_z;
+					}
+				}
+				const float abs_div_v = fabs(dvx_dx + dvy_dy + dvz_dz);
+				const float curl_vx = dvz_dy - dvy_dz;
+				const float curl_vy = -dvz_dx + dvx_dz;
+				const float curl_vz = dvy_dx - dvx_dy;
+				const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
+				const float fvel = abs_div_v / (abs_div_v + abs_curl_v);
+				sph_particles_fvel(i) = fvel;
+			}
+		}
+	}
+		break;
+
 	case SPH_RUN_HYDRO: {
 		load_data(true, true, true, true, true);
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
@@ -445,10 +514,67 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 				const auto myvx = sph_particles_vel(XDIM, i);
 				const auto myvy = sph_particles_vel(YDIM, i);
 				const auto myvz = sph_particles_vel(ZDIM, i);
+				const auto myfvel = sph_particles_fvel(i);
 				const auto myp = pow(myrho, SPH_GAMMA) * myent;
 				const auto myc = sqrtf(SPH_GAMMA * myp * myrhoinv * myent);
 				const int k = i - self_ptr->part_range.first;
 				float max_c = 0.0f;
+				for (int j = 0; j < xs.size(); j++) {
+					const float dx = distance(myx, xs[j]);
+					const float dy = distance(myy, ys[j]);
+					const float dz = distance(myz, zs[j]);
+					const float h = hs[j];
+					const float h2 = sqr(h);
+					const float r2 = sqr(dx, dy, dz);
+					constexpr float alpha = 0.75;
+					constexpr float beta = 2.0f * alpha;
+					if (r2 < std::max(myh2, h2) && r2 != 0.0f) {
+						const float hinv = 1.0f / h;
+						const float h3inv = hinv * sqr(hinv);
+						const float rho = sph_den(h3inv);
+						const float rhoinv = 1.0f / rho;
+						const float p = ents[j] * pow(rho, SPH_GAMMA);
+						const float c = sqrtf(SPH_GAMMA * p * rhoinv * ents[j]);
+						const float cij = 0.5f * (myc + c);
+						const float hij = 0.5f * (h + myh);
+						const float rho_ij = 0.5f * (rho + myrho);
+						const float dvx = myvx - vxs[j];
+						const float dvy = myvy - vys[j];
+						const float dvz = myvz - vzs[j];
+						const float r = sqrt(sqr(dx, dy, dz));
+						const float rinv = 1.0f / r;
+						const float r2inv = sqr(rinv);
+						const float uij = std::min(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv / (c + myc)) * (myfvel + fvels[j]);
+						const float Pfac = -alpha * uij + beta * sqr(uij);
+						const float dWdri = sph_dWdr(r, myhinv, myh3inv) * rinv;
+						const float dWdrj = sph_dWdr(r, hinv, h3inv) * rinv;
+						const float dWdri_x = dx * dWdri;
+						const float dWdri_y = dy * dWdri;
+						const float dWdri_z = dz * dWdri;
+						const float dWdrj_x = dx * dWdrj;
+						const float dWdrj_y = dy * dWdrj;
+						const float dWdrj_z = dz * dWdrj;
+						const float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
+						const float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
+						const float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
+						const float Pfacp1 = Pfac + 1.0f;
+						const float Prho2i = myp * myrhoinv * myrhoinv;
+						const float Prho2j = p * rhoinv * rhoinv;
+						const float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x);
+						const float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y);
+						const float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z);
+						float dvxdt = -dpx * Pfacp1;
+						float dvydt = -dpy * Pfacp1;
+						float dvzdt = -dpz * Pfacp1;
+						const float dt = std::max(rung_dt[rungs[j]], rung_dt[myrung]) * params.t0;
+						float dAdt = (dpx * dvx + dpy * dvy + dpz * dvz) * Pfac;
+						dAdt *= 0.5 * (SPH_GAMMA - 1.f) * pow(rho, 1.0f - SPH_GAMMA);
+						sph_particles_dvel(XDIM, i) += dvxdt * dt;
+						sph_particles_dvel(YDIM, i) += dvydt * dt;
+						sph_particles_dvel(ZDIM, i) += dvzdt * dt;
+						sph_particles_dent(i) += dAdt * dt;
+					}
+				}
 				for (int j = 0; j < xs.size(); j++) {
 					const float dx = distance(myx, xs[j]);
 					const float dy = distance(myy, ys[j]);
@@ -516,167 +642,164 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 			const bool test1 = sph_particles_rung(i) >= params.min_rung;
 			const bool test2 = sph_particles_semi_active(i);
 			if (test1 || test2) {
-				for( int dim = 0; dim < NDIM; dim++) {
-					sph_particles_vel(dim, i) += sph_particles_dvel(dim,i);
-					sph_particles_dvel(dim,i) = 0.0f;
+				for (int dim = 0; dim < NDIM; dim++) {
+					sph_particles_vel(dim, i) += sph_particles_dvel(dim, i);
+					sph_particles_dvel(dim, i) = 0.0f;
 				}
 				sph_particles_ent(i) += sph_particles_dent(i);
 				sph_particles_dent(i) = 0.0f;
 			}
 
-			}
 		}
+	}
 		break;
 
-		case SPH_RUN_GRAVITY:
-		{
-			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				auto& rung = sph_particles_rung(i);
-				const bool test1 = rung >= params.min_rung;
-				if (test1) {
-					float dt;
-					float& vx = sph_particles_vel(XDIM, i);
-					float& vy = sph_particles_vel(YDIM, i);
-					float& vz = sph_particles_vel(ZDIM, i);
-					float& gx = sph_particles_gforce(XDIM, i);
-					float& gy = sph_particles_gforce(YDIM, i);
-					float& gz = sph_particles_gforce(ZDIM, i);
-					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range %i\n", rung);
-					} else {
-						dt = 0.5f * rung_dt[rung] * params.t0;
-					}
-					vx = fmaf(gx, dt, vx);
-					vy = fmaf(gy, dt, vy);
-					vz = fmaf(gz, dt, vz);
-					gx = gy = gz = 0.f;
+	case SPH_RUN_GRAVITY: {
+		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			auto& rung = sph_particles_rung(i);
+			const bool test1 = rung >= params.min_rung;
+			if (test1) {
+				float dt;
+				float& vx = sph_particles_vel(XDIM, i);
+				float& vy = sph_particles_vel(YDIM, i);
+				float& vz = sph_particles_vel(ZDIM, i);
+				float& gx = sph_particles_gforce(XDIM, i);
+				float& gy = sph_particles_gforce(YDIM, i);
+				float& gz = sph_particles_gforce(ZDIM, i);
+				if (rung < 0 || rung >= MAX_RUNG) {
+					PRINT("Rung out of range %i\n", rung);
+				} else {
+					dt = 0.5f * rung_dt[rung] * params.t0;
+				}
+				vx = fmaf(gx, dt, vx);
+				vy = fmaf(gy, dt, vy);
+				vz = fmaf(gz, dt, vz);
+				gx = gy = gz = 0.f;
+			}
+		}
+	}
+		break;
+
+	case SPH_RUN_MARK_SEMIACTIVE: {
+		load_data(true, true, false, false, true);
+		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			const auto myx = sph_particles_pos(XDIM, i);
+			const auto myy = sph_particles_pos(YDIM, i);
+			const auto myz = sph_particles_pos(ZDIM, i);
+			sph_particles_semi_active(i) = false;
+			for (int j = 0; j < xs.size(); j++) {
+				const float h = hs[j];
+				const float h2 = sqr(h);
+				const float dx = distance(myx, xs[j]);
+				const float dy = distance(myy, ys[j]);
+				const float dz = distance(myz, zs[j]);
+				const float r2 = sqr(dx, dy, dz);
+				if (r2 < h2 && r2 != 0.0) {
+					sph_particles_semi_active(i) = true;
 				}
 			}
+
 		}
+	}
 		break;
 
-		case SPH_RUN_MARK_SEMIACTIVE:
-		{
-			load_data(true, true, false, false, true);
-			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+	case SPH_RUN_FIND_BOXES: {
+		range<fixed32> ibox, obox;
+		for (int dim = 0; dim < NDIM; dim++) {
+			ibox.begin[dim] = fixed32::max();
+			ibox.end[dim] = 0.0f;
+		}
+		obox = ibox;
+		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			const bool otest1 = params.set2 == SPH_SET_ACTIVE && sph_particles_rung(i) >= params.min_rung;
+			const bool otest2 = params.set2 == SPH_SET_SEMIACTIVE && sph_particles_semi_active(i);
+			const bool otest3 = params.set2 == SPH_SET_ALL;
+			const bool itest1 = params.set1 == SPH_SET_ACTIVE && sph_particles_rung(i) >= params.min_rung;
+			const bool itest2 = params.set1 == SPH_SET_SEMIACTIVE && sph_particles_semi_active(i);
+			const bool itest3 = params.set1 == SPH_SET_ALL;
+			const bool otest = otest1 || otest2 || otest3;
+			const bool itest = itest1 || itest2 || itest3;
+			if (otest || itest) {
+				const float& h = sph_particles_smooth_len(i);
+				const float h2 = sqr(h);
+				const float hinv = 1.0f / h;
 				const auto myx = sph_particles_pos(XDIM, i);
 				const auto myy = sph_particles_pos(YDIM, i);
 				const auto myz = sph_particles_pos(ZDIM, i);
-				sph_particles_semi_active(i) = false;
-				for (int j = 0; j < xs.size(); j++) {
-					const float h = hs[j];
-					const float h2 = sqr(h);
-					const float dx = distance(myx, xs[j]);
-					const float dy = distance(myy, ys[j]);
-					const float dz = distance(myz, zs[j]);
-					const float r2 = sqr(dx, dy, dz);
-					if (r2 < h2 && r2 != 0.0) {
-						sph_particles_semi_active(i) = true;
-					}
-				}
-
-			}
-		}
-		break;
-
-		case SPH_RUN_FIND_BOXES:
-		{
-			range<fixed32> ibox, obox;
-			for (int dim = 0; dim < NDIM; dim++) {
-				ibox.begin[dim] = fixed32::max();
-				ibox.end[dim] = 0.0f;
-			}
-			obox = ibox;
-			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				const bool otest1 = params.set2 == SPH_SET_ACTIVE && sph_particles_rung(i) >= params.min_rung;
-				const bool otest2 = params.set2 == SPH_SET_SEMIACTIVE && sph_particles_semi_active(i);
-				const bool otest3 = params.set2 == SPH_SET_ALL;
-				const bool itest1 = params.set1 == SPH_SET_ACTIVE && sph_particles_rung(i) >= params.min_rung;
-				const bool itest2 = params.set1 == SPH_SET_SEMIACTIVE && sph_particles_semi_active(i);
-				const bool itest3 = params.set1 == SPH_SET_ALL;
-				const bool otest = otest1 || otest2 || otest3;
-				const bool itest = itest1 || itest2 || itest3;
-				if (otest || itest) {
-					const float& h = sph_particles_smooth_len(i);
-					const float h2 = sqr(h);
-					const float hinv = 1.0f / h;
-					const auto myx = sph_particles_pos(XDIM, i);
-					const auto myy = sph_particles_pos(YDIM, i);
-					const auto myz = sph_particles_pos(ZDIM, i);
-					const int k = i - self_ptr->part_range.first;
-					array<fixed32, NDIM> X;
-					X[XDIM] = myx;
-					X[YDIM] = myy;
-					X[ZDIM] = myz;
-					if (otest) {
-						for (int dim = 0; dim < NDIM; dim++) {
-							const float myh = params.h_wt * h;
-							if (distance(obox.begin[dim], X[dim]) + myh >= 0.0) {
-								obox.begin[dim] = fixed<int32_t>(X[dim]) - fixed<int32_t>(myh);
-							}
-							if (distance(X[dim], obox.end[dim]) + myh >= 0.0) {
-								obox.end[dim] = fixed<int32_t>(X[dim]) + fixed<int32_t>(myh);
-							}
+				const int k = i - self_ptr->part_range.first;
+				array<fixed32, NDIM> X;
+				X[XDIM] = myx;
+				X[YDIM] = myy;
+				X[ZDIM] = myz;
+				if (otest) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const float myh = params.h_wt * h;
+						if (distance(obox.begin[dim], X[dim]) + myh >= 0.0) {
+							obox.begin[dim] = fixed<int32_t>(X[dim]) - fixed<int32_t>(myh);
+						}
+						if (distance(X[dim], obox.end[dim]) + myh >= 0.0) {
+							obox.end[dim] = fixed<int32_t>(X[dim]) + fixed<int32_t>(myh);
 						}
 					}
-					if (itest) {
-						for (int dim = 0; dim < NDIM; dim++) {
-							const float myh = params.h_wt * h;
-							if (distance(ibox.begin[dim], X[dim]) >= 0.0) {
-								ibox.begin[dim] = X[dim];
-							}
-							if (distance(X[dim], ibox.end[dim]) >= 0.0) {
-								ibox.end[dim] = X[dim];
-							}
+				}
+				if (itest) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const float myh = params.h_wt * h;
+						if (distance(ibox.begin[dim], X[dim]) >= 0.0) {
+							ibox.begin[dim] = X[dim];
+						}
+						if (distance(X[dim], ibox.end[dim]) >= 0.0) {
+							ibox.end[dim] = X[dim];
 						}
 					}
 				}
 			}
-			kr.inner_box = ibox;
-			kr.outer_box = obox;
 		}
+		kr.inner_box = ibox;
+		kr.outer_box = obox;
+	}
 		break;
 	}
-		if (self_ptr->leaf) {
-			cleanup_workspace(std::move(workspace));
-			return hpx::make_ready_future(kr);
-		} else {
-			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-			cleanup_workspace(std::move(workspace));
-			const sph_tree_node* cl = sph_tree_get_node(self_ptr->children[LEFT]);
-			const sph_tree_node* cr = sph_tree_get_node(self_ptr->children[RIGHT]);
-			std::array<hpx::future<sph_run_return>, NCHILD> futs;
-			futs[RIGHT] = sph_run_fork(params, self_ptr->children[RIGHT], checklist, thread_left);
-			futs[LEFT] = sph_run_fork(params, self_ptr->children[LEFT], std::move(checklist), false);
+	if (self_ptr->leaf) {
+		cleanup_workspace(std::move(workspace));
+		return hpx::make_ready_future(kr);
+	} else {
+		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+		cleanup_workspace(std::move(workspace));
+		const sph_tree_node* cl = sph_tree_get_node(self_ptr->children[LEFT]);
+		const sph_tree_node* cr = sph_tree_get_node(self_ptr->children[RIGHT]);
+		std::array<hpx::future<sph_run_return>, NCHILD> futs;
+		futs[RIGHT] = sph_run_fork(params, self_ptr->children[RIGHT], checklist, thread_left);
+		futs[LEFT] = sph_run_fork(params, self_ptr->children[LEFT], std::move(checklist), false);
 
-			const auto finish = [self,params](hpx::future<sph_run_return>& fl, hpx::future<sph_run_return>& fr) {
-				sph_run_return kr;
-				const auto rcl = fl.get();
-				const auto rcr = fr.get();
-				kr += rcl;
-				kr += rcr;
-				if( (params.run_type == SPH_RUN_FIND_BOXES) ) {
-					sph_tree_set_boxes(self,kr.inner_box, kr.outer_box);
-				}
-				if( params.run_type == SPH_RUN_SMOOTH_LEN) {
-					sph_tree_set_box_active(self,kr.rc2);
-				} else {
-					sph_tree_set_box_active(self,false);
-				}
-				if( params.run_type == SPH_RUN_HYDRO) {
-					sph_tree_set_box_active(self,kr.rc1);
-				}
-				return kr;
-			};
-			if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
-				return hpx::make_ready_future(finish(futs[LEFT], futs[RIGHT]));
+		const auto finish = [self,params](hpx::future<sph_run_return>& fl, hpx::future<sph_run_return>& fr) {
+			sph_run_return kr;
+			const auto rcl = fl.get();
+			const auto rcr = fr.get();
+			kr += rcl;
+			kr += rcr;
+			if( (params.run_type == SPH_RUN_FIND_BOXES) ) {
+				sph_tree_set_boxes(self,kr.inner_box, kr.outer_box);
+			}
+			if( params.run_type == SPH_RUN_SMOOTH_LEN) {
+				sph_tree_set_box_active(self,kr.rc2);
 			} else {
-				return hpx::when_all(futs.begin(), futs.end()).then([finish,tm,self_ptr](hpx::future<std::vector<hpx::future<sph_run_return>>> futsfut) {
-					auto futs = futsfut.get();
-					return finish(futs[LEFT], futs[RIGHT]);
-				});
+				sph_tree_set_box_active(self,false);
 			}
+			if( params.run_type == SPH_RUN_HYDRO) {
+				sph_tree_set_box_active(self,kr.rc1);
+			}
+			return kr;
+		};
+		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
+			return hpx::make_ready_future(finish(futs[LEFT], futs[RIGHT]));
+		} else {
+			return hpx::when_all(futs.begin(), futs.end()).then([finish,tm,self_ptr](hpx::future<std::vector<hpx::future<sph_run_return>>> futsfut) {
+				auto futs = futsfut.get();
+				return finish(futs[LEFT], futs[RIGHT]);
+			});
 		}
-
 	}
+
+}
 

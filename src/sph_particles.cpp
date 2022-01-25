@@ -204,10 +204,8 @@ part_int sph_particles_size() {
 }
 
 template<class T>
-void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
+void sph_particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 	T* new_ptr;
-	if (capacity > 0) {
-	}
 #ifdef USE_CUDA
 	if( reg ) {
 		cudaMallocManaged(&new_ptr,sizeof(T) * new_capacity);
@@ -240,30 +238,33 @@ void sph_particles_resize(part_int sz) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
 		PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
-		particles_array_resize(sph_particles_dm, new_capacity, false);
-		particles_array_resize(sph_particles_h, new_capacity, false);
-		particles_array_resize(sph_particles_e, new_capacity, false);
-		particles_array_resize(sph_particles_de, new_capacity, false);
-		particles_array_resize(sph_particles_sa, new_capacity, false);
+		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
+		sph_particles_array_resize(sph_particles_e, new_capacity, false);
+		sph_particles_array_resize(sph_particles_h, new_capacity, false);
+		sph_particles_array_resize(sph_particles_de, new_capacity, false);
+		sph_particles_array_resize(sph_particles_sa, new_capacity, false);
+		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
 		for (int dim = 0; dim < NDIM; dim++) {
-			particles_array_resize(sph_particles_dv[NDIM], new_capacity, true);
+			sph_particles_array_resize(sph_particles_dv[dim], new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
 	part_int new_parts = sz - size;
 	part_int offset = particles_size();
 	particles_resize(particles_size() + new_parts);
+	int oldsz = size;
+	size = sz;
 	for (int i = 0; i < new_parts; i++) {
-		particles_sph_index(offset + i) = size + i;
-		sph_particles_dm_index(size + i) = offset + i;
+		particles_sph_index(offset + i) = oldsz + i;
+		sph_particles_dm_index(oldsz + i) = offset + i;
 		for( int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim,i) = 0.0f;
 		}
 	}
-	size = sz;
 }
 
 void sph_particles_free() {
+	free(sph_particles_fv);
 	free(sph_particles_dm);
 	free(sph_particles_sa);
 	free(sph_particles_h);
@@ -359,7 +360,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& fvel, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -372,6 +373,7 @@ void sph_particles_global_read_sph(particle_global_range range, vector<float>& e
 				vx[j] = sph_particles_vel(XDIM, i);
 				vy[j] = sph_particles_vel(YDIM, i);
 				vz[j] = sph_particles_vel(ZDIM, i);
+				fvel[j] = sph_particles_fvel(i);
 			}
 		} else {
 			line_id_type line_id;
@@ -391,6 +393,7 @@ void sph_particles_global_read_sph(particle_global_range range, vector<float>& e
 					vx[dest_index] = part.v[XDIM];
 					vy[dest_index] = part.v[YDIM];
 					vz[dest_index] = part.v[ZDIM];
+					fvel[dest_index] = part.fvel;
 					dest_index++;
 				}
 			}

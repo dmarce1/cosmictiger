@@ -666,6 +666,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 						particles_rung(index) = 0;
 						if( sph ) {
 							sph_particles_rung(index) = 0;
+							sph_particles_ent(index) = 0.0;
 						}
 					}
 				}

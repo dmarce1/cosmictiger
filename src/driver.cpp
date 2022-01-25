@@ -124,6 +124,8 @@ void do_groups(int number, double scale) {
 int sph_step(int minrung, double scale, double t0) {
 	int max_rung = 0;
 	sph_tree_create_params tparams;
+
+	timer tm;
 	tparams.h_wt = 2.0;
 	tparams.min_rung = minrung;
 	tree_id root_id;
@@ -131,7 +133,11 @@ int sph_step(int minrung, double scale, double t0) {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
+	tm.start();
+	PRINT( "starting sph_tree_create = %e\n", tm.read());
 	auto sr = sph_tree_create(tparams);
+	tm.stop();
+	PRINT( "sph_tree_create time = %e\n", tm.read());
 	sph_run_params sparams;
 	sparams.a = scale;
 	sparams.t0 = t0;
@@ -139,6 +145,9 @@ int sph_step(int minrung, double scale, double t0) {
 	bool cont;
 	sph_run_return kr;
 	sparams.set1 = SPH_SET_ACTIVE;
+
+	abort();
+
 	do {
 		sparams.set1 = SPH_SET_ACTIVE;
 		sparams.run_type = SPH_RUN_SMOOTH_LEN;

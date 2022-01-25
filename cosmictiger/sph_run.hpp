@@ -74,9 +74,10 @@ struct sph_run_return {
 #define SPH_RUN_MARK_SEMIACTIVE 1
 #define SPH_RUN_FIND_BOXES 2
 #define SPH_RUN_COURANT 3
-#define SPH_RUN_GRAVITY 4
-#define SPH_RUN_HYDRO 5
-#define SPH_RUN_UPDATE 6
+#define SPH_RUN_FVELS 4
+#define SPH_RUN_GRAVITY 5
+#define SPH_RUN_HYDRO 6
+#define SPH_RUN_UPDATE 7
 
 #define SPH_SET_ACTIVE 0
 #define SPH_SET_SEMIACTIVE 1

@@ -28,7 +28,7 @@
 #ifdef CHECK_BOUNDS
 #define CHECK_SPH_PART_BOUNDS(i)                                                                                                                            \
 	if( i < 0 || i >= sph_particles_size()) {                                                                                                            \
-		PRINT( "particle bound check failure %li should be between %li and %li\n", (long long) i, (long long) 0, (long long) particles_size());  \
+		PRINT( "particle bound check failure %li should be between %li and %li\n", (long long) i, (long long) 0, (long long) sph_particles_size());  \
 		ALWAYS_ASSERT(false);                                                                                                                           \
 	}
 #else
@@ -37,11 +37,13 @@
 
 struct sph_particle {
 	float ent;
+	float fvel;
 	array<float, NDIM> v;
 	template<class T>
 	void serialize(T&&arc, unsigned) {
 		arc & ent;
 		arc & v;
+		arc & fvel;
 	}
 };
 
@@ -51,6 +53,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
+SPH_PARTICLES_EXTERN float* sph_particles_fv;
 
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz);
@@ -59,13 +62,18 @@ void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& fvel, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, vector<char>&, vector<float>&, part_int offset);
 void sph_particles_cache_free();
 
 inline char& sph_particles_semi_active(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_sa[index];
+}
+
+inline float& sph_particles_fvel(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_fv[index];
 }
 
 inline part_int& sph_particles_dm_index(part_int index) {
@@ -117,5 +125,6 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 	for( int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}
+	p.fvel = sph_particles_fvel(index);
 	return p;
 }
