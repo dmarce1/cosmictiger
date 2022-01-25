@@ -147,8 +147,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-		if (sph) {
-			const int j = sph_index[snki];
+		const int j = sph_index[snki];
+		if (sph && j != NOT_SPH) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
 			sph_gz[j] = gz[i];
