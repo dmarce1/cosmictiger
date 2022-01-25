@@ -20,45 +20,51 @@
 #ifndef SPH_HPP_
 #define SPH_HPP_
 
+#define SPH_KERNEL_ORDER 5
+
 #include <cosmictiger/defs.hpp>
+
+template<class T, int N>
+T ipow(T x) {
+	if (N == 0) {
+		return T(1);
+	} else if (N == 1) {
+		return x;
+	} else if (N == 2) {
+		return sqr(x);
+	} else {
+		constexpr int M = N / 2;
+		constexpr int L = N - M;
+		return ipow<T, L>(x) * ipow<T, M>(x);
+	}
+}
 
 template<class T>
 inline T sph_W(T r, T hinv, T h3inv) {
-	static const T _8piinv = T(8) / T(M_PI);
-	const T C = h3inv * _8piinv;
-	T q = r * hinv;
-	if (q < T(1)) {
-		return C * (T(1) - T(6) * sqr(q) * (T(1) - q));
-	} else if (q < T(2)) {
-		const T tmp = T(1) - q;
-		return T(2) * tmp * sqr(tmp) * C;
-	}
+	static constexpr T n = SPH_KERNEL_ORDER;
+	static const T c0 = pow(M_PI, -1.5) / tgamma(T(2.5) + n) / tgamma(T(1) + n);
+	const T q = r * hinv;
+	const T tmp = T(1) - sqr(q);
+	return c0 * ipow<T, SPH_KERNEL_ORDER>(tmp) * h3inv;
 }
 
 template<class T>
 inline T sph_dWdr(T r, T hinv, T h3inv) {
-	static const T _8piinv = T(48) / T(M_PI);
-	const T C = hinv * h3inv * _8piinv;
-	T q = r * hinv;
-	if (q < T(0.5)) {
-		return C * q * (T(3) * q - T(2));
-	} else if (q < T(1)) {
-		const T tmp = T(1) - q;
-		return -sqr(tmp) * C;
-	}
+	static constexpr T n = SPH_KERNEL_ORDER;
+	static const T c0 = T(2) * pow(M_PI, -1.5) / tgamma(T(2.5) + n) / tgamma(n);
+	const T q = r * hinv;
+	const T tmp = T(1) - sqr(q);
+	return -c0 * ipow<T, SPH_KERNEL_ORDER - 1>(tmp) * h3inv * hinv * q;
 }
 
 template<class T>
 inline T sph_dWdh(T r, T hinv, T h3inv) {
-	static const T _8piinv = T(24) / T(M_PI);
-	const T C = h3inv * hinv * _8piinv;
-	T q = r * hinv;
-	if (q < T(0.5)) {
-		return -C * (T(1) - T(10) * sqr(q) * (T(1) - T(6.0 / 5.0) * q)) * hinv;
-	} else if (q < T(1)) {
-		const T tmp = T(1) - q;
-		return -sqr(T(1) - q) * (T(1) - T(2) * q) * C * hinv * T(2);
-	}
+	static constexpr T n = SPH_KERNEL_ORDER;
+	static const T c0 = pow(M_PI, -1.5) / tgamma(T(2.5) + n) / tgamma(T(1) + n);
+	static const T c1 = T(3) + T(2) * n;
+	const T q = r * hinv;
+	const T tmp = T(1) - sqr(q);
+	return c0 * ipow<T, SPH_KERNEL_ORDER - 1>(tmp) * h3inv * hinv * (c1 * q - T(2));
 }
 
 template<class T>

@@ -221,7 +221,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 	vector<float> vys;
 	vector<float> vzs;
 
-	const auto load_data = [&xs,&ys,&zs,&rungs, &hs,&leaflist,self_ptr,&ents,&vxs,&vys,&vzs](bool do_rungs, bool do_smoothlens, bool do_sph, bool check_outer) {
+	const auto load_data = [&xs,&ys,&zs,&rungs, &hs,&leaflist,self_ptr,&ents,&vxs,&vys,&vzs](bool do_rungs, bool do_smoothlens, bool do_sph, bool check_inner, bool check_outer) {
 		part_int offset;
 		for (int ci = 0; ci < leaflist.size(); ci++) {
 			const auto* other = sph_tree_get_node(leaflist[ci]);
@@ -256,7 +256,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 				X[XDIM] = xs[i];
 				X[YDIM] = ys[i];
 				X[ZDIM] = zs[i];
-				const bool test1 =!range_contains(self_ptr->outer_box, X);
+				const bool test1 = check_inner && !range_contains(self_ptr->outer_box, X);
 				bool test2 = false;
 				if( check_outer && !test1) {
 					assert(do_rungs);
@@ -302,7 +302,8 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTH_LEN: {
-		load_data(false, false, false, false);
+		const bool test = params.set1 = SPH_SET_SEMIACTIVE;
+		load_data(false, test, test, !test, test);
 		const int self_nparts = self_ptr->part_range.second - self_ptr->part_range.first;
 		float f, dfdh;
 		float max_dlogh;
@@ -358,7 +359,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		break;
 
 	case SPH_RUN_COURANT: {
-		load_data(true, false, true, false);
+		load_data(true, false, true, true, false);
 		const float ainv = 1.0f / params.a;
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 			const bool test1 = sph_particles_rung(i) >= params.min_rung;
@@ -425,7 +426,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		break;
 
 	case SPH_RUN_HYDRO: {
-		load_data(true, true, true, false);
+		load_data(true, true, true, true, true);
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 			const bool test1 = sph_particles_rung(i) >= params.min_rung;
 			const bool test2 = sph_particles_semi_active(i);
@@ -556,7 +557,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 
 		case SPH_RUN_MARK_SEMIACTIVE:
 		{
-			load_data(true, true, false, true);
+			load_data(true, true, false, false, true);
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const auto myx = sph_particles_pos(XDIM, i);
 				const auto myy = sph_particles_pos(YDIM, i);

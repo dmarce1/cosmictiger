@@ -36,6 +36,8 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/view.hpp>
+#include <cosmictiger/sph_tree.hpp>
+#include <cosmictiger/sph_run.hpp>
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -116,6 +118,67 @@ void do_groups(int number, double scale) {
 	PRINT("Total time = %e\n", total.read());
 	PRINT("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
 	particles_groups_destroy();
+
+}
+
+int sph_step(int minrung, double scale, double t0) {
+	int max_rung = 0;
+	sph_tree_create_params tparams;
+	tparams.h_wt = 2.0;
+	tparams.min_rung = minrung;
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
+	auto sr = sph_tree_create(tparams);
+	sph_run_params sparams;
+	sparams.a = scale;
+	sparams.t0 = t0;
+	sparams.min_rung = minrung;
+	bool cont;
+	sph_run_return kr;
+	sparams.set1 = SPH_SET_ACTIVE;
+	do {
+		sparams.set1 = SPH_SET_ACTIVE;
+		sparams.run_type = SPH_RUN_SMOOTH_LEN;
+		kr = sph_run(sparams, root_id, checklist).get();
+		cont = kr.rc1;
+		sparams.h_wt = cont ? 2.0 : 1.0;
+		sparams.run_type = SPH_RUN_FIND_BOXES;
+		sparams.set1 = SPH_SET_ALL;
+		sparams.set2 = SPH_SET_ACTIVE;
+		sph_run(sparams, root_id, checklist).get();
+	} while (cont);
+	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
+	sparams.set1 = SPH_SET_SEMIACTIVE;
+	sph_run(sparams, root_id, checklist).get();
+	do {
+		sparams.set1 = SPH_SET_SEMIACTIVE;
+		sparams.run_type = SPH_RUN_SMOOTH_LEN;
+		kr = sph_run(sparams, root_id, checklist).get();
+		cont = kr.rc1;
+		sparams.h_wt = cont ? 2.0 : 1.0;
+		sparams.run_type = SPH_RUN_FIND_BOXES;
+		sparams.set1 = SPH_SET_SEMIACTIVE;
+		sparams.set2 = SPH_SET_ACTIVE;
+		sph_run(sparams, root_id, checklist).get();
+	} while (cont);
+	sparams.run_type = SPH_RUN_COURANT;
+	sparams.set1 = SPH_SET_ACTIVE;
+	kr = sph_run(sparams, root_id, checklist).get();
+	max_rung = kr.max_rung;
+	sparams.run_type = SPH_RUN_GRAVITY;
+	sparams.set1 = SPH_SET_ACTIVE;
+	kr = sph_run(sparams, root_id, checklist).get();
+	sparams.run_type = SPH_RUN_HYDRO;
+	sparams.set1 = SPH_SET_SEMIACTIVE;
+	kr = sph_run(sparams, root_id, checklist).get();
+	sparams.run_type = SPH_RUN_UPDATE;
+	sparams.set1 = SPH_SET_SEMIACTIVE;
+	kr = sph_run(sparams, root_id, checklist).get();
+
+	return max_rung;
 
 }
 
@@ -237,6 +300,7 @@ void output_time_file() {
 }
 
 void driver() {
+	const bool static sph = get_options().sph;
 	timer total_time;
 	total_time.start();
 	timer tmr;
@@ -382,6 +446,10 @@ void driver() {
 			PRINT("Kicking\n");
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
+			int max_rung = kr.max_rung;
+			if( sph ) {
+				max_rung = std::max(max_rung, sph_step(minrung, a, t0));
+			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");
 			if (full_eval) {
@@ -395,7 +463,7 @@ void driver() {
 					do_groups(step, a);
 				}
 			}
-			dt = t0 / (1 << kr.max_rung);
+			dt = t0 / (1 << max_rung);
 			const double dadt1 = a * cosmos_dadt(a);
 			const double a1 = a;
 			a += dadt1 * dt;
@@ -466,7 +534,7 @@ void driver() {
 			total_time.start();
 			//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
 //			PRINT("%llx\n", itime);
-			itime = inc(itime, kr.max_rung);
+			itime = inc(itime, max_rung);
 			domain_time = 0.0;
 			sort_time = 0.0;
 			kick_time = 0.0;
