@@ -226,7 +226,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 	vector<float> vys;
 	vector<float> vzs;
 	vector<float> fvels;
-
+	static const float m = get_options().sph_mass;
 	const auto load_data =
 			[&xs,&ys,&zs,&rungs,&fvels, &hs,&leaflist,self_ptr,&ents,&vxs,&vys,&vzs](bool do_rungs, bool do_smoothlens, bool do_sph, bool check_inner, bool check_outer) {
 				part_int offset;
@@ -468,9 +468,10 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 						const float r = sqrt(r2);
 						const float rinv = 1.0f / r;
 						const float dWdr = sph_dWdr(r, hinv, hinv3) * rinv;
-						const float dWdr_x = dx * dWdr * rhoinv;
-						const float dWdr_y = dy * dWdr * rhoinv;
-						const float dWdr_z = dz * dWdr * rhoinv;
+						const float tmp = m * dWdr * rhoinv;
+						const float dWdr_x = dx * tmp;
+						const float dWdr_y = dy * tmp;
+						const float dWdr_z = dz * tmp;
 						dvx_dx += vxs[j] * dWdr_x;
 						dvx_dy += vxs[j] * dWdr_y;
 						dvx_dz += vxs[j] * dWdr_z;
@@ -563,12 +564,13 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 						const float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x);
 						const float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y);
 						const float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z);
-						float dvxdt = -dpx * Pfacp1;
-						float dvydt = -dpy * Pfacp1;
-						float dvzdt = -dpz * Pfacp1;
+						const float tmp = m * Pfacp1;
+						float dvxdt = -dpx * tmp;
+						float dvydt = -dpy * tmp;
+						float dvzdt = -dpz * tmp;
 						const float dt = std::max(rung_dt[rungs[j]], rung_dt[myrung]) * params.t0;
 						float dAdt = (dpx * dvx + dpy * dvy + dpz * dvz) * Pfac;
-						dAdt *= 0.5 * (SPH_GAMMA - 1.f) * pow(rho, 1.0f - SPH_GAMMA);
+						dAdt *= 0.5 * m * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
 						sph_particles_dvel(XDIM, i) += dvxdt * dt;
 						sph_particles_dvel(YDIM, i) += dvydt * dt;
 						sph_particles_dvel(ZDIM, i) += dvzdt * dt;

@@ -186,6 +186,7 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.stop();
 	auto stream = cuda_get_stream();
+	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));

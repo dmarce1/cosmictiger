@@ -23,6 +23,7 @@
 #define SPH_KERNEL_ORDER 5
 
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/options.hpp>
 
 template<class T, int N>
 T ipow(T x) {
@@ -69,8 +70,9 @@ inline T sph_dWdh(T r, T hinv, T h3inv) {
 
 template<class T>
 inline T sph_den(T hinv3) {
+	static const T m = get_options().sph_mass;
 	static const T c0 = T(3.0 / 4.0 / M_PI * SPH_NEIGHBOR_COUNT);
-	return c0 * hinv3;
+	return m * c0 * hinv3;
 }
 
 #endif /* SPH_HPP_ */

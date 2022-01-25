@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/zero_order.hpp>
@@ -129,8 +129,7 @@ double zero_order_universe::redshift_to_time(double z) const {
 	return t;
 }
 
-void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<double(double)> fxe, double amax,
-		cosmic_params cpars) {
+void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<double(double)> fxe, double amax, cosmic_params cpars) {
 	zero_order_universe& uni = *uni_ptr;
 	uni.xe = fxe;
 	using namespace constants;
@@ -150,6 +149,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	double logamax = log(amax);
 	int N = 4 * 1024;
 	double dloga = (logamax - logamin) / N;
+	std::vector<double> K(N + 1);
 	std::vector<double> thomson(N + 1);
 	std::vector<double> sound_speed2(N + 1);
 
@@ -166,11 +166,10 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	PRINT("\t\t\t temperature today = %f\n\n", 2.73 * Theta);
 
 	dloga = (logamax - logamin) / N;
-	const auto cosmic_hubble =
-			[=](double a) {
-				using namespace cosmic_constants;
-				return littleh * cosmic_constants::H0 * sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + (1 - omega_r - omega_m));
-			};
+	const auto cosmic_hubble = [=](double a) {
+		using namespace cosmic_constants;
+		return littleh * cosmic_constants::H0 * sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + (1 - omega_r - omega_m));
+	};
 	auto cgs_hubble = [=](double a) {
 		return constants::H0 / cosmic_constants::H0 * cosmic_hubble(a);
 	};
@@ -223,6 +222,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	double cs2;
 	P1 = P2 = P;
 	rho1 = rho2 = rho_b;
+	K[0] = P / std::pow(rho_b, 5.0 / 3.0);
 	double a1;
 	for (int i = 1; i <= N; i++) {
 		loga = logamin + i * dloga;
@@ -247,11 +247,9 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 		ne = fxe(a) * nH;
 		mu = (nH + 4 * nHe) * mh / (nH + nHe + ne);
 		sigmaC = mu / me * c * (8.0 / 3.0) * omega_gam / (a * omega_m) * sigma_T * ne / hubble;
-		const double dTgasdT1 = ((Tgas + gamma * dloga * sigmaC * Trad) / (1 + gamma * dloga * (2 + sigmaC)) - Tgas)
-				/ (gamma * dloga);
+		const double dTgasdT1 = ((Tgas + gamma * dloga * sigmaC * Trad) / (1 + gamma * dloga * (2 + sigmaC)) - Tgas) / (gamma * dloga);
 		const double T1 = Tgas + (1 - 2 * gamma) * dTgasdT1 * dloga;
-		const double dTgasdT2 = ((T1 + gamma * dloga * sigmaC * Trad) / (1 + gamma * dloga * (2 + sigmaC)) - T1)
-				/ (gamma * dloga);
+		const double dTgasdT2 = ((T1 + gamma * dloga * sigmaC * Trad) / (1 + gamma * dloga * (2 + sigmaC)) - T1) / (gamma * dloga);
 		Tgas += 0.5 * (dTgasdT1 + dTgasdT2) * dloga;
 		ne = fxe(a) * nH;
 		n = nH + nHe;
@@ -265,13 +263,16 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 		}
 		sound_speed2[i - 1] = cs2 / (c * c);
 		thomson[i] = sigmaT;
-	//	printf("%e %e %e %e |  %e %e %e \n", a, ne / (nH + 2 * nHe), thomson[i], sound_speed2[i - 1], P, P1, P2);
+		K[i] = P / std::pow(rho_b,5.0/3.0);
+
+		//	printf("%e %e %e %e |  %e %e %e \n", a, ne / (nH + 2 * nHe), thomson[i], sound_speed2[i - 1], P, P1, P2);
 	}
 	cs2 = (P - P1) / (rho_b - rho1);
 	sound_speed2[N - 1] = cs2 / c;
 //	print_time(t);
 	uni.amin = amin;
 	uni.amax = amax;
+	build_interpolation_function(&uni.K, K, (double) amin, (double) amax);
 	build_interpolation_function(&uni.sigma_T, thomson, (double) amin, (double) amax);
 	build_interpolation_function(&uni.cs2, sound_speed2, (double) amin, (double) amax);
 //	uni.hubble = std::move(cosmic_hubble);

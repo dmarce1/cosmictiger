@@ -544,7 +544,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
 	if (local_root) {
-		particles_resolve_with_sph_particles();
+		if( sph ) {
+			particles_resolve_with_sph_particles();
+		}
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaStreamSynchronize(stream));
 		CUDA_CHECK(cudaStreamDestroy(stream));

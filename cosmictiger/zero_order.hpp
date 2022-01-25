@@ -41,6 +41,7 @@ struct zero_order_universe {
 	cosmic_params params;
 	interp_functor<double> sigma_T;
 	interp_functor<double> cs2;
+	interp_functor<double> K;
 	std::function<double(double)> xe;
 
 

@@ -203,13 +203,13 @@ power_spectrum_function compute_power_spectrum() {
 	power_spectrum_function func;
 	zero_order_universe zeroverse;
 	double* result_ptr;
-	cosmic_params params;
 	interp_functor<double> m_k;
 	interp_functor<double> vel_k;
 	int Nk = 1024;
 	vector<cos_state> states(Nk);
 
 	auto& uni = zeroverse;
+	cosmic_params params;
 	params.omega_b = get_options().omega_b;
 	params.omega_c = get_options().omega_c;
 	params.omega_gam = get_options().omega_gam;
@@ -639,13 +639,38 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	const float Ninv = 1.0 / N;
 	const float box_size_inv = 1.0 / box_size;
 	vector<hpx::future<void>> local_futs;
+	float entropy;
 	if (init_parts) {
 		particles_resize(box.volume());
 		if (sph) {
 			sph_particles_resize(box.volume());
+
+			zero_order_universe uni;
+			cosmic_params params;
+			params.omega_b = get_options().omega_b;
+			params.omega_c = get_options().omega_c;
+			params.omega_gam = get_options().omega_gam;
+			params.omega_nu = get_options().omega_nu;
+			params.Y = get_options().Y;
+			params.Neff = get_options().Neff;
+			params.Theta = get_options().Theta;
+			params.hubble = get_options().hubble;
+			auto fxe = run_recfast(params);
+			create_zero_order_universe(&uni, fxe, 1.0, params);
+			const float a1 = 1.0 / (get_options().z0 + 1.0);
+			const double Kphys = uni.K(a1);
+			const double c2g = get_options().code_to_g;
+			const double c2s = get_options().code_to_s;
+			const double c2cm = get_options().code_to_cm;
+			const double c2e = c2g / (c2s * c2s) / c2cm;
+			const double c2den = c2g / (c2cm * c2cm * c2cm);
+			const double c2ent = c2e / std::pow(c2den,5.0/3.0);
+			entropy = Kphys / c2ent;
+			PRINT( "Entropy conversion factor = %e\n", c2ent);
+			PRINT( "Initial entropy in code units = %e\n", entropy);
 		}
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-			local_futs.push_back(hpx::async([box,Ninv,sph](array<int64_t,NDIM> I) {
+			local_futs.push_back(hpx::async([box,Ninv,sph,entropy](array<int64_t,NDIM> I) {
 				const float omega_m = get_options().omega_m;
 				const float omega_b = get_options().omega_b;
 				const float omega = omega_m + omega_b;
@@ -666,7 +691,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 						particles_rung(index) = 0;
 						if( sph ) {
 							sph_particles_rung(index) = 0;
-							sph_particles_ent(index) = 0.0;
+							sph_particles_ent(index) = entropy;
 						}
 					}
 				}
