@@ -352,9 +352,9 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 				if (test1 || test2 || test3) {
 					float error;
 					float& h = sph_particles_smooth_len(i);
-					const auto myx = sph_particles_pos(XDIM, i);
-					const auto myy = sph_particles_pos(YDIM, i);
-					const auto myz = sph_particles_pos(ZDIM, i);
+					const auto myx = (sph_particles_pos(XDIM, i));
+					const auto myy = (sph_particles_pos(YDIM, i));
+					const auto myz = (sph_particles_pos(ZDIM, i));
 					int cnt = 0;
 					do {
 						const float h2 = sqr(h);
@@ -405,6 +405,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					break;
 				}
 			}
+			PRINT( "%i\n", max_cnt);
 			if (box_xceeded) {
 				kr.rc1 = true;
 			}

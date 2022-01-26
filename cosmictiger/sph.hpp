@@ -42,42 +42,31 @@ T ipow(T x) {
 
 template<class T>
 inline T sph_W(T r, T hinv, T h3inv) {
-	static const T c0 = T(8.0 / M_PI);
+	static const T c0 = T(21.0 / M_PI / 2.0);
 	const T C = c0 * h3inv;
 	const T q = r * hinv;
-	if (q < T(0.5)) {
-		return C * (T(1) - T(6) * sqr(q) * (T(1) - q));
-	} else {
-		const T tmp = T(1) - q;
-		return C * T(2) * sqr(tmp) * tmp;
-	}
+	const T tmp = T(1) - q;
+	return C * sqr(sqr(tmp)) * (T(1) + T(4) * q);
 }
 
 template<class T>
 inline T sph_dWdr(T r, T hinv, T h3inv) {
-	static const T c0 = T(48.0 / M_PI);
-	const T C = -c0 * h3inv * hinv;
+	static const T c0 = T(210.0 / M_PI);
+	const T C = c0 * h3inv * hinv;
 	const T q = r * hinv;
-	if (q < T(0.5)) {
-		return C * q * (T(2) - T(3) * q);
-	} else {
-		const T tmp = T(1) - q;
-		return C * sqr(tmp);
-	}
+	const T tmp = T(1) - q;
+	return -C * sqr(tmp) * tmp * q;
 }
 
 template<class T>
 inline T sph_dWdh(T r, T hinv, T h3inv) {
-	static const T c0 = T(24.0 / M_PI);
-	const T C = -c0 * h3inv;
+	static const T c0 = T(21.0 / M_PI / 2.0);
+	const T C = c0 * h3inv;
 	const T q = r * hinv;
-	if (q < T(0.5)) {
-		return C * (T(1) - T(10) * sqr(q) * (T(1) - T(6.0 / 5.0) * q));
-	} else {
-		const T tmp = T(1) - q;
-		return C * T(2) * sqr(tmp) * (T(1) - T(2) * q);
-	}
+	const T tmp = T(1) - q;
+	return -C * sqr(tmp) * tmp * (T(3) + T(9) * q - T(32) * q);
 }
+
 
 template<class T>
 inline T sph_den(T hinv3) {
