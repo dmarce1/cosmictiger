@@ -1,22 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef RANGE_HPP_
 #define RANGE_HPP_
@@ -48,7 +47,8 @@ struct range {
 	array<T, N> begin;
 	array<T, N> end;
 
-	CUDA_EXPORT inline range<T, N> intersection(const range<T, N>& other) const {
+	CUDA_EXPORT
+	inline range<T, N> intersection(const range<T, N>& other) const {
 		range<T, N> I;
 		for (int dim = 0; dim < N; dim++) {
 #ifdef __CUDA_ARCH__
@@ -105,7 +105,8 @@ struct range {
 		}
 	}
 
-	CUDA_EXPORT inline bool contains(const range<T, N>& box) const {
+	CUDA_EXPORT
+	inline bool contains(const range<T, N>& box) const {
 		bool rc = true;
 		for (int dim = 0; dim < N; dim++) {
 			if (begin[dim] > box.begin[dim]) {
@@ -120,7 +121,8 @@ struct range {
 		return rc;
 	}
 
-	CUDA_EXPORT inline bool contains(const array<T, N>& p) const {
+	CUDA_EXPORT
+	inline bool contains(const array<T, N>& p) const {
 		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				return false;
@@ -222,7 +224,8 @@ struct range {
 		return rc;
 	}
 
-	CUDA_EXPORT inline T volume() const {
+	CUDA_EXPORT
+	inline T volume() const {
 		T vol = T(1);
 		for (int dim = 0; dim < N; dim++) {
 			const T span = end[dim] - begin[dim];
@@ -242,7 +245,8 @@ struct range {
 		}
 	}
 
-	CUDA_EXPORT inline range<T, N> pad(T dx = T(1)) const {
+	CUDA_EXPORT
+	inline range<T, N> pad(T dx = T(1)) const {
 		range<T, N> r;
 		for (int dim = 0; dim < N; dim++) {
 			r.begin[dim] = begin[dim] - dx;
@@ -276,11 +280,66 @@ inline range<fixed32> fixed32_unit_box() {
 
 inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
 	range<fixed32> rc;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		rc.begin[dim] = other.begin[dim];
 		rc.end[dim] = other.end[dim];
 	}
 	return rc;
 }
+
+struct fixed32_range: public range<fixed32> {
+	char valid;
+	fixed32_range() {
+		valid = false;
+	}
+	bool contains(const array<fixed32, NDIM>& pt, float h = float(0)) const {
+		bool rc = true;
+		for( int dim = 0; dim < NDIM; dim++) {
+			if( distance(pt[dim],begin[dim]) + h > 0.0 && distance(end[dim],pt[dim]) + h > 0.0 ){
+			} else {
+				rc = false;
+				break;
+			}
+		}
+		return rc;
+	}
+	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
+		if (!valid) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				begin[dim] = pt[dim] - h;
+				end[dim] = pt[dim] + h;
+			}
+			valid = true;
+		} else {
+			for (int dim = 0; dim < NDIM; dim++) {
+				if (distance(begin[dim], pt[dim]) + h >= 0.0) {
+					begin[dim] = fixed<int32_t>(pt[dim]) - fixed<int32_t>(h);
+				}
+				if (distance(pt[dim], end[dim]) + h >= 0.0) {
+					end[dim] = fixed<int32_t>(pt[dim]) + fixed<int32_t>(h);
+				}
+			}
+		}
+	}
+	void accumulate(const fixed32_range& other) {
+		if (valid && other.valid) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				if (distance(begin[dim], other.begin[dim]) >= 0.0) {
+					begin[dim] = other.begin[dim];
+				}
+				if (distance(other.end[dim], end[dim]) >= 0.0) {
+					end[dim] = other.end[dim];
+				}
+			}
+		} else if (!valid && other.valid) {
+			*this = other;
+		}
+	}
+	template<class A>
+	void serialize(A&& arc, unsigned i) {
+		range<fixed32>::serialize(arc,i);
+		arc & valid;
+	}
+};
 
 #endif /* RANGE_HPP_ */

@@ -27,14 +27,19 @@
 #include <atomic>
 
 struct sph_run_return {
-	range<fixed32> inner_box;
-	range<fixed32> outer_box;
+	fixed32_range inner_box;
+	fixed32_range outer_box;
 	bool rc1;
 	bool rc2;
-	char max_rung;CUDA_EXPORT
+	char max_rung;
+	float max_h;
+	float min_h;
+	CUDA_EXPORT
 	sph_run_return() {
 		rc2 = false;
 		rc1 = false;
+		min_h = std::numeric_limits<float>::max();
+		max_h = 0.0;
 		max_rung = 0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			inner_box.begin[dim] = outer_box.begin[dim] = fixed32::max();
@@ -43,20 +48,13 @@ struct sph_run_return {
 	}
 	CUDA_EXPORT
 	sph_run_return& operator+=(const sph_run_return& other) {
-		range<fixed32> rbox;
-		for (int dim = 0; dim < NDIM; dim++) {
-			rbox.end[dim] = distance(inner_box.end[dim], other.inner_box.end[dim]) > 0.0 ? inner_box.end[dim] : other.inner_box.end[dim];
-			rbox.begin[dim] = distance(inner_box.begin[dim], other.inner_box.end[dim]) > 0.0 ? other.inner_box.begin[dim] : inner_box.begin[dim];
-		}
-		inner_box = rbox;
-		for (int dim = 0; dim < NDIM; dim++) {
-			rbox.end[dim] = distance(outer_box.end[dim], other.outer_box.end[dim]) > 0.0 ? outer_box.end[dim] : other.outer_box.end[dim];
-			rbox.begin[dim] = distance(outer_box.begin[dim], other.outer_box.end[dim]) > 0.0 ? other.outer_box.begin[dim] : outer_box.begin[dim];
-		}
-		outer_box = rbox;
+		outer_box.accumulate(other.outer_box);
+		inner_box.accumulate(other.inner_box);
 		rc1 = other.rc1 || rc1;
 		rc2 = other.rc2 || rc2;
 		max_rung = std::max(max_rung, other.max_rung);
+		max_h = std::max(max_h, other.max_h);
+		min_h = std::min(min_h, other.min_h);
 		return *this;
 
 	}
@@ -67,6 +65,8 @@ struct sph_run_return {
 		arc & rc1;
 		arc & rc2;
 		arc & max_rung;
+		arc & max_h;
+		arc & min_h;
 	}
 };
 
@@ -114,7 +114,7 @@ struct sph_run_workitem {
 struct sph_run_workspace;
 
 #ifndef __CUDACC__
-hpx::future<sph_run_return> sph_run(sph_run_params, tree_id self, vector<tree_id> checklist);
+hpx::future<sph_run_return> sph_run(sph_run_params, tree_id self, vector<tree_id> checklist, int level=0);
 #endif
 
 #endif /* SPH_RUN_HPP_ */

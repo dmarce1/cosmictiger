@@ -146,19 +146,28 @@ int sph_step(int minrung, double scale, double t0) {
 	sph_run_return kr;
 	sparams.set1 = SPH_SET_ACTIVE;
 
-	abort();
 
 	do {
 		sparams.set1 = SPH_SET_ACTIVE;
 		sparams.run_type = SPH_RUN_SMOOTH_LEN;
+		timer tm;
+		tm.start();
 		kr = sph_run(sparams, root_id, checklist).get();
+		tm.stop();
+		PRINT( "sph_run(SPH_RUN_SMOOTH_LEN): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
+		tm.reset();
 		cont = kr.rc1;
 		sparams.h_wt = cont ? 2.0 : 1.0;
 		sparams.run_type = SPH_RUN_FIND_BOXES;
-		sparams.set1 = SPH_SET_ALL;
-		sparams.set2 = SPH_SET_ACTIVE;
+		sparams.set1 = SPH_SET_ACTIVE;
+		sparams.set2 = SPH_SET_ALL;
+		tm.start();
 		sph_run(sparams, root_id, checklist).get();
+		tm.stop();
+		PRINT( "sph_run(SPH_RUN_FIND_BOXES): %e\n", tm.read());
+		PRINT( "?\n");
 	} while (cont);
+	sleep(100);
 	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
 	sparams.set1 = SPH_SET_SEMIACTIVE;
 	sph_run(sparams, root_id, checklist).get();

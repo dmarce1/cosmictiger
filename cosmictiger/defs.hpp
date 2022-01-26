@@ -40,7 +40,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define SPH_GAMMA (5.0/3.0)
 
 #define BH_BUCKET_SIZE 32
-#define SPH_BUCKET_SIZE 160
 #define BH_CUDA_MIN 512
 #define DOMAIN_REBOUND_ITERS 20
 
@@ -55,8 +54,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define USE_WENDLAND
 
 #define USE_CONFORMAL_TIME
-#define SPH_NEIGHBOR_COUNT 32
-#define SPH_SMOOTHLEN_TOLER 1.0e-4
+#define SPH_NEIGHBOR_COUNT 64
+#define SPH_BUCKET_SIZE 32
+#define SPH_SMOOTHLEN_TOLER 1.0e-6
 
 #define GROUP_WAVES 8
 #define GROUP_BUCKET_SIZE 90

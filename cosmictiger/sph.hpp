@@ -42,30 +42,41 @@ T ipow(T x) {
 
 template<class T>
 inline T sph_W(T r, T hinv, T h3inv) {
-	static constexpr T n = SPH_KERNEL_ORDER;
-	static const T c0 = pow(M_PI, -1.5) / tgamma(T(2.5) + n) / tgamma(T(1) + n);
+	static const T c0 = T(8.0 / M_PI);
+	const T C = c0 * h3inv;
 	const T q = r * hinv;
-	const T tmp = T(1) - sqr(q);
-	return c0 * ipow<T, SPH_KERNEL_ORDER>(tmp) * h3inv;
+	if (q < T(0.5)) {
+		return C * (T(1) - T(6) * sqr(q) * (T(1) - q));
+	} else {
+		const T tmp = T(1) - q;
+		return C * T(2) * sqr(tmp) * tmp;
+	}
 }
 
 template<class T>
 inline T sph_dWdr(T r, T hinv, T h3inv) {
-	static constexpr T n = SPH_KERNEL_ORDER;
-	static const T c0 = T(2) * pow(M_PI, -1.5) / tgamma(T(2.5) + n) / tgamma(n);
+	static const T c0 = T(48.0 / M_PI);
+	const T C = -c0 * h3inv * hinv;
 	const T q = r * hinv;
-	const T tmp = T(1) - sqr(q);
-	return -c0 * ipow<T, SPH_KERNEL_ORDER - 1>(tmp) * h3inv * hinv * q;
+	if (q < T(0.5)) {
+		return C * q * (T(2) - T(3) * q);
+	} else {
+		const T tmp = T(1) - q;
+		return C * sqr(tmp);
+	}
 }
 
 template<class T>
 inline T sph_dWdh(T r, T hinv, T h3inv) {
-	static constexpr T n = SPH_KERNEL_ORDER;
-	static const T c0 = pow(M_PI, -1.5) / tgamma(T(2.5) + n) / tgamma(T(1) + n);
-	static const T c1 = T(3) + T(2) * n;
+	static const T c0 = T(24.0 / M_PI);
+	const T C = -c0 * h3inv;
 	const T q = r * hinv;
-	const T tmp = T(1) - sqr(q);
-	return c0 * ipow<T, SPH_KERNEL_ORDER - 1>(tmp) * h3inv * hinv * (c1 * q - T(2));
+	if (q < T(0.5)) {
+		return C * (T(1) - T(10) * sqr(q) * (T(1) - T(6.0 / 5.0) * q));
+	} else {
+		const T tmp = T(1) - q;
+		return C * T(2) * sqr(tmp) * (T(1) - T(2) * q);
+	}
 }
 
 template<class T>

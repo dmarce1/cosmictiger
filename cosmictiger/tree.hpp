@@ -35,35 +35,6 @@ struct multipole_pos {
 struct tree_id {
 	int proc;
 	int index;
-	tree_id() {
-		proc = 0;
-	}
-	CUDA_EXPORT
-	tree_id(const tree_id& other) {
-		proc = other.proc;
-		index = other.index;
-		ASSERT(proc==0);
-	}
-	CUDA_EXPORT
-	tree_id& operator=(const tree_id& other) {
-		proc = other.proc;
-		index = other.index;
-		ASSERT(proc==0);
-		return *this;
-	}
-	CUDA_EXPORT
-	tree_id(tree_id&& other) {
-		proc = other.proc;
-		index = other.index;
-		ASSERT(proc==0);
-	}
-	CUDA_EXPORT
-	tree_id& operator=(tree_id&& other) {
-		proc = other.proc;
-		index = other.index;
-		ASSERT(proc==0);
-		return *this;
-	}
 	inline bool operator==(tree_id other) const {
 		return proc == other.proc && index == other.index;
 	}
