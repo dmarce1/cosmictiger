@@ -257,8 +257,8 @@ void sph_particles_resize(part_int sz) {
 	for (int i = 0; i < new_parts; i++) {
 		particles_sph_index(offset + i) = oldsz + i;
 		sph_particles_dm_index(oldsz + i) = offset + i;
-		for( int dim = 0; dim < NDIM; dim++) {
-			sph_particles_gforce(dim,i) = 0.0f;
+		for (int dim = 0; dim < NDIM; dim++) {
+			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 		}
 	}
 }
@@ -360,7 +360,8 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& fvel, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& fvel, vector<float>& vx, vector<float>& vy,
+		vector<float>& vz, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {

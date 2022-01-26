@@ -372,13 +372,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				if (part_sph) {
-					const int j = particles_sph_index(i);
-					ALWAYS_ASSERT(j != NOT_SPH);
-					ALWAYS_ASSERT(j>=0);
-					ALWAYS_ASSERT(j<sph_particles_size());
-					sph_particles_gforce(XDIM, j) = forces.gx[j];
-					sph_particles_gforce(YDIM, j) = forces.gy[j];
-					sph_particles_gforce(ZDIM, j) = forces.gz[j];
+					const int k = particles_sph_index(i);
+					sph_particles_gforce(XDIM, k) = forces.gx[j];
+					sph_particles_gforce(YDIM, k) = forces.gy[j];
+					sph_particles_gforce(ZDIM, k) = forces.gz[j];
 				} else {
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);

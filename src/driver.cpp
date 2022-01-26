@@ -134,10 +134,10 @@ int sph_step(int minrung, double scale, double t0) {
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
 	tm.start();
-	PRINT( "starting sph_tree_create = %e\n", tm.read());
+	PRINT("starting sph_tree_create = %e\n", tm.read());
 	auto sr = sph_tree_create(tparams);
 	tm.stop();
-	PRINT( "sph_tree_create time = %e\n", tm.read());
+	PRINT("sph_tree_create time = %e\n", tm.read());
 	sph_run_params sparams;
 	sparams.a = scale;
 	sparams.t0 = t0;
@@ -146,7 +146,6 @@ int sph_step(int minrung, double scale, double t0) {
 	sph_run_return kr;
 	sparams.set1 = SPH_SET_ACTIVE;
 
-
 	do {
 		sparams.set1 = SPH_SET_ACTIVE;
 		sparams.run_type = SPH_RUN_SMOOTH_LEN;
@@ -154,7 +153,7 @@ int sph_step(int minrung, double scale, double t0) {
 		tm.start();
 		kr = sph_run(sparams, root_id, checklist).get();
 		tm.stop();
-		PRINT( "sph_run(SPH_RUN_SMOOTH_LEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
+		PRINT("sph_run(SPH_RUN_SMOOTH_LEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
 		tm.reset();
 		cont = kr.rc1;
 		sparams.h_wt = 2.0;
@@ -164,8 +163,8 @@ int sph_step(int minrung, double scale, double t0) {
 		tm.start();
 		sph_run(sparams, root_id, checklist).get();
 		tm.stop();
-		PRINT( "sph_run(SPH_RUN_FIND_BOXES): %e\n", tm.read());
-		PRINT( "?\n");
+		PRINT("sph_run(SPH_RUN_FIND_BOXES): %e\n", tm.read());
+		PRINT("?\n");
 	} while (cont);
 	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
 	sparams.set1 = SPH_SET_SEMIACTIVE;
@@ -173,7 +172,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_MARK_SEMI_ACTIVE): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_MARK_SEMI_ACTIVE): tm = %e \n", tm.read());
 	tm.reset();
 	sparams.run_type = SPH_RUN_FIND_BOXES;
 	sparams.set2 = SPH_SET_SEMIACTIVE;
@@ -181,7 +180,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
 	tm.reset();
 	do {
 		sparams.set1 = SPH_SET_SEMIACTIVE;
@@ -189,7 +188,7 @@ int sph_step(int minrung, double scale, double t0) {
 		tm.start();
 		kr = sph_run(sparams, root_id, checklist).get();
 		tm.stop();
-		PRINT( "sph_run(SPH_RUN_SMOOTH_LEN (semi-active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
+		PRINT("sph_run(SPH_RUN_SMOOTH_LEN (semi-active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
 		tm.reset();
 		cont = kr.rc1;
 		sparams.h_wt = cont ? 2.0 : 1.0;
@@ -199,7 +198,7 @@ int sph_step(int minrung, double scale, double t0) {
 		tm.start();
 		sph_run(sparams, root_id, checklist).get();
 		tm.stop();
-		PRINT( "sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
+		PRINT("sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
 		tm.reset();
 	} while (cont);
 
@@ -208,7 +207,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	kr = sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_COURANT): tm = %e %i\n", tm.read(), kr.max_rung);
+	PRINT("sph_run(SPH_RUN_COURANT): tm = %e %i\n", tm.read(), kr.max_rung);
 	tm.reset();
 	max_rung = kr.max_rung;
 	sparams.run_type = SPH_RUN_FIND_BOXES;
@@ -217,15 +216,15 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
-	/*tm.reset();
+	PRINT("sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
+	tm.reset();
 
-		sparams.run_type = SPH_RUN_GRAVITY;
+	sparams.run_type = SPH_RUN_GRAVITY;
 	sparams.set1 = SPH_SET_ACTIVE;
 	tm.start();
 	kr = sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_GRAVITY): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e \n", tm.read());
 	tm.reset();
 
 	sparams.run_type = SPH_RUN_HYDRO;
@@ -233,7 +232,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	kr = sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_HYDRO): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e \n", tm.read());
 	tm.reset();
 
 	sparams.run_type = SPH_RUN_UPDATE;
@@ -241,9 +240,8 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	kr = sph_run(sparams, root_id, checklist).get();
 	tm.stop();
-	PRINT( "sph_run(SPH_RUN_UPDATE): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e \n", tm.read());
 	tm.reset();
-*/
 
 	return max_rung;
 
@@ -514,7 +512,7 @@ void driver() {
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung = kr.max_rung;
-			if( sph ) {
+			if (sph) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, t0));
 			}
 			tree_create_return sr = tmp.second;

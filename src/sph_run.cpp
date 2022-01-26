@@ -513,12 +513,12 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					char& rung = sph_particles_rung(i);
 					const float g2 = sqr(gx, gy, gz);
 					const float factor = eta * sqrtf(params.a * hgrav);
-					const float dt_grav = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
+					const float dt_grav = g2 > 0.0 ? std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0) : 1e99;
 					const float dt = std::min(dt_grav, dthydro);
 					const int rung1 = ceilf(log2f(params.t0) - log2f(dt));
 					rung = std::max((int) rung1, std::max(rung - 1, params.min_rung));
 					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range %e %i %e %e %e %e\n", sph_particles_smooth_len(i), rung1, myc, sqrt(sqr(myvx, myvy, myvz)), dt_grav, dthydro);
+						PRINT("Rung out of range %e %i %e %e %e %e %e %e %e\n", sph_particles_smooth_len(i), rung1, myc, sqrt(sqr(myvx, myvy, myvz)), gx, gy, gz, dt_grav, dthydro);
 					}
 					kr.max_rung = std::max(kr.max_rung, rung);
 				}
