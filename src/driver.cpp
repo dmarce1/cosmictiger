@@ -227,6 +227,14 @@ int sph_step(int minrung, double scale, double t0) {
 	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e \n", tm.read());
 	tm.reset();
 
+	sparams.run_type = SPH_RUN_FVELS;
+	sparams.set1 = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
+	tm.start();
+	kr = sph_run(sparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_run(SPH_RUN_FVELS): tm = %e \n", tm.read());
+	tm.reset();
+
 	sparams.run_type = SPH_RUN_HYDRO;
 	sparams.set1 = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
 	tm.start();

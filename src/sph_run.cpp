@@ -490,13 +490,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float dvz = myvz - vzs[j];
 							const float w = std::min(0.0f, (dvy * dx + dvy * dy + dvz * dz) * rinv);
 							const float sig = c + myc - 3.0f * w;
-							if (sig < 0.0) {
-								printf("----------------------------\n");
-							}
 							max_c = std::max(max_c, sig);
-							if (c > 1e-5 || w > 1e-5) {
-								print("%e %e %e %e %e\n", h, rho, c, w, ents[j]);
-							}
 						}
 					}
 					float dthydro = max_c / (params.a * myh);
@@ -518,7 +512,8 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					const int rung1 = ceilf(log2f(params.t0) - log2f(dt));
 					rung = std::max((int) rung1, std::max(rung - 1, params.min_rung));
 					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range %e %i %e %e %e %e %e %e %e\n", sph_particles_smooth_len(i), rung1, myc, sqrt(sqr(myvx, myvy, myvz)), gx, gy, gz, dt_grav, dthydro);
+						PRINT("Rung out of range %e %i %e %e %e %e %e %e %e\n", sph_particles_smooth_len(i), rung1, myc, sqrt(sqr(myvx, myvy, myvz)), gx, gy, gz,
+								dt_grav, dthydro);
 					}
 					kr.max_rung = std::max(kr.max_rung, rung);
 				}
@@ -527,7 +522,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 			break;
 
 		case SPH_RUN_FVELS: {
-			load_data(true, false, true, true, false);
+			load_data(true, true, true, true, false);
 			const float ainv = 1.0f / params.a;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool test1 = sph_particles_rung(i) >= params.min_rung;
@@ -560,7 +555,9 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 						if (r2 < h2) {
 							const float r = sqrt(r2);
 							const float rinv = 1.0f / r;
-							const float dWdr = sph_dWdr(r, hinv, hinv3) * rinv;
+							const float this_hinv3 = 1.0f / (sqr(hs[j]) * hs[j]);
+							const float this_rho = sph_den(this_hinv3);
+							const float dWdr = sph_dWdr_rinv(r, hinv, hinv3);
 							const float tmp = m * dWdr * rhoinv;
 							const float dWdr_x = dx * tmp;
 							const float dWdr_y = dy * tmp;
@@ -610,7 +607,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					const auto myvz = sph_particles_vel(ZDIM, i);
 					const auto myfvel = sph_particles_fvel(i);
 					const auto myp = pow(myrho, SPH_GAMMA) * myent;
-					const auto myc = sqrtf(SPH_GAMMA * myp * myrhoinv * myent);
+					const auto myc = sqrtf(SPH_GAMMA * myp * myrhoinv);
 					const int k = i - self_ptr->part_range.first;
 					float max_c = 0.0f;
 					for (int j = 0; j < xs.size(); j++) {
@@ -628,80 +625,20 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float rho = sph_den(h3inv);
 							const float rhoinv = 1.0f / rho;
 							const float p = ents[j] * pow(rho, SPH_GAMMA);
-							const float c = sqrtf(SPH_GAMMA * p * rhoinv * ents[j]);
+							const float c = sqrtf(SPH_GAMMA * p * rhoinv);
 							const float cij = 0.5f * (myc + c);
 							const float hij = 0.5f * (h + myh);
 							const float rho_ij = 0.5f * (rho + myrho);
 							const float dvx = myvx - vxs[j];
 							const float dvy = myvy - vys[j];
 							const float dvz = myvz - vzs[j];
-							const float r = sqrt(sqr(dx, dy, dz));
-							const float rinv = 1.0f / r;
-							const float r2inv = sqr(rinv);
-							const float uij = std::min(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv / (c + myc)) * (myfvel + fvels[j]);
-							const float Pfac = -alpha * uij + beta * sqr(uij);
-							const float dWdri = r < myh ? sph_dWdr(r, myhinv, myh3inv) * rinv : 0.f;
-							const float dWdrj = r < h ? sph_dWdr(r, hinv, h3inv) * rinv : 0.f;
-							const float dWdri_x = dx * dWdri;
-							const float dWdri_y = dy * dWdri;
-							const float dWdri_z = dz * dWdri;
-							const float dWdrj_x = dx * dWdrj;
-							const float dWdrj_y = dy * dWdrj;
-							const float dWdrj_z = dz * dWdrj;
-							const float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
-							const float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
-							const float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
-							const float Pfacp1 = Pfac + 1.0f;
-							const float Prho2i = myp * myrhoinv * myrhoinv;
-							const float Prho2j = p * rhoinv * rhoinv;
-							const float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x);
-							const float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y);
-							const float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z);
-							const float tmp = m * Pfacp1;
-							float dvxdt = -dpx * tmp;
-							float dvydt = -dpy * tmp;
-							float dvzdt = -dpz * tmp;
-							const float dt = std::max(rung_dt[rungs[j]], rung_dt[myrung]) * params.t0;
-							float dAdt = (dpx * dvx + dpy * dvy + dpz * dvz) * Pfac;
-							dAdt *= 0.5 * m * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
-							sph_particles_dvel(XDIM, i) += dvxdt * dt;
-							sph_particles_dvel(YDIM, i) += dvydt * dt;
-							sph_particles_dvel(ZDIM, i) += dvzdt * dt;
-							sph_particles_dent(i) += dAdt * dt;
-						}
-					}
-					for (int j = 0; j < xs.size(); j++) {
-						const float dx = distance(myx, xs[j]);
-						const float dy = distance(myy, ys[j]);
-						const float dz = distance(myz, zs[j]);
-						const float h = hs[j];
-						const float h2 = sqr(h);
-						const float r2 = sqr(dx, dy, dz);
-						constexpr float alpha = 0.75;
-						constexpr float beta = 2.0f * alpha;
-						if (r2 < std::max(myh2, h2) && r2 != 0.0f) {
-							const float hinv = 1.0f / h;
-							const float h3inv = hinv * sqr(hinv);
-							const float rho = sph_den(h3inv);
-							const float rhoinv = 1.0f / rho;
-							const float p = ents[j] * pow(rho, SPH_GAMMA);
-							const float c = sqrtf(SPH_GAMMA * p * rhoinv * ents[j]);
-							const float cij = 0.5f * (myc + c);
-							const float hij = 0.5f * (h + myh);
-							const float rho_ij = 0.5f * (rho + myrho);
-							const float dvx = myvx - vxs[j];
-							const float dvy = myvy - vys[j];
-							const float dvz = myvz - vzs[j];
-							const float dx = distance(myx, xs[j]);
-							const float dy = distance(myy, ys[j]);
-							const float dz = distance(myz, zs[j]);
 							const float r = sqrt(sqr(dx, dy, dz));
 							const float rinv = 1.0f / r;
 							const float r2inv = sqr(rinv);
 							const float uij = std::min(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-							const float Piij = -alpha * cij * uij + beta * sqr(uij) / rho_ij;
-							const float dWdri = sph_dWdr(r, myhinv, myh3inv) * rinv;
-							const float dWdrj = sph_dWdr(r, hinv, h3inv) * rinv;
+							const float Piij = (-alpha * uij * cij + beta * sqr(uij))*rhoinv;
+							const float dWdri = r < myh ? sph_dWdr_rinv(r, myhinv, myh3inv) : 0.f;
+							const float dWdrj = r < h ? sph_dWdr_rinv(r, hinv, h3inv) : 0.f;
 							const float dWdri_x = dx * dWdri;
 							const float dWdri_y = dy * dWdri;
 							const float dWdri_z = dz * dWdri;
@@ -711,15 +648,20 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
 							const float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
 							const float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
-							float dvxdt = -0.5f * (p * rhoinv * rhoinv * dWdrj_x + myp * myrhoinv * myrhoinv * dWdri_x);
-							float dvydt = -0.5f * (p * rhoinv * rhoinv * dWdrj_y + myp * myrhoinv * myrhoinv * dWdri_y);
-							float dvzdt = -0.5f * (p * rhoinv * rhoinv * dWdrj_z + myp * myrhoinv * myrhoinv * dWdri_z);
-							const float dt = std::max(rung_dt[rungs[j]], rung_dt[myrung]) * params.t0;
-							dvxdt -= Piij * dWdrij_x;
-							dvydt -= Piij * dWdrij_y;
-							dvzdt -= Piij * dWdrij_z;
-							float dAdt = Piij * (dvx * dWdrij_x + dvy * dWdrij_y + dvz * dWdrij_z);
-							dAdt *= 0.5 * (SPH_GAMMA - 1.f) * pow(rho, 1.0f - SPH_GAMMA);
+							const float Prho2i = myp * myrhoinv * myrhoinv;
+							const float Prho2j = p * rhoinv * rhoinv;
+							const float dviscx = Piij * dWdrij_x;
+							const float dviscy = Piij * dWdrij_y;
+							const float dviscz = Piij * dWdrij_z;
+							const float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx;
+							const float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy;
+							const float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz;
+							float dvxdt = -dpx * m;
+							float dvydt = -dpy * m;
+							float dvzdt = -dpz * m;
+							const float dt = std::min(rung_dt[rungs[j]], rung_dt[myrung]) * params.t0;
+							float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
+							dAdt *= 0.5 * m * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
 							sph_particles_dvel(XDIM, i) += dvxdt * dt;
 							sph_particles_dvel(YDIM, i) += dvydt * dt;
 							sph_particles_dvel(ZDIM, i) += dvzdt * dt;
