@@ -410,7 +410,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 						const float dh = -f / dfdh;
 						error = fabs(log(h + dh) - log(h));
 						h += dh;
-					//	PRINT( "%e %e\n", h, dh);
+						//	PRINT( "%e %e\n", h, dh);
 						array<fixed32, NDIM> X;
 						X[XDIM] = sph_particles_pos(XDIM, i);
 						X[YDIM] = sph_particles_pos(YDIM, i);
@@ -426,8 +426,8 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							}
 						}
 						cnt++;
-						if( cnt > 20 ) {
-							PRINT( "density solver failed to converge %e %e\n", h, dh);
+						if (cnt > 20) {
+							PRINT("density solver failed to converge %e %e\n", h, dh);
 							abort();
 						}
 					} while (error > SPH_SMOOTHLEN_TOLER);
@@ -449,7 +449,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 			break;
 
 		case SPH_RUN_COURANT: {
-			load_data(true, false, true, true, false);
+			load_data(false, true, true, true, false);
 			const float ainv = 1.0f / params.a;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool test1 = sph_particles_rung(i) >= params.min_rung;
@@ -489,9 +489,13 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float dvy = myvy - vys[j];
 							const float dvz = myvz - vzs[j];
 							const float w = std::min(0.0f, (dvy * dx + dvy * dy + dvz * dz) * rinv);
-							max_c = std::max(max_c, c + myc - 3.0f * w);
-							if( c > 1 || w > 1 ) {
-								print( "%e %e %e %e %e\n", h, rho, c, w, ents[j]);
+							const float sig = c + myc - 3.0f * w;
+							if (sig < 0.0) {
+								printf("----------------------------\n");
+							}
+							max_c = std::max(max_c, sig);
+							if (c > 1e-5 || w > 1e-5) {
+								print("%e %e %e %e %e\n", h, rho, c, w, ents[j]);
 							}
 						}
 					}
@@ -509,11 +513,12 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					char& rung = sph_particles_rung(i);
 					const float g2 = sqr(gx, gy, gz);
 					const float factor = eta * sqrtf(params.a * hgrav);
-					float dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
-					dt = std::min(dt, dthydro);
-					rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
+					const float dt_grav = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
+					const float dt = std::min(dt_grav, dthydro);
+					const int rung1 = ceilf(log2f(params.t0) - log2f(dt));
+					rung = std::max((int) rung1, std::max(rung - 1, params.min_rung));
 					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range %i %e\n", rung, myc);
+						PRINT("Rung out of range %e %i %e %e %e %e\n", sph_particles_smooth_len(i), rung1, myc, sqrt(sqr(myvx, myvy, myvz)), dt_grav, dthydro);
 					}
 					kr.max_rung = std::max(kr.max_rung, rung);
 				}
@@ -793,7 +798,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 			fixed32_range ibox, obox;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool active = sph_particles_rung(i) >= params.min_rung;
-				const bool semiactive =  sph_particles_semi_active(i) && !active;
+				const bool semiactive = sph_particles_semi_active(i) && !active;
 				const bool otest1 = (params.set2 | SPH_SET_ACTIVE) && active;
 				const bool otest2 = (params.set2 | SPH_SET_SEMIACTIVE) && semiactive;
 				const bool otest3 = params.set2 | SPH_SET_ALL;
