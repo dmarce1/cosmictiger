@@ -79,9 +79,9 @@ struct sph_run_return {
 #define SPH_RUN_HYDRO 6
 #define SPH_RUN_UPDATE 7
 
-#define SPH_SET_ACTIVE 0
-#define SPH_SET_SEMIACTIVE 1
-#define SPH_SET_ALL 2
+#define SPH_SET_ACTIVE 1
+#define SPH_SET_SEMIACTIVE 2
+#define SPH_SET_ALL 4
 
 struct sph_run_params {
 	int run_type;

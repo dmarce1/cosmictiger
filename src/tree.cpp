@@ -460,7 +460,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			for (part_int j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
 				mask[j - i] = 0.f;
 				for (int dim = 0; dim < NDIM; dim++) {
-					X[dim][j - i] = particles_pos(dim, maxi - 1).raw();
+					X[dim][j - i] = particles_pos(dim, maxj - 1).raw();
 				}
 			}
 			array < simd_float, NDIM > dx;

@@ -55,7 +55,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #define USE_CONFORMAL_TIME
 #define SPH_NEIGHBOR_COUNT 64
-#define SPH_BUCKET_SIZE 32
+#define SPH_BUCKET_SIZE 128
 #define SPH_SMOOTHLEN_TOLER 1.0e-6
 
 #define GROUP_WAVES 8
@@ -86,7 +86,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define KICK_OVERSUBSCRIPTION 8
 #define MAX_DEPTH 64
 #define MAX_PARTICLES_PER_PARCEL (8*1024*1024)
-#define MAX_RUNG 64
+#define MAX_RUNG 32
 #define MIN_CP_PARTS 25
 #define MIN_KICK_THREAD_PARTS (1024)
 #define MIN_PC_PARTS 47

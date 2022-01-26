@@ -162,13 +162,14 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 	bool do_outer, do_inner, active_only;
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTH_LEN:
-		do_inner = false;
-		do_outer = true;
+		do_inner = true;
+		do_outer = false;
 		active_only = true;
 		break;
 	case SPH_RUN_MARK_SEMIACTIVE:
 		do_inner = false;
 		do_outer = true;
+		active_only = false;
 		break;
 	case SPH_RUN_FIND_BOXES:
 		do_inner = false;
@@ -315,6 +316,8 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 								if( do_rungs ) {
 									rungs[i] = rungs.back();
 									rungs.pop_back();
+								}
+								if( do_smoothlens ) {
 									hs[i] = hs.back();
 									hs.pop_back();
 								}
@@ -338,9 +341,10 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		switch (params.run_type) {
 		case SPH_RUN_SMOOTH_LEN: {
 			const bool test = params.set1 == SPH_SET_SEMIACTIVE;
-			load_data(false, test, test, !test, test);
+			load_data(false, false, false, true, false);
 			const int self_nparts = self_ptr->part_range.second - self_ptr->part_range.first;
 			float f, dfdh;
+			simd_float f_simd, dfdh_simd;
 			bool box_xceeded = false;
 			float max_h = 0.0;
 			float min_h = std::numeric_limits<float>::max();
@@ -352,60 +356,89 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 				if (test1 || test2 || test3) {
 					float error;
 					float& h = sph_particles_smooth_len(i);
-					const auto myx = (sph_particles_pos(XDIM, i));
-					const auto myy = (sph_particles_pos(YDIM, i));
-					const auto myz = (sph_particles_pos(ZDIM, i));
+					const simd_int myx = (sph_particles_pos(XDIM, i).raw());
+					const simd_int myy = (sph_particles_pos(YDIM, i).raw());
+					const simd_int myz = (sph_particles_pos(ZDIM, i).raw());
 					int cnt = 0;
 					do {
-						const float h2 = sqr(h);
-						const float hinv = 1.0f / h;
-						f = 0.0;
-						dfdh = 0.0;
-						for (int j = 0; j < xs.size(); j++) {
-							const float dx = distance(myx, xs[j]);
-							const float dy = distance(myy, ys[j]);
-							const float dz = distance(myz, zs[j]);
-							const float r2 = sqr(dx, dy, dz);
-							if (r2 < h2) {
-								const float r = sqrt(r2);
-								const float w = sph_W(r, hinv, 1.0f);
-								const float dwdh = sph_dWdh(r, hinv, 1.0f);
-								constexpr float c0 = float(4.0 / 3.0 * M_PI);
-								f += c0 * w;
-								dfdh += c0 * dwdh;
+						const simd_float h2 = sqr(h);
+						const simd_float hinv = 1.0f / h;
+						f_simd = 0.0;
+						dfdh_simd = 0.0;
+						const int maxj = round_up((int) xs.size(), SIMD_FLOAT_SIZE);
+						for (int j = 0; j < maxj; j += SIMD_FLOAT_SIZE) {
+							const int maxk = std::min((int) xs.size(), j + SIMD_FLOAT_SIZE);
+							simd_int X, Y, Z;
+							simd_float mask;
+							for (int k = j; k < maxk; k++) {
+								const int kmj = k - j;
+								X[kmj] = xs[k].raw();
+								Y[kmj] = ys[k].raw();
+								Z[kmj] = zs[k].raw();
+								mask[kmj] = 1.0f;
 							}
+							for (int k = maxk; k < j + SIMD_FLOAT_SIZE; k++) {
+								const int kmj = k - j;
+								X[kmj] = Y[kmj] = Z[kmj] = 0.0;
+								mask[kmj] = 0.0f;
+							}
+							static const simd_float _2float(fixed2float);
+							const simd_float dx = simd_float(myx - X) * _2float;
+							const simd_float dy = simd_float(myy - Y) * _2float;
+							const simd_float dz = simd_float(myz - Z) * _2float;
+							const simd_float r2 = sqr(dx, dy, dz);
+							mask *= (r2 < h2);
+							const simd_float r = sqrt(r2);
+							const simd_float q = r * hinv;
+							const simd_float q2 = sqr(q);
+							static const simd_float one = simd_float(1);
+							static const simd_float four = simd_float(4);
+							const simd_float _1mq = one - q;
+							const simd_float _1mq2 = sqr(_1mq);
+							const simd_float _1mq3 = _1mq * _1mq2;
+							const simd_float _1mq4 = _1mq * _1mq3;
+							static const simd_float A = simd_float(float(21.0 * 2.0 / 3.0));
+							static const simd_float B = simd_float(float(840.0 / 3.0));
+							const simd_float w = A * _1mq4 * (one + four * q);
+							const simd_float dwdh = B * _1mq3 * q2 * hinv;
+							f_simd += w * mask;
+							dfdh_simd += dwdh * mask;
 						}
-						dfdh += 3.0f * f * hinv;
+						f = f_simd.sum();
+						dfdh = dfdh_simd.sum();
 						f -= SPH_NEIGHBOR_COUNT;
 						const float dh = -f / dfdh;
 						error = fabs(log(h + dh) - log(h));
 						h += dh;
+					//	PRINT( "%e %e\n", h, dh);
 						array<fixed32, NDIM> X;
-						X[XDIM] = myx;
-						X[YDIM] = myy;
-						X[ZDIM] = myz;
+						X[XDIM] = sph_particles_pos(XDIM, i);
+						X[YDIM] = sph_particles_pos(YDIM, i);
+						X[ZDIM] = sph_particles_pos(ZDIM, i);
 						for (int dim = 0; dim < NDIM; dim++) {
-							if( distance(self_ptr->outer_box.end[dim], X[dim]) + h < 0.0 ) {
+							if (distance(self_ptr->outer_box.end[dim], X[dim]) + h < 0.0) {
 								box_xceeded = true;
 								break;
 							}
-							if( distance(X[dim], self_ptr->outer_box.begin[dim]) + h < 0.0 ) {
+							if (distance(X[dim], self_ptr->outer_box.begin[dim]) + h < 0.0) {
 								box_xceeded = true;
 								break;
 							}
 						}
 						cnt++;
+						if( cnt > 20 ) {
+							PRINT( "density solver failed to converge %e %e\n", h, dh);
+							abort();
+						}
 					} while (error > SPH_SMOOTHLEN_TOLER);
-					max_cnt = std::max(max_cnt,cnt);
+					max_cnt = std::max(max_cnt, cnt);
+					max_h = std::max(max_h, h);
+					min_h = std::min(min_h, h);
 				}
-				float h = sph_particles_smooth_len(i);
-				max_h = std::max(max_h, h);
-				min_h = std::min(min_h, h);
 				if (box_xceeded) {
 					break;
 				}
 			}
-			PRINT( "%i\n", max_cnt);
 			if (box_xceeded) {
 				kr.rc1 = true;
 			}
@@ -457,6 +490,9 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float dvz = myvz - vzs[j];
 							const float w = std::min(0.0f, (dvy * dx + dvy * dy + dvz * dz) * rinv);
 							max_c = std::max(max_c, c + myc - 3.0f * w);
+							if( c > 1 || w > 1 ) {
+								print( "%e %e %e %e %e\n", h, rho, c, w, ents[j]);
+							}
 						}
 					}
 					float dthydro = max_c / (params.a * myh);
@@ -476,6 +512,9 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					float dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
 					dt = std::min(dt, dthydro);
 					rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
+					if (rung < 0 || rung >= MAX_RUNG) {
+						PRINT("Rung out of range %i %e\n", rung, myc);
+					}
 					kr.max_rung = std::max(kr.max_rung, rung);
 				}
 			}
@@ -596,8 +635,8 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float r2inv = sqr(rinv);
 							const float uij = std::min(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv / (c + myc)) * (myfvel + fvels[j]);
 							const float Pfac = -alpha * uij + beta * sqr(uij);
-							const float dWdri = sph_dWdr(r, myhinv, myh3inv) * rinv;
-							const float dWdrj = sph_dWdr(r, hinv, h3inv) * rinv;
+							const float dWdri = r < myh ? sph_dWdr(r, myhinv, myh3inv) * rinv : 0.f;
+							const float dWdrj = r < h ? sph_dWdr(r, hinv, h3inv) * rinv : 0.f;
 							const float dWdri_x = dx * dWdri;
 							const float dWdri_y = dy * dWdri;
 							const float dWdri_z = dz * dWdri;
@@ -717,11 +756,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					float& gx = sph_particles_gforce(XDIM, i);
 					float& gy = sph_particles_gforce(YDIM, i);
 					float& gz = sph_particles_gforce(ZDIM, i);
-					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range %i\n", rung);
-					} else {
-						dt = 0.5f * rung_dt[rung] * params.t0;
-					}
+					dt = 0.5f * rung_dt[rung] * params.t0;
 					vx = fmaf(gx, dt, vx);
 					vy = fmaf(gy, dt, vy);
 					vz = fmaf(gz, dt, vz);
@@ -757,12 +792,14 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		case SPH_RUN_FIND_BOXES: {
 			fixed32_range ibox, obox;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				const bool otest1 = params.set2 == SPH_SET_ACTIVE && sph_particles_rung(i) >= params.min_rung;
-				const bool otest2 = params.set2 == SPH_SET_SEMIACTIVE && sph_particles_semi_active(i);
-				const bool otest3 = params.set2 == SPH_SET_ALL;
-				const bool itest1 = params.set1 == SPH_SET_ACTIVE && sph_particles_rung(i) >= params.min_rung;
-				const bool itest2 = params.set1 == SPH_SET_SEMIACTIVE && sph_particles_semi_active(i);
-				const bool itest3 = params.set1 == SPH_SET_ALL;
+				const bool active = sph_particles_rung(i) >= params.min_rung;
+				const bool semiactive =  sph_particles_semi_active(i) && !active;
+				const bool otest1 = (params.set2 | SPH_SET_ACTIVE) && active;
+				const bool otest2 = (params.set2 | SPH_SET_SEMIACTIVE) && semiactive;
+				const bool otest3 = params.set2 | SPH_SET_ALL;
+				const bool itest1 = (params.set1 | SPH_SET_ACTIVE) && active;
+				const bool itest2 = (params.set1 | SPH_SET_SEMIACTIVE) && semiactive;
+				const bool itest3 = params.set1 | SPH_SET_ALL;
 				const bool otest = otest1 || otest2 || otest3;
 				const bool itest = itest1 || itest2 || itest3;
 				if (otest || itest) {
@@ -785,7 +822,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 			}
 			kr.inner_box = ibox;
 			kr.outer_box = obox;
-			sph_tree_set_boxes(self,kr.inner_box, kr.outer_box);
+			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
 		}
 			break;
 		}
