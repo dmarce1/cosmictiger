@@ -147,13 +147,14 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
+		int j = NOT_SPH;
 		if (sph) {
-			const int j = sph_index[snki];
-			if (j != NOT_SPH) {
-				sph_gx[j] = gx[i];
-				sph_gy[j] = gy[i];
-				sph_gz[j] = gz[i];
-			}
+			j = sph_index[snki];
+		}
+		if (j != NOT_SPH) {
+			sph_gx[j] = gx[i];
+			sph_gy[j] = gy[i];
+			sph_gz[j] = gz[i];
 		} else {
 			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
 			rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));

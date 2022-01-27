@@ -41,17 +41,6 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-struct workspace {
-	vector<tree_id> nextlist;
-	vector<tree_id> leaflist;
-	workspace() = default;
-	workspace(const workspace&) = delete;
-	workspace& operator=(const workspace&) = delete;
-	workspace(workspace&&) = default;
-	workspace& operator=(workspace&&) = default;
-};
-static thread_local std::stack<std::shared_ptr<workspace>> local_workspaces;
-
 inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 	bool intersect = a.valid && b.valid;
 	if (intersect) {
@@ -82,20 +71,6 @@ inline bool range_contains(const fixed32_range& a, const array<fixed32, NDIM> x)
 	return contains;
 }
 
-static std::shared_ptr<workspace> get_workspace() {
-	if (local_workspaces.empty()) {
-		local_workspaces.push(std::make_shared<workspace>());
-	}
-	auto workspace = std::move(local_workspaces.top());
-	local_workspaces.pop();
-	workspace->nextlist.resize(0);
-	workspace->leaflist.resize(0);
-	return std::move(workspace);
-}
-
-static void cleanup_workspace(std::shared_ptr<workspace> workspace) {
-	local_workspaces.push(std::move(workspace));
-}
 
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor_fork(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level,
 		bool threadme) {
@@ -147,17 +122,17 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 	stack_trace_activate();
 	const sph_tree_node* self_ptr = sph_tree_get_node(self);
 	sph_tree_neighbor_return kr;
-	if (self_ptr->local_root) {
+	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS && self_ptr->local_root) {
 		sph_tree_free_neighbor_list();
+		sph_tree_clear_neighbor_ranges();
 	}
 	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS && checklist.size() == 0) {
 		return hpx::make_ready_future(kr);
 	}
 	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
-	auto ws = get_workspace();
-	vector<tree_id>& nextlist = ws->nextlist;
-	vector<tree_id>& leaflist = ws->leaflist;
+	vector<tree_id> nextlist;
+	vector<tree_id> leaflist;
 	fixed32_range box;
 
 	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS) {
@@ -214,11 +189,9 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 		}
 			break;
 		}
-		cleanup_workspace(std::move(ws));
 		return hpx::make_ready_future(kr);
 	} else {
 		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-		cleanup_workspace(std::move(ws));
 		const sph_tree_node* cl = sph_tree_get_node(self_ptr->children[LEFT]);
 		const sph_tree_node* cr = sph_tree_get_node(self_ptr->children[RIGHT]);
 		std::array<hpx::future<sph_tree_neighbor_return>, NCHILD> futs;

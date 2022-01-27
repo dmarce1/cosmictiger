@@ -122,6 +122,7 @@ void do_groups(int number, double scale) {
 }
 
 int sph_step(int minrung, double scale, double t0) {
+	PRINT( "Doing SPH step with minrung = %i\n", minrung);
 	int max_rung = 0;
 	sph_tree_create_params tparams;
 
@@ -233,7 +234,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
+	PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i\n", tm.read(), kr.max_vsig, kr.max_rung);
 	tm.reset();
 	max_rung = kr.max_rung;
 
@@ -243,7 +244,6 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
-	max_rung = kr.max_rung;
 
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
@@ -265,7 +265,6 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_FVELS): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
-	max_rung = kr.max_rung;
 
 
 	sparams.run_type = SPH_RUN_HYDRO;
@@ -274,8 +273,6 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
-	max_rung = kr.max_rung;
-
 
 	sparams.run_type = SPH_RUN_UPDATE;
 	tm.start();
@@ -283,6 +280,8 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
+
+	PRINT( "Completing SPH step with max_rung = %i\n", max_rung);
 	return max_rung;
 
 }
@@ -552,6 +551,7 @@ void driver() {
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung = kr.max_rung;
+			PRINT( "GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, t0));
 			}
@@ -639,6 +639,7 @@ void driver() {
 			total_time.start();
 			//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
 //			PRINT("%llx\n", itime);
+			PRINT( "itime inc %i\n", max_rung);
 			itime = inc(itime, max_rung);
 			domain_time = 0.0;
 			sort_time = 0.0;
