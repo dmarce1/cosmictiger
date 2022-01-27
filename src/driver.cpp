@@ -140,6 +140,7 @@ int sph_step(int minrung, double scale, double t0) {
 	PRINT("starting sph_tree_create = %e\n", tm.read());
 	auto sr = sph_tree_create(tparams);
 	tm.stop();
+	tm.reset();
 	PRINT("sph_tree_create time = %e\n", tm.read());
 
 	sph_tree_neighbor_params tnparams;
@@ -282,6 +283,9 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.reset();
 
 	PRINT( "Completing SPH step with max_rung = %i\n", max_rung);
+
+	total_tm.stop();
+	PRINT( "TOTAL SPH TIME = %e\n", total_tm.read());
 	return max_rung;
 
 }

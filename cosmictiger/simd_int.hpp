@@ -134,6 +134,9 @@ public:
 		v[1] = _mm_mul_epi32(v[1], other.v[1]);
 		return *this;
 	}
+	inline simd_int8 operator<<(const simd_int8& other) {
+
+	}
 	inline simd_int8 operator*(float d) const {
 		const simd_int8 other = d;
 		return other * *this;

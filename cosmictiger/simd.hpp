@@ -155,6 +155,10 @@ inline simd_float operator*(float r, const simd_float& y) {
 	return y * r;
 }
 
+inline simd_float8 pow(const simd_float8& a, const simd_float8& b) {
+	return exp(log(a)*b);
+}
+
 #endif /* SIMD_HPP_ */
 
 #endif

@@ -539,8 +539,52 @@ public:
 	friend inline simd_float8 round(const simd_float8&);
 	friend inline simd_float8 fmaf(const simd_float8&, const simd_float8&, const simd_float8&);
 	friend class simd_int8;
+	friend simd_float8 log2(const simd_float8& a);
+
 
 };
+
+
+inline simd_float8 log2(const simd_float8& a) {
+	__m256i i = _mm256_castps_si256(a.v);
+	__m256i j;
+	i = _mm256_srli_epi32(i, 23);
+	j = _mm256_slli_epi32(i, 23);
+	i = _mm256_sub_epi32(i, _mm256_set1_epi32(0x7f));
+	simd_float8 ret, x;
+	x.v = _mm256_castsi256_ps(j);
+	ret.v = _mm256_cvtepi32_ps(i);
+	x = a / x;
+	x = sqrt(sqrt(x));
+	static const float c0 = 1.0 / log(2.0);
+	static const simd_float8 c1(c0);
+	static const simd_float8 c2(-c0/2);
+	static const simd_float8 c3(c0/3);
+	static const simd_float8 c4(-c0/4);
+	static const simd_float8 c5(c0/5);
+	static const simd_float8 c6(-c0/6);
+	static const simd_float8 c7(c0/7);
+	static const simd_float8 c8(-c0/8);
+	static const simd_float8 c9(c0/9);
+	x = x - simd_float8(1.0f);
+	simd_float8 y = c9;
+	y = fmaf(y, x, c8);
+	y = fmaf(y, x, c7);
+	y = fmaf(y, x, c6);
+	y = fmaf(y, x, c5);
+	y = fmaf(y, x, c4);
+	y = fmaf(y, x, c3);
+	y = fmaf(y, x, c2);
+	y = fmaf(y, x, c1);
+	y = y * x;
+	ret += simd_float8(4)*y;
+	return ret;
+}
+
+inline simd_float8 log(const simd_float8& a) {
+	static const simd_float8 b = 1.0/log2(exp(1));
+	return log2(a)*b;
+}
 
 inline simd_float8 sqrt(const simd_float8& a) {
 	simd_float8 b;
