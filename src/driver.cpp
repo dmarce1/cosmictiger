@@ -37,7 +37,7 @@
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/view.hpp>
 #include <cosmictiger/sph_tree.hpp>
-#include <cosmictiger/sph_run.hpp>
+#include <cosmictiger/sph.hpp>
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -140,121 +140,149 @@ int sph_step(int minrung, double scale, double t0) {
 	auto sr = sph_tree_create(tparams);
 	tm.stop();
 	PRINT("sph_tree_create time = %e\n", tm.read());
+
+	sph_tree_neighbor_params tnparams;
+	tnparams.h_wt = 2.0;
+	tnparams.min_rung = minrung;
+	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+
+	tm.start();
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	tm.reset();
+
 	sph_run_params sparams;
 	sparams.a = scale;
 	sparams.t0 = t0;
 	sparams.min_rung = minrung;
 	bool cont;
 	sph_run_return kr;
-	sparams.set1 = SPH_SET_ACTIVE;
+	sparams.set = SPH_SET_ACTIVE;
 
 	do {
-		sparams.set1 = SPH_SET_ACTIVE;
-		sparams.run_type = SPH_RUN_SMOOTH_LEN;
+		sparams.set = SPH_SET_ACTIVE;
+		sparams.run_type = SPH_RUN_SMOOTHLEN;
 		timer tm;
 		tm.start();
-		kr = sph_run(sparams, root_id, checklist).get();
+		kr = sph_run(sparams);
 		tm.stop();
-		PRINT("sph_run(SPH_RUN_SMOOTH_LEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
+		PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
-		cont = kr.rc1;
-		sparams.h_wt = 2.0;
-		sparams.run_type = SPH_RUN_FIND_BOXES;
-		sparams.set2 = SPH_SET_ACTIVE;
-		sparams.set1 = SPH_SET_ALL;
+		cont = kr.rc;
+		tnparams.h_wt = 2.0;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.set = SPH_SET_ACTIVE;
 		tm.start();
-		sph_run(sparams, root_id, checklist).get();
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		tm.stop();
-		PRINT("sph_run(SPH_RUN_FIND_BOXES): %e\n", tm.read());
-		PRINT("?\n");
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+		tm.start();
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		tm.stop();
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+		tm.reset();
 	} while (cont);
 	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
-	sparams.set1 = SPH_SET_ALL;
 	tm.reset();
 	tm.start();
-	sph_run(sparams, root_id, checklist).get();
+	sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_MARK_SEMI_ACTIVE): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 	tm.reset();
-	sparams.run_type = SPH_RUN_FIND_BOXES;
-	sparams.set2 = SPH_SET_SEMIACTIVE;
-	sparams.set1 = SPH_SET_ALL;
+	tnparams.h_wt = 2.0;
+	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+	tnparams.set = SPH_SET_SEMIACTIVE;
 	tm.start();
-	sph_run(sparams, root_id, checklist).get();
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	tm.start();
+	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 	tm.reset();
+
 	do {
-		sparams.set1 = SPH_SET_SEMIACTIVE;
-		sparams.run_type = SPH_RUN_SMOOTH_LEN;
+		sparams.set = SPH_SET_SEMIACTIVE;
+		sparams.run_type = SPH_RUN_SMOOTHLEN;
+		timer tm;
 		tm.start();
-		kr = sph_run(sparams, root_id, checklist).get();
+		kr = sph_run(sparams);
 		tm.stop();
-		PRINT("sph_run(SPH_RUN_SMOOTH_LEN (semi-active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.min_h, kr.max_h);
+		PRINT("sph_run(SPH_RUN_SMOOTHLEN (semi-active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
-		cont = kr.rc1;
-		sparams.h_wt = cont ? 2.0 : 1.0;
-		sparams.run_type = SPH_RUN_FIND_BOXES;
-		sparams.set2 = cont ? SPH_SET_SEMIACTIVE : SPH_SET_ACTIVE;
-		sparams.set1 = SPH_SET_ALL;
+		cont = kr.rc;
+		tnparams.h_wt = cont ? 2.0 : 1.0;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.set = cont ? SPH_SET_SEMIACTIVE : SPH_SET_ACTIVE;
 		tm.start();
-		sph_run(sparams, root_id, checklist).get();
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		tm.stop();
-		PRINT("sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+		tm.start();
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		tm.stop();
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
 	} while (cont);
-
 	sparams.run_type = SPH_RUN_COURANT;
-	sparams.set1 = SPH_SET_ACTIVE;
 	tm.start();
-	kr = sph_run(sparams, root_id, checklist).get();
+	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_COURANT): tm = %e %i\n", tm.read(), kr.max_rung);
+	PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
 	max_rung = kr.max_rung;
-	sparams.run_type = SPH_RUN_FIND_BOXES;
-	sparams.set2 = SPH_SET_ACTIVE | SPH_SET_SEMIACTIVE;
-	sparams.set1 = SPH_SET_ALL;
-	tm.start();
-	sph_run(sparams, root_id, checklist).get();
-	tm.stop();
-	PRINT("sph_run(SPH_RUN_FIND_BOXES): tm = %e \n", tm.read());
-	tm.reset();
 
 	sparams.run_type = SPH_RUN_GRAVITY;
-	sparams.set1 = SPH_SET_ACTIVE;
 	tm.start();
-	kr = sph_run(sparams, root_id, checklist).get();
+	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
+	max_rung = kr.max_rung;
+
+	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+	tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
+	tm.start();
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	tm.start();
+	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+	tm.reset();
+
 
 	sparams.run_type = SPH_RUN_FVELS;
-	sparams.set1 = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
 	tm.start();
-	kr = sph_run(sparams, root_id, checklist).get();
+	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_FVELS): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_FVELS): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
+	max_rung = kr.max_rung;
+
 
 	sparams.run_type = SPH_RUN_HYDRO;
-	sparams.set1 = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
 	tm.start();
-	kr = sph_run(sparams, root_id, checklist).get();
+	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
+	max_rung = kr.max_rung;
+
 
 	sparams.run_type = SPH_RUN_UPDATE;
-	sparams.set1 = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
 	tm.start();
-	kr = sph_run(sparams, root_id, checklist).get();
+	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e \n", tm.read());
+	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
 	tm.reset();
-
-	total_tm.stop();
-	PRINT("TOTAL TIME = %e\n", total_tm.read());
 	return max_rung;
 
 }
