@@ -126,6 +126,8 @@ int sph_step(int minrung, double scale, double t0) {
 	sph_tree_create_params tparams;
 
 	timer tm;
+	timer total_tm;
+	total_tm.start();
 	tparams.h_wt = 2.0;
 	tparams.min_rung = minrung;
 	tree_id root_id;
@@ -167,7 +169,7 @@ int sph_step(int minrung, double scale, double t0) {
 		PRINT("?\n");
 	} while (cont);
 	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
-	sparams.set1 = SPH_SET_SEMIACTIVE;
+	sparams.set1 = SPH_SET_ALL;
 	tm.reset();
 	tm.start();
 	sph_run(sparams, root_id, checklist).get();
@@ -251,6 +253,8 @@ int sph_step(int minrung, double scale, double t0) {
 	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e \n", tm.read());
 	tm.reset();
 
+	total_tm.stop();
+	PRINT("TOTAL TIME = %e\n", total_tm.read());
 	return max_rung;
 
 }

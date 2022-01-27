@@ -74,5 +74,4 @@ inline T sph_den(T hinv3) {
 	static const T c0 = T(3.0 / 4.0 / M_PI * SPH_NEIGHBOR_COUNT);
 	return m * c0 * hinv3;
 }
-
 #endif /* SPH_HPP_ */

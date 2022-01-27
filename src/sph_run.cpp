@@ -226,18 +226,16 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		nextlist.resize(0);
 		for (int ci = 0; ci < checklist.size(); ci++) {
 			const auto* other = sph_tree_get_node(checklist[ci]);
-			if (other->nactive > 0) {
-				const bool test1 = do_inner && range_intersect(self_ptr->outer_box, other->inner_box);
-				const bool test2 = do_outer && range_intersect(self_ptr->inner_box, other->outer_box);
-				const bool test3 = (!do_outer && !do_inner) && (self_ptr == other);
-				const bool test4 = level <= 6;
-				if (test1 || test2 || test3 || test4) {
-					if (other->leaf) {
-						leaflist.push_back(checklist[ci]);
-					} else {
-						nextlist.push_back(other->children[LEFT]);
-						nextlist.push_back(other->children[RIGHT]);
-					}
+			const bool test1 = do_inner && range_intersect(self_ptr->outer_box, other->inner_box);
+			const bool test2 = do_outer && range_intersect(self_ptr->inner_box, other->outer_box) && (other->nactive > 0);
+			const bool test3 = (!do_outer && !do_inner) && (self_ptr == other);
+			const bool test4 = level <= 6;
+			if (test1 || test2 || test3 || test4) {
+				if (other->leaf) {
+					leaflist.push_back(checklist[ci]);
+				} else {
+					nextlist.push_back(other->children[LEFT]);
+					nextlist.push_back(other->children[RIGHT]);
 				}
 			}
 		}
@@ -363,6 +361,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 					do {
 						const simd_float h2 = sqr(h);
 						const simd_float hinv = 1.0f / h;
+						//PRINT( "%e %e %e \n", h, h2[0], hinv[0]);
 						f_simd = 0.0;
 						dfdh_simd = 0.0;
 						const int maxj = round_up((int) xs.size(), SIMD_FLOAT_SIZE);
@@ -407,10 +406,16 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 						f = f_simd.sum();
 						dfdh = dfdh_simd.sum();
 						f -= SPH_NEIGHBOR_COUNT;
-						const float dh = -f / dfdh;
+						float dh = -f / dfdh;
 						error = fabs(log(h + dh) - log(h));
+						/*if (dh > 0.1 * h) {
+							dh = 0.1 * h;
+						} else if (dh < -0.1 * h) {
+							dh = -0.1 * dh;
+						}*/
 						h += dh;
-						//	PRINT( "%e %e\n", h, dh);
+						//if( cnt > 5 )
+						//	PRINT( "%i %e %e\n", cnt, h, dh);
 						array<fixed32, NDIM> X;
 						X[XDIM] = sph_particles_pos(XDIM, i);
 						X[YDIM] = sph_particles_pos(YDIM, i);
@@ -426,7 +431,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							}
 						}
 						cnt++;
-						if (cnt > 20) {
+						if (cnt > 100) {
 							PRINT("density solver failed to converge %e %e\n", h, dh);
 							abort();
 						}
@@ -636,7 +641,7 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 							const float rinv = 1.0f / r;
 							const float r2inv = sqr(rinv);
 							const float uij = std::min(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-							const float Piij = (-alpha * uij * cij + beta * sqr(uij))*rhoinv;
+							const float Piij = (-alpha * uij * cij + beta * sqr(uij)) * rhoinv;
 							const float dWdri = r < myh ? sph_dWdr_rinv(r, myhinv, myh3inv) : 0.f;
 							const float dWdrj = r < h ? sph_dWdr_rinv(r, hinv, h3inv) : 0.f;
 							const float dWdri_x = dx * dWdri;
@@ -716,20 +721,25 @@ hpx::future<sph_run_return> sph_run(sph_run_params params, tree_id self, vector<
 		case SPH_RUN_MARK_SEMIACTIVE: {
 			load_data(true, true, false, false, true);
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				const auto myx = sph_particles_pos(XDIM, i);
-				const auto myy = sph_particles_pos(YDIM, i);
-				const auto myz = sph_particles_pos(ZDIM, i);
-				sph_particles_semi_active(i) = false;
-				for (int j = 0; j < xs.size(); j++) {
-					const float h = hs[j];
-					const float h2 = sqr(h);
-					const float dx = distance(myx, xs[j]);
-					const float dy = distance(myy, ys[j]);
-					const float dz = distance(myz, zs[j]);
-					const float r2 = sqr(dx, dy, dz);
-					if (r2 < h2 && r2 != 0.0) {
-						sph_particles_semi_active(i) = true;
+				if (sph_particles_rung(i) < params.min_rung) {
+					const auto myx = sph_particles_pos(XDIM, i);
+					const auto myy = sph_particles_pos(YDIM, i);
+					const auto myz = sph_particles_pos(ZDIM, i);
+					sph_particles_semi_active(i) = false;
+					for (int j = 0; j < xs.size(); j++) {
+						const float h = hs[j];
+						const float h2 = sqr(h);
+						const float dx = distance(myx, xs[j]);
+						const float dy = distance(myy, ys[j]);
+						const float dz = distance(myz, zs[j]);
+						const float r2 = sqr(dx, dy, dz);
+						if (rungs[j] >= params.min_rung && r2 < h2 && r2 != 0.0) {
+							sph_particles_semi_active(i) = true;
+							break;
+						}
 					}
+				} else {
+					sph_particles_semi_active(i) = true;
 				}
 
 			}
