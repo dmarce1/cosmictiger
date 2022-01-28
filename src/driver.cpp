@@ -154,7 +154,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	sph_tree_neighbor(tnparams, root_id, checklist).get();
 	tm.stop();
-	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 	tm.reset();
 
 	sph_run_params sparams;
@@ -179,7 +179,7 @@ int sph_step(int minrung, double scale, double t0) {
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.set = SPH_SET_ACTIVE;
 		tm.start();
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
 		tm.reset();
@@ -201,7 +201,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.set = SPH_SET_SEMIACTIVE;
 	tm.start();
-	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 	tm.stop();
 	tm.reset();
 	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
@@ -226,7 +226,7 @@ int sph_step(int minrung, double scale, double t0) {
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.set = cont ? SPH_SET_SEMIACTIVE : SPH_SET_ACTIVE;
 		tm.start();
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
 		tm.reset();
@@ -255,7 +255,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
 	tm.start();
-	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 	tm.stop();
 	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
 	tm.reset();
@@ -294,7 +294,7 @@ int sph_step(int minrung, double scale, double t0) {
 	total_tm.stop();
 	PRINT( "TOTAL SPH TIME = %e\n", total_tm.read());
 
-	sph_tree_destroy();
+	sph_tree_destroy(true);
 	sph_particles_cache_free();
 
 	return max_rung;

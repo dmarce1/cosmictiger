@@ -66,6 +66,7 @@ static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
+static std::atomic<int> allocator_mtx(0);
 
 long long tree_nodes_size() {
 	return nodes.size();
@@ -122,8 +123,11 @@ void tree_allocator::reset() {
 
 tree_allocator::tree_allocator() {
 	ready = false;
-	std::lock_guard<spinlock_type> lock(mutex[0]);
+	while( allocator_mtx++ != 0 ) {
+		allocator_mtx--;
+	}
 	allocator_list.push_back(this);
+	allocator_mtx--;
 }
 
 int tree_allocator::allocate() {
@@ -135,7 +139,9 @@ int tree_allocator::allocate() {
 }
 
 tree_allocator::~tree_allocator() {
-	std::lock_guard<spinlock_type> lock(mutex[0]);
+	while( allocator_mtx++ != 0 ) {
+		allocator_mtx--;
+	}
 	for (int i = 0; i < allocator_list.size(); i++) {
 		if (allocator_list[i] == this) {
 			allocator_list[i] = allocator_list.back();
@@ -143,6 +149,7 @@ tree_allocator::~tree_allocator() {
 			break;
 		}
 	}
+	allocator_mtx--;
 }
 
 tree_create_params::tree_create_params(int min_rung_, double theta_) {
@@ -221,9 +228,13 @@ static void tree_allocate_nodes() {
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
+	while( allocator_mtx++ != 0 ) {
+		allocator_mtx--;
+	}
 	for (int i = 0; i < allocator_list.size(); i++) {
 		allocator_list[i]->ready = false;
 	}
+	allocator_mtx--;
 	hpx::wait_all(futs.begin(), futs.end());
 }
 

@@ -149,7 +149,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 					}
 				}*/
 				const bool test2 = range_intersect(self_ptr->inner_box, other->outer_box) && (other->nactive > 0);
-				const bool test3 = level <= 6;
+				const bool test3 = level <= 9;
 				if (test1 || test2 || test3) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
@@ -457,7 +457,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				}
 				cnt++;
 				if (cnt > 20) {
-					PRINT("density solver failed to converge %e %e %i %i %i\n", h, dh, nactive, self_ptr->outer_box.valid, nneighbor);
+					PRINT("density solver failed to converge %e %e %i %i %i %i\n", h, dh, nactive, self_ptr->outer_box.valid, self_ptr->inner_box.valid, nneighbor);
 					abort();
 				}
 			} while (error > SPH_SMOOTHLEN_TOLER);
@@ -676,7 +676,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				PRINT("Rung out of range %e %i %i %e %e %e %e %e %e %e\n", sph_particles_smooth_len(i), rung1, rung, myc, sqrt(sqr(myvx, myvy, myvz)), gx, gy, gz,
 						dt_grav, dthydro);
 			}
-			rc.max_rung = std::max(rc.max_rung, (int) rung);
+			rc.max_rung = std::max(rc.max_rung, (int) rung1);
 
 		}
 	}
