@@ -241,15 +241,15 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	kr = sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i\n", tm.read(), kr.max_vsig, kr.max_rung);
+	PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
 	max_rung = kr.max_rung;
 
 	sparams.run_type = SPH_RUN_GRAVITY;
 	tm.start();
-	kr = sph_run(sparams);
+	sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
+	PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
 	tm.reset();
 
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -269,27 +269,27 @@ int sph_step(int minrung, double scale, double t0) {
 
 	sparams.run_type = SPH_RUN_FVELS;
 	tm.start();
-	kr = sph_run(sparams);
+	sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_FVELS): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
+	PRINT("sph_run(SPH_RUN_FVELS): tm = %e\n", tm.read());
 	tm.reset();
 
 
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.start();
-	kr = sph_run(sparams);
+	sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
+	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 	tm.reset();
 
 	sparams.run_type = SPH_RUN_UPDATE;
 	tm.start();
-	kr = sph_run(sparams);
+	sph_run(sparams);
 	tm.stop();
-	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e max_vsig = %e\n", tm.read(), kr.max_vsig);
+	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
 	tm.reset();
 
-	PRINT( "Completing SPH step with max_rung = %i\n", max_rung);
+	PRINT( "Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
 
 	total_tm.stop();
 	PRINT( "TOTAL SPH TIME = %e\n", total_tm.read());

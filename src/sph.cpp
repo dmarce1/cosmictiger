@@ -669,14 +669,18 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			const float factor = eta * sqrtf(ascale * hgrav);
 			const float dt_grav = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
 			const float dt = std::min(dt_grav, dthydro);
-			const int rung1 = ceilf(log2f(t0) - log2f(dt));
+			const int rung_hydro = ceilf(log2f(t0) - log2f(dthydro));
+			const int rung_grav = ceilf(log2f(t0) - log2f(dt_grav));
+			const int rung1 = std::max(rung_hydro, rung_grav);
 			rung = std::max((int) rung1, std::max(rung - 1, min_rung));
 //			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
 			if (rung < 0 || rung >= MAX_RUNG) {
 				PRINT("Rung out of range %e %i %i %e %e %e %e %e %e %e\n", sph_particles_smooth_len(i), rung1, rung, myc, sqrt(sqr(myvx, myvy, myvz)), gx, gy, gz,
 						dt_grav, dthydro);
 			}
-			rc.max_rung = std::max(rc.max_rung, (int) rung1);
+			rc.max_rung_hydro = std::max(rc.max_rung_hydro, (int) rung_hydro);
+			rc.max_rung_grav = std::max(rc.max_rung_grav, (int) rung_grav);
+			rc.max_rung = std::max(rc.max_rung, (int) rung);
 
 		}
 	}

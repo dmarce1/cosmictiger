@@ -75,12 +75,16 @@ struct sph_tree_neighbor_params {
 struct sph_run_return {
 	float hmin;
 	float hmax;
+	int max_rung_hydro;
+	int max_rung_grav;
 	int max_rung;
 	float max_vsig;
 	bool rc;
 	sph_run_return() {
 		hmax = 0.0;
 		hmin = std::numeric_limits<float>::max();
+		max_rung_hydro = 0;
+		max_rung_grav = 0;
 		max_rung = 0;
 		max_vsig = 0.0;
 		rc = false;
@@ -89,12 +93,16 @@ struct sph_run_return {
 	void serialize(A&& arc, unsigned) {
 		arc & hmin;
 		arc & hmax;
+		arc & max_rung_hydro;
+		arc & max_rung_grav;
 		arc & max_rung;
 		arc & max_vsig;
 	}
 	sph_run_return& operator+=(const sph_run_return& other) {
 		hmax = std::max(hmax, other.hmax);
 		hmin = std::min(hmin, other.hmin);
+		max_rung_hydro = std::max(max_rung_hydro, other.max_rung_hydro);
+		max_rung_grav = std::max(max_rung_grav, other.max_rung_grav);
 		max_rung = std::max(max_rung, other.max_rung);
 		max_vsig = std::max(max_vsig, other.max_vsig);
 		return *this;
