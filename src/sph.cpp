@@ -140,6 +140,14 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			for (int ci = 0; ci < checklist.size(); ci++) {
 				const auto* other = sph_tree_get_node(checklist[ci]);
 				const bool test1 = range_intersect(self_ptr->outer_box, other->inner_box);
+			/*	if (level > 6) {
+					if (!test1 && self_ptr == other && self_ptr->nactive > 0) {
+						PRINT("!\n");
+						static mutex_type mutex;
+						std::lock_guard<mutex_type> lock(mutex);
+						PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
+					}
+				}*/
 				const bool test2 = range_intersect(self_ptr->inner_box, other->outer_box) && (other->nactive > 0);
 				const bool test3 = level <= 6;
 				if (test1 || test2 || test3) {
@@ -160,6 +168,9 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			pair<int> rng;
 			rng.first = sph_tree_allocate_neighbor_list(leaflist);
 			rng.second = leaflist.size() + rng.first;
+			//	if( leaflist.size() == 0) {
+			//		PRINT( "zero\n");
+			//	}
 			sph_tree_set_neighbor_range(self, rng);
 		}
 			break;
@@ -358,7 +369,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 }
 
 static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
-		int min_rung, bool active, bool semiactive) {
+		int min_rung, bool active, bool semiactive, int nactive, int nneighbor) {
 	sph_run_return rc;
 	const int self_nparts = self_ptr->part_range.second - self_ptr->part_range.first;
 	float f, dfdh;
@@ -446,7 +457,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				}
 				cnt++;
 				if (cnt > 20) {
-					PRINT("density solver failed to converge %e %e\n", h, dh);
+					PRINT("density solver failed to converge %e %e %i %i %i\n", h, dh, nactive, self_ptr->outer_box.valid, nneighbor);
 					abort();
 				}
 			} while (error > SPH_SMOOTHLEN_TOLER);
@@ -1129,7 +1140,11 @@ sph_run_return sph_run(sph_run_params params) {
 				sph_run_return this_rc;
 				switch(params.run_type) {
 					case SPH_RUN_SMOOTHLEN:
-					this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE);
+					if( neighbors.size()==0) {
+//						PRINT( "%i\n", neighbors.size());
+					}
+
+					this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
 					break;
 					case SPH_RUN_MARK_SEMIACTIVE:
 					this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);

@@ -145,6 +145,8 @@ int sph_step(int minrung, double scale, double t0) {
 	PRINT("sph_tree_create time = %e\n", tm.read());
 
 	sph_tree_neighbor_params tnparams;
+
+
 	tnparams.h_wt = 2.0;
 	tnparams.min_rung = minrung;
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
@@ -180,6 +182,7 @@ int sph_step(int minrung, double scale, double t0) {
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+		tm.reset();
 		tm.start();
 		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
@@ -200,6 +203,7 @@ int sph_step(int minrung, double scale, double t0) {
 	tm.start();
 	sph_tree_neighbor(tnparams, root_id, checklist).get();
 	tm.stop();
+	tm.reset();
 	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
 	tm.start();
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
@@ -225,6 +229,7 @@ int sph_step(int minrung, double scale, double t0) {
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+		tm.reset();
 		tm.start();
 		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
@@ -253,6 +258,7 @@ int sph_step(int minrung, double scale, double t0) {
 	sph_tree_neighbor(tnparams, root_id, checklist).get();
 	tm.stop();
 	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	tm.reset();
 	tm.start();
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 	sph_tree_neighbor(tnparams, root_id, checklist).get();
