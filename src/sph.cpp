@@ -29,6 +29,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 
+#include <fenv.h>
 #include <unistd.h>
 #include <stack>
 
@@ -490,9 +491,9 @@ static sph_run_return sph_mark_semiactive(const sph_tree_node* self_ptr, const v
 				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
 					const int kmj = k - j;
 					if (k < xs.size()) {
-						x[kmj] = xs[j].raw();
-						y[kmj] = ys[j].raw();
-						z[kmj] = zs[j].raw();
+						x[kmj] = xs[k].raw();
+						y[kmj] = ys[k].raw();
+						z[kmj] = zs[k].raw();
 						mask[kmj] = 1.0f;
 					} else {
 						x[kmj] = myx[0];
@@ -576,6 +577,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			int offset = SIMD_FLOAT_SIZE;
 			static const simd_float _2float(fixed2float);
 
+			int count = 0;
 			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
 				simd_int x, y, z;
 				simd_float mask, h;
@@ -583,10 +585,10 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
 					const int kmj = k - j;
 					if (k < main_xs.size()) {
-						x[kmj] = main_xs[j].raw();
-						y[kmj] = main_ys[j].raw();
-						z[kmj] = main_zs[j].raw();
-						h[kmj] = main_hs[j];
+						x[kmj] = main_xs[k].raw();
+						y[kmj] = main_ys[k].raw();
+						z[kmj] = main_zs[k].raw();
+						h[kmj] = main_hs[k];
 						mask[kmj] = 1.0f;
 					} else {
 						h[kmj] = 1.0f;
@@ -597,10 +599,11 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dy = simd_float(myy - y) * _2float;
 				const simd_float dz = simd_float(myz - z) * _2float;
 				const simd_float h2 = sqr(h);
-				const simd_float r2 = sqrt(sqr(dx, dy, dz));
-				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < h2) + simd_float(r2 < myh));
+				const simd_float r2 = sqr(dx, dy, dz);
+				mask *= simd_float(r2 > simd_float(0.0f)) * simd_float(r2 < myh2);
 				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
 					if (mask[k] > 0.0) {
+						count++;
 						if (offset == SIMD_FLOAT_SIZE) {
 							xs.push_back(myx);
 							ys.push_back(myy);
@@ -629,6 +632,11 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 					}
 				}
 			}
+//			if( xs.size() == 0 ) {
+//				PRINT( "%i\n", count);
+//				PRINT( "ZERO %i %i %e %e\n", self_ptr->neighbor_range.second - self_ptr->neighbor_range.first, main_xs.size(), myh[0], myx[0]*_2float[0]);
+//				abort();
+//			}
 			static const simd_float tiny = simd_float(1e-15);
 			static const simd_float one(1.0f);
 			static const simd_float zero(0.0f);
@@ -745,6 +753,7 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const simd_int myx = sph_particles_pos(XDIM, i).raw();
 			const simd_int myy = sph_particles_pos(YDIM, i).raw();
 			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
+//			PRINT( "%i\n", main_xs.size());
 			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
 				simd_int x, y, z;
 				simd_float mask, h;
@@ -752,10 +761,10 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
 					const int kmj = k - j;
 					if (k < main_xs.size()) {
-						x[kmj] = main_xs[j].raw();
-						y[kmj] = main_ys[j].raw();
-						z[kmj] = main_zs[j].raw();
-						h[kmj] = main_hs[j];
+						x[kmj] = main_xs[k].raw();
+						y[kmj] = main_ys[k].raw();
+						z[kmj] = main_zs[k].raw();
+						h[kmj] = main_hs[k];
 						mask[kmj] = 1.0f;
 					} else {
 						h[kmj] = 1.0f;
@@ -765,7 +774,7 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dx = simd_float(myx - x) * _2float;
 				const simd_float dy = simd_float(myy - y) * _2float;
 				const simd_float dz = simd_float(myz - z) * _2float;
-				const simd_float r2 = sqrt(sqr(dx, dy, dz));
+				const simd_float r2 = sqr(dx, dy, dz);
 				const simd_float myh = sph_particles_smooth_len(i);
 				const simd_float myh2 = sqr(myh);
 				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < myh2));
@@ -848,7 +857,11 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const float curl_vz = dvy_dx_sum - dvx_dy_sum;
 			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
 			const float fvel = abs_div_v / (abs_div_v + abs_curl_v);
+			if( std::isnan(fvel)) {
+				PRINT( "%e %e %i\n", abs_curl_v, abs_div_v, xs.size());
+			}
 			sph_particles_fvel(i) = fvel;
+//			PRINT( "%e %i\n", dvx_dx_sum, xs.size());
 		}
 	}
 	return rc;
@@ -858,6 +871,9 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 		const vector<char>& main_rungs, const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs,
 		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, float t0) {
 	sph_run_return rc;
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
 	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
 	static thread_local vector<simd_int> zs;
@@ -923,10 +939,10 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
 					const int kmj = k - j;
 					if (k < main_xs.size()) {
-						x[kmj] = main_xs[j].raw();
-						y[kmj] = main_ys[j].raw();
-						z[kmj] = main_zs[j].raw();
-						h[kmj] = main_hs[j];
+						x[kmj] = main_xs[k].raw();
+						y[kmj] = main_ys[k].raw();
+						z[kmj] = main_zs[k].raw();
+						h[kmj] = main_hs[k];
 						mask[kmj] = 1.0f;
 					} else {
 						h[kmj] = 1.0f;
@@ -937,8 +953,8 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dy = simd_float(myy - y) * _2float;
 				const simd_float dz = simd_float(myz - z) * _2float;
 				const simd_float h2 = sqr(h);
-				const simd_float r2 = sqrt(sqr(dx, dy, dz));
-				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < h2) + simd_float(r2 < myh));
+				const simd_float r2 = sqr(dx, dy, dz);
+				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < h2) + simd_float(r2 < myh2));
 				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
 					if (mask[k] > 0.0) {
 						if (offset == SIMD_FLOAT_SIZE) {
@@ -1001,7 +1017,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float rinv = one / (r + tiny);
 				const simd_float r2inv = sqr(rinv);
 				const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-				const simd_float Piij = (-alpha * uij * cij + beta * sqr(uij)) * rhoinv;
+				const simd_float Piij = (-alpha * uij * cij + beta * sqr(uij)) * rhoinv * simd_float(0.5) * (myfvel + fvels[j]);
 				const simd_float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
 				const simd_float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
 				const simd_float dWdri_x = dx * dWdri;
@@ -1031,6 +1047,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
 				sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
 				sph_particles_dent(i) += (dAdt * dt * masks[j]).sum();
+		//		PRINT( "%e %e\n", dAdt.sum() , Piij.sum());
 			}
 		}
 	}
