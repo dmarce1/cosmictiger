@@ -119,6 +119,7 @@ void swap(sph_particle_ref a, sph_particle_ref b) {
 	b = c;
 }
 
+
 struct sph_particle_iterator {
 	using iterator_category = std::random_access_iterator_tag;
 	using difference_type = int;
@@ -194,6 +195,9 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 					std::swap(sph_particles_e[hi], sph_particles_e[lo]);
 					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
 					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
+					for (int dim = 0; dim < NDIM; dim++) {
+						std::swap(sph_particles_dv[dim][hi], sph_particles_dv[dim][lo]);
+					}
 					break;
 				}
 			}
@@ -356,7 +360,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<array<fixed32, NDIM>> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
-	const part_int end = std::min(particles_size(), begin + line_size);
+	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			line[i - begin][dim] = sph_particles_pos(dim, i);
@@ -437,7 +441,7 @@ static vector<sph_particle> sph_particles_fetch_sph_cache_line(part_int index) {
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<sph_particle> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
-	const part_int end = std::min(particles_size(), begin + line_size);
+	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {
 		line[i - begin] = sph_particles_get_particle(i);
 	}
@@ -510,7 +514,7 @@ static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int in
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<pair<char, float>> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
-	const part_int end = std::min(particles_size(), begin + line_size);
+	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {
 		line[i - begin].first = sph_particles_rung(i);
 		line[i - begin].second = sph_particles_smooth_len(i);
@@ -574,7 +578,7 @@ static vector<float> sph_particles_fetch_fvel_cache_line(part_int index) {
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<float> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
-	const part_int end = std::min(particles_size(), begin + line_size);
+	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {
 		line[i - begin] = sph_particles_fvel(i);
 	}

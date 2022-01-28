@@ -32,6 +32,7 @@
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/output.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
@@ -286,6 +287,10 @@ int sph_step(int minrung, double scale, double t0) {
 
 	total_tm.stop();
 	PRINT( "TOTAL SPH TIME = %e\n", total_tm.read());
+
+	sph_tree_destroy();
+	sph_particles_cache_free();
+
 	return max_rung;
 
 }

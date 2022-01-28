@@ -56,6 +56,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_fv;
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz);
 void sph_particles_free();
+void sph_particles_cache_free();
 void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
@@ -63,7 +64,6 @@ void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixe
 void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, vector<char>&, vector<float>&, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels, part_int offset);
-void sph_particles_cache_free();
 
 inline char& sph_particles_semi_active(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
