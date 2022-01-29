@@ -33,6 +33,9 @@ constexpr bool verbose = true;
 #include <unistd.h>
 #include <stack>
 
+static const float SPH_ALPHA = 1.0f;
+static const float SPH_BETA = 2.0f * SPH_ALPHA;
+
 HPX_PLAIN_ACTION (sph_tree_neighbor);
 
 #define MAX_ACTIVE_WORKSPACES 1
@@ -527,6 +530,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 		const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs, const vector<float>& main_vys, const vector<float>& main_vzs,
 		int min_rung, float ascale, float t0) {
 	sph_run_return rc;
+	const simd_float m = get_options().sph_mass;
 	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
 	static thread_local vector<simd_int> zs;
@@ -544,7 +548,6 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 		}
 		return dt;
 	};
-	const simd_float m = get_options().sph_mass;
 	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 		if (sph_particles_rung(i) >= min_rung) {
 			xs.resize(0);
@@ -600,7 +603,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dz = simd_float(myz - z) * _2float;
 				const simd_float h2 = sqr(h);
 				const simd_float r2 = sqr(dx, dy, dz);
-				mask *= simd_float(r2 > simd_float(0.0f)) * simd_float(r2 < myh2);
+				mask *= simd_float(r2 < myh2);
 				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
 					if (mask[k] > 0.0) {
 						count++;
@@ -641,27 +644,34 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			static const simd_float one(1.0f);
 			static const simd_float zero(0.0f);
 			simd_float max_vsig(zero);
+			simd_float cs(zero);
+			simd_float divv(zero);
 			for (int j = 0; j < xs.size(); j++) {
 				const simd_float dx = simd_float(myx - xs[j]) * _2float;
 				const simd_float dy = simd_float(myy - ys[j]) * _2float;
 				const simd_float dz = simd_float(myz - zs[j]) * _2float;
 				const simd_float h = hs[j];
-				const simd_float h2 = sqr(h);
 				const simd_float hinv = one / h;
 				const simd_float hinv3 = hinv * sqr(hinv);
 				const simd_float rho = sph_den(hinv3);
+				const simd_float rhoinv = one / rho;
+				const simd_float vx = vxs[j];
+				const simd_float vy = vys[j];
+				const simd_float vz = vzs[j];
 				const simd_float c = sqrt(simd_float(SPH_GAMMA) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
-				const simd_float rinv = one / (tiny + sqrt(sqr(dx, dy, dz)));
-				const simd_float dvx = myvx - vxs[j];
-				const simd_float dvy = myvy - vys[j];
-				const simd_float dvz = myvz - vzs[j];
-				const simd_float w = min(zero, (dvy * dx + dvy * dy + dvz * dz) * rinv);
-				const simd_float sig = masks[j] * (c + myc - 3.0f * w);
-				max_vsig = max(max_vsig, sig);
+				const simd_float r = sqrt(sqr(dx, dy, dz));
+				const simd_float W = sph_W(r, myhinv, myh3inv);
+				const simd_float dWdr_rinv = sph_dWdr_rinv(r, myhinv, myh3inv);
+				const simd_float M = m * rhoinv * masks[j];
+				cs += M * c * W;
+				divv += M * dWdr_rinv * dx * (vx - myvx);
+				divv += M * dWdr_rinv * dy * (vy - myvy);
+				divv += M * dWdr_rinv * dz * (vz - myvz);
 			}
-			const float max_c = max_vsig.sum();
-			rc.max_vsig = max_c;
-			float dthydro = max_c / (ascale * myh[0]);
+			const float cs_sum = cs.sum();
+			const float divv_sum = divv.sum();
+			rc.max_vsig = cs_sum + myh[0] * divv_sum;
+			float dthydro = (cs_sum * (1.0f + 1.2f * SPH_ALPHA) + myh[0] * divv_sum * (1.0f + 1.2f * SPH_BETA)) / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
 				dthydro = SPH_CFL / dthydro;
 			} else {
@@ -753,11 +763,15 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const simd_int myx = sph_particles_pos(XDIM, i).raw();
 			const simd_int myy = sph_particles_pos(YDIM, i).raw();
 			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
-			const simd_float myent = sph_particles_ent(i);
-			const simd_float myp = pow(myrho, simd_float(SPH_GAMMA)) * myent;
-			const simd_float myc = sqrt(simd_float(SPH_GAMMA) * myp * myrhoinv);
+			const float myent = sph_particles_ent(i);
 			const simd_float myh = sph_particles_smooth_len(i);
 			const simd_float myh2 = sqr(myh);
+			const float myhinv = 1.f / myh[0];
+			const float myh3inv = myhinv * sqr(myhinv);
+			const float myrho = sph_den(myh3inv);
+			const float myrhoinv = 1.f / myrho;
+			const float myp = pow(myrho, SPH_GAMMA) * myent;
+			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv);
 //			PRINT( "%i\n", main_xs.size());
 			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
 				simd_int x, y, z;
@@ -924,13 +938,13 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const simd_int myx = sph_particles_pos(XDIM, i).raw();
 			const simd_int myy = sph_particles_pos(YDIM, i).raw();
 			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
-			const simd_float myent = sph_particles_ent(i);
+			const float myent = sph_particles_ent(i);
 			const simd_float myvx = sph_particles_vel(XDIM, i);
 			const simd_float myvy = sph_particles_vel(YDIM, i);
 			const simd_float myvz = sph_particles_vel(ZDIM, i);
 			const simd_float myfvel = sph_particles_fvel(i);
-			const simd_float myp = pow(myrho, simd_float(SPH_GAMMA)) * myent;
-			const simd_float myc = sqrt(simd_float(SPH_GAMMA) * myp * myrhoinv);
+			const float myp = pow(myrho[0], SPH_GAMMA) * myent;
+			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv[0]);
 			float max_c = 0.0f;
 			int base = -1;
 			int offset = SIMD_FLOAT_SIZE;
@@ -993,19 +1007,16 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				}
 			}
 			for (int j = 0; j < xs.size(); j++) {
-				const simd_float dx = simd_float(myx - xs[j]) * _2float;
-				const simd_float dy = simd_float(myy - ys[j]) * _2float;
-				const simd_float dz = simd_float(myz - zs[j]) * _2float;
-				const simd_float h = hs[j];
-				const simd_float h2 = sqr(h);
-				const simd_float r2 = sqr(dx, dy, dz);
-				static const simd_float alpha = 1.0f;
-				static const simd_float beta = 2.0f * alpha;
 				static const simd_float one = simd_float(1.f);
 				static const simd_float zero = simd_float(0.f);
 				static const simd_float tiny = simd_float(1e-15);
 				static const simd_float half = simd_float(0.5f);
 				static const simd_float gamma = SPH_GAMMA;
+				const simd_float dx = simd_float(myx - xs[j]) * _2float;
+				const simd_float dy = simd_float(myy - ys[j]) * _2float;
+				const simd_float dz = simd_float(myz - zs[j]) * _2float;
+				const simd_float h = hs[j];
+				const simd_float r2 = sqr(dx, dy, dz);
 				const simd_float hinv = one / h;
 				const simd_float h3inv = hinv * sqr(hinv);
 				const simd_float rho = sph_den(h3inv);
@@ -1022,7 +1033,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float rinv = one / (r + tiny);
 				const simd_float r2inv = sqr(rinv) + 0.01 * sqr(hij);
 				const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-				const simd_float Piij = (uij * (-alpha * cij + beta * uij)) * rhoinv * half * (myfvel + fvels[j]);
+				const simd_float Piij = (uij * (-simd_float(SPH_ALPHA) * cij + simd_float(SPH_BETA) * uij)) * rhoinv * half * (myfvel + fvels[j]);
 				const simd_float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
 				const simd_float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
 				const simd_float dWdri_x = dx * dWdri;
@@ -1052,7 +1063,6 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
 				sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
 				sph_particles_dent(i) += (dAdt * dt * masks[j]).sum();
-				//		PRINT( "%e %e\n", dAdt.sum() , Piij.sum());
 			}
 		}
 	}
