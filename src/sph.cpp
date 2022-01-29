@@ -1065,7 +1065,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvzdt = -dpz * m;
 				const simd_float dt = min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
 				simd_float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
-				dAdt *= simd_float(0.5) * m * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
+				dAdt *= simd_float(0.5) * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
 				sph_particles_dvel(XDIM, i) += (dvxdt * dt * masks[j]).sum();
 				sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
 				sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
