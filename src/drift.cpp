@@ -79,13 +79,15 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				float vy = particles_vel(YDIM,i);
 				float vz = particles_vel(ZDIM,i);
 				int j = NOT_SPH;
+				float mass = 1.0f;
 				if( sph ) {
 					j = particles_sph_index(i);
+					mass = (j == NOT_SPH ? dm_mass : sph_mass);
 				}
-				this_dr.kin += (j == NOT_SPH ? dm_mass : sph_mass) * 0.5 * sqr(vx,vy,vz) * a2inv;
-				this_dr.momx += vx;
-				this_dr.momy += vy;
-				this_dr.momz += vz;
+				this_dr.kin += mass * 0.5 * sqr(vx,vy,vz) * a2inv;
+				this_dr.momx += mass * vx;
+				this_dr.momy += mass * vy;
+				this_dr.momz += mass * vz;
 				if( j != NOT_SPH ) {
 					const float h = sph_particles_smooth_len(j);
 					const float ent = sph_particles_ent(j);

@@ -295,7 +295,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		force_vectors forces(mynparts);
 		for (part_int i = 0; i < mynparts; i++) {
 			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-			forces.phi[i] = -SELF_PHI / hfloat;
+			forces.phi[i] = 0.0;
 		}
 		for (int i = 0; i < leaflist.size(); i++) {
 			const tree_node* other_ptr = tree_get_node(leaflist[i]);
@@ -347,7 +347,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
 				const auto L2 = L2P(L, dx, params.min_rung == 0);
+				const bool part_sph = sph && particles_is_sph(i);
+				const float m = sph ? (part_sph ? sph_mass : dm_mass) : 1.f;
 				forces.phi[j] += L2(0, 0, 0);
+				forces.phi[j] -= SELF_PHI * m / (2.f * params.h);
 				forces.gx[j] -= L2(1, 0, 0);
 				forces.gy[j] -= L2(0, 1, 0);
 				forces.gz[j] -= L2(0, 0, 1);
@@ -361,7 +364,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					particles_gforce(ZDIM, i) = forces.gz[j];
 					particles_pot(i) = forces.phi[j];
 				}
-				const bool part_sph = sph && particles_is_sph(i);
 				auto& vx = particles_vel(XDIM, i);
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);
@@ -392,7 +394,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					vy = fmaf(forces.gy[j], dt, vy);
 					vz = fmaf(forces.gz[j], dt, vz);
 				}
-				const float m = part_sph ? sph_mass : dm_mass;
 				kr.pot += m * forces.phi[j];
 				kr.fx += forces.gx[j];
 				kr.fy += forces.gy[j];

@@ -68,13 +68,14 @@ struct cuda_kick_params {
 };
 
 __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive,
-		const tree_node& self, float dm_mass, float sph_mass) {
+		const tree_node& self, float dm_mass, float sph_mass, float h) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
 	const bool sph = data.sph;
+	const float hinv = 1.f / h;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
@@ -122,7 +123,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		flops += 537 + (params.min_rung == 0) * 178;
 		L2 = L2P(L, dx, params.min_rung == 0);
+		int j = NOT_SPH;
+		if (sph) {
+			j = sph_index[snki];
+		}
+		const float mass = sph ? (j == NOT_SPH ? dm_mass : sph_mass) : 1.0f;
 		phi[i] += L2(0, 0, 0);
+		phi[i] -= SELF_PHI * hinv * mass;
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
 		gz[i] -= L2(0, 0, 1);
@@ -147,13 +154,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-		int j = NOT_SPH;
-		if (sph) {
-			j = sph_index[snki];
-		}
-		if( rung == 4 ) {
-//			PRINT( "%e\n", sink_x[i].to_float() );
-		}
 		if (j != NOT_SPH) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
@@ -176,7 +176,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vel_y[snki] = vy;
 			vel_z[snki] = vz;
 		}
-		phi_tot += (j == NOT_SPH ? dm_mass : sph_mass) * phi[i];
+		phi_tot += mass * phi[i];
 		fx_tot += gx[i];
 		fy_tot += gy[i];
 		fz_tot += gz[i];
@@ -518,7 +518,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					shared_reduce_add(pflops);
 					__syncwarp();
 					for (int i = tid; i < nactive; i += WARP_SIZE) {
-						phi[i] = -SELF_PHI * hinv;
+						phi[i] = 0.0;
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
 					pflops += nactive * 2;
@@ -528,7 +528,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass);
+					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass, 2.f * h);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();

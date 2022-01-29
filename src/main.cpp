@@ -28,9 +28,14 @@
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
 
+#include <cosmictiger/sph.hpp>
+
 
 int hpx_main(int argc, char *argv[]) {
 	std::atomic<int> i;
+	for( double q = 0.0; q < 1.0; q += 0.01) {
+//		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
+	}
 	if( !i.is_lock_free() ) {
 		PRINT( "std::atomic<int> is not lock free!\n");
 		PRINT( "std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
