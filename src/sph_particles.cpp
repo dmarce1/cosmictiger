@@ -194,6 +194,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 					std::swap(sph_particles_e[hi], sph_particles_e[lo]);
 					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
 					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
+					std::swap(sph_particles_sa[hi], sph_particles_sa[lo]);
 #ifdef CHECK_MUTUAL_SORT
 					std::swap(sph_particles_tst[hi], sph_particles_tst[lo]);
 #endif
@@ -255,6 +256,10 @@ void sph_particles_resize(part_int sz) {
 		sph_particles_array_resize(sph_particles_de, new_capacity, false);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, false);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
+		sph_particles_array_resize(sph_particles_dhdt, new_capacity, false);
+#ifdef SPH_STORE_VOLUME
+		sph_particles_array_resize(sph_particles_vlm, new_capacity, false);
+#endif
 #ifdef CHECK_MUTUAL_SORT
 		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
 #endif
@@ -282,6 +287,10 @@ void sph_particles_resize(part_int sz) {
 }
 
 void sph_particles_free() {
+	free(sph_particles_dhdt);
+#ifdef SPH_STORE_VOLUME
+	free(sph_particles_vlm);
+#endif
 	free(sph_particles_fv);
 	free(sph_particles_dm);
 	free(sph_particles_sa);

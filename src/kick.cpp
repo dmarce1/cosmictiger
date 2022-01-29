@@ -369,7 +369,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
 				auto dt = 0.5f * rung_dt[rung] * params.t0;
-				if (!params.first_call) {
+				if (!params.first_call && !part_sph) {
 					vx = fmaf(forces.gx[j], dt, vx);
 					vy = fmaf(forces.gy[j], dt, vy);
 					vz = fmaf(forces.gz[j], dt, vz);

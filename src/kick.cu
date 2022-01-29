@@ -148,7 +148,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vz = vel_z[snki];
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
-		if (!params.first_call) {
+		if (!params.first_call && j == NOT_SPH) {
 			vx = fmaf(gx[i], dt, vx);
 			vy = fmaf(gy[i], dt, vy);
 			vz = fmaf(gz[i], dt, vz);

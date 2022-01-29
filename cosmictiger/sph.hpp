@@ -112,29 +112,38 @@ struct sph_run_return {
 struct sph_run_params {
 	int run_type;
 	int set;
+	int hydro_iter;
 	int min_rung;
 	float t0;
 	float a;
+	float adot;
+	int drift_dir;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & hydro_iter;
 		arc & run_type;
 		arc & set;
 		arc & min_rung;
 		arc & t0;
 		arc & a;
+		arc & adot;
+		arc & drift_dir;
 	}
 };
 
 #define SPH_RUN_SMOOTHLEN 0
 #define SPH_RUN_MARK_SEMIACTIVE 1
 #define SPH_RUN_COURANT 2
-#define SPH_RUN_GRAVITY 3
+#define SPH_RUN_DSMOOTHLEN 3
 #define SPH_RUN_FVELS 4
 #define SPH_RUN_HYDRO 5
-#define SPH_RUN_UPDATE 6
+#define SPH_RUN_UPDATE1 6
 
 sph_run_return sph_run(sph_run_params params);
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level=0);
+void sph_kick(int min_rung, float t0);
+void sph_drift(int min_rung, float a, float t0);
+void sph_apply_update2(int min_rung);
 
 
 template<class T, int N>

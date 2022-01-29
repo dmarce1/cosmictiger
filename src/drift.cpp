@@ -98,27 +98,28 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float e = p * (1.0f/(SPH_GAMMA-1.0f)) * vol;
 					this_dr.therm += e * a2inv;
 					this_dr.vol += vol;
+				} else {
+					vx *= ainv;
+					vy *= ainv;
+					vz *= ainv;
+					double x0, y0, z0;
+					x0 = x;
+					y0 = y;
+					z0 = z;
+					x += double(vx*dt);
+					y += double(vy*dt);
+					z += double(vz*dt);
+					if( do_lc) {
+						this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
+					}
+					constrain_range(x);
+					constrain_range(y);
+					constrain_range(z);
+					particles_pos(XDIM,i) = x;
+					particles_pos(YDIM,i) = y;
+					particles_pos(ZDIM,i) = z;
+					this_dr.flops += 34;
 				}
-				vx *= ainv;
-				vy *= ainv;
-				vz *= ainv;
-				double x0, y0, z0;
-				x0 = x;
-				y0 = y;
-				z0 = z;
-				x += double(vx*dt);
-				y += double(vy*dt);
-				z += double(vz*dt);
-				if( do_lc) {
-					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
-				}
-				constrain_range(x);
-				constrain_range(y);
-				constrain_range(z);
-				particles_pos(XDIM,i) = x;
-				particles_pos(YDIM,i) = y;
-				particles_pos(ZDIM,i) = z;
-				this_dr.flops += 34;
 			}
 			if( do_lc) {
 				lc_add_parts(std::move(this_part_buffer));

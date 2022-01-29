@@ -52,14 +52,28 @@ SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
+SPH_PARTICLES_EXTERN float* sph_particles_dhdt;
+
+part_int sph_particles_size();
+
+inline float& sph_particles_dsmooth_len_dt(int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dhdt[index];
+}
+#ifdef SPH_STORE_VOLUME
+SPH_PARTICLES_EXTERN float* sph_particles_vlm;
+inline float& sph_particles_volume(int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_vlm[index];
+}
+#endif
 #ifdef CHECK_MUTUAL_SORT
 SPH_PARTICLES_EXTERN part_int* sph_particles_tst;
 inline part_int& sph_particles_test(int index) {
+	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_tst[index];
 }
 #endif
-
-part_int sph_particles_size();
 void sph_particles_resize(part_int sz);
 void sph_particles_free();
 void sph_particles_cache_free();
