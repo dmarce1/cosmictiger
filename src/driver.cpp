@@ -277,14 +277,14 @@ int sph_step(int minrung, double scale, double t0) {
 
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.start();
-//	sph_run(sparams);
+	sph_run(sparams);
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 	tm.reset();
 
 	sparams.run_type = SPH_RUN_UPDATE;
 	tm.start();
-//	sph_run(sparams);
+	sph_run(sparams);
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
 	tm.reset();

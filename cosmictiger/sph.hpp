@@ -157,25 +157,17 @@ inline T sph_W(T r, T hinv, T h3inv) {
 	static const T c0 = T(21.0 / M_PI / 2.0);
 	const T C = c0 * h3inv;
 	const T q = r * hinv;
-	T w = T(4);
-	w = fmaf(w, q, -T(15));
-	w = fmaf(w, q, T(20));
-	w = fmaf(w, q, -T(10));
-	w *= q;
-	w = fmaf(w, q, T(1));
-	return w * c0;
+	const T tmp = T(1) - q;
+	return C * sqr(sqr(tmp)) * (T(1) + T(4) * q);
 }
 
 template<class T>
 inline T sph_dWdr_rinv(T r, T hinv, T h3inv) {
-	static const T c0 = T(21.0 / M_PI / 2.0);
+	static const T c0 = T(210.0 / M_PI);
 	const T C = c0 * h3inv * sqr(hinv);
 	const T q = r * hinv;
-	T w = T(20);
-	w = fmaf(w, q, -T(60));
-	w = fmaf(w, q, T(60));
-	w = fmaf(w, q, -T(20));
-	return w * c0;
+	const T tmp = T(1) - q;
+	return -C * sqr(tmp) * tmp;
 }
 
 template<class T>
@@ -185,6 +177,6 @@ inline T sph_den(T hinv3) {
 	return m * c0 * hinv3;
 }
 
-
+}
 
 #endif /* SPH_HPP_ */
