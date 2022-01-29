@@ -177,6 +177,6 @@ inline T sph_den(T hinv3) {
 	return m * c0 * hinv3;
 }
 
-}
+
 
 #endif /* SPH_HPP_ */
