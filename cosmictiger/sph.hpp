@@ -171,19 +171,12 @@ inline T sph_dWdr_rinv(T r, T hinv, T h3inv) {
 }
 
 template<class T>
-inline T sph_dWdh(T r, T hinv, T h3inv) {
-	static const T c0 = T(21.0 / M_PI / 2.0);
-	const T C = c0 * h3inv;
-	const T q = r * hinv;
-	const T tmp = T(1) - q;
-	return -C * sqr(tmp) * tmp * (T(3) + T(9) * q - T(32) * q);
-}
-
-
-template<class T>
 inline T sph_den(T hinv3) {
 	static const T m = get_options().sph_mass;
 	static const T c0 = T(3.0 / 4.0 / M_PI * SPH_NEIGHBOR_COUNT);
 	return m * c0 * hinv3;
 }
+
+
+
 #endif /* SPH_HPP_ */

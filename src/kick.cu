@@ -68,7 +68,7 @@ struct cuda_kick_params {
 };
 
 __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive,
-		const tree_node& self) {
+		const tree_node& self, float dm_mass, float sph_mass) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -176,7 +176,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vel_y[snki] = vy;
 			vel_z[snki] = vz;
 		}
-		phi_tot += phi[i];
+		phi_tot += (j == NOT_SPH ? dm_mass : sph_mass) * phi[i];
 		fx_tot += gx[i];
 		fy_tot += gy[i];
 		fz_tot += gz[i];
@@ -528,7 +528,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self);
+					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();

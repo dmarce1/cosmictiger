@@ -23,6 +23,8 @@
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/sph.hpp>
+#include <cosmictiger/sph_particles.hpp>
 
 HPX_PLAIN_ACTION (drift);
 
@@ -38,6 +40,9 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
 	const auto func = [dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
+		const bool sph = get_options().sph;
+		const float dm_mass = get_options().dm_mass;
+		const float sph_mass = get_options().sph_mass;
 		vector<lc_particle> this_part_buffer;
 		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
@@ -48,6 +53,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		this_dr.momz = 0.0;
 		this_dr.flops = 0.0;
 		this_dr.nmapped = 0;
+		this_dr.therm = 0.0;
+		this_dr.vol = 0.0;
 		part_int begin = (size_t) proc * particles_size() / nthreads;
 		part_int end = (size_t) (proc+1) * particles_size() / nthreads;
 #ifdef USE_CUDA
@@ -71,10 +78,25 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				float vx = particles_vel(XDIM,i);
 				float vy = particles_vel(YDIM,i);
 				float vz = particles_vel(ZDIM,i);
-				this_dr.kin += 0.5 * sqr(vx,vy,vz) * a2inv;
+				int j = NOT_SPH;
+				if( sph ) {
+					j = particles_sph_index(i);
+				}
+				this_dr.kin += (j == NOT_SPH ? dm_mass : sph_mass) * 0.5 * sqr(vx,vy,vz) * a2inv;
 				this_dr.momx += vx;
 				this_dr.momy += vy;
 				this_dr.momz += vz;
+				if( j != NOT_SPH ) {
+					const float h = sph_particles_smooth_len(j);
+					const float ent = sph_particles_ent(j);
+					const float h3 = sqr(h)*h;
+					const float vol = (4.0*M_PI/3.0) * h3 / SPH_NEIGHBOR_COUNT;
+					const float rho = sph_den(1./h3);
+					const float p = ent * pow(rho, SPH_GAMMA);
+					const float e = p * (1.0f/(SPH_GAMMA-1.0f)) * vol;
+					this_dr.therm += e;
+					this_dr.vol += vol;
+				}
 				vx *= ainv;
 				vy *= ainv;
 				vz *= ainv;
@@ -115,6 +137,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		dr.flops += this_dr.flops;
 		dr.momz += this_dr.momz;
 		dr.nmapped += this_dr.nmapped;
+		dr.therm += this_dr.therm;
+		dr.vol += this_dr.vol;
 	}
 	tm.stop();
 //	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());

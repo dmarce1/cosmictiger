@@ -27,6 +27,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 struct drift_return {
 	double kin;
+	double therm;
+	double vol;
 	double momx;
 	double momy;
 	double momz;
@@ -34,6 +36,8 @@ struct drift_return {
 	part_int nmapped;
 	template<class Arc>
 	void serialize(Arc&& a, unsigned) {
+		a & vol;
+		a & therm;
 		a & kin;
 		a & momx;
 		a & momy;

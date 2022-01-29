@@ -603,12 +603,13 @@ void driver() {
 			PRINT("Drift done\n");
 			dtm.stop();
 			drift_time += dtm.read();
-			cosmicK += dr.kin * (a - a1);
-			const double esum = (a * (pot + dr.kin) + cosmicK);
+			const double total_kinetic = dr.kin + dr.therm;
+			cosmicK += total_kinetic * (a - a1);
+			const double esum = (a * (pot + total_kinetic) + cosmicK);
 			if (tau == 0.0) {
 				esum0 = esum;
 			}
-			const double eerr = (esum - esum0) / (a * dr.kin + a * std::abs(pot) + cosmicK);
+			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");
@@ -616,7 +617,7 @@ void driver() {
 			if (full_eval) {
 				PRINT_BOTH(textfp,
 						"\n%10s %6s %10s %4s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
-						"runtime", "i", "imbalance", "mind", "maxd", "ed", "ppnode", "appanode", "Z", "a", "timestep", "years", "dt", "pot", "kin", "cosmicK",
+						"runtime", "i", "imbalance", "mind", "maxd", "ed", "ppnode", "appanode", "Z", "a", "timestep", "years", "vol", "pot", "kin", "therm", "cosmicK",
 						"pot err", "minr", "maxr", "active", "nmapped", "load", "dotime", "stime", "ktime", "drtime", "avg total", "pps", "GFLOPSins", "GFLOPS");
 			}
 			iter++;
@@ -639,13 +640,13 @@ void driver() {
 				if (fp == NULL) {
 					THROW_ERROR("Unable to open energy.txt\n");
 				}
-				fprintf(fp, "%i %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, cosmicK, eerr);
+				fprintf(fp, "%i %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr);
 				fclose(fp);
 			}
 			PRINT_BOTH(textfp,
-					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
+					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
 					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1, tau / t0, years,
-					dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time,
+					dr.vol, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time,
 					drift_time, runtime / iter, (double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
 					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
