@@ -532,6 +532,13 @@ public:
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
+	float max() const {
+		float mx = v[0];
+		for( int i = 1; i < SIMD_FLOAT8_SIZE; i++) {
+			mx = std::max(mx, v[i]);
+		}
+		return mx;
+	}
 	friend inline simd_float8 sqrt(const simd_float8&);
 	friend inline simd_float8 rsqrt(const simd_float8&);
 	friend inline simd_float8 max(const simd_float8&, const simd_float8&);
@@ -544,6 +551,9 @@ public:
 
 };
 
+inline simd_float8 abs(const simd_float8& a) {
+	return max(a,-a);
+}
 
 inline simd_float8 log2(const simd_float8& a) {
 	__m256i i = _mm256_castps_si256(a.v);

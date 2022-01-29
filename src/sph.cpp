@@ -645,7 +645,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			static const simd_float zero(0.0f);
 			simd_float max_vsig(zero);
 			simd_float cs(zero);
-			simd_float divv(zero);
+			simd_float vsig(0.f);
 			for (int j = 0; j < xs.size(); j++) {
 				const simd_float dx = simd_float(myx - xs[j]) * _2float;
 				const simd_float dy = simd_float(myy - ys[j]) * _2float;
@@ -655,23 +655,23 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float hinv3 = hinv * sqr(hinv);
 				const simd_float rho = sph_den(hinv3);
 				const simd_float rhoinv = one / rho;
-				const simd_float vx = vxs[j];
-				const simd_float vy = vys[j];
-				const simd_float vz = vzs[j];
+				const simd_float dvx = vxs[j] - myvx;
+				const simd_float dvy = vys[j] - myvy;
+				const simd_float dvz = vzs[j] - myvz;
 				const simd_float c = sqrt(simd_float(SPH_GAMMA) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
 				const simd_float r = sqrt(sqr(dx, dy, dz));
+				const simd_float rinv = one / r;
+				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
 				const simd_float W = sph_W(r, myhinv, myh3inv);
 				const simd_float dWdr_rinv = sph_dWdr_rinv(r, myhinv, myh3inv);
 				const simd_float M = m * rhoinv * masks[j];
 				cs += M * c * W;
-				divv += M * dWdr_rinv * dx * (vx - myvx);
-				divv += M * dWdr_rinv * dy * (vy - myvy);
-				divv += M * dWdr_rinv * dz * (vz - myvz);
+				max_vsig = max(max_vsig, abs(dv));
 			}
 			const float cs_sum = cs.sum();
-			const float divv_sum = fabs(divv.sum());
-			rc.max_vsig = cs_sum + myh[0] * divv_sum;
-			float dthydro = (cs_sum * (1.0f + 1.2f * SPH_ALPHA) + myh[0] * divv_sum * (1.0f + 1.2f * SPH_BETA)) / (ascale * myh[0]);
+			const float vsig_max = max_vsig.max();
+			rc.max_vsig = 2.0f * cs_sum + 3.0f * vsig_max;
+			float dthydro = rc.max_vsig / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
 				dthydro = SPH_CFL / dthydro;
 			} else {
