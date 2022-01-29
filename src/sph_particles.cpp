@@ -119,7 +119,6 @@ void swap(sph_particle_ref a, sph_particle_ref b) {
 	b = c;
 }
 
-
 struct sph_particle_iterator {
 	using iterator_category = std::random_access_iterator_tag;
 	using difference_type = int;
@@ -195,6 +194,9 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 					std::swap(sph_particles_e[hi], sph_particles_e[lo]);
 					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
 					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
+#ifdef CHECK_MUTUAL_SORT
+					std::swap(sph_particles_tst[hi], sph_particles_tst[lo]);
+#endif
 					for (int dim = 0; dim < NDIM; dim++) {
 						std::swap(sph_particles_dv[dim][hi], sph_particles_dv[dim][lo]);
 					}
@@ -253,6 +255,9 @@ void sph_particles_resize(part_int sz) {
 		sph_particles_array_resize(sph_particles_de, new_capacity, false);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, false);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
+#ifdef CHECK_MUTUAL_SORT
+		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
+#endif
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv[dim], new_capacity, true);
 		}
@@ -266,6 +271,10 @@ void sph_particles_resize(part_int sz) {
 	for (int i = 0; i < new_parts; i++) {
 		particles_sph_index(offset + i) = oldsz + i;
 		sph_particles_dm_index(oldsz + i) = offset + i;
+#ifdef CHECK_MUTUAL_SORT
+		particles_lastgroup(offset + i) = oldsz + i;
+		sph_particles_test(oldsz + i) = oldsz + i;
+#endif
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 		}
@@ -279,6 +288,9 @@ void sph_particles_free() {
 	free(sph_particles_h);
 	free(sph_particles_e);
 	free(sph_particles_de);
+#ifdef CHECK_MUTUAL_SORT
+	free(sph_particles_tst);
+#endif
 	for (int dim = 0; dim < NDIM; dim++) {
 		free(sph_particles_dv[NDIM]);
 	}
@@ -292,7 +304,13 @@ void sph_particles_resolve_with_particles() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthread;
 			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
-				particles_sph_index(sph_particles_dm_index(i)) = i;
+				const int j = sph_particles_dm_index(i);
+				particles_sph_index(j) = i;
+#ifdef CHECK_MUTUAL_SORT
+				if( particles_lastgroup(j) != sph_particles_test(i)) {
+					PRINT( "%i %i\n", (int) particles_lastgroup(j), sph_particles_test(i));
+				}
+#endif
 			}
 		}));
 	}

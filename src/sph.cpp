@@ -708,7 +708,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0) {
 	sph_run_return rc;
 	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		auto& rung = sph_particles_rung(i);
+		const auto rung = sph_particles_rung(i);
 		const bool test1 = rung >= min_rung;
 		if (test1) {
 			float dt;
@@ -718,6 +718,7 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 			float& gx = sph_particles_gforce(XDIM, i);
 			float& gy = sph_particles_gforce(YDIM, i);
 			float& gz = sph_particles_gforce(ZDIM, i);
+	//		PRINT( "%e %e %e\n", gx, gy, gz);
 			dt = 0.5f * rung_dt[rung] * t0;
 			vx = fmaf(gx, dt, vx);
 			vy = fmaf(gy, dt, vy);
@@ -1127,6 +1128,7 @@ sph_run_return sph_run(sph_run_params params) {
 							case SPH_RUN_FVELS:
 							case SPH_RUN_HYDRO:
 							case SPH_RUN_MARK_SEMIACTIVE:
+							case SPH_RUN_UPDATE:
 							test = (self->nactive > 0);
 							if( !test ) {
 								test = has_active_neighbors(self);
@@ -1136,8 +1138,6 @@ sph_run_return sph_run(sph_run_params params) {
 							case SPH_RUN_COURANT:
 							case SPH_RUN_GRAVITY:
 							test = self->nactive > 0;
-							case SPH_RUN_UPDATE:
-							test = test || has_active_neighbors(self);
 							break;
 						}
 						if(test) {

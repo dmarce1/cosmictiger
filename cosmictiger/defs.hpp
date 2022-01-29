@@ -27,6 +27,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define CHECK_BOUNDS
 #define DOMAINS_CHECK
 #endif
+//#define CHECK_MUTUAL_SORT
 
 #define NDIM 3
 #define XDIM 0
@@ -55,12 +56,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define USE_CONFORMAL_TIME
 #define SPH_NEIGHBOR_COUNT 100
 #define SPH_BUCKET_SIZE 256
-#define SPH_SMOOTHLEN_TOLER 1.0e-6
+#define SPH_SMOOTHLEN_TOLER 1.0e-5
 #define SPH_CFL 0.15
 
 #define GROUP_WAVES 8
 #define GROUP_BUCKET_SIZE 90
-
 
 #define MAX_LOAD_IMBALANCE 0.005
 #define CUDA_MAX_MEM 0.3

@@ -177,10 +177,16 @@ bool process_options(int argc, char *argv[]) {
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
 	PRINT("Box size = %e\n", opts.code_to_cm / constants::mpc_to_cm);
+#ifdef CHECK_MUTUAL_SORT
+	opts.do_groups = true;
+#endif
+
 	if( opts.sph ) {
 		const double omega_inv = 1.0 / (opts.omega_m);
 		opts.dm_mass = opts.omega_c * omega_inv;
 		opts.sph_mass = opts.omega_b * omega_inv;
+		opts.sph_mass = 1.0;
+		opts.dm_mass = 0.0;
 	}
 	SHOW(check_freq);
 	SHOW(code_to_cm);

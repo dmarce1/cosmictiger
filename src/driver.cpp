@@ -277,14 +277,14 @@ int sph_step(int minrung, double scale, double t0) {
 
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.start();
-	sph_run(sparams);
+//	sph_run(sparams);
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 	tm.reset();
 
 	sparams.run_type = SPH_RUN_UPDATE;
 	tm.start();
-	sph_run(sparams);
+//	sph_run(sparams);
 	tm.stop();
 	PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
 	tm.reset();
@@ -580,9 +580,11 @@ void driver() {
 				if (get_options().do_power) {
 					do_power_spectrum(step, a);
 				}
+#ifndef CHECK_MUTUAL_SORT
 				if (get_options().do_groups) {
 					do_groups(step, a);
 				}
+#endif
 			}
 			dt = t0 / (1 << max_rung);
 			const double dadt1 = a * cosmos_dadt(a);

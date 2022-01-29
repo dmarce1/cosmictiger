@@ -172,10 +172,10 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vy = fmaf(gy[i], dt, vy);
 			vz = fmaf(gz[i], dt, vz);
 			write_rungs[snki] = rung;
-			vel_x[snki] = vx;
-			vel_y[snki] = vy;
-			vel_z[snki] = vz;
 		}
+		vel_x[snki] = vx;
+		vel_y[snki] = vy;
+		vel_z[snki] = vz;
 		phi_tot += mass * phi[i];
 		fx_tot += gx[i];
 		fy_tot += gy[i];
@@ -233,7 +233,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
 	const float& h = global_params.h;
-	const float hinv = 1.f / h;
 	const float thetainv = 1.f / global_params.theta;
 	const int min_rung = global_params.min_rung;
 	const float sink_bias = 1.5;
