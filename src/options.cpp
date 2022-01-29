@@ -185,8 +185,8 @@ bool process_options(int argc, char *argv[]) {
 		const double omega_inv = 1.0 / (opts.omega_m);
 		opts.dm_mass = opts.omega_c * omega_inv;
 		opts.sph_mass = opts.omega_b * omega_inv;
-		opts.sph_mass = 1.0;
-		opts.dm_mass = 0.0;
+	//	opts.sph_mass = 1.0;
+	//	opts.dm_mass = 0.0;
 	}
 	SHOW(check_freq);
 	SHOW(code_to_cm);
