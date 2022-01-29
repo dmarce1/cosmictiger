@@ -460,7 +460,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					}
 				}
 				cnt++;
-				if (cnt > 20) {
+				if (cnt > 100) {
 					PRINT("density solver failed to converge %e %e %i %i %i %i\n", h, dh, nactive, self_ptr->outer_box.valid, self_ptr->inner_box.valid, nneighbor);
 					abort();
 				}
@@ -669,7 +669,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				divv += M * dWdr_rinv * dz * (vz - myvz);
 			}
 			const float cs_sum = cs.sum();
-			const float divv_sum = divv.sum();
+			const float divv_sum = fabs(divv.sum());
 			rc.max_vsig = cs_sum + myh[0] * divv_sum;
 			float dthydro = (cs_sum * (1.0f + 1.2f * SPH_ALPHA) + myh[0] * divv_sum * (1.0f + 1.2f * SPH_BETA)) / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
