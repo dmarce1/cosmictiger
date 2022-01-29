@@ -151,6 +151,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		if (sph) {
 			j = sph_index[snki];
 		}
+		if( rung == 4 ) {
+//			PRINT( "%e\n", sink_x[i].to_float() );
+		}
 		if (j != NOT_SPH) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];

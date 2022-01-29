@@ -141,14 +141,14 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			for (int ci = 0; ci < checklist.size(); ci++) {
 				const auto* other = sph_tree_get_node(checklist[ci]);
 				const bool test1 = range_intersect(self_ptr->outer_box, other->inner_box);
-			/*	if (level > 6) {
-					if (!test1 && self_ptr == other && self_ptr->nactive > 0) {
-						PRINT("!\n");
-						static mutex_type mutex;
-						std::lock_guard<mutex_type> lock(mutex);
-						PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
-					}
-				}*/
+				/*	if (level > 6) {
+				 if (!test1 && self_ptr == other && self_ptr->nactive > 0) {
+				 PRINT("!\n");
+				 static mutex_type mutex;
+				 std::lock_guard<mutex_type> lock(mutex);
+				 PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
+				 }
+				 }*/
 				const bool test2 = range_intersect(self_ptr->inner_box, other->outer_box) && (other->nactive > 0);
 				const bool test3 = level <= 9;
 				if (test1 || test2 || test3) {
@@ -663,7 +663,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			rc.max_vsig = max_c;
 			float dthydro = max_c / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
-				dthydro = 1.0 / dthydro;
+				dthydro = SPH_CFL / dthydro;
 			} else {
 				dthydro = 1.0e99;
 			}
@@ -753,6 +753,11 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const simd_int myx = sph_particles_pos(XDIM, i).raw();
 			const simd_int myy = sph_particles_pos(YDIM, i).raw();
 			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
+			const simd_float myent = sph_particles_ent(i);
+			const simd_float myp = pow(myrho, simd_float(SPH_GAMMA)) * myent;
+			const simd_float myc = sqrt(simd_float(SPH_GAMMA) * myp * myrhoinv);
+			const simd_float myh = sph_particles_smooth_len(i);
+			const simd_float myh2 = sqr(myh);
 //			PRINT( "%i\n", main_xs.size());
 			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
 				simd_int x, y, z;
@@ -775,8 +780,6 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dy = simd_float(myy - y) * _2float;
 				const simd_float dz = simd_float(myz - z) * _2float;
 				const simd_float r2 = sqr(dx, dy, dz);
-				const simd_float myh = sph_particles_smooth_len(i);
-				const simd_float myh2 = sqr(myh);
 				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < myh2));
 				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
 					if (mask[k] > 0.0) {
@@ -855,13 +858,14 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const float curl_vx = dvz_dy_sum - dvy_dz_sum;
 			const float curl_vy = -dvz_dx_sum + dvx_dz_sum;
 			const float curl_vz = dvy_dx_sum - dvx_dy_sum;
+			const float sw = 1e-4 * myc[0] / myh[0];
 			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
-			const float fvel = abs_div_v / (abs_div_v + abs_curl_v);
-			if( std::isnan(fvel)) {
-				PRINT( "%e %e %i\n", abs_curl_v, abs_div_v, xs.size());
-			}
+			const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
+			//	if( std::isnan(fvel)) {
+			//		PRINT( "%e %e %i\n", abs_curl_v, abs_div_v, xs.size());
+			//	}
 			sph_particles_fvel(i) = fvel;
-//			PRINT( "%e %i\n", dvx_dx_sum, xs.size());
+			//		PRINT( "%e\n", fvel);
 		}
 	}
 	return rc;
@@ -871,9 +875,9 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 		const vector<char>& main_rungs, const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs,
 		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, float t0) {
 	sph_run_return rc;
-	feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
+//	feenableexcept (FE_DIVBYZERO);
+//	feenableexcept (FE_INVALID);
+//	feenableexcept (FE_OVERFLOW);
 	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
 	static thread_local vector<simd_int> zs;
@@ -995,11 +999,12 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float h = hs[j];
 				const simd_float h2 = sqr(h);
 				const simd_float r2 = sqr(dx, dy, dz);
-				static const simd_float alpha = 0.75;
+				static const simd_float alpha = 1.0f;
 				static const simd_float beta = 2.0f * alpha;
 				static const simd_float one = simd_float(1.f);
 				static const simd_float zero = simd_float(0.f);
 				static const simd_float tiny = simd_float(1e-15);
+				static const simd_float half = simd_float(0.5f);
 				static const simd_float gamma = SPH_GAMMA;
 				const simd_float hinv = one / h;
 				const simd_float h3inv = hinv * sqr(hinv);
@@ -1015,9 +1020,9 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvz = myvz - vzs[j];
 				const simd_float r = sqrt(r2);
 				const simd_float rinv = one / (r + tiny);
-				const simd_float r2inv = sqr(rinv);
+				const simd_float r2inv = sqr(rinv) + 0.01 * sqr(hij);
 				const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-				const simd_float Piij = (-alpha * uij * cij + beta * sqr(uij)) * rhoinv * simd_float(0.5) * (myfvel + fvels[j]);
+				const simd_float Piij = (uij * (-alpha * cij + beta * uij)) * rhoinv * half * (myfvel + fvels[j]);
 				const simd_float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
 				const simd_float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
 				const simd_float dWdri_x = dx * dWdri;
@@ -1047,7 +1052,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
 				sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
 				sph_particles_dent(i) += (dAdt * dt * masks[j]).sum();
-		//		PRINT( "%e %e\n", dAdt.sum() , Piij.sum());
+				//		PRINT( "%e %e\n", dAdt.sum() , Piij.sum());
 			}
 		}
 	}
@@ -1084,114 +1089,115 @@ sph_run_return sph_run(sph_run_params params) {
 	static std::atomic<int> next;
 	next = 0;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,params]() {
-			sph_run_return rc;
-			int index = next++;
-			sph_data_vecs data;
-			while( index < sph_tree_leaflist_size()) {
-				data.clear();
-				const auto* self = sph_tree_get_leaf(index);
-				bool test;
-				switch(params.run_type) {
+		futs.push_back(
+				hpx::async([proc,nthreads,params]() {
+					sph_run_return rc;
+					int index = next++;
+					sph_data_vecs data;
+					while( index < sph_tree_leaflist_size()) {
+						data.clear();
+						const auto* self = sph_tree_get_leaf(index);
+						bool test;
+						switch(params.run_type) {
 
-					case SPH_RUN_SMOOTHLEN:
-					test = (params.set & SPH_SET_ACTIVE) && (self->nactive > 0);
-					if( !test && (params.set & SPH_SET_SEMIACTIVE) ) {
-						test = has_active_neighbors(self);
-					}
-					break;
+							case SPH_RUN_SMOOTHLEN:
+							test = (params.set & SPH_SET_ACTIVE) && (self->nactive > 0);
+							if( !test && (params.set & SPH_SET_SEMIACTIVE) ) {
+								test = has_active_neighbors(self);
+							}
+							break;
 
-					case SPH_RUN_FVELS:
-					case SPH_RUN_HYDRO:
-					case SPH_RUN_MARK_SEMIACTIVE:
-					test = (self->nactive > 0);
-					if( !test ) {
-						test = has_active_neighbors(self);
-					}
-					break;
+							case SPH_RUN_FVELS:
+							case SPH_RUN_HYDRO:
+							case SPH_RUN_MARK_SEMIACTIVE:
+							test = (self->nactive > 0);
+							if( !test ) {
+								test = has_active_neighbors(self);
+							}
+							break;
 
-					case SPH_RUN_COURANT:
-					case SPH_RUN_GRAVITY:
-					test = self->nactive > 0;
-					case SPH_RUN_UPDATE:
-					test = test || has_active_neighbors(self);
-					break;
-				}
-				if(test) {
-					vector<tree_id> neighbors;
-					switch(params.run_type) {
-
-						case SPH_RUN_SMOOTHLEN:
-						case SPH_RUN_MARK_SEMIACTIVE:
-						case SPH_RUN_COURANT:
-						case SPH_RUN_FVELS:
-						case SPH_RUN_HYDRO:
-						for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-							const auto id = sph_tree_get_neighbor(i);
-							neighbors.push_back(id);
+							case SPH_RUN_COURANT:
+							case SPH_RUN_GRAVITY:
+							test = self->nactive > 0;
+							case SPH_RUN_UPDATE:
+							test = test || has_active_neighbors(self);
+							break;
 						}
-						break;
+						if(test) {
+							vector<tree_id> neighbors;
+							switch(params.run_type) {
 
-						case SPH_RUN_GRAVITY:
-						case SPH_RUN_UPDATE:
-						break;
+								case SPH_RUN_SMOOTHLEN:
+								case SPH_RUN_MARK_SEMIACTIVE:
+								case SPH_RUN_COURANT:
+								case SPH_RUN_FVELS:
+								case SPH_RUN_HYDRO:
+								for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+									const auto id = sph_tree_get_neighbor(i);
+									neighbors.push_back(id);
+								}
+								break;
 
-					}
-					//		PRINT( "neighbors_size = %i\n",neighbors.size());
-				switch(params.run_type) {
-					case SPH_RUN_SMOOTHLEN:
-					load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
-					break;
-					case SPH_RUN_MARK_SEMIACTIVE:
-					load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
-					break;
-					case SPH_RUN_COURANT:
-					load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-					break;
-					case SPH_RUN_FVELS:
-					load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-					break;
-					case SPH_RUN_HYDRO:
-					load_data<true, true, true, true, true, true, false, false>(self, neighbors, data, params.min_rung);
-					break;
-					case SPH_RUN_GRAVITY:
-					case SPH_RUN_UPDATE:
-					break;
-				}
-				sph_run_return this_rc;
-				switch(params.run_type) {
-					case SPH_RUN_SMOOTHLEN:
-					if( neighbors.size()==0) {
+								case SPH_RUN_GRAVITY:
+								case SPH_RUN_UPDATE:
+								break;
+
+							}
+							//		PRINT( "neighbors_size = %i\n",neighbors.size());
+						switch(params.run_type) {
+							case SPH_RUN_SMOOTHLEN:
+							load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_MARK_SEMIACTIVE:
+							load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_COURANT:
+							load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_FVELS:
+							load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_HYDRO:
+							load_data<true, true, true, true, true, true, false, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_GRAVITY:
+							case SPH_RUN_UPDATE:
+							break;
+						}
+						sph_run_return this_rc;
+						switch(params.run_type) {
+							case SPH_RUN_SMOOTHLEN:
+							if( neighbors.size()==0) {
 //						PRINT( "%i\n", neighbors.size());
-					}
+							}
 
-					this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
-					break;
-					case SPH_RUN_MARK_SEMIACTIVE:
-					this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
-					break;
-					case SPH_RUN_COURANT:
-					this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
-					break;
-					case SPH_RUN_GRAVITY:
-					this_rc = sph_gravity(self, params.min_rung, params.t0);
-					break;
-					case SPH_RUN_FVELS:
-					this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs);
-					break;
-					case SPH_RUN_HYDRO:
-					this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, params.t0);
-					break;
-					case SPH_RUN_UPDATE:
-					this_rc = sph_update(self);
-					break;
+							this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
+							break;
+							case SPH_RUN_MARK_SEMIACTIVE:
+							this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
+							break;
+							case SPH_RUN_COURANT:
+							this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
+							break;
+							case SPH_RUN_GRAVITY:
+							this_rc = sph_gravity(self, params.min_rung, params.t0);
+							break;
+							case SPH_RUN_FVELS:
+							this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs);
+							break;
+							case SPH_RUN_HYDRO:
+							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, params.t0);
+							break;
+							case SPH_RUN_UPDATE:
+							this_rc = sph_update(self);
+							break;
+						}
+						rc += this_rc;
+					}
+					index = next++;
 				}
-				rc += this_rc;
-			}
-			index = next++;
-		}
-		return rc;
-	}));
+				return rc;
+			}));
 	}
 	for (auto& f : futs) {
 		rc += f.get();

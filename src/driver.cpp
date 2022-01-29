@@ -142,7 +142,7 @@ int sph_step(int minrung, double scale, double t0) {
 	auto sr = sph_tree_create(tparams);
 	tm.stop();
 	tm.reset();
-	PRINT("sph_tree_create time = %e\n", tm.read());
+	PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 
 	sph_tree_neighbor_params tnparams;
 
@@ -315,6 +315,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tree_create_params tparams(minrung, theta);
 	PRINT("Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);
+	PRINT( "gravity nactive = %i\n", sr.nactive);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
 	tm.stop();
@@ -644,7 +645,7 @@ void driver() {
 			PRINT_BOTH(textfp,
 					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
 					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1, tau / t0, years,
-					dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, kr.max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time,
+					dt / t0, a * pot, a * dr.kin, cosmicK, eerr, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time,
 					drift_time, runtime / iter, (double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
 					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
