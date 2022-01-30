@@ -112,11 +112,13 @@ struct sph_run_return {
 struct sph_run_params {
 	int run_type;
 	int set;
+	int phase;
 	int min_rung;
 	float t0;
 	float a;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & phase;
 		arc & run_type;
 		arc & set;
 		arc & min_rung;

@@ -219,6 +219,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			}
 			other_radius[i] = other_ptrs[i]->radius;
 		}
+		for( int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				other_pos[dim][i] = 0.f;
+			}
+			other_radius[i] = 0.f;
+		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;              // 3
 		}
@@ -375,12 +381,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					vz = fmaf(forces.gz[j], dt, vz);
 				}
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				if (part_sph) {
+			/*	if (part_sph) {
 					const int k = particles_sph_index(i);
 					sph_particles_gforce(XDIM, k) = forces.gx[j];
 					sph_particles_gforce(YDIM, k) = forces.gy[j];
 					sph_particles_gforce(ZDIM, k) = forces.gz[j];
-				} else {
+				} else {*/
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
 					rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
@@ -393,7 +399,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					vx = fmaf(forces.gx[j], dt, vx);
 					vy = fmaf(forces.gy[j], dt, vy);
 					vz = fmaf(forces.gz[j], dt, vz);
-				}
+//				}
 				kr.pot += m * forces.phi[j];
 				kr.fx += forces.gx[j];
 				kr.fy += forces.gy[j];
