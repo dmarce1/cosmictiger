@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/fast_future.hpp>
 #include <cosmictiger/group_tree.hpp>
@@ -68,6 +68,7 @@ struct last_cache_entry_t;
 
 static std::unordered_set<last_cache_entry_t*> last_cache_entries;
 static std::atomic<int> last_cache_entry_mtx;
+static std::atomic<int> allocator_mtx(0);
 
 struct last_cache_entry_t {
 	tree_id line;
@@ -124,7 +125,7 @@ fast_future<group_tree_return> group_tree_create_fork(size_t key, pair<int, int>
 	if (!threadme) {
 		rc.set_value(group_tree_create(key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-		rc = hpx::async < group_tree_create_action > (hpx_localities()[proc_range.first], key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async<group_tree_create_action>(hpx_localities()[proc_range.first], key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([proc_range, part_range, depth, local_root, box, key]() {
 			auto rc = group_tree_create(key, proc_range, part_range, box,depth, local_root);
@@ -144,9 +145,13 @@ group_tree_return group_tree_create(size_t key, pair<int, int> proc_range, pair<
 	if (nodes.size() == 0) {
 		next_id = -tree_cache_line_size;
 		nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / GROUP_BUCKET_SIZE), (size_t) 1));
+		while (allocator_mtx++ != 0) {
+			allocator_mtx--;
+		}
 		for (int i = 0; i < allocator_list.size(); i++) {
 			allocator_list[i]->ready = false;
 		}
+		allocator_mtx--;
 	}
 	if (local_root) {
 		part_range.first = 0;
@@ -231,7 +236,7 @@ void group_tree_set_active(tree_id id, bool b) {
 void group_tree_allocator::reset() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	next = (next_id += tree_cache_line_size);
-	last = std::min( next + tree_cache_line_size, (int) nodes.size());
+	last = std::min(next + tree_cache_line_size, (int) nodes.size());
 	if (next >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full");
 	}
@@ -239,8 +244,11 @@ void group_tree_allocator::reset() {
 
 group_tree_allocator::group_tree_allocator() {
 	ready = false;
-	std::lock_guard<spinlock_type> lock(mutex[0]);
+	while (allocator_mtx++ != 0) {
+		allocator_mtx--;
+	}
 	allocator_list.push_back(this);
+	allocator_mtx--;
 }
 
 int group_tree_allocator::allocate() {
@@ -251,7 +259,9 @@ int group_tree_allocator::allocate() {
 }
 
 group_tree_allocator::~group_tree_allocator() {
-	std::lock_guard<spinlock_type> lock(mutex[0]);
+	while (allocator_mtx++ != 0) {
+		allocator_mtx--;
+	}
 	for (int i = 0; i < allocator_list.size(); i++) {
 		if (allocator_list[i] == this) {
 			allocator_list[i] = allocator_list.back();
@@ -259,13 +269,14 @@ group_tree_allocator::~group_tree_allocator() {
 			break;
 		}
 	}
+	allocator_mtx--;
 }
 
 void group_tree_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < group_tree_destroy_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<group_tree_destroy_action>(HPX_PRIORITY_HI, c));
 	}
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
@@ -370,7 +381,7 @@ void group_tree_inc_cache_epoch() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async < group_tree_inc_cache_epoch_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<group_tree_inc_cache_epoch_action>(HPX_PRIORITY_HI, c));
 	}
 	for (auto& node : nodes) {
 		node.last_active = node.active;

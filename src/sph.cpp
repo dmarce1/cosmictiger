@@ -658,28 +658,18 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dvx = vxs[j] - myvx;
 				const simd_float dvy = vys[j] - myvy;
 				const simd_float dvz = vzs[j] - myvz;
-				for( int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-					if( ents[j][l] < 0.0 ) {
-						PRINT( "ERRROR %e\n", ents[j][l]);
-					}
-				}
 				const simd_float c = sqrt(simd_float(SPH_GAMMA) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
 				const simd_float r = sqrt(sqr(dx, dy, dz));
 				static const simd_float tiny = simd_float(1e-15);
 				const simd_float rinv = one / (r + tiny);
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-				const simd_float W = sph_W(r, myhinv, myh3inv);
-				const simd_float dWdr_rinv = sph_dWdr_rinv(r, myhinv, myh3inv);
-				const simd_float M = m * rhoinv * masks[j];
-				cs += M * c * W;
-				max_vsig = max(max_vsig, abs(dv));
+				max_vsig = max(max_vsig, myc + c + simd_float(3) * max(-dv,zero));
 			}
-			const float cs_sum = cs.sum();
 			const float vsig_max = max_vsig.max();
-			rc.max_vsig = 2.0f * cs_sum + 3.0f * vsig_max;
+			rc.max_vsig = vsig_max;
 			float dthydro = rc.max_vsig / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
-				dthydro = SPH_CFL / dthydro;
+				dthydro = get_options().cfl / dthydro;
 			} else {
 				dthydro = 1.0e99;
 			}
@@ -907,13 +897,10 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			sph_particles_dvel(ZDIM, i) = 0.0f;
 			sph_particles_dent(i) = 0.0f;
 		}
-		bool test;
-		if (phase == 0) {
-			test = sph_particles_semi_active(i);
-		} else {
-			test = sph_particles_rung(i) >= min_rung;
-		}
-		if (sph_particles_semi_active(i)) {
+		const bool active = sph_particles_rung(i) >= min_rung;
+		const bool semi = !active && sph_particles_semi_active(i);
+		const bool test = phase == 0 ? (semi || active) : active;
+		if (test) {
 			xs.resize(0);
 			ys.resize(0);
 			zs.resize(0);
@@ -972,7 +959,8 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float r2 = sqr(dx, dy, dz);
 				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < h2) + simd_float(r2 < myh2));
 				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-					if (mask[k] > 0.0) {
+					const int jpk = j + k;
+					if (mask[k] > 0.0 && !(semi && main_rungs[jpk] < min_rung)) {
 						if (offset == SIMD_FLOAT_SIZE) {
 							xs.push_back(myx);
 							ys.push_back(myy);
@@ -988,7 +976,6 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 							base++;
 							offset = 0;
 						}
-						const int jpk = j + k;
 						xs.back()[offset] = main_xs[jpk].raw();
 						ys.back()[offset] = main_ys[jpk].raw();
 						zs.back()[offset] = main_zs[jpk].raw();

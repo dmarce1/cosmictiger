@@ -836,9 +836,13 @@ vector<particle_sample> particles_sample(int cnt) {
 }
 
 void particles_load(FILE* fp) {
-	part_int size;
+	part_int size, sph_size;
 	FREAD(&size, sizeof(part_int), 1, fp);
-	particles_resize(size);
+	FREAD(&sph_size, sizeof(part_int), 1, fp);
+	particles_resize(size - sph_size);
+	if (sph_size) {
+		sph_particles_resize(sph_size);
+	}
 	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
@@ -852,11 +856,17 @@ void particles_load(FILE* fp) {
 	if (get_options().do_tracers) {
 		FREAD(&particles_tracer(0), sizeof(char), particles_size(), fp);
 	}
+	if( sph_size ) {
+		FREAD(&particles_sph_index(0), sizeof(part_int), particles_size(), fp);
+		sph_particles_load(fp);
+	}
 }
 
 void particles_save(FILE* fp) {
 	part_int size = particles_size();
+	part_int sph_size = sph_particles_size();
 	fwrite(&size, sizeof(part_int), 1, fp);
+	fwrite(&sph_size, sizeof(part_int), 1, fp);
 	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
@@ -869,6 +879,10 @@ void particles_save(FILE* fp) {
 	}
 	if (get_options().do_tracers) {
 		fwrite(&particles_tracer(0), sizeof(char), particles_size(), fp);
+	}
+	if( sph_size ) {
+		fwrite(&particles_sph_index(0), sizeof(part_int), particles_size(), fp);
+		sph_particles_save(fp);
 	}
 
 }

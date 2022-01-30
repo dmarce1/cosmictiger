@@ -616,3 +616,21 @@ void sph_particles_cache_free() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+void sph_particles_load(FILE* fp) {
+	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
+	FREAD(&sph_particles_ent(0), sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_dent(0), sizeof(float), sph_particles_size(), fp);
+	for (int dim = 0; dim < NDIM; dim++) {
+		FREAD(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp);
+	}
+}
+
+void sph_particles_save(FILE* fp) {
+	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
+	fwrite(&sph_particles_ent(0), sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_dent(0), sizeof(float), sph_particles_size(), fp);
+	for (int dim = 0; dim < NDIM; dim++) {
+		fwrite(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp);
+	}
+
+}

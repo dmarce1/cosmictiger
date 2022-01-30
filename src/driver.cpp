@@ -280,15 +280,8 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 
 		}
 	} else {
-		sparams.run_type = SPH_RUN_COURANT;
-		tm.start();
-		kr = sph_run(sparams);
-		tm.stop();
-		PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-		tm.reset();
-		max_rung = kr.max_rung;
 
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+/*		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.set = SPH_SET_ACTIVE;
 		tm.start();
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -301,6 +294,14 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
+*/
+		sparams.run_type = SPH_RUN_COURANT;
+		tm.start();
+		kr = sph_run(sparams);
+		tm.stop();
+		PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
+		tm.reset();
+		max_rung = kr.max_rung;
 
 		sparams.phase = 1;
 		sparams.run_type = SPH_RUN_FVELS;
@@ -325,7 +326,7 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 
 		sparams.phase = 0;
 
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+	/*	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
 		tm.start();
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -337,7 +338,7 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-		tm.reset();
+		tm.reset();*/
 
 		sparams.run_type = SPH_RUN_FVELS;
 		tm.start();

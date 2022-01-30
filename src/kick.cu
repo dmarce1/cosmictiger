@@ -84,9 +84,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
-	auto* sph_gx = data.sph_gx;
-	auto* sph_gy = data.sph_gy;
-	auto* sph_gz = data.sph_gz;
 	auto* sph_index = data.sph_index;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
@@ -154,25 +151,25 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-/*		if (j != NOT_SPH) {
-			sph_gx[j] = gx[i];
-			sph_gy[j] = gy[i];
-			sph_gz[j] = gz[i];
-		} else {*/
-			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
-			rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
-			max_rung = max(max(rung, max_rung), 1);
-			if (rung < 0 || rung >= MAX_RUNG) {
-				PRINT("Rung out of range %i\n", rung);
-			}
-			ASSERT(rung >= 0);
-			ASSERT(rung < MAX_RUNG);
-			dt = 0.5f * rung_dt[rung] * params.t0;
-			vx = fmaf(gx[i], dt, vx);
-			vy = fmaf(gy[i], dt, vy);
-			vz = fmaf(gz[i], dt, vz);
-			write_rungs[snki] = rung;
-//		}
+		/*		if (j != NOT_SPH) {
+		 sph_gx[j] = gx[i];
+		 sph_gy[j] = gy[i];
+		 sph_gz[j] = gz[i];
+		 } else {*/
+		dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
+		rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
+		max_rung = max(max(rung, max_rung), 1);
+		if (rung < 0 || rung >= MAX_RUNG) {
+			PRINT("Rung out of range %i\n", rung);
+		}
+		ASSERT(rung >= 0);
+		ASSERT(rung < MAX_RUNG);
+		dt = 0.5f * rung_dt[rung] * params.t0;
+		vx = fmaf(gx[i], dt, vx);
+		vy = fmaf(gy[i], dt, vy);
+		vz = fmaf(gz[i], dt, vz);
+		write_rungs[snki] = rung;
+		//	}
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
@@ -697,9 +694,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.z = dev_z;
 	data.sph = do_sph ? dev_sph : nullptr;
 	if (data.sph) {
-		data.sph_gx = &sph_particles_gforce(XDIM, 0);
-		data.sph_gy = &sph_particles_gforce(YDIM, 0);
-		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
 		data.sph_index = &particles_sph_index(0);
 	}
 	data.tree_nodes = dev_tree_nodes;

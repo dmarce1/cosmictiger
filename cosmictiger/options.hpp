@@ -72,11 +72,13 @@ struct options {
 	double Neff;
 	double dm_mass;
 	double sph_mass;
+	double cfl;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & cfl;
 		arc & sph;
 		arc & nsteps;
 		arc & cuda;
