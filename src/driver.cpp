@@ -249,6 +249,35 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 			tm.stop();
 			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
 			tm.reset();
+
+			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+			tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
+			tm.start();
+			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+			tm.stop();
+			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+			tm.reset();
+			tm.start();
+			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+			sph_tree_neighbor(tnparams, root_id, checklist).get();
+			tm.stop();
+			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+			tm.reset();
+
+			sparams.run_type = SPH_RUN_FVELS;
+			tm.start();
+			sph_run(sparams);
+			tm.stop();
+			PRINT("sph_run(SPH_RUN_FVELS): tm = %e\n", tm.read());
+			tm.reset();
+
+			sparams.run_type = SPH_RUN_HYDRO;
+			tm.start();
+			sph_run(sparams);
+			tm.stop();
+			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			tm.reset();
+
 		}
 	} else {
 		sparams.run_type = SPH_RUN_COURANT;

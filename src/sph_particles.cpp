@@ -192,6 +192,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 				hi--;
 				if (sph_particles_pos(xdim, hi) < xmid) {
 					std::swap(sph_particles_e[hi], sph_particles_e[lo]);
+					std::swap(sph_particles_de[hi], sph_particles_de[lo]);
 					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
 					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
 #ifdef CHECK_MUTUAL_SORT

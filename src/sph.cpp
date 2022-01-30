@@ -658,9 +658,15 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dvx = vxs[j] - myvx;
 				const simd_float dvy = vys[j] - myvy;
 				const simd_float dvz = vzs[j] - myvz;
+				for( int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+					if( ents[j][l] < 0.0 ) {
+						PRINT( "ERRROR %e\n", ents[j][l]);
+					}
+				}
 				const simd_float c = sqrt(simd_float(SPH_GAMMA) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
 				const simd_float r = sqrt(sqr(dx, dy, dz));
-				const simd_float rinv = one / r;
+				static const simd_float tiny = simd_float(1e-15);
+				const simd_float rinv = one / (r + tiny);
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
 				const simd_float W = sph_W(r, myhinv, myh3inv);
 				const simd_float dWdr_rinv = sph_dWdr_rinv(r, myhinv, myh3inv);
@@ -684,9 +690,9 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			//const float gz = sph_particles_gforce(ZDIM, i);
 			char& rung = sph_particles_rung(i);
 			//const float g2 = sqr(gx, gy, gz);
-		//	const float factor = eta * sqrtf(ascale * hgrav);
-	//		const float dt_grav = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
-	//		const float dt = std::min(dt_grav, dthydro);
+			//	const float factor = eta * sqrtf(ascale * hgrav);
+			//		const float dt_grav = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
+			//		const float dt = std::min(dt_grav, dthydro);
 			const int rung_hydro = ceilf(log2f(t0) - log2f(dthydro));
 //			const int rung_grav = ceilf(log2f(t0) - log2f(dt_grav));
 			const int rung_grav = rung;
@@ -1049,7 +1055,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvzdt = -dpz * m;
 				simd_float dt;
 				if (phase == 0) {
-					dt = min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
+					dt = 0.5f * min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
 				} else if (phase == 1) {
 					dt = rung2dt(myrung) * simd_float(t0);
 				}
