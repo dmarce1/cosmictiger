@@ -449,6 +449,7 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 		dr = drift(a0, 0.0, 0.0, 0.0, 0.0);
+		PRINT( "Initial etherm = %e\n", dr.therm);
 
 	}
 	PRINT("ekin0 = %e\n", dr.kin);

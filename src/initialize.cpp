@@ -175,7 +175,7 @@ struct power_spectrum_function {
 };
 
 static void zeldovich_begin(int dim1, int dim2);
-static float zeldovich_end(int dim, bool, float, float);
+static float zeldovich_end(int dim, bool, float, float, float);
 static void twolpt_init();
 static void twolpt_destroy();
 static void twolpt(int, int);
@@ -278,7 +278,8 @@ void initialize(double z0) {
 		zeldovich_begin(dim, NDIM);
 //		fft3d_force_real();
 		fft3d_inv_execute();
-		float dxmax = zeldovich_end(dim, dim == 0, D1, prefac1);
+		float mask = get_options().twolpt ? 0.0 : 1.0;
+		float dxmax = zeldovich_end(dim, dim == 0, D1, prefac1, mask);
 		fft3d_destroy();
 		PRINT("%e\n", dxmax);
 	}
@@ -339,7 +340,7 @@ void initialize(double z0) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			PRINT("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
 			twolpt_correction2(dim);
-			float dxmax = zeldovich_end(dim, false, -D2, prefac2);
+			float dxmax = zeldovich_end(dim, false, -D2, prefac2, 1.0);
 			fft3d_destroy();
 			PRINT("%e\n", dxmax);
 		}
@@ -623,7 +624,7 @@ static range<int64_t> find_my_box() {
 	return find_my_box(box, 0, hpx_size(), 0);
 }
 
-static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
+static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, float mask) {
 	const bool sph = get_options().sph;
 	float dxmax = 0.0;
 	spinlock_type mutex;
@@ -632,7 +633,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	const auto box = find_my_box();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_end_action>(HPX_PRIORITY_HI, c, dim, init_parts, D1, prefac1));
+		futs.push_back(hpx::async<zeldovich_end_action>(HPX_PRIORITY_HI, c, dim, init_parts, D1, prefac1, mask));
 	}
 	const auto Y = fft3d_read_real(box);
 	array<int64_t, NDIM> I;
@@ -676,8 +677,8 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 				const float omega_m = get_options().omega_m;
 				const float omega_b = get_options().omega_b;
 				const float omega = omega_m + omega_b;
-				const float dm_shift = sph ? 0.5 * omega_b / get_options().parts_dim : 0.0;
-				const float gas_shift = -0.5 * omega_m / get_options().parts_dim;
+				const float dm_shift = sph ? 0.5 * omega_b / get_options().parts_dim / omega: 0.0;
+				const float gas_shift = -0.5 * omega_m / get_options().parts_dim / omega;
 				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 						const int64_t index = box.index(I);
@@ -693,7 +694,11 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 						particles_rung(index) = 0;
 						if( sph ) {
 							sph_particles_rung(index) = 0;
+#ifdef SPH_TOTAL_ENERGY
+							sph_particles_ent(index) = 0.0;
+#else
 							sph_particles_ent(index) = entropy;
+#endif
 							sph_particles_smooth_len(index) = h;
 						}
 					}
@@ -704,7 +709,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 		local_futs.resize(0);
 	}
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs.push_back(hpx::async([sph, box, D1, prefac1, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {
+		futs.push_back(hpx::async([sph, box, D1, prefac1, mask, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {
 			float this_dxmax = 0.0;
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
@@ -736,6 +741,9 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 						}
 						sph_particles_pos(dim, index) = x;
 						sph_particles_vel(dim, index) += prefac1 * dx;
+#ifdef SPH_TOTAL_ENERGY
+						sph_particles_ent(index) += mask*get_options().sph_mass * sqr(sph_particles_vel(dim, index))*0.5f;
+#endif
 					}
 				}
 			}

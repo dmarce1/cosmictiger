@@ -100,8 +100,14 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / SPH_NEIGHBOR_COUNT;
 					const float rho = sph_den(1./h3);
+#ifdef SPH_TOTAL_ENERGY
+					const float ekin = 0.5f * mass * sqr(vx,vy,vz);
+					const float etherm = sph_particles_ent(j) - ekin;
+					const float e = etherm;
+#else
 					const float p = ent * pow(rho, SPH_GAMMA);
 					const float e = p * (1.0f/(SPH_GAMMA-1.0f)) * vol;
+#endif
 					this_dr.therm += e * a2inv;
 					this_dr.vol += vol;
 				}

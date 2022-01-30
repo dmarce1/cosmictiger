@@ -27,6 +27,9 @@
 #include <atomic>
 
 struct cuda_kick_data {
+#ifdef SPH_TOTAL_ENERGY
+	float* sph_energy;
+#endif
 	tree_node* tree_nodes;
 	fixed32* x;
 	fixed32* y;

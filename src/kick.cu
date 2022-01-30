@@ -85,6 +85,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
 	auto* sph_index = data.sph_index;
+#ifdef SPH_TOTAL_ENERGY
+	auto* sph_energy = data.sph_energy;
+#endif
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
@@ -151,6 +154,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
+#ifdef SPH_TOTAL_ENERGY
+		float dedt;
+		if( j != NOT_SPH) {
+			dedt = mass * (vx * gx[i] + vy * gy[i] + vz * gz[i]);
+			sph_energy[j] += dedt * dt;
+		}
+#endif
 		/*		if (j != NOT_SPH) {
 		 sph_gx[j] = gx[i];
 		 sph_gy[j] = gy[i];
@@ -165,6 +175,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		ASSERT(rung >= 0);
 		ASSERT(rung < MAX_RUNG);
 		dt = 0.5f * rung_dt[rung] * params.t0;
+#ifdef SPH_TOTAL_ENERGY
+		if( j != NOT_SPH) {
+			sph_energy[j] += dedt * dt;
+		}
+#endif
 		vx = fmaf(gx[i], dt, vx);
 		vy = fmaf(gy[i], dt, vy);
 		vz = fmaf(gz[i], dt, vz);
@@ -695,6 +710,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.sph = do_sph ? dev_sph : nullptr;
 	if (data.sph) {
 		data.sph_index = &particles_sph_index(0);
+#ifdef SPH_TOTAL_ENERGY
+		data.sph_energy = &sph_particles_ent(0);
+#endif
 	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);
