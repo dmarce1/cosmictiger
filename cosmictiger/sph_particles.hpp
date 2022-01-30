@@ -50,6 +50,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
+SPH_PARTICLES_EXTERN float* sph_particles_dvv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
 #ifdef CHECK_MUTUAL_SORT
@@ -114,6 +115,11 @@ inline float& sph_particles_ent(part_int index) {
 inline float& sph_particles_dvel(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dv[dim][index];
+}
+
+inline float& sph_particles_divv(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dvv[index];
 }
 
 inline float& sph_particles_gforce(int dim, part_int index) {

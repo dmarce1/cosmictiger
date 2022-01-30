@@ -192,6 +192,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 				hi--;
 				if (sph_particles_pos(xdim, hi) < xmid) {
 					std::swap(sph_particles_e[hi], sph_particles_e[lo]);
+					std::swap(sph_particles_dvv[hi], sph_particles_dvv[lo]);
 					std::swap(sph_particles_de[hi], sph_particles_de[lo]);
 					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
 					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
@@ -256,6 +257,7 @@ void sph_particles_resize(part_int sz) {
 		sph_particles_array_resize(sph_particles_de, new_capacity, false);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, false);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
+		sph_particles_array_resize(sph_particles_dvv, new_capacity, false);
 #ifdef CHECK_MUTUAL_SORT
 		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
 #endif
@@ -289,6 +291,7 @@ void sph_particles_free() {
 	free(sph_particles_h);
 	free(sph_particles_e);
 	free(sph_particles_de);
+	free(sph_particles_dvv);
 #ifdef CHECK_MUTUAL_SORT
 	free(sph_particles_tst);
 #endif
@@ -618,6 +621,7 @@ void sph_particles_cache_free() {
 
 void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
+	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_ent(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dent(0), sizeof(float), sph_particles_size(), fp);
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -627,6 +631,7 @@ void sph_particles_load(FILE* fp) {
 
 void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
+	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_ent(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dent(0), sizeof(float), sph_particles_size(), fp);
 	for (int dim = 0; dim < NDIM; dim++) {

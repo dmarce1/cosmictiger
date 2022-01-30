@@ -89,8 +89,14 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				this_dr.momy += mass * vy;
 				this_dr.momz += mass * vz;
 				if( j != NOT_SPH ) {
-					const float h = sph_particles_smooth_len(j);
+					float& h = sph_particles_smooth_len(j);
 					const float ent = sph_particles_ent(j);
+					if( tau0 != 0.0 ) {
+						const float divv = sph_particles_divv(j);
+						const float dloghdt = (1.f/3.f)*divv;
+						const float c0 = exp(dloghdt*dt);
+						h *= c0;
+					}
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / SPH_NEIGHBOR_COUNT;
 					const float rho = sph_den(1./h3);

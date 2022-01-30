@@ -192,7 +192,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				if ((active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+				if (params.set & SPH_SET_ALL || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
 					obox.accumulate(X, h);
 				}
 				ibox.accumulate(X);
@@ -487,6 +487,8 @@ static sph_run_return sph_mark_semiactive(const sph_tree_node* self_ptr, const v
 			const simd_int myx = sph_particles_pos(XDIM, i).raw();
 			const simd_int myy = sph_particles_pos(YDIM, i).raw();
 			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
+			const float myh = sph_particles_smooth_len(i);
+			const simd_float myh2 = sqr(myh);
 			sph_particles_semi_active(i) = false;
 			for (int j = 0; j < xs.size(); j += SIMD_FLOAT_SIZE) {
 				simd_int x, y, z;
@@ -512,7 +514,13 @@ static sph_run_return sph_mark_semiactive(const sph_tree_node* self_ptr, const v
 				const simd_float dy = simd_float(myy - y) * _2float;
 				const simd_float dz = simd_float(myz - z) * _2float;
 				const simd_float r2 = sqr(dx, dy, dz);
-				mask *= (r2 < h2) * (r2 > 0.0);
+				mask *= ((((r2 < h2) + (r2 < myh2))* (r2 > 0.0)) > 0.0);
+				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
+					if (k < xs.size()) {
+						const int kmj = k - j;
+						mask[kmj] *= (rungs[k] >= min_rung);
+					}
+				}
 				const bool semi = mask.sum();
 				if (semi) {
 					sph_particles_semi_active(i) = semi;
@@ -663,13 +671,18 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				static const simd_float tiny = simd_float(1e-15);
 				const simd_float rinv = one / (r + tiny);
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-				max_vsig = max(max_vsig, myc + c + simd_float(3) * max(-dv,zero));
+				const simd_float W = sph_W(r, myhinv, myh3inv);
+				const simd_float dWdr_rinv = sph_dWdr_rinv(r, myhinv, myh3inv);
+				const simd_float M = m * rhoinv * masks[j];
+				cs += M * c * W;
+				max_vsig = max(max_vsig, abs(dv));
 			}
+			const float cs_sum = cs.sum();
 			const float vsig_max = max_vsig.max();
-			rc.max_vsig = vsig_max;
+			rc.max_vsig = 2.0f * cs_sum + 3.0f * vsig_max;
 			float dthydro = rc.max_vsig / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
-				dthydro = get_options().cfl / dthydro;
+				dthydro = SPH_CFL / dthydro;
 			} else {
 				dthydro = 1.0e99;
 			}
@@ -866,7 +879,7 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 
 sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& main_xs, const vector<fixed32>& main_ys, const vector<fixed32>& main_zs,
 		const vector<char>& main_rungs, const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs,
-		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, int min_rung, float t0, int phase) {
+		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, int min_rung, float t0, int phase, float a) {
 	sph_run_return rc;
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
@@ -889,17 +902,18 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 		}
 		return dt;
 	};
+	const simd_float ainv = 1.0f / a;
 	const simd_float m = get_options().sph_mass;
 	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		if (phase == 1) {
+		const bool active = sph_particles_rung(i) >= min_rung;
+		const bool semi = !active && sph_particles_semi_active(i);
+		const bool test = phase == 0 ? (semi || active) : active;
+		if (phase == 1 && test) {
 			sph_particles_dvel(XDIM, i) = 0.0f;
 			sph_particles_dvel(YDIM, i) = 0.0f;
 			sph_particles_dvel(ZDIM, i) = 0.0f;
 			sph_particles_dent(i) = 0.0f;
 		}
-		const bool active = sph_particles_rung(i) >= min_rung;
-		const bool semi = !active && sph_particles_semi_active(i);
-		const bool test = phase == 0 ? (semi || active) : active;
 		if (test) {
 			xs.resize(0);
 			ys.resize(0);
@@ -991,6 +1005,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 					}
 				}
 			}
+			simd_float divv(0.f);
 			for (int j = 0; j < xs.size(); j++) {
 				static const simd_float one = simd_float(1.f);
 				static const simd_float zero = simd_float(0.f);
@@ -1040,6 +1055,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvxdt = -dpx * m;
 				const simd_float dvydt = -dpy * m;
 				const simd_float dvzdt = -dpz * m;
+				divv -= ainv * m * rhoinv * myfvel * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
 				simd_float dt;
 				if (phase == 0) {
 					dt = 0.5f * min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
@@ -1052,6 +1068,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
 				sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
 				sph_particles_dent(i) += (dAdt * dt * masks[j]).sum();
+				sph_particles_divv(i) = divv.sum();
 			}
 		}
 	}
@@ -1198,7 +1215,7 @@ sph_run_return sph_run(sph_run_params params) {
 							this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs);
 							break;
 							case SPH_RUN_HYDRO:
-							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, params.min_rung, params.t0, params.phase);
+							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, params.min_rung, params.t0, params.phase, params.a);
 							break;
 							case SPH_RUN_UPDATE:
 							this_rc = sph_update(self, params.min_rung, params.phase);
