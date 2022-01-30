@@ -201,13 +201,6 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 		tm.reset();
 
 		if (tau != 0.0) {
-			sparams.run_type = SPH_RUN_UPDATE;
-			tm.start();
-			sph_run(sparams);
-			tm.stop();
-			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-			tm.reset();
-
 			sparams.run_type = SPH_RUN_FVELS;
 			tm.start();
 			sph_run(sparams);
@@ -221,6 +214,14 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase) {
 			tm.stop();
 			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
+
+			sparams.run_type = SPH_RUN_UPDATE;
+			tm.start();
+			sph_run(sparams);
+			tm.stop();
+			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
+			tm.reset();
+
 		}
 
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
