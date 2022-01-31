@@ -402,6 +402,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				f_simd = 0.0;
 				dfdh_simd = 0.0;
 				const int maxj = round_up((int) xs.size(), SIMD_FLOAT_SIZE);
+				simd_float count(simd_float(0.0));
 				for (int j = 0; j < maxj; j += SIMD_FLOAT_SIZE) {
 					const int maxk = std::min((int) xs.size(), j + SIMD_FLOAT_SIZE);
 					simd_int X, Y, Z;
@@ -418,6 +419,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 						X[kmj] = Y[kmj] = Z[kmj] = 0.0;
 						mask[kmj] = 0.0f;
 					}
+					count += mask;
 					static const simd_float _2float(fixed2float);
 					const simd_float dx = simd_float(myx - X) * _2float;
 					const simd_float dy = simd_float(myy - Y) * _2float;
@@ -440,12 +442,17 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					f_simd += w * mask;
 					dfdh_simd += dwdh * mask;
 				}
-				f = f_simd.sum();
-				dfdh = dfdh_simd.sum();
-				f -= SPH_NEIGHBOR_COUNT;
-				float dh = -f / dfdh;
-				error = fabs(log(h + dh) - log(h));
-				h += dh;
+				if (count.sum() > 1.0) {
+					f = f_simd.sum();
+					dfdh = dfdh_simd.sum();
+					f -= SPH_NEIGHBOR_COUNT;
+					float dh = -f / dfdh;
+					error = fabs(log(h + dh) - log(h));
+					h += dh;
+				} else {
+					h *= 1.1;
+					error = 1.0;
+				}
 				//if( cnt > 5 )
 //					PRINT( "%i %e %e\n", cnt, h, dh);
 				array<fixed32, NDIM> X;
@@ -1236,7 +1243,7 @@ sph_run_return sph_run(sph_run_params params) {
 							load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
 							break;
 							case SPH_RUN_FVELS:
-							load_data<false, true, false, true, false, true, true, false>(self, neighbors, data, params.min_rung);
+							load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
 							break;
 							case SPH_RUN_HYDRO:
 							load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
