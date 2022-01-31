@@ -389,30 +389,30 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 #endif
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				/*	if (part_sph) {
-				 const int k = particles_sph_index(i);
-				 sph_particles_gforce(XDIM, k) = forces.gx[j];
-				 sph_particles_gforce(YDIM, k) = forces.gy[j];
-				 sph_particles_gforce(ZDIM, k) = forces.gz[j];
-				 } else {*/
-				const float factor = eta * sqrtf(params.a * hfloat);
-				dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
-				rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
-				kr.max_rung = std::max(std::max(rung, kr.max_rung), (char) 1);
-				if (rung < 0 || rung >= MAX_RUNG) {
-					PRINT("Rung out of range %i\n", rung);
+				if (part_sph) {
+					const int k = particles_sph_index(i);
+					sph_particles_gforce(XDIM, k) = forces.gx[j];
+					sph_particles_gforce(YDIM, k) = forces.gy[j];
+					sph_particles_gforce(ZDIM, k) = forces.gz[j];
 				} else {
-					dt = 0.5f * rung_dt[rung] * params.t0;
-				}
+					const float factor = eta * sqrtf(params.a * hfloat);
+					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
+					rung = std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung));
+					kr.max_rung = std::max(std::max(rung, kr.max_rung), (char) 1);
+					if (rung < 0 || rung >= MAX_RUNG) {
+						PRINT("Rung out of range %i\n", rung);
+					} else {
+						dt = 0.5f * rung_dt[rung] * params.t0;
+					}
 #ifdef SPH_TOTAL_ENERGY
-				if( k != NOT_SPH ) {
-					sph_particles_ent(k) += dedt * dt;
-				}
+					if( k != NOT_SPH ) {
+						sph_particles_ent(k) += dedt * dt;
+					}
 #endif
-				vx = fmaf(forces.gx[j], dt, vx);
-				vy = fmaf(forces.gy[j], dt, vy);
-				vz = fmaf(forces.gz[j], dt, vz);
-//				}
+					vx = fmaf(forces.gx[j], dt, vx);
+					vy = fmaf(forces.gy[j], dt, vy);
+					vz = fmaf(forces.gz[j], dt, vz);
+				}
 				kr.pot += m * forces.phi[j];
 				kr.fx += forces.gx[j];
 				kr.fy += forces.gy[j];

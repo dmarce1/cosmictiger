@@ -250,7 +250,7 @@ void sph_particles_resize(part_int sz) {
 		while (new_capacity < sz) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
-		PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
+	//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
 #ifdef SPH_TOTAL_ENERGY
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
@@ -266,7 +266,7 @@ void sph_particles_resize(part_int sz) {
 		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
 #endif
 		for (int dim = 0; dim < NDIM; dim++) {
-			sph_particles_array_resize(sph_particles_dv[dim], new_capacity, false);
+			sph_particles_array_resize(sph_particles_dv[dim], new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -295,9 +295,6 @@ void sph_particles_free() {
 	free(sph_particles_h);
 	free(sph_particles_de);
 	free(sph_particles_dvv);
-	for (int dim = 0; dim < NDIM; dim++) {
-		free(sph_particles_dv[NDIM]);
-	}
 #ifdef CHECK_MUTUAL_SORT
 	free(sph_particles_tst);
 #endif
@@ -310,9 +307,15 @@ void sph_particles_free() {
 	if( cuda ) {
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaFree(sph_particles_e));
+		for (int dim = 0; dim < NDIM; dim++) {
+			CUDA_CHECK(cudaFree(sph_particles_dv[NDIM]));
+		}
 #endif
 	} else {
 		free(sph_particles_e);
+		for (int dim = 0; dim < NDIM; dim++) {
+			free(sph_particles_dv[NDIM]);
+		}
 	}
 }
 

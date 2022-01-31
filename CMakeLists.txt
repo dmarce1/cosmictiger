@@ -23,7 +23,7 @@ include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 CHECK_CXX_COMPILER_FLAG("-maltivec" COMPILER_SUPPORTS_MALTIVEC)
 if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fno-pie -no-pie")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -ffast-math -fno-pie -no-pie")
 endif()
 if(COMPILER_SUPPORTS_MALTIVEC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -maltivec")
@@ -62,6 +62,7 @@ set(cosmictiger_source_files
     src/groups.cpp
     src/group_entry.cpp
     src/groups_find.cpp
+    src/hydro.cpp
     src/initialize.cpp
     src/hpx.cpp
     src/kick.cpp
@@ -115,6 +116,7 @@ set(cosmictiger_header_files
     cosmictiger/group_entry.hpp
     cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
+    cosmictiger/hydro.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lc_group_archive.hpp

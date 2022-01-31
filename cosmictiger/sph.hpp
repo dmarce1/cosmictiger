@@ -164,6 +164,7 @@ struct sph_run_params {
 #define SPH_RUN_FVELS 4
 #define SPH_RUN_HYDRO 5
 #define SPH_RUN_UPDATE 6
+#define SPH_RUN_RUNGS 7
 
 sph_run_return sph_run(sph_run_params params);
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);

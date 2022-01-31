@@ -36,6 +36,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/bh.hpp>
+#include <cosmictiger/hydro.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
@@ -471,6 +472,8 @@ void test(std::string test) {
 		kick_test();
 	} else if (test == "tree") {
 		tree_test();
+	} else if (test == "sod") {
+		hydro_sod_test();
 	} else if (test == "bh") {
 		bh_test();
 	} else {

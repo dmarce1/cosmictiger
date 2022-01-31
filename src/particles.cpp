@@ -639,7 +639,7 @@ void particles_resize(part_int sz) {
 		while (new_capacity < sz) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
-		PRINT("Resizing particles to %li from %li\n", new_capacity, capacity);
+//		PRINT("Resizing particles to %li from %li\n", new_capacity, capacity);
 		for (int dim = 0; dim < NDIM; dim++) {
 			particles_array_resize(particles_x[dim], new_capacity, false);
 			particles_array_resize(particles_v[dim], new_capacity, true);
