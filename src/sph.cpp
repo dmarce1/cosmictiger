@@ -320,10 +320,10 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 			X[YDIM] = d.ys[i];
 			X[ZDIM] = d.zs[i];
 			bool test0 = (active_only && d.rungs[i] < min_rung);
-			bool test1 = true;
+			bool test1 = false;
 			bool test2 = true;
 			if (!test0) {
-				const bool test1 = check_inner && !range_contains(self_ptr->outer_box, X);
+				test1 = check_inner && !range_contains(self_ptr->outer_box, X);
 				if (check_outer && test1) {
 					assert(do_rungs);
 					test2 = true;
@@ -1236,10 +1236,10 @@ sph_run_return sph_run(sph_run_params params) {
 							load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
 							break;
 							case SPH_RUN_FVELS:
-							load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+							load_data<false, true, false, true, false, true, true, false>(self, neighbors, data, params.min_rung);
 							break;
 							case SPH_RUN_HYDRO:
-							load_data<true, true, true, true, true, true, false, false>(self, neighbors, data, params.min_rung);
+							load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
 							break;
 							case SPH_RUN_UPDATE:
 							break;
