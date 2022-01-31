@@ -102,25 +102,6 @@ struct sph_tree_neighbor_params {
 	}
 };
 
-struct sph_con {
-	float ekin;
-	float etherm;
-	float momx;
-	float momy;
-	float momz;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & ekin;
-		arc & etherm;
-		arc & momx;
-		arc & momy;
-		arc & momz;
-	}
-};
-
-sph_con sph_get_conserved_totals(float a);
-
-
 struct sph_run_return {
 	float hmin;
 	float hmax;
@@ -130,12 +111,14 @@ struct sph_run_return {
 	float max_vsig;
 	bool rc;
 	float ekin;
+	float ent;
 	float etherm;
 	float momx;
 	float momy;
 	float momz;
 	float vol;
 	sph_run_return() {
+		ent = 0.0;
 		hmax = 0.0;
 		hmin = std::numeric_limits<float>::max();
 		max_rung_hydro = 0;
@@ -158,6 +141,7 @@ struct sph_run_return {
 		arc & momy;
 		arc & momz;
 		arc & vol;
+		arc & ent;
 		arc & etherm;
 	}
 	sph_run_return& operator+=(const sph_run_return& other) {
@@ -173,6 +157,7 @@ struct sph_run_return {
 		momz += other.momz;
 		vol += other.vol;
 		etherm += other.etherm;
+		ent += other.ent;
 		return *this;
 	}
 };

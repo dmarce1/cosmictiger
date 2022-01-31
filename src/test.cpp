@@ -474,6 +474,10 @@ void test(std::string test) {
 		tree_test();
 	} else if (test == "sod") {
 		hydro_sod_test();
+	} else if (test == "blast") {
+		hydro_blast_test();
+	} else if (test == "helmholtz") {
+		hydro_helmholtz_test();
 	} else if (test == "bh") {
 		bh_test();
 	} else {

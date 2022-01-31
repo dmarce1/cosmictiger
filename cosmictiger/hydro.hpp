@@ -21,3 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 void hydro_sod_test();
+
+void hydro_helmholtz_test();
+
+void hydro_blast_test();
