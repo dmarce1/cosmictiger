@@ -37,7 +37,7 @@ static void output_line(int num) {
 	fclose(fp);
 }
 
-int sph_step(int minrung, double scale, double tau, double t0, int phase, bool verbose);
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, bool verbose);
 
 void hydro_driver(double tmax) {
 	time_type itime = 0;
@@ -46,16 +46,24 @@ void hydro_driver(double tmax) {
 	double t0 = tmax / 64.0;
 	int step = 0;
 	int main_step = 0;
+	float e0;
 	do {
 		int minrung = min_rung(itime);
-		sph_step(minrung, 1.0, t, t0, 0, false);
-		int maxrung = sph_step(minrung, 1.0, t, t0, 1, false);
+		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, false);
+		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, false);
+		int maxrung = rc2.max_rung;
 		double dt = t0 / (1 << maxrung);
 		auto dr = drift(1.0, dt, t, t + dt, tmax);
-		PRINT( "maxrung = %i\n", maxrung);
 		itime = inc(itime, maxrung);
+		if (t == 0.0) {
+			e0 = rc1.ekin + rc1.etherm;
+		}
+		float etot = rc1.ekin + rc1.etherm;
+		rc1.momx /= sqrt(2.0f * dr.kin + 1e-20);
+		rc1.momy /= sqrt(2.0f * dr.kin + 1e-20);
+		rc1.momz /= sqrt(2.0f * dr.kin + 1e-20);
 		t += dt;
-		PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
+		PRINT("%i %e %e %i %i %e %e %e %e %e %e\n", step, t, dt, minrung, maxrung, rc1.ekin, rc1.etherm, (etot - e0) / (rc1.ekin+1e-20), rc1.momx, rc1.momy, rc1.momz);
 		step++;
 		if (minrung == 0) {
 			output_line(main_step);
@@ -97,7 +105,7 @@ void hydro_sod_test() {
 				double z = (iz + 0.5) * dx;
 				double ent = p1 / pow(rho1, SPH_GAMMA);
 				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size()+1);
+				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
 				sph_particles_pos(YDIM, i) = y;
@@ -122,7 +130,7 @@ void hydro_sod_test() {
 				double z = (iz + 0.5) * dx;
 				double ent = p0 / pow(rho0, SPH_GAMMA);
 				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size()+1);
+				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
 				sph_particles_pos(YDIM, i) = y;

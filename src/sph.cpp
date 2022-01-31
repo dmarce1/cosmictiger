@@ -291,7 +291,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 					test2 = true;
 					const auto& box = self_ptr->inner_box;
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (distance(box.begin[dim], X[dim]) + d.hs[i] >= 0.0 && distance(X[dim], box.end[dim]) + d.hs[i]) {
+						if (distance(box.begin[dim], X[dim]) + d.hs[i] > 0.0 || distance(X[dim], box.end[dim]) + d.hs[i] > 0.0) {
 						} else {
 							test2 = false;
 							break;
@@ -383,8 +383,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
 				 }
 				 }*/
-				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box)
-						&& (other->nactive > 0);
+				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
 				const bool test3 = level <= 9;
 				if (test1 || test2 || test3) {
 					if (other->leaf) {
@@ -851,7 +850,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				static const simd_float tiny = simd_float(1e-15);
 				const simd_float rinv = one / (r + tiny);
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-				const simd_float this_vsig =  (c + myc + simd_float(3) * max(-dv, simd_float(0)))*masks[j];
+				const simd_float this_vsig = (c + myc + simd_float(3) * max(-dv, simd_float(0))) * masks[j];
 				max_vsig = max(max_vsig, this_vsig);
 			}
 			const float vsig_max = max_vsig.max();
@@ -870,11 +869,11 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			char& rung = sph_particles_rung(i);
 			const float g2 = sqr(gx, gy, gz);
 			const float factor = eta * sqrtf(ascale * hgrav);
-			const float dt_grav = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
+			const float dt_grav = std::min(factor / sqrtf(sqrtf(g2 + tiny[0])), (float) t0);
 			const float dt = std::min(dt_grav, dthydro);
 			const int rung_hydro = ceilf(log2f(t0) - log2f(dthydro));
 			const int rung_grav = ceilf(log2f(t0) - log2f(dt_grav));
-			rung = std::max(std::max((int) std::max(rung_hydro, rung_grav), std::max(min_rung,(int) rung - 1)), 1);
+			rung = std::max(std::max((int) std::max(rung_hydro, rung_grav), std::max(min_rung, (int) rung - 1)), 1);
 //			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
 			if (rung < 0 || rung >= MAX_RUNG) {
 				PRINT("Rung out of range \n");
@@ -1290,7 +1289,22 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase) {
 	sph_run_return rc;
 	if (phase == 0) {
+		rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = 0.0;
+		static const float m = get_options().sph_mass;
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			const float h = sph_particles_smooth_len(i);
+			const float vx = sph_particles_vel(XDIM,i);
+			const float vy = sph_particles_vel(YDIM,i);
+			const float vz = sph_particles_vel(ZDIM,i);
+			const float A = sph_particles_ent(i);
+			const float rho = sph_den(1.0/(h*h*h));
+			const float p = A * pow(rho, SPH_GAMMA);
+			const float vol = (4.0 * h*h*h * M_PI / 3.0) / SPH_NEIGHBOR_COUNT;
+			rc.momx += vx * m;
+			rc.momy += vy * m;
+			rc.momz += vz * m;
+			rc.ekin += 0.5f * m * sqr(vx, vy, vz);
+			rc.etherm += p / (SPH_GAMMA - 1.0f) * vol;
 			if (sph_particles_rung(i) >= min_rung) {
 
 				for (int dim = 0; dim < NDIM; dim++) {

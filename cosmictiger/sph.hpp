@@ -110,6 +110,12 @@ struct sph_run_return {
 	int max_rung;
 	float max_vsig;
 	bool rc;
+	float ekin;
+	float etherm;
+	float momx;
+	float momy;
+	float momz;
+	float vol;
 	sph_run_return() {
 		hmax = 0.0;
 		hmin = std::numeric_limits<float>::max();
@@ -117,6 +123,7 @@ struct sph_run_return {
 		max_rung_grav = 0;
 		max_rung = 0;
 		max_vsig = 0.0;
+		etherm = vol = ekin = momx = momy = momz = 0.0;
 		rc = false;
 	}
 	template<class A>
@@ -127,6 +134,12 @@ struct sph_run_return {
 		arc & max_rung_grav;
 		arc & max_rung;
 		arc & max_vsig;
+		arc & ekin;
+		arc & momx;
+		arc & momy;
+		arc & momz;
+		arc & vol;
+		arc & etherm;
 	}
 	sph_run_return& operator+=(const sph_run_return& other) {
 		hmax = std::max(hmax, other.hmax);
@@ -135,6 +148,12 @@ struct sph_run_return {
 		max_rung_grav = std::max(max_rung_grav, other.max_rung_grav);
 		max_rung = std::max(max_rung, other.max_rung);
 		max_vsig = std::max(max_vsig, other.max_vsig);
+		ekin += other.ekin;
+		momx += other.momx;
+		momy += other.momy;
+		momz += other.momz;
+		vol += other.vol;
+		etherm += other.etherm;
 		return *this;
 	}
 };

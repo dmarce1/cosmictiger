@@ -122,7 +122,7 @@ void do_groups(int number, double scale) {
 
 }
 
-int sph_step(int minrung, double scale, double tau, double t0, int phase, bool verbose = true) {
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, bool verbose = true) {
 	if( verbose) PRINT("Doing SPH step with minrung = %i\n", minrung);
 	int max_rung = 0;
 	sph_tree_create_params tparams;
@@ -177,7 +177,7 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase, bool v
 			if( verbose) PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 			tm.reset();
 			cont = kr.rc;
-			tnparams.h_wt = cont ? 2.0 : 1.0;
+			tnparams.h_wt = cont ? 2.0 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 			tm.start();
@@ -215,14 +215,14 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase, bool v
 			if( verbose) PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
 
-			sparams.run_type = SPH_RUN_UPDATE;
-			tm.start();
-			sph_run(sparams);
-			tm.stop();
-			if( verbose) PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-			tm.reset();
-
 		}
+		sparams.run_type = SPH_RUN_UPDATE;
+		tm.start();
+		kr = sph_run(sparams);
+		tm.stop();
+		if( verbose) PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
+		tm.reset();
+
 
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
@@ -305,7 +305,7 @@ int sph_step(int minrung, double scale, double tau, double t0, int phase, bool v
 		sph_particles_cache_free();
 	}
 //	PRINT( "%i\n", max_rung);
-	return max_rung;
+	return kr;
 
 }
 
@@ -582,7 +582,7 @@ void driver() {
 			int max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1));
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1).max_rung);
 			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");

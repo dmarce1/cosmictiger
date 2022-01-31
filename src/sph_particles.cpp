@@ -282,6 +282,7 @@ void sph_particles_resize(part_int sz) {
 		particles_lastgroup(offset + i) = oldsz + i;
 		sph_particles_test(oldsz + i) = oldsz + i;
 #endif
+		sph_particles_dent(oldsz + i) = 0.0f;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 		}
