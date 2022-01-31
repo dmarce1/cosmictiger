@@ -319,22 +319,25 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 			X[XDIM] = d.xs[i];
 			X[YDIM] = d.ys[i];
 			X[ZDIM] = d.zs[i];
-			bool test0 = !(active_only && d.rungs[i] < min_rung);
-			const bool test1 = check_inner && !range_contains(self_ptr->outer_box, X);
+			bool test0 = (active_only && d.rungs[i] < min_rung);
+			bool test1 = true;
 			bool test2 = true;
-			if (check_outer && test1) {
-				assert(do_rungs);
-				test2 = true;
-				const auto& box = self_ptr->inner_box;
-				for (int dim = 0; dim < NDIM; dim++) {
-					if (distance(box.begin[dim], X[dim]) + d.hs[i] >= 0.0 && distance(X[dim], box.end[dim]) + d.hs[i]) {
-					} else {
-						test2 = false;
-						break;
+			if (!test0) {
+				const bool test1 = check_inner && !range_contains(self_ptr->outer_box, X);
+				if (check_outer && test1) {
+					assert(do_rungs);
+					test2 = true;
+					const auto& box = self_ptr->inner_box;
+					for (int dim = 0; dim < NDIM; dim++) {
+						if (distance(box.begin[dim], X[dim]) + d.hs[i] >= 0.0 && distance(X[dim], box.end[dim]) + d.hs[i]) {
+						} else {
+							test2 = false;
+							break;
+						}
 					}
 				}
 			}
-			if (test0 && test1 && test2) {
+			if (test0 || (test1 && test2)) {
 				d.xs[i] = d.xs.back();
 				d.ys[i] = d.ys.back();
 				d.zs[i] = d.zs.back();
@@ -1190,15 +1193,9 @@ sph_run_return sph_run(sph_run_params params) {
 
 							case SPH_RUN_HYDRO:
 							case SPH_RUN_FVELS:
-							test = (self->nactive > 0);
-							if( !test && params.phase == 0) {
-								test = has_active_neighbors(self);
-							}
-							break;
-
 							case SPH_RUN_MARK_SEMIACTIVE:
 							test = (self->nactive > 0);
-							if( !test ) {
+							if( !test && params.phase == 0) {
 								test = has_active_neighbors(self);
 							}
 							break;
