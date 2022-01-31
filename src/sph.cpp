@@ -874,7 +874,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			const float dt = std::min(dt_grav, dthydro);
 			const int rung_hydro = ceilf(log2f(t0) - log2f(dthydro));
 			const int rung_grav = ceilf(log2f(t0) - log2f(dt_grav));
-			rung = std::max(std::max((int) std::max(rung_hydro, rung_grav), (int) rung - 1), 1);
+			rung = std::max(std::max((int) std::max(rung_hydro, rung_grav), std::max(min_rung,(int) rung - 1)), 1);
 //			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
 			if (rung < 0 || rung >= MAX_RUNG) {
 				PRINT("Rung out of range \n");
