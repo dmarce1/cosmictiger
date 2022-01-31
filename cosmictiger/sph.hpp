@@ -102,6 +102,25 @@ struct sph_tree_neighbor_params {
 	}
 };
 
+struct sph_con {
+	float ekin;
+	float etherm;
+	float momx;
+	float momy;
+	float momz;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & ekin;
+		arc & etherm;
+		arc & momx;
+		arc & momy;
+		arc & momz;
+	}
+};
+
+sph_con sph_get_conserved_totals(float a);
+
+
 struct sph_run_return {
 	float hmin;
 	float hmax;

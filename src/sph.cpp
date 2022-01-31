@@ -236,6 +236,8 @@ struct sph_data_vecs {
 	}
 };
 
+
+
 template<bool do_rungs, bool do_smoothlens, bool do_ent, bool do_vel, bool do_fvel, bool check_inner, bool check_outer, bool active_only>
 void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlist, sph_data_vecs& d, int min_rung) {
 	part_int offset;
@@ -1292,27 +1294,26 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 		rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = 0.0;
 		static const float m = get_options().sph_mass;
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-			const float h = sph_particles_smooth_len(i);
-			const float vx = sph_particles_vel(XDIM,i);
-			const float vy = sph_particles_vel(YDIM,i);
-			const float vz = sph_particles_vel(ZDIM,i);
-			const float A = sph_particles_ent(i);
-			const float rho = sph_den(1.0/(h*h*h));
-			const float p = A * pow(rho, SPH_GAMMA);
-			const float vol = (4.0 * h*h*h * M_PI / 3.0) / SPH_NEIGHBOR_COUNT;
-			rc.momx += vx * m;
-			rc.momy += vy * m;
-			rc.momz += vz * m;
-			rc.ekin += 0.5f * m * sqr(vx, vy, vz);
-			rc.etherm += p / (SPH_GAMMA - 1.0f) * vol;
 			if (sph_particles_rung(i) >= min_rung) {
-
 				for (int dim = 0; dim < NDIM; dim++) {
 					sph_particles_vel(dim, i) += sph_particles_dvel(dim, i);
 					sph_particles_dvel(dim, i) = 0.0f;
 				}
 				sph_particles_ent(i) += sph_particles_dent(i);
 				sph_particles_dent(i) = 0.0f;
+				const float h = sph_particles_smooth_len(i);
+				const float vx = sph_particles_vel(XDIM,i);
+				const float vy = sph_particles_vel(YDIM,i);
+				const float vz = sph_particles_vel(ZDIM,i);
+				const float A = sph_particles_ent(i);
+				const float rho = sph_den(1.0/(h*h*h));
+				const float p = A * pow(rho, SPH_GAMMA);
+				const float vol = (4.0 * h*h*h * M_PI / 3.0) / SPH_NEIGHBOR_COUNT;
+				rc.momx += vx * m;
+				rc.momy += vy * m;
+				rc.momz += vz * m;
+				rc.ekin += 0.5f * m * sqr(vx, vy, vz);
+				rc.etherm += p / (SPH_GAMMA - 1.0f) * vol;
 			}
 
 		}
