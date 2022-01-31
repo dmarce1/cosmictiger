@@ -513,6 +513,17 @@ void driver() {
 	};
 
 	for (;; step++) {
+
+
+		vector<double> x(1000), y(1000, 0.5), z(1000, 0.5);
+		for( int i = 0; i < 1000; i++) {
+			x[i] = i / 1000.0;
+		}
+		auto values = sph_values_at(x, y, z);
+		for( int i = 0; i < 1000; i++) {
+			PRINT( "%e %e\n", x[i], values[i].rho);
+		}
+
 		double t0 = tau_max / get_options().nsteps;
 		do {
 			tmr.stop();

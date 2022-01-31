@@ -32,28 +32,53 @@
 
 #include <atomic>
 
+struct sph_values {
+	float vx;
+	float vy;
+	float vz;
+	float rho;
+	float p;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & vx;
+		arc & vy;
+		arc & vz;
+		arc & rho;
+		arc & p;
+	}
+};
+
 struct sph_tree_neighbor_return {
 	fixed32_range inner_box;
 	fixed32_range outer_box;
-	CUDA_EXPORT
+	sph_values value_at;
+	bool has_value_at;CUDA_EXPORT
 	sph_tree_neighbor_return() {
+		has_value_at = false;
 	}
 	CUDA_EXPORT
 	sph_tree_neighbor_return& operator+=(const sph_tree_neighbor_return& other) {
 		inner_box.accumulate(other.inner_box);
 		outer_box.accumulate(other.outer_box);
+		if (!has_value_at && other.has_value_at) {
+			value_at = other.value_at;
+			has_value_at = true;
+		}
 		return *this;
 
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & has_value_at;
 		arc & inner_box;
 		arc & outer_box;
+		arc & value_at;
 	}
 };
 
 #define SPH_TREE_NEIGHBOR_BOXES 0
 #define SPH_TREE_NEIGHBOR_NEIGHBORS 1
+#define SPH_TREE_NEIGHBOR_VALUE_AT 2
 #define SPH_SET_ACTIVE 1
 #define SPH_SET_SEMIACTIVE 2
 #define SPH_SET_ALL 4
@@ -63,14 +88,19 @@ struct sph_tree_neighbor_params {
 	float h_wt;
 	int min_rung;
 	int set;
+	double x;
+	double y;
+	double z;
 	template<class T>
 	void serialize(T&& arc, unsigned) {
 		arc & run_type;
 		arc & h_wt;
 		arc & min_rung;
+		arc & x;
+		arc & y;
+		arc & z;
 	}
 };
-
 
 struct sph_run_return {
 	float hmin;
@@ -136,8 +166,8 @@ struct sph_run_params {
 #define SPH_RUN_UPDATE 6
 
 sph_run_return sph_run(sph_run_params params);
-hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level=0);
-
+hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);
+vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z);
 
 template<class T, int N>
 T ipow(T x) {
@@ -178,7 +208,5 @@ inline T sph_den(T hinv3) {
 	static const T c0 = T(3.0 / 4.0 / M_PI * SPH_NEIGHBOR_COUNT);
 	return m * c0 * hinv3;
 }
-
-
 
 #endif /* SPH_HPP_ */

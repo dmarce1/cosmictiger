@@ -61,6 +61,84 @@ inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 	return intersect;
 }
 
+vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z) {
+	int max_rung = 0;
+	sph_tree_create_params tparams;
+	PRINT("Doing values at\n");
+	tparams.h_wt = 2.0;
+	tparams.min_rung = 0;
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	sph_tree_create_return sr;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
+	sph_tree_neighbor_params tnparams;
+
+	tnparams.h_wt = 2.0;
+	tnparams.min_rung = 0;
+	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+
+	sph_run_params sparams;
+	sparams.a = 1.0f;
+	sparams.t0 = 0.0;
+	sparams.min_rung = 0;
+	bool cont;
+	sph_run_return kr;
+	sparams.set = SPH_SET_ACTIVE;
+	sparams.phase = 0;
+	timer tm;
+	tm.start();
+	PRINT("starting sph_tree_create = %e\n", tm.read());
+	sr = sph_tree_create(tparams);
+	tm.stop();
+	tm.reset();
+	PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
+
+	tm.start();
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+	tm.reset();
+
+	do {
+		sparams.set = SPH_SET_ACTIVE;
+		sparams.run_type = SPH_RUN_SMOOTHLEN;
+		timer tm;
+		tm.start();
+		kr = sph_run(sparams);
+		tm.stop();
+		PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+		tm.reset();
+		cont = kr.rc;
+		tnparams.h_wt = cont ? 2.0 : 1.0;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+		tm.start();
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+		tm.stop();
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+		tm.reset();
+		tm.start();
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		tm.stop();
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+		tm.reset();
+	} while (cont);
+	tnparams.run_type = SPH_TREE_NEIGHBOR_VALUE_AT;
+
+	vector<sph_values> values(x.size());
+	for( int i = 0; i < x.size(); i++) {
+		tnparams.x = x[i];
+		tnparams.y = y[i];
+		tnparams.z = z[i];
+		auto rc = sph_tree_neighbor(tnparams, root_id, checklist).get();
+		values[i] = rc.value_at;
+	}
+	return values;
+}
+
 inline bool range_contains(const fixed32_range& a, const array<fixed32, NDIM> x) {
 	bool contains = a.valid;
 	if (contains) {
@@ -119,122 +197,6 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor_fork(sph_tree_neighbor_p
 	}
 	return rc;
 }
-
-hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level) {
-///	PRINT( "%i %i\n", level, checklist.size());
-	stack_trace_activate();
-	const sph_tree_node* self_ptr = sph_tree_get_node(self);
-	sph_tree_neighbor_return kr;
-	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS && self_ptr->local_root) {
-		sph_tree_free_neighbor_list();
-		sph_tree_clear_neighbor_ranges();
-	}
-	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS && checklist.size() == 0) {
-		return hpx::make_ready_future(kr);
-	}
-	ASSERT(self.proc == hpx_rank());
-	bool thread_left = true;
-	vector<tree_id> nextlist;
-	vector<tree_id> leaflist;
-	fixed32_range box;
-
-	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS) {
-		do {
-			nextlist.resize(0);
-			for (int ci = 0; ci < checklist.size(); ci++) {
-				const auto* other = sph_tree_get_node(checklist[ci]);
-				const bool test1 = range_intersect(self_ptr->outer_box, other->inner_box);
-				/*	if (level > 6) {
-				 if (!test1 && self_ptr == other && self_ptr->nactive > 0) {
-				 PRINT("!\n");
-				 static mutex_type mutex;
-				 std::lock_guard<mutex_type> lock(mutex);
-				 PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
-				 }
-				 }*/
-				const bool test2 = range_intersect(self_ptr->inner_box, other->outer_box) && (other->nactive > 0);
-				const bool test3 = level <= 9;
-				if (test1 || test2 || test3) {
-					if (other->leaf) {
-						leaflist.push_back(checklist[ci]);
-					} else {
-						nextlist.push_back(other->children[LEFT]);
-						nextlist.push_back(other->children[RIGHT]);
-					}
-				}
-			}
-			checklist = std::move(nextlist);
-		} while (self_ptr->leaf && checklist.size());
-	}
-	if (self_ptr->leaf) {
-		switch (params.run_type) {
-		case SPH_TREE_NEIGHBOR_NEIGHBORS: {
-			pair<int> rng;
-			rng.first = sph_tree_allocate_neighbor_list(leaflist);
-			rng.second = leaflist.size() + rng.first;
-			//	if( leaflist.size() == 0) {
-			//		PRINT( "zero\n");
-			//	}
-			sph_tree_set_neighbor_range(self, rng);
-		}
-			break;
-		case SPH_TREE_NEIGHBOR_BOXES: {
-			fixed32_range ibox, obox;
-			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				const bool active = sph_particles_rung(i) >= params.min_rung;
-				const bool semiactive = !active && sph_particles_semi_active(i);
-				const float h = params.h_wt * sph_particles_smooth_len(i);
-				const auto myx = sph_particles_pos(XDIM, i);
-				const auto myy = sph_particles_pos(YDIM, i);
-				const auto myz = sph_particles_pos(ZDIM, i);
-				const int k = i - self_ptr->part_range.first;
-				array<fixed32, NDIM> X;
-				X[XDIM] = myx;
-				X[YDIM] = myy;
-				X[ZDIM] = myz;
-				if (params.set & SPH_SET_ALL || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
-					obox.accumulate(X, h);
-				}
-				ibox.accumulate(X);
-			}
-			kr.inner_box = ibox;
-			kr.outer_box = obox;
-			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
-		}
-			break;
-		}
-		return hpx::make_ready_future(kr);
-	} else {
-		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-		const sph_tree_node* cl = sph_tree_get_node(self_ptr->children[LEFT]);
-		const sph_tree_node* cr = sph_tree_get_node(self_ptr->children[RIGHT]);
-		std::array<hpx::future<sph_tree_neighbor_return>, NCHILD> futs;
-		futs[RIGHT] = sph_tree_neighbor_fork(params, self_ptr->children[RIGHT], checklist, level, thread_left);
-		futs[LEFT] = sph_tree_neighbor_fork(params, self_ptr->children[LEFT], std::move(checklist), level, false);
-
-		const auto finish = [self,params](hpx::future<sph_tree_neighbor_return>& fl, hpx::future<sph_tree_neighbor_return>& fr) {
-			sph_tree_neighbor_return kr;
-			const auto rcl = fl.get();
-			const auto rcr = fr.get();
-			kr += rcl;
-			kr += rcr;
-			if( params.run_type == SPH_TREE_NEIGHBOR_BOXES ) {
-				sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
-			}
-			return kr;
-		};
-		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
-			return hpx::make_ready_future(finish(futs[LEFT], futs[RIGHT]));
-		} else {
-			return hpx::when_all(futs.begin(), futs.end()).then([finish,self_ptr](hpx::future<std::vector<hpx::future<sph_tree_neighbor_return>>> futsfut) {
-				auto futs = futsfut.get();
-				return finish(futs[LEFT], futs[RIGHT]);
-			});
-		}
-	}
-
-}
-
 HPX_PLAIN_ACTION (sph_run);
 
 bool has_active_neighbors(const sph_tree_node* self) {
@@ -375,6 +337,191 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 	}
 }
 
+hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level) {
+///	PRINT( "%i %i\n", level, checklist.size());
+	stack_trace_activate();
+	const sph_tree_node* self_ptr = sph_tree_get_node(self);
+	sph_tree_neighbor_return kr;
+	if (params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT) {
+		array<fixed32, NDIM> x;
+		x[XDIM] = params.x;
+		x[YDIM] = params.y;
+		x[ZDIM] = params.z;
+		const bool test = self_ptr->box.contains(x);
+		//PRINT("%i\n", test);
+		//PRINT("%e %e %e\n", x[XDIM].to_float(), self_ptr->box.begin[0].to_float(), self_ptr->box.end[0].to_float());
+		//PRINT("%e %e %e\n", x[YDIM].to_float(), self_ptr->box.begin[1].to_float(), self_ptr->box.end[1].to_float());
+		//PRINT("%e %e %e\n", x[ZDIM].to_float(), self_ptr->box.begin[2].to_float(), self_ptr->box.end[2].to_float());
+		if (!test && level > 3) {
+			return hpx::make_ready_future(kr);
+		}
+	}
+	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS && self_ptr->local_root) {
+		sph_tree_free_neighbor_list();
+		sph_tree_clear_neighbor_ranges();
+	}
+	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS && checklist.size() == 0) {
+		return hpx::make_ready_future(kr);
+	}
+	ASSERT(self.proc == hpx_rank());
+	bool thread_left = params.run_type != SPH_TREE_NEIGHBOR_VALUE_AT;
+	vector<tree_id> nextlist;
+	vector<tree_id> leaflist;
+	fixed32_range box;
+
+	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS || params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT) {
+		do {
+			nextlist.resize(0);
+			for (int ci = 0; ci < checklist.size(); ci++) {
+				const auto* other = sph_tree_get_node(checklist[ci]);
+				const bool test1 = range_intersect(self_ptr->outer_box, other->inner_box);
+				/*	if (level > 6) {
+				 if (!test1 && self_ptr == other && self_ptr->nactive > 0) {
+				 PRINT("!\n");
+				 static mutex_type mutex;
+				 std::lock_guard<mutex_type> lock(mutex);
+				 PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
+				 }
+				 }*/
+				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box)
+						&& (other->nactive > 0);
+				const bool test3 = level <= 9;
+				if (test1 || test2 || test3) {
+					if (other->leaf) {
+						leaflist.push_back(checklist[ci]);
+					} else {
+						nextlist.push_back(other->children[LEFT]);
+						nextlist.push_back(other->children[RIGHT]);
+					}
+				}
+			}
+			checklist = std::move(nextlist);
+		} while (self_ptr->leaf && checklist.size());
+	}
+	if (self_ptr->leaf) {
+		switch (params.run_type) {
+		case SPH_TREE_NEIGHBOR_NEIGHBORS: {
+			pair<int> rng;
+			rng.first = sph_tree_allocate_neighbor_list(leaflist);
+			rng.second = leaflist.size() + rng.first;
+			//	if( leaflist.size() == 0) {
+			//		PRINT( "zero\n");
+			//	}
+			sph_tree_set_neighbor_range(self, rng);
+		}
+			break;
+		case SPH_TREE_NEIGHBOR_BOXES: {
+			fixed32_range ibox, obox;
+			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+				const bool active = sph_particles_rung(i) >= params.min_rung;
+				const bool semiactive = !active && sph_particles_semi_active(i);
+				const float h = params.h_wt * sph_particles_smooth_len(i);
+				const auto myx = sph_particles_pos(XDIM, i);
+				const auto myy = sph_particles_pos(YDIM, i);
+				const auto myz = sph_particles_pos(ZDIM, i);
+				const int k = i - self_ptr->part_range.first;
+				array<fixed32, NDIM> X;
+				X[XDIM] = myx;
+				X[YDIM] = myy;
+				X[ZDIM] = myz;
+				if (params.set & SPH_SET_ALL || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+					obox.accumulate(X, h);
+				}
+				ibox.accumulate(X);
+			}
+			kr.inner_box = ibox;
+			kr.outer_box = obox;
+			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
+		}
+			break;
+
+		case SPH_TREE_NEIGHBOR_VALUE_AT: {
+			float h = 0.f;
+			float r2min = std::numeric_limits<float>::max();
+			sph_data_vecs dat;
+			load_data<true, true, true, true, true, true, true, false>(self_ptr, leaflist, dat, params.min_rung);
+			sph_values values;
+			values.vx = 0.0;
+			values.vy = 0.0;
+			values.vz = 0.0;
+			values.rho = 0.0;
+			values.p = 0.0;
+			for (int i = 0; i < dat.xs.size(); i++) {
+				const auto myx = dat.xs[i];
+				const auto myy = dat.ys[i];
+				const auto myz = dat.zs[i];
+				const float dx = distance(fixed32(params.x), myx);
+				const float dy = distance(fixed32(params.y), myy);
+				const float dz = distance(fixed32(params.z), myz);
+				const float r2 = sqr(dx, dy, dz);
+				if (r2 < r2min) {
+					r2min = r2;
+					h = dat.hs[i];
+				}
+			}
+			const float m = get_options().sph_mass;
+			for (int i = 0; i < dat.xs.size(); i++) {
+				const float h = dat.hs[i];
+				const auto x = dat.xs[i];
+				const auto y = dat.ys[i];
+				const auto z = dat.zs[i];
+				const float dx = distance(fixed32(params.x), x);
+				const float dy = distance(fixed32(params.y), y);
+				const float dz = distance(fixed32(params.z), z);
+				const float r2 = sqr(dx, dy, dz);
+				if (r2 < h * h) {
+					const float r = sqrt(r2);
+					const float hinv = 1.0f / h;
+					const float h3inv = sqr(hinv) * hinv;
+					const float rho = sph_den(h3inv);
+					const float rhoinv = 1.0 / rho;
+					const float w = sph_W(r, hinv, h3inv) * rhoinv * m;
+					const float p = dat.ents[i] * pow(rho, SPH_GAMMA);
+					values.vx += w * dat.vxs[i];
+					values.vy += w * dat.vys[i];
+					values.vz += w * dat.vzs[i];
+					values.rho += rho * w;
+					values.p += p * w;
+				}
+			}
+			kr.has_value_at = true;
+			kr.value_at = values;
+		}
+			break;
+
+		}
+		return hpx::make_ready_future(kr);
+	} else {
+		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+		const sph_tree_node* cl = sph_tree_get_node(self_ptr->children[LEFT]);
+		const sph_tree_node* cr = sph_tree_get_node(self_ptr->children[RIGHT]);
+		std::array<hpx::future<sph_tree_neighbor_return>, NCHILD> futs;
+		futs[RIGHT] = sph_tree_neighbor_fork(params, self_ptr->children[RIGHT], checklist, level, thread_left);
+		futs[LEFT] = sph_tree_neighbor_fork(params, self_ptr->children[LEFT], std::move(checklist), level, false);
+
+		const auto finish = [self,params](hpx::future<sph_tree_neighbor_return>& fl, hpx::future<sph_tree_neighbor_return>& fr) {
+			sph_tree_neighbor_return kr;
+			const auto rcl = fl.get();
+			const auto rcr = fr.get();
+			kr += rcl;
+			kr += rcr;
+			if( params.run_type == SPH_TREE_NEIGHBOR_BOXES ) {
+				sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
+			}
+			return kr;
+		};
+		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
+			return hpx::make_ready_future(finish(futs[LEFT], futs[RIGHT]));
+		} else {
+			return hpx::when_all(futs.begin(), futs.end()).then([finish,self_ptr](hpx::future<std::vector<hpx::future<sph_tree_neighbor_return>>> futsfut) {
+				auto futs = futsfut.get();
+				return finish(futs[LEFT], futs[RIGHT]);
+			});
+		}
+	}
+
+}
+
 static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
 		int min_rung, bool active, bool semiactive, int nactive, int nneighbor) {
 	sph_run_return rc;
@@ -442,11 +589,12 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					f_simd += w * mask;
 					dfdh_simd += dwdh * mask;
 				}
+				float dh = 0.1 * h;
 				if (count.sum() > 1.0) {
 					f = f_simd.sum();
 					dfdh = dfdh_simd.sum();
 					f -= SPH_NEIGHBOR_COUNT;
-					float dh = -f / dfdh;
+					dh = -f / dfdh;
 					error = fabs(log(h + dh) - log(h));
 					h += dh;
 				} else {
@@ -670,7 +818,6 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			static const simd_float zero(0.0f);
 			static const simd_float half(0.5f);
 			simd_float max_vsig(zero);
-			simd_float cs(zero);
 			simd_float vsig(0.f);
 			for (int j = 0; j < xs.size(); j++) {
 				const simd_float dx = simd_float(myx - xs[j]) * _2float;
@@ -681,9 +828,9 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float hinv3 = hinv * sqr(hinv);
 				const simd_float rho = sph_den(hinv3);
 				const simd_float rhoinv = one / rho;
-				const simd_float dvx = vxs[j] - myvx;
-				const simd_float dvy = vys[j] - myvy;
-				const simd_float dvz = vzs[j] - myvz;
+				const simd_float dvx = myvz - vxs[j];
+				const simd_float dvy = myvy - vys[j];
+				const simd_float dvz = myvz - vzs[j];
 #ifdef SPH_TOTAL_ENERGY
 				const simd_float ekin = half * m * (sqr(vxs[j], vys[j], vzs[j]));
 				const simd_float etherm = max(zero, ents[j] - ekin);
@@ -696,15 +843,10 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				static const simd_float tiny = simd_float(1e-15);
 				const simd_float rinv = one / (r + tiny);
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-				const simd_float W = sph_W(r, myhinv, myh3inv);
-				const simd_float dWdr_rinv = sph_dWdr_rinv(r, myhinv, myh3inv);
-				const simd_float M = m * rhoinv * masks[j];
-				cs += M * c * W;
-				max_vsig = max(max_vsig, abs(dv));
+				max_vsig = max(max_vsig, c + myc + simd_float(3)*max(-dv,simd_float(0)));
 			}
-			const float cs_sum = cs.sum();
 			const float vsig_max = max_vsig.max();
-			rc.max_vsig = 2.0f * cs_sum + 3.0f * vsig_max;
+			rc.max_vsig = vsig_max;
 			float dthydro = rc.max_vsig / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
 				dthydro = SPH_CFL / dthydro;
@@ -1080,10 +1222,9 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvy = myvy - vys[j];
 				const simd_float dvz = myvz - vzs[j];
 				const simd_float r = sqrt(r2);
-				const simd_float rinv = one / (r + tiny);
-				const simd_float r2inv = sqr(rinv) + 0.01 * sqr(hij);
+				const simd_float r2inv = one / (sqr(r) + 1e-2 * sqr(hij));
 				const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-				const simd_float Piij = (uij * (-simd_float(SPH_ALPHA) * cij + simd_float(SPH_BETA) * uij)) * rhoinv * half * (myfvel + fvels[j]);
+				const simd_float Piij = (uij * (-simd_float(SPH_ALPHA) * cij + simd_float(SPH_BETA) * uij)) * half * (myfvel + fvels[j]) / rho_ij;
 				const simd_float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
 				const simd_float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
 				const simd_float dWdri_x = dx * dWdri;
