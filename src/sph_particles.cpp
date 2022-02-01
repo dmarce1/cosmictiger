@@ -73,7 +73,7 @@ HPX_PLAIN_ACTION (sph_particles_fetch_fvel_cache_line);
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<sph_particle>>, line_id_hash_hi>, PART_CACHE_SIZE> sph_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<char, float>>> , line_id_hash_hi>, PART_CACHE_SIZE> rung_part_cache;
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>>, line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>> , line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> sph_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> rung_mutexes;
@@ -179,6 +179,32 @@ void sph_particles_sort_by_particles(pair<part_int> rng) {
 	std::sort(b, e);
 }
 
+HPX_PLAIN_ACTION (sph_particles_max_smooth_len);
+
+float sph_particles_max_smooth_len() {
+	vector<hpx::future<float>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_particles_max_smooth_len_action>(c));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc]() {
+			float maxh = 0.0;
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				maxh = std::max(maxh, sph_particles_smooth_len(i));
+			}
+			return maxh;
+		}));
+	}
+	float maxh = 0.f;
+	for (auto& f : futs) {
+		maxh = std::max(maxh, f.get());
+	}
+	return maxh;
+}
+
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 	part_int begin = rng.first;
 	part_int end = rng.second;
@@ -252,7 +278,7 @@ void sph_particles_resize(part_int sz) {
 		while (new_capacity < sz) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
-	//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
+		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
 #ifdef SPH_TOTAL_ENERGY
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
@@ -309,7 +335,7 @@ void sph_particles_free() {
 	cuda = true;
 #endif
 #endif
-	if( cuda ) {
+	if (cuda) {
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaFree(sph_particles_e));
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -568,7 +594,7 @@ static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int in
 	return line;
 }
 
-void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels,  vector<float>& fpres, part_int offset) {
+void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels, vector<float>& fpres, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -607,7 +633,7 @@ static const pair<float>* sph_particles_fvel_cache_read_line(line_id_type line_i
 	std::unique_lock<spinlock_type> lock(fvel_mutexes[bin]);
 	auto iter = fvel_cache[bin].find(line_id);
 	if (iter == fvel_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<pair<float>>>>();
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<pair<float>>> >();
 		fvel_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {

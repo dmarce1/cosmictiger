@@ -152,37 +152,37 @@ tree_allocator::~tree_allocator() {
 	allocator_mtx--;
 }
 
-tree_create_params::tree_create_params(int min_rung_, double theta_) {
+tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
 	theta = theta_;
 	min_rung = min_rung_;
-	min_level = tree_min_level(theta);
+	hmax = hmax_;
+	min_level = tree_min_level(theta, hmax);
 }
 
-int tree_min_level(double theta) {
-	const double h = get_options().hsoft;
+int tree_min_level(double theta, double h) {
 	int lev = 1;
 	double dx;
-	double r;
+	double r1, r2, r;
 	do {
 		int N = 1 << (lev / NDIM);
 		dx = EWALD_DIST * N;
-		double a;
+		double a2;
 		constexpr double ffac = 1.01;
 		if (lev % NDIM == 0) {
-			a = std::sqrt(3) + ffac * h;
+			r1 = 2.0f * std::sqrt(3) + ffac * h;
+			a2 = std::sqrt(3);
 		} else if (lev % NDIM == 1) {
-			a = 1.5 + ffac * h;
+			r1 = 2.0f * 1.5 + ffac * h;
+			a2 = 1.5;
 		} else {
-			a = std::sqrt(1.5) + ffac * h;
+			r1 = 2.0f * std::sqrt(1.5) + ffac * h;
+			a2 = std::sqrt(1.5);
 		}
-		r = (1.0 + SINK_BIAS) * a / theta + h * N;
+		r2 = (1.0 + SINK_BIAS) * a2 / theta;
 		lev++;
+		r = std::max(r1, r2);
 	} while (dx <= r);
-	int i = 1;
-	while (i < hpx_size()) {
-		i *= 2;
-	}
-	return i == hpx_size() ? lev : lev + 1;
+	return (hpx_size() == 1) ? lev : lev + 1;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
@@ -321,7 +321,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
-		if( sph && vsoft) {
+		if (sph && vsoft) {
 			hsoft_max = std::max(rcl.hsoft_max, rcr.hsoft_max);
 		}
 		min_depth = std::min(rcl.min_depth, rcr.min_depth);
@@ -464,8 +464,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		if (sph && vsoft) {
 			for (part_int i = part_range.first; i < part_range.second; i++) {
 				const int j = particles_sph_index(i);
-				if( j == NOT_SPH ) {
-					hsoft_max = std::max(hsoft_max,h);
+				if (j == NOT_SPH) {
+					hsoft_max = std::max(hsoft_max, h);
 				} else {
 					hsoft_max = std::max(hsoft_max, (double) sph_particles_smooth_len(j));
 				}

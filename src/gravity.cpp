@@ -328,6 +328,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			simd_float src_hsoft;
 			simd_float sink_hsoft;
 			simd_float dm_soft = get_options().hsoft;
+			const simd_float tiny = 1.0e-15;
 			for (part_int i = range.first; i < range.second; i++) {
 				if (particles_rung(i) >= min_rung) {
 					if (vsoft) {
@@ -361,7 +362,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 						}
 
 						simd_float rinv1, rinv3;
-						if (!do_sph) {
+						if (do_sph) {
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 							if (vsoft) {
 								h = max(src_hsoft, sink_hsoft);
@@ -378,7 +379,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 									hinv3 = sqr(hinv) * hinv;
 								}
 								const simd_float r = sqrt(r2);                                                    // 4
-								const simd_float rinv1_far = mask * simd_float(1) / r;                            // 5
+								const simd_float rinv1_far = mask * simd_float(1) / (r + tiny);                            // 5
 								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
 								const simd_float q = r * hinv;                                             // 1
 								simd_float rinv3_near = simd_float(21.0f);
@@ -416,7 +417,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 								far_count += count;
 							} else {
 								const simd_float r = sqrt(r2);                                                    // 4
-								const simd_float rinv1_far = mask * simd_float(1) / r;                            // 5
+								const simd_float rinv1_far = mask * simd_float(1) / (r + tiny);                            // 5
 								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
 								const simd_float r1overh1 = r * hinv;                                             // 1
 								const simd_float r2oh2 = r1overh1 * r1overh1;                                     // 1

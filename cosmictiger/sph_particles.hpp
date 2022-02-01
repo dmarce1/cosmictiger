@@ -74,6 +74,7 @@ void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range,
 void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels,vector<float>& fpre, part_int offset);
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
+float sph_particles_max_smooth_len();
 
 inline char& sph_particles_semi_active(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);

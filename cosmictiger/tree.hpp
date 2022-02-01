@@ -156,11 +156,13 @@ struct tree_create_return {
 struct tree_create_params {
 	int min_rung;
 	double theta;
+	double hmax;
 	int min_level;
 	tree_create_params() = default;
-	tree_create_params(int min_rung, double theta);
+	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & hmax;
 		arc & min_rung;
 		arc & theta;
 		arc & min_level;
@@ -170,7 +172,7 @@ struct tree_create_params {
 tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
 		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_destroy(bool free_tree = false);
-int tree_min_level(double theta);
+int tree_min_level(double theta, double hsoft);
 const tree_node* tree_get_node(tree_id);
 void tree_sort_particles_by_sph_particles();
 
