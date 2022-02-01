@@ -72,6 +72,43 @@ __device__ inline void shared_reduce_add(T& number) {
 	}
 }
 
+template<class T, int BLOCK_SIZE>
+__device__ inline void shared_reduce_add(T& number) {
+	const int tid = threadIdx.x;
+	__shared__ T sum[BLOCK_SIZE];
+	sum[tid] = number;
+	__syncthreads();
+	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % BLOCK_SIZE;
+		const T t = sum[tid] + sum[inbr];
+		__syncthreads();
+		sum[tid] = t;
+		__syncthreads();
+	}
+	number = sum[tid];
+}
+
+#include <cosmictiger/safe_io.hpp>
+
+template<int BLOCK_SIZE>
+__device__ inline void compute_indices(int& index, int& total) {
+	__shared__ int sum[BLOCK_SIZE];
+	const int& tid = threadIdx.x;
+	sum[tid] = index;
+	__syncthreads();
+	for (int P = 1; P < BLOCK_SIZE; P *= 2) {
+		int tmp = 0;
+		if (tid >= P) {
+			tmp = sum[tid - P];
+		}
+		__syncthreads();
+		sum[tid] += tmp;
+		__syncthreads();
+	}
+	total = sum[BLOCK_SIZE - 1];
+	index = tid == 0 ? 0 : sum[tid - 1];
+}
+
 __device__ inline void shared_reduce_min(int& number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		number = min(number, __shfl_xor_sync(0xffffffff, number, P));
