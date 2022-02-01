@@ -1255,7 +1255,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
 				const simd_float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
 				const simd_float Prho2j = p * rhoinv * rhoinv * f0s[j];
-		//		PRINT( "%e\n", f0s[j][0]);
+				//		PRINT( "%e\n", f0s[j][0]);
 #ifdef SPH_TOTAL_ENERGY
 				const simd_float Pvxrho2j = Prho2j * vxs[j];
 				const simd_float Pvyrho2j = Prho2j * vys[j];
@@ -1550,3 +1550,113 @@ sph_run_return sph_run(sph_run_params params) {
 	}
 	return rc;
 }
+
+struct sph_run_cuda_data {
+	fixed32* x;
+	fixed32* y;
+	fixed32* z;
+	sph_tree_node* trees;
+	int* selfs;
+	int* neighbors;
+};
+
+struct sph_run_workspace {
+	vector<fixed32, pinned_allocator<fixed32>> host_x;
+	vector<fixed32, pinned_allocator<fixed32>> host_y;
+	vector<fixed32, pinned_allocator<fixed32>> host_z;
+	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
+	vector<int, pinned_allocator<int>> host_neighbors;
+	vector<int> host_selflist;
+	std::unordered_map<tree_id, int, tree_id_hash> tree_map;
+	mutex_type mutex;
+
+	void add_work(tree_id selfid) {
+		const auto* self = sph_tree_get_node(selfid);
+		for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+			const auto nid = sph_tree_get_neighbor(i);
+			bool found = true;
+			std::unique_lock<mutex_type> lock(mutex);
+			if (tree_map.find(nid) == tree_map.end()) {
+				tree_map[nid] = host_trees.size();
+				host_trees.resize(host_trees.size() + 1);
+				found = false;
+			}
+			host_neighbors.push_back(tree_map[nid]);
+			if (!found) {
+				lock.unlock();
+				const auto* node = sph_tree_get_node(nid);
+				lock.lock();
+				host_trees[tree_map[nid]] = *node;
+			}
+			host_neighbors.push_back(tree_map[nid]);
+		}
+		std::lock_guard<mutex_type> lock(mutex);
+		int neighbor_begin = host_neighbors.size();
+		for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+			const auto nid = sph_tree_get_neighbor(i);
+			host_neighbors.push_back(tree_map[nid]);
+		}
+		int neighbor_end = host_neighbors.size();
+		const int myindex = tree_map[selfid];
+		host_selflist.push_back(myindex);
+		auto& this_tree = host_trees[myindex];
+		this_tree.neighbor_range.first = neighbor_begin;
+		this_tree.neighbor_range.second = neighbor_end;
+	}
+
+	void to_gpu() {
+		size_t parts_size = 0;
+		for (auto& node : host_trees) {
+			parts_size += node.part_range.second - node.part_range.first;
+		}
+		host_x.resize(parts_size);
+		host_y.resize(parts_size);
+		host_z.resize(parts_size);
+		vector<hpx::future<void>> futs;
+		const int nthreads = 8 * hpx_hardware_concurrency();
+		std::atomic<int> index(0);
+		std::atomic<part_int> part_index(0);
+		for (int proc = 0; proc < nthreads; proc++) {
+			futs.push_back(hpx::async([&index,proc,nthreads,this,&part_index]() {
+				int this_index = index++;
+				while( index < host_trees.size()) {
+					auto& node = host_trees[index];
+					const part_int size = node.part_range.second - node.part_range.first;
+					const part_int offset = (part_index += size) - size;
+					node.part_range.first = offset;
+					node.part_range.second = offset + size;
+					sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
+					this_index = index++;
+				}
+			}));
+		}
+		hpx::wait_all(futs.begin(), futs.end());
+		sph_run_cuda_data cuda_data;
+		CUDA_CHECK(cudaMalloc(&cuda_data.x, sizeof(fixed32) * host_x.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.y, sizeof(fixed32) * host_y.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.z, sizeof(fixed32) * host_z.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.selfs, sizeof(int) * host_selflist.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
+		auto stream = cuda_get_stream();
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice));
+
+
+
+
+		cuda_end_stream(stream);
+		CUDA_CHECK(cudaFree(cuda_data.x));
+		CUDA_CHECK(cudaFree(cuda_data.y));
+		CUDA_CHECK(cudaFree(cuda_data.z));
+		CUDA_CHECK(cudaFree(cuda_data.trees));
+		CUDA_CHECK(cudaFree(cuda_data.selfs));
+		CUDA_CHECK(cudaFree(cuda_data.neighbors));
+
+	}
+
+};
