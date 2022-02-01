@@ -177,7 +177,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
 			timer tm;
 			tm.start();
-			kr = sph_run(sparams);
+			kr = sph_run(sparams, true);
 			tm.stop();
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);

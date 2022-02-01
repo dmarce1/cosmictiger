@@ -79,6 +79,7 @@ set(cosmictiger_source_files
     src/rockstar.cu
     src/sph_particles.cpp
     src/sph.cpp
+    src/sph.cu
     src/sph_tree.cpp
     src/stack_trace.cpp
     src/test.cpp
@@ -132,6 +133,7 @@ set(cosmictiger_header_files
     cosmictiger/safe_io.hpp
     cosmictiger/simd.hpp
     cosmictiger/sph.hpp
+    cosmictiger/sph_cuda.hpp
     cosmictiger/sph_particles.hpp
     cosmictiger/sph_tree.hpp
     cosmictiger/stack_vector.hpp
@@ -202,7 +204,7 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                        --use_fast_math --maxrregcount=160 ;
+                       -DUSE_CUDA --use_fast_math --maxrregcount=160 ;
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )

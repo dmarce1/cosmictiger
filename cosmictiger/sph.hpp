@@ -48,6 +48,7 @@ struct sph_values {
 	}
 };
 
+#ifndef __CUDACC__
 struct sph_tree_neighbor_return {
 	fixed32_range inner_box;
 	fixed32_range outer_box;
@@ -75,6 +76,7 @@ struct sph_tree_neighbor_return {
 		arc & value_at;
 	}
 };
+#endif
 
 #define SPH_TREE_NEIGHBOR_BOXES 0
 #define SPH_TREE_NEIGHBOR_NEIGHBORS 1
@@ -189,8 +191,10 @@ struct sph_run_params {
 #define SPH_RUN_UPDATE 6
 #define SPH_RUN_RUNGS 7
 
-sph_run_return sph_run(sph_run_params params);
+sph_run_return sph_run(sph_run_params params, bool cuda = false);
+#ifndef __CUDACC__
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);
+#endif
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z);
 
 template<class T, int N>

@@ -292,14 +292,14 @@ struct fixed32_range: public range<fixed32> {
 	fixed32_range() {
 		valid = false;
 	}
+	CUDA_EXPORT
 	bool contains(const array<fixed32, NDIM>& pt, float h = float(0)) const {
 		bool rc = true;
 		for( int dim = 0; dim < NDIM; dim++) {
 			const float d1 = distance(pt[dim],begin[dim]) + h;
 			const float d2 = distance(end[dim],pt[dim]) + h;
-			if( d1 >= 0.0 && d2 >= 0.0 ){
+			if( d1 >= 0.0f && d2 >= 0.0f ){
 			} else {
-		//		PRINT( "%e %e\n", d1, d2);
 				rc = false;
 				break;
 			}

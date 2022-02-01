@@ -88,8 +88,11 @@ int sph_tree_leaflist_size() {
 	return leaflist.size();
 }
 
-const sph_tree_node* sph_tree_get_leaf(int i) {
-	return &nodes[leaflist[i]];
+const tree_id sph_tree_get_leaf(int i) {
+	tree_id id;
+	id.index = leaflist[i];
+	id.proc = hpx_rank();
+	return id;
 }
 
 void sph_tree_free_neighbor_list() {
@@ -412,7 +415,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = box.begin[dim];
 		node.box.end[dim] = box.end[dim] == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
-	//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
+		//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
 	}
 	nodes[index] = node;
 	rc.leaf_nodes = leaf_nodes;
@@ -453,10 +456,6 @@ void sph_tree_destroy(bool free_sph_tree) {
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
-}
-
-void sph_tree_set_box_active(tree_id id, bool rc) {
-	nodes[id.index].box_active = rc;
 }
 
 void sph_tree_set_nactive(tree_id id, part_int i) {

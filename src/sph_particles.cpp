@@ -285,7 +285,7 @@ void sph_particles_resize(part_int sz) {
 #else
 		sph_particles_array_resize(sph_particles_e, new_capacity, false);
 #endif
-		sph_particles_array_resize(sph_particles_h, new_capacity, false);
+		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de, new_capacity, false);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, false);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
@@ -520,7 +520,7 @@ static vector<sph_particle> sph_particles_fetch_sph_cache_line(part_int index) {
 	return line;
 }
 
-void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, vector<char>& rungs, vector<float>& hs, part_int offset) {
+void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char* rungs, float* hs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -528,10 +528,10 @@ void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range,
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				if (rungs.size()) {
+				if (rungs) {
 					rungs[j] = sph_particles_rung(i);
 				}
-				if (hs.size()) {
+				if (hs) {
 					hs[j] = sph_particles_smooth_len(i);
 				}
 			}
@@ -548,10 +548,10 @@ void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range,
 				const auto end = std::min(line_id.index + line_size, range.range.second);
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
-					if (rungs.size()) {
+					if (rungs) {
 						rungs[dest_index] = ptr[src_index].first;
 					}
-					if (hs.size()) {
+					if (hs) {
 						hs[dest_index] = ptr[src_index].second;
 					}
 					dest_index++;

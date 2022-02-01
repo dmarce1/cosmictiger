@@ -24,8 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
-#include <cosmictiger/sph.hpp>
-#include <cosmictiger/sph_tree.hpp>
+#include <cosmictiger/sph_cuda.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 
@@ -60,6 +59,21 @@ inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 	}
 	return intersect;
 }
+
+struct sph_run_workspace {
+	vector<fixed32, pinned_allocator<fixed32>> host_x;
+	vector<fixed32, pinned_allocator<fixed32>> host_y;
+	vector<fixed32, pinned_allocator<fixed32>> host_z;
+	vector<char, pinned_allocator<char>> host_rungs;
+	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
+	vector<int, pinned_allocator<int>> host_neighbors;
+	vector<int> host_selflist;
+	std::unordered_map<tree_id, int, tree_id_hash> tree_map;
+	std::unordered_map<int, pair<int>> neighbor_ranges;
+	mutex_type mutex;
+	void add_work(tree_id selfid);
+	sph_run_return to_gpu(sph_run_params params);
+};
 
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z) {
 	int max_rung = 0;
@@ -270,7 +284,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 		}
 		sph_particles_global_read_pos(other->global_part_range(), d.xs.data(), d.ys.data(), d.zs.data(), offset);
 		if (do_rungs || do_smoothlens) {
-			sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), d.rungs, d.hs, offset);
+			sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), d.rungs.data(), d.hs.data(), offset);
 		}
 		if (do_ent || do_vel) {
 			sph_particles_global_read_sph(other->global_part_range(), d.ents, d.vxs, d.vys, d.vzs, offset);
@@ -1415,11 +1429,13 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 	return rc;
 }
 
-sph_run_return sph_run(sph_run_params params) {
+sph_run_return sph_run(sph_run_params params, bool cuda) {
 	sph_run_return rc;
 	vector<hpx::future<sph_run_return>> futs;
+	vector<hpx::future<sph_run_return>> futs2;
+	std::shared_ptr<sph_run_workspace> workspace_ptr = std::make_shared<sph_run_workspace>();
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_run_action>(c, params));
+		futs.push_back(hpx::async<sph_run_action>(c, params, cuda));
 	}
 	int nthreads = hpx_hardware_concurrency();
 	if (hpx_size() > 1) {
@@ -1428,14 +1444,15 @@ sph_run_return sph_run(sph_run_params params) {
 	static std::atomic<int> next;
 	next = 0;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(
-				hpx::async([proc,nthreads,params]() {
+		futs2.push_back(
+				hpx::async([proc,nthreads,params,cuda,workspace_ptr]() {
 					sph_run_return rc;
 					int index = next++;
 					sph_data_vecs data;
 					while( index < sph_tree_leaflist_size()) {
 						data.clear();
-						const auto* self = sph_tree_get_leaf(index);
+						const auto selfid = sph_tree_get_leaf(index);
+						const auto* self = sph_tree_get_node(selfid);
 						bool test;
 						switch(params.run_type) {
 
@@ -1463,87 +1480,92 @@ sph_run_return sph_run(sph_run_params params) {
 						break;
 					}
 					if(test) {
-						vector<tree_id> neighbors;
-						switch(params.run_type) {
+						if( cuda ) {
+							workspace_ptr->add_work(selfid);
+						} else {
 
-							case SPH_RUN_SMOOTHLEN:
-							case SPH_RUN_MARK_SEMIACTIVE:
+							vector<tree_id> neighbors;
+							switch(params.run_type) {
+
+								case SPH_RUN_SMOOTHLEN:
+								case SPH_RUN_MARK_SEMIACTIVE:
 //								case SPH_RUN_RUNGS:
-							case SPH_RUN_COURANT:
-							case SPH_RUN_FVELS:
-							case SPH_RUN_HYDRO:
-							for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-								const auto id = sph_tree_get_neighbor(i);
-								neighbors.push_back(id);
+								case SPH_RUN_COURANT:
+								case SPH_RUN_FVELS:
+								case SPH_RUN_HYDRO:
+								for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+									const auto id = sph_tree_get_neighbor(i);
+									neighbors.push_back(id);
+								}
+								break;
+
+								case SPH_RUN_UPDATE:
+								case SPH_RUN_GRAVITY:
+								break;
+
 							}
-							break;
-
-							case SPH_RUN_UPDATE:
-							case SPH_RUN_GRAVITY:
-							break;
-
-						}
-						//		PRINT( "neighbors_size = %i\n",neighbors.size());
-						switch(params.run_type) {
-							case SPH_RUN_SMOOTHLEN:
-							load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
-							break;
-							case SPH_RUN_MARK_SEMIACTIVE:
-							load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
-							break;
-							case SPH_RUN_RUNGS:
-							load_data<true, true, false, false, false, true, true, false>(self, neighbors, data, params.min_rung);
-							break;
-							case SPH_RUN_COURANT:
-							load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-							break;
-							case SPH_RUN_FVELS:
-							load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-							break;
-							case SPH_RUN_HYDRO:
-							load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
-							break;
-							case SPH_RUN_UPDATE:
-							case SPH_RUN_GRAVITY:
-							break;
-						}
-						sph_run_return this_rc;
-						switch(params.run_type) {
-							case SPH_RUN_SMOOTHLEN:
-							if( neighbors.size()==0) {
-//						PRINT( "%i\n", neighbors.size());
+							//		PRINT( "neighbors_size = %i\n",neighbors.size());
+							switch(params.run_type) {
+								case SPH_RUN_SMOOTHLEN:
+								load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
+								break;
+								case SPH_RUN_MARK_SEMIACTIVE:
+								load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
+								break;
+								case SPH_RUN_RUNGS:
+								load_data<true, true, false, false, false, true, true, false>(self, neighbors, data, params.min_rung);
+								break;
+								case SPH_RUN_COURANT:
+								load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+								break;
+								case SPH_RUN_FVELS:
+								load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+								break;
+								case SPH_RUN_HYDRO:
+								load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
+								break;
+								case SPH_RUN_UPDATE:
+								case SPH_RUN_GRAVITY:
+								break;
 							}
-
-							this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
-							break;
-							case SPH_RUN_MARK_SEMIACTIVE:
-							this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
-							break;
-//							case SPH_RUN_RUNGS:
-//							this_rc = sph_rungs(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
-//							break;
-							case SPH_RUN_COURANT:
-							this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
-							break;
-							case SPH_RUN_FVELS:
-							this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs, params.min_rung);
-							break;
-							case SPH_RUN_HYDRO:
-							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
-							break;
-							case SPH_RUN_UPDATE:
-							this_rc = sph_update(self, params.min_rung, params.phase);
-							break;
-							case SPH_RUN_GRAVITY:
-							this_rc = sph_gravity(self, params.min_rung, params.t0);
-							break;
+							sph_run_return this_rc;
+							switch(params.run_type) {
+								case SPH_RUN_SMOOTHLEN:
+								this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
+								break;
+								case SPH_RUN_MARK_SEMIACTIVE:
+								this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
+								break;
+								case SPH_RUN_COURANT:
+								this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
+								break;
+								case SPH_RUN_FVELS:
+								this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs, params.min_rung);
+								break;
+								case SPH_RUN_HYDRO:
+								this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
+								break;
+								case SPH_RUN_UPDATE:
+								this_rc = sph_update(self, params.min_rung, params.phase);
+								break;
+								case SPH_RUN_GRAVITY:
+								this_rc = sph_gravity(self, params.min_rung, params.t0);
+								break;
+							}
+							rc += this_rc;
 						}
-						rc += this_rc;
 					}
+
 					index = next++;
 				}
 				return rc;
 			}));
+	}
+	for (auto& f : futs2) {
+		rc += f.get();
+	}
+	if (cuda) {
+		rc += workspace_ptr->to_gpu(params);
 	}
 	for (auto& f : futs) {
 		rc += f.get();
@@ -1551,112 +1573,107 @@ sph_run_return sph_run(sph_run_params params) {
 	return rc;
 }
 
-struct sph_run_cuda_data {
-	fixed32* x;
-	fixed32* y;
-	fixed32* z;
-	sph_tree_node* trees;
-	int* selfs;
-	int* neighbors;
+struct sph_tree_id_hash {
+	inline size_t operator()(tree_id id) const {
+		const int i = id.index;
+		return i * hpx_size() + id.proc;
+	}
 };
 
-struct sph_run_workspace {
-	vector<fixed32, pinned_allocator<fixed32>> host_x;
-	vector<fixed32, pinned_allocator<fixed32>> host_y;
-	vector<fixed32, pinned_allocator<fixed32>> host_z;
-	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
-	vector<int, pinned_allocator<int>> host_neighbors;
-	vector<int> host_selflist;
-	std::unordered_map<tree_id, int, tree_id_hash> tree_map;
-	mutex_type mutex;
-
-	void add_work(tree_id selfid) {
-		const auto* self = sph_tree_get_node(selfid);
-		for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-			const auto nid = sph_tree_get_neighbor(i);
-			bool found = true;
-			std::unique_lock<mutex_type> lock(mutex);
-			if (tree_map.find(nid) == tree_map.end()) {
-				tree_map[nid] = host_trees.size();
-				host_trees.resize(host_trees.size() + 1);
-				found = false;
-			}
-			host_neighbors.push_back(tree_map[nid]);
-			if (!found) {
-				lock.unlock();
-				const auto* node = sph_tree_get_node(nid);
-				lock.lock();
-				host_trees[tree_map[nid]] = *node;
-			}
-			host_neighbors.push_back(tree_map[nid]);
+void sph_run_workspace::add_work(tree_id selfid) {
+	const auto* self = sph_tree_get_node(selfid);
+	std::unique_lock<mutex_type> lock(mutex);
+	std::unordered_map<tree_id, int, sph_tree_id_hash>::iterator iter;
+	for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+		const auto nid = sph_tree_get_neighbor(i);
+		iter = tree_map.find(nid);
+		if (iter == tree_map.end()) {
+			int index = host_trees.size();
+			host_trees.resize(index + 1);
+			tree_map[nid] = index;
+			lock.unlock();
+			const auto* node = sph_tree_get_node(nid);
+			lock.lock();
+			host_trees[index] = *node;
 		}
-		std::lock_guard<mutex_type> lock(mutex);
-		int neighbor_begin = host_neighbors.size();
-		for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-			const auto nid = sph_tree_get_neighbor(i);
-			host_neighbors.push_back(tree_map[nid]);
-		}
-		int neighbor_end = host_neighbors.size();
-		const int myindex = tree_map[selfid];
-		host_selflist.push_back(myindex);
-		auto& this_tree = host_trees[myindex];
-		this_tree.neighbor_range.first = neighbor_begin;
-		this_tree.neighbor_range.second = neighbor_end;
 	}
-
-	void to_gpu() {
-		size_t parts_size = 0;
-		for (auto& node : host_trees) {
-			parts_size += node.part_range.second - node.part_range.first;
-		}
-		host_x.resize(parts_size);
-		host_y.resize(parts_size);
-		host_z.resize(parts_size);
-		vector<hpx::future<void>> futs;
-		const int nthreads = 8 * hpx_hardware_concurrency();
-		std::atomic<int> index(0);
-		std::atomic<part_int> part_index(0);
-		for (int proc = 0; proc < nthreads; proc++) {
-			futs.push_back(hpx::async([&index,proc,nthreads,this,&part_index]() {
-				int this_index = index++;
-				while( index < host_trees.size()) {
-					auto& node = host_trees[index];
-					const part_int size = node.part_range.second - node.part_range.first;
-					const part_int offset = (part_index += size) - size;
-					node.part_range.first = offset;
-					node.part_range.second = offset + size;
-					sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
-					this_index = index++;
-				}
-			}));
-		}
-		hpx::wait_all(futs.begin(), futs.end());
-		sph_run_cuda_data cuda_data;
-		CUDA_CHECK(cudaMalloc(&cuda_data.x, sizeof(fixed32) * host_x.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.y, sizeof(fixed32) * host_y.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.z, sizeof(fixed32) * host_z.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.selfs, sizeof(int) * host_selflist.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
-		auto stream = cuda_get_stream();
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice));
-
-
-
-
-		cuda_end_stream(stream);
-		CUDA_CHECK(cudaFree(cuda_data.x));
-		CUDA_CHECK(cudaFree(cuda_data.y));
-		CUDA_CHECK(cudaFree(cuda_data.z));
-		CUDA_CHECK(cudaFree(cuda_data.trees));
-		CUDA_CHECK(cudaFree(cuda_data.selfs));
-		CUDA_CHECK(cudaFree(cuda_data.neighbors));
-
+	int neighbor_begin = host_neighbors.size();
+	for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+		const auto nid = sph_tree_get_neighbor(i);
+		host_neighbors.push_back(tree_map[nid]);
 	}
+	int neighbor_end = host_neighbors.size();
+	const int myindex = tree_map[selfid];
+	host_selflist.push_back(myindex);
+	auto& this_tree = host_trees[myindex];
+	auto& r = neighbor_ranges[myindex];
+	r.first = neighbor_begin;
+	r.second = neighbor_end;
+}
 
-};
+sph_run_return sph_run_workspace::to_gpu(sph_run_params params) {
+	size_t parts_size = 0;
+	for (auto& node : host_trees) {
+		parts_size += node.part_range.second - node.part_range.first;
+	}
+	host_x.resize(parts_size);
+	host_y.resize(parts_size);
+	host_z.resize(parts_size);
+	host_rungs.resize(parts_size);
+	vector<hpx::future<void>> futs;
+	const int nthreads = 8 * hpx_hardware_concurrency();
+	std::atomic<int> index(0);
+	std::atomic<part_int> part_index(0);
+	for (int i = 0; i < host_selflist.size(); i++) {
+		host_trees[i].neighbor_range = neighbor_ranges[i];
+	}
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([&index,proc,nthreads,this,&part_index]() {
+			int this_index = index++;
+			while( this_index < host_trees.size()) {
+				auto& node = host_trees[this_index];
+				const part_int size = node.part_range.second - node.part_range.first;
+				const part_int offset = (part_index += size) - size;
+				sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
+				sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), nullptr, offset);
+				node.part_range.first = offset;
+				node.part_range.second = offset + size;
+				this_index = index++;
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	if (host_x.size() != part_index) {
+		PRINT("%i %i %i\n", host_x.size(), (int ) part_index, parts_size);
+		PRINT("BROKEN\n");
+		abort();
+	}
+	sph_run_cuda_data cuda_data;
+	CUDA_CHECK(cudaMalloc(&cuda_data.x, sizeof(fixed32) * host_x.size()));
+	CUDA_CHECK(cudaMalloc(&cuda_data.y, sizeof(fixed32) * host_y.size()));
+	CUDA_CHECK(cudaMalloc(&cuda_data.z, sizeof(fixed32) * host_z.size()));
+	CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
+	CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
+	CUDA_CHECK(cudaMalloc(&cuda_data.selfs, sizeof(int) * host_selflist.size()));
+	CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
+	auto stream = cuda_get_stream();
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.rungs, host_rungs.data(), sizeof(char) * host_rungs.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
+	cuda_data.nselfs = host_selflist.size();
+	cuda_data.h_snk = &sph_particles_smooth_len(0);
+	auto rc = sph_run_cuda(params, cuda_data, stream);
+	cuda_end_stream(stream);
+	CUDA_CHECK(cudaFree(cuda_data.x));
+	CUDA_CHECK(cudaFree(cuda_data.y));
+	CUDA_CHECK(cudaFree(cuda_data.z));
+	CUDA_CHECK(cudaFree(cuda_data.trees));
+	CUDA_CHECK(cudaFree(cuda_data.selfs));
+	CUDA_CHECK(cudaFree(cuda_data.neighbors));
+	return rc;
+}
+

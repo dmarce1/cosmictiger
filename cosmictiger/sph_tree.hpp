@@ -41,13 +41,8 @@ struct sph_tree_node {
 	bool leaf;
 	size_t node_count;
 	size_t active_nodes;
-	bool box_active;
 	int depth;
 	pair<int,int> neighbor_range;
-	CUDA_EXPORT
-	sph_tree_node() {
-		box_active = false;
-	}
 	inline part_int nparts() const {
 		return part_range.second - part_range.first;
 	}
@@ -66,7 +61,6 @@ struct sph_tree_node {
 	template<class A>
 	void serialize(A && arc, unsigned) {
 		arc & neighbor_range;
-		arc & box_active;
 		arc & box;
 		arc & sink_part_range;
 		arc & inner_box;
@@ -126,15 +120,15 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 void sph_tree_destroy(bool free_sph_tree = false);
 const sph_tree_node* sph_tree_get_node(tree_id);
 void sph_tree_sort_sph_particles_by_particles();
-void sph_tree_set_box_active(tree_id id, bool rc);
 void sph_tree_set_nactive(tree_id id, part_int i);
 void sph_tree_set_boxes(tree_id, const fixed32_range& , const fixed32_range& );
 void sph_tree_free_neighbor_list();
 int sph_tree_allocate_neighbor_list(const vector<tree_id>&);
 tree_id& sph_tree_get_neighbor(int i);
+long long sph_tree_nodes_size();
 void sph_tree_set_neighbor_range(tree_id id, pair<int,int> rng);
 int sph_tree_leaflist_size();
-const sph_tree_node* sph_tree_get_leaf(int i);
+const tree_id sph_tree_get_leaf(int i);
 void sph_tree_clear_neighbor_ranges();
 
 
