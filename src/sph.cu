@@ -23,6 +23,7 @@ struct smoothlen_shmem {
 
 #include <cosmictiger/sph_cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/timer.hpp>
 
 #define WORKSPACE_SIZE (256*SPH_NEIGHBOR_COUNT)
 
@@ -34,7 +35,15 @@ struct smoothlen_workspace {
 
 #define SMOOTHLEN_BLOCK_SIZE 512
 
-__global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, int* counter, int* flag) {
+struct sph_reduction {
+	int counter;
+	int flag;
+	float hmin;
+	float hmax;
+	double flops;
+};
+
+__global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
 	const int block_size = blockDim.x;
@@ -44,11 +53,12 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	float error;
 	smoothlen_workspace& ws = workspaces[bid];
 	if (tid == 0) {
-		index = atomicAdd(counter, 1);
+		index = atomicAdd(&reduce->counter, 1);
 	}
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
+		int flops = 0;
 		ws.x.resize(0);
 		ws.y.resize(0);
 		ws.z.resize(0);
@@ -91,6 +101,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		if (ws.x.size() == 0) {
 			PRINT("ZERO\n");
 		}
+		float hmin = 1e+20;
+		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			if (data.rungs[i] >= params.min_rung) {
 				const int snki = self.sink_part_range.first - self.part_range.first + i;
@@ -105,32 +117,31 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float dh;
 				float& h = data.h_snk[snki];
 				do {
-					const float hinv = 1.f / h;
-					const float h2 = sqr(h);
+					const float hinv = 1.f / h; // 4
+					const float h2 = sqr(h);    // 1
 					count = 0;
 					f = 0.f;
 					dfdh = 0.f;
-					if (ws.x.size() == 0) {
-						//		PRINT( "ZERO\n");
-					}
 					for (int j = tid; j < ws.x.size(); j += block_size) {
-						const float dx = distance(x[XDIM], ws.x[j]);
-						const float dy = distance(x[YDIM], ws.y[j]);
-						const float dz = distance(x[ZDIM], ws.z[j]);
-						const float r2 = sqr(dx, dy, dz);
-						count += int(r2 < h2);
-						const float r = sqrt(r2);
-						const float q = r * hinv;
-						if (q < 1.f) {
-							const float q2 = sqr(q);
-							const float _1mq = 1.f - q;
-							const float _1mq2 = sqr(_1mq);
-							const float _1mq3 = _1mq * _1mq2;
-							const float _1mq4 = _1mq * _1mq3;
-							const float w = A * _1mq4 * fmaf(4.f, q, 1.f);
-							const float dwdh = B * _1mq3 * q2 * hinv;
-							f += w;
-							dfdh += dwdh;
+						const float dx = distance(x[XDIM], ws.x[j]); // 2
+						const float dy = distance(x[YDIM], ws.y[j]); // 2
+						const float dz = distance(x[ZDIM], ws.z[j]); // 2
+						const float r2 = sqr(dx, dy, dz);            // 2
+						count += int(r2 < h2);                       // 1
+						const float r = sqrt(r2);                    // 4
+						const float q = r * hinv;                    // 1
+						flops += 15;
+						if (q < 1.f) {                               // 1
+							const float q2 = sqr(q);                  // 1
+							const float _1mq = 1.f - q;               // 1
+							const float _1mq2 = sqr(_1mq);            // 1
+							const float _1mq3 = _1mq * _1mq2;         // 1
+							const float _1mq4 = _1mq * _1mq3;         // 1
+							const float w = A * _1mq4 * fmaf(4.f, q, 1.f); // 4
+							const float dwdh = B * _1mq3 * q2 * hinv; // 3
+							f += w;                                   // 1
+							dfdh += dwdh;                             // 1
+							flops += 15;
 						}
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(f);
@@ -175,18 +186,25 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					//			if( tid == 0 )
 					//			PRINT("%i %i %e %e\n", iter, count, h, dh);
 					if (iter > 20) {
-							PRINT("density solver failed to converge\n");
-							__trap();
+						PRINT("density solver failed to converge\n");
+						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
-				if (tid == 0 && box_xceeded) {
-					atomicAdd(flag, 1);
+				hmin = fminf(hmin, h);
+				hmax = fmaxf(hmax, h);
+				if (tid == 0) {
+					if (box_xceeded) {
+						atomicAdd(&reduce->flag, 1);
+					}
 				}
 			}
 		}
-
+		shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(flops);
 		if (tid == 0) {
-			index = atomicAdd(counter, 1);
+			atomicAdd(&reduce->flops, (double) flops);
+			atomicMax(&reduce->hmax, hmax);
+			atomicMin(&reduce->hmin, hmin);
+			index = atomicAdd(&reduce->counter, 1);
 		}
 		__syncthreads();
 	}
@@ -194,29 +212,35 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 }
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream) {
+	timer tm;
 	sph_run_return rc;
-	int* counter;
-	int* flag;
+	sph_reduction* reduce;
 	int nblocks;
-	CUDA_CHECK(cudaMallocManaged(&counter, sizeof(int)));
-	CUDA_CHECK(cudaMallocManaged(&flag, sizeof(int)));
-	*counter = 0;
-	*flag = 0;
+	CUDA_CHECK(cudaMallocManaged(&reduce, sizeof(sph_reduction)));
+	reduce->counter = reduce->flag = 0;
+	reduce->hmin = std::numeric_limits<float>::max();
+	reduce->hmax = 0.0f;
+	reduce->flops = 0.0;
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTHLEN: {
 		smoothlen_workspace* workspaces;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, sizeof(smoothlen_shmem)));
 		nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(smoothlen_workspace) * nblocks));
-		sph_cuda_smoothlen<<<nblocks, SMOOTHLEN_BLOCK_SIZE>>>(params,data,workspaces,counter, flag);
+		tm.start();
+		sph_cuda_smoothlen<<<nblocks, SMOOTHLEN_BLOCK_SIZE>>>(params,data,workspaces,reduce);
 		cuda_stream_synchronize(stream);
+		tm.stop();
 		CUDA_CHECK(cudaFree(workspaces));
-		rc.rc = flag;
+		rc.rc = reduce->flag;
+		rc.hmin = reduce->hmin;
+		rc.hmax = reduce->hmax;
+		tm.stop();
+		PRINT("Kernel ran at %e GFLOPS\n", reduce->flops / (1024 * 1024 * 1024) / tm.read());
 	}
 		break;
 	}
-	CUDA_CHECK(cudaFree(counter));
-	CUDA_CHECK(cudaFree(flag));
+	CUDA_CHECK (cudaFree(reduce));
 
 	return rc;
 }
