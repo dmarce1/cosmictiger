@@ -44,6 +44,14 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
+
+struct sph_tree_id_hash {
+	inline size_t operator()(tree_id id) const {
+		const int i = id.index;
+		return i * hpx_size() + id.proc;
+	}
+};
+
 inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 	bool intersect = a.valid && b.valid;
 	if (intersect) {
@@ -68,7 +76,7 @@ struct sph_run_workspace {
 	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
-	std::unordered_map<tree_id, int, tree_id_hash> tree_map;
+	std::unordered_map<tree_id, int, sph_tree_id_hash> tree_map;
 	std::unordered_map<int, pair<int>> neighbor_ranges;
 	mutex_type mutex;
 	void add_work(tree_id selfid);
@@ -1572,13 +1580,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 	}
 	return rc;
 }
-
-struct sph_tree_id_hash {
-	inline size_t operator()(tree_id id) const {
-		const int i = id.index;
-		return i * hpx_size() + id.proc;
-	}
-};
 
 void sph_run_workspace::add_work(tree_id selfid) {
 	const auto* self = sph_tree_get_node(selfid);
