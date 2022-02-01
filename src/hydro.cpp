@@ -67,8 +67,8 @@ void hydro_driver(double tmax) {
 		if (minrung != 0) {
 			PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
 		} else {
-			PRINT("%i %e %e %i %i %e %e %e %e %e %e %e %e\n", step, t, dt, minrung, maxrung, rc1.ent, rc1.ent / ent0 - 1.0, rc1.ekin, rc1.etherm,
-					(etot - e0) / (rc1.ekin + 1e-20), rc1.momx, rc1.momy, rc1.momz);
+			PRINT("%i %e %e %i %i %e %e %e %e %e %e %e %e %e\n", step, t, dt, minrung, maxrung, rc1.ent, rc1.ent / ent0 - 1.0, rc1.ekin, rc1.etherm,
+					(etot - e0) / (rc1.ekin + 1e-20), rc1.momx, rc1.momy, rc1.momz, rc1.vol);
 		}
 		step++;
 		if (minrung == 0) {

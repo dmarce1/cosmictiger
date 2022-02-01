@@ -53,6 +53,7 @@ SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
 SPH_PARTICLES_EXTERN float* sph_particles_dvv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
+SPH_PARTICLES_EXTERN float* sph_particles_f0;
 #ifdef CHECK_MUTUAL_SORT
 SPH_PARTICLES_EXTERN part_int* sph_particles_tst;
 inline part_int& sph_particles_test(int index) {
@@ -70,7 +71,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, vector<char>&, vector<float>&, part_int offset);
-void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels, part_int offset);
+void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels,vector<float>& fpre, part_int offset);
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 
@@ -82,6 +83,11 @@ inline char& sph_particles_semi_active(part_int index) {
 inline float& sph_particles_fvel(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_fv[index];
+}
+
+inline float& sph_particles_fpre(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_f0[index];
 }
 
 inline part_int& sph_particles_dm_index(part_int index) {

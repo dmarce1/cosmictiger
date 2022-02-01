@@ -210,13 +210,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 
 		if (tau != 0.0) {
-			sparams.run_type = SPH_RUN_FVELS;
-			tm.start();
-			sph_run(sparams);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_FVELS): tm = %e\n", tm.read());
-			tm.reset();
 
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
@@ -253,27 +246,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 	} else {
 
-		sparams.run_type = SPH_RUN_COURANT;
-		tm.start();
-		kr = sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-		tm.reset();
-		max_rung = kr.max_rung;
-
-		sparams.run_type = SPH_RUN_RUNGS;
-		tm.start();
-		bool cont;
-		do {
-			sph_run(sparams);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_RUNGS): tm = %e\n", tm.read());
-			tm.reset();
-			cont = kr.rc;
-		} while (cont);
-
 		sparams.phase = 1;
 		sparams.run_type = SPH_RUN_FVELS;
 		tm.start();
@@ -283,6 +255,27 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_FVELS): tm = %e\n", tm.read());
 		tm.reset();
 
+		sparams.run_type = SPH_RUN_COURANT;
+		tm.start();
+		kr = sph_run(sparams);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
+		tm.reset();
+		max_rung = kr.max_rung;
+
+		/*	sparams.run_type = SPH_RUN_RUNGS;
+		 tm.start();
+		 bool cont;
+		 do {
+		 sph_run(sparams);
+		 tm.stop();
+		 if (verbose)
+		 PRINT("sph_run(SPH_RUN_RUNGS): tm = %e\n", tm.read());
+		 tm.reset();
+		 cont = kr.rc;
+		 } while (cont);
+		 */
 		sparams.phase = 1;
 		sparams.run_type = SPH_RUN_GRAVITY;
 		tm.start();
@@ -308,14 +301,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
 
 		sparams.phase = 0;
-
-		sparams.run_type = SPH_RUN_FVELS;
-		tm.start();
-		sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_FVELS): tm = %e\n", tm.read());
-		tm.reset();
 
 		sparams.run_type = SPH_RUN_HYDRO;
 		tm.start();

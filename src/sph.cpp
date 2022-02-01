@@ -222,6 +222,7 @@ struct sph_data_vecs {
 	vector<float> vxs;
 	vector<float> vys;
 	vector<float> vzs;
+	vector<float> f0s;
 	void clear() {
 		xs.clear();
 		ys.clear();
@@ -233,6 +234,7 @@ struct sph_data_vecs {
 		vxs.clear();
 		vys.clear();
 		vzs.clear();
+		f0s.clear();
 	}
 };
 
@@ -264,6 +266,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 		}
 		if (do_fvel) {
 			d.fvels.resize(new_sz);
+			d.f0s.resize(new_sz);
 		}
 		sph_particles_global_read_pos(other->global_part_range(), d.xs.data(), d.ys.data(), d.zs.data(), offset);
 		if (do_rungs || do_smoothlens) {
@@ -273,7 +276,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 			sph_particles_global_read_sph(other->global_part_range(), d.ents, d.vxs, d.vys, d.vzs, offset);
 		}
 		if (do_fvel) {
-			sph_particles_global_read_fvels(other->global_part_range(), d.fvels, offset);
+			sph_particles_global_read_fvels(other->global_part_range(), d.fvels, d.f0s, offset);
 		}
 		int i = offset;
 		while (i < d.xs.size()) {
@@ -328,7 +331,9 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 				}
 				if (do_fvel) {
 					d.fvels[i] = d.fvels.back();
+					d.f0s[i] = d.f0s.back();
 					d.fvels.pop_back();
+					d.f0s.pop_back();
 				}
 			} else {
 				i++;
@@ -882,7 +887,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 }
 
 sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& main_xs, const vector<fixed32>& main_ys, const vector<fixed32>& main_zs,
-		const vector<float>& main_hs, const vector<float>& main_vxs, const vector<float>& main_vys, const vector<float>& main_vzs) {
+		const vector<float>& main_hs, const vector<float>& main_vxs, const vector<float>& main_vys, const vector<float>& main_vzs, int min_rung) {
 	sph_run_return rc;
 	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
@@ -902,7 +907,7 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 	const simd_float m = get_options().sph_mass;
 	const simd_float minv = 1.f / get_options().sph_mass;
 	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		if (sph_particles_semi_active(i)) {
+		if (sph_particles_rung(i) >= min_rung) {
 			xs.resize(0);
 			ys.resize(0);
 			zs.resize(0);
@@ -996,6 +1001,7 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			simd_float dvz_dy = 0.0f;
 			simd_float dvz_dz = 0.0f;
 			static const simd_float tiny = simd_float(1e-15);
+			simd_float drho_dh = 0.f;
 			for (int j = 0; j < xs.size(); j++) {
 				const simd_float dx = simd_float(myx - xs[j]) * _2float;
 				const simd_float dy = simd_float(myy - ys[j]) * _2float;
@@ -1015,15 +1021,16 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvx = vxs[j] - myvx;
 				const simd_float dvy = vys[j] - myvy;
 				const simd_float dvz = vzs[j] - myvz;
-				dvx_dx += dvx * dWdr_x;
-				dvx_dy += dvx * dWdr_y;
-				dvx_dz += dvx * dWdr_z;
-				dvy_dx += dvy * dWdr_x;
-				dvy_dy += dvy * dWdr_y;
-				dvy_dz += dvy * dWdr_z;
-				dvz_dx += dvz * dWdr_x;
-				dvz_dy += dvz * dWdr_y;
-				dvz_dz += dvz * dWdr_z;
+				dvx_dx += dvx * dWdr_x * masks[j];
+				dvx_dy += dvx * dWdr_y * masks[j];
+				dvx_dz += dvx * dWdr_z * masks[j];
+				dvy_dx += dvy * dWdr_x * masks[j];
+				dvy_dy += dvy * dWdr_y * masks[j];
+				dvy_dz += dvy * dWdr_z * masks[j];
+				dvz_dx += dvz * dWdr_x * masks[j];
+				dvz_dy += dvz * dWdr_y * masks[j];
+				dvz_dz += dvz * dWdr_z * masks[j];
+				drho_dh += sph_h4dWdh(r, myhinv) * masks[j];
 			}
 			const float dvx_dx_sum = dvx_dx.sum();
 			const float dvx_dy_sum = dvx_dy.sum();
@@ -1041,6 +1048,10 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const float sw = 1e-4 * myc[0] / myh[0];
 			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
 			const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
+			const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * SPH_NEIGHBOR_COUNT);
+			const float pre = 1.0f / (1.0f + c0);
+			sph_particles_fpre(i) = pre;
+			//PRINT( "%e\n",pre);
 			//		PRINT( "%e\n", fvel);
 			//	if( std::isnan(fvel)) {
 			//		PRINT( "%e %e %i\n", abs_curl_v, abs_div_v, xs.size());
@@ -1054,7 +1065,8 @@ sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& m
 
 sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& main_xs, const vector<fixed32>& main_ys, const vector<fixed32>& main_zs,
 		const vector<char>& main_rungs, const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs,
-		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, int min_rung, float t0, int phase, float a) {
+		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, const vector<float>& main_f0s, int min_rung, float t0,
+		int phase, float a) {
 	sph_run_return rc;
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
@@ -1069,6 +1081,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 	static thread_local vector<simd_float> vys;
 	static thread_local vector<simd_float> vzs;
 	static thread_local vector<simd_float> fvels;
+	static thread_local vector<simd_float> f0s;
 	static thread_local vector<simd_float> masks;
 	const auto rung2dt = [](simd_int rung) {
 		simd_float dt;
@@ -1102,6 +1115,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			vys.resize(0);
 			vzs.resize(0);
 			masks.resize(0);
+			f0s.resize(0);
 			const simd_float myh = sph_particles_smooth_len(i);
 			const simd_int myrung = sph_particles_rung(i);
 			const simd_float myh2 = sqr(myh);
@@ -1126,7 +1140,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const float myp = pow(myrho[0], SPH_GAMMA) * myent;
 #endif
 			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv[0]);
-			const simd_float Prho2i = myp * myrhoinv * myrhoinv;
+			const simd_float Prho2i = myp * myrhoinv * myrhoinv * sph_particles_fpre(i);
 #ifdef SPH_TOTAL_ENERGY
 			const simd_float Pvxrho2i = Prho2i * myvx;
 			const simd_float Pvyrho2i = Prho2i * myvy;
@@ -1175,6 +1189,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 							vzs.push_back(simd_float(0.0));
 							fvels.push_back(simd_float(0.0));
 							masks.push_back(simd_float(0.0));
+							f0s.push_back(simd_float(1));
 							base++;
 							offset = 0;
 						}
@@ -1189,6 +1204,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 						vzs.back()[offset] = main_vzs[jpk];
 						fvels.back()[offset] = main_fvels[jpk];
 						masks.back()[offset] = 1.0f;
+						f0s.back()[offset] = main_f0s[jpk];
 						offset++;
 					}
 				}
@@ -1238,7 +1254,8 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
 				const simd_float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
 				const simd_float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
-				const simd_float Prho2j = p * rhoinv * rhoinv;
+				const simd_float Prho2j = p * rhoinv * rhoinv * f0s[j];
+		//		PRINT( "%e\n", f0s[j][0]);
 #ifdef SPH_TOTAL_ENERGY
 				const simd_float Pvxrho2j = Prho2j * vxs[j];
 				const simd_float Pvyrho2j = Prho2j * vys[j];
@@ -1253,7 +1270,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvxdt = -dpx * m;
 				const simd_float dvydt = -dpy * m;
 				const simd_float dvzdt = -dpz * m;
-				divv -= ainv * m * rhoinv * myfvel * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
+				divv -= ainv * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
 				simd_float dt;
 				if (phase == 0) {
 					dt = 0.5f * min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
@@ -1284,7 +1301,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase) {
 	sph_run_return rc;
 	if (phase == 0) {
-		rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = rc.ent = 0.0;
+		rc.vol = rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = rc.ent = 0.0;
 		static const float m = get_options().sph_mass;
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 			if (sph_particles_rung(i) >= min_rung) {
@@ -1308,6 +1325,7 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 				rc.ekin += 0.5f * m * sqr(vx, vy, vz);
 				rc.etherm += p / (SPH_GAMMA - 1.0f) * vol;
 				rc.ent += A;
+				rc.vol += vol;
 			}
 
 		}
@@ -1327,62 +1345,62 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 	}
 	return rc;
 }
+/*
+ static sph_run_return sph_rungs(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
+ const vector<char>& rungs, const vector<float>& hs, int min_rung) {
+ sph_run_return rc;
+ for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+ auto& rung = sph_particles_rung(i);
+ if (rung > min_rung) {
+ const simd_int myx = sph_particles_pos(XDIM, i).raw();
+ const simd_int myy = sph_particles_pos(YDIM, i).raw();
+ const simd_int myz = sph_particles_pos(ZDIM, i).raw();
+ const float myh = sph_particles_smooth_len(i);
+ const simd_float myh2 = sqr(myh);
+ for (int j = 0; j < xs.size(); j += SIMD_FLOAT_SIZE) {
+ simd_int x, y, z;
+ simd_float mask;
+ for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
+ const int kmj = k - j;
+ if (k < xs.size()) {
+ x[kmj] = xs[k].raw();
+ y[kmj] = ys[k].raw();
+ z[kmj] = zs[k].raw();
+ mask[kmj] = 1.0f;
+ } else {
+ x[kmj] = myx[0];
+ y[kmj] = myy[0];
+ z[kmj] = myz[0];
+ mask[kmj] = 0.f;
+ }
+ }
 
-static sph_run_return sph_rungs(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
-		const vector<char>& rungs, const vector<float>& hs, int min_rung) {
-	sph_run_return rc;
-	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		auto& rung = sph_particles_rung(i);
-		if (rung > min_rung) {
-			const simd_int myx = sph_particles_pos(XDIM, i).raw();
-			const simd_int myy = sph_particles_pos(YDIM, i).raw();
-			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
-			const float myh = sph_particles_smooth_len(i);
-			const simd_float myh2 = sqr(myh);
-			for (int j = 0; j < xs.size(); j += SIMD_FLOAT_SIZE) {
-				simd_int x, y, z;
-				simd_float mask;
-				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
-					const int kmj = k - j;
-					if (k < xs.size()) {
-						x[kmj] = xs[k].raw();
-						y[kmj] = ys[k].raw();
-						z[kmj] = zs[k].raw();
-						mask[kmj] = 1.0f;
-					} else {
-						x[kmj] = myx[0];
-						y[kmj] = myy[0];
-						z[kmj] = myz[0];
-						mask[kmj] = 0.f;
-					}
-				}
-
-				const simd_float h = hs[j];
-				const simd_float h2 = sqr(h);
-				static const simd_float _2float(fixed2float);
-				const simd_float dx = simd_float(myx - x) * _2float;
-				const simd_float dy = simd_float(myy - y) * _2float;
-				const simd_float dz = simd_float(myz - z) * _2float;
-				const simd_float r2 = sqr(dx, dy, dz);
-				mask *= ((((r2 < h2) + (r2 < myh2)) * (r2 > 0.0)) > 0.0);
-				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-					if (mask[k]) {
-						const int kpj = k + j;
-						if (kpj < xs.size()) {
-							if (rung < rungs[kpj] - 1) {
-								PRINT( "1\n");
-								rc.rc = true;
-							//	rung = rungs[kpj] - 1;
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	return rc;
-}
-
+ const simd_float h = hs[j];
+ const simd_float h2 = sqr(h);
+ static const simd_float _2float(fixed2float);
+ const simd_float dx = simd_float(myx - x) * _2float;
+ const simd_float dy = simd_float(myy - y) * _2float;
+ const simd_float dz = simd_float(myz - z) * _2float;
+ const simd_float r2 = sqr(dx, dy, dz);
+ mask *= ((((r2 < h2) + (r2 < myh2)) * (r2 > 0.0)) > 0.0);
+ for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+ if (mask[k]) {
+ const int kpj = k + j;
+ if (kpj < xs.size()) {
+ if (rung < rungs[kpj] - 1) {
+ PRINT( "1\n");
+ rc.rc = true;
+ rung = rungs[kpj] - 1;
+ }
+ }
+ }
+ }
+ }
+ }
+ }
+ return rc;
+ }
+ */
 sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0) {
 	sph_run_return rc;
 	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
@@ -1440,32 +1458,32 @@ sph_run_return sph_run(sph_run_params params) {
 							case SPH_RUN_COURANT:
 							case SPH_RUN_UPDATE:
 							case SPH_RUN_GRAVITY:
-							case SPH_RUN_RUNGS:
-							test = self->nactive > 0;
-							break;
-						}
-						if(test) {
-							vector<tree_id> neighbors;
-							switch(params.run_type) {
+//							case SPH_RUN_RUNGS:
+						test = self->nactive > 0;
+						break;
+					}
+					if(test) {
+						vector<tree_id> neighbors;
+						switch(params.run_type) {
 
-								case SPH_RUN_SMOOTHLEN:
-								case SPH_RUN_MARK_SEMIACTIVE:
-								case SPH_RUN_RUNGS:
-								case SPH_RUN_COURANT:
-								case SPH_RUN_FVELS:
-								case SPH_RUN_HYDRO:
-								for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-									const auto id = sph_tree_get_neighbor(i);
-									neighbors.push_back(id);
-								}
-								break;
-
-								case SPH_RUN_UPDATE:
-								case SPH_RUN_GRAVITY:
-								break;
-
+							case SPH_RUN_SMOOTHLEN:
+							case SPH_RUN_MARK_SEMIACTIVE:
+//								case SPH_RUN_RUNGS:
+							case SPH_RUN_COURANT:
+							case SPH_RUN_FVELS:
+							case SPH_RUN_HYDRO:
+							for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+								const auto id = sph_tree_get_neighbor(i);
+								neighbors.push_back(id);
 							}
-							//		PRINT( "neighbors_size = %i\n",neighbors.size());
+							break;
+
+							case SPH_RUN_UPDATE:
+							case SPH_RUN_GRAVITY:
+							break;
+
+						}
+						//		PRINT( "neighbors_size = %i\n",neighbors.size());
 						switch(params.run_type) {
 							case SPH_RUN_SMOOTHLEN:
 							load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
@@ -1501,17 +1519,17 @@ sph_run_return sph_run(sph_run_params params) {
 							case SPH_RUN_MARK_SEMIACTIVE:
 							this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
 							break;
-							case SPH_RUN_RUNGS:
-							this_rc = sph_rungs(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
-							break;
+//							case SPH_RUN_RUNGS:
+//							this_rc = sph_rungs(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
+//							break;
 							case SPH_RUN_COURANT:
 							this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
 							break;
 							case SPH_RUN_FVELS:
-							this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs);
+							this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs, params.min_rung);
 							break;
 							case SPH_RUN_HYDRO:
-							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, params.min_rung, params.t0, params.phase, params.a);
+							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
 							break;
 							case SPH_RUN_UPDATE:
 							this_rc = sph_update(self, params.min_rung, params.phase);

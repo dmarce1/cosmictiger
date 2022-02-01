@@ -218,6 +218,15 @@ inline T sph_W(T r, T hinv, T h3inv) {
 }
 
 template<class T>
+inline T sph_h4dWdh(T r, T hinv) {
+	static const T c0 = T(21.0 / M_PI / 2.0);
+	const T C = c0;
+	const T q = r * hinv;
+	const T tmp = T(1) - q;
+	return -C * tmp*sqr(tmp) * (T(3)+T(9)*q-T(32)*sqr(q));
+}
+
+template<class T>
 inline T sph_dWdr_rinv(T r, T hinv, T h3inv) {
 	static const T c0 = T(210.0 / M_PI);
 	const T C = c0 * h3inv * sqr(hinv);
