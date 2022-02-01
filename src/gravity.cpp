@@ -23,6 +23,7 @@
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/sph_particles.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 
@@ -128,12 +129,13 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			}
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), sph.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, sph.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
-					masks[i] = sph[i] ? sph_mass : dm_mass;;
+					masks[i] = sph[i] ? sph_mass : dm_mass;
+					;
 				}
 			} else {
 				for (int i = 0; i < count; i++) {
@@ -263,16 +265,17 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 	size_t near_count = 0;
 	size_t far_count = 0;
 	const static bool do_sph = get_options().sph;
+	const static bool vsoft = do_sph && get_options().vsoft;
 	const static float dm_mass = get_options().dm_mass;
 	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-			const simd_float h = 2.0f * hfloat;
-		const simd_float h2 = h * h;
+		simd_float h = hfloat;
+		simd_float h2 = h * h;
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);
-		const simd_float hinv = simd_float(1) / h;
-		const simd_float hinv3 = hinv * hinv * hinv;
+		simd_float hinv = simd_float(1) / h;
+		simd_float hinv3 = hinv * hinv * hinv;
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		for (int li = 0; li < list.size(); li += chunk_size) {
@@ -287,6 +290,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
+			vector<float> hsoft;
 			vector<char> sph;
 			vector<float> masks;
 			srcx.resize(nsource);
@@ -295,15 +299,20 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			masks.resize(nsource);
 			if (do_sph) {
 				sph.resize(nsource);
+				if (vsoft) {
+					hsoft.resize(nsource);
+				}
 			}
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), sph.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), hsoft.size() ? hsoft.data() : nullptr,
+						sph.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
-					masks[i] = sph[i] ? sph_mass : dm_mass;;
+					masks[i] = sph[i] ? sph_mass : dm_mass;
+					;
 				}
 			} else {
 				for (int i = 0; i < count; i++) {
@@ -316,8 +325,16 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			const auto range = self_ptr->part_range;
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
+			simd_float src_hsoft;
+			simd_float sink_hsoft;
+			simd_float dm_soft = get_options().hsoft;
 			for (part_int i = range.first; i < range.second; i++) {
 				if (particles_rung(i) >= min_rung) {
+					if (vsoft) {
+						const static float dm_hsoft = get_options().hsoft;
+						const int sphi = particles_sph_index(i);
+						sink_hsoft = sphi == NOT_SPH ? dm_hsoft : sph_particles_smooth_len(sphi);
+					}
 					simd_float gx(0.0);
 					simd_float gy(0.0);
 					simd_float gz(0.0);
@@ -334,38 +351,90 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							Y[YDIM][l] = srcy[j + l].raw();
 							Y[ZDIM][l] = srcz[j + l].raw();
 							mask[l] = masks[j + l];
+							if (vsoft) {
+								src_hsoft[l] = hsoft[j + l];
+							}
 						}
 						array<simd_float, NDIM> dx;
 						for (int dim = 0; dim < NDIM; dim++) {
 							dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
 						}
-						const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
-						const simd_float far_flag = r2 > h2;                                                // 1
+
 						simd_float rinv1, rinv3;
-						if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
-							rinv1 = mask * rsqrt(r2);                                                        // 5
-							rinv3 = -rinv1 * rinv1 * rinv1;                                                  // 2
-							far_count += count;
+						if (!do_sph) {
+							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
+							if (vsoft) {
+								h = max(src_hsoft, sink_hsoft);
+								h2 = sqr(h);
+							}
+							const simd_float far_flag = r2 > h2;                                                // 1
+							if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+								rinv1 = mask * rsqrt(r2);                                                        // 5
+								rinv3 = -rinv1 * rinv1 * rinv1;                                                  // 2
+								far_count += count;
+							} else {
+								if (vsoft) {
+									hinv = simd_float(1.f) / h;
+									hinv3 = sqr(hinv) * hinv;
+								}
+								const simd_float r = sqrt(r2);                                                    // 4
+								const simd_float rinv1_far = mask * simd_float(1) / r;                            // 5
+								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
+								const simd_float q = r * hinv;                                             // 1
+								simd_float rinv3_near = simd_float(21.0f);
+								rinv3_near = fmaf(rinv3_near, q, simd_float(-90.0f));
+								rinv3_near = fmaf(rinv3_near, q, simd_float(140.0f));
+								rinv3_near = fmaf(rinv3_near, q, simd_float(-84.0f));
+								rinv3_near *= rinv3_near;
+								rinv3_near = fmaf(rinv3_near, q, simd_float(14.0f));
+								simd_float rinv1_near = simd_float(0.f);
+								if (min_rung == 0) {
+									rinv1_near = simd_float(-3.0f);
+									rinv1_near = fmaf(rinv1_near, q, simd_float(15.0f));
+									rinv1_near = fmaf(rinv1_near, q, simd_float(-28.0f));
+									rinv1_near = fmaf(rinv1_near, q, simd_float(21.0f));
+									rinv1_near *= q;
+									rinv1_near = fmaf(rinv1_near, q, simd_float(-7.0f));
+									rinv1_near *= q;
+									rinv1_near = fmaf(rinv1_near, q, simd_float(3.0f));
+									rinv1_near *= r2 > simd_float(0);
+								}
+								const auto near_flag = (simd_float(1) - far_flag);                                // 1
+								rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4
+								rinv3 = -(far_flag * rinv3_far + near_flag * rinv3_near) * mask;                     // 5
+								near_count += count;
+								flops += 52;
+							}
 						} else {
-							const simd_float r = sqrt(r2);                                                    // 4
-							const simd_float rinv1_far = mask * simd_float(1) / r;                            // 5
-							const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
-							const simd_float r1overh1 = r * hinv;                                             // 1
-							const simd_float r2oh2 = r1overh1 * r1overh1;                                     // 1
-							simd_float rinv3_near = +15.0f / 8.0f;
-							rinv3_near = fmaf(rinv3_near, r2oh2, simd_float(-21.0f / 4.0f));                    // 2
-							rinv3_near = fmaf(rinv3_near, r2oh2, simd_float(+35.0f / 8.0f));                    // 2
-							rinv3_near *= hinv3;                                                               // 1
-							simd_float rinv1_near = -5.0f / 16.0f;
-							rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                    // 2
-							rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                   // 2
-							rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                    // 2
-							rinv1_near *= hinv;                                                                // 1
-							const auto near_flag = (simd_float(1) - far_flag);                                // 1
-							rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4
-							rinv3 = -(far_flag * rinv3_far + near_flag * rinv3_near) * mask;                     // 5
-							near_count += count;
-							flops += 52;
+
+							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
+							const simd_float far_flag = (r2 > h2) * (r2 > simd_float(0));                                                // 1
+							simd_float rinv1, rinv3;
+							if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+								rinv1 = mask * rsqrt(r2);                                                        // 5
+								rinv3 = -rinv1 * rinv1 * rinv1;                                                  // 2
+								far_count += count;
+							} else {
+								const simd_float r = sqrt(r2);                                                    // 4
+								const simd_float rinv1_far = mask * simd_float(1) / r;                            // 5
+								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
+								const simd_float r1overh1 = r * hinv;                                             // 1
+								const simd_float r2oh2 = r1overh1 * r1overh1;                                     // 1
+								simd_float rinv3_near = +15.0f / 8.0f;
+								rinv3_near = fmaf(rinv3_near, r2oh2, simd_float(-21.0f / 4.0f));                    // 2
+								rinv3_near = fmaf(rinv3_near, r2oh2, simd_float(+35.0f / 8.0f));                    // 2
+								rinv3_near *= hinv3;                                                               // 1
+								simd_float rinv1_near = -5.0f / 16.0f;
+								rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                    // 2
+								rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                   // 2
+								rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                    // 2
+								rinv1_near *= hinv;                                                                // 1
+								const auto near_flag = (simd_float(1) - far_flag);                                // 1
+								rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4
+								rinv3 = -(far_flag * rinv3_far + near_flag * rinv3_near) * mask;                     // 5
+								near_count += count;
+								flops += 52;
+							}
 						}
 						rinv3 *= mask;
 						rinv1 *= mask;

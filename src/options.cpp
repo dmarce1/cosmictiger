@@ -93,6 +93,7 @@ bool process_options(int argc, char *argv[]) {
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
+	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "do variable softening") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
@@ -111,7 +112,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.15), "CFL condition") //
-		("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
+		("eta", po::value<double>(&(opts.eta))->default_value(0.15), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -151,7 +152,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
-	opts.hsoft = 1.0 / 50.0 / opts.parts_dim;
+	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;

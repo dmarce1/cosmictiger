@@ -211,6 +211,9 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
 	const bool sph = data.sph;
+	const bool vsoft = sph && data.vsoft;
+	auto& src_hsoft = shmem.src.hsoft;
+	const auto& sink_hsoft = shmem.sink_hsoft;
 	const auto& sink_x = shmem.sink_x;
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
@@ -218,14 +221,15 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
 	const auto* main_src_sph = data.sph;
+	const auto* main_src_hsoft = data.hsoft;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
 	auto& src_sph = shmem.src.sph;
 	const auto* tree_nodes = data.tree_nodes;
-	const float h2 = sqr(2.f * h);
-	const float hinv = 1.f / (2.f * h);
-	const float h3inv = hinv * hinv * hinv;
+	float h2 = sqr(h);
+	float hinv = 1.f / (h);
+	float h3inv = hinv * hinv * hinv;
 	int part_index;
 	int nnear = 0;
 	int nfar = 0;
@@ -259,6 +263,9 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					src_z[i1] = main_src_z[i2];
 					if (sph) {
 						src_sph[i1] = main_src_sph[i2];
+						if( vsoft ) {
+							src_hsoft[i1] = main_src_hsoft[i2];
+						}
 					}
 				}
 				__syncwarp();
@@ -293,22 +300,40 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						dx2 = distance(sink_z[k], src_z[j]); // 1
 						const float mass = src_sph[j] ? sph_mass : dm_mass;
 						const auto r2 = sqr(dx0, dx1, dx2);  // 5
+						if (vsoft) {
+							h = max(sink_hsoft[k], src_hsoft[j]);
+							h2 = sqr(h);
+						}
 						if (r2 >= h2) {                      // 1
 							r1inv = rsqrt(r2);                // 4
 							r3inv = r1inv * r1inv * r1inv;    // 2
 							nnear++;
 						} else {
-							const float r1oh1 = sqrtf(r2) * hinv; // 5
-							const float r2oh2 = r1oh1 * r1oh1;    // 1
-							r3inv = +15.0f / 8.0f;
-							r1inv = -5.0f / 16.0f;
-							r3inv = fmaf(r3inv, r2oh2, -21.0f / 4.0f);  // 2
-							r1inv = fmaf(r1inv, r2oh2, 21.0f / 16.0f);  // 2
-							r3inv = fmaf(r3inv, r2oh2, +35.0f / 8.0f);  // 2
-							r1inv = fmaf(r1inv, r2oh2, -35.0f / 16.0f); // 2
+							if (vsoft) {
+								hinv = 1.0f / h;
+								h3inv = hinv * sqr(hinv);
+							}
+							const float q = sqrt(r2) * hinv;
+
+							r3inv = +21.0f;
+							r3inv = fmaf(r3inv, q, -90.0f);  // 2
+							r3inv = fmaf(r3inv, q, 140.0f);  // 2
+							r3inv = fmaf(r3inv, q, -84.0f);  // 2
+							r3inv *= q;
+							r3inv = fmaf(r3inv, q, 14.0f);  // 2
 							r3inv *= h3inv;                             // 1
-							r1inv = fmaf(r1inv, r2oh2, 35.0f / 16.0f);  // 2
-							r1inv *= hinv;                              // 1
+							if (do_phi) {
+								r1inv = -3.0f;
+								r1inv = fmaf(r1inv, q, 15.0f);  // 2
+								r1inv = fmaf(r1inv, q, -28.0f);  // 2
+								r1inv = fmaf(r1inv, q, 21.0f);  // 2
+								r1inv *= q;
+								r1inv = fmaf(r1inv, q, -7.0f);  // 2
+								r1inv *= q;
+								r1inv = fmaf(r1inv, q, 3.0f);  // 2
+								r1inv *= hinv;                              // 1
+								r1inv *= r2 > 0.0f;
+							}
 							nfar++;
 						}
 						r3inv *= mass;

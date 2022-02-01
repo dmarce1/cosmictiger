@@ -123,7 +123,7 @@ void tree_allocator::reset() {
 
 tree_allocator::tree_allocator() {
 	ready = false;
-	while( allocator_mtx++ != 0 ) {
+	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
 	allocator_list.push_back(this);
@@ -139,7 +139,7 @@ int tree_allocator::allocate() {
 }
 
 tree_allocator::~tree_allocator() {
-	while( allocator_mtx++ != 0 ) {
+	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
 	for (int i = 0; i < allocator_list.size(); i++) {
@@ -228,7 +228,7 @@ static void tree_allocate_nodes() {
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
-	while( allocator_mtx++ != 0 ) {
+	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
 	for (int i = 0; i < allocator_list.size(); i++) {
@@ -245,6 +245,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	static const int bucket_size = BUCKET_SIZE;
 	tree_create_return rc;
 	const static bool sph = get_options().sph;
+	const static bool vsoft = get_options().vsoft;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
@@ -283,6 +284,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	size_t leaf_nodes = 0;
 	size_t active_leaf_nodes = 0;
 	const int index = allocator.allocate();
+	double hsoft_max = 0.0;
+
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
 		auto right_box = box;
@@ -318,6 +321,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
+		if( sph && vsoft) {
+			hsoft_max = std::max(rcl.hsoft_max, rcr.hsoft_max);
+		}
 		min_depth = std::min(rcl.min_depth, rcr.min_depth);
 		max_depth = std::max(rcl.max_depth, rcr.max_depth);
 		total_flops += rcl.flops + rcr.flops;
@@ -454,6 +460,17 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const simd_float _2float = fixed2float;
 		const double dm_mass = get_options().dm_mass;
 		const double sph_mass = get_options().sph_mass;
+
+		if (sph && vsoft) {
+			for (part_int i = part_range.first; i < part_range.second; i++) {
+				const int j = particles_sph_index(i);
+				if( j == NOT_SPH ) {
+					hsoft_max = std::max(hsoft_max,h);
+				} else {
+					hsoft_max = std::max(hsoft_max, (double) sph_particles_smooth_len(j));
+				}
+			}
+		}
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
 			simd_float mask;
@@ -525,6 +542,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
+	node.hsoft_max = hsoft_max;
 	node.nactive = nactive;
 	node.active_nodes = active_nodes;
 	node.depth = depth;
@@ -547,6 +565,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
+	rc.hsoft_max = hsoft_max;
 	rc.leaf_nodes = leaf_nodes;
 	rc.active_leaf_nodes = active_leaf_nodes;
 	rc.node_count = node.node_count;
@@ -556,7 +575,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
 	if (local_root) {
-		if( sph ) {
+		if (sph) {
 			particles_resolve_with_sph_particles();
 		}
 #ifdef USE_CUDA

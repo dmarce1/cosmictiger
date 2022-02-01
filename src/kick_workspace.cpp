@@ -25,6 +25,7 @@ vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_x;
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_y;
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_z;
 vector<char, pinned_allocator<char>> kick_workspace::host_sph;
+vector<float, pinned_allocator<float>> kick_workspace::host_hsoft;
 semaphore kick_workspace::lock1(1);
 semaphore kick_workspace::lock2(1);
 vector<tree_node, pinned_allocator<tree_node>> kick_workspace::tree_nodes;
@@ -63,6 +64,7 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 
 void kick_workspace::to_gpu() {
 	const static bool sph = get_options().sph;
+	const static bool vsoft = sph && get_options().vsoft;
 #ifdef USE_CUDA
 	timer tm;
 	lock1.wait();
@@ -88,6 +90,7 @@ void kick_workspace::to_gpu() {
 	fixed32* dev_x;
 	fixed32* dev_y;
 	fixed32* dev_z;
+	float* dev_hsoft;
 	char* dev_sph;
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 	std::atomic<part_int> next_index(0);
@@ -138,7 +141,7 @@ void kick_workspace::to_gpu() {
 								for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 									auto iter = tree_map.find(workitems[i].dchecklist[j]);
 									if( iter == tree_map.end()) {
-										THROW_ERROR( "Tree map error\n");
+										THROW_ERROR( "Tree map error %i\n", tree_map.size());
 									}
 									workitems[i].dchecklist[j].index = iter->second;
 								}
@@ -164,6 +167,9 @@ void kick_workspace::to_gpu() {
 	host_z.resize(part_count);
 	if( sph ) {
 		host_sph.resize(part_count);
+		if( vsoft ) {
+			host_hsoft.resize(part_count);
+		}
 	}
 	futs.resize(0);
 
@@ -174,7 +180,7 @@ void kick_workspace::to_gpu() {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 									const int local_index = tree_map[tree_ids_vector[i]];
 									part_int part_index = (next_index += ptr->nparts()) - ptr->nparts();
-									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_sph.data(), part_index);
+									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), vsoft ? host_hsoft.data() : nullptr, host_sph.data(), part_index);
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
 							}
@@ -192,14 +198,22 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	if( sph ) {
 		CUDA_CHECK(cudaMalloc(&dev_sph, sizeof(char) * part_count));
+		if( vsoft ) {
+			CUDA_CHECK(cudaMalloc(&dev_hsoft, sizeof(float) * part_count));
+		}
+	}
+	if( sph ) {
 		CUDA_CHECK(cudaMemcpyAsync(dev_sph, host_sph.data(), sizeof(char) * part_count, cudaMemcpyHostToDevice, stream));
+		if( vsoft ) {
+			CUDA_CHECK(cudaMemcpyAsync(dev_hsoft, host_hsoft.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
+		}
 	}
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 //	PRINT("parts size = %li\n", sizeof(fixed32) * part_count * NDIM);
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_sph, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
+	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_hsoft, dev_sph, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_end_stream(stream);
 //	PRINT("To GPU Done %i\n", hpx_rank());
 	CUDA_CHECK(cudaFree(dev_x));

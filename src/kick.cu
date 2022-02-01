@@ -132,7 +132,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 		const float mass = sph ? (j == NOT_SPH ? dm_mass : sph_mass) : 1.0f;
 		phi[i] += L2(0, 0, 0);
-		phi[i] -= SELF_PHI * hinv * mass;
+		if (!sph) {
+			phi[i] -= SELF_PHI * hinv * mass;
+		}
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
 		gz[i] -= L2(0, 0, 1);
@@ -221,6 +223,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		int* next_item, int ntrees) {
 //	auto tm1 = clock64();
 	const bool sph = data.sph;
+	const bool vsoft = data.vsoft;
 	const float dm_mass = !sph ? 1.0f : global_params.dm_mass;
 	const float sph_mass = global_params.sph_mass;
 	const int& tid = threadIdx.x;
@@ -239,6 +242,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& partlist = lists[bid].partlist;
 	auto& leaflist = lists[bid].leaflist;
 	auto& activei = shmem.active;
+	auto& sink_hsoft = shmem.sink_hsoft;
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
@@ -253,6 +257,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const float sink_bias = 1.5;
 	auto* tree_nodes = data.tree_nodes;
 	auto* all_rungs = data.rungs;
+	auto* src_hsoft = data.hsoft;
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
@@ -322,18 +327,31 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				multlist.resize(0);
 				maxi = round_up(echecks.size(), WARP_SIZE);
 				int ninteracts = 0;
+				float hsoft = h, other_hsoft = h;
+				if (vsoft) {
+					hsoft = self.hsoft_max;
+				} else {
+					hsoft = h;
+				}
 				for (int i = tid; i < maxi; i += WARP_SIZE) {
 					bool mult = false;
 					bool next = false;
 					if (i < echecks.size()) {
 						const tree_node& other = tree_nodes[echecks[i]];
+						if (vsoft) {
+							other_hsoft = other.hsoft_max;
+						} else {
+							other_hsoft = h;
+						}
 						for (int dim = 0; dim < NDIM; dim++) {
 							dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 						}
 						float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);         // 5
 						R2 = fmaxf(R2, EWALD_DIST2);                          // 1
-						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv + h); // 5
-						mult = R2 > r2;                                       // 1
+						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv); // 5
+						const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
+					//	PRINT( "%i %%e %e %e\n", soft_sep, self.radius, other.radius, max(other_hsoft, hsoft));
+						mult = soft_sep && (R2 > r2);                                       // 1
 						next = !mult;
 						ninteracts++;
 					}
@@ -388,12 +406,18 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						bool part = false;
 						if (i < dchecks.size()) {
 							const tree_node& other = tree_nodes[dchecks[i]];
+							if (vsoft) {
+								other_hsoft = other.hsoft_max;
+							} else {
+								other_hsoft = h;
+							}
 							for (int dim = 0; dim < NDIM; dim++) {
 								dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 							}
 							const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
-							const bool far1 = R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + h);     // 5
-							const bool far2 = R2 > sqr(sink_bias * self.radius * thetainv + other.radius + h);       // 5
+							const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
+							const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
+							const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
 							mult = far1;
 							part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
 							leaf = !mult && !part && other.leaf;
@@ -478,6 +502,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							sink_x[l] = src_x[srci];
 							sink_y[l] = src_y[srci];
 							sink_z[l] = src_z[srci];
+							if (vsoft) {
+								sink_hsoft[l] = src_hsoft[srci];
+							}
 						}
 						nactive += total;
 						__syncwarp();
@@ -542,7 +569,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					pflops += cuda_gravity_pp(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass, 2.f * h);
+					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass, h);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
@@ -638,10 +665,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_sph, tree_node* dev_tree_nodes,
-		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, float* dev_hsoft, char* dev_sph,
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	static const bool do_sph = get_options().sph;
+	static const bool vsoft = do_sph && get_options().vsoft;
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -710,12 +738,14 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
+	data.hsoft = vsoft ? dev_hsoft : nullptr;
 	data.sph = do_sph ? dev_sph : nullptr;
+	data.vsoft = get_options().vsoft;
 	if (data.sph) {
 		data.sph_index = &particles_sph_index(0);
-		data.sph_gx = &sph_particles_gforce(XDIM,0);
-		data.sph_gy = &sph_particles_gforce(YDIM,0);
-		data.sph_gz = &sph_particles_gforce(ZDIM,0);
+		data.sph_gx = &sph_particles_gforce(XDIM, 0);
+		data.sph_gy = &sph_particles_gforce(YDIM, 0);
+		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
 #ifdef SPH_TOTAL_ENERGY
 		data.sph_energy = &sph_particles_ent(0);
 #endif
