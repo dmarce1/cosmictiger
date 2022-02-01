@@ -169,13 +169,13 @@ int tree_min_level(double theta, double h) {
 		double a2;
 		constexpr double ffac = 1.01;
 		if (lev % NDIM == 0) {
-			r1 = 2.0f * std::sqrt(3) + ffac * h;
+			r1 = 2.0f * std::sqrt(3) + ffac * N * h;
 			a2 = std::sqrt(3);
 		} else if (lev % NDIM == 1) {
-			r1 = 2.0f * 1.5 + ffac * h;
+			r1 = 2.0f * 1.5 + ffac * N * h;
 			a2 = 1.5;
 		} else {
-			r1 = 2.0f * std::sqrt(1.5) + ffac * h;
+			r1 = 2.0f * std::sqrt(1.5) + ffac * N * h;
 			a2 = std::sqrt(1.5);
 		}
 		r2 = (1.0 + SINK_BIAS) * a2 / theta;
