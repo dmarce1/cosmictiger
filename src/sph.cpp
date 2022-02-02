@@ -1593,6 +1593,13 @@ void sph_run_workspace::add_work(tree_id selfid) {
 	const auto* self = sph_tree_get_node(selfid);
 	std::unique_lock<mutex_type> lock(mutex);
 	std::unordered_map<tree_id, int, sph_tree_id_hash>::iterator iter;
+	iter = tree_map.find(selfid);
+	if (iter == tree_map.end()) {
+		int index = host_trees.size();
+		host_trees.resize(index + 1);
+		tree_map[selfid] = index;
+		host_trees[index] = *self;
+	}
 	for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
 		const auto nid = sph_tree_get_neighbor(i);
 		iter = tree_map.find(nid);
@@ -1685,6 +1692,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		abort();
 	}
 	sph_run_cuda_data cuda_data;
+	CUDA_CHECK(cudaMalloc(&cuda_data.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.x, sizeof(fixed32) * host_x.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.y, sizeof(fixed32) * host_y.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.z, sizeof(fixed32) * host_z.size()));
@@ -1701,7 +1709,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		break;
 	}
 	CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
-	CUDA_CHECK(cudaMalloc(&cuda_data.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
 	switch(params.run_type) {
@@ -1722,6 +1729,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
+	for( int i = 0; i < host_selflist.size(); i++) {
+		if( host_selflist[i] == 0 ) {
+			PRINT( "Selflist = 0\n");
+		}
+	}
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.dent_snk = &sph_particles_dent(0);

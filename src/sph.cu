@@ -130,13 +130,13 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 
 		constexpr float A = float(float(21.0 * 2.0 / 3.0));
 		constexpr float B = float(float(840.0 / 3.0));
-		if (ws.x.size() == 0) {
-			PRINT("ZERO\n");
-		}
 		float hmin = 1e+20;
 		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			if (data.rungs[i] >= params.min_rung) {
+				if (ws.x.size() == 0) {
+					PRINT("ZERO\n");
+				}
 				const int snki = self.sink_part_range.first - self.part_range.first + i;
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
@@ -329,8 +329,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				}
 			}
 		}
-		if( ws.x0.size() == 0 ) {
-			PRINT( "ZERO\n");
+		if (ws.x0.size() == 0) {
+			if( tid == 0 )
+			PRINT("ZERO %i  %i  %i  %i %i\n",  data.nselfs, self.neighbor_range.second - self.neighbor_range.first, data.selfs[index], data.neighbors[self.neighbor_range.first], index);
 		}
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			int myrung = data.rungs[i];
@@ -540,7 +541,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		tm.stop();
 		PRINT("Kernel ran at %e GFLOPS\n", reduce->flops / (1024 * 1024 * 1024) / tm.read());
 	}
-	break;
+		break;
 	case SPH_RUN_HYDRO: {
 		hydro_workspace* workspaces;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
