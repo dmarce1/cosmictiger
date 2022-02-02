@@ -242,7 +242,22 @@ inline T sph_dWdr_rinv(T r, T hinv, T h3inv) {
 	const T tmp = T(1) - q;
 	return -C * sqr(tmp) * tmp;
 }
-
+/*
+template<class T>
+CUDA_EXPORT
+inline T sph_divW(T r, Thinv, Th3inv) {
+	const T c0 = T(21.f/M_PI/2.f);
+	const T C = c0 * h3inv * sqr(hinv);
+	const T q = r * hinv;
+	T w = 120.0;
+	w = fmaf(q, w, T(120));
+	w = fmaf(q, w, -T(300));
+	w = fmaf(q, w, T(240));
+	w = fmaf(q, w, -T(60));
+	w *= C;
+	return w;
+}
+*/
 template<class T>
 inline T sph_den(T hinv3) {
 	static const T m = get_options().sph_mass;

@@ -30,8 +30,8 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (512*SPH_NEIGHBOR_COUNT)
-#define HYDRO_SIZE (32*SPH_NEIGHBOR_COUNT)
+#define WORKSPACE_SIZE (1024*SPH_NEIGHBOR_COUNT)
+#define HYDRO_SIZE (128*SPH_NEIGHBOR_COUNT)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -120,6 +120,7 @@ struct sph_reduction {
 	double flops;
 	int max_rung_hydro;
 	int max_rung_grav;
+	int max_rung;
 };
 
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, sph_reduction* reduce) {
@@ -622,7 +623,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				float ddvx = 0.f;
 				float ddvy = 0.f;
 				float ddvz = 0.f;
+				//			float ddivvdt = 0.f;
 				const float ainv = 1.0f / params.a;
+				if (ws.x.size() > 8 * SPH_NEIGHBOR_COUNT) {
+					//		PRINT( "%i\n", ws.x.size());
+				}
 				for (int j = tid; j < ws.x.size(); j += block_size) {
 					constexpr float gamma = SPH_GAMMA;
 					const float dx = distance(myx, ws.x[j]);
@@ -649,6 +654,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
 					const float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
 					const float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
+//					const float divWi = sph_divW(r, myhinv, myh3inv);
+//					const float divWj = sph_divW(r, hinv, h3inv);
+//					const float divWij = 0.5f * (divWj + divWi);
 					const float dWdri_x = dx * dWdri;
 					const float dWdri_y = dy * dWdri;
 					const float dWdri_z = dz * dWdri;
@@ -659,16 +667,16 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
 					const float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
 					const float Prho2j = p * rhoinv * rhoinv * ws.f0[j];
-					const float dviscx = Piij * dWdrij_x;
-					const float dviscy = Piij * dWdrij_y;
-					const float dviscz = Piij * dWdrij_z;
-					const float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx;
-					const float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy;
-					const float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz;
+					float dviscx = Piij * dWdrij_x;
+					float dviscy = Piij * dWdrij_y;
+					float dviscz = Piij * dWdrij_z;
+					float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx;
+					float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy;
+					float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz;
 					const float dvxdt = -dpx * m;
 					const float dvydt = -dpy * m;
 					const float dvzdt = -dpz * m;
-					divv -= ainv * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
+					divv -= m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
 					float dt;
 					if (params.phase == 0) {
 						dt = 0.5f * min(rung_dt[ws.rungs[j]], rung_dt[myrung]) * (params.t0);
@@ -681,6 +689,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ddvx += dvxdt * dt;
 					ddvy += dvydt * dt;
 					ddvz += dvzdt * dt;
+					/*			dviscx = Piij * divWij;
+					 dviscy = Piij * divWij;
+					 dviscz = Piij * divWij;
+					 dpx = (Prho2j * divWj + Prho2i * divWi) + dviscx;
+					 dpy = (Prho2j * divWj + Prho2i * divWi) + dviscy;
+					 dpz = (Prho2j * divWj + Prho2i * divWi) + dviscz;
+					 ddivvdt -= dpx + dpy + dpz;*/
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dent);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvx);
@@ -693,7 +708,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					data.dvy_snk[snki] += ddvy;
 					data.dvz_snk[snki] += ddvz;
 					if (params.phase == 1 && !semi_active) {
-						data.divv_snk[snki] = divv;
+						//	float dt = 0.5f * rung_dt[myrung] * (params.t0);
+						//	PRINT( "%e %e\n",  divv, dt * ddivdt);
+						data.divv_snk[snki] = divv;					// + dt * ddivdt;
 					}
 //					PRINT( "%e %e %e %e %e\n", dent, ddvx, ddvy, ddvy, ddvz, divv);
 				}
@@ -726,6 +743,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	float total_vsig_max = 0.;
 	int max_rung_hydro = 0;
 	int max_rung_grav = 0;
+	int max_rung = 0;
 	while (index < data.nselfs) {
 		int flops = 0;
 		ws.x0.resize(0);
@@ -914,6 +932,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					max_rung_hydro = max(max_rung_hydro, rung_hydro);
 					max_rung_grav = max(max_rung_grav, rung_grav);
 					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+					max_rung = max(max_rung, rung);
 					//			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
 					if (rung < 0 || rung >= MAX_RUNG) {
 						PRINT("Rung out of range \n");
@@ -931,6 +950,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	}
 	if (tid == 0) {
 		atomicMax(&reduce->vsig_max, total_vsig_max);
+		atomicMax(&reduce->max_rung, max_rung);
 		atomicMax(&reduce->max_rung_hydro, max_rung_hydro);
 		atomicMax(&reduce->max_rung_grav, max_rung_grav);
 	}
@@ -1158,6 +1178,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->vsig_max = 0.0;
 	reduce->max_rung_grav = 0;
 	reduce->max_rung_hydro = 0;
+	reduce->max_rung = 0;
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTHLEN: {
 		smoothlen_workspace* workspaces;
@@ -1215,7 +1236,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.max_vsig = reduce->vsig_max;
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
-		rc.max_rung = std::max(rc.max_rung_hydro,rc.max_rung_grav);
+		rc.max_rung = reduce->max_rung;
 	}
 		break;
 	case SPH_RUN_FVELS: {
