@@ -43,6 +43,9 @@ struct sph_run_cuda_data {
 	float* dvx_snk;
 	float* dvy_snk;
 	float* dvz_snk;
+	float* gx_snk;
+	float* gy_snk;
+	float* gz_snk;
 	char* sa_snk;
 	float* divv_snk;
 	int nselfs;
@@ -50,6 +53,7 @@ struct sph_run_cuda_data {
 	int* selfs;
 	int* neighbors;
 	float m;
+	float eta;
 };
 
 

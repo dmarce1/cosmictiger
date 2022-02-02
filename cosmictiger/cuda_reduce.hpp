@@ -88,6 +88,22 @@ __device__ inline void shared_reduce_add(T& number) {
 	number = sum[tid];
 }
 
+template<class T, int BLOCK_SIZE>
+__device__ inline void shared_reduce_max(T& number) {
+	const int tid = threadIdx.x;
+	__shared__ T sum[BLOCK_SIZE];
+	sum[tid] = number;
+	__syncthreads();
+	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % BLOCK_SIZE;
+		const T t = max(sum[tid], sum[inbr]);
+		__syncthreads();
+		sum[tid] = t;
+		__syncthreads();
+	}
+	number = sum[tid];
+}
+
 #include <cosmictiger/safe_io.hpp>
 
 template<int BLOCK_SIZE>
