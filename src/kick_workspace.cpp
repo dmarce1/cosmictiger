@@ -216,6 +216,12 @@ void kick_workspace::to_gpu() {
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_hsoft, dev_sph, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_end_stream(stream);
 //	PRINT("To GPU Done %i\n", hpx_rank());
+	if( sph ) {
+		CUDA_CHECK(cudaFree(dev_sph));
+		if( vsoft ) {
+			CUDA_CHECK(cudaFree(dev_hsoft));
+		}
+	}
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
 	CUDA_CHECK(cudaFree(dev_z));
