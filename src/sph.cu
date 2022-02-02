@@ -30,8 +30,8 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (256*SPH_NEIGHBOR_COUNT)
-#define HYDRO_SIZE (10*SPH_NEIGHBOR_COUNT)
+#define WORKSPACE_SIZE (512*SPH_NEIGHBOR_COUNT)
+#define HYDRO_SIZE (20*SPH_NEIGHBOR_COUNT)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -262,10 +262,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						}
 					}
 					iter++;
-					//			if( tid == 0 )
-					//			PRINT("%i %i %e %e\n", iter, count, h, dh);
-					if (iter > 20) {
-						PRINT("density solver failed to converge %i\n", ws.x.size());
+					if (iter > 100) {
+						if (tid == 0) {
+							PRINT("%i %i %e %e\n", iter, count, h, dh);
+							PRINT("density solver failed to converge %i\n", ws.x.size());
+						}
 						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
@@ -514,6 +515,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			bool use = active;
 			if (!use && params.phase == 0) {
 				use = semi_active;
+			}
+			if (params.phase == 1 && active && tid == 0) {
+				data.dent_snk[snki] = 0.0f;
+				data.dvx_snk[snki] = 0.f;
+				data.dvy_snk[snki] = 0.f;
+				data.dvz_snk[snki] = 0.f;
 			}
 			const float m = data.m;
 			const float minv = 1.f / m;

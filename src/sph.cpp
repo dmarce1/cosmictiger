@@ -888,7 +888,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				dthydro = 1.0e99;
 			}
 			static const float eta = get_options().eta;
-			static const float hgrav = get_options().hsoft;
+			static const float hgrav = myh[0];
 			const float gx = sph_particles_gforce(XDIM, i);
 			const float gy = sph_particles_gforce(YDIM, i);
 			const float gz = sph_particles_gforce(ZDIM, i);
@@ -1443,6 +1443,7 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
+	cuda = false;
 	sph_run_return rc;
 	vector<hpx::future<sph_run_return>> futs;
 	vector<hpx::future<sph_run_return>> futs2;
