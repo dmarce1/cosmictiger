@@ -39,6 +39,7 @@ struct sph_run_cuda_data {
 	float* h;
 	char* rungs;
 	float* h_snk;
+	float* ent_snk;
 	float* dent_snk;
 	float* dvx_snk;
 	float* dvy_snk;
@@ -46,6 +47,8 @@ struct sph_run_cuda_data {
 	float* gx_snk;
 	float* gy_snk;
 	float* gz_snk;
+	float* f0_snk;
+	float* fvel_snk;
 	char* sa_snk;
 	float* divv_snk;
 	int nselfs;

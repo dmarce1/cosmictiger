@@ -224,8 +224,9 @@ inline T sph_W(T r, T hinv, T h3inv) {
 }
 
 template<class T>
+CUDA_EXPORT
 inline T sph_h4dWdh(T r, T hinv) {
-	static const T c0 = T(21.0 / M_PI / 2.0);
+	const T c0 = T(21.0f / M_PI / 2.0f);
 	const T C = c0;
 	const T q = r * hinv;
 	const T tmp = T(1) - q;

@@ -280,16 +280,12 @@ void sph_particles_resize(part_int sz) {
 		}
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
-#ifdef SPH_TOTAL_ENERGY
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
-#else
-		sph_particles_array_resize(sph_particles_e, new_capacity, false);
-#endif
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
-		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
-		sph_particles_array_resize(sph_particles_f0, new_capacity, false);
+		sph_particles_array_resize(sph_particles_fv, new_capacity, true);
+		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
 #ifdef CHECK_MUTUAL_SORT
 		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
@@ -319,10 +315,7 @@ void sph_particles_resize(part_int sz) {
 }
 
 void sph_particles_free() {
-	free(sph_particles_f0);
-	free(sph_particles_fv);
 	free(sph_particles_dm);
-	free(sph_particles_h);
 #ifdef CHECK_MUTUAL_SORT
 	free(sph_particles_tst);
 #endif
@@ -338,15 +331,21 @@ void sph_particles_free() {
 		CUDA_CHECK(cudaFree(sph_particles_de));
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
+		CUDA_CHECK(cudaFree(sph_particles_f0));
+		CUDA_CHECK(cudaFree(sph_particles_fv));
+		CUDA_CHECK(cudaFree(sph_particles_h));
 		for (int dim = 0; dim < NDIM; dim++) {
 			CUDA_CHECK(cudaFree(sph_particles_dv[NDIM]));
 		}
 #endif
 	} else {
+		free(sph_particles_h);
 		free(sph_particles_e);
 		free(sph_particles_de);
 		free(sph_particles_dvv);
 		free(sph_particles_sa);
+		free(sph_particles_f0);
+		free(sph_particles_fv);
 		for (int dim = 0; dim < NDIM; dim++) {
 			free(sph_particles_dv[NDIM]);
 		}

@@ -250,7 +250,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		sparams.phase = 1;
 		sparams.run_type = SPH_RUN_FVELS;
 		tm.start();
-		sph_run(sparams);
+		sph_run(sparams, true);
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_FVELS): tm = %e\n", tm.read());
