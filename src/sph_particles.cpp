@@ -286,11 +286,11 @@ void sph_particles_resize(part_int sz) {
 		sph_particles_array_resize(sph_particles_e, new_capacity, false);
 #endif
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
-		sph_particles_array_resize(sph_particles_de, new_capacity, false);
-		sph_particles_array_resize(sph_particles_sa, new_capacity, false);
+		sph_particles_array_resize(sph_particles_de, new_capacity, true);
+		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, false);
 		sph_particles_array_resize(sph_particles_f0, new_capacity, false);
-		sph_particles_array_resize(sph_particles_dvv, new_capacity, false);
+		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
 #ifdef CHECK_MUTUAL_SORT
 		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
 #endif
@@ -322,10 +322,7 @@ void sph_particles_free() {
 	free(sph_particles_f0);
 	free(sph_particles_fv);
 	free(sph_particles_dm);
-	free(sph_particles_sa);
 	free(sph_particles_h);
-	free(sph_particles_de);
-	free(sph_particles_dvv);
 #ifdef CHECK_MUTUAL_SORT
 	free(sph_particles_tst);
 #endif
@@ -338,12 +335,18 @@ void sph_particles_free() {
 	if (cuda) {
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaFree(sph_particles_e));
+		CUDA_CHECK(cudaFree(sph_particles_de));
+		CUDA_CHECK(cudaFree(sph_particles_dvv));
+		CUDA_CHECK(cudaFree(sph_particles_sa));
 		for (int dim = 0; dim < NDIM; dim++) {
 			CUDA_CHECK(cudaFree(sph_particles_dv[NDIM]));
 		}
 #endif
 	} else {
 		free(sph_particles_e);
+		free(sph_particles_de);
+		free(sph_particles_dvv);
+		free(sph_particles_sa);
 		for (int dim = 0; dim < NDIM; dim++) {
 			free(sph_particles_dv[NDIM]);
 		}
@@ -441,7 +444,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, vector<float>& ent, vector<float>& vx, vector<float>& vy, vector<float>& vz, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -450,10 +453,10 @@ void sph_particles_global_read_sph(particle_global_range range, vector<float>& e
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				if (ent.size()) {
+				if (ent) {
 					ent[j] = sph_particles_ent(i);
 				}
-				if (vx.size()) {
+				if (vx) {
 					vx[j] = sph_particles_vel(XDIM, i);
 					vy[j] = sph_particles_vel(YDIM, i);
 					vz[j] = sph_particles_vel(ZDIM, i);
@@ -473,10 +476,10 @@ void sph_particles_global_read_sph(particle_global_range range, vector<float>& e
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
 					const sph_particle& part = ptr[src_index];
-					if (ent.size()) {
+					if (ent) {
 						ent[dest_index] = part.ent;
 					}
-					if (vx.size()) {
+					if (vx) {
 						vx[dest_index] = part.v[XDIM];
 						vy[dest_index] = part.v[YDIM];
 						vz[dest_index] = part.v[ZDIM];
@@ -594,7 +597,7 @@ static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int in
 	return line;
 }
 
-void sph_particles_global_read_fvels(particle_global_range range, vector<float>& fvels, vector<float>& fpres, part_int offset) {
+void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpres, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {

@@ -32,8 +32,6 @@ constexpr bool verbose = true;
 #include <unistd.h>
 #include <stack>
 
-static const float SPH_ALPHA = 1.0f;
-static const float SPH_BETA = 2.0f * SPH_ALPHA;
 
 HPX_PLAIN_ACTION (sph_tree_neighbor);
 
@@ -43,7 +41,6 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
-
 
 struct sph_tree_id_hash {
 	inline size_t operator()(tree_id id) const {
@@ -69,9 +66,17 @@ inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 }
 
 struct sph_run_workspace {
+	sph_run_params params;
 	vector<fixed32, pinned_allocator<fixed32>> host_x;
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
+	vector<float, pinned_allocator<float>> host_vx;
+	vector<float, pinned_allocator<float>> host_vy;
+	vector<float, pinned_allocator<float>> host_vz;
+	vector<float, pinned_allocator<float>> host_ent;
+	vector<float, pinned_allocator<float>> host_fvel;
+	vector<float, pinned_allocator<float>> host_f0;
+	vector<float, pinned_allocator<float>> host_h;
 	vector<char, pinned_allocator<char>> host_rungs;
 	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
 	vector<int, pinned_allocator<int>> host_neighbors;
@@ -80,7 +85,10 @@ struct sph_run_workspace {
 	std::unordered_map<int, pair<int>> neighbor_ranges;
 	mutex_type mutex;
 	void add_work(tree_id selfid);
-	sph_run_return to_gpu(sph_run_params params);
+	sph_run_return to_gpu();
+	sph_run_workspace(sph_run_params p) {
+		params = p;
+	}
 };
 
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z) {
@@ -295,10 +303,10 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 			sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), d.rungs.data(), d.hs.data(), offset);
 		}
 		if (do_ent || do_vel) {
-			sph_particles_global_read_sph(other->global_part_range(), d.ents, d.vxs, d.vys, d.vzs, offset);
+			sph_particles_global_read_sph(other->global_part_range(), d.ents.data(), d.vxs.data(), d.vys.data(), d.vzs.data(), offset);
 		}
 		if (do_fvel) {
-			sph_particles_global_read_fvels(other->global_part_range(), d.fvels, d.f0s, offset);
+			sph_particles_global_read_fvels(other->global_part_range(), d.fvels.data(), d.f0s.data(), offset);
 		}
 		int i = offset;
 		while (i < d.xs.size()) {
@@ -1441,7 +1449,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 	sph_run_return rc;
 	vector<hpx::future<sph_run_return>> futs;
 	vector<hpx::future<sph_run_return>> futs2;
-	std::shared_ptr<sph_run_workspace> workspace_ptr = std::make_shared<sph_run_workspace>();
+	std::shared_ptr<sph_run_workspace> workspace_ptr = std::make_shared < sph_run_workspace > (params);
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_run_action>(c, params, cuda));
 	}
@@ -1573,7 +1581,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 		rc += f.get();
 	}
 	if (cuda) {
-		rc += workspace_ptr->to_gpu(params);
+		rc += workspace_ptr->to_gpu();
 	}
 	for (auto& f : futs) {
 		rc += f.get();
@@ -1605,14 +1613,13 @@ void sph_run_workspace::add_work(tree_id selfid) {
 	}
 	int neighbor_end = host_neighbors.size();
 	const int myindex = tree_map[selfid];
+	auto& r = neighbor_ranges[host_selflist.size()];
 	host_selflist.push_back(myindex);
-	auto& this_tree = host_trees[myindex];
-	auto& r = neighbor_ranges[myindex];
 	r.first = neighbor_begin;
 	r.second = neighbor_end;
 }
 
-sph_run_return sph_run_workspace::to_gpu(sph_run_params params) {
+sph_run_return sph_run_workspace::to_gpu() {
 	size_t parts_size = 0;
 	for (auto& node : host_trees) {
 		parts_size += node.part_range.second - node.part_range.first;
@@ -1621,12 +1628,23 @@ sph_run_return sph_run_workspace::to_gpu(sph_run_params params) {
 	host_y.resize(parts_size);
 	host_z.resize(parts_size);
 	host_rungs.resize(parts_size);
+	switch (params.run_type) {
+	case SPH_RUN_HYDRO:
+		host_h.resize(parts_size);
+		host_vx.resize(parts_size);
+		host_vy.resize(parts_size);
+		host_vz.resize(parts_size);
+		host_ent.resize(parts_size);
+		host_fvel.resize(parts_size);
+		host_f0.resize(parts_size);
+		break;
+	}
 	vector<hpx::future<void>> futs;
 	const int nthreads = 8 * hpx_hardware_concurrency();
 	std::atomic<int> index(0);
 	std::atomic<part_int> part_index(0);
 	for (int i = 0; i < host_selflist.size(); i++) {
-		host_trees[i].neighbor_range = neighbor_ranges[i];
+		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&index,proc,nthreads,this,&part_index]() {
@@ -1636,7 +1654,24 @@ sph_run_return sph_run_workspace::to_gpu(sph_run_params params) {
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
 				sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
-				sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), nullptr, offset);
+				switch(params.run_type) {
+					case SPH_RUN_SMOOTHLEN:
+					sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), nullptr, offset);
+					break;
+					case SPH_RUN_HYDRO:
+					sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
+					break;
+				}
+				switch(params.run_type) {
+					case SPH_RUN_HYDRO:
+					sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
+					break;
+				}
+				switch(params.run_type) {
+					case SPH_RUN_HYDRO:
+					sph_particles_global_read_fvels(node.global_part_range(), host_fvel.data(), host_f0.data(), offset);
+					break;
+				}
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
 				this_index = index++;
@@ -1654,10 +1689,32 @@ sph_run_return sph_run_workspace::to_gpu(sph_run_params params) {
 	CUDA_CHECK(cudaMalloc(&cuda_data.y, sizeof(fixed32) * host_y.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.z, sizeof(fixed32) * host_z.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
+	switch(params.run_type) {
+	case SPH_RUN_HYDRO:
+		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.ent, sizeof(float) * host_ent.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.fvel, sizeof(float) * host_fvel.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.f0, sizeof(float) * host_f0.size()));
+		break;
+	}
 	CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
+	switch(params.run_type) {
+	case SPH_RUN_HYDRO:
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.ent, host_ent.data(), sizeof(float) * host_ent.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.f0, host_f0.data(), sizeof(float) * host_f0.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fvel, host_fvel.data(), sizeof(float) * host_fvel.size(), cudaMemcpyHostToDevice, stream));
+		break;
+	}
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice, stream));
@@ -1667,8 +1724,25 @@ sph_run_return sph_run_workspace::to_gpu(sph_run_params params) {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
+	cuda_data.dent_snk = &sph_particles_dent(0);
+	cuda_data.dvx_snk = &sph_particles_dvel(XDIM,0);
+	cuda_data.dvy_snk = &sph_particles_dvel(YDIM,0);
+	cuda_data.dvz_snk = &sph_particles_dvel(ZDIM,0);
+	cuda_data.sa_snk = &sph_particles_semi_active(0);
+	cuda_data.m = get_options().sph_mass;
+	cuda_data.divv_snk = &sph_particles_divv(0);
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_end_stream(stream);
+	switch(params.run_type) {
+	case SPH_RUN_HYDRO:
+		CUDA_CHECK(cudaFree(cuda_data.vx));
+		CUDA_CHECK(cudaFree(cuda_data.vy));
+		CUDA_CHECK(cudaFree(cuda_data.vz));
+		CUDA_CHECK(cudaFree(cuda_data.ent));
+		CUDA_CHECK(cudaFree(cuda_data.f0));
+		CUDA_CHECK(cudaFree(cuda_data.fvel));
+		break;
+	}
 	CUDA_CHECK(cudaFree(cuda_data.x));
 	CUDA_CHECK(cudaFree(cuda_data.y));
 	CUDA_CHECK(cudaFree(cuda_data.z));

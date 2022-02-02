@@ -30,12 +30,26 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	float* vx;
+	float* vy;
+	float* vz;
+	float* ent;
+	float* f0;
+	float* fvel;
+	float* h;
 	char* rungs;
 	float* h_snk;
+	float* dent_snk;
+	float* dvx_snk;
+	float* dvy_snk;
+	float* dvz_snk;
+	char* sa_snk;
+	float* divv_snk;
 	int nselfs;
 	sph_tree_node* trees;
 	int* selfs;
 	int* neighbors;
+	float m;
 };
 
 
