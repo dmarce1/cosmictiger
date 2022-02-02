@@ -39,6 +39,14 @@ struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> z;
 };
 
+struct mark_semiactive_workspace {
+	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
+	fixedcapvec<fixed32, WORKSPACE_SIZE> y;
+	fixedcapvec<fixed32, WORKSPACE_SIZE> z;
+	fixedcapvec<float, WORKSPACE_SIZE> h;
+	fixedcapvec<char, WORKSPACE_SIZE> rungs;
+};
+
 struct hydro_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
@@ -275,6 +283,131 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 			atomicAdd(&reduce->flops, (double) flops);
 			atomicMax(&reduce->hmax, hmax);
 			atomicMin(&reduce->hmin, hmin);
+			index = atomicAdd(&reduce->counter, 1);
+		}
+		__syncthreads();
+	}
+
+}
+
+__global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_data data, mark_semiactive_workspace* workspaces, sph_reduction* reduce) {
+	const int tid = threadIdx.x;
+	const int bid = blockIdx.x;
+	const int block_size = blockDim.x;
+	__shared__
+	int index;
+	mark_semiactive_workspace& ws = workspaces[bid];
+	if (tid == 0) {
+		index = atomicAdd(&reduce->counter, 1);
+	}
+	__syncthreads();
+	array<fixed32, NDIM> x;
+	while (index < data.nselfs) {
+		int flops = 0;
+		ws.x.resize(0);
+		ws.y.resize(0);
+		ws.z.resize(0);
+		ws.h.resize(0);
+		ws.rungs.resize(0);
+		const sph_tree_node& self = data.trees[data.selfs[index]];
+		//	PRINT( "%i\n", self.neighbor_range.second - self.neighbor_range.first);
+		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+			//PRINT( "%i\n", -self.neighbor_range.first+self.neighbor_range.second);
+			const sph_tree_node& other = data.trees[data.neighbors[ni]];
+			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+				bool contains = false;
+				int j;
+				int total;
+				float h;
+				int rung;
+				if (pi < other.part_range.second) {
+					h = data.h[pi];
+					rung = data.rungs[pi];
+					if (rung >= params.min_rung) {
+						x[XDIM] = data.x[pi];
+						x[YDIM] = data.y[pi];
+						x[ZDIM] = data.z[pi];
+						if (self.outer_box.contains(x)) {
+							contains = true;
+						}
+						if (!contains) {
+							contains = true;
+							for (int dim = 0; dim < NDIM; dim++) {
+								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+							}
+						}
+					}
+				}
+				j = contains;
+				compute_indices<SMOOTHLEN_BLOCK_SIZE>(j, total);
+				const int offset = ws.x.size();
+				const int next_size = offset + total;
+				ws.x.resize(next_size);
+				ws.y.resize(next_size);
+				ws.z.resize(next_size);
+				ws.h.resize(next_size);
+				ws.rungs.resize(next_size);
+				if (contains) {
+					const int k = offset + j;
+					ws.x[k] = x[XDIM];
+					ws.y[k] = x[YDIM];
+					ws.z[k] = x[ZDIM];
+					ws.h[k] = h;
+					ws.rungs[k] = rung;
+				}
+			}
+		}
+
+		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			const int snki = self.sink_part_range.first - self.part_range.first + i;
+			if (data.rungs[i] >= params.min_rung) {
+				if (tid == 0) {
+					data.sa_snk[snki] = true;
+				}
+			} else {
+				const auto x0 = data.x[i];
+				const auto y0 = data.y[i];
+				const auto z0 = data.z[i];
+				const auto h0 = data.h[i];
+				const auto h02 = sqr(h0);
+				int semiactive = 0;
+				const int jmax = round_up(ws.x.size(), block_size);
+				data.sa_snk[snki] = false;
+				for (int j = tid; j < jmax; j += block_size) {
+					if (j < ws.x.size()) {
+						const auto x1 = ws.x[j];
+						const auto y1 = ws.y[j];
+						const auto z1 = ws.z[j];
+						const auto h1 = ws.h[j];
+						const auto h12 = sqr(h1);
+						const float dx = distance(x0, x1);
+						const float dy = distance(y0, y1);
+						const float dz = distance(z0, z1);
+						const float r2 = sqr(dx, dy, dz);
+						if (r2 < fmaxf(h02, h12)) {
+							semiactive++;
+						}
+					}
+					shared_reduce_add<int>(semiactive);
+					if (semiactive) {
+						if (tid == 0) {
+							data.sa_snk[snki] = true;
+						}
+						break;
+					}
+				}
+			}
+		}
+		shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(flops);
+		if (tid == 0) {
 			index = atomicAdd(&reduce->counter, 1);
 		}
 		__syncthreads();
@@ -987,7 +1120,7 @@ __global__ void sph_cuda_fvels(sph_run_params params, sph_run_cuda_data data, fv
 				if (tid == 0) {
 					data.fvel_snk[snki] = fvel;
 					data.f0_snk[snki] = fpre;
-	//				PRINT( "%e %e\n", fvel, fpre);
+					//				PRINT( "%e %e\n", fvel, fpre);
 				}
 			}
 		}
@@ -1027,6 +1160,20 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.rc = reduce->flag;
 		rc.hmin = reduce->hmin;
 		rc.hmax = reduce->hmax;
+		tm.stop();
+		PRINT("Kernel ran at %e GFLOPS\n", reduce->flops / (1024 * 1024 * 1024) / tm.read());
+	}
+		break;
+	case SPH_RUN_MARK_SEMIACTIVE: {
+		mark_semiactive_workspace* workspaces;
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_mark_semiactive, SMOOTHLEN_BLOCK_SIZE, 0));
+		nblocks *= cuda_smp_count();
+		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(mark_semiactive_workspace) * nblocks));
+		tm.start();
+		sph_cuda_mark_semiactive<<<nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,workspaces,reduce);
+		cuda_stream_synchronize(stream);
+		tm.stop();
+		CUDA_CHECK(cudaFree(workspaces));
 		tm.stop();
 		PRINT("Kernel ran at %e GFLOPS\n", reduce->flops / (1024 * 1024 * 1024) / tm.read());
 	}

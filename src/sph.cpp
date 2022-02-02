@@ -1636,7 +1636,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_FVELS:
+	case SPH_RUN_MARK_SEMIACTIVE:
 		host_h.resize(parts_size);
+		break;
+	}
+	switch (params.run_type) {
+	case SPH_RUN_HYDRO:
+	case SPH_RUN_COURANT:
+	case SPH_RUN_FVELS:
 		host_vx.resize(parts_size);
 		host_vy.resize(parts_size);
 		host_vz.resize(parts_size);
@@ -1676,6 +1683,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 					case SPH_RUN_COURANT:
 					case SPH_RUN_HYDRO:
 					case SPH_RUN_FVELS:
+					case SPH_RUN_MARK_SEMIACTIVE:
 					sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
 					break;
 				}
@@ -1715,7 +1723,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_FVELS:
+	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
+		break;
+	}
+	switch (params.run_type) {
+	case SPH_RUN_HYDRO:
+	case SPH_RUN_COURANT:
+	case SPH_RUN_FVELS:
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
@@ -1740,7 +1755,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_FVELS:
+	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
+		break;
+	}
+	switch (params.run_type) {
+	case SPH_RUN_HYDRO:
+	case SPH_RUN_COURANT:
+	case SPH_RUN_FVELS:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
@@ -1800,8 +1822,15 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_FVELS:
-		CUDA_CHECK(cudaFree(cuda_data.vx));
+	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaFree(cuda_data.h));
+		break;
+	}
+	switch (params.run_type) {
+	case SPH_RUN_HYDRO:
+	case SPH_RUN_COURANT:
+	case SPH_RUN_FVELS:
+		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));
 		CUDA_CHECK(cudaFree(cuda_data.vz));
 		break;
