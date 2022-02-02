@@ -381,7 +381,9 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				const auto h02 = sqr(h0);
 				int semiactive = 0;
 				const int jmax = round_up(ws.x.size(), block_size);
-				data.sa_snk[snki] = false;
+				if (tid == 0) {
+					data.sa_snk[snki] = false;
+				}
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.x.size()) {
 						const auto x1 = ws.x[j];
@@ -394,6 +396,7 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 						const float dz = distance(z0, z1);
 						const float r2 = sqr(dx, dy, dz);
 						if (r2 < fmaxf(h02, h12)) {
+				//			PRINT( "SEMIACTIVE\n");
 							semiactive++;
 						}
 					}
@@ -689,7 +692,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					data.dvx_snk[snki] += ddvx;
 					data.dvy_snk[snki] += ddvy;
 					data.dvz_snk[snki] += ddvz;
-					data.divv_snk[snki] += divv;
+					data.divv_snk[snki] = divv;
 //					PRINT( "%e %e %e %e %e\n", dent, ddvx, ddvy, ddvy, ddvz, divv);
 				}
 			}
