@@ -31,7 +31,7 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 #define WORKSPACE_SIZE (512*SPH_NEIGHBOR_COUNT)
-#define HYDRO_SIZE (20*SPH_NEIGHBOR_COUNT)
+#define HYDRO_SIZE (32*SPH_NEIGHBOR_COUNT)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -912,7 +912,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 					const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
 					max_rung_hydro = max(max_rung_hydro, rung_hydro);
-					max_rung_grav = max(max_rung_hydro, rung_grav);
+					max_rung_grav = max(max_rung_grav, rung_grav);
 					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
 					//			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
 					if (rung < 0 || rung >= MAX_RUNG) {
