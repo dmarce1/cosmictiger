@@ -160,6 +160,7 @@ struct sph_run_return {
 		vol += other.vol;
 		etherm += other.etherm;
 		ent += other.ent;
+		rc = rc || other.rc;
 		return *this;
 	}
 };

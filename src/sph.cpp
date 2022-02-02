@@ -458,11 +458,12 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				if (params.set & SPH_SET_ALL || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+				if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
 					obox.accumulate(X, h);
 				}
 				ibox.accumulate(X);
 			}
+	//		PRINT( "obox %e %e %e\n", obox.begin[0].to_float(), obox.end[0].to_float(), params.h_wt );
 			kr.inner_box = ibox;
 			kr.outer_box = obox;
 			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
@@ -649,11 +650,11 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				X[YDIM] = sph_particles_pos(YDIM, i);
 				X[ZDIM] = sph_particles_pos(ZDIM, i);
 				for (int dim = 0; dim < NDIM; dim++) {
-					if (distance(self_ptr->outer_box.end[dim], X[dim]) + h < 0.0) {
+					if (distance(self_ptr->outer_box.end[dim], X[dim]) - h < 0.0) {
 						box_xceeded = true;
 						break;
 					}
-					if (distance(X[dim], self_ptr->outer_box.begin[dim]) + h < 0.0) {
+					if (distance(X[dim], self_ptr->outer_box.begin[dim]) - h < 0.0) {
 						box_xceeded = true;
 						break;
 					}
@@ -668,9 +669,6 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 			max_cnt = std::max(max_cnt, cnt);
 			max_h = std::max(max_h, h);
 			min_h = std::min(min_h, h);
-		}
-		if (box_xceeded) {
-			break;
 		}
 	}
 	rc.rc = box_xceeded;
@@ -1729,11 +1727,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
-	for( int i = 0; i < host_selflist.size(); i++) {
-		if( host_selflist[i] == 0 ) {
-			PRINT( "Selflist = 0\n");
-		}
-	}
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.dent_snk = &sph_particles_dent(0);
