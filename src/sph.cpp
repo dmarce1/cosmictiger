@@ -1167,7 +1167,8 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const float myp = pow(myrho[0], SPH_GAMMA) * myent;
 #endif
 			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv[0]);
-			const simd_float Prho2i = myp * myrhoinv * myrhoinv * sph_particles_fpre(i);
+			const simd_float myf0 =  sph_particles_fpre(i);
+			const simd_float Prho2i = myp * myrhoinv * myrhoinv * myf0;
 #ifdef SPH_TOTAL_ENERGY
 			const simd_float Pvxrho2i = Prho2i * myvx;
 			const simd_float Pvyrho2i = Prho2i * myvy;
@@ -1297,7 +1298,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float dvxdt = -dpx * m;
 				const simd_float dvydt = -dpy * m;
 				const simd_float dvzdt = -dpz * m;
-				divv -= ainv * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
+				divv -= myf0 * ainv * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
 				simd_float dt;
 				if (phase == 0) {
 					dt = 0.5f * min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
