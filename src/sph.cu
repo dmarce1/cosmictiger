@@ -1215,6 +1215,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.max_vsig = reduce->vsig_max;
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
+		rc.max_rung = std::max(rc.max_rung_hydro,rc.max_rung_grav);
 	}
 		break;
 	case SPH_RUN_FVELS: {
