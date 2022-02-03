@@ -35,9 +35,9 @@ void kernel_output();
 
 #ifdef __CUDACC__
 #ifdef __KERNEL_CU__
-extern __managed__ int kernel_type;
-#else
 __managed__ int kernel_type;
+#else
+extern __managed__ int kernel_type;
 #endif
 #endif
 
@@ -45,7 +45,7 @@ template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
 	T w1, w2, sw, res;
-#ifdef __CUDACC__
+#ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
@@ -73,7 +73,7 @@ template<class T>
 CUDA_EXPORT
 inline T dkernelW_dq(T q) {
 	T w1, w2, sw, res;
-#ifdef __CUDACC__
+#ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
@@ -98,8 +98,8 @@ inline T dkernelW_dq(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T w1, w2, sw, res;
-#ifdef __CUDACC__
+	T w1, w2, sw, res, q3inv;
+#ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
@@ -114,7 +114,9 @@ inline T kernelFqinv(T q) {
 		w2 = fmaf(q, w2, T(192 / 5.0));
 		w2 = fmaf(q, w2, -T(48.0));
 		w2 = fmaf(q, w2, T(64.0 / 3.0));
-		w2 -= T(1.0 / 15.0) / (q * sqr(q));
+		q3inv = T(1) / (q + T(1.0e-10f));
+		q3inv = sqr(q3inv) * q3inv;
+		w2 -= T(1.0 / 15.0) * q3inv;
 		sw = q < T(0.5);
 		res = (sw * w1 + (T(1) - sw) * w2);
 	}
@@ -126,8 +128,8 @@ inline T kernelFqinv(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T w1, w2, sw, res;
-#ifdef __CUDACC__
+	T w1, w2, sw, res, q1inv;
+#ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
@@ -146,7 +148,8 @@ inline T kernelPot(T q) {
 		w2 = fmaf(q, w2, T(-32.0 / 3.0));
 		w2 *= q;
 		w2 = fmaf(q, w2, T(16.0 / 5.0));
-		w2 -= T(1.0 / 15.0) / q;
+		q1inv = T(1) / (q + T(1.0e-15));
+		w2 -= T(1.0 / 15.0) * q1inv;
 		sw = q < T(0.5);
 		res = (sw * w1 + (T(1) - sw) * w2);
 	}

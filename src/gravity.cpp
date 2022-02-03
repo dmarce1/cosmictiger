@@ -24,6 +24,7 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/kernel.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 
@@ -382,23 +383,10 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 								const simd_float rinv1_far = mask * simd_float(1) / (r + tiny);                            // 5
 								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
 								const simd_float q = r * hinv;                                             // 1
-								simd_float rinv3_near = simd_float(21.0f);
-								rinv3_near = fmaf(rinv3_near, q, simd_float(-90.0f));
-								rinv3_near = fmaf(rinv3_near, q, simd_float(140.0f));
-								rinv3_near = fmaf(rinv3_near, q, simd_float(-84.0f));
-								rinv3_near *= rinv3_near;
-								rinv3_near = fmaf(rinv3_near, q, simd_float(14.0f));
-								simd_float rinv1_near = simd_float(0.f);
-								if (min_rung == 0) {
-									rinv1_near = simd_float(-3.0f);
-									rinv1_near = fmaf(rinv1_near, q, simd_float(15.0f));
-									rinv1_near = fmaf(rinv1_near, q, simd_float(-28.0f));
-									rinv1_near = fmaf(rinv1_near, q, simd_float(21.0f));
-									rinv1_near *= q;
-									rinv1_near = fmaf(rinv1_near, q, simd_float(-7.0f));
-									rinv1_near *= q;
-									rinv1_near = fmaf(rinv1_near, q, simd_float(3.0f));
-									rinv1_near *= r2 > simd_float(0);
+								const simd_float rinv3_near = kernelFqinv(q) * hinv3;
+								simd_float rinv1_near;
+								if( min_rung == 0 ) {
+									rinv1_near = kernelPot(q) * hinv;
 								}
 								const auto near_flag = (simd_float(1) - far_flag);                                // 1
 								rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4

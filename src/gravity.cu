@@ -19,6 +19,7 @@
 
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/kernel.hpp>
 
 __device__
 int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist,
@@ -263,7 +264,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					src_z[i1] = main_src_z[i2];
 					if (sph) {
 						src_sph[i1] = main_src_sph[i2];
-						if( vsoft ) {
+						if (vsoft) {
 							src_hsoft[i1] = main_src_hsoft[i2];
 						}
 					}
@@ -314,25 +315,9 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 								h3inv = hinv * sqr(hinv);
 							}
 							const float q = sqrt(r2) * hinv;
-
-							r3inv = +21.0f;
-							r3inv = fmaf(r3inv, q, -90.0f);  // 2
-							r3inv = fmaf(r3inv, q, 140.0f);  // 2
-							r3inv = fmaf(r3inv, q, -84.0f);  // 2
-							r3inv *= q;
-							r3inv = fmaf(r3inv, q, 14.0f);  // 2
-							r3inv *= h3inv;                             // 1
+							r3inv = kernelFqinv(q) * h3inv;
 							if (do_phi) {
-								r1inv = -3.0f;
-								r1inv = fmaf(r1inv, q, 15.0f);  // 2
-								r1inv = fmaf(r1inv, q, -28.0f);  // 2
-								r1inv = fmaf(r1inv, q, 21.0f);  // 2
-								r1inv *= q;
-								r1inv = fmaf(r1inv, q, -7.0f);  // 2
-								r1inv *= q;
-								r1inv = fmaf(r1inv, q, 3.0f);  // 2
-								r1inv *= hinv;                              // 1
-								r1inv *= r2 > 0.0f;
+								r1inv = kernelPot(q) * hinv;
 							}
 							nfar++;
 						}
