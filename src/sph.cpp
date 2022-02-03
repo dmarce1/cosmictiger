@@ -957,9 +957,6 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, const vector<float>& main_f0s, int min_rung, float t0,
 		int phase, float a) {
 	sph_run_return rc;
-	feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
 	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
 	static thread_local vector<simd_int> zs;
@@ -1192,6 +1189,10 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 }
 
 sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase) {
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
+
 	sph_run_return rc;
 	if (phase == 0) {
 		rc.vol = rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = rc.ent = 0.0;

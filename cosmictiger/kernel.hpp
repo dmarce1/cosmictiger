@@ -389,6 +389,7 @@ inline T kernelFqinv(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
+		q = min(q,T(1.1));
 		const T c0 = T(1365.f / 16.f);
 		w = T(16. / 7.);
 		w = fmaf(q, w, T(-231. / 13.));
@@ -552,6 +553,7 @@ inline T kernelPot(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
+		q = min(q,T(1.1));
 		const T c0 = T(1365.f / 16.f);
 		w = T(-16. / 91.);
 		w = fmaf(q, w, T(77. / 52.));
@@ -567,7 +569,8 @@ inline T kernelPot(T q) {
 		w = fmaf(q, w, T(-1. / 6.));
 		w *= q;
 		w = fmaf(q, w, T(7. / 156.));
-		res = c0 * w;
+		res = (q > T(0)) * c0 * w;
+		break;
 	}
 	case KERNEL_DOUBLE_COSINE: {
 		const T c0 = T(-1.0 / ((1.0f - 7.5f / sqr(M_PI))));
