@@ -1852,6 +1852,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaFree(cuda_data.x));
 	CUDA_CHECK(cudaFree(cuda_data.y));
 	CUDA_CHECK(cudaFree(cuda_data.z));
+	CUDA_CHECK(cudaFree(cuda_data.rungs));
 	CUDA_CHECK(cudaFree(cuda_data.trees));
 	CUDA_CHECK(cudaFree(cuda_data.selfs));
 	CUDA_CHECK(cudaFree(cuda_data.neighbors));
