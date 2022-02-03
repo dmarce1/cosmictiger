@@ -670,7 +670,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 			PRINT( "Entropy conversion factor = %e\n", c2ent);
 			PRINT( "Initial entropy in code units = %e\n", entropy);
 		}
-		const float h3 = SPH_NEIGHBOR_COUNT / (4.0/3.0*M_PI) / std::pow(get_options().parts_dim,3);
+		const float h3 = get_options().neighbor_number/ (4.0/3.0*M_PI) / std::pow(get_options().parts_dim,3);
 		const float h = std::pow(h3,1.0/3.0);
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 			local_futs.push_back(hpx::async([box,Ninv,sph,entropy,h](array<int64_t,NDIM> I) {

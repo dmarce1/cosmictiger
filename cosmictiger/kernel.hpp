@@ -32,6 +32,7 @@
 
 void kernel_set_type(int type);
 void kernel_output();
+void kernel_adjust_options(options& opts);
 
 #ifdef __CUDACC__
 #ifdef __KERNEL_CU__
@@ -44,7 +45,7 @@ extern __managed__ int kernel_type;
 template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
-	T w1, w2, sw, res;
+	T w1, w2, w3, sw, res, sw1, sw2, sw3, w;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -65,6 +66,98 @@ inline T kernelW(T q) {
 		res = c0 * (sw * w1 + (T(1) - sw) * w2);
 	}
 		break;
+	case KERNEL_QUARTIC_SPLINE: {
+		const T c0 = T(15625.0f / float(M_PI) / 512.0f);
+		w1 = T(6);
+		w1 *= q;
+		w1 = fmaf(q, w1, -T(12.0f / 5.0f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(46.0f / 125.0f));
+		w2 = -T(4);
+		w2 = fmaf(q, w2, T(8));
+		w2 = fmaf(q, w2, -T(24.0f / 5.f));
+		w2 = fmaf(q, w2, T(8. / 25.));
+		w2 = fmaf(q, w2, T(44. / 125.));
+		w3 = T(1);
+		w3 = fmaf(q, w3, -T(4));
+		w3 = fmaf(q, w3, T(6));
+		w3 = fmaf(q, w3, -T(4));
+		w3 = fmaf(q, w3, T(1));
+		sw1 = q < T(0.2f);
+		sw3 = q > T(0.6f);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+	}
+		break;
+	case KERNEL_QUINTIC_SPLINE: {
+		const T c0 = T(2187.0 / (40.0 * M_PI));
+		w1 = T(-10);
+		w1 = fmaf(q, w1, T(10));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(-20.0f / 9.f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(22.0f / 81.0f));
+		w2 = T(5);
+		w2 = fmaf(q, w2, -T(15));
+		w2 = fmaf(q, w2, T(50. / 3.));
+		w2 = fmaf(q, w2, T(-70. / 9.));
+		w2 = fmaf(q, w2, T(25. / 27.));
+		w2 = fmaf(q, w2, T(17. / 81.));
+		w3 = T(-1);
+		w3 = fmaf(q, w3, T(5));
+		w3 = fmaf(q, w3, T(-10));
+		w3 = fmaf(q, w3, T(10));
+		w3 = fmaf(q, w3, T(-5));
+		w3 = fmaf(q, w3, T(1));
+		sw1 = q < T(1. / 3.);
+		sw3 = q > T(2. / 3.);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+	}
+		break;
+	case KERNEL_WENDLAND_C2: {
+		const T c0 = T(21.f / 2.f / float(M_PI));
+		w = T(4);
+		w = fmaf(q, w, T(-15));
+		w = fmaf(q, w, T(20));
+		w = fmaf(q, w, T(-10));
+		w *= q;
+		w = fmaf(q, w, T(1));
+		res = c0 * w;
+	}
+		break;
+	case KERNEL_WENDLAND_C4: {
+		const T c0 = T(495.f / 32.f / float(M_PI));
+		w = T(35.0f / 3.f);
+		w = fmaf(q, w, T(-64));
+		w = fmaf(q, w, T(140));
+		w = fmaf(q, w, T(-448.f / 3.f));
+		w = fmaf(q, w, T(70));
+		w *= q;
+		w = fmaf(q, w, T(-28.f / 3.f));
+		w *= q;
+		w = fmaf(q, w, T(1));
+		res = c0 * w;
+	}
+		break;
+	case KERNEL_WENDLAND_C6: {
+		const T c0 = T(1365.f / 64.f / float(M_PI));
+		w = T(32);
+		w = fmaf(q, w, T(-231));
+		w = fmaf(q, w, T(704));
+		w = fmaf(q, w, T(-1155));
+		w = fmaf(q, w, T(1056));
+		w = fmaf(q, w, T(-462));
+		w *= q;
+		w = fmaf(q, w, T(66));
+		w *= q;
+		w = fmaf(q, w, T(-11));
+		w *= q;
+		w = fmaf(q, w, T(1));
+		res = c0 * w;
+	}
+		break;
+
 	};
 	return res;
 }
@@ -72,7 +165,7 @@ inline T kernelW(T q) {
 template<class T>
 CUDA_EXPORT
 inline T dkernelW_dq(T q) {
-	T w1, w2, sw, res;
+	T w1, w2, w3, sw, res, sw1, sw2, sw3, w;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -91,6 +184,90 @@ inline T dkernelW_dq(T q) {
 		res = c0 * (sw * w1 + (T(1) - sw) * w2);
 	}
 		break;
+	case KERNEL_QUARTIC_SPLINE: {
+		const T c0 = T(15625.0f / float(M_PI) / 512.0f);
+		w1 = T(24);
+		w1 *= q;
+		w1 = fmaf(q, w1, -T(24.0f / 5.0f));
+		w1 *= q;
+		w2 = -T(16);
+		w2 = fmaf(q, w2, T(24));
+		w2 = fmaf(q, w2, -T(48.0f / 5.f));
+		w2 = fmaf(q, w2, T(8. / 25.));
+		w3 = T(4);
+		w3 = fmaf(q, w3, -T(12));
+		w3 = fmaf(q, w3, T(12));
+		w3 = fmaf(q, w3, -T(4));
+		sw1 = q < T(0.2f);
+		sw3 = q > T(0.6f);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+	}
+		break;
+	case KERNEL_QUINTIC_SPLINE: {
+		const T c0 = T(2187.0 / (40.0 * M_PI));
+		w1 = T(-50);
+		w1 = fmaf(q, w1, T(40));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(-40.0f / 9.f));
+		w1 *= q;
+		w2 = T(25);
+		w2 = fmaf(q, w2, -T(60));
+		w2 = fmaf(q, w2, T(50.));
+		w2 = fmaf(q, w2, T(-140. / 9.));
+		w2 = fmaf(q, w2, T(25. / 27.));
+		w3 = T(-5);
+		w3 = fmaf(q, w3, T(20));
+		w3 = fmaf(q, w3, T(-30));
+		w3 = fmaf(q, w3, T(20));
+		w3 = fmaf(q, w3, T(-5));
+		sw1 = q < T(1. / 3.);
+		sw3 = q > T(2. / 3.);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+	}
+		break;
+
+	case KERNEL_WENDLAND_C2: {
+		const T c0 = T(21.f / 2.f / float(M_PI));
+		w = T(20);
+		w = fmaf(q, w, T(-60));
+		w = fmaf(q, w, T(60));
+		w = fmaf(q, w, T(-20));
+		w *= q;
+		res = c0 * w;
+	}
+		break;
+	case KERNEL_WENDLAND_C4: {
+		const T c0 = T(495.f / 32.f / float(M_PI));
+		w = T(280.0f / 3.f);
+		w = fmaf(q, w, T(-448));
+		w = fmaf(q, w, T(840));
+		w = fmaf(q, w, T(-2240.f / 3.f));
+		w = fmaf(q, w, T(280));
+		w *= q;
+		w = fmaf(q, w, T(-56.f / 3.f));
+		w *= q;
+		res = c0 * w;
+	}
+		break;
+	case KERNEL_WENDLAND_C6: {
+		const T c0 = T(1365.f / 64.f / float(M_PI));
+		w = T(352);
+		w = fmaf(q, w, T(-2310));
+		w = fmaf(q, w, T(6336));
+		w = fmaf(q, w, T(-9240));
+		w = fmaf(q, w, T(7392));
+		w = fmaf(q, w, T(-2772));
+		w *= q;
+		w = fmaf(q, w, T(264));
+		w *= q;
+		w = fmaf(q, w, T(-22));
+		w *= q;
+		res = c0 * w;
+	}
+		break;
+
 	};
 	return res;
 }
@@ -98,7 +275,7 @@ inline T dkernelW_dq(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T w1, w2, sw, res, q3inv;
+	T w1, w2, sw, res, q3inv, w3, sw1, sw2, sw3, w;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -121,6 +298,104 @@ inline T kernelFqinv(T q) {
 		res = (sw * w1 + (T(1) - sw) * w2);
 	}
 		break;
+	case KERNEL_QUARTIC_SPLINE:
+		w1 = T(46875.0f / 448.0f);
+		w1 *= q;
+		w1 = fmaf(q, w1, -T(1875.f / 32.f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(2875.f / 192.f));
+		w2 = -T(15625.0f / 224.0f);
+		w2 = fmaf(q, w2, T(15625.f / 96.f));
+		w2 = fmaf(q, w2, -T(1875.0f / 16.f));
+		w2 = fmaf(q, w2, T(625.f / 64.f));
+		w2 = fmaf(q, w2, T(1375.f / 96.f));
+		q3inv = T(1) / (q + T(1e-10f));
+		q3inv = sqr(q3inv) * q3inv;
+		w2 += T(1.0f / 6720.0f) * q3inv;
+		w3 = T(15625.0f / 896.0f);
+		w3 = fmaf(q, w3, -T(15625.0f / 192.0f));
+		w3 = fmaf(q, w3, T(9375.0f / 64.0f));
+		w3 = fmaf(q, w3, -T(15625.0f / 128.0f));
+		w3 = fmaf(q, w3, T(15625.0f / 384.0f));
+		w3 -= T(437.0f / 2688.0f) * q3inv;
+		sw1 = q < T(0.2f);
+		sw3 = q > T(0.6f);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = (sw1 * w1 + sw2 * w2 + sw3 * w3);
+		break;
+	case KERNEL_QUINTIC_SPLINE: {
+		const T c0 = T(218.7);
+		w1 = T(-5. / 4.);
+		w1 = fmaf(q, w1, T(10. / 7.));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(-4.0f / 9.f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(22.0f / 243.0f));
+		w2 = T(5. / 8.);
+		w2 = fmaf(q, w2, -T(15. / 7.));
+		w2 = fmaf(q, w2, T(25. / 9.));
+		w2 = fmaf(q, w2, T(-14. / 9.));
+		w2 = fmaf(q, w2, T(25. / 108.));
+		w2 = fmaf(q, w2, T(17. / 243.));
+		q3inv = T(1) / (q + T(1e-10));
+		q3inv = sqr(q3inv) * q3inv;
+		w2 += T(5.0 / 367416.0) * q3inv;
+		w3 = T(-1. / 8.);
+		w3 = fmaf(q, w3, T(5. / 7.));
+		w3 = fmaf(q, w3, T(-5. / 3.));
+		w3 = fmaf(q, w3, T(2));
+		w3 = fmaf(q, w3, T(-5. / 4.));
+		w3 = fmaf(q, w3, T(1. / 3.));
+		w3 -= T(169.0 / 122472.0) * q3inv;
+		sw1 = q < T(1. / 3.);
+		sw3 = q > T(2. / 3.);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+	}
+		break;
+
+	case KERNEL_WENDLAND_C2: {
+		w = T(21);
+		w = fmaf(q, w, T(-90));
+		w = fmaf(q, w, T(140));
+		w = fmaf(q, w, T(-84));
+		w *= q;
+		w = fmaf(q, w, T(14));
+		res = w;
+	}
+		break;
+	case KERNEL_WENDLAND_C4: {
+		const T c0 = T(495.f / 8.f);
+		w = T(35.0f / 33.f);
+		w = fmaf(q, w, T(-32.f / 5.f));
+		w = fmaf(q, w, T(140.f / 9.f));
+		w = fmaf(q, w, T(-56.f / 3.f));
+		w = fmaf(q, w, T(10));
+		w *= q;
+		w = fmaf(q, w, T(-28.f / 15.f));
+		w *= q;
+		w = fmaf(q, w, T(1.0f / 3.0f));
+		res = c0 * w;
+	}
+		break;
+	case KERNEL_WENDLAND_C6: {
+		const T c0 = T(1365.f / 16.f);
+		w = T(16./7.);
+		w = fmaf(q, w, T(-231./13.));
+		w = fmaf(q, w, T(176./3.));
+		w = fmaf(q, w, T(-105));
+		w = fmaf(q, w, T(528./5.));
+		w = fmaf(q, w, T(-154./3.));
+		w *= q;
+		w = fmaf(q, w, T(66./7.));
+		w *= q;
+		w = fmaf(q, w, T(-11./5.));
+		w *= q;
+		w = fmaf(q, w, T(1./3.));
+		res = c0 * w;
+	}
+		break;
+
 	};
 	return res;
 }
@@ -128,7 +403,7 @@ inline T kernelFqinv(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T w1, w2, sw, res, q1inv;
+	T w1, w2, sw, res, q1inv, w3, sw1, sw2, sw3, w;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -151,9 +426,122 @@ inline T kernelPot(T q) {
 		q1inv = T(1) / (q + T(1.0e-15));
 		w2 -= T(1.0 / 15.0) * q1inv;
 		sw = q < T(0.5);
-		res = (sw * w1 + (T(1) - sw) * w2);
+		res = (q > T(0.f)) * (sw * w1 + (T(1) - sw) * w2);
 	}
 		break;
+	case KERNEL_QUARTIC_SPLINE:
+		w1 = T(-15625.0f / 896.0f);
+		w1 *= q;
+		w1 = fmaf(q, w1, T(1875.f / 128.f));
+		w1 *= q;
+		w1 = fmaf(q, w1, -T(2875.f / 384.f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(1199.f / 384.f));
+		w2 = T(15625.0f / 1344.0f);
+		w2 = fmaf(q, w2, T(-3125.f / 96.f));
+		w2 = fmaf(q, w2, T(1875.0f / 64.f));
+		w2 = fmaf(q, w2, -T(625.f / 192.f));
+		w2 = fmaf(q, w2, -T(1375.f / 192.f));
+		w2 *= q;
+		w2 = fmaf(q, w2, T(599.f / 192.f));
+		q1inv = T(1) / (q + T(1e-15f));
+		w2 += T(1.0f / 6720.0f) * q1inv;
+		w3 = -T(15625.0f / 5376.0f);
+		w3 = fmaf(q, w3, T(3125.0f / 192.0f));
+		w3 = fmaf(q, w3, -T(9375.0f / 256.0f));
+		w3 = fmaf(q, w3, T(15625.0f / 384.0f));
+		w3 = fmaf(q, w3, -T(15625.0f / 768.0f));
+		w3 *= q;
+		w3 = fmaf(q, w3, T(3125.0f / 768.0f));
+		w3 -= T(437.0f / 2688.0f) * q1inv;
+		sw1 = q < T(0.2f);
+		sw3 = q > T(0.6f);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = (q > T(0)) * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+		break;
+
+	case KERNEL_QUINTIC_SPLINE: {
+		const T c0 = T(218.7);
+		w1 = T(5. / 28.);
+		w1 = fmaf(q, w1, T(-5. / 21.));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(1.0f / 9.f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(-11.0f / 243.0f));
+		w1 *= q;
+		w1 = fmaf(q, w1, T(239. / 15309.));
+		w2 = T(-5. / 56.);
+		w2 = fmaf(q, w2, T(5. / 14.));
+		w2 = fmaf(q, w2, T(-5. / 9.));
+		w2 = fmaf(q, w2, T(7. / 18.));
+		w2 = fmaf(q, w2, T(-25. / 324.));
+		w2 = fmaf(q, w2, T(-17. / 486.));
+		w2 *= q;
+		w2 = fmaf(q, w2, T(473. / 30618.));
+		q1inv = T(1) / (q + T(1e-15));
+		w2 += T(5. / 367416.) * q1inv;
+		w3 = T(1. / 56.);
+		w3 = fmaf(q, w3, T(-5. / 42.));
+		w3 = fmaf(q, w3, T(1. / 3.));
+		w3 = fmaf(q, w3, T(-.5));
+		w3 = fmaf(q, w3, T(5. / 12.));
+		w3 = fmaf(q, w3, T(-1. / 6.));
+		w3 *= q;
+		w3 = fmaf(q, w3, T(1. / 42.));
+		w3 -= T(169. / (122472.)) * q1inv;
+		sw1 = q < T(1. / 3.);
+		sw3 = q > T(2. / 3.);
+		sw2 = (T(1) - sw1) * (T(1) - sw3);
+		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+	}
+		break;
+
+	case KERNEL_WENDLAND_C2: {
+		w = T(-3);
+		w = fmaf(q, w, T(15));
+		w = fmaf(q, w, T(-28));
+		w = fmaf(q, w, T(21));
+		w *= q;
+		w = fmaf(q, w, T(-7));
+		w *= q;
+		w = fmaf(q, w, T(3));
+		res = w;
+	}
+		break;
+	case KERNEL_WENDLAND_C4: {
+		const T c0 = T(495.f / 8.f);
+		w = T(-7.0f / 66.f);
+		w = fmaf(q, w, T(32.f / 45.f));
+		w = fmaf(q, w, T(-35.f / 18.f));
+		w = fmaf(q, w, T(8.f / 3.f));
+		w = fmaf(q, w, T(-5.f / 3.f));
+		w *= q;
+		w = fmaf(q, w, T(7.f / 15.f));
+		w *= q;
+		w = fmaf(q, w, T(-1.0f / 6.0f));
+		w *= q;
+		w = fmaf(q, w, T(1.0f / 18.0f));
+		res = (q > T(0)) * c0 * w;
+	}
+		break;
+	case KERNEL_WENDLAND_C6: {
+		const T c0 = T(1365.f / 16.f);
+		w = T(-16./91.);
+		w = fmaf(q, w, T(77./52.));
+		w = fmaf(q, w, T(-16./3.));
+		w = fmaf(q, w, T(21./2.));
+		w = fmaf(q, w, T(-176./15.));
+		w = fmaf(q, w, T(77./12.));
+		w *= q;
+		w = fmaf(q, w, T(-11./7.));
+		w *= q;
+		w = fmaf(q, w, T(11./20.));
+		w *= q;
+		w = fmaf(q, w, T(-1./6.));
+		w *= q;
+		w = fmaf(q, w, T(7./156.));
+		res = c0 * w;
+	}
 	};
 	return res;
 }

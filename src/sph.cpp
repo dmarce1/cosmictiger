@@ -622,7 +622,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				if (count.sum() > 1.0) {
 					f = f_simd.sum();
 					dfdh = dfdh_simd.sum();
-					f -= SPH_NEIGHBOR_COUNT;
+					f -= get_options().neighbor_number;
 					dh = -f / dfdh;
 					if (dh > 0.5 * h) {
 						dh = 0.5 * h;
@@ -914,7 +914,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			const float sw = 1e-4 * myc[0] / myh[0];
 			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
 			const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-			const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * SPH_NEIGHBOR_COUNT);
+			const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * get_options().neighbor_number);
 			const float pre = 1.0f / (1.0f + c0);
 			sph_particles_fpre(i) = pre;
 			sph_particles_fvel(i) = fvel;
@@ -1211,7 +1211,7 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 				const float A = sph_particles_ent(i);
 				const float rho = sph_den(1.0 / (h * h * h));
 				const float p = A * pow(rho, SPH_GAMMA);
-				const float vol = (4.0 * h * h * h * M_PI / 3.0) / SPH_NEIGHBOR_COUNT;
+				const float vol = (4.0 * h * h * h * M_PI / 3.0) / get_options().neighbor_number;
 				rc.momx += vx * m;
 				rc.momy += vy * m;
 				rc.momz += vz * m;
@@ -1323,6 +1323,8 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 	}
 	static std::atomic<int> next;
 	next = 0;
+	static std::atomic<int> gpu_work;
+	gpu_work = 0;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(
 				hpx::async([proc,nthreads,params,cuda,workspace_ptr]() {
@@ -1360,6 +1362,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 					}
 					if(test) {
 						if( cuda ) {
+							gpu_work++;
 							workspace_ptr->add_work(selfid);
 						} else {
 
@@ -1436,7 +1439,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 	for (auto& f : futs2) {
 		rc += f.get();
 	}
-	if (cuda) {
+	if (cuda && gpu_work) {
 		rc += workspace_ptr->to_gpu();
 	}
 	for (auto& f : futs) {
@@ -1651,6 +1654,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.f0_snk = &sph_particles_fpre(0);
 	cuda_data.ent_snk = &sph_particles_ent(0);
 	cuda_data.m = get_options().sph_mass;
+	cuda_data.N = get_options().neighbor_number;
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
 	auto rc = sph_run_cuda(params, cuda_data, stream);

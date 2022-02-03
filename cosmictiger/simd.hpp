@@ -1,24 +1,21 @@
+/*
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
- /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef SIMD_HPP_
 #define SIMD_HPP_
@@ -151,12 +148,22 @@ inline void erfcexp(const simd_float &x, simd_float *ec, simd_float* ex) {				//
 	*ec = (a1 * t1 + a2 * t2 + a3 * t3 + a4 * t4 + a5 * t5) * *ex; 			// 11
 }
 
+inline simd_float erfc(const simd_float x) {				// 76
+	simd_float ec, ex;
+	erfcexp(x, &ec, &ex);
+	return ec;
+}
+
+inline simd_float erf(const simd_float x) {				// 76
+	return simd_float(1) - erfc(x);
+}
+
 inline simd_float operator*(float r, const simd_float& y) {
 	return y * r;
 }
 
 inline simd_float8 pow(const simd_float8& a, const simd_float8& b) {
-	return exp(log(a)*b);
+	return exp(log(a) * b);
 }
 
 #endif /* SIMD_HPP_ */

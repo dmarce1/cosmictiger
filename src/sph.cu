@@ -31,8 +31,8 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (2048*SPH_NEIGHBOR_COUNT)
-#define HYDRO_SIZE (256*SPH_NEIGHBOR_COUNT)
+#define WORKSPACE_SIZE (2048*128)
+#define HYDRO_SIZE (256*128)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -224,7 +224,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					if (tid == 0) {
 						dh = 0.1f * h;
 						if (count > 1) {
-							f -= SPH_NEIGHBOR_COUNT;
+							f -= data.N;
 							dh = -f / dfdh;
 							if (dh > 0.5f * h) {
 								dh = 0.5f * h;
@@ -499,11 +499,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				}
 			}
 		}
-		if (ws.x0.size() == 0) {
-			if (tid == 0)
-				PRINT("ZERO %i  %i  %i  %i %i\n", data.nselfs, self.neighbor_range.second - self.neighbor_range.first, data.selfs[index],
-						data.neighbors[self.neighbor_range.first], index);
-		}
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			int myrung = data.rungs[i];
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
@@ -521,7 +516,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			}
 			const float m = data.m;
 			const float minv = 1.f / m;
-			const float c0 = float(3.0f / 4.0f / M_PI * SPH_NEIGHBOR_COUNT);
+			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 			const float c0inv = 1.0f / c0;
 			if (use) {
 				const auto myx = data.x[i];
@@ -618,7 +613,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				float ddvz = 0.f;
 				//			float ddivvdt = 0.f;
 				const float ainv = 1.0f / params.a;
-				if (ws.x.size() > 8 * SPH_NEIGHBOR_COUNT) {
+				if (ws.x.size() > 8 * data.N) {
 					//		PRINT( "%i\n", ws.x.size());
 				}
 				for (int j = tid; j < ws.x.size(); j += block_size) {
@@ -814,7 +809,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 			}
 			const float m = data.m;
 			const float minv = 1.f / m;
-			const float c0 = float(3.0f / 4.0f / M_PI * SPH_NEIGHBOR_COUNT);
+			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 			const float c0inv = 1.0f / c0;
 			if (use) {
 				const auto myx = data.x[i];
@@ -946,7 +941,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float abs_div_v = fabsf(div_v);
 					const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-					const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * SPH_NEIGHBOR_COUNT);
+					const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
 					const float fpre = 1.0f / (1.0f + c0);
 					data.fvel_snk[snki] = fvel;
 					data.f0_snk[snki] = fpre;

@@ -98,7 +98,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						h *= c0;
 					}
 					const float h3 = sqr(h)*h;
-					const float vol = (4.0*M_PI/3.0) * h3 / SPH_NEIGHBOR_COUNT;
+					const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
 					const float rho = sph_den(1./h3);
 #ifdef SPH_TOTAL_ENERGY
 					const float ekin = 0.5f * mass * sqr(vx,vy,vz);

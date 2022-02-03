@@ -106,7 +106,7 @@ bool process_options(int argc, char *argv[]) {
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
-	("neighbor_number", po::value<int>(&(opts.neighbor_number))->default_value(0), "neighbor number") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(0), "kernel type") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
@@ -115,7 +115,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.15), "CFL condition") //
-		("eta", po::value<double>(&(opts.eta))->default_value(0.15), "time-step criterion (default=0.2)") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.155), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -155,7 +155,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
-	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
+	opts.hsoft = 1.0 / 30.0 / opts.parts_dim;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
@@ -186,12 +186,12 @@ bool process_options(int argc, char *argv[]) {
 	opts.do_groups = true;
 #endif
 
-	if( opts.sph ) {
+	if (opts.sph) {
 		const double omega_inv = 1.0 / (opts.omega_m);
 		opts.dm_mass = opts.omega_c * omega_inv;
 		opts.sph_mass = opts.omega_b * omega_inv;
-	//	opts.sph_mass = 1.0;
-	//	opts.dm_mass = 0.0;
+		//	opts.sph_mass = 1.0;
+		//	opts.dm_mass = 0.0;
 	}
 	SHOW(check_freq);
 	SHOW(code_to_cm);
@@ -254,9 +254,12 @@ bool process_options(int argc, char *argv[]) {
 	}
 #endif
 
+	kernel_set_type(opts.kernel);
+	set_options(opts);
+	kernel_adjust_options(opts);
 	set_options(opts);
 
-	kernel_set_type(opts.kernel);
+
 	kernel_output();
 	return rc;
 }

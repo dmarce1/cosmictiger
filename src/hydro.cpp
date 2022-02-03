@@ -110,7 +110,7 @@ void hydro_sod_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double ent = p1 / pow(rho1, SPH_GAMMA);
-				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -135,7 +135,7 @@ void hydro_sod_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double ent = p0 / pow(rho0, SPH_GAMMA);
-				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -185,7 +185,7 @@ void hydro_helmholtz_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double ent = p1 / pow(rho1, SPH_GAMMA);
-				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -210,7 +210,7 @@ void hydro_helmholtz_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double ent = p0 / pow(rho0, SPH_GAMMA);
-				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -250,7 +250,7 @@ void hydro_blast_test() {
 				double z = (iz + 0.5) * dx;
 				const bool center = ix == ndim / 2 && iy == ndim / 2 && iz == ndim / 2;
 				double ent = center ? p1 : p0 / pow(rho, SPH_GAMMA);
-				double h = pow(m * SPH_NEIGHBOR_COUNT / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 			//	PRINT( "%e\n", h);
 				sph_particles_smooth_len (i) = h;

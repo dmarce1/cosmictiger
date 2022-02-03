@@ -37,7 +37,6 @@ struct options {
 	bool vsoft;
 	int tracer_count;
 	int kernel;
-	int neighbor_number;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
@@ -51,6 +50,7 @@ struct options {
 	int nsteps;
 	double lc_b;
 	double slice_size;
+	double neighbor_number;
 	double link_len;
 	double hsoft;
 	double GM;
