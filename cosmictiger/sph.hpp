@@ -187,7 +187,6 @@ struct sph_run_params {
 #define SPH_RUN_MARK_SEMIACTIVE 1
 #define SPH_RUN_COURANT 2
 #define SPH_RUN_GRAVITY 3
-#define SPH_RUN_FVELS 4
 #define SPH_RUN_HYDRO 5
 #define SPH_RUN_UPDATE 6
 #define SPH_RUN_RUNGS 7

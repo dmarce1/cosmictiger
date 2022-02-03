@@ -227,7 +227,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(f);
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(count);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dfdh);
-					float c2 = f;
 					if (tid == 0) {
 						dh = 0.1f * h;
 						if (count > 1) {
@@ -264,7 +263,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						}
 					}
 					iter++;
-				//	if( tid == 0 ) PRINT("%i %e %e %e\n", count, c2, h, dh);
+					//	if( tid == 0 ) PRINT("%i %e %e %e\n", count, c2, h, dh);
 					if (iter > 100) {
 						if (tid == 0) {
 							PRINT("density solver failed to converge %i\n", ws.x.size());
@@ -887,8 +886,16 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					}
 				}
 				float vsig_max = 0.f;
-				float one = 0.f;
-				int count = 0;
+				float dvx_dx = 0.0f;
+				float dvx_dy = 0.0f;
+				float dvx_dz = 0.0f;
+				float dvy_dx = 0.0f;
+				float dvy_dy = 0.0f;
+				float dvy_dz = 0.0f;
+				float dvz_dx = 0.0f;
+				float dvz_dy = 0.0f;
+				float dvz_dz = 0.0f;
+				float drho_dh = 0.f;
 				for (int j = tid; j < ws.x.size(); j += block_size) {
 					constexpr float gamma = SPH_GAMMA;
 					const float dx = distance(myx, ws.x[j]);
@@ -901,7 +908,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float h3inv = hinv * sqr(hinv);
 					const float rho = m * c0 * h3inv;
 					const float rhoinv = minv * c0inv * h3;
-					one += m * rhoinv * sph_W(sqrt(r2), myhinv, myh3inv);
 					const float p = ws.ent[j] * powf(rho, gamma);
 					const float c = sqrtf(gamma * p * rhoinv);
 					const float dvx = myvx - ws.vx[j];
@@ -911,16 +917,42 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float dv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
 					const float this_vsig = myc + c - 3.f * dv;
 					vsig_max = fmaxf(vsig_max, this_vsig);
-					count++;
+					const float r = sqrt(r2);
+					const float dWdr = sph_dWdr_rinv(r, myhinv, myh3inv);
+					const float tmp = m * dWdr * rhoinv;
+					const float dWdr_x = dx * tmp;
+					const float dWdr_y = dy * tmp;
+					const float dWdr_z = dz * tmp;
+					dvx_dx -= dvx * dWdr_x;
+					dvx_dy -= dvx * dWdr_y;
+					dvx_dz -= dvx * dWdr_z;
+					dvy_dx -= dvy * dWdr_x;
+					dvy_dy -= dvy * dWdr_y;
+					dvy_dz -= dvy * dWdr_z;
+					dvz_dx -= dvz * dWdr_x;
+					dvz_dy -= dvz * dWdr_y;
+					dvz_dz -= dvz * dWdr_z;
+					drho_dh += sph_h4dWdh(r, myhinv);
 
 				}
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
-				shared_reduce_add<int, HYDRO_BLOCK_SIZE>(count);
-				if (tid == 0) {
-//								PRINT( "%e %e %i %e \n", one, myh, count, m);
-				}
+				float div_v = dvx_dx + dvy_dy + dvz_dz;
+				float curl_vx = dvz_dy - dvy_dz;
+				float curl_vy = -dvz_dx + dvx_dz;
+				float curl_vz = dvy_dx - dvx_dy;
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max);
 				if (tid == 0) {
+					const float sw = 1e-4f * myc / myh;
+					const float abs_div_v = fabsf(div_v);
+					const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
+					const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
+					const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * SPH_NEIGHBOR_COUNT);
+					const float fpre = 1.0f / (1.0f + c0);
+					data.fvel_snk[snki] = fvel;
+					data.f0_snk[snki] = fpre;
 					total_vsig_max = fmaxf(total_vsig_max, vsig_max);
 					float dthydro = vsig_max / (params.a * myh);
 					if (dthydro > 1.0e-99) {
@@ -942,11 +974,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					max_rung_grav = max(max_rung_grav, rung_grav);
 					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
 					max_rung = max(max_rung, rung);
-					//			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
 					if (rung < 0 || rung >= MAX_RUNG) {
 						PRINT("Rung out of range \n");
 					}
-
 				}
 			}
 		}
@@ -962,215 +992,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		atomicMax(&reduce->max_rung, max_rung);
 		atomicMax(&reduce->max_rung_hydro, max_rung_hydro);
 		atomicMax(&reduce->max_rung_grav, max_rung_grav);
-	}
-}
-
-__global__ void sph_cuda_fvels(sph_run_params params, sph_run_cuda_data data, fvels_workspace* workspaces, sph_reduction* reduce) {
-	const int tid = threadIdx.x;
-	const int bid = blockIdx.x;
-	const int block_size = blockDim.x;
-	__shared__
-	int index;
-	fvels_workspace& ws = workspaces[bid];
-	if (tid == 0) {
-		index = atomicAdd(&reduce->counter, 1);
-	}
-	__syncthreads();
-	array<fixed32, NDIM> x;
-
-	while (index < data.nselfs) {
-		int flops = 0;
-		ws.x0.resize(0);
-		ws.y0.resize(0);
-		ws.z0.resize(0);
-		ws.vx0.resize(0);
-		ws.vy0.resize(0);
-		ws.vz0.resize(0);
-		ws.h0.resize(0);
-		const sph_tree_node& self = data.trees[data.selfs[index]];
-		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
-			const sph_tree_node& other = data.trees[data.neighbors[ni]];
-			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
-			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
-				bool contains = false;
-				int j;
-				int total;
-				if (pi < other.part_range.second) {
-					x[XDIM] = data.x[pi];
-					x[YDIM] = data.y[pi];
-					x[ZDIM] = data.z[pi];
-					if (self.outer_box.contains(x)) {
-						contains = true;
-					}
-				}
-				j = contains;
-				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-				const int offset = ws.x0.size();
-				const int next_size = offset + total;
-				ws.x0.resize(next_size);
-				ws.y0.resize(next_size);
-				ws.z0.resize(next_size);
-				ws.vx0.resize(next_size);
-				ws.vy0.resize(next_size);
-				ws.vz0.resize(next_size);
-				ws.h0.resize(next_size);
-				if (contains) {
-					const int k = offset + j;
-					ws.x0[k] = x[XDIM];
-					ws.y0[k] = x[YDIM];
-					ws.z0[k] = x[ZDIM];
-					ws.vx0[k] = data.vx[pi];
-					ws.vy0[k] = data.vy[pi];
-					ws.vz0[k] = data.vz[pi];
-					ws.h0[k] = data.h[pi];
-				}
-			}
-		}
-		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-
-			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			int myrung = data.rungs[i];
-			bool use = myrung >= params.min_rung;
-			const float m = data.m;
-			const float minv = 1.f / m;
-			const float c0 = float(3.0f / 4.0f / M_PI * SPH_NEIGHBOR_COUNT);
-			const float c0inv = 1.0f / c0;
-			if (use) {
-				const auto myx = data.x[i];
-				const auto myy = data.y[i];
-				const auto myz = data.z[i];
-				const auto myvx = data.vx[i];
-				const auto myvy = data.vy[i];
-				const auto myvz = data.vz[i];
-				const float myh = data.h[i];
-				const float myh2 = sqr(myh);
-				const float myhinv = 1.f / myh;
-				const float myh3inv = 1.f / (sqr(myh) * myh);
-				const float myrho = m * c0 * myh3inv;
-				const float myrhoinv = minv * c0inv * sqr(myh) * myh;
-				const float myp = data.ent_snk[snki] * powf(myrho, SPH_GAMMA);
-				const float myc = sqrtf(SPH_GAMMA * myp * myrhoinv);
-				const int jmax = round_up(ws.x0.size(), block_size);
-				ws.x.resize(0);
-				ws.y.resize(0);
-				ws.z.resize(0);
-				ws.vx.resize(0);
-				ws.vy.resize(0);
-				ws.vz.resize(0);
-				ws.h.resize(0);
-				for (int j = tid; j < jmax; j += block_size) {
-					bool flag = false;
-					int k;
-					int total;
-					if (j < ws.x0.size()) {
-						const auto x = ws.x0[j];
-						const auto y = ws.y0[j];
-						const auto z = ws.z0[j];
-						const float h = ws.h0[j];
-						const float dx = distance(x, myx);
-						const float dy = distance(y, myy);
-						const float dz = distance(z, myz);
-						const float r2 = sqr(dx, dy, dz);
-						if (r2 < myh2) {
-							flag = true;
-						}
-					}
-					k = flag;
-
-					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-					const int offset = ws.x.size();
-					const int next_size = offset + total;
-					ws.x.resize(next_size);
-					ws.y.resize(next_size);
-					ws.z.resize(next_size);
-					ws.vx.resize(next_size);
-					ws.vy.resize(next_size);
-					ws.vz.resize(next_size);
-					ws.h.resize(next_size);
-					if (flag) {
-						const int l = offset + k;
-						ws.x[l] = ws.x0[j];
-						ws.y[l] = ws.y0[j];
-						ws.z[l] = ws.z0[j];
-						ws.vx[l] = ws.vx0[j];
-						ws.vy[l] = ws.vy0[j];
-						ws.vz[l] = ws.vz0[j];
-						ws.h[l] = ws.h0[j];
-					}
-				}
-				float dvx_dx = 0.0f;
-				float dvx_dy = 0.0f;
-				float dvx_dz = 0.0f;
-				float dvy_dx = 0.0f;
-				float dvy_dy = 0.0f;
-				float dvy_dz = 0.0f;
-				float dvz_dx = 0.0f;
-				float dvz_dy = 0.0f;
-				float dvz_dz = 0.0f;
-				float drho_dh = 0.f;
-				for (int j = tid; j < ws.x.size(); j += block_size) {
-					const float dx = distance(myx, ws.x[j]);
-					const float dy = distance(myy, ws.y[j]);
-					const float dz = distance(myz, ws.z[j]);
-					const float h = ws.h[j];
-					const float h3 = sqr(h) * h;
-					const float r2 = sqr(dx, dy, dz);
-					if (r2 != 0.f) {
-						const float hinv = 1. / h;
-						const float h3inv = hinv * sqr(hinv);
-						const float rho = m * c0 * h3inv;
-						const float rhoinv = minv * c0inv * h3;
-						const float vx = ws.vx[j];
-						const float vy = ws.vy[j];
-						const float vz = ws.vz[j];
-						const float r = sqrt(r2);
-						const float dWdr = sph_dWdr_rinv(r, myhinv, myh3inv);
-						const float tmp = m * dWdr * rhoinv;
-						const float dWdr_x = dx * tmp;
-						const float dWdr_y = dy * tmp;
-						const float dWdr_z = dz * tmp;
-						const float dvx = vx - myvx;
-						const float dvy = vy - myvy;
-						const float dvz = vz - myvz;
-						dvx_dx += dvx * dWdr_x;
-						dvx_dy += dvx * dWdr_y;
-						dvx_dz += dvx * dWdr_z;
-						dvy_dx += dvy * dWdr_x;
-						dvy_dy += dvy * dWdr_y;
-						dvy_dz += dvy * dWdr_z;
-						dvz_dx += dvz * dWdr_x;
-						dvz_dy += dvz * dWdr_y;
-						dvz_dz += dvz * dWdr_z;
-						drho_dh += sph_h4dWdh(r, myhinv);
-					}
-				}
-				float div_v = dvx_dx + dvy_dy + dvz_dz;
-				float curl_vx = dvz_dy - dvy_dz;
-				float curl_vy = -dvz_dx + dvx_dz;
-				float curl_vz = dvy_dx - dvx_dy;
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
-				const float sw = 1e-4f * myc / myh;
-				const float abs_div_v = fabsf(div_v);
-				const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
-				const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-				const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * SPH_NEIGHBOR_COUNT);
-				const float fpre = 1.0f / (1.0f + c0);
-				if (tid == 0) {
-					data.fvel_snk[snki] = fvel;
-					data.f0_snk[snki] = fpre;
-					//				PRINT( "%e %e\n", fvel, fpre);
-				}
-			}
-		}
-		shared_reduce_add<int, HYDRO_BLOCK_SIZE>(flops);
-		if (tid == 0) {
-			atomicAdd(&reduce->flops, (double) flops);
-			index = atomicAdd(&reduce->counter, 1);
-		}
-		__syncthreads();
 	}
 }
 
@@ -1247,18 +1068,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.max_rung_hydro = reduce->max_rung_hydro;
 		rc.max_rung = reduce->max_rung;
 	}
-		break;
-	case SPH_RUN_FVELS: {
-		fvels_workspace* workspaces;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_fvels, HYDRO_BLOCK_SIZE, 0));
-		nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(fvels_workspace) * nblocks));
-		sph_cuda_fvels<<<nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,workspaces,reduce);
-		cuda_stream_synchronize(stream);
-		CUDA_CHECK(cudaFree(workspaces));
-
-	}
-		break;
 	}
 	CUDA_CHECK(cudaFree(reduce));
 

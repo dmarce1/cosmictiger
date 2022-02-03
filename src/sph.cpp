@@ -850,6 +850,16 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			static const simd_float one(1.0f);
 			static const simd_float zero(0.0f);
 			static const simd_float half(0.5f);
+			simd_float dvx_dx = 0.0f;
+			simd_float dvx_dy = 0.0f;
+			simd_float dvx_dz = 0.0f;
+			simd_float dvy_dx = 0.0f;
+			simd_float dvy_dy = 0.0f;
+			simd_float dvy_dz = 0.0f;
+			simd_float dvz_dx = 0.0f;
+			simd_float dvz_dy = 0.0f;
+			simd_float dvz_dz = 0.0f;
+			simd_float drho_dh = 0.f;
 			simd_float max_vsig(zero);
 			simd_float vsig(0.f);
 			for (int j = 0; j < xs.size(); j++) {
@@ -878,7 +888,42 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
 				const simd_float this_vsig = (c + myc + simd_float(3) * max(-dv, simd_float(0))) * masks[j];
 				max_vsig = max(max_vsig, this_vsig);
+				const simd_float dWdr = sph_dWdr_rinv(r, myhinv, myh3inv);
+				const simd_float tmp = m * dWdr * rhoinv * masks[j];
+				const simd_float dWdr_x = dx * tmp;
+				const simd_float dWdr_y = dy * tmp;
+				const simd_float dWdr_z = dz * tmp;
+				dvx_dx -= dvx * dWdr_x;
+				dvx_dy -= dvx * dWdr_y;
+				dvx_dz -= dvx * dWdr_z;
+				dvy_dx -= dvy * dWdr_x;
+				dvy_dy -= dvy * dWdr_y;
+				dvy_dz -= dvy * dWdr_z;
+				dvz_dx -= dvz * dWdr_x;
+				dvz_dy -= dvz * dWdr_y;
+				dvz_dz -= dvz * dWdr_z;
+				drho_dh += sph_h4dWdh(r, myhinv) * masks[j];
 			}
+			const float dvx_dx_sum = dvx_dx.sum();
+			const float dvx_dy_sum = dvx_dy.sum();
+			const float dvx_dz_sum = dvx_dz.sum();
+			const float dvy_dx_sum = dvy_dx.sum();
+			const float dvy_dy_sum = dvy_dy.sum();
+			const float dvy_dz_sum = dvy_dz.sum();
+			const float dvz_dx_sum = dvz_dx.sum();
+			const float dvz_dy_sum = dvz_dy.sum();
+			const float dvz_dz_sum = dvz_dz.sum();
+			const float abs_div_v = fabs(dvx_dx_sum + dvy_dy_sum + dvz_dz_sum);
+			const float curl_vx = dvz_dy_sum - dvy_dz_sum;
+			const float curl_vy = -dvz_dx_sum + dvx_dz_sum;
+			const float curl_vz = dvy_dx_sum - dvx_dy_sum;
+			const float sw = 1e-4 * myc[0] / myh[0];
+			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
+			const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
+			const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * SPH_NEIGHBOR_COUNT);
+			const float pre = 1.0f / (1.0f + c0);
+			sph_particles_fpre(i) = pre;
+			sph_particles_fvel(i) = fvel;
 			const float vsig_max = max_vsig.max();
 			rc.max_vsig = vsig_max;
 			float dthydro = rc.max_vsig / (ascale * myh[0]);
@@ -908,183 +953,6 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			rc.max_rung_grav = std::max(rc.max_rung_grav, (int) rung_grav);
 			rc.max_rung = std::max(rc.max_rung, (int) rung);
 
-		}
-	}
-	return rc;
-}
-
-sph_run_return sph_fvels(const sph_tree_node* self_ptr, const vector<fixed32>& main_xs, const vector<fixed32>& main_ys, const vector<fixed32>& main_zs,
-		const vector<float>& main_hs, const vector<float>& main_vxs, const vector<float>& main_vys, const vector<float>& main_vzs, int min_rung) {
-	sph_run_return rc;
-	static thread_local vector<simd_int> xs;
-	static thread_local vector<simd_int> ys;
-	static thread_local vector<simd_int> zs;
-	static thread_local vector<simd_float> hs;
-	static thread_local vector<simd_float> vxs;
-	static thread_local vector<simd_float> vys;
-	static thread_local vector<simd_float> vzs;
-	static thread_local vector<simd_float> masks;
-	const auto rung2dt = [](simd_int rung) {
-		simd_float dt;
-		for( int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-			dt[k] = rung_dt[rung[k]];
-		}
-		return dt;
-	};
-	const simd_float m = get_options().sph_mass;
-	const simd_float minv = 1.f / get_options().sph_mass;
-	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		if (sph_particles_rung(i) >= min_rung) {
-			xs.resize(0);
-			ys.resize(0);
-			zs.resize(0);
-			hs.resize(0);
-			vxs.resize(0);
-			vys.resize(0);
-			vzs.resize(0);
-			masks.resize(0);
-			int base = -1;
-			int offset = SIMD_FLOAT_SIZE;
-			static const simd_float _2float(fixed2float);
-			const simd_int myx = sph_particles_pos(XDIM, i).raw();
-			const simd_int myy = sph_particles_pos(YDIM, i).raw();
-			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
-			const simd_float myvx = sph_particles_vel(XDIM, i);
-			const simd_float myvy = sph_particles_vel(YDIM, i);
-			const simd_float myvz = sph_particles_vel(ZDIM, i);
-			const simd_float myh = sph_particles_smooth_len(i);
-			const simd_float myh2 = sqr(myh);
-			const simd_float myhinv = 1.f / myh[0];
-			const simd_float myh3inv = myhinv * sqr(myhinv);
-			const float myrho = sph_den(myh3inv[0]);
-			const float myrhoinv = 1.f / myrho;
-#ifdef SPH_TOTAL_ENERGY
-			const float myekin = sqr(myvx[0], myvy[0], myvz[0]) * 0.5f * m[0];
-			const float etherm = std::max(0.f, sph_particles_ent(i) - myekin);
-			const float myp = myrho * minv[0] * etherm * (SPH_GAMMA - 1.0);
-#else
-			const float myent = sph_particles_ent(i);
-			const float myp = pow(myrho, SPH_GAMMA) * myent;
-#endif
-			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv);
-//			PRINT( "%i\n", main_xs.size());
-			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
-				simd_int x, y, z;
-				simd_float mask, h;
-				const int maxj = std::min((int) main_xs.size(), j + SIMD_FLOAT_SIZE);
-				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
-					const int kmj = k - j;
-					if (k < main_xs.size()) {
-						x[kmj] = main_xs[k].raw();
-						y[kmj] = main_ys[k].raw();
-						z[kmj] = main_zs[k].raw();
-						h[kmj] = main_hs[k];
-						mask[kmj] = 1.0f;
-					} else {
-						h[kmj] = 1.0f;
-						x[kmj] = y[kmj] = z[kmj] = mask[kmj] = 0.0f;
-					}
-				}
-				const simd_float dx = simd_float(myx - x) * _2float;
-				const simd_float dy = simd_float(myy - y) * _2float;
-				const simd_float dz = simd_float(myz - z) * _2float;
-				const simd_float r2 = sqr(dx, dy, dz);
-				mask *= (simd_float(r2 < myh2));
-				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-					if (mask[k] > 0.0) {
-						if (offset == SIMD_FLOAT_SIZE) {
-							xs.push_back(myx);
-							ys.push_back(myy);
-							zs.push_back(myz);
-							hs.push_back(simd_float(1.0));
-							vxs.push_back(simd_float(0.0));
-							vys.push_back(simd_float(0.0));
-							vzs.push_back(simd_float(0.0));
-							masks.push_back(simd_float(0.0));
-							base++;
-							offset = 0;
-						}
-						const int jpk = j + k;
-						xs.back()[offset] = main_xs[jpk].raw();
-						ys.back()[offset] = main_ys[jpk].raw();
-						zs.back()[offset] = main_zs[jpk].raw();
-						hs.back()[offset] = main_hs[jpk];
-						vxs.back()[offset] = main_vxs[jpk];
-						vys.back()[offset] = main_vys[jpk];
-						vzs.back()[offset] = main_vzs[jpk];
-						masks.back()[offset] = 1.0f;
-						offset++;
-					}
-				}
-			}
-			static const simd_float one(1.0f);
-			simd_float dvx_dx = 0.0f;
-			simd_float dvx_dy = 0.0f;
-			simd_float dvx_dz = 0.0f;
-			simd_float dvy_dx = 0.0f;
-			simd_float dvy_dy = 0.0f;
-			simd_float dvy_dz = 0.0f;
-			simd_float dvz_dx = 0.0f;
-			simd_float dvz_dy = 0.0f;
-			simd_float dvz_dz = 0.0f;
-			static const simd_float tiny = simd_float(1e-15);
-			simd_float drho_dh = 0.f;
-			for (int j = 0; j < xs.size(); j++) {
-				const simd_float dx = simd_float(myx - xs[j]) * _2float;
-				const simd_float dy = simd_float(myy - ys[j]) * _2float;
-				const simd_float dz = simd_float(myz - zs[j]) * _2float;
-				const simd_float r2 = sqr(dx, dy, dz);
-				const simd_float r = sqrt(r2);
-				const simd_float rinv = one / (r + tiny);
-				const simd_float hinv = one / (hs[j]);
-				const simd_float hinv3 = sqr(hinv) * hinv;
-				const simd_float rho = sph_den(hinv3);
-				const simd_float rhoinv = one / rho;
-				const simd_float dWdr = sph_dWdr_rinv(r, myhinv, myh3inv);
-				const simd_float tmp = m * dWdr * rhoinv * masks[j];
-				const simd_float dWdr_x = dx * tmp;
-				const simd_float dWdr_y = dy * tmp;
-				const simd_float dWdr_z = dz * tmp;
-				const simd_float dvx = vxs[j] - myvx;
-				const simd_float dvy = vys[j] - myvy;
-				const simd_float dvz = vzs[j] - myvz;
-				dvx_dx += dvx * dWdr_x * masks[j];
-				dvx_dy += dvx * dWdr_y * masks[j];
-				dvx_dz += dvx * dWdr_z * masks[j];
-				dvy_dx += dvy * dWdr_x * masks[j];
-				dvy_dy += dvy * dWdr_y * masks[j];
-				dvy_dz += dvy * dWdr_z * masks[j];
-				dvz_dx += dvz * dWdr_x * masks[j];
-				dvz_dy += dvz * dWdr_y * masks[j];
-				dvz_dz += dvz * dWdr_z * masks[j];
-				drho_dh += sph_h4dWdh(r, myhinv) * masks[j];
-			}
-			const float dvx_dx_sum = dvx_dx.sum();
-			const float dvx_dy_sum = dvx_dy.sum();
-			const float dvx_dz_sum = dvx_dz.sum();
-			const float dvy_dx_sum = dvy_dx.sum();
-			const float dvy_dy_sum = dvy_dy.sum();
-			const float dvy_dz_sum = dvy_dz.sum();
-			const float dvz_dx_sum = dvz_dx.sum();
-			const float dvz_dy_sum = dvz_dy.sum();
-			const float dvz_dz_sum = dvz_dz.sum();
-			const float abs_div_v = fabs(dvx_dx_sum + dvy_dy_sum + dvz_dz_sum);
-			const float curl_vx = dvz_dy_sum - dvy_dz_sum;
-			const float curl_vy = -dvz_dx_sum + dvx_dz_sum;
-			const float curl_vz = dvy_dx_sum - dvx_dy_sum;
-			const float sw = 1e-4 * myc[0] / myh[0];
-			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
-			const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-			const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * SPH_NEIGHBOR_COUNT);
-			const float pre = 1.0f / (1.0f + c0);
-			sph_particles_fpre(i) = pre;
-			//PRINT( "%e\n",pre);
-			//		PRINT( "%e\n", fvel);
-			//	if( std::isnan(fvel)) {
-			//		PRINT( "%e %e %i\n", abs_curl_v, abs_div_v, xs.size());
-			//	}
-			sph_particles_fvel(i) = fvel;
-			//		PRINT( "%e\n", fvel);
 		}
 	}
 	return rc;
@@ -1479,7 +1347,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_HYDRO:
-							case SPH_RUN_FVELS:
 							case SPH_RUN_MARK_SEMIACTIVE:
 							test = (self->nactive > 0);
 							if( !test && params.phase == 0) {
@@ -1506,7 +1373,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 								case SPH_RUN_MARK_SEMIACTIVE:
 //								case SPH_RUN_RUNGS:
 								case SPH_RUN_COURANT:
-								case SPH_RUN_FVELS:
 								case SPH_RUN_HYDRO:
 								for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
 									const auto id = sph_tree_get_neighbor(i);
@@ -1533,9 +1399,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 								case SPH_RUN_COURANT:
 								load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
 								break;
-								case SPH_RUN_FVELS:
-								load_data<false, true, false, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-								break;
 								case SPH_RUN_HYDRO:
 								load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
 								break;
@@ -1553,9 +1416,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 								break;
 								case SPH_RUN_COURANT:
 								this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
-								break;
-								case SPH_RUN_FVELS:
-								this_rc = sph_fvels(self, data.xs, data.ys, data.zs, data.hs, data.vxs, data.vys, data.vzs, params.min_rung);
 								break;
 								case SPH_RUN_HYDRO:
 								this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
@@ -1637,7 +1497,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		host_h.resize(parts_size);
 		break;
@@ -1645,7 +1504,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 		host_vx.resize(parts_size);
 		host_vy.resize(parts_size);
 		host_vz.resize(parts_size);
@@ -1684,7 +1542,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 					break;
 					case SPH_RUN_COURANT:
 					case SPH_RUN_HYDRO:
-					case SPH_RUN_FVELS:
 					case SPH_RUN_MARK_SEMIACTIVE:
 					sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
 					break;
@@ -1694,8 +1551,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 					case SPH_RUN_COURANT:
 					sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 					break;
-					case SPH_RUN_FVELS:
-					sph_particles_global_read_sph(node.global_part_range(), nullptr, host_vx.data(), host_vy.data(), host_vz.data(), offset);
 					break;
 				}
 				switch(params.run_type) {
@@ -1724,7 +1579,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		break;
@@ -1732,7 +1586,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
@@ -1756,7 +1609,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
 		break;
@@ -1764,7 +1616,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
@@ -1823,7 +1674,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		break;
@@ -1831,7 +1681,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-	case SPH_RUN_FVELS:
 		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));
 		CUDA_CHECK(cudaFree(cuda_data.vz));
