@@ -27,6 +27,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/sph_cuda.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/kernel.hpp>
 
 #include <fenv.h>
 #include <unistd.h>
@@ -509,7 +510,8 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 					const float h3inv = sqr(hinv) * hinv;
 					const float rho = sph_den(h3inv);
 					const float rhoinv = 1.0 / rho;
-					const float w = sph_W(r, hinv, h3inv) * rhoinv * m;
+					const float q = r * hinv;
+					const float w = h3inv * kernelW(q) * rhoinv * m;
 					const float p = dat.ents[i] * pow(rho, SPH_GAMMA);
 					values.vx += w * dat.vxs[i];
 					values.vy += w * dat.vys[i];
@@ -611,17 +613,8 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					mask *= (r2 < h2);
 					const simd_float r = sqrt(r2);
 					const simd_float q = r * hinv;
-					const simd_float q2 = sqr(q);
-					static const simd_float one = simd_float(1);
-					static const simd_float four = simd_float(4);
-					const simd_float _1mq = one - q;
-					const simd_float _1mq2 = sqr(_1mq);
-					const simd_float _1mq3 = _1mq * _1mq2;
-					const simd_float _1mq4 = _1mq * _1mq3;
-					static const simd_float A = simd_float(float(21.0 * 2.0 / 3.0));
-					static const simd_float B = simd_float(float(840.0 / 3.0));
-					const simd_float w = A * _1mq4 * (one + four * q);
-					const simd_float dwdh = B * _1mq3 * q2 * hinv;
+					const simd_float w = kernelW(q);
+					const simd_float dwdh = -q * hinv * dkernelW_dq(q);
 					f_simd += w * mask;
 					dfdh_simd += dwdh * mask;
 				}
@@ -888,11 +881,12 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
 				const simd_float this_vsig = (c + myc + simd_float(3) * max(-dv, simd_float(0))) * masks[j];
 				max_vsig = max(max_vsig, this_vsig);
-				const simd_float dWdr = sph_dWdr_rinv(r, myhinv, myh3inv);
+				const simd_float q = r * myhinv;
+				const simd_float dWdr = dkernelW_dq(q) * hinv * hinv3;
 				const simd_float tmp = m * dWdr * rhoinv * masks[j];
-				const simd_float dWdr_x = dx * tmp;
-				const simd_float dWdr_y = dy * tmp;
-				const simd_float dWdr_z = dz * tmp;
+				const simd_float dWdr_x = dx * tmp * rinv;
+				const simd_float dWdr_y = dy * tmp * rinv;
+				const simd_float dWdr_z = dz * tmp * rinv;
 				dvx_dx -= dvx * dWdr_x;
 				dvx_dy -= dvx * dWdr_y;
 				dvx_dz -= dvx * dWdr_z;
@@ -902,7 +896,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				dvz_dx -= dvz * dWdr_x;
 				dvz_dy -= dvz * dWdr_y;
 				dvz_dz -= dvz * dWdr_z;
-				drho_dh += sph_h4dWdh(r, myhinv) * masks[j];
+				drho_dh += -q * dkernelW_dq(q) * masks[j];
 			}
 			const float dvx_dx_sum = dvx_dx.sum();
 			const float dvx_dy_sum = dvx_dy.sum();
@@ -1035,7 +1029,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 			const float myp = pow(myrho[0], SPH_GAMMA) * myent;
 #endif
 			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv[0]);
-			const simd_float myf0 =  sph_particles_fpre(i);
+			const simd_float myf0 = sph_particles_fpre(i);
 			const simd_float Prho2i = myp * myrhoinv * myrhoinv * myf0;
 #ifdef SPH_TOTAL_ENERGY
 			const simd_float Pvxrho2i = Prho2i * myvx;
@@ -1139,14 +1133,17 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
 				//		PRINT( "%e %e %e %e \n", myvx[0], vxs[j][0], uij[0], c[0]);
 				const simd_float Piij = (uij * (-simd_float(SPH_ALPHA) * cij + simd_float(SPH_BETA) * uij)) * half * (myfvel + fvels[j]) / rho_ij;
-				const simd_float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
-				const simd_float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
-				const simd_float dWdri_x = dx * dWdri;
-				const simd_float dWdri_y = dy * dWdri;
-				const simd_float dWdri_z = dz * dWdri;
-				const simd_float dWdrj_x = dx * dWdrj;
-				const simd_float dWdrj_y = dy * dWdrj;
-				const simd_float dWdrj_z = dz * dWdrj;
+				const simd_float qi = r * myhinv;
+				const simd_float qj = r * hinv;
+				const simd_float rinv = one / (r + tiny);
+				const simd_float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv;
+				const simd_float dWdrj = (r < h) * dkernelW_dq(qj) * hinv * h3inv;
+				const simd_float dWdri_x = dx * dWdri * rinv;
+				const simd_float dWdri_y = dy * dWdri * rinv;
+				const simd_float dWdri_z = dz * dWdri * rinv;
+				const simd_float dWdrj_x = dx * dWdrj * rinv;
+				const simd_float dWdrj_y = dy * dWdrj * rinv;
+				const simd_float dWdrj_z = dz * dWdrj * rinv;
 				const simd_float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
 				const simd_float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
 				const simd_float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);

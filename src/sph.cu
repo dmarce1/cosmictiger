@@ -24,14 +24,15 @@ struct smoothlen_shmem {
 #include <cosmictiger/sph_cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/kernel.hpp>
 
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (1024*SPH_NEIGHBOR_COUNT)
-#define HYDRO_SIZE (128*SPH_NEIGHBOR_COUNT)
+#define WORKSPACE_SIZE (2048*SPH_NEIGHBOR_COUNT)
+#define HYDRO_SIZE (256*SPH_NEIGHBOR_COUNT)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -176,8 +177,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 			}
 		}
 
-		constexpr float A = float(float(21.0 * 2.0 / 3.0));
-		constexpr float B = float(float(840.0 / 3.0));
 		float hmin = 1e+20;
 		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
@@ -212,13 +211,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float q = r * hinv;                    // 1
 						flops += 15;
 						if (q < 1.f) {                               // 1
-							const float q2 = sqr(q);                  // 1
-							const float _1mq = 1.f - q;               // 1
-							const float _1mq2 = sqr(_1mq);            // 1
-							const float _1mq3 = _1mq * _1mq2;         // 1
-							const float _1mq4 = _1mq * _1mq3;         // 1
-							const float w = A * _1mq4 * fmaf(4.f, q, 1.f); // 4
-							const float dwdh = B * _1mq3 * q2 * hinv; // 3
+							const float w = kernelW(q); // 4
+							const float dwdh = -q * dkernelW_dq(q) * hinv; // 3
 							f += w;                                   // 1
 							dfdh += dwdh;                             // 1
 							flops += 15;
@@ -263,7 +257,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						}
 					}
 					iter++;
-					//	if( tid == 0 ) PRINT("%i %e %e %e\n", count, c2, h, dh);
 					if (iter > 100) {
 						if (tid == 0) {
 							PRINT("density solver failed to converge %i\n", ws.x.size());
@@ -652,8 +645,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));
 					const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
 					const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
-					const float dWdri = (r < myh) * sph_dWdr_rinv(r, myhinv, myh3inv);
-					const float dWdrj = (r < h) * sph_dWdr_rinv(r, hinv, h3inv);
+					const float qi = r * myhinv;
+					const float qj = r * hinv;
+					const float rinv = 1.0f / (r + float(1.0e-15));
+					const float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv * rinv;
+					const float dWdrj = (r < h) * dkernelW_dq(qj) * hinv * h3inv * rinv;
 //					const float divWi = sph_divW(r, myhinv, myh3inv);
 //					const float divWj = sph_divW(r, hinv, h3inv);
 //					const float divWij = 0.5f * (divWj + divWi);
@@ -905,6 +901,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float h3 = sqr(h) * h;
 					const float r2 = sqr(dx, dy, dz);
 					const float hinv = 1. / h;
+					const float r = sqrt(r2);
 					const float h3inv = hinv * sqr(hinv);
 					const float rho = m * c0 * h3inv;
 					const float rhoinv = minv * c0inv * h3;
@@ -913,12 +910,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float dvx = myvx - ws.vx[j];
 					const float dvy = myvy - ws.vy[j];
 					const float dvz = myvz - ws.vz[j];
-					const float rinv = rsqrtf(r2);
+					const float rinv = 1.f / (r + 1e-15f);
 					const float dv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
 					const float this_vsig = myc + c - 3.f * dv;
 					vsig_max = fmaxf(vsig_max, this_vsig);
-					const float r = sqrt(r2);
-					const float dWdr = sph_dWdr_rinv(r, myhinv, myh3inv);
+					const float q = r * myhinv;
+					const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;
 					const float tmp = m * dWdr * rhoinv;
 					const float dWdr_x = dx * tmp;
 					const float dWdr_y = dy * tmp;
@@ -932,7 +929,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					dvz_dx -= dvz * dWdr_x;
 					dvz_dy -= dvz * dWdr_y;
 					dvz_dz -= dvz * dWdr_z;
-					drho_dh += sph_h4dWdh(r, myhinv);
+					drho_dh -= q * dkernelW_dq(q);
 
 				}
 				float div_v = dvx_dx + dvy_dy + dvz_dz;

@@ -197,50 +197,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 #endif
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z);
 
-template<class T, int N>
-T ipow(T x) {
-	if (N == 0) {
-		return T(1);
-	} else if (N == 1) {
-		return x;
-	} else if (N == 2) {
-		return sqr(x);
-	} else {
-		constexpr int M = N / 2;
-		constexpr int L = N - M;
-		return ipow<T, L>(x) * ipow<T, M>(x);
-	}
-}
 
-template<class T>
-CUDA_EXPORT
-inline T sph_W(T r, T hinv, T h3inv) {
-	const T c0 = T(21.0 / M_PI / 2.0);
-	const T C = c0 * h3inv;
-	const T q = r * hinv;
-	const T tmp = T(1) - q;
-	return C * sqr(sqr(tmp)) * (T(1) + T(4) * q);
-}
-
-template<class T>
-CUDA_EXPORT
-inline T sph_h4dWdh(T r, T hinv) {
-	const T c0 = T(21.0f / M_PI / 2.0f);
-	const T C = c0;
-	const T q = r * hinv;
-	const T tmp = T(1) - q;
-	return -C * tmp*sqr(tmp) * (T(3)+T(9)*q-T(32)*sqr(q));
-}
-
-template<class T>
-CUDA_EXPORT
-inline T sph_dWdr_rinv(T r, T hinv, T h3inv) {
-	const T c0 = T(210.0 / M_PI);
-	const T C = c0 * h3inv * sqr(hinv);
-	const T q = r * hinv;
-	const T tmp = T(1) - q;
-	return -C * sqr(tmp) * tmp;
-}
 /*
 template<class T>
 CUDA_EXPORT

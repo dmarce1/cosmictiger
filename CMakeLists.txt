@@ -65,6 +65,7 @@ set(cosmictiger_source_files
     src/hydro.cpp
     src/initialize.cpp
     src/hpx.cpp
+    src/kernel.cu
     src/kick.cpp
     src/kick.cu
     src/kick_workspace.cpp
@@ -118,6 +119,7 @@ set(cosmictiger_header_files
     cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
     cosmictiger/hydro.hpp
+    cosmictiger/kernel.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lc_group_archive.hpp

@@ -36,6 +36,8 @@ struct options {
 	bool read_check;
 	bool vsoft;
 	int tracer_count;
+	int kernel;
+	int neighbor_number;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
@@ -79,6 +81,8 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & neighbor_number;
+		arc & kernel;
 		arc & vsoft;
 		arc & cfl;
 		arc & sph;
