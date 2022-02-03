@@ -29,6 +29,7 @@
 #define KERNEL_WENDLAND_C2 3
 #define KERNEL_WENDLAND_C4 4
 #define KERNEL_WENDLAND_C6 5
+#define KERNEL_DOUBLE_COSINE 6
 
 void kernel_set_type(int type);
 void kernel_output();
@@ -157,6 +158,11 @@ inline T kernelW(T q) {
 		res = c0 * w;
 	}
 		break;
+	case KERNEL_DOUBLE_COSINE:
+		const T c0 = T(1.0 / (4.0f * (1.0f - 7.5f / sqr(M_PI)) * M_PI));
+		w = T(4) * cos(T(M_PI) * q) + cos(T(2.0 * M_PI) * q) + T(3);
+		res = c0 * w;
+		break;
 
 	};
 	return res;
@@ -267,7 +273,11 @@ inline T dkernelW_dq(T q) {
 		res = c0 * w;
 	}
 		break;
-
+	case KERNEL_DOUBLE_COSINE:
+		const T c0 = T(-2.0 * M_PI / (4.0f * (1.0f - 7.5f / sqr(M_PI)) * M_PI));
+		w = T(2) * sin(T(M_PI) * q) + sin(T(2.0 * M_PI) * q);
+		res = c0 * w;
+		break;
 	};
 	return res;
 }
@@ -380,22 +390,39 @@ inline T kernelFqinv(T q) {
 		break;
 	case KERNEL_WENDLAND_C6: {
 		const T c0 = T(1365.f / 16.f);
-		w = T(16./7.);
-		w = fmaf(q, w, T(-231./13.));
-		w = fmaf(q, w, T(176./3.));
+		w = T(16. / 7.);
+		w = fmaf(q, w, T(-231. / 13.));
+		w = fmaf(q, w, T(176. / 3.));
 		w = fmaf(q, w, T(-105));
-		w = fmaf(q, w, T(528./5.));
-		w = fmaf(q, w, T(-154./3.));
+		w = fmaf(q, w, T(528. / 5.));
+		w = fmaf(q, w, T(-154. / 3.));
 		w *= q;
-		w = fmaf(q, w, T(66./7.));
+		w = fmaf(q, w, T(66. / 7.));
 		w *= q;
-		w = fmaf(q, w, T(-11./5.));
+		w = fmaf(q, w, T(-11. / 5.));
 		w *= q;
-		w = fmaf(q, w, T(1./3.));
+		w = fmaf(q, w, T(1. / 3.));
 		res = c0 * w;
 	}
 		break;
-
+	case KERNEL_DOUBLE_COSINE: {
+		const T c0 = T(-1.0 / (2.0 * M_PI * (2.0 * sqr(M_PI) - 15.0)));
+		const T q2 = sqr(q);
+		const T q3 = q * q2;
+		const T q3inv = (T(1.) / (q3 + T(1.0e-15)));
+		const T sinpiq = sin(T(M_PI) * q);
+		const T cospiq = cos(T(M_PI) * q);
+		w = T(16) * cospiq;
+		w += cos(T(2.0 * M_PI) * q);
+		w += T(M_PI) * q * (T(8) * sinpiq + sin(T(2.0 * M_PI) * q));
+		w *= -T(2.0 * M_PI) * q;
+		w += -T(4.0 * sqr(M_PI) * M_PI) * q3;
+		w += T(32) * sinpiq;
+		w += sin(T(2.0 * M_PI) * q);
+		w *= q3inv;
+		res = (q>T(0))*c0 * w;
+		break;
+	}
 	};
 	return res;
 }
@@ -526,21 +553,37 @@ inline T kernelPot(T q) {
 		break;
 	case KERNEL_WENDLAND_C6: {
 		const T c0 = T(1365.f / 16.f);
-		w = T(-16./91.);
-		w = fmaf(q, w, T(77./52.));
-		w = fmaf(q, w, T(-16./3.));
-		w = fmaf(q, w, T(21./2.));
-		w = fmaf(q, w, T(-176./15.));
-		w = fmaf(q, w, T(77./12.));
+		w = T(-16. / 91.);
+		w = fmaf(q, w, T(77. / 52.));
+		w = fmaf(q, w, T(-16. / 3.));
+		w = fmaf(q, w, T(21. / 2.));
+		w = fmaf(q, w, T(-176. / 15.));
+		w = fmaf(q, w, T(77. / 12.));
 		w *= q;
-		w = fmaf(q, w, T(-11./7.));
+		w = fmaf(q, w, T(-11. / 7.));
 		w *= q;
-		w = fmaf(q, w, T(11./20.));
+		w = fmaf(q, w, T(11. / 20.));
 		w *= q;
-		w = fmaf(q, w, T(-1./6.));
+		w = fmaf(q, w, T(-1. / 6.));
 		w *= q;
-		w = fmaf(q, w, T(7./156.));
+		w = fmaf(q, w, T(7. / 156.));
 		res = c0 * w;
+	}
+	case KERNEL_DOUBLE_COSINE: {
+		const T c0 = T(-1.0 / ((1.0f - 7.5f / sqr(M_PI))));
+		const T qinv = T(1) / (q + T(1.0e-15));
+		const T q2 = sqr(q);
+		const T sinpiq = sin(T(M_PI) * q);
+		const T cospiq = cos(T(M_PI) * q);
+		w = T(16) * cospiq;
+		w += cos(T(2.0 * M_PI) * q);
+		w *= T(-M_PI) * q;
+		w += T(32) * sinpiq;
+		w += sin(T(2.0 * M_PI) * q);
+		w += T(M_PI) * q * (T(2.0 * sqr(M_PI)) * (q2 - T(3)) + T(15));
+		w *= T(1.0/(4.0 * sqr(M_PI) * M_PI)) * qinv;
+		res = (q > T(0)) * c0 * w;
+		break;
 	}
 	};
 	return res;

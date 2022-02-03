@@ -57,6 +57,7 @@ void kernel_adjust_options(options& opts) {
 	case KERNEL_WENDLAND_C2:
 	case KERNEL_WENDLAND_C4:
 	case KERNEL_WENDLAND_C6:
+	case KERNEL_DOUBLE_COSINE:
 		break;
 	default:
 		PRINT("Error ! Unknown kernel!\n");
