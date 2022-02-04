@@ -40,8 +40,8 @@ void output_particles(const std::string filename, const vector<output_particle>&
 	}
 	const int nparts = parts.size();
 	double *coords[NDIM] = { x.data(), y.data(), z.data() };
-	DBPutPointmesh(db, "points", NDIM, coords, nparts, DB_DOUBLE, NULL);
-	x = decltype(x)();
+		DBPutPointmesh(db, "points", NDIM, coords, nparts, DB_DOUBLE, NULL);
+		x = decltype(x)();
 	y = decltype(y)();
 	z = decltype(z)();
 	for (int dim = 0; dim < NDIM; dim++) {

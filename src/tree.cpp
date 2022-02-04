@@ -549,12 +549,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = !global && (depth >= params.min_level) && (nparts <= BUCKET_SIZE);
-	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
+/*	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
 		if (node.leaf) {
 			std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
 			leaf_part_ranges.push_back(part_range);
 		}
-	}
+	}*/
 	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}

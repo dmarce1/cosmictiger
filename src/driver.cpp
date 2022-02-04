@@ -247,7 +247,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 	} else {
 
-
 		sparams.run_type = SPH_RUN_COURANT;
 		tm.start();
 		kr = sph_run(sparams, true);
@@ -557,6 +556,7 @@ void driver() {
 				if (get_options().do_slice) {
 					output_slice(number, years);
 				}
+				view_output_views((tau + 1e-6 * t0) / t0);
 				if (get_options().do_views) {
 					timer tm;
 					tm.start();

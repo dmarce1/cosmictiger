@@ -30,6 +30,7 @@
 #define KERNEL_WENDLAND_C4 4
 #define KERNEL_WENDLAND_C6 5
 #define KERNEL_DOUBLE_COSINE 6
+#define KERNEL_FERRERS5 7
 
 void kernel_set_type(int type);
 void kernel_output();
@@ -158,10 +159,23 @@ inline T kernelW(T q) {
 		res = c0 * w;
 	}
 		break;
-	case KERNEL_DOUBLE_COSINE:
+	case KERNEL_DOUBLE_COSINE: {
 		const T c0 = T(1.0 / (4.0f * (1.0f - 7.5f / sqr(M_PI)) * M_PI));
 		w = T(4) * cos(T(M_PI) * q) + cos(T(2.0 * M_PI) * q) + T(3);
 		res = c0 * w;
+	}
+		break;
+	case KERNEL_FERRERS5: {
+		const T c0 = T(9009.f / 1024.f / float(M_PI));
+		const T q2 = sqr(q);
+		w = T(-1);
+		w = fmaf(q2, w, T(5));
+		w = fmaf(q2, w, T(-10));
+		w = fmaf(q2, w, T(10));
+		w = fmaf(q2, w, T(-5));
+		w = fmaf(q2, w, T(1));
+		res = c0 * w;
+	}
 		break;
 
 	};
@@ -273,10 +287,23 @@ inline T dkernelW_dq(T q) {
 		res = c0 * w;
 	}
 		break;
-	case KERNEL_DOUBLE_COSINE:
+	case KERNEL_DOUBLE_COSINE: {
 		const T c0 = T(-2.0 * M_PI / (4.0f * (1.0f - 7.5f / sqr(M_PI)) * M_PI));
 		w = T(2) * sin(T(M_PI) * q) + sin(T(2.0 * M_PI) * q);
 		res = c0 * w;
+		break;
+	}
+	case KERNEL_FERRERS5: {
+		const T c0 = T(9009.f / 1024.f / float(M_PI));
+		const T q2 = sqr(q);
+		w = T(-10);
+		w = fmaf(q2, w, T(40));
+		w = fmaf(q2, w, T(-60));
+		w = fmaf(q2, w, T(40));
+		w = fmaf(q2, w, T(-10));
+		w *= q;
+		res = c0 * w;
+	}
 		break;
 	};
 	return res;
@@ -389,7 +416,7 @@ inline T kernelFqinv(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
-		q = min(q,T(1.1));
+		q = min(q, T(1.1));
 		const T c0 = T(1365.f / 16.f);
 		w = T(16. / 7.);
 		w = fmaf(q, w, T(-231. / 13.));
@@ -421,9 +448,21 @@ inline T kernelFqinv(T q) {
 		w += T(32) * sinpiq;
 		w += sin(T(2.0 * M_PI) * q);
 		w *= q3inv;
-		res = (q>T(0))*c0 * w;
-		break;
+		res = (q > T(0)) * c0 * w;
 	}
+		break;
+	case KERNEL_FERRERS5: {
+		const T c0 = T(4.0 *  9009.f / 1024.f);
+		const T q2 = sqr(q);
+		w = T(-1. / 13.);
+		w = fmaf(q2, w, T(5. / 11.));
+		w = fmaf(q2, w, T(-10. / 9.));
+		w = fmaf(q2, w, T(10. / 7.));
+		w = fmaf(q2, w, T(-1));
+		w = fmaf(q2, w, T(1. / 3.));
+		res = c0 * w;
+	}
+		break;
 	};
 	return res;
 }
@@ -553,7 +592,7 @@ inline T kernelPot(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
-		q = min(q,T(1.1));
+		q = min(q, T(1.1));
 		const T c0 = T(1365.f / 16.f);
 		w = T(-16. / 91.);
 		w = fmaf(q, w, T(77. / 52.));
@@ -584,10 +623,23 @@ inline T kernelPot(T q) {
 		w += T(32) * sinpiq;
 		w += sin(T(2.0 * M_PI) * q);
 		w += T(M_PI) * q * (T(2.0 * sqr(M_PI)) * (q2 - T(3)) + T(15));
-		w *= T(1.0/(4.0 * sqr(M_PI) * M_PI)) * qinv;
+		w *= T(1.0 / (4.0 * sqr(M_PI) * M_PI)) * qinv;
 		res = (q > T(0)) * c0 * w;
-		break;
 	}
+		break;
+	case KERNEL_FERRERS5: {
+		const T c0 = T(4.0 * M_PI * 9009.f / 1024.f / float(M_PI));
+		const T q2 = sqr(q);
+		w = T(1. / 156.);
+		w = fmaf(q2, w, T(-1. / 22.));
+		w = fmaf(q2, w, T(5. / 36.));
+		w = fmaf(q2, w, T(-5. / 21.));
+		w = fmaf(q2, w, T(1. / 4.));
+		w = fmaf(q2, w, T(-1. / 6.));
+		w = fmaf(q2, w, T(1. / 12.));
+		res = c0 * w;
+	}
+		break;
 	};
 	return res;
 }

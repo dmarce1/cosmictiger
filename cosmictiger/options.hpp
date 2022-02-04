@@ -48,6 +48,7 @@ struct options {
 	int min_group;
 	int slice_res;
 	int nsteps;
+	int sph_bucket_size;
 	double lc_b;
 	double slice_size;
 	double neighbor_number;
@@ -93,6 +94,7 @@ struct options {
 		arc & do_power;
 		arc & do_groups;
 		arc & do_tracers;
+		arc & sph_bucket_size;
 		arc & do_slice;
 		arc & do_views;
 		arc & twolpt;

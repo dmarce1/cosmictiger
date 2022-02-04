@@ -58,6 +58,7 @@ void kernel_adjust_options(options& opts) {
 	case KERNEL_WENDLAND_C4:
 	case KERNEL_WENDLAND_C6:
 	case KERNEL_DOUBLE_COSINE:
+	case KERNEL_FERRERS5:
 		break;
 	default:
 		PRINT("Error ! Unknown kernel!\n");
@@ -65,11 +66,13 @@ void kernel_adjust_options(options& opts) {
 	h = kernel_stddev(kernelW<double>);
 	PRINT( "kernel width = %e\n", h0/h);
 	opts.neighbor_number *= pow(h0 / h, 3);
+	opts.sph_bucket_size = opts.neighbor_number * 8.0 / M_PI;
 	opts.cfl *= h / h0;
 	opts.hsoft *= h0 / h;
 	opts.eta *= sqrt(h / h0);
 	PRINT("Setting:\n");
 	PRINT("Neighbor number       = %e\n", opts.neighbor_number);
+	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);
 	PRINT("Dark matter softening = 1/%e of mean separation.\n", 1.0 / opts.parts_dim / opts.hsoft);
 	PRINT("CFL = %f\n", opts.cfl);
 	PRINT("eta = %f\n", opts.eta);

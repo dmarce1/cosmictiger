@@ -21,13 +21,215 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/view.hpp>
+
+#include <silo.h>
 
 #include <atomic>
 
 #include <chealpix.h>
 
 HPX_PLAIN_ACTION (output_view);
+
+static vector<range<double>> view_boxes;
+
+struct dm_part_info {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+	float vx;
+	float vy;
+	float vz;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & x;
+		arc & y;
+		arc & z;
+		arc & vx;
+		arc & vy;
+		arc & vz;
+	}
+
+};
+
+struct sph_part_info: public dm_part_info {
+	float ent;
+	float h;
+	template<class A>
+	void serialize(A&& arc, unsigned ver) {
+		dm_part_info::serialize(arc, ver);
+		arc & ent;
+		arc & h;
+	}
+
+};
+
+struct view_return {
+	vector<vector<sph_part_info>> hydro;
+	vector<vector<dm_part_info>> dm;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & hydro;
+		arc & dm;
+	}
+};
+
+view_return view_get_particles(vector<range<double>> boxes);
+
+HPX_PLAIN_ACTION (view_get_particles);
+
+view_return view_get_particles(vector<range<double>> boxes = vector<range<double>>()) {
+	if (hpx_rank() == 0) {
+		boxes = view_boxes;
+	}
+	view_return rc;
+	rc.hydro.resize(boxes.size());
+	rc.dm.resize(boxes.size());
+	vector<hpx::future<view_return>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc, nthreads, boxes]() {
+			view_return rc;
+			rc.hydro.resize(boxes.size());
+			rc.dm.resize(boxes.size());
+			const part_int b = (size_t) proc * particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+			for( part_int i = b; i < e; i++) {
+				array<double,NDIM> x;
+				x[XDIM] = particles_pos(XDIM,i).to_double();
+				x[YDIM] = particles_pos(YDIM,i).to_double();
+				x[ZDIM] = particles_pos(ZDIM,i).to_double();
+				for( int j = 0; j < boxes.size(); j++) {
+					if( boxes[j].contains(x)) {
+						const part_int k = particles_sph_index(i);
+						if( k == NOT_SPH) {
+							dm_part_info info;
+							info.x = particles_pos(XDIM,i);
+							info.y = particles_pos(YDIM,i);
+							info.z = particles_pos(ZDIM,i);
+							info.vx = particles_vel(XDIM,i);
+							info.vy = particles_vel(YDIM,i);
+							info.vz = particles_vel(ZDIM,i);
+							rc.dm[j].push_back(info);
+						} else {
+							sph_part_info info;
+							info.x = particles_pos(XDIM,i);
+							info.y = particles_pos(YDIM,i);
+							info.z = particles_pos(ZDIM,i);
+							info.vx = particles_vel(XDIM,i);
+							info.vy = particles_vel(YDIM,i);
+							info.vz = particles_vel(ZDIM,i);
+							info.ent = sph_particles_ent(k);
+							info.h = sph_particles_smooth_len(k);
+							rc.hydro[j].push_back(info);
+						}
+					}
+				}
+			}
+			return rc;
+		}));
+	}
+
+	for (auto& f : futs) {
+		auto tmp = f.get();
+		for (int i = 0; i < boxes.size(); i++) {
+			rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
+			rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
+		}
+	}
+	return rc;
+
+}
+
+void view_output_views(int cycle) {
+	if (!view_boxes.size()) {
+		return;
+	}
+	for (int bi = 0; bi < view_boxes.size(); bi++) {
+		PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", view_boxes[bi].begin[XDIM], view_boxes[bi].end[XDIM], view_boxes[bi].begin[YDIM],
+				view_boxes[bi].end[YDIM], view_boxes[bi].begin[ZDIM], view_boxes[bi].end[ZDIM]);
+		std::string filename = "view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo";
+		DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
+		view_return parts;
+		parts = view_get_particles();
+		vector<float> x, y, z;
+		for (int i = 0; i < parts.dm[bi].size(); i++) {
+			x.push_back(distance(parts.dm[bi][i].x, view_boxes[bi].begin[XDIM]));
+			y.push_back(distance(parts.dm[bi][i].y, view_boxes[bi].begin[YDIM]));
+			z.push_back(distance(parts.dm[bi][i].z, view_boxes[bi].begin[ZDIM]));
+		}
+		float *coords1[NDIM] = { x.data(), y.data(), z.data() };
+		DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		z.resize(0);
+		for (int i = 0; i < parts.hydro[bi].size(); i++) {
+			x.push_back(distance(parts.hydro[bi][i].x, view_boxes[bi].begin[XDIM]));
+			y.push_back(distance(parts.hydro[bi][i].y, view_boxes[bi].begin[YDIM]));
+			z.push_back(distance(parts.hydro[bi][i].z, view_boxes[bi].begin[ZDIM]));
+		}
+		float *coords2[NDIM] = { x.data(), y.data(), z.data() };
+		DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		z.resize(0);
+		for (int i = 0; i < parts.dm[bi].size(); i++) {
+			x.push_back(parts.dm[bi][i].vx);
+			y.push_back(parts.dm[bi][i].vy);
+			z.push_back(parts.dm[bi][i].vz);
+		}
+		DBPutPointvar1(db, "dm_vx", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "dm_vy", "dark_matter", y.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "dm_vz", "dark_matter", z.data(), x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		z.resize(0);
+		for (int i = 0; i < parts.hydro[bi].size(); i++) {
+			x.push_back(parts.hydro[bi][i].vx);
+			y.push_back(parts.hydro[bi][i].vy);
+			z.push_back(parts.hydro[bi][i].vz);
+		}
+		DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		for (int i = 0; i < parts.hydro[bi].size(); i++) {
+			x.push_back(parts.hydro[bi][i].h);
+			y.push_back(parts.hydro[bi][i].ent);
+		}
+		DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+		DBClose(db);
+	}
+
+}
+
+void view_read_view_file() {
+	FILE* fp = fopen("view.txt", "rt");
+	if (fp == nullptr) {
+		PRINT("No view file found.\n");
+		return;
+	}
+	range<float> view_box;
+	while (fscanf(fp, "%f %f %f %f %f %f\n", &view_box.begin[XDIM], &view_box.end[XDIM], &view_box.begin[YDIM], &view_box.end[YDIM], &view_box.begin[ZDIM],
+			&view_box.end[ZDIM]) == 2 * NDIM) {
+		PRINT("Reading box for view at x range (%f,%f) yrange (%f,%f) zrange (%f,%f)\n", view_box.begin[XDIM], view_box.end[XDIM], view_box.begin[YDIM],
+				view_box.end[YDIM], view_box.begin[ZDIM], view_box.end[ZDIM]);
+		range<double> view_box_d;
+		for (int dim = 0; dim < NDIM; dim++) {
+			view_box_d.begin[dim] = view_box.begin[dim];
+			view_box_d.end[dim] = view_box.end[dim];
+		}
+		view_boxes.push_back(view_box_d);
+	}
+	fclose(fp);
+
+}
 
 vector<float> output_view(int number, double time) {
 	vector<hpx::future<void>> futs;

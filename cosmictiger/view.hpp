@@ -24,6 +24,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 vector<float> output_view(int number, double time);
+void view_output_views(int cycle);
 
+void view_read_view_file();
 
 #endif /* VIEW_HPP_ */

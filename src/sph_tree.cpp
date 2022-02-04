@@ -236,7 +236,7 @@ fast_future<sph_tree_create_return> sph_tree_create_fork(sph_tree_create_params 
 
 static void sph_tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	static const int bucket_size = SPH_BUCKET_SIZE;
+	static const int bucket_size =  get_options().sph_bucket_size;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
@@ -257,7 +257,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 		int depth, bool local_root) {
 	stack_trace_activate();
 	const double h = get_options().hsoft;
-	static const int bucket_size = SPH_BUCKET_SIZE;
+	static const int bucket_size = get_options().sph_bucket_size;
 	sph_tree_create_return rc;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -397,13 +397,13 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	node.sink_part_range = part_range;
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
-	node.leaf = !global && (nparts <= SPH_BUCKET_SIZE);
-	if ( BUCKET_SIZE <= SPH_BUCKET_SIZE) {
+	node.leaf = !global && (nparts <= get_options().sph_bucket_size);
+/*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
 		if (node.leaf) {
 			std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
 			leaf_part_ranges.push_back(part_range);
 		}
-	}
+	}*/
 	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}

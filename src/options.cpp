@@ -26,6 +26,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/kernel.hpp>
+#include <cosmictiger/view.hpp>
 
 #ifdef HPX_LITE
 #include <boost/program_options.hpp>
@@ -261,6 +262,7 @@ bool process_options(int argc, char *argv[]) {
 
 
 	kernel_output();
+	view_read_view_file();
 	return rc;
 }
 
