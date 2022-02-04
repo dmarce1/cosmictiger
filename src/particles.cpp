@@ -501,7 +501,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					const int j = offset + i - range.range.first;
 					const int k = particles_sph_index(i);
 					sph_part[j] = char(k != NOT_SPH);
-					if( hsoft ) {
+					if (hsoft) {
 						hsoft[j] = (!vsoft || k == NOT_SPH) ? dm_hsoft : std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
 					}
 				}
@@ -574,7 +574,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			const int k = particles_sph_index(i);
 			ln.sph = char(k != NOT_SPH);
 			if (vsoft) {
-				ln.hsoft = k == NOT_SPH ? hsoft : std::min(SPH_MAX_SOFT,sph_particles_smooth_len(k));
+				ln.hsoft = k == NOT_SPH ? hsoft : std::min(SPH_MAX_SOFT, sph_particles_smooth_len(k));
 			}
 		}
 	}

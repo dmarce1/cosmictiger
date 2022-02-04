@@ -30,21 +30,21 @@
 
 #include <cosmictiger/sph.hpp>
 
-
 int hpx_main(int argc, char *argv[]) {
+	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
 	std::atomic<int> i;
-	for( double q = 0.0; q < 1.0; q += 0.01) {
+	for (double q = 0.0; q < 1.0; q += 0.01) {
 //		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
 	}
-	if( !i.is_lock_free() ) {
-		PRINT( "std::atomic<int> is not lock free!\n");
-		PRINT( "std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
-		PRINT( "Exiting...\n");
+	if (!i.is_lock_free()) {
+		PRINT("std::atomic<int> is not lock free!\n");
+		PRINT("std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
+		PRINT("Exiting...\n");
 		return hpx::finalize();
 	} else {
-		PRINT( "std::atomic<int> is lock free!\n" );
+		PRINT("std::atomic<int> is lock free!\n");
 	}
-	PRINT( "tree_node size = %i\n", sizeof(tree_node));
+	PRINT("tree_node size = %i\n", sizeof(tree_node));
 	hpx_init();
 	ewald_const::init();
 	start_memuse_daemon();

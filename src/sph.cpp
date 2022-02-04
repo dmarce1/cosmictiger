@@ -562,6 +562,10 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 
 static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
 		int min_rung, bool active, bool semiactive, int nactive, int nneighbor) {
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
+
 	sph_run_return rc;
 	const int self_nparts = self_ptr->part_range.second - self_ptr->part_range.first;
 	float f, dfdh;
@@ -623,6 +627,11 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					f = f_simd.sum();
 					dfdh = dfdh_simd.sum();
 					f -= get_options().neighbor_number;
+				/*	for( int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+						if( abs(dfdh[l]) < 1e-20) {
+							PRINT( "!!!!!!!!!!!! %e\n", f[l]);
+						}
+					}*/
 					dh = -f / dfdh;
 					if (dh > 0.5 * h) {
 						dh = 0.5 * h;
@@ -1203,7 +1212,11 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 					sph_particles_vel(dim, i) += sph_particles_dvel(dim, i);
 					sph_particles_dvel(dim, i) = 0.0f;
 				}
+				const auto original = sph_particles_ent(i);
 				sph_particles_ent(i) += sph_particles_dent(i);
+				if (sph_particles_ent(i) < 0.f) {
+					PRINT("Negative entropy %e %e %e %s %i\n", original, sph_particles_ent(i), sph_particles_dent(i), __FILE__, __LINE__);
+				}
 				sph_particles_dent(i) = 0.0f;
 				const float h = sph_particles_smooth_len(i);
 				const float vx = sph_particles_vel(XDIM, i);
@@ -1229,6 +1242,10 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 				for (int dim = 0; dim < NDIM; dim++) {
 					sph_particles_vel(dim, i) += 0.5f * sph_particles_dvel(dim, i);
 					sph_particles_dvel(dim, i) *= -.5f;
+				}
+				const auto original = sph_particles_ent(i);
+				if (sph_particles_ent(i) < -0.5f * sph_particles_dent(i)) {
+					PRINT("Negative entropy %e %e %e %s %i\n", original, sph_particles_ent(i), 0.5f * sph_particles_dent(i), __FILE__, __LINE__);
 				}
 				sph_particles_ent(i) += 0.5f * sph_particles_dent(i);
 				sph_particles_dent(i) *= -0.5f;
@@ -1310,6 +1327,9 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
+	if (get_options().cuda == false) {
+		cuda = false;
+	}
 //	cuda = false;
 	sph_run_return rc;
 	vector<hpx::future<sph_run_return>> futs;

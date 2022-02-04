@@ -119,6 +119,10 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				y0 = y;
 				z0 = z;
 				x += double(vx*dt);
+				if( std::isnan(vy)) {
+					PRINT( "vy is nan\n");
+					abort();
+				}
 				y += double(vy*dt);
 				z += double(vz*dt);
 				if( do_lc) {

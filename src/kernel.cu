@@ -29,7 +29,7 @@ void kernel_set_type(int type) {
 
 void kernel_output() {
 	FILE* fp = fopen("kernel.txt", "wt");
-	for (double q = 0.0; q <= 1.0; q += 0.01) {
+	for (double q = 0.0; q <= 1.0; q += 0.0001) {
 		fprintf(fp, "%e %e %e %e %e\n", q, kernelW(q), dkernelW_dq(q), kernelFqinv(q), kernelPot(q));
 	}
 	fclose(fp);
@@ -57,8 +57,6 @@ void kernel_adjust_options(options& opts) {
 	case KERNEL_WENDLAND_C2:
 	case KERNEL_WENDLAND_C4:
 	case KERNEL_WENDLAND_C6:
-	case KERNEL_DOUBLE_COSINE:
-	case KERNEL_FERRERS5:
 		break;
 	default:
 		PRINT("Error ! Unknown kernel!\n");

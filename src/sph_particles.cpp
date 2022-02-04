@@ -685,6 +685,13 @@ void sph_particles_load(FILE* fp) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		FREAD(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp);
 	}
+	for (part_int i = 0; i < sph_particles_size(); i++) {
+		if (std::isnan(sph_particles_dvel(YDIM, i))) {
+			PRINT("dvy is NAN on read\n");
+			abort();
+		}
+	}
+
 }
 
 void sph_particles_save(FILE* fp) {

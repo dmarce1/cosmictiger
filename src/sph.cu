@@ -531,6 +531,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float myrho = m * c0 * myh3inv;
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;
 				const float myp = data.ent[i] * powf(myrho, SPH_GAMMA);
+				if (data.ent[i] < 0.0) {
+					PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
+					__trap();
+				}
 				const float myc = sqrtf(SPH_GAMMA * myp * myrhoinv);
 				const float myrho1mgammainv = powf(myrho, 1.0f - SPH_GAMMA);
 				const float myfvel = data.fvel[i];
@@ -629,6 +633,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float rho = m * c0 * h3inv;
 					const float rhoinv = minv * c0inv * h3;
 					const float p = ws.ent[j] * powf(rho, gamma);
+					if (p < 0.0) {
+						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
+						__trap();
+					}
 					const float c = sqrtf(gamma * p * rhoinv);
 					const float cij = 0.5f * (myc + c);
 					const float hij = 0.5f * (h + myh);
@@ -640,6 +648,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));
 					const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
 					const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
+					if (Piij < 0.f) {
+						PRINT("Negative Piij %e %e %e %e", uij, cij, myfvel, ws.fvel[j]);
+						__trap();
+					}
 					const float qi = r * myhinv;
 					const float qj = r * hinv;
 					const float rinv = 1.0f / (r + float(1.0e-15));
@@ -675,6 +687,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 						dt = rung_dt[myrung] * (params.t0);
 					}
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
+		/*			if (dAdt < 0.f) {
+						PRINT("Negative DATDt %e %e  %e %e %e %e %e %e %e %e\n", r/h, r/myh, (dviscx * dvx + dviscy * dvy + dviscz * dvz), dviscx * dvx, dviscy * dvy, dviscz * dvz,  (dvx * dx + dvy * dy + dvz * dz),  dvx * dx ,dvy * dy, dvz * dz);
+						__trap();
+					}*/
 					dAdt *= float(0.5) * m * (SPH_GAMMA - 1.f) * myrho1mgammainv;
 					dent += dAdt * dt;
 					ddvx += dvxdt * dt;
@@ -825,6 +841,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				const float myrho = m * c0 * myh3inv;
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;
 				const float myp = data.ent[i] * powf(myrho, SPH_GAMMA);
+				if (myp < 0.0) {
+					PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
+					__trap();
+				}
 				const float myc = sqrtf(SPH_GAMMA * myp * myrhoinv);
 				const int jmax = round_up(ws.x0.size(), block_size);
 				ws.x.resize(0);
@@ -901,6 +921,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float rho = m * c0 * h3inv;
 					const float rhoinv = minv * c0inv * h3;
 					const float p = ws.ent[j] * powf(rho, gamma);
+					if (p < 0.0) {
+						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
+						__trap();
+					}
 					const float c = sqrtf(gamma * p * rhoinv);
 					const float dvx = myvx - ws.vx[j];
 					const float dvy = myvy - ws.vy[j];
