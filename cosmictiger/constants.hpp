@@ -37,6 +37,7 @@ constexpr double seconds_to_years = 1.0 / (365.24*24*60*60);
 constexpr double mpc_to_cm = 3.086e24;
 constexpr double spyr = 365.24 * 24.0 * 60.0 * 60.0;
 constexpr double M0 = 1.989e33;
+constexpr double avo = 6.0221409e+23;
 }
 
 namespace cosmic_constants {

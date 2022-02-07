@@ -48,6 +48,7 @@ set(cosmictiger_source_files
     src/bh.cpp
     src/bh.cu
     src/boltzmann.cpp
+    src/chemistry.cpp
  	src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp
@@ -96,6 +97,7 @@ set(cosmictiger_header_files
     cosmictiger/assert.hpp
     cosmictiger/bh.hpp
     cosmictiger/boltzmann.hpp
+    cosmictiger/chemistry.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
     cosmictiger/cosmology.hpp
