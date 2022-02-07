@@ -24,14 +24,141 @@
 #include <fenv.h>
 
 #define NRATES 20
+#define NCOOL 15
 
-const double Ktoev = double(1. / 11604.45);
+const float Ktoev = float(1. / 11604.45);
 
-array<double, NRATES> chemistry_rates(double T) {
-	array<double, NRATES> K;
-	double Tev = T * Ktoev;
-	double lnT = log(Tev);
-	double log10T = lnT / log(10);
+float cooling_rate(float T, float z, species_t N) {
+	float K1, K3, K5;
+	T = std::max(1000.0f, T);
+
+	{
+		array<float, NRATES> K;
+		float Tev = T * Ktoev;
+		float lnT = log(Tev);
+		float log10T = lnT / log(10);
+		{
+			const auto c0 = -32.71396786;
+			const auto c1 = 13.536556;
+			const auto c2 = -5.73932875;
+			const auto c3 = 1.56315498;
+			const auto c4 = -0.2877056;
+			const auto c5 = 3.48255977e-2;
+			const auto c6 = -2.63197617e-3;
+			const auto c7 = 1.11954395e-4;
+			const auto c8 = -2.03914985e-6;
+			float k = c8;
+			k = k * lnT + c7;
+			k = k * lnT + c6;
+			k = k * lnT + c5;
+			k = k * lnT + c4;
+			k = k * lnT + c3;
+			k = k * lnT + c2;
+			k = k * lnT + c1;
+			k = k * lnT + c0;
+			K1 = expf(k);
+		}
+
+		{
+			const auto c0 = -44.09864886;
+			const auto c1 = 23.91596563;
+			const auto c2 = -10.7532302;
+			const auto c3 = 3.05803875;
+			const auto c4 = -0.56851189;
+			const auto c5 = 6.79539123e-2;
+			const auto c6 = -5.00905610e-3;
+			const auto c7 = 2.06723616e-4;
+			const auto c8 = -3.64916141e-6;
+			float k = c8;
+			k = k * lnT + c7;
+			k = k * lnT + c6;
+			k = k * lnT + c5;
+			k = k * lnT + c4;
+			k = k * lnT + c3;
+			k = k * lnT + c2;
+			k = k * lnT + c1;
+			k = k * lnT + c0;
+			K3 = expf(k);
+
+		}
+		{
+			const auto c0 = -68.71040990;
+			const auto c1 = 43.93347633;
+			const auto c2 = -18.4806699;
+			const auto c3 = 4.70162649;
+			const auto c4 = -0.76924663;
+			const auto c5 = 8.113042E-2;
+			const auto c6 = -5.32402063E-3;
+			const auto c7 = 1.97570531E-4;
+			const auto c8 = -3.16558106E-6;
+			float k = c8;
+			k = k * lnT + c7;
+			k = k * lnT + c6;
+			k = k * lnT + c5;
+			k = k * lnT + c4;
+			k = k * lnT + c3;
+			k = k * lnT + c2;
+			k = k * lnT + c1;
+			k = k * lnT + c0;
+			K5 = expf(k);
+		}
+	}
+
+	const float ne = N.Hp - N.Hn + N.Hep + 2 * N.Hepp;
+	const float T5 = T * 1e-5;
+	array<float, NCOOL> C;
+	float Tinv = 1.0 / T;
+	float tmp = 1.0 / (1.0 + sqrt(T5));
+	float tmp2 = pow(T, -.1687);
+	C[1] = 7.5e-19 * expf(-118348 * Tinv) * ne * N.H;
+	C[2] = 9.1e-27 * expf(-13179 * Tinv) * tmp2 * sqr(ne) * N.He;
+	C[3] = 5.54e-17 * expf(-473638 * Tinv) * pow(T, -.397) * ne * N.Hep;
+	C[4] = 2.18e-11 * K1 * ne * N.H;
+	C[5] = 3.94e-11 * K3 * ne * N.He;
+	C[6] = 8.72e-11 * K5 * ne * N.Hep;
+	C[7] = 5.01e-27 * tmp * tmp2 * expf(-55338 * Tinv) * sqr(ne) * N.Hep;
+	C[8] = 8.7e-27 * sqrt(T) * pow(T / 1000, -.2) / (1.0 + pow(T * 1e-6, .7)) * ne * N.Hp;
+	C[9] = 1.55e-26 * pow(T, 0.3647) * ne * N.Hp;
+	C[10] = 1.24e-13 * pow(T, -1.5) * (1 + .3 * exp(-94000 * Tinv)) * exp(-470000 / T) * ne * N.Hp;
+	C[11] = 3.48e-26 * sqrt(T) * pow(T / 1000, -.2) / (1.0 + pow(T * 1e-6, .7)) * ne * N.Hepp;
+	float Qn = powf(N.H2, 0.77) + 1.2 * powf(N.H, 0.77);
+	float LrL, LrH;
+	float x = log10f(T / 10000);
+	double LvL;
+	if (T > 4031) {
+		LrL = 1.38e-22 * expf(-9243 * Tinv);
+	} else {
+		LrL = pow(10.0, -22.90 - 0.553 * x - 1.48 * sqr(x));
+	}
+	LrL *= Qn;
+	if (T > 1087) {
+		LrH = 3.9e-19 * expf(-6118 * Tinv);
+	} else {
+		LrH = pow(10, -19.24 + 0.474 * x - 1.247 * x * x);
+	}
+	if (T > 1635) {
+		LvL = 1e-12 * sqrtf(T) * exp(-1000 / T);
+	} else {
+		LvL = 1.4e-13 * exp(T / 125 - sqr(T / 577));
+	}
+	LvL *= N.H * 8.18e-13;
+	double LvH = 1.1e-13 * exp(-6744 / T);
+	C[12] = N.H2 * (LrH * LrL / (LrL + LrH) + LvH * LvL / (LvL + LvH));
+	C[13] = 1.43e-27 * sqrt(T) * (1.1 + 0.34 * expf(-sqr(5.5 - log10f(T)) / 3.0)) * ne * (N.Hp + N.Hep + N.Hepp);
+	C[14] = 5.65e-36 * sqr(sqr(1 + z)) * (T - 2.73 * (1 + z)) * ne;
+	float total = 0.0f;
+	for (int i = 0; i < 14; i++) {
+		total += C[i];
+	}
+	return total;
+}
+
+array<float, NRATES> chemistry_rates(float T) {
+	T = std::max(1000.0f, T);
+	array<float, NRATES> K;
+	float Tev = T * Ktoev;
+	float lnT = log(Tev);
+	float log10T = lnT / log(10);
 	{
 		const auto c0 = -32.71396786;
 		const auto c1 = 13.536556;
@@ -42,7 +169,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		const auto c6 = -2.63197617e-3;
 		const auto c7 = 1.11954395e-4;
 		const auto c8 = -2.03914985e-6;
-		double k = c8;
+		float k = c8;
 		k = k * lnT + c7;
 		k = k * lnT + c6;
 		k = k * lnT + c5;
@@ -51,7 +178,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		k = k * lnT + c2;
 		k = k * lnT + c1;
 		k = k * lnT + c0;
-		K[1] = exp(k);
+		K[1] = expf(k);
 	}
 	{
 		const auto c0 = -28.6130338;
@@ -64,7 +191,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		const auto c7 = 5.75561414e-7;
 		const auto c8 = -1.85676704e-8;
 		const auto c9 = -3.07113524e-9;
-		double k = c9;
+		float k = c9;
 		k = k * lnT + c8;
 		k = k * lnT + c7;
 		k = k * lnT + c6;
@@ -74,7 +201,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		k = k * lnT + c2;
 		k = k * lnT + c1;
 		k = k * lnT + c0;
-		K[2] = std::exp(k);
+		K[2] = expf(k);
 	}
 
 	{
@@ -87,7 +214,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		const auto c6 = -5.00905610e-3;
 		const auto c7 = 2.06723616e-4;
 		const auto c8 = -3.64916141e-6;
-		double k = c8;
+		float k = c8;
 		k = k * lnT + c7;
 		k = k * lnT + c6;
 		k = k * lnT + c5;
@@ -96,13 +223,13 @@ array<double, NRATES> chemistry_rates(double T) {
 		k = k * lnT + c2;
 		k = k * lnT + c1;
 		k = k * lnT + c0;
-		K[3] = exp(k);
+		K[3] = expf(k);
 
 	}
 
 	{
 		K[4] = 3.925E-13 * std::pow(Tev, -0.6353);
-		K[4] += 1.544E-9 * std::pow(Tev, -1.5) * std::exp(-48.596 / Tev) * (0.3 + std::exp(8.10 / Tev));
+		K[4] += 1.544E-9 * std::pow(Tev, -1.5) * (0.3 * expf(-48.596 / Tev) + expf(-40.496 / Tev));
 	}
 	{
 		const auto c0 = -68.71040990;
@@ -114,7 +241,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		const auto c6 = -5.32402063E-3;
 		const auto c7 = 1.97570531E-4;
 		const auto c8 = -3.16558106E-6;
-		double k = c8;
+		float k = c8;
 		k = k * lnT + c7;
 		k = k * lnT + c6;
 		k = k * lnT + c5;
@@ -123,7 +250,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		k = k * lnT + c2;
 		k = k * lnT + c1;
 		k = k * lnT + c0;
-		K[5] = exp(k);
+		K[5] = expf(k);
 	}
 
 	{
@@ -156,7 +283,7 @@ array<double, NRATES> chemistry_rates(double T) {
 			const auto c5 = 1.0732940E-4;
 			const auto c6 = -8.36671960E-6;
 			const auto c7 = 2.23830623E-7;
-			double k = c7;
+			float k = c7;
 			k = k * lnT + c6;
 			k = k * lnT + c5;
 			k = k * lnT + c4;
@@ -164,7 +291,7 @@ array<double, NRATES> chemistry_rates(double T) {
 			k = k * lnT + c2;
 			k = k * lnT + c1;
 			k = k * lnT + c0;
-			K[8] = exp(k);
+			K[8] = expf(k);
 		} else {
 			K[8] = 1.428e-9;
 		}
@@ -189,7 +316,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		const auto c6 = -7.87902615E-3;
 		const auto c7 = 4.13839842E-4;
 		const auto c8 = -9.36345888E-6;
-		double k = c8;
+		float k = c8;
 		k = k * lnT + c7;
 		k = k * lnT + c6;
 		k = k * lnT + c5;
@@ -198,17 +325,17 @@ array<double, NRATES> chemistry_rates(double T) {
 		k = k * lnT + c2;
 		k = k * lnT + c1;
 		k = k * lnT + c0;
-		K[11] = exp(k);
+		K[11] = expf(k);
 
 	}
 
 	{
-		K[12] = 5.6e-11 * sqrt(T) * exp(-102124 / T);
+		K[12] = 5.6e-11 * sqrt(T) * expf(-102124 / T);
 	}
 
-	/*{
-	 K[13] = 1.067e-10 * std::pow(T, 2.012) * std::exp(-(4.463 / T) * std::pow(1 + 0.2472 * T, 3.512));
-	 }*/
+	{
+//		K[13] = 1.067e-10 * std::pow(T, 2.012) * expf(-(4.463 / T) * std::pow(1 + 0.2472 * T, 3.512));
+	}
 
 	{
 
@@ -221,7 +348,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		const auto c6 = -1.65619470E-3;
 		const auto c7 = 1.06827520E-4;
 		const auto c8 = -2.63128581E-6;
-		double k = c8;
+		float k = c8;
 		k = k * lnT + c7;
 		k = k * lnT + c6;
 		k = k * lnT + c5;
@@ -230,7 +357,7 @@ array<double, NRATES> chemistry_rates(double T) {
 		k = k * lnT + c2;
 		k = k * lnT + c1;
 		k = k * lnT + c0;
-		K[14] = std::exp(k);
+		K[14] = expf(k);
 	}
 
 	/*	{
@@ -246,7 +373,7 @@ array<double, NRATES> chemistry_rates(double T) {
 	 const auto c8 = 2.4555012E-6;
 	 const auto c9 = -8.0683825E-8;
 	 const auto lnT = std::log(T);
-	 double k = c9;
+	 float k = c9;
 	 k = k * lnT + c9;
 	 k = k * lnT + c7;
 	 k = k * lnT + c6;
@@ -256,7 +383,7 @@ array<double, NRATES> chemistry_rates(double T) {
 	 k = k * lnT + c2;
 	 k = k * lnT + c1;
 	 k = k * lnT + c0;
-	 K[15] = std::exp(k);
+	 K[15] = expf(k);
 	 } else {
 	 K[15] = 2.5634E-9 * std::pow(T, 1.78186);
 	 }
@@ -269,7 +396,7 @@ array<double, NRATES> chemistry_rates(double T) {
 	 if (T < 1.719) {
 	 K[17] = 2.291e-10 * std::pow(T, -0.4);
 	 } else {
-	 K[17] = 8.4258e-10 * std::pow(T, -1.4) * std::exp(-1.301 / T);
+	 K[17] = 8.4258e-10 * std::pow(T, -1.4) * expf(-1.301 / T);
 	 }
 	 }
 
@@ -287,15 +414,15 @@ array<double, NRATES> chemistry_rates(double T) {
 	return K;
 }
 
-species_t species_t::fractions_to_number_density(double rho) const {
+species_t species_t::fractions_to_number_density(float rho) const {
 	species_t N;
-	double tot = 0.f;
+	float tot = 0.f;
 	rho *= constants::avo;
 	for (int i = 0; i < NSPECIES; i++) {
 		tot += n[i];
 		N.n[i] = n[i] * rho;
 	}
-	double totinv = 1.f / tot;
+	float totinv = 1.f / tot;
 	for (int i = 0; i < NSPECIES; i++) {
 		N.n[i] *= totinv;
 	}
@@ -312,39 +439,33 @@ species_t species_t::number_density_to_fractions() const {
 	f.Hep *= 4.0;
 	f.Hepp *= 4.0;
 	f.H2 *= 2.0;
-	double rho = 0.f;
+	float rho = 0.f;
 	for (int i = 0; i < NSPECIES; i++) {
 		rho += f.n[i];
 	}
-	double rhoinv = 1.f / rho;
+	float rhoinv = 1.f / rho;
 	for (int i = 0; i < NSPECIES; i++) {
 		f.n[i] *= rhoinv;
 	}
 	return f;
 }
 
-static double rand1() {
-	return ((double) rand() + 0.5) / (double) RAND_MAX;
+static float rand1() {
+	return ((float) rand() + 0.5) / (float) RAND_MAX;
 }
 
-void radiation_cross_sections(double z, double& sigma20, double& sigma21, double& sigma22) {
-	double k0[3] = { 5.6e-13, 2 * 4.8e-15, 3.2e-13 };
-	double alpha[3] = { 0.43, 0.30, 0.43 };
-	double beta[3] = { 1.0 / 1.95, 1.0 / 2.6, 1.0 / 1.95 };
-	double z0[3] = { 2.3, 2.3, 2.3 };
-	double z1[3] = { 0, 0, 0 };
-	double gamma[3] = { 0, 0, 0 };
-	/*	double k0[3] = { 1.04e-12, 1.84e-14, 5.79e-13 };
-	 double alpha[3] = { 0.231, -1.038, 0.278 };
-	 double beta[3] = { -.6818, -1.1640, -0.8260 };
-	 double z0[3] = { 1.855, 1.973, 1.973 };
-	 double z1[3] = { 0.3097, -.6561, .2880 };
-	 double gamma[3] = { .1646, .1940, .1730 };*/
-	double res[3];
-	for (int i = 0; i < 3; i++) {
-		double pwr = beta[i] * sqr(z - z0[i]);
+void radiation_cross_sections(float z, float& sigma20, float& sigma21, float& sigma22, float& sigmaH, float& sigmaHe, float& sigmaHep) {
+	float k0[6] = { 5.6e-13, 2 * 4.8e-15, 3.2e-13, 3.9e-24, 6.4e-24, 8.6e-26 };
+	float alpha[6] = { 0.43, 0.30, 0.43, .43, .43, .3 };
+	float beta[6] = { 1.0 / 1.95, 1.0 / 2.6, 1.0 / 1.95, 1 / 1.95, 1 / 2.1, 1 / 2.7 };
+	float z0[6] = { 2.3, 2.3, 2.3, 2.3, 2.3, 2.3 };
+	float z1[6] = { 0, 0, 0, 0, 0, 0 };
+	float gamma[6] = { 0, 0, 0, 0, 0, 0 };
+	float res[6];
+	for (int i = 0; i < 6; i++) {
+		float pwr = beta[i] * sqr(z - z0[i]);
 		if (pwr < 50.0) {
-			res[i] = k0[i] * pow(1 + z, alpha[i]) * exp(-pwr / (1 + gamma[i] * sqr(z + z1[i])));
+			res[i] = k0[i] * pow(1 + z, alpha[i]) * expf(-pwr / (1 + gamma[i] * sqr(z + z1[i])));
 		} else {
 			res[i] = 0.0;
 		}
@@ -352,111 +473,159 @@ void radiation_cross_sections(double z, double& sigma20, double& sigma21, double
 	sigma20 = res[0];
 	sigma21 = res[2];
 	sigma22 = res[1];
-//	sigma20 = sigma21 = sigma22 = 1;
+	sigmaH = res[3];
+	sigmaHe = res[4];
+	sigmaHep = res[5];
 }
 
-species_t chemistry_update(species_t species, double rho, double T, double z, double dt) {
+species_t chemistry_update(species_t species, float rho, float& T0, float z, float dt) {
 	species_t N = species.fractions_to_number_density(rho);
 
 	const auto N0 = N;
-	double Ntot = N.H + N.Hp + N.Hn + N.He + N.Hep + N.Hepp + N.H2;
-	double Hall = N.H + N.Hn + N.Hp + 2.0 * (N.H2);
-	double Heall = N.He + N.Hep + N.Hepp;
+	float Ntot = N.H + N.Hp + N.Hn + N.He + N.Hep + N.Hepp + N.H2;
+	float Hall = N.H + N.Hn + N.Hp + 2.0 * (N.H2);
+//	PRINT("@!1111111111111111$ %e %e %e %e\n", N.H, N.Hn, N.Hp, N.H2);
+	float Heall = N.He + N.Hep + N.Hepp;
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
-
+	float oldT;
 #define Power(a, b) pow(a, b)
 #define Sqrt(a) sqrt(a)
 #define Rule(a,b) a = b
 #define List(...) __VA_ARGS__
+	float sigma20, sigma21, sigma22, sigmaH, sigmaHe, sigmaHep;
+	radiation_cross_sections(z, sigma20, sigma21, sigma22, sigmaH, sigmaHe, sigmaHep);
+	const float oldN = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;
+	float newN;
+	const auto test_temp =
+			[N0,&newN,oldN,Heall,Hall,dt, sigma20, sigma21, sigma22, sigmaH, sigmaHe, sigmaHep,&N, z, T0](float T) {
+				auto k = chemistry_rates(T);
+				const auto compute_ne =
+				[N0,Heall,Hall,k, dt, sigma20, sigma21, sigma22, sigmaH, sigmaHe, sigmaHep, T0, T](species_t& N, float ne) {
+					float K1 = k[1];
+					float K2 = k[2];
+					float K3 = k[3];
+					float K4 = k[4];
+					float K5 = k[5];
+					float K6 = k[6];
+					float K7 = k[7];
+					float K8 = k[8];
+					float K9 = k[9];
+					float K10 = k[10];
+					float K11 = k[11];
+					float K12 = k[12];
+					float K13 = k[13];
+					float K14 = k[14];
+					float K15 = k[15];
+					float K16 = k[16];
+					float K17 = k[17];
+					float K18 = k[18];
+					float K19 = k[19];
 
-	auto k = chemistry_rates(T);
-	double sigma20, sigma21, sigma22;
-	radiation_cross_sections(z, sigma20, sigma21, sigma22);
+					float& H = N.H;
+					float& Hp = N.Hp;
+					float& Hn = N.Hn;
+					float& He = N.He;
+					float& Hep = N.Hep;
+					float& Hepp = N.Hepp;
+					float& H2 = N.H2;
+					float H0 = N0.H;
+					float Hp0 = N0.Hp;
+					float Hn0 = N0.Hn;
+					float He0 = N0.He;
+					float Hep0 = N0.Hep;
+					float Hepp0 = N0.Hepp;
+					float H20 = N0.H2;
+					float Hp1, Hp2, H21, H22;
+//					PRINT( " 1 %e %e %e %e\n", H, Hp, Hn, H2);
+					Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
+					H = Hall - Hp - Hn - 2 * H2;
+//					PRINT( " 2 %e %e %e %e\n", H, Hp, Hn, H2);
+					List(List(Rule(Hp,(Hp0 - 2*dt*H2*K1*ne + dt*Hall*K1*ne - dt*Hn*K1*ne - 2*dt*H2*sigma20 + dt*Hall*sigma20 - dt*Hn*sigma20)/(1 + dt*K1*ne + dt*K2*ne + dt*sigma20))));
+					H = Hall - Hp - Hn - 2 * H2;
+//					PRINT( " 3 %e %e %e %e\n", H, Hp, Hn, H2);
+					Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
+					H = Hall - Hp - Hn - 2 * H2;
+//					PRINT( " 4 %e %e %e %e\n", H, Hp, Hn, H2);
+					float H200 = H2;
+					List(List(Rule(H2,(H20*Hp*K16 + H*H20*K8 + H20*K14*ne + dt*Power(H,2)*K7*K8*ne + 2*dt*H*H20*K7*K8*ne)/
+											(Hp*K16 + dt*Power(Hp,2)*K11*K16 + H*K8 + dt*H*Hp*K11*K8 + K14*ne + dt*Hp*K11*K14*ne + dt*Hp*K12*K16*ne + dt*H*K12*K8*ne + 2*dt*H*K7*K8*ne + dt*K12*K14*Power(ne,2)))));
+			//		if( H2 > 0.5 *H + H200 ) {
+			//			PRINT( "!!!!!!!!!! %e %e %e\n", H2, H, H200);
+			//			abort();
+			//		}
+					H = Hall - Hp - Hn - 2 * H2;
+					Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
+					H = Hall - Hp - Hn - 2 * H2;
+					List(List(Rule(Hep,-((Hepp0*(dt*K3*ne - dt*K6*ne + dt*sigma21) + (1 + dt*K6*ne)*(-Hep0 - dt*Heall*K3*ne - dt*Heall*sigma21))/
+													(-((dt*K3*ne - dt*K6*ne + dt*sigma21)*(-(dt*K5*ne) - dt*sigma22)) + (1 + dt*K6*ne)*(1 + dt*K3*ne + dt*K4*ne + dt*K5*ne + dt*sigma21 + dt*sigma22)))),
+									Rule(Hepp,-((-Hepp0 - dt*Hepp0*K3*ne - dt*Hepp0*K4*ne - dt*Hep0*K5*ne - dt*Hepp0*K5*ne - Power(dt,2)*Heall*K3*K5*Power(ne,2) - dt*Hepp0*sigma21 - Power(dt,2)*Heall*K5*ne*sigma21 - dt*Hep0*sigma22 - dt*Hepp0*sigma22 -
+															Power(dt,2)*Heall*K3*ne*sigma22 - Power(dt,2)*Heall*sigma21*sigma22)/
+													(1 + dt*K3*ne + dt*K4*ne + dt*K5*ne + dt*K6*ne + Power(dt,2)*K3*K5*Power(ne,2) + Power(dt,2)*K3*K6*Power(ne,2) + Power(dt,2)*K4*K6*Power(ne,2) + dt*sigma21 + Power(dt,2)*K5*ne*sigma21 +
+															Power(dt,2)*K6*ne*sigma21 + dt*sigma22 + Power(dt,2)*K3*ne*sigma22 + Power(dt,2)*sigma21*sigma22)))));
+					He = Heall - Hep - Hepp;
+//					PRINT( "%e %e %e %e \n", (H2-H20)/H20, K7/(K11+K12), T, H/ Hall);
+					H = std::max(H,0.0f);
+					 Hp = std::max(Hp,0.0f);
+					 Hn = std::max(Hn,0.0f);
+					 H2 = std::max(H2,0.0f);
+					 He = std::max(He,0.0f);
+					 Hep = std::max(Hep,0.0f);
+					 Hepp = std::max(Hepp,0.0f);
+					return Hp - Hn + Hep + 2 * Hepp;
+				};
+				float ne_max = Hall + 4 * Heall;
+				float ne_min = 0.0;
+				bool dotop = true;
+				bool dobottom = true;
+				float f_max, f_mid;
+				for (int iter = 0; iter < 20; iter++) {
+					float ne_mid = 0.5 * (ne_max + ne_min);
+					if (dotop) {
+						f_max = compute_ne(N, ne_max) - ne_max;
+					}
+					if (dobottom) {
+						f_mid = compute_ne(N, ne_mid) - ne_mid;
+					}
+					if (f_max * f_mid < 0.0) {
+						ne_min = ne_mid;
+						dobottom = true;
+						dotop = false;
+					} else {
+						ne_max = ne_mid;
+						dobottom = false;
+						dotop = true;
+					}
+				}
 
-	const auto compute_ne = [N0,Heall,Hall,k, dt, sigma20, sigma21, sigma22](species_t& N, double ne) {
-		double K1 = k[1];
-		double K2 = k[2];
-		double K3 = k[3];
-		double K4 = k[4];
-		double K5 = k[5];
-		double K6 = k[6];
-		double K7 = k[7];
-		double K8 = k[8];
-		double K9 = k[9];
-		double K10 = k[10];
-		double K11 = k[11];
-		double K12 = k[12];
-		double K13 = k[13];
-		double K14 = k[14];
-		double K15 = k[15];
-		double K16 = k[16];
-		double K17 = k[17];
-		double K18 = k[18];
-		double K19 = k[19];
+				newN = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;
+				float dedt_cool = cooling_rate(T,z, N) - N.H * sigmaH - N.He * sigmaHe - N.Hep * sigmaHep;
+				return 1.5 * constants::kb *(newN * T - oldN * T0) + dt * dedt_cool;
+			};
 
-		double& H = N.H;
-		double& Hp = N.Hp;
-		double& Hn = N.Hn;
-		double& He = N.He;
-		double& Hep = N.Hep;
-		double& Hepp = N.Hepp;
-		double& H2 = N.H2;
-		double H0 = N0.H;
-		double Hp0 = N0.Hp;
-		double Hn0 = N0.Hn;
-		double He0 = N0.He;
-		double Hep0 = N0.Hep;
-		double Hepp0 = N0.Hepp;
-		double H20 = N0.H2;
-		Hn = 0.0;
-		//		PRINT( "%e %e %e\n", sigma20, sigma21, sigma22);
-			double Hp1, Hp2, H21, H22;
-			Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
-			H = Hall - Hp - Hn - 2 * H2;
-			List(List(Rule(Hp,(Hp0 - 2*dt*H2*K1 + dt*Hall*K1 - dt*Hn*K1 - 2*dt*H2*sigma20 + dt*Hall*sigma20 - dt*Hn*sigma20)/(1 + dt*K1 + dt*K2 + dt*sigma20)))); H = Hall - Hp - Hn - 2 * H2;
-			Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
-			H = Hall - Hp - Hn - 2 * H2;
-			List(List(Rule(H2,(H20 + dt*H*Hn*K8)/(1 + dt*Hp*K11 + dt*K12*ne))));
-			Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
-			H = Hall - Hp - Hn - 2 * H2;
-			List(List(Rule(Hep,-((Hepp0*(dt*K3*ne - dt*K6*ne + dt*sigma21) + (1 + dt*K6*ne)*(-Hep0 - dt*Heall*K3*ne - dt*Heall*sigma21))/
-			        (-((dt*K3*ne - dt*K6*ne + dt*sigma21)*(-(dt*K5*ne) - dt*sigma22)) + (1 + dt*K6*ne)*(1 + dt*K3*ne + dt*K4*ne + dt*K5*ne + dt*sigma21 + dt*sigma22)))),
-			    Rule(Hepp,-((-Hepp0 - dt*Hepp0*K3*ne - dt*Hepp0*K4*ne - dt*Hep0*K5*ne - dt*Hepp0*K5*ne - Power(dt,2)*Heall*K3*K5*Power(ne,2) - dt*Hepp0*sigma21 - Power(dt,2)*Heall*K5*ne*sigma21 - dt*Hep0*sigma22 - dt*Hepp0*sigma22 -
-			          Power(dt,2)*Heall*K3*ne*sigma22 - Power(dt,2)*Heall*sigma21*sigma22)/
-			        (1 + dt*K3*ne + dt*K4*ne + dt*K5*ne + dt*K6*ne + Power(dt,2)*K3*K5*Power(ne,2) + Power(dt,2)*K3*K6*Power(ne,2) + Power(dt,2)*K4*K6*Power(ne,2) + dt*sigma21 + Power(dt,2)*K5*ne*sigma21 +
-			          Power(dt,2)*K6*ne*sigma21 + dt*sigma22 + Power(dt,2)*K3*ne*sigma22 + Power(dt,2)*sigma21*sigma22)))));
-			//PRINT( "%e %e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp, ne);
-			He = Heall - Hep - Hepp;
-			H = std::max(H,0.0);
-			Hp = std::max(Hp,0.0);
-			Hn = std::max(Hn,0.0);
-			H2 = std::max(H2,0.0);
-			He = std::max(He,0.0);
-			Hep = std::max(Hep,0.0);
-			Hepp = std::max(Hepp,0.0);
-			return Hp - Hn + Hep + Hepp;
-		};
-
-	double ne_max = Hall + 4 * Heall;
-	double ne_min = 0.0;
-	do {
-		double ne_mid = 0.5 * (ne_max + ne_min);
-		double f_max = compute_ne(N, ne_max) - ne_max;
-		double f_mid = compute_ne(N, ne_mid) - ne_min;
-		if (f_max * f_mid < 0.0) {
-			ne_min = ne_mid;
+	float Tmin = 1e3;
+	float Tmax = 1e8;
+	float Tmid;
+	for (int i = 0; i < 20; i++) {
+		Tmid = sqrt(Tmax * Tmin);
+		float fmax = test_temp(Tmax);
+		float fmid = test_temp(Tmid);
+		if (std::copysign(1.0, fmax) == std::copysign(1.0, fmid) < 0.0) {
+			Tmin = Tmid;
 		} else {
-			ne_max = ne_mid;
+			Tmax = Tmid;
 		}
-		auto fracs = N.number_density_to_fractions();
-		//	PRINT("%e %e %e %e %e %e %e %e %e %e\n", ne_min, ne_max, fracs.H, fracs.Hp, fracs.Hn, fracs.H2, fracs.He, fracs.Hep, fracs.Hepp, (N.Hp-N.Hn+2*N.Hepp+N.Hepp) / (Hall + 4*Heall));
-	} while ((ne_max - ne_min) / ne_max > 1e-6);
-	//PRINT("%e\n", k[6] * ne_max, sigma22);
-
-	double Hfac = Hall / (N.H + N.Hn + N.Hp + 2.0 * (N.H2));
-	double Hefac = Heall / (N.He + N.Hep + N.Hepp);
+		//	PRINT("%e %e %e %e\n", T0, Tmin, Tmid, Tmax);
+	}
+	if (oldN / newN > 18./5. || oldN / newN < 5. / 18.) {
+		PRINT("%e %e %e\n", oldN / newN, oldN, newN);
+		PRINT("%e %e %e %e %e %e %e\n", N0.H, N0.Hp, N0.Hn, N0.H2, N0.He, N0.Hep, N0.Hepp);
+		PRINT("%e %e %e %e %e %e %e\n", N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
+		abort();
+	}
+	float Hfac = Hall / (N.H + N.Hn + N.Hp + 2.0 * (N.H2));
+	float Hefac = Heall / (N.He + N.Hep + N.Hepp);
 	N.H *= Hfac;
 	N.Hp *= Hfac;
 	N.Hn *= Hfac;
@@ -464,10 +633,12 @@ species_t chemistry_update(species_t species, double rho, double T, double z, do
 	N.He *= Hefac;
 	N.Hep *= Hefac;
 	N.Hepp *= Hefac;
+	T0 = Tmid;
 	return N.number_density_to_fractions();
 }
 
 void chemistry_test() {
+
 	species_t N;
 	N.H = 0.71;
 	N.H2 = 0.02;
@@ -476,57 +647,59 @@ void chemistry_test() {
 	N.He = 0.23;
 	N.Hep = 0.01;
 	N.Hepp = 0.01;
-	/*for (double T = 1000.0; T < 1e8; T *= 1.1) {
+	/*for (float T = 1000.0; T < 1e8; T *= 1.1) {
 	 auto k = chemistry_rates(T);
-	 double K1 = k[1];
-	 double K2 = k[2];
-	 double K3 = k[3];
-	 double K4 = k[4];
-	 double K5 = k[5];
-	 double K6 = k[6];
-	 double K7 = k[7];
-	 double K8 = k[8];
-	 double K9 = k[9];
-	 double K10 = k[10];
-	 double K11 = k[11];
-	 double K12 = k[12];
-	 double K13 = k[13];
-	 double K14 = k[14];
-	 double K15 = k[15];
-	 double K16 = k[16];
-	 double K17 = k[17];
-	 double K18 = k[18];
-	 double K19 = k[19];
+	 float K1 = k[1];
+	 float K2 = k[2];
+	 float K3 = k[3];
+	 float K4 = k[4];
+	 float K5 = k[5];
+	 float K6 = k[6];
+	 float K7 = k[7];
+	 float K8 = k[8];
+	 float K9 = k[9];
+	 float K10 = k[10];
+	 float K11 = k[11];
+	 float K12 = k[12];
+	 float K13 = k[13];
+	 float K14 = k[14];
+	 float K15 = k[15];
+	 float K16 = k[16];
+	 float K17 = k[17];
+	 float K18 = k[18];
+	 float K19 = k[19];
 
 	 PRINT("%e %e %e %e %e %e %e %e %e %e %e %e \n", T, K1, K2, K3, K4, K5, K6, K7, K8, K11, K14, K16);
 	 }*/
-	double m = 0.0;
+	float m = 0.0;
 
-	for (double z = 0.0; z < 50; z += 0.01) {
-		//	double T = pow(10.0, 3.0 + rand1() * 5.0);
-		//	double rho = pow(10.0, -(20.0 + 6.0 * rand1()));
-		double T = 1000;
-		double rho = 1e-28;
-//		double z = rand1() * 50.0;
-		N.H = .75;
+	for (int i = 0; true; i++) {
+		float T = pow(10.0, 3.0 + rand1() * 5.0);
+		float z = rand1() * 5;
+				float rho = pow(10.0, -(24.0 + 3.0 * rand1())) * (z+1);
+		N.H = rand1();
 		N.H2 = 0.0;
-		N.Hp = 0.0;
+		N.Hp = rand1();
 		N.Hn = 0.0;
-		N.He = 0.25;
-		N.Hep = 0.0;
-		N.Hepp = 0.0;
-		double t0 = N.H + 2 * N.H2 + N.Hp + N.Hn + N.He + N.Hep + N.Hepp;
-		N.H /= t0;
-		N.H2 /= t0;
-		N.Hp /= t0;
-		N.Hn /= t0;
-		N.He /= t0;
-		N.Hep /= t0;
-		N.Hepp /= t0;
+		N.He = rand1();
+		N.Hep = rand1();
+		N.Hepp = rand1();
+//		PRINT("!!!!!!!!!!!!!!!!!!!!!! %e %e %e %e\n", N.H + N.H2 + N.Hp + N.Hn, N.He, N.Hep, N.Hepp);
+		float h0 = (N.H + N.H2 + N.Hp + N.Hn) / .75;
+		float he0 = (N.He + N.Hep + N.Hepp) / .25;
+		N.H /= h0;
+		N.H2 /= h0;
+		N.Hp /= h0;
+		N.Hn /= h0;
+		N.He /= he0;
+		N.Hep /= he0;
+		N.Hepp /= he0;
+//		PRINT("!!!!!!!!!!!!!!!!!!!!!! %e %e %e %e  %e\n", N.H + N.H2 + N.Hp + N.Hn, N.He, N.Hep, N.Hepp, he0);
 		//	print("-----------------------------------------------------------\n");
+		float T0 = T;
 		N = chemistry_update(N, rho, T, z, 1e15);
-		print("%e %e %e %e %e %e %e %e\n", z, N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
-		double sigma20, sigma21, sigma22;
+		print("%e %e %e %e %e %e %e %e %e %e\n", z, T0, T, N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
+		float sigma20, sigma21, sigma22;
 		//radiation_cross_sections(z, sigma20, sigma21, sigma22);
 		if (m < N.H2) {
 			m = N.H2;

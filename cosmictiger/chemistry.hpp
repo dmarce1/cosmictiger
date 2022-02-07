@@ -29,18 +29,18 @@
 
 struct species_t {
 	union {
-		double n[NSPECIES];
+		float n[NSPECIES];
 		struct {
-			double H;
-			double Hp;
-			double Hn;
-			double He;
-			double Hep;
-			double Hepp;
-			double H2;
+			float H;
+			float Hp;
+			float Hn;
+			float He;
+			float Hep;
+			float Hepp;
+			float H2;
 		};
 	};
-	species_t fractions_to_number_density(double rho) const;
+	species_t fractions_to_number_density(float rho) const;
 	species_t number_density_to_fractions() const;
 };
 
