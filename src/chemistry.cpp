@@ -21,6 +21,8 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/hpx.hpp>
 #include <fenv.h>
 
 #define NRATES 20
@@ -581,7 +583,7 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 		Tmid = sqrt(Tmax * Tmin);
 		float fmax = test_temp(Tmax);
 		float fmid = test_temp(Tmid);
-		if (std::copysign(1.0, fmax) != std::copysign(1.0, fmid) ) {
+		if (std::copysign(1.0, fmax) != std::copysign(1.0, fmid)) {
 			Tmin = Tmid;
 		} else {
 			Tmax = Tmid;
@@ -679,3 +681,58 @@ void chemistry_test() {
 	}
 }
 
+HPX_PLAIN_ACTION (chemistry_do_step);
+
+static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
+		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
+		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+
+void chemistry_do_step(float a, int minrung, float t0) {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0));
+	}
+	int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc, nthreads, a, minrung,t0]() {
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			vector<chem_attribs> chems;
+			const float mass = get_options().sph_mass;
+			const int N = get_options().neighbor_number;
+			for( part_int i = b; i < e; i++) {
+				int rung = sph_particles_rung(i);
+				if( rung >= minrung ) {
+					chem_attribs chem;
+					chem.Hp = sph_particles_Hp(i);
+					chem.Hn = sph_particles_Hn(i);
+					chem.H2 = sph_particles_H2(i);
+					chem.Hep = sph_particles_Hep(i);
+					chem.Hepp = sph_particles_Hepp(i);
+					chem.K = sph_particles_ent(i);
+					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3);
+					chem.dt = 0.5f * t0 * rung_dt[rung];
+					chems.push_back(chem);
+				}
+			}
+			cuda_chemistry_step(chems, a);
+			int j = 0;
+			for( part_int i = b; i < e; i++) {
+				int rung = sph_particles_rung(i);
+				if( rung >= minrung ) {
+					const chem_attribs& chem = chems[j++];
+					sph_particles_Hp(i) = chem.Hp;
+					sph_particles_Hn(i) = chem.Hn;
+					sph_particles_H2(i) = chem.H2;
+					sph_particles_Hep(i) = chem.Hep;
+					sph_particles_Hepp(i) = chem.Hepp;
+					sph_particles_ent(i) = chem.K;
+				}
+			}
+
+		}));
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+}

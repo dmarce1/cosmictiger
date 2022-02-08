@@ -56,6 +56,11 @@ struct dm_part_info {
 struct sph_part_info: public dm_part_info {
 	float ent;
 	float h;
+	float Hp;
+	float H2;
+	float Hn;
+	float Hep;
+	float Hepp;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
@@ -90,9 +95,10 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
 	}
+	const bool chem = get_options().chem;
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, boxes]() {
+		futs.push_back(hpx::async([proc, nthreads, boxes, chem]() {
 			view_return rc;
 			rc.hydro.resize(boxes.size());
 			rc.dm.resize(boxes.size());
@@ -125,6 +131,13 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 							info.vz = particles_vel(ZDIM,i);
 							info.ent = sph_particles_ent(k);
 							info.h = sph_particles_smooth_len(k);
+							if( chem ) {
+								info.Hp = sph_particles_Hp(k);
+								info.Hn = sph_particles_Hn(k);
+								info.H2 = sph_particles_H2(k);
+								info.Hep = sph_particles_Hep(k);
+								info.Hepp = sph_particles_Hepp(k);
+							}
 							rc.hydro[j].push_back(info);
 						}
 					}
@@ -198,12 +211,31 @@ void view_output_views(int cycle) {
 		DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
 		x.resize(0);
 		y.resize(0);
+		const bool chem = get_options().chem;
 		for (int i = 0; i < parts.hydro[bi].size(); i++) {
 			x.push_back(parts.hydro[bi][i].h);
 			y.push_back(parts.hydro[bi][i].ent);
 		}
 		DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 		DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		z.resize(0);
+		if (chem) {
+			vector<float> p, q;
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].Hp);
+				y.push_back(parts.hydro[bi][i].Hn);
+				z.push_back(parts.hydro[bi][i].H2);
+				p.push_back(parts.hydro[bi][i].Hep);
+				q.push_back(parts.hydro[bi][i].Hepp);
+			}
+			DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, NULL);
+		}
 		DBClose(db);
 	}
 

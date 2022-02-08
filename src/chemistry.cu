@@ -23,6 +23,7 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 
 struct chemistry_params {
@@ -31,7 +32,6 @@ struct chemistry_params {
 	double code_to_s;
 	float a;
 	float Hefrac;
-	float dt;
 };
 
 #define CHEM_BLOCK_SIZE 32
@@ -396,12 +396,11 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	return constants::kb * (cv1 * n1 * T - cv0 * n0 * T0) - dt * dedt;												// 8
 }
 
-__global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, int nchems, float dt, int* next_index, double* total_flops) {
+__global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, int nchems, int* next_index, double* total_flops) {
 	int index;
 	index = atomicAdd(next_index, 1);
 	const double code_to_energy_density = params.code_to_g / (params.code_to_cm * sqr(params.code_to_s));		// 7
 	const double code_to_density = pow(params.code_to_cm, -3) * params.code_to_g;										// 10
-	dt *= params.a * params.code_to_s;																												// 1
 	int flops = 18;
 	double myflops = 0.0;
 	while (index < nchems) {
@@ -415,6 +414,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.He = params.Hefrac - attr.Hep - attr.Hepp;																		// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
+		float dt = attr.dt;
+		dt *= params.a * params.code_to_s;																												// 1
 		const float rho = attr.rho * code_to_density;
 		const float rhoavo = rho * constants::avo;																		// 1
 		N.H *= rhoavo;																												// 1
@@ -494,7 +495,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 	atomicAdd(total_flops, myflops);
 }
 
-void cuda_chemistry_step(vector<chem_attribs>& chems, float scale, float dt) {
+void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	timer tm;
 	tm.start();
 	static const auto opts = get_options();
@@ -514,10 +515,10 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale, float dt) {
 	params.code_to_cm = opts.code_to_cm;
 	params.code_to_g = opts.code_to_g;
 	params.code_to_s = opts.code_to_s;
-	params.dt = dt;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) chemistry_kernel, CHEM_BLOCK_SIZE, 0));
 	nblocks *= cuda_smp_count();
-	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE>>>(params, dev_chems, chems.size(), dt, index, flops);
+	nblocks = std::max(1,nblocks/hpx_hardware_concurrency());
+	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE>>>(params, dev_chems, chems.size(), index, flops);
 	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaMemcpy(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost));
 	double myflops = *flops;
@@ -571,6 +572,7 @@ void test_cuda_chemistry_kernel() {
 		K *= pow(code_to_density, gamma);
 //		PRINT("!!!!!!!!!!!1 %e %e %e %e\n", energy, gamma, rho, K);
 		rho /= code_to_density;
+		chem.dt = 1e15 / opts.code_to_s;
 		chem.H2 = N.H2;
 		chem.Hp = N.Hp;
 		chem.Hep = N.Hep;
@@ -583,10 +585,10 @@ void test_cuda_chemistry_kernel() {
 		chem0.push_back(chem);
 	}
 	PRINT("Starting\n");
-	cuda_chemistry_step(chems, 1.0, 1e15 / opts.code_to_s);
+	cuda_chemistry_step(chems, 1.0);
 
 	for (int i = 0; i < N; i++) {
-//		PRINT("%e %e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
+//.		PRINT("%e %e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
 	}
 }
 

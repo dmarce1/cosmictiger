@@ -94,6 +94,7 @@ bool process_options(int argc, char *argv[]) {
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
+	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "do variable softening") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
@@ -195,6 +196,7 @@ bool process_options(int argc, char *argv[]) {
 		//	opts.dm_mass = 0.0;
 	}
 	SHOW(check_freq);
+	SHOW(chem);
 	SHOW(code_to_cm);
 	SHOW(cfl);
 	SHOW(code_to_g);

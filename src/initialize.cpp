@@ -626,6 +626,7 @@ static range<int64_t> find_my_box() {
 
 static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, float mask) {
 	const bool sph = get_options().sph;
+	const bool chem = get_options().chem;
 	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
@@ -665,15 +666,15 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 			const double c2cm = get_options().code_to_cm;
 			const double c2e = c2g / (c2s * c2s) / c2cm;
 			const double c2den = c2g / (c2cm * c2cm * c2cm);
-			const double c2ent = c2e / std::pow(c2den,5.0/3.0);
+			const double c2ent = c2e / std::pow(c2den, 5.0 / 3.0);
 			entropy = Kphys / c2ent;
-			PRINT( "Entropy conversion factor = %e\n", c2ent);
-			PRINT( "Initial entropy in code units = %e\n", entropy);
+			PRINT("Entropy conversion factor = %e\n", c2ent);
+			PRINT("Initial entropy in code units = %e\n", entropy);
 		}
-		const float h3 = get_options().neighbor_number/ (4.0/3.0*M_PI) / std::pow(get_options().parts_dim,3);
-		const float h = std::pow(h3,1.0/3.0);
+		const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+		const float h = std::pow(h3, 1.0 / 3.0);
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-			local_futs.push_back(hpx::async([box,Ninv,sph,entropy,h](array<int64_t,NDIM> I) {
+			local_futs.push_back(hpx::async([box,Ninv,sph,entropy,h,chem](array<int64_t,NDIM> I) {
 				const float omega_m = get_options().omega_m;
 				const float omega_b = get_options().omega_b;
 				const float omega = omega_m + omega_b;
@@ -695,15 +696,22 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 						if( sph ) {
 							sph_particles_rung(index) = 0;
 #ifdef SPH_TOTAL_ENERGY
-							sph_particles_ent(index) = 0.0;
+					sph_particles_ent(index) = 0.0;
 #else
-							sph_particles_ent(index) = entropy;
+					sph_particles_ent(index) = entropy;
 #endif
-							sph_particles_smooth_len(index) = h;
-						}
+					sph_particles_smooth_len(index) = h;
+					if( chem ) {
+						sph_particles_Hp(index) = 0.f;
+						sph_particles_Hn(index) = 0.f;
+						sph_particles_H2(index) = 0.f;
+						sph_particles_Hep(index) = 0.f;
+						sph_particles_Hepp(index) = 0.f;
 					}
 				}
-			}, I));
+			}
+		}
+	}, I));
 		}
 		hpx::wait_all(local_futs.begin(), local_futs.end());
 		local_futs.resize(0);
@@ -742,13 +750,13 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 						sph_particles_pos(dim, index) = x;
 						sph_particles_vel(dim, index) += prefac1 * dx;
 #ifdef SPH_TOTAL_ENERGY
-						sph_particles_ent(index) += mask*get_options().sph_mass * sqr(sph_particles_vel(dim, index))*0.5f;
+				sph_particles_ent(index) += mask*get_options().sph_mass * sqr(sph_particles_vel(dim, index))*0.5f;
 #endif
-					}
-				}
 			}
-			return this_dxmax;
-		}, I));
+		}
+	}
+	return this_dxmax;
+}, I));
 	}
 	for (auto& f : futs) {
 		const auto tmp = f.get();

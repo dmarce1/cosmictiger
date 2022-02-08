@@ -35,6 +35,7 @@ struct options {
 	bool use_power_file;
 	bool read_check;
 	bool vsoft;
+	bool chem;
 	int tracer_count;
 	int kernel;
 	int parts_dim;
@@ -82,6 +83,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & chem;
 		arc & neighbor_number;
 		arc & kernel;
 		arc & vsoft;

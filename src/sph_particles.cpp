@@ -210,8 +210,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 	part_int end = rng.second;
 	part_int lo = begin;
 	part_int hi = end;
-	const bool do_groups = get_options().do_groups;
-	const bool do_tracers = get_options().do_tracers;
+	const bool chem = get_options().chem;
 	while (lo < hi) {
 		if (sph_particles_pos(xdim, lo) >= xmid) {
 			while (lo != hi) {
@@ -229,6 +228,11 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 #endif
 					for (int dim = 0; dim < NDIM; dim++) {
 						std::swap(sph_particles_dv[dim][hi], sph_particles_dv[dim][lo]);
+					}
+					if (chem) {
+						for (int l = 0; l < NCHEMFRACS; l++) {
+							std::swap(sph_particles_chem[l][hi], sph_particles_chem[l][lo]);
+						}
 					}
 					break;
 				}
@@ -273,6 +277,7 @@ void sph_particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 }
 
 void sph_particles_resize(part_int sz) {
+	const bool chem = get_options().chem;
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
@@ -292,6 +297,11 @@ void sph_particles_resize(part_int sz) {
 #endif
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv[dim], new_capacity, true);
+		}
+		if (chem) {
+			for (int f = 0; f < NCHEMFRACS; f++) {
+				sph_particles_array_resize(sph_particles_chem[f], new_capacity, false);
+			}
 		}
 		capacity = new_capacity;
 	}
@@ -339,6 +349,11 @@ void sph_particles_free() {
 		}
 #endif
 	} else {
+		if (get_options().chem) {
+			for (int f = 0; f < NCHEMFRACS; f++) {
+				free(sph_particles_chem[f]);
+			}
+		}
 		free(sph_particles_h);
 		free(sph_particles_e);
 		free(sph_particles_de);
