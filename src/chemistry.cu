@@ -415,7 +415,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.He = params.Hefrac - attr.Hep - attr.Hepp;																		// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
-		float dt = attr.dt;
+		float dt = attr.dt / params.a;
 		dt *= params.a * params.code_to_s;																												// 1
 		const float rho = attr.rho * code_to_density * pow(params.a, -3);
 		const float rhoavo = rho * constants::avo;																		// 1
