@@ -23,6 +23,8 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/view.hpp>
+#include <cosmictiger/sph.hpp>
+#include <cosmictiger/constants.hpp>
 
 #include <silo.h>
 
@@ -158,7 +160,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 
 }
 
-void view_output_views(int cycle) {
+void view_output_views(int cycle, double a) {
 	if (!view_boxes.size()) {
 		return;
 	}
@@ -222,19 +224,49 @@ void view_output_views(int cycle) {
 		y.resize(0);
 		z.resize(0);
 		if (chem) {
-			vector<float> p, q;
+			const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
+			const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
+			const double Y = get_options().Y;
+			vector<float> p, q, t;
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].Hp);
 				y.push_back(parts.hydro[bi][i].Hn);
 				z.push_back(parts.hydro[bi][i].H2);
 				p.push_back(parts.hydro[bi][i].Hep);
 				q.push_back(parts.hydro[bi][i].Hepp);
+				const double h = parts.hydro[bi][i].h;
+				double rho = sph_den(1 / (h * h * h));
+				const double Hp = parts.hydro[bi][i].Hp;
+				const double Hn = parts.hydro[bi][i].Hn;
+				const double H2 = parts.hydro[bi][i].H2;
+				const double Hep = parts.hydro[bi][i].Hep;
+				const double Hepp = parts.hydro[bi][i].Hepp;
+				const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
+				const double He = Y - Hep - Hepp;
+				double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
+				rho *= code_to_density * pow(a, -3);
+				n *= constants::avo * rho;									// 8
+
+				double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2);															// 4
+				double gamma = 1. + 1. / cv;																							// 5
+				cv *= double(constants::kb);																							// 1
+				double K = parts.hydro[bi][i].ent;												// 11
+				double K0 = K;
+				K *= pow(a, 3. * gamma - 5.);												// 11
+				K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
+				//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
+				double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));																// 9
+				double T = energy / (n * cv);																							// 5
+			//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
+				t.push_back(T);
+
 			}
 			DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, NULL);
 		}
 		DBClose(db);
 	}

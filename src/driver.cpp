@@ -567,7 +567,7 @@ void driver() {
 				if (get_options().do_slice) {
 					output_slice(number, years);
 				}
-				view_output_views((tau + 1e-6 * t0) / t0);
+				view_output_views((tau + 1e-6 * t0) / t0, a);
 				if (get_options().do_views) {
 					timer tm;
 					tm.start();

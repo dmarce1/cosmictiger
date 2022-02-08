@@ -197,28 +197,28 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 #endif
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z);
 
-
 /*
-template<class T>
-CUDA_EXPORT
-inline T sph_divW(T r, Thinv, Th3inv) {
-	const T c0 = T(21.f/M_PI/2.f);
-	const T C = c0 * h3inv * sqr(hinv);
-	const T q = r * hinv;
-	T w = 120.0;
-	w = fmaf(q, w, T(120));
-	w = fmaf(q, w, -T(300));
-	w = fmaf(q, w, T(240));
-	w = fmaf(q, w, -T(60));
-	w *= C;
-	return w;
-}
-*/
+ template<class T>
+ CUDA_EXPORT
+ inline T sph_divW(T r, Thinv, Th3inv) {
+ const T c0 = T(21.f/M_PI/2.f);
+ const T C = c0 * h3inv * sqr(hinv);
+ const T q = r * hinv;
+ T w = 120.0;
+ w = fmaf(q, w, T(120));
+ w = fmaf(q, w, -T(300));
+ w = fmaf(q, w, T(240));
+ w = fmaf(q, w, -T(60));
+ w *= C;
+ return w;
+ }
+ */
 template<class T>
 inline T sph_den(T hinv3) {
 	static const T m = get_options().sph_mass;
 	static const T N = get_options().neighbor_number;
 	static const T c0 = T(3.0 / 4.0 / M_PI) * N;
+//	PRINT("%e %e\n", m, N);
 	return m * c0 * hinv3;
 }
 

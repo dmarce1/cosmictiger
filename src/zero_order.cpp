@@ -176,6 +176,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 
 	const auto rho_baryon = [=](double a) {
 		using namespace constants;
+//		PRINT( "%e\n", omega_b);
 		return 3.0 * pow(littleh * H0, 2) / (8.0 * M_PI * G) * omega_b / (a * a * a);
 	};
 
@@ -265,7 +266,10 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 		thomson[i] = sigmaT;
 		K[i] = P / std::pow(rho_b,5.0/3.0);
 
-		//	printf("%e %e %e %e |  %e %e %e \n", a, ne / (nH + 2 * nHe), thomson[i], sound_speed2[i - 1], P, P1, P2);
+	//	printf("%e %e %e %e\n", n, nH, nHe, ne);
+		if( 1.0/a-1.0 < 50.0 ) {
+	//		break;
+		}
 	}
 	cs2 = (P - P1) / (rho_b - rho1);
 	sound_speed2[N - 1] = cs2 / c;

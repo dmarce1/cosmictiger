@@ -627,7 +627,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				if (count.sum() > 1.0) {
 					f = f_simd.sum();
 					dfdh = dfdh_simd.sum();
-					f -= get_options().neighbor_number;
+					f -= get_options().neighbor_number * 3.0 / (4.0*M_PI);
 					/*	for( int l = 0; l < SIMD_FLOAT_SIZE; l++) {
 					 if( abs(dfdh[l]) < 1e-20) {
 					 PRINT( "!!!!!!!!!!!! %e\n", f[l]);

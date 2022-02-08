@@ -211,7 +211,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float dy = distance(x[YDIM], ws.y[j]); // 2
 						const float dz = distance(x[ZDIM], ws.z[j]); // 2
 						const float r2 = sqr(dx, dy, dz);            // 2
-						count += int(r2 < h2);                       // 1
 						const float r = sqrt(r2);                    // 4
 						const float q = r * hinv;                    // 1
 						flops += 15;
@@ -221,6 +220,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							f += w;                                   // 1
 							dfdh += dwdh;                             // 1
 							flops += 15;
+							count++;
 						}
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(f);
@@ -229,7 +229,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					if (tid == 0) {
 						dh = 0.1f * h;
 						if (count > 1) {
-							f -= data.N;
+				//			PRINT( "%e %i\n", f / float(3.0 / (4.0 * M_PI)), count);
+							f -= data.N * float(3.0 / (4.0 * M_PI));
 							dh = -f / dfdh;
 							if (dh > 0.5f * h) {
 								dh = 0.5f * h;
@@ -269,6 +270,9 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
+			//	if (tid == 0)
+				//	PRINT("%i %e\n", count, data.N);
+				//		PRINT( "%e\n", h);
 				hmin = fminf(hmin, h);
 				hmax = fmaxf(hmax, h);
 				if (tid == 0) {

@@ -416,7 +416,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.Hepp = attr.Hepp;
 		float dt = attr.dt;
 		dt *= params.a * params.code_to_s;																												// 1
-		const float rho = attr.rho * code_to_density;
+		const float rho = attr.rho * code_to_density * pow(params.a, -3);
 		const float rhoavo = rho * constants::avo;																		// 1
 		N.H *= rhoavo;																												// 1
 		N.Hp *= rhoavo;																											// 1
@@ -432,13 +432,15 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		cv *= float(constants::kb);																							// 1
 		float K = attr.K;												// 11
 //		PRINT("%e\n", K);
-		K *= pow(params.a, (1.f / 3.f) * gamma - 5.f);												// 11
+		K *= pow(params.a, 3.f * gamma - 5.f);												// 11
 		//PRINT("%e %e \n", K, (code_to_energy_density * pow(code_to_density, -gamma)));
 		K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
 		//	PRINT("%e\n", K);
 		float energy = float((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));																			// 9
-		float T0 = energy / (n * cv);																							// 5
-//		PRINT("%e %e %e %e %e %e %e\n", T0, energy, K, rho, gamma, n, cv);
+		float T0 = energy / (n * cv);
+	//	PRINT( "%e  %e %e %e %e %e \n"	,T0, energy, n, cv, K, rho);
+				// 5
+//	/	PRINT("%e %e %e %e %e %e %e\n", T0, energy, K, rho, gamma, n, cv);
 		float Tmax = 1e8f;
 		float Tmin = 1e3f;
 		N0 = N;
