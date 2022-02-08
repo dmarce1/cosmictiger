@@ -407,6 +407,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
+		float K0 = attr.K;
 		N.H = 1.f - params.Hefrac - attr.Hp - 2.f * attr.H2;															// 4
 		N.Hp = attr.Hp;
 		N.Hn = attr.Hn;
@@ -486,7 +487,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		energy = cv * n * T;																										 	// 1
 		K = (energy / rho) * powf(rho, 1.f - gamma) * (gamma - 1.f);																	// 12
 		K *= (pow(code_to_density, gamma) / code_to_energy_density);													// 12
-		K *= pow(params.a, -(1.f / 3.f) * gamma + 5.f);																	// 11
+		K *= pow(params.a, -(3.f) * gamma + 5.f);																	// 11
 		attr.H2 = N.H2;
 		attr.Hep = N.Hep;
 		attr.Hepp = N.Hepp;
@@ -497,6 +498,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		myflops += flops;
 		flops = 0;
 		index = atomicAdd(next_index, 1);
+//		PRINT( "%e %e\n", K0, K);
 	}
 	atomicAdd(total_flops, myflops);
 }
