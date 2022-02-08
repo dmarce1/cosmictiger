@@ -729,6 +729,9 @@ void chemistry_do_step(float a, int minrung, float t0) {
 					sph_particles_Hep(i) = chem.Hep;
 					sph_particles_Hepp(i) = chem.Hepp;
 					sph_particles_ent(i) = chem.K;
+					if( chem.K < 0.0 ) {
+						PRINT( "Chem routines made negative entropy!\n");
+					}
 				}
 			}
 

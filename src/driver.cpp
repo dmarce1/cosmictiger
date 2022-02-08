@@ -257,6 +257,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 		max_rung = kr.max_rung;
 
+		const bool chem = get_options().chem;
+		if (chem) {
+			PRINT("Doing chemistry step\n");
+			timer tm;
+			tm.start();
+			chemistry_do_step(scale, minrung, t0);
+			tm.stop();
+			PRINT("Took %e s\n", tm.read());
+		}
+
 		/*	sparams.run_type = SPH_RUN_RUNGS;
 		 tm.start();
 		 bool cont;
@@ -590,6 +600,7 @@ void driver() {
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			if (sph) {
+				sph_step(minrung, a, tau, t0, 0);
 				if (tau != 0.0 && chem) {
 					PRINT("Doing chemistry step\n");
 					timer tm;
@@ -598,7 +609,6 @@ void driver() {
 					tm.stop();
 					PRINT("Took %e s\n", tm.read());
 				}
-				sph_step(minrung, a, tau, t0, 0);
 			}
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
@@ -606,14 +616,6 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1).max_rung);
-				if (chem) {
-					PRINT("Doing chemistry step\n");
-					timer tm;
-					tm.start();
-					chemistry_do_step(a, minrung, t0);
-					tm.stop();
-					PRINT("Took %e s\n", tm.read());
-				}
 			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");
