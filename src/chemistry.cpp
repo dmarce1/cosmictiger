@@ -714,7 +714,7 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * get_options().Y - 0.5 * chem.H2);
 						double gamma = 1. + 1. / cv;
 						double dt = rung_dt[rung] * t0;
-						chem.K *= exp((5.-3.*gamma)*adot/a*dt);
+						chem.K *= exp((5. - 3.*gamma)*adot/a*dt);
 					}
 					chem.K = sph_particles_ent(i);
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3);

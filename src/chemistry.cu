@@ -498,7 +498,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		myflops += flops;
 		flops = 0;
 		index = atomicAdd(next_index, 1);
-//		PRINT( "%e %e\n", K0, K);
+//		PRINT( "%e %e %e %e\n", K0, K, T0, T);
 	}
 	atomicAdd(total_flops, myflops);
 }
