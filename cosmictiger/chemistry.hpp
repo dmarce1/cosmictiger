@@ -45,5 +45,13 @@ struct species_t {
 };
 
 
+struct chem_attribs {
+	float Hp;
+	float H2;
+	float Hep;
+	float Hepp;
+	float rho;
+	float K;
+};
 
 void chemistry_test();

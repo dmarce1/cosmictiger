@@ -49,6 +49,7 @@ set(cosmictiger_source_files
     src/bh.cu
     src/boltzmann.cpp
     src/chemistry.cpp
+    src/chemistry.cu
  	src/cosmology.cpp
     src/cuda.cpp
     src/drift.cpp

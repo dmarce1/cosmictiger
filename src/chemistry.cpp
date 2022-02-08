@@ -110,6 +110,7 @@ float cooling_rate(float T, float z, species_t N) {
 	float Tinv = 1.0 / T;
 	float tmp = 1.0 / (1.0 + sqrt(T5));
 	float tmp2 = pow(T, -.1687);
+	C[0] = 0.f;
 	C[1] = 7.5e-19 * expf(-118348 * Tinv) * ne * N.H;
 	C[2] = 9.1e-27 * expf(-13179 * Tinv) * tmp2 * sqr(ne) * N.He;
 	C[3] = 5.54e-17 * expf(-473638 * Tinv) * pow(T, -.397) * ne * N.Hep;
@@ -147,7 +148,7 @@ float cooling_rate(float T, float z, species_t N) {
 	C[13] = 1.43e-27 * sqrt(T) * (1.1 + 0.34 * expf(-sqr(5.5 - log10f(T)) / 3.0)) * ne * (N.Hp + N.Hep + N.Hepp);
 	C[14] = 5.65e-36 * sqr(sqr(1 + z)) * (T - 2.73 * (1 + z)) * ne;
 	float total = 0.0f;
-	for (int i = 0; i < 14; i++) {
+	for (int i = 0; i < 15; i++) {
 		total += C[i];
 	}
 	return total;
@@ -538,23 +539,15 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 					float Hepp0 = N0.Hepp;
 					float H20 = N0.H2;
 					float Hp1, Hp2, H21, H22;
-//					PRINT( " 1 %e %e %e %e\n", H, Hp, Hn, H2);
 					Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
 					H = Hall - Hp - Hn - 2 * H2;
-//					PRINT( " 2 %e %e %e %e\n", H, Hp, Hn, H2);
 					List(List(Rule(Hp,(Hp0 - 2*dt*H2*K1*ne + dt*Hall*K1*ne - dt*Hn*K1*ne - 2*dt*H2*sigma20 + dt*Hall*sigma20 - dt*Hn*sigma20)/(1 + dt*K1*ne + dt*K2*ne + dt*sigma20))));
 					H = Hall - Hp - Hn - 2 * H2;
-//					PRINT( " 3 %e %e %e %e\n", H, Hp, Hn, H2);
 					Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
 					H = Hall - Hp - Hn - 2 * H2;
-//					PRINT( " 4 %e %e %e %e\n", H, Hp, Hn, H2);
 					float H200 = H2;
 					List(List(Rule(H2,(H20*Hp*K16 + H*H20*K8 + H20*K14*ne + dt*Power(H,2)*K7*K8*ne + 2*dt*H*H20*K7*K8*ne)/
 											(Hp*K16 + dt*Power(Hp,2)*K11*K16 + H*K8 + dt*H*Hp*K11*K8 + K14*ne + dt*Hp*K11*K14*ne + dt*Hp*K12*K16*ne + dt*H*K12*K8*ne + 2*dt*H*K7*K8*ne + dt*K12*K14*Power(ne,2)))));
-			//		if( H2 > 0.5 *H + H200 ) {
-			//			PRINT( "!!!!!!!!!! %e %e %e\n", H2, H, H200);
-			//			abort();
-			//		}
 					H = Hall - Hp - Hn - 2 * H2;
 					Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);
 					H = Hall - Hp - Hn - 2 * H2;
@@ -565,14 +558,13 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 													(1 + dt*K3*ne + dt*K4*ne + dt*K5*ne + dt*K6*ne + Power(dt,2)*K3*K5*Power(ne,2) + Power(dt,2)*K3*K6*Power(ne,2) + Power(dt,2)*K4*K6*Power(ne,2) + dt*sigma21 + Power(dt,2)*K5*ne*sigma21 +
 															Power(dt,2)*K6*ne*sigma21 + dt*sigma22 + Power(dt,2)*K3*ne*sigma22 + Power(dt,2)*sigma21*sigma22)))));
 					He = Heall - Hep - Hepp;
-//					PRINT( "%e %e %e %e \n", (H2-H20)/H20, K7/(K11+K12), T, H/ Hall);
 					H = std::max(H,0.0f);
-					 Hp = std::max(Hp,0.0f);
-					 Hn = std::max(Hn,0.0f);
-					 H2 = std::max(H2,0.0f);
-					 He = std::max(He,0.0f);
-					 Hep = std::max(Hep,0.0f);
-					 Hepp = std::max(Hepp,0.0f);
+					Hp = std::max(Hp,0.0f);
+					Hn = std::max(Hn,0.0f);
+					H2 = std::max(H2,0.0f);
+					He = std::max(He,0.0f);
+					Hep = std::max(Hep,0.0f);
+					Hepp = std::max(Hepp,0.0f);
 					return Hp - Hn + Hep + 2 * Hepp;
 				};
 				float ne_max = Hall + 4 * Heall;
@@ -611,14 +603,14 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 		Tmid = sqrt(Tmax * Tmin);
 		float fmax = test_temp(Tmax);
 		float fmid = test_temp(Tmid);
-		if (std::copysign(1.0, fmax) == std::copysign(1.0, fmid) < 0.0) {
+		if (std::copysign(1.0, fmax) != std::copysign(1.0, fmid) ) {
 			Tmin = Tmid;
 		} else {
 			Tmax = Tmid;
 		}
 		//	PRINT("%e %e %e %e\n", T0, Tmin, Tmid, Tmax);
 	}
-	if (oldN / newN > 18./5. || oldN / newN < 5. / 18.) {
+	if (oldN / newN > 18. / 5. || oldN / newN < 5. / 18.) {
 		PRINT("%e %e %e\n", oldN / newN, oldN, newN);
 		PRINT("%e %e %e %e %e %e %e\n", N0.H, N0.Hp, N0.Hn, N0.H2, N0.He, N0.Hep, N0.Hepp);
 		PRINT("%e %e %e %e %e %e %e\n", N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
@@ -676,7 +668,7 @@ void chemistry_test() {
 	for (int i = 0; true; i++) {
 		float T = pow(10.0, 3.0 + rand1() * 5.0);
 		float z = rand1() * 5;
-				float rho = pow(10.0, -(24.0 + 3.0 * rand1())) * (z+1);
+		float rho = pow(10.0, -(24.0 + 3.0 * rand1())) * (z + 1);
 		N.H = rand1();
 		N.H2 = 0.0;
 		N.Hp = rand1();
