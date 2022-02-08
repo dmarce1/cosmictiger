@@ -451,10 +451,6 @@ species_t species_t::number_density_to_fractions() const {
 	return f;
 }
 
-static float rand1() {
-	return ((float) rand() + 0.5) / (float) RAND_MAX;
-}
-
 void radiation_cross_sections(float z, float& sigma20, float& sigma21, float& sigma22, float& sigmaH, float& sigmaHe, float& sigmaHep) {
 	float k0[6] = { 5.6e-13, 2 * 4.8e-15, 3.2e-13, 3.9e-24, 6.4e-24, 8.6e-26 };
 	float alpha[6] = { 0.43, 0.30, 0.43, .43, .43, .3 };

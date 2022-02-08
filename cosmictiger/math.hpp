@@ -35,6 +35,11 @@ CUDA_EXPORT inline T sqr(const T& a, const T& b, const T& c) {
 	return a * a + b * b + c * c;
 }
 
+
+inline float rand1() {
+	return ((float) rand() + 0.5) / (float) RAND_MAX;
+}
+
 template<class T>
 CUDA_EXPORT void constrain_range(T& x) {
 	if (x >= T(1)) {

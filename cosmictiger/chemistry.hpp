@@ -18,6 +18,8 @@
  */
 #pragma once
 
+#include <cosmictiger/containers.hpp>
+
 #define NSPECIES 7
 #define SPECIE_H 0
 #define SPECIE_HP 1
@@ -55,3 +57,5 @@ struct chem_attribs {
 };
 
 void chemistry_test();
+void cuda_chemistry_step(vector<chem_attribs>& chems, float dt);
+void test_cuda_chemistry_kernel();

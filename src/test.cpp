@@ -43,10 +43,6 @@ constexpr bool verbose = true;
 //0.55, 0.65
 //0.4, 0.5
 
-double rand1() {
-	return ((double) rand() + 0.5) / (double) RAND_MAX;
-}
-
 float rand_normal() {
 	float x = 2.0 * rand1() - 1.0;
 	float y = 2.0 * rand1() - 1.0;
@@ -482,7 +478,8 @@ void test(std::string test) {
 	} else if (test == "bh") {
 		bh_test();
 	} else if (test == "chemistry") {
-		chemistry_test();
+		test_cuda_chemistry_kernel();
+	//	chemistry_test();
 	} else {
 		THROW_ERROR("test %s is not known\n", test.c_str());
 	}

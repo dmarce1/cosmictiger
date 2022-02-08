@@ -18,8 +18,12 @@
  */
 
 #include <cosmictiger/chemistry.hpp>
+#include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/timer.hpp>
+#include <cosmictiger/options.hpp>
 
 struct chemistry_params {
 	float code_to_cm;
@@ -30,9 +34,10 @@ struct chemistry_params {
 	float dt;
 };
 
+#define CHEM_BLOCK_SIZE 32
+
 __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, float T, float dt, float z, float K1, float K2, float K3, float K4, float K5,
 		float K6, float K7, float K8, float K9, float K11, float K12, float K14, float K16, float sigma20, float sigma21, float sigma22, int& flops) {
-
 	float& H = N.H;
 	float& Hp = N.Hp;
 	float& Hn = N.Hn;
@@ -40,17 +45,14 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	float& Hep = N.Hep;
 	float& Hepp = N.Hepp;
 	float& H2 = N.H2;
-	float H0 = N0.H;
 	float Hp0 = N0.Hp;
-	float Hn0 = N0.Hn;
-	float He0 = N0.He;
 	float Hep0 = N0.Hep;
 	float Hepp0 = N0.Hepp;
 	float H20 = N0.H2;
 	float Hall = H + Hp + 2.f * H2 + Hn;																																							// 4
 	float Heall = He + Hep + Hepp;																																									// 2
-	float sqrne = sqr(ne);																																												// 1
-
+	float sqrne = sqr(ne);
+	N = N0;
 	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	  // 11
 	H = Hall - Hp - Hn - 2 * H2;																																										// 4
 	Hp = (Hp0 + dt * ((-2.f * H2 * K1 + Hall * K1) * ne - Hn * K1 * ne - 2.f * H2 * sigma20 + Hall * sigma20 - Hn * sigma20))
@@ -86,7 +88,6 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	Hepp = fmax(Hepp, 0.0f);																																											// 1
 	flops += 261;
 	return Hp - Hn + Hep + 2 * Hepp - ne;
-
 }
 
 __device__ float test_temperature(species_t N0, species_t& N, float T0, float T, float dt, float z, int& flops) {
@@ -352,20 +353,19 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 
 	float dedt = heat - cool;																							// 1
 
-	flops += 584;
+	flops += 625;
 
-	float n0 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;
-	float cv0 = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);
+	float n0 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;								// 8
+	float cv0 = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);															// 4
 
-	float Htot = N.H + N.Hp + N.Hn + 2.f * N.H2;
-	float Hetot = N.He + N.Hep + N.Hepp;
-	float ne_max = Htot + 4.f * Hetot;
-	float ne_min = ne_max * 1e-7f;
-	bool first = true;
+	float Htot = N.H + N.Hp + N.Hn + 2.f * N.H2;																	// 4
+	float Hetot = N.He + N.Hep + N.Hepp;																			// 2
+	float ne_max = Htot + 4.f * Hetot;																				// 2
+	float ne_min = ne_max * 1e-7f;																					// 1
 	for (int i = 0; i < 28; i++) {
 		float ne_mid = sqrtf(ne_max * ne_min);
 		float fe_max, fe_mid;
-		if (first) {
+		if (i == 0) {
 			fe_max = test_electron_fraction(ne_max, N0, N, T, dt, z, K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16, sigma20, sigma21, sigma22, flops);
 		}
 		fe_mid = test_electron_fraction(ne_mid, N0, N, T, dt, z, K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16, sigma20, sigma21, sigma22, flops);
@@ -375,82 +375,188 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 			ne_max = ne_mid;
 			fe_max = fe_mid;
 		}
+		flops += 8;
 	}
 
-	float n1 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;
-	float cv1 = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);
-	return constants::kb * (cv1 * n1 * T - cv0 * n0 * T0) - dt * dedt;
-
+	float n1 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;											// 8
+	float cv1 = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);																		// 4
+	return constants::kb * (cv1 * n1 * T - cv0 * n0 * T0) - dt * dedt;												// 8
 }
 
-__device__ void chemistry_solve(species_t& N, float& T, float dt) {
-
-}
-
-__global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, int nchems, float dt, int* next_index) {
+__global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, int nchems, float dt, int* next_index, double* total_flops) {
 	const int& tid = threadIdx.x;
-	const int& bid = blockIdx.x;
-	const int& bsz = blockDim.x;
 	__shared__ int index;
 	if (tid == 0) {
 		index = atomicAdd(next_index, 1);
 	}
 	__syncwarp();
-	const float code_to_energy_density = params.code_to_g / (params.code_to_cm * sqr(params.code_to_s));
-	const float code_to_density = powf(params.code_to_cm, -3) * params.code_to_g;
-	dt *= params.code_to_s;
+	const float code_to_energy_density = params.code_to_g / (params.code_to_cm * sqr(params.code_to_s));		// 7
+	const float code_to_density = powf(params.code_to_cm, -3) * params.code_to_g;										// 10
+	dt *= params.code_to_s;																												// 1
+	int flops = 18;
 	while (index < nchems) {
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
-		N.H = 1.f - params.Hefrac - attr.Hp - 2.f * attr.H2;
+		N.H = 1.f - params.Hefrac - attr.Hp - 2.f * attr.H2;															// 4
 		N.Hp = attr.Hp;
 		N.H2 = attr.H2;
-		N.He = params.Hefrac - attr.Hep - attr.Hepp;
+		N.He = params.Hefrac - attr.Hep - attr.Hepp;																		// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
-		float cv = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);
+		float cv = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);																// 4
 		const float& rho = attr.rho;
-		const float rhoavo = rho * constants::avo;
-		N.H *= rhoavo;
-		N.Hp *= rhoavo;
-		N.Hn *= rhoavo;
-		N.H2 *= 0.5f * rhoavo;
-		N.He *= 0.25f * rhoavo;
-		N.Hep *= 0.25f * rhoavo;
-		N.Hepp *= 0.25f * rhoavo;
-		float n = N.H + 2.f * N.Hp + N.H2 + N.He + 2.f * N.Hep + 3.f * N.Hepp;
-		float gamma = 1.f + 1.f / cv;
-		cv *= float(constants::kb);
-		float K = attr.K * pow(params.a, (1.f / 3.f) * gamma - 5.f);
-		K *= code_to_energy_density * powf(code_to_density, -gamma);
-		float energy = K * powf(rho, gamma);
-		float T = energy / (n * cv);
+		const float rhoavo = rho * constants::avo;																		// 1
+		N.H *= rhoavo;																												// 1
+		N.Hp *= rhoavo;																											// 1
+		N.Hn *= rhoavo;																											// 1
+		N.H2 *= 0.5f * rhoavo;																									// 2
+		N.He *= 0.25f * rhoavo;																									// 2
+		N.Hep *= 0.25f * rhoavo;																								// 2
+		N.Hepp *= 0.25f * rhoavo;																								// 2
+		float n = N.H + 2.f * N.Hp + N.H2 + N.He + 2.f * N.Hep + 3.f * N.Hepp;									// 8
+		float gamma = 1.f + 1.f / cv;																							// 5
+		cv *= float(constants::kb);																							// 1
+		float K = attr.K * pow(params.a, (1.f / 3.f) * gamma - 5.f);												// 11
+		K *= code_to_energy_density * powf(code_to_density, -gamma);												// 11
+		float energy = K * powf(rho, gamma);																				// 9
+		float T0 = energy / (n * cv);																							// 5
+		float Tmax = 1e8f;
+		float Tmin = 1e3f;
+		N0 = N;
+		float z = 1.f / params.a - 1.f;																						// 2
+		float Tmid;
+		for (int i = 0; i < 28; i++) {
+			float f_mid, f_min;
+			Tmid = sqrtf(Tmax * Tmin);																							// 5
+			if (i == 0) {
+				f_min = test_temperature(N0, N, T0, Tmin, dt, z, flops);
+			}
+			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops);
+			if (copysignf(1.f, f_mid) != copysignf(1.f, f_min)) {
+				Tmax = Tmid;
+			} else {
+				Tmin = Tmid;
+				f_min = f_mid;
+			}
+			flops += 7;
+		}
+		float T = Tmid;
 
-		n = N.H + 2.f * N.Hp + N.H2 + N.He + 2.f * N.Hep + 3.f * N.Hepp;
-		const float rhoavoinv = 1.f / rhoavo;
-		N.H *= rhoavoinv;
-		N.Hp *= rhoavoinv;
-		N.Hn *= rhoavoinv;
-		N.H2 *= rhoavoinv;
-		N.He *= rhoavoinv;
-		N.Hep *= rhoavoinv;
-		N.Hepp *= rhoavoinv;
-		cv = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);
-		gamma = 1.f + 1.f / cv;
-		energy = cv * T;
-		K = energy * powf(rho, -gamma);
-		K *= powf(code_to_density, gamma) / code_to_energy_density;
-		K *= pow(params.a, -(1.f / 3.f) * gamma + 5.f);
+		n = N.H + 2.f * N.Hp + N.H2 + N.He + 2.f * N.Hep + 3.f * N.Hepp;											// 8
+		const float rhoavoinv = 1.f / rhoavo;																				// 4
+		N.H *= rhoavoinv;																											// 1
+		N.Hp *= rhoavoinv;																										// 1
+		N.Hn *= rhoavoinv;																										// 1
+		N.H2 *= rhoavoinv;																										// 1
+		N.He *= rhoavoinv;																										// 1
+		N.Hep *= rhoavoinv;																										// 1
+		N.Hepp *= rhoavoinv;																										// 1
+		cv = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);																		// 4
+		gamma = 1.f + 1.f / cv;																									// 5
+		energy = cv * n * T;																										 	// 1
+		K = energy * powf(rho, -gamma) * (gamma - 1.f);																	// 12
+		K *= powf(code_to_density, gamma) / code_to_energy_density;													// 12
+		K *= pow(params.a, -(1.f / 3.f) * gamma + 5.f);																	// 11
 		attr.H2 = N.H2;
 		attr.Hep = N.Hep;
 		attr.Hepp = N.Hepp;
 		attr.Hp = N.Hp;
 		attr.K = K;
+		flops += 136;
+		shared_reduce_add<int, CHEM_BLOCK_SIZE>(flops);
 		if (tid == 0) {
+			atomicAdd(total_flops, (double) flops);
 			index = atomicAdd(next_index, 1);
 		}
+		flops = 0;
 		__syncwarp();
 	}
 
 }
+
+void cuda_chemistry_step(vector<chem_attribs>& chems, float scale, float dt) {
+	timer tm;
+	tm.start();
+	static const auto opts = get_options();
+	double* flops;
+	int* index;
+	chem_attribs* dev_chems;
+	chemistry_params params;
+	int nblocks;
+	auto stream = cuda_get_stream();
+	CUDA_CHECK(cudaMalloc(&dev_chems, sizeof(chem_attribs) * chems.size()));
+	CUDA_CHECK(cudaMallocManaged(&flops, sizeof(double)));
+	CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
+	CUDA_CHECK(cudaMemcpyAsync(dev_chems, chems.data(), sizeof(chem_attribs) * chems.size(), cudaMemcpyHostToDevice));
+	*index = 0;
+	params.Hefrac = opts.Y;
+	params.a = scale;
+	params.code_to_cm = opts.code_to_cm;
+	params.code_to_g = opts.code_to_g;
+	params.code_to_s = opts.code_to_s;
+	params.dt = dt;
+	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) chemistry_kernel, CHEM_BLOCK_SIZE, 0));
+	nblocks *= cuda_smp_count();
+	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE>>>(params, dev_chems, chems.size(), dt, index, flops);
+	cuda_stream_synchronize(stream);
+	CUDA_CHECK(cudaMemcpy(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost));
+	double myflops = *flops;
+	CUDA_CHECK(cudaFree(flops));
+	CUDA_CHECK(cudaFree(index));
+	CUDA_CHECK(cudaFree(dev_chems));
+	cuda_end_stream(stream);
+	tm.stop();
+	PRINT("Cuda Chemistry took %e at %e GFLOPs\n", tm.read(), myflops / 1024 / 1024 / 1024);
+}
+
+void test_cuda_chemistry_kernel() {
+	static const auto opts = get_options();
+	const float code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
+	const float code_to_density = powf(opts.code_to_cm, -3) * opts.code_to_g;										// 10
+	const int N = 1;
+	vector<chem_attribs> chem0;
+	vector<chem_attribs> chems;
+	float z = 0.5;
+	for (int i = 0; i < N; i++) {
+		float T = pow(10.0, 3.0 + rand1() * 5.0);
+		float rho = pow(10.0, -(24.0 + 3.0 * rand1())) * (z + 1);
+		species_t N;
+		N.H = rand1();
+		N.H2 = rand1() / 100.0;
+		N.Hp = rand1();
+		N.Hn = 0.0;
+		N.He = rand1();
+		N.Hep = rand1();
+		N.Hepp = rand1();
+		float h0 = (N.H + N.H2 + N.Hp + N.Hn) / .75;
+		float he0 = (N.He + N.Hep + N.Hepp) / .25;
+		N.H /= h0;
+		N.H2 /= h0;
+		N.Hp /= h0;
+		N.Hn /= h0;
+		N.He /= he0;
+		N.Hep /= he0;
+		N.Hepp /= he0;
+		chem_attribs chem;
+		float cv = (1.5 + N.H2);
+		float gamma = 1.0 + 1.0 / cv;
+		cv *= constants::kb;
+		float n = (N.H + 2.f * N.Hp + 0.5f * N.H2 + 0.25f * N.He + 0.5f * N.Hep + .75f * N.Hepp) * rho * constants::avo;
+		float energy = cv * n * T;
+		float K = energy * (gamma - 1.0) * powf(rho, -gamma);
+		chem.H2 = N.H2;
+		chem.Hp = N.Hp;
+		chem.Hep = N.Hep;
+		chem.Hepp = N.Hepp;
+		chem.rho = rho / code_to_density;
+		chem.K = K;
+		chems.push_back(chem);
+		chem0.push_back(chem);
+	}
+	cuda_chemistry_step(chems, 1.0, 1e15);
+
+	for (int i = 0; i < N; i++) {
+	}
+}
+
