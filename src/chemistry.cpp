@@ -722,6 +722,7 @@ void chemistry_do_step(float a, int minrung, float t0) {
 				int rung = sph_particles_rung(i);
 				if( rung >= minrung ) {
 					const chem_attribs& chem = chems[j++];
+			//		PRINT( "%e %e %e %e %e %e\n", chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, chem.K);
 					sph_particles_Hp(i) = chem.Hp;
 					sph_particles_Hn(i) = chem.Hn;
 					sph_particles_H2(i) = chem.H2;

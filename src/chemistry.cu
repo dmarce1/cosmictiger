@@ -477,8 +477,9 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.Hep *= 4.f * rhoavoinv;																										// 1
 		N.Hepp *= 4.f * rhoavoinv;																										// 1
 		gamma = 1.f + 1.f / cv;																									// 5
+		cv *= float(constants::kb);
 		energy = cv * n * T;																										 	// 1
-		K = energy * powf(rho, -gamma) * (gamma - 1.f);																	// 12
+		K = (energy / rho) * powf(rho, 1.f - gamma) * (gamma - 1.f);																	// 12
 		K *= (pow(code_to_density, gamma) / code_to_energy_density);													// 12
 		K *= pow(params.a, -(1.f / 3.f) * gamma + 5.f);																	// 11
 		attr.H2 = N.H2;
@@ -517,7 +518,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	params.code_to_s = opts.code_to_s;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) chemistry_kernel, CHEM_BLOCK_SIZE, 0));
 	nblocks *= cuda_smp_count();
-	nblocks = std::max(1,nblocks/hpx_hardware_concurrency());
+	nblocks = std::max(1, nblocks / hpx_hardware_concurrency());
 	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE>>>(params, dev_chems, chems.size(), index, flops);
 	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaMemcpy(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost));
@@ -527,7 +528,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	CUDA_CHECK(cudaFree(dev_chems));
 	cuda_end_stream(stream);
 	tm.stop();
-	PRINT("Cuda Chemistry took %e at %e GFLOPs\n", tm.read(), myflops / 1024 / 1024 / 1024 / tm.read());
+//	PRINT("Cuda Chemistry took %e at %e GFLOPs\n", tm.read(), myflops / 1024 / 1024 / 1024 / tm.read());
 }
 
 void test_cuda_chemistry_kernel() {
