@@ -60,35 +60,49 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	  // 11
 	H = Hall - Hp - Hn - 2 * H2;																																										// 4
 	List(
-			List( Rule(Hp, (Hp0 - 2 * dt * H2 * K1 * ne + dt * Hall * K1 * ne - dt * Hn * K1 * ne - 2 * dt * H2 * sigma20 + dt * Hall * sigma20 - dt * Hn * sigma20) / (1 + dt * K1 * ne + dt * K2 * ne + dt * sigma20))));
+			List( Rule(Hp, (Hp0 - 2 * dt * H2 * K1 * ne + dt * Hall * K1 * ne - dt * Hn * K1 * ne - 2 * dt * H2 * sigma20 + dt * Hall * sigma20 - dt * Hn * sigma20) / (1 + dt * K1 * ne + dt * K2 * ne + dt * sigma20)))); // 35
 	H = Hall - Hp - Hn - 2 * H2;																																										// 4
 	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	// 11
 	H = Hall - Hp - Hn - 2 * H2;
+	float H200 = H2;
 	List(
-			List(Rule(H2,(H20*Hp*K16 + H*H20*K8 + H20*K14*ne + dt*Power(H,2)*K7*K8*ne + 2*dt*H*H20*K7*K8*ne)/ (Hp*K16 + dt*Power(Hp,2)*K11*K16 + H*K8 + dt*H*Hp*K11*K8 + K14*ne + dt*Hp*K11*K14*ne + dt*Hp*K12*K16*ne + dt*H*K12*K8*ne + 2*dt*H*K7*K8*ne + dt*K12*K14*Power(ne,2)))));
+			List(Rule(H2,(H20*Hp*K16 + H*H20*K8 + H20*K14*ne + dt*sqr(H)*K7*K8*ne + 2*dt*H*H20*K7*K8*ne)/ (Hp*K16 + dt*sqr(Hp)*K11*K16 + H*K8 + dt*H*Hp*K11*K8 + K14*ne + dt*Hp*K11*K14*ne + dt*Hp*K12*K16*ne + dt*H*K12*K8*ne + 2*dt*H*K7*K8*ne + dt*K12*K14*sqr(ne))))); //62
 
+	if (isnan(H2)) {
+		H2 = H200;
+		PRINT("%e %e %e %e %e %e %e \n", dt,H,K7,K8,ne, H*H, K7*K8*ne );
+		__trap();
+	}
 	H = Hall - Hp - Hn - 2 * H2;																																										// 4
 	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	// 11
 	H = Hall - Hp - Hn - 2 * H2;																																										// 4
 	Hep = -((Hepp0 * (dt * K3 * ne - dt * K6 * ne + dt * sigma21) + (1 + dt * K6 * ne) * (-Hep0 - dt * Heall * K3 * ne - dt * Heall * sigma21))
 			/ (-((dt * K3 * ne - dt * K6 * ne + dt * sigma21) * (-(dt * K5 * ne) - dt * sigma22))
-					+ (1 + dt * K6 * ne) * (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * sigma21 + dt * sigma22)));
-	Hepp = -((-Hepp0 - dt * Hepp0 * K3 * ne - dt * Hepp0 * K4 * ne - dt * Hep0 * K5 * ne - dt * Hepp0 * K5 * ne - Power(dt, 2) * Heall * K3 * K5 * Power(ne, 2)
-			- dt * Hepp0 * sigma21 - Power(dt, 2) * Heall * K5 * ne * sigma21 - dt * Hep0 * sigma22 - dt * Hepp0 * sigma22
-			- Power(dt, 2) * Heall * K3 * ne * sigma22 - Power(dt, 2) * Heall * sigma21 * sigma22)
-			/ (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * K6 * ne + Power(dt, 2) * K3 * K5 * Power(ne, 2) + Power(dt, 2) * K3 * K6 * Power(ne, 2)
-					+ Power(dt, 2) * K4 * K6 * Power(ne, 2) + dt * sigma21 + Power(dt, 2) * K5 * ne * sigma21 + Power(dt, 2) * K6 * ne * sigma21 + dt * sigma22
-					+ Power(dt, 2) * K3 * ne * sigma22 + Power(dt, 2) * sigma21 * sigma22));
+					+ (1 + dt * K6 * ne) * (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * sigma21 + dt * sigma22)));             // 59
+	Hepp = -((-Hepp0 - dt * Hepp0 * K3 * ne - dt * Hepp0 * K4 * ne - dt * Hep0 * K5 * ne - dt * Hepp0 * K5 * ne - sqr(dt) * Heall * K3 * K5 * Power(ne, 2)
+			- dt * Hepp0 * sigma21 - sqr(dt) * Heall * K5 * ne * sigma21 - dt * Hep0 * sigma22 - dt * Hepp0 * sigma22
+			- sqr(dt) * Heall * K3 * ne * sigma22 - sqr(dt) * Heall * sigma21 * sigma22)
+			/ (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * K6 * ne + sqr(dt) * K3 * K5 * Power(ne, 2) + sqr(dt) * K3 * K6 * Power(ne, 2)
+					+ sqr(dt) * K4 * K6 * Power(ne, 2) + dt * sigma21 + sqr(dt) * K5 * ne * sigma21 + sqr(dt) * K6 * ne * sigma21 + dt * sigma22
+					+ sqr(dt) * K3 * ne * sigma22 + sqr(dt) * sigma21 * sigma22));												//112
 	He = Heall - Hep - Hepp;																																											// 2
 //	PRINT("out %e\n", dt);
-	H = fmax(H, 0.0f);																																													// 1
-	Hp = fmax(Hp, 0.0f);																																													// 1
-	Hn = fmax(Hn, 0.0f);																																													// 1
-	H2 = fmax(H2, 0.0f);																																													// 1
-	He = fmax(He, 0.0f);																																													// 1
-	Hep = fmax(Hep, 0.0f);																																												// 1
-	Hepp = fmax(Hepp, 0.0f);																																											// 1
-	flops += 261;
+/*	if (fmaxf(H, 0.0f) + fmaxf(Hp, 0.0f) + fmaxf(Hn, 0.0f) + 2 * fmaxf(H2, 0.0f) <= 0.0) {
+		PRINT("ZEROS ONE %e %e %e %e %e %e %e\n", N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
+		__trap();
+	}*/
+	H = fmaxf(H, 0.0f);																																													// 1
+	Hp = fmaxf(Hp, 0.0f);																																												// 1
+	Hn = fmaxf(Hn, 0.0f);																																												// 1
+	H2 = fmaxf(H2, 0.0f);																																												// 1
+	He = fmaxf(He, 0.0f);																																												// 1
+	Hep = fmaxf(Hep, 0.0f);																																												// 1
+	Hepp = fmaxf(Hepp, 0.0f);																																											// 1
+/*	if (H + Hp + Hn + 2 * H2 <= 0.0) {
+		PRINT("ZEROS TWO %e %e %e %e %e %e %e\n", N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
+		__trap();
+	}*/
+	flops += 332;
 	return Hp - Hn + Hep + 2 * Hepp - ne;
 }
 
@@ -367,12 +381,12 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	for (int i = 0; i < 28; i++) {
 		float ne_mid = sqrtf(ne_max * ne_min);
 		float fe_max, fe_mid;
-	//	PRINT( "%e ", N.H + 2 * N.H2 + N.Hn + N.Hp);
+		//	PRINT( "%e ", N.H + 2 * N.H2 + N.Hn + N.Hp);
 		if (i == 0) {
 			fe_max = test_electron_fraction(ne_max, N0, N, T, dt, z, K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16, sigma20, sigma21, sigma22, flops);
 		}
 		fe_mid = test_electron_fraction(ne_mid, N0, N, T, dt, z, K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16, sigma20, sigma21, sigma22, flops);
-	//	PRINT( "%e\n", N.H + 2 * N.H2 + N.Hn + N.Hp);
+		//	PRINT( "%e\n", N.H + 2 * N.H2 + N.Hn + N.Hp);
 		if (copysignf(1.f, fe_max) != copysignf(1.f, fe_mid)) {
 			ne_min = ne_mid;
 		} else {
@@ -424,7 +438,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		K *= pow(params.a, (1.f / 3.f) * gamma - 5.f);												// 11
 		//PRINT("%e %e \n", K, (code_to_energy_density * pow(code_to_density, -gamma)));
 		K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
-	//	PRINT("%e\n", K);
+		//	PRINT("%e\n", K);
 		float energy = float((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));																			// 9
 		float T0 = energy / (n * cv);																							// 5
 //		PRINT("%e %e %e %e %e %e %e\n", T0, energy, K, rho, gamma, n, cv);
@@ -437,7 +451,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float f_mid, f_min;
 			Tmid = sqrtf(Tmax * Tmin);																							// 5
 			N = N.number_density_to_fractions();
-			PRINT("%e %e %e %e %e %e %e %e\n", Tmid, N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
+//			PRINT("%e %e %e %e %e %e %e %e\n", Tmid, N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
 			N = N0;
 			if (i == 0) {
 				f_min = test_temperature(N0, N, T0, Tmin, dt, z, flops);
@@ -518,7 +532,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale, float dt) {
 	CUDA_CHECK(cudaFree(dev_chems));
 	cuda_end_stream(stream);
 	tm.stop();
-	PRINT("Cuda Chemistry took %e at %e GFLOPs\n", tm.read(), myflops / 1024 / 1024 / 1024);
+	PRINT("Cuda Chemistry took %e at %e GFLOPs\n", tm.read(), myflops / 1024 / 1024 / 1024 / tm.read());
 }
 
 void test_cuda_chemistry_kernel() {
@@ -526,7 +540,7 @@ void test_cuda_chemistry_kernel() {
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
 	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;										// 10
 	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
-	const int N = 1;
+	const int N = 100000000;
 	vector<chem_attribs> chem0;
 	vector<chem_attribs> chems;
 	float z = 0.5;
@@ -573,6 +587,7 @@ void test_cuda_chemistry_kernel() {
 		chems.push_back(chem);
 		chem0.push_back(chem);
 	}
+	PRINT("Starting\n");
 	cuda_chemistry_step(chems, 1.0, 1e15 / opts.code_to_s);
 
 	for (int i = 0; i < N; i++) {
