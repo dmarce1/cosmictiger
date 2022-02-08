@@ -31,10 +31,12 @@ struct sph_run_cuda_data {
 	fixed32* y;
 	fixed32* z;
 	float* vx;
+	float Y;
 	float* vy;
 	float* vz;
 	float* ent;
 	float* f0;
+	float* H2;
 	float* fvel;
 	float* h;
 	char* rungs;

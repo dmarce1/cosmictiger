@@ -49,6 +49,7 @@ struct mark_semiactive_workspace {
 };
 
 struct hydro_workspace {
+	fixedcapvec<float, WORKSPACE_SIZE> H2;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
@@ -74,6 +75,7 @@ struct hydro_workspace {
 };
 
 struct courant_workspace {
+	fixedcapvec<float, WORKSPACE_SIZE> H2;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
@@ -123,6 +125,12 @@ struct sph_reduction {
 	int max_rung_grav;
 	int max_rung;
 };
+
+inline __device__ float compute_gamma(float H2, float Y) {
+	float nh2 = 0.5f * H2 / (1.f - .75f * Y - 0.5f * H2);
+	float cv = 1.5 + nh2;
+	return 1.f + 1.f / cv;
+}
 
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -181,9 +189,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			if (data.rungs[i] >= params.min_rung) {
-				if (ws.x.size() == 0) {
-					PRINT("ZERO\n");
-				}
 				const int snki = self.sink_part_range.first - self.part_range.first + i;
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
@@ -427,6 +432,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
 		int flops = 0;
+		if (data.H2) {
+			ws.H2.resize(0);
+		}
 		ws.x0.resize(0);
 		ws.y0.resize(0);
 		ws.z0.resize(0);
@@ -472,6 +480,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
 				const int offset = ws.x0.size();
 				const int next_size = offset + total;
+				if (data.H2) {
+					ws.H2.resize(next_size);
+				}
 				ws.x0.resize(next_size);
 				ws.y0.resize(next_size);
 				ws.z0.resize(next_size);
@@ -485,6 +496,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				ws.h0.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
+					if (data.H2) {
+						ws.H2[k] = data.H2[pi];
+					}
 					ws.x0[k] = x[XDIM];
 					ws.y0[k] = x[YDIM];
 					ws.z0[k] = x[ZDIM];
@@ -530,13 +544,19 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float myh3inv = 1.f / (sqr(myh) * myh);
 				const float myrho = m * c0 * myh3inv;
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;
-				const float myp = data.ent[i] * powf(myrho, SPH_GAMMA);
+				float mygamma;
+				if (data.H2) {
+					mygamma = compute_gamma(data.H2[i], data.Y);
+				} else {
+					mygamma = 5. / 3.;
+				}
+				const float myp = data.ent[i] * powf(myrho, mygamma);
 				if (data.ent[i] < 0.0) {
 					PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
 					__trap();
 				}
-				const float myc = sqrtf(SPH_GAMMA * myp * myrhoinv);
-				const float myrho1mgammainv = powf(myrho, 1.0f - SPH_GAMMA);
+				const float myc = sqrtf(mygamma * myp * myrhoinv);
+				const float myrho1mgammainv = powf(myrho, 1.0f - mygamma);
 				const float myfvel = data.fvel[i];
 				const float myf0 = data.f0[i];
 				const float Prho2i = myp * myrhoinv * myrhoinv * myf0;
@@ -621,7 +641,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					//		PRINT( "%i\n", ws.x.size());
 				}
 				for (int j = tid; j < ws.x.size(); j += block_size) {
-					constexpr float gamma = SPH_GAMMA;
 					const float dx = distance(myx, ws.x[j]);
 					const float dy = distance(myy, ws.y[j]);
 					const float dz = distance(myz, ws.z[j]);
@@ -632,6 +651,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float h3inv = hinv * sqr(hinv);
 					const float rho = m * c0 * h3inv;
 					const float rhoinv = minv * c0inv * h3;
+					float gamma;
+					if (data.H2) {
+						gamma = compute_gamma(ws.H2[j], data.Y);
+					} else {
+						gamma = 5. / 3.;
+					}
+
 					const float p = ws.ent[j] * powf(rho, gamma);
 					if (p < 0.0) {
 						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
@@ -687,11 +713,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 						dt = rung_dt[myrung] * (params.t0);
 					}
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
-		/*			if (dAdt < 0.f) {
-						PRINT("Negative DATDt %e %e  %e %e %e %e %e %e %e %e\n", r/h, r/myh, (dviscx * dvx + dviscy * dvy + dviscz * dvz), dviscx * dvx, dviscy * dvy, dviscz * dvz,  (dvx * dx + dvy * dy + dvz * dz),  dvx * dx ,dvy * dy, dvz * dz);
-						__trap();
-					}*/
-					dAdt *= float(0.5) * m * (SPH_GAMMA - 1.f) * myrho1mgammainv;
+					/*			if (dAdt < 0.f) {
+					 PRINT("Negative DATDt %e %e  %e %e %e %e %e %e %e %e\n", r/h, r/myh, (dviscx * dvx + dviscy * dvy + dviscz * dvz), dviscx * dvx, dviscy * dvy, dviscz * dvz,  (dvx * dx + dvy * dy + dvz * dz),  dvx * dx ,dvy * dy, dvz * dz);
+					 __trap();
+					 }*/
+					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv;
 					dent += dAdt * dt;
 					ddvx += dvxdt * dt;
 					ddvy += dvydt * dt;
@@ -761,6 +787,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		ws.vz0.resize(0);
 		ws.h0.resize(0);
 		ws.ent0.resize(0);
+		if (data.H2) {
+			ws.H2.resize(0);
+		}
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
@@ -803,6 +832,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				ws.vz0.resize(next_size);
 				ws.ent0.resize(next_size);
 				ws.h0.resize(next_size);
+				if (data.H2) {
+					ws.H2.resize(next_size);
+				}
 				if (contains) {
 					const int k = offset + j;
 					ws.x0[k] = x[XDIM];
@@ -813,6 +845,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					ws.vz0[k] = data.vz[pi];
 					ws.ent0[k] = data.ent[pi];
 					ws.h0[k] = data.h[pi];
+					if (data.H2) {
+						ws.H2[k] = data.H2[pi];
+					}
 				}
 			}
 		}
@@ -840,12 +875,18 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				const float myh3inv = 1.f / (sqr(myh) * myh);
 				const float myrho = m * c0 * myh3inv;
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;
-				const float myp = data.ent[i] * powf(myrho, SPH_GAMMA);
+				float gamma;
+				if (data.H2) {
+					gamma = compute_gamma(data.H2[i], data.Y);
+				} else {
+					gamma = 5.f / 3.f;
+				}
+				const float myp = data.ent[i] * powf(myrho, gamma);
 				if (myp < 0.0) {
 					PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
 					__trap();
 				}
-				const float myc = sqrtf(SPH_GAMMA * myp * myrhoinv);
+				const float myc = sqrtf(gamma * myp * myrhoinv);
 				const int jmax = round_up(ws.x0.size(), block_size);
 				ws.x.resize(0);
 				ws.y.resize(0);
@@ -908,7 +949,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				float dvz_dz = 0.0f;
 				float drho_dh = 0.f;
 				for (int j = tid; j < ws.x.size(); j += block_size) {
-					constexpr float gamma = SPH_GAMMA;
 					const float dx = distance(myx, ws.x[j]);
 					const float dy = distance(myy, ws.y[j]);
 					const float dz = distance(myz, ws.z[j]);
@@ -920,6 +960,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float h3inv = hinv * sqr(hinv);
 					const float rho = m * c0 * h3inv;
 					const float rhoinv = minv * c0inv * h3;
+					float gamma;
+					if (data.H2) {
+						gamma = compute_gamma(ws.H2[j], data.Y);
+					} else {
+						gamma = 5.f / 3.f;
+					}
 					const float p = ws.ent[j] * powf(rho, gamma);
 					if (p < 0.0) {
 						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);

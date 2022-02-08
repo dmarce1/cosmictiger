@@ -688,14 +688,14 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-void chemistry_do_step(float a, int minrung, float t0) {
+void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0));
+		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0, adot, dir));
 	}
 	int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, a, minrung,t0]() {
+		futs.push_back(hpx::async([proc, nthreads, a, minrung,t0,dir,adot]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			vector<chem_attribs> chems;
@@ -710,6 +710,12 @@ void chemistry_do_step(float a, int minrung, float t0) {
 					chem.H2 = sph_particles_H2(i);
 					chem.Hep = sph_particles_Hep(i);
 					chem.Hepp = sph_particles_Hepp(i);
+					if( dir == 1 ) {
+						double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * get_options().Y - 0.5 * chem.H2);
+						double gamma = 1. + 1. / cv;
+						double dt = rung_dt[rung] * t0;
+						chem.K *= exp((5.-3.*gamma)*adot/a*dt);
+					}
 					chem.K = sph_particles_ent(i);
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3);
 					chem.dt = 0.5f * t0 * rung_dt[rung];
@@ -721,21 +727,28 @@ void chemistry_do_step(float a, int minrung, float t0) {
 			for( part_int i = b; i < e; i++) {
 				int rung = sph_particles_rung(i);
 				if( rung >= minrung ) {
-					const chem_attribs& chem = chems[j++];
-			//		PRINT( "%e %e %e %e %e %e\n", chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, chem.K);
-					sph_particles_Hp(i) = chem.Hp;
-					sph_particles_Hn(i) = chem.Hn;
-					sph_particles_H2(i) = chem.H2;
-					sph_particles_Hep(i) = chem.Hep;
-					sph_particles_Hepp(i) = chem.Hepp;
-					sph_particles_ent(i) = chem.K;
-					if( chem.K < 0.0 ) {
-						PRINT( "Chem routines made negative entropy!\n");
+					chem_attribs chem = chems[j++];
+					//		PRINT( "%e %e %e %e %e %e\n", chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, chem.K);
+					if( dir == -1 ) {
+						double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * get_options().Y - 0.5 * chem.H2);
+						double gamma = 1. + 1. / cv;
+						double dt = rung_dt[rung] * t0;
+						chem.K *= exp((5.-3.*gamma)*adot/a*dt);
+		//				PRINT( "%e %e %e %e\n", cv,(5.f-3.f*gamma)*adot/a*dt, chem.H2, exp((5.-3.*gamma)*adot/a*dt));
 					}
+				sph_particles_Hp(i) = chem.Hp;
+				sph_particles_Hn(i) = chem.Hn;
+				sph_particles_H2(i) = chem.H2;
+				sph_particles_Hep(i) = chem.Hep;
+				sph_particles_Hepp(i) = chem.Hepp;
+				sph_particles_ent(i) = chem.K;
+				if( chem.K < 0.0 ) {
+					PRINT( "Chem routines made negative entropy!\n");
 				}
 			}
+		}
 
-		}));
+	}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());

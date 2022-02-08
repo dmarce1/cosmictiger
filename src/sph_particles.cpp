@@ -458,7 +458,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, float* H2, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -474,6 +474,9 @@ void sph_particles_global_read_sph(particle_global_range range, float* ent, floa
 					vx[j] = sph_particles_vel(XDIM, i);
 					vy[j] = sph_particles_vel(YDIM, i);
 					vz[j] = sph_particles_vel(ZDIM, i);
+				}
+				if( H2 ) {
+					H2[j] = sph_particles_H2(i);
 				}
 			}
 		} else {
@@ -497,6 +500,9 @@ void sph_particles_global_read_sph(particle_global_range range, float* ent, floa
 						vx[dest_index] = part.v[XDIM];
 						vy[dest_index] = part.v[YDIM];
 						vz[dest_index] = part.v[ZDIM];
+					}
+					if( H2 ) {
+						H2[dest_index] = part.H2;
 					}
 					dest_index++;
 				}

@@ -123,7 +123,7 @@ void do_groups(int number, double scale) {
 
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, bool verbose = true) {
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, bool verbose = true) {
 	verbose = true;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
@@ -262,7 +262,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("Doing chemistry step\n");
 			timer tm;
 			tm.start();
-			chemistry_do_step(scale, minrung, t0);
+			chemistry_do_step(scale, minrung, t0, adot, +1);
 			tm.stop();
 			PRINT("Took %e s\n", tm.read());
 		}
@@ -600,12 +600,12 @@ void driver() {
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			if (sph) {
-				sph_step(minrung, a, tau, t0, 0);
+				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a));
 				if (tau != 0.0 && chem) {
 					PRINT("Doing chemistry step\n");
 					timer tm;
 					tm.start();
-					chemistry_do_step(a, minrung, t0);
+					chemistry_do_step(a, minrung, t0, cosmos_dadt(a), -1);
 					tm.stop();
 					PRINT("Took %e s\n", tm.read());
 				}
@@ -615,7 +615,7 @@ void driver() {
 			int max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1).max_rung);
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a)).max_rung);
 			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");

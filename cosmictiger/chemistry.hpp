@@ -62,4 +62,4 @@ struct chem_attribs {
 void chemistry_test();
 void cuda_chemistry_step(vector<chem_attribs>& chems, float scale);
 void test_cuda_chemistry_kernel();
-void chemistry_do_step(float,int,float);
+void chemistry_do_step(float,int,float, float, int);

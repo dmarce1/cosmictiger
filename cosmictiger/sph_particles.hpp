@@ -38,6 +38,7 @@
 struct sph_particle {
 	float ent;
 	array<float, NDIM> v;
+	float H2;
 	template<class T>
 	void serialize(T&&arc, unsigned) {
 		arc & ent;
@@ -77,7 +78,7 @@ void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, float* H2, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
 void sph_particles_load(FILE* fp);
@@ -176,6 +177,10 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 	p.ent = sph_particles_ent(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
+	}
+	static const bool chem = get_options().chem;
+	if (chem) {
+		p.H2 = sph_particles_H2(index);
 	}
 	return p;
 }
