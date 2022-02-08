@@ -445,25 +445,28 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		float z = 1.f / params.a - 1.f;																						// 2
 		float Tmid;
 		for (int i = 0; i < 28; i++) {
-			float f_mid, f_min;
+			float f_mid, f_max;
 			Tmid = sqrtf(Tmax * Tmin);																							// 5
 			N = N.number_density_to_fractions();
 //			PRINT("%e %e %e %e %e %e %e %e\n", Tmid, N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
 			N = N0;
 			if (i == 0) {
-				f_min = test_temperature(N0, N, T0, Tmin, dt, z, flops);
+				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops);
 			}
 			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops);
-			if (copysignf(1.f, f_mid) != copysignf(1.f, f_min)) {
-				Tmax = Tmid;
-			} else {
+			if (copysignf(1.f, f_mid) != copysignf(1.f, f_max)) {
 				Tmin = Tmid;
-				f_min = f_mid;
+			} else {
+				Tmax = Tmid;
+				f_max = f_mid;
 			}
 
 			flops += 7;
 		}
 		float T = Tmid;
+		if (T > 9e7) {
+			PRINT("%e %e %e %e\n", T0, T, test_temperature(N0, N, T0, 1e3f, dt, z, flops), test_temperature(N0, N, T0, 1e8, dt, z, flops));
+		}
 
 		n0 = N.H + N.H2 + N.He + N.Hep + N.Hepp + N.Hp + N.Hn;
 		n = N.H + 2.f * N.Hp + N.H2 + N.He + 2.f * N.Hep + 3.f * N.Hepp;											// 8
@@ -536,7 +539,7 @@ void test_cuda_chemistry_kernel() {
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
 	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;										// 10
 	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
-	const int N = 100000000;
+	const int N = 1000000;
 	vector<chem_attribs> chem0;
 	vector<chem_attribs> chems;
 	float z = 0.5;
@@ -589,7 +592,7 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0);
 
 	for (int i = 0; i < N; i++) {
-//.		PRINT("%e %e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
+//		PRINT("%e %e\n", chems0[i].K, chems[i].K, chems[i].H2, chems[i].Hep, chems[i].Hepp);
 	}
 }
 
