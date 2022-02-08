@@ -57,40 +57,34 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 #define Rule(a,b) a = b
 #define List(...) __VA_ARGS__
 //	PRINT("in %e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
-	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	  // 11
-	H = Hall - Hp - Hn - 2 * H2;																																										// 4
-	List(
-			List( Rule(Hp, (Hp0 - 2 * dt * H2 * K1 * ne + dt * Hall * K1 * ne - dt * Hn * K1 * ne - 2 * dt * H2 * sigma20 + dt * Hall * sigma20 - dt * Hn * sigma20) / (1 + dt * K1 * ne + dt * K2 * ne + dt * sigma20)))); // 35
-	H = Hall - Hp - Hn - 2 * H2;																																										// 4
-	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	// 11
-	H = Hall - Hp - Hn - 2 * H2;
-	float H200 = H2;
-	List(
-			List(Rule(H2,(H20*Hp*K16 + H*H20*K8 + H20*K14*ne + dt*sqr(H)*K7*K8*ne + 2*dt*H*H20*K7*K8*ne)/ (Hp*K16 + dt*sqr(Hp)*K11*K16 + H*K8 + dt*H*Hp*K11*K8 + K14*ne + dt*Hp*K11*K14*ne + dt*Hp*K12*K16*ne + dt*H*K12*K8*ne + 2*dt*H*K7*K8*ne + dt*K12*K14*sqr(ne))))); //62
-
-	if (isnan(H2)) {
-		H2 = H200;
-		PRINT("%e %e %e %e %e %e %e \n", dt,H,K7,K8,ne, H*H, K7*K8*ne );
-		__trap();
-	}
-	H = Hall - Hp - Hn - 2 * H2;																																										// 4
-	Hn = (H * K7 * ne) / (Hp * K16 + H * K8 + K14 * ne);																																	// 11
-	H = Hall - Hp - Hn - 2 * H2;																																										// 4
+	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
+	H = Hall - (Hp + fmaf(2.f, H2, Hn));
+	const float twoH2 = 2.f * H2;
+	const float tmp1 = (twoH2 - Hall + Hn);
+	const float Hpnum = (Hp0 - dt * tmp1 * fmaf(ne, K1, sigma20));
+	const float Hpden = (1 + dt * fmaf(ne, K1 + K2, sigma20));
+	Hp = Hpnum / Hpden;
+	H = Hall - (Hp + fmaf(2.f, H2, Hn));
+	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
+	H = Hall - (Hp + fmaf(2.f, H2, Hn));
+	const float tmp2 = K7 * K8;
+	const float H2num = fmaf(H20, fmaf(Hp, K16, fmaf(H, K8, K14 * ne)), dt * H * tmp2 * ne * fmaf(2.f, H20, H));
+	const float K14ne = K14 * ne;
+	const float H2den = (Hp * K16 + H * K8 + K14ne + dt * (Hp * K11 * (Hp * K16 + H * K8 + K14ne) + ne * (K12 * (Hp * K16 + H * K8 + K14ne) + 2.f * H * tmp2)));
+	H2 = H2num / H2den;																																	//62
+	H = Hall - (Hp + fmaf(2.f, H2, Hn));
+	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
+	H = Hall - (Hp + fmaf(2.f, H2, Hn));
 	Hep = -((Hepp0 * (dt * K3 * ne - dt * K6 * ne + dt * sigma21) + (1 + dt * K6 * ne) * (-Hep0 - dt * Heall * K3 * ne - dt * Heall * sigma21))
 			/ (-((dt * K3 * ne - dt * K6 * ne + dt * sigma21) * (-(dt * K5 * ne) - dt * sigma22))
 					+ (1 + dt * K6 * ne) * (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * sigma21 + dt * sigma22)));             // 59
 	Hepp = -((-Hepp0 - dt * Hepp0 * K3 * ne - dt * Hepp0 * K4 * ne - dt * Hep0 * K5 * ne - dt * Hepp0 * K5 * ne - sqr(dt) * Heall * K3 * K5 * Power(ne, 2)
-			- dt * Hepp0 * sigma21 - sqr(dt) * Heall * K5 * ne * sigma21 - dt * Hep0 * sigma22 - dt * Hepp0 * sigma22
-			- sqr(dt) * Heall * K3 * ne * sigma22 - sqr(dt) * Heall * sigma21 * sigma22)
+			- dt * Hepp0 * sigma21 - sqr(dt) * Heall * K5 * ne * sigma21 - dt * Hep0 * sigma22 - dt * Hepp0 * sigma22 - sqr(dt) * Heall * K3 * ne * sigma22
+			- sqr(dt) * Heall * sigma21 * sigma22)
 			/ (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * K6 * ne + sqr(dt) * K3 * K5 * Power(ne, 2) + sqr(dt) * K3 * K6 * Power(ne, 2)
 					+ sqr(dt) * K4 * K6 * Power(ne, 2) + dt * sigma21 + sqr(dt) * K5 * ne * sigma21 + sqr(dt) * K6 * ne * sigma21 + dt * sigma22
 					+ sqr(dt) * K3 * ne * sigma22 + sqr(dt) * sigma21 * sigma22));												//112
 	He = Heall - Hep - Hepp;																																											// 2
-//	PRINT("out %e\n", dt);
-/*	if (fmaxf(H, 0.0f) + fmaxf(Hp, 0.0f) + fmaxf(Hn, 0.0f) + 2 * fmaxf(H2, 0.0f) <= 0.0) {
-		PRINT("ZEROS ONE %e %e %e %e %e %e %e\n", N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
-		__trap();
-	}*/
 	H = fmaxf(H, 0.0f);																																													// 1
 	Hp = fmaxf(Hp, 0.0f);																																												// 1
 	Hn = fmaxf(Hn, 0.0f);																																												// 1
@@ -98,10 +92,6 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	He = fmaxf(He, 0.0f);																																												// 1
 	Hep = fmaxf(Hep, 0.0f);																																												// 1
 	Hepp = fmaxf(Hepp, 0.0f);																																											// 1
-/*	if (H + Hp + Hn + 2 * H2 <= 0.0) {
-		PRINT("ZEROS TWO %e %e %e %e %e %e %e\n", N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
-		__trap();
-	}*/
 	flops += 332;
 	return Hp - Hn + Hep + 2 * Hepp - ne;
 }
@@ -591,7 +581,7 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0, 1e15 / opts.code_to_s);
 
 	for (int i = 0; i < N; i++) {
-		PRINT( "%e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
+		PRINT("%e %e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
 	}
 }
 
