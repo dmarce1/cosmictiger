@@ -62,7 +62,7 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	const float twoH2 = 2.f * H2;
 	const float tmp1 = (twoH2 - Hall + Hn);
 	const float Hpnum = (Hp0 - dt * tmp1 * fmaf(ne, K1, sigma20));
-	const float Hpden = (1 + dt * fmaf(ne, K1 + K2, sigma20));
+	const float Hpden = fmaf(dt, fmaf(ne, K1 + K2, sigma20), 1.f);
 	Hp = Hpnum / Hpden;
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));
 	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
@@ -70,14 +70,19 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	const float tmp2 = K7 * K8;
 	const float H2num = fmaf(H20, fmaf(Hp, K16, fmaf(H, K8, K14 * ne)), dt * H * tmp2 * ne * fmaf(2.f, H20, H));
 	const float K14ne = K14 * ne;
-	const float H2den = (Hp * K16 + H * K8 + K14ne + dt * (Hp * K11 * (Hp * K16 + H * K8 + K14ne) + ne * (K12 * (Hp * K16 + H * K8 + K14ne) + 2.f * H * tmp2)));
+	const float tmp3 = Hp * K16 + fmaf(H, K8, K14ne);
+	const float H2den = fmaf(dt, fmaf(tmp3, (fmaf(Hp, K11, ne * K12)), ne * 2.f * H * tmp2), tmp3);
 	H2 = H2num / H2den;																																	//62
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));
 	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));
-	Hep = -((Hepp0 * (dt * K3 * ne - dt * K6 * ne + dt * sigma21) + (1 + dt * K6 * ne) * (-Hep0 - dt * Heall * K3 * ne - dt * Heall * sigma21))
-			/ (-((dt * K3 * ne - dt * K6 * ne + dt * sigma21) * (-(dt * K5 * ne) - dt * sigma22))
-					+ (1 + dt * K6 * ne) * (1 + dt * K3 * ne + dt * K4 * ne + dt * K5 * ne + dt * sigma21 + dt * sigma22)));             // 59
+	const float K6ne = K6 * ne;
+	const float tmp4 = fmaf(dt, K6ne, 1.f);
+	const float tmp5 = fmaf(K3, ne, sigma21 - K6ne);
+	const float Hep_num = fmaf(-Hepp0, dt * tmp5, tmp4 * (fmaf(dt, fmaf(Heall, K3 * ne, Heall * sigma21), Hep0)));
+	const float dt2 = sqr(dt);
+	const float Hep_den = (dt2 * tmp5 * fmaf(K5, ne, sigma22)) + tmp4 * fmaf(dt, ((K3 + K4 + K5) * ne + sigma21 + sigma22), 1.f);
+	Hep = Hep_num / Hep_den;
 	Hepp = -((-Hepp0 - dt * Hepp0 * K3 * ne - dt * Hepp0 * K4 * ne - dt * Hep0 * K5 * ne - dt * Hepp0 * K5 * ne - sqr(dt) * Heall * K3 * K5 * Power(ne, 2)
 			- dt * Hepp0 * sigma21 - sqr(dt) * Heall * K5 * ne * sigma21 - dt * Hep0 * sigma22 - dt * Hepp0 * sigma22 - sqr(dt) * Heall * K3 * ne * sigma22
 			- sqr(dt) * Heall * sigma21 * sigma22)
@@ -529,7 +534,7 @@ void test_cuda_chemistry_kernel() {
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
 	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;										// 10
 	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
-	const int N = 1;
+	const int N = 100000000;
 	vector<chem_attribs> chem0;
 	vector<chem_attribs> chems;
 	float z = 0.5;
@@ -581,7 +586,7 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0, 1e15 / opts.code_to_s);
 
 	for (int i = 0; i < N; i++) {
-		PRINT("%e %e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
+//		PRINT("%e %e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
 	}
 }
 
