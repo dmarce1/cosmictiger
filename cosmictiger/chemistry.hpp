@@ -43,6 +43,7 @@ struct species_t {
 		};
 	};
 	species_t fractions_to_number_density(float rho) const;
+	CUDA_EXPORT
 	species_t number_density_to_fractions() const;
 };
 
