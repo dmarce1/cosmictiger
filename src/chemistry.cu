@@ -402,19 +402,20 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 }
 
 __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, int nchems, float dt, int* next_index, double* total_flops) {
-	const int& tid = threadIdx.x;
 	int index;
 	index = atomicAdd(next_index, 1);
 	const double code_to_energy_density = params.code_to_g / (params.code_to_cm * sqr(params.code_to_s));		// 7
 	const double code_to_density = pow(params.code_to_cm, -3) * params.code_to_g;										// 10
 	dt *= params.a * params.code_to_s;																												// 1
 	int flops = 18;
+	double myflops = 0.0;
 	while (index < nchems) {
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
 		N.H = 1.f - params.Hefrac - attr.Hp - 2.f * attr.H2;															// 4
 		N.Hp = attr.Hp;
+		N.Hn = attr.Hn;
 		N.H2 = attr.H2;
 		N.He = params.Hefrac - attr.Hep - attr.Hepp;																		// 2
 		N.Hep = attr.Hep;
@@ -487,17 +488,15 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		attr.H2 = N.H2;
 		attr.Hep = N.Hep;
 		attr.Hepp = N.Hepp;
+		attr.Hn = N.Hn;
 		attr.Hp = N.Hp;
 		attr.K = K;
 		flops += 136;
-		shared_reduce_add<int, CHEM_BLOCK_SIZE>(flops);
-		if (tid == 0) {
-			atomicAdd(total_flops, (double) flops);
-		}
-		index = atomicAdd(next_index, 1);
+		myflops += flops;
 		flops = 0;
+		index = atomicAdd(next_index, 1);
 	}
-
+	atomicAdd(total_flops, myflops);
 }
 
 void cuda_chemistry_step(vector<chem_attribs>& chems, float scale, float dt) {
@@ -540,7 +539,7 @@ void test_cuda_chemistry_kernel() {
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
 	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;										// 10
 	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
-	const int N = 100000000;
+	const int N = 1;
 	vector<chem_attribs> chem0;
 	vector<chem_attribs> chems;
 	float z = 0.5;
@@ -583,6 +582,7 @@ void test_cuda_chemistry_kernel() {
 		chem.Hepp = N.Hepp;
 		chem.rho = rho;
 		chem.K = K;
+		chem.Hn = N.Hn;
 		chem.rho = rho;
 		chems.push_back(chem);
 		chem0.push_back(chem);
@@ -591,6 +591,7 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0, 1e15 / opts.code_to_s);
 
 	for (int i = 0; i < N; i++) {
+		PRINT( "%e %e %e %e\n", chems[i].Hp, chems[i].Hn, chems[i].H2, chems[i].Hep, chems[i].Hepp);
 	}
 }
 
