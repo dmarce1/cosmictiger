@@ -50,6 +50,7 @@ struct mark_semiactive_workspace {
 
 struct hydro_workspace {
 	fixedcapvec<float, WORKSPACE_SIZE> H2;
+	fixedcapvec<float, WORKSPACE_SIZE> H20;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
@@ -76,6 +77,7 @@ struct hydro_workspace {
 
 struct courant_workspace {
 	fixedcapvec<float, WORKSPACE_SIZE> H2;
+	fixedcapvec<float, WORKSPACE_SIZE> H20;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
@@ -229,7 +231,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					if (tid == 0) {
 						dh = 0.1f * h;
 						if (count > 1) {
-				//			PRINT( "%e %i\n", f / float(3.0 / (4.0 * M_PI)), count);
+							//			PRINT( "%e %i\n", f / float(3.0 / (4.0 * M_PI)), count);
 							f -= data.N * float(3.0 / (4.0 * M_PI));
 							dh = -f / dfdh;
 							if (dh > 0.5f * h) {
@@ -270,7 +272,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
-			//	if (tid == 0)
+				//	if (tid == 0)
 				//	PRINT("%i %e\n", count, data.N);
 				//		PRINT( "%e\n", h);
 				hmin = fminf(hmin, h);
@@ -450,6 +452,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 		ws.rungs0.resize(0);
 		ws.fvel0.resize(0);
 		ws.f00.resize(0);
+		if (data.H2) {
+			ws.H20.resize(0);
+		}
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
@@ -485,7 +490,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const int offset = ws.x0.size();
 				const int next_size = offset + total;
 				if (data.H2) {
-					ws.H2.resize(next_size);
+					ws.H20.resize(next_size);
 				}
 				ws.x0.resize(next_size);
 				ws.y0.resize(next_size);
@@ -501,7 +506,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				if (contains) {
 					const int k = offset + j;
 					if (data.H2) {
-						ws.H2[k] = data.H2[pi];
+						ws.H20[k] = data.H2[pi];
 					}
 					ws.x0[k] = x[XDIM];
 					ws.y0[k] = x[YDIM];
@@ -576,6 +581,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				ws.fvel.resize(0);
 				ws.f0.resize(0);
 				ws.rungs.resize(0);
+				if (data.H2) {
+					ws.H2.resize(0);
+				}
 				for (int j = tid; j < jmax; j += block_size) {
 					bool flag = false;
 					int k;
@@ -619,8 +627,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ws.f0.resize(next_size);
 					ws.h.resize(next_size);
 					ws.rungs.resize(next_size);
+					if (data.H2) {
+						ws.H2.resize(next_size);
+					}
 					if (flag) {
 						const int l = offset + k;
+						if (data.H2) {
+							ws.H2[l] = ws.H20[j];
+						}
 						ws.x[l] = ws.x0[j];
 						ws.y[l] = ws.y0[j];
 						ws.z[l] = ws.z0[j];
@@ -726,13 +740,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ddvx += dvxdt * dt;
 					ddvy += dvydt * dt;
 					ddvz += dvzdt * dt;
-					/*			dviscx = Piij * divWij;
-					 dviscy = Piij * divWij;
-					 dviscz = Piij * divWij;
-					 dpx = (Prho2j * divWj + Prho2i * divWi) + dviscx;
-					 dpy = (Prho2j * divWj + Prho2i * divWi) + dviscy;
-					 dpz = (Prho2j * divWj + Prho2i * divWi) + dviscz;
-					 ddivvdt -= dpx + dpy + dpz;*/
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dent);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvx);
@@ -792,7 +799,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		ws.h0.resize(0);
 		ws.ent0.resize(0);
 		if (data.H2) {
-			ws.H2.resize(0);
+			ws.H20.resize(0);
 		}
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
@@ -837,7 +844,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				ws.ent0.resize(next_size);
 				ws.h0.resize(next_size);
 				if (data.H2) {
-					ws.H2.resize(next_size);
+					ws.H20.resize(next_size);
 				}
 				if (contains) {
 					const int k = offset + j;
@@ -850,7 +857,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					ws.ent0[k] = data.ent[pi];
 					ws.h0[k] = data.h[pi];
 					if (data.H2) {
-						ws.H2[k] = data.H2[pi];
+						ws.H20[k] = data.H2[pi];
 					}
 				}
 			}
@@ -900,6 +907,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				ws.vz.resize(0);
 				ws.h.resize(0);
 				ws.ent.resize(0);
+				if (data.H2) {
+					ws.H2.resize(0);
+				}
 				for (int j = tid; j < jmax; j += block_size) {
 					bool flag = false;
 					int k;
@@ -929,8 +939,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					ws.vz.resize(next_size);
 					ws.ent.resize(next_size);
 					ws.h.resize(next_size);
+					if (data.H2) {
+						ws.H2.resize(next_size);
+					}
 					if (flag) {
 						const int l = offset + k;
+						if (data.H2) {
+							ws.H2[l] = ws.H20[j];
+						}
 						ws.x[l] = ws.x0[j];
 						ws.y[l] = ws.y0[j];
 						ws.z[l] = ws.z0[j];
