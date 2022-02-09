@@ -63,7 +63,7 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 #define Rule(a,b) a = b
 #define List(...) __VA_ARGS__
 //	PRINT("in %e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
-	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																																// 11
+	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
 	const float twoH2 = 2.f * H2;																																										// 1
 	const float tmp1 = (twoH2 - Hall + Hn);																																						// 2
@@ -71,30 +71,30 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	const float Hpden = fmaf(dt, fmaf(ne, K1 + K2, sigma20), 1.f);																															// 5
 	Hp = Hpnum / Hpden;																																													// 4
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
-	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															  	// 11
+	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															  // 11
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
 	const float tmp2 = K7 * K8;																																										// 1
-	const float H2num = fmaf(H20, fmaf(Hp, K16, fmaf(H, K8, K14 * ne)), dt * H * tmp2 * ne * fmaf(2.f, H20, H));															// 13
+	const float H2num = fmaf(H20, fmaf(Hp, K16, fmaf(H, K8, K14 * ne)), dt * H * tmp2 * ne * fmaf(2.f, H20, H));														// 13
 	const float K14ne = K14 * ne;																																										// 1
 	const float tmp3 = Hp * K16 + fmaf(H, K8, K14ne);																																			// 4
-	const float H2den = fmaf(dt, fmaf(tmp3, (fmaf(Hp, K11, ne * K12)), ne * 2.f * H * tmp2), tmp3);																				// 10
+	const float H2den = fmaf(dt, fmaf(tmp3, (fmaf(Hp, K11, ne * K12)), ne * 2.f * H * tmp2), tmp3);																			// 10
 	H2 = H2num / H2den;																																													// 4
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
-	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															 	// 11
+	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															 // 11
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
 	const float K6ne = K6 * ne;																																										// 1
 	const float tmp4 = fmaf(dt, K6ne, 1.f);																																						// 2
 	const float tmp5 = fmaf(K3, ne, sigma21 - K6ne);																																			// 3
-	const float Hep_num = fmaf(-Hepp0, dt * tmp5, tmp4 * (fmaf(dt, fmaf(Heall, K3 * ne, Heall * sigma21), Hep0)));													    	// 11
+	const float Hep_num = fmaf(-Hepp0, dt * tmp5, tmp4 * (fmaf(dt, fmaf(Heall, K3 * ne, Heall * sigma21), Hep0)));													    // 11
 	const float K345 = K3 + K4 + K5;																																									// 2
-	const float Hep_den = fmaf(tmp4, fmaf(dt, fmaf(K345, ne, sigma21 + sigma22), 1.f), (sqr(dt) * tmp5 * fmaf(K5, ne, sigma22)));										// 12
+	const float Hep_den = fmaf(tmp4, fmaf(dt, fmaf(K345, ne, sigma21 + sigma22), 1.f), (sqr(dt) * tmp5 * fmaf(K5, ne, sigma22)));									// 12
 	Hep = Hep_num / Hep_den;																																											// 4
 	const float Hepp_num = fmaf(dt,
 			fmaf(dt, Heall * fmaf(K5, ne * fmaf(K3, ne, sigma21), fmaf(K3, ne, sigma21) * sigma22),
-					fmaf(ne, fmaf(Hepp0, K345, Hep0 * K5), fmaf(Hepp0, sigma21, (Hep0 + Hepp0) * sigma22))), Hepp0);															// 22
+					fmaf(ne, fmaf(Hepp0, K345, Hep0 * K5), fmaf(Hepp0, sigma21, (Hep0 + Hepp0) * sigma22))), Hepp0);														// 22
 	const float Hepp_den = fmaf(dt,
 			(dt * fmaf(K3, sqr(ne) * (K5 + K6), fmaf(ne, fmaf(K6, fmaf(K4, ne, sigma21), K5 * sigma21), fmaf(K3, ne, sigma21) * sigma22))
-					+ fmaf((K345 + K6), ne, sigma21) + sigma22), 1.f);																															// 21
+					+ fmaf((K345 + K6), ne, sigma21) + sigma22), 1.f);																														// 21
 	Hepp = (Hepp_num / Hepp_den);																																										// 4
 	He = Heall - Hep - Hepp;																																											// 2
 	H = fmaxf(H, 0.0f);																																													// 1
@@ -438,8 +438,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.He = params.Hefrac - (double) attr.Hep - (double) attr.Hepp;																		// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
-		float dt = (double) attr.dt / (double) params.a;
-		dt *= (double) params.a * (double) params.code_to_s;																												// 1
+		float dt = (double) attr.dt * (double) params.a;
+		dt *= (double) params.code_to_s;																												// 1
 		const double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
 		const double rhoavo = rho * constants::avo;																		// 1
 		N.H *= rhoavo;																												// 1
@@ -530,9 +530,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 }
 
 void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
-	timer1 = timer2 = timer3 = 0.0;
 	timer tm;
-	tm.start();
 	static const auto opts = get_options();
 	double* flops;
 	int* index;
@@ -543,7 +541,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	CUDA_CHECK(cudaMalloc(&dev_chems, sizeof(chem_attribs) * chems.size()));
 	CUDA_CHECK(cudaMallocManaged(&flops, sizeof(double)));
 	CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
-	CUDA_CHECK(cudaMemcpyAsync(dev_chems, chems.data(), sizeof(chem_attribs) * chems.size(), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpyAsync(dev_chems, chems.data(), sizeof(chem_attribs) * chems.size(), cudaMemcpyHostToDevice, stream));
 	*index = 0;
 	params.Hefrac = opts.Y;
 	params.a = scale;
@@ -551,23 +549,20 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	params.code_to_g = opts.code_to_g;
 	params.code_to_s = opts.code_to_s;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) chemistry_kernel, CHEM_BLOCK_SIZE, 0));
-	PRINT("Occupancy is %i\n", nblocks);
 	nblocks *= cuda_smp_count();
-//nblocks = std::max(1, nblocks / hpx_hardware_concurrency());
-	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE>>>(params, dev_chems, chems.size(), index, flops);
+	nblocks = std::max(1, nblocks / hpx_hardware_concurrency());
+	tm.start();
+	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE, 0, stream>>>(params, dev_chems, chems.size(), index, flops);
 	cuda_stream_synchronize(stream);
-	CUDA_CHECK(cudaMemcpy(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost));
+	tm.stop();
+	CUDA_CHECK(cudaMemcpyAsync(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost, stream));
 	double myflops = *flops;
 	CUDA_CHECK(cudaFree(flops));
 	CUDA_CHECK(cudaFree(index));
+	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaFree(dev_chems));
 	cuda_end_stream(stream);
-	tm.stop();
 	double ttot = timer1 + timer2 + timer3;
-	timer1 /= ttot;
-	timer2 /= ttot;
-	timer3 /= ttot;
-	PRINT("Cuda Chemistry took %e at %e GFLOPs %e %e %e\n", tm.read(), myflops / 1024 / 1024 / 1024 / tm.read(), timer1, timer2, timer3);
 }
 
 void test_cuda_chemistry_kernel() {
@@ -628,7 +623,7 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0);
 
 	for (int i = 0; i < N; i++) {
-	//	PRINT("%e %e %e\n", chem0[i].K, chems[i].K, chems[i].Hepp);
+		//	PRINT("%e %e %e\n", chem0[i].K, chems[i].K, chems[i].Hepp);
 	}
 }
 
