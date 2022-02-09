@@ -36,6 +36,11 @@
 
 
 #define NOT_SPH ((part_int) 0xFFFFFFFFU)
+#define NOT_STAR ((part_int) 0xFFFFFFFFU)
+
+#define DARK_MATTER_TYPE 0
+#define SPH_TYPE 1
+#define STAR_TYPE 2
 
 #ifdef LONG_LONG_PART_INT
 using part_int = long long;
@@ -139,6 +144,7 @@ PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 PARTICLES_EXTERN part_int* particles_sph;
 PARTICLES_EXTERN group_int* particles_lgrp;
 PARTICLES_EXTERN char* particles_tr;
+PARTICLES_EXTERN char* particles_ty;
 PARTICLES_EXTERN size_t particles_global_offset;
 
 struct particle_global_range {
@@ -170,6 +176,11 @@ vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
 void particles_memadvise_gpu();
 void particles_free();
+
+inline char& particles_type(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_ty[index];
+}
 
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);

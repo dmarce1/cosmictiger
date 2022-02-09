@@ -695,6 +695,7 @@ void particles_resize(part_int sz) {
 		}
 		if (get_options().sph) {
 			particles_array_resize(particles_sph, new_capacity, true);
+			particles_array_resize(particles_ty, new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -742,6 +743,7 @@ void particles_free() {
 		free(particles_tr);
 	}
 	if (get_options().sph) {
+		free(particles_ty);
 		free(particles_sph);
 	}
 }
@@ -814,6 +816,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 					}
 					if (sph) {
 						std::swap(particles_sph[hi], particles_sph[lo]);
+						std::swap(particles_ty[hi], particles_ty[lo]);
 					}
 					break;
 				}
@@ -890,6 +893,7 @@ void particles_load(FILE* fp) {
 		FREAD(&particles_tracer(0), sizeof(char), particles_size(), fp);
 	}
 	if (sph_size) {
+		FREAD(&particles_type(0), sizeof(char), particles_size(), fp);
 		FREAD(&particles_sph_index(0), sizeof(part_int), particles_size(), fp);
 		sph_particles_load(fp);
 	}
@@ -914,6 +918,7 @@ void particles_save(FILE* fp) {
 		fwrite(&particles_tracer(0), sizeof(char), particles_size(), fp);
 	}
 	if (sph_size) {
+		fwrite(&particles_type(0), sizeof(char), particles_size(), fp);
 		fwrite(&particles_sph_index(0), sizeof(part_int), particles_size(), fp);
 		sph_particles_save(fp);
 	}

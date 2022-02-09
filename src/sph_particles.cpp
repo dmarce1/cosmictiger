@@ -210,39 +210,45 @@ float sph_particles_max_smooth_len() {
 	return maxh;
 }
 
+void sph_particles_swap(part_int i, part_int j) {
+	const bool chem = get_options().chem;
+	const bool stars = get_options().stars;
+	std::swap(sph_particles_e[i], sph_particles_e[j]);
+	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
+	std::swap(sph_particles_fv[i], sph_particles_fv[j]);
+	std::swap(sph_particles_f0[i], sph_particles_f0[j]);
+	std::swap(sph_particles_de[i], sph_particles_de[j]);
+	std::swap(sph_particles_h[i], sph_particles_h[j]);
+	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
+	if (stars) {
+		std::swap(sph_particles_ts[i], sph_particles_ts[j]);
+	}
+#ifdef CHECK_MUTUAL_SORT
+	std::swap(sph_particles_tst[i], sph_particles_tst[j]);
+#endif
+	for (int dim = 0; dim < NDIM; dim++) {
+		std::swap(sph_particles_dv[dim][i], sph_particles_dv[dim][j]);
+	}
+	if (chem) {
+		for (int l = 0; l < NCHEMFRACS; l++) {
+			std::swap(sph_particles_chem[l][i], sph_particles_chem[l][j]);
+		}
+	}
+}
+
+
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 	part_int begin = rng.first;
 	part_int end = rng.second;
 	part_int lo = begin;
 	part_int hi = end;
-	const bool chem = get_options().chem;
-	const bool stars = get_options().stars;
+	part_int j = end;
 	while (lo < hi) {
 		if (sph_particles_pos(xdim, lo) >= xmid) {
 			while (lo != hi) {
 				hi--;
 				if (sph_particles_pos(xdim, hi) < xmid) {
-					std::swap(sph_particles_e[hi], sph_particles_e[lo]);
-					std::swap(sph_particles_dvv[hi], sph_particles_dvv[lo]);
-					std::swap(sph_particles_fv[hi], sph_particles_fv[lo]);
-					std::swap(sph_particles_f0[hi], sph_particles_f0[lo]);
-					std::swap(sph_particles_de[hi], sph_particles_de[lo]);
-					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
-					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
-					if (stars) {
-						std::swap(sph_particles_ts[hi], sph_particles_ts[lo]);
-					}
-#ifdef CHECK_MUTUAL_SORT
-					std::swap(sph_particles_tst[hi], sph_particles_tst[lo]);
-#endif
-					for (int dim = 0; dim < NDIM; dim++) {
-						std::swap(sph_particles_dv[dim][hi], sph_particles_dv[dim][lo]);
-					}
-					if (chem) {
-						for (int l = 0; l < NCHEMFRACS; l++) {
-							std::swap(sph_particles_chem[l][hi], sph_particles_chem[l][lo]);
-						}
-					}
+					sph_particles_swap(lo,hi);
 					break;
 				}
 			}

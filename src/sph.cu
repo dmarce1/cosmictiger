@@ -1143,10 +1143,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							float dt = rung_dt[rung] * params.t0;
 							data.time_to_star_snk[snki] -= dt / tdyn;
 							auto tmp = data.time_to_star_snk[snki];
-							if (tmp < 0.0) {
-								PRINT("STAR FORMED !!!!!!!!!!!!!!!!!!!!!!\n");
-							}
-							PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, tmp);
+//							PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, tmp);
 						} else {
 							data.time_to_star_snk[snki] = 1.f;
 						}

@@ -85,6 +85,7 @@ set(cosmictiger_source_files
     src/sph.cu
     src/sph_tree.cpp
     src/stack_trace.cpp
+    src/stars.cpp
     src/test.cpp
     src/tree.cpp
     src/view.cpp
@@ -143,6 +144,7 @@ set(cosmictiger_header_files
     cosmictiger/sph_tree.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
+    cosmictiger/stars.hpp
     cosmictiger/test.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
