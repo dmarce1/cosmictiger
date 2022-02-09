@@ -30,6 +30,10 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	float G;
+	float t0;
+	float rho0_c;
+	float rho0_b;
 	float* gx;
 	float* gy;
 	float* gz;
@@ -44,6 +48,8 @@ struct sph_run_cuda_data {
 	float* h;
 	char* rungs;
 	float* h_snk;
+	float* tcool_snk;
+	float* time_to_star_snk;
 	float* ent_snk;
 	float* dent_snk;
 	float* dvx_snk;

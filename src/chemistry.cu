@@ -112,7 +112,7 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	return Hp - Hn + Hep + 2 * Hepp - ne;
 }
 
-__device__ float test_temperature(species_t N0, species_t& N, float T0, float T, float dt, float z, int& flops) {
+__device__ float test_temperature(species_t N0, species_t& N, float T0, float T, float dt, float z, int& flops, float* dedt_ptr) {
 //	const int tid = threadIdx.x;
 //	auto tm = clock64();
 	T = fmaxf(1e3f, T);							// 1
@@ -415,6 +415,7 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 //	if (tid == 0) {
 //		atomicAdd(&timer2, (double) tm);
 //	}
+	*dedt_ptr = dedt;
 	return constants::kb * (cv1 * n1 * T - cv0 * n0 * T0) - dt * dedt;												// 8
 }
 
@@ -464,15 +465,16 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N0 = N;
 		double z = 1.0 / (double) params.a - 1.0;																						// 2
 		double Tmid;
+		float dedt;
 		for (int i = 0; i < 28; i++) {
 			float f_mid, f_max;
 			Tmid = sqrtf(Tmax * Tmin);																							// 5
 			N = N.number_density_to_fractions();
 			N = N0;
 			if (i == 0) {
-				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops);
+				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops, &dedt);
 			}
-			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops);
+			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt);
 			if (copysignf(1.f, f_mid) != copysignf(1.f, f_max)) {
 				Tmin = Tmid;
 			} else {
@@ -505,6 +507,11 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		attr.Hepp = N.Hepp;
 		attr.Hn = N.Hn;
 		attr.Hp = N.Hp;
+		if (dedt < 0.0) {
+			attr.tcool = -energy / dedt / params.a / params.code_to_s;
+		} else {
+			attr.tcool = 1e38;
+		}
 		attr.K = K;
 		flops += 136;
 		myflops += flops;

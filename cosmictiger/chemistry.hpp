@@ -57,6 +57,7 @@ struct chem_attribs {
 	float rho;
 	float K;
 	float dt;
+	float tcool;
 };
 
 void chemistry_test();

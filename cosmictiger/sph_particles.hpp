@@ -63,6 +63,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_dvv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
 SPH_PARTICLES_EXTERN float* sph_particles_f0;
+SPH_PARTICLES_EXTERN float* sph_particles_ts;
 #ifdef CHECK_MUTUAL_SORT
 SPH_PARTICLES_EXTERN part_int* sph_particles_tst;
 inline part_int& sph_particles_test(int index) {
@@ -85,6 +86,11 @@ void sph_particles_global_read_fvels(particle_global_range range, float* fvels, 
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
+
+inline float& sph_particles_time_to_star(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_ts[index];
+}
 
 inline float& sph_particles_Hp(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -144,6 +150,11 @@ inline char& sph_particles_rung(int index) {
 }
 
 inline float& sph_particles_dent(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de[index];
+}
+
+inline float& sph_particles_tcool(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de[index];
 }

@@ -169,6 +169,8 @@ bool process_options(int argc, char *argv[]) {
 	const double Neff = 3.086;
 	const double Theta = 1.0;
 	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
+	opts.rho0_b = nparts * opts.omega_b / opts.omega_m;
+	opts.rho0_c = nparts * opts.omega_c / opts.omega_m;
 	opts.code_to_g = 3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble) / (8.0 * M_PI) / nparts / constants::G * std::pow(opts.code_to_cm, 3);
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
@@ -263,7 +265,6 @@ bool process_options(int argc, char *argv[]) {
 	set_options(opts);
 	kernel_adjust_options(opts);
 	set_options(opts);
-
 
 	kernel_output();
 	view_read_view_file();

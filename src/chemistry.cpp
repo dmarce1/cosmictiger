@@ -737,19 +737,20 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						chem.K *= exp((5.-3.*gamma)*adot/a*dt);
 		//				PRINT( "%e %e %e %e\n", cv,(5.f-3.f*gamma)*adot/a*dt, chem.H2, exp((5.-3.*gamma)*adot/a*dt));
 					}
-				sph_particles_Hp(i) = chem.Hp;
-				sph_particles_Hn(i) = chem.Hn;
-				sph_particles_H2(i) = chem.H2;
-				sph_particles_Hep(i) = chem.Hep;
-				sph_particles_Hepp(i) = chem.Hepp;
-				sph_particles_ent(i) = chem.K;
-				if( chem.K < 0.0 ) {
-					PRINT( "Chem routines made negative entropy!\n");
+					sph_particles_Hp(i) = chem.Hp;
+					sph_particles_Hn(i) = chem.Hn;
+					sph_particles_H2(i) = chem.H2;
+					sph_particles_Hep(i) = chem.Hep;
+					sph_particles_Hepp(i) = chem.Hepp;
+					sph_particles_ent(i) = chem.K;
+					sph_particles_tcool(i) = chem.tcool;
+					if( chem.K < 0.0 ) {
+						PRINT( "Chem routines made negative entropy!\n");
+					}
 				}
 			}
-		}
 
-	}));
+		}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());

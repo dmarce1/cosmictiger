@@ -79,11 +79,16 @@ struct options {
 	double dm_mass;
 	double sph_mass;
 	double cfl;
+	double rho0_b;
+	double rho0_c;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & rho0_b;
+		arc & rho0_c;
+		arc & stars;
 		arc & chem;
 		arc & neighbor_number;
 		arc & kernel;

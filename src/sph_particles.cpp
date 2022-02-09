@@ -216,6 +216,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 	part_int lo = begin;
 	part_int hi = end;
 	const bool chem = get_options().chem;
+	const bool stars = get_options().stars;
 	while (lo < hi) {
 		if (sph_particles_pos(xdim, lo) >= xmid) {
 			while (lo != hi) {
@@ -228,6 +229,9 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 					std::swap(sph_particles_de[hi], sph_particles_de[lo]);
 					std::swap(sph_particles_h[hi], sph_particles_h[lo]);
 					std::swap(sph_particles_dm[hi], sph_particles_dm[lo]);
+					if (stars) {
+						std::swap(sph_particles_ts[hi], sph_particles_ts[lo]);
+					}
 #ifdef CHECK_MUTUAL_SORT
 					std::swap(sph_particles_tst[hi], sph_particles_tst[lo]);
 #endif
@@ -283,6 +287,7 @@ void sph_particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 void sph_particles_resize(part_int sz) {
 	const bool chem = get_options().chem;
+	const bool stars = get_options().stars;
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
@@ -308,6 +313,9 @@ void sph_particles_resize(part_int sz) {
 				sph_particles_array_resize(sph_particles_chem[f], new_capacity, false);
 			}
 		}
+		if (stars) {
+			sph_particles_array_resize(sph_particles_ts, new_capacity, true);
+		}
 		capacity = new_capacity;
 	}
 	part_int new_parts = sz - size;
@@ -323,6 +331,9 @@ void sph_particles_resize(part_int sz) {
 		sph_particles_test(oldsz + i) = oldsz + i;
 #endif
 		sph_particles_dent(oldsz + i) = 0.0f;
+		if (stars) {
+			sph_particles_time_to_star(i) = 1.f;
+		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 		}
@@ -330,6 +341,7 @@ void sph_particles_resize(part_int sz) {
 }
 
 void sph_particles_free() {
+	const bool stars = get_options().stars;
 	free(sph_particles_dm);
 #ifdef CHECK_MUTUAL_SORT
 	free(sph_particles_tst);
@@ -347,6 +359,9 @@ void sph_particles_free() {
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
 		CUDA_CHECK(cudaFree(sph_particles_f0));
+		if( stars ) {
+			CUDA_CHECK(cudaFree(sph_particles_ts));
+		}
 		CUDA_CHECK(cudaFree(sph_particles_fv));
 		CUDA_CHECK(cudaFree(sph_particles_h));
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -366,6 +381,9 @@ void sph_particles_free() {
 		free(sph_particles_sa);
 		free(sph_particles_f0);
 		free(sph_particles_fv);
+		if (stars) {
+			free(sph_particles_ts);
+		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			free(sph_particles_dv[NDIM]);
 		}
@@ -462,7 +480,6 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	}
 	return line;
 }
-
 
 void sph_particles_global_read_gforce(particle_global_range range, float* gx, float* gy, float* gz, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
@@ -773,6 +790,7 @@ void sph_particles_cache_free() {
 
 void sph_particles_load(FILE* fp) {
 	const bool chem = get_options().chem;
+	const bool stars = get_options().stars;
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
@@ -791,13 +809,17 @@ void sph_particles_load(FILE* fp) {
 	}
 	if (chem) {
 		for (int f = 0; f < NCHEMFRACS; f++) {
-			FREAD(&sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);
+			FREAD(sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);
 		}
+	}
+	if (stars) {
+		FREAD(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
 	}
 }
 
 void sph_particles_save(FILE* fp) {
 	const bool chem = get_options().chem;
+	const bool stars = get_options().stars;
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
@@ -806,11 +828,14 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
 	for (int dim = 0; dim < NDIM; dim++) {
-		fwrite(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp);
+		PRINT("%i\n", fwrite(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp));
 	}
 	if (chem) {
 		for (int f = 0; f < NCHEMFRACS; f++) {
-			fwrite(&sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);
+			fwrite(sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);
 		}
+	}
+	if (stars) {
+		fwrite(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
 	}
 }

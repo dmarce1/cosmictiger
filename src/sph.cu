@@ -795,6 +795,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	int max_rung_grav = 0;
 	int max_rung = 0;
 	const bool stars = data.gx;
+	const float Ginv = 1.f / data.G;
 	while (index < data.nselfs) {
 		int flops = 0;
 		ws.x0.resize(0);
@@ -858,7 +859,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				if (data.H2) {
 					ws.H20.resize(next_size);
 				}
-				if( stars ) {
+				if (stars) {
 					ws.gx0.resize(next_size);
 					ws.gy0.resize(next_size);
 					ws.gz0.resize(next_size);
@@ -876,7 +877,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					if (data.H2) {
 						ws.H20[k] = data.H2[pi];
 					}
-					if( stars ) {
+					if (stars) {
 						ws.gx0[k] = data.gx[pi];
 						ws.gy0[k] = data.gy[pi];
 						ws.gz0[k] = data.gz[pi];
@@ -896,6 +897,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 			const float c0inv = 1.0f / c0;
 			if (use) {
+				float mygx, mygy, mygz;
+				if (stars) {
+					mygx = data.gx[i];
+					mygy = data.gy[i];
+					mygz = data.gz[i];
+				}
 				const auto myx = data.x[i];
 				const auto myy = data.y[i];
 				const auto myz = data.z[i];
@@ -929,7 +936,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				ws.vz.resize(0);
 				ws.h.resize(0);
 				ws.ent.resize(0);
-				if( stars ) {
+				if (stars) {
 					ws.gx.resize(0);
 					ws.gy.resize(0);
 					ws.gz.resize(0);
@@ -966,7 +973,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					ws.vz.resize(next_size);
 					ws.ent.resize(next_size);
 					ws.h.resize(next_size);
-					if( stars ) {
+					if (stars) {
 						ws.gx.resize(next_size);
 						ws.gy.resize(next_size);
 						ws.gz.resize(next_size);
@@ -987,7 +994,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.vz[l] = ws.vz0[j];
 						ws.ent[l] = ws.ent0[j];
 						ws.h[l] = ws.h0[j];
-						if( stars ) {
+						if (stars) {
 							ws.gx[l] = ws.gx0[j];
 							ws.gy[l] = ws.gy0[j];
 							ws.gz[l] = ws.gz0[j];
@@ -1005,6 +1012,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				float dvz_dy = 0.0f;
 				float dvz_dz = 0.0f;
 				float drho_dh = 0.f;
+				float dgx_dx = 0.f;
+				float dgy_dy = 0.f;
+				float dgz_dz = 0.f;
 				for (int j = tid; j < ws.x.size(); j += block_size) {
 					const float dx = distance(myx, ws.x[j]);
 					const float dy = distance(myy, ws.y[j]);
@@ -1052,12 +1062,22 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					dvz_dy -= dvz * dWdr_y;
 					dvz_dz -= dvz * dWdr_z;
 					drho_dh -= q * dkernelW_dq(q);
+					if (stars) {
+						dgx_dx += (ws.gx[j] - mygx) * dWdr_x;
+						dgy_dy += (ws.gy[j] - mygy) * dWdr_y;
+						dgz_dz += (ws.gz[j] - mygz) * dWdr_z;
+					}
 
 				}
 				float div_v = dvx_dx + dvy_dy + dvz_dz;
 				float curl_vx = dvz_dy - dvy_dz;
 				float curl_vy = -dvz_dx + dvx_dz;
 				float curl_vz = dvy_dx - dvx_dy;
+				float div_g;
+				if (stars) {
+					div_g = dgx_dx + dgy_dy + dgz_dz;
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
+				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
@@ -1095,6 +1115,41 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					max_rung = max(max_rung, rung);
 					if (rung < 0 || rung >= MAX_RUNG) {
 						PRINT("Rung out of range \n");
+					}
+					if (stars) {
+						bool is_eligible = false;
+						float tdyn;
+						float mj;
+						float tcool;
+						if (div_v < 0.f) {
+							const float Gn32 = powf(data.G, -1.5);
+							float rho0 = data.rho0_b + data.rho0_c;
+							float delta = -Ginv * float(1.0 / 4.0 / M_PI) * div_g;
+							float delta_b = myrho - data.rho0_b;
+							float delta_c = delta - delta_b;
+							float rho_tot = (rho0 + delta) * powf(params.a, -3.0);
+							tdyn = sqrtf(3.f * M_PI / (32.f * data.G * rho_tot)) / params.a;
+							if (delta_b / data.rho0_b > 10.0 && delta > 0.f) {
+								tcool = data.tcool_snk[snki];
+								if (tcool < tdyn) {
+									mj = Gn32 * rsqrt(myrho) * sqr(myc) * myc * powf(delta_b / delta, 1.5f) * powf(params.a, -1.5f);
+									if (mj < m) {
+										is_eligible = true;
+									}
+								}
+							}
+						}
+						if (is_eligible) {
+							float dt = rung_dt[rung] * params.t0;
+							data.time_to_star_snk[snki] -= dt / tdyn;
+							auto tmp = data.time_to_star_snk[snki];
+							if (tmp < 0.0) {
+								PRINT("STAR FORMED !!!!!!!!!!!!!!!!!!!!!!\n");
+							}
+							PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, tmp);
+						} else {
+							data.time_to_star_snk[snki] = 1.f;
+						}
 					}
 				}
 			}
