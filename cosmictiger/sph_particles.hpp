@@ -77,6 +77,7 @@ void sph_particles_cache_free();
 void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
+void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, float* H2, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);

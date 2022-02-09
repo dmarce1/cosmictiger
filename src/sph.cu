@@ -84,6 +84,9 @@ struct courant_workspace {
 	fixedcapvec<float, WORKSPACE_SIZE> vx0;
 	fixedcapvec<float, WORKSPACE_SIZE> vy0;
 	fixedcapvec<float, WORKSPACE_SIZE> vz0;
+	fixedcapvec<float, WORKSPACE_SIZE> gx0;
+	fixedcapvec<float, WORKSPACE_SIZE> gy0;
+	fixedcapvec<float, WORKSPACE_SIZE> gz0;
 	fixedcapvec<float, WORKSPACE_SIZE> ent0;
 	fixedcapvec<float, WORKSPACE_SIZE> h0;
 	fixedcapvec<fixed32, HYDRO_SIZE> x;
@@ -92,6 +95,9 @@ struct courant_workspace {
 	fixedcapvec<float, HYDRO_SIZE> vx;
 	fixedcapvec<float, HYDRO_SIZE> vy;
 	fixedcapvec<float, HYDRO_SIZE> vz;
+	fixedcapvec<float, HYDRO_SIZE> gx;
+	fixedcapvec<float, HYDRO_SIZE> gy;
+	fixedcapvec<float, HYDRO_SIZE> gz;
 	fixedcapvec<float, HYDRO_SIZE> ent;
 	fixedcapvec<float, HYDRO_SIZE> h;
 };
@@ -788,6 +794,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	int max_rung_hydro = 0;
 	int max_rung_grav = 0;
 	int max_rung = 0;
+	const bool stars = data.gx;
 	while (index < data.nselfs) {
 		int flops = 0;
 		ws.x0.resize(0);
@@ -800,6 +807,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		ws.ent0.resize(0);
 		if (data.H2) {
 			ws.H20.resize(0);
+		}
+		if (stars) {
+			ws.vx0.resize(0);
+			ws.vy0.resize(0);
+			ws.vz0.resize(0);
 		}
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
@@ -846,6 +858,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				if (data.H2) {
 					ws.H20.resize(next_size);
 				}
+				if( stars ) {
+					ws.gx0.resize(next_size);
+					ws.gy0.resize(next_size);
+					ws.gz0.resize(next_size);
+				}
 				if (contains) {
 					const int k = offset + j;
 					ws.x0[k] = x[XDIM];
@@ -858,6 +875,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					ws.h0[k] = data.h[pi];
 					if (data.H2) {
 						ws.H20[k] = data.H2[pi];
+					}
+					if( stars ) {
+						ws.gx0[k] = data.gx[pi];
+						ws.gy0[k] = data.gy[pi];
+						ws.gz0[k] = data.gz[pi];
 					}
 				}
 			}
@@ -907,6 +929,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				ws.vz.resize(0);
 				ws.h.resize(0);
 				ws.ent.resize(0);
+				if( stars ) {
+					ws.gx.resize(0);
+					ws.gy.resize(0);
+					ws.gz.resize(0);
+				}
 				if (data.H2) {
 					ws.H2.resize(0);
 				}
@@ -939,6 +966,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					ws.vz.resize(next_size);
 					ws.ent.resize(next_size);
 					ws.h.resize(next_size);
+					if( stars ) {
+						ws.gx.resize(next_size);
+						ws.gy.resize(next_size);
+						ws.gz.resize(next_size);
+					}
 					if (data.H2) {
 						ws.H2.resize(next_size);
 					}
@@ -955,6 +987,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.vz[l] = ws.vz0[j];
 						ws.ent[l] = ws.ent0[j];
 						ws.h[l] = ws.h0[j];
+						if( stars ) {
+							ws.gx[l] = ws.gx0[j];
+							ws.gy[l] = ws.gy0[j];
+							ws.gz[l] = ws.gz0[j];
+						}
 					}
 				}
 				float vsig_max = 0.f;

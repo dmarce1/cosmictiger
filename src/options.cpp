@@ -97,6 +97,7 @@ bool process_options(int argc, char *argv[]) {
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "do variable softening") //
+	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
@@ -236,6 +237,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(slice_size);
 	SHOW(sph);
 	SHOW(sph_mass);
+	SHOW(stars);
 	SHOW(Theta);
 	SHOW(theta);
 	SHOW(tracer_count);

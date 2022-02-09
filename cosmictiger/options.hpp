@@ -31,6 +31,7 @@ struct options {
 	bool do_tracers;
 	bool do_slice;
 	bool do_views;
+	bool stars;
 	bool twolpt;
 	bool use_power_file;
 	bool read_check;

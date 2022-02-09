@@ -438,7 +438,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.He = params.Hefrac - (double) attr.Hep - (double) attr.Hepp;																		// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
-		float dt = (double) attr.dt * (double) params.a;
+		double dt = (double) attr.dt * (double) params.a;
 		dt *= (double) params.code_to_s;																												// 1
 		const double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
 		const double rhoavo = rho * constants::avo;																		// 1
@@ -468,18 +468,11 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float f_mid, f_max;
 			Tmid = sqrtf(Tmax * Tmin);																							// 5
 			N = N.number_density_to_fractions();
-//			PRINT("%e %e %e %e %e %e %e %e\n", Tmid, N.H, N.Hp, N.Hn, N.H2, N.He, N.Hep, N.Hepp);
 			N = N0;
-//			tm = clock64() - tm;
-//			if (tid == 0) {
-//				atomicAdd(&timer1, (double) tm);
-//			}
-//			tm = clock64();
 			if (i == 0) {
 				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops);
 			}
 			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops);
-//			tm = clock64();
 			if (copysignf(1.f, f_mid) != copysignf(1.f, f_max)) {
 				Tmin = Tmid;
 			} else {
@@ -490,8 +483,6 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			flops += 7;
 		}
 		float T = Tmid;
-		//	PRINT("%e\n", abs(test_temperature(N0, N, T0, T, dt, z, flops) / T));
-
 		n0 = (double) N.H + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp + (double) N.Hp + (double) N.Hn;
 		n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;											// 8
 		const double rhoavoinv = 1.0 / rhoavo;																				// 4
@@ -519,12 +510,6 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		myflops += flops;
 		flops = 0;
 		index = atomicAdd(next_index, 1);
-//		PRINT( "%e %e %e %e\n", K0, K, T0, T);
-//		tm = clock64() - tm;
-//		if (tid == 0) {
-//			atomicAdd(&timer1, (double) tm);
-//		}
-//		tm = clock64();
 	}
 	atomicAdd(total_flops, myflops);
 }
