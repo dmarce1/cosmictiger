@@ -78,17 +78,22 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				float vx = particles_vel(XDIM,i);
 				float vy = particles_vel(YDIM,i);
 				float vz = particles_vel(ZDIM,i);
-				int j = NOT_SPH;
+				int type = DARK_MATTER_TYPE;
 				float mass = 1.0f;
 				if( sph ) {
-					j = particles_sph_index(i);
-					mass = (j == NOT_SPH ? dm_mass : sph_mass);
+					type = particles_type(i);
+					if( type != SPH_TYPE) {
+						mass = dm_mass;
+					} else {
+						mass = sph_mass;
+					}
 				}
 				this_dr.kin += mass * 0.5 * sqr(vx,vy,vz) * a2inv;
 				this_dr.momx += mass * vx;
 				this_dr.momy += mass * vy;
 				this_dr.momz += mass * vz;
-				if( j != NOT_SPH ) {
+				if( type == SPH_TYPE ) {
+					int j = particles_cat_index(i);
 					float& h = sph_particles_smooth_len(j);
 					const float ent = sph_particles_ent(j);
 					if( tau0 != 0.0 ) {

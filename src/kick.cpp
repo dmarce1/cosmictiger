@@ -382,8 +382,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
 				const auto L2 = L2P(L, dx, params.min_rung == 0);
-				const bool part_sph = sph && particles_is_sph(i);
-				const float m = sph ? (part_sph ? sph_mass : dm_mass) : 1.f;
+				int type = particles_type(i);
+				float m = 1.f;
+				if( sph ) {
+					m = type == DARK_MATTER_TYPE ? dm_mass : sph_mass;
+				}
 				forces.phi[j] += L2(0, 0, 0);
 				if( !sph ) {
 					forces.phi[j] -= SELF_PHI * m / (2.f * params.h);
@@ -411,17 +414,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					vy = fmaf(forces.gy[j], dt, vy);
 					vz = fmaf(forces.gz[j], dt, vz);
 				}
-#ifdef SPH_TOTAL_ENERGY
-				int k;
-				k = particles_sph_index(i);
-				const float dedt = m * (vx * forces.gx[j] + vy * forces.gy[j] + vz * forces.gz[j]);
-				if( k != NOT_SPH ) {
-					sph_particles_ent(k) += dedt * dt;
-				}
-#endif
+
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				if (part_sph) {
-					const int k = particles_sph_index(i);
+				if (type == SPH_TYPE) {
+					const int k = particles_cat_index(i);
 					sph_particles_gforce(XDIM, k) = forces.gx[j];
 					sph_particles_gforce(YDIM, k) = forces.gy[j];
 					sph_particles_gforce(ZDIM, k) = forces.gz[j];

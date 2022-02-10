@@ -71,14 +71,23 @@ struct sph_part_info: public dm_part_info {
 	}
 
 };
+struct star_part_info: public dm_part_info {
+	template<class A>
+	void serialize(A&& arc, unsigned ver) {
+		dm_part_info::serialize(arc, ver);
+	}
+
+};
 
 struct view_return {
 	vector<vector<sph_part_info>> hydro;
 	vector<vector<dm_part_info>> dm;
+	vector<vector<star_part_info>> star;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & hydro;
 		arc & dm;
+		arc & star;
 	}
 };
 
@@ -93,6 +102,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 	view_return rc;
 	rc.hydro.resize(boxes.size());
 	rc.dm.resize(boxes.size());
+	rc.star.resize(boxes.size());
 	vector<hpx::future<view_return>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
@@ -104,6 +114,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 			view_return rc;
 			rc.hydro.resize(boxes.size());
 			rc.dm.resize(boxes.size());
+			rc.star.resize(boxes.size());
 			const part_int b = (size_t) proc * particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
@@ -113,34 +124,50 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 				x[ZDIM] = particles_pos(ZDIM,i).to_double();
 				for( int j = 0; j < boxes.size(); j++) {
 					if( boxes[j].contains(x)) {
-						const part_int k = particles_sph_index(i);
-						if( k == NOT_SPH) {
-							dm_part_info info;
-							info.x = particles_pos(XDIM,i);
-							info.y = particles_pos(YDIM,i);
-							info.z = particles_pos(ZDIM,i);
-							info.vx = particles_vel(XDIM,i);
-							info.vy = particles_vel(YDIM,i);
-							info.vz = particles_vel(ZDIM,i);
-							rc.dm[j].push_back(info);
-						} else {
-							sph_part_info info;
-							info.x = particles_pos(XDIM,i);
-							info.y = particles_pos(YDIM,i);
-							info.z = particles_pos(ZDIM,i);
-							info.vx = particles_vel(XDIM,i);
-							info.vy = particles_vel(YDIM,i);
-							info.vz = particles_vel(ZDIM,i);
-							info.ent = sph_particles_ent(k);
-							info.h = sph_particles_smooth_len(k);
-							if( chem ) {
-								info.Hp = sph_particles_Hp(k);
-								info.Hn = sph_particles_Hn(k);
-								info.H2 = sph_particles_H2(k);
-								info.Hep = sph_particles_Hep(k);
-								info.Hepp = sph_particles_Hepp(k);
+						const part_int k = particles_type(i);
+						switch(k) {
+							case DARK_MATTER_TYPE: {
+								dm_part_info info;
+								info.x = particles_pos(XDIM,i);
+								info.y = particles_pos(YDIM,i);
+								info.z = particles_pos(ZDIM,i);
+								info.vx = particles_vel(XDIM,i);
+								info.vy = particles_vel(YDIM,i);
+								info.vz = particles_vel(ZDIM,i);
+								rc.dm[j].push_back(info);
+								break;
 							}
-							rc.hydro[j].push_back(info);
+							case SPH_TYPE: {
+								sph_part_info info;
+								info.x = particles_pos(XDIM,i);
+								info.y = particles_pos(YDIM,i);
+								info.z = particles_pos(ZDIM,i);
+								info.vx = particles_vel(XDIM,i);
+								info.vy = particles_vel(YDIM,i);
+								info.vz = particles_vel(ZDIM,i);
+								info.ent = sph_particles_ent(k);
+								info.h = sph_particles_smooth_len(k);
+								if( chem ) {
+									info.Hp = sph_particles_Hp(k);
+									info.Hn = sph_particles_Hn(k);
+									info.H2 = sph_particles_H2(k);
+									info.Hep = sph_particles_Hep(k);
+									info.Hepp = sph_particles_Hepp(k);
+								}
+								rc.hydro[j].push_back(info);
+								break;
+							}
+							case STAR_TYPE: {
+								star_part_info info;
+								info.x = particles_pos(XDIM,i);
+								info.y = particles_pos(YDIM,i);
+								info.z = particles_pos(ZDIM,i);
+								info.vx = particles_vel(XDIM,i);
+								info.vy = particles_vel(YDIM,i);
+								info.vz = particles_vel(ZDIM,i);
+								rc.star[j].push_back(info);
+								break;
+							}
 						}
 					}
 				}
@@ -192,6 +219,16 @@ void view_output_views(int cycle, double a) {
 		x.resize(0);
 		y.resize(0);
 		z.resize(0);
+		for (int i = 0; i < parts.star[bi].size(); i++) {
+			x.push_back(distance(parts.star[bi][i].x, view_boxes[bi].begin[XDIM]));
+			y.push_back(distance(parts.star[bi][i].y, view_boxes[bi].begin[YDIM]));
+			z.push_back(distance(parts.star[bi][i].z, view_boxes[bi].begin[ZDIM]));
+		}
+		float *coords3[NDIM] = { x.data(), y.data(), z.data() };
+		DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		z.resize(0);
 		for (int i = 0; i < parts.dm[bi].size(); i++) {
 			x.push_back(parts.dm[bi][i].vx);
 			y.push_back(parts.dm[bi][i].vy);
@@ -211,6 +248,17 @@ void view_output_views(int cycle, double a) {
 		DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 		DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 		DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+		x.resize(0);
+		y.resize(0);
+		z.resize(0);
+		for (int i = 0; i < parts.star[bi].size(); i++) {
+			x.push_back(parts.star[bi][i].vx);
+			y.push_back(parts.star[bi][i].vy);
+			z.push_back(parts.star[bi][i].vz);
+		}
+		DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, NULL);
 		x.resize(0);
 		y.resize(0);
 		const bool chem = get_options().chem;
@@ -257,7 +305,7 @@ void view_output_views(int cycle, double a) {
 				//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
 				double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));																// 9
 				double T = energy / (n * cv);																							// 5
-			//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
+				//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
 				t.push_back(T);
 
 			}

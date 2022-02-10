@@ -79,86 +79,86 @@ HPX_PLAIN_ACTION (particles_set_global_offset);
 HPX_PLAIN_ACTION (particles_set_tracers);
 HPX_PLAIN_ACTION (particles_get_tracers);
 HPX_PLAIN_ACTION (particles_get_sample);
+/*
+ struct particle_ref {
+ int index;
+ bool operator<(const particle_ref& other) const {
+ return particles_sph_index(index) < particles_sph_index(other.index);
+ }
+ bool operator<(const particle& other) const {
+ return particles_sph_index(index) < other.sph_index;
+ }
+ operator particle() const {
+ return particles_get_particle(index);
+ }
+ particle_ref operator=(const particle& other) {
+ particles_set_particle(other, index);
+ return *this;
+ }
+ };
 
-struct particle_ref {
-	int index;
-	bool operator<(const particle_ref& other) const {
-		return particles_sph_index(index) < particles_sph_index(other.index);
-	}
-	bool operator<(const particle& other) const {
-		return particles_sph_index(index) < other.sph_index;
-	}
-	operator particle() const {
-		return particles_get_particle(index);
-	}
-	particle_ref operator=(const particle& other) {
-		particles_set_particle(other, index);
-		return *this;
-	}
-};
+ bool operator<(const particle& a, const particle& b) {
+ return a.sph_index < b.sph_index;
+ }
 
-bool operator<(const particle& a, const particle& b) {
-	return a.sph_index < b.sph_index;
-}
+ void swap(particle_ref a, particle_ref b) {
+ particle c = (particle) a;
+ a = (particle) b;
+ b = c;
+ }
 
-void swap(particle_ref a, particle_ref b) {
-	particle c = (particle) a;
-	a = (particle) b;
-	b = c;
-}
-
-struct particle_iterator {
-	using iterator_category = std::random_access_iterator_tag;
-	using difference_type = int;
-	using value_type = particle;
-	using pointer = int;  // or also value_type*
-	using reference = particle_ref&;  // or also value_type&
-	int index;
-	particle_ref operator*() const {
-		particle_ref ref;
-		ref.index = index;
-		return ref;
-	}
-	int operator-(const particle_iterator& other) const {
-		return index - other.index;
-	}
-	particle_iterator operator+(int i) const {
-		particle_iterator j;
-		j.index = index + i;
-		return j;
-	}
-	particle_iterator operator-(int i) const {
-		particle_iterator j;
-		j.index = index - i;
-		return j;
-	}
-	particle_iterator& operator--() {
-		index--;
-		return *this;
-	}
-	particle_iterator& operator--(int) {
-		index--;
-		return *this;
-	}
-	particle_iterator& operator++() {
-		index++;
-		return *this;
-	}
-	particle_iterator& operator++(int) {
-		index++;
-		return *this;
-	}
-	bool operator!=(const particle_iterator& other) const {
-		return index != other.index;
-	}
-	bool operator==(const particle_iterator& other) const {
-		return index == other.index;
-	}
-	bool operator<(const particle_iterator& other) const {
-		return index < other.index;
-	}
-};
-
+ struct particle_iterator {
+ using iterator_category = std::random_access_iterator_tag;
+ using difference_type = int;
+ using value_type = particle;
+ using pointer = int;  // or also value_type*
+ using reference = particle_ref&;  // or also value_type&
+ int index;
+ particle_ref operator*() const {
+ particle_ref ref;
+ ref.index = index;
+ return ref;
+ }
+ int operator-(const particle_iterator& other) const {
+ return index - other.index;
+ }
+ particle_iterator operator+(int i) const {
+ particle_iterator j;
+ j.index = index + i;
+ return j;
+ }
+ particle_iterator operator-(int i) const {
+ particle_iterator j;
+ j.index = index - i;
+ return j;
+ }
+ particle_iterator& operator--() {
+ index--;
+ return *this;
+ }
+ particle_iterator& operator--(int) {
+ index--;
+ return *this;
+ }
+ particle_iterator& operator++() {
+ index++;
+ return *this;
+ }
+ particle_iterator& operator++(int) {
+ index++;
+ return *this;
+ }
+ bool operator!=(const particle_iterator& other) const {
+ return index != other.index;
+ }
+ bool operator==(const particle_iterator& other) const {
+ return index == other.index;
+ }
+ bool operator<(const particle_iterator& other) const {
+ return index < other.index;
+ }
+ };
+ */
 struct line_id_type {
 	int proc;
 	part_int index;
@@ -201,13 +201,13 @@ struct group_cache_entry {
 static array<std::unordered_map<line_id_type, group_cache_entry, line_id_hash_hi>, PART_CACHE_SIZE> group_part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> group_mutexes;
 
-void particles_sort_by_sph(pair<part_int> rng) {
-	particle_iterator b;
-	particle_iterator e;
-	b.index = rng.first;
-	e.index = rng.second;
-	std::sort(b, e);
-}
+/*void particles_sort_by_sph(pair<part_int> rng) {
+ particle_iterator b;
+ particle_iterator e;
+ b.index = rng.first;
+ e.index = rng.second;
+ std::sort(b, e);
+ }*/
 
 vector<output_particle> particles_get_sample(const range<double>& box) {
 	vector<hpx::future<vector<output_particle>>>futs;
@@ -499,10 +499,11 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 			if (sph) {
 				for (int i = range.range.first; i < range.range.second; i++) {
 					const int j = offset + i - range.range.first;
-					const int k = particles_sph_index(i);
-					sph_part[j] = char(k != NOT_SPH);
+					const int k = particles_cat_index(i);
+					int type = particles_type(i);
+					sph_part[j] = char(type != DARK_MATTER_TYPE);
 					if (hsoft) {
-						hsoft[j] = (!vsoft || k == NOT_SPH) ? dm_hsoft : std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
+						hsoft[j] == type != SPH_TYPE ? dm_hsoft : std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
 					}
 				}
 			}
@@ -571,10 +572,14 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			ln.x[dim] = particles_pos(dim, i);
 		}
 		if (sph) {
-			const int k = particles_sph_index(i);
-			ln.sph = char(k != NOT_SPH);
-			if (vsoft) {
-				ln.hsoft = k == NOT_SPH ? hsoft : std::min(SPH_MAX_SOFT, sph_particles_smooth_len(k));
+			int type = particles_type(i);
+			ln.sph = type != DARK_MATTER_TYPE;
+			if( vsoft) {
+				if( type != SPH_TYPE) {
+					ln.hsoft = hsoft;
+				} else {
+					ln.hsoft = type != SPH_TYPE ? hsoft : std::min(SPH_MAX_SOFT, sph_particles_smooth_len(particles_cat_index(i)));
+				}
 			}
 		}
 	}
@@ -703,7 +708,8 @@ void particles_resize(part_int sz) {
 	size = sz;
 	if (get_options().sph) {
 		for (int i = oldsz; i < sz; i++) {
-			particles_sph_index(i) = NOT_SPH;
+			particles_cat_index(i) = NO_INDEX;
+			particles_type(i) = DARK_MATTER_TYPE;
 		}
 	}
 }
@@ -894,7 +900,7 @@ void particles_load(FILE* fp) {
 	}
 	if (sph_size) {
 		FREAD(&particles_type(0), sizeof(char), particles_size(), fp);
-		FREAD(&particles_sph_index(0), sizeof(part_int), particles_size(), fp);
+		FREAD(&particles_cat_index(0), sizeof(part_int), particles_size(), fp);
 		sph_particles_load(fp);
 	}
 }
@@ -919,7 +925,7 @@ void particles_save(FILE* fp) {
 	}
 	if (sph_size) {
 		fwrite(&particles_type(0), sizeof(char), particles_size(), fp);
-		fwrite(&particles_sph_index(0), sizeof(part_int), particles_size(), fp);
+		fwrite(&particles_cat_index(0), sizeof(part_int), particles_size(), fp);
 		sph_particles_save(fp);
 	}
 
@@ -933,8 +939,9 @@ void particles_resolve_with_sph_particles() {
 			const part_int b = (size_t) proc * particles_size() / nthread;
 			const part_int e = (size_t) (proc + 1) * particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
-				const part_int index = particles_sph_index(i);
-				if( index != NOT_SPH ) {
+				const int type = particles_type(i);
+				if( type == SPH_TYPE ) {
+					const part_int index = particles_cat_index(i);
 					sph_particles_dm_index(index) = i;
 #ifdef CHECK_MUTUAL_SORT
 				if( particles_lastgroup(i) != sph_particles_test(index)) {

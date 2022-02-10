@@ -85,6 +85,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
 	auto* sph_index = data.sph_index;
+	auto* type = data.type;
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
@@ -126,11 +127,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		flops += 537 + (params.min_rung == 0) * 178;
 		L2 = L2P(L, dx, params.min_rung == 0);
-		int j = NOT_SPH;
+		int j = NO_INDEX;
+		char my_type = DARK_MATTER_TYPE;
 		if (sph) {
 			j = sph_index[snki];
+			my_type = type[snki];
 		}
-		const float mass = sph ? (j == NOT_SPH ? dm_mass : sph_mass) : 1.0f;
+		const float mass = sph ? (my_type == DARK_MATTER_TYPE ? dm_mass : sph_mass) : 1.0f;
 		phi[i] += L2(0, 0, 0);
 		if (!sph) {
 			phi[i] -= SELF_PHI * hinv * mass;
@@ -166,7 +169,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			sph_energy[j] += dedt * dt;
 		}
 #endif
-		if (j != NOT_SPH) {
+		if (my_type == SPH_TYPE) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
 			sph_gz[j] = gz[i];
@@ -742,7 +745,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.sph = do_sph ? dev_sph : nullptr;
 	data.vsoft = get_options().vsoft;
 	if (data.sph) {
-		data.sph_index = &particles_sph_index(0);
+		data.sph_index = &particles_cat_index(0);
+		data.type = &particles_type(0);
 		data.sph_gx = &sph_particles_gforce(XDIM, 0);
 		data.sph_gy = &sph_particles_gforce(YDIM, 0);
 		data.sph_gz = &sph_particles_gforce(ZDIM, 0);

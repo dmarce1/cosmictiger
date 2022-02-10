@@ -39,7 +39,7 @@ HPX_PLAIN_ACTION (tree_allocate_nodes);
 HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
-HPX_PLAIN_ACTION (tree_sort_particles_by_sph_particles);
+//HPX_PLAIN_ACTION (tree_sort_particles_by_sph_particles);
 
 class tree_allocator {
 	int next;
@@ -463,10 +463,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 
 		if (sph && vsoft) {
 			for (part_int i = part_range.first; i < part_range.second; i++) {
-				const int j = particles_sph_index(i);
-				if (j == NOT_SPH) {
+				if (particles_type(i) == SPH_TYPE) {
 					hsoft_max = std::max(hsoft_max, h);
 				} else {
+					const int j = particles_cat_index(i);
 					hsoft_max = std::max(hsoft_max, (double) sph_particles_smooth_len(j));
 				}
 			}
@@ -480,7 +480,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 					X[dim][j - i] = particles_pos(dim, j).raw();
 				}
 				if (sph) {
-					mask[j - i] = particles_sph_index(j) == NOT_SPH ? dm_mass : sph_mass;
+					mask[j - i] = particles_type(j) == DARK_MATTER_TYPE ? dm_mass : sph_mass;
 				} else {
 					mask[j - i] = 1.0f;
 				}
@@ -549,12 +549,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = !global && (depth >= params.min_level) && (nparts <= BUCKET_SIZE);
-/*	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
-		if (node.leaf) {
-			std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
-			leaf_part_ranges.push_back(part_range);
-		}
-	}*/
+	/*	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
+	 if (node.leaf) {
+	 std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
+	 leaf_part_ranges.push_back(part_range);
+	 }
+	 }*/
 	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
@@ -665,7 +665,7 @@ static vector<tree_node> tree_fetch_cache_line(int index) {
 
 }
 
-void tree_sort_particles_by_sph_particles() {
+/*void tree_sort_particles_by_sph_particles() {
 	const int nthreads = hpx_hardware_concurrency();
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -682,4 +682,4 @@ void tree_sort_particles_by_sph_particles() {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	leaf_part_ranges.resize(0);
-}
+}*/

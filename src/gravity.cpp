@@ -334,8 +334,8 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 				if (particles_rung(i) >= min_rung) {
 					if (vsoft) {
 						const static float dm_hsoft = get_options().hsoft;
-						const int sphi = particles_sph_index(i);
-						sink_hsoft = sphi == NOT_SPH ? dm_hsoft : sph_particles_smooth_len(sphi);
+						const int type = particles_type(i);
+						sink_hsoft = type == STAR_TYPE ? dm_hsoft : sph_particles_smooth_len(particles_cat_index(i));
 					}
 					simd_float gx(0.0);
 					simd_float gy(0.0);

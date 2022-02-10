@@ -330,7 +330,7 @@ void sph_particles_resize(part_int sz) {
 	int oldsz = size;
 	size = sz;
 	for (int i = 0; i < new_parts; i++) {
-		particles_sph_index(offset + i) = oldsz + i;
+		particles_cat_index(offset + i) = oldsz + i;
 		sph_particles_dm_index(oldsz + i) = offset + i;
 #ifdef CHECK_MUTUAL_SORT
 		particles_lastgroup(offset + i) = oldsz + i;
@@ -405,12 +405,7 @@ void sph_particles_resolve_with_particles() {
 			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
 				const int j = sph_particles_dm_index(i);
-				particles_sph_index(j) = i;
-#ifdef CHECK_MUTUAL_SORT
-				if( particles_lastgroup(j) != sph_particles_test(i)) {
-					PRINT( "%i %i\n", (int) particles_lastgroup(j), sph_particles_test(i));
-				}
-#endif
+				particles_cat_index(j) = i;
 			}
 		}));
 	}

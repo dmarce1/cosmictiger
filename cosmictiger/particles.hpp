@@ -34,9 +34,7 @@
 #include <fstream>
 #include <unordered_map>
 
-
-#define NOT_SPH ((part_int) 0xFFFFFFFFU)
-#define NOT_STAR ((part_int) 0xFFFFFFFFU)
+#define NO_INDEX ((part_int) 0xFFFFFFFFU)
 
 #define DARK_MATTER_TYPE 0
 #define SPH_TYPE 1
@@ -82,9 +80,10 @@ struct particle {
 	array<fixed32, NDIM> x;
 	array<float, NDIM> v;
 	group_int lg;
-	part_int sph_index;
+	part_int cat_index;
 	char r;
 	char t;
+	char type;
 	template<class A>
 	void serialize(A && a, unsigned) {
 		static bool do_groups = get_options().do_groups;
@@ -102,7 +101,8 @@ struct particle {
 			a & t;
 		}
 		if (sph) {
-			a & sph_index;
+			a & cat_index;
+			a & type;
 		}
 	}
 };
@@ -178,8 +178,14 @@ void particles_memadvise_gpu();
 void particles_free();
 
 inline char& particles_type(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_ty[index];
+	static const bool sph = get_options().sph;
+	if (sph) {
+		CHECK_PART_BOUNDS(index);
+		return particles_ty[index];
+	} else {
+		static char dm = DARK_MATTER_TYPE;
+		return dm;
+	}
 }
 
 inline float& particles_pot(part_int index) {
@@ -229,7 +235,7 @@ inline char& particles_tracer(part_int index) {
 	return particles_tr[index];
 }
 
-inline part_int& particles_sph_index(part_int index) {
+inline part_int& particles_cat_index(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_sph[index];
 }
@@ -252,7 +258,8 @@ inline particle particles_get_particle(part_int index) {
 		p.t = particles_tracer(index);
 	}
 	if (sph) {
-		p.sph_index = particles_sph_index(index);
+		p.type = particles_type(index);
+		p.cat_index = particles_cat_index(index);
 	}
 	return p;
 }
@@ -273,13 +280,14 @@ inline void particles_set_particle(particle p, part_int index) {
 	if (do_tracers) {
 		particles_tracer(index) = p.t;
 	}
-	if( sph) {
-		particles_sph_index(index) = p.sph_index;
+	if (sph) {
+		particles_type(index) = p.type;
+		particles_cat_index(index) = p.cat_index;
 	}
 }
 
 inline bool particles_is_sph(int index) {
-	return particles_sph_index(index) != NOT_SPH;
+	return particles_type(index) == SPH_TYPE;
 }
 
 #endif /* PARTICLES_HPP_ */
