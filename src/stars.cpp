@@ -57,8 +57,7 @@ void stars_find(float a) {
 		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			part_int i = b;
-			while( i < e) {
+			for( part_int i = b; i < e; i++) {
 				if( sph_particles_time_to_star(i) < 0.0 ) {
 					star_particle star;
 					star.energy = sph_particles_energy(i);
@@ -66,13 +65,11 @@ void stars_find(float a) {
 					star.dm_index = sph_particles_dm_index(i);
 					const int dmi = star.dm_index;
 					found++;
+					particles_type(dmi) = STAR_TYPE;
 					std::lock_guard<mutex_type> lock(mutex);
 					particles_cat_index(dmi) = stars.size();
-					particles_type(dmi) = STAR_TYPE;
 					stars.push_back(star);
 					indices.push_back(i);
-				} else {
-					i++;
 				}
 			}
 		}));
@@ -85,8 +82,8 @@ void stars_find(float a) {
 		if (i < sph_particles_size()) {
 			const int k = sph_particles_size() - 1;
 			if (i != k) {
-				sph_particles_swap(i, k);
 				const int dmk = sph_particles_dm_index(k);
+				sph_particles_swap(i, k);
 				particles_cat_index(dmk) = i;
 			}
 			sph_particles_resize(k);
