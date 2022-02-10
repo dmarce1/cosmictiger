@@ -330,8 +330,8 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	C[5] = 4.95e-22f * sqrtT * tmp1 * expf(-631515.f * Tinv) * ne * N.Hep;																// 4
 	C[6] = 5.01e-27f * tmp1 * tmp2 * expf(-55338.f * Tinv) * sqr(ne) * N.Hep;		// 16
 	C[7] = 8.7e-27f * sqrtT * tmp4 * ne * N.Hp;				// 18
-	C[8] = 1.55e-26f * powf(T, 0.3647f) * ne * N.Hp;											// 12
-	C[9] = 1.24e-13f * powf(T, -1.5f) * (1.f + .3f * expf(-94000.f * Tinv)) * expf(-470000.f * Tinv) * ne * N.Hp; // 34
+	C[8] = 1.55e-26f * powf(T, 0.3647f) * ne * N.Hep;											// 12
+	C[9] = 1.24e-13f * powf(T, -1.5f) * (1.f + .3f * expf(-94000.f * Tinv)) * expf(-470000.f * Tinv) * ne * N.Hep; // 34
 	C[10] = 3.48e-26f * sqrtT * tmp4 * ne * N.Hepp;          // 18
 	const float Qn = powf(N.H2, 0.77f) + 1.2 * powf(N.H, 0.77f);										// 18
 	float LrL, LrH;
