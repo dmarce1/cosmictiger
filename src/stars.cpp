@@ -45,37 +45,55 @@ void stars_load(FILE* fp) {
 void stars_find(float a) {
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<stars_find_action>(c, a));
 	}
 	mutex_type mutex;
-	std::atomic<part_int> next_index(sph_particles_size());
 	std::atomic<int> found(0);
+	vector<part_int> indices;
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, &next_index, a, &found, &mutex]() {
+		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			for( part_int i = b; i < e; i++) {
+			part_int i = b;
+			while( i < e) {
 				if( sph_particles_time_to_star(i) < 0.0 ) {
-					part_int k = --next_index;
 					star_particle star;
 					star.energy = sph_particles_energy(i);
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
-					const int dmk = sph_particles_dm_index(k);
 					const int dmi = star.dm_index;
-					sph_particles_swap(k,i);
-					particles_cat_index(dmk) = i;
 					found++;
 					std::lock_guard<mutex_type> lock(mutex);
 					particles_cat_index(dmi) = stars.size();
+					particles_type(dmi) = STAR_TYPE;
 					stars.push_back(star);
+					indices.push_back(i);
+				} else {
+					i++;
 				}
 			}
 		}));
 	}
+	hpx::wait_all(futs2.begin(), futs2.end());
+	for (auto& i : indices) {
+		while (sph_particles_time_to_star(sph_particles_size() - 1) < 0.f && sph_particles_size()) {
+			sph_particles_resize(sph_particles_size() - 1);
+		}
+		if (i < sph_particles_size()) {
+			const int k = sph_particles_size() - 1;
+			if (i != k) {
+				sph_particles_swap(i, k);
+				const int dmk = sph_particles_dm_index(k);
+				particles_cat_index(dmk) = i;
+			}
+			sph_particles_resize(k);
+		} else {
+			break;
+		}
+	}
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars found for a total of %i\n", (int ) found, stars.size());
-	sph_particles_resize(next_index);
 }

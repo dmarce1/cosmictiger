@@ -259,9 +259,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 		max_rung = kr.max_rung;
 
-		if (stars) {
-			stars_find(scale);
-		}
 
 		const bool chem = get_options().chem;
 		if (chem) {
@@ -463,7 +460,7 @@ void driver() {
 	timer tmr;
 	tmr.start();
 	driver_params params;
-
+	const bool stars = get_options().stars;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	drift_return dr;
 	if (get_options().read_check) {
@@ -651,6 +648,9 @@ void driver() {
 			dtm.start();
 			PRINT("Drift\n");
 			dr = drift(a2, dt, tau, tau + dt, tau_max);
+			if (stars) {
+				stars_find(a);
+			}
 			if (get_options().do_lc) {
 				check_lc(false);
 			}
