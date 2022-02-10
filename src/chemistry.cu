@@ -563,7 +563,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	}
 	if (ctot > 0.0) {
 		for (int i = 0; i < NCOOL; i++) {
-			PRINT("C%i = %e\n", i, cooling_totals[i] / ctot);
+	//		PRINT("C%i = %e\n", i, cooling_totals[i] / ctot);
 		}
 	}
 }

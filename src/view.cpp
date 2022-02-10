@@ -139,6 +139,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 							}
 							case SPH_TYPE: {
 								sph_part_info info;
+								const int l = particles_cat_index(i);
 								info.x = particles_pos(XDIM,i);
 								info.y = particles_pos(YDIM,i);
 								info.z = particles_pos(ZDIM,i);
@@ -146,13 +147,13 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vy = particles_vel(YDIM,i);
 								info.vz = particles_vel(ZDIM,i);
 								info.ent = sph_particles_ent(k);
-								info.h = sph_particles_smooth_len(k);
+								info.h = sph_particles_smooth_len(l);
 								if( chem ) {
-									info.Hp = sph_particles_Hp(k);
-									info.Hn = sph_particles_Hn(k);
-									info.H2 = sph_particles_H2(k);
-									info.Hep = sph_particles_Hep(k);
-									info.Hepp = sph_particles_Hepp(k);
+									info.Hp = sph_particles_Hp(l);
+									info.Hn = sph_particles_Hn(l);
+									info.H2 = sph_particles_H2(l);
+									info.Hep = sph_particles_Hep(l);
+									info.Hepp = sph_particles_Hepp(l);
 								}
 								rc.hydro[j].push_back(info);
 								break;
