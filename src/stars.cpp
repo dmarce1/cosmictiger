@@ -35,6 +35,11 @@ void stars_save(FILE* fp) {
 	fwrite(stars.data(), sizeof(star_particle), stars.size(), fp);
 }
 
+
+part_int stars_size() {
+	return stars.size();
+}
+
 void stars_load(FILE* fp) {
 	size_t size;
 	FREAD(&size, sizeof(size_t), 1, fp);

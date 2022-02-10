@@ -883,13 +883,15 @@ vector<particle_sample> particles_sample(int cnt) {
 }
 
 void particles_load(FILE* fp) {
-	part_int size, sph_size;
+	part_int size, sph_size, stars_size0;
 	FREAD(&size, sizeof(part_int), 1, fp);
 	FREAD(&sph_size, sizeof(part_int), 1, fp);
-	particles_resize(size - sph_size);
+	FREAD(&stars_size0, sizeof(part_int), 1, fp);
+	particles_resize(size - sph_size - stars_size0);
 	if (sph_size) {
 		sph_particles_resize(sph_size);
 	}
+	particles_resize(particles_size() + stars_size0);
 	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
@@ -913,8 +915,10 @@ void particles_load(FILE* fp) {
 void particles_save(FILE* fp) {
 	part_int size = particles_size();
 	part_int sph_size = sph_particles_size();
+	part_int stars_size0 = stars_size();
 	fwrite(&size, sizeof(part_int), 1, fp);
 	fwrite(&sph_size, sizeof(part_int), 1, fp);
+	fwrite(&stars_size0, sizeof(part_int), 1, fp);
 	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
