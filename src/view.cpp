@@ -146,7 +146,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vx = particles_vel(XDIM,i);
 								info.vy = particles_vel(YDIM,i);
 								info.vz = particles_vel(ZDIM,i);
-								info.ent = sph_particles_ent(k);
+								info.ent = sph_particles_ent(l);
 								info.h = sph_particles_smooth_len(l);
 								if( chem ) {
 									info.Hp = sph_particles_Hp(l);

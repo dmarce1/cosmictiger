@@ -208,6 +208,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				int iter = 0;
 				float dh;
 				float& h = data.h_snk[snki];
+				float h0 = h;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
@@ -278,6 +279,9 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
+				if( tid == 0 ) {
+					//PRINT( "%e\n", logf(h/h0));
+				}
 				//	if (tid == 0)
 				//	PRINT("%i %e\n", count, data.N);
 				//		PRINT( "%e\n", h);
@@ -443,6 +447,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
+		const sph_tree_node& self = data.trees[data.selfs[index]];
 		int flops = 0;
 		if (data.H2) {
 			ws.H2.resize(0);
@@ -461,7 +466,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 		if (data.H2) {
 			ws.H20.resize(0);
 		}
-		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -695,16 +699,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dvy = myvy - ws.vy[j];
 					const float dvz = myvz - ws.vz[j];
 					const float r = sqrtf(r2);
-					const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));
-					const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-					const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
-					if (Piij < 0.f) {
-						PRINT("Negative Piij %e %e %e %e", uij, cij, myfvel, ws.fvel[j]);
-						__trap();
-					}
+					const float rinv = 1.0f / (r + float(1.0e-15));
+					const float wij = fminf(0.f, (dvx * dx + dvy * dy + dvz * dz) * rinv);
+					const float vsigij = 2.f * cij - 3.f * wij;
+					const float Piij = -.5f * SPH_ALPHA * vsigij * wij / rho_ij * 0.5f * (myfvel + ws.fvel[j]);
+					//	const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));
+					//	const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
+					//	const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
 					const float qi = r * myhinv;
 					const float qj = r * hinv;
-					const float rinv = 1.0f / (r + float(1.0e-15));
 					const float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv * rinv;
 					const float dWdrj = (r < h) * dkernelW_dq(qj) * hinv * h3inv * rinv;
 //					const float divWi = sph_divW(r, myhinv, myh3inv);
@@ -797,371 +800,373 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const bool stars = data.gx;
 	const float Ginv = 1.f / data.G;
 	while (index < data.nselfs) {
-		int flops = 0;
-		ws.x0.resize(0);
-		ws.y0.resize(0);
-		ws.z0.resize(0);
-		ws.vx0.resize(0);
-		ws.vy0.resize(0);
-		ws.vz0.resize(0);
-		ws.h0.resize(0);
-		ws.ent0.resize(0);
-		if (data.H2) {
-			ws.H20.resize(0);
-		}
-		if (stars) {
+		const sph_tree_node& self = data.trees[data.selfs[index]];
+		if (self.nactive > 0) {
+			int flops = 0;
+			ws.x0.resize(0);
+			ws.y0.resize(0);
+			ws.z0.resize(0);
 			ws.vx0.resize(0);
 			ws.vy0.resize(0);
 			ws.vz0.resize(0);
-		}
-		const sph_tree_node& self = data.trees[data.selfs[index]];
-		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
-			const sph_tree_node& other = data.trees[data.neighbors[ni]];
-			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
-			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
-				bool contains = false;
-				int j;
-				int total;
-				if (pi < other.part_range.second) {
-					x[XDIM] = data.x[pi];
-					x[YDIM] = data.y[pi];
-					x[ZDIM] = data.z[pi];
-					if (self.outer_box.contains(x)) {
-						contains = true;
-					}
-					if (!contains) {
-						contains = true;
-						const float& h = data.h[pi];
-						for (int dim = 0; dim < NDIM; dim++) {
-							if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
-								contains = false;
-								break;
-							}
-							if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
-								contains = false;
-								break;
-							}
-						}
-					}
-				}
-				j = contains;
-				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-				const int offset = ws.x0.size();
-				const int next_size = offset + total;
-				ws.x0.resize(next_size);
-				ws.y0.resize(next_size);
-				ws.z0.resize(next_size);
-				ws.vx0.resize(next_size);
-				ws.vy0.resize(next_size);
-				ws.vz0.resize(next_size);
-				ws.ent0.resize(next_size);
-				ws.h0.resize(next_size);
-				if (data.H2) {
-					ws.H20.resize(next_size);
-				}
-				if (stars) {
-					ws.gx0.resize(next_size);
-					ws.gy0.resize(next_size);
-					ws.gz0.resize(next_size);
-				}
-				if (contains) {
-					const int k = offset + j;
-					ws.x0[k] = x[XDIM];
-					ws.y0[k] = x[YDIM];
-					ws.z0[k] = x[ZDIM];
-					ws.vx0[k] = data.vx[pi];
-					ws.vy0[k] = data.vy[pi];
-					ws.vz0[k] = data.vz[pi];
-					ws.ent0[k] = data.ent[pi];
-					ws.h0[k] = data.h[pi];
-					if (data.H2) {
-						ws.H20[k] = data.H2[pi];
-					}
-					if (stars) {
-						ws.gx0[k] = data.gx[pi];
-						ws.gy0[k] = data.gy[pi];
-						ws.gz0[k] = data.gz[pi];
-					}
-				}
+			ws.h0.resize(0);
+			ws.ent0.resize(0);
+			if (data.H2) {
+				ws.H20.resize(0);
 			}
-		}
-		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			int myrung = data.rungs[i];
-			bool use = myrung >= params.min_rung;
-			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			if (!use && params.phase == 0) {
-				use = data.sa_snk[snki];
+			if (stars) {
+				ws.vx0.resize(0);
+				ws.vy0.resize(0);
+				ws.vz0.resize(0);
 			}
-			const float m = data.m;
-			const float minv = 1.f / m;
-			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
-			const float c0inv = 1.0f / c0;
-			if (use) {
-				float mygx, mygy, mygz;
-				if (stars) {
-					mygx = data.gx[i];
-					mygy = data.gy[i];
-					mygz = data.gz[i];
-				}
-				const auto myx = data.x[i];
-				const auto myy = data.y[i];
-				const auto myz = data.z[i];
-				const auto myvx = data.vx[i];
-				const auto myvy = data.vy[i];
-				const auto myvz = data.vz[i];
-				const float myh = data.h[i];
-				const float myh2 = sqr(myh);
-				const float myhinv = 1.f / myh;
-				const float myh3inv = 1.f / (sqr(myh) * myh);
-				const float myrho = m * c0 * myh3inv;
-				const float myrhoinv = minv * c0inv * sqr(myh) * myh;
-				float gamma;
-				if (data.H2) {
-					gamma = compute_gamma(data.H2[i], data.Y);
-				} else {
-					gamma = 5.f / 3.f;
-				}
-				const float myp = data.ent[i] * powf(myrho, gamma);
-				if (myp < 0.0) {
-					PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
-					__trap();
-				}
-				const float myc = sqrtf(gamma * myp * myrhoinv);
-				const int jmax = round_up(ws.x0.size(), block_size);
-				ws.x.resize(0);
-				ws.y.resize(0);
-				ws.z.resize(0);
-				ws.vx.resize(0);
-				ws.vy.resize(0);
-				ws.vz.resize(0);
-				ws.h.resize(0);
-				ws.ent.resize(0);
-				if (stars) {
-					ws.gx.resize(0);
-					ws.gy.resize(0);
-					ws.gz.resize(0);
-				}
-				if (data.H2) {
-					ws.H2.resize(0);
-				}
-				for (int j = tid; j < jmax; j += block_size) {
-					bool flag = false;
-					int k;
+			for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+				const sph_tree_node& other = data.trees[data.neighbors[ni]];
+				const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+				for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+					bool contains = false;
+					int j;
 					int total;
-					if (j < ws.x0.size()) {
-						const auto x = ws.x0[j];
-						const auto y = ws.y0[j];
-						const auto z = ws.z0[j];
-						const float h = ws.h0[j];
-						const float dx = distance(x, myx);
-						const float dy = distance(y, myy);
-						const float dz = distance(z, myz);
-						const float r2 = sqr(dx, dy, dz);
-						if (r2 < myh2) {
-							flag = true;
+					if (pi < other.part_range.second) {
+						x[XDIM] = data.x[pi];
+						x[YDIM] = data.y[pi];
+						x[ZDIM] = data.z[pi];
+						if (self.outer_box.contains(x)) {
+							contains = true;
 						}
-					}
-					k = flag;
-					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-					const int offset = ws.x.size();
-					const int next_size = offset + total;
-					ws.x.resize(next_size);
-					ws.y.resize(next_size);
-					ws.z.resize(next_size);
-					ws.vx.resize(next_size);
-					ws.vy.resize(next_size);
-					ws.vz.resize(next_size);
-					ws.ent.resize(next_size);
-					ws.h.resize(next_size);
-					if (stars) {
-						ws.gx.resize(next_size);
-						ws.gy.resize(next_size);
-						ws.gz.resize(next_size);
-					}
-					if (data.H2) {
-						ws.H2.resize(next_size);
-					}
-					if (flag) {
-						const int l = offset + k;
-						if (data.H2) {
-							ws.H2[l] = ws.H20[j];
-						}
-						ws.x[l] = ws.x0[j];
-						ws.y[l] = ws.y0[j];
-						ws.z[l] = ws.z0[j];
-						ws.vx[l] = ws.vx0[j];
-						ws.vy[l] = ws.vy0[j];
-						ws.vz[l] = ws.vz0[j];
-						ws.ent[l] = ws.ent0[j];
-						ws.h[l] = ws.h0[j];
-						if (stars) {
-							ws.gx[l] = ws.gx0[j];
-							ws.gy[l] = ws.gy0[j];
-							ws.gz[l] = ws.gz0[j];
-						}
-					}
-				}
-				float vsig_max1 = 0.f;
-				float vsig_max2 = 0.f;
-				float dvx_dx = 0.0f;
-				float dvx_dy = 0.0f;
-				float dvx_dz = 0.0f;
-				float dvy_dx = 0.0f;
-				float dvy_dy = 0.0f;
-				float dvy_dz = 0.0f;
-				float dvz_dx = 0.0f;
-				float dvz_dy = 0.0f;
-				float dvz_dz = 0.0f;
-				float drho_dh = 0.f;
-				float dgx_dx = 0.f;
-				float dgy_dy = 0.f;
-				float dgz_dz = 0.f;
-				for (int j = tid; j < ws.x.size(); j += block_size) {
-					const float dx = distance(myx, ws.x[j]);
-					const float dy = distance(myy, ws.y[j]);
-					const float dz = distance(myz, ws.z[j]);
-					const float h = ws.h[j];
-					const float h3 = sqr(h) * h;
-					const float r2 = sqr(dx, dy, dz);
-					const float hinv = 1. / h;
-					const float r = sqrt(r2);
-					const float h3inv = hinv * sqr(hinv);
-					const float rho = m * c0 * h3inv;
-					const float rhoinv = minv * c0inv * h3;
-					float gamma;
-					if (data.H2) {
-						gamma = compute_gamma(ws.H2[j], data.Y);
-					} else {
-						gamma = 5.f / 3.f;
-					}
-					const float p = ws.ent[j] * powf(rho, gamma);
-					if (p < 0.0) {
-						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
-						__trap();
-					}
-					const float c = sqrtf(gamma * p * rhoinv);
-					const float dvx = myvx - ws.vx[j];
-					const float dvy = myvy - ws.vy[j];
-					const float dvz = myvz - ws.vz[j];
-					const float rinv = 1.f / (r + 1e-15f);
-					const float ndv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
-					const float this_vsig1 = myc + c;
-					const float this_vsig2 = (myc + c - ndv) * 2. * myh / (myh + r);
-					vsig_max1 = fmaxf(vsig_max1, this_vsig1);
-					vsig_max2 = fmaxf(vsig_max2, this_vsig2);
-					const float q = r * myhinv;
-					const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;
-					const float tmp = m * dWdr * rhoinv;
-					const float dWdr_x = dx * tmp;
-					const float dWdr_y = dy * tmp;
-					const float dWdr_z = dz * tmp;
-					dvx_dx -= dvx * dWdr_x;
-					dvx_dy -= dvx * dWdr_y;
-					dvx_dz -= dvx * dWdr_z;
-					dvy_dx -= dvy * dWdr_x;
-					dvy_dy -= dvy * dWdr_y;
-					dvy_dz -= dvy * dWdr_z;
-					dvz_dx -= dvz * dWdr_x;
-					dvz_dy -= dvz * dWdr_y;
-					dvz_dz -= dvz * dWdr_z;
-					drho_dh -= q * dkernelW_dq(q);
-					if (stars) {
-						dgx_dx += (ws.gx[j] - mygx) * dWdr_x;
-						dgy_dy += (ws.gy[j] - mygy) * dWdr_y;
-						dgz_dz += (ws.gz[j] - mygz) * dWdr_z;
-					}
-
-				}
-				float div_v = dvx_dx + dvy_dy + dvz_dz;
-				float curl_vx = dvz_dy - dvy_dz;
-				float curl_vy = -dvz_dx + dvx_dz;
-				float curl_vz = dvy_dx - dvx_dy;
-				float div_g;
-				if (stars) {
-					div_g = dgx_dx + dgy_dy + dgz_dz;
-					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
-				}
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max1);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max2);
-
-				if (tid == 0) {
-					const float dt_cfl = 2.f * myh / vsig_max1;
-					const float dt_sig = 2.f * myh / vsig_max2;
-					const float dt_dens = 3.f * params.a / (fabsf(div_v) + 1e-30);
-					const float sw = 1e-4f * myc / myh;
-					const float abs_div_v = fabsf(div_v);
-					const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
-					const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-					const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
-					const float fpre = 1.0f / (1.0f + c0);
-					data.fvel_snk[snki] = fvel;
-					data.f0_snk[snki] = fpre;
-					total_vsig_max = fmaxf(total_vsig_max, vsig_max2);
-					float dthydro = SPH_CFL * fminf(dt_cfl, fminf(dt_sig, dt_dens));
-					const float gx = data.gx_snk[snki];
-					const float gy = data.gy_snk[snki];
-					const float gz = data.gz_snk[snki];
-					char& rung = data.rungs[i];
-					const float g2 = sqr(gx, gy, gz);
-					const float factor = data.eta * sqrtf(params.a * myh);
-					const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
-					const float dt = fminf(dt_grav, dthydro);
-					const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
-					const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
-					max_rung_hydro = max(max_rung_hydro, rung_hydro);
-					max_rung_grav = max(max_rung_grav, rung_grav);
-					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
-					max_rung = max(max_rung, rung);
-					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range \n");
-					}
-					if (stars) {
-						bool is_eligible = false;
-						float tdyn;
-						float mj;
-						float tcool;
-						if (div_v < 0.f) {
-							const float Gn32 = powf(data.G, -1.5);
-							float rho0 = data.rho0_b + data.rho0_c;
-							float delta = -Ginv * float(1.0 / 4.0 / M_PI) * div_g;
-							float delta_b = myrho - data.rho0_b;
-							float delta_c = delta - delta_b;
-							float rho_tot = (rho0 + delta) * powf(params.a, -3.0);
-							tdyn = sqrtf(3.f * M_PI / (32.f * data.G * rho_tot)) / params.a;
-							if (delta_b / data.rho0_b > 10.0 && delta > 0.f) {
-								tcool = data.tcool_snk[snki];
-								if (tcool < tdyn) {
-									mj = Gn32 * rsqrt(myrho) * sqr(myc) * myc * powf(delta_b / delta, 1.5f) * powf(params.a, -1.5f);
-									if (mj < m) {
-										is_eligible = true;
-									}
+						if (!contains) {
+							contains = true;
+							const float& h = data.h[pi];
+							for (int dim = 0; dim < NDIM; dim++) {
+								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+									contains = false;
+									break;
 								}
 							}
 						}
-						if (is_eligible) {
-							float dt = rung_dt[rung] * params.t0;
-							data.time_to_star_snk[snki] -= dt / tdyn;
-							//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
-							if (data.time_to_star_snk[snki] < 0.0f) {
-								//			PRINT("MAKING STAR!\n");
-							}
-						} else {
-							data.time_to_star_snk[snki] = 1.f;
+					}
+					j = contains;
+					compute_indices<HYDRO_BLOCK_SIZE>(j, total);
+					const int offset = ws.x0.size();
+					const int next_size = offset + total;
+					ws.x0.resize(next_size);
+					ws.y0.resize(next_size);
+					ws.z0.resize(next_size);
+					ws.vx0.resize(next_size);
+					ws.vy0.resize(next_size);
+					ws.vz0.resize(next_size);
+					ws.ent0.resize(next_size);
+					ws.h0.resize(next_size);
+					if (data.H2) {
+						ws.H20.resize(next_size);
+					}
+					if (stars) {
+						ws.gx0.resize(next_size);
+						ws.gy0.resize(next_size);
+						ws.gz0.resize(next_size);
+					}
+					if (contains) {
+						const int k = offset + j;
+						ws.x0[k] = x[XDIM];
+						ws.y0[k] = x[YDIM];
+						ws.z0[k] = x[ZDIM];
+						ws.vx0[k] = data.vx[pi];
+						ws.vy0[k] = data.vy[pi];
+						ws.vz0[k] = data.vz[pi];
+						ws.ent0[k] = data.ent[pi];
+						ws.h0[k] = data.h[pi];
+						if (data.H2) {
+							ws.H20[k] = data.H2[pi];
+						}
+						if (stars) {
+							ws.gx0[k] = data.gx[pi];
+							ws.gy0[k] = data.gy[pi];
+							ws.gz0[k] = data.gz[pi];
 						}
 					}
 				}
 			}
+			for (int i = self.part_range.first; i < self.part_range.second; i++) {
+				int myrung = data.rungs[i];
+				bool use = myrung >= params.min_rung;
+				const int snki = self.sink_part_range.first - self.part_range.first + i;
+				if (!use && params.phase == 0) {
+					use = data.sa_snk[snki];
+				}
+				const float m = data.m;
+				const float minv = 1.f / m;
+				const float c0 = float(3.0f / 4.0f / M_PI * data.N);
+				const float c0inv = 1.0f / c0;
+				if (use) {
+					float mygx, mygy, mygz;
+					if (stars) {
+						mygx = data.gx[i];
+						mygy = data.gy[i];
+						mygz = data.gz[i];
+					}
+					const auto myx = data.x[i];
+					const auto myy = data.y[i];
+					const auto myz = data.z[i];
+					const auto myvx = data.vx[i];
+					const auto myvy = data.vy[i];
+					const auto myvz = data.vz[i];
+					const float myh = data.h[i];
+					const float myh2 = sqr(myh);
+					const float myhinv = 1.f / myh;
+					const float myh3inv = 1.f / (sqr(myh) * myh);
+					const float myrho = m * c0 * myh3inv;
+					const float myrhoinv = minv * c0inv * sqr(myh) * myh;
+					float gamma;
+					if (data.H2) {
+						gamma = compute_gamma(data.H2[i], data.Y);
+					} else {
+						gamma = 5.f / 3.f;
+					}
+					const float myp = data.ent[i] * powf(myrho, gamma);
+					if (myp < 0.0) {
+						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
+						__trap();
+					}
+					const float myc = sqrtf(gamma * myp * myrhoinv);
+					const int jmax = round_up(ws.x0.size(), block_size);
+					ws.x.resize(0);
+					ws.y.resize(0);
+					ws.z.resize(0);
+					ws.vx.resize(0);
+					ws.vy.resize(0);
+					ws.vz.resize(0);
+					ws.h.resize(0);
+					ws.ent.resize(0);
+					if (stars) {
+						ws.gx.resize(0);
+						ws.gy.resize(0);
+						ws.gz.resize(0);
+					}
+					if (data.H2) {
+						ws.H2.resize(0);
+					}
+					for (int j = tid; j < jmax; j += block_size) {
+						bool flag = false;
+						int k;
+						int total;
+						if (j < ws.x0.size()) {
+							const auto x = ws.x0[j];
+							const auto y = ws.y0[j];
+							const auto z = ws.z0[j];
+							const float h = ws.h0[j];
+							const float dx = distance(x, myx);
+							const float dy = distance(y, myy);
+							const float dz = distance(z, myz);
+							const float r2 = sqr(dx, dy, dz);
+							if (r2 < myh2) {
+								flag = true;
+							}
+						}
+						k = flag;
+						compute_indices<HYDRO_BLOCK_SIZE>(k, total);
+						const int offset = ws.x.size();
+						const int next_size = offset + total;
+						ws.x.resize(next_size);
+						ws.y.resize(next_size);
+						ws.z.resize(next_size);
+						ws.vx.resize(next_size);
+						ws.vy.resize(next_size);
+						ws.vz.resize(next_size);
+						ws.ent.resize(next_size);
+						ws.h.resize(next_size);
+						if (stars) {
+							ws.gx.resize(next_size);
+							ws.gy.resize(next_size);
+							ws.gz.resize(next_size);
+						}
+						if (data.H2) {
+							ws.H2.resize(next_size);
+						}
+						if (flag) {
+							const int l = offset + k;
+							if (data.H2) {
+								ws.H2[l] = ws.H20[j];
+							}
+							ws.x[l] = ws.x0[j];
+							ws.y[l] = ws.y0[j];
+							ws.z[l] = ws.z0[j];
+							ws.vx[l] = ws.vx0[j];
+							ws.vy[l] = ws.vy0[j];
+							ws.vz[l] = ws.vz0[j];
+							ws.ent[l] = ws.ent0[j];
+							ws.h[l] = ws.h0[j];
+							if (stars) {
+								ws.gx[l] = ws.gx0[j];
+								ws.gy[l] = ws.gy0[j];
+								ws.gz[l] = ws.gz0[j];
+							}
+						}
+					}
+					float vsig_max1 = 0.f;
+					float vsig_max2 = 0.f;
+					float dvx_dx = 0.0f;
+					float dvx_dy = 0.0f;
+					float dvx_dz = 0.0f;
+					float dvy_dx = 0.0f;
+					float dvy_dy = 0.0f;
+					float dvy_dz = 0.0f;
+					float dvz_dx = 0.0f;
+					float dvz_dy = 0.0f;
+					float dvz_dz = 0.0f;
+					float drho_dh = 0.f;
+					float dgx_dx = 0.f;
+					float dgy_dy = 0.f;
+					float dgz_dz = 0.f;
+					for (int j = tid; j < ws.x.size(); j += block_size) {
+						const float dx = distance(myx, ws.x[j]);
+						const float dy = distance(myy, ws.y[j]);
+						const float dz = distance(myz, ws.z[j]);
+						const float h = ws.h[j];
+						const float h3 = sqr(h) * h;
+						const float r2 = sqr(dx, dy, dz);
+						const float hinv = 1. / h;
+						const float r = sqrt(r2);
+						const float h3inv = hinv * sqr(hinv);
+						const float rho = m * c0 * h3inv;
+						const float rhoinv = minv * c0inv * h3;
+						float gamma;
+						if (data.H2) {
+							gamma = compute_gamma(ws.H2[j], data.Y);
+						} else {
+							gamma = 5.f / 3.f;
+						}
+						const float p = ws.ent[j] * powf(rho, gamma);
+						if (p < 0.0) {
+							PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
+							__trap();
+						}
+						const float c = sqrtf(gamma * p * rhoinv);
+						const float dvx = myvx - ws.vx[j];
+						const float dvy = myvy - ws.vy[j];
+						const float dvz = myvz - ws.vz[j];
+						const float rinv = 1.f / (r + 1e-15f);
+						const float ndv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
+						const float this_vsig1 = myc + c;
+						const float this_vsig2 = (myc + c - ndv) * 2. * myh / (myh + r);
+						vsig_max1 = fmaxf(vsig_max1, this_vsig1);
+						vsig_max2 = fmaxf(vsig_max2, this_vsig2);
+						const float q = r * myhinv;
+						const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;
+						const float tmp = m * dWdr * rhoinv;
+						const float dWdr_x = dx * tmp;
+						const float dWdr_y = dy * tmp;
+						const float dWdr_z = dz * tmp;
+						dvx_dx -= dvx * dWdr_x;
+						dvx_dy -= dvx * dWdr_y;
+						dvx_dz -= dvx * dWdr_z;
+						dvy_dx -= dvy * dWdr_x;
+						dvy_dy -= dvy * dWdr_y;
+						dvy_dz -= dvy * dWdr_z;
+						dvz_dx -= dvz * dWdr_x;
+						dvz_dy -= dvz * dWdr_y;
+						dvz_dz -= dvz * dWdr_z;
+						drho_dh -= q * dkernelW_dq(q);
+						if (stars) {
+							dgx_dx += (ws.gx[j] - mygx) * dWdr_x;
+							dgy_dy += (ws.gy[j] - mygy) * dWdr_y;
+							dgz_dz += (ws.gz[j] - mygz) * dWdr_z;
+						}
+
+					}
+					float div_v = dvx_dx + dvy_dy + dvz_dz;
+					float curl_vx = dvz_dy - dvy_dz;
+					float curl_vy = -dvz_dx + dvx_dz;
+					float curl_vz = dvy_dx - dvx_dy;
+					float div_g;
+					if (stars) {
+						div_g = dgx_dx + dgy_dy + dgz_dz;
+						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
+					}
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
+					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max1);
+					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max2);
+
+					if (tid == 0) {
+						const float dt_cfl = 2.f * myh / vsig_max1;
+						const float dt_sig = 2.f * myh / vsig_max2;
+						const float dt_dens = 3.f * params.a / (fabsf(div_v) + 1e-30);
+						const float sw = 1e-4f * myc / myh;
+						const float abs_div_v = fabsf(div_v);
+						const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
+						const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
+						const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
+						const float fpre = 1.0f / (1.0f + c0);
+						data.fvel_snk[snki] = fvel;
+						data.f0_snk[snki] = fpre;
+						total_vsig_max = fmaxf(total_vsig_max, vsig_max2);
+						float dthydro = SPH_CFL * fminf(dt_cfl, fminf(dt_sig, dt_dens));
+						const float gx = data.gx_snk[snki];
+						const float gy = data.gy_snk[snki];
+						const float gz = data.gz_snk[snki];
+						char& rung = data.rungs[i];
+						const float g2 = sqr(gx, gy, gz);
+						const float factor = data.eta * sqrtf(params.a * myh);
+						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
+						const float dt = fminf(dt_grav, dthydro);
+						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
+						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
+						max_rung_hydro = max(max_rung_hydro, rung_hydro);
+						max_rung_grav = max(max_rung_grav, rung_grav);
+						rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+						max_rung = max(max_rung, rung);
+						if (rung < 0 || rung >= MAX_RUNG) {
+							PRINT("Rung out of range \n");
+						}
+						if (stars) {
+							bool is_eligible = false;
+							float tdyn;
+							float mj;
+							float tcool;
+							if (div_v < 0.f) {
+								const float Gn32 = powf(data.G, -1.5);
+								float rho0 = data.rho0_b + data.rho0_c;
+								float delta = -Ginv * float(1.0 / 4.0 / M_PI) * div_g;
+								float delta_b = myrho - data.rho0_b;
+								float delta_c = delta - delta_b;
+								float rho_tot = (rho0 + delta) * powf(params.a, -3.0);
+								tdyn = sqrtf(3.f * M_PI / (32.f * data.G * rho_tot)) / params.a;
+								if (delta_b / data.rho0_b > 10.0 && delta > 0.f) {
+									tcool = data.tcool_snk[snki];
+									if (tcool < tdyn) {
+										mj = Gn32 * rsqrt(myrho) * sqr(myc) * myc * powf(delta_b / delta, 1.5f) * powf(params.a, -1.5f);
+										if (mj < m) {
+											is_eligible = true;
+										}
+									}
+								}
+							}
+							if (is_eligible) {
+								float dt = rung_dt[rung] * params.t0;
+								data.time_to_star_snk[snki] -= dt / tdyn;
+								//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
+								if (data.time_to_star_snk[snki] < 0.0f) {
+									//			PRINT("MAKING STAR!\n");
+								}
+							} else {
+								data.time_to_star_snk[snki] = 1.f;
+							}
+						}
+					}
+				}
+			}
+			shared_reduce_add<int, HYDRO_BLOCK_SIZE>(flops);
+			if (tid == 0) {
+				atomicAdd(&reduce->flops, (double) flops);
+				index = atomicAdd(&reduce->counter, 1);
+			}
+			__syncthreads();
 		}
-		shared_reduce_add<int, HYDRO_BLOCK_SIZE>(flops);
-		if (tid == 0) {
-			atomicAdd(&reduce->flops, (double) flops);
-			index = atomicAdd(&reduce->counter, 1);
-		}
-		__syncthreads();
 	}
 	if (tid == 0) {
 		atomicMax(&reduce->vsig_max, total_vsig_max);

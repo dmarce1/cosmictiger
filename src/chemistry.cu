@@ -482,6 +482,10 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			flops += 7;
 		}
 		Tmid = sqrtf(Tmax * Tmin);																							// 5
+		if( T0 > 5e7 ) {
+			PRINT( "TMAX!!!!!!!!!! %e %e\n", Tmid, T0);
+			__trap();
+		}
 		test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, true);
 		float T = Tmid;
 		n0 = (double) N.H + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp + (double) N.Hp + (double) N.Hn;
