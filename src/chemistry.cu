@@ -323,9 +323,9 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	const float tmp3 = powf(T3, -.2f);																			// 8
 	const float tmp4 = tmp3 / (1.0f + powf(T6, .7f));
 	array<float, NCOOL> C;
-	C[0] = 7.5e-19f * expf(-118348.f * Tinv) * ne * N.H;									// 13
-	C[1] = 9.1e-27f * expf(-13179.f * Tinv) * tmp2 * sqr(ne) * N.He;               // 15
-	C[2] = 5.54e-17f * expf(-473638.f * Tinv) * powf(T, -.397f) * ne * N.Hep;     // 22
+	C[0] = 7.5e-19f * tmp1 * expf(-118348.f * Tinv) * ne * N.H;									// 13
+	C[1] = 9.1e-27f * tmp1 * expf(-13179.f * Tinv) * tmp2 * sqr(ne) * N.He;               // 15
+	C[2] = 5.54e-17f * tmp1 * expf(-473638.f * Tinv) * powf(T, -.397f) * ne * N.Hep;     // 22
 	C[3] = 1.27e-21f * sqrtT * tmp1 * expf(-157809.1f * Tinv) * ne * N.H;																// 4
 	C[4] = 9.38e-22f * sqrtT * tmp1 * expf(-285335.4f * Tinv) * ne * N.He;																// 4
 	C[5] = 4.95e-22f * sqrtT * tmp1 * expf(-631515.f * Tinv) * ne * N.Hep;																// 4
@@ -627,8 +627,8 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0);
 
 	for (int i = 0; i < N; i++) {
-		PRINT("%e %e | %e %e %e | %e %e %e | \n", chem0[i].K, chems[i].K, 1 - Y - chem0[i].Hp - chem0[i].H2 * 2 - chem0[i].Hn, chem0[i].Hp, chem0[i].H2,
-				1 - Y - chems[i].Hp - chems[i].H2 * 2 - chems[i].Hn, chems[i].Hp, chems[i].H2);
+		//PRINT("%e %e | %e %e %e | %e %e %e | \n", chem0[i].K, chems[i].K, 1 - Y - chem0[i].Hp - chem0[i].H2 * 2 - chem0[i].Hn, chem0[i].Hp, chem0[i].H2,
+		//1 - Y - chems[i].Hp - chems[i].H2 * 2 - chems[i].Hn, chems[i].Hp, chems[i].H2);
 	}
 }
 
