@@ -182,6 +182,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 		for (int i = 0; i < boxes.size(); i++) {
 			rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
 			rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
+			rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
 		}
 	}
 	return rc;
