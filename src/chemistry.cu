@@ -1,5 +1,5 @@
 /*
- CosmicTiger - A cosmological N-Body code
+ CosmicTiger - A Cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
@@ -51,6 +51,7 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	float& Hep = N.Hep;
 	float& Hepp = N.Hepp;
 	float& H2 = N.H2;
+	float& H0 = N.H;
 	float Hp0 = N0.Hp;
 	float Hep0 = N0.Hep;
 	float Hepp0 = N0.Hepp;
@@ -64,7 +65,9 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 #define List(...) __VA_ARGS__
 //	PRINT("in %e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
 	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															// 11
-	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
+	Hp = Hall - (H + fmaf(2.f, H2, Hn));
+	Hp = fmaxf(Hp, 0.0f);																																												// 1
+// 4
 	const float twoH2 = 2.f * H2;																																										// 1
 	const float tmp1 = (twoH2 - Hall + Hn);																																						// 2
 	const float Hpnum = (Hp0 - dt * tmp1 * fmaf(ne, K1, sigma20));																															// 5
@@ -81,7 +84,7 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	H2 = H2num / H2den;																																													// 4
 	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
 	Hn = (H * K7 * ne) / fmaf(Hp, K16, fmaf(H, K8, K14 * ne));																															 // 11
-	H = Hall - (Hp + fmaf(2.f, H2, Hn));																																							// 4
+	H = Hall - (Hp + fmaf(2.f, H2, Hn));
 	const float K6ne = K6 * ne;																																										// 1
 	const float tmp4 = fmaf(dt, K6ne, 1.f);																																						// 2
 	const float tmp5 = fmaf(K3, ne, sigma21 - K6ne);																																			// 3
@@ -239,7 +242,7 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 		}
 	}
 	{
-		if (T > 0.1) {
+		if (Tev > 0.1) {
 			const float c0 = -20.06913897f;
 			const float c1 = 0.22898f;
 			const float c2 = 3.5998377E-2f;
@@ -568,9 +571,10 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 void test_cuda_chemistry_kernel() {
 	static const auto opts = get_options();
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
-	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;										// 10
+	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;
+	const double Y = get_options().Y;		// 10
 	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
-	const int N = 100000000;
+	const int N = 10000000;
 	vector<chem_attribs> chem0;
 	vector<chem_attribs> chems;
 	float z = 0.5;
@@ -623,7 +627,8 @@ void test_cuda_chemistry_kernel() {
 	cuda_chemistry_step(chems, 1.0);
 
 	for (int i = 0; i < N; i++) {
-		//	PRINT("%e %e %e\n", chem0[i].K, chems[i].K, chems[i].Hepp);
+		PRINT("%e %e | %e %e %e | %e %e %e | \n", chem0[i].K, chems[i].K, 1 - Y - chem0[i].Hp - chem0[i].H2 * 2 - chem0[i].Hn, chem0[i].Hp, chem0[i].H2,
+				1 - Y - chems[i].Hp - chems[i].H2 * 2 - chems[i].Hn, chems[i].Hp, chems[i].H2);
 	}
 }
 
