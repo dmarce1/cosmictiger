@@ -21,6 +21,8 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/stars.hpp>
+#include <cosmictiger/sph.hpp>
+#include <cosmictiger/constants.hpp>
 
 static part_int capacity = 0;
 static part_int size = 0;
@@ -210,6 +212,36 @@ float sph_particles_max_smooth_len() {
 	}
 	return maxh;
 }
+
+
+float sph_particles_temperature(part_int i, float a) {
+	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
+	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
+	static const double Y = get_options().Y;
+	const double h = sph_particles_smooth_len(i);
+	const double Hp = sph_particles_Hp(i);
+	const double Hn = sph_particles_Hn(i);
+	const double H2 = sph_particles_H2(i);
+	const double Hep = sph_particles_Hep(i);
+	const double Hepp = sph_particles_Hepp(i);
+	const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
+	const double He = Y - Hep - Hepp;
+	double rho = sph_den(1 / (h * h * h));
+	double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
+	rho *= code_to_density * pow(a, -3);
+	n *= constants::avo * rho;									// 8
+	double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2);															// 4
+	double gamma = 1. + 1. / cv;																							// 5
+	cv *= double(constants::kb);																							// 1
+	double K = sph_particles_ent(i);												// 11
+	K *= pow(a, 3. * gamma - 5.);												// 11
+	K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
+	double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));															// 9
+	double T = energy / (n * cv);																							// 5
+	return T;
+}
+
+
 
 void sph_particles_swap(part_int i, part_int j) {
 	const bool chem = get_options().chem;

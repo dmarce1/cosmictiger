@@ -279,7 +279,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
-				if( tid == 0 ) {
+				if (tid == 0) {
 					//PRINT( "%e\n", logf(h/h0));
 				}
 				//	if (tid == 0)
@@ -1093,15 +1093,16 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max2);
 
 					if (tid == 0) {
-						const float dt_cfl = 2.f * myh / vsig_max1;
-						const float dt_sig = 2.f * myh / vsig_max2;
-						const float dt_dens = 3.f * params.a / (fabsf(div_v) + 1e-30);
 						const float sw = 1e-4f * myc / myh;
 						const float abs_div_v = fabsf(div_v);
 						const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 						const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
 						const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
 						const float fpre = 1.0f / (1.0f + c0);
+						div_v *= fpre;
+						const float dt_cfl = 2.f * params.a * myh / vsig_max1;
+						const float dt_sig = 2.f * params.a * myh / vsig_max2;
+						const float dt_dens = 3.f * params.a / (abs(div_v) + 1e-30);
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
 						total_vsig_max = fmaxf(total_vsig_max, vsig_max2);
@@ -1115,6 +1116,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
+					//	if (rung_hydro >= 12) {
+							PRINT("%e %e %e %e %e %e \n", dt_cfl, dt_sig, dt_dens, vsig_max1, vsig_max2, div_v*myh);
+					//		__trap();
+				//		}
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
 						max_rung_grav = max(max_rung_grav, rung_grav);

@@ -88,6 +88,7 @@ void sph_particles_global_read_fvels(particle_global_range range, float* fvels, 
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
+float sph_particles_temperature(part_int, float);
 
 inline float& sph_particles_time_to_star(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);

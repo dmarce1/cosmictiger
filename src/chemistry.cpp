@@ -705,6 +705,10 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				int rung = sph_particles_rung(i);
 				if( rung >= minrung ) {
 					chem_attribs chem;
+					float T = sph_particles_temperature(i,a);
+					if( T > 1e7) {
+						PRINT( "T-------------> %e\n", T);
+					}
 					chem.Hp = sph_particles_Hp(i);
 					chem.Hn = sph_particles_Hn(i);
 					chem.H2 = sph_particles_H2(i);
