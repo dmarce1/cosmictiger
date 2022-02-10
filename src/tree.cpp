@@ -463,7 +463,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 
 		if (sph && vsoft) {
 			for (part_int i = part_range.first; i < part_range.second; i++) {
-				if (particles_type(i) == SPH_TYPE) {
+				if (particles_type(i) != SPH_TYPE) {
 					hsoft_max = std::max(hsoft_max, h);
 				} else {
 					const int j = particles_cat_index(i);

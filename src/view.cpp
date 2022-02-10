@@ -188,10 +188,12 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 }
 
 void view_output_views(int cycle, double a) {
+	const bool chem = get_options().chem;
 	if (!view_boxes.size()) {
 		return;
 	}
 	for (int bi = 0; bi < view_boxes.size(); bi++) {
+		bool stars = get_options().stars;
 		PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", view_boxes[bi].begin[XDIM], view_boxes[bi].end[XDIM], view_boxes[bi].begin[YDIM],
 				view_boxes[bi].end[YDIM], view_boxes[bi].begin[ZDIM], view_boxes[bi].end[ZDIM]);
 		std::string filename = "view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo";
@@ -199,122 +201,130 @@ void view_output_views(int cycle, double a) {
 		view_return parts;
 		parts = view_get_particles();
 		vector<float> x, y, z;
-		for (int i = 0; i < parts.dm[bi].size(); i++) {
-			x.push_back(distance(parts.dm[bi][i].x, view_boxes[bi].begin[XDIM]));
-			y.push_back(distance(parts.dm[bi][i].y, view_boxes[bi].begin[YDIM]));
-			z.push_back(distance(parts.dm[bi][i].z, view_boxes[bi].begin[ZDIM]));
-		}
-		float *coords1[NDIM] = { x.data(), y.data(), z.data() };
-		DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		z.resize(0);
-		for (int i = 0; i < parts.hydro[bi].size(); i++) {
-			x.push_back(distance(parts.hydro[bi][i].x, view_boxes[bi].begin[XDIM]));
-			y.push_back(distance(parts.hydro[bi][i].y, view_boxes[bi].begin[YDIM]));
-			z.push_back(distance(parts.hydro[bi][i].z, view_boxes[bi].begin[ZDIM]));
-		}
-		float *coords2[NDIM] = { x.data(), y.data(), z.data() };
-		DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		z.resize(0);
-		for (int i = 0; i < parts.star[bi].size(); i++) {
-			x.push_back(distance(parts.star[bi][i].x, view_boxes[bi].begin[XDIM]));
-			y.push_back(distance(parts.star[bi][i].y, view_boxes[bi].begin[YDIM]));
-			z.push_back(distance(parts.star[bi][i].z, view_boxes[bi].begin[ZDIM]));
-		}
-		float *coords3[NDIM] = { x.data(), y.data(), z.data() };
-		DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		z.resize(0);
-		for (int i = 0; i < parts.dm[bi].size(); i++) {
-			x.push_back(parts.dm[bi][i].vx);
-			y.push_back(parts.dm[bi][i].vy);
-			z.push_back(parts.dm[bi][i].vz);
-		}
-		DBPutPointvar1(db, "dm_vx", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "dm_vy", "dark_matter", y.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "dm_vz", "dark_matter", z.data(), x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		z.resize(0);
-		for (int i = 0; i < parts.hydro[bi].size(); i++) {
-			x.push_back(parts.hydro[bi][i].vx);
-			y.push_back(parts.hydro[bi][i].vy);
-			z.push_back(parts.hydro[bi][i].vz);
-		}
-		DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		z.resize(0);
-		for (int i = 0; i < parts.star[bi].size(); i++) {
-			x.push_back(parts.star[bi][i].vx);
-			y.push_back(parts.star[bi][i].vy);
-			z.push_back(parts.star[bi][i].vz);
-		}
-		DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		const bool chem = get_options().chem;
-		for (int i = 0; i < parts.hydro[bi].size(); i++) {
-			x.push_back(parts.hydro[bi][i].h);
-			y.push_back(parts.hydro[bi][i].ent);
-		}
-		DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-		DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
-		x.resize(0);
-		y.resize(0);
-		z.resize(0);
-		if (chem) {
-			const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
-			const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
-			const double Y = get_options().Y;
-			vector<float> p, q, t;
-			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].Hp);
-				y.push_back(parts.hydro[bi][i].Hn);
-				z.push_back(parts.hydro[bi][i].H2);
-				p.push_back(parts.hydro[bi][i].Hep);
-				q.push_back(parts.hydro[bi][i].Hepp);
-				const double h = parts.hydro[bi][i].h;
-				double rho = sph_den(1 / (h * h * h));
-				const double Hp = parts.hydro[bi][i].Hp;
-				const double Hn = parts.hydro[bi][i].Hn;
-				const double H2 = parts.hydro[bi][i].H2;
-				const double Hep = parts.hydro[bi][i].Hep;
-				const double Hepp = parts.hydro[bi][i].Hepp;
-				const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
-				const double He = Y - Hep - Hepp;
-				double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
-				rho *= code_to_density * pow(a, -3);
-				n *= constants::avo * rho;									// 8
-
-				double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2);															// 4
-				double gamma = 1. + 1. / cv;																							// 5
-				cv *= double(constants::kb);																							// 1
-				double K = parts.hydro[bi][i].ent;												// 11
-				double K0 = K;
-				K *= pow(a, 3. * gamma - 5.);												// 11
-				K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
-				//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
-				double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));																// 9
-				double T = energy / (n * cv);																							// 5
-				//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
-				t.push_back(T);
-
+		if (parts.dm.size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.dm[bi].size(); i++) {
+				x.push_back(distance(parts.dm[bi][i].x, view_boxes[bi].begin[XDIM]));
+				y.push_back(distance(parts.dm[bi][i].y, view_boxes[bi].begin[YDIM]));
+				z.push_back(distance(parts.dm[bi][i].z, view_boxes[bi].begin[ZDIM]));
 			}
-			DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, NULL);
+			float *coords1[NDIM] = { x.data(), y.data(), z.data() };
+			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.dm[bi].size(); i++) {
+				x.push_back(parts.dm[bi][i].vx);
+				y.push_back(parts.dm[bi][i].vy);
+				z.push_back(parts.dm[bi][i].vz);
+			}
+			DBPutPointvar1(db, "dm_vx", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "dm_vy", "dark_matter", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "dm_vz", "dark_matter", z.data(), x.size(), DB_FLOAT, NULL);
+		}
+		if (parts.hydro[bi].size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(distance(parts.hydro[bi][i].x, view_boxes[bi].begin[XDIM]));
+				y.push_back(distance(parts.hydro[bi][i].y, view_boxes[bi].begin[YDIM]));
+				z.push_back(distance(parts.hydro[bi][i].z, view_boxes[bi].begin[ZDIM]));
+			}
+			float *coords2[NDIM] = { x.data(), y.data(), z.data() };
+			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].vx);
+				y.push_back(parts.hydro[bi][i].vy);
+				z.push_back(parts.hydro[bi][i].vz);
+			}
+			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			y.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].h);
+				y.push_back(parts.hydro[bi][i].ent);
+			}
+			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			if (chem) {
+				const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
+				const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
+				const double Y = get_options().Y;
+				vector<float> p, q, t;
+				for (int i = 0; i < parts.hydro[bi].size(); i++) {
+					x.push_back(parts.hydro[bi][i].Hp);
+					y.push_back(parts.hydro[bi][i].Hn);
+					z.push_back(parts.hydro[bi][i].H2);
+					p.push_back(parts.hydro[bi][i].Hep);
+					q.push_back(parts.hydro[bi][i].Hepp);
+					const double h = parts.hydro[bi][i].h;
+					double rho = sph_den(1 / (h * h * h));
+					const double Hp = parts.hydro[bi][i].Hp;
+					const double Hn = parts.hydro[bi][i].Hn;
+					const double H2 = parts.hydro[bi][i].H2;
+					const double Hep = parts.hydro[bi][i].Hep;
+					const double Hepp = parts.hydro[bi][i].Hepp;
+					const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
+					const double He = Y - Hep - Hepp;
+					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
+					rho *= code_to_density * pow(a, -3);
+					n *= constants::avo * rho;									// 8
+
+					double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2);															// 4
+					double gamma = 1. + 1. / cv;																							// 5
+					cv *= double(constants::kb);																							// 1
+					double K = parts.hydro[bi][i].ent;												// 11
+					double K0 = K;
+					K *= pow(a, 3. * gamma - 5.);												// 11
+					K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
+					//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
+					double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));															// 9
+					double T = energy / (n * cv);																							// 5
+					//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
+					t.push_back(T);
+
+				}
+				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, NULL);
+			}
+		}
+		if (parts.star[bi].size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(distance(parts.star[bi][i].x, view_boxes[bi].begin[XDIM]));
+				y.push_back(distance(parts.star[bi][i].y, view_boxes[bi].begin[YDIM]));
+				z.push_back(distance(parts.star[bi][i].z, view_boxes[bi].begin[ZDIM]));
+			}
+			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
+			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].vx);
+				y.push_back(parts.star[bi][i].vy);
+				z.push_back(parts.star[bi][i].vz);
+			}
+			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, NULL);
 		}
 		DBClose(db);
 	}

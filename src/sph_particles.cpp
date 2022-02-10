@@ -331,6 +331,7 @@ void sph_particles_resize(part_int sz) {
 	size = sz;
 	for (int i = 0; i < new_parts; i++) {
 		particles_cat_index(offset + i) = oldsz + i;
+		particles_type(offset + i) = SPH_TYPE;
 		sph_particles_dm_index(oldsz + i) = offset + i;
 #ifdef CHECK_MUTUAL_SORT
 		particles_lastgroup(offset + i) = oldsz + i;

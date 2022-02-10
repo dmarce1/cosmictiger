@@ -503,7 +503,11 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					int type = particles_type(i);
 					sph_part[j] = char(type != DARK_MATTER_TYPE);
 					if (hsoft) {
-						hsoft[j] == type != SPH_TYPE ? dm_hsoft : std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
+						if (type != SPH_TYPE) {
+							hsoft[j] = dm_hsoft;
+						} else {
+							hsoft[j] = std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
+						}
 					}
 				}
 			}
@@ -574,8 +578,8 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 		if (sph) {
 			int type = particles_type(i);
 			ln.sph = type != DARK_MATTER_TYPE;
-			if( vsoft) {
-				if( type != SPH_TYPE) {
+			if (vsoft) {
+				if (type != SPH_TYPE) {
 					ln.hsoft = hsoft;
 				} else {
 					ln.hsoft = type != SPH_TYPE ? hsoft : std::min(SPH_MAX_SOFT, sph_particles_smooth_len(particles_cat_index(i)));

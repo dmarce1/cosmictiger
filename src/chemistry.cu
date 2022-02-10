@@ -36,9 +36,9 @@ struct chemistry_params {
 
 #define CHEM_BLOCK_SIZE 64
 
-__managed__ double timer1;
-__managed__ double timer2;
-__managed__ double timer3;
+#define NCOOL 14
+
+__managed__ array<double, NCOOL> cooling_totals;
 
 __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, float T, float dt, float z, float K1, float K2, float K3, float K4, float K5,
 		float K6, float K7, float K8, float K9, float K11, float K12, float K14, float K16, float sigma20, float sigma21, float sigma22, int& flops) {
@@ -112,7 +112,7 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	return Hp - Hn + Hep + 2 * Hepp - ne;
 }
 
-__device__ float test_temperature(species_t N0, species_t& N, float T0, float T, float dt, float z, int& flops, float* dedt_ptr) {
+__device__ float test_temperature(species_t N0, species_t& N, float T0, float T, float dt, float z, int& flops, float* dedt_ptr, bool add_totals) {
 //	const int tid = threadIdx.x;
 //	auto tm = clock64();
 	T = fmaxf(1e3f, T);							// 1
@@ -318,17 +318,19 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	const float tmp1 = 1.0f / (1.0f + sqrtf(T5));															// 9
 	const float tmp2 = powf(T, -.1687f);																		// 8
 	const float tmp3 = powf(T3, -.2f);																			// 8
-	cool = fmaf(7.5e-19f, expf(-118348.f * Tinv) * ne * N.H, cool);									// 13
-	cool = fmaf(9.1e-27f, expf(-13179.f * Tinv) * tmp2 * sqr(ne) * N.He, cool);               // 15
-	cool = fmaf(5.54e-17f, expf(-473638.f * Tinv) * powf(T, -.397f) * ne * N.Hep, cool);     // 22
-	cool = fmaf(2.18e-11f, K1 * ne * N.H, cool);																// 4
-	cool = fmaf(3.94e-11f, K3 * ne * N.He, cool);															// 4
-	cool = fmaf(8.72e-11f, K5 * ne * N.Hep, cool);															// 4
-	cool = fmaf(5.01e-27f, tmp1 * tmp2 * expf(-55338.f * Tinv) * sqr(ne) * N.Hep, cool);		// 16
-	cool = fmaf(8.7e-27f, sqrtT * tmp3 / (1.0f + powf(T6, .7f)) * ne * N.Hp, cool);				// 18
-	cool = fmaf(1.55e-26f, powf(T, 0.3647f) * ne * N.Hp, cool);											// 12
-	cool = fmaf(1.24e-13f, powf(T, -1.5f) * (1.f + .3f * expf(-94000.f * Tinv)) * expf(-470000.f * Tinv) * ne * N.Hp, cool); // 34
-	cool = fmaf(3.48e-26f, sqrtT * tmp3 / (1.0 + powf(T6, .7f)) * ne * N.Hepp, cool);          // 18
+	const float tmp4 = tmp3 / (1.0f + powf(T6, .7f));
+	array<float, NCOOL> C;
+	C[0] = 7.5e-19f * expf(-118348.f * Tinv) * ne * N.H;									// 13
+	C[1] = 9.1e-27f * expf(-13179.f * Tinv) * tmp2 * sqr(ne) * N.He;               // 15
+	C[2] = 5.54e-17f * expf(-473638.f * Tinv) * powf(T, -.397f) * ne * N.Hep;     // 22
+	C[3] = 1.27e-21f * sqrtT * tmp1 * expf(-157809.1f * Tinv) * ne * N.H;																// 4
+	C[4] = 9.38e-22f * sqrtT * tmp1 * expf(-285335.4f * Tinv) * ne * N.He;																// 4
+	C[5] = 4.95e-22f * sqrtT * tmp1 * expf(-631515.f * Tinv) * ne * N.Hep;																// 4
+	C[6] = 5.01e-27f * tmp1 * tmp2 * expf(-55338.f * Tinv) * sqr(ne) * N.Hep;		// 16
+	C[7] = 8.7e-27f * sqrtT * tmp4 * ne * N.Hp;				// 18
+	C[8] = 1.55e-26f * powf(T, 0.3647f) * ne * N.Hp;											// 12
+	C[9] = 1.24e-13f * powf(T, -1.5f) * (1.f + .3f * expf(-94000.f * Tinv)) * expf(-470000.f * Tinv) * ne * N.Hp; // 34
+	C[10] = 3.48e-26f * sqrtT * tmp4 * ne * N.Hepp;          // 18
 	const float Qn = powf(N.H2, 0.77f) + 1.2 * powf(N.H, 0.77f);										// 18
 	float LrL, LrH;
 	const float x = log10T - 4.f; 																				// 1
@@ -338,7 +340,7 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 		LrL = 1.38e-22f * expf(-9243.f * Tinv);
 		flops += 10;
 	} else {
-		LrL = powf(10.0f, -22.90f - 0.553f * x - 1.48f * x2);
+		LrL = powf(10.0f, -22.90f - 0.553f * x - 1.148f * x2);
 		flops += 12;
 	}
 	LrL *= Qn;																									// 1
@@ -358,22 +360,27 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	}
 	LvL *= N.H * 8.18e-13f;																					// 2
 	const float LvH = 1.1e-13f * expf(-6744.f * Tinv);														// 10
-	cool = fmaf(N.H2, (LrH * LrL / (LrL + LrH) + LvH * LvL / (LvL + LvH)), cool);					// 15
-	cool = fmaf(1.43e-27f, sqrtT * (fmaf(0.34f, expf(-sqr(5.5f - log10T) * (1.f / 3.f)), 1.1f)) * ne * (N.Hp + N.Hep + N.Hepp), cool); // 21
-	cool = fmaf(5.65e-36f, sqr(sqr(1.f + z)) * (fmaf(-2.73f, (1 + z), T)) * ne, cool);			// 10
+	C[11] = N.H2 * (LrH * LrL / (LrL + LrH) + LvH * LvL / (LvL + LvH));					// 15
+	C[12] = 1.43e-27f * sqrtT * (fmaf(0.34f, expf(-sqr(5.5f - log10T) * (1.f / 3.f)), 1.1f)) * ne * (N.Hp + N.Hep + N.Hepp); // 21
+	C[13] = 5.65e-36f * sqr(sqr(1.f + z)) * (fmaf(-2.73f, (1 + z), T)) * ne;			// 10
 	constexpr float expmax = 88.0f;
-	const float tmp4 = sqr(z - 2.3f);																						// 1
 	const float tmp5 = powf(1.f + z, 0.43f);																				// 9
 	const float tmp6 = powf(1.f + z, 0.3f);																				// 9
-	const float tmp7 = tmp5 * expf(-fminf((1.f / 1.95f) * tmp4, expmax));											// 12
+	const float tmp8 = sqr(z - 2.3f);																						// 1
+	const float tmp7 = tmp5 * expf(-fminf((1.f / 1.95f) * tmp8, expmax));											// 12
 	const float sigma20 = 5.6e-13f * tmp7;																					// 1
-	const float sigma22 = 9.6e-15f * tmp6 * expf(-fminf((1.f / 2.6f) * tmp4, expmax));							// 12
+	const float sigma22 = 9.6e-15f * tmp6 * expf(-fminf((1.f / 2.6f) * tmp8, expmax));							// 12
 	const float sigma21 = 3.2e-13f * tmp7;																					// 1
 	const float sigmaH = 3.9e-24f * tmp7;																					// 1
-	const float sigmaHe = 6.4e-24f * tmp5 * expf(-fminf((1.f / 2.1f) * tmp4, expmax));							// 12
-	const float sigmaHep = 8.6e-26f * tmp6 * expf(-fminf((1.f / 2.7f) * tmp4, expmax));						// 12
+	const float sigmaHe = 6.4e-24f * tmp5 * expf(-fminf((1.f / 2.1f) * tmp8, expmax));							// 12
+	const float sigmaHep = 8.6e-26f * tmp6 * expf(-fminf((1.f / 2.7f) * tmp8, expmax));						// 12
 	const float heat = sigmaH * N.H + sigmaHe * N.He + sigmaHep * N.Hep;											// 5
-
+	for (int i = 0; i < NCOOL; i++) {
+		cool += C[i];
+		if (add_totals) {
+			atomicAdd(&cooling_totals[i], C[i] * dt);
+		}
+	}
 	const float dedt = heat - cool;																							// 1
 
 	flops += 625;
@@ -388,18 +395,10 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	for (int i = 0; i < 28; i++) {
 		float ne_mid = sqrtf(ne_max * ne_min);
 		float fe_max, fe_mid;
-		//	PRINT( "%e ", N.H + 2 * N.H2 + N.Hn + N.Hp);
-//		tm = clock64() - tm;
-//		if (tid == 0) {
-//			atomicAdd(&timer2, (double) tm);
-//		}
-//		tm = clock64();
 		if (i == 0) {
 			fe_max = test_electron_fraction(ne_max, N0, N, T, dt, z, K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16, sigma20, sigma21, sigma22, flops);
 		}
 		fe_mid = test_electron_fraction(ne_mid, N0, N, T, dt, z, K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16, sigma20, sigma21, sigma22, flops);
-//		tm = clock64();
-		//	PRINT( "%e\n", N.H + 2 * N.H2 + N.Hn + N.Hp);
 		if (copysignf(1.f, fe_max) != copysignf(1.f, fe_mid)) {
 			ne_min = ne_mid;
 		} else {
@@ -411,10 +410,6 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 
 	const float n1 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;											// 8
 	const float cv1 = (1.5f + N.H2);																		// 4
-//	tm = clock64() - tm;
-//	if (tid == 0) {
-//		atomicAdd(&timer2, (double) tm);
-//	}
 	*dedt_ptr = dedt;
 	return constants::kb * (cv1 * n1 * T - cv0 * n0 * T0) - dt * dedt;												// 8
 }
@@ -472,9 +467,9 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			N = N.number_density_to_fractions();
 			N = N0;
 			if (i == 0) {
-				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops, &dedt);
+				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops, &dedt, false);
 			}
-			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt);
+			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, false);
 			if (copysignf(1.f, f_mid) != copysignf(1.f, f_max)) {
 				Tmin = Tmid;
 			} else {
@@ -484,6 +479,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 
 			flops += 7;
 		}
+		Tmid = sqrtf(Tmax * Tmin);																							// 5
+		test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, true);
 		float T = Tmid;
 		n0 = (double) N.H + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp + (double) N.Hp + (double) N.Hn;
 		n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;											// 8
@@ -530,6 +527,9 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	chemistry_params params;
 	int nblocks;
 	auto stream = cuda_get_stream();
+	for (int i = 0; i < NCOOL; i++) {
+		cooling_totals[i] = 0.f;
+	}
 	CUDA_CHECK(cudaMalloc(&dev_chems, sizeof(chem_attribs) * chems.size()));
 	CUDA_CHECK(cudaMallocManaged(&flops, sizeof(double)));
 	CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
@@ -554,7 +554,15 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	cuda_stream_synchronize(stream);
 	CUDA_CHECK(cudaFree(dev_chems));
 	cuda_end_stream(stream);
-	double ttot = timer1 + timer2 + timer3;
+	double ctot = 0.0;
+	for (int i = 0; i < NCOOL; i++) {
+		ctot += cooling_totals[i];
+	}
+	if (ctot > 0.0) {
+		for (int i = 0; i < NCOOL; i++) {
+			PRINT("C%i = %e\n", i, cooling_totals[i] / ctot);
+		}
+	}
 }
 
 void test_cuda_chemistry_kernel() {
