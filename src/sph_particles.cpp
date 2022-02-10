@@ -20,6 +20,7 @@
 #define SPH_PARTICLES_CPP
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/stars.hpp>
 
 static part_int capacity = 0;
 static part_int size = 0;
@@ -816,6 +817,7 @@ void sph_particles_load(FILE* fp) {
 	}
 	if (stars) {
 		FREAD(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
+		stars_load(fp);
 	}
 }
 
@@ -839,5 +841,6 @@ void sph_particles_save(FILE* fp) {
 	}
 	if (stars) {
 		fwrite(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
+		stars_save(fp);
 	}
 }

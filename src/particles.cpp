@@ -24,6 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/stars.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -947,15 +948,12 @@ void particles_resolve_with_sph_particles() {
 				if( type == SPH_TYPE ) {
 					const part_int index = particles_cat_index(i);
 					sph_particles_dm_index(index) = i;
-#ifdef CHECK_MUTUAL_SORT
-				if( particles_lastgroup(i) != sph_particles_test(index)) {
-					PRINT( "%i %i\n", (int) particles_lastgroup(i), sph_particles_test(index));
+				} else if( type == STAR_TYPE ) {
+					const part_int index = particles_cat_index(i);
+					stars_get(index).dm_index = i;
 				}
-#endif
-
 			}
-		}
-	}));
+		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }

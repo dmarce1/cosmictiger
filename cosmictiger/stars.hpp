@@ -17,8 +17,17 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cosmictiger/particles.hpp>
+
 
 struct star_particle {
 	float energy;
-	float end_time;
+	float zform;
+	int dm_index;
 };
+
+star_particle& stars_get(part_int index);
+
+void stars_find(float a);
+void stars_save(FILE* fp);
+void stars_load(FILE* fp);

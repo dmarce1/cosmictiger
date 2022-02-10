@@ -19,6 +19,7 @@
 #pragma once
 
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/math.hpp>
 
 #ifdef SPH_PARTICLES_CPP
 #define SPH_PARTICLES_EXTERN
@@ -183,6 +184,26 @@ inline float& sph_particles_gforce(int dim, part_int index) {
 inline float& sph_particles_smooth_len(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_h[index];
+}
+
+inline float sph_particles_rho(part_int index) {
+	const float h = sph_particles_smooth_len(index);
+	static const float mass = get_options().sph_mass;
+	static const float N = get_options().neighbor_number;
+	static const float c0 = N * mass * 3.0 / (4.0 * M_PI);
+	return c0 / (h * sqr(h));
+}
+
+inline float sph_particles_energy(part_int index) {
+	const float rho = sph_particles_rho(index);
+	const float K = sph_particles_ent(index);
+	const float h = sph_particles_smooth_len(index);
+	const float H2 = sph_particles_H2(index);
+	const float cv = 1.5f + H2;
+	const float gamma = 1.f + 1.f / cv;
+	float E = K * powf(rho, gamma) / (gamma - 1.f);
+	E *= (4.0 * M_PI / 3.0) * h * sqr(h);
+	return E;
 }
 
 inline sph_particle sph_particles_get_particle(part_int index) {

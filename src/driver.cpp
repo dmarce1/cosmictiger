@@ -40,6 +40,7 @@
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/chemistry.hpp>
+#include <cosmictiger/stars.hpp>
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -124,6 +125,7 @@ void do_groups(int number, double scale) {
 }
 
 sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, bool verbose = true) {
+	const bool stars = get_options().stars;
 	verbose = true;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
@@ -256,6 +258,10 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 		tm.reset();
 		max_rung = kr.max_rung;
+
+		if (stars) {
+			stars_find(scale);
+		}
 
 		const bool chem = get_options().chem;
 		if (chem) {

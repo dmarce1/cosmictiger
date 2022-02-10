@@ -221,7 +221,6 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 		K5 = expf(k);
 	}
 	{
-
 		K6 = 3.36e-10f * sqrtTinv * powf(T3, -0.2f) / (1.0f + powf(T6, 0.7));
 	}
 	{
