@@ -24,6 +24,10 @@
 vector<star_particle> stars;
 
 star_particle& stars_get(part_int index) {
+	if( index > stars.size() ) {
+		PRINT( "Attempt to read %i star with only %i\n", index, stars.size());
+		abort();
+	}
 	return stars[index];
 }
 
@@ -34,7 +38,6 @@ void stars_save(FILE* fp) {
 	fwrite(&size, sizeof(size_t), 1, fp);
 	fwrite(stars.data(), sizeof(star_particle), stars.size(), fp);
 }
-
 
 part_int stars_size() {
 	return stars.size();
@@ -90,12 +93,22 @@ void stars_find(float a) {
 				const int dmk = sph_particles_dm_index(k);
 				sph_particles_swap(i, k);
 				particles_cat_index(dmk) = i;
+				if( particles_type(dmk) == STAR_TYPE) {
+					PRINT( "Error %s %i\n", __FILE__, __LINE__);
+					abort();
+				}
 			}
-			sph_particles_resize(k);
-		} else {
-			break;
+			sph_particles_resize(k, false);
 		}
 	}
+/*	for( part_int i = 0; i < particles_size(); i++) {
+		if( particles_type(i) == STAR_TYPE) {
+			if( particles_cat_index(i) >= stars.size()) {
+				PRINT( "Error %s %i\n", __FILE__, __LINE__);
+				abort();
+			}
+		}
+	}*/
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars found for a total of %i\n", (int ) found, stars.size());
 }

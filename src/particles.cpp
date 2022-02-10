@@ -887,11 +887,15 @@ void particles_load(FILE* fp) {
 	FREAD(&size, sizeof(part_int), 1, fp);
 	FREAD(&sph_size, sizeof(part_int), 1, fp);
 	FREAD(&stars_size0, sizeof(part_int), 1, fp);
+	PRINT( "Reading %i total particles %i stars %i sph\n", size, stars_size0, sph_size);
 	particles_resize(size - sph_size - stars_size0);
+	PRINT( "particles_size  = %i\n", particles_size());
 	if (sph_size) {
 		sph_particles_resize(sph_size);
+		PRINT( "particles_size  = %i\n", particles_size());
 	}
 	particles_resize(particles_size() + stars_size0);
+	PRINT( "particles_size  = %i\n", particles_size());
 	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);

@@ -98,7 +98,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float ent = sph_particles_ent(j);
 					if( tau0 != 0.0 ) {
 						const float divv = sph_particles_divv(j);
-						const float dloghdt = (1.f/3.f)*divv;
+						const float dloghdt = (1.f/3.f)*divv/scale;
 						const float c0 = exp(dloghdt*dt);
 						h *= c0;
 					}

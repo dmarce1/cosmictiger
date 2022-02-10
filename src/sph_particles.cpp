@@ -292,7 +292,7 @@ void sph_particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 }
 
-void sph_particles_resize(part_int sz) {
+void sph_particles_resize(part_int sz, bool parts2) {
 	const bool chem = get_options().chem;
 	const bool stars = get_options().stars;
 	if (sz > capacity) {
@@ -327,7 +327,9 @@ void sph_particles_resize(part_int sz) {
 	}
 	part_int new_parts = sz - size;
 	part_int offset = particles_size();
-	particles_resize(particles_size() + new_parts);
+	if( parts2) {
+		particles_resize(particles_size() + new_parts);
+	}
 	int oldsz = size;
 	size = sz;
 	for (int i = 0; i < new_parts; i++) {

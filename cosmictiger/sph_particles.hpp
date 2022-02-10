@@ -73,7 +73,7 @@ inline part_int& sph_particles_test(int index) {
 #endif
 
 part_int sph_particles_size();
-void sph_particles_resize(part_int sz);
+void sph_particles_resize(part_int sz, bool parts2 = true);
 void sph_particles_free();
 void sph_particles_cache_free();
 void sph_particles_resolve_with_particles();

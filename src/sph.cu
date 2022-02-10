@@ -1001,7 +1001,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						}
 					}
 				}
-				float vsig_max = 0.f;
+				float vsig_max1 = 0.f;
+				float vsig_max2 = 0.f;
 				float dvx_dx = 0.0f;
 				float dvx_dy = 0.0f;
 				float dvx_dz = 0.0f;
@@ -1043,9 +1044,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float dvy = myvy - ws.vy[j];
 					const float dvz = myvz - ws.vz[j];
 					const float rinv = 1.f / (r + 1e-15f);
-					const float dv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
-					const float this_vsig = myc + c - 3.f * dv;
-					vsig_max = fmaxf(vsig_max, this_vsig);
+					const float ndv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
+					const float this_vsig1 = myc + c;
+					const float this_vsig2 = (myc + c - ndv) * 2. * myh / (myh + r);
+					vsig_max1 = fmaxf(vsig_max1, this_vsig1);
+					vsig_max2 = fmaxf(vsig_max2, this_vsig2);
 					const float q = r * myhinv;
 					const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;
 					const float tmp = m * dWdr * rhoinv;
@@ -1082,8 +1085,13 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max);
+				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max1);
+				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max2);
+
 				if (tid == 0) {
+					const float dt_cfl = 2.f * myh / vsig_max1;
+					const float dt_sig = 2.f * myh / vsig_max2;
+					const float dt_dens = 3.f * params.a / (fabsf(div_v) + 1e-30);
 					const float sw = 1e-4f * myc / myh;
 					const float abs_div_v = fabsf(div_v);
 					const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
@@ -1092,13 +1100,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float fpre = 1.0f / (1.0f + c0);
 					data.fvel_snk[snki] = fvel;
 					data.f0_snk[snki] = fpre;
-					total_vsig_max = fmaxf(total_vsig_max, vsig_max);
-					float dthydro = vsig_max / (params.a * myh);
-					if (dthydro > 1.0e-99) {
-						dthydro = SPH_CFL / dthydro;
-					} else {
-						dthydro = 1.0e99;
-					}
+					total_vsig_max = fmaxf(total_vsig_max, vsig_max2);
+					float dthydro = SPH_CFL * fminf(dt_cfl, fminf(dt_sig, dt_dens));
 					const float gx = data.gx_snk[snki];
 					const float gy = data.gy_snk[snki];
 					const float gz = data.gz_snk[snki];
@@ -1142,9 +1145,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						if (is_eligible) {
 							float dt = rung_dt[rung] * params.t0;
 							data.time_to_star_snk[snki] -= dt / tdyn;
-				//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
+							//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
 							if (data.time_to_star_snk[snki] < 0.0f) {
-					//			PRINT("MAKING STAR!\n");
+								//			PRINT("MAKING STAR!\n");
 							}
 						} else {
 							data.time_to_star_snk[snki] = 1.f;
