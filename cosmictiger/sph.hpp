@@ -172,6 +172,7 @@ struct sph_run_params {
 	int min_rung;
 	float t0;
 	float a;
+	float cfl;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & phase;
@@ -180,6 +181,7 @@ struct sph_run_params {
 		arc & min_rung;
 		arc & t0;
 		arc & a;
+		arc & cfl;
 	}
 };
 

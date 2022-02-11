@@ -1331,6 +1331,7 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
+	params.cfl = get_options().cfl;
 	if (get_options().cuda == false) {
 		cuda = false;
 	}
