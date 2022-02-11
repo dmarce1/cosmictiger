@@ -314,7 +314,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 								hinv = 1.0f / h;
 								h3inv = hinv * sqr(hinv);
 							}
-							const float q = sqrt(r2) * hinv;
+							const float q = fminf(sqrt(r2) * hinv, 1.f);
 							r3inv = kernelFqinv(q) * h3inv;
 							if (do_phi) {
 								r1inv = kernelPot(q) * hinv;
