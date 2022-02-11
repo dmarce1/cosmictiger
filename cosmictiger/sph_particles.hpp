@@ -65,6 +65,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
 SPH_PARTICLES_EXTERN float* sph_particles_f0;
 SPH_PARTICLES_EXTERN float* sph_particles_ts;
+SPH_PARTICLES_EXTERN float* sph_particles_m;
 #ifdef CHECK_MUTUAL_SORT
 SPH_PARTICLES_EXTERN part_int* sph_particles_tst;
 inline part_int& sph_particles_test(int index) {
@@ -95,6 +96,10 @@ inline float& sph_particles_tdyn(part_int index) {
 	return sph_particles_ts[index];
 }
 
+inline float& sph_particles_mass(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_m[index];
+}
 inline float& sph_particles_Hp(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_HP][index];

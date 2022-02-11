@@ -99,8 +99,6 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 	constexpr int chunk_size = 32;
 	const static bool do_sph = get_options().sph;
 	size_t flops = 0;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -119,23 +117,23 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
-			vector<char> sph;
+			vector<float> mass;
 			vector<float> masks;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masks.resize(nsource);
 			if (do_sph) {
-				sph.resize(nsource);
+				mass.resize(nsource);
 			}
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, sph.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, do_sph ? mass.data() : nullptr, count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
-					masks[i] = sph[i] ? sph_mass : dm_mass;
+					masks[i] = mass[i];
 					;
 				}
 			} else {
@@ -267,8 +265,6 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 	size_t far_count = 0;
 	const static bool do_sph = get_options().sph;
 	const static bool vsoft = do_sph && get_options().vsoft;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		simd_float h = hfloat;
@@ -292,14 +288,14 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
 			vector<float> hsoft;
-			vector<char> sph;
+			vector<float> mass;
 			vector<float> masks;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masks.resize(nsource);
 			if (do_sph) {
-				sph.resize(nsource);
+				mass.resize(nsource);
 				if (vsoft) {
 					hsoft.resize(nsource);
 				}
@@ -307,13 +303,12 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
 				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), hsoft.size() ? hsoft.data() : nullptr,
-						sph.data(), count);
+						do_sph ? mass.data() : nullptr, count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
-					masks[i] = sph[i] ? sph_mass : dm_mass;
-					;
+					masks[i] = mass[i];
 				}
 			} else {
 				for (int i = 0; i < count; i++) {
@@ -335,7 +330,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 					if (vsoft) {
 						const static float dm_hsoft = get_options().hsoft;
 						const int type = particles_type(i);
-						if( type == SPH_TYPE) {
+						if (type == SPH_TYPE) {
 							sink_hsoft = sph_particles_smooth_len(particles_cat_index(i));
 						} else {
 							sink_hsoft = dm_hsoft;
@@ -389,7 +384,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 								const simd_float q = min(r * hinv, simd_float(1));                                             // 1
 								const simd_float rinv3_near = kernelFqinv(q) * hinv3;
 								simd_float rinv1_near;
-								if( min_rung == 0 ) {
+								if (min_rung == 0) {
 									rinv1_near = kernelPot(q) * hinv;
 								}
 								const auto near_flag = (simd_float(1) - far_flag);                                // 1

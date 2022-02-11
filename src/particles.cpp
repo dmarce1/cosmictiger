@@ -40,16 +40,13 @@ void particles_group_cache_free();
 
 struct particles_cache_entry {
 	array<fixed32, NDIM> x;
-	char sph;
+	float mass;
 	float hsoft;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		static const bool do_sph = get_options().sph;
-		static const bool vsoft = sph && get_options().vsoft;
 		if (do_sph) {
-			arc & sph;
-		}
-		if (vsoft) {
+			arc & mass;
 			arc & hsoft;
 		}
 		arc & x;
@@ -485,8 +482,9 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, char* sph_part, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* mass, part_int offset) {
 	static const bool sph = get_options().sph;
+	static const float dm_mass = get_options().dm_mass;
 	static const bool vsoft = sph && get_options().vsoft;
 	static const float dm_hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;
@@ -502,12 +500,24 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					const int j = offset + i - range.range.first;
 					const int k = particles_cat_index(i);
 					int type = particles_type(i);
-					sph_part[j] = char(type != DARK_MATTER_TYPE);
 					if (hsoft) {
 						if (type != SPH_TYPE) {
 							hsoft[j] = dm_hsoft;
 						} else {
-							hsoft[j] = std::max(dm_hsoft,std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
+							hsoft[j] = std::max(dm_hsoft, std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
+						}
+					}
+					if (mass) {
+						switch (type) {
+						case DARK_MATTER_TYPE:
+							mass[j] = dm_mass;
+							break;
+						case SPH_TYPE:
+							mass[j] = sph_particles_mass(k);
+							break;
+						case STAR_TYPE:
+							mass[j] = stars_mass(k);
+							break;
 						}
 					}
 				}
@@ -529,7 +539,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					y[dest_index] = ptr[src_index].x[YDIM];
 					z[dest_index] = ptr[src_index].x[ZDIM];
 					if (sph) {
-						sph_part[dest_index] = ptr[src_index].sph;
+						mass[dest_index] = ptr[src_index].mass;
 						if (vsoft) {
 							hsoft[dest_index] = ptr[src_index].hsoft;
 						}
@@ -567,6 +577,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 	static const bool sph = get_options().sph;
 	static const float hsoft = get_options().hsoft;
 	static const bool vsoft = sph && get_options().sph;
+	static const float dm_mass = get_options().dm_mass;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
@@ -578,13 +589,24 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 		}
 		if (sph) {
 			int type = particles_type(i);
-			ln.sph = type != DARK_MATTER_TYPE;
+			const int k = particles_cat_index(i);
 			if (vsoft) {
 				if (type != SPH_TYPE) {
 					ln.hsoft = hsoft;
 				} else {
-					ln.hsoft = std::max(hsoft, std::min(SPH_MAX_SOFT, sph_particles_smooth_len(particles_cat_index(i))));
+					ln.hsoft = std::max(hsoft, std::min(SPH_MAX_SOFT, sph_particles_smooth_len(k)));
 				}
+			}
+			switch (type) {
+			case DARK_MATTER_TYPE:
+				ln.mass = dm_mass;
+				break;
+			case SPH_TYPE:
+				ln.mass = sph_particles_mass(k);
+				break;
+			case STAR_TYPE:
+				ln.mass = stars_mass(k);
+				break;
 			}
 		}
 	}

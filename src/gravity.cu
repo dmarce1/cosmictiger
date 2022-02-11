@@ -61,21 +61,20 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, float dm_mass,
-		float sph_mass, bool do_phi) {
+int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, bool do_phi) {
 	int flops = 0;
 	__shared__
 	extern int shmem_ptr[];
+	const bool sph = data.src_mass != nullptr;
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	const bool sph = data.sph;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	const auto* main_src_sph = data.sph;
+	const auto* main_src_mass = data.src_mass;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-	auto& src_sph = shmem.src.sph;
+	auto& src_mass = shmem.src.mass;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -111,7 +110,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 					if (sph) {
-						src_sph[i1] = main_src_sph[i2];
+						src_mass[i1] = main_src_mass[i2];
 					}
 				}
 				__syncwarp();
@@ -130,7 +129,10 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-				const float mass = sph && src_sph[j] ? sph_mass : dm_mass;
+				float mass = 1.f;
+				if (data.src_mass) {
+					mass = src_mass[j];
+				}
 				flops += 3;
 				expansion<float> D;
 				flops += greens_function(D, dx);
@@ -201,9 +203,9 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 }
 
 __device__
-int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive, float h, float dm_mass,
-		float sph_mass, bool do_phi) {
+int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive, float h, bool do_phi) {
 	const int &tid = threadIdx.x;
+	const bool sph = data.src_mass != nullptr;
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -211,7 +213,6 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	auto &gy = shmem.gy;
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
-	const bool sph = data.sph;
 	const bool vsoft = sph && data.vsoft;
 	auto& src_hsoft = shmem.src.hsoft;
 	const auto& sink_hsoft = shmem.sink_hsoft;
@@ -221,12 +222,12 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	const auto* main_src_sph = data.sph;
+	const auto* main_src_mass = data.src_mass;
 	const auto* main_src_hsoft = data.hsoft;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-	auto& src_sph = shmem.src.sph;
+	auto& src_mass = shmem.src.mass;
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
 	float hinv = 1.f / (h);
@@ -263,7 +264,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 					if (sph) {
-						src_sph[i1] = main_src_sph[i2];
+						src_mass[i1] = main_src_mass[i2];
 						if (vsoft) {
 							src_hsoft[i1] = main_src_hsoft[i2];
 						}
@@ -299,7 +300,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						dx0 = distance(sink_x[k], src_x[j]); // 1
 						dx1 = distance(sink_y[k], src_y[j]); // 1
 						dx2 = distance(sink_z[k], src_z[j]); // 1
-						const float mass = src_sph[j] ? sph_mass : dm_mass;
+						const float mass = src_mass[j];
 						const auto r2 = sqr(dx0, dx1, dx2);  // 5
 						if (vsoft) {
 							h = max(sink_hsoft[k], src_hsoft[j]);

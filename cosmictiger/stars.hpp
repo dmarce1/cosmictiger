@@ -23,12 +23,14 @@
 struct star_particle {
 	float energy;
 	float zform;
+	float mass;
 	int dm_index;
 };
 
 star_particle& stars_get(part_int index);
 
 part_int stars_size();
+float stars_mass(part_int index);
 void stars_find(float a, float dt);
 void stars_save(FILE* fp);
 void stars_load(FILE* fp);

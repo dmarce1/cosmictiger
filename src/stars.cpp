@@ -43,6 +43,10 @@ part_int stars_size() {
 	return stars.size();
 }
 
+float stars_mass(part_int index) {
+	return stars[index].mass;
+}
+
 void stars_load(FILE* fp) {
 	size_t size;
 	FREAD(&size, sizeof(size_t), 1, fp);
@@ -78,6 +82,7 @@ void stars_find(float a, float dt) {
 					star.energy = sph_particles_energy(i);
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
+					star.mass = sph_particles_mass(i);
 					const int dmi = star.dm_index;
 					found++;
 					particles_type(dmi) = STAR_TYPE;

@@ -246,6 +246,7 @@ float sph_particles_temperature(part_int i, float a) {
 void sph_particles_swap(part_int i, part_int j) {
 	const bool chem = get_options().chem;
 	const bool stars = get_options().stars;
+	std::swap(sph_particles_m[i], sph_particles_m[j]);
 	std::swap(sph_particles_e[i], sph_particles_e[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
 	std::swap(sph_particles_fv[i], sph_particles_fv[j]);
@@ -341,6 +342,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_fv, new_capacity, true);
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
+		sph_particles_array_resize(sph_particles_m, new_capacity, true);
 #ifdef CHECK_MUTUAL_SORT
 		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
 #endif
@@ -375,6 +377,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_dent(oldsz + i) = 0.0f;
 		if (stars) {
 			sph_particles_tdyn(i) = 1e38f;
+			sph_particles_mass(i) = get_options().omega_b / get_options().omega_m;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
@@ -401,6 +404,7 @@ void sph_particles_free() {
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
 		CUDA_CHECK(cudaFree(sph_particles_f0));
+		CUDA_CHECK(cudaFree(sph_particles_m));
 		if( stars ) {
 			CUDA_CHECK(cudaFree(sph_particles_ts));
 		}
@@ -420,6 +424,7 @@ void sph_particles_free() {
 		free(sph_particles_e);
 		free(sph_particles_de);
 		free(sph_particles_dvv);
+		free(sph_particles_m);
 		free(sph_particles_sa);
 		free(sph_particles_f0);
 		free(sph_particles_fv);
