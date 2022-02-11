@@ -649,7 +649,7 @@ void driver() {
 			PRINT("Drift\n");
 			dr = drift(a2, dt, tau, tau + dt, tau_max);
 			if (stars) {
-				stars_find(a);
+				stars_find(a, dt);
 			}
 			if (get_options().do_lc) {
 				check_lc(false);

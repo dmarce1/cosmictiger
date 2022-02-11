@@ -374,7 +374,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 #endif
 		sph_particles_dent(oldsz + i) = 0.0f;
 		if (stars) {
-			sph_particles_time_to_star(i) = 1.f;
+			sph_particles_tdyn(i) = 1e38f;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
@@ -851,6 +851,9 @@ void sph_particles_load(FILE* fp) {
 	}
 	if (stars) {
 		FREAD(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
+		for( part_int i = 0; i < sph_particles_size(); i++) {
+			sph_particles_tdyn(i) = 1e38;
+		}
 		stars_load(fp);
 	}
 }

@@ -24,8 +24,8 @@
 vector<star_particle> stars;
 
 star_particle& stars_get(part_int index) {
-	if( index > stars.size() ) {
-		PRINT( "Attempt to read %i star with only %i\n", index, stars.size());
+	if (index > stars.size()) {
+		PRINT("Attempt to read %i star with only %i\n", index, stars.size());
 		abort();
 	}
 	return stars[index];
@@ -50,23 +50,30 @@ void stars_load(FILE* fp) {
 	FREAD(stars.data(), sizeof(star_particle), size, fp);
 }
 
-void stars_find(float a) {
+void stars_find(float a, float dt) {
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<stars_find_action>(c, a));
+		futs.push_back(hpx::async<stars_find_action>(c, a, dt));
 	}
 	mutex_type mutex;
 	std::atomic<int> found(0);
 	vector<part_int> indices;
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices]() {
+		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
-				if( sph_particles_time_to_star(i) < 0.0 ) {
+				float tdyn = sph_particles_tdyn(i);
+				bool make_star = false;
+				if( tdyn < 1e38 ) {
+					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
+					make_star = rand1() < p;
+				}
+				if( make_star ) {
+					sph_particles_tdyn(i) = 0.0;
 					star_particle star;
 					star.energy = sph_particles_energy(i);
 					star.zform = 1.f / a - 1.f;
@@ -84,7 +91,7 @@ void stars_find(float a) {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	for (auto& i : indices) {
-		while (sph_particles_time_to_star(sph_particles_size() - 1) < 0.f && sph_particles_size()) {
+		while (sph_particles_tdyn(sph_particles_size() - 1) == 0.f && sph_particles_size()) {
 			sph_particles_resize(sph_particles_size() - 1);
 		}
 		if (i < sph_particles_size()) {
@@ -93,22 +100,22 @@ void stars_find(float a) {
 				const int dmk = sph_particles_dm_index(k);
 				sph_particles_swap(i, k);
 				particles_cat_index(dmk) = i;
-				if( particles_type(dmk) == STAR_TYPE) {
-					PRINT( "Error %s %i\n", __FILE__, __LINE__);
+				if (particles_type(dmk) == STAR_TYPE) {
+					PRINT("Error %s %i\n", __FILE__, __LINE__);
 					abort();
 				}
 			}
 			sph_particles_resize(k, false);
 		}
 	}
-/*	for( part_int i = 0; i < particles_size(); i++) {
-		if( particles_type(i) == STAR_TYPE) {
-			if( particles_cat_index(i) >= stars.size()) {
-				PRINT( "Error %s %i\n", __FILE__, __LINE__);
-				abort();
-			}
-		}
-	}*/
+	/*	for( part_int i = 0; i < particles_size(); i++) {
+	 if( particles_type(i) == STAR_TYPE) {
+	 if( particles_cat_index(i) >= stars.size()) {
+	 PRINT( "Error %s %i\n", __FILE__, __LINE__);
+	 abort();
+	 }
+	 }
+	 }*/
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars found for a total of %i\n", (int ) found, stars.size());
 }

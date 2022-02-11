@@ -1723,7 +1723,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.fvel_snk = &sph_particles_fvel(0);
 	cuda_data.f0_snk = &sph_particles_fpre(0);
-	cuda_data.time_to_star_snk = &sph_particles_time_to_star(0);
+	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
 	cuda_data.ent_snk = &sph_particles_ent(0);
 	cuda_data.G = get_options().GM;
 	cuda_data.rho0_c = get_options().rho0_c;

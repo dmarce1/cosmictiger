@@ -90,7 +90,7 @@ void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
 
-inline float& sph_particles_time_to_star(part_int index) {
+inline float& sph_particles_tdyn(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_ts[index];
 }

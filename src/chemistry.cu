@@ -482,9 +482,10 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			flops += 7;
 		}
 		Tmid = sqrtf(Tmax * Tmin);																							// 5
-		test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, true);
 		float dedt0;
-		test_temperature(N0, N, T0, T0, 0.0, z, flops, &dedt0, false);
+		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
+		test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, true);
+		dedt = 0.5f * dedt + 0.5f * dedt0;
 		float T = Tmid;
 		n0 = (double) N.H + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp + (double) N.Hp + (double) N.Hn;
 		n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;											// 8
@@ -508,7 +509,6 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		attr.Hepp = N.Hepp;
 		attr.Hn = N.Hn;
 		attr.Hp = N.Hp;
-		dedt = 0.5f * (dedt + dedt0);
 		if (dedt < 0.0) {
 			attr.tcool = -energy / dedt / params.a / params.code_to_s;
 		} else {

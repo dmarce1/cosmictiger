@@ -50,7 +50,7 @@ struct sph_run_cuda_data {
 	char* rungs;
 	float* h_snk;
 	float* tcool_snk;
-	float* time_to_star_snk;
+	float* tdyn_snk;
 	float* ent_snk;
 	float* dent_snk;
 	float* dvx_snk;

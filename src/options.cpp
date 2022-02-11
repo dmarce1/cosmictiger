@@ -159,7 +159,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
 	opts.hsoft = 1.0 / 30.0 / opts.parts_dim;
-	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble * 0.5;
+	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.omega_m = opts.omega_b + opts.omega_c;
