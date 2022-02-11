@@ -82,7 +82,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				float mass = 1.0f;
 				if( sph ) {
 					type = particles_type(i);
-					if( type != SPH_TYPE) {
+					if( type == DARK_MATTER_TYPE) {
 						mass = dm_mass;
 					} else {
 						mass = sph_mass;
