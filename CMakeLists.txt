@@ -191,7 +191,7 @@ add_hpx_executable(
 #if( COSMICTIGER_WITH_CUDA )
 #	target_link_libraries(cosmictiger_lite PUBLIC cudart)
 #	target_compile_options(cosmictiger_lite PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-#                       --use_fast_math  --maxrregcount=160 -G;
+#                       --use_fast_math  --maxrregcount=160;
 #                        >)
 #	target_compile_options(cosmictiger_lite PRIVATE -DUSE_CUDA )
 #	set_property(TARGET cosmictiger_lite PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})

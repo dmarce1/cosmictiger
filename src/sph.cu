@@ -237,7 +237,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dfdh);
 					dh = 0.1f * h;
 					if (count > 1) {
-						//			PRINT( "%e %i\n", f / float(3.0 / (4.0 * M_PI)), count);
 						f -= data.N * float(3.0 / (4.0 * M_PI));
 						dh = -f / dfdh;
 						if (dh > 0.5f * h) {
@@ -245,18 +244,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						} else if (dh < -0.5f * h) {
 							dh = -0.5f * h;
 						}
-						error = fabsf(logf(h + dh) - logf(h));
-						if (tid == 0) {
-							h += dh;
-						}
-					} else {
-						if (count == 0) {
-							PRINT("Can't find self\n");
-						}
-						if (tid == 0) {
-							h *= 1.1;
-						}
-						error = 1.0;
+					}
+					error = fabsf(logf(h + dh) - logf(h));
+					__syncthreads();
+					if (tid == 0) {
+						h += dh;
 					}
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
