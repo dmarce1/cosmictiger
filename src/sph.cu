@@ -235,30 +235,28 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(f);
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(count);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dfdh);
-					if (tid == 0) {
-						dh = 0.1f * h;
-						if (count > 1) {
-							//			PRINT( "%e %i\n", f / float(3.0 / (4.0 * M_PI)), count);
-							f -= data.N * float(3.0 / (4.0 * M_PI));
-							dh = -f / dfdh;
-							if (dh > 0.5f * h) {
-								dh = 0.5f * h;
-							} else if (dh < -0.5f * h) {
-								dh = -0.5f * h;
-							}
-							error = fabsf(logf(h + dh) - logf(h));
-							if (tid == 0) {
-								h += dh;
-							}
-						} else {
-							if (count == 0) {
-								PRINT("Can't find self\n");
-							}
-							if (tid == 0) {
-								h *= 1.1;
-							}
-							error = 1.0;
+					dh = 0.1f * h;
+					if (count > 1) {
+						//			PRINT( "%e %i\n", f / float(3.0 / (4.0 * M_PI)), count);
+						f -= data.N * float(3.0 / (4.0 * M_PI));
+						dh = -f / dfdh;
+						if (dh > 0.5f * h) {
+							dh = 0.5f * h;
+						} else if (dh < -0.5f * h) {
+							dh = -0.5f * h;
 						}
+						error = fabsf(logf(h + dh) - logf(h));
+						if (tid == 0) {
+							h += dh;
+						}
+					} else {
+						if (count == 0) {
+							PRINT("Can't find self\n");
+						}
+						if (tid == 0) {
+							h *= 1.1;
+						}
+						error = 1.0;
 					}
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
@@ -1105,7 +1103,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						if (rung_hydro >= 10) {
-					//		PRINT("%e %e %e %e %e %e %e \n", dt_cfl, dt_sig, dt_dens, vsig_max1, vsig_max2, div_v * myh, myh);
+							//		PRINT("%e %e %e %e %e %e %e \n", dt_cfl, dt_sig, dt_dens, vsig_max1, vsig_max2, div_v * myh, myh);
 							//		__trap();
 						}
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
@@ -1146,8 +1144,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 								data.tdyn_snk[snki] = tdyn;
 								//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
 //								if (data.time_to_star_snk[snki] < 0.0f) {
-									//			PRINT("MAKING STAR!\n");
-	//							}
+								//			PRINT("MAKING STAR!\n");
+								//							}
 							} else {
 								data.tdyn_snk[snki] = 1e+38;
 							}
