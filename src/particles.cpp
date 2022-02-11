@@ -507,7 +507,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 						if (type != SPH_TYPE) {
 							hsoft[j] = dm_hsoft;
 						} else {
-							hsoft[j] = std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
+							hsoft[j] = std::max(dm_hsoft,std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
 						}
 					}
 				}
@@ -565,7 +565,7 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 
 static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) {
 	static const bool sph = get_options().sph;
-	static const bool hsoft = get_options().hsoft;
+	static const float hsoft = get_options().hsoft;
 	static const bool vsoft = sph && get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);
@@ -583,7 +583,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 				if (type != SPH_TYPE) {
 					ln.hsoft = hsoft;
 				} else {
-					ln.hsoft = type != SPH_TYPE ? hsoft : std::min(SPH_MAX_SOFT, sph_particles_smooth_len(particles_cat_index(i)));
+					ln.hsoft = std::max(hsoft, std::min(SPH_MAX_SOFT, sph_particles_smooth_len(particles_cat_index(i))));
 				}
 			}
 		}
@@ -887,15 +887,15 @@ void particles_load(FILE* fp) {
 	FREAD(&size, sizeof(part_int), 1, fp);
 	FREAD(&sph_size, sizeof(part_int), 1, fp);
 	FREAD(&stars_size0, sizeof(part_int), 1, fp);
-	PRINT( "Reading %i total particles %i stars %i sph\n", size, stars_size0, sph_size);
+	PRINT("Reading %i total particles %i stars %i sph\n", size, stars_size0, sph_size);
 	particles_resize(size - sph_size - stars_size0);
-	PRINT( "particles_size  = %i\n", particles_size());
+	PRINT("particles_size  = %i\n", particles_size());
 	if (sph_size) {
 		sph_particles_resize(sph_size);
-		PRINT( "particles_size  = %i\n", particles_size());
+		PRINT("particles_size  = %i\n", particles_size());
 	}
 	particles_resize(particles_size() + stars_size0);
-	PRINT( "particles_size  = %i\n", particles_size());
+	PRINT("particles_size  = %i\n", particles_size());
 	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);

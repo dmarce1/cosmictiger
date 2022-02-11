@@ -43,6 +43,7 @@ struct dm_part_info {
 	float vx;
 	float vy;
 	float vz;
+	int rung;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & x;
@@ -51,6 +52,7 @@ struct dm_part_info {
 		arc & vx;
 		arc & vy;
 		arc & vz;
+		arc & rung;
 	}
 
 };
@@ -134,6 +136,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vx = particles_vel(XDIM,i);
 								info.vy = particles_vel(YDIM,i);
 								info.vz = particles_vel(ZDIM,i);
+								info.rung = particles_rung(i);
 								rc.dm[j].push_back(info);
 								break;
 							}
@@ -148,6 +151,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vz = particles_vel(ZDIM,i);
 								info.ent = sph_particles_ent(l);
 								info.h = sph_particles_smooth_len(l);
+								info.rung = particles_rung(i);
 								if( chem ) {
 									info.Hp = sph_particles_Hp(l);
 									info.Hn = sph_particles_Hn(l);
@@ -166,6 +170,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vx = particles_vel(XDIM,i);
 								info.vy = particles_vel(YDIM,i);
 								info.vz = particles_vel(ZDIM,i);
+								info.rung = particles_rung(i);
 								rc.star[j].push_back(info);
 								break;
 							}
@@ -225,6 +230,11 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "dm_vx", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "dm_vy", "dark_matter", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "dm_vz", "dark_matter", z.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			for (int i = 0; i < parts.dm[bi].size(); i++) {
+				x.push_back(parts.dm[bi][i].rung);
+			}
+			DBPutPointvar1(db, "dm_rung", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
 		}
 		if (parts.hydro[bi].size()) {
 			x.resize(0);
@@ -248,6 +258,11 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].rung);
+			}
+			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			y.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
@@ -327,6 +342,11 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].rung);
+			}
+			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, NULL);
 		}
 		DBClose(db);
 	}

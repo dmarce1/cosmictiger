@@ -700,19 +700,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dvz = myvz - ws.vz[j];
 					const float r = sqrtf(r2);
 					const float rinv = 1.0f / (r + float(1.0e-15));
-//					const float wij = fminf(0.f, (dvx * dx + dvy * dy + dvz * dz) * rinv);
-//					const float vsigij = 2.f * cij - 3.f * wij;
-//					const float Piij = -.5f * SPH_ALPHA * vsigij * wij / rho_ij * 0.5f * (myfvel + ws.fvel[j]);
-						const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));
-						const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-						const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
+					const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));
+					const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
+					const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + ws.fvel[j]) / rho_ij;
 					const float qi = r * myhinv;
 					const float qj = r * hinv;
 					const float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv * rinv;
 					const float dWdrj = (r < h) * dkernelW_dq(qj) * hinv * h3inv * rinv;
-//					const float divWi = sph_divW(r, myhinv, myh3inv);
-//					const float divWj = sph_divW(r, hinv, h3inv);
-//					const float divWij = 0.5f * (divWj + divWi);
 					const float dWdri_x = dx * dWdri;
 					const float dWdri_y = dy * dWdri;
 					const float dWdri_z = dz * dWdri;
@@ -740,10 +734,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 						dt = rung_dt[myrung] * (params.t0);
 					}
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
-					/*			if (dAdt < 0.f) {
-					 PRINT("Negative DATDt %e %e  %e %e %e %e %e %e %e %e\n", r/h, r/myh, (dviscx * dvx + dviscy * dvy + dviscz * dvz), dviscx * dvx, dviscy * dvy, dviscz * dvz,  (dvx * dx + dvy * dy + dvz * dz),  dvx * dx ,dvy * dy, dvz * dz);
-					 __trap();
-					 }*/
 					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv;
 					dent += dAdt * dt;
 					ddvx += dvxdt * dt;
@@ -761,11 +751,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					data.dvy_snk[snki] += ddvy;
 					data.dvz_snk[snki] += ddvz;
 					if (params.phase == 1 && !semi_active) {
-						//	float dt = 0.5f * rung_dt[myrung] * (params.t0);
-						//	PRINT( "%e %e\n",  divv, dt * ddivdt);
 						data.divv_snk[snki] = divv;					// + dt * ddivdt;
 					}
-//					PRINT( "%e %e %e %e %e\n", dent, ddvx, ddvy, ddvy, ddvz, divv);
 				}
 			}
 		}
@@ -1048,7 +1035,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dvy = myvy - ws.vy[j];
 						const float dvz = myvz - ws.vz[j];
 						const float rinv = 1.f / (r + 1e-15f);
-						const float ndv = min(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
+						const float ndv = fminf(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
 						const float this_vsig1 = myc + c;
 						const float this_vsig2 = (myc + c - ndv) * 2. * myh / (myh + r);
 						vsig_max1 = fmaxf(vsig_max1, this_vsig1);
@@ -1112,13 +1099,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float gz = data.gz_snk[snki];
 						char& rung = data.rungs[i];
 						const float g2 = sqr(gx, gy, gz);
-						const float factor = data.eta * sqrtf(params.a * myh);
+						const float hsoft = fminf(fmaxf(myh, data.hsoft_min), SPH_MAX_SOFT);
+						const float factor = data.eta * sqrtf(params.a * hsoft);
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						if (rung_hydro >= 10) {
-							PRINT("%e %e %e %e %e %e %e \n", dt_cfl, dt_sig, dt_dens, vsig_max1, vsig_max2, div_v*myh, myh);
-					//		__trap();
+					//		PRINT("%e %e %e %e %e %e %e \n", dt_cfl, dt_sig, dt_dens, vsig_max1, vsig_max2, div_v * myh, myh);
+							//		__trap();
 						}
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
@@ -1130,6 +1118,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						}
 						if (stars) {
 							bool is_eligible = false;
+							const float N = ws.x.size();
 							float tdyn;
 							float mj;
 							float tcool;
@@ -1145,7 +1134,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 									tcool = data.tcool_snk[snki];
 									if (tcool < tdyn) {
 										mj = Gn32 * rsqrt(myrho) * sqr(myc) * myc * powf(delta_b / delta, 1.5f) * powf(params.a, -1.5f);
-										if (mj < m) {
+										const float msph = N * m;
+										if (mj < msph) {
 											is_eligible = true;
 										}
 									}

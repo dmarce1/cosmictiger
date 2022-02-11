@@ -1733,6 +1733,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.N = get_options().neighbor_number;
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
+	cuda_data.hsoft_min = get_options().hsoft;
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	if (params.run_type == SPH_RUN_COURANT) {
 		CUDA_CHECK(cudaMemcpyAsync(host_rungs.data(), cuda_data.rungs, sizeof(char) * host_rungs.size(), cudaMemcpyDeviceToHost, stream));
