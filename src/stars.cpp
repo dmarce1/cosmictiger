@@ -92,7 +92,7 @@ void stars_find(float a, float dt) {
 	hpx::wait_all(futs2.begin(), futs2.end());
 	for (auto& i : indices) {
 		while (sph_particles_tdyn(sph_particles_size() - 1) == 0.f && sph_particles_size()) {
-			sph_particles_resize(sph_particles_size() - 1);
+			sph_particles_resize(sph_particles_size() - 1, false);
 		}
 		if (i < sph_particles_size()) {
 			const int k = sph_particles_size() - 1;
