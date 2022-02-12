@@ -604,7 +604,7 @@ void driver() {
 			last_theta = theta;
 			PRINT("Kicking\n");
 			if (stars) {
-				stars_find(a, dt, minrung);
+				stars_find(a, dt, minrung, iter);
 			}
 			const bool chem = get_options().chem;
 			if (sph) {

@@ -710,9 +710,6 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				if( rung >= minrung ) {
 					chem_attribs chem;
 					float T = sph_particles_temperature(i,a);
-					if( T > 1e7) {
-						PRINT( "T-------------> %e\n", T);
-					}
 					chem.Hp = sph_particles_Hp(i);
 					chem.Hn = sph_particles_Hn(i);
 					chem.H2 = sph_particles_H2(i);
@@ -728,6 +725,17 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3);
 			//		PRINT( "%e\n", chem.rho);
 					chem.dt = 0.5f * t0 * rung_dt[rung];
+					if( T > 1e7) {
+						PRINT( "T-------------> %e\n", T);
+						if( T > 1e8) {
+							int k = sph_particles_dm_index(i);
+							float vx = particles_vel(XDIM,k);
+							float vy = particles_vel(YDIM,k);
+							float vz = particles_vel(ZDIM,k);
+							PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.K, sph_particles_smooth_len(i), vx, vy, vz);
+							abort();
+						}
+					}
 					chems.push_back(chem);
 				}
 			}

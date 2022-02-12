@@ -361,13 +361,11 @@ void sph_particles_resize(part_int sz, bool parts2) {
 	int oldsz = size;
 	size = sz;
 	for (int i = 0; i < new_parts; i++) {
-		particles_cat_index(offset + i) = oldsz + i;
-		particles_type(offset + i) = SPH_TYPE;
-		sph_particles_dm_index(oldsz + i) = offset + i;
-#ifdef CHECK_MUTUAL_SORT
-		particles_lastgroup(offset + i) = oldsz + i;
-		sph_particles_test(oldsz + i) = oldsz + i;
-#endif
+		if (parts2) {
+			particles_cat_index(offset + i) = oldsz + i;
+			particles_type(offset + i) = SPH_TYPE;
+			sph_particles_dm_index(oldsz + i) = offset + i;
+		}
 		sph_particles_dent(oldsz + i) = 0.0f;
 		if (stars) {
 			sph_particles_tdyn(i) = 1e38f;
@@ -877,7 +875,7 @@ void sph_particles_energy_to_entropy(float a) {
 					const float gamma = 5.0f/3.0f;
 					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
 					sph_particles_ent(i) = K;
-					PRINT( "Restoring star with gas temp = %e\n", sph_particles_temperature(i,a));
+					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
 				}
 			}
 		}));

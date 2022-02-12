@@ -31,7 +31,7 @@ struct star_particle {
 star_particle& stars_get(part_int index);
 
 part_int stars_size();
-void stars_find(float a, float dt, int minrung);
+void stars_find(float a, float dt, int minrung, int step);
 void stars_save(FILE* fp);
 void stars_load(FILE* fp);
 void stars_test_mass();

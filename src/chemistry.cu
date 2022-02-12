@@ -51,7 +51,6 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 	float& Hep = N.Hep;
 	float& Hepp = N.Hepp;
 	float& H2 = N.H2;
-	float& H0 = N.H;
 	float Hp0 = N0.Hp;
 	float Hep0 = N0.Hep;
 	float Hepp0 = N0.Hepp;

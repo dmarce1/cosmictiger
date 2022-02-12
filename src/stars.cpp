@@ -22,9 +22,11 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/constants.hpp>
 
+#include <gsl/gsl_rng.h>
+
 vector<star_particle> stars;
 
-float stars_sample_mass();
+float stars_sample_mass(gsl_rng*);
 float stars_luminosity(float mass);
 float stars_lifetime(float mass);
 
@@ -51,17 +53,27 @@ void stars_load(FILE* fp) {
 	FREAD(stars.data(), sizeof(star_particle), size, fp);
 }
 
-void stars_find(float a, float dt, int minrung) {
+void stars_find(float a, float dt, int minrung, int step) {
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung));
+		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step));
 	}
 	mutex_type mutex;
 	std::atomic<int> found(0);
+	std::atomic<int> remnants(0);
 	vector<part_int> indices;
 	const int nthreads = hpx_hardware_concurrency();
+	static bool first = true;
+	static vector<gsl_rng *> rnd_gens(nthreads);
+	if (first) {
+		first = false;
+		for (int i = 0; i < nthreads; i++) {
+			rnd_gens[i] = gsl_rng_alloc(gsl_rng_taus);
+			gsl_rng_set(rnd_gens[i], step * nthreads + i);
+		}
+	}
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt]() {
 			const float code_to_s = get_options().code_to_s;
@@ -75,14 +87,14 @@ void stars_find(float a, float dt, int minrung) {
 						PRINT( "ERROR %s %i\n", __FILE__, __LINE__);
 					}
 					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
-					make_star = rand1() < p;
+					make_star = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
 				}
 				if( make_star ) {
 					sph_particles_tdyn(i) = 0.0;
 					star_particle star;
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
-					star.stellar_mass = stars_sample_mass();
+					star.stellar_mass = stars_sample_mass(rnd_gens[proc]);
 					star.time_remaining = stars_lifetime(star.stellar_mass) / constants::seconds_to_years / code_to_s;
 					star.remnant = false;
 					const int dmi = star.dm_index;
@@ -96,17 +108,18 @@ void stars_find(float a, float dt, int minrung) {
 			}
 		}));
 	}
+	hpx::wait_all(futs2.begin(), futs2.end());
 	vector<part_int> to_gas_indices;
 	mutex_type to_gas_mutex;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, nthreads, a, dt, &to_gas_mutex, &to_gas_indices, minrung]() {
+		futs2.push_back(hpx::async([proc, nthreads, a, dt, &to_gas_mutex, &to_gas_indices, minrung, &remnants]() {
 			const part_int b = (size_t) proc * stars.size() / nthreads;
 			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				if( stars[i].remnant == false ) {
 					stars[i].time_remaining -= a * dt;
 					if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
-						if( rand1() < 0.4f ) {
+						if( gsl_rng_uniform_pos(rnd_gens[proc]) < 0.4f ) {
 							std::lock_guard<mutex_type> lock(to_gas_mutex);
 							to_gas_indices.push_back(i);
 						} else {
@@ -114,11 +127,14 @@ void stars_find(float a, float dt, int minrung) {
 						}
 					}
 				}
+				if( stars[i].remnant == false ) {
+					remnants++;
+				}
 			}
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
-	PRINT( "Creating stars\n");
+	PRINT("Creating stars\n");
 	for (auto& i : indices) {
 		while (sph_particles_tdyn(sph_particles_size() - 1) == 0.f && sph_particles_size()) {
 			sph_particles_resize(sph_particles_size() - 1, false);
@@ -143,7 +159,7 @@ void stars_find(float a, float dt, int minrung) {
 	static const double code_to_g = get_options().code_to_g;
 	static const double code_to_cm = get_options().code_to_cm;
 	static const double code_to_s = get_options().code_to_s;
-	PRINT( "Restoring gas\n");
+	PRINT("Restoring gas\n");
 	for (auto& i : to_gas_indices) {
 		star_particle star = stars[i];
 		const int j = star.dm_index;
@@ -179,11 +195,12 @@ void stars_find(float a, float dt, int minrung) {
 		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	PRINT("%i stars created and %i stars destroyed for a total of %i\n", (int ) found, to_gas_indices.size(), stars.size());
+	PRINT("%i stars created and %i stars destroyed for a total of %i stars and %i remnants\n", (int ) found, to_gas_indices.size(),
+			stars.size() - (int ) remnants, (int ) remnants);
 }
 
-float stars_sample_mass() {
-	float y = rand1();
+float stars_sample_mass(gsl_rng* rndgen) {
+	float y = gsl_rng_uniform_pos(rndgen);
 	constexpr float m1 = 0.08;
 	constexpr float m2 = 0.5;
 	constexpr float alpha1 = -.7f;
@@ -193,17 +210,17 @@ float stars_sample_mass() {
 	if (y < 0.0360115f) {
 		const float y0 = 0.f;
 		const float y1 = powf(m1, 1.f - alpha1);
-		y = y0 + (y1 - y0) * rand1();
+		y = y0 + (y1 - y0) * gsl_rng_uniform_pos(rndgen);
 		mass = powf(y, 1.0f / (1.f - alpha1));
 	} else if (y < 0.0360115f + 0.227977f) {
 		const float y0 = powf(m1, 1.f - alpha2);
 		const float y1 = powf(m2, 1.f - alpha2);
-		y = y0 + (y1 - y0) * rand1();
+		y = y0 + (y1 - y0) * gsl_rng_uniform_pos(rndgen);
 		mass = powf(y, 1.0f / (1.f - alpha2));
 	} else {
 		const float y0 = 0.f;
 		const float y1 = powf(m2, 1.f - alpha3);
-		y = y0 + (y1 - y0) * rand1();
+		y = y0 + (y1 - y0) * gsl_rng_uniform_pos(rndgen);
 		mass = powf(y, 1.0f / (1.f - alpha3));
 	}
 	if (mass < 0.f) {
@@ -233,30 +250,32 @@ float stars_luminosity(float mass) {
 }
 
 float stars_lifetime(float mass) {
-	const float l = mass / stars_luminosity(mass);
-	return l * 12e9;
+	float l = mass / stars_luminosity(mass);
+	l *= 12e9;
+	PRINT( "Stellar lifetime = %e B yr \n", l/1e9);
+	return l;
 }
 
 void stars_test_mass() {
-	constexpr int N = 200000;
-	vector<float> m;
-	float dm = 0.01;
-	vector<float> cnt(10000, 0.0);
-	for (int i = 0; i < N; i++) {
-		m.push_back(stars_sample_mass());
-		//	PRINT( "%e\n", m[i]);
-		const int j = m[i] / dm;
-		if (j < 10000 && j >= 0) {
-			cnt[j] += 1.0;
-		}
-	}
-	FILE* fp = fopen("mass", "wt");
-	for (int i = 0; i < 10000; i++) {
-		const float m = (i + 0.5) * dm;
-		fprintf(fp, "%e %e %e\n", m, cnt[i], stars_lifetime(m));
-//		printf( "%e %e\n", m, cnt[i]);
-	}
-	fclose(fp);
-
+	/*	constexpr int N = 200000;
+	 vector<float> m;
+	 float dm = 0.01;
+	 vector<float> cnt(10000, 0.0);
+	 for (int i = 0; i < N; i++) {
+	 m.push_back(stars_sample_mass());
+	 //	PRINT( "%e\n", m[i]);
+	 const int j = m[i] / dm;
+	 if (j < 10000 && j >= 0) {
+	 cnt[j] += 1.0;
+	 }
+	 }
+	 FILE* fp = fopen("mass", "wt");
+	 for (int i = 0; i < 10000; i++) {
+	 const float m = (i + 0.5) * dm;
+	 fprintf(fp, "%e %e %e\n", m, cnt[i], stars_lifetime(m));
+	 //		printf( "%e %e\n", m, cnt[i]);
+	 }
+	 fclose(fp);
+	 */
 }
 
