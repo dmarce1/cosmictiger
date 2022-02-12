@@ -105,8 +105,8 @@ void stars_find(float a, float dt, int minrung, int step) {
 					star.time_remaining = stars_lifetime(star.stellar_mass);
 					star.remnant = false;
 					star.remove = false;
-					star.Y = sph_particles_Y(i);
-					star.Z = sph_particles_Z(i);
+					star.Y = sph_particles_formY(i);
+					star.Z = sph_particles_formZ(i);
 					const int dmi = star.dm_index;
 					found++;
 					particles_type(dmi) = STAR_TYPE;
