@@ -166,6 +166,7 @@ void stars_find(float a, float dt, int minrung) {
 		sph_particles_Hepp(k) = Y;
 		sph_particles_smooth_len(k) = h0;
 		sph_particles_tdyn(k) = 1e38;
+		particles_cat_index(j) = k;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel(dim, k) = 0.f;
 		}

@@ -269,8 +269,9 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						__trap();
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
-				if (tid == 0) {
-					//PRINT( "%e\n", logf(h/h0));
+				if (tid == 0 && h <= 0.f) {
+					PRINT( "Less than ZERO H! sph.cu %e\n", h);
+					__trap();
 				}
 				//	if (tid == 0)
 				//	PRINT("%i %e\n", count, data.N);

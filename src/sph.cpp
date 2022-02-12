@@ -1227,7 +1227,13 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 				const float vy = sph_particles_vel(YDIM, i);
 				const float vz = sph_particles_vel(ZDIM, i);
 				const float A = sph_particles_ent(i);
+				if (h <= 0.f) {
+					PRINT( "Less than ZERO H! sph.cpp %e\n", h);
+				}
 				const float rho = sph_den(1.0 / (h * h * h));
+				if( std::isnan(A) || std::isnan(rho)) {
+					PRINT( "ENTY bad! %e %e\n", A, rho);
+				}
 				const float p = A * pow(rho, SPH_GAMMA);
 				const float vol = (4.0 * h * h * h * M_PI / 3.0) / get_options().neighbor_number;
 				rc.momx += vx * m;
