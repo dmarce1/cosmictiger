@@ -25,6 +25,7 @@ struct star_particle {
 	float time_remaining;
 	float stellar_mass;
 	bool remnant;
+	bool remove;
 	int dm_index;
 };
 

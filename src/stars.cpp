@@ -74,6 +74,10 @@ void stars_find(float a, float dt, int minrung, int step) {
 			gsl_rng_set(rnd_gens[i], step * nthreads + i);
 		}
 	}
+	static const double sph_mass = get_options().sph_mass;
+	static const double code_to_g = get_options().code_to_g;
+	static const double code_to_cm = get_options().code_to_cm;
+	static const double code_to_s = get_options().code_to_s;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt]() {
 			const float code_to_s = get_options().code_to_s;
@@ -95,8 +99,9 @@ void stars_find(float a, float dt, int minrung, int step) {
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
 					star.stellar_mass = stars_sample_mass(rnd_gens[proc]);
-					star.time_remaining = stars_lifetime(star.stellar_mass) / constants::seconds_to_years / code_to_s;
+					star.time_remaining = stars_lifetime(star.stellar_mass);
 					star.remnant = false;
+					star.remove = false;
 					const int dmi = star.dm_index;
 					found++;
 					particles_type(dmi) = STAR_TYPE;
@@ -117,21 +122,24 @@ void stars_find(float a, float dt, int minrung, int step) {
 			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				if( stars[i].remnant == false ) {
-					stars[i].time_remaining -= a * dt;
-					if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
-						if( gsl_rng_uniform_pos(rnd_gens[proc]) < 0.4f ) {
-							std::lock_guard<mutex_type> lock(to_gas_mutex);
-							to_gas_indices.push_back(i);
-						} else {
-							stars[i].remnant = true;
-						}
+					float real_dt = a * dt * code_to_s * constants::seconds_to_years;
+					//PRINT( "removing %e years from %e\n", real_dt, stars[i].time_remaining);
+				stars[i].time_remaining -= real_dt;
+				if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
+					if( gsl_rng_uniform_pos(rnd_gens[proc]) < 0.4f ) {
+						std::lock_guard<mutex_type> lock(to_gas_mutex);
+						to_gas_indices.push_back(i);
+						stars[i].remove = true;
+					} else {
+						stars[i].remnant = true;
 					}
 				}
-				if( stars[i].remnant == false ) {
-					remnants++;
-				}
 			}
-		}));
+			if( stars[i].remnant == true ) {
+				remnants++;
+			}
+		}
+	}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	PRINT("Creating stars\n");
@@ -155,10 +163,6 @@ void stars_find(float a, float dt, int minrung, int step) {
 	}
 	const static auto Y = get_options().Y;
 	static const auto h0 = 1.0e-3 / get_options().parts_dim;
-	static const double sph_mass = get_options().sph_mass;
-	static const double code_to_g = get_options().code_to_g;
-	static const double code_to_cm = get_options().code_to_cm;
-	static const double code_to_s = get_options().code_to_s;
 	PRINT("Restoring gas\n");
 	for (auto& i : to_gas_indices) {
 		star_particle star = stars[i];
@@ -167,6 +171,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 		sph_particles_resize(k + 1, false);
 		sph_particles_dm_index(k) = j;
 		particles_type(j) = SPH_TYPE;
+		particles_cat_index(j) = k;
 		const double T = 5000.0;
 		const double N = sph_mass * code_to_g * ((1. - Y) * 2.f + Y * .25f * 3.f) * constants::avo;
 		const double Cv = 1.5 * constants::kb;
@@ -182,15 +187,16 @@ void stars_find(float a, float dt, int minrung, int step) {
 		sph_particles_Hepp(k) = Y;
 		sph_particles_smooth_len(k) = h0;
 		sph_particles_tdyn(k) = 1e38;
-		particles_cat_index(j) = k;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel(dim, k) = 0.f;
 		}
 	}
 	for (auto& i : to_gas_indices) {
-		if (i < stars.size()) {
+		while (i < stars.size() && stars[i].remove) {
 			stars[i] = stars.back();
-			particles_cat_index(stars[i].dm_index) = i;
+			if( !stars[i].remove ) {
+				particles_cat_index(stars[i].dm_index) = i;
+			}
 			stars.pop_back();
 		}
 	}
@@ -252,7 +258,7 @@ float stars_luminosity(float mass) {
 float stars_lifetime(float mass) {
 	float l = mass / stars_luminosity(mass);
 	l *= 12e9;
-	PRINT( "Stellar lifetime = %e B yr \n", l/1e9);
+	//PRINT( "Stellar lifetime = %e B yr \n", l/1e9);
 	return l;
 }
 
