@@ -179,7 +179,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 									info.Hep = sph_particles_Hep(l);
 									info.Hepp = sph_particles_Hepp(l);
 									info.Z = sph_particles_Z(l);
-									info.He = sph_particles_He(l);
+									info.He = sph_particles_He0(l);
 								}
 								rc.hydro[j].push_back(info);
 								break;
@@ -381,8 +381,8 @@ void view_output_views(int cycle, double a) {
 			}
 			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, NULL);
 
-			vector<float> q;
-			vector<char> p;
+			vector<float> p;
+			vector<char> q;
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);

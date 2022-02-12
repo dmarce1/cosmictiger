@@ -208,7 +208,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		if (star.stellar_mass > 10.0f) {
 			const float Hefrac = stars_helium_produced(star.stellar_mass);
 			if (Hefrac > 1.0 - star.Y - star.Z) {
-				PRINT("CANNOT CONVERT MORE THAN A STARS HYDROGEN MASS TO HELIUM!\n");
+				PRINT("CANNOT CONVERT MORE THAN A STARS HYDROGEN MASS TO HELIUM! %e %e %e\n", Hefrac, star.Y, star.Z);
 				abort();
 			}
 			const double Zyield = 0.02;
@@ -218,8 +218,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			}
 			star.Y -= Hefrac - Zyield;
 			star.Z += Zyield;
-			PRINT( "SUPERNOVA\n!\n");
-			sleep(10);
+			PRINT( "***********************************SUPERNOVA************************************\n!\n");
 		}
 		const double T = 5000.0;
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
