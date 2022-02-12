@@ -29,6 +29,8 @@
 #define SPECIE_HEP 5
 #define SPECIE_HEPP 6
 
+#define TMAX 1e9f
+
 struct species_t {
 	union {
 		float n[NSPECIES];

@@ -218,7 +218,22 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			}
 			star.Y -= Hefrac - Zyield;
 			star.Z += Zyield;
-			PRINT( "***********************************SUPERNOVA************************************\n!\n");
+			PRINT("***********************************SUPERNOVA************************************\n!\n");
+			const int k = star.dm_index;
+			float x = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
+			float y = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
+			float z = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
+			const float ninv = 1.f / sqrt(sqr(x, y, z));
+			x *= ninv;
+			y *= ninv;
+			z *= ninv;
+			constexpr float vsup = 5e-3;
+			float& vx = particles_vel(XDIM, k);
+			float& vy = particles_vel(YDIM, k);
+			float& vz = particles_vel(ZDIM, k);
+			vx += vsup * x * a;
+			vy += vsup * y * a;
+			vz += vsup * z * a;
 		}
 		const double T = 5000.0;
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
@@ -282,8 +297,8 @@ float stars_sample_mass(gsl_rng* rndgen) {
 		y = y0 + (y1 - y0) * gsl_rng_uniform_pos(rndgen);
 		mass = powf(y, 1.0f / (1.f - alpha3));
 	}
-	if (mass < 0.f) {
-		PRINT("%e\n", mass);
+	if( mass > 265.f ) {
+		return sample_mass(rndgen);
 	}
 	return mass;
 }

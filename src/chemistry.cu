@@ -117,7 +117,7 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 //	const int tid = threadIdx.x;
 //	auto tm = clock64();
 	T = fmaxf(1e3f, T);							// 1
-	T = fminf(1e8f, T);							// 1
+	T = fminf(TMAX, T);							// 1
 	const float Tev = T / constants::evtoK;					// 4
 	const float Tevinv = 1.f / Tev;					// 4
 	const float lnTev = log(Tev);						// 8
@@ -455,7 +455,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		K *= ((double) code_to_energy_density * pow((double) code_to_density, -(double) gamma));												// 11
 		double energy = (double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0);																			// 9
 		double T0 = energy / (n * cv);
-		double Tmax = 1e8;
+		double Tmax = TMAX;
 		float Tmin = 1e3;
 		N0 = N;
 		double z = 1.0 / (double) params.a - 1.0;																						// 2

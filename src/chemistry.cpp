@@ -577,7 +577,7 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 			};
 
 	float Tmin = 1e3;
-	float Tmax = 1e8;
+	float Tmax = TMAX;
 	float Tmid;
 	for (int i = 0; i < 20; i++) {
 		Tmid = sqrt(Tmax * Tmin);
@@ -726,7 +726,7 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				chem.dt = 0.5f * t0 * rung_dt[rung];
 				if( T > 1e7) {
 					PRINT( "T-------------> %e\n", T);
-					if( T > 1e8) {
+					if( T > TMAX) {
 						int k = sph_particles_dm_index(i);
 						float vx = particles_vel(XDIM,k);
 						float vy = particles_vel(YDIM,k);

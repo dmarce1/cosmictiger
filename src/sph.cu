@@ -1011,6 +1011,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float dgz_dz = 0.f;
 					float Y = 0.f;
 					float Z = 0.f;
+					float one = 0.f;
 					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(myx, ws.x[j]);
 						const float dy = distance(myy, ws.y[j]);
@@ -1050,9 +1051,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_x = dx * tmp;
 						const float dWdr_y = dy * tmp;
 						const float dWdr_z = dz * tmp;
-						const float W = kernelW(q) * myh3inv;
-						Y += m * rhoinv * W * ws.Y[j];
-						Z += m * rhoinv * W * ws.Z[j];
 						dvx_dx -= dvx * dWdr_x;
 						dvx_dy -= dvx * dWdr_y;
 						dvx_dz -= dvx * dWdr_z;
@@ -1067,6 +1065,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							dgx_dx += (ws.gx[j] - mygx) * dWdr_x;
 							dgy_dy += (ws.gy[j] - mygy) * dWdr_y;
 							dgz_dz += (ws.gz[j] - mygz) * dWdr_z;
+							const float W = kernelW(q) * myh3inv;
+							Y += m * rhoinv * W * ws.Y[j];
+							Z += m * rhoinv * W * ws.Z[j];
+							one += m * rhoinv * W;
 						}
 
 					}
@@ -1080,6 +1082,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Y);
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Z);
+						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 					}
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
@@ -1126,6 +1129,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							PRINT("Rung out of range \n");
 						}
 						if (stars) {
+							const float oneinv = 1.f / one;
+							Y *= oneinv;
+							Z *= oneinv;
 							bool is_eligible = false;
 							const float N = ws.x.size();
 							float tdyn;
