@@ -32,3 +32,4 @@ part_int stars_size();
 void stars_find(float a, float dt);
 void stars_save(FILE* fp);
 void stars_load(FILE* fp);
+void stars_test_mass();

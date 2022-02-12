@@ -38,6 +38,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/bh.hpp>
 #include <cosmictiger/hydro.hpp>
 #include <cosmictiger/chemistry.hpp>
+#include <cosmictiger/stars.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
@@ -477,6 +478,8 @@ void test(std::string test) {
 		hydro_helmholtz_test();
 	} else if (test == "bh") {
 		bh_test();
+	} else if (test == "stars") {
+		stars_test_mass();
 	} else if (test == "chemistry") {
 		test_cuda_chemistry_kernel();
 	//	chemistry_test();

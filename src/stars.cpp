@@ -119,3 +119,57 @@ void stars_find(float a, float dt) {
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars found for a total of %i\n", (int ) found, stars.size());
 }
+
+float stars_sample_mass() {
+	float y = rand1();
+	constexpr float m1 = 0.08;
+	constexpr float m2 = 0.5;
+	constexpr float alpha1 = -.7f;
+	constexpr float alpha2 = .3f;
+	constexpr float alpha3 = 1.3f;
+	float mass;
+	if (y < 0.0360115f) {
+		const float y0 = 0.f;
+		const float y1 = powf(m1, 1.f - alpha1);
+		y = y0 + (y1 - y0) * rand1();
+		mass = powf(y, 1.0f / (1.f - alpha1));
+	} else if (y < 0.0360115f + 0.227977f) {
+		const float y0 = powf(m1, 1.f - alpha2);
+		const float y1 = powf(m2, 1.f - alpha2);
+		y = y0 + (y1 - y0) * rand1();
+		mass = powf(y, 1.0f / (1.f - alpha2));
+	} else {
+		const float y0 = 0.f;
+		const float y1 = powf(m2, 1.f - alpha3);
+		y = y0 + (y1 - y0) * rand1();
+		mass = powf(y, 1.0f / (1.f - alpha3));
+	}
+	if (mass < 0.f) {
+		PRINT("%e\n", mass);
+	}
+	return mass;
+}
+
+void stars_test_mass() {
+	constexpr int N = 200000;
+	vector<float> m;
+	float dm = 0.01;
+	vector<float> cnt(5000, 0.0);
+	for (int i = 0; i < N; i++) {
+		m.push_back(stars_sample_mass());
+		//	PRINT( "%e\n", m[i]);
+		const int j = m[i] / dm;
+		if (j < 5000 && j >= 0) {
+			cnt[j] += 1.0;
+		}
+	}
+	FILE* fp = fopen("mass", "wt");
+	for (int i = 0; i < 5000; i++) {
+		const float m = (i + 0.5) * dm;
+		fprintf(fp, "%e %e\n", m, cnt[i]);
+//		printf( "%e %e\n", m, cnt[i]);
+	}
+	fclose(fp);
+
+}
+
