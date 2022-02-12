@@ -214,7 +214,7 @@ power_spectrum_function compute_power_spectrum() {
 	params.omega_c = get_options().omega_c;
 	params.omega_gam = get_options().omega_gam;
 	params.omega_nu = get_options().omega_nu;
-	params.Y = get_options().Y;
+	params.Y = get_options().Y0;
 	params.Neff = get_options().Neff;
 	params.Theta = get_options().Theta;
 	params.hubble = get_options().hubble;
@@ -627,6 +627,7 @@ static range<int64_t> find_my_box() {
 static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, float mask) {
 	const bool sph = get_options().sph;
 	const bool chem = get_options().chem;
+	const float Y0 = get_options().Y0;
 	float dxmax = 0.0;
 	spinlock_type mutex;
 	const int64_t N = get_options().parts_dim;
@@ -653,7 +654,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 			params.omega_c = get_options().omega_c;
 			params.omega_gam = get_options().omega_gam;
 			params.omega_nu = get_options().omega_nu;
-			params.Y = get_options().Y;
+			params.Y = get_options().Y0;
 			params.Neff = get_options().Neff;
 			params.Theta = get_options().Theta;
 			params.hubble = get_options().hubble;
@@ -674,7 +675,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 		const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 		const float h = std::pow(h3, 1.0 / 3.0);
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-			local_futs.push_back(hpx::async([box,Ninv,sph,entropy,h,chem](array<int64_t,NDIM> I) {
+			local_futs.push_back(hpx::async([box,Ninv,sph,entropy,h,chem,Y0](array<int64_t,NDIM> I) {
 				const float omega_m = get_options().omega_m;
 				const float omega_b = get_options().omega_b;
 				const float omega = omega_m + omega_b;
@@ -702,6 +703,8 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 #endif
 					sph_particles_smooth_len(index) = h;
 					if( chem ) {
+						sph_particles_He0(index) = Y0;
+						sph_particles_Z(index) = 0.f;
 						sph_particles_Hp(index) = 0.f;
 						sph_particles_Hn(index) = 0.f;
 						sph_particles_H2(index) = 0.f;

@@ -31,7 +31,6 @@ struct chemistry_params {
 	double code_to_g;
 	double code_to_s;
 	float a;
-	float Hefrac;
 };
 
 #define CHEM_BLOCK_SIZE 64
@@ -428,11 +427,11 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
-		N.H = 1.0 - (double) params.Hefrac - (double) attr.Hp - 2.0 * (double) attr.H2;															// 4
+		N.H = 1.0 - ((double) attr.He +(double) attr.Hep +(double) attr.Hepp +(double) attr.Hp + 2.0 * (double) attr.H2);															// 4
 		N.Hp = attr.Hp;
 		N.Hn = attr.Hn;
 		N.H2 = attr.H2;
-		N.He = params.Hefrac - (double) attr.Hep - (double) attr.Hepp;																		// 2
+		N.He = attr.He;																	// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
 		double dt = (double) attr.dt * (double) params.a;
@@ -508,6 +507,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		attr.Hepp = N.Hepp;
 		attr.Hn = N.Hn;
 		attr.Hp = N.Hp;
+		attr.He = N.He;
 		if (dedt < 0.0) {
 			attr.tcool = -energy / dedt / params.a / params.code_to_s;
 		} else {
@@ -539,7 +539,6 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(dev_chems, chems.data(), sizeof(chem_attribs) * chems.size(), cudaMemcpyHostToDevice, stream));
 	*index = 0;
-	params.Hefrac = opts.Y;
 	params.a = scale;
 	params.code_to_cm = opts.code_to_cm;
 	params.code_to_g = opts.code_to_g;
@@ -552,7 +551,6 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	cuda_stream_synchronize(stream);
 	tm.stop();
 	CUDA_CHECK(cudaMemcpyAsync(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost, stream));
-	double myflops = *flops;
 	CUDA_CHECK(cudaFree(flops));
 	CUDA_CHECK(cudaFree(index));
 	cuda_stream_synchronize(stream);
@@ -573,7 +571,7 @@ void test_cuda_chemistry_kernel() {
 	static const auto opts = get_options();
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
 	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;
-	const double Y = get_options().Y;		// 10
+	const double Y = get_options().Y0;		// 10
 	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
 	const int N = 10000000;
 	vector<chem_attribs> chem0;
@@ -591,8 +589,8 @@ void test_cuda_chemistry_kernel() {
 		N.He = rand1();
 		N.Hep = rand1();
 		N.Hepp = rand1();
-		float h0 = (N.H + 2.0 * N.H2 + N.Hp + N.Hn) / (1.0 - opts.Y);
-		float he0 = (N.He + N.Hep + N.Hepp) / opts.Y;
+		float h0 = (N.H + 2.0 * N.H2 + N.Hp + N.Hn) / (1.0 - opts.Y0);
+		float he0 = (N.He + N.Hep + N.Hepp) / opts.Y0;
 		N.H /= h0;
 		N.H2 /= h0;
 		N.Hp /= h0;
@@ -613,6 +611,7 @@ void test_cuda_chemistry_kernel() {
 //		PRINT("!!!!!!!!!!!1 %e %e %e %e\n", energy, gamma, rho, K);
 		rho /= code_to_density;
 		chem.dt = 1e15 / opts.code_to_s;
+		chem.He = N.He;
 		chem.H2 = N.H2;
 		chem.Hp = N.Hp;
 		chem.Hep = N.Hep;

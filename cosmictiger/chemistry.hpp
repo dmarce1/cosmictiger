@@ -52,6 +52,7 @@ struct chem_attribs {
 	float Hp;
 	float H2;
 	float Hn;
+	float He;
 	float Hep;
 	float Hepp;
 	float rho;

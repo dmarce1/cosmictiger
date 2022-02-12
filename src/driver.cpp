@@ -261,7 +261,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 		max_rung = kr.max_rung;
 
-
 		const bool chem = get_options().chem;
 		if (chem) {
 			PRINT("Doing chemistry step\n");
@@ -604,7 +603,7 @@ void driver() {
 			last_theta = theta;
 			PRINT("Kicking\n");
 			if (stars) {
-				stars_find(a, dt, minrung, iter);
+				stars_remove(a, dt, minrung, iter);
 			}
 			const bool chem = get_options().chem;
 			if (sph) {
@@ -624,6 +623,9 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a)).max_rung);
+			}
+			if (stars) {
+				stars_find(a, dt, minrung, iter);
 			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");

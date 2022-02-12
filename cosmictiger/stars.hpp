@@ -24,6 +24,8 @@ struct star_particle {
 	float zform;
 	float time_remaining;
 	float stellar_mass;
+	float Y;
+	float Z;
 	bool remnant;
 	bool remove;
 	int dm_index;
@@ -33,6 +35,7 @@ star_particle& stars_get(part_int index);
 
 part_int stars_size();
 void stars_find(float a, float dt, int minrung, int step);
+void stars_remove(float a, float dt, int minrung, int step);
 void stars_save(FILE* fp);
 void stars_load(FILE* fp);
 void stars_test_mass();

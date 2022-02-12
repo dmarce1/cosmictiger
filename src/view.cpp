@@ -25,6 +25,7 @@
 #include <cosmictiger/view.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/stars.hpp>
 
 #include <silo.h>
 
@@ -65,18 +66,37 @@ struct sph_part_info: public dm_part_info {
 	float Hn;
 	float Hep;
 	float Hepp;
+	float He;
+	float Z;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
 		arc & ent;
 		arc & h;
+		arc & Hp;
+		arc & H2;
+		arc & Hn;
+		arc & Hep;
+		arc & Hepp;
+		arc & He;
+		arc & Z;
 	}
 
 };
 struct star_part_info: public dm_part_info {
+	bool remnant;
+	float Y;
+	float Z;
+	float M;
+	float zform;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
+		arc & remnant;
+		arc & Y;
+		arc & Z;
+		arc & M;
+		arc & zform;
 	}
 
 };
@@ -171,6 +191,12 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vy = particles_vel(YDIM,i);
 								info.vz = particles_vel(ZDIM,i);
 								info.rung = particles_rung(i);
+								const auto& star = stars_get(particles_cat_index(i));
+								info.Y = star.Y;
+								info.Z = star.Z;
+								info.remnant = star.remnant;
+								info.zform = star.zform;
+								info.M = star.stellar_mass;
 								rc.star[j].push_back(info);
 								break;
 							}
@@ -277,24 +303,27 @@ void view_output_views(int cycle, double a) {
 			if (chem) {
 				const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
 				const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
-				const double Y = get_options().Y;
-				vector<float> p, q, t;
+				vector<float> p, q, t, u, w;
 				for (int i = 0; i < parts.hydro[bi].size(); i++) {
 					x.push_back(parts.hydro[bi][i].Hp);
 					y.push_back(parts.hydro[bi][i].Hn);
 					z.push_back(parts.hydro[bi][i].H2);
 					p.push_back(parts.hydro[bi][i].Hep);
 					q.push_back(parts.hydro[bi][i].Hepp);
+					u.push_back(parts.hydro[bi][i].He);
+					w.push_back(parts.hydro[bi][i].Z);
 					const double h = parts.hydro[bi][i].h;
 					double rho = sph_den(1 / (h * h * h));
 					const double Hp = parts.hydro[bi][i].Hp;
 					const double Hn = parts.hydro[bi][i].Hn;
 					const double H2 = parts.hydro[bi][i].H2;
+					const double He = parts.hydro[bi][i].He;
+					const double Z = parts.hydro[bi][i].Z;
 					const double Hep = parts.hydro[bi][i].Hep;
 					const double Hepp = parts.hydro[bi][i].Hepp;
-					const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
-					const double He = Y - Hep - Hepp;
-					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
+					const double Y = He + Hep + Hepp;
+					const double H = 1.0 - Y - Hp - Hn - 2.0 * H2 - Z;
+					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp + Z / 10.0;
 					rho *= code_to_density * pow(a, -3);
 					n *= constants::avo * rho;									// 8
 
@@ -312,11 +341,13 @@ void view_output_views(int cycle, double a) {
 					t.push_back(T);
 
 				}
+				DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, NULL);
 				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 				DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, NULL);
 				DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, NULL);
 				DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, NULL);
 				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, NULL);
 			}
 		}
@@ -347,11 +378,30 @@ void view_output_views(int cycle, double a) {
 				x.push_back(parts.star[bi][i].rung);
 			}
 			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, NULL);
+
+			vector<float> q;
+			vector<char> p;
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].Y);
+				y.push_back(parts.star[bi][i].Z);
+				z.push_back(parts.star[bi][i].M);
+				p.push_back(parts.star[bi][i].zform);
+				q.push_back(parts.star[bi][i].remnant);
+			}
+			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_remnant", "stars", q.data(), x.size(), DB_CHAR, NULL);
 		}
 		DBClose(db);
 	}
 
 }
+
 
 void view_read_view_file() {
 	FILE* fp = fopen("view.txt", "rt");

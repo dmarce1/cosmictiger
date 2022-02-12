@@ -74,7 +74,7 @@ struct options {
 	double omega_nu;
 	double Theta;
 	double ns;
-	double Y;
+	double Y0;
 	double Neff;
 	double dm_mass;
 	double sph_mass;
@@ -141,7 +141,7 @@ struct options {
 		arc & omega_nu;
 		arc & Theta;
 		arc & ns;
-		arc & Y;
+		arc & Y0;
 		arc & Neff;
 		arc & config_file;
 		arc & test;

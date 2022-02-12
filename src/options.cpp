@@ -124,7 +124,7 @@ bool process_options(int argc, char *argv[]) {
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
 	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255 / 2.73), "") //
-	("Y", po::value<double>(&(opts.Y))->default_value(0.2454006), "") //
+	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8120), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
@@ -251,7 +251,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(z1);
 
 	SHOW(ns);
-	SHOW(Y);
+	SHOW(Y0);
 	SHOW(Neff);
 	SHOW(config_file);
 	SHOW(test);
