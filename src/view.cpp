@@ -178,6 +178,8 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 									info.H2 = sph_particles_H2(l);
 									info.Hep = sph_particles_Hep(l);
 									info.Hepp = sph_particles_Hepp(l);
+									info.Z = sph_particles_Z(l);
+									info.He = sph_particles_He(l);
 								}
 								rc.hydro[j].push_back(info);
 								break;

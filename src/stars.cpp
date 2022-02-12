@@ -218,6 +218,8 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			}
 			star.Y -= Hefrac - Zyield;
 			star.Z += Zyield;
+			PRINT( "SUPERNOVA\n!\n");
+			sleep(10);
 		}
 		const double T = 5000.0;
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;

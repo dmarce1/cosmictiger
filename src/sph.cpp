@@ -1664,9 +1664,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 			CUDA_CHECK(cudaMalloc(&cuda_data.gx, sizeof(float) * host_gx.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.gy, sizeof(float) * host_gy.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.gz, sizeof(float) * host_gz.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.ent, sizeof(float) * host_ent.size()));
+			CUDA_CHECK(cudaMalloc(&cuda_data.Y, sizeof(float) * host_Y.size()));
+			CUDA_CHECK(cudaMalloc(&cuda_data.Z, sizeof(float) * host_Z.size()));
 		} else {
-			cuda_data.gx = cuda_data.gy = cuda_data.gz = nullptr;
+			cuda_data.gx = cuda_data.gy = cuda_data.gz = cuda_data.Y = cuda_data.Z = nullptr;
 		}
 		break;
 	}
