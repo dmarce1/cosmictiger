@@ -213,7 +213,6 @@ float sph_particles_max_smooth_len() {
 	return maxh;
 }
 
-
 float sph_particles_temperature(part_int i, float a) {
 	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
 	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
@@ -241,8 +240,6 @@ float sph_particles_temperature(part_int i, float a) {
 	return T;
 }
 
-
-
 void sph_particles_swap(part_int i, part_int j) {
 	const bool chem = get_options().chem;
 	const bool stars = get_options().stars;
@@ -269,7 +266,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	}
 }
 
-
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 	part_int begin = rng.first;
 	part_int end = rng.second;
@@ -281,7 +277,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 			while (lo != hi) {
 				hi--;
 				if (sph_particles_pos(xdim, hi) < xmid) {
-					sph_particles_swap(lo,hi);
+					sph_particles_swap(lo, hi);
 					break;
 				}
 			}
@@ -359,7 +355,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 	}
 	part_int new_parts = sz - size;
 	part_int offset = particles_size();
-	if( parts2) {
+	if (parts2) {
 		particles_resize(particles_size() + new_parts);
 	}
 	int oldsz = size;
@@ -851,11 +847,44 @@ void sph_particles_load(FILE* fp) {
 	}
 	if (stars) {
 		FREAD(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
-		for( part_int i = 0; i < sph_particles_size(); i++) {
+		for (part_int i = 0; i < sph_particles_size(); i++) {
 			sph_particles_tdyn(i) = 1e38;
 		}
 		stars_load(fp);
 	}
+}
+HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
+
+void sph_particles_energy_to_entropy(float a) {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_particles_energy_to_entropy_action>(c, a));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc,a]() {
+			const static float N = get_options().neighbor_number;
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				float e = sph_particles_ent(i);
+				if( e < 0.0 ) {
+					e = -e;
+					const float h = sph_particles_smooth_len(i);
+					const float h3 = (h*h*h);
+					const float h3inv = 1.0 / (h3);
+					const float rho = sph_den(h3inv);
+					const float gamma = 5.0f/3.0f;
+					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
+					sph_particles_ent(i) = K;
+					PRINT( "Restoring star with gas temp = %e\n", sph_particles_temperature(i,a));
+				}
+			}
+		}));
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+
 }
 
 void sph_particles_save(FILE* fp) {

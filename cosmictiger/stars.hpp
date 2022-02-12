@@ -21,15 +21,17 @@
 
 
 struct star_particle {
-	float energy;
 	float zform;
+	float time_remaining;
+	float stellar_mass;
+	bool remnant;
 	int dm_index;
 };
 
 star_particle& stars_get(part_int index);
 
 part_int stars_size();
-void stars_find(float a, float dt);
+void stars_find(float a, float dt, int minrung);
 void stars_save(FILE* fp);
 void stars_load(FILE* fp);
 void stars_test_mass();

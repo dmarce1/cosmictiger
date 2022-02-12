@@ -224,4 +224,8 @@ inline T sph_den(T hinv3) {
 	return m * c0 * hinv3;
 }
 
+
+
+void sph_particles_energy_to_entropy(float a);
+
 #endif /* SPH_HPP_ */
