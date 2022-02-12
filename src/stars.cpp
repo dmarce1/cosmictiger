@@ -71,6 +71,9 @@ void stars_find(float a, float dt, int minrung) {
 				float tdyn = sph_particles_tdyn(i);
 				bool make_star = false;
 				if( tdyn < 1e38 ) {
+					if( tdyn == 0.f ) {
+						PRINT( "ERROR %s %i\n", __FILE__, __LINE__);
+					}
 					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
 					make_star = rand1() < p;
 				}
@@ -95,8 +98,6 @@ void stars_find(float a, float dt, int minrung) {
 	}
 	vector<part_int> to_gas_indices;
 	mutex_type to_gas_mutex;
-	hpx::wait_all(futs2.begin(), futs2.end());
-	PRINT( "Marking remnants\n");
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, nthreads, a, dt, &to_gas_mutex, &to_gas_indices, minrung]() {
 			const part_int b = (size_t) proc * stars.size() / nthreads;
@@ -142,7 +143,6 @@ void stars_find(float a, float dt, int minrung) {
 	static const double code_to_g = get_options().code_to_g;
 	static const double code_to_cm = get_options().code_to_cm;
 	static const double code_to_s = get_options().code_to_s;
-	const double a5 = pow(a, 5);
 	PRINT( "Restoring gas\n");
 	for (auto& i : to_gas_indices) {
 		star_particle star = stars[i];
@@ -152,11 +152,11 @@ void stars_find(float a, float dt, int minrung) {
 		sph_particles_dm_index(k) = j;
 		particles_type(j) = SPH_TYPE;
 		const double T = 5000.0;
-		const double N = sph_mass * code_to_g * (1. - 0.75 * Y) * constants::avo;
-		const double Cv = 1.5;
+		const double N = sph_mass * code_to_g * ((1. - Y) * 2.f + Y * .25f * 3.f) * constants::avo;
+		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
-		E *= a5;
+		E *= a * a;
 		sph_particles_ent(k) = -E;
 		sph_particles_dent(k) = 0.f;
 		sph_particles_H2(k) = 0.f;
@@ -165,6 +165,7 @@ void stars_find(float a, float dt, int minrung) {
 		sph_particles_Hn(k) = 0.f;
 		sph_particles_Hepp(k) = Y;
 		sph_particles_smooth_len(k) = h0;
+		sph_particles_tdyn(k) = 1e38;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel(dim, k) = 0.f;
 		}

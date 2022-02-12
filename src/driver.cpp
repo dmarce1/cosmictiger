@@ -603,6 +603,9 @@ void driver() {
 			}
 			last_theta = theta;
 			PRINT("Kicking\n");
+			if (stars) {
+				stars_find(a, dt, minrung);
+			}
 			const bool chem = get_options().chem;
 			if (sph) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a));
@@ -650,9 +653,6 @@ void driver() {
 			dtm.start();
 			PRINT("Drift\n");
 			dr = drift(a2, dt, tau, tau + dt, tau_max);
-			if (stars) {
-				stars_find(a, dt, minrung);
-			}
 			if (get_options().do_lc) {
 				check_lc(false);
 			}
