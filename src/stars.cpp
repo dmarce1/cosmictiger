@@ -250,6 +250,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		sph_particles_dent(k) = 0.f;
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;
+		sph_particles_He0(k) = 0.f;
 		sph_particles_Hep(k) = 0.f;
 		sph_particles_Hn(k) = 0.f;
 		sph_particles_Hepp(k) = star.Y;
