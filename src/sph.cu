@@ -31,8 +31,8 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (2048*128)
-#define HYDRO_SIZE (256*128)
+#define WORKSPACE_SIZE (64*1024)
+#define HYDRO_SIZE (8*1024)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -41,86 +41,69 @@ struct smoothlen_workspace {
 };
 
 struct mark_semiactive_workspace {
-	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> y;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> z;
-	fixedcapvec<float, WORKSPACE_SIZE> h;
-	fixedcapvec<char, WORKSPACE_SIZE> rungs;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 1> x;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 1> y;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 1> z;
+	fixedcapvec<float, WORKSPACE_SIZE + 1> h;
+	fixedcapvec<char, WORKSPACE_SIZE + 1> rungs;
 };
 
 struct hydro_workspace {
-	fixedcapvec<float, WORKSPACE_SIZE> gamma;
-	fixedcapvec<float, WORKSPACE_SIZE> gamma0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
-	fixedcapvec<float, WORKSPACE_SIZE> vx0;
-	fixedcapvec<float, WORKSPACE_SIZE> vy0;
-	fixedcapvec<float, WORKSPACE_SIZE> vz0;
-	fixedcapvec<char, WORKSPACE_SIZE> rungs0;
-	fixedcapvec<float, WORKSPACE_SIZE> ent0;
-	fixedcapvec<float, WORKSPACE_SIZE> f00;
-	fixedcapvec<float, WORKSPACE_SIZE> fvel0;
-	fixedcapvec<float, WORKSPACE_SIZE> h0;
-	fixedcapvec<fixed32, HYDRO_SIZE> x;
-	fixedcapvec<fixed32, HYDRO_SIZE> y;
-	fixedcapvec<fixed32, HYDRO_SIZE> z;
-	fixedcapvec<float, HYDRO_SIZE> vx;
-	fixedcapvec<char, HYDRO_SIZE> rungs;
-	fixedcapvec<float, HYDRO_SIZE> vy;
-	fixedcapvec<float, HYDRO_SIZE> vz;
-	fixedcapvec<float, HYDRO_SIZE> ent;
-	fixedcapvec<float, HYDRO_SIZE> f0;
-	fixedcapvec<float, HYDRO_SIZE> fvel;
-	fixedcapvec<float, HYDRO_SIZE> h;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> gamma;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> gamma0;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> x0;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> y0;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> z0;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> vx0;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> vy0;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> vz0;
+	fixedcapvec<char, WORKSPACE_SIZE + 2> rungs0;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> ent0;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> f00;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> fvel0;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> h0;
+	fixedcapvec<fixed32, HYDRO_SIZE + 2> x;
+	fixedcapvec<fixed32, HYDRO_SIZE + 2> y;
+	fixedcapvec<fixed32, HYDRO_SIZE + 2> z;
+	fixedcapvec<float, HYDRO_SIZE + 2> vx;
+	fixedcapvec<char, HYDRO_SIZE + 2> rungs;
+	fixedcapvec<float, HYDRO_SIZE + 2> vy;
+	fixedcapvec<float, HYDRO_SIZE + 2> vz;
+	fixedcapvec<float, HYDRO_SIZE + 2> ent;
+	fixedcapvec<float, HYDRO_SIZE + 2> f0;
+	fixedcapvec<float, HYDRO_SIZE + 2> fvel;
+	fixedcapvec<float, HYDRO_SIZE + 2> h;
 };
 
 struct courant_workspace {
-	fixedcapvec<float,HYDRO_SIZE> Y;
-	fixedcapvec<float, WORKSPACE_SIZE> Y0;
-	fixedcapvec<float,HYDRO_SIZE> Z;
-	fixedcapvec<float, WORKSPACE_SIZE> Z0;
-	fixedcapvec<float,HYDRO_SIZE> gamma;
-	fixedcapvec<float, WORKSPACE_SIZE> gamma0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
-	fixedcapvec<float, WORKSPACE_SIZE> vx0;
-	fixedcapvec<float, WORKSPACE_SIZE> vy0;
-	fixedcapvec<float, WORKSPACE_SIZE> vz0;
-	fixedcapvec<float, WORKSPACE_SIZE> gx0;
-	fixedcapvec<float, WORKSPACE_SIZE> gy0;
-	fixedcapvec<float, WORKSPACE_SIZE> gz0;
-	fixedcapvec<float, WORKSPACE_SIZE> ent0;
-	fixedcapvec<float, WORKSPACE_SIZE> h0;
-	fixedcapvec<fixed32, HYDRO_SIZE> x;
-	fixedcapvec<fixed32, HYDRO_SIZE> y;
-	fixedcapvec<fixed32, HYDRO_SIZE> z;
-	fixedcapvec<float, HYDRO_SIZE> vx;
-	fixedcapvec<float, HYDRO_SIZE> vy;
-	fixedcapvec<float, HYDRO_SIZE> vz;
-	fixedcapvec<float, HYDRO_SIZE> gx;
-	fixedcapvec<float, HYDRO_SIZE> gy;
-	fixedcapvec<float, HYDRO_SIZE> gz;
-	fixedcapvec<float, HYDRO_SIZE> ent;
-	fixedcapvec<float, HYDRO_SIZE> h;
-};
-
-struct fvels_workspace {
-	fixedcapvec<fixed32, WORKSPACE_SIZE> x0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> y0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> z0;
-	fixedcapvec<float, WORKSPACE_SIZE> vx0;
-	fixedcapvec<float, WORKSPACE_SIZE> vy0;
-	fixedcapvec<float, WORKSPACE_SIZE> vz0;
-	fixedcapvec<float, WORKSPACE_SIZE> h0;
-	fixedcapvec<fixed32, HYDRO_SIZE> x;
-	fixedcapvec<fixed32, HYDRO_SIZE> y;
-	fixedcapvec<fixed32, HYDRO_SIZE> z;
-	fixedcapvec<float, HYDRO_SIZE> vx;
-	fixedcapvec<float, HYDRO_SIZE> vy;
-	fixedcapvec<float, HYDRO_SIZE> vz;
-	fixedcapvec<float, HYDRO_SIZE> h;
+	fixedcapvec<float, HYDRO_SIZE + 3> Y;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> Y0;
+	fixedcapvec<float, HYDRO_SIZE + 3> Z;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> Z0;
+	fixedcapvec<float, HYDRO_SIZE + 3> gamma;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> gamma0;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 3> x0;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 3> y0;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 3> z0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> vx0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> vy0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> vz0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> gx0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> gy0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> gz0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> ent0;
+	fixedcapvec<float, WORKSPACE_SIZE + 3> h0;
+	fixedcapvec<fixed32, HYDRO_SIZE + 3> x;
+	fixedcapvec<fixed32, HYDRO_SIZE + 3> y;
+	fixedcapvec<fixed32, HYDRO_SIZE + 3> z;
+	fixedcapvec<float, HYDRO_SIZE + 3> vx;
+	fixedcapvec<float, HYDRO_SIZE + 3> vy;
+	fixedcapvec<float, HYDRO_SIZE + 3> vz;
+	fixedcapvec<float, HYDRO_SIZE + 3> gx;
+	fixedcapvec<float, HYDRO_SIZE + 3> gy;
+	fixedcapvec<float, HYDRO_SIZE + 3> gz;
+	fixedcapvec<float, HYDRO_SIZE + 3> ent;
+	fixedcapvec<float, HYDRO_SIZE + 3> h;
 };
 
 #define SMOOTHLEN_BLOCK_SIZE 512
@@ -137,7 +120,6 @@ struct sph_reduction {
 	int max_rung_grav;
 	int max_rung;
 };
-
 
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -269,7 +251,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
 				if (tid == 0 && h <= 0.f) {
-					PRINT( "Less than ZERO H! sph.cu %e\n", h);
+					PRINT("Less than ZERO H! sph.cu %e\n", h);
 					__trap();
 				}
 				//	if (tid == 0)
@@ -904,7 +886,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float myrhoinv = minv * c0inv * sqr(myh) * myh;
 					float gamma;
 					if (data.gamma) {
-						gamma = data.gamma[i];;
+						gamma = data.gamma[i];
+						;
 					} else {
 						gamma = 5.f / 3.f;
 					}
@@ -1193,7 +1176,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	timer tm;
 	sph_run_return rc;
 	sph_reduction* reduce;
-	int nblocks;
 	CUDA_CHECK(cudaMallocManaged(&reduce, sizeof(sph_reduction)));
 	reduce->counter = reduce->flag = 0;
 	reduce->hmin = std::numeric_limits<float>::max();
@@ -1203,66 +1185,60 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->max_rung_grav = 0;
 	reduce->max_rung_hydro = 0;
 	reduce->max_rung = 0;
+	static int smoothlen_nblocks;
+	static int semiactive_nblocks;
+	static int hydro_nblocks;
+	static int courant_nblocks;
+	static bool first = true;
+	static char* workspace_ptr;
+	if (first) {
+		first = false;
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
+		smoothlen_nblocks *= cuda_smp_count();
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semiactive_nblocks, (const void*) sph_cuda_mark_semiactive, SMOOTHLEN_BLOCK_SIZE, 0));
+		semiactive_nblocks *= cuda_smp_count();
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
+		hydro_nblocks *= cuda_smp_count();
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&courant_nblocks, (const void*) sph_cuda_courant, HYDRO_BLOCK_SIZE, 0));
+		courant_nblocks *= cuda_smp_count();
+		size_t smoothlen_mem = sizeof(smoothlen_workspace) * smoothlen_nblocks;
+		size_t semiactive_mem = sizeof(mark_semiactive_workspace) * semiactive_nblocks;
+		size_t courant_mem = sizeof(courant_workspace) * courant_nblocks;
+		size_t hydro_mem = sizeof(hydro_workspace) * hydro_nblocks;
+		size_t max_mem = std::max(std::max(smoothlen_mem, semiactive_mem), std::max(hydro_mem, courant_mem));
+		CUDA_CHECK(cudaMalloc(&workspace_ptr, max_mem));
+		PRINT("Allocating %i GB in workspace memory\n", max_mem / 1024 / 1024 / 1024);
+//		sleep(10);
+	}
+
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTHLEN: {
-		smoothlen_workspace* workspaces;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
-		nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(smoothlen_workspace) * nblocks));
-		tm.start();
-		sph_cuda_smoothlen<<<nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,workspaces,reduce);
+		sph_cuda_smoothlen<<<smoothlen_nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,(smoothlen_workspace*)workspace_ptr,reduce);
 		cuda_stream_synchronize(stream);
-		tm.stop();
-		CUDA_CHECK(cudaFree(workspaces));
 		rc.rc = reduce->flag;
 		rc.hmin = reduce->hmin;
 		rc.hmax = reduce->hmax;
-		tm.stop();
-		PRINT("Kernel ran at %e GFLOPS\n", reduce->flops / (1024 * 1024 * 1024) / tm.read());
 	}
-		break;
+	break;
 	case SPH_RUN_MARK_SEMIACTIVE: {
-		mark_semiactive_workspace* workspaces;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_mark_semiactive, SMOOTHLEN_BLOCK_SIZE, 0));
-		nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(mark_semiactive_workspace) * nblocks));
-		tm.start();
-		sph_cuda_mark_semiactive<<<nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,workspaces,reduce);
+		sph_cuda_mark_semiactive<<<semiactive_nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,(mark_semiactive_workspace*)workspace_ptr,reduce);
 		cuda_stream_synchronize(stream);
-		tm.stop();
-		CUDA_CHECK(cudaFree(workspaces));
-		tm.stop();
-		PRINT("Kernel ran at %e GFLOPS\n", reduce->flops / (1024 * 1024 * 1024) / tm.read());
 	}
-		break;
+	break;
 	case SPH_RUN_HYDRO: {
-		hydro_workspace* workspaces;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
-		nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(hydro_workspace) * nblocks));
-		tm.start();
-		sph_cuda_hydro<<<nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,workspaces,reduce);
-
+		sph_cuda_hydro<<<hydro_nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,(hydro_workspace*)workspace_ptr,reduce);
 		cuda_stream_synchronize(stream);
-		tm.stop();
-		CUDA_CHECK(cudaFree(workspaces));
-		tm.stop();
 	}
-		break;
+	break;
 	case SPH_RUN_COURANT: {
-		courant_workspace* workspaces;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_courant, HYDRO_BLOCK_SIZE, 0));
-		nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaMalloc(&workspaces, sizeof(courant_workspace) * nblocks));
-		sph_cuda_courant<<<nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,workspaces,reduce);
+		sph_cuda_courant<<<courant_nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,(courant_workspace*)workspace_ptr,reduce);
 		cuda_stream_synchronize(stream);
-		CUDA_CHECK(cudaFree(workspaces));
 		rc.max_vsig = reduce->vsig_max;
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
 		rc.max_rung = reduce->max_rung;
 	}
-	}
+}
 	CUDA_CHECK(cudaFree(reduce));
 
 	return rc;
