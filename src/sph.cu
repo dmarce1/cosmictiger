@@ -1131,7 +1131,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						if (stars) {
 							const float oneinv = 1.f / one;
 							Y *= oneinv;
-							Y = fmaxf(data.Y0, Y);
+//							Y = fmaxf(data.Y0, Y);
 							Z *= oneinv;
 							bool is_eligible = false;
 							const float N = ws.x.size();

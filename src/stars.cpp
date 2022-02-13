@@ -216,7 +216,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 				PRINT("Cannot have less total mass converted than z yield\n");
 				abort();
 			}
-			star.Y -= Hefrac - Zyield;
+			star.Y += Hefrac - Zyield;
 			star.Z += Zyield;
 			PRINT("***********************************SUPERNOVA************************************\n!\n");
 			const int k = star.dm_index;
