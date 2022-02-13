@@ -886,8 +886,8 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 					const float q = r * hinv;
 					const float W = kernelW(q) * h3inv;
 					const float wt = m * myrhoinv * W;
-					const float detherm = wt * dEtherm * myrho / m;
-					const float dekin = wt * dEkin;
+					const float detherm = wt * dEtherm / m;
+					const float dekin = wt * dEkin / m;
 					const float da = float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv * detherm;
 					const float vx = myvx - ws.vx[j];
 					const float vy = myvy - ws.vy[j];
@@ -898,9 +898,14 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 					dvy += dvr * dy * rinv;
 					dvz += dvr * dz * rinv;
 					dA += da;
-					dZ + wt * fZ;
+					dZ += wt * fZ;
 				}
 			}
+			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dA);
+			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvx);
+			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvy);
+			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz);
+			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dZ);
 			if (tid == 0) {
 				data.dent_snk[snki] += dA;
 				data.dvx_snk[snki] += dvx;

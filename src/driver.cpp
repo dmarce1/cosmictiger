@@ -224,6 +224,26 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
+
+		}
+
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
+		tm.start();
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+		tm.stop();
+		if (verbose)
+			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+		tm.reset();
+		tm.start();
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		tm.stop();
+		if (verbose)
+			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+		tm.reset();
+
+		if (tau != 0.0) {
 			sparams.run_type = SPH_RUN_DEPOSIT;
 			tm.start();
 			kr = sph_run(sparams, true);
@@ -240,22 +260,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-		tm.reset();
-
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
-		tm.start();
-		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-		tm.stop();
-		if (verbose)
-			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
-		tm.reset();
-		tm.start();
-		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		tm.stop();
-		if (verbose)
-			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
 
 	} else {
