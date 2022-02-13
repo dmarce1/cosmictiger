@@ -227,7 +227,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			x *= ninv;
 			y *= ninv;
 			z *= ninv;
-			constexpr float vsup = 5e-3;
+			constexpr float vsup = 0e-3;
 			float& vx = particles_vel(XDIM, k);
 			float& vy = particles_vel(YDIM, k);
 			float& vz = particles_vel(ZDIM, k);
@@ -239,9 +239,9 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
 		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
-		const double fSN = 2e-4;
+		const double fSN = 0.0e-4;
 		if (star.stellar_mass > 7.5) {
-			double Esuper = fSN * sph_mass * code_to_g / sqr(constants::c);
+			double Esuper = fSN * sph_mass * code_to_g * sqr(constants::c);
 			E += Esuper;
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
@@ -298,7 +298,7 @@ float stars_sample_mass(gsl_rng* rndgen) {
 		mass = powf(y, 1.0f / (1.f - alpha3));
 	}
 	if( mass > 265.f ) {
-		return sample_mass(rndgen);
+		return stars_sample_mass(rndgen);
 	}
 	return mass;
 }

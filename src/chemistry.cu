@@ -427,7 +427,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
-		N.H = 1.0 - ((double) attr.He +(double) attr.Hep +(double) attr.Hepp +(double) attr.Hp + 2.0 * (double) attr.H2);															// 4
+		N.H = 1.0 - ((double) attr.He +(double) attr.Hep +(double) attr.Hepp +(double) attr.Hp +(double) attr.Hn + 2.0 * (double) attr.H2);															// 4
 		N.Hp = attr.Hp;
 		N.Hn = attr.Hn;
 		N.H2 = attr.H2;

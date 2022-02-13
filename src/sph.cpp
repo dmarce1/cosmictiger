@@ -1741,6 +1741,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.Z_snk = &sph_particles_formZ(0);
 	cuda_data.ent_snk = &sph_particles_ent(0);
 	cuda_data.G = get_options().GM;
+	cuda_data.Y0 = get_options().Y0;
 	cuda_data.rho0_c = get_options().rho0_c;
 	cuda_data.rho0_b = get_options().rho0_b;
 	cuda_data.t0 = params.t0;

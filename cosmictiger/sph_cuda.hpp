@@ -37,6 +37,7 @@ struct sph_run_cuda_data {
 	float rho0_b;
 	float* Z;
 	float* Y;
+	float Y0;
 	float* gx;
 	float* gy;
 	float* gz;

@@ -746,7 +746,7 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				chem_attribs chem = chems[j++];
 				//		PRINT( "%e %e %e %e %e %e\n", chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, chem.K);
 				if( dir == -1 ) {
-					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * chem.He - 0.5 * chem.H2);
+					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 					double gamma = 1. + 1. / cv;
 					double dt = rung_dt[rung] * t0;
 					chem.K *= exp((5.-3.*gamma)*adot/a*dt);
