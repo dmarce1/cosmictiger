@@ -49,7 +49,6 @@ struct mark_semiactive_workspace {
 };
 
 struct hydro_workspace {
-	fixedcapvec<float, WORKSPACE_SIZE + 2> gamma;
 	fixedcapvec<float, WORKSPACE_SIZE + 2> gamma0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> x0;
 	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> y0;
@@ -62,6 +61,7 @@ struct hydro_workspace {
 	fixedcapvec<float, WORKSPACE_SIZE + 2> f00;
 	fixedcapvec<float, WORKSPACE_SIZE + 2> fvel0;
 	fixedcapvec<float, WORKSPACE_SIZE + 2> h0;
+	fixedcapvec<float, HYDRO_SIZE + 2> gamma;
 	fixedcapvec<fixed32, HYDRO_SIZE + 2> x;
 	fixedcapvec<fixed32, HYDRO_SIZE + 2> y;
 	fixedcapvec<fixed32, HYDRO_SIZE + 2> z;
@@ -189,7 +189,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				int iter = 0;
 				float dh;
 				float& h = data.h_snk[snki];
-				float h0 = h;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1

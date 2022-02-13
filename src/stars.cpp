@@ -239,7 +239,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
 		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
-		const double fSN = 0.0e-4;
+		const double fSN = 0.0e-5;
 		if (star.stellar_mass > 7.5) {
 			double Esuper = fSN * sph_mass * code_to_g * sqr(constants::c);
 			E += Esuper;
