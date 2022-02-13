@@ -72,11 +72,13 @@ SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
 SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem;
 SPH_PARTICLES_EXTERN float* sph_particles_dvv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
+SPH_PARTICLES_EXTERN float* sph_particles_dz;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
 SPH_PARTICLES_EXTERN float* sph_particles_f0;
 SPH_PARTICLES_EXTERN float* sph_particles_ts;
 SPH_PARTICLES_EXTERN float* sph_particles_fY;
 SPH_PARTICLES_EXTERN float* sph_particles_fZ;
+SPH_PARTICLES_EXTERN char* sph_particles_sn;
 #ifdef CHECK_MUTUAL_SORT
 SPH_PARTICLES_EXTERN part_int* sph_particles_tst;
 inline part_int& sph_particles_test(int index) {
@@ -97,10 +99,15 @@ void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixe
 void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, float* gamma, float* Y, float *Z, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
+void sph_particles_global_read_sns(particle_global_range range, char* sn, part_int offset);
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
+
+inline char& sph_particles_SN(part_int index) {
+	return sph_particles_sn[index];
+}
 
 inline float& sph_particles_tdyn(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -217,6 +224,11 @@ inline char& sph_particles_rung(int index) {
 inline float& sph_particles_dent(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de[index];
+}
+
+inline float& sph_particles_dZ(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dz[index];
 }
 
 inline float& sph_particles_tcool(part_int index) {

@@ -239,10 +239,11 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
 		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
-		const double fSN = 0.0e-5;
+//		const double fSN = 0.0e-5;
 		if (star.stellar_mass > 7.5) {
-			double Esuper = fSN * sph_mass * code_to_g * sqr(constants::c);
-			E += Esuper;
+//			double Esuper = fSN * sph_mass * code_to_g * sqr(constants::c);
+//			E += Esuper;
+			sph_particles_SN(k) = true;
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		E *= a * a;
@@ -298,7 +299,7 @@ float stars_sample_mass(gsl_rng* rndgen) {
 		y = y0 + (y1 - y0) * gsl_rng_uniform_pos(rndgen);
 		mass = powf(y, 1.0f / (1.f - alpha3));
 	}
-	if( mass > 265.f ) {
+	if (mass > 265.f) {
 		return stars_sample_mass(rndgen);
 	}
 	return mass;

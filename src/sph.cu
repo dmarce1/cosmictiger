@@ -23,6 +23,7 @@ struct smoothlen_shmem {
 
 #include <cosmictiger/sph_cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/constants.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/kernel.hpp>
 
@@ -73,6 +74,17 @@ struct hydro_workspace {
 	fixedcapvec<float, HYDRO_SIZE + 2> f0;
 	fixedcapvec<float, HYDRO_SIZE + 2> fvel;
 	fixedcapvec<float, HYDRO_SIZE + 2> h;
+};
+
+struct deposit_workspace {
+	fixedcapvec<char, WORKSPACE_SIZE + 2> sn;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> x;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> y;
+	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> z;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> vx;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> vy;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> vz;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> h;
 };
 
 struct courant_workspace {
@@ -739,6 +751,171 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 //	print( "COMPLETE\n");
 }
 
+__global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, deposit_workspace* workspaces, sph_reduction* reduce) {
+	const int tid = threadIdx.x;
+	const int bid = blockIdx.x;
+	const int block_size = blockDim.x;
+	__shared__
+	int index;
+	deposit_workspace& ws = workspaces[bid];
+	if (tid == 0) {
+		index = atomicAdd(&reduce->counter, 1);
+	}
+	__syncthreads();
+	array<fixed32, NDIM> x;
+	while (index < data.nselfs) {
+		const sph_tree_node& self = data.trees[data.selfs[index]];
+		int flops = 0;
+		ws.x.resize(0);
+		ws.y.resize(0);
+		ws.z.resize(0);
+		ws.vx.resize(0);
+		ws.vy.resize(0);
+		ws.vz.resize(0);
+		ws.h.resize(0);
+		ws.sn.resize(0);
+		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+			const sph_tree_node& other = data.trees[data.neighbors[ni]];
+			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+				bool contains = false;
+				int j;
+				int total;
+				if (pi < other.part_range.second) {
+					if (data.sn[pi]) {
+						x[XDIM] = data.x[pi];
+						x[YDIM] = data.y[pi];
+						x[ZDIM] = data.z[pi];
+						if (self.outer_box.contains(x)) {
+							contains = true;
+						}
+						if (!contains) {
+							contains = true;
+							const float& h = data.h[pi];
+							for (int dim = 0; dim < NDIM; dim++) {
+								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+							}
+						}
+					}
+				}
+				j = contains;
+				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
+				const int offset = ws.x.size();
+				const int next_size = offset + total;
+				ws.x.resize(next_size);
+				ws.y.resize(next_size);
+				ws.z.resize(next_size);
+				ws.vx.resize(next_size);
+				ws.vy.resize(next_size);
+				ws.vz.resize(next_size);
+				ws.h.resize(next_size);
+				ws.sn.resize(next_size);
+				if (contains) {
+					const int k = offset + j;
+					ws.x[k] = x[XDIM];
+					ws.y[k] = x[YDIM];
+					ws.z[k] = x[ZDIM];
+					ws.vx[k] = data.vx[pi];
+					ws.vy[k] = data.vy[pi];
+					ws.vz[k] = data.vz[pi];
+					ws.h[k] = data.h[pi];
+					ws.sn[k] = data.sn[pi];
+				}
+			}
+		}
+		const float m = data.m;
+		constexpr float fSN = 2e-4f;
+		constexpr float fZ = 0.02f;
+		const float dEtherm = 0.5f * m * fSN * sqr(params.a);
+		const float dEkin = 0.5f * m * fSN * sqr(params.a);
+		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			const int snki = self.sink_part_range.first - self.part_range.first + i;
+			const float m = data.m;
+			const float minv = 1.f / m;
+			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
+			const float c0inv = 1.0f / c0;
+			const auto myx = data.x[i];
+			const auto myy = data.y[i];
+			const auto myz = data.z[i];
+			const auto myvx = data.vx[i];
+			const auto myvy = data.vy[i];
+			const auto myvz = data.vz[i];
+			const float myh = data.h[i];
+			const float myhinv = 1.f / myh;
+			const float myh3inv = 1.f / (sqr(myh) * myh);
+			const float myrho = m * c0 * myh3inv;
+			const float myrhoinv = minv * c0inv * sqr(myh) * myh;
+			float mygamma;
+			if (data.gamma) {
+				mygamma = data.gamma[i];
+			} else {
+				mygamma = 5. / 3.;
+			}
+			const float myp = data.ent[i] * powf(myrho, mygamma);
+			const float myc = sqrtf(mygamma * myp * myrhoinv);
+			const float myrho1mgammainv = powf(myrho, 1.0f - mygamma);
+			const float myfvel = data.fvel[i];
+			const float myf0 = data.f0[i];
+			const float Prho2i = myp * myrhoinv * myrhoinv * myf0;
+			const int jmax = round_up(ws.x.size(), block_size);
+			const float ainv = 1.0f / params.a;
+			float dvx = 0.f;
+			float dvy = 0.f;
+			float dvz = 0.f;
+			float dA = 0.f;
+			float dZ = 0.f;
+			for (int j = tid; j < ws.x.size(); j += block_size) {
+				const float dx = distance(myx, ws.x[j]);
+				const float dy = distance(myy, ws.y[j]);
+				const float dz = distance(myz, ws.z[j]);
+				const float h = ws.h[j];
+				const float hinv = 1.f / h;
+				const float h3inv = sqr(hinv) * hinv;
+				const float h2 = sqr(h);
+				const float r2 = sqr(dx, dy, dz);
+				if (r2 < h2) {
+					const float r = sqrtf(r2);
+					const float rinv = 1.f / (r + 1e-15f);
+					const float q = r * hinv;
+					const float W = kernelW(q) * h3inv;
+					const float wt = m * myrhoinv * W;
+					const float detherm = wt * dEtherm * myrho / m;
+					const float dekin = wt * dEkin;
+					const float da = float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv * detherm;
+					const float vx = myvx - ws.vx[j];
+					const float vy = myvy - ws.vy[j];
+					const float vz = myvz - ws.vz[j];
+					const float vr = (vx * dx + vy * dy + vz * dz) * rinv;
+					const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
+					dvx += dvr * dx * rinv;
+					dvy += dvr * dy * rinv;
+					dvz += dvr * dz * rinv;
+					dA += da;
+					dZ + wt * fZ;
+				}
+			}
+			if (tid == 0) {
+				data.dent_snk[snki] += dA;
+				data.dvx_snk[snki] += dvx;
+				data.dvy_snk[snki] += dvy;
+				data.dvz_snk[snki] += dvz;
+				data.dz_snk[snki] += dZ;
+			}
+		}
+		if (tid == 0) {
+			index = atomicAdd(&reduce->counter, 1);
+		}
+		__syncthreads();
+	}
+}
+
 __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, courant_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
@@ -1142,8 +1319,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							if (is_eligible) {
 								float dt = rung_dt[rung] * params.t0;
 								data.tdyn_snk[snki] = tdyn;
-								data.Y_snk[snki] = Y;
-								data.Z_snk[snki] = Z;
+								data.Yform_snk[snki] = Y;
+								data.Zform_snk[snki] = Z;
 								//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
 //								if (data.time_to_star_snk[snki] < 0.0f) {
 								//			PRINT("MAKING STAR!\n");
@@ -1187,6 +1364,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int smoothlen_nblocks;
 	static int semiactive_nblocks;
 	static int hydro_nblocks;
+	static int deposit_nblocks;
 	static int courant_nblocks;
 	static bool first = true;
 	static char* workspace_ptr;
@@ -1198,13 +1376,16 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		semiactive_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
 		hydro_nblocks *= cuda_smp_count();
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&deposit_nblocks, (const void*) sph_cuda_deposit, HYDRO_BLOCK_SIZE, 0));
+		deposit_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&courant_nblocks, (const void*) sph_cuda_courant, HYDRO_BLOCK_SIZE, 0));
 		courant_nblocks *= cuda_smp_count();
 		size_t smoothlen_mem = sizeof(smoothlen_workspace) * smoothlen_nblocks;
 		size_t semiactive_mem = sizeof(mark_semiactive_workspace) * semiactive_nblocks;
 		size_t courant_mem = sizeof(courant_workspace) * courant_nblocks;
 		size_t hydro_mem = sizeof(hydro_workspace) * hydro_nblocks;
-		size_t max_mem = std::max(std::max(smoothlen_mem, semiactive_mem), std::max(hydro_mem, courant_mem));
+		size_t deposit_mem = sizeof(deposit_workspace) * deposit_nblocks;
+		size_t max_mem = std::max(std::max(std::max(smoothlen_mem, semiactive_mem), std::max(hydro_mem, courant_mem)), deposit_mem);
 		CUDA_CHECK(cudaMalloc(&workspace_ptr, max_mem));
 		PRINT("Allocating %i GB in workspace memory\n", max_mem / 1024 / 1024 / 1024);
 //		sleep(10);
@@ -1226,6 +1407,11 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	break;
 	case SPH_RUN_HYDRO: {
 		sph_cuda_hydro<<<hydro_nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,(hydro_workspace*)workspace_ptr,reduce);
+		cuda_stream_synchronize(stream);
+	}
+	break;
+	case SPH_RUN_DEPOSIT: {
+		sph_cuda_deposit<<<deposit_nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,(deposit_workspace*)workspace_ptr,reduce);
 		cuda_stream_synchronize(stream);
 	}
 	break;
