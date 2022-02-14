@@ -355,7 +355,16 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				ws.h.resize(next_size);
 				ws.rungs.resize(next_size);
 				if (contains) {
+					if( j >= total) {
+						PRINT( "%i %i\n", j, total);
+					}
+					ASSERT(j < total);
 					const int k = offset + j;
+					ASSERT(k < next_size);
+					ASSERT( k < ws.x.size());
+					ASSERT( k < ws.y.size());
+					ASSERT( k < ws.z.size());
+					ASSERT( k < ws.h.size());
 					ws.x[k] = x[XDIM];
 					ws.y[k] = x[YDIM];
 					ws.z[k] = x[ZDIM];
@@ -831,7 +840,7 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 			}
 		}
 		const float m = data.m;
-		constexpr float fSN = 2e-4f;
+		constexpr float fSN = 6e-4f;
 		const float dEtherm = 0.5f * m * fSN * sqr(params.a);
 		const float dEkin = 0.5f * m * fSN * sqr(params.a);
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {

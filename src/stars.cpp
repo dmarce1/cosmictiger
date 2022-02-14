@@ -220,7 +220,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 					float real_dt = a * dt * code_to_s * constants::seconds_to_years;
 					//PRINT( "removing %e years from %e\n", real_dt, stars[i].time_remaining);
 				stars[i].time_remaining -= real_dt;
-				if( stars[i].time_remaining < 0.0 /*&& particles_rung(stars[i].dm_index) >= minrung*/ ) {
+				if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
 					float remnant_mass_ratio = stars_remnant_mass(stars[i].stellar_mass, stars[i].Z);
 					if( gsl_rng_uniform_pos(rnd_gens[proc]) > remnant_mass_ratio ) {
 						std::lock_guard<mutex_type> lock(to_gas_mutex);
@@ -285,10 +285,8 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
 //		const double fSN = 0.0e-5;
-		if (star.stellar_mass > 7.5) {
-			float prem = stars_remnant_mass(stars[i].stellar_mass, stars[i].Z);
-			float psn = 1.0f - prem;
-			sph_particles_SN(k) = 1.0f / psn;
+		if (star.stellar_mass > 8.0) {
+			sph_particles_SN(k) = 1.0f / star.stellar_mass;
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		E *= a * a;
@@ -408,23 +406,104 @@ float stars_helium_produced(float mass) {
  }
  */
 
+float Mrem_frac_big(float M, float Z) {
+// Spera et al 2015
+	const auto Mco_coeffs = [](float& B1, float&K1, float& K2, float&delta1, float& delta2,
+			float Z) {
+		if (Z > 4e-3) {
+			B1 = 59.63 - 2.969e3 * Z + 4.988e4 * sqr(Z);
+			K1 = 45.04 - 2.176e3 * Z + 3.806e4 * sqr(Z);
+			K2 = 1.389e2 - 4.664e3 * Z + 5.106e4 * sqr(Z);
+			delta1 = 2.790e-2 - 1.780e-2 * Z + 77.05 * sqr(Z);
+			delta2 = 6.730e-3 + 2.690 * Z - 52.39 * sqr(Z);
+		} else if (Z > 1e-3) {
+			B1 = 40.98 + 3.415e4 * Z - 8.064e6 * sqr(Z);
+			K1 = 35.17 + 1.548e4 * Z - 3.759e6 * sqr(Z);
+			K2 = 20.36 + 1.162e5 * Z - 2.276e7 * sqr(Z);
+			delta1 = 2.500e-2 - 4.346 * Z + 1.340e3 * sqr(Z);
+			delta2 = 1.750e-2 + 11.39 * Z - 2.902 * sqr(Z);
+		} else {
+			B1 = 67.07;
+			K1 = 46.89;
+			K2 = 1.138e2;
+			delta1 = 2.199e-2;
+			delta2 = 2.602e-2;
+
+		}
+	};
+
+	const auto gmxy = [](float M, float x, float y) {
+		return 0.5 / (1.0 + pow(10, (x - M) * y));
+	};
+
+	const auto MCO = [Mco_coeffs,gmxy](float M, float Z) {
+		float B1, K1, K2, delta1, delta2;
+		Mco_coeffs(B1, K1, K2, delta1, delta2, Z);
+		return -2.0 + (B1 + 2.0) * (gmxy(M, K1, delta1) + gmxy(M, K2, delta2));
+	};
+
+	float mco = MCO(M, Z);
+	float Mrem;
+	if (Z < 5e-4) {
+		float mZ = -6.476e2 * Z + 1.911;
+		float qZ = 2.300e3 * Z + 11.67;
+		float fmcoz = mZ * mco + qZ;
+		float pmco = -2.333 + 0.1559 * mco + 0.2700 * sqr(mco);
+		if (mco < 5) {
+			Mrem = std::max(pmco, 1.27f);
+		} else if (mco < 10.0) {
+			Mrem = pmco;
+		} else {
+			Mrem = std::min(pmco, fmcoz);
+		}
+	} else {
+		float A1, A2, L, eta, m, q;
+		if (Z > 1e-3) {
+			A1 = 1.340 - 29.46 / (1.0 + pow(Z / 1.110e-3, 2.361));
+			A2 = 80.22 - 74.73 * pow(Z, 0.965) / (2.72e-3 + pow(Z, 0.965));
+			L = 5.683 + 3.533 / (1.0 + pow(Z / 7.430e-3, 1.993));
+			eta = 1.066 - 1.121 / (1.0 + pow(Z / 2.558e-2, 0.609));
+		} else {
+			A1 = 1.150e5 * Z - 1.258e2;
+			A2 = 91.56 - 1.957e4 * Z - 1.558e7 * sqr(Z);
+			L = 1.134e4 * Z - 2.143;
+			eta = 3.090e-2 - 22.30 * Z + 7.363e4 * sqr(Z);
+		}
+		if (Z > 2e-3) {
+			m = 1.127;
+			q = 1.061;
+		} else if (Z > 1e-3) {
+			m = -43.82 * Z + 1.304;
+			q = -1.296e4 * Z + 26.98;
+		} else {
+			m = -6.476e2 * Z + 1.911;
+			q = 2.300e3 * Z + 11.67;
+		}
+		float hmcoz = A1 + (A2 - A1) / (1.0 + pow(10, (L - mco) * eta));
+		float fmcoz = m * mco + q;
+		if (mco < 5) {
+			Mrem = std::max(hmcoz, 1.27f);
+		} else if (mco < 10) {
+			Mrem = hmcoz;
+		} else {
+			Mrem = std::max(hmcoz, fmcoz);
+		}
+	}
+	return std::min(std::max(Mrem / M, 0.0f), 1.0f);
+}
 float stars_remnant_mass(float Mi, float Z) {
 	float Mf;
-	constexpr float Z0 = 0.012;
-	Z /= Z0;
 	if (Mi < 2.85) { // Cummings 2018
 		Mf = std::min(0.080f * Mi + 0.489f, Mi);
 	} else if (Mi < 3.60) { // Cummings 2018
 		Mf = 0.187 * Mi + 0.184;
-	} else if (Mi < 10.0) { // Cummings 2018
+	} else if (Mi < 8.0) { // Cummings 2018
 		Mf = 0.107 * Mi + 0.471;
-	} else if (Mi < 20.0) {
-		const float m1 = (0.107 * 10.0f + 0.471);
-		Mf = m1 + (Mi - 10.0) / 10.0 * (0.5 * Mi - m1);
 	} else {
-		Mf = 0.5f * Mi;
+		Mf = Mi * Mrem_frac_big(Mi, Z);
 	}
 	return Mf / Mi;
+
 }
 void stars_test_mass() {
 	constexpr int N = 200000;

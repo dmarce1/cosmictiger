@@ -38,7 +38,9 @@ public:
 		if (tid == 0) {
 			sz = 0;
 		}
-		__syncwarp();
+#ifdef __CUDA_ARCH__
+		__syncthreads();
+#endif
 	}
 	__device__
 	void initialize() {
@@ -46,7 +48,9 @@ public:
 		if (tid == 0) {
 			sz = 0;
 		}
-		__syncwarp();
+#ifdef __CUDA_ARCH__
+		__syncthreads();
+#endif
 	}
 	fixedcapvec(const fixedcapvec&) = default;
 	fixedcapvec& operator=(const fixedcapvec&) = default;
@@ -57,7 +61,9 @@ public:
 	__device__
 	inline void resize(int new_sz) {
 		const int tid = threadIdx.x;
-		__syncwarp();
+#ifdef __CUDA_ARCH__
+		__syncthreads();
+#endif
 		if (tid == 0) {
 			sz = new_sz;
 			if (sz >= N) {
@@ -69,7 +75,9 @@ public:
 #endif
 			}
 		}
-		__syncwarp();
+#ifdef __CUDA_ARCH__
+		__syncthreads();
+#endif
 	}
 	__device__
 	inline void push_back(const T& item) {
@@ -86,7 +94,9 @@ public:
 #endif
 			}
 		}
-		__syncwarp();
+#ifdef __CUDA_ARCH__
+		__syncthreads();
+#endif
 	}
 	__device__
 	inline void pop_back() {
@@ -94,7 +104,9 @@ public:
 		if( tid == 0 ) {
 			sz--;
 		}
-		__syncwarp();
+#ifdef __CUDA_ARCH__
+		__syncthreads();
+#endif
 	}
 	__device__
 	inline T& back() {
