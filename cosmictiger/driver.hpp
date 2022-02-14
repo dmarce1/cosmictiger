@@ -29,6 +29,7 @@ struct driver_params {
 	double tau_max;
 	double cosmicK;
 	double esum0;
+	int max_rung;
 	int iter;
 	int step;
 	size_t total_processed;

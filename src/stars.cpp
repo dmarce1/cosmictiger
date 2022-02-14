@@ -220,7 +220,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 					float real_dt = a * dt * code_to_s * constants::seconds_to_years;
 					//PRINT( "removing %e years from %e\n", real_dt, stars[i].time_remaining);
 				stars[i].time_remaining -= real_dt;
-				if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
+				if( stars[i].time_remaining < 0.0 /*&& particles_rung(stars[i].dm_index) >= minrung*/ ) {
 					float remnant_mass_ratio = stars_remnant_mass(stars[i].stellar_mass, stars[i].Z);
 					if( gsl_rng_uniform_pos(rnd_gens[proc]) > remnant_mass_ratio ) {
 						std::lock_guard<mutex_type> lock(to_gas_mutex);

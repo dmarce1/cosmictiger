@@ -1276,10 +1276,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
-						if (rung_hydro >= 10) {
-							//		PRINT("%e %e %e %e %e %e %e \n", dt_cfl, dt_sig, dt_dens, vsig_max1, vsig_max2, div_v * myh, myh);
-							//		__trap();
-						}
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
 						max_rung_grav = max(max_rung_grav, rung_grav);
@@ -1291,7 +1287,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						if (stars) {
 							const float oneinv = 1.f / one;
 							Y *= oneinv;
-//							Y = fmaxf(data.Y0, Y);
 							Z *= oneinv;
 							bool is_eligible = false;
 							const float N = ws.x.size();
@@ -1322,10 +1317,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 								data.tdyn_snk[snki] = tdyn;
 								data.Yform_snk[snki] = Y;
 								data.Zform_snk[snki] = Z;
-								//			PRINT("Jeans mass is %e tdyn = %e tcool = %e rung  = %i time_to_star = %e\n", mj, tdyn, tcool, myrung, data.time_to_star_snk[snki]);
-//								if (data.time_to_star_snk[snki] < 0.0f) {
-								//			PRINT("MAKING STAR!\n");
-								//							}
+								rung = max(params.max_rung - 1, rung);
+								max_rung = max(max_rung, rung);
 							} else {
 								data.tdyn_snk[snki] = 1e+38;
 							}

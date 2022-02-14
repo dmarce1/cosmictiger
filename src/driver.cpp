@@ -124,12 +124,11 @@ void do_groups(int number, double scale) {
 
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, bool verbose = true) {
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, bool verbose = true) {
 	const bool stars = get_options().stars;
 	verbose = true;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
-	int max_rung = 0;
 	sph_tree_create_params tparams;
 
 	timer tm;
@@ -150,6 +149,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 
 	sph_run_params sparams;
+	sparams.max_rung = max_rung;
+	max_rung = 0;
 	sparams.a = scale;
 	sparams.t0 = t0;
 	sparams.min_rung = minrung;
@@ -490,6 +491,7 @@ void driver() {
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		params.tau = 0.0;
 		params.a = a0;
+		params.max_rung = 0;
 		params.cosmicK = 0.0;
 		params.itime = 0;
 		params.iter = 0;
@@ -503,6 +505,7 @@ void driver() {
 	PRINT("ekin0 = %e\n", dr.kin);
 	PRINT("tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
+	int& max_rung = params.max_rung;
 	auto& a = params.a;
 	auto& tau = params.tau;
 	auto& tau_max = params.tau_max;
@@ -620,7 +623,7 @@ void driver() {
 			}
 			const bool chem = get_options().chem;
 			if (sph) {
-				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a));
+				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung);
 				if (tau != 0.0 && chem) {
 					PRINT("Doing chemistry step\n");
 					timer tm;
@@ -632,10 +635,11 @@ void driver() {
 			}
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
-			int max_rung = kr.max_rung;
+			int max_rung0 = max_rung;
+			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a)).max_rung);
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung).max_rung);
 			}
 			if (stars) {
 				stars_find(a, dt, minrung, iter);

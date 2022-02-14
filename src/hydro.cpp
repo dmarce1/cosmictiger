@@ -37,7 +37,7 @@ static void output_line(int num) {
 	fclose(fp);
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, bool verbose);
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int, bool verbose);
 
 void hydro_driver(double tmax) {
 	time_type itime = 0;
@@ -49,8 +49,8 @@ void hydro_driver(double tmax) {
 	float e0, ent0;
 	do {
 		int minrung = min_rung(itime);
-		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, false);
-		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, false);
+		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, false);
+		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, false);
 		int maxrung = rc2.max_rung;
 		double dt = t0 / (1 << maxrung);
 		auto dr = drift(1.0, dt, t, t + dt, tmax);
