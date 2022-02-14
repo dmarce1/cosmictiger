@@ -31,37 +31,6 @@
 
 #define TMAX 1e9f
 
-class frac_real {
-	union {
-		uint16_t bits;
-		struct {
-			uint16_t ex :6;
-			uint16_t mn :10;
-		};
-	};
-	static constexpr float factor = 1023.49999;
-public:
-	CUDA_EXPORT
-	operator float() const {
-		float x = 1.f + (float) mn / (float) factor;
-		float b2y = powf(2.f, -ex);
-		//	PRINT("%i %i to %e\n", mn, ex, x * b2y);
-		return x * b2y;
-	}
-	CUDA_EXPORT
-	frac_real& operator=(float z) {
-		if (z != 0.f) {
-			ex = floor(-log2(z));
-			mn = factor * (z * powf(2.f, ex) - 1.f);
-		} else {
-			ex = 63;
-			mn = 0;
-		}
-		//	PRINT("%e to %i and %i\n", z, mn, ex);
-		return *this;
-	}
-};
-
 struct species_t {
 	union {
 		float n[NSPECIES];
