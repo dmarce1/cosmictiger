@@ -101,12 +101,12 @@ void stars_find(float a, float dt, int minrung, int step) {
 					star_particle star;
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
-					star.stellar_mass = stars_sample_mass(rnd_gens[proc]);
+					star.Z = sph_particles_formZ(i);
+					star.stellar_mass = stars_sample_mass(rnd_gens[proc]) * (star.Z == 0.f ? 25.0f : 1.0f);
 					star.time_remaining = stars_lifetime(star.stellar_mass);
 					star.remnant = false;
 					star.remove = false;
 					star.Y = sph_particles_formY(i);
-					star.Z = sph_particles_formZ(i);
 					const int dmi = star.dm_index;
 					found++;
 					particles_type(dmi) = STAR_TYPE;
@@ -144,6 +144,49 @@ void stars_find(float a, float dt, int minrung, int step) {
 
 float stars_remnant_mass(float Mi, float Z);
 
+HPX_PLAIN_ACTION (stars_statistics);
+
+stars_stats stars_statistics(float a) {
+	PRINT("Searching for STARS\n");
+	vector<hpx::future<stars_stats>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<stars_statistics_action>(c, a));
+	}
+	stars_stats stats;
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc, nthreads]() {
+			const part_int b = (size_t) proc * stars.size() / nthreads;
+			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
+			stars_stats stats;
+			for( part_int i = b; i < e; i++) {
+				if( stars[i].remnant) {
+					stats.remnants++;
+				} else {
+					stats.stars++;
+					if( stars[i].Z == 0.0) {
+						stats.popIII++;
+					} else if( stars[i].Z < 0.02) {
+						stats.popII++;
+					} else {
+						stats.popI++;
+					}
+				}
+			}
+			return stats;
+		}));
+	}
+	for (auto& f : futs) {
+		stats += f.get();
+	}
+	if (hpx_rank() == 0) {
+		FILE* fp = fopen("stars.txt", "at");
+		fprintf(fp, "%e %li %li %li %li %li\n", 1.f / a - 1.f, stats.stars, stats.popI, stats.popII, stats.popIII, stats.remnants);
+		fclose(fp);
+	}
+	return stats;
+}
+
 void stars_remove(float a, float dt, int minrung, int step) {
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
@@ -178,13 +221,15 @@ void stars_remove(float a, float dt, int minrung, int step) {
 					//PRINT( "removing %e years from %e\n", real_dt, stars[i].time_remaining);
 				stars[i].time_remaining -= real_dt;
 				if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
-
-					if( gsl_rng_uniform_pos(rnd_gens[proc]) > stars_remnant_mass(stars[i].stellar_mass, stars[i].Z) ) {
+					float remnant_mass_ratio = stars_remnant_mass(stars[i].stellar_mass, stars[i].Z);
+					if( gsl_rng_uniform_pos(rnd_gens[proc]) > remnant_mass_ratio ) {
 						std::lock_guard<mutex_type> lock(to_gas_mutex);
 						to_gas_indices.push_back(i);
 						stars[i].remove = true;
 					} else {
 						stars[i].remnant = true;
+						stars[i].zform = 1.0f / a - 1.f;
+						stars[i].stellar_mass *= remnant_mass_ratio;
 					}
 				}
 			}
@@ -241,9 +286,9 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		double E = Cv * N * T;
 //		const double fSN = 0.0e-5;
 		if (star.stellar_mass > 7.5) {
-//			double Esuper = fSN * sph_mass * code_to_g * sqr(constants::c);
-//			E += Esuper;
-			sph_particles_SN(k) = true;
+			float prem = stars_remnant_mass(stars[i].stellar_mass, stars[i].Z);
+			float psn = 1.0f - prem;
+			sph_particles_SN(k) = 1.0f / psn;
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		E *= a * a;

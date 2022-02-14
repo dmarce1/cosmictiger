@@ -19,6 +19,7 @@
 #pragma once
 
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/math.hpp>
 
 #ifdef SPH_PARTICLES_CPP
@@ -69,7 +70,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
-SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem;
+SPH_PARTICLES_EXTERN array<frac_real*, NCHEMFRACS> sph_particles_chem;
 SPH_PARTICLES_EXTERN float* sph_particles_dvv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_dz;
@@ -78,13 +79,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_f0;
 SPH_PARTICLES_EXTERN float* sph_particles_ts;
 SPH_PARTICLES_EXTERN float* sph_particles_fY;
 SPH_PARTICLES_EXTERN float* sph_particles_fZ;
-SPH_PARTICLES_EXTERN char* sph_particles_sn;
-#ifdef CHECK_MUTUAL_SORT
-SPH_PARTICLES_EXTERN part_int* sph_particles_tst;
-inline part_int& sph_particles_test(int index) {
-	return sph_particles_tst[index];
-}
-#endif
+SPH_PARTICLES_EXTERN float* sph_particles_sn;
 
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz, bool parts2 = true);
@@ -99,13 +94,13 @@ void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixe
 void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, float* gamma, float* Y, float *Z, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
-void sph_particles_global_read_sns(particle_global_range range, char* sn, part_int offset);
+void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
 
-inline char& sph_particles_SN(part_int index) {
+inline float& sph_particles_SN(part_int index) {
 	return sph_particles_sn[index];
 }
 
@@ -133,37 +128,37 @@ inline float sph_particles_H(part_int index) {
 	return H;
 }
 
-inline float& sph_particles_Z(part_int index) {
+inline frac_real& sph_particles_Z(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_Z][index];
 }
 
-inline float& sph_particles_He0(part_int index) {
+inline frac_real& sph_particles_He0(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_HE][index];
 }
 
-inline float& sph_particles_Hp(part_int index) {
+inline frac_real& sph_particles_Hp(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_HP][index];
 }
 
-inline float& sph_particles_Hn(part_int index) {
+inline frac_real& sph_particles_Hn(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_HN][index];
 }
 
-inline float& sph_particles_H2(part_int index) {
+inline frac_real& sph_particles_H2(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_H2][index];
 }
 
-inline float& sph_particles_Hep(part_int index) {
+inline frac_real& sph_particles_Hep(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_HEP][index];
 }
 
-inline float& sph_particles_Hepp(part_int index) {
+inline frac_real& sph_particles_Hepp(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[CHEM_HEPP][index];
 }
@@ -226,7 +221,7 @@ inline float& sph_particles_dent(part_int index) {
 	return sph_particles_de[index];
 }
 
-inline float& sph_particles_dZ(part_int index) {
+inline float& sph_particles_dchem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dz[index];
 }

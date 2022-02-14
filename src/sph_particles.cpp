@@ -62,14 +62,14 @@ static const array<float, NDIM>* sph_particles_gforce_cache_read_line(line_id_ty
 static const sph_particle* sph_particles_sph_cache_read_line(line_id_type line_id);
 static const pair<char, float>* sph_particles_rung_cache_read_line(line_id_type line_id);
 static const pair<float>* sph_particles_fvel_cache_read_line(line_id_type line_id);
-static const char* sph_particles_sn_cache_read_line(line_id_type line_id);
+static const float* sph_particles_sn_cache_read_line(line_id_type line_id);
 
 static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int index);
 static vector<array<float, NDIM>> sph_particles_fetch_gforce_cache_line(part_int index);
 static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int index);
 static vector<sph_particle> sph_particles_fetch_sph_cache_line(part_int index);
 static vector<pair<float>> sph_particles_fetch_fvel_cache_line(part_int index);
-static vector<char> sph_particles_fetch_sn_cache_line(part_int index);
+static vector<float> sph_particles_fetch_sn_cache_line(part_int index);
 
 HPX_PLAIN_ACTION (sph_particles_fetch_cache_line);
 HPX_PLAIN_ACTION (sph_particles_fetch_gforce_cache_line);
@@ -84,7 +84,7 @@ static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fl
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<sph_particle>>, line_id_hash_hi>, PART_CACHE_SIZE> sph_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<char, float>>> , line_id_hash_hi>, PART_CACHE_SIZE> rung_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>> , line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<char>> , line_id_hash_hi>, PART_CACHE_SIZE> sn_cache;
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>> , line_id_hash_hi>, PART_CACHE_SIZE> sn_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> gforce_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> sph_mutexes;
@@ -377,7 +377,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_dent(oldsz + i) = 0.0f;
 		if (stars) {
 			sph_particles_tdyn(i) = 1e38f;
-			sph_particles_dZ(i) = 0.f;
+			sph_particles_dchem(i) = 0.f;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
@@ -830,7 +830,7 @@ static vector<pair<float>> sph_particles_fetch_fvel_cache_line(part_int index) {
 }
 
 
-void sph_particles_global_read_sns(particle_global_range range, char* sn, part_int offset) {
+void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -861,13 +861,13 @@ void sph_particles_global_read_sns(particle_global_range range, char* sn, part_i
 	}
 }
 
-static const char* sph_particles_sn_cache_read_line(line_id_type line_id) {
+static const float* sph_particles_sn_cache_read_line(line_id_type line_id) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const size_t bin = line_id_hash_lo()(line_id);
 	std::unique_lock<spinlock_type> lock(fvel_mutexes[bin]);
 	auto iter = sn_cache[bin].find(line_id);
 	if (iter == sn_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<char>> >();
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<float>> >();
 		sn_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -882,9 +882,9 @@ static const char* sph_particles_sn_cache_read_line(line_id_type line_id) {
 	return fut.get().data();
 }
 
-static vector<char> sph_particles_fetch_sn_cache_line(part_int index) {
+static vector<float> sph_particles_fetch_sn_cache_line(part_int index) {
 	const part_int line_size = get_options().part_cache_line_size;
-	vector<char> line(line_size);
+	vector<float> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
 	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {

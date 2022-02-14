@@ -615,6 +615,7 @@ void driver() {
 			last_theta = theta;
 			PRINT("Kicking\n");
 			if (stars) {
+				stars_statistics(a);
 				stars_remove(a, dt, minrung, iter);
 			}
 			const bool chem = get_options().chem;

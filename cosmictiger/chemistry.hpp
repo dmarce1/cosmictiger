@@ -31,6 +31,37 @@
 
 #define TMAX 1e9f
 
+class frac_real {
+	union {
+		uint16_t bits;
+		struct {
+			uint16_t ex :6;
+			uint16_t mn :10;
+		};
+	};
+	static constexpr float factor = 1023.49999;
+public:
+	CUDA_EXPORT
+	operator float() const {
+		float x = 1.f + (float) mn / (float) factor;
+		float b2y = powf(2.f, -ex);
+		//	PRINT("%i %i to %e\n", mn, ex, x * b2y);
+		return x * b2y;
+	}
+	CUDA_EXPORT
+	frac_real& operator=(float z) {
+		if (z != 0.f) {
+			ex = floor(-log2(z));
+			mn = factor * (z * powf(2.f, ex) - 1.f);
+		} else {
+			ex = 63;
+			mn = 0;
+		}
+		//	PRINT("%e to %i and %i\n", z, mn, ex);
+		return *this;
+	}
+};
+
 struct species_t {
 	union {
 		float n[NSPECIES];
@@ -44,11 +75,9 @@ struct species_t {
 			float H2;
 		};
 	};
-	species_t fractions_to_number_density(float rho) const;
-	CUDA_EXPORT
+	species_t fractions_to_number_density(float rho) const;CUDA_EXPORT
 	species_t number_density_to_fractions() const;
 };
-
 
 struct chem_attribs {
 	float Hp;
@@ -66,4 +95,4 @@ struct chem_attribs {
 void chemistry_test();
 void cuda_chemistry_step(vector<chem_attribs>& chems, float scale);
 void test_cuda_chemistry_kernel();
-void chemistry_do_step(float,int,float, float, int);
+void chemistry_do_step(float, int, float, float, int);

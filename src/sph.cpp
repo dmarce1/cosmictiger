@@ -84,7 +84,7 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_Y;
 	vector<float, pinned_allocator<float>> host_Z;
 	vector<char, pinned_allocator<char>> host_rungs;
-	vector<char, pinned_allocator<char>> host_sn;
+	vector<float, pinned_allocator<float>> host_sn;
 	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
@@ -1215,17 +1215,21 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 		static const float m = get_options().sph_mass;
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 			if (sph_particles_rung(i) >= min_rung) {
-				if (sph_particles_dZ(i) > 0.f) {
-					const float factor = 1.0f / (1.0f + sph_particles_dZ(i));
-					sph_particles_He0(i) *= factor;
-					sph_particles_Hp(i) *= factor;
-					sph_particles_Hn(i) *= factor;
-					sph_particles_H2(i) *= factor;
-					sph_particles_Hep(i) *= factor;
-					sph_particles_Hepp(i) *= factor;
-					sph_particles_Z(i) *= factor;
-					sph_particles_Z(i) += sph_particles_dZ(i);
-					sph_particles_dZ(i) = 0.f;
+				constexpr float SNZ = 0.02;
+				constexpr float SNHe = 0.16;
+				const float dchem = sph_particles_dchem(i);
+				if (dchem > 0.f) {
+					const float dZ = SNZ * dchem;
+					const float dHe = SNHe * dchem;
+					const float factor = 1.0f / (1.0f + dZ + dHe);
+					sph_particles_He0(i) = sph_particles_He0(i) * factor;
+					sph_particles_Hep(i) = sph_particles_Hep(i) * factor;
+					sph_particles_Hepp(i) = sph_particles_Hepp(i) * factor;
+					sph_particles_Hp(i) = sph_particles_Hp(i) * factor;
+					sph_particles_Hn(i) = sph_particles_Hn(i) * factor;
+					sph_particles_H2(i) = sph_particles_H2(i) * factor;
+					sph_particles_Z(i) = sph_particles_Z(i) * factor;
+					sph_particles_dchem(i) = 0.f;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
 					sph_particles_vel(dim, i) += sph_particles_dvel(dim, i);
@@ -1701,7 +1705,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_DEPOSIT:
 		if (stars) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.sn, sizeof(char) * host_sn.size()));
+			CUDA_CHECK(cudaMalloc(&cuda_data.sn, sizeof(float) * host_sn.size()));
 		}
 		break;
 	}
@@ -1755,7 +1759,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_DEPOSIT:
 		if (stars) {
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.sn, host_sn.data(), sizeof(char) * host_sn.size(), cudaMemcpyHostToDevice, stream));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.sn, host_sn.data(), sizeof(float) * host_sn.size(), cudaMemcpyHostToDevice, stream));
 		}
 		break;
 	}
@@ -1791,7 +1795,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.t0 = params.t0;
 	cuda_data.m = get_options().sph_mass;
 	cuda_data.N = get_options().neighbor_number;
-	cuda_data.dz_snk = &sph_particles_dZ(0);
+	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
 	cuda_data.hsoft_min = get_options().hsoft;

@@ -25,12 +25,13 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_tree.hpp>
+#include <cosmictiger/chemistry.hpp>
 
 struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
-	char* sn;
+	float* sn;
 	float hsoft_min;
 	float G;
 	float t0;
@@ -56,7 +57,7 @@ struct sph_run_cuda_data {
 	float* tdyn_snk;
 	float* ent_snk;
 	float* dent_snk;
-	float* dz_snk;
+	float* dchem_snk;
 	float* dvx_snk;
 	float* dvy_snk;
 	float* dvz_snk;
@@ -65,7 +66,7 @@ struct sph_run_cuda_data {
 	float* gz_snk;
 	float* f0_snk;
 	float* fvel_snk;
-	float* Z_snk;
+	frac_real* Z_snk;
 	float N;
 	char* sa_snk;
 	float* Yform_snk;

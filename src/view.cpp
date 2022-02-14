@@ -83,8 +83,8 @@ struct sph_part_info: public dm_part_info {
 	}
 
 };
+
 struct star_part_info: public dm_part_info {
-	bool remnant;
 	float Y;
 	float Z;
 	float M;
@@ -92,9 +92,20 @@ struct star_part_info: public dm_part_info {
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
-		arc & remnant;
 		arc & Y;
 		arc & Z;
+		arc & M;
+		zform;
+	}
+
+};
+
+struct remnant_part_info: public dm_part_info {
+	float M;
+	float zform;
+	template<class A>
+	void serialize(A&& arc, unsigned ver) {
+		dm_part_info::serialize(arc, ver);
 		arc & M;
 		arc & zform;
 	}
@@ -105,11 +116,13 @@ struct view_return {
 	vector<vector<sph_part_info>> hydro;
 	vector<vector<dm_part_info>> dm;
 	vector<vector<star_part_info>> star;
+	vector<vector<remnant_part_info>> remnant;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & hydro;
 		arc & dm;
 		arc & star;
+		arc & remnant;
 	}
 };
 
@@ -125,6 +138,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 	rc.hydro.resize(boxes.size());
 	rc.dm.resize(boxes.size());
 	rc.star.resize(boxes.size());
+	rc.remnant.resize(boxes.size());
 	vector<hpx::future<view_return>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
@@ -137,6 +151,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 			rc.hydro.resize(boxes.size());
 			rc.dm.resize(boxes.size());
 			rc.star.resize(boxes.size());
+			rc.remnant.resize(boxes.size());
 			const part_int b = (size_t) proc * particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
@@ -185,21 +200,36 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								break;
 							}
 							case STAR_TYPE: {
-								star_part_info info;
-								info.x = particles_pos(XDIM,i);
-								info.y = particles_pos(YDIM,i);
-								info.z = particles_pos(ZDIM,i);
-								info.vx = particles_vel(XDIM,i);
-								info.vy = particles_vel(YDIM,i);
-								info.vz = particles_vel(ZDIM,i);
-								info.rung = particles_rung(i);
-								const auto& star = stars_get(particles_cat_index(i));
-								info.Y = star.Y;
-								info.Z = star.Z;
-								info.remnant = star.remnant;
-								info.zform = star.zform;
-								info.M = star.stellar_mass;
-								rc.star[j].push_back(info);
+								const int k = particles_cat_index(i);
+								const auto& star = stars_get(k);
+								if( star.remnant) {
+									remnant_part_info info;
+									info.x = particles_pos(XDIM,i);
+									info.y = particles_pos(YDIM,i);
+									info.z = particles_pos(ZDIM,i);
+									info.vx = particles_vel(XDIM,i);
+									info.vy = particles_vel(YDIM,i);
+									info.vz = particles_vel(ZDIM,i);
+									info.rung = particles_rung(i);
+									info.zform = star.zform;
+									info.M = star.stellar_mass;
+									rc.remnant[j].push_back(info);
+								} else {
+									star_part_info info;
+									info.x = particles_pos(XDIM,i);
+									info.y = particles_pos(YDIM,i);
+									info.z = particles_pos(ZDIM,i);
+									info.vx = particles_vel(XDIM,i);
+									info.vy = particles_vel(YDIM,i);
+									info.vz = particles_vel(ZDIM,i);
+									info.rung = particles_rung(i);
+									const auto& star = stars_get(k);
+									info.Y = star.Y;
+									info.Z = star.Z;
+									info.zform = star.zform;
+									info.M = star.stellar_mass;
+									rc.star[j].push_back(info);
+								}
 								break;
 							}
 						}
@@ -216,6 +246,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 			rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
 			rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
 			rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
+			rc.remnant[i].insert(rc.remnant[i].begin(), tmp.remnant[i].begin(), tmp.remnant[i].end());
 		}
 	}
 	return rc;
@@ -382,7 +413,6 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, NULL);
 
 			vector<float> p;
-			vector<char> q;
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
@@ -391,19 +421,53 @@ void view_output_views(int cycle, double a) {
 				y.push_back(parts.star[bi][i].Z);
 				z.push_back(parts.star[bi][i].M);
 				p.push_back(parts.star[bi][i].zform);
-				q.push_back(parts.star[bi][i].remnant);
 			}
 			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "star_remnant", "stars", q.data(), x.size(), DB_CHAR, NULL);
+		}
+		if (parts.remnant[bi].size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.remnant[bi].size(); i++) {
+				x.push_back(distance(parts.remnant[bi][i].x, view_boxes[bi].begin[XDIM]));
+				y.push_back(distance(parts.remnant[bi][i].y, view_boxes[bi].begin[YDIM]));
+				z.push_back(distance(parts.remnant[bi][i].z, view_boxes[bi].begin[ZDIM]));
+			}
+			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
+			DBPutPointmesh(db, "remnants", NDIM, coords3, x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.remnant[bi].size(); i++) {
+				x.push_back(parts.remnant[bi][i].vx);
+				y.push_back(parts.remnant[bi][i].vy);
+				z.push_back(parts.remnant[bi][i].vz);
+			}
+			DBPutPointvar1(db, "remnant_vx", "remnants", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "remnant_vy", "remnants", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "remnant_vz", "remnants", z.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
+			for (int i = 0; i < parts.remnant[bi].size(); i++) {
+				x.push_back(parts.remnant[bi][i].rung);
+			}
+			DBPutPointvar1(db, "remnant_rung", "remnants", x.data(), x.size(), DB_FLOAT, NULL);
+
+			vector<float> y;
+			z.resize(0);
+			for (int i = 0; i < parts.remnant[bi].size(); i++) {
+				z.push_back(parts.remnant[bi][i].M);
+				y.push_back(parts.remnant[bi][i].zform);
+			}
+			DBPutPointvar1(db, "remnant_M", "remnants", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "remnant_zform", "remnants", y.data(), x.size(), DB_FLOAT, NULL);
 		}
 		DBClose(db);
 	}
 
 }
-
 
 void view_read_view_file() {
 	FILE* fp = fopen("view.txt", "rt");

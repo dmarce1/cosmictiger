@@ -77,7 +77,7 @@ struct hydro_workspace {
 };
 
 struct deposit_workspace {
-	fixedcapvec<char, WORKSPACE_SIZE + 2> sn;
+	fixedcapvec<float, WORKSPACE_SIZE + 2> sn;
 	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> x;
 	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> y;
 	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> z;
@@ -832,7 +832,6 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 		}
 		const float m = data.m;
 		constexpr float fSN = 2e-4f;
-		constexpr float fZ = 0.02f;
 		const float dEtherm = 0.5f * m * fSN * sqr(params.a);
 		const float dEkin = 0.5f * m * fSN * sqr(params.a);
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
@@ -861,16 +860,13 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 			const float myp = data.ent[i] * powf(myrho, mygamma);
 			const float myc = sqrtf(mygamma * myp * myrhoinv);
 			const float myrho1mgammainv = powf(myrho, 1.0f - mygamma);
-			const float myfvel = data.fvel[i];
-			const float myf0 = data.f0[i];
-			const float Prho2i = myp * myrhoinv * myrhoinv * myf0;
 			const int jmax = round_up(ws.x.size(), block_size);
 			const float ainv = 1.0f / params.a;
 			float dvx = 0.f;
 			float dvy = 0.f;
 			float dvz = 0.f;
 			float dA = 0.f;
-			float dZ = 0.f;
+			float dchem = 0.f;
 			for (int j = tid; j < ws.x.size(); j += block_size) {
 				const float dx = distance(myx, ws.x[j]);
 				const float dy = distance(myy, ws.y[j]);
@@ -894,24 +890,24 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 					const float vz = myvz - ws.vz[j];
 					const float vr = (vx * dx + vy * dy + vz * dz) * rinv;
 					const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
-					dvx += dvr * dx * rinv;
-					dvy += dvr * dy * rinv;
-					dvz += dvr * dz * rinv;
-					dA += da;
-					dZ += wt * fZ;
+					dvx += dvr * dx * rinv * ws.sn[j];
+					dvy += dvr * dy * rinv * ws.sn[j];
+					dvz += dvr * dz * rinv * ws.sn[j];
+					dA += da * ws.sn[j];
+					dchem += wt * ws.sn[j];
 				}
 			}
 			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dA);
 			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvx);
 			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvy);
 			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz);
-			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dZ);
+			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dchem);
 			if (tid == 0) {
 				data.dent_snk[snki] += dA;
 				data.dvx_snk[snki] += dvx;
 				data.dvy_snk[snki] += dvy;
 				data.dvz_snk[snki] += dvz;
-				data.dz_snk[snki] += dZ;
+				data.dchem_snk[snki] += dchem;
 			}
 		}
 		if (tid == 0) {
