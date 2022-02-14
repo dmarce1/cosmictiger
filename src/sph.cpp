@@ -1229,6 +1229,8 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 					sph_particles_Hn(i) = sph_particles_Hn(i) * factor;
 					sph_particles_H2(i) = sph_particles_H2(i) * factor;
 					sph_particles_Z(i) = sph_particles_Z(i) * factor;
+					sph_particles_He0(i) += dHe;
+					sph_particles_Z(i) += dZ;
 					sph_particles_dchem(i) = 0.f;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
