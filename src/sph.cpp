@@ -1968,8 +1968,8 @@ void sph_deposit_sn(float a) {
 									const float vr = (dvx * dx + dvy * dy + dvz * dz) * rinv;
 									const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
 									sph_particles_dvel(XDIM,l) += dvr * dx * rinv * sn[k];
-									sph_particles_dvel(YDIM,l) += dvr * dx * rinv * sn[k];
-									sph_particles_dvel(ZDIM,l) += dvr * dx * rinv * sn[k];
+									sph_particles_dvel(YDIM,l) += dvr * dy * rinv * sn[k];
+									sph_particles_dvel(ZDIM,l) += dvr * dz * rinv * sn[k];
 									sph_particles_dent(l) += da * sn[k];
 									sph_particles_dchem(l) += wt * sn[k];
 								}

@@ -63,6 +63,14 @@ void stars_load(FILE* fp) {
 	FREAD(&size, sizeof(size_t), 1, fp);
 	stars.resize(size);
 	FREAD(stars.data(), sizeof(star_particle), size, fp);
+	stars_cap = stars.size();
+	CUDA_CHECK(cudaMallocManaged(&ptr_stars_gx, sizeof(float) * stars_cap));
+	CUDA_CHECK(cudaMallocManaged(&ptr_stars_gy, sizeof(float) * stars_cap));
+	CUDA_CHECK(cudaMallocManaged(&ptr_stars_gz, sizeof(float) * stars_cap));
+	for (int i = 0; i < stars.size(); i++) {
+		stars_gx(i) = stars_gy(i) = stars_gz(i) = 0.0f;
+	}
+
 }
 
 void stars_find(float a, float dt, int minrung, int step) {
@@ -328,7 +336,8 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		E *= a * a;
-		sph_particles_ent(k) = 1e28 * pow(code_to_g,5./3.) * sqr(code_to_s) / sqr(sqr(code_to_cm));
+		sph_particles_ent(k) = 1e28 * pow(code_to_g, 2. / 3.) * sqr(code_to_s) / sqr(sqr(code_to_cm));
+	//	PRINT( "Restored entropy = %e\n", sph_particles_ent(k));
 		sph_particles_dent(k) = 0.f;
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;
