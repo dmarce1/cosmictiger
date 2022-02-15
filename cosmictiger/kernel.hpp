@@ -155,7 +155,7 @@ inline T dkernelW_dq(T q) {
 		w1 = T(18);
 		w1 = fmaf(q, w1, -T(12));
 		w1 *= q;
-		w2 = -T(6);
+		w2 = T(-6);
 		w2 *= sqr(T(1) - q);
 		sw = q < T(0.5);
 		res = c0 * (sw * w1 + (T(1) - sw) * w2);
