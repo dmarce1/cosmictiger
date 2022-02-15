@@ -85,35 +85,31 @@ struct deposit_workspace {
 	fixedcapvec<float, WORKSPACE_SIZE + 2> h;
 };
 
+struct courant_record1 {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+};
+
+struct courant_record2 {
+	float Y;
+	float Z;
+	float gamma;
+	float vx;
+	float vy;
+	float vz;
+	float gx;
+	float gy;
+	float gz;
+	float ent;
+	float h;
+};
+
 struct courant_workspace {
-	fixedcapvec<float, HYDRO_SIZE + 3> Y;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> Y0;
-	fixedcapvec<float, HYDRO_SIZE + 3> Z;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> Z0;
-	fixedcapvec<float, HYDRO_SIZE + 3> gamma;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> gamma0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 3> x0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 3> y0;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 3> z0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> vx0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> vy0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> vz0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> gx0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> gy0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> gz0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> ent0;
-	fixedcapvec<float, WORKSPACE_SIZE + 3> h0;
-	fixedcapvec<fixed32, HYDRO_SIZE + 3> x;
-	fixedcapvec<fixed32, HYDRO_SIZE + 3> y;
-	fixedcapvec<fixed32, HYDRO_SIZE + 3> z;
-	fixedcapvec<float, HYDRO_SIZE + 3> vx;
-	fixedcapvec<float, HYDRO_SIZE + 3> vy;
-	fixedcapvec<float, HYDRO_SIZE + 3> vz;
-	fixedcapvec<float, HYDRO_SIZE + 3> gx;
-	fixedcapvec<float, HYDRO_SIZE + 3> gy;
-	fixedcapvec<float, HYDRO_SIZE + 3> gz;
-	fixedcapvec<float, HYDRO_SIZE + 3> ent;
-	fixedcapvec<float, HYDRO_SIZE + 3> h;
+	fixedcapvec<courant_record1, WORKSPACE_SIZE + 3> rec1_main;
+	fixedcapvec<courant_record2, WORKSPACE_SIZE + 3> rec2_main;
+	fixedcapvec<courant_record1, HYDRO_SIZE + 3> rec1;
+	fixedcapvec<courant_record2, HYDRO_SIZE + 3> rec2;
 };
 
 #define SMOOTHLEN_BLOCK_SIZE 512
@@ -875,24 +871,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		if (self.nactive > 0) {
 			int flops = 0;
-			ws.x0.resize(0);
-			ws.y0.resize(0);
-			ws.z0.resize(0);
-			ws.vx0.resize(0);
-			ws.vy0.resize(0);
-			ws.vz0.resize(0);
-			ws.h0.resize(0);
-			ws.ent0.resize(0);
-			if (data.gamma) {
-				ws.gamma0.resize(0);
-			}
-			if (stars) {
-				ws.gx0.resize(0);
-				ws.gy0.resize(0);
-				ws.gz0.resize(0);
-				ws.Y0.resize(0);
-				ws.Z0.resize(0);
-			}
+			ws.rec1_main.resize(0);
+			ws.rec2_main.resize(0);
 			for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 				const sph_tree_node& other = data.trees[data.neighbors[ni]];
 				const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -924,45 +904,27 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					}
 					j = contains;
 					compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-					const int offset = ws.x0.size();
+					const int offset = ws.rec1_main.size();
 					const int next_size = offset + total;
-					ws.x0.resize(next_size);
-					ws.y0.resize(next_size);
-					ws.z0.resize(next_size);
-					ws.vx0.resize(next_size);
-					ws.vy0.resize(next_size);
-					ws.vz0.resize(next_size);
-					ws.ent0.resize(next_size);
-					ws.h0.resize(next_size);
-					if (data.gamma) {
-						ws.gamma0.resize(next_size);
-					}
-					if (stars) {
-						ws.gx0.resize(next_size);
-						ws.gy0.resize(next_size);
-						ws.gz0.resize(next_size);
-						ws.Y0.resize(next_size);
-						ws.Z0.resize(next_size);
-					}
+					ws.rec1_main.resize(next_size);
+					ws.rec2_main.resize(next_size);
 					if (contains) {
 						const int k = offset + j;
-						ws.x0[k] = x[XDIM];
-						ws.y0[k] = x[YDIM];
-						ws.z0[k] = x[ZDIM];
-						ws.vx0[k] = data.vx[pi];
-						ws.vy0[k] = data.vy[pi];
-						ws.vz0[k] = data.vz[pi];
-						ws.ent0[k] = data.ent[pi];
-						ws.h0[k] = data.h[pi];
-						if (data.gamma) {
-							ws.gamma0[k] = data.gamma[pi];
-						}
+						ws.rec1_main[k].x = x[XDIM];
+						ws.rec1_main[k].y = x[YDIM];
+						ws.rec1_main[k].z = x[ZDIM];
+						ws.rec2_main[k].vx = data.vx[pi];
+						ws.rec2_main[k].vy = data.vy[pi];
+						ws.rec2_main[k].vz = data.vz[pi];
+						ws.rec2_main[k].ent = data.ent[pi];
+						ws.rec2_main[k].h = data.h[pi];
+						ws.rec2_main[k].gamma = data.gamma[pi];
 						if (stars) {
-							ws.gx0[k] = data.gx[pi];
-							ws.gy0[k] = data.gy[pi];
-							ws.gz0[k] = data.gz[pi];
-							ws.Y0[k] = data.Y[pi];
-							ws.Z0[k] = data.Z[pi];
+							ws.rec2_main[k].gx = data.gx[pi];
+							ws.rec2_main[k].gy = data.gy[pi];
+							ws.rec2_main[k].gz = data.gz[pi];
+							ws.rec2_main[k].Y = data.Y[pi];
+							ws.rec2_main[k].Z = data.Z[pi];
 						}
 					}
 				}
@@ -1000,7 +962,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float gamma;
 					if (data.gamma) {
 						gamma = data.gamma[i];
-						;
 					} else {
 						gamma = 5.f / 3.f;
 					}
@@ -1010,34 +971,18 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						__trap();
 					}
 					const float myc = sqrtf(gamma * myp * myrhoinv);
-					const int jmax = round_up(ws.x0.size(), block_size);
-					ws.x.resize(0);
-					ws.y.resize(0);
-					ws.z.resize(0);
-					ws.vx.resize(0);
-					ws.vy.resize(0);
-					ws.vz.resize(0);
-					ws.h.resize(0);
-					ws.ent.resize(0);
-					if (stars) {
-						ws.gx.resize(0);
-						ws.gy.resize(0);
-						ws.gz.resize(0);
-						ws.Y.resize(0);
-						ws.Z.resize(0);
-					}
-					if (data.gamma) {
-						ws.gamma.resize(0);
-					}
+					const int jmax = round_up(ws.rec1_main.size(), block_size);
+					ws.rec1.resize(0);
+					ws.rec2.resize(0);
 					for (int j = tid; j < jmax; j += block_size) {
 						bool flag = false;
 						int k;
 						int total;
-						if (j < ws.x0.size()) {
-							const auto x = ws.x0[j];
-							const auto y = ws.y0[j];
-							const auto z = ws.z0[j];
-							const float h = ws.h0[j];
+						if (j < ws.rec1.size()) {
+							const auto rec = ws.rec1_main[j];
+							const auto x = rec.x;
+							const auto y = rec.y;
+							const auto z = rec.z;
 							const float dx = distance(x, myx);
 							const float dy = distance(y, myy);
 							const float dz = distance(z, myz);
@@ -1048,46 +993,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						}
 						k = flag;
 						compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-						const int offset = ws.x.size();
+						const int offset = ws.rec1.size();
 						const int next_size = offset + total;
-						ws.x.resize(next_size);
-						ws.y.resize(next_size);
-						ws.z.resize(next_size);
-						ws.vx.resize(next_size);
-						ws.vy.resize(next_size);
-						ws.vz.resize(next_size);
-						ws.ent.resize(next_size);
-						ws.h.resize(next_size);
-						if (stars) {
-							ws.gx.resize(next_size);
-							ws.gy.resize(next_size);
-							ws.gz.resize(next_size);
-							ws.Y.resize(next_size);
-							ws.Z.resize(next_size);
-						}
-						if (data.gamma) {
-							ws.gamma.resize(next_size);
-						}
+						ws.rec1.resize(next_size);
+						ws.rec2.resize(next_size);
 						if (flag) {
 							const int l = offset + k;
-							if (data.gamma) {
-								ws.gamma[l] = ws.gamma0[j];
-							}
-							ws.x[l] = ws.x0[j];
-							ws.y[l] = ws.y0[j];
-							ws.z[l] = ws.z0[j];
-							ws.vx[l] = ws.vx0[j];
-							ws.vy[l] = ws.vy0[j];
-							ws.vz[l] = ws.vz0[j];
-							ws.ent[l] = ws.ent0[j];
-							ws.h[l] = ws.h0[j];
-							if (stars) {
-								ws.gx[l] = ws.gx0[j];
-								ws.gy[l] = ws.gy0[j];
-								ws.gz[l] = ws.gz0[j];
-								ws.Y[l] = ws.Y0[j];
-								ws.Z[l] = ws.Z0[j];
-							}
+							ws.rec1[l] = ws.rec1_main[j];
+							ws.rec2[l] = ws.rec2_main[j];
 						}
 					}
 					float vsig_max1 = 0.f;
@@ -1108,11 +1021,13 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float Y = 0.f;
 					float Z = 0.f;
 					float one = 0.f;
-					for (int j = tid; j < ws.x.size(); j += block_size) {
-						const float dx = distance(myx, ws.x[j]);
-						const float dy = distance(myy, ws.y[j]);
-						const float dz = distance(myz, ws.z[j]);
-						const float h = ws.h[j];
+					for (int j = tid; j < ws.rec1.size(); j += block_size) {
+						const auto rec1 = ws.rec1[j];
+						const auto rec2 = ws.rec2[j];
+						const float dx = distance(myx, rec1.x);
+						const float dy = distance(myy, rec1.y);
+						const float dz = distance(myz, rec1.z);
+						const float h = rec2.h;
 						const float h3 = sqr(h) * h;
 						const float r2 = sqr(dx, dy, dz);
 						const float hinv = 1. / h;
@@ -1122,19 +1037,19 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float rhoinv = minv * c0inv * h3;
 						float gamma;
 						if (data.gamma) {
-							gamma = ws.gamma[j];
+							gamma = rec2.gamma;
 						} else {
 							gamma = 5.f / 3.f;
 						}
-						const float p = ws.ent[j] * powf(rho, gamma);
+						const float p = rec2.ent * powf(rho, gamma);
 						if (p < 0.0) {
 							PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
 							__trap();
 						}
 						const float c = sqrtf(gamma * p * rhoinv);
-						const float dvx = myvx - ws.vx[j];
-						const float dvy = myvy - ws.vy[j];
-						const float dvz = myvz - ws.vz[j];
+						const float dvx = myvx - rec2.vx;
+						const float dvy = myvy - rec2.vy;
+						const float dvz = myvz - rec2.vz;
 						const float rinv = 1.f / (r + 1e-15f);
 						const float ndv = fminf(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
 						const float this_vsig1 = myc + c;
@@ -1158,12 +1073,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						dvz_dz -= dvz * dWdr_z;
 						drho_dh -= q * dkernelW_dq(q);
 						if (stars) {
-							dgx_dx += (ws.gx[j] - mygx) * dWdr_x;
-							dgy_dy += (ws.gy[j] - mygy) * dWdr_y;
-							dgz_dz += (ws.gz[j] - mygz) * dWdr_z;
+							dgx_dx += (rec2.gx - mygx) * dWdr_x;
+							dgy_dy += (rec2.gy - mygy) * dWdr_y;
+							dgz_dz += (rec2.gz - mygz) * dWdr_z;
 							const float W = kernelW(q) * myh3inv;
-							Y += m * rhoinv * W * ws.Y[j];
-							Z += m * rhoinv * W * ws.Z[j];
+							Y += m * rhoinv * W * rec2.Y;
+							Z += m * rhoinv * W * rec2.Z;
 							one += m * rhoinv * W;
 						}
 
@@ -1225,7 +1140,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							Y *= oneinv;
 							Z *= oneinv;
 							bool is_eligible = false;
-							const float N = ws.x.size();
+							const float N = ws.rec1.size();
 							float tdyn;
 							float mj;
 							float tcool;
