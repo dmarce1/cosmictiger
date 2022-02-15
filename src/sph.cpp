@@ -973,7 +973,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, const vector<float>& main_f0s, int min_rung, float t0,
 		int phase, float a) {
 	sph_run_return rc;
-	static thread_local vector<simd_int> xs;
+/*	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
 	static thread_local vector<simd_int> zs;
 	static thread_local vector<simd_int> rungs;
@@ -1200,7 +1200,7 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 				sph_particles_divv(i) = divv.sum();
 			}
 		}
-	}
+	}*/
 	return rc;
 }
 
@@ -1210,7 +1210,7 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 	feenableexcept (FE_OVERFLOW);
 
 	sph_run_return rc;
-	if (phase == 0) {
+	/*	if (phase == 0) {
 		rc.vol = rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = rc.ent = 0.0;
 		static const float m = get_options().sph_mass;
 		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
@@ -1284,7 +1284,7 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 			}
 
 		}
-	}
+	}*/
 	return rc;
 }
 /*
@@ -1775,10 +1775,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.tcool_snk = &sph_particles_tcool(0);
-	cuda_data.dent_snk = &sph_particles_dent(0);
-	cuda_data.dvx_snk = &sph_particles_dvel(XDIM, 0);
-	cuda_data.dvy_snk = &sph_particles_dvel(YDIM, 0);
-	cuda_data.dvz_snk = &sph_particles_dvel(ZDIM, 0);
+	cuda_data.dent1_snk = &sph_particles_dent1(0);
+	cuda_data.dvx1_snk = &sph_particles_dvel1(XDIM, 0);
+	cuda_data.dvy1_snk = &sph_particles_dvel1(YDIM, 0);
+	cuda_data.dvz1_snk = &sph_particles_dvel1(ZDIM, 0);
+	cuda_data.dent2_snk = &sph_particles_dent2(0);
+	cuda_data.dvx2_snk = &sph_particles_dvel2(XDIM, 0);
+	cuda_data.dvy2_snk = &sph_particles_dvel2(YDIM, 0);
+	cuda_data.dvz2_snk = &sph_particles_dvel2(ZDIM, 0);
 	cuda_data.sa_snk = &sph_particles_semi_active(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);

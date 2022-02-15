@@ -159,77 +159,36 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	sparams.set = SPH_SET_ACTIVE;
 	sparams.phase = phase;
 
-	if (phase == 0) {
-		tm.start();
-		if (verbose)
-			PRINT("starting sph_tree_create = %e\n", tm.read());
-		sr = sph_tree_create(tparams);
-		tm.stop();
-		tm.reset();
-		if (verbose)
-			PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
+	tm.start();
+	if (verbose)
+		PRINT("starting sph_tree_create = %e\n", tm.read());
+	sr = sph_tree_create(tparams);
+	tm.stop();
+	tm.reset();
+	if (verbose)
+		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 
-		tm.start();
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		tm.stop();
-		if (verbose)
-			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-		tm.reset();
+	tm.start();
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	if (verbose)
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+	tm.reset();
 
-		do {
-			sparams.set = SPH_SET_ACTIVE;
-			sparams.run_type = SPH_RUN_SMOOTHLEN;
-			timer tm;
-			tm.start();
-			kr = sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-			tm.reset();
-			cont = kr.rc;
-			tnparams.h_wt = cont ? 1.5 : 1.01;
-			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-			tm.start();
-			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-			tm.stop();
-			if (verbose)
-				PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
-			tm.reset();
-			tm.start();
-			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-			sph_tree_neighbor(tnparams, root_id, checklist).get();
-			tm.stop();
-			if (verbose)
-				PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-			tm.reset();
-			kr = sph_run_return();
-		} while (cont);
-		sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
-		tm.reset();
+	do {
+		sparams.set = SPH_SET_ACTIVE;
+		sparams.run_type = SPH_RUN_SMOOTHLEN;
+		timer tm;
 		tm.start();
-		sph_run(sparams, true);
+		kr = sph_run(sparams, true);
 		tm.stop();
 		if (verbose)
-			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
+			PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
-
-		if (tau != 0.0) {
-
-			sph_particles_energy_to_entropy(scale);
-
-			sparams.run_type = SPH_RUN_HYDRO;
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-			tm.reset();
-
-		}
-
+		cont = kr.rc;
+		tnparams.h_wt = cont ? 1.5 : 1.01;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
+		tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 		tm.start();
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		tm.stop();
@@ -243,94 +202,97 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
+		kr = sph_run_return();
+	} while (cont);
+	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
+	tm.reset();
+	tm.start();
+	sph_run(sparams, true);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
+	tm.reset();
 
-		if (tau != 0.0) {
-			sparams.run_type = SPH_RUN_DEPOSIT;
-			tm.start();
-			kr = sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_DEPOSIT): tm = %e \n", tm.read());
-			tm.reset();
+	if (tau != 0.0) {
 
-		}
+		sph_particles_energy_to_entropy(scale);
 
-		sparams.run_type = SPH_RUN_UPDATE;
-		tm.start();
-		kr = sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-		tm.reset();
+	}
 
-	} else {
+	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+	tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
+	tm.start();
+	sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+	tm.stop();
+	if (verbose)
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	tm.reset();
+	tm.start();
+	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	if (verbose)
+		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+	tm.reset();
 
-		sparams.run_type = SPH_RUN_COURANT;
+	if (tau != 0.0) {
+		sparams.run_type = SPH_RUN_DEPOSIT;
 		tm.start();
 		kr = sph_run(sparams, true);
 		tm.stop();
 		if (verbose)
-			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-		tm.reset();
-		max_rung = kr.max_rung;
-
-		const bool chem = get_options().chem;
-		if (chem) {
-			PRINT("Doing chemistry step\n");
-			timer tm;
-			tm.start();
-			chemistry_do_step(scale, minrung, t0, adot, +1);
-			tm.stop();
-			PRINT("Took %e s\n", tm.read());
-		}
-
-		/*	sparams.run_type = SPH_RUN_RUNGS;
-		 tm.start();
-		 bool cont;
-		 do {
-		 sph_run(sparams);
-		 tm.stop();
-		 if (verbose)
-		 PRINT("sph_run(SPH_RUN_RUNGS): tm = %e\n", tm.read());
-		 tm.reset();
-		 cont = kr.rc;
-		 } while (cont);
-		 */
-		sparams.phase = 1;
-		sparams.run_type = SPH_RUN_GRAVITY;
-		tm.start();
-		sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
-		tm.reset();
-
-		sparams.run_type = SPH_RUN_HYDRO;
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-		tm.reset();
-
-		sparams.run_type = SPH_RUN_UPDATE;
-		tm.start();
-		sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-
-		sparams.phase = 0;
-
-		sparams.run_type = SPH_RUN_HYDRO;
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			PRINT("sph_run(SPH_RUN_DEPOSIT): tm = %e \n", tm.read());
 		tm.reset();
 
 	}
+
+	sparams.run_type = SPH_RUN_COURANT;
+	tm.start();
+	kr = sph_run(sparams, true);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
+	tm.reset();
+	max_rung = kr.max_rung;
+
+	const bool chem = get_options().chem;
+	if (chem) {
+		PRINT("Doing chemistry step\n");
+		timer tm;
+		tm.start();
+		chemistry_do_step(scale, minrung, t0, adot, +1);
+		tm.stop();
+		PRINT("Took %e s\n", tm.read());
+	}
+
+	/*	sparams.run_type = SPH_RUN_RUNGS;
+	 tm.start();
+	 bool cont;
+	 do {
+	 sph_run(sparams);
+	 tm.stop();
+	 if (verbose)
+	 PRINT("sph_run(SPH_RUN_RUNGS): tm = %e\n", tm.read());
+	 tm.reset();
+	 cont = kr.rc;
+	 } while (cont);
+	 */
+	sparams.phase = 1;
+	sparams.run_type = SPH_RUN_GRAVITY;
+	tm.start();
+	sph_run(sparams);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
+	tm.reset();
+
+	sparams.run_type = SPH_RUN_HYDRO;
+	tm.start();
+	sph_run(sparams, true);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+	tm.reset();
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
 
@@ -623,8 +585,8 @@ void driver() {
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			if (sph) {
-				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung);
 				if (tau != 0.0 && chem) {
+					sph_particles_apply_updates(minrung);
 					PRINT("Doing chemistry step\n");
 					timer tm;
 					tm.start();
@@ -638,12 +600,6 @@ void driver() {
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
-			if (sph) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung).max_rung);
-			}
-			if (stars) {
-				stars_find(a, dt, minrung, iter);
-			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");
 			if (full_eval) {
@@ -671,7 +627,14 @@ void driver() {
 			timer dtm;
 			dtm.start();
 			PRINT("Drift\n");
-			dr = drift(a2, dt, tau, tau + dt, tau_max);
+			dr = drift(a2, 0.5f * dt, tau, tau + dt, tau_max);
+			if (sph) {
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung).max_rung);
+			}
+			dr = drift(a2, 0.5f * dt, tau, tau + dt, tau_max);
+			if (stars) {
+				stars_find(a, dt, minrung, iter);
+			}
 			if (get_options().do_lc) {
 				check_lc(false);
 			}
@@ -752,7 +715,7 @@ void driver() {
 		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
 		}
-		if( jiter > 50 ) {
+		if (jiter > 50) {
 			break;
 		}
 	}

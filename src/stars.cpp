@@ -291,7 +291,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		E *= a * a;
 		sph_particles_ent(k) = -E;
-		sph_particles_dent(k) = 0.f;
+		sph_particles_dent2(k) = 0.f;
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;
 		sph_particles_He0(k) = 0.f;
@@ -302,7 +302,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		sph_particles_smooth_len(k) = h0;
 		sph_particles_tdyn(k) = 1e38;
 		for (int dim = 0; dim < NDIM; dim++) {
-			sph_particles_dvel(dim, k) = 0.f;
+			sph_particles_dvel2(dim, k) = 0.f;
 		}
 	}
 	for (auto& i : to_gas_indices) {

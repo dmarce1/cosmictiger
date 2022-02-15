@@ -495,15 +495,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			bool active = myrung >= params.min_rung;
 			bool semi_active = !active && data.sa_snk[snki];
-			bool use = active;
-			if (!use && params.phase == 0) {
-				use = semi_active;
-			}
-			if (params.phase == 1 && active && tid == 0) {
-				data.dent_snk[snki] = 0.0f;
-				data.dvx_snk[snki] = 0.f;
-				data.dvy_snk[snki] = 0.f;
-				data.dvz_snk[snki] = 0.f;
+			bool use = semi_active;
+			if (active && tid == 0) {
+				data.dent2_snk[snki] = 0.0f;
+				data.dvx2_snk[snki] = 0.f;
+				data.dvy2_snk[snki] = 0.f;
+				data.dvz2_snk[snki] = 0.f;
 			}
 			const float m = data.m;
 			const float minv = 1.f / m;
@@ -662,11 +659,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvz);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
 				if (tid == 0) {
-					data.dent_snk[snki] += dent;
-					data.dvx_snk[snki] += ddvx;
-					data.dvy_snk[snki] += ddvy;
-					data.dvz_snk[snki] += ddvz;
-					if (params.phase == 1 && !semi_active) {
+					data.dent2_snk[snki] += dent;
+					data.dvx2_snk[snki] += ddvx;
+					data.dvy2_snk[snki] += ddvy;
+					data.dvz2_snk[snki] += ddvz;
+					if (!semi_active) {
 						data.divv_snk[snki] = divv;					// + dt * ddivdt;
 					}
 				}
@@ -837,10 +834,10 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz);
 			shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dchem);
 			if (tid == 0) {
-				data.dent_snk[snki] += dA;
-				data.dvx_snk[snki] += dvx;
-				data.dvy_snk[snki] += dvy;
-				data.dvz_snk[snki] += dvz;
+				data.dent2_snk[snki] += dA;
+				data.dvx2_snk[snki] += dvx;
+				data.dvy2_snk[snki] += dvy;
+				data.dvz2_snk[snki] += dvz;
 				data.dchem_snk[snki] += dchem;
 			}
 		}
