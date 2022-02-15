@@ -528,7 +528,7 @@ void driver() {
 		lc_init(tau, tau_max);
 	}
 	double dt;
-
+	int jiter = 0;
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
 			timer tm;
@@ -616,11 +616,11 @@ void driver() {
 				set_options(opts);
 			}
 			last_theta = theta;
-			PRINT("Kicking\n");
 			if (stars) {
 				stars_statistics(a);
 				stars_remove(a, dt, minrung, iter);
 			}
+			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			if (sph) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung);
@@ -750,6 +750,9 @@ void driver() {
 			}
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
+			break;
+		}
+		if( jiter > 50 ) {
 			break;
 		}
 	}

@@ -522,7 +522,7 @@ void stars_test_mass() {
 	FILE* fp = fopen("mass.txt", "wt");
 	for (int i = 0; i < 10000; i++) {
 		const float m = (i + 0.5) * dm;
-		fprintf(fp, "%e %e %e %e %e \n", m, cnt[i], stars_remnant_mass(m, 0.0), stars_remnant_mass(m, 0.002), stars_remnant_mass(m, 0.02));
+		fprintf(fp, "%e %e %e %e %e %e \n", m, cnt[i], stars_lifetime(m), stars_remnant_mass(m, 0.0), stars_remnant_mass(m, 0.002), stars_remnant_mass(m, 0.02));
 		//		printf( "%e %e\n", m, cnt[i]);
 	}
 	fclose(fp);
