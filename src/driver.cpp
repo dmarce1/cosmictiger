@@ -586,7 +586,7 @@ void driver() {
 			const bool chem = get_options().chem;
 			if (sph) {
 				if (tau != 0.0 && chem) {
-					sph_particles_apply_updates(minrung);
+					sph_particles_apply_updates(1, minrung, 0.0, 0.0);
 					PRINT("Doing chemistry step\n");
 					timer tm;
 					tm.start();
@@ -631,6 +631,7 @@ void driver() {
 			if (sph) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung).max_rung);
 			}
+			sph_particles_apply_updates(0, minrung, 0.5f * dt, a2);
 			dr = drift(a2, 0.5f * dt, tau, tau + dt, tau_max);
 			if (stars) {
 				stars_find(a, dt, minrung, iter);

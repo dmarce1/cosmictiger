@@ -991,45 +991,62 @@ void sph_particles_energy_to_entropy(float a) {
 
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
 
-void sph_particles_apply_updates(int minrung) {
+void sph_particles_apply_updates(int which, int minrung, float dt, float a) {
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung));
+		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, which, minrung, dt, a));
 	}
 
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc,minrung]() {
+		futs.push_back(hpx::async([nthreads, proc,minrung,which,a, dt]() {
+			const float dtainv = dt / a;
 			const static float N = get_options().neighbor_number;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				const int j = sph_particles_dm_index(i);
 				if( particles_rung(j) >= minrung) {
-					constexpr float SNZ = 0.02;
-					constexpr float SNHe = 0.16;
-					const float dchem = sph_particles_dchem(i);
-					if (dchem > 0.f) {
-						const float dZ = SNZ * dchem;
-						const float dHe = SNHe * dchem;
-						const float factor = 1.0f / (1.0f + dZ + dHe);
-						sph_particles_He0(i) = sph_particles_He0(i) * factor;
-						sph_particles_Hep(i) = sph_particles_Hep(i) * factor;
-						sph_particles_Hepp(i) = sph_particles_Hepp(i) * factor;
-						sph_particles_Hp(i) = sph_particles_Hp(i) * factor;
-						sph_particles_Hn(i) = sph_particles_Hn(i) * factor;
-						sph_particles_H2(i) = sph_particles_H2(i) * factor;
-						sph_particles_Z(i) = sph_particles_Z(i) * factor;
-						sph_particles_He0(i) += dHe;
-						sph_particles_Z(i) += dZ;
-						sph_particles_dchem(i) = 0.f;
+					if( which == 0 ) {
+						for (int dim = 0; dim < NDIM; dim++) {
+							const int j = sph_particles_dm_index(i);
+							float& v = sph_particles_vel(dim, i);
+							double x = particles_pos(dim,j).to_double();
+							const float dv = sph_particles_dvel1(dim, i);
+							x += dv * dtainv;
+							particles_pos(dim,j) = x;
+							constrain_range(x);
+							v += dv;
+							sph_particles_dvel1(dim, i) = 0.0f;
+						}
+						sph_particles_ent(i) += sph_particles_dent1(i);
+						sph_particles_dent1(i) = 0.f;
+					} else {
+						constexpr float SNZ = 0.02;
+						constexpr float SNHe = 0.16;
+						const float dchem = sph_particles_dchem(i);
+						if (dchem > 0.f) {
+							const float dZ = SNZ * dchem;
+							const float dHe = SNHe * dchem;
+							const float factor = 1.0f / (1.0f + dZ + dHe);
+							sph_particles_He0(i) = sph_particles_He0(i) * factor;
+							sph_particles_Hep(i) = sph_particles_Hep(i) * factor;
+							sph_particles_Hepp(i) = sph_particles_Hepp(i) * factor;
+							sph_particles_Hp(i) = sph_particles_Hp(i) * factor;
+							sph_particles_Hn(i) = sph_particles_Hn(i) * factor;
+							sph_particles_H2(i) = sph_particles_H2(i) * factor;
+							sph_particles_Z(i) = sph_particles_Z(i) * factor;
+							sph_particles_He0(i) += dHe;
+							sph_particles_Z(i) += dZ;
+							sph_particles_dchem(i) = 0.f;
+						}
+						for (int dim = 0; dim < NDIM; dim++) {
+							sph_particles_vel(dim, i) += sph_particles_dvel2(dim, i);
+							sph_particles_dvel2(dim, i) = 0.0f;
+						}
+						sph_particles_ent(i) += sph_particles_dent2(i);
+						sph_particles_dent2(i) = 0.f;
 					}
-					for (int dim = 0; dim < NDIM; dim++) {
-						sph_particles_vel(dim, i) += sph_particles_dvel2(dim, i);
-						sph_particles_dvel2(dim, i) = 0.0f;
-					}
-					sph_particles_ent(i) += sph_particles_dent2(i);
-					sph_particles_dent2(i) = 0.f;
 				}
 			}
 		}));

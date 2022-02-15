@@ -495,12 +495,16 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			bool active = myrung >= params.min_rung;
 			bool semi_active = !active && data.sa_snk[snki];
-			bool use = semi_active;
+			bool use = active || semi_active;
 			if (active && tid == 0) {
 				data.dent2_snk[snki] = 0.0f;
 				data.dvx2_snk[snki] = 0.f;
 				data.dvy2_snk[snki] = 0.f;
 				data.dvz2_snk[snki] = 0.f;
+				data.dent1_snk[snki] = 0.0f;
+				data.dvx1_snk[snki] = 0.f;
+				data.dvy1_snk[snki] = 0.f;
+				data.dvz1_snk[snki] = 0.f;
 			}
 			const float m = data.m;
 			const float minv = 1.f / m;
@@ -579,10 +583,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					}
 				}
 				float divv = 0.f;
-				float dent = 0.f;
-				float ddvx = 0.f;
-				float ddvy = 0.f;
-				float ddvz = 0.f;
+				float dent1 = 0.f;
+				float ddvx1 = 0.f;
+				float ddvy1 = 0.f;
+				float ddvz1 = 0.f;
+				float dent2 = 0.f;
+				float ddvx2 = 0.f;
+				float ddvy2 = 0.f;
+				float ddvz2 = 0.f;
 				const float ainv = 1.0f / params.a;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					auto rec1 = ws.rec1[j];
@@ -640,29 +648,50 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dvydt = -dpy * m;
 					const float dvzdt = -dpz * m;
 					divv -= myf0 * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
-					float dt;
-					if (params.phase == 0) {
-						dt = 0.5f * min(rung_dt[rec1.rung], rung_dt[myrung]) * (params.t0);
-					} else if (params.phase == 1) {
-						dt = rung_dt[myrung] * (params.t0);
-					}
+					float dt1, dt2;
+					dt1 = rung_dt[myrung] * (params.t0);
+					dt2 = min(rung_dt[rec1.rung] * (params.t0), dt1);
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
 					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv;
-					dent += dAdt * dt;
-					ddvx += dvxdt * dt;
-					ddvy += dvydt * dt;
-					ddvz += dvzdt * dt;
+					dent1 += dAdt * dt1;
+					ddvx1 += dvxdt * dt1;
+					ddvy1 += dvydt * dt1;
+					ddvz1 += dvzdt * dt1;
+					dent2 += dAdt * dt2;
+					ddvx2 += dvxdt * dt2;
+					ddvy2 += dvydt * dt2;
+					ddvz2 += dvzdt * dt2;
 				}
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dent);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvx);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvy);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvz);
+				if (active) {
+					dent2 -= 0.5f * dent1;
+					ddvx2 -= 0.5f * ddvx1;
+					ddvy2 -= 0.5f * ddvy1;
+					ddvz2 -= 0.5f * ddvz1;
+					dent1 *= 0.5f;
+					ddvx1 *= 0.5f;
+					ddvy1 *= 0.5f;
+					ddvz1 *= 0.5f;
+				}
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dent2);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvx2);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvy2);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvz2);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dent1);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvx1);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvy1);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvz1);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
 				if (tid == 0) {
-					data.dent2_snk[snki] += dent;
-					data.dvx2_snk[snki] += ddvx;
-					data.dvy2_snk[snki] += ddvy;
-					data.dvz2_snk[snki] += ddvz;
+					data.dent2_snk[snki] += dent2;
+					data.dvx2_snk[snki] += ddvx2;
+					data.dvy2_snk[snki] += ddvy2;
+					data.dvz2_snk[snki] += ddvz2;
+					if (active) {
+						data.dent1_snk[snki] += dent1;
+						data.dvx1_snk[snki] += ddvx1;
+						data.dvy1_snk[snki] += ddvy1;
+						data.dvz1_snk[snki] += ddvz1;
+					}
 					if (!semi_active) {
 						data.divv_snk[snki] = divv;					// + dt * ddivdt;
 					}

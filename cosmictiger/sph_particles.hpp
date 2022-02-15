@@ -288,7 +288,7 @@ inline float sph_particles_energy(part_int index) {
 	return E;
 }
 
-void sph_particles_apply_updates(int minrung);
+void sph_particles_apply_updates(int which, int minrung, float, float);
 
 inline sph_particle sph_particles_get_particle(part_int index) {
 	sph_particle p;
