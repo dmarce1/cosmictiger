@@ -196,7 +196,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float dh;
 				float& h = data.h_snk[snki];
 				do {
-					float max_dh = h * 1.0 / sqrtf(iter + 1);
+					float max_dh = h / sqrtf(iter + 100);
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					count = 0;
