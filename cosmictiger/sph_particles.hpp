@@ -69,11 +69,13 @@ SPH_PARTICLES_EXTERN part_int* sph_particles_dm;
 SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
-SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1;
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2;
+SPH_PARTICLES_EXTERN float* sph_particles_de1;
+SPH_PARTICLES_EXTERN float* sph_particles_de2;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g;
 SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem;
 SPH_PARTICLES_EXTERN float* sph_particles_dvv;
-SPH_PARTICLES_EXTERN float* sph_particles_de;
 SPH_PARTICLES_EXTERN float* sph_particles_dz;
 SPH_PARTICLES_EXTERN float* sph_particles_fv;
 SPH_PARTICLES_EXTERN float* sph_particles_f0;
@@ -101,7 +103,12 @@ void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
-void sph_particles_apply_updates(bool=false);
+
+#define SPH_UPDATE_CHANGE_SIGN 0
+#define SPH_UPDATE_NULL 1
+#define SPH_UPDATE_CLEAR 2
+
+void sph_particles_apply_updates(int, int);
 
 
 inline float& sph_particles_SN(part_int index) {
@@ -226,10 +233,6 @@ inline char& sph_particles_rung(int index) {
 	return particles_rung(sph_particles_dm_index(index));
 }
 
-inline float& sph_particles_dent(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_de[index];
-}
 
 inline float& sph_particles_dchem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -246,9 +249,24 @@ inline float& sph_particles_ent(part_int index) {
 	return sph_particles_e[index];
 }
 
-inline float& sph_particles_dvel(int dim, part_int index) {
+inline float& sph_particles_dent_pred(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dv[dim][index];
+	return sph_particles_de1[index];
+}
+
+inline float& sph_particles_dvel_pred(int dim, part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dv1[dim][index];
+}
+
+inline float& sph_particles_dent_con(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de2[index];
+}
+
+inline float& sph_particles_dvel_con(int dim, part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dv2[dim][index];
 }
 
 inline float& sph_particles_divv(part_int index) {

@@ -193,7 +193,6 @@ struct sph_run_params {
 #define SPH_RUN_GRAVITY 3
 #define SPH_RUN_HYDRO 5
 #define SPH_RUN_UPDATE 6
-#define SPH_RUN_DEPOSIT 7
 
 sph_run_return sph_run(sph_run_params params, bool cuda = false);
 #ifndef __CUDACC__

@@ -179,7 +179,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
 
-
 		do {
 			sparams.set = SPH_SET_ACTIVE;
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
@@ -218,8 +217,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
 
-
 		if (tau != 0.0) {
+			sph_particles_apply_updates(minrung,0);
 
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
@@ -229,11 +228,11 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
 
-			sph_particles_apply_updates();
+///			sph_particles_apply_updates(SPH_UPDATE_NULL);
+			sph_particles_apply_updates(minrung,1);
 		}
 
 	} else {
-
 
 		if (stars) {
 //			sph_deposit_sn(scale);
@@ -249,7 +248,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 		max_rung = kr.max_rung;
 
-		sph_particles_apply_updates(true);
+//		sph_particles_apply_updates(SPH_UPDATE_CHANGE_SIGN);
 
 		const bool chem = get_options().chem;
 		if (chem) {
@@ -282,7 +281,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
 		tm.reset();
 
-
 		sparams.run_type = SPH_RUN_HYDRO;
 		tm.start();
 		sph_run(sparams, true);
@@ -290,8 +288,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 		tm.reset();
+		sph_particles_apply_updates(minrung,2);
 
-		sph_particles_apply_updates();
+//		sph_particles_apply_updates();
 
 	}
 	if (verbose)
@@ -711,7 +710,7 @@ void driver() {
 		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
 		}
-		if( jiter > 50 ) {
+		if (jiter > 50) {
 			break;
 		}
 	}
