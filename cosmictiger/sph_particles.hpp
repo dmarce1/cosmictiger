@@ -70,6 +70,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv;
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g;
 SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem;
 SPH_PARTICLES_EXTERN float* sph_particles_dvv;
 SPH_PARTICLES_EXTERN float* sph_particles_de;
@@ -80,6 +81,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_ts;
 SPH_PARTICLES_EXTERN float* sph_particles_fY;
 SPH_PARTICLES_EXTERN float* sph_particles_fZ;
 SPH_PARTICLES_EXTERN float* sph_particles_sn;
+SPH_PARTICLES_EXTERN float* sph_particles_tc;
 
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz, bool parts2 = true);
@@ -106,6 +108,7 @@ inline float& sph_particles_SN(part_int index) {
 	return sph_particles_sn[index];
 }
 
+
 inline float& sph_particles_tdyn(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_ts[index];
@@ -128,6 +131,11 @@ inline float sph_particles_H(part_int index) {
 		H -= sph_particles_chem[fi][index];
 	}
 	return H;
+}
+
+inline float& sph_particles_frac(int j, part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_chem[j][index];
 }
 
 inline float& sph_particles_Z(part_int index) {
@@ -230,7 +238,7 @@ inline float& sph_particles_dchem(part_int index) {
 
 inline float& sph_particles_tcool(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_de[index];
+	return sph_particles_tc[index];
 }
 
 inline float& sph_particles_ent(part_int index) {
@@ -250,7 +258,7 @@ inline float& sph_particles_divv(part_int index) {
 
 inline float& sph_particles_gforce(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dv[dim][index];
+	return sph_particles_g[dim][index];
 }
 
 inline float& sph_particles_smooth_len(part_int index) {

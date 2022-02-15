@@ -217,7 +217,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 		if (tau != 0.0) {
 
-
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
 			sph_run(sparams, true);
@@ -227,26 +226,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 
 			sph_particles_apply_updates();
-
 		}
-/*		if (tau != 0.0) {
-			sparams.run_type = SPH_RUN_DEPOSIT;
-			tm.start();
-			kr = sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_DEPOSIT): tm = %e \n", tm.read());
-			tm.reset();
-
-		}*/
-
-/*		sparams.run_type = SPH_RUN_UPDATE;
-		tm.start();
-		kr = sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-		tm.reset();*/
 
 	} else {
 
@@ -254,7 +234,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (stars) {
 			stars_statistics(scale);
 			stars_remove(scale, dt, minrung, iter);
-			sph_particles_energy_to_entropy(scale);
+			sph_deposit_sn(scale);
+			sph_particles_apply_updates();
 		}
 
 		sparams.run_type = SPH_RUN_COURANT;

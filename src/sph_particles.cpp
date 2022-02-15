@@ -225,24 +225,45 @@ void sph_particles_apply_updates() {
 		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
+	std::atomic<int> updated(0);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc]() {
-			float maxh = 0.0;
+		futs.push_back(hpx::async([nthreads, proc, &updated]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				sph_particles_ent(i) += sph_particles_dent(i);
+				if( sph_particles_dent(i) != 0.0 ) {
+					updated++;
+				}
 				sph_particles_dent(i) = 0.f;
 				const int k = sph_particles_dm_index(i);
 				for( int dim = 0; dim < NDIM; dim++) {
 					particles_vel(dim,k) += sph_particles_dvel(dim,i);
+					if( sph_particles_dvel(dim,i) != 0.0 ) {
+						updated++;
+					}
 					sph_particles_dvel(dim,i) = 0.f;
+				}
+				constexpr float dZ = 0.02;
+				constexpr float dHe = 0.16;
+				const float dc = sph_particles_dchem(i);
+				if( dc > 0.0) {
+					const float factor = 1.0f / (1.f + dc*(dZ+dHe));
+					for( int f = 0; f < NCHEMFRACS; f++) {
+						sph_particles_frac(f,i) *= factor;
+					}
+					sph_particles_Z(i) += dc * dZ;
+					sph_particles_Hepp(i) += dc * dHe;
+					sph_particles_dchem(i) = 0.f;
 				}
 			}
 		}));
 	}
 	for (auto& f : futs) {
 		f.get();
+	}
+	if( updated ) {
+		PRINT( "DID UPDATE\n");
 	}
 }
 
@@ -280,7 +301,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
 	std::swap(sph_particles_fv[i], sph_particles_fv[j]);
 	std::swap(sph_particles_f0[i], sph_particles_f0[j]);
-	std::swap(sph_particles_de[i], sph_particles_de[j]);
 	std::swap(sph_particles_h[i], sph_particles_h[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 	if (stars) {
@@ -290,7 +310,7 @@ void sph_particles_swap(part_int i, part_int j) {
 		std::swap(sph_particles_sn[i], sph_particles_sn[j]);
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
-		std::swap(sph_particles_dv[dim][i], sph_particles_dv[dim][j]);
+		std::swap(sph_particles_g[dim][i], sph_particles_g[dim][j]);
 	}
 	if (chem) {
 		for (int l = 0; l < NCHEMFRACS; l++) {
@@ -375,6 +395,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 #endif
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv[dim], new_capacity, true);
+			sph_particles_array_resize(sph_particles_g[dim], new_capacity, true);
 		}
 		if (chem) {
 			for (int f = 0; f < NCHEMFRACS; f++) {
@@ -387,6 +408,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			sph_particles_array_resize(sph_particles_fZ, new_capacity, true);
 			sph_particles_array_resize(sph_particles_sn, new_capacity, true);
 			sph_particles_array_resize(sph_particles_dz, new_capacity, true);
+			sph_particles_array_resize(sph_particles_tc, new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -407,9 +429,12 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		if (stars) {
 			sph_particles_tdyn(i) = 1e38f;
 			sph_particles_dchem(i) = 0.f;
+			sph_particles_SN(i) = 0.f;
 		}
+		sph_particles_dent(oldsz + i) = 0.0f;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
+			sph_particles_dvel(dim, oldsz + i) = 0.0f;
 		}
 	}
 }
@@ -438,11 +463,13 @@ void sph_particles_free() {
 			CUDA_CHECK(cudaFree(sph_particles_fY));
 			CUDA_CHECK(cudaFree(sph_particles_sn));
 			CUDA_CHECK(cudaFree(sph_particles_dz));
+			CUDA_CHECK(cudaFree(sph_particles_tc));
 		}
 		CUDA_CHECK(cudaFree(sph_particles_fv));
 		CUDA_CHECK(cudaFree(sph_particles_h));
 		for (int dim = 0; dim < NDIM; dim++) {
 			CUDA_CHECK(cudaFree(sph_particles_dv[NDIM]));
+			CUDA_CHECK(cudaFree(sph_particles_g[NDIM]));
 		}
 #endif
 	} else {
@@ -461,9 +488,11 @@ void sph_particles_free() {
 		if (stars) {
 			free(sph_particles_ts);
 			free(sph_particles_dz);
+			free(sph_particles_tc);
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			free(sph_particles_dv[NDIM]);
+			free(sph_particles_g[NDIM]);
 		}
 	}
 }
@@ -951,12 +980,8 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_ent(0), sizeof(float), sph_particles_size(), fp);
-	FREAD(&sph_particles_dent(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
-	for (int dim = 0; dim < NDIM; dim++) {
-		FREAD(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp);
-	}
 	for (part_int i = 0; i < sph_particles_size(); i++) {
 		if (std::isnan(sph_particles_dvel(YDIM, i))) {
 			PRINT("dvy is NAN on read\n");
@@ -975,39 +1000,6 @@ void sph_particles_load(FILE* fp) {
 		stars_load(fp);
 	}
 }
-HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
-
-void sph_particles_energy_to_entropy(float a) {
-	vector<hpx::future<void>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_energy_to_entropy_action>(c, a));
-	}
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc,a]() {
-			const static float N = get_options().neighbor_number;
-			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			for( int i = b; i < e; i++) {
-				float e = sph_particles_ent(i);
-				if( e < 0.0 ) {
-					e = -e;
-					const float h = sph_particles_smooth_len(i);
-					const float h3 = (h*h*h);
-					const float h3inv = 1.0 / (h3);
-					const float rho = sph_den(h3inv);
-					const float gamma = 5.0f/3.0f;
-					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
-					sph_particles_ent(i) = K;
-//					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
-			}
-		}
-	}));
-	}
-
-	hpx::wait_all(futs.begin(), futs.end());
-
-}
 
 void sph_particles_save(FILE* fp) {
 	const bool chem = get_options().chem;
@@ -1016,12 +1008,8 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_ent(0), sizeof(float), sph_particles_size(), fp);
-	fwrite(&sph_particles_dent(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
-	for (int dim = 0; dim < NDIM; dim++) {
-		PRINT("%i\n", fwrite(&sph_particles_dvel(dim, 0), sizeof(float), sph_particles_size(), fp));
-	}
 	if (chem) {
 		for (int f = 0; f < NCHEMFRACS; f++) {
 			fwrite(sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);

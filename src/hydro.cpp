@@ -40,7 +40,7 @@ static void output_line(int num) {
 sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int, bool verbose);
 
 void hydro_driver(double tmax) {
-	time_type itime = 0;
+/*	time_type itime = 0;
 	int minrung = 0;
 	double t = 0.0;
 	double t0 = tmax / 64.0;
@@ -75,7 +75,7 @@ void hydro_driver(double tmax) {
 			output_line(main_step);
 			main_step++;
 		}
-	} while (t < tmax);
+	} while (t < tmax);*/
 }
 
 void hydro_sod_test() {

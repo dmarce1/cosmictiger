@@ -1873,3 +1873,135 @@ sph_run_return sph_run_workspace::to_gpu() {
 	return rc;
 }
 
+void sph_deposit_sn(float);
+
+HPX_PLAIN_ACTION (sph_deposit_sn);
+
+void sph_deposit_sn(float a) {
+	vector<hpx::future<void>> futs;
+	vector<hpx::future<void>> futs1;
+	for (auto& c : hpx_children()) {
+		futs1.push_back(hpx::async<sph_deposit_sn_action>(c, a));
+	}
+
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads,a]() {
+			vector<float> sn;
+			vector<fixed32> x;
+			vector<fixed32> y;
+			vector<fixed32> z;
+			vector<float> vx;
+			vector<float> vy;
+			vector<float> vz;
+			vector<float> h;
+			const int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
+			const int e = (size_t) (proc + 1) * sph_tree_leaflist_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				const auto self_id = sph_tree_get_leaf(i);
+				const auto* self_ptr = sph_tree_get_node(self_id);
+				if( has_active_neighbors(self_ptr)) {
+					for( int j = self_ptr->neighbor_range.first; j < self_ptr->neighbor_range.second; j++) {
+						const auto id = sph_tree_get_neighbor(j);
+						const auto& node = *sph_tree_get_node(id);
+						const int size= node.part_range.second - node.part_range.first;
+						sn.resize(size);
+						sph_particles_global_read_sns(node.global_part_range(), sn.data(), 0);
+						bool found_sn = false;
+						for( int k = 0; k < sn.size(); k++) {
+							if( sn[k] != 0.0 ) {
+								found_sn = true;
+								break;
+							}
+						}
+						//constexpr float fSN = 6e-4f;
+				constexpr float fSN = 0e-4f;
+				const float m = get_options().sph_mass;
+				const float dEtherm = 0.5f * m * fSN * sqr(a);
+				const float dEkin = 0.5f * m * fSN * sqr(a);
+				if( found_sn ) {
+					x.resize(size);
+					y.resize(size);
+					z.resize(size);
+					vx.resize(size);
+					vy.resize(size);
+					vz.resize(size);
+					h.resize(size);
+					sph_particles_global_read_pos(node.global_part_range(), x.data(), y.data(), z.data(), 0);
+					sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), nullptr, h.data(), 0);
+					sph_particles_global_read_sph(node.global_part_range(), nullptr, vx.data(), vy.data(), vz.data(), nullptr, nullptr, nullptr, 0);
+					for( int k= 0; k < sn.size(); k++) {
+						if( sn[k] != 0.0 ) {
+							const float h2 = sqr(h[k]);
+							const float hinv = 1.0f / h[k];
+							const float h3inv = sqr(hinv) * hinv;
+							for( int l = self_ptr->part_range.first; l < self_ptr->part_range.second; l++) {
+								const int n = sph_particles_dm_index(l);
+								const auto myx = particles_pos(XDIM,n);
+								const auto myy = particles_pos(YDIM,n);
+								const auto myz = particles_pos(ZDIM,n);
+								const auto myvx = particles_vel(XDIM,n);
+								const auto myvy = particles_vel(YDIM,n);
+								const auto myvz = particles_vel(ZDIM,n);
+								const auto myh = sph_particles_smooth_len(l);
+								const auto myh3inv = 1.f / (sqr(myh)*myh);
+								const auto myrho = sph_den(myh3inv);
+								const auto myrhoinv = 1.f / myrho;
+								const auto mygamma = sph_particles_gamma(l);
+								const auto myrho1mgammainv = powf(myrho,1.f-mygamma);
+								const float dx = distance(x[k],myx);
+								const float dy = distance(y[k],myy);
+								const float dz = distance(z[k],myz);
+								const float r2 = sqr(dx,dy,dz);
+								if( r2 < h2 ) {
+									const float r = sqrtf(r2);
+									const float rinv = 1.f / (r + 1e-15f);
+									const float q = r * hinv;
+									const float W = kernelW(q) * h3inv;
+									const float wt = m * myrhoinv * W;
+									const float detherm = wt * dEtherm / m;
+									const float dekin = wt * dEkin / m;
+									const float da = float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv * detherm;
+									const float dvx = myvx - vx[k];
+									const float dvy = myvy - vy[k];
+									const float dvz = myvz - vz[k];
+									const float vr = (dvx * dx + dvy * dy + dvz * dz) * rinv;
+									const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
+									sph_particles_dvel(XDIM,l) += dvr * dx * rinv * sn[k];
+									sph_particles_dvel(YDIM,l) += dvr * dx * rinv * sn[k];
+									sph_particles_dvel(ZDIM,l) += dvr * dx * rinv * sn[k];
+									sph_particles_dent(l) += da * sn[k];
+									sph_particles_dchem(l) += wt * sn[k];
+								}
+							}
+						}
+					}
+				}
+			}
+
+		}
+	}
+}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads,a]() {
+			vector<float> sn;
+			vector<fixed32> x;
+			vector<fixed32> y;
+			vector<fixed32> z;
+			vector<float> vx;
+			vector<float> vy;
+			vector<float> vz;
+			vector<float> h;
+			const int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
+			const int e = (size_t) (proc + 1) * sph_tree_leaflist_size() / nthreads;
+			for( int i = b; i < e; i++) {
+			}
+
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	hpx::wait_all(futs1.begin(), futs1.end());
+
+}

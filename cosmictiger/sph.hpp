@@ -225,7 +225,7 @@ inline T sph_den(T hinv3) {
 //	PRINT("%e %e\n", m, N);
 	return m * c0 * hinv3;
 }
-
+void sph_deposit_sn(float a);
 
 
 void sph_particles_energy_to_entropy(float a);

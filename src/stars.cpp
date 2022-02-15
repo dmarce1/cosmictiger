@@ -328,7 +328,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		E *= a * a;
-		sph_particles_ent(k) = -E;
+		sph_particles_ent(k) = 1e28 * pow(code_to_g,5./3.) * sqr(code_to_s) / sqr(sqr(code_to_cm));
 		sph_particles_dent(k) = 0.f;
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;
