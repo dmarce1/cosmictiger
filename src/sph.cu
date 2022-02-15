@@ -32,7 +32,7 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (256*1024)
+#define WORKSPACE_SIZE (128*1024)
 #define HYDRO_SIZE (8*1024)
 
 struct smoothlen_workspace {
@@ -764,7 +764,8 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 			}
 		}
 		const float m = data.m;
-		constexpr float fSN = 6e-4f;
+		//constexpr float fSN = 6e-4f;
+		constexpr float fSN = 0e-4f;
 		const float dEtherm = 0.5f * m * fSN * sqr(params.a);
 		const float dEkin = 0.5f * m * fSN * sqr(params.a);
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
@@ -979,7 +980,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						bool flag = false;
 						int k;
 						int total;
-						if (j < ws.rec1.size()) {
+						if (j < ws.rec1_main.size()) {
 							const auto rec = ws.rec1_main[j];
 							const auto x = rec.x;
 							const auto y = rec.y;
