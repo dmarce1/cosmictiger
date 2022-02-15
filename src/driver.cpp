@@ -160,6 +160,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	sparams.phase = phase;
 
 	if (phase == 0) {
+
+		stars_statistics(scale);
+		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)
 			PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -175,6 +178,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
+
 
 		do {
 			sparams.set = SPH_SET_ACTIVE;
@@ -232,8 +236,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 
 		if (stars) {
-			stars_statistics(scale);
-			stars_remove(scale, dt, minrung, iter);
 			sph_deposit_sn(scale);
 			sph_particles_apply_updates();
 		}

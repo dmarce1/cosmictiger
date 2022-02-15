@@ -296,7 +296,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		sph_particles_dm_index(k) = j;
 		particles_type(j) = SPH_TYPE;
 		particles_cat_index(j) = k;
-		if (star.stellar_mass > 10.0f) {
+		if (star.stellar_mass > 7.5f) {
 			const float Hefrac = stars_helium_produced(star.stellar_mass);
 			if (Hefrac > 1.0 - star.Y - star.Z) {
 				PRINT("CANNOT CONVERT MORE THAN A STARS HYDROGEN MASS TO HELIUM! %e %e %e\n", Hefrac, star.Y, star.Z);
@@ -310,28 +310,13 @@ void stars_remove(float a, float dt, int minrung, int step) {
 //			star.Y += Hefrac - Zyield;
 //			star.Z += Zyield;
 //			PRINT("***********************************SUPERNOVA************************************\n!\n");
-			const int k = star.dm_index;
-			float x = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
-			float y = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
-			float z = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
-			const float ninv = 1.f / sqrt(sqr(x, y, z));
-			x *= ninv;
-			y *= ninv;
-			z *= ninv;
-			constexpr float vsup = 0e-3;
-			float& vx = particles_vel(XDIM, k);
-			float& vy = particles_vel(YDIM, k);
-			float& vz = particles_vel(ZDIM, k);
-			vx += vsup * x * a;
-			vy += vsup * y * a;
-			vz += vsup * z * a;
 		}
 		const double T = 5000.0;
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
 		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
 //		const double fSN = 0.0e-5;
-		if (star.stellar_mass > 8.0) {
+		if (star.stellar_mass > 7.5) {
 			sph_particles_SN(k) = 1.0f / star.stellar_mass;
 		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);

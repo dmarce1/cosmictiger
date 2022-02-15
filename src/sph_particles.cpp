@@ -231,6 +231,9 @@ void sph_particles_apply_updates() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
+				if( sph_particles_SN(i) != 0.0 ) {
+//					PRINT( "!!!!!!!!!!!!!!!!!!!1\n");
+				}
 				sph_particles_ent(i) += sph_particles_dent(i);
 				if( sph_particles_dent(i) != 0.0 ) {
 					updated++;
