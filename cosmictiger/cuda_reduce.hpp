@@ -86,6 +86,7 @@ __device__ inline void shared_reduce_add(T& number) {
 		__syncthreads();
 	}
 	number = sum[tid];
+	__syncthreads();
 }
 
 template<class T, int BLOCK_SIZE>

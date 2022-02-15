@@ -971,7 +971,7 @@ void sph_particles_energy_to_entropy(float a) {
 					const float gamma = 5.0f/3.0f;
 					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
 					sph_particles_ent(i) = K;
-					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
+//					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
 				}
 			}
 		}));

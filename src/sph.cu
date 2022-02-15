@@ -32,7 +32,7 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (64*1024)
+#define WORKSPACE_SIZE (256*1024)
 #define HYDRO_SIZE (8*1024)
 
 struct smoothlen_workspace {
@@ -196,6 +196,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float dh;
 				float& h = data.h_snk[snki];
 				do {
+					float max_dh = h * 1.0 / sqrtf(iter + 1);
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					count = 0;
@@ -225,16 +226,15 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					if (count > 1) {
 						f -= data.N * float(3.0 / (4.0 * M_PI));
 						dh = -f / dfdh;
-						if (dh > 0.5f * h) {
-							dh = 0.5f * h;
-						} else if (dh < -0.5f * h) {
-							dh = -0.5f * h;
-						}
+						dh = fminf(fmaxf(dh, -max_dh), max_dh);
 					}
-					error = fabsf(logf(h + dh) - logf(h));
+					error = fabsf(f) / (data.N * float(3.0 / (4.0 * M_PI)));
 					__syncthreads();
 					if (tid == 0) {
 						h += dh;
+						if (iter > 20) {
+							PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, max_dh, error, count);
+						}
 					}
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
@@ -248,12 +248,13 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						}
 					}
 					iter++;
-					if (iter > 100) {
+					if (max_dh / h < SPH_SMOOTHLEN_TOLER) {
 						if (tid == 0) {
 							PRINT("density solver failed to converge %i\n", ws.x.size());
+							__trap();
 						}
-						__trap();
 					}
+					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(box_xceeded);
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
 				if (tid == 0 && h <= 0.f) {
 					PRINT("Less than ZERO H! sph.cu %e\n", h);
