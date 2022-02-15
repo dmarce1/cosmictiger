@@ -25,6 +25,10 @@
 #include <gsl/gsl_rng.h>
 
 vector<star_particle> stars;
+float* ptr_stars_gx = nullptr;
+float* ptr_stars_gy = nullptr;
+float* ptr_stars_gz = nullptr;
+part_int stars_cap = 0;
 
 float stars_sample_mass(gsl_rng*);
 float stars_luminosity(float mass);
@@ -34,6 +38,11 @@ float stars_helium_produced(float mass);
 
 HPX_PLAIN_ACTION (stars_find);
 HPX_PLAIN_ACTION (stars_remove);
+
+static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
+		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
+		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 void stars_save(FILE* fp) {
 	size_t size = stars.size();
@@ -138,8 +147,37 @@ void stars_find(float a, float dt, int minrung, int step) {
 			sph_particles_resize(k, false);
 		}
 	}
+	if (stars_cap < stars.size()) {
+		if (ptr_stars_gx != nullptr) {
+			CUDA_CHECK(cudaFree(ptr_stars_gx));
+			CUDA_CHECK(cudaFree(ptr_stars_gy));
+			CUDA_CHECK(cudaFree(ptr_stars_gz));
+		}
+		int old_cap = stars_cap;
+		stars_cap = std::max(1, stars_cap * 2);
+		CUDA_CHECK(cudaMallocManaged(&ptr_stars_gx, sizeof(float) * stars_cap));
+		CUDA_CHECK(cudaMallocManaged(&ptr_stars_gy, sizeof(float) * stars_cap));
+		CUDA_CHECK(cudaMallocManaged(&ptr_stars_gz, sizeof(float) * stars_cap));
+		for (int i = old_cap; i < stars_cap; i++) {
+			ptr_stars_gx[i] = 0.f;
+			ptr_stars_gy[i] = 0.f;
+			ptr_stars_gz[i] = 0.f;
+		}
+	}
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars created  for a total of %i stars and remnants\n", (int ) found, stars.size());
+}
+
+float& stars_gx(part_int i) {
+	return ptr_stars_gx[i];
+}
+
+float& stars_gy(part_int i) {
+	return ptr_stars_gy[i];
+}
+
+float& stars_gz(part_int i) {
+	return ptr_stars_gz[i];
 }
 
 float stars_remnant_mass(float Mi, float Z);
@@ -263,7 +301,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			}
 //			star.Y += Hefrac - Zyield;
 //			star.Z += Zyield;
-			PRINT("***********************************SUPERNOVA************************************\n!\n");
+//			PRINT("***********************************SUPERNOVA************************************\n!\n");
 			const int k = star.dm_index;
 			float x = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
 			float y = 2.f * gsl_rng_uniform_pos(rnd_gens[0]) - 1.f;
@@ -301,13 +339,21 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		sph_particles_Z(k) = star.Z;
 		sph_particles_smooth_len(k) = h0;
 		sph_particles_tdyn(k) = 1e38;
+		sph_particles_gforce(XDIM, k) = stars_gx(i);
+		sph_particles_gforce(YDIM, k) = stars_gy(i);
+		sph_particles_gforce(ZDIM, k) = stars_gz(i);
+		stars_gx(i) = stars_gy(i) = stars_gz(i) = 0.f;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel(dim, k) = 0.f;
 		}
 	}
 	for (auto& i : to_gas_indices) {
 		while (i < stars.size() && stars[i].remove) {
+			const int j = stars.size() - 1;
 			stars[i] = stars.back();
+			stars_gx(i) = stars_gx(j);
+			stars_gy(i) = stars_gy(j);
+			stars_gz(i) = stars_gz(j);
 			if (!stars[i].remove) {
 				particles_cat_index(stars[i].dm_index) = i;
 			}
@@ -527,5 +573,34 @@ void stars_test_mass() {
 	}
 	fclose(fp);
 
+}
+
+HPX_PLAIN_ACTION (stars_apply_gravity);
+
+void stars_apply_gravity(int minrung, float t0) {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<stars_apply_gravity_action>(c, minrung, t0));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc, nthreads, minrung,t0]() {
+			const part_int b = (size_t) proc * stars.size() / nthreads;
+			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
+			for( part_int i = b; i < e; i++) {
+				const int j = stars[i].dm_index;
+				const auto rung = particles_rung(j);
+				if( rung >= minrung) {
+					const float dt = 0.5f * t0 * rung_dt[rung];
+					particles_vel(XDIM,j) += stars_gx(i) * dt;
+					particles_vel(YDIM,j) += stars_gy(i) * dt;
+					particles_vel(ZDIM,j) += stars_gz(i) * dt;
+					stars_gx(i) = stars_gy(i) = stars_gz(i) = 0.f;
+				}
+			}
+		}));
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
 }
 

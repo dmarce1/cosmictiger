@@ -27,6 +27,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/stars.hpp>
 
 #include <unistd.h>
 #include <stack>
@@ -421,6 +422,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					sph_particles_gforce(XDIM, k) = forces.gx[j];
 					sph_particles_gforce(YDIM, k) = forces.gy[j];
 					sph_particles_gforce(ZDIM, k) = forces.gz[j];
+				} else if( type == STAR_TYPE ) {
+					const int k = particles_cat_index(i);
+					stars_gx(k) = forces.gx[j];
+					stars_gy(k) = forces.gy[j];
+					stars_gz(k) = forces.gz[j];
 				} else {
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);

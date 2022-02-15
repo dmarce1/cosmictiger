@@ -41,9 +41,12 @@ struct cuda_kick_data {
 	float* sph_gx;
 	float* sph_gy;
 	float* sph_gz;
-	part_int* sph_index;
-	char* type;
+	float* star_gx;
+	float* star_gy;
+	float* star_gz;
+	part_int* cat_index;
 	char* sph;
+	char* type;
 	bool vsoft;
 	char* rungs;
 	float* gx;

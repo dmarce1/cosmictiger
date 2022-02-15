@@ -124,7 +124,7 @@ void do_groups(int number, double scale) {
 
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, bool verbose = true) {
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, bool verbose = true) {
 	const bool stars = get_options().stars;
 	verbose = true;
 	if (verbose)
@@ -214,9 +214,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
 
+
 		if (tau != 0.0) {
 
-			sph_particles_energy_to_entropy(scale);
 
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
@@ -226,25 +226,10 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
 
+			sph_particles_apply_updates();
+
 		}
-
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.set = SPH_SET_SEMIACTIVE | SPH_SET_ACTIVE;
-		tm.start();
-		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-		tm.stop();
-		if (verbose)
-			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
-		tm.reset();
-		tm.start();
-		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		tm.stop();
-		if (verbose)
-			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-		tm.reset();
-
-		if (tau != 0.0) {
+/*		if (tau != 0.0) {
 			sparams.run_type = SPH_RUN_DEPOSIT;
 			tm.start();
 			kr = sph_run(sparams, true);
@@ -253,17 +238,24 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_DEPOSIT): tm = %e \n", tm.read());
 			tm.reset();
 
-		}
+		}*/
 
-		sparams.run_type = SPH_RUN_UPDATE;
+/*		sparams.run_type = SPH_RUN_UPDATE;
 		tm.start();
 		kr = sph_run(sparams);
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-		tm.reset();
+		tm.reset();*/
 
 	} else {
+
+
+		if (stars) {
+			stars_statistics(scale);
+			stars_remove(scale, dt, minrung, iter);
+			sph_particles_energy_to_entropy(scale);
+		}
 
 		sparams.run_type = SPH_RUN_COURANT;
 		tm.start();
@@ -305,22 +297,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
 		tm.reset();
 
-		sparams.run_type = SPH_RUN_HYDRO;
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-		tm.reset();
 
-		sparams.run_type = SPH_RUN_UPDATE;
-		tm.start();
-		sph_run(sparams);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_UPDATE): tm = %e\n", tm.read());
-
-		sparams.phase = 0;
+		stars_apply_gravity(minrung, t0);
 
 		sparams.run_type = SPH_RUN_HYDRO;
 		tm.start();
@@ -329,6 +307,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 		tm.reset();
+
+		sph_particles_apply_updates();
 
 	}
 	if (verbose)
@@ -616,14 +596,10 @@ void driver() {
 				set_options(opts);
 			}
 			last_theta = theta;
-			if (stars) {
-				stars_statistics(a);
-				stars_remove(a, dt, minrung, iter);
-			}
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			if (sph) {
-				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung);
+				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt);
 				if (tau != 0.0 && chem) {
 					PRINT("Doing chemistry step\n");
 					timer tm;
@@ -639,7 +615,7 @@ void driver() {
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung).max_rung);
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt).max_rung);
 			}
 			if (stars) {
 				stars_find(a, dt, minrung, iter);

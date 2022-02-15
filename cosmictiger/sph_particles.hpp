@@ -99,6 +99,8 @@ void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
+void sph_particles_apply_updates();
+
 
 inline float& sph_particles_SN(part_int index) {
 	return sph_particles_sn[index];

@@ -27,6 +27,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/stars.hpp>
 
 #include <atomic>
 
@@ -84,11 +85,14 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
-	auto* sph_index = data.sph_index;
+	auto* sph_index = data.cat_index;
 	auto* type = data.type;
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
+	auto* star_gx = data.star_gy;
+	auto* star_gy = data.star_gz;
+	auto* star_gz = data.star_gz;
 #ifdef SPH_TOTAL_ENERGY
 	auto* sph_energy = data.sph_energy;
 #endif
@@ -162,17 +166,14 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-#ifdef SPH_TOTAL_ENERGY
-		float dedt;
-		if( j != NOT_SPH) {
-			dedt = mass * (vx * gx[i] + vy * gy[i] + vz * gz[i]);
-			sph_energy[j] += dedt * dt;
-		}
-#endif
 		if (my_type == SPH_TYPE) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
 			sph_gz[j] = gz[i];
+		} else if( my_type == STAR_TYPE) {
+			star_gx[j] = gx[i];
+			star_gy[j] = gy[i];
+			star_gz[j] = gz[i];
 		} else {
 			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
 			rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
@@ -745,11 +746,14 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.sph = do_sph ? dev_sph : nullptr;
 	data.vsoft = get_options().vsoft;
 	if (data.sph) {
-		data.sph_index = &particles_cat_index(0);
+		data.cat_index = &particles_cat_index(0);
 		data.type = &particles_type(0);
 		data.sph_gx = &sph_particles_gforce(XDIM, 0);
 		data.sph_gy = &sph_particles_gforce(YDIM, 0);
 		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
+		data.star_gx = &stars_gx(0);
+		data.star_gy = &stars_gy(0);
+		data.star_gz = &stars_gz(0);
 #ifdef SPH_TOTAL_ENERGY
 		data.sph_energy = &sph_particles_ent(0);
 #endif

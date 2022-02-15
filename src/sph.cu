@@ -232,7 +232,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					__syncthreads();
 					if (tid == 0) {
 						h += dh;
-						if (iter > 20) {
+						if (iter > 30) {
 							PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, max_dh, error, count);
 						}
 					}
@@ -495,11 +495,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			bool active = myrung >= params.min_rung;
 			bool semi_active = !active && data.sa_snk[snki];
-			bool use = active;
-			if (!use && params.phase == 0) {
-				use = semi_active;
-			}
-			if (params.phase == 1 && active && tid == 0) {
+			bool use = active || semi_active;
+			if (active && tid == 0) {
 				data.dent_snk[snki] = 0.0f;
 				data.dvx_snk[snki] = 0.f;
 				data.dvy_snk[snki] = 0.f;
@@ -644,11 +641,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dvzdt = -dpz * m;
 					divv -= myf0 * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
 					float dt;
-					if (params.phase == 0) {
-						dt = 0.5f * min(rung_dt[rec1.rung], rung_dt[myrung]) * (params.t0);
-					} else if (params.phase == 1) {
-						dt = rung_dt[myrung] * (params.t0);
-					}
+					dt = 0.5f * min(rung_dt[rec1.rung], rung_dt[myrung]) * (params.t0);
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
 					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv;
 					dent += dAdt * dt;
@@ -698,7 +691,6 @@ __global__ void sph_cuda_deposit(sph_run_params params, sph_run_cuda_data data, 
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		int flops = 0;
 		ws.x.resize(0);
 		ws.y.resize(0);
 		ws.z.resize(0);

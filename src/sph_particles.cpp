@@ -84,7 +84,7 @@ static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fl
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<sph_particle>>, line_id_hash_hi>, PART_CACHE_SIZE> sph_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<char, float>>> , line_id_hash_hi>, PART_CACHE_SIZE> rung_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>> , line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>> , line_id_hash_hi>, PART_CACHE_SIZE> sn_cache;
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>, line_id_hash_hi>, PART_CACHE_SIZE> sn_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> gforce_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> sph_mutexes;
@@ -215,6 +215,35 @@ float sph_particles_max_smooth_len() {
 		maxh = std::max(maxh, f.get());
 	}
 	return maxh;
+}
+
+HPX_PLAIN_ACTION (sph_particles_apply_updates);
+
+void sph_particles_apply_updates() {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc]() {
+			float maxh = 0.0;
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				sph_particles_ent(i) += sph_particles_dent(i);
+				sph_particles_dent(i) = 0.f;
+				const int k = sph_particles_dm_index(i);
+				for( int dim = 0; dim < NDIM; dim++) {
+					particles_vel(dim,k) += sph_particles_dvel(dim,i);
+					sph_particles_dvel(dim,i) = 0.f;
+				}
+			}
+		}));
+	}
+	for (auto& f : futs) {
+		f.get();
+	}
 }
 
 float sph_particles_temperature(part_int i, float a) {
@@ -829,7 +858,6 @@ static vector<pair<float>> sph_particles_fetch_fvel_cache_line(part_int index) {
 	return line;
 }
 
-
 void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
@@ -972,9 +1000,9 @@ void sph_particles_energy_to_entropy(float a) {
 					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
 					sph_particles_ent(i) = K;
 //					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
-				}
 			}
-		}));
+		}
+	}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
