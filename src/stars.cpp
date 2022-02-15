@@ -25,10 +25,6 @@
 #include <gsl/gsl_rng.h>
 
 vector<star_particle> stars;
-float* ptr_stars_gx = nullptr;
-float* ptr_stars_gy = nullptr;
-float* ptr_stars_gz = nullptr;
-part_int stars_cap = 0;
 
 float stars_sample_mass(gsl_rng*);
 float stars_luminosity(float mass);
@@ -63,14 +59,6 @@ void stars_load(FILE* fp) {
 	FREAD(&size, sizeof(size_t), 1, fp);
 	stars.resize(size);
 	FREAD(stars.data(), sizeof(star_particle), size, fp);
-	stars_cap = stars.size();
-	CUDA_CHECK(cudaMallocManaged(&ptr_stars_gx, sizeof(float) * stars_cap));
-	CUDA_CHECK(cudaMallocManaged(&ptr_stars_gy, sizeof(float) * stars_cap));
-	CUDA_CHECK(cudaMallocManaged(&ptr_stars_gz, sizeof(float) * stars_cap));
-	for (int i = 0; i < stars.size(); i++) {
-		stars_gx(i) = stars_gy(i) = stars_gz(i) = 0.0f;
-	}
-
 }
 
 void stars_find(float a, float dt, int minrung, int step) {
@@ -155,37 +143,8 @@ void stars_find(float a, float dt, int minrung, int step) {
 			sph_particles_resize(k, false);
 		}
 	}
-	if (stars_cap < stars.size()) {
-		if (ptr_stars_gx != nullptr) {
-			CUDA_CHECK(cudaFree(ptr_stars_gx));
-			CUDA_CHECK(cudaFree(ptr_stars_gy));
-			CUDA_CHECK(cudaFree(ptr_stars_gz));
-		}
-		int old_cap = stars_cap;
-		stars_cap = std::max(1, stars_cap * 2);
-		CUDA_CHECK(cudaMallocManaged(&ptr_stars_gx, sizeof(float) * stars_cap));
-		CUDA_CHECK(cudaMallocManaged(&ptr_stars_gy, sizeof(float) * stars_cap));
-		CUDA_CHECK(cudaMallocManaged(&ptr_stars_gz, sizeof(float) * stars_cap));
-		for (int i = old_cap; i < stars_cap; i++) {
-			ptr_stars_gx[i] = 0.f;
-			ptr_stars_gy[i] = 0.f;
-			ptr_stars_gz[i] = 0.f;
-		}
-	}
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars created  for a total of %i stars and remnants\n", (int ) found, stars.size());
-}
-
-float& stars_gx(part_int i) {
-	return ptr_stars_gx[i];
-}
-
-float& stars_gy(part_int i) {
-	return ptr_stars_gy[i];
-}
-
-float& stars_gz(part_int i) {
-	return ptr_stars_gz[i];
 }
 
 float stars_remnant_mass(float Mi, float Z);
@@ -286,7 +245,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 	}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
-	static const auto h0 = 1.0e-1 / get_options().parts_dim;
+	static const auto h0 = 1.0 / get_options().parts_dim;
 	PRINT("Restoring gas\n");
 	for (auto& i : to_gas_indices) {
 		star_particle star = stars[i];
@@ -333,10 +292,6 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		sph_particles_Z(k) = star.Z;
 		sph_particles_smooth_len(k) = h0;
 		sph_particles_tdyn(k) = 1e38;
-		sph_particles_gforce(XDIM, k) = stars_gx(i);
-		sph_particles_gforce(YDIM, k) = stars_gy(i);
-		sph_particles_gforce(ZDIM, k) = stars_gz(i);
-		stars_gx(i) = stars_gy(i) = stars_gz(i) = 0.f;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel(dim, k) = 0.f;
 		}
@@ -345,9 +300,6 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		while (i < stars.size() && stars[i].remove) {
 			const int j = stars.size() - 1;
 			stars[i] = stars.back();
-			stars_gx(i) = stars_gx(j);
-			stars_gy(i) = stars_gy(j);
-			stars_gz(i) = stars_gz(j);
 			if (!stars[i].remove) {
 				particles_cat_index(stars[i].dm_index) = i;
 			}
@@ -568,33 +520,3 @@ void stars_test_mass() {
 	fclose(fp);
 
 }
-
-HPX_PLAIN_ACTION (stars_apply_gravity);
-
-void stars_apply_gravity(int minrung, float t0) {
-	vector<hpx::future<void>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<stars_apply_gravity_action>(c, minrung, t0));
-	}
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, minrung,t0]() {
-			const part_int b = (size_t) proc * stars.size() / nthreads;
-			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
-			for( part_int i = b; i < e; i++) {
-				const int j = stars[i].dm_index;
-				const auto rung = particles_rung(j);
-				if( rung >= minrung) {
-					const float dt = 0.5f * t0 * rung_dt[rung];
-					particles_vel(XDIM,j) += stars_gx(i) * dt;
-					particles_vel(YDIM,j) += stars_gy(i) * dt;
-					particles_vel(ZDIM,j) += stars_gz(i) * dt;
-					stars_gx(i) = stars_gy(i) = stars_gz(i) = 0.f;
-				}
-			}
-		}));
-	}
-
-	hpx::wait_all(futs.begin(), futs.end());
-}
-

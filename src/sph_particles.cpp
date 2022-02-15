@@ -219,33 +219,21 @@ float sph_particles_max_smooth_len() {
 
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
 
-void sph_particles_apply_updates() {
+void sph_particles_apply_updates(bool change_sign) {
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c));
+		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, change_sign));
 	}
 	const int nthreads = hpx_hardware_concurrency();
-	std::atomic<int> updated(0);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc, &updated]() {
+		futs.push_back(hpx::async([nthreads, proc, change_sign]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
-				if( sph_particles_SN(i) != 0.0 ) {
-//					PRINT( "!!!!!!!!!!!!!!!!!!!1\n");
-				}
 				sph_particles_ent(i) += sph_particles_dent(i);
-				if( sph_particles_dent(i) != 0.0 ) {
-					updated++;
-				}
-				sph_particles_dent(i) = 0.f;
 				const int k = sph_particles_dm_index(i);
 				for( int dim = 0; dim < NDIM; dim++) {
 					particles_vel(dim,k) += sph_particles_dvel(dim,i);
-					if( sph_particles_dvel(dim,i) != 0.0 ) {
-						updated++;
-					}
-					sph_particles_dvel(dim,i) = 0.f;
 				}
 				constexpr float dZ = 0.02;
 				constexpr float dHe = 0.16;
@@ -259,14 +247,17 @@ void sph_particles_apply_updates() {
 					sph_particles_Hepp(i) += dc * dHe;
 					sph_particles_dchem(i) = 0.f;
 				}
+				if( change_sign ) {
+					sph_particles_dent(i) = -sph_particles_dent(i);
+					for( int dim = 0; dim < NDIM; dim++) {
+						sph_particles_dvel(dim,i) = -sph_particles_dvel(dim,i);
+					}
+				}
 			}
 		}));
 	}
 	for (auto& f : futs) {
 		f.get();
-	}
-	if( updated ) {
-		PRINT( "DID UPDATE\n");
 	}
 }
 

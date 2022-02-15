@@ -496,7 +496,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			bool active = myrung >= params.min_rung;
 			bool semi_active = !active && data.sa_snk[snki];
 			bool use = active || semi_active;
-			if (active && tid == 0) {
+			if (params.phase == 0 && use && tid == 0) {
 				data.dent_snk[snki] = 0.0f;
 				data.dvx_snk[snki] = 0.f;
 				data.dvy_snk[snki] = 0.f;
@@ -1115,6 +1115,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float gy = data.gy_snk[snki];
 						const float gz = data.gz_snk[snki];
 						char& rung = data.rungs[i];
+						char last_rung = rung;
 						const float g2 = sqr(gx, gy, gz);
 						const float hsoft = fminf(fmaxf(myh, data.hsoft_min), SPH_MAX_SOFT);
 						const float factor = data.eta * sqrtf(params.a * hsoft);
@@ -1168,6 +1169,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 								data.tdyn_snk[snki] = 1e+38;
 							}
 						}
+						float dt_rat = rung_dt[rung] / rung_dt[last_rung];
+						data.dent_snk[snki] *= dt_rat;
+						data.dvx_snk[snki] *= dt_rat;
+						data.dvy_snk[snki] *= dt_rat;
+						data.dvz_snk[snki] *= dt_rat;
 					}
 				}
 			}

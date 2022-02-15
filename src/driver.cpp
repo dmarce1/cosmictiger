@@ -162,7 +162,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	if (phase == 0) {
 
 		stars_statistics(scale);
-		stars_remove(scale, dt, minrung, iter);
+//		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)
 			PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -236,8 +236,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 
 		if (stars) {
-			sph_deposit_sn(scale);
-			sph_particles_apply_updates();
+//			sph_deposit_sn(scale);
+//			sph_particles_apply_updates();
 		}
 
 		sparams.run_type = SPH_RUN_COURANT;
@@ -248,6 +248,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 		tm.reset();
 		max_rung = kr.max_rung;
+
+		sph_particles_apply_updates(true);
 
 		const bool chem = get_options().chem;
 		if (chem) {
@@ -280,8 +282,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
 		tm.reset();
 
-
-		stars_apply_gravity(minrung, t0);
 
 		sparams.run_type = SPH_RUN_HYDRO;
 		tm.start();

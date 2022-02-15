@@ -66,8 +66,6 @@ struct stars_stats {
 
 
 star_particle& stars_get(part_int index);
-
-void stars_apply_gravity(int, float);
 part_int stars_size();
 void stars_find(float a, float dt, int minrung, int step);
 void stars_remove(float a, float dt, int minrung, int step);
@@ -75,6 +73,3 @@ stars_stats stars_statistics(float);
 void stars_save(FILE* fp);
 void stars_load(FILE* fp);
 void stars_test_mass();
-float& stars_gx(part_int);
-float& stars_gy(part_int);
-float& stars_gz(part_int);

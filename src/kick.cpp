@@ -422,11 +422,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					sph_particles_gforce(XDIM, k) = forces.gx[j];
 					sph_particles_gforce(YDIM, k) = forces.gy[j];
 					sph_particles_gforce(ZDIM, k) = forces.gz[j];
-				} else if( type == STAR_TYPE ) {
-					const int k = particles_cat_index(i);
-					stars_gx(k) = forces.gx[j];
-					stars_gy(k) = forces.gy[j];
-					stars_gz(k) = forces.gz[j];
 				} else {
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
@@ -437,11 +432,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					} else {
 						dt = 0.5f * rung_dt[rung] * params.t0;
 					}
-#ifdef SPH_TOTAL_ENERGY
-					if( k != NOT_SPH ) {
-						sph_particles_ent(k) += dedt * dt;
-					}
-#endif
 					vx = fmaf(forces.gx[j], dt, vx);
 					vy = fmaf(forces.gy[j], dt, vy);
 					vz = fmaf(forces.gz[j], dt, vz);

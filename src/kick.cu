@@ -90,9 +90,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
-	auto* star_gx = data.star_gy;
-	auto* star_gy = data.star_gz;
-	auto* star_gz = data.star_gz;
 #ifdef SPH_TOTAL_ENERGY
 	auto* sph_energy = data.sph_energy;
 #endif
@@ -170,10 +167,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
 			sph_gz[j] = gz[i];
-		} else if( my_type == STAR_TYPE) {
-			star_gx[j] = gx[i];
-			star_gy[j] = gy[i];
-			star_gz[j] = gz[i];
 		} else {
 			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
 			rung = max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung));
@@ -184,11 +177,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			ASSERT(rung >= 0);
 			ASSERT(rung < MAX_RUNG);
 			dt = 0.5f * rung_dt[rung] * params.t0;
-#ifdef SPH_TOTAL_ENERGY
-			if( j != NOT_SPH) {
-				sph_energy[j] += dedt * dt;
-			}
-#endif
 			vx = fmaf(gx[i], dt, vx);
 			vy = fmaf(gy[i], dt, vy);
 			vz = fmaf(gz[i], dt, vz);
@@ -751,9 +739,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 		data.sph_gx = &sph_particles_gforce(XDIM, 0);
 		data.sph_gy = &sph_particles_gforce(YDIM, 0);
 		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
-		data.star_gx = &stars_gx(0);
-		data.star_gy = &stars_gy(0);
-		data.star_gz = &stars_gz(0);
 #ifdef SPH_TOTAL_ENERGY
 		data.sph_energy = &sph_particles_ent(0);
 #endif
