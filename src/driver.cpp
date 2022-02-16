@@ -251,12 +251,12 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 					PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
 				tm.reset();
 				tm.start();
-				err = sph_apply_diffusion_update(minrung, 1e-6);
+				err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
 				tm.stop();
 				if (verbose)
 					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 				tm.reset();
-			} while (err > 1.0e-6);
+			} while (err > SPH_DIFFUSION_TOLER);
 		}
 
 		sparams.run_type = SPH_RUN_COURANT;
@@ -281,12 +281,12 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
 			tm.reset();
 			tm.start();
-			err = sph_apply_diffusion_update(minrung, 1e-6);
+			err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
 			tm.stop();
 			if (verbose)
 				PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 			tm.reset();
-		} while (err > 1.0e-6);
+		} while (err > SPH_DIFFUSION_TOLER);
 
 //		sph_particles_apply_updates(SPH_UPDATE_CHANGE_SIGN);
 

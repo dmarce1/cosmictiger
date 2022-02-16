@@ -2048,10 +2048,10 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 								auto dfrac = sph_particles_d_dif_vec(j);
 								auto& frac = sph_particles_dif_vec(j);
 								for( int fi = 0; fi < DIFCO_COUNT; fi++) {
-									this_error = std::max(this_error,fabs(dfrac[fi] / frac[fi]));
 									if( dfrac[fi] < -frac[fi]*0.99 ) {
 										dfrac[fi] = -frac[fi]*0.99;
 									}
+									this_error = std::max(this_error,fabs(dfrac[fi] / (0.5f * dfrac[fi] + frac[fi])));
 									frac[fi] += dfrac[fi];
 								}
 							}
