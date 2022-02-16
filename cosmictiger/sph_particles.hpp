@@ -92,6 +92,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_fZ;
 SPH_PARTICLES_EXTERN float* sph_particles_sn;
 SPH_PARTICLES_EXTERN float* sph_particles_tc;
 SPH_PARTICLES_EXTERN float* sph_particles_dc;
+SPH_PARTICLES_EXTERN char* sph_particles_or;
 
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz, bool parts2 = true);
@@ -107,7 +108,7 @@ void sph_particles_global_read_sph(particle_global_range range, float* ent, floa
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
 void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
-void sph_particles_global_read_difcos(particle_global_range range, float* difcos, part_int offset);
+void sph_particles_global_read_difcos(particle_global_range range, float* difcos, char*, part_int offset);
 void sph_particles_global_read_difvecs(particle_global_range range, dif_vector* difvecs, part_int offset);
 
 void sph_particles_load(FILE* fp);
@@ -122,6 +123,10 @@ void sph_particles_apply_updates(int, int);
 
 inline float& sph_particles_SN(part_int index) {
 	return sph_particles_sn[index];
+}
+
+inline char& sph_particles_old_rung(part_int index) {
+	return sph_particles_or[index];
 }
 
 inline float& sph_particles_difco(part_int index) {

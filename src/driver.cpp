@@ -240,24 +240,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		}
 
 		if (tau != 0.0) {
-			sph_init_diffusion();
-			float err;
-			do {
-				sparams.run_type = SPH_RUN_DIFFUSION;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-				tm.reset();
-				tm.start();
-				err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-				tm.reset();
-			} while (err > SPH_DIFFUSION_TOLER);
 		}
+
+		sph_init_diffusion();
 
 		sparams.run_type = SPH_RUN_COURANT;
 		tm.start();
@@ -271,7 +256,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 //		view_output_views(1, scale);
 
 		sparams.run_type = SPH_RUN_DIFFUSION;
-		sph_init_diffusion();
 		float err;
 		do {
 			tm.start();

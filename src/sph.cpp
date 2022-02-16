@@ -78,6 +78,7 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_vz;
 	vector<float, pinned_allocator<float>> host_ent;
 	vector<float, pinned_allocator<float>> host_difco;
+	vector<char, pinned_allocator<char>> host_oldrung;
 	vector<dif_vector, pinned_allocator<dif_vector>> host_difvec;
 	vector<float, pinned_allocator<float>> host_fvel;
 	vector<float, pinned_allocator<float>> host_f0;
@@ -1558,6 +1559,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_DIFFUSION:
 		host_difco.resize(parts_size);
+		host_oldrung.resize(parts_size);
 		host_difvec.resize(parts_size);
 		break;
 	}
@@ -1618,7 +1620,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
 								switch (params.run_type) {
 									case SPH_RUN_DIFFUSION:
-									sph_particles_global_read_difcos(node.global_part_range(), host_difco.data(), offset);
+									sph_particles_global_read_difcos(node.global_part_range(), host_difco.data(), host_oldrung.data(), offset);
 									sph_particles_global_read_difvecs(node.global_part_range(), host_difvec.data(), offset);
 									break;
 								}
@@ -1677,6 +1679,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_DIFFUSION:
 		CUDA_CHECK(cudaMalloc(&cuda_data.difco, sizeof(float) * host_difco.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.oldrung, sizeof(char) * host_oldrung.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.dif_vec, sizeof(dif_vector) * host_difvec.size()));
 		break;
 	}
@@ -1728,6 +1731,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_DIFFUSION:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.difco, host_difco.data(), sizeof(float) * host_difco.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.oldrung, host_oldrung.data(), sizeof(char) * host_oldrung.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.dif_vec, host_difvec.data(), sizeof(dif_vector) * host_difvec.size(), cudaMemcpyHostToDevice, stream));
 		break;
 	}
@@ -1831,6 +1835,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_DIFFUSION:
 		CUDA_CHECK(cudaFree(cuda_data.difco));
+		CUDA_CHECK(cudaFree(cuda_data.oldrung));
 		CUDA_CHECK(cudaFree(cuda_data.dif_vec));
 		break;
 	}
@@ -2106,6 +2111,7 @@ void sph_init_diffusion() {
 			b = (size_t) proc * sph_particles_size() / nthreads;
 			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
+				sph_particles_old_rung(i) = particles_rung(sph_particles_dm_index(i));
 				dif_vector vec;
 				vec[NCHEMFRACS] = sph_particles_ent(i);
 				vec[0] = sph_particles_He0(i);
