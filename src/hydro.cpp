@@ -250,8 +250,11 @@ void hydro_blast_test() {
 				double x = (ix + 0.5) * dx;
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
-				const bool center = ix == ndim / 2 && iy == ndim / 2 && iz == ndim / 2;
+				const bool center = (ix == ndim / 2 && iy == ndim / 2 && iz == ndim / 2);
 				double ent = center ? p1 : p0 / pow(rho, SPH_GAMMA);
+				if( center ) {
+					PRINT( "CENTER at %e %e %e\n", x, y, z);
+				}
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 			//	PRINT( "%e\n", h);
@@ -269,5 +272,5 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(0.25);
+	hydro_driver(2.5/8.0);
 }

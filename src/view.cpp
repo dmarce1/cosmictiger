@@ -272,9 +272,9 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(distance(parts.dm[bi][i].x, view_boxes[bi].begin[XDIM]));
-				y.push_back(distance(parts.dm[bi][i].y, view_boxes[bi].begin[YDIM]));
-				z.push_back(distance(parts.dm[bi][i].z, view_boxes[bi].begin[ZDIM]));
+				x.push_back(parts.dm[bi][i].x.to_float());
+				y.push_back(parts.dm[bi][i].y.to_float());
+				z.push_back(parts.dm[bi][i].z.to_float());
 			}
 			float *coords1[NDIM] = { x.data(), y.data(), z.data() };
 			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, NULL);
@@ -300,12 +300,12 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(distance(parts.hydro[bi][i].x, view_boxes[bi].begin[XDIM]));
-				y.push_back(distance(parts.hydro[bi][i].y, view_boxes[bi].begin[YDIM]));
-				z.push_back(distance(parts.hydro[bi][i].z, view_boxes[bi].begin[ZDIM]));
+				x.push_back(parts.hydro[bi][i].x.to_float());
+				y.push_back(parts.hydro[bi][i].y.to_float());
+				z.push_back(parts.hydro[bi][i].z.to_float());
 			}
 			float *coords2[NDIM] = { x.data(), y.data(), z.data() };
-			PRINT( "gas points\n");
+//			PRINT( "gas points\n");
 			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			y.resize(0);
@@ -315,7 +315,7 @@ void view_output_views(int cycle, double a) {
 				y.push_back(parts.hydro[bi][i].vy);
 				z.push_back(parts.hydro[bi][i].vz);
 			}
-			PRINT( "Vels\n");
+			//PRINT( "Vels\n");
 			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
@@ -323,7 +323,7 @@ void view_output_views(int cycle, double a) {
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].rung);
 			}
-			PRINT( "rungs\n");
+			//PRINT( "rungs\n");
 			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			y.resize(0);
@@ -331,7 +331,7 @@ void view_output_views(int cycle, double a) {
 				x.push_back(parts.hydro[bi][i].h);
 				y.push_back(parts.hydro[bi][i].ent);
 			}
-			PRINT( "h and ent\n");
+//			PRINT( "h and ent\n");
 			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);
@@ -393,9 +393,9 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(distance(parts.star[bi][i].x, view_boxes[bi].begin[XDIM]));
-				y.push_back(distance(parts.star[bi][i].y, view_boxes[bi].begin[YDIM]));
-				z.push_back(distance(parts.star[bi][i].z, view_boxes[bi].begin[ZDIM]));
+				x.push_back(parts.star[bi][i].x.to_float());
+				y.push_back(parts.star[bi][i].y.to_float());
+				z.push_back(parts.star[bi][i].z.to_float());
 			}
 			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
 			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, NULL);
@@ -436,9 +436,9 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.remnant[bi].size(); i++) {
-				x.push_back(distance(parts.remnant[bi][i].x, view_boxes[bi].begin[XDIM]));
-				y.push_back(distance(parts.remnant[bi][i].y, view_boxes[bi].begin[YDIM]));
-				z.push_back(distance(parts.remnant[bi][i].z, view_boxes[bi].begin[ZDIM]));
+				x.push_back(parts.remnant[bi][i].x.to_float());
+				y.push_back(parts.remnant[bi][i].y.to_float());
+				z.push_back(parts.remnant[bi][i].z.to_float());
 			}
 			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
 			DBPutPointmesh(db, "remnants", NDIM, coords3, x.size(), DB_FLOAT, NULL);

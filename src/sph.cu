@@ -946,12 +946,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
 						total_vsig_max = fmaxf(total_vsig_max, vsig_max);
-						float dthydro = SPH_CFL * dt_cfl;
+						float dthydro = params.cfl * dt_cfl;
 						const float gx = data.gx_snk[snki];
 						const float gy = data.gy_snk[snki];
 						const float gz = data.gz_snk[snki];
 						char& rung = data.rungs[i];
-						char last_rung = rung;
 						const float g2 = sqr(gx, gy, gz);
 						const float hsoft = fminf(fmaxf(myh, data.hsoft_min), SPH_MAX_SOFT);
 						const float factor = data.eta * sqrtf(params.a * hsoft);
