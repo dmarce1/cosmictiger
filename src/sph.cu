@@ -524,13 +524,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float myh3inv = 1.f / (sqr(myh) * myh);										// 6
 				const float myrho = m * c0 * myh3inv;													// 2
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;								// 5
+				const float myent = data.ent[i];
 				float mygamma;
 				if (data.gamma) {
 					mygamma = data.gamma[i];
 				} else {
 					mygamma = 5. / 3.;
 				}
-				const float myp = data.ent[i] * powf(myrho, mygamma);								// 5
+				const float myp = myent * powf(myrho, mygamma);								// 5
 				if (data.ent[i] < 0.0) {
 					PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
 					__trap();
@@ -560,12 +561,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 						const float h2max = sqr(fmaxf(h, myh));
 						const float r2 = sqr(dx, dy, dz);
 						if (r2 < h2max) {
-							if (params.phase == 0) {
-								if (semi_active) {
-									if (rec.rung >= params.min_rung) {
-										flag = true;
-									}
-								} else {
+							if (semi_active) {
+								if (rec.rung >= params.min_rung) {
 									flag = true;
 								}
 							} else {
@@ -647,6 +644,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx; // 4
 					float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy; // 4
 					float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz; // 4
+					const float Qij = sqrtf(sqr(dvx, dvy, dvz)) * hij * SPH_DIFFUSION_C;   // Wadsley 2008
+					float dAdif = -m * Qij * (myent - rec2.ent) * 0.5f * (dWdri + dWdrj) / rho_ij;
 					const float dvxdt = -dpx * m;								// 2
 					const float dvydt = -dpy * m;								// 2
 					const float dvzdt = -dpz * m;								// 2
@@ -656,6 +655,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dt_con = 0.5f * fminf(rung_dt[rec1.rung] * (params.t0), dt_pred); // 3
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz); // 5
 					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv; // 5
+					dAdt += dAdif;
 					if (first_step) {
 						dent_pred += dAdt * dt_pred;							// 2
 						ddvx_pred += dvxdt * dt_pred;							// 2

@@ -235,7 +235,7 @@ void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho = 10.0;
 	double p1 = 1.0;
-	double p0 = 1.0e-6;
+	double p0 = 1.0e-1;
 	auto opts = get_options();
 	const part_int ndim = get_options().parts_dim;
 	const part_int nparts = std::pow(ndim, NDIM);
