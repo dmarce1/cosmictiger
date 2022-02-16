@@ -270,20 +270,21 @@ void stars_remove(float a, float dt, int minrung, int step) {
 //			star.Z += Zyield;
 //			PRINT("***********************************SUPERNOVA************************************\n!\n");
 		}
-		const double T = 5000.0;
+		const double T = 10000.0;
 		const double N = sph_mass * code_to_g * ((1. - star.Y) * 2.f + star.Y * .25f * 3.f + 0.5f * star.Z) * constants::avo;
 		const double Cv = 1.5 * constants::kb;
 		double E = Cv * N * T;
+		constexpr float fSn = 6e-4;
 //		const double fSN = 0.0e-5;
-		if (star.stellar_mass > 7.5) {
-			sph_particles_SN(k) = 1.0f / star.stellar_mass;
-		}
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
-		E *= a * a;
-		sph_particles_ent(k) = 1e28 * pow(code_to_g, 2. / 3.) * sqr(code_to_s) / sqr(sqr(code_to_cm));
-	//	PRINT( "Restored entropy = %e\n", sph_particles_ent(k));
-		sph_particles_dent_con(k) = 0.f;
-		sph_particles_dent_pred(k) = 0.f;
+		if (star.stellar_mass > 7.5) {
+			E += fSn * sph_mass / star.stellar_mass;
+			double dZ = 0.02;
+			double dHe = 0.20 * (1.0 - star.Y - star.Z);
+			star.Y += dHe;
+			star.Z += dZ;
+			PRINT( "SUPERNOVA!!!\n");
+		}
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;
 		sph_particles_He0(k) = 0.f;
@@ -291,8 +292,12 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		sph_particles_Hn(k) = 0.f;
 		sph_particles_Hepp(k) = star.Y;
 		sph_particles_Z(k) = star.Z;
+		sph_particles_dent_con(k) = 0.f;
+		sph_particles_dent_pred(k) = 0.f;
 		sph_particles_smooth_len(k) = h0;
 		sph_particles_tdyn(k) = 1e38;
+		E *= a * a;
+		sph_particles_ent(k) = -E;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel_pred(dim, k) = 0.f;
 			sph_particles_dvel_con(dim, k) = 0.f;

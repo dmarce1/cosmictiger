@@ -616,7 +616,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 						num[fi] += myvec0[fi];
 						data.dvec_snk[snki][fi] = num[fi] / den - myvec[fi];
-						//	PRINT("%e %e\n", data.dvec_snk[snki][fi], data.dvec_snk[snki][fi] / myvec[fi]);
 					}
 				}
 			}
@@ -630,7 +629,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 		__syncthreads();
 	}
 }
-
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hydro_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -854,8 +852,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx; // 4
 					float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy; // 4
 					float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz; // 4
-//					const float Qij = sqrtf(sqr(dvx, dvy, dvz)) * hij * SPH_DIFFUSION_C;   // Wadsley 2008
-//					float dAdif = -m * Qij * (myent - rec2.ent) * 0.5f * (dWdri + dWdrj) / rho_ij;
 					const float dvxdt = -dpx * m;								// 2
 					const float dvydt = -dpy * m;								// 2
 					const float dvzdt = -dpz * m;								// 2
@@ -917,7 +913,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 		__syncthreads();
 	}
 }
-
 
 __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, courant_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;

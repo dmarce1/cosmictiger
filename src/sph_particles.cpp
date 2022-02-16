@@ -294,6 +294,39 @@ float sph_particles_temperature(part_int i, float a) {
 	return T;
 }
 
+HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
+
+void sph_particles_energy_to_entropy(float a) {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_particles_energy_to_entropy_action>(c, a));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc,a]() {
+			const static float N = get_options().neighbor_number;
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				float e = sph_particles_ent(i);
+				if( e < 0.0 ) {
+					e = -e;
+					const float h = sph_particles_smooth_len(i);
+					const float h3 = (h*h*h);
+					const float h3inv = 1.0 / (h3);
+					const float rho = sph_den(h3inv);
+					const float gamma = 5.0f/3.0f;
+					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
+					sph_particles_ent(i) = K;
+//					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
+			}
+		}
+	}));
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+
+}
 void sph_particles_swap(part_int i, part_int j) {
 	const bool chem = get_options().chem;
 	const bool stars = get_options().stars;

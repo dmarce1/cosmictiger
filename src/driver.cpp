@@ -218,6 +218,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 
 		if (tau != 0.0) {
+			sph_particles_energy_to_entropy(scale);
 			sph_particles_apply_updates(minrung, 0);
 
 			sparams.run_type = SPH_RUN_HYDRO;

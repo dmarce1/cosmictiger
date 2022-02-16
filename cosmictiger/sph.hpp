@@ -165,6 +165,9 @@ struct sph_run_return {
 	}
 };
 
+void sph_particles_energy_to_entropy(float a);
+
+
 struct sph_run_params {
 	int run_type;
 	int set;
