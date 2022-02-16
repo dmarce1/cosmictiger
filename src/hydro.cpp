@@ -77,7 +77,7 @@ void hydro_driver(double tmax) {
 			output_line(main_step);
 			main_step++;
 		}
-	} while (t < tmax);
+	} while (true);
 }
 
 void hydro_sod_test() {
@@ -157,7 +157,7 @@ void hydro_sod_test() {
 }
 void hydro_helmholtz_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho1 = 0.1;
+	double rho1 = 0.5;
 	double rho0 = 1.0;
 	double vx1 = 0.0;
 	double vy1 = 0.5;
@@ -228,7 +228,7 @@ void hydro_helmholtz_test() {
 			}
 		}
 	}
-	hydro_driver(0.25);
+	hydro_driver(1.00);
 }
 
 void hydro_blast_test() {
@@ -272,5 +272,5 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(2.5/8.0);
+	hydro_driver(2.5);
 }

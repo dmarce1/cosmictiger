@@ -77,6 +77,8 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_vy;
 	vector<float, pinned_allocator<float>> host_vz;
 	vector<float, pinned_allocator<float>> host_ent;
+	vector<float, pinned_allocator<float>> host_difco;
+	vector<dif_vector, pinned_allocator<dif_vector>> host_difvec;
 	vector<float, pinned_allocator<float>> host_fvel;
 	vector<float, pinned_allocator<float>> host_f0;
 	vector<float, pinned_allocator<float>> host_h;
@@ -1554,6 +1556,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 	host_z.resize(parts_size);
 	host_rungs.resize(parts_size);
 	switch (params.run_type) {
+	case SPH_RUN_DIFFUSION:
+		host_difco.resize(parts_size);
+		host_difvec.resize(parts_size);
+		break;
+	}
+	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_MARK_SEMIACTIVE:
@@ -1608,6 +1616,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 								const part_int size = node.part_range.second - node.part_range.first;
 								const part_int offset = (part_index += size) - size;
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
+								switch (params.run_type) {
+									case SPH_RUN_DIFFUSION:
+									sph_particles_global_read_difcos(node.global_part_range(), host_difco.data(), offset);
+									sph_particles_global_read_difvecs(node.global_part_range(), host_difvec.data(), offset);
+									break;
+								}
 								switch(params.run_type) {
 									case SPH_RUN_SMOOTHLEN:
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), nullptr, offset);
@@ -1661,6 +1675,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&cuda_data.z, sizeof(fixed32) * host_z.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
 	switch (params.run_type) {
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaMalloc(&cuda_data.difco, sizeof(float) * host_difco.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.dif_vec, sizeof(dif_vector) * host_difvec.size()));
+		break;
+	}
+	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_DIFFUSION:
@@ -1705,6 +1725,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
+	switch (params.run_type) {
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.difco, host_difco.data(), sizeof(float) * host_difco.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.dif_vec, host_difvec.data(), sizeof(dif_vector) * host_difvec.size(), cudaMemcpyHostToDevice, stream));
+		break;
+	}
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
@@ -1763,6 +1789,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.dvy_con = &sph_particles_dvel_con(YDIM, 0);
 	cuda_data.dvz_con = &sph_particles_dvel_con(ZDIM, 0);
 	cuda_data.sa_snk = &sph_particles_semi_active(0);
+	cuda_data.difco_snk = &sph_particles_difco(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
@@ -1800,6 +1827,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 				sph_particles_rung(i + offset) = host_rungs[i];
 			}
 		}
+	}
+	switch (params.run_type) {
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaFree(cuda_data.difco));
+		CUDA_CHECK(cudaFree(cuda_data.dif_vec));
+		break;
 	}
 
 	switch (params.run_type) {
@@ -2053,9 +2086,14 @@ void sph_init_diffusion() {
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([nthreads, proc]() {
-			float error = 0.f;
-			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			part_int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
+			part_int e = (size_t) (proc+1) * sph_tree_leaflist_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				const auto sid = sph_tree_get_leaf(i);
+				sph_tree_set_converged(sid, false);
+			}
+			b = (size_t) proc * sph_particles_size() / nthreads;
+			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				sph_particles_ent0(i) = sph_particles_ent(i);
 			}

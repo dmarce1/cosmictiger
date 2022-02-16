@@ -125,7 +125,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 void sph_tree_destroy(bool free_sph_tree = false);
 const sph_tree_node* sph_tree_get_node(tree_id);
 void sph_tree_sort_sph_particles_by_particles();
-void sph_tree_set_converged(tree_id id);
+void sph_tree_set_converged(tree_id id, bool=true);
 void sph_tree_set_nactive(tree_id id, part_int i);
 void sph_tree_set_boxes(tree_id, const fixed32_range& , const fixed32_range& );
 void sph_tree_free_neighbor_list();

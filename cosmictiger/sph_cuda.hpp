@@ -26,6 +26,7 @@
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/chemistry.hpp>
+#include <cosmictiger/sph_particles.hpp>
 
 struct sph_run_cuda_data {
 	fixed32* x;
@@ -58,6 +59,9 @@ struct sph_run_cuda_data {
 	float* ent0_snk;
 	float* ent_snk;
 	float* dchem_snk;
+	float* difco;
+	float* difco_snk;
+	dif_vector* dif_vec;
 	float* dent_con;
 	float* dvx_con;
 	float* dvy_con;

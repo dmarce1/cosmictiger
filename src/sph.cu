@@ -1128,6 +1128,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float curl_vx = dvz_dy - dvy_dz;
 					float curl_vy = -dvz_dx + dvx_dz;
 					float curl_vz = dvy_dx - dvx_dy;
+					float shear_xx = dvx_dx - (1.f / 3.f) * div_v;
+					float shear_yy = dvy_dy - (1.f / 3.f) * div_v;
+					float shear_zz = dvz_dz - (1.f / 3.f) * div_v;
+					float shear_xy = 0.5f * (dvx_dy + dvy_dx);
+					float shear_xz = 0.5f * (dvx_dz + dvz_dx);
+					float shear_yz = 0.5f * (dvy_dz + dvz_dy);
 					float div_g;
 					if (stars) {
 						div_g = dgx_dx + dgy_dy + dgz_dz;
@@ -1136,6 +1142,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Z);
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 					}
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xx);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xy);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xz);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_yy);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_yz);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_zz);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_v);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
@@ -1151,8 +1163,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float fpre = 1.0f / (1.0f + c0);
 						div_v *= fpre;
 						const float dt_cfl = params.a * myh / vsig_max;
+						const float Cdif = sqr(myh)*sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
+						data.difco_snk[snki] = Cdif;
 						total_vsig_max = fmaxf(total_vsig_max, vsig_max);
 						float dthydro = params.cfl * dt_cfl;
 						const float gx = data.gx_snk[snki];
