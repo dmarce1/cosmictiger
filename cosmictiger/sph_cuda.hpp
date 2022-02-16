@@ -55,6 +55,7 @@ struct sph_run_cuda_data {
 	float* h_snk;
 	float* tcool_snk;
 	float* tdyn_snk;
+	float* ent0_snk;
 	float* ent_snk;
 	float* dchem_snk;
 	float* dent_con;
@@ -62,6 +63,7 @@ struct sph_run_cuda_data {
 	float* dvy_con;
 	float* dvz_con;
 	float* dent_pred;
+	float* dent_dif;
 	float* dvx_pred;
 	float* dvy_pred;
 	float* dvz_pred;

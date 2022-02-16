@@ -972,234 +972,234 @@ sph_run_return sph_hydro(const sph_tree_node* self_ptr, const vector<fixed32>& m
 		const vector<float>& main_vys, const vector<float>& main_vzs, const vector<float>& main_fvels, const vector<float>& main_f0s, int min_rung, float t0,
 		int phase, float a) {
 	sph_run_return rc;
-/*	static thread_local vector<simd_int> xs;
-	static thread_local vector<simd_int> ys;
-	static thread_local vector<simd_int> zs;
-	static thread_local vector<simd_int> rungs;
-	static thread_local vector<simd_float> hs;
-	static thread_local vector<simd_float> ents;
-	static thread_local vector<simd_float> vxs;
-	static thread_local vector<simd_float> vys;
-	static thread_local vector<simd_float> vzs;
-	static thread_local vector<simd_float> fvels;
-	static thread_local vector<simd_float> f0s;
-	static thread_local vector<simd_float> masks;
-	const auto rung2dt = [](simd_int rung) {
-		simd_float dt;
-		for( int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-			dt[k] = rung_dt[rung[k]];
-		}
-		return dt;
-	};
-	const simd_float ainv = 1.0f / a;
-	const simd_float m = get_options().sph_mass;
-	const simd_float minv = simd_float(1.f) / m;
-	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		const bool active = sph_particles_rung(i) >= min_rung;
-		const bool semi = !active && sph_particles_semi_active(i);
-		const bool test = phase == 0 ? (semi || active) : active;
-		if (phase == 1 && test) {
-			sph_particles_dvel(XDIM, i) = 0.0f;
-			sph_particles_dvel(YDIM, i) = 0.0f;
-			sph_particles_dvel(ZDIM, i) = 0.0f;
-			sph_particles_dent(i) = 0.0f;
-		}
-		if (test) {
-			xs.resize(0);
-			ys.resize(0);
-			zs.resize(0);
-			hs.resize(0);
-			rungs.resize(0);
-			ents.resize(0);
-			fvels.resize(0);
-			vxs.resize(0);
-			vys.resize(0);
-			vzs.resize(0);
-			masks.resize(0);
-			f0s.resize(0);
-			const simd_float myh = sph_particles_smooth_len(i);
-			const simd_int myrung = sph_particles_rung(i);
-			const simd_float myh2 = sqr(myh);
-			const simd_float myhinv = simd_float(1.0) / myh;
-			const simd_float myh3inv = myhinv * sqr(myhinv);
-			const simd_float myrho = sph_den(myh3inv);
-			const simd_float myrhoinv = simd_float(1.0) / myrho;
-			const simd_int myx = sph_particles_pos(XDIM, i).raw();
-			const simd_int myy = sph_particles_pos(YDIM, i).raw();
-			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
-			const simd_float myvx = sph_particles_vel(XDIM, i);
-			const simd_float myvy = sph_particles_vel(YDIM, i);
-			const simd_float myvz = sph_particles_vel(ZDIM, i);
-			const simd_float myfvel = sph_particles_fvel(i);
-			static const simd_float half = simd_float(0.5f);
-#ifdef SPH_TOTAL_ENERGY
-			const float myekin = m[0] * sqr(myvx[0], myvy[0], myvz[0]) * half[0];
-			const float myetherm = std::max(sph_particles_ent(i) - myekin, 0.0f);
-			const float myp = float(SPH_GAMMA - 1.0) * minv[0] * myrho[0] * myetherm;
-#else
-			const float myent = sph_particles_ent(i);
-			const float myp = pow(myrho[0], SPH_GAMMA) * myent;
-#endif
-			const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv[0]);
-			const simd_float myf0 = sph_particles_fpre(i);
-			const simd_float Prho2i = myp * myrhoinv * myrhoinv * myf0;
-#ifdef SPH_TOTAL_ENERGY
-			const simd_float Pvxrho2i = Prho2i * myvx;
-			const simd_float Pvyrho2i = Prho2i * myvy;
-			const simd_float Pvzrho2i = Prho2i * myvz;
-#endif
-			float max_c = 0.0f;
-			int base = -1;
-			int offset = SIMD_FLOAT_SIZE;
-			static const simd_float _2float(fixed2float);
+	/*	static thread_local vector<simd_int> xs;
+	 static thread_local vector<simd_int> ys;
+	 static thread_local vector<simd_int> zs;
+	 static thread_local vector<simd_int> rungs;
+	 static thread_local vector<simd_float> hs;
+	 static thread_local vector<simd_float> ents;
+	 static thread_local vector<simd_float> vxs;
+	 static thread_local vector<simd_float> vys;
+	 static thread_local vector<simd_float> vzs;
+	 static thread_local vector<simd_float> fvels;
+	 static thread_local vector<simd_float> f0s;
+	 static thread_local vector<simd_float> masks;
+	 const auto rung2dt = [](simd_int rung) {
+	 simd_float dt;
+	 for( int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+	 dt[k] = rung_dt[rung[k]];
+	 }
+	 return dt;
+	 };
+	 const simd_float ainv = 1.0f / a;
+	 const simd_float m = get_options().sph_mass;
+	 const simd_float minv = simd_float(1.f) / m;
+	 for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+	 const bool active = sph_particles_rung(i) >= min_rung;
+	 const bool semi = !active && sph_particles_semi_active(i);
+	 const bool test = phase == 0 ? (semi || active) : active;
+	 if (phase == 1 && test) {
+	 sph_particles_dvel(XDIM, i) = 0.0f;
+	 sph_particles_dvel(YDIM, i) = 0.0f;
+	 sph_particles_dvel(ZDIM, i) = 0.0f;
+	 sph_particles_dent(i) = 0.0f;
+	 }
+	 if (test) {
+	 xs.resize(0);
+	 ys.resize(0);
+	 zs.resize(0);
+	 hs.resize(0);
+	 rungs.resize(0);
+	 ents.resize(0);
+	 fvels.resize(0);
+	 vxs.resize(0);
+	 vys.resize(0);
+	 vzs.resize(0);
+	 masks.resize(0);
+	 f0s.resize(0);
+	 const simd_float myh = sph_particles_smooth_len(i);
+	 const simd_int myrung = sph_particles_rung(i);
+	 const simd_float myh2 = sqr(myh);
+	 const simd_float myhinv = simd_float(1.0) / myh;
+	 const simd_float myh3inv = myhinv * sqr(myhinv);
+	 const simd_float myrho = sph_den(myh3inv);
+	 const simd_float myrhoinv = simd_float(1.0) / myrho;
+	 const simd_int myx = sph_particles_pos(XDIM, i).raw();
+	 const simd_int myy = sph_particles_pos(YDIM, i).raw();
+	 const simd_int myz = sph_particles_pos(ZDIM, i).raw();
+	 const simd_float myvx = sph_particles_vel(XDIM, i);
+	 const simd_float myvy = sph_particles_vel(YDIM, i);
+	 const simd_float myvz = sph_particles_vel(ZDIM, i);
+	 const simd_float myfvel = sph_particles_fvel(i);
+	 static const simd_float half = simd_float(0.5f);
+	 #ifdef SPH_TOTAL_ENERGY
+	 const float myekin = m[0] * sqr(myvx[0], myvy[0], myvz[0]) * half[0];
+	 const float myetherm = std::max(sph_particles_ent(i) - myekin, 0.0f);
+	 const float myp = float(SPH_GAMMA - 1.0) * minv[0] * myrho[0] * myetherm;
+	 #else
+	 const float myent = sph_particles_ent(i);
+	 const float myp = pow(myrho[0], SPH_GAMMA) * myent;
+	 #endif
+	 const simd_float myc = sqrt(SPH_GAMMA * myp * myrhoinv[0]);
+	 const simd_float myf0 = sph_particles_fpre(i);
+	 const simd_float Prho2i = myp * myrhoinv * myrhoinv * myf0;
+	 #ifdef SPH_TOTAL_ENERGY
+	 const simd_float Pvxrho2i = Prho2i * myvx;
+	 const simd_float Pvyrho2i = Prho2i * myvy;
+	 const simd_float Pvzrho2i = Prho2i * myvz;
+	 #endif
+	 float max_c = 0.0f;
+	 int base = -1;
+	 int offset = SIMD_FLOAT_SIZE;
+	 static const simd_float _2float(fixed2float);
 
-			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
-				simd_int x, y, z;
-				simd_float mask, h;
-				const int maxj = std::min((int) main_xs.size(), j + SIMD_FLOAT_SIZE);
-				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
-					const int kmj = k - j;
-					if (k < main_xs.size()) {
-						x[kmj] = main_xs[k].raw();
-						y[kmj] = main_ys[k].raw();
-						z[kmj] = main_zs[k].raw();
-						h[kmj] = main_hs[k];
-						mask[kmj] = 1.0f;
-					} else {
-						h[kmj] = 1.0f;
-						x[kmj] = y[kmj] = z[kmj] = mask[kmj] = 0.0f;
-					}
-				}
-				const simd_float dx = simd_float(myx - x) * _2float;
-				const simd_float dy = simd_float(myy - y) * _2float;
-				const simd_float dz = simd_float(myz - z) * _2float;
-				const simd_float h2 = sqr(h);
-				const simd_float r2 = sqr(dx, dy, dz);
-				mask *= simd_float(r2 > 0.0) * (simd_float(r2 < h2) + simd_float(r2 < myh2));
-				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-					const int jpk = j + k;
-					if (mask[k] > 0.0 && !(semi && main_rungs[jpk] < min_rung)) {
-						if (offset == SIMD_FLOAT_SIZE) {
-							xs.push_back(myx);
-							ys.push_back(myy);
-							zs.push_back(myz);
-							rungs.push_back(simd_int(0));
-							hs.push_back(simd_float(1.0));
-							ents.push_back(simd_float(1.0));
-							vxs.push_back(simd_float(0.0));
-							vys.push_back(simd_float(0.0));
-							vzs.push_back(simd_float(0.0));
-							fvels.push_back(simd_float(0.0));
-							masks.push_back(simd_float(0.0));
-							f0s.push_back(simd_float(1));
-							base++;
-							offset = 0;
-						}
-						xs.back()[offset] = main_xs[jpk].raw();
-						ys.back()[offset] = main_ys[jpk].raw();
-						zs.back()[offset] = main_zs[jpk].raw();
-						rungs.back()[offset] = main_rungs[jpk];
-						hs.back()[offset] = main_hs[jpk];
-						ents.back()[offset] = main_ents[jpk];
-						vxs.back()[offset] = main_vxs[jpk];
-						vys.back()[offset] = main_vys[jpk];
-						vzs.back()[offset] = main_vzs[jpk];
-						fvels.back()[offset] = main_fvels[jpk];
-						masks.back()[offset] = 1.0f;
-						f0s.back()[offset] = main_f0s[jpk];
-						offset++;
-					}
-				}
-			}
-			simd_float divv(0.f);
-			for (int j = 0; j < xs.size(); j++) {
-				static const simd_float one = simd_float(1.f);
-				static const simd_float zero = simd_float(0.f);
-				static const simd_float tiny = simd_float(1e-15);
-				static const simd_float gamma = SPH_GAMMA;
-				const simd_float dx = simd_float(myx - xs[j]) * _2float;
-				const simd_float dy = simd_float(myy - ys[j]) * _2float;
-				const simd_float dz = simd_float(myz - zs[j]) * _2float;
-				const simd_float h = hs[j];
-				const simd_float r2 = sqr(dx, dy, dz);
-				const simd_float hinv = one / h;
-				const simd_float h3inv = hinv * sqr(hinv);
-				const simd_float rho = sph_den(h3inv);
-				const simd_float rhoinv = one / rho;
-#ifdef SPH_TOTAL_ENERGY
-				const simd_float ekin = half * m * sqr(vxs[j], vys[j], vzs[j]);
-				const simd_float etherm = max(ents[j] - ekin, zero);
-				const simd_float p = simd_float(SPH_GAMMA - 1.0) * rho * etherm * minv;
-#else
-				const simd_float p = ents[j] * pow(rho, gamma);
-#endif
-				const simd_float c = sqrt(gamma * p * rhoinv);
-				const simd_float cij = 0.5f * (myc + c);
-				const simd_float hij = 0.5f * (h + myh);
-				const simd_float rho_ij = 0.5f * (rho + myrho);
-				const simd_float dvx = myvx - vxs[j];
-				const simd_float dvy = myvy - vys[j];
-				const simd_float dvz = myvz - vzs[j];
-				const simd_float r = sqrt(r2);
-				const simd_float r2inv = one / (sqr(r) + 1e-2 * sqr(hij));
-				const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
-				//		PRINT( "%e %e %e %e \n", myvx[0], vxs[j][0], uij[0], c[0]);
-				const simd_float Piij = (uij * (-simd_float(SPH_ALPHA) * cij + simd_float(SPH_BETA) * uij)) * half * (myfvel + fvels[j]) / rho_ij;
-				const simd_float qi = r * myhinv;
-				const simd_float qj = r * hinv;
-				const simd_float rinv = one / (r + tiny);
-				const simd_float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv;
-				const simd_float dWdrj = (r < h) * dkernelW_dq(qj) * hinv * h3inv;
-				const simd_float dWdri_x = dx * dWdri * rinv;
-				const simd_float dWdri_y = dy * dWdri * rinv;
-				const simd_float dWdri_z = dz * dWdri * rinv;
-				const simd_float dWdrj_x = dx * dWdrj * rinv;
-				const simd_float dWdrj_y = dy * dWdrj * rinv;
-				const simd_float dWdrj_z = dz * dWdrj * rinv;
-				const simd_float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
-				const simd_float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
-				const simd_float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
-				const simd_float Prho2j = p * rhoinv * rhoinv * f0s[j];
-				//		PRINT( "%e\n", f0s[j][0]);
-#ifdef SPH_TOTAL_ENERGY
-				const simd_float Pvxrho2j = Prho2j * vxs[j];
-				const simd_float Pvyrho2j = Prho2j * vys[j];
-				const simd_float Pvzrho2j = Prho2j * vzs[j];
-#endif
-				const simd_float dviscx = Piij * dWdrij_x;
-				const simd_float dviscy = Piij * dWdrij_y;
-				const simd_float dviscz = Piij * dWdrij_z;
-				const simd_float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx;
-				const simd_float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy;
-				const simd_float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz;
-				const simd_float dvxdt = -dpx * m;
-				const simd_float dvydt = -dpy * m;
-				const simd_float dvzdt = -dpz * m;
-				divv -= myf0 * ainv * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
-				simd_float dt;
-				if (phase == 0) {
-					dt = 0.5f * min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
-				} else if (phase == 1) {
-					dt = rung2dt(myrung) * simd_float(t0);
-				}
-#ifdef SPH_TOTAL_ENERGY
-				simd_float dedt = m * (Pvxrho2j * dWdrj_x + Pvyrho2j * dWdrj_y + Pvzrho2j * dWdrj_z);
-				dedt += -sqr(m) * (Pvxrho2i * dWdri_x + Pvyrho2i * dWdri_y + Pvzrho2i * dWdri_z);
-				sph_particles_dent(i) += (dedt * dt).sum();
-#else
-				simd_float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
-				dAdt *= simd_float(0.5) * m * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
-				//			if( dAdt[0] > 1.0e-4 )
-				//			PRINT( "%e\n", dAdt[0]);
-				sph_particles_dent(i) += (dAdt * dt * masks[j]).sum();
-#endif
-				sph_particles_dvel(XDIM, i) += (dvxdt * dt * masks[j]).sum();
-				sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
-				sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
-				sph_particles_divv(i) = divv.sum();
-			}
-		}
-	}*/
+	 for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
+	 simd_int x, y, z;
+	 simd_float mask, h;
+	 const int maxj = std::min((int) main_xs.size(), j + SIMD_FLOAT_SIZE);
+	 for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
+	 const int kmj = k - j;
+	 if (k < main_xs.size()) {
+	 x[kmj] = main_xs[k].raw();
+	 y[kmj] = main_ys[k].raw();
+	 z[kmj] = main_zs[k].raw();
+	 h[kmj] = main_hs[k];
+	 mask[kmj] = 1.0f;
+	 } else {
+	 h[kmj] = 1.0f;
+	 x[kmj] = y[kmj] = z[kmj] = mask[kmj] = 0.0f;
+	 }
+	 }
+	 const simd_float dx = simd_float(myx - x) * _2float;
+	 const simd_float dy = simd_float(myy - y) * _2float;
+	 const simd_float dz = simd_float(myz - z) * _2float;
+	 const simd_float h2 = sqr(h);
+	 const simd_float r2 = sqr(dx, dy, dz);
+	 mask *= simd_float(r2 > 0.0) * (simd_float(r2 < h2) + simd_float(r2 < myh2));
+	 for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+	 const int jpk = j + k;
+	 if (mask[k] > 0.0 && !(semi && main_rungs[jpk] < min_rung)) {
+	 if (offset == SIMD_FLOAT_SIZE) {
+	 xs.push_back(myx);
+	 ys.push_back(myy);
+	 zs.push_back(myz);
+	 rungs.push_back(simd_int(0));
+	 hs.push_back(simd_float(1.0));
+	 ents.push_back(simd_float(1.0));
+	 vxs.push_back(simd_float(0.0));
+	 vys.push_back(simd_float(0.0));
+	 vzs.push_back(simd_float(0.0));
+	 fvels.push_back(simd_float(0.0));
+	 masks.push_back(simd_float(0.0));
+	 f0s.push_back(simd_float(1));
+	 base++;
+	 offset = 0;
+	 }
+	 xs.back()[offset] = main_xs[jpk].raw();
+	 ys.back()[offset] = main_ys[jpk].raw();
+	 zs.back()[offset] = main_zs[jpk].raw();
+	 rungs.back()[offset] = main_rungs[jpk];
+	 hs.back()[offset] = main_hs[jpk];
+	 ents.back()[offset] = main_ents[jpk];
+	 vxs.back()[offset] = main_vxs[jpk];
+	 vys.back()[offset] = main_vys[jpk];
+	 vzs.back()[offset] = main_vzs[jpk];
+	 fvels.back()[offset] = main_fvels[jpk];
+	 masks.back()[offset] = 1.0f;
+	 f0s.back()[offset] = main_f0s[jpk];
+	 offset++;
+	 }
+	 }
+	 }
+	 simd_float divv(0.f);
+	 for (int j = 0; j < xs.size(); j++) {
+	 static const simd_float one = simd_float(1.f);
+	 static const simd_float zero = simd_float(0.f);
+	 static const simd_float tiny = simd_float(1e-15);
+	 static const simd_float gamma = SPH_GAMMA;
+	 const simd_float dx = simd_float(myx - xs[j]) * _2float;
+	 const simd_float dy = simd_float(myy - ys[j]) * _2float;
+	 const simd_float dz = simd_float(myz - zs[j]) * _2float;
+	 const simd_float h = hs[j];
+	 const simd_float r2 = sqr(dx, dy, dz);
+	 const simd_float hinv = one / h;
+	 const simd_float h3inv = hinv * sqr(hinv);
+	 const simd_float rho = sph_den(h3inv);
+	 const simd_float rhoinv = one / rho;
+	 #ifdef SPH_TOTAL_ENERGY
+	 const simd_float ekin = half * m * sqr(vxs[j], vys[j], vzs[j]);
+	 const simd_float etherm = max(ents[j] - ekin, zero);
+	 const simd_float p = simd_float(SPH_GAMMA - 1.0) * rho * etherm * minv;
+	 #else
+	 const simd_float p = ents[j] * pow(rho, gamma);
+	 #endif
+	 const simd_float c = sqrt(gamma * p * rhoinv);
+	 const simd_float cij = 0.5f * (myc + c);
+	 const simd_float hij = 0.5f * (h + myh);
+	 const simd_float rho_ij = 0.5f * (rho + myrho);
+	 const simd_float dvx = myvx - vxs[j];
+	 const simd_float dvy = myvy - vys[j];
+	 const simd_float dvz = myvz - vzs[j];
+	 const simd_float r = sqrt(r2);
+	 const simd_float r2inv = one / (sqr(r) + 1e-2 * sqr(hij));
+	 const simd_float uij = min(zero, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv);
+	 //		PRINT( "%e %e %e %e \n", myvx[0], vxs[j][0], uij[0], c[0]);
+	 const simd_float Piij = (uij * (-simd_float(SPH_ALPHA) * cij + simd_float(SPH_BETA) * uij)) * half * (myfvel + fvels[j]) / rho_ij;
+	 const simd_float qi = r * myhinv;
+	 const simd_float qj = r * hinv;
+	 const simd_float rinv = one / (r + tiny);
+	 const simd_float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv;
+	 const simd_float dWdrj = (r < h) * dkernelW_dq(qj) * hinv * h3inv;
+	 const simd_float dWdri_x = dx * dWdri * rinv;
+	 const simd_float dWdri_y = dy * dWdri * rinv;
+	 const simd_float dWdri_z = dz * dWdri * rinv;
+	 const simd_float dWdrj_x = dx * dWdrj * rinv;
+	 const simd_float dWdrj_y = dy * dWdrj * rinv;
+	 const simd_float dWdrj_z = dz * dWdrj * rinv;
+	 const simd_float dWdrij_x = 0.5f * (dWdri_x + dWdrj_x);
+	 const simd_float dWdrij_y = 0.5f * (dWdri_y + dWdrj_y);
+	 const simd_float dWdrij_z = 0.5f * (dWdri_z + dWdrj_z);
+	 const simd_float Prho2j = p * rhoinv * rhoinv * f0s[j];
+	 //		PRINT( "%e\n", f0s[j][0]);
+	 #ifdef SPH_TOTAL_ENERGY
+	 const simd_float Pvxrho2j = Prho2j * vxs[j];
+	 const simd_float Pvyrho2j = Prho2j * vys[j];
+	 const simd_float Pvzrho2j = Prho2j * vzs[j];
+	 #endif
+	 const simd_float dviscx = Piij * dWdrij_x;
+	 const simd_float dviscy = Piij * dWdrij_y;
+	 const simd_float dviscz = Piij * dWdrij_z;
+	 const simd_float dpx = (Prho2j * dWdrj_x + Prho2i * dWdri_x) + dviscx;
+	 const simd_float dpy = (Prho2j * dWdrj_y + Prho2i * dWdri_y) + dviscy;
+	 const simd_float dpz = (Prho2j * dWdrj_z + Prho2i * dWdri_z) + dviscz;
+	 const simd_float dvxdt = -dpx * m;
+	 const simd_float dvydt = -dpy * m;
+	 const simd_float dvzdt = -dpz * m;
+	 divv -= myf0 * ainv * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z);
+	 simd_float dt;
+	 if (phase == 0) {
+	 dt = 0.5f * min(rung2dt(rungs[j]), rung2dt(myrung)) * simd_float(t0);
+	 } else if (phase == 1) {
+	 dt = rung2dt(myrung) * simd_float(t0);
+	 }
+	 #ifdef SPH_TOTAL_ENERGY
+	 simd_float dedt = m * (Pvxrho2j * dWdrj_x + Pvyrho2j * dWdrj_y + Pvzrho2j * dWdrj_z);
+	 dedt += -sqr(m) * (Pvxrho2i * dWdri_x + Pvyrho2i * dWdri_y + Pvzrho2i * dWdri_z);
+	 sph_particles_dent(i) += (dedt * dt).sum();
+	 #else
+	 simd_float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz);
+	 dAdt *= simd_float(0.5) * m * (SPH_GAMMA - 1.f) * pow(myrho, 1.0f - SPH_GAMMA);
+	 //			if( dAdt[0] > 1.0e-4 )
+	 //			PRINT( "%e\n", dAdt[0]);
+	 sph_particles_dent(i) += (dAdt * dt * masks[j]).sum();
+	 #endif
+	 sph_particles_dvel(XDIM, i) += (dvxdt * dt * masks[j]).sum();
+	 sph_particles_dvel(YDIM, i) += (dvydt * dt * masks[j]).sum();
+	 sph_particles_dvel(ZDIM, i) += (dvzdt * dt * masks[j]).sum();
+	 sph_particles_divv(i) = divv.sum();
+	 }
+	 }
+	 }*/
 	return rc;
 }
 
@@ -1210,80 +1210,80 @@ sph_run_return sph_update(const sph_tree_node* self_ptr, int min_rung, int phase
 
 	sph_run_return rc;
 	/*if (phase == 0) {
-		rc.vol = rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = rc.ent = 0.0;
-		static const float m = get_options().sph_mass;
-		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-			if (sph_particles_rung(i) >= min_rung) {
-				constexpr float SNZ = 0.02;
-				constexpr float SNHe = 0.16;
-				const float dchem = sph_particles_dchem(i);
-				if (dchem > 0.f) {
-					const float dZ = SNZ * dchem;
-					const float dHe = SNHe * dchem;
-					const float factor = 1.0f / (1.0f + dZ + dHe);
-					sph_particles_He0(i) = sph_particles_He0(i) * factor;
-					sph_particles_Hep(i) = sph_particles_Hep(i) * factor;
-					sph_particles_Hepp(i) = sph_particles_Hepp(i) * factor;
-					sph_particles_Hp(i) = sph_particles_Hp(i) * factor;
-					sph_particles_Hn(i) = sph_particles_Hn(i) * factor;
-					sph_particles_H2(i) = sph_particles_H2(i) * factor;
-					sph_particles_Z(i) = sph_particles_Z(i) * factor;
-					sph_particles_He0(i) += dHe;
-					sph_particles_Z(i) += dZ;
-					sph_particles_dchem(i) = 0.f;
-				}
-				for (int dim = 0; dim < NDIM; dim++) {
-					sph_particles_vel(dim, i) += sph_particles_dvel(dim, i);
-					sph_particles_dvel(dim, i) = 0.0f;
-				}
-				const auto original = sph_particles_ent(i);
-				sph_particles_ent(i) += sph_particles_dent(i);
-				if (sph_particles_ent(i) < 0.f) {
-					PRINT("Negative entropy %e %e %e %s %i\n", original, sph_particles_ent(i), sph_particles_dent(i), __FILE__, __LINE__);
-				}
-				sph_particles_dent(i) = 0.0f;
-				const float h = sph_particles_smooth_len(i);
-				const float vx = sph_particles_vel(XDIM, i);
-				const float vy = sph_particles_vel(YDIM, i);
-				const float vz = sph_particles_vel(ZDIM, i);
-				const float A = sph_particles_ent(i);
-				if (h <= 0.f) {
-					PRINT("Less than ZERO H! sph.cpp %e\n", h);
-				}
-				const float rho = sph_den(1.0 / (h * h * h));
-				if (std::isnan(A) || std::isnan(rho)) {
-					PRINT("ENTY bad! %e %e\n", A, rho);
-				}
-				const float p = A * pow(rho, SPH_GAMMA);
-				const float vol = (4.0 * h * h * h * M_PI / 3.0) / get_options().neighbor_number;
-				rc.momx += vx * m;
-				rc.momy += vy * m;
-				rc.momz += vz * m;
-				rc.ekin += 0.5f * m * sqr(vx, vy, vz);
-				rc.etherm += p / (SPH_GAMMA - 1.0f) * vol;
-				rc.ent += A;
-				rc.vol += vol;
-			}
+	 rc.vol = rc.momx = rc.momy = rc.momz = rc.etherm = rc.ekin = rc.ent = 0.0;
+	 static const float m = get_options().sph_mass;
+	 for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+	 if (sph_particles_rung(i) >= min_rung) {
+	 constexpr float SNZ = 0.02;
+	 constexpr float SNHe = 0.16;
+	 const float dchem = sph_particles_dchem(i);
+	 if (dchem > 0.f) {
+	 const float dZ = SNZ * dchem;
+	 const float dHe = SNHe * dchem;
+	 const float factor = 1.0f / (1.0f + dZ + dHe);
+	 sph_particles_He0(i) = sph_particles_He0(i) * factor;
+	 sph_particles_Hep(i) = sph_particles_Hep(i) * factor;
+	 sph_particles_Hepp(i) = sph_particles_Hepp(i) * factor;
+	 sph_particles_Hp(i) = sph_particles_Hp(i) * factor;
+	 sph_particles_Hn(i) = sph_particles_Hn(i) * factor;
+	 sph_particles_H2(i) = sph_particles_H2(i) * factor;
+	 sph_particles_Z(i) = sph_particles_Z(i) * factor;
+	 sph_particles_He0(i) += dHe;
+	 sph_particles_Z(i) += dZ;
+	 sph_particles_dchem(i) = 0.f;
+	 }
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 sph_particles_vel(dim, i) += sph_particles_dvel(dim, i);
+	 sph_particles_dvel(dim, i) = 0.0f;
+	 }
+	 const auto original = sph_particles_ent(i);
+	 sph_particles_ent(i) += sph_particles_dent(i);
+	 if (sph_particles_ent(i) < 0.f) {
+	 PRINT("Negative entropy %e %e %e %s %i\n", original, sph_particles_ent(i), sph_particles_dent(i), __FILE__, __LINE__);
+	 }
+	 sph_particles_dent(i) = 0.0f;
+	 const float h = sph_particles_smooth_len(i);
+	 const float vx = sph_particles_vel(XDIM, i);
+	 const float vy = sph_particles_vel(YDIM, i);
+	 const float vz = sph_particles_vel(ZDIM, i);
+	 const float A = sph_particles_ent(i);
+	 if (h <= 0.f) {
+	 PRINT("Less than ZERO H! sph.cpp %e\n", h);
+	 }
+	 const float rho = sph_den(1.0 / (h * h * h));
+	 if (std::isnan(A) || std::isnan(rho)) {
+	 PRINT("ENTY bad! %e %e\n", A, rho);
+	 }
+	 const float p = A * pow(rho, SPH_GAMMA);
+	 const float vol = (4.0 * h * h * h * M_PI / 3.0) / get_options().neighbor_number;
+	 rc.momx += vx * m;
+	 rc.momy += vy * m;
+	 rc.momz += vz * m;
+	 rc.ekin += 0.5f * m * sqr(vx, vy, vz);
+	 rc.etherm += p / (SPH_GAMMA - 1.0f) * vol;
+	 rc.ent += A;
+	 rc.vol += vol;
+	 }
 
-		}
-	} else {
-		for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-			if (sph_particles_rung(i) >= min_rung) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					sph_particles_vel(dim, i) += 0.5f * sph_particles_dvel(dim, i);
-					sph_particles_dvel(dim, i) *= -.5f;
-				}
-				const auto original = sph_particles_ent(i);
-				if (sph_particles_ent(i) < -0.5f * sph_particles_dent(i)) {
-					PRINT("Negative entropy %e %e %e %s %i\n", original, sph_particles_ent(i), 0.5f * sph_particles_dent(i), __FILE__, __LINE__);
-				}
-				sph_particles_ent(i) += 0.5f * sph_particles_dent(i);
-				sph_particles_dent(i) *= -0.5f;
-				sph_particles_semi_active(i) = false;
-			}
+	 }
+	 } else {
+	 for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+	 if (sph_particles_rung(i) >= min_rung) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 sph_particles_vel(dim, i) += 0.5f * sph_particles_dvel(dim, i);
+	 sph_particles_dvel(dim, i) *= -.5f;
+	 }
+	 const auto original = sph_particles_ent(i);
+	 if (sph_particles_ent(i) < -0.5f * sph_particles_dent(i)) {
+	 PRINT("Negative entropy %e %e %e %s %i\n", original, sph_particles_ent(i), 0.5f * sph_particles_dent(i), __FILE__, __LINE__);
+	 }
+	 sph_particles_ent(i) += 0.5f * sph_particles_dent(i);
+	 sph_particles_dent(i) *= -0.5f;
+	 sph_particles_semi_active(i) = false;
+	 }
 
-		}
-	}*/
+	 }
+	 }*/
 	return rc;
 }
 /*
@@ -1391,6 +1391,14 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 						bool test;
 						switch(params.run_type) {
 
+							case SPH_RUN_DIFFUSION:
+							test = (self->nactive > 0);
+							if( !test) {
+								test = has_active_neighbors(self);
+							}
+							test = test && !self->converged;
+							break;
+
 							case SPH_RUN_SMOOTHLEN:
 							test = (params.set & SPH_SET_ACTIVE) && (self->nactive > 0);
 							if( !test && (params.set & SPH_SET_SEMIACTIVE) ) {
@@ -1409,82 +1417,81 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							case SPH_RUN_COURANT:
 							case SPH_RUN_UPDATE:
 							case SPH_RUN_GRAVITY:
-//							case SPH_RUN_RUNGS:
-						test = self->nactive > 0;
+							test = self->nactive > 0;
+							break;
+						}
+						if(test) {
+							if( cuda ) {
+								gpu_work++;
+								workspace_ptr->add_work(selfid);
+							} else {
+
+								vector<tree_id> neighbors;
+								switch(params.run_type) {
+
+									case SPH_RUN_SMOOTHLEN:
+									case SPH_RUN_MARK_SEMIACTIVE:
+//								case SPH_RUN_RUNGS:
+						case SPH_RUN_COURANT:
+						case SPH_RUN_HYDRO:
+						for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+							const auto id = sph_tree_get_neighbor(i);
+							neighbors.push_back(id);
+						}
+						break;
+
+						case SPH_RUN_UPDATE:
+						case SPH_RUN_GRAVITY:
+						break;
+
+					}
+					//		PRINT( "neighbors_size = %i\n",neighbors.size());
+					switch(params.run_type) {
+						case SPH_RUN_SMOOTHLEN:
+						load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
+						break;
+						case SPH_RUN_MARK_SEMIACTIVE:
+						load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
+						break;
+						case SPH_RUN_COURANT:
+						load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+						break;
+						case SPH_RUN_HYDRO:
+						load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
+						break;
+						case SPH_RUN_UPDATE:
+						case SPH_RUN_GRAVITY:
 						break;
 					}
-					if(test) {
-						if( cuda ) {
-							gpu_work++;
-							workspace_ptr->add_work(selfid);
-						} else {
-
-							vector<tree_id> neighbors;
-							switch(params.run_type) {
-
-								case SPH_RUN_SMOOTHLEN:
-								case SPH_RUN_MARK_SEMIACTIVE:
-//								case SPH_RUN_RUNGS:
-								case SPH_RUN_COURANT:
-								case SPH_RUN_HYDRO:
-								for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-									const auto id = sph_tree_get_neighbor(i);
-									neighbors.push_back(id);
-								}
-								break;
-
-								case SPH_RUN_UPDATE:
-								case SPH_RUN_GRAVITY:
-								break;
-
-							}
-							//		PRINT( "neighbors_size = %i\n",neighbors.size());
-							switch(params.run_type) {
-								case SPH_RUN_SMOOTHLEN:
-								load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
-								break;
-								case SPH_RUN_MARK_SEMIACTIVE:
-								load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
-								break;
-								case SPH_RUN_COURANT:
-								load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-								break;
-								case SPH_RUN_HYDRO:
-								load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
-								break;
-								case SPH_RUN_UPDATE:
-								case SPH_RUN_GRAVITY:
-								break;
-							}
-							sph_run_return this_rc;
-							switch(params.run_type) {
-								case SPH_RUN_SMOOTHLEN:
-								this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
-								break;
-								case SPH_RUN_MARK_SEMIACTIVE:
-								this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
-								break;
-								case SPH_RUN_COURANT:
-								this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
-								break;
-								case SPH_RUN_HYDRO:
-								this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
-								break;
-								case SPH_RUN_UPDATE:
-								this_rc = sph_update(self, params.min_rung, params.phase);
-								break;
-								case SPH_RUN_GRAVITY:
-								this_rc = sph_gravity(self, params.min_rung, params.t0);
-								break;
-							}
-							rc += this_rc;
-						}
+					sph_run_return this_rc;
+					switch(params.run_type) {
+						case SPH_RUN_SMOOTHLEN:
+						this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
+						break;
+						case SPH_RUN_MARK_SEMIACTIVE:
+						this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
+						break;
+						case SPH_RUN_COURANT:
+						this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
+						break;
+						case SPH_RUN_HYDRO:
+						this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
+						break;
+						case SPH_RUN_UPDATE:
+						this_rc = sph_update(self, params.min_rung, params.phase);
+						break;
+						case SPH_RUN_GRAVITY:
+						this_rc = sph_gravity(self, params.min_rung, params.t0);
+						break;
 					}
-
-					index = next++;
+					rc += this_rc;
 				}
-				return rc;
-			}));
+			}
+
+			index = next++;
+		}
+		return rc;
+	}));
 	}
 	for (auto& f : futs2) {
 		rc += f.get();
@@ -1550,16 +1557,18 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_MARK_SEMIACTIVE:
+	case SPH_RUN_DIFFUSION:
 		host_h.resize(parts_size);
 		break;
 	}
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-		host_ent.resize(parts_size);
 		if (chem) {
 			host_gamma.resize(parts_size);
 		}
+	case SPH_RUN_DIFFUSION:
+		host_ent.resize(parts_size);
 		host_vx.resize(parts_size);
 		host_vy.resize(parts_size);
 		host_vz.resize(parts_size);
@@ -1606,10 +1615,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 									case SPH_RUN_COURANT:
 									case SPH_RUN_HYDRO:
 									case SPH_RUN_MARK_SEMIACTIVE:
+									case SPH_RUN_DIFFUSION:
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
 									break;
 								}
 								switch(params.run_type) {
+									case SPH_RUN_DIFFUSION:
+									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), nullptr, nullptr, nullptr, offset);
+									break;
 									case SPH_RUN_HYDRO:
 									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, nullptr, nullptr, offset);
 									break;
@@ -1650,6 +1663,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
+	case SPH_RUN_DIFFUSION:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		break;
@@ -1657,12 +1671,13 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-		CUDA_CHECK(cudaMalloc(&cuda_data.ent, sizeof(float) * host_ent.size()));
 		if (chem) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_vz.size()));
 		} else {
 			cuda_data.gamma = nullptr;
 		}
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaMalloc(&cuda_data.ent, sizeof(float) * host_ent.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
@@ -1694,16 +1709,18 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_MARK_SEMIACTIVE:
+	case SPH_RUN_DIFFUSION:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
 		break;
 	}
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.ent, host_ent.data(), sizeof(float) * host_ent.size(), cudaMemcpyHostToDevice, stream));
 		if (chem) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
 		}
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.ent, host_ent.data(), sizeof(float) * host_ent.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
@@ -1736,6 +1753,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.tcool_snk = &sph_particles_tcool(0);
+	cuda_data.dent_dif = &sph_particles_dent_dif(0);
 	cuda_data.dent_pred = &sph_particles_dent_pred(0);
 	cuda_data.dvx_pred = &sph_particles_dvel_pred(XDIM, 0);
 	cuda_data.dvy_pred = &sph_particles_dvel_pred(YDIM, 0);
@@ -1755,6 +1773,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.Yform_snk = &sph_particles_formY(0);
 	cuda_data.Zform_snk = &sph_particles_formZ(0);
 	cuda_data.ent_snk = &sph_particles_ent(0);
+	cuda_data.ent0_snk = &sph_particles_ent0(0);
 	cuda_data.G = get_options().GM;
 	cuda_data.Y0 = get_options().Y0;
 	cuda_data.rho0_c = get_options().rho0_c;
@@ -1785,6 +1804,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
+	case SPH_RUN_DIFFUSION:
 	case SPH_RUN_COURANT:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaFree(cuda_data.h));
@@ -1793,10 +1813,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_COURANT:
-		CUDA_CHECK(cudaFree(cuda_data.ent));
 		if (chem) {
 			CUDA_CHECK(cudaFree(cuda_data.gamma));
 		}
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaFree(cuda_data.ent));
 		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));
 		CUDA_CHECK(cudaFree(cuda_data.vz));
@@ -1828,7 +1849,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaFree(cuda_data.neighbors));
 	return rc;
 }
-
 
 HPX_PLAIN_ACTION (sph_deposit_sn);
 
@@ -1869,81 +1889,81 @@ void sph_deposit_sn(float a) {
 						for( int k = 0; k < sn.size(); k++) {
 							if( sn[k] != 0.0 ) {
 //								PRINT( "******************** SUPERNOVA *******************\n");
-								//abort();
-								found_sn = true;
-								break;
-							}
-						}
-						constexpr float fSN = 0e-4f;
-						const float m = get_options().sph_mass;
-						const float dEtherm = 0.5f * m * fSN * sqr(a);
-						const float dEkin = 0.5f * m * fSN * sqr(a);
-						if( found_sn ) {
-							x.resize(size);
-							y.resize(size);
-							z.resize(size);
-							vx.resize(size);
-							vy.resize(size);
-							vz.resize(size);
-							h.resize(size);
-							sph_particles_global_read_pos(node.global_part_range(), x.data(), y.data(), z.data(), 0);
-							sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), nullptr, h.data(), 0);
-							sph_particles_global_read_sph(node.global_part_range(), nullptr, vx.data(), vy.data(), vz.data(), nullptr, nullptr, nullptr, 0);
-							for( int k= 0; k < sn.size(); k++) {
-								if( sn[k] != 0.0 ) {
-									const float h2 = sqr(h[k]);
-									const float hinv = 1.0f / h[k];
-									const float h3inv = sqr(hinv) * hinv;
-									for( int l = self_ptr->part_range.first; l < self_ptr->part_range.second; l++) {
-										const int n = sph_particles_dm_index(l);
-										const auto myx = particles_pos(XDIM,n);
-										const auto myy = particles_pos(YDIM,n);
-										const auto myz = particles_pos(ZDIM,n);
-										const auto myvx = particles_vel(XDIM,n);
-										const auto myvy = particles_vel(YDIM,n);
-										const auto myvz = particles_vel(ZDIM,n);
-										const auto myh = sph_particles_smooth_len(l);
-										const auto myh3inv = 1.f / (sqr(myh)*myh);
-										const auto myrho = sph_den(myh3inv);
-										const auto myrhoinv = 1.f / myrho;
-										const auto mygamma = sph_particles_gamma(l);
-										const auto myrho1mgammainv = powf(myrho,1.f-mygamma);
-										const float dx = distance(x[k],myx);
-										const float dy = distance(y[k],myy);
-										const float dz = distance(z[k],myz);
-										const float r2 = sqr(dx,dy,dz);
-										if( r2 < h2 ) {
-											const float r = sqrtf(r2);
-											const float rinv = 1.f / (r + 1e-15f);
-											const float q = r * hinv;
-											const float W = kernelW(q) * h3inv;
-											const float wt = m * myrhoinv * W;
-											const float detherm = wt * dEtherm / m;
-											const float dekin = wt * dEkin / m;
-											const float da = float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv * detherm;
-											const float dvx = myvx - vx[k];
-											const float dvy = myvy - vy[k];
-											const float dvz = myvz - vz[k];
-											const float vr = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-											const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
-											sph_particles_dvel_con(XDIM,l) += dvr * dx * rinv * sn[k];
-											sph_particles_dvel_con(YDIM,l) += dvr * dy * rinv * sn[k];
-											sph_particles_dvel_con(ZDIM,l) += dvr * dz * rinv * sn[k];
-											sph_particles_dent_con(l) += da * sn[k];
-											sph_particles_dchem(l) += wt * sn[k];
-										}
-									}
-								}
-							}
+				//abort();
+				found_sn = true;
+				break;
+			}
+		}
+		constexpr float fSN = 0e-4f;
+		const float m = get_options().sph_mass;
+		const float dEtherm = 0.5f * m * fSN * sqr(a);
+		const float dEkin = 0.5f * m * fSN * sqr(a);
+		if( found_sn ) {
+			x.resize(size);
+			y.resize(size);
+			z.resize(size);
+			vx.resize(size);
+			vy.resize(size);
+			vz.resize(size);
+			h.resize(size);
+			sph_particles_global_read_pos(node.global_part_range(), x.data(), y.data(), z.data(), 0);
+			sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), nullptr, h.data(), 0);
+			sph_particles_global_read_sph(node.global_part_range(), nullptr, vx.data(), vy.data(), vz.data(), nullptr, nullptr, nullptr, 0);
+			for( int k= 0; k < sn.size(); k++) {
+				if( sn[k] != 0.0 ) {
+					const float h2 = sqr(h[k]);
+					const float hinv = 1.0f / h[k];
+					const float h3inv = sqr(hinv) * hinv;
+					for( int l = self_ptr->part_range.first; l < self_ptr->part_range.second; l++) {
+						const int n = sph_particles_dm_index(l);
+						const auto myx = particles_pos(XDIM,n);
+						const auto myy = particles_pos(YDIM,n);
+						const auto myz = particles_pos(ZDIM,n);
+						const auto myvx = particles_vel(XDIM,n);
+						const auto myvy = particles_vel(YDIM,n);
+						const auto myvz = particles_vel(ZDIM,n);
+						const auto myh = sph_particles_smooth_len(l);
+						const auto myh3inv = 1.f / (sqr(myh)*myh);
+						const auto myrho = sph_den(myh3inv);
+						const auto myrhoinv = 1.f / myrho;
+						const auto mygamma = sph_particles_gamma(l);
+						const auto myrho1mgammainv = powf(myrho,1.f-mygamma);
+						const float dx = distance(x[k],myx);
+						const float dy = distance(y[k],myy);
+						const float dz = distance(z[k],myz);
+						const float r2 = sqr(dx,dy,dz);
+						if( r2 < h2 ) {
+							const float r = sqrtf(r2);
+							const float rinv = 1.f / (r + 1e-15f);
+							const float q = r * hinv;
+							const float W = kernelW(q) * h3inv;
+							const float wt = m * myrhoinv * W;
+							const float detherm = wt * dEtherm / m;
+							const float dekin = wt * dEkin / m;
+							const float da = float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv * detherm;
+							const float dvx = myvx - vx[k];
+							const float dvy = myvy - vy[k];
+							const float dvz = myvz - vz[k];
+							const float vr = (dvx * dx + dvy * dy + dvz * dz) * rinv;
+							const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
+							sph_particles_dvel_con(XDIM,l) += dvr * dx * rinv * sn[k];
+							sph_particles_dvel_con(YDIM,l) += dvr * dy * rinv * sn[k];
+							sph_particles_dvel_con(ZDIM,l) += dvr * dz * rinv * sn[k];
+							sph_particles_dent_con(l) += da * sn[k];
+							sph_particles_dchem(l) += wt * sn[k];
 						}
 					}
-
 				}
 			}
-		}));
+		}
+	}
+
+}
+}
+}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	PRINT( "COUNT1 %i COUNT2 %i\n", (int) count1, (int) count2);
+	PRINT("COUNT1 %i COUNT2 %i\n", (int ) count1, (int ) count2);
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,a]() {
 			vector<float> sn;
@@ -1964,4 +1984,84 @@ void sph_deposit_sn(float a) {
 	hpx::wait_all(futs.begin(), futs.end());
 	hpx::wait_all(futs1.begin(), futs1.end());
 
+}
+
+HPX_PLAIN_ACTION (sph_apply_diffusion_update);
+HPX_PLAIN_ACTION (sph_init_diffusion);
+
+float sph_apply_diffusion_update(int minrung, float toler) {
+	vector<hpx::future<float>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_apply_diffusion_update_action>(c, minrung, toler));
+	}
+	float error = 0.f;
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc, toler, minrung]() {
+			float error = 0.f;
+			const part_int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_tree_leaflist_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				const auto sid = sph_tree_get_leaf(i);
+				auto* self = sph_tree_get_node(sid);
+				if( !self->converged ) {
+					float this_error = 0.f;
+					if( self->nactive || has_active_neighbors(self)) {
+						for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
+							const part_int k = sph_particles_dm_index(j);
+							const auto rung = particles_rung(k);
+							const bool sa = sph_particles_semi_active(j);
+							if( rung >= minrung || sa) {
+								float dent = sph_particles_dent_dif(j);
+								float e = sph_particles_ent(j);
+								if( sph_particles_ent(j) == 0.f ) {
+									PRINT( "%e\n", dent);
+								}
+								this_error = std::max(this_error,fabs(dent / (sph_particles_ent(j))));
+								if( dent < -0.5f*e) {
+									dent = -0.5f*e;
+								} else if( dent > 0.5f*e) {
+									dent = 0.5f*e;
+								}
+								sph_particles_ent(j) += dent;
+								sph_particles_dent_dif(j) = 0.0f;
+								///	PRINT( "%e %e %e\n", dent, dent / sph_particles_ent(j), sph_particles_ent(j) );
+			}
+		}
+	}
+	if( this_error < toler ) {
+		sph_tree_set_converged(sid);
+	}
+	error = std::max(error, this_error);
+}
+}
+return error;
+}));
+	}
+	for (auto& f : futs) {
+		error = std::max(error, f.get());
+	}
+	return error;
+}
+
+void sph_init_diffusion() {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_init_diffusion_action>(c));
+	}
+	float error = 0.f;
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc]() {
+			float error = 0.f;
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				sph_particles_ent0(i) = sph_particles_ent(i);
+			}
+		}));
+	}
+	for (auto& f : futs) {
+		f.get();
+	}
 }

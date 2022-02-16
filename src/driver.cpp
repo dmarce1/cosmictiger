@@ -218,7 +218,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 
 		if (tau != 0.0) {
-			sph_particles_apply_updates(minrung,0);
+			sph_particles_apply_updates(minrung, 0);
 
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
@@ -229,7 +229,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 
 ///			sph_particles_apply_updates(SPH_UPDATE_NULL);
-			sph_particles_apply_updates(minrung,1);
+			sph_particles_apply_updates(minrung, 1);
 		}
 
 	} else {
@@ -237,6 +237,26 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (stars) {
 //			sph_deposit_sn(scale);
 //			sph_particles_apply_updates();
+		}
+
+		if (tau != 0.0) {
+			sph_init_diffusion();
+			float err;
+			do {
+				sparams.run_type = SPH_RUN_DIFFUSION;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+				tm.reset();
+				tm.start();
+				err = sph_apply_diffusion_update(minrung, 1e-6);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+				tm.reset();
+			} while (err > 1.0e-6);
 		}
 
 		sparams.run_type = SPH_RUN_COURANT;
@@ -247,6 +267,26 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 		tm.reset();
 		max_rung = kr.max_rung;
+
+//		view_output_views(1, scale);
+
+		sparams.run_type = SPH_RUN_DIFFUSION;
+		sph_init_diffusion();
+		float err;
+		do {
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+			tm.reset();
+			tm.start();
+			err = sph_apply_diffusion_update(minrung, 1e-6);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+			tm.reset();
+		} while (err > 1.0e-6);
 
 //		sph_particles_apply_updates(SPH_UPDATE_CHANGE_SIGN);
 
@@ -288,7 +328,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 		tm.reset();
-		sph_particles_apply_updates(minrung,2);
+		sph_particles_apply_updates(minrung, 2);
 
 //		sph_particles_apply_updates();
 

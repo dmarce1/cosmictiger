@@ -39,10 +39,14 @@ struct sph_tree_node {
 	size_t nactive;
 	bool local_root;
 	bool leaf;
+	bool converged;
 	size_t node_count;
 	size_t active_nodes;
 	int depth;
 	pair<int,int> neighbor_range;
+	sph_tree_node() {
+		converged = false;
+	}
 	inline part_int nparts() const {
 		return part_range.second - part_range.first;
 	}
@@ -60,6 +64,7 @@ struct sph_tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & converged;
 		arc & neighbor_range;
 		arc & box;
 		arc & sink_part_range;
@@ -120,6 +125,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 void sph_tree_destroy(bool free_sph_tree = false);
 const sph_tree_node* sph_tree_get_node(tree_id);
 void sph_tree_sort_sph_particles_by_particles();
+void sph_tree_set_converged(tree_id id);
 void sph_tree_set_nactive(tree_id id, part_int i);
 void sph_tree_set_boxes(tree_id, const fixed32_range& , const fixed32_range& );
 void sph_tree_free_neighbor_list();

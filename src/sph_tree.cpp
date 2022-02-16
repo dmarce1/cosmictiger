@@ -462,6 +462,10 @@ void sph_tree_set_nactive(tree_id id, part_int i) {
 	nodes[id.index].nactive = i;
 }
 
+void sph_tree_set_converged(tree_id id) {
+	nodes[id.index].converged = true;
+}
+
 const sph_tree_node* sph_tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
 		ASSERT(id.index >= 0);

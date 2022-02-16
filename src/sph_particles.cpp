@@ -256,19 +256,10 @@ void sph_particles_apply_updates(int minrung, int phase) {
 	for (auto& f : futs) {
 		f.get();
 	}
-	/*				constexpr float dZ = 0.02;
-	 constexpr float dHe = 0.16;
-	 const float dc = sph_particles_dchem(i);
-	 if( dc > 0.0) {
-	 const float factor = 1.0f / (1.f + dc*(dZ+dHe));
-	 for( int f = 0; f < NCHEMFRACS; f++) {
-	 sph_particles_frac(f,i) *= factor;
-	 }
-	 sph_particles_Z(i) += dc * dZ;
-	 sph_particles_Hepp(i) += dc * dHe;
-	 sph_particles_dchem(i) = 0.f;
-	 }*/
+
 }
+
+
 
 float sph_particles_temperature(part_int i, float a) {
 	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
@@ -391,9 +382,11 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
+		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_de3, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, true);
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
@@ -464,7 +457,9 @@ void sph_particles_free() {
 	if (cuda) {
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaFree(sph_particles_e));
+		CUDA_CHECK(cudaFree(sph_particles_e0));
 		CUDA_CHECK(cudaFree(sph_particles_de1));
+		CUDA_CHECK(cudaFree(sph_particles_de3));
 		CUDA_CHECK(cudaFree(sph_particles_de2));
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
@@ -491,9 +486,11 @@ void sph_particles_free() {
 			}
 		}
 		free(sph_particles_h);
+		free(sph_particles_e0);
 		free(sph_particles_e);
 		free(sph_particles_de1);
 		free(sph_particles_de2);
+		free(sph_particles_de3);
 		free(sph_particles_dvv);
 		free(sph_particles_sa);
 		free(sph_particles_f0);

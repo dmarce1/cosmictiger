@@ -68,11 +68,13 @@ struct sph_particle {
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;
 SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
+SPH_PARTICLES_EXTERN float* sph_particles_e0;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2;
 SPH_PARTICLES_EXTERN float* sph_particles_de1;
 SPH_PARTICLES_EXTERN float* sph_particles_de2;
+SPH_PARTICLES_EXTERN float* sph_particles_de3;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g;
 SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem;
 SPH_PARTICLES_EXTERN float* sph_particles_dvv;
@@ -104,10 +106,10 @@ void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
 
+
 #define SPH_UPDATE_CHANGE_SIGN 0
 #define SPH_UPDATE_NULL 1
 #define SPH_UPDATE_CLEAR 2
-
 void sph_particles_apply_updates(int, int);
 
 
@@ -244,9 +246,19 @@ inline float& sph_particles_tcool(part_int index) {
 	return sph_particles_tc[index];
 }
 
+inline float& sph_particles_ent0(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_e0[index];
+}
+
 inline float& sph_particles_ent(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_e[index];
+}
+
+inline float& sph_particles_dent_dif(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de3[index];
 }
 
 inline float& sph_particles_dent_pred(part_int index) {

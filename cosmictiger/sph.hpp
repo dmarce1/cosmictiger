@@ -193,12 +193,17 @@ struct sph_run_params {
 #define SPH_RUN_GRAVITY 3
 #define SPH_RUN_HYDRO 5
 #define SPH_RUN_UPDATE 6
+#define SPH_RUN_DIFFUSION 7
 
 sph_run_return sph_run(sph_run_params params, bool cuda = false);
 #ifndef __CUDACC__
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);
 #endif
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z);
+
+float sph_apply_diffusion_update(int minrung, float toler);
+void sph_init_diffusion();
+
 
 /*
  template<class T>
