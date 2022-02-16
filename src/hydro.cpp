@@ -21,6 +21,7 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/drift.hpp>
+#include <cosmictiger/view.hpp>
 
 static void output_line(int num) {
 
@@ -37,10 +38,10 @@ static void output_line(int num) {
 	fclose(fp);
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int, bool verbose);
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, bool verbose = true);
 
 void hydro_driver(double tmax) {
-/*	time_type itime = 0;
+	time_type itime = 0;
 	int minrung = 0;
 	double t = 0.0;
 	double t0 = tmax / 64.0;
@@ -49,8 +50,8 @@ void hydro_driver(double tmax) {
 	float e0, ent0;
 	do {
 		int minrung = min_rung(itime);
-		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, false);
-		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, false);
+		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, false);
+		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, false);
 		int maxrung = rc2.max_rung;
 		double dt = t0 / (1 << maxrung);
 		auto dr = drift(1.0, dt, t, t + dt, tmax);
@@ -67,15 +68,16 @@ void hydro_driver(double tmax) {
 		if (minrung != 0) {
 			PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
 		} else {
-			PRINT("%i %e %e %i %i %e %e %e %e %e %e %e %e %e\n", step, t, dt, minrung, maxrung, rc1.ent, rc1.ent / ent0 - 1.0, rc1.ekin, rc1.etherm,
+			PRINT("%i %e %e %i %i %e %e %e %e %e %e %e %e\n", step, t, dt, minrung, maxrung, rc1.ent, rc1.ekin, rc1.etherm,
 					(etot - e0) / (rc1.ekin + 1e-20), rc1.momx, rc1.momy, rc1.momz, rc1.vol);
 		}
 		step++;
 		if (minrung == 0) {
+			view_output_views(main_step, 1.0);
 			output_line(main_step);
 			main_step++;
 		}
-	} while (t < tmax);*/
+	} while (t < tmax);
 }
 
 void hydro_sod_test() {

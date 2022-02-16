@@ -142,6 +142,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
+
 		int flops = 0;
 		ws.x.resize(0);
 		ws.y.resize(0);
@@ -480,7 +481,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ws.rec1_main[k].z = x[ZDIM];
 					ws.rec1_main[k].h = data.h[pi];
 					ws.rec1_main[k].rung = data.rungs[pi];
-					ws.rec2_main[k].gamma = data.gamma[pi];
+					if (data.gamma) {
+						ws.rec2_main[k].gamma = data.gamma[pi];
+					} else {
+						ws.rec2_main[k].gamma = 5. / 3.;
+					}
 					ws.rec2_main[k].vx = data.vx[pi];
 					ws.rec2_main[k].vy = data.vy[pi];
 					ws.rec2_main[k].vz = data.vz[pi];
@@ -758,7 +763,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.rec2_main[k].vz = data.vz[pi];
 						ws.rec2_main[k].ent = data.ent[pi];
 						ws.rec2_main[k].h = data.h[pi];
-						ws.rec2_main[k].gamma = data.gamma[pi];
+						if (data.gamma) {
+							ws.rec2_main[k].gamma = data.gamma[pi];
+						}
 						if (stars) {
 							ws.rec2_main[k].gx = data.gx[pi];
 							ws.rec2_main[k].gy = data.gy[pi];
@@ -803,10 +810,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						gamma = 5.f / 3.f;
 					}
 					const float myp = data.ent[i] * powf(myrho, gamma);
-					if (myp < 0.0) {
-						PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
-						__trap();
-					}
 					const float myc = sqrtf(gamma * myp * myrhoinv);
 					const int jmax = round_up(ws.rec1_main.size(), block_size);
 					ws.rec1.resize(0);
@@ -840,8 +843,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							ws.rec2[l] = ws.rec2_main[j];
 						}
 					}
-					float vsig_max1 = 0.f;
-					float vsig_max2 = 0.f;
+					float vsig_max = 0.f;
 					float dvx_dx = 0.0f;
 					float dvx_dy = 0.0f;
 					float dvx_dz = 0.0f;
@@ -861,40 +863,34 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const auto rec1 = ws.rec1[j];
 						const auto rec2 = ws.rec2[j];
-						const float dx = distance(myx, rec1.x);
-						const float dy = distance(myy, rec1.y);
-						const float dz = distance(myz, rec1.z);
+						const float dx = distance(myx, rec1.x);									// 2
+						const float dy = distance(myy, rec1.y);									// 2
+						const float dz = distance(myz, rec1.z);									// 2
 						const float h = rec2.h;
-						const float h3 = sqr(h) * h;
-						const float r2 = sqr(dx, dy, dz);
-						const float hinv = 1. / h;
-						const float r = sqrt(r2);
-						const float h3inv = hinv * sqr(hinv);
-						const float rho = m * c0 * h3inv;
-						const float rhoinv = minv * c0inv * h3;
+						const float h3 = sqr(h) * h;													// 2
+						const float r2 = sqr(dx, dy, dz);											// 5
+						const float hinv = 1. / h;														// 4
+						const float r = sqrt(r2);														// 4
+						const float h3inv = hinv * sqr(hinv);										// 3
+						const float rho = m * c0 * h3inv;											// 2
+						const float rhoinv = minv * c0inv * h3;									// 2
 						float gamma;
 						if (data.gamma) {
 							gamma = rec2.gamma;
 						} else {
 							gamma = 5.f / 3.f;
 						}
-						const float p = rec2.ent * powf(rho, gamma);
-						if (p < 0.0) {
-							PRINT("Negative entropy! %s %i\n", __FILE__, __LINE__);
-							__trap();
-						}
-						const float c = sqrtf(gamma * p * rhoinv);
-						const float dvx = myvx - rec2.vx;
-						const float dvy = myvy - rec2.vy;
-						const float dvz = myvz - rec2.vz;
-						const float rinv = 1.f / (r + 1e-15f);
-						const float ndv = fminf(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv);
-						const float this_vsig1 = myc + c;
-						const float this_vsig2 = (myc + c - ndv) * 2. * myh / (myh + r);
-						vsig_max1 = fmaxf(vsig_max1, this_vsig1);
-						vsig_max2 = fmaxf(vsig_max2, this_vsig2);
-						const float q = r * myhinv;
-						const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;
+						const float p = rec2.ent * powf(rho, gamma);								// 5
+						const float c = sqrtf(gamma * p * rhoinv);								// 6
+						const float dvx = myvx - rec2.vx;											// 1
+						const float dvy = myvy - rec2.vy;											// 1
+						const float dvz = myvz - rec2.vz;											// 1
+						const float rinv = 1.f / (r + 1e-15f);										// 5
+						const float ndv = fminf(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv); // 7
+						const float this_vsig = (myc + c - 3.f * ndv);	                  // 9
+						vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
+						const float q = r * myhinv;                                       // 1
+						const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;      // 14
 						const float tmp = m * dWdr * rhoinv;
 						const float dWdr_x = dx * tmp;
 						const float dWdr_y = dy * tmp;
@@ -936,8 +932,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
-					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max1);
-					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max2);
+					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max);
 
 					if (tid == 0) {
 						const float sw = 1e-4f * myc / myh;
@@ -947,13 +942,11 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
 						const float fpre = 1.0f / (1.0f + c0);
 						div_v *= fpre;
-						const float dt_cfl = 2.f * params.a * myh / vsig_max1;
-						const float dt_sig = 2.f * params.a * myh / vsig_max2;
-						const float dt_dens = 3.f * params.a / (abs(div_v) + 1e-30);
+						const float dt_cfl = params.a * myh / vsig_max;
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
-						total_vsig_max = fmaxf(total_vsig_max, vsig_max2);
-						float dthydro = SPH_CFL * fminf(dt_cfl, fminf(dt_sig, dt_dens));
+						total_vsig_max = fmaxf(total_vsig_max, vsig_max);
+						float dthydro = SPH_CFL * dt_cfl;
 						const float gx = data.gx_snk[snki];
 						const float gy = data.gy_snk[snki];
 						const float gz = data.gz_snk[snki];
@@ -1012,7 +1005,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 								data.tdyn_snk[snki] = 1e+38;
 							}
 						}
-						float dt_rat = rung_dt[rung] / rung_dt[last_rung];
 					}
 				}
 			}

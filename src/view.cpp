@@ -267,7 +267,7 @@ void view_output_views(int cycle, double a) {
 		view_return parts;
 		parts = view_get_particles();
 		vector<float> x, y, z;
-		if (parts.dm.size()) {
+		if (parts.dm[bi].size()) {
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
@@ -305,6 +305,7 @@ void view_output_views(int cycle, double a) {
 				z.push_back(distance(parts.hydro[bi][i].z, view_boxes[bi].begin[ZDIM]));
 			}
 			float *coords2[NDIM] = { x.data(), y.data(), z.data() };
+			PRINT( "gas points\n");
 			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			y.resize(0);
@@ -314,6 +315,7 @@ void view_output_views(int cycle, double a) {
 				y.push_back(parts.hydro[bi][i].vy);
 				z.push_back(parts.hydro[bi][i].vz);
 			}
+			PRINT( "Vels\n");
 			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
@@ -321,6 +323,7 @@ void view_output_views(int cycle, double a) {
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].rung);
 			}
+			PRINT( "rungs\n");
 			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			y.resize(0);
@@ -328,6 +331,7 @@ void view_output_views(int cycle, double a) {
 				x.push_back(parts.hydro[bi][i].h);
 				y.push_back(parts.hydro[bi][i].ent);
 			}
+			PRINT( "h and ent\n");
 			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);

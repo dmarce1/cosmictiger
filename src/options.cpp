@@ -198,6 +198,10 @@ bool process_options(int argc, char *argv[]) {
 		//	opts.sph_mass = 1.0;
 		//	opts.dm_mass = 0.0;
 	}
+	if( opts.chem == false && opts.stars == true ) {
+		PRINT( "Need chemistry for stars!!! Turning offs stars\n");
+		opts.stars = false;
+	}
 	SHOW(check_freq);
 	SHOW(chem);
 	SHOW(code_to_cm);

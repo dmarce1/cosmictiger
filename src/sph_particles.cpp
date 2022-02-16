@@ -966,19 +966,22 @@ static vector<float> sph_particles_fetch_sn_cache_line(part_int index) {
 }
 
 void sph_particles_cache_free() {
+	static const auto stars = get_options().stars;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_particles_cache_free_action>(HPX_PRIORITY_HI, c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc]() {
-			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			for( int i = b; i < e; i++) {
-				sph_particles_SN(i) = false;
-			}
-		}));
+	if (stars) {
+		for (int proc = 0; proc < nthreads; proc++) {
+			futs.push_back(hpx::async([nthreads, proc]() {
+				const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+				const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+				for( int i = b; i < e; i++) {
+					sph_particles_SN(i) = false;
+				}
+			}));
+		}
 	}
 	part_cache = decltype(part_cache)();
 	sph_part_cache = decltype(sph_part_cache)();
