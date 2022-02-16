@@ -76,10 +76,8 @@ struct dif_record1 {
 };
 
 struct dif_record2 {
-	float vx;
-	float vy;
-	float vz;
-	float ent;
+	float difco;
+	dif_vector vec;
 };
 
 struct hydro_workspace {
@@ -789,10 +787,8 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					ws.rec1_main[k].z = x[ZDIM];
 					ws.rec1_main[k].h = data.h[pi];
 					ws.rec1_main[k].rung = data.rungs[pi];
-					ws.rec2_main[k].vx = data.vx[pi];
-					ws.rec2_main[k].vy = data.vy[pi];
-					ws.rec2_main[k].vz = data.vz[pi];
-					ws.rec2_main[k].ent = data.ent[pi];
+					ws.rec2_main[k].difco = data.difco[pi];
+					ws.rec2_main[k].vec = data.dif_vec[pi];
 				}
 			}
 		}
@@ -810,16 +806,14 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const auto myx = data.x[i];
 				const auto myy = data.y[i];
 				const auto myz = data.z[i];
-				const auto myvx = data.vx[i];
-				const auto myvy = data.vy[i];
-				const auto myvz = data.vz[i];
 				const float myh = data.h[i];
 				const float myhinv = 1.f / myh;															// 4
 				const float myh3inv = 1.f / (sqr(myh) * myh);										// 6
 				const float myrho = m * c0 * myh3inv;													// 2
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;								// 5
-				const float myent = data.ent[i];
-				const float myent0 = data.ent0_snk[snki];
+				const float mydifco = data.difco[i];
+				const auto myvec0 = data.vec0_snk[snki];
+				const auto myvec = data.dif_vec[i];
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -860,8 +854,11 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 						ws.rec2[l] = ws.rec2_main[j];
 					}
 				}
-				float num = 0.f;
+				dif_vector num;
 				float den = 0.f;
+				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
+					num[fi] = 0.f;
+				}
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					auto rec1 = ws.rec1[j];
 					auto rec2 = ws.rec2[j];
@@ -877,8 +874,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float dt_ij = 0.5f * fminf(rung_dt[myrung], rung_dt[rec1.rung]) * params.t0;
 					const float rho_ij = 0.5f * (rho + myrho);
 					const float h_ij = 0.5f * (h + myh);
-					const float v2 = sqr(myvx - rec2.vx, myvy - rec2.vy, myvz - rec2.vz);
-					const float d_ij = SPH_DIFFUSION_C * sqrt(v2) * h_ij;
+					const float d_ij = SPH_DIFFUSION_C * 0.5f * (rec2.difco + mydifco);
 					const float r = sqrtf(r2);
 					const float q_i = r * myhinv;
 					const float q_j = r * hinv;
@@ -887,15 +883,22 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
 					const float rinv = 1. / (r + 1.e-15f);
 					const float factor = -dt_ij * m / rho_ij * d_ij * dWdr_ij * rinv;
-					num += factor * rec2.ent;
+					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
+						num[fi] += factor * rec2.vec[fi];
+					}
 					den += factor;
 				}
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(num);
+				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(num[fi]);
+				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(den);
 				if (tid == 0) {
-					num += myent0;
 					den += 1.0f;
-					data.dent_dif[snki] = num / den - myent;
+					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
+						num[fi] += myvec0[fi];
+						data.dvec_snk[snki][fi] = num[fi] / den - myvec[fi];
+					//	PRINT("%e %e\n", data.dvec_snk[snki][fi], data.dvec_snk[snki][fi] / myvec[fi]);
+					}
 				}
 			}
 		}
@@ -1163,7 +1166,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float fpre = 1.0f / (1.0f + c0);
 						div_v *= fpre;
 						const float dt_cfl = params.a * myh / vsig_max;
-						const float Cdif = sqr(myh)*sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
+						const float Cdif = sqr(myh) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
 						data.difco_snk[snki] = Cdif;

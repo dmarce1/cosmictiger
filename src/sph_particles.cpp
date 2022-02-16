@@ -389,11 +389,9 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
-		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
-		sph_particles_array_resize(sph_particles_de3, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fv, new_capacity, true);
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
@@ -469,9 +467,7 @@ void sph_particles_free() {
 	if (cuda) {
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaFree(sph_particles_e));
-		CUDA_CHECK(cudaFree(sph_particles_e0));
 		CUDA_CHECK(cudaFree(sph_particles_de1));
-		CUDA_CHECK(cudaFree(sph_particles_de3));
 		CUDA_CHECK(cudaFree(sph_particles_de2));
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
@@ -501,12 +497,10 @@ void sph_particles_free() {
 			}
 		}
 		free(sph_particles_h);
-		free(sph_particles_e0);
 		free(sph_particles_e);
 		free(sph_particles_dc);
 		free(sph_particles_de1);
 		free(sph_particles_de2);
-		free(sph_particles_de3);
 		free(sph_particles_dvv);
 		free(sph_particles_sa);
 		free(sph_particles_f0);

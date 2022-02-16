@@ -1779,7 +1779,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.tcool_snk = &sph_particles_tcool(0);
-	cuda_data.dent_dif = &sph_particles_dent_dif(0);
+	cuda_data.dvec_snk = &sph_particles_d_dif_vec(0);
 	cuda_data.dent_pred = &sph_particles_dent_pred(0);
 	cuda_data.dvx_pred = &sph_particles_dvel_pred(XDIM, 0);
 	cuda_data.dvy_pred = &sph_particles_dvel_pred(YDIM, 0);
@@ -1800,7 +1800,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.Yform_snk = &sph_particles_formY(0);
 	cuda_data.Zform_snk = &sph_particles_formZ(0);
 	cuda_data.ent_snk = &sph_particles_ent(0);
-	cuda_data.ent0_snk = &sph_particles_ent0(0);
+	cuda_data.vec0_snk = &sph_particles_dif_vec0(0);
 	cuda_data.G = get_options().GM;
 	cuda_data.Y0 = get_options().Y0;
 	cuda_data.rho0_c = get_options().rho0_c;
@@ -2045,31 +2045,42 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 							const auto rung = particles_rung(k);
 							const bool sa = sph_particles_semi_active(j);
 							if( rung >= minrung || sa) {
-								float dent = sph_particles_dent_dif(j);
-								float e = sph_particles_ent(j);
-								if( sph_particles_ent(j) == 0.f ) {
-									PRINT( "%e\n", dent);
+								auto dfrac = sph_particles_d_dif_vec(j);
+								auto& frac = sph_particles_dif_vec(j);
+								for( int fi = 0; fi < DIFCO_COUNT; fi++) {
+									this_error = std::max(this_error,fabs(dfrac[fi] / frac[fi]));
+									if( dfrac[fi] < -frac[fi]*0.99 ) {
+										dfrac[fi] = -frac[fi]*0.99;
+									}
+									frac[fi] += dfrac[fi];
 								}
-								this_error = std::max(this_error,fabs(dent / (sph_particles_ent(j))));
-								if( dent < -0.5f*e) {
-									dent = -0.5f*e;
-								} else if( dent > 0.5f*e) {
-									dent = 0.5f*e;
-								}
-								sph_particles_ent(j) += dent;
-								sph_particles_dent_dif(j) = 0.0f;
-								///	PRINT( "%e %e %e\n", dent, dent / sph_particles_ent(j), sph_particles_ent(j) );
+							}
+						}
+					}
+					if( this_error < toler ) {
+						sph_tree_set_converged(sid);
+						for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
+							const part_int k = sph_particles_dm_index(j);
+							const auto rung = particles_rung(k);
+							const bool sa = sph_particles_semi_active(j);
+							const auto vec = sph_particles_dif_vec(j);
+							if( rung >= minrung || sa) {
+								sph_particles_ent(i) = vec[NCHEMFRACS];
+								sph_particles_He0(i) = vec[0];
+								sph_particles_Hep(i) = vec[1];
+								sph_particles_Hepp(i) = vec[2];
+								sph_particles_Hp(i) = vec[3];
+								sph_particles_Hn(i) = vec[4];
+								sph_particles_H2(i) = vec[5];
+								sph_particles_Z(i) = vec[6];
+							}
+						}
+					}
+					error = std::max(error, this_error);
+				}
 			}
-		}
-	}
-	if( this_error < toler ) {
-		sph_tree_set_converged(sid);
-	}
-	error = std::max(error, this_error);
-}
-}
-return error;
-}));
+			return error;
+		}));
 	}
 	for (auto& f : futs) {
 		error = std::max(error, f.get());
@@ -2095,7 +2106,17 @@ void sph_init_diffusion() {
 			b = (size_t) proc * sph_particles_size() / nthreads;
 			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
-				sph_particles_ent0(i) = sph_particles_ent(i);
+				dif_vector vec;
+				vec[NCHEMFRACS] = sph_particles_ent(i);
+				vec[0] = sph_particles_He0(i);
+				vec[1] = sph_particles_Hep(i);
+				vec[2] = sph_particles_Hepp(i);
+				vec[3] = sph_particles_Hp(i);
+				vec[4] = sph_particles_Hn(i);
+				vec[5] = sph_particles_H2(i);
+				vec[6] = sph_particles_Z(i);
+				sph_particles_dif_vec0(i) = vec;
+				sph_particles_dif_vec(i) = vec;
 			}
 		}));
 	}
