@@ -113,8 +113,8 @@ struct courant_record1 {
 };
 
 struct courant_record2 {
-	float Y;
-	float Z;
+//	float Y;
+//	float Z;
 	float gamma;
 	float vx;
 	float vy;
@@ -976,8 +976,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							ws.rec2_main[k].gx = data.gx[pi];
 							ws.rec2_main[k].gy = data.gy[pi];
 							ws.rec2_main[k].gz = data.gz[pi];
-							ws.rec2_main[k].Y = data.Y[pi];
-							ws.rec2_main[k].Z = data.Z[pi];
 						}
 					}
 				}
@@ -1063,9 +1061,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float dgx_dx = 0.f;
 					float dgy_dy = 0.f;
 					float dgz_dz = 0.f;
-					float Y = 0.f;
-					float Z = 0.f;
-					float one = 0.f;
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const auto rec1 = ws.rec1[j];
 						const auto rec2 = ws.rec2[j];
@@ -1123,9 +1118,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							dgy_dy += (rec2.gy - mygy) * dWdr_y;
 							dgz_dz += (rec2.gz - mygz) * dWdr_z;
 							const float W = kernelW(q) * myh3inv;
-							Y += m * rhoinv * W * rec2.Y;
-							Z += m * rhoinv * W * rec2.Z;
-							one += m * rhoinv * W;
 						}
 
 					}
@@ -1143,9 +1135,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					if (stars) {
 						div_g = dgx_dx + dgy_dy + dgz_dz;
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
-						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Y);
-						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Z);
-						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 					}
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xy);
@@ -1193,9 +1182,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							PRINT("Rung out of range \n");
 						}
 						if (stars) {
-							const float oneinv = 1.f / one;
-							Y *= oneinv;
-							Z *= oneinv;
 							bool is_eligible = false;
 							const float N = ws.rec1.size();
 							float tdyn;
@@ -1223,8 +1209,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							if (is_eligible) {
 								float dt = rung_dt[rung] * params.t0;
 								data.tdyn_snk[snki] = tdyn;
-								data.Yform_snk[snki] = Y;
-								data.Zform_snk[snki] = Z;
+//								data.Yform_snk[snki] = Y;
+//								data.Zform_snk[snki] = Z;
 								rung = max(params.max_rung - 1, rung);
 								max_rung = max(max_rung, rung);
 							} else {

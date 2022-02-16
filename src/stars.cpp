@@ -106,12 +106,12 @@ void stars_find(float a, float dt, int minrung, int step) {
 					star_particle star;
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
-					star.Z = sph_particles_formZ(i);
+					star.Z = sph_particles_Z(i);
 					star.stellar_mass = stars_sample_mass(rnd_gens[proc]) * (star.Z == 0.f ? 25.0f : 1.0f);
 					star.time_remaining = stars_lifetime(star.stellar_mass);
 					star.remnant = false;
 					star.remove = false;
-					star.Y = sph_particles_formY(i);
+					star.Y = sph_particles_Y(i);
 					const int dmi = star.dm_index;
 					found++;
 					particles_type(dmi) = STAR_TYPE;

@@ -38,8 +38,8 @@ struct sph_run_cuda_data {
 	float t0;
 	float rho0_c;
 	float rho0_b;
-	float* Z;
-	float* Y;
+//	float* Z;
+//	float* Y;
 	float Y0;
 	float* gx;
 	float* gy;
@@ -59,7 +59,7 @@ struct sph_run_cuda_data {
 	float* tdyn_snk;
 	dif_vector* vec0_snk;
 	float* ent_snk;
-	float* dchem_snk;
+//	float* dchem_snk;
 	float* difco;
 	float* difco_snk;
 	dif_vector* dif_vec;
@@ -80,8 +80,8 @@ struct sph_run_cuda_data {
 	float* Z_snk;
 	float N;
 	char* sa_snk;
-	float* Yform_snk;
-	float* Zform_snk;
+//	float* Yform_snk;
+//	float* Zform_snk;
 	float* divv_snk;
 	int nselfs;
 	sph_tree_node* trees;

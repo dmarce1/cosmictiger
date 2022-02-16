@@ -84,8 +84,6 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_f0;
 	vector<float, pinned_allocator<float>> host_h;
 	vector<float, pinned_allocator<float>> host_gamma;
-	vector<float, pinned_allocator<float>> host_Y;
-	vector<float, pinned_allocator<float>> host_Z;
 	vector<char, pinned_allocator<char>> host_rungs;
 	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
 	vector<int, pinned_allocator<int>> host_neighbors;
@@ -312,7 +310,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 			sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), d.rungs.data(), d.hs.data(), offset);
 		}
 		if (do_ent || do_vel) {
-			sph_particles_global_read_sph(other->global_part_range(), d.ents.data(), d.vxs.data(), d.vys.data(), d.vzs.data(), nullptr, nullptr, nullptr, offset);
+			sph_particles_global_read_sph(other->global_part_range(), d.ents.data(), d.vxs.data(), d.vys.data(), d.vzs.data(), nullptr, offset);
 		}
 		if (do_fvel) {
 			sph_particles_global_read_fvels(other->global_part_range(), d.fvels.data(), d.f0s.data(), offset);
@@ -1590,8 +1588,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 			host_gx.resize(parts_size);
 			host_gy.resize(parts_size);
 			host_gz.resize(parts_size);
-			host_Y.resize(parts_size);
-			host_Z.resize(parts_size);
 		}
 		break;
 	}
@@ -1637,13 +1633,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 								}
 								switch(params.run_type) {
 									case SPH_RUN_DIFFUSION:
-									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), nullptr, nullptr, nullptr, offset);
+									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), nullptr, offset);
 									break;
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, nullptr, nullptr, offset);
-									break;
 									case SPH_RUN_COURANT:
-									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, stars ? host_Y.data() : nullptr, stars ? host_Z.data() : nullptr,offset);
+									sph_particles_global_read_sph(node.global_part_range(), host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, offset);
 									break;
 								}
 								switch(params.run_type) {
@@ -1712,10 +1706,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 			CUDA_CHECK(cudaMalloc(&cuda_data.gx, sizeof(float) * host_gx.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.gy, sizeof(float) * host_gy.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.gz, sizeof(float) * host_gz.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.Y, sizeof(float) * host_Y.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.Z, sizeof(float) * host_Z.size()));
 		} else {
-			cuda_data.gx = cuda_data.gy = cuda_data.gz = cuda_data.Y = cuda_data.Z = nullptr;
+			cuda_data.gx = cuda_data.gy = cuda_data.gz = nullptr;
 		}
 		break;
 	}
@@ -1762,8 +1754,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gx, host_gx.data(), sizeof(float) * host_gx.size(), cudaMemcpyHostToDevice, stream));
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gy, host_gy.data(), sizeof(float) * host_gy.size(), cudaMemcpyHostToDevice, stream));
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gz, host_gz.data(), sizeof(float) * host_gz.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.Y, host_Y.data(), sizeof(float) * host_Y.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.Z, host_Z.data(), sizeof(float) * host_Z.size(), cudaMemcpyHostToDevice, stream));
 		}
 		break;
 	}
@@ -1801,8 +1791,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.Z_snk = &sph_particles_Z(0);
 	cuda_data.f0_snk = &sph_particles_fpre(0);
 	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
-	cuda_data.Yform_snk = &sph_particles_formY(0);
-	cuda_data.Zform_snk = &sph_particles_formZ(0);
+//	cuda_data.Yform_snk = &sph_particles_formY(0);
+//	cuda_data.Zform_snk = &sph_particles_formZ(0);
 	cuda_data.ent_snk = &sph_particles_ent(0);
 	cuda_data.vec0_snk = &sph_particles_dif_vec0(0);
 	cuda_data.G = get_options().GM;
@@ -1812,7 +1802,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.t0 = params.t0;
 	cuda_data.m = get_options().sph_mass;
 	cuda_data.N = get_options().neighbor_number;
-	cuda_data.dchem_snk = &sph_particles_dchem(0);
+//	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
 	cuda_data.hsoft_min = get_options().hsoft;
@@ -1867,8 +1857,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 			CUDA_CHECK(cudaFree(cuda_data.gx));
 			CUDA_CHECK(cudaFree(cuda_data.gy));
 			CUDA_CHECK(cudaFree(cuda_data.gz));
-			CUDA_CHECK(cudaFree(cuda_data.Y));
-			CUDA_CHECK(cudaFree(cuda_data.Z));
 		}
 		break;
 	}
@@ -1886,142 +1874,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaFree(cuda_data.selfs));
 	CUDA_CHECK(cudaFree(cuda_data.neighbors));
 	return rc;
-}
-
-HPX_PLAIN_ACTION (sph_deposit_sn);
-
-void sph_deposit_sn(float a) {
-	vector<hpx::future<void>> futs;
-	vector<hpx::future<void>> futs1;
-	for (auto& c : hpx_children()) {
-		futs1.push_back(hpx::async<sph_deposit_sn_action>(c, a));
-	}
-	std::atomic<int> count1(0);
-	std::atomic<int> count2(0);
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,a,&count1,&count2]() {
-			vector<float> sn;
-			vector<fixed32> x;
-			vector<fixed32> y;
-			vector<fixed32> z;
-			vector<float> vx;
-			vector<float> vy;
-			vector<float> vz;
-			vector<float> h;
-			const int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
-			const int e = (size_t) (proc + 1) * sph_tree_leaflist_size() / nthreads;
-			for( int i = b; i < e; i++) {
-				const auto self_id = sph_tree_get_leaf(i);
-				const auto* self_ptr = sph_tree_get_node(self_id);
-				count1++;
-				if( has_active_neighbors(self_ptr)) {
-					for( int j = self_ptr->neighbor_range.first; j < self_ptr->neighbor_range.second; j++) {
-						count2++;
-						const auto id = sph_tree_get_neighbor(j);
-						const auto& node = *sph_tree_get_node(id);
-						const int size= node.part_range.second - node.part_range.first;
-						sn.resize(size);
-						sph_particles_global_read_sns(node.global_part_range(), sn.data(), 0);
-						bool found_sn = false;
-						for( int k = 0; k < sn.size(); k++) {
-							if( sn[k] != 0.0 ) {
-//								PRINT( "******************** SUPERNOVA *******************\n");
-				//abort();
-				found_sn = true;
-				break;
-			}
-		}
-		constexpr float fSN = 0e-4f;
-		const float m = get_options().sph_mass;
-		const float dEtherm = 0.5f * m * fSN * sqr(a);
-		const float dEkin = 0.5f * m * fSN * sqr(a);
-		if( found_sn ) {
-			x.resize(size);
-			y.resize(size);
-			z.resize(size);
-			vx.resize(size);
-			vy.resize(size);
-			vz.resize(size);
-			h.resize(size);
-			sph_particles_global_read_pos(node.global_part_range(), x.data(), y.data(), z.data(), 0);
-			sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), nullptr, h.data(), 0);
-			sph_particles_global_read_sph(node.global_part_range(), nullptr, vx.data(), vy.data(), vz.data(), nullptr, nullptr, nullptr, 0);
-			for( int k= 0; k < sn.size(); k++) {
-				if( sn[k] != 0.0 ) {
-					const float h2 = sqr(h[k]);
-					const float hinv = 1.0f / h[k];
-					const float h3inv = sqr(hinv) * hinv;
-					for( int l = self_ptr->part_range.first; l < self_ptr->part_range.second; l++) {
-						const int n = sph_particles_dm_index(l);
-						const auto myx = particles_pos(XDIM,n);
-						const auto myy = particles_pos(YDIM,n);
-						const auto myz = particles_pos(ZDIM,n);
-						const auto myvx = particles_vel(XDIM,n);
-						const auto myvy = particles_vel(YDIM,n);
-						const auto myvz = particles_vel(ZDIM,n);
-						const auto myh = sph_particles_smooth_len(l);
-						const auto myh3inv = 1.f / (sqr(myh)*myh);
-						const auto myrho = sph_den(myh3inv);
-						const auto myrhoinv = 1.f / myrho;
-						const auto mygamma = sph_particles_gamma(l);
-						const auto myrho1mgammainv = powf(myrho,1.f-mygamma);
-						const float dx = distance(x[k],myx);
-						const float dy = distance(y[k],myy);
-						const float dz = distance(z[k],myz);
-						const float r2 = sqr(dx,dy,dz);
-						if( r2 < h2 ) {
-							const float r = sqrtf(r2);
-							const float rinv = 1.f / (r + 1e-15f);
-							const float q = r * hinv;
-							const float W = kernelW(q) * h3inv;
-							const float wt = m * myrhoinv * W;
-							const float detherm = wt * dEtherm / m;
-							const float dekin = wt * dEkin / m;
-							const float da = float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv * detherm;
-							const float dvx = myvx - vx[k];
-							const float dvy = myvy - vy[k];
-							const float dvz = myvz - vz[k];
-							const float vr = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-							const float dvr = sqrtf(2.f * dekin + sqr(vr)) - vr;
-							sph_particles_dvel_con(XDIM,l) += dvr * dx * rinv * sn[k];
-							sph_particles_dvel_con(YDIM,l) += dvr * dy * rinv * sn[k];
-							sph_particles_dvel_con(ZDIM,l) += dvr * dz * rinv * sn[k];
-							sph_particles_dent_con(l) += da * sn[k];
-							sph_particles_dchem(l) += wt * sn[k];
-						}
-					}
-				}
-			}
-		}
-	}
-
-}
-}
-}));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	PRINT("COUNT1 %i COUNT2 %i\n", (int ) count1, (int ) count2);
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,a]() {
-			vector<float> sn;
-			vector<fixed32> x;
-			vector<fixed32> y;
-			vector<fixed32> z;
-			vector<float> vx;
-			vector<float> vy;
-			vector<float> vz;
-			vector<float> h;
-			const int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
-			const int e = (size_t) (proc + 1) * sph_tree_leaflist_size() / nthreads;
-			for( int i = b; i < e; i++) {
-			}
-
-		}));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	hpx::wait_all(futs1.begin(), futs1.end());
-
 }
 
 HPX_PLAIN_ACTION (sph_apply_diffusion_update);
@@ -2070,14 +1922,14 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 							const bool sa = sph_particles_semi_active(j);
 							const auto vec = sph_particles_dif_vec(j);
 							if( rung >= minrung || sa) {
-								sph_particles_ent(i) = vec[NCHEMFRACS];
-								sph_particles_He0(i) = vec[0];
-								sph_particles_Hep(i) = vec[1];
-								sph_particles_Hepp(i) = vec[2];
-								sph_particles_Hp(i) = vec[3];
-								sph_particles_Hn(i) = vec[4];
-								sph_particles_H2(i) = vec[5];
-								sph_particles_Z(i) = vec[6];
+								sph_particles_ent(j) = vec[NCHEMFRACS];
+								sph_particles_He0(j) = vec[0];
+								sph_particles_Hep(j) = vec[1];
+								sph_particles_Hepp(j) = vec[2];
+								sph_particles_Hp(j) = vec[3];
+								sph_particles_Hn(j) = vec[4];
+								sph_particles_H2(j) = vec[5];
+								sph_particles_Z(j) = vec[6];
 							}
 						}
 					}
