@@ -306,7 +306,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dc[i], sph_particles_dc[j]);
 	std::swap(sph_particles_h[i], sph_particles_h[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
-	std::swap(sph_particles_dc[i], sph_particles_dc[j]);
 	if (stars) {
 		std::swap(sph_particles_ts[i], sph_particles_ts[j]);
 		std::swap(sph_particles_fY[i], sph_particles_fY[j]);

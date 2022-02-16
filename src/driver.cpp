@@ -162,7 +162,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	if (phase == 0) {
 
 		stars_statistics(scale);
-//		stars_remove(scale, dt, minrung, iter);
+		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)
 			PRINT("starting sph_tree_create = %e\n", tm.read());
