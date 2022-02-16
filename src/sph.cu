@@ -887,7 +887,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dvz = myvz - rec2.vz;											// 1
 						const float rinv = 1.f / (r + 1e-15f);										// 5
 						const float ndv = fminf(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv); // 7
-						const float this_vsig = (myc + c - 3.f * ndv);	                  // 9
+						const float hij = 0.5f * (h + myh);
+						const float cij = 0.5f * (c + myc);
+						const float hfac = myh / hij;
+						float this_vsig = 1.25f * cij * hfac;
+						if (ndv < 0.f) {
+							this_vsig += 0.75f * SPH_ALPHA * cij * hfac;
+							this_vsig -= 0.75f * SPH_BETA * ndv * hfac;
+						}
 						vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
 						const float q = r * myhinv;                                       // 1
 						const float dWdr = dkernelW_dq(q) * rinv * myhinv * myh3inv;      // 14
