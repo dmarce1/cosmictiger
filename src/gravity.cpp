@@ -130,7 +130,7 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			}
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, sph.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, do_sph ? sph.data() : nullptr, count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
@@ -307,7 +307,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
 				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), hsoft.size() ? hsoft.data() : nullptr,
-						sph.data(), count);
+						do_sph ? sph.data() : nullptr, count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
@@ -366,7 +366,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
 						}
 
-						simd_float rinv1, rinv3;
+						simd_float rinv1 = 0.f, rinv3 = 0.f;
 						if (do_sph) {
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 							if (vsoft) {
@@ -402,7 +402,6 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 							const simd_float far_flag = (r2 > h2) * (r2 > simd_float(0));                                                // 1
-							simd_float rinv1, rinv3;
 							if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
 								rinv1 = mask * rsqrt(r2);                                                        // 5
 								rinv3 = -rinv1 * rinv1 * rinv1;                                                  // 2

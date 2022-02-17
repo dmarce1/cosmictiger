@@ -256,6 +256,40 @@ power_spectrum_function compute_power_spectrum() {
 	return func;
 }
 
+void initialize_glass() {
+	if (hpx_size() > 1) {
+		PRINT("Glass can only run on one processor!\n");
+		abort();
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	const part_int part_dim = get_options().parts_dim;
+	const size_t nparts = sqr(part_dim) * part_dim;
+	vector<hpx::future<void>> futs;
+	particles_resize(nparts);
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads,nparts]() {
+			gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
+			gsl_rng_set(rndgen, proc+42);
+			const part_int b = (size_t) proc * nparts / nthreads;
+			const part_int e = (size_t) (proc+1) * nparts / nthreads;
+			for( part_int i = b; i < e; i++) {
+				const double x = gsl_rng_uniform_pos(rndgen);
+				const double y = gsl_rng_uniform_pos(rndgen);
+				const double z = gsl_rng_uniform_pos(rndgen);
+				particles_pos(XDIM,i) = x;
+				particles_pos(YDIM,i) = y;
+				particles_pos(ZDIM,i) = z;
+				particles_vel(XDIM,i) = 0;
+				particles_vel(YDIM,i) = 0;
+				particles_vel(ZDIM,i) = 0;
+				particles_rung(i) = 0;
+			}
+			gsl_rng_free(rndgen);
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
+
 void initialize(double z0) {
 	const int64_t N = get_options().parts_dim;
 	const float omega_m = get_options().omega_m;
@@ -333,8 +367,6 @@ void initialize(double z0) {
 
 		twolpt_correction1();
 		twolpt_f2delta2_inv();
-//		fft3d2silo(false);
-//		system( "cp complex.silo complex.3.silo\n");
 		fft3d_destroy();
 
 		for (int dim = 0; dim < NDIM; dim++) {

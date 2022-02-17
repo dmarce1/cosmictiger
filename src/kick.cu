@@ -146,6 +146,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		gx[i] *= params.GM;
 		gy[i] *= params.GM;
 		gz[i] *= params.GM;
+		if (params.glass) {
+			gx[i] *= -1.f;
+			gy[i] *= -1.f;
+			gz[i] *= -1.f;
+		}
 		if (params.save_force) {
 			all_gx[snki] = gx[i];
 			all_gy[snki] = gy[i];
@@ -342,7 +347,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						R2 = fmaxf(R2, EWALD_DIST2);                          // 1
 						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv); // 5
 						const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
-					//	PRINT( "%i %%e %e %e\n", soft_sep, self.radius, other.radius, max(other_hsoft, hsoft));
+						//	PRINT( "%i %%e %e %e\n", soft_sep, self.radius, other.radius, max(other_hsoft, hsoft));
 						mult = soft_sep && (R2 > r2);                                       // 1
 						next = !mult;
 						ninteracts++;

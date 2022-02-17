@@ -37,6 +37,7 @@ struct options {
 	bool read_check;
 	bool vsoft;
 	bool chem;
+	int glass;
 	int tracer_count;
 	int kernel;
 	int parts_dim;
@@ -86,6 +87,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & glass;
 		arc & rho0_b;
 		arc & rho0_c;
 		arc & stars;

@@ -151,9 +151,11 @@ struct kick_params {
 	bool first_call;
 	bool gpu;
 	float node_load;
+	int glass;
 	kick_params() {
 		dm_mass = get_options().dm_mass;
 		sph_mass = get_options().sph_mass;
+		glass = 0;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {

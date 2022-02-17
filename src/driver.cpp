@@ -359,6 +359,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 //	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
+	kparams.glass = get_options().glass;
 	kparams.node_load = flops_per_node / flops_per_particle;
 	kparams.gpu = true;
 	used_gpu = kparams.gpu;
@@ -464,11 +465,16 @@ void driver() {
 	const bool stars = get_options().stars;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	drift_return dr;
+	const int glass = get_options().glass;
 	if (get_options().read_check) {
 		params = read_checkpoint();
 	} else {
 		output_time_file();
-		initialize(get_options().z0);
+		if (glass) {
+			initialize_glass();
+		} else {
+			initialize(get_options().z0);
+		}
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
@@ -605,7 +611,7 @@ void driver() {
 			last_theta = theta;
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
-			if (sph) {
+			if (sph & !glass) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt);
 				if (tau != 0.0 && chem) {
 					PRINT("Doing chemistry step\n");
@@ -621,10 +627,10 @@ void driver() {
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
-			if (sph) {
+			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt).max_rung);
 			}
-			if (stars) {
+			if (stars & !glass) {
 				stars_find(a, dt, minrung, iter);
 			}
 			tree_create_return sr = tmp.second;
@@ -737,6 +743,13 @@ void driver() {
 		}
 		if (jiter > 50) {
 			break;
+		}
+	}
+	if (glass) {
+		if( glass == 1 ) {
+			particles_save_glass("glass_dm.bin");
+		} else {
+			particles_save_glass("glass_sph.bin");
 		}
 	}
 	if (get_options().do_lc) {

@@ -176,6 +176,8 @@ vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
 void particles_memadvise_gpu();
 void particles_free();
+void particles_save_glass(const char* filename);
+
 
 inline char& particles_type(part_int index) {
 	static const bool sph = get_options().sph;

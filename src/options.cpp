@@ -91,7 +91,8 @@ bool process_options(int argc, char *argv[]) {
 #endif
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600),
 			"time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
-	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
+			("glass", po::value<int>(&(opts.glass))->default_value(0), "maximum number of time-steps (default=1000000)") //
+			("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
@@ -202,6 +203,14 @@ bool process_options(int argc, char *argv[]) {
 		PRINT( "Need chemistry for stars!!! Turning offs stars\n");
 		opts.stars = false;
 	}
+	if( opts.glass == 1 ) {
+		if( opts.sph ) {
+			PRINT( "TURNING SPH OFF FOR GLASS PHASE 1\n");
+			opts.sph = false;
+			opts.vsoft = false;
+			opts.chem = false;
+		}
+	}
 	SHOW(check_freq);
 	SHOW(chem);
 	SHOW(code_to_cm);
@@ -264,7 +273,6 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
-
 	kernel_set_type(opts.kernel);
 	set_options(opts);
 	kernel_adjust_options(opts);

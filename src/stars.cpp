@@ -169,9 +169,9 @@ stars_stats stars_statistics(float a) {
 					stats.remnants++;
 				} else {
 					stats.stars++;
-					if( stars[i].Z == 0.0) {
+					if( stars[i].Z < 1e-9) {
 						stats.popIII++;
-					} else if( stars[i].Z < 0.02) {
+					} else if( stars[i].Z < 0.005) {
 						stats.popII++;
 					} else {
 						stats.popI++;
@@ -283,7 +283,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			double dHe = 0.20 * (1.0 - star.Y - star.Z);
 			star.Y += dHe;
 			star.Z += dZ;
-	//		PRINT( "SUPERNOVA!!!\n");
+			//		PRINT( "SUPERNOVA!!!\n");
 		}
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;

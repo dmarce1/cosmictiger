@@ -507,7 +507,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 						if (type != SPH_TYPE) {
 							hsoft[j] = dm_hsoft;
 						} else {
-							hsoft[j] = std::max(dm_hsoft,std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
+							hsoft[j] = std::max(dm_hsoft, std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
 						}
 					}
 				}
@@ -942,6 +942,16 @@ void particles_save(FILE* fp) {
 		sph_particles_save(fp);
 	}
 
+}
+
+void particles_save_glass(const char* filename) {
+	FILE* fp = fopen(filename, "wb");
+	part_int size = get_options().parts_dim;
+	fwrite(&size, sizeof(part_int), 1, fp);
+	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fclose(fp);
 }
 
 void particles_resolve_with_sph_particles() {
