@@ -704,12 +704,12 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 					sph_particles_smooth_len(index) = h;
 					if( chem ) {
 						sph_particles_He0(index) = Y0;
-						sph_particles_Z(index) = 1.0e-10f;
-						sph_particles_Hp(index) = 1.0e-10f;
-						sph_particles_Hn(index) = 1.0e-10f;
-						sph_particles_H2(index) = 1.0e-10f;
-						sph_particles_Hep(index) = 1.0e-10f;
-						sph_particles_Hepp(index) = 1.0e-10f;
+						sph_particles_Z(index) = 1.0e-30f;
+						sph_particles_Hp(index) = 1.0e-30f;
+						sph_particles_Hn(index) = 1.0e-30f;
+						sph_particles_H2(index) = 1.0e-30f;
+						sph_particles_Hep(index) = 1.0e-30f;
+						sph_particles_Hepp(index) = 1.0e-30f;
 					}
 				}
 			}

@@ -41,12 +41,18 @@ struct sph_particle {
 	float ent;
 	array<float, NDIM> v;
 	float gamma;
-	template<class T>
-	void serialize(T&&arc, unsigned) {
+	float T;
+	float lambda_e;
+	float mmw;
+	template<class A>
+	void serialize(A&&arc, unsigned) {
 		static const bool stars = get_options().stars;
+		arc & mmw;
 		arc & ent;
 		arc & v;
 		arc & gamma;
+		arc & T;
+		arc & lambda_e;
 	}
 };
 
@@ -87,6 +93,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_ts;
 SPH_PARTICLES_EXTERN float* sph_particles_tc;
 SPH_PARTICLES_EXTERN float* sph_particles_dc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
+SPH_PARTICLES_EXTERN float* sph_particles_cond;
 
 part_int sph_particles_size();
 void sph_particles_resize(part_int sz, bool parts2 = true);
@@ -98,25 +105,27 @@ void sph_particles_swap(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float* ent, float* vx, float* vy, float* vz, float* gamma, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
+		float* mmw, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
 //void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
-void sph_particles_global_read_difcos(particle_global_range range, float* difcos, char*, part_int offset);
+void sph_particles_global_read_difcos(particle_global_range range, float* difcos, float*, char*, part_int offset);
 void sph_particles_global_read_difvecs(particle_global_range range, dif_vector* difvecs, part_int offset);
 
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
-
+float sph_particles_mmw(part_int);
+float sph_particles_lambda_e(part_int, float, float);
 
 void sph_particles_apply_updates(int, int);
 /*
-inline float& sph_particles_SN(part_int index) {
-	return sph_particles_sn[index];
-}
-*/
+ inline float& sph_particles_SN(part_int index) {
+ return sph_particles_sn[index];
+ }
+ */
 inline char& sph_particles_old_rung(part_int index) {
 	return sph_particles_or[index];
 }
@@ -167,6 +176,11 @@ inline float sph_particles_H(part_int index) {
 inline float& sph_particles_frac(int j, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[j][index];
+}
+
+inline float& sph_particles_kappa(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_cond[index];
 }
 
 inline float& sph_particles_Z(part_int index) {
@@ -258,10 +272,10 @@ inline char& sph_particles_rung(int index) {
 }
 
 /*inline float& sph_particles_dchem(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dz[index];
-}
-*/
+ CHECK_SPH_PART_BOUNDS(index);
+ return sph_particles_dz[index];
+ }
+ */
 inline float& sph_particles_tcool(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_tc[index];
@@ -327,7 +341,7 @@ inline float sph_particles_energy(part_int index) {
 	return E;
 }
 
-inline sph_particle sph_particles_get_particle(part_int index) {
+inline sph_particle sph_particles_get_particle(part_int index, float a) {
 	sph_particle p;
 	p.ent = sph_particles_ent(index);
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -341,6 +355,9 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 		float cv = 1.5 + nh2;
 		float gamma = 1.f + 1.f / cv;
 		p.gamma = gamma;
+		p.T = sph_particles_temperature(index, a);
+		p.lambda_e = sph_particles_lambda_e(index, a, p.T);
+		p.mmw = sph_particles_mmw(index);
 	}
 	return p;
 }

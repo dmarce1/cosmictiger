@@ -76,9 +76,10 @@ struct dif_record1 {
 };
 
 struct dif_record2 {
-	float difco;
-	char oldrung;
 	dif_vector vec;
+	float difco;
+	float kappa;
+	char oldrung;
 };
 
 struct hydro_workspace {
@@ -124,6 +125,9 @@ struct courant_record2 {
 	float gz;
 	float ent;
 	float h;
+	float T;
+	float lambda_e;
+	float mmw;
 };
 
 struct courant_workspace {
@@ -503,6 +507,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					ws.rec1_main[k].h = data.h[pi];
 					ws.rec1_main[k].rung = data.rungs[pi];
 					ws.rec2_main[k].difco = data.difco[pi];
+					ws.rec2_main[k].kappa = data.kappa[pi];
 					ws.rec2_main[k].vec = data.dif_vec[pi];
 					ws.rec2_main[k].oldrung = data.oldrung[pi];
 				}
@@ -529,6 +534,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const float myrho = m * c0 * myh3inv;													// 2
 				const float myrhoinv = minv * c0inv * sqr(myh) * myh;								// 5
 				const float mydifco = data.difco[i];
+				const float mykappa = data.kappa[i];
 				const auto myvec0 = data.vec0_snk[snki];
 				const auto myvec = data.dif_vec[i];
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
@@ -573,6 +579,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				}
 				dif_vector num;
 				float den = 0.f;
+				float den_A = 0.f;
 				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 					num[fi] = 0.f;
 				}
@@ -594,6 +601,12 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float rho_ij = 0.5f * (rho + myrho);
 					const float h_ij = 0.5f * (h + myh);
 					const float d_ij = SPH_DIFFUSION_C * 0.5f * (rec2.difco + mydifco);
+					float kappa_ij;
+					if (mykappa + rec2.kappa > 0.f) {
+						kappa_ij = 2.f * mykappa * rec2.kappa / (mykappa + rec2.kappa);
+					} else {
+						kappa_ij = 0.f;
+					}
 					const float r = sqrtf(r2);
 					const float q_i = r * myhinv;
 					const float q_j = r * hinv;
@@ -602,10 +615,16 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
 					const float rinv = 1. / (r + 1.e-15f);
 					const float factor = -dt_ij * m / rho_ij * d_ij * dWdr_ij * rinv;
+					const float factor_cond = -dt_ij * m / (myrho * rho) * kappa_ij * dWdr_ij * rinv;
+					if( kappa_ij > 0.f ) {
+						PRINT("kappa_ij = %e\n", kappa_ij);
+					}
 					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 						num[fi] += factor * rec2.vec[fi];
 					}
+					num[NCHEMFRACS] += factor_cond * rec2.vec[NCHEMFRACS];
 					den += factor;
+					den_A += factor + factor_cond;
 				}
 				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(num[fi]);
@@ -613,7 +632,10 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(den);
 				if (tid == 0) {
 					den += 1.0f;
-					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
+					den_A += 1.0f;
+					num[NCHEMFRACS] += myvec0[NCHEMFRACS];
+					data.dvec_snk[snki][NCHEMFRACS] = num[NCHEMFRACS] / den_A - myvec[NCHEMFRACS];
+					for (int fi = 1; fi < DIFCO_COUNT; fi++) {
 						num[fi] += myvec0[fi];
 						data.dvec_snk[snki][fi] = num[fi] / den - myvec[fi];
 					}
@@ -969,6 +991,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.rec2_main[k].vz = data.vz[pi];
 						ws.rec2_main[k].ent = data.ent[pi];
 						ws.rec2_main[k].h = data.h[pi];
+						ws.rec2_main[k].T = data.T[pi];
+						ws.rec2_main[k].lambda_e = data.lambda_e[pi];
+						ws.rec2_main[k].mmw = data.mmw[pi];
 						if (data.gamma) {
 							ws.rec2_main[k].gamma = data.gamma[pi];
 						}
@@ -1001,6 +1026,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const auto myvx = data.vx[i];
 					const auto myvy = data.vy[i];
 					const auto myvz = data.vz[i];
+					const float myT = data.T[i];
 					const float myh = data.h[i];
 					const float myh2 = sqr(myh);
 					const float myhinv = 1.f / myh;
@@ -1061,6 +1087,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float dgx_dx = 0.f;
 					float dgy_dy = 0.f;
 					float dgz_dz = 0.f;
+					float dT_dx = 0.f;
+					float dT_dy = 0.f;
+					float dT_dz = 0.f;
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const auto rec1 = ws.rec1[j];
 						const auto rec2 = ws.rec2[j];
@@ -1103,6 +1132,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_x = dx * tmp;
 						const float dWdr_y = dy * tmp;
 						const float dWdr_z = dz * tmp;
+						dT_dx += (rec2.T - myT) * dWdr_x;
+						dT_dy += (rec2.T - myT) * dWdr_y;
+						dT_dz += (rec2.T - myT) * dWdr_z;
 						dvx_dx -= dvx * dWdr_x;
 						dvx_dy -= dvx * dWdr_y;
 						dvx_dz -= dvx * dWdr_z;
@@ -1136,6 +1168,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						div_g = dgx_dx + dgy_dy + dgz_dz;
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
 					}
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dx);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dy);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dz);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xy);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(shear_xz);
@@ -1157,7 +1192,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float fpre = 1.0f / (1.0f + c0);
 						div_v *= fpre;
 						const float dt_cfl = params.a * myh / vsig_max;
-						const float Cdif = sqr(myh) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
+						const float Cdif = params.a * sqr(myh) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
+						const float lt = myT / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * myT);
+						const float kappa_sp = 8.2e20f * powf(constants::kb * myT * 0.1f / constants::evtoK, 2.5f) / (0.001f * constants::evtoK);
+						const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
+						float Dcond = 2.f * data.mmw[i] / constants::kb * (data.gamma[i] - 1.f) * kappa;
+						Dcond /= data.code_dif_to_cgs;
+						Dcond *= sqr(sqr(params.a));
+						data.kappa_snk[snki] = Dcond;
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
 						data.difco_snk[snki] = Cdif;
@@ -1209,8 +1251,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							if (is_eligible) {
 								float dt = rung_dt[rung] * params.t0;
 								data.tdyn_snk[snki] = tdyn;
-//								data.Yform_snk[snki] = Y;
-//								data.Zform_snk[snki] = Z;
 								rung = max(params.max_rung - 1, rung);
 								max_rung = max(max_rung, rung);
 							} else {

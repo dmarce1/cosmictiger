@@ -21,7 +21,6 @@
 #ifndef SPH_CUDA_HPP_
 #define SPH_CUDA_HPP_
 
-
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_tree.hpp>
@@ -32,7 +31,7 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
-	float* sn;
+	float* mmw;
 	float hsoft_min;
 	float G;
 	float t0;
@@ -41,6 +40,9 @@ struct sph_run_cuda_data {
 //	float* Z;
 //	float* Y;
 	float Y0;
+	float* T;
+	float* kappa;
+	float* lambda_e;
 	float* gx;
 	float* gy;
 	char* oldrung;
@@ -70,6 +72,7 @@ struct sph_run_cuda_data {
 	float* dent_pred;
 	dif_vector* dvec_snk;
 	float* dvx_pred;
+	float* kappa_snk;
 	float* dvy_pred;
 	float* dvz_pred;
 	float* gx_snk;
@@ -78,6 +81,7 @@ struct sph_run_cuda_data {
 	float* f0_snk;
 	float* fvel_snk;
 	float* Z_snk;
+	float code_dif_to_cgs;
 	float N;
 	char* sa_snk;
 //	float* Yform_snk;
@@ -90,7 +94,6 @@ struct sph_run_cuda_data {
 	float m;
 	float eta;
 };
-
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);
 
