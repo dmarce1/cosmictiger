@@ -635,6 +635,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(num[fi]);
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(den);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(den_A);
 				if (tid == 0) {
 					den += 1.0f;
 					den_A += 1.0f;

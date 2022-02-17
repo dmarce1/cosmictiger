@@ -1937,6 +1937,10 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 									}
 									this_error = std::max(this_error,fabs(dfrac[fi] / (0.5f * dfrac[fi] + frac[fi])));
 									frac[fi] += dfrac[fi];
+									if( frac[fi] == INFINITY) {
+										PRINT( "frac infinity with dfrac = %e\n", dfrac[fi]);
+										abort();
+									}
 								}
 							}
 						}

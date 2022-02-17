@@ -298,7 +298,7 @@ float sph_particles_temperature(part_int i, float a) {
 	double gamma = sph_particles_gamma(i);
 	double cv = 1.0 / (gamma - 1.0);															// 4
 	cv *= double(constants::kb);																							// 1
-	double K = sph_particles_ent(i);												// 11
+	double K = sph_particles_ent(i);
 	K *= pow(a, 3. * gamma - 5.);												// 11
 	K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
 	double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));															// 9

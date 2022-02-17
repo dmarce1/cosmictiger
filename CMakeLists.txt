@@ -228,7 +228,7 @@ add_custom_command(
     COMMENT "generating cosmictiger/fmm_kernels.hpp"
 )
 add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
-add_dependencies( cosmictiger generate_fmm_kernels )
+#add_dependencies( cosmictiger generate_fmm_kernels )
  
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
