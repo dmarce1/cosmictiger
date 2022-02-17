@@ -333,13 +333,13 @@ float sph_particles_lambda_e(part_int i, float a, float T) {
 	rho *= code_to_density * pow(a, -3);
 	ne *= constants::avo * rho;									// 8
 	constexpr float colog = logf(37.8f);
-	static const float lambda_e0 = powf(3.0f, 1.5f) / (4.0f * sqrtf(M_PI) * expf(4.0f) * colog);
-	float lambda_e = lambda_e0 * sqr(constants::kb * T / constants::evtoerg * 0.001f) / (ne + 1e-10);
+	static const double lambda_e0 = pow(3.0, 1.5) / (4.0 * sqrt(M_PI) * pow(constants::e, 4.) * colog);
+	double lambda_e = lambda_e0 * sqr(constants::kb * T) / (ne + 1e-10);
 	lambda_e /= get_options().code_to_cm;
 	lambda_e /= a;
-	//if (T > 1e6 && lambda_e > 0.0) {
-	//	PRINT("lambda_e %e %e %e\n", lambda_e, lambda_e0, ne);
-	//}
+	if (T > 1e6 && lambda_e > 0.0) {
+//		PRINT("lambda_e %e %e %e\n", lambda_e, lambda_e0, ne);
+	}
 	return lambda_e;
 }
 
@@ -358,15 +358,23 @@ void sph_particles_energy_to_entropy(float a) {
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				float e = sph_particles_ent(i);
+				float e0;
 				if( e < 0.0 ) {
 					e = -e;
-					const float h = sph_particles_smooth_len(i);
-					const float h3 = (h*h*h);
-					const float h3inv = 1.0 / (h3);
-					const float rho = sph_den(h3inv);
-					const float gamma = 5.0f/3.0f;
-					const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
-					sph_particles_ent(i) = K;
+					e0 = e;
+					float T;
+					do {
+						const float h = sph_particles_smooth_len(i);
+						const float h3 = (h*h*h);
+						const float h3inv = 1.0 / (h3);
+						const float rho = sph_den(h3inv);
+						const float gamma = 5.0f/3.0f;
+						const float K = (gamma-1.f)*e*N*h3inv*float(3.0/(4.0*M_PI)) * powf(rho,-gamma);
+						sph_particles_ent(i) = K;
+						T = sph_particles_temperature(i,a);
+						e *= 0.99;
+					}while( T > 1e8);
+					//				PRINT( "Clipping SN energy production by %e\n", 1 - e / e0);
 //					PRINT( "Restoring star with gas temp = %e K = %e\n", sph_particles_temperature(i,a), K);
 			}
 		}

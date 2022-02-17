@@ -278,7 +278,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 //		const double fSN = 0.0e-5;
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		if (star.stellar_mass > 7.5) {
-		//	E += fSn * sph_mass / star.stellar_mass;
+			E += fSn * sph_mass / star.stellar_mass;
 			double dZ = 0.02;
 			double dHe = 0.20 * (1.0 - star.Y - star.Z);
 			star.Y += dHe;
