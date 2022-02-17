@@ -336,6 +336,8 @@ float sph_particles_lambda_e(part_int i, float a, float T) {
 	constexpr float colog = 37.8f;
 	static const float lambda_e0 = powf(3.0f, 1.5f) * sqr(constants::kb) / (4.0f * sqrtf(M_PI) * expf(4.0f) * colog);
 	float lambda_e = lambda_e * sqr(T) / (ne + 1e-10);
+	lambda_e /= get_options().code_to_cm;
+	lambda_e /= a;
 	return lambda_e;
 }
 
