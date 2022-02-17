@@ -69,7 +69,6 @@ struct difco_data {
 	}
 };
 
-
 static const array<fixed32, NDIM>* sph_particles_cache_read_line(line_id_type line_id);
 static const array<float, NDIM>* sph_particles_gforce_cache_read_line(line_id_type line_id);
 static const sph_particle* sph_particles_sph_cache_read_line(line_id_type line_id, float);
@@ -104,7 +103,7 @@ static array<std::unordered_map<line_id_type, hpx::shared_future<vector<sph_part
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<char, float>>> , line_id_hash_hi>, PART_CACHE_SIZE> rung_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>> , line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
 //static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>, line_id_hash_hi>, PART_CACHE_SIZE> sn_cache;
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<difco_data>> , line_id_hash_hi>, PART_CACHE_SIZE> difco_cache;
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<difco_data>>, line_id_hash_hi>, PART_CACHE_SIZE> difco_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<dif_vector>>, line_id_hash_hi>, PART_CACHE_SIZE> difvec_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> gforce_mutexes;
@@ -307,7 +306,6 @@ float sph_particles_temperature(part_int i, float a) {
 	return T;
 }
 
-
 float sph_particles_mmw(part_int i) {
 	const double Hp = sph_particles_Hp(i);
 	const double Hn = sph_particles_Hn(i);
@@ -318,6 +316,7 @@ float sph_particles_mmw(part_int i) {
 	const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
 	const double He = Y - Hep - Hepp;
 	double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
+//	PRINT( "%e\n", 1.0 / n);
 	return 1.0 / n;
 }
 
@@ -333,11 +332,14 @@ float sph_particles_lambda_e(part_int i, float a, float T) {
 	double ne = Hp - Hn + 0.25f * Hep + 0.5f * Hepp;
 	rho *= code_to_density * pow(a, -3);
 	ne *= constants::avo * rho;									// 8
-	constexpr float colog = 37.8f;
-	static const float lambda_e0 = powf(3.0f, 1.5f) * sqr(constants::kb) / (4.0f * sqrtf(M_PI) * expf(4.0f) * colog);
-	float lambda_e = lambda_e * sqr(T) / (ne + 1e-10);
+	constexpr float colog = logf(37.8f);
+	static const float lambda_e0 = powf(3.0f, 1.5f) / (4.0f * sqrtf(M_PI) * expf(4.0f) * colog);
+	float lambda_e = lambda_e0 * sqr(constants::kb * T / constants::evtoerg * 0.001f) / (ne + 1e-10);
 	lambda_e /= get_options().code_to_cm;
 	lambda_e /= a;
+	//if (T > 1e6 && lambda_e > 0.0) {
+	//	PRINT("lambda_e %e %e %e\n", lambda_e, lambda_e0, ne);
+	//}
 	return lambda_e;
 }
 
@@ -760,8 +762,8 @@ static vector<array<float, NDIM>> sph_particles_fetch_gforce_cache_line(part_int
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e, float* mmw,
-		part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
+		float* mmw, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -784,6 +786,8 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 				if (T) {
 					T[j] = sph_particles_temperature(i, a);
 					lambda_e[j] = sph_particles_lambda_e(i, a, T[j]);
+				}
+				if (mmw) {
 					mmw[j] = sph_particles_mmw(i);
 				}
 			}
@@ -815,6 +819,8 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					if (T) {
 						T[dest_index] = part.T;
 						lambda_e[dest_index] = part.lambda_e;
+					}
+					if (mmw) {
 						mmw[dest_index] = part.mmw;
 					}
 					dest_index++;

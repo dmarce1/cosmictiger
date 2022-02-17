@@ -283,7 +283,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 			double dHe = 0.20 * (1.0 - star.Y - star.Z);
 			star.Y += dHe;
 			star.Z += dZ;
-			PRINT( "SUPERNOVA!!!\n");
+	//		PRINT( "SUPERNOVA!!!\n");
 		}
 		sph_particles_H2(k) = 0.f;
 		sph_particles_Hp(k) = 1.f - star.Y - star.Z;

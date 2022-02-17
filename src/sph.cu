@@ -80,6 +80,7 @@ struct dif_record2 {
 	float gamma;
 	float difco;
 	float kappa;
+	float mmw;
 	char oldrung;
 };
 
@@ -512,6 +513,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					ws.rec2_main[k].gamma = data.gamma[pi];
 					ws.rec2_main[k].vec = data.dif_vec[pi];
 					ws.rec2_main[k].oldrung = data.oldrung[pi];
+					ws.rec2_main[k].mmw = data.mmw[pi];
 				}
 			}
 		}
@@ -540,6 +542,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const auto myvec0 = data.vec0_snk[snki];
 				const auto myvec = data.dif_vec[i];
 				const auto mygamma = data.gamma[i];
+				const auto mymmw = data.mmw[i];
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -622,7 +625,9 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 						num[fi] += factor * rec2.vec[fi];
 					}
-					num[NCHEMFRACS] += factor_cond * rec2.vec[NCHEMFRACS] * powf(rho, rec2.gamma - 1.f) * powf(myrho, 1.f - mygamma);
+					float adjust = powf(rho, rec2.gamma - 1.f) * powf(myrho, 1.f - mygamma);
+					adjust *= rec2.mmw / mymmw;
+					num[NCHEMFRACS] += factor_cond * rec2.vec[NCHEMFRACS] * adjust;
 					den += factor;
 					den_A += factor + factor_cond;
 				}
@@ -1196,6 +1201,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float lt = myT / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * myT);
 						const float kappa_sp = 8.2e20f * powf(1e3 * constants::kb * myT / constants::evtoerg * 0.1f, 2.5f) / (1e3f * constants::evtoK); // Jubelgas et al 2004
 						const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
+						//PRINT("%e %e\n", data.lambda_e[i], lt);
 						const float tmp = data.code_dif_to_cgs * constants::kb / sqr(sqr(params.a));
 						float Dcond = 2.f * data.mmw[i] * (data.gamma[i] - 1.f) * kappa / tmp;
 //						if (myT > 1e5)
