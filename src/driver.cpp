@@ -596,15 +596,20 @@ void driver() {
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
-			if (z > 50.0) {
-				theta = 0.4;
-			} else if (z > 20.0) {
-				theta = 0.5;
-			} else if (z > 2.0) {
-				theta = 0.65;
+			if (!glass) {
+				if (z > 50.0) {
+					theta = 0.4;
+				} else if (z > 20.0) {
+					theta = 0.5;
+				} else if (z > 2.0) {
+					theta = 0.65;
+				} else {
+					theta = 0.8;
+				}
 			} else {
-				theta = 0.8;
+				theta = 0.4;
 			}
+
 			if (last_theta != theta) {
 				set_options(opts);
 			}
@@ -706,6 +711,7 @@ void driver() {
 					THROW_ERROR("Unable to open energy.txt\n");
 				}
 				fprintf(fp, "%i %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr);
+				fprintf(fp, "%i %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr);
 				fclose(fp);
 			}
 			PRINT_BOTH(textfp,
@@ -746,7 +752,7 @@ void driver() {
 		}
 	}
 	if (glass) {
-		if( glass == 1 ) {
+		if (glass == 1) {
 			particles_save_glass("glass_dm.bin");
 		} else {
 			particles_save_glass("glass_sph.bin");

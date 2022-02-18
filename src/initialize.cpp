@@ -36,6 +36,129 @@
 #define RECFAST_Z1 0
 #define RECFAST_DZ 10
 
+static void zeldovich_begin(int dim1, int dim2);
+static float zeldovich_end(float, float);
+static void twolpt_init();
+static void twolpt_destroy();
+static void twolpt(int, int);
+static void twolpt_phase(int phase);
+static void twolpt_correction1();
+static void twolpt_f2delta2_inv();
+static void twolpt_correction2(int dim);
+static void zeldovich_save(int dim1);
+
+HPX_PLAIN_ACTION (zeldovich_save);
+HPX_PLAIN_ACTION (zeldovich_begin);
+HPX_PLAIN_ACTION (zeldovich_end);
+HPX_PLAIN_ACTION (twolpt_init);
+HPX_PLAIN_ACTION (twolpt_phase);
+HPX_PLAIN_ACTION (twolpt_correction1);
+HPX_PLAIN_ACTION (twolpt_f2delta2_inv);
+HPX_PLAIN_ACTION (twolpt_correction2);
+HPX_PLAIN_ACTION (twolpt);
+HPX_PLAIN_ACTION (twolpt_destroy);
+
+static vector<float> delta2;
+static vector<cmplx> delta2_inv;
+static vector<float> delta2_part;
+static array<vector<float>, NDIM> displacement;
+
+struct power_spectrum_function {
+	vector<float> P;
+	float logkmin;
+	float logkmax;
+	float dlogk;
+	float operator()(float k) const {
+		float logk = std::log(k);
+		const float k0 = (logk - logkmin) / dlogk;
+		int i0 = int(k0) - 1;
+		if (i0 < 0) {
+			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
+		}
+		if (i0 > P.size() - 4) {
+			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
+		}
+		int i1 = i0 + 1;
+		int i2 = i0 + 2;
+		int i3 = i0 + 3;
+		float x = k0 - i1;
+		float y0 = std::log(P[i0]);
+		float y1 = std::log(P[i1]);
+		float y2 = std::log(P[i2]);
+		float y3 = std::log(P[i3]);
+		float k1 = (y2 - y0) * 0.5;
+		float k2 = (y3 - y1) * 0.5;
+		float a = y1;
+		float b = k1;
+		float c = -2 * k1 - k2 - 3 * y1 + 3 * y2;
+		float d = k1 + k2 + 2 * y1 - 2 * y2;
+		return std::exp(a + b * x + c * x * x + d * x * x * x);
+	}
+	float sigma8_integrand(float x) const {
+		float R = 8 / get_options().hubble;
+		const float c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(R, 6);
+		float k = std::exp(x);
+		float P = (*this)(k);
+		float tmp = (std::sin(k * R) - k * R * std::cos(k * R));
+		return c0 * P * tmp * tmp * std::pow(k, -3);
+	}
+	float normalize() {
+		const int N = 8 * 1024;
+		float sum = 0.0;
+		float logkmax = this->logkmax - 2.5 * dlogk;
+		float logkmin = this->logkmin + 1.5 * dlogk;
+		float dlogk = (logkmax - logkmin) / N;
+		sum = (1.0 / 3.0) * (sigma8_integrand(logkmax) + sigma8_integrand(logkmin)) * dlogk;
+		for (int i = 1; i < N; i += 2) {
+			float logk = logkmin + i * dlogk;
+			sum += (4.0 / 3.0) * sigma8_integrand(logk) * dlogk;
+		}
+		for (int i = 2; i < N; i += 2) {
+			float logk = logkmin + i * dlogk;
+			sum += (2.0 / 3.0) * sigma8_integrand(logk) * dlogk;
+		}
+		sum = sqr(get_options().sigma8) / sum;
+		for (int i = 0; i < P.size(); i++) {
+			P[i] *= sum;
+		}
+		if (hpx_rank() == 0) {
+			PRINT("Normalization = %e\n", sum);
+		}
+		return sum;
+	}
+
+};
+
+static power_spectrum_function read_power_spectrum();
+
+static range<int64_t> find_my_box(range<int64_t> box, int begin, int end, int depth) {
+	if (end - begin == 1) {
+		return box;
+	} else {
+		const int xdim = depth % NDIM;
+		const int mid = (begin + end) / 2;
+		const float w = float(mid - begin) / float(end - begin);
+		if (hpx_rank() < mid) {
+			auto left = box;
+			left.end[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
+			return find_my_box(left, begin, mid, depth + 1);
+		} else {
+			auto right = box;
+			right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
+			return find_my_box(right, mid, end, depth + 1);
+		}
+	}
+}
+
+static range<int64_t> find_my_box() {
+	range<int64_t> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = 0;
+		box.end[dim] = get_options().parts_dim;
+	}
+	return find_my_box(box, 0, hpx_size(), 0);
+}
+
 std::function<double(double)> run_recfast(cosmic_params params) {
 	std::function<double(double)> func;
 	std::string filename = "recfast.in." + std::to_string(hpx_rank());
@@ -108,97 +231,6 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 	return std::move(inter_func);
 }
 
-struct power_spectrum_function {
-	vector<float> P;
-	float logkmin;
-	float logkmax;
-	float dlogk;
-	float operator()(float k) const {
-		float logk = std::log(k);
-		const float k0 = (logk - logkmin) / dlogk;
-		int i0 = int(k0) - 1;
-		if (i0 < 0) {
-			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
-		}
-		if (i0 > P.size() - 4) {
-			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
-		}
-		int i1 = i0 + 1;
-		int i2 = i0 + 2;
-		int i3 = i0 + 3;
-		float x = k0 - i1;
-		float y0 = std::log(P[i0]);
-		float y1 = std::log(P[i1]);
-		float y2 = std::log(P[i2]);
-		float y3 = std::log(P[i3]);
-		float k1 = (y2 - y0) * 0.5;
-		float k2 = (y3 - y1) * 0.5;
-		float a = y1;
-		float b = k1;
-		float c = -2 * k1 - k2 - 3 * y1 + 3 * y2;
-		float d = k1 + k2 + 2 * y1 - 2 * y2;
-		return std::exp(a + b * x + c * x * x + d * x * x * x);
-	}
-	float sigma8_integrand(float x) const {
-		float R = 8 / get_options().hubble;
-		const float c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(R, 6);
-		float k = std::exp(x);
-		float P = (*this)(k);
-		float tmp = (std::sin(k * R) - k * R * std::cos(k * R));
-		return c0 * P * tmp * tmp * std::pow(k, -3);
-	}
-	float normalize() {
-		const int N = 8 * 1024;
-		float sum = 0.0;
-		float logkmax = this->logkmax - 2.5 * dlogk;
-		float logkmin = this->logkmin + 1.5 * dlogk;
-		float dlogk = (logkmax - logkmin) / N;
-		sum = (1.0 / 3.0) * (sigma8_integrand(logkmax) + sigma8_integrand(logkmin)) * dlogk;
-		for (int i = 1; i < N; i += 2) {
-			float logk = logkmin + i * dlogk;
-			sum += (4.0 / 3.0) * sigma8_integrand(logk) * dlogk;
-		}
-		for (int i = 2; i < N; i += 2) {
-			float logk = logkmin + i * dlogk;
-			sum += (2.0 / 3.0) * sigma8_integrand(logk) * dlogk;
-		}
-		sum = sqr(get_options().sigma8) / sum;
-		for (int i = 0; i < P.size(); i++) {
-			P[i] *= sum;
-		}
-		if (hpx_rank() == 0) {
-			PRINT("Normalization = %e\n", sum);
-		}
-		return sum;
-	}
-
-};
-
-static void zeldovich_begin(int dim1, int dim2);
-static float zeldovich_end(int dim, bool, float, float, float);
-static void twolpt_init();
-static void twolpt_destroy();
-static void twolpt(int, int);
-static void twolpt_phase(int phase);
-static void twolpt_correction1();
-static void twolpt_f2delta2_inv();
-static void twolpt_correction2(int dim);
-static power_spectrum_function read_power_spectrum();
-
-HPX_PLAIN_ACTION (zeldovich_begin);
-HPX_PLAIN_ACTION (zeldovich_end);
-HPX_PLAIN_ACTION (twolpt_init);
-HPX_PLAIN_ACTION (twolpt_phase);
-HPX_PLAIN_ACTION (twolpt_correction1);
-HPX_PLAIN_ACTION (twolpt_f2delta2_inv);
-HPX_PLAIN_ACTION (twolpt_correction2);
-HPX_PLAIN_ACTION (twolpt);
-HPX_PLAIN_ACTION (twolpt_destroy);
-
-static vector<float> delta2;
-static vector<cmplx> delta2_inv;
-static vector<float> delta2_part;
-
 power_spectrum_function compute_power_spectrum() {
 	power_spectrum_function func;
 	zero_order_universe zeroverse;
@@ -254,6 +286,83 @@ power_spectrum_function compute_power_spectrum() {
 		fclose(fp);
 	}
 	return func;
+}
+
+void load_glass(const char* filename) {
+	FILE* fp = fopen(filename, "rb");
+	if (fp == NULL) {
+		PRINT("Fatal - unable to load %s\n", filename);
+		abort();
+	}
+	vector<double> x;
+	vector<double> y;
+	vector<double> z;
+	size_t parts_dim;
+	FREAD(&parts_dim, sizeof(part_int), 1, fp);
+	size_t nparts = sqr(parts_dim) * parts_dim;
+	size_t multiplicity = get_options().parts_dim / parts_dim;
+	PRINT("Glass multiplicity = %i\n", multiplicity);
+	size_t remainder = get_options().parts_dim % parts_dim;
+	if (remainder) {
+		PRINT("parts_dim must be a multiple of 128 to use this glass file\n");
+		abort();
+	}
+	x.resize(nparts);
+	y.resize(nparts);
+	z.resize(nparts);
+	for (part_int i = 0; i < nparts; i++) {
+		fixed32 X;
+		FREAD(&X, sizeof(fixed32), 1, fp);
+		x[i] = X.to_double();
+	}
+	for (part_int i = 0; i < nparts; i++) {
+		fixed32 X;
+		FREAD(&X, sizeof(fixed32), 1, fp);
+		y[i] = X.to_double();
+	}
+	for (part_int i = 0; i < nparts; i++) {
+		fixed32 X;
+		FREAD(&X, sizeof(fixed32), 1, fp);
+		z[i] = X.to_double();
+	}
+	const auto optsdim = get_options().parts_dim;
+	auto ibox = find_my_box();
+	range<double> mybox;
+	for (int dim = 0; dim < NDIM; dim++) {
+		mybox.begin[dim] = ibox.begin[dim] / (double) optsdim;
+		mybox.end[dim] = ibox.end[dim] / (double) optsdim;
+	}
+	double minv = 1.0 / multiplicity;
+	for (int i = 0; i < multiplicity; i++) {
+		for (int j = 0; j < multiplicity; j++) {
+			for (int k = 0; k < multiplicity; k++) {
+				range<double> this_box;
+				this_box.begin[XDIM] = i / (double) multiplicity;
+				this_box.begin[YDIM] = j / (double) multiplicity;
+				this_box.begin[ZDIM] = k / (double) multiplicity;
+				this_box.end[XDIM] = (i + 1) / (double) multiplicity;
+				this_box.end[YDIM] = (j + 1) / (double) multiplicity;
+				this_box.end[ZDIM] = (k + 1) / (double) multiplicity;
+				if (this_box.intersection(mybox).volume()) {
+					for (int l = 0; l < nparts; l++) {
+						array<double, NDIM> X;
+						X[XDIM] = x[l] * minv + this_box.begin[XDIM];
+						X[YDIM] = y[l] * minv + this_box.begin[YDIM];
+						X[ZDIM] = z[l] * minv + this_box.begin[ZDIM];
+						if (mybox.contains(X)) {
+							const part_int index = particles_size();
+							particles_resize(index + 1);
+							for (int dim = 0; dim < NDIM; dim++) {
+								particles_pos(dim, index) = X[dim];
+								particles_vel(dim, index) = 0.0;
+								particles_rung(index) = 0;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 void initialize_glass() {
@@ -312,12 +421,12 @@ void initialize(double z0) {
 		zeldovich_begin(dim, NDIM);
 //		fft3d_force_real();
 		fft3d_inv_execute();
-		float mask = get_options().twolpt ? 0.0 : 1.0;
-		float dxmax = zeldovich_end(dim, dim == 0, D1, prefac1, mask);
+		zeldovich_save(dim);
 		fft3d_destroy();
-		PRINT("%e\n", dxmax);
 	}
-	if (get_options().twolpt) {
+	float dxmax = zeldovich_end(D1, prefac1);
+	PRINT("%e\n", dxmax);
+	if (false && get_options().twolpt) {
 		twolpt_init();
 
 		PRINT("2LPT phase 1\n");
@@ -372,11 +481,14 @@ void initialize(double z0) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			PRINT("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
 			twolpt_correction2(dim);
-			float dxmax = zeldovich_end(dim, false, -D2, prefac2, 1.0);
+//			float dxmax = zeldovich_end(dim, false, -D2, prefac2, 1.0);
 			fft3d_destroy();
 			PRINT("%e\n", dxmax);
 		}
 		twolpt_destroy();
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		displacement[dim] = vector<float>();
 	}
 }
 
@@ -618,6 +730,20 @@ void twolpt_destroy() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+static void zeldovich_save(int dim1) {
+	vector<hpx::future<void>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<zeldovich_save_action>(HPX_PRIORITY_HI, c, dim1));
+	}
+	auto box = find_my_box();
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.end[dim]++;
+	}
+	displacement[dim1] = fft3d_read_real(box);
+	hpx::wait_all(futs.begin(), futs.end());
+
+}
+
 static void zeldovich_begin(int dim1, int dim2) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
@@ -628,35 +754,7 @@ static void zeldovich_begin(int dim1, int dim2) {
 
 }
 
-static range<int64_t> find_my_box(range<int64_t> box, int begin, int end, int depth) {
-	if (end - begin == 1) {
-		return box;
-	} else {
-		const int xdim = depth % NDIM;
-		const int mid = (begin + end) / 2;
-		const float w = float(mid - begin) / float(end - begin);
-		if (hpx_rank() < mid) {
-			auto left = box;
-			left.end[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
-			return find_my_box(left, begin, mid, depth + 1);
-		} else {
-			auto right = box;
-			right.begin[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
-			return find_my_box(right, mid, end, depth + 1);
-		}
-	}
-}
-
-static range<int64_t> find_my_box() {
-	range<int64_t> box;
-	for (int dim = 0; dim < NDIM; dim++) {
-		box.begin[dim] = 0;
-		box.end[dim] = get_options().parts_dim;
-	}
-	return find_my_box(box, 0, hpx_size(), 0);
-}
-
-static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, float mask) {
+static float zeldovich_end(float D1, float prefac) {
 	const bool sph = get_options().sph;
 	const bool chem = get_options().chem;
 	const float Y0 = get_options().Y0;
@@ -667,43 +765,18 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 	const auto box = find_my_box();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_end_action>(HPX_PRIORITY_HI, c, dim, init_parts, D1, prefac1, mask));
+		futs.push_back(hpx::async<zeldovich_end_action>(HPX_PRIORITY_HI, c, D1, prefac));
 	}
-	const auto Y = fft3d_read_real(box);
 	array<int64_t, NDIM> I;
 	const float Ninv = 1.0 / N;
 	const float box_size_inv = 1.0 / box_size;
 	vector<hpx::future<void>> local_futs;
 	float entropy;
-	if (init_parts) {
+	if (get_options().use_glass) {
+		std::string filename = sph ? "glass_sph.bin" : "glass_dm.bin";
+		load_glass(filename.c_str());
+	} else {
 		particles_resize(box.volume());
-		if (sph) {
-			sph_particles_resize(box.volume());
-
-			zero_order_universe uni;
-			cosmic_params params;
-			params.omega_b = get_options().omega_b;
-			params.omega_c = get_options().omega_c;
-			params.omega_gam = get_options().omega_gam;
-			params.omega_nu = get_options().omega_nu;
-			params.Y = get_options().Y0;
-			params.Neff = get_options().Neff;
-			params.Theta = get_options().Theta;
-			params.hubble = get_options().hubble;
-			auto fxe = run_recfast(params);
-			create_zero_order_universe(&uni, fxe, 1.0, params);
-			const float a1 = 1.0 / (get_options().z0 + 1.0);
-			const double Kphys = uni.K(a1);
-			const double c2g = get_options().code_to_g;
-			const double c2s = get_options().code_to_s;
-			const double c2cm = get_options().code_to_cm;
-			const double c2e = c2g / (c2s * c2s) / c2cm;
-			const double c2den = c2g / (c2cm * c2cm * c2cm);
-			const double c2ent = c2e / std::pow(c2den, 5.0 / 3.0);
-			entropy = Kphys / c2ent;
-			PRINT("Entropy conversion factor = %e\n", c2ent);
-			PRINT("Initial entropy in code units = %e\n", entropy);
-		}
 		const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 		const float h = std::pow(h3, 1.0 / 3.0);
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
@@ -716,22 +789,24 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 						const int64_t index = box.index(I);
-						for (int dim1 = 0; dim1 < NDIM; dim1++) {
-							float x = (I[dim1] + 0.5) * Ninv;
-							particles_pos(dim1, index) = x + dm_shift;
-							particles_vel(dim1, index) = 0.0;
-							if( sph ) {
-								sph_particles_pos(dim1, index) = x + gas_shift;
-								sph_particles_vel(dim1, index) = 0.0;
+						if( !get_options().glass ) {
+							for (int dim1 = 0; dim1 < NDIM; dim1++) {
+								float x = (I[dim1] + 0.5) * Ninv;
+								particles_pos(dim1, index) = x + dm_shift;
+								particles_vel(dim1, index) = 0.0;
+								if( sph ) {
+									sph_particles_pos(dim1, index) = x + gas_shift;
+									sph_particles_vel(dim1, index) = 0.0;
+								}
 							}
+							particles_rung(index) = 0;
 						}
-						particles_rung(index) = 0;
 						if( sph ) {
 							sph_particles_rung(index) = 0;
 #ifdef SPH_TOTAL_ENERGY
 					sph_particles_ent(index) = 0.0;
 #else
-					sph_particles_ent(index) = entropy;
+					sph_particles_ent(index) = 0.f;
 #endif
 					sph_particles_smooth_len(index) = h;
 					if( chem ) {
@@ -751,49 +826,105 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1, fl
 		hpx::wait_all(local_futs.begin(), local_futs.end());
 		local_futs.resize(0);
 	}
-	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs.push_back(hpx::async([sph, box, D1, prefac1, mask, dim, &Y, box_size_inv, N](array<int64_t,NDIM> I) {
-			float this_dxmax = 0.0;
-			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-					const int64_t index = box.index(I);
-					float x = particles_pos(dim, index).to_float();
-					const float dx = -D1 * Y[index] * box_size_inv;
-					if (std::abs(dx * N) > this_dxmax) {
-						this_dxmax = std::abs(dx * N);
-					}
-					x += dx;
-					if (x >= 1.0) {
+	const int nthreads = hpx_hardware_concurrency();
+	vector<hpx::future<float>> futs3;
+	const part_int parts_dim = get_options().parts_dim;
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs3.push_back(hpx::async([D1,prefac,nthreads,proc, parts_dim, box_size_inv]() {
+			const part_int b = (size_t) proc * particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+			auto box = find_my_box();
+			for( int dim = 0; dim < NDIM; dim++) {
+				box.end[dim]++;
+			}
+			float max_disp = 0.f;
+			for( part_int i = b; i < e; i++) {
+				const double x = particles_pos(XDIM,i).to_double();
+				const double y = particles_pos(YDIM,i).to_double();
+				const double z = particles_pos(ZDIM,i).to_double();
+				const part_int x0 = x * parts_dim;
+				const part_int y0 = y * parts_dim;
+				const part_int z0 = z * parts_dim;
+				const part_int x1 = x0 + 1;
+				const part_int y1 = y0 + 1;
+				const part_int z1 = z0 + 1;
+				array<int64_t, NDIM> J;
+				J[XDIM] = x0;
+				J[YDIM] = y0;
+				J[ZDIM] = z0;
+				const double dx = x * parts_dim - x0;
+				const double dy = y * parts_dim - y0;
+				const double dz = z * parts_dim - z0;
+				const double wt111 = dx * dy * dz;
+				const double wt110 = dx * dy * (1.f - dz);
+				const double wt101 = dx * (1.f - dy) * dz;
+				const double wt100 = dx * (1.f - dy) * (1.f - dz);
+				const double wt011 = (1.f - dx) * dy * dz;
+				const double wt010 =(1.f - dx) * dy * (1.f - dz);
+				const double wt001 = (1.f - dx) * (1.f - dy) * dz;
+				const double wt000 = (1.f - dx) * (1.f - dy) * (1.f - dz);
+				double disp = 0.0;
+				for( int dim = 0; dim < NDIM; dim++) {
+					disp = 0.0;
+					part_int index;
+					index = box.index(J);
+					J[XDIM] = x0;
+					J[YDIM] = y0;
+					J[ZDIM] = z0;
+					disp += wt000 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x0;
+					J[YDIM] = y0;
+					J[ZDIM] = z1;
+					disp += wt001 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x0;
+					J[YDIM] = y1;
+					J[ZDIM] = z0;
+					disp += wt010 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x0;
+					J[YDIM] = y1;
+					J[ZDIM] = z1;
+					disp += wt011 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x1;
+					J[YDIM] = y0;
+					J[ZDIM] = z0;
+					disp += wt100 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x1;
+					J[YDIM] = y0;
+					J[ZDIM] = z1;
+					disp += wt101 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x1;
+					J[YDIM] = y1;
+					J[ZDIM] = z0;
+					disp += wt110 * displacement[dim][index];
+					index = box.index(J);
+					J[XDIM] = x1;
+					J[YDIM] = y1;
+					J[ZDIM] = z1;
+					disp += wt111 * displacement[dim][index];
+
+					disp *= -D1 * box_size_inv;
+					double x = particles_pos(dim,i).to_double() + disp;
+					if( x >= 1.0 ) {
 						x -= 1.0;
-					} else if (x < 0.0) {
+					} else if( x < 0.0 ) {
 						x += 1.0;
 					}
-					particles_pos(dim, index) = x;
-					particles_vel(dim, index) += prefac1 * dx;
-					if( sph ) {
-						float x = sph_particles_pos(dim, index).to_float();
-						const float dx = -D1 * Y[index] * box_size_inv;
-						if (std::abs(dx * N) > this_dxmax) {
-							this_dxmax = std::abs(dx * N);
-						}
-						x += dx;
-						if (x >= 1.0) {
-							x -= 1.0;
-						} else if (x < 0.0) {
-							x += 1.0;
-						}
-						sph_particles_pos(dim, index) = x;
-						sph_particles_vel(dim, index) += prefac1 * dx;
-#ifdef SPH_TOTAL_ENERGY
-				sph_particles_ent(index) += mask*get_options().sph_mass * sqr(sph_particles_vel(dim, index))*0.5f;
-#endif
+					//	PRINT( "%e\n", displacement[dim][index]);
+				particles_pos(dim,i) = x;
+				particles_vel(dim,i) += prefac*disp;
+				max_disp = std::max(max_disp, (float)(disp * parts_dim));
 			}
 		}
+		return max_disp;
+	}));
 	}
-	return this_dxmax;
-}, I));
-	}
-	for (auto& f : futs) {
+	for (auto& f : futs3) {
 		const auto tmp = f.get();
 		dxmax = std::max(dxmax, tmp);
 	}

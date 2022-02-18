@@ -80,10 +80,10 @@ bool process_options(int argc, char *argv[]) {
 	po::options_description command_opts("options");
 
 	command_opts.add_options()                                                                       //
-	("help", "produce help message")                                                                 //
-	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file") //
+	("help", "produce help message")                                                                       //
+	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file")                                                  //
 	("read_check", po::value<bool>(&(opts.read_check))->default_value(false),
-			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)") //
+			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)")                                      //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
 #else
@@ -91,9 +91,10 @@ bool process_options(int argc, char *argv[]) {
 #endif
 	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600),
 			"time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
-			("glass", po::value<int>(&(opts.glass))->default_value(0), "maximum number of time-steps (default=1000000)") //
-			("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
+	("glass", po::value<int>(&(opts.glass))->default_value(0), "maximum number of time-steps (default=1000000)") //
+	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
+	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(true), "use glass file for IC") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
@@ -199,17 +200,20 @@ bool process_options(int argc, char *argv[]) {
 		//	opts.sph_mass = 1.0;
 		//	opts.dm_mass = 0.0;
 	}
-	if( opts.chem == false && opts.stars == true ) {
-		PRINT( "Need chemistry for stars!!! Turning offs stars\n");
+	if (opts.chem == false && opts.stars == true) {
+		PRINT("Need chemistry for stars!!! Turning offs stars\n");
 		opts.stars = false;
 	}
-	if( opts.glass == 1 ) {
-		if( opts.sph ) {
-			PRINT( "TURNING SPH OFF FOR GLASS PHASE 1\n");
+	if (opts.glass == 1) {
+		if (opts.sph) {
+			PRINT("TURNING SPH OFF FOR GLASS PHASE 1\n");
 			opts.sph = false;
 			opts.vsoft = false;
 			opts.chem = false;
 		}
+	}
+	if (!opts.sph) {
+		opts.vsoft = false;
 	}
 	SHOW(check_freq);
 	SHOW(chem);
@@ -258,6 +262,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(tracer_count);
 	SHOW(tree_cache_line_size);
 	SHOW(twolpt);
+	SHOW(use_glass);
 	SHOW(use_power_file);
 	SHOW(view_size);
 	SHOW(z0);
