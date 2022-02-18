@@ -670,7 +670,7 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	constexpr int rand_init_iters = 8;
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor](array<int64_t,NDIM> I) {
+		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor,power](array<int64_t,NDIM> I) {
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
