@@ -297,19 +297,25 @@ void load_glass(const char* filename) {
 	vector<double> x;
 	vector<double> y;
 	vector<double> z;
-	size_t parts_dim;
+	part_int parts_dim;
 	FREAD(&parts_dim, sizeof(part_int), 1, fp);
 	size_t nparts = sqr(parts_dim) * parts_dim;
-	size_t multiplicity = get_options().parts_dim / parts_dim;
+	size_t multiplicity = (size_t) get_options().parts_dim / (size_t) parts_dim;
 	PRINT("Glass multiplicity = %i\n", multiplicity);
-	size_t remainder = get_options().parts_dim % parts_dim;
+	size_t remainder = (size_t) get_options().parts_dim % (size_t) parts_dim;
 	if (remainder) {
-		PRINT("parts_dim must be a multiple of 128 to use this glass file\n");
+		PRINT("parts_dim must be a multiple of %i to use this glass file, it is %i %i\n", parts_dim, get_options().parts_dim, remainder);
 		abort();
 	}
-	x.resize(nparts);
-	y.resize(nparts);
-	z.resize(nparts);
+	particles_resize(nparts);
+	part_int max_parts = nparts;
+	if (get_options().sph && get_options().glass != 2) {
+		sph_particles_resize(nparts);
+		max_parts *= 2;
+	}
+	x.resize(max_parts);
+	y.resize(max_parts);
+	z.resize(max_parts);
 	for (part_int i = 0; i < nparts; i++) {
 		fixed32 X;
 		FREAD(&X, sizeof(fixed32), 1, fp);
@@ -325,6 +331,44 @@ void load_glass(const char* filename) {
 		FREAD(&X, sizeof(fixed32), 1, fp);
 		z[i] = X.to_double();
 	}
+	if( get_options().sph) {
+		for (part_int i = nparts; i < 2 * nparts; i++) {
+			fixed32 X;
+			FREAD(&X, sizeof(fixed32), 1, fp);
+			x[i] = X.to_double();
+		}
+		for (part_int i = nparts; i < 2 * nparts; i++) {
+			fixed32 X;
+			FREAD(&X, sizeof(fixed32), 1, fp);
+			y[i] = X.to_double();
+		}
+		for (part_int i = nparts; i < 2 * nparts; i++) {
+			fixed32 X;
+			FREAD(&X, sizeof(fixed32), 1, fp);
+			z[i] = X.to_double();
+		}
+	}
+	/*	if (get_options().glass == 2) {
+	 sph_particles_resize(nparts);
+	 x.resize(2 * nparts);
+	 y.resize(2 * nparts);
+	 z.resize(2 * nparts);
+	 for (part_int i = nparts; i < 2 * nparts; i++) {
+	 x[i] = x[i - nparts] + 0.5;
+	 y[i] = y[i - nparts] + 0.5;
+	 z[i] = z[i - nparts] + 0.5;
+	 if (x[i] > 1.0) {
+	 x[i] -= 1.0;
+	 }
+	 if (y[i] > 1.0) {
+	 y[i] -= 1.0;
+	 }
+	 if (z[i] > 1.0) {
+	 z[i] -= 1.0;
+	 }
+	 }
+	 }*/
+	fclose(fp);
 	const auto optsdim = get_options().parts_dim;
 	auto ibox = find_my_box();
 	range<double> mybox;
@@ -333,6 +377,11 @@ void load_glass(const char* filename) {
 		mybox.end[dim] = ibox.end[dim] / (double) optsdim;
 	}
 	double minv = 1.0 / multiplicity;
+	int dm_index = 0;
+	int sph_index = nparts;
+	const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float h = std::pow(h3, 1.0 / 3.0);
+	const bool chem = get_options().chem;
 	for (int i = 0; i < multiplicity; i++) {
 		for (int j = 0; j < multiplicity; j++) {
 			for (int k = 0; k < multiplicity; k++) {
@@ -344,21 +393,67 @@ void load_glass(const char* filename) {
 				this_box.end[YDIM] = (j + 1) / (double) multiplicity;
 				this_box.end[ZDIM] = (k + 1) / (double) multiplicity;
 				if (this_box.intersection(mybox).volume()) {
-					for (int l = 0; l < nparts; l++) {
+					for (int l = 0; l < x.size(); l++) {
 						array<double, NDIM> X;
 						X[XDIM] = x[l] * minv + this_box.begin[XDIM];
 						X[YDIM] = y[l] * minv + this_box.begin[YDIM];
 						X[ZDIM] = z[l] * minv + this_box.begin[ZDIM];
 						if (mybox.contains(X)) {
-							const part_int index = particles_size();
-							particles_resize(index + 1);
+							int index;
+							if (l < nparts) {
+								index = dm_index++;
+							} else {
+								index = sph_index++;
+							}
 							for (int dim = 0; dim < NDIM; dim++) {
 								particles_pos(dim, index) = X[dim];
 								particles_vel(dim, index) = 0.0;
 								particles_rung(index) = 0;
 							}
+							if (l >= nparts) {
+								const part_int m = particles_cat_index(index);
+								sph_particles_ent(m) = 0.0f;
+								sph_particles_smooth_len(m) = h;
+								if (chem) {
+									sph_particles_He0(m) = get_options().Y0;
+									sph_particles_Hn(m) = 1.e-30;
+									sph_particles_Hp(m) = 1.e-30;
+									sph_particles_H2(m) = 1.e-30;
+									sph_particles_Hep(m) = 1.e-30;
+									sph_particles_Hepp(m) = 1.e-30;
+									sph_particles_Z(m) = 1.e-30;
+								}
+							}
 						}
 					}
+				}
+			}
+		}
+	}
+	if (get_options().glass == 2) {
+		sph_particles_resize(nparts);
+		part_int index = nparts;
+		for (part_int i = 0; i < optsdim; i++) {
+			const double x = (double) i / optsdim;
+			for (part_int j = 0; j < optsdim; j++) {
+				const double y = (double) j / optsdim;
+				for (part_int k = 0; k < optsdim; k++) {
+					const double z = (double) k / optsdim;
+					const part_int l = index - nparts;
+					particles_pos(XDIM, index) = particles_pos(XDIM,l);
+					particles_pos(YDIM, index) = particles_pos(YDIM,l);
+					particles_pos(ZDIM, index) = particles_pos(ZDIM,l);
+					particles_pos(XDIM, l) = x;
+					particles_pos(YDIM, l) = y;
+					particles_pos(ZDIM, l) = z;
+					for (int dim = 0; dim < NDIM; dim++) {
+						particles_vel(dim, index) = 0.0;
+						particles_rung(index) = 0;
+					}
+					const part_int m = particles_cat_index(index);
+					sph_particles_ent(m) = 0.0f;
+					sph_particles_smooth_len(m) = h;
+					index++;
 				}
 			}
 		}
@@ -370,31 +465,36 @@ void initialize_glass() {
 		PRINT("Glass can only run on one processor!\n");
 		abort();
 	}
-	const int nthreads = hpx_hardware_concurrency();
+	const int phase = get_options().glass;
 	const part_int part_dim = get_options().parts_dim;
 	const size_t nparts = sqr(part_dim) * part_dim;
 	vector<hpx::future<void>> futs;
-	particles_resize(nparts);
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,nparts]() {
-			gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
-			gsl_rng_set(rndgen, proc+42);
-			const part_int b = (size_t) proc * nparts / nthreads;
-			const part_int e = (size_t) (proc+1) * nparts / nthreads;
-			for( part_int i = b; i < e; i++) {
-				const double x = gsl_rng_uniform_pos(rndgen);
-				const double y = gsl_rng_uniform_pos(rndgen);
-				const double z = gsl_rng_uniform_pos(rndgen);
-				particles_pos(XDIM,i) = x;
-				particles_pos(YDIM,i) = y;
-				particles_pos(ZDIM,i) = z;
-				particles_vel(XDIM,i) = 0;
-				particles_vel(YDIM,i) = 0;
-				particles_vel(ZDIM,i) = 0;
-				particles_rung(i) = 0;
-			}
-			gsl_rng_free(rndgen);
-		}));
+	const int nthreads = hpx_hardware_concurrency();
+	if (phase == 1) {
+		particles_resize(nparts);
+		for (int proc = 0; proc < nthreads; proc++) {
+			futs.push_back(hpx::async([proc,nthreads,nparts]() {
+				gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
+				gsl_rng_set(rndgen, proc+42);
+				const part_int b = (size_t) proc * nparts / nthreads;
+				const part_int e = (size_t) (proc+1) * nparts / nthreads;
+				for( part_int i = b; i < e; i++) {
+					const double x = gsl_rng_uniform_pos(rndgen);
+					const double y = gsl_rng_uniform_pos(rndgen);
+					const double z = gsl_rng_uniform_pos(rndgen);
+					particles_pos(XDIM,i) = x;
+					particles_pos(YDIM,i) = y;
+					particles_pos(ZDIM,i) = z;
+					particles_vel(XDIM,i) = 0;
+					particles_vel(YDIM,i) = 0;
+					particles_vel(ZDIM,i) = 0;
+					particles_rung(i) = 0;
+				}
+				gsl_rng_free(rndgen);
+			}));
+		}
+	} else {
+		load_glass("glass_dm.bin");
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
@@ -777,6 +877,9 @@ static float zeldovich_end(float D1, float prefac) {
 		load_glass(filename.c_str());
 	} else {
 		particles_resize(box.volume());
+		if (sph) {
+			sph_particles_resize(box.volume());
+		}
 		const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 		const float h = std::pow(h3, 1.0 / 3.0);
 		for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
@@ -789,39 +892,32 @@ static float zeldovich_end(float D1, float prefac) {
 				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 						const int64_t index = box.index(I);
-						if( !get_options().glass ) {
-							for (int dim1 = 0; dim1 < NDIM; dim1++) {
-								float x = (I[dim1] + 0.5) * Ninv;
-								particles_pos(dim1, index) = x + dm_shift;
-								particles_vel(dim1, index) = 0.0;
-								if( sph ) {
-									sph_particles_pos(dim1, index) = x + gas_shift;
-									sph_particles_vel(dim1, index) = 0.0;
-								}
+						for (int dim1 = 0; dim1 < NDIM; dim1++) {
+							float x = (I[dim1] + 0.5) * Ninv;
+							particles_pos(dim1, index) = x + dm_shift;
+							particles_vel(dim1, index) = 0.0;
+							if( sph ) {
+								sph_particles_pos(dim1, index) = x + gas_shift;
+								sph_particles_vel(dim1, index) = 0.0;
 							}
-							particles_rung(index) = 0;
 						}
+						particles_rung(index) = 0;
 						if( sph ) {
-							sph_particles_rung(index) = 0;
-#ifdef SPH_TOTAL_ENERGY
-					sph_particles_ent(index) = 0.0;
-#else
-					sph_particles_ent(index) = 0.f;
-#endif
-					sph_particles_smooth_len(index) = h;
-					if( chem ) {
-						sph_particles_He0(index) = Y0;
-						sph_particles_Z(index) = 1.0e-30f;
-						sph_particles_Hp(index) = 1.0e-30f;
-						sph_particles_Hn(index) = 1.0e-30f;
-						sph_particles_H2(index) = 1.0e-30f;
-						sph_particles_Hep(index) = 1.0e-30f;
-						sph_particles_Hepp(index) = 1.0e-30f;
+							sph_particles_ent(index) = 1.e-22f;
+							sph_particles_smooth_len(index) = h;
+							if( chem ) {
+								sph_particles_He0(index) = Y0;
+								sph_particles_Z(index) = 1.0e-30f;
+								sph_particles_Hp(index) = 1.0e-30f;
+								sph_particles_Hn(index) = 1.0e-30f;
+								sph_particles_H2(index) = 1.0e-30f;
+								sph_particles_Hep(index) = 1.0e-30f;
+								sph_particles_Hepp(index) = 1.0e-30f;
+							}
+						}
 					}
 				}
-			}
-		}
-	}, I));
+			}, I));
 		}
 		hpx::wait_all(local_futs.begin(), local_futs.end());
 		local_futs.resize(0);
@@ -829,6 +925,7 @@ static float zeldovich_end(float D1, float prefac) {
 	const int nthreads = hpx_hardware_concurrency();
 	vector<hpx::future<float>> futs3;
 	const part_int parts_dim = get_options().parts_dim;
+	PRINT( "particles size = %i\n", particles_size());
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs3.push_back(hpx::async([D1,prefac,nthreads,proc, parts_dim, box_size_inv]() {
 			const part_int b = (size_t) proc * particles_size() / nthreads;

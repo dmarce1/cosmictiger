@@ -158,7 +158,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	sph_run_return kr;
 	sparams.set = SPH_SET_ACTIVE;
 	sparams.phase = phase;
-
+	const bool glass = get_options().glass;
 	if (phase == 0) {
 
 		stars_statistics(scale);
@@ -217,7 +217,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
 
-		if (tau != 0.0) {
+		if (tau != 0.0 && !glass) {
 			sph_particles_energy_to_entropy(scale);
 			sph_particles_apply_updates(minrung, 0);
 
@@ -242,61 +242,50 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 		if (tau != 0.0) {
 		}
+		if (!glass) {
+			sph_init_diffusion();
 
-		sph_init_diffusion();
-
-		sparams.run_type = SPH_RUN_COURANT;
-		tm.start();
-		kr = sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-		tm.reset();
-		max_rung = kr.max_rung;
+			sparams.run_type = SPH_RUN_COURANT;
+			tm.start();
+			kr = sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
+			tm.reset();
+			max_rung = kr.max_rung;
 
 //		view_output_views(1, scale);
 
-		sparams.run_type = SPH_RUN_DIFFUSION;
-		float err;
-		do {
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-			tm.reset();
-			tm.start();
-			err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-			tm.reset();
-		} while (err > SPH_DIFFUSION_TOLER);
+			sparams.run_type = SPH_RUN_DIFFUSION;
+			float err;
+			do {
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+				tm.reset();
+				tm.start();
+				err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+				tm.reset();
+			} while (err > SPH_DIFFUSION_TOLER);
 
 //		sph_particles_apply_updates(SPH_UPDATE_CHANGE_SIGN);
 
-		const bool chem = get_options().chem;
-		if (chem) {
-			PRINT("Doing chemistry step\n");
-			timer tm;
-			tm.start();
-			chemistry_do_step(scale, minrung, t0, adot, +1);
-			tm.stop();
-			PRINT("Took %e s\n", tm.read());
-		}
+			const bool chem = get_options().chem;
+			if (chem) {
+				PRINT("Doing chemistry step\n");
+				timer tm;
+				tm.start();
+				chemistry_do_step(scale, minrung, t0, adot, +1);
+				tm.stop();
+				PRINT("Took %e s\n", tm.read());
+			}
 
-		/*	sparams.run_type = SPH_RUN_RUNGS;
-		 tm.start();
-		 bool cont;
-		 do {
-		 sph_run(sparams);
-		 tm.stop();
-		 if (verbose)
-		 PRINT("sph_run(SPH_RUN_RUNGS): tm = %e\n", tm.read());
-		 tm.reset();
-		 cont = kr.rc;
-		 } while (cont);
-		 */
+		}
 		sparams.phase = 1;
 		sparams.run_type = SPH_RUN_GRAVITY;
 		tm.start();
@@ -305,17 +294,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
 		tm.reset();
-
-		sparams.run_type = SPH_RUN_HYDRO;
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-		tm.reset();
-		sph_particles_apply_updates(minrung, 2);
-
-//		sph_particles_apply_updates();
+		if (!glass) {
+			sparams.run_type = SPH_RUN_HYDRO;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			tm.reset();
+			sph_particles_apply_updates(minrung, 2);
+		}
 
 	}
 	if (verbose)
@@ -710,7 +698,6 @@ void driver() {
 				if (fp == NULL) {
 					THROW_ERROR("Unable to open energy.txt\n");
 				}
-				fprintf(fp, "%i %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr);
 				fprintf(fp, "%i %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr);
 				fclose(fp);
 			}

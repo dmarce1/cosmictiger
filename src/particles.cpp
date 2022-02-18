@@ -677,6 +677,7 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 }
 
 void particles_resize(part_int sz) {
+//	PRINT( "Resizing particles to %i\n", sz);
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
@@ -948,9 +949,36 @@ void particles_save_glass(const char* filename) {
 	FILE* fp = fopen(filename, "wb");
 	part_int size = get_options().parts_dim;
 	fwrite(&size, sizeof(part_int), 1, fp);
-	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
-	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
-	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
+	for (part_int i = 0; i < particles_size(); i++) {
+		if (particles_type(i) == DARK_MATTER_TYPE) {
+			fwrite(&particles_pos(XDIM, i), sizeof(fixed32), 1, fp);
+		}
+	}
+	for (part_int i = 0; i < particles_size(); i++) {
+		if (particles_type(i) == DARK_MATTER_TYPE) {
+			fwrite(&particles_pos(YDIM, i), sizeof(fixed32), 1, fp);
+		}
+	}
+	for (part_int i = 0; i < particles_size(); i++) {
+		if (particles_type(i) == DARK_MATTER_TYPE) {
+			fwrite(&particles_pos(ZDIM, i), sizeof(fixed32), 1, fp);
+		}
+	}
+	for (part_int i = 0; i < particles_size(); i++) {
+		if (particles_type(i) == SPH_TYPE) {
+			fwrite(&particles_pos(XDIM, i), sizeof(fixed32), 1, fp);
+		}
+	}
+	for (part_int i = 0; i < particles_size(); i++) {
+		if (particles_type(i) == SPH_TYPE) {
+			fwrite(&particles_pos(YDIM, i), sizeof(fixed32), 1, fp);
+		}
+	}
+	for (part_int i = 0; i < particles_size(); i++) {
+		if (particles_type(i) == SPH_TYPE) {
+			fwrite(&particles_pos(ZDIM, i), sizeof(fixed32), 1, fp);
+		}
+	}
 	fclose(fp);
 }
 
