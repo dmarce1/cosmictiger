@@ -663,7 +663,7 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
-	static auto power = get_options().use_power_file ? read_power_spectrum(phase) : compute_power_spectrum();
+	auto power = get_options().use_power_file ? read_power_spectrum(phase) : compute_power_spectrum();
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int64_t, NDIM> I;
@@ -1075,6 +1075,7 @@ static power_spectrum_function read_power_spectrum(int phase) {
 	func.dlogk = (func.logkmax - func.logkmin) / (func.P.size() - 1);
 	fclose(fp);
 	float sigma8 = CDM_POWER ? get_options().sigma8_c : get_options().sigma8;
+	PRINT( "READING POWER SPECTRUM\n");
 	func.normalize(sigma8);
 	if (phase == BARYON_POWER) {
 		auto cdm = read_power_spectrum(CDM_POWER);
