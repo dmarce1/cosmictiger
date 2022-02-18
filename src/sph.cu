@@ -1263,8 +1263,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							if (is_eligible) {
 								float dt = rung_dt[rung] * params.t0;
 								data.tdyn_snk[snki] = tdyn;
-								rung = max(params.max_rung - 1, rung);
-								max_rung = max(max_rung, rung);
+			//					rung = max(params.max_rung - 1, rung);
+		//						max_rung = max(max_rung, rung);
 							} else {
 								data.tdyn_snk[snki] = 1e+38;
 							}

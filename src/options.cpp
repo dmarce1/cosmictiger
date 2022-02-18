@@ -94,7 +94,6 @@ bool process_options(int argc, char *argv[]) {
 	("glass", po::value<int>(&(opts.glass))->default_value(0), "maximum number of time-steps (default=1000000)") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
-	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "use glass file for IC") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
@@ -268,7 +267,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(tracer_count);
 	SHOW(tree_cache_line_size);
 	SHOW(twolpt);
-	SHOW(use_glass);
 	SHOW(use_power_file);
 	SHOW(view_size);
 	SHOW(z0);

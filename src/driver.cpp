@@ -470,6 +470,7 @@ void driver() {
 		params.step = 0;
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
+		PRINT( "TAU_MAX = %e\n", params.tau_max);
 		params.tau = 0.0;
 		params.a = a0;
 		params.max_rung = 0;

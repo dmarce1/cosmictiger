@@ -23,7 +23,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 struct options {
 	bool sph;
-	bool use_glass;
 	bool cuda;
 	bool save_force;
 	bool do_lc;
@@ -100,7 +99,6 @@ struct options {
 		arc & sph;
 		arc & nsteps;
 		arc & cuda;
-		arc & use_glass;
 		arc & do_lc;
 		arc & save_force;
 		arc & do_power;
