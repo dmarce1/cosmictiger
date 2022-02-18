@@ -1200,17 +1200,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dt_cfl = params.a * myh / vsig_max;
 						const float Cdif = params.a * sqr(myh) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
 						const float lt = myT / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * myT);
-//						const float kappa_sp = 8.2e20f * powf(1e3 * constants::kb * myT / constants::evtoerg * 0.1f, 2.5f) / (1e3f * constants::evtoK); // Jubelgas et al 2004
-						const float kappa_sp = 4.9e-6f * powf(myT, 2.5f);
-			//			if( data.lambda_e[i] / lt > 1/4.2) {
-			//			PRINT( "%e\n", data.lambda_e[i] / lt);
-			//			}
+						const float kappa_sp = data.kappa0 / data.colog[i]; // Jubelgas et al 2004, Smith et al 2021
 						const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
-						//												//PRINT("%e %e\n", data.lambda_e[i], lt);
 						const float tmp = data.code_dif_to_cgs * constants::kb / sqr(sqr(params.a));
 						float Dcond = 2.f * data.mmw[i] * (data.gamma[i] - 1.f) * kappa / tmp;
-//						if (myT > 1e5)
-//							PRINT("%e %e %e %e %e %e\n", kappa_sp/myrho, kappa, Cdif, Dcond, tmp, data.mmw[i]);
 						data.kappa_snk[snki] = Dcond;
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;

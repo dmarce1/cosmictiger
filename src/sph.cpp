@@ -28,6 +28,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/kernel.hpp>
+#include <cosmictiger/constants.hpp>
 
 #include <fenv.h>
 #include <unistd.h>
@@ -78,6 +79,7 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_vz;
 	vector<float, pinned_allocator<float>> host_ent;
 	vector<float, pinned_allocator<float>> host_T;
+	vector<float, pinned_allocator<float>> host_colog;
 	vector<float, pinned_allocator<float>> host_kappa;
 	vector<float, pinned_allocator<float>> host_lambda_e;
 	vector<float, pinned_allocator<float>> host_mmw;
@@ -1591,6 +1593,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_COURANT:
 		host_lambda_e.resize(parts_size);
 		host_T.resize(parts_size);
+		host_colog.resize(parts_size);
 		if (stars) {
 			host_gx.resize(parts_size);
 			host_gy.resize(parts_size);
@@ -1640,14 +1643,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 									break;
 								}
 								switch(params.run_type) {
-								case SPH_RUN_DIFFUSION:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, nullptr,nullptr,nullptr,nullptr, chem ? host_gamma.data() : nullptr, nullptr, nullptr, host_mmw.data(), offset);
+									case SPH_RUN_DIFFUSION:
+									sph_particles_global_read_sph(node.global_part_range(), params.a, nullptr,nullptr,nullptr,nullptr, chem ? host_gamma.data() : nullptr, nullptr, nullptr, host_mmw.data(), nullptr,offset);
 									break;
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, nullptr, nullptr, nullptr, offset);
+									sph_particles_global_read_sph(node.global_part_range(), params.a, host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, nullptr, nullptr, nullptr,nullptr, offset);
 									break;
 									case SPH_RUN_COURANT:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, host_T.data(), host_lambda_e.data(), host_mmw.data(), offset);
+									sph_particles_global_read_sph(node.global_part_range(), params.a, host_ent.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr, host_T.data(), host_lambda_e.data(), host_mmw.data(),host_colog.data(), offset);
 									break;
 								}
 								switch(params.run_type) {
@@ -1713,6 +1716,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	}
 	switch (params.run_type) {
 	case SPH_RUN_COURANT:
+		CUDA_CHECK(cudaMalloc(&cuda_data.colog, sizeof(float) * host_colog.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.T, sizeof(float) * host_T.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.lambda_e, sizeof(float) * host_lambda_e.size()));
 		if (stars) {
@@ -1767,6 +1771,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_COURANT:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.T, host_T.data(), sizeof(float) * host_T.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.colog, host_colog.data(), sizeof(float) * host_colog.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.lambda_e, host_lambda_e.data(), sizeof(float) * host_lambda_e.size(), cudaMemcpyHostToDevice, stream));
 		if (stars) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gx, host_gx.data(), sizeof(float) * host_gx.size(), cudaMemcpyHostToDevice, stream));
@@ -1824,6 +1829,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.t0 = params.t0;
 	cuda_data.m = get_options().sph_mass;
 	cuda_data.N = get_options().neighbor_number;
+	cuda_data.kappa0 = 1.31 * pow(3.0, 1.5) * pow(constants::kb, 3.5) / 4.0 / sqrt(M_PI) / pow(constants::e, 4) / sqrt(constants::me);
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
@@ -1876,6 +1882,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	}
 	switch (params.run_type) {
 	case SPH_RUN_COURANT:
+		CUDA_CHECK(cudaFree(cuda_data.colog));
 		CUDA_CHECK(cudaFree(cuda_data.T));
 		CUDA_CHECK(cudaFree(cuda_data.lambda_e));
 		if (stars) {

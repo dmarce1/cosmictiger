@@ -44,6 +44,7 @@ struct sph_particle {
 	float T;
 	float lambda_e;
 	float mmw;
+	float colog;
 	template<class A>
 	void serialize(A&&arc, unsigned) {
 		static const bool stars = get_options().stars;
@@ -53,6 +54,7 @@ struct sph_particle {
 		arc & gamma;
 		arc & T;
 		arc & lambda_e;
+		arc & colog;
 	}
 };
 
@@ -106,7 +108,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
-		float* mmw, part_int offset);
+		float* mmw, float* colog, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
 //void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
@@ -341,6 +343,8 @@ inline float sph_particles_energy(part_int index) {
 	return E;
 }
 
+float sph_particles_coloumb_log(part_int i, float a);
+
 inline sph_particle sph_particles_get_particle(part_int index, float a) {
 	sph_particle p;
 	p.ent = sph_particles_ent(index);
@@ -358,6 +362,7 @@ inline sph_particle sph_particles_get_particle(part_int index, float a) {
 		p.T = sph_particles_temperature(index, a);
 		p.lambda_e = sph_particles_lambda_e(index, a, p.T);
 		p.mmw = sph_particles_mmw(index);
+		p.colog = sph_particles_coloumb_log(index, a);
 	}
 	return p;
 }

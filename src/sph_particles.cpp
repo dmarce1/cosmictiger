@@ -279,6 +279,25 @@ void sph_particles_apply_updates(int minrung, int phase) {
 
 }
 
+float sph_particles_coloumb_log(part_int i, float a) {
+	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
+	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
+	const double h = sph_particles_smooth_len(i);
+	const double Hp = sph_particles_Hp(i);
+	const double Hn = sph_particles_Hn(i);
+	const double Hep = sph_particles_Hep(i);
+	const double Hepp = sph_particles_Hepp(i);
+	double rho = sph_den(1 / (h * h * h));
+	double ne = Hp - Hn + Hep + 2.0f * Hepp;
+	rho *= code_to_density * pow(a, -3);
+	ne *= constants::avo * rho;
+	const double T = sph_particles_temperature(i, a);
+	const double part1 = 23.5;
+	const double part2 = -log(sqrt(ne) * pow(T, -1.2));
+	const double part3 = -sqrt((1e-5 + sqr(log(T) - 2)) / 16.0);
+	return part1 + part2 + part3;
+}
+
 float sph_particles_temperature(part_int i, float a) {
 	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
 	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
@@ -771,7 +790,7 @@ static vector<array<float, NDIM>> sph_particles_fetch_gforce_cache_line(part_int
 }
 
 void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
-		float* mmw, part_int offset) {
+		float* mmw, float* colog, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -797,6 +816,9 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 				}
 				if (mmw) {
 					mmw[j] = sph_particles_mmw(i);
+				}
+				if (colog) {
+					colog[j] = sph_particles_coloumb_log(i,a);
 				}
 			}
 		} else {
@@ -830,6 +852,9 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					}
 					if (mmw) {
 						mmw[dest_index] = part.mmw;
+					}
+					if( colog ) {
+						colog[dest_index] = part.colog;
 					}
 					dest_index++;
 				}
