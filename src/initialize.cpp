@@ -107,7 +107,7 @@ struct power_spectrum_function {
 		float tmp = (std::sin(k * R) - k * R * std::cos(k * R));
 		return c0 * P * tmp * tmp * std::pow(k, -3);
 	}
-	float normalize() {
+	float normalize(float sigma8) {
 		const int N = 8 * 1024;
 		float sum = 0.0;
 		float logkmax = this->logkmax - 2.5 * dlogk;
@@ -122,7 +122,7 @@ struct power_spectrum_function {
 			float logk = logkmin + i * dlogk;
 			sum += (2.0 / 3.0) * sigma8_integrand(logk) * dlogk;
 		}
-		sum = sqr(get_options().sigma8) / sum;
+		sum = sqr(sigma8) / sum;
 		for (int i = 0; i < P.size(); i++) {
 			P[i] *= sum;
 		}
@@ -275,7 +275,8 @@ power_spectrum_function compute_power_spectrum() {
 		double k = exp(func.logkmin + (double) i * func.dlogk);
 		func.P.push_back(m_k(k));
 	}
-	const auto norm = func.normalize();
+
+	const auto norm = func.normalize(get_options().sigma8);
 	if (hpx_rank() == 0) {
 		const int M = 2 * Nk;
 		const double logkmin = log(kmin);
@@ -1073,7 +1074,8 @@ static power_spectrum_function read_power_spectrum(int phase) {
 	func.logkmax = std::log(kmax);
 	func.dlogk = (func.logkmax - func.logkmin) / (func.P.size() - 1);
 	fclose(fp);
-	func.normalize();
+	float sigma8 = CDM_POWER ? get_options().sigma8_c : get_options().sigma8;
+	func.normalize(sigma8);
 	if (phase == BARYON_POWER) {
 		auto cdm = read_power_spectrum(CDM_POWER);
 		const double omega_b = get_options().omega_b;

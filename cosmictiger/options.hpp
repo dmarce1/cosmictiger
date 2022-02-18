@@ -62,6 +62,7 @@ struct options {
 	double code_to_s;
 	double code_to_cm;
 	double code_to_g;
+	double sigma8_c;
 	double omega_m;
 	double omega_r;
 	double z0;
@@ -137,6 +138,7 @@ struct options {
 		arc & z1;
 		arc & hubble;
 		arc & sigma8;
+		arc & sigma8_c;
 		arc & omega_b;
 		arc & omega_c;
 		arc & omega_gam;

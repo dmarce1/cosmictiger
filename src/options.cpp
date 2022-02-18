@@ -126,7 +126,8 @@ bool process_options(int argc, char *argv[]) {
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
 	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255 / 2.73), "") //
 	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
-	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8120), "") //
+	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "") //
+	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 
@@ -257,6 +258,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(read_check);
 	SHOW(save_force);
 	SHOW(sigma8);
+	SHOW(sigma8_c);
 	SHOW(slice_res);
 	SHOW(slice_size);
 	SHOW(sph);
