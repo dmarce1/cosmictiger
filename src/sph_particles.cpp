@@ -1127,6 +1127,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_dent_con(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dent_pred(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_difco(0), sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_kappa(0), sizeof(float), sph_particles_size(), fp);
 	for (int dim = 0; dim < NDIM; dim++) {
 		FREAD(&sph_particles_dvel_con(dim, 0), sizeof(float), sph_particles_size(), fp);
 		FREAD(&sph_particles_dvel_pred(dim, 0), sizeof(float), sph_particles_size(), fp);
@@ -1154,6 +1155,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_dent_con(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dent_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_difco(0), sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_kappa(0), sizeof(float), sph_particles_size(), fp);
 	for (int dim = 0; dim < NDIM; dim++) {
 		fwrite(&sph_particles_dvel_con(dim, 0), sizeof(float), sph_particles_size(), fp);
 		fwrite(&sph_particles_dvel_pred(dim, 0), sizeof(float), sph_particles_size(), fp);

@@ -98,7 +98,8 @@ void stars_find(float a, float dt, int minrung, int step) {
 					if( tdyn == 0.f ) {
 						PRINT( "ERROR %s %i\n", __FILE__, __LINE__);
 					}
-					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
+					constexpr float reduction_factor = 0.1;
+					float p = 1.f - expf(-std::min(reduction_factor*dt/tdyn,88.0f));
 					make_star = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
 				}
 				if( make_star ) {
