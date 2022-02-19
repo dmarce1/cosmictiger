@@ -63,13 +63,6 @@ void stars_load(FILE* fp) {
 
 void stars_find(float a, float dt, int minrung, int step) {
 
-
-
-
-	return;
-
-
-
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
@@ -103,7 +96,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 					if( tdyn == 0.f ) {
 						PRINT( "ERROR %s %i\n", __FILE__, __LINE__);
 					}
-					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
+					float p = 1.f - expf(-std::min(dt/tdyn/3.0f,88.0f));
 					make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
 				}
 				if( make_cloud ) {
@@ -237,14 +230,10 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step));
 	}
 	const int nthreads = hpx_hardware_concurrency();
-	static bool first = true;
-	static vector<gsl_rng *> rnd_gens(nthreads);
-	if (first) {
-		first = false;
-		for (int i = 0; i < nthreads; i++) {
-			rnd_gens[i] = gsl_rng_alloc(gsl_rng_taus);
-			gsl_rng_set(rnd_gens[i], step * nthreads + i);
-		}
+	vector<gsl_rng *> rnd_gens(nthreads);
+	for (int i = 0; i < nthreads; i++) {
+		rnd_gens[i] = gsl_rng_alloc(gsl_rng_taus);
+		gsl_rng_set(rnd_gens[i], step * nthreads + i);
 	}
 	static const double sph_mass = get_options().sph_mass;
 	static const double code_to_g = get_options().code_to_g;
@@ -256,7 +245,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 	std::atomic<int> clouds(0);
 	std::atomic<int> nstars(0);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, nthreads, a, dt, &to_gas_mutex, &to_gas_indices, minrung, &remnants, &clouds,&nstars]() {
+		futs2.push_back(hpx::async([&rnd_gens,proc, nthreads, a, dt, &to_gas_mutex, &to_gas_indices, minrung, &remnants, &clouds,&nstars]() {
 			const part_int b = (size_t) proc * stars.size() / nthreads;
 			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
 			for( part_int i = b; i < e; i++) {
@@ -272,32 +261,32 @@ void stars_remove(float a, float dt, int minrung, int step) {
 					float pwind = 1.0 - exp(-wind_rate*dt/dt_star);
 					if( gsl_rng_uniform_pos(rnd_gens[proc]) < pwind) {
 						std::lock_guard<mutex_type> lock(to_gas_mutex);
-						PRINT( "Stellar wind!\n");
+						//		PRINT( "Stellar wind!\n");
+				to_gas_indices.push_back(i);
+				stars[i].remove = true;
+			} else {
+				if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
+					if( gsl_rng_uniform_pos(rnd_gens[proc]) > remnant_mass_ratio ) {
+						std::lock_guard<mutex_type> lock(to_gas_mutex);
 						to_gas_indices.push_back(i);
 						stars[i].remove = true;
 					} else {
-						if( stars[i].time_remaining < 0.0 && particles_rung(stars[i].dm_index) >= minrung ) {
-							if( gsl_rng_uniform_pos(rnd_gens[proc]) > remnant_mass_ratio ) {
-								std::lock_guard<mutex_type> lock(to_gas_mutex);
-								to_gas_indices.push_back(i);
-								stars[i].remove = true;
-							} else {
-								stars[i].type = REMNANT_TYPE;
-								stars[i].zform = 1.0f / a - 1.f;
-								stars[i].stellar_mass *= remnant_mass_ratio;
-							}
-						}
+						stars[i].type = REMNANT_TYPE;
+						stars[i].zform = 1.0f / a - 1.f;
+						stars[i].stellar_mass *= remnant_mass_ratio;
 					}
 				}
-				if( stars[i].type == REMNANT_TYPE ) {
-					remnants++;
-				} else if( stars[i].type == CLOUD_TYPE) {
-					clouds++;
-				} else if( stars[i].type == STAR_TYPE) {
-					nstars++;
-				}
 			}
-		}));
+		}
+		if( stars[i].type == REMNANT_TYPE ) {
+			remnants++;
+		} else if( stars[i].type == CLOUD_TYPE) {
+			clouds++;
+		} else if( stars[i].type == STAR_TYPE) {
+			nstars++;
+		}
+	}
+}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	static const auto h0 = 1.0 / get_options().parts_dim;
@@ -319,15 +308,15 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		E /= sqr(code_to_cm) * code_to_g / sqr(code_to_s);
 		float wind_energy = 0.0;
 		if (star.stellar_mass > 7.5) {
-			PRINT("Supernova!\n");
-			E += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
+			//		PRINT("Supernova!\n");
+			//		E += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
 			wind_energy += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
 			double dZ = 0.02;
 			double dHe = 0.20 * (1.0 - star.Y - star.Z);
 			star.Y += dHe;
 			star.Z += dZ;
 		} else if (star.time_remaining > 0.0) {
-			wind_energy = 0.5 * sqr(1e-3) * a * a;
+			//		wind_energy = 0.5 * sqr(1e-3) * a * a;
 		}
 		if (wind_energy > 0.0) {
 			const int n = sph_particles_dm_index(k);
@@ -380,6 +369,9 @@ void stars_remove(float a, float dt, int minrung, int step) {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	PRINT("%i stars, %i remnants, %i clouds\n", (int ) nstars, (int ) remnants, (int ) clouds);
+	for (int i = 0; i < nthreads; i++) {
+		gsl_rng_free(rnd_gens[i]);
+	}
 }
 
 float stars_sample_mass(gsl_rng* rndgen) {

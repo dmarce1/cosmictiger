@@ -672,8 +672,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	array<fixed32, NDIM> x;
 	int flops = 0;
 	const auto compute_alpha = [&data](float h) {
+		return 1.0f;
 		if( h < data.h0 ) {
-			return SPH_ALPHA * h / data.h0;
+			return SPH_ALPHA*(.1f + 0.9f *h / data.h0);
 		} else {
 			return SPH_ALPHA;
 		}
@@ -835,6 +836,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				float ddvx_con = 0.f;
 				float ddvy_con = 0.f;
 				float ddvz_con = 0.f;
+				float dvmax = 0.0;
 				const float ainv = 1.0f / params.a;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					auto rec1 = ws.rec1[j];
@@ -893,7 +895,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dvxdt = -dpx * m;								// 2
 					const float dvydt = -dpy * m;								// 2
 					const float dvzdt = -dpz * m;								// 2
-					divv -= myf0 * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z); // 9
+					divv -= myf0 * m * rhoinv * (dvx * dWdri_x + dvy * dWdri_y + dvz * dWdri_z); //
+					dvmax = fmaxf(dvmax,fabs(dvx));
+					dvmax = fmaxf(dvmax,fabs(dvy));
+					dvmax = fmaxf(dvmax,fabs(dvz));
 					float dt_pred, dt_con;
 					dt_pred = 0.5f * rung_dt[myrung] * params.t0;		// 2
 					dt_con = 0.5f * fminf(rung_dt[rec1.rung] * (params.t0), dt_pred); // 3
@@ -924,6 +929,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddvz_pred);
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
+				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dvmax);
 				if (tid == 0) {
 					if (first_step) {
 						data.dent_pred[snki] = dent_pred;
@@ -937,6 +943,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					data.dvz_con[snki] += ddvz_con;										// 1
 					flops += 4;
 					if (params.phase == 1 && !semi_active) {
+						if( divv > 10.0 ) {
+							PRINT( "large divv ! %e %e %e %e %e dvmax = %e count = %i\n", divv, myh, myvx, myvy, myvz, dvmax, ws.rec1.size());
+							__trap();
+						}
 						data.divv_snk[snki] = divv;
 					}
 				}
@@ -972,8 +982,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const float Ginv = 1.f / data.G;
 	int flops = 0;
 	const auto compute_alpha = [&data](float h) {
+		return 1.0f;
 		if( h < data.h0 ) {
-			return SPH_ALPHA *h / data.h0;
+			return SPH_ALPHA*(.1f + 0.9f *h / data.h0);
 		} else {
 			return SPH_ALPHA;
 		}

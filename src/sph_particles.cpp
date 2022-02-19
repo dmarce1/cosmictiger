@@ -325,10 +325,11 @@ float sph_particles_temperature(part_int i, float a) {
 	if( H < 0.0 ) {
 		PRINT( "NEGATIVE H\n");
 		PRINT( "%e %e %e %e %e %e %e\n",  H, Hp, Hn,  H2,  He, Hep, Hepp);
-		abort();
+	//	abort();
 	}
-	if( T > 1e10 ) {
-		PRINT( "%e %e %e %e\n", sph_particles_ent(i), energy, K, rho);
+	if( T > 1e10 || T == 0.0) {
+		PRINT( "T == %e %e %e %e %e\n", T, sph_particles_ent(i), energy, K, rho);
+		abort();
 	}
 	return T;
 }

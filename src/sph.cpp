@@ -575,9 +575,6 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 
 static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
 		int min_rung, bool active, bool semiactive, int nactive, int nneighbor) {
-	feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
 
 	sph_run_return rc;
 	const int self_nparts = self_ptr->part_range.second - self_ptr->part_range.first;
@@ -1364,6 +1361,9 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
 	params.cfl = get_options().cfl;
 	if (get_options().cuda == false) {
 		cuda = false;
@@ -2016,13 +2016,13 @@ void sph_init_diffusion() {
 				sph_particles_old_rung(i) = particles_rung(sph_particles_dm_index(i));
 				dif_vector vec;
 				vec[NCHEMFRACS] = sph_particles_ent(i);
-				vec[0] = sph_particles_He0(i);
-				vec[1] = sph_particles_Hep(i);
-				vec[2] = sph_particles_Hepp(i);
-				vec[3] = sph_particles_Hp(i);
-				vec[4] = sph_particles_Hn(i);
-				vec[5] = sph_particles_H2(i);
-				vec[6] = sph_particles_Z(i);
+				vec[0] = std::max(sph_particles_He0(i),1e-30f);
+				vec[1] = std::max(sph_particles_Hep(i),1e-30f);
+				vec[2] = std::max(sph_particles_Hepp(i),1e-30f);
+				vec[3] = std::max(sph_particles_Hp(i),1e-30f);
+				vec[4] = std::max(sph_particles_Hn(i),1e-30f);
+				vec[5] = std::max(sph_particles_H2(i),1e-30f);
+				vec[6] = std::max(sph_particles_Z(i),1e-30f);
 				sph_particles_dif_vec0(i) = vec;
 				sph_particles_dif_vec(i) = vec;
 			}
