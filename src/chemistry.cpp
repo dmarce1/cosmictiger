@@ -719,7 +719,7 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * chem.He - 0.5 * chem.H2);
 						double gamma = 1. + 1. / cv;
 						double dt = rung_dt[rung] * t0;
-						chem.K *= exp((5. - 3.*gamma)*adot/a*dt);
+						chem.K *= exp((5. - 3.*gamma)*adot*dt);
 					}
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
 					//		PRINT( "%e\n", chem.rho);
@@ -732,6 +732,7 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						float vy = particles_vel(YDIM,k);
 						float vz = particles_vel(ZDIM,k);
 						PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.K, sph_particles_smooth_len(i), vx, vy, vz);
+						PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
 						abort();
 					}
 				}
@@ -749,7 +750,7 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 					double gamma = 1. + 1. / cv;
 					double dt = rung_dt[rung] * t0;
-					chem.K *= exp((5.-3.*gamma)*adot/a*dt);
+					chem.K *= exp((5.-3.*gamma)*adot*dt);
 					//				PRINT( "%e %e %e %e\n", cv,(5.f-3.f*gamma)*adot/a*dt, chem.H2, exp((5.-3.*gamma)*adot/a*dt));
 				}
 				const float factor = 1.0f - sph_particles_Z(i);

@@ -308,7 +308,7 @@ float sph_particles_temperature(part_int i, float a) {
 	const double Y = sph_particles_Y(i);
 	const double Hep = sph_particles_Hep(i);
 	const double Hepp = sph_particles_Hepp(i);
-	const double H = 1.0 - Y - Hp - Hn - 2.0 * H2;
+	const double H = 1.0 - Y - Hp - Hn - H2;
 	const double He = Y - Hep - Hepp;
 	double rho = sph_den(1 / (h * h * h));
 	double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
@@ -321,7 +321,15 @@ float sph_particles_temperature(part_int i, float a) {
 	K *= pow(a, 3. * gamma - 5.);												// 11
 	K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
 	double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));															// 9
-	double T = energy / (n * cv);																							// 5
+	double T = energy / (n * cv);
+	if( H < 0.0 ) {
+		PRINT( "NEGATIVE H\n");
+		PRINT( "%e %e %e %e %e %e %e\n",  H, Hp, Hn,  H2,  He, Hep, Hepp);
+		abort();
+	}
+	if( T > 1e10 ) {
+		PRINT( "%e %e %e %e\n", sph_particles_ent(i), energy, K, rho);
+	}
 	return T;
 }
 

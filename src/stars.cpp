@@ -62,6 +62,14 @@ void stars_load(FILE* fp) {
 }
 
 void stars_find(float a, float dt, int minrung, int step) {
+
+
+
+
+	return;
+
+
+
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
@@ -174,7 +182,6 @@ float stars_remnant_mass(float Mi, float Z);
 HPX_PLAIN_ACTION (stars_statistics);
 
 stars_stats stars_statistics(float a) {
-	PRINT("Searching for STARS\n");
 	vector<hpx::future<stars_stats>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<stars_statistics_action>(c, a));
@@ -223,7 +230,7 @@ stars_stats stars_statistics(float a) {
 #define WIND_RATIO 0.5
 
 void stars_remove(float a, float dt, int minrung, int step) {
-	PRINT("Searching for STARS\n");
+
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {

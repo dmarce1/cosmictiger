@@ -68,6 +68,7 @@ struct sph_part_info: public dm_part_info {
 	float Hepp;
 	float He;
 	float Z;
+	float tdyn;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
@@ -80,6 +81,7 @@ struct sph_part_info: public dm_part_info {
 		arc & Hepp;
 		arc & He;
 		arc & Z;
+		arc & tdyn;
 	}
 
 };
@@ -156,9 +158,10 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
 	}
 	const bool chem = get_options().chem;
+	const bool stars = get_options().stars;
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, boxes, chem]() {
+		futs.push_back(hpx::async([proc, nthreads, boxes, chem, stars]() {
 			view_return rc;
 			rc.hydro.resize(boxes.size());
 			rc.dm.resize(boxes.size());
@@ -200,6 +203,9 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.ent = sph_particles_ent(l);
 								info.h = sph_particles_smooth_len(l);
 								info.rung = particles_rung(i);
+								if( stars ) {
+									info.tdyn = sph_particles_tdyn(l);
+								}
 								if( chem ) {
 									info.Hp = sph_particles_Hp(l);
 									info.Hn = sph_particles_Hn(l);
@@ -360,6 +366,12 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].tdyn);
+			}
+//			PRINT( "h and ent\n");
+			DBPutPointvar1(db, "tdyn", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			if (chem) {
@@ -384,7 +396,7 @@ void view_output_views(int cycle, double a) {
 					const double Hep = parts.hydro[bi][i].Hep;
 					const double Hepp = parts.hydro[bi][i].Hepp;
 					const double Y = He + Hep + Hepp;
-					const double H = 1.0 - Y - Hp - Hn - 2.0 * H2 - Z;
+					const double H = 1.0 - Y - Hp - Hn - H2 - Z;
 					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp + Z / 10.0;
 					rho *= code_to_density * pow(a, -3);
 					n *= constants::avo * rho;									// 8
