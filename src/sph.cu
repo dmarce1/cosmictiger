@@ -945,7 +945,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					if (params.phase == 1 && !semi_active) {
 						if( divv > 10.0 ) {
 							PRINT( "large divv ! %e %e %e %e %e dvmax = %e count = %i\n", divv, myh, myvx, myvy, myvz, dvmax, ws.rec1.size());
-							__trap();
+//							__trap();
 						}
 						data.divv_snk[snki] = divv;
 					}
