@@ -19,14 +19,18 @@
 
 #include <cosmictiger/particles.hpp>
 
+#define REMNANT_TYPE 10
+#define CLOUD_TYPE 11
+
 
 struct star_particle {
 	float zform;
 	float time_remaining;
+	float total_life;
 	float stellar_mass;
 	float Y;
 	float Z;
-	bool remnant;
+	int type;
 	bool remove;
 	int dm_index;
 };
@@ -35,6 +39,7 @@ struct star_particle {
 struct stars_stats {
 	size_t stars;
 	size_t remnants;
+	size_t clouds;
 	size_t popI;
 	size_t popII;
 	size_t popIII;
@@ -44,6 +49,7 @@ struct stars_stats {
 		popI = 0;
 		popII = 0;
 		popIII = 0;
+		clouds = 0;
 	}
 	stars_stats& operator+=(const stars_stats& other) {
 		stars += other.stars;
@@ -51,6 +57,7 @@ struct stars_stats {
 		popI += other.popI;
 		popII += other.popII;
 		popIII += other.popIII;
+		clouds += other.clouds;
 		return *this;
 	}
 	template<class A>
@@ -60,6 +67,7 @@ struct stars_stats {
 		arc & popI;
 		arc & popII;
 		arc & popIII;
+		arc & clouds;
 	}
 };
 
