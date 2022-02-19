@@ -1256,8 +1256,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							if (is_eligible) {
 								float dt = rung_dt[rung] * params.t0;
 								data.tdyn_snk[snki] = tdyn;
-			//					rung = max(params.max_rung - 1, rung);
-		//						max_rung = max(max_rung, rung);
+								//					rung = max(params.max_rung - 1, rung);
+								//						max_rung = max(max_rung, rung);
 							} else {
 								data.tdyn_snk[snki] = 1e+38;
 							}
@@ -1280,6 +1280,29 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		atomicMax(&reduce->max_rung_hydro, max_rung_hydro);
 		atomicMax(&reduce->max_rung_grav, max_rung_grav);
 	}
+}
+
+int sph_get_blocks_per_kernel(int type) {
+	int nblocks;
+	switch (type) {
+	case SPH_RUN_SMOOTHLEN:
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
+		break;
+	case SPH_RUN_MARK_SEMIACTIVE:
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_mark_semiactive, SMOOTHLEN_BLOCK_SIZE, 0));
+		break;
+	case SPH_RUN_DIFFUSION:
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_diffusion, HYDRO_BLOCK_SIZE, 0));
+		break;
+	case SPH_RUN_COURANT:
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_courant, HYDRO_BLOCK_SIZE, 0));
+		break;
+	case SPH_RUN_HYDRO:
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) sph_cuda_diffusion, HYDRO_BLOCK_SIZE, 0));
+		break;
+	}
+	nblocks *= cuda_smp_count();
+	return nblocks;
 }
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream) {

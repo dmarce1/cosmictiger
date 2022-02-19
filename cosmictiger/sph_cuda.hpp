@@ -97,6 +97,7 @@ struct sph_run_cuda_data {
 	float eta;
 };
 
+int sph_get_blocks_per_kernel(int type);
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);
 
 #endif /* SPH_CUDA_HPP_ */
