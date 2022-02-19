@@ -576,7 +576,7 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 				return 1.5 * constants::kb *(newN * T - oldN * T0) + dt * dedt_cool;
 			};
 
-	float Tmin = 1e3;
+	float Tmin = TMIN;
 	float Tmax = TMAX;
 	float Tmid;
 	for (int i = 0; i < 20; i++) {

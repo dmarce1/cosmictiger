@@ -327,8 +327,8 @@ float sph_particles_temperature(part_int i, float a) {
 		PRINT( "%e %e %e %e %e %e %e\n",  H, Hp, Hn,  H2,  He, Hep, Hepp);
 	//	abort();
 	}
-	if( T > 1e10 || T == 0.0) {
-		PRINT( "T == %e %e %e %e %e\n", T, sph_particles_ent(i), energy, K, rho);
+	if( T > TMAX || T == 0.0) {
+		PRINT( "T == %e %e %e %e %e %e\n", T, sph_particles_ent(i), energy, K, rho, h);
 		abort();
 	}
 	return T;

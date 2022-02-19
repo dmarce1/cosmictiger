@@ -310,7 +310,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		if (star.stellar_mass > 7.5) {
 			//		PRINT("Supernova!\n");
 			//		E += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
-			wind_energy += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
+		//	wind_energy += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
 			double dZ = 0.02;
 			double dHe = 0.20 * (1.0 - star.Y - star.Z);
 			star.Y += dHe;

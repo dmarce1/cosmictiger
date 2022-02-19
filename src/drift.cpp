@@ -102,12 +102,12 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						const float divv = sph_particles_divv(j);
 						float dloghdt = (1.f/3.f)*divv/scale;
 						if( dloghdt > 0.5 / dt0 ) {
-							PRINT( "Clippling dhdt %e", dloghdt * dt0);
+							PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
 	//						PRINT( "Hmult = %e\n", c0);
 //							abort();
 							dloghdt = 0.5 / dt0;
 						} else if( dloghdt < -0.5 / dt0) {
-							PRINT( "Clippling dhdt %e", dloghdt * dt0);
+							PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
 //							PRINT( "Hmult = %e\n", c0);
 //							abort();
 							dloghdt = -0.5 / dt0;

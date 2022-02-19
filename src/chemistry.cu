@@ -116,7 +116,8 @@ __device__ float test_electron_fraction(float ne, species_t N0, species_t& N, fl
 __device__ float test_temperature(species_t N0, species_t& N, float T0, float T, float dt, float z, int& flops, float* dedt_ptr, bool add_totals) {
 //	const int tid = threadIdx.x;
 //	auto tm = clock64();
-	T = fmaxf(1e3f, T);							// 1
+	const auto oT = T;
+	T = fmaxf(TMIN, T);							// 1
 	T = fminf(TMAX, T);							// 1
 	const float Tev = T / constants::evtoK;					// 4
 	const float Tevinv = 1.f / Tev;					// 4
@@ -311,7 +312,7 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	{
 		K16 = 7e-7f * sqrtTinv; // 5
 	}
-
+	T = oT;
 	float cool = 0.f;
 	const float ne = N.Hp - N.Hn + N.Hep + 2 * N.Hepp;														// 4
 	const float T5 = T * 1e-5f;																					// 1
@@ -456,7 +457,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double energy = (double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0);																			// 9
 		double T0 = energy / (n * cv);
 		double Tmax = TMAX;
-		float Tmin = 1e3;
+		float Tmin = TMIN;
 		N0 = N;
 		double z = 1.0 / (double) params.a - 1.0;																						// 2
 		double Tmid;
