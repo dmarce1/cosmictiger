@@ -760,6 +760,17 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				sph_particles_H2(i) = chem.H2 * factor;
 				sph_particles_Hep(i) = chem.Hep * factor;
 				sph_particles_Hepp(i) = chem.Hepp * factor;
+				double norm = 0.0;
+				for( int c = 0; c < NCHEMFRACS; c++) {
+					norm += sph_particles_frac(c,i);
+				}
+				if( norm > 0.999999 ) {
+					norm = 1.0 / norm;
+					norm *= 0.999999;
+					for( int c = 0; c < NCHEMFRACS; c++) {
+						sph_particles_frac(c,i) *= norm;
+					}
+				}
 				sph_particles_ent(i) = chem.K;
 				sph_particles_tcool(i) = chem.tcool;
 				if( chem.K < 0.0 ) {

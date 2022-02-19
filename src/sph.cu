@@ -671,6 +671,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	int flops = 0;
+	const auto compute_alpha = [&data](float h) {
+		if( h < data.h0 ) {
+			return SPH_ALPHA * h / data.h0;
+		} else {
+			return SPH_ALPHA;
+		}
+	};
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		ws.rec1_main.resize(0);
@@ -778,6 +785,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float myf0 = data.f0[i];
 				const float Prho2i = myp * myrhoinv * myrhoinv * myf0;							// 3
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
+				const float myalpha = compute_alpha(myh);
 				flops += 36;
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -835,6 +843,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dy = distance(myy, rec1.y);				// 2
 					const float dz = distance(myz, rec1.z);				// 2
 					const float h = rec1.h;
+					const float alpha = compute_alpha(h);
+					const float alpha_ij = sqrt(alpha * myalpha);
 					const float h3 = sqr(h) * h;								// 2
 					const float r2 = sqr(dx, dy, dz);						// 5
 					const float hinv = 1. / h;									// 4
@@ -859,7 +869,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float rinv = 1.0f / (r + float(1.0e-15));		// 5
 					const float r2inv = 1.f / (sqr(r) + 0.01f * sqr(hij));	// 8
 					const float uij = fminf(0.f, hij * (dvx * dx + dvy * dy + dvz * dz) * r2inv); //8
-					const float Piij = (uij * (-float(SPH_ALPHA) * cij + float(SPH_BETA) * uij)) * 0.5f * (myfvel + rec2.fvel) / rho_ij; // 12
+					const float Piij = uij * alpha_ij * (-cij + float(SPH_BETA) * uij) * 0.5f * (myfvel + rec2.fvel) / rho_ij; // 12
 					const float qi = r * myhinv;								// 1
 					const float qj = r * hinv;									// 1
 					const float dWdri = (r < myh) * dkernelW_dq(qi) * myhinv * myh3inv * rinv; // 15
@@ -961,6 +971,13 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const bool stars = data.gx;
 	const float Ginv = 1.f / data.G;
 	int flops = 0;
+	const auto compute_alpha = [&data](float h) {
+		if( h < data.h0 ) {
+			return SPH_ALPHA *h / data.h0;
+		} else {
+			return SPH_ALPHA;
+		}
+	};
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		if (self.nactive > 0) {
@@ -1039,6 +1056,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float myh3inv = 1.f / (sqr(myh) * myh);
 					const float myrho = m * c0 * myh3inv;
 					const float myrhoinv = minv * c0inv * sqr(myh) * myh;
+					const float myalpha = compute_alpha(myh);
 					float gamma;
 					if (data.gamma) {
 						gamma = data.gamma[i];
@@ -1103,6 +1121,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dy = distance(myy, rec1.y);									// 2
 						const float dz = distance(myz, rec1.z);									// 2
 						const float h = rec2.h;
+						const float alpha = compute_alpha(h);
+						const float alpha_ij = sqrtf(alpha * myalpha);
 						const float h3 = sqr(h) * h;													// 2
 						const float r2 = sqr(dx, dy, dz);											// 5
 						const float hinv = 1. / h;														// 4
@@ -1128,8 +1148,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float hfac = myh / hij;
 						float this_vsig = 1.25f * cij * hfac;
 						if (ndv < 0.f) {
-							this_vsig += 0.75f * SPH_ALPHA * cij * hfac;
-							this_vsig -= 0.75f * SPH_BETA * ndv * hfac;
+							this_vsig += 0.75f * alpha_ij * cij * hfac;
+							this_vsig -= 0.75f * alpha_ij * SPH_BETA * ndv * hfac;
 						}
 						vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
 						const float q = r * myhinv;                                       // 1
@@ -1256,8 +1276,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 							if (is_eligible) {
 								float dt = rung_dt[rung] * params.t0;
 								data.tdyn_snk[snki] = tdyn;
-			//					rung = max(params.max_rung - 1, rung);
-		//						max_rung = max(max_rung, rung);
+								//					rung = max(params.max_rung - 1, rung);
+								//						max_rung = max(max_rung, rung);
 							} else {
 								data.tdyn_snk[snki] = 1e+38;
 							}

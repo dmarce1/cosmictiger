@@ -1816,6 +1816,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.fvel_snk = &sph_particles_fvel(0);
 	cuda_data.Z_snk = &sph_particles_Z(0);
+	cuda_data.h0 = get_options().hsoft;
 	cuda_data.f0_snk = &sph_particles_fpre(0);
 	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
 //	cuda_data.Yform_snk = &sph_particles_formY(0);
@@ -1958,9 +1959,20 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 							const part_int k = sph_particles_dm_index(j);
 							const auto rung = particles_rung(k);
 							const bool sa = sph_particles_semi_active(j);
-							const auto vec = sph_particles_dif_vec(j);
+							auto vec = sph_particles_dif_vec(j);
 							if( rung >= minrung || sa) {
 								sph_particles_ent(j) = vec[NCHEMFRACS];
+								double total = 0.0;
+								for( int l = 0; l < NCHEMFRACS; l++) {
+									total += vec[l];
+								}
+								if( total > 0.999999 ) {
+									total = 1.0 / total;
+									total *= 0.999999;
+									for( int l = 0; l < NCHEMFRACS; l++) {
+										vec[l] *= total;
+									}
+								}
 								sph_particles_He0(j) = vec[0];
 								sph_particles_Hep(j) = vec[1];
 								sph_particles_Hepp(j) = vec[2];
