@@ -335,6 +335,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 	const bool vsoft = get_options().sph && get_options().vsoft;
 	const float h = vsoft ? sph_particles_max_smooth_len() : get_options().hsoft;
+	ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
 	tree_create_params tparams(minrung, theta, h);
 	PRINT("Create tree %i %e\n", minrung, theta);
 	auto sr = tree_create(tparams);

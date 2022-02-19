@@ -31,6 +31,7 @@
 
 #include <atomic>
 
+
 /*__managed__ int node_count;
  __managed__ double total_time;
  __managed__ double tree_time;
@@ -174,7 +175,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			sph_gz[j] = gz[i];
 		} else {
 			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
-			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)),1);
+			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 			max_rung = max(rung, max_rung);
 			if (rung < 0 || rung >= MAX_RUNG) {
 				PRINT("Rung out of range %i\n", rung);

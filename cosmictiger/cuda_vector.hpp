@@ -75,9 +75,9 @@ public:
 			cap = 0;
 			sz = 0;
 		}
-		__syncwarp();
+		__syncthreads();
 		resize(_sz);
-		__syncwarp();
+		__syncthreads();
 		for (unsigned i = tid; i < _sz; i += WARP_SIZE) {
 			(*this)[i] = ele;
 		}
@@ -90,7 +90,7 @@ public:
 			cap = 0;
 			sz = 0;
 		}
-		__syncwarp();
+		__syncthreads();
 		swap(other);
 	}
 	__device__
@@ -101,14 +101,14 @@ public:
 			ptr = nullptr;
 			cap = 0;
 		};
-		__syncwarp();
+		__syncthreads();
 		reserve(other.cap);
-		__syncwarp();
+		__syncthreads();
 		if (tid == 0) {
 			sz = other.sz;
 			cap = other.sz;
 		}
-		__syncwarp();
+		__syncthreads();
 		for (unsigned i = tid; i < other.sz; i += WARP_SIZE) {
 			(*this)[i] = other[i];
 		}
@@ -145,7 +145,7 @@ public:
 	inline
 	void reserve(unsigned new_cap) {
 		const int& tid = threadIdx.x;
-		__syncwarp();
+		__syncthreads();
 		if (new_cap > cap) {
 			size_t i = 1;
 			while (i < new_cap) {
@@ -167,7 +167,7 @@ public:
 				new (new_ptr + i) T();
 				new_ptr[i] = std::move((*this)[i]);
 			}
-			__syncwarp();
+			__syncthreads();
 			if (tid == 0) {
 				cap = new_cap;
 				if (ptr) {
@@ -181,12 +181,12 @@ public:
 	inline
 	void resize(unsigned new_size) {
 		const int& tid = threadIdx.x;
-		__syncwarp();
+		__syncthreads();
 		reserve(new_size);
 		if (tid == 0) {
 			sz = new_size;
 		}
-		__syncwarp();
+		__syncthreads();
 	}
 	__device__
 	inline T operator[](unsigned i) const {
