@@ -624,7 +624,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 						d_ij = 0.f;
 					}
 					const float r = sqrtf(r2);
-					const float q = r * h_ij;
+					const float q = r / h_ij;
 					const float dWdr_ij = dkernelW_dq(q) / sqr(sqr(h_ij));
 					const float rinv = 1. / (r + 1.e-15f);
 					const float factor = -dt_ij * m / rho_ij * d_ij * dWdr_ij * rinv;
@@ -893,9 +893,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdrj_x = dx * dWdrj;						// 1
 					const float dWdrj_y = dy * dWdrj;						// 1
 					const float dWdrj_z = dz * dWdrj;						// 1
-					const float h_ij = 0.5f * (myh + h);
-					const float q = r / h_ij;
-					const float dWdrij = (r < h_ij) * dkernelW_dq(q) * rinv / sqr(sqr(h_ij)); // 15
+					const float q = r / hij;
+					const float dWdrij = (r < hij) * dkernelW_dq(q) * rinv / sqr(sqr(hij)); // 15
 					const float dWdrij_x = dx * dWdrij;
 					const float dWdrij_y = dy * dWdrij;
 					const float dWdrij_z = dz * dWdrij;
