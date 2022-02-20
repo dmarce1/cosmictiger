@@ -69,6 +69,7 @@ struct sph_part_info: public dm_part_info {
 	float He;
 	float Z;
 	float tdyn;
+	float alpha;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
@@ -82,6 +83,7 @@ struct sph_part_info: public dm_part_info {
 		arc & He;
 		arc & Z;
 		arc & tdyn;
+		arc & alpha;
 	}
 
 };
@@ -203,6 +205,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.ent = sph_particles_ent(l);
 								info.h = sph_particles_smooth_len(l);
 								info.rung = particles_rung(i);
+								info.alpha = sph_particles_alpha(l);
 								if( stars ) {
 									info.tdyn = sph_particles_tdyn(l);
 								}
@@ -358,13 +361,15 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			y.resize(0);
+			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].h);
-				y.push_back(parts.hydro[bi][i].ent);
+				z.push_back(parts.hydro[bi][i].alpha);
 			}
 //			PRINT( "h and ent\n");
 			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].tdyn);

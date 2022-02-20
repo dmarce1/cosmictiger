@@ -63,6 +63,7 @@ struct hydro_record2 {
 	float vy;
 	float vz;
 	float ent;
+	float alpha;
 	float f0;
 	float fvel;
 };
@@ -130,6 +131,7 @@ struct courant_record2 {
 	float T;
 	float lambda_e;
 	float mmw;
+	float alpha;
 };
 
 struct courant_workspace {
@@ -250,7 +252,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(f);
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(count);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dfdh);
-					dh = 0.1f * h;
+					dh = 0.2f * h;
 					if (count > 1) {
 						f -= data.N * float(3.0 / (4.0 * M_PI));
 						dh = -f / dfdh;
@@ -671,13 +673,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	int flops = 0;
-	const auto compute_alpha = [&data](float h) {
-		if( h < data.h0 ) {
-			return SPH_ALPHA*(.0f + 1.0f *h / data.h0);
-		} else {
-			return SPH_ALPHA;
-		}
-	};
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		ws.rec1_main.resize(0);
@@ -735,6 +730,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ws.rec2_main[k].ent = data.ent[pi];
 					ws.rec2_main[k].f0 = data.f0[pi];
 					ws.rec2_main[k].fvel = data.fvel[pi];
+					ws.rec2_main[k].alpha = data.alpha[pi];
 				}
 			}
 		}
@@ -785,7 +781,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float myf0 = data.f0[i];
 				const float Prho2i = myp * myrhoinv * myrhoinv * myf0;							// 3
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
-				const float myalpha = compute_alpha(myh);
+				const float myalpha = data.alpha[i];
 				flops += 36;
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -844,8 +840,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dy = distance(myy, rec1.y);				// 2
 					const float dz = distance(myz, rec1.z);				// 2
 					const float h = rec1.h;
-					const float alpha = compute_alpha(h);
-					const float alpha_ij = sqrt(alpha * myalpha);
+					const float alpha = rec2.alpha;
+					const float alpha_ij = 0.5f * (alpha + myalpha);
 					const float h3 = sqr(h) * h;								// 2
 					const float r2 = sqr(dx, dy, dz);						// 5
 					const float hinv = 1. / h;									// 4
@@ -951,6 +947,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 						}
 						data.divv_snk[snki] = divv;
 					}
+					float alphan = data.alpha_snk[snki];
+					float& alphanp1 = data.alpha_snk[snki];
+					float t0 = 0.1f * myh / myc;
+					float S = fmaxf(0.f, -data.f0[i] * divv);
+					float dt = 0.5f * rung_dt[myrung] * (params.t0); // 3
+					const float num = alphan + dt * (SPH_ALPHA0 / t0 + S);
+					const float den = 1.f + dt * (1.f / t0 + S / SPH_ALPHA1);
+					alphanp1 = num / den;
 				}
 			}
 		}
@@ -983,13 +987,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const bool stars = data.gx;
 	const float Ginv = 1.f / data.G;
 	int flops = 0;
-	const auto compute_alpha = [&data](float h) {
-		if( h < data.h0 ) {
-			return SPH_ALPHA*(.0f + 1.0f *h / data.h0);
-		} else {
-			return SPH_ALPHA;
-		}
-	};
+
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		if (self.nactive > 0) {
@@ -1029,6 +1027,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.rec2_main[k].T = data.T[pi];
 						ws.rec2_main[k].lambda_e = data.lambda_e[pi];
 						ws.rec2_main[k].mmw = data.mmw[pi];
+						ws.rec2_main[k].alpha = data.alpha[pi];
 						if (data.gamma) {
 							ws.rec2_main[k].gamma = data.gamma[pi];
 						}
@@ -1068,7 +1067,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float myh3inv = 1.f / (sqr(myh) * myh);
 					const float myrho = m * c0 * myh3inv;
 					const float myrhoinv = minv * c0inv * sqr(myh) * myh;
-					const float myalpha = compute_alpha(myh);
+					const float myalpha = data.alpha[i];
 					float gamma;
 					if (data.gamma) {
 						gamma = data.gamma[i];
@@ -1133,8 +1132,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dy = distance(myy, rec1.y);									// 2
 						const float dz = distance(myz, rec1.z);									// 2
 						const float h = rec2.h;
-						const float alpha = compute_alpha(h);
-						const float alpha_ij = sqrtf(alpha * myalpha);
+						const float alpha = rec2.alpha;
+						const float alpha_ij = 0.5f * (myalpha + alpha);
 						const float h3 = sqr(h) * h;													// 2
 						const float r2 = sqr(dx, dy, dz);											// 5
 						const float hinv = 1. / h;														// 4

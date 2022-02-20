@@ -418,7 +418,7 @@ void load_glass(const char* filename) {
 							}
 							if (l >= nparts) {
 								const part_int m = particles_cat_index(index);
-								sph_particles_ent(m) = 0.0f;
+								sph_particles_ent(m) = 1.0e-30f;
 								sph_particles_smooth_len(m) = h;
 								if (chem) {
 									sph_particles_He0(m) = get_options().Y0;

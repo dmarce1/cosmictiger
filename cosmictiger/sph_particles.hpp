@@ -45,6 +45,7 @@ struct sph_particle {
 	float lambda_e;
 	float mmw;
 	float colog;
+	float alpha;
 	template<class A>
 	void serialize(A&&arc, unsigned) {
 		static const bool stars = get_options().stars;
@@ -53,6 +54,7 @@ struct sph_particle {
 		arc & v;
 		arc & gamma;
 		arc & T;
+		arc & alpha;
 		arc & lambda_e;
 		arc & colog;
 	}
@@ -71,6 +73,7 @@ struct sph_particle {
 
 using dif_vector = array<float,DIFCO_COUNT>;
 
+SPH_PARTICLES_EXTERN float* sph_particles_a;
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;
 SPH_PARTICLES_EXTERN dif_vector* sph_particles_dvec;
 SPH_PARTICLES_EXTERN dif_vector* sph_particles_vec0;
@@ -108,7 +111,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
-		float* mmw, float* colog, part_int offset);
+		float* mmw, float* colog,float* alpha, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
 //void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
@@ -154,6 +157,11 @@ inline dif_vector& sph_particles_d_dif_vec(part_int index) {
 inline float& sph_particles_tdyn(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_ts[index];
+}
+
+inline float& sph_particles_alpha(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_a[index];
 }
 /*
  inline float& sph_particles_formY(part_int index) {
@@ -363,6 +371,7 @@ inline sph_particle sph_particles_get_particle(part_int index, float a) {
 		p.lambda_e = sph_particles_lambda_e(index, a, p.T);
 		p.mmw = sph_particles_mmw(index);
 		p.colog = sph_particles_coloumb_log(index, a);
+		p.alpha = sph_particles_alpha(index);
 	}
 	return p;
 }

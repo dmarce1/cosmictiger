@@ -96,7 +96,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 					if( tdyn == 0.f ) {
 						PRINT( "ERROR %s %i\n", __FILE__, __LINE__);
 					}
-					float p = 1.f - expf(-std::min(dt/tdyn/3.0f,88.0f));
+					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
 					make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
 				}
 				if( make_cloud ) {
@@ -125,6 +125,10 @@ void stars_find(float a, float dt, int minrung, int step) {
 	hpx::wait_all(futs2.begin(), futs2.end());
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens]() {
+
+
+			return;
+
 			double dt0 = STAR_FORM_TIME / constants::seconds_to_years;
 			dt0 /= code_to_s;
 			dt0 /= a;
@@ -223,6 +227,9 @@ stars_stats stars_statistics(float a) {
 #define WIND_RATIO 0.5
 
 void stars_remove(float a, float dt, int minrung, int step) {
+
+
+	return;
 
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
