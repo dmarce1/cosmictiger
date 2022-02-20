@@ -90,13 +90,10 @@ void stars_find(float a, float dt, int minrung, int step) {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
-				float tdyn = sph_particles_tdyn(i);
 				bool make_cloud = false;
-				if( tdyn < 1e38 ) {
-					if( tdyn == 0.f ) {
-						PRINT( "ERROR %s %i\n", __FILE__, __LINE__);
-					}
-					float p = 1.f - expf(-std::min(dt/tdyn,88.0f));
+				if( sph_particles_tdyn(i) < 1e37 ) {
+					float tdyn = sph_particles_tdyn(i);
+					float p = 1.f - expf(-dt/tdyn);
 					make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
 				}
 				if( make_cloud ) {
@@ -125,7 +122,6 @@ void stars_find(float a, float dt, int minrung, int step) {
 	hpx::wait_all(futs2.begin(), futs2.end());
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens]() {
-
 
 			return;
 
@@ -228,7 +224,6 @@ stars_stats stars_statistics(float a) {
 
 void stars_remove(float a, float dt, int minrung, int step) {
 
-
 	return;
 
 	vector<hpx::future<void>> futs;
@@ -317,7 +312,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 		if (star.stellar_mass > 7.5) {
 			//		PRINT("Supernova!\n");
 			//		E += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
-		//	wind_energy += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
+			//	wind_energy += 0.5 * fSn * sph_mass / star.stellar_mass * a * a;
 			double dZ = 0.02;
 			double dHe = 0.20 * (1.0 - star.Y - star.Z);
 			star.Y += dHe;

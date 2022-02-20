@@ -87,6 +87,7 @@ struct sph_run_cuda_data {
 	float* fvel_snk;
 	float* Z_snk;
 	float code_dif_to_cgs;
+	float hstar0;
 	float N;
 	char* sa_snk;
 //	float* Yform_snk;
