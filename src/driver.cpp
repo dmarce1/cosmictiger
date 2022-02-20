@@ -126,6 +126,7 @@ void do_groups(int number, double scale) {
 
 sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, bool verbose = true) {
 	const bool stars = get_options().stars;
+	const bool chem = get_options().chem;
 	verbose = true;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
@@ -232,6 +233,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 ///			sph_particles_apply_updates(SPH_UPDATE_NULL);
 			sph_particles_apply_updates(minrung, 1);
 
+
+			if (tau != 0.0 && chem) {
+				PRINT("Doing chemistry step\n");
+				timer tm;
+				tm.start();
+				chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
+				tm.stop();
+				PRINT("Took %e s\n", tm.read());
+			}
+
 			sph_init_diffusion();
 			sparams.run_type = SPH_RUN_DIFFUSION;
 			float err;
@@ -268,7 +279,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sparams.run_type = SPH_RUN_COURANT;
 			tm.start();
 			kr = sph_run(sparams, true);
-			tm.stop();
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 			tm.reset();
@@ -629,14 +639,6 @@ void driver() {
 			const bool chem = get_options().chem;
 			if (sph & !glass) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt);
-				if (tau != 0.0 && chem) {
-					PRINT("Doing chemistry step\n");
-					timer tm;
-					tm.start();
-					chemistry_do_step(a, minrung, t0, cosmos_dadt(a), -1);
-					tm.stop();
-					PRINT("Took %e s\n", tm.read());
-				}
 			}
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;

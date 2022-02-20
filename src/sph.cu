@@ -884,7 +884,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float Piij = -0.5f * alpha_ij * (c + myc - 3.f * wij) * wij / rho_ij;
 					const float qi = r * myhinv;								// 1
 					const float qj = r * hinv;									// 1
-					const float dWdri = fminf((r < myh) * dkernelW_dq(fminf(qi, 1.f)) * myhinv * myh3inv * rinv,0.f); // 15
+					const float dWdri = fminf((r < myh) * dkernelW_dq(fminf(qi, 1.f)) * myhinv * myh3inv * rinv, 0.f); // 15
 					const float dWdrj = fminf((r < h) * dkernelW_dq(fminf(qj, 1.f)) * hinv * h3inv * rinv, 0.f); // 15
 					const float dWdri_x = dx * dWdri;						// 1
 					const float dWdri_y = dy * dWdri;						// 1
@@ -920,13 +920,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dt_pred = 0.5f * rung_dt[myrung] * params.t0;		// 2
 					dt_con = 0.5f * fminf(rung_dt[rec1.rung] * (params.t0), dt_pred); // 3
 					float dAdt = (dviscx * dvx + dviscy * dvy + dviscz * dvz); // 5
-					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv; // 5
-					if (dAdt < 0.f) {
+					if (dAdt < -1e-6 * sqrtf(sqr(dviscx * dvx, dviscy * dvy, dviscz * dvz))) {
 						if (tid == 0) {
-							PRINT("Negative dadt! %e  %e %e %e %e  %e  %e  %e \n", dAdt, tmp, dviscx , dvx, dviscy, dvy, dviscz, dvz);
+							PRINT("Negative dadt! %e  %e %e %e %e  %e  %e  %e \n", dAdt, tmp, dviscx, dvx, dviscy, dvy, dviscz, dvz);
 							__trap();
 						}
 					}
+					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv; // 5
 					//				dAdt += dAdif;
 					if (first_step) {
 						dent_pred += dAdt * dt_pred;							// 2
