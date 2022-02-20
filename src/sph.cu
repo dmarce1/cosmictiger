@@ -881,7 +881,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float tmp = (dvx * dx + dvy * dy + dvz * dz);
 					const float wij = fminf(0.f, tmp * rinv); //8
 					vsig = fmaxf(vsig, myc + c - wij);
-					const float uij = hij * tmp * r2inv; //8
+					const float uij = hij * fminf(0.f, tmp * r2inv); //8
 					const float Piij = uij * alpha_ij * (-cij + float(SPH_BETA) * uij) * 0.5f * (myfvel + rec2.fvel) / rho_ij; // 12
 					const float qi = r * myhinv;								// 1
 					const float qj = r * hinv;									// 1
@@ -925,7 +925,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dAdt *= float(0.5) * m * (mygamma - 1.f) * myrho1mgammainv; // 5
 					if (dAdt < 0.f) {
 						if (tid == 0) {
-							PRINT("Negative dadt! %e  %e  %e  %e \n", dAdt, dWdrij_x, dviscx, dvx);
+							PRINT("Negative dadt! %e  %e \n", dAdt, tmp);
 							__trap();
 						}
 					}
