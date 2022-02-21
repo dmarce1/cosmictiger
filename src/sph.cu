@@ -902,7 +902,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					float tmp = 0.f;
 					tmp += (p_i * powf(rho_i, -SIGMA) + p_j * powf(rho_j, -SIGMA)) * (powf(rho_i, SIGMA - 1.0f) - powf(rho_j, SIGMA - 1.f));
 					tmp += (powf(rho_i, SIGMA - 2.0f) + powf(rho_j, SIGMA - 2.f)) * (p_i * powf(rho_i, 1.f - SIGMA) - p_j * powf(rho_j, 1.f - SIGMA));
-					ddivv_dt = m * tmp * dWdr_ij / rho_ij * rinv;
+					ddivv_dt += m * tmp * dWdr_ij / rho_ij * rinv;
 					ddivv_dt += mrhoinv_i * (gx_j - gx_i) * dWdr_x_i;
 					ddivv_dt += mrhoinv_i * (gy_j - gy_i) * dWdr_y_i;
 					ddivv_dt += mrhoinv_i * (gz_j - gz_i) * dWdr_z_i;
