@@ -368,12 +368,14 @@ void particles_groups_destroy() {
 }
 
 void particles_cache_free() {
+	profiler_enter( __FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_cache_free_action>(HPX_PRIORITY_HI, c));
 	}
 	part_cache = decltype(part_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
 }
 
 void particles_memadvise_gpu() {

@@ -590,7 +590,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 }
 
 void tree_destroy(bool free_tree) {
-	profiler_enter("FUNCTION");
+	profiler_enter( __FUNCTION__);
 
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();

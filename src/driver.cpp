@@ -357,7 +357,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		sph_particles_cache_free();
 	}
 //	PRINT( "%i\n", max_rung);
-	profiler_exit();
 	return kr;
 
 }
@@ -418,7 +417,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
 	PRINT("Do kick\n");
-	profiler_enter("tree_create");
+	profiler_enter("kick");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 	profiler_exit();
 	tm.stop();
@@ -594,9 +593,9 @@ void driver() {
 	};
 
 	for (;; step++) {
-		profiler_enter("main driver");
 		double t0 = tau_max / get_options().nsteps;
 		do {
+//			profiler_enter("main driver");
 			tmr.stop();
 			if (tmr.read() > get_options().check_freq) {
 				total_time.stop();
@@ -772,6 +771,9 @@ void driver() {
 				PRINT("Reached maximum iteration, exiting...\n");
 				break;
 			}
+//			profiler_exit();
+//			profiler_enter("main driver");
+			profiler_output();
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
@@ -779,9 +781,6 @@ void driver() {
 		if (jiter > 50) {
 			break;
 		}
-		profiler_exit();
-		profiler_output();
-		profiler_enter("main driver");
 	}
 	if (glass) {
 		if (glass == 1) {

@@ -228,7 +228,7 @@ stars_stats stars_statistics(float a) {
 #define WIND_RATIO 0.5
 
 void stars_remove(float a, float dt, int minrung, int step) {
-	profiler_enter(__FUNCTION__);
+//	profiler_enter(__FUNCTION__);
 
 	return;
 
@@ -380,7 +380,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
 	}
-	profiler_exit();
+//	profiler_exit();
 }
 
 float stars_sample_mass(gsl_rng* rndgen) {

@@ -1119,6 +1119,7 @@ static vector<pair<float>> sph_particles_fetch_fvel_cache_line(part_int index) {
  }
  */
 void sph_particles_cache_free() {
+	profiler_enter(__FUNCTION__);
 	static const auto stars = get_options().stars;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
@@ -1132,6 +1133,7 @@ void sph_particles_cache_free() {
 	difco_cache = decltype(difco_cache)();
 	difvec_cache = decltype(difvec_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
 }
 
 void sph_particles_load(FILE* fp) {
