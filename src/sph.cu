@@ -516,11 +516,19 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					ws.rec1_main[k].h = data.h[pi];
 					ws.rec1_main[k].rung = data.rungs[pi];
 					ws.rec2_main[k].difco = data.difco[pi];
-					ws.rec2_main[k].kappa = data.kappa[pi];
-					ws.rec2_main[k].gamma = data.gamma[pi];
 					ws.rec2_main[k].vec = data.dif_vec[pi];
 					ws.rec2_main[k].oldrung = data.oldrung[pi];
 					ws.rec2_main[k].mmw = data.mmw[pi];
+					if (data.conduction) {
+						ws.rec2_main[k].kappa = data.kappa[pi];
+					} else {
+						ws.rec2_main[k].kappa = 0.f;
+					}
+					if (data.chem) {
+						ws.rec2_main[k].gamma = data.gamma[pi];
+					} else {
+						ws.rec2_main[k].gamma = data.def_gamma;
+					}
 				}
 			}
 		}
@@ -545,11 +553,21 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const float rho_i = m * c0 * h3inv_i;													// 2
 				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;								// 5
 				const float difco_i = data.difco[i];
-				const float kappa_i = data.kappa[i];
 				const auto vec0_i = data.vec0_snk[snki];
 				const auto vec_i = data.dif_vec[i];
-				const auto gamma_i = data.gamma[i];
-				const auto mmw_i = data.mmw[i];
+				const float mmw_i = data.mmw[i];
+				float gamma_i;
+				if (data.chem) {
+					gamma_i = data.gamma[i];
+				} else {
+					gamma_i = data.def_gamma;
+				}
+				float kappa_i;
+				if (data.conduction) {
+					kappa_i = data.kappa[i];
+				} else {
+					kappa_i = 0.f;
+				}
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -559,9 +577,9 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					int total;
 					if (j < ws.rec1_main.size()) {
 						const auto rec = ws.rec1_main[j];
-						const auto x_j = rec.x;
-						const auto y_j = rec.y;
-						const auto z_j = rec.z;
+						const fixed32 x_j = rec.x;
+						const fixed32 y_j = rec.y;
+						const fixed32 z_j = rec.z;
 						const float h_j = rec.h;
 						const float dx = distance(x_i, x_j);									// 2
 						const float dy = distance(y_i, y_j);									// 2
@@ -597,21 +615,21 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					num[fi] = 0.f;
 				}
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
-					auto rec1 = ws.rec1[j];
-					auto rec2 = ws.rec2[j];
-					const fixed32 x_j = rec1.x;
-					const fixed32 y_j = rec1.y;
-					const fixed32 z_j = rec1.z;
+					const auto& rec1 = ws.rec1[j];
+					const auto& rec2 = ws.rec2[j];
+					const fixed32& x_j = rec1.x;
+					const fixed32& y_j = rec1.y;
+					const fixed32& z_j = rec1.z;
+					const float& gamma_j = rec2.gamma;
+					const float& kappa_j = rec2.kappa;
+					const float& difco_j = rec2.difco;
+					const float& mmw_j = rec2.mmw;
 					const float x_ij = distance(x_i, x_j);				// 2
 					const float y_ij = distance(y_i, y_j);				// 2
 					const float z_ij = distance(z_i, z_j);				// 2
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0f + r);
-					const float gamma_j = rec2.gamma;
-					const float kappa_j = rec2.kappa;
-					const float difco_j = rec2.difco;
-					const float mmw_j = rec2.mmw;
 					const float h_j = rec1.h;
 					const float hinv_j = 1.f / h_j;															// 4
 					const float h3inv_j = sqr(hinv_j) * hinv_j;
@@ -628,9 +646,11 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 						num[fi] += diff_factor * rec2.vec[fi];
 					}
 					den += diff_factor;
-					float adjust = powf(rho_j, gamma_j - 1.f) * powf(rho_i, 1.f - gamma_i) * mmw_j / mmw_i;
-					num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS] * adjust;
-					den_A += diff_factor + cond_factor;
+					if (data.conduction) {
+						float adjust = powf(rho_j, gamma_j - 1.f) * powf(rho_i, 1.f - gamma_i) * mmw_j / mmw_i;
+						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS] * adjust;
+						den_A += diff_factor + cond_factor;
+					}
 				}
 				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(num[fi]);
@@ -722,21 +742,27 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ws.rec1_main[k].z = x[ZDIM];
 					ws.rec1_main[k].h = data.h[pi];
 					ws.rec1_main[k].rung = data.rungs[pi];
-					if (data.gamma) {
-						ws.rec2_main[k].gamma = data.gamma[pi];
-					} else {
-						ws.rec2_main[k].gamma = 5. / 3.;
-					}
 					ws.rec2_main[k].vx = data.vx[pi];
 					ws.rec2_main[k].vy = data.vy[pi];
 					ws.rec2_main[k].vz = data.vz[pi];
-					ws.rec2_main[k].gx = data.gx[pi];
-					ws.rec2_main[k].gy = data.gy[pi];
-					ws.rec2_main[k].gz = data.gz[pi];
 					ws.rec2_main[k].ent = data.ent[pi];
 					ws.rec2_main[k].f0 = data.f0[pi];
 					ws.rec2_main[k].fvel = data.fvel[pi];
 					ws.rec2_main[k].alpha = data.alpha[pi];
+					if (data.chem) {
+						ws.rec2_main[k].gamma = data.gamma[pi];
+					} else {
+						ws.rec2_main[k].gamma = data.def_gamma;
+					}
+					if (data.gravity) {
+						ws.rec2_main[k].gx = data.gx[pi];
+						ws.rec2_main[k].gy = data.gy[pi];
+						ws.rec2_main[k].gz = data.gz[pi];
+					} else {
+						ws.rec2_main[k].gx = 0.f;
+						ws.rec2_main[k].gy = 0.f;
+						ws.rec2_main[k].gz = 0.f;
+					}
 				}
 			}
 		}
@@ -764,16 +790,30 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float vx_i = data.vx[i];
 				const float vy_i = data.vy[i];
 				const float vz_i = data.vz[i];
-				const float gx_i = data.gx[i];
-				const float gy_i = data.gy[i];
-				const float gz_i = data.gz[i];
+				float gx_i;
+				float gy_i;
+				float gz_i;
+				if (data.gravity) {
+					gx_i = data.gx[i];
+					gy_i = data.gy[i];
+					gz_i = data.gz[i];
+				} else {
+					gx_i = 0.f;
+					gy_i = 0.f;
+					gz_i = 0.f;
+				}
 				const float h_i = data.h[i];
 				const float hinv_i = 1.f / h_i;															// 4
 				const float h3inv_i = sqr(hinv_i) * hinv_i;
 				const float rho_i = m * c0 * h3inv_i;													// 2
 				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;								// 5
 				const float ent_i = data.ent[i];
-				const float gamma_i = data.gamma[i];
+				float gamma_i;
+				if (data.chem) {
+					gamma_i = data.gamma[i];
+				} else {
+					gamma_i = data.def_gamma;
+				}
 				const float p_i = ent_i * powf(rho_i, gamma_i);								// 5
 				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);									// 6
 				const float fvel_i = data.fvel[i];
@@ -1061,18 +1101,22 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.rec2_main[k].vz = data.vz[pi];
 						ws.rec2_main[k].ent = data.ent[pi];
 						ws.rec1_main[k].h = data.h[pi];
-						ws.rec2_main[k].T = data.T[pi];
 						ws.rec2_main[k].lambda_e = data.lambda_e[pi];
 						ws.rec2_main[k].mmw = data.mmw[pi];
 						ws.rec2_main[k].alpha = data.alpha[pi];
-						if (data.gamma) {
+						if (data.conduction) {
+							ws.rec2_main[k].T = data.T[pi];
+						}
+						if (data.chem) {
 							ws.rec2_main[k].gamma = data.gamma[pi];
+						} else {
+							ws.rec2_main[k].gamma = data.def_gamma;
 						}
-						if (stars) {
-							ws.rec2_main[k].gx = data.gx[pi];
-							ws.rec2_main[k].gy = data.gy[pi];
-							ws.rec2_main[k].gz = data.gz[pi];
-						}
+						/*						if (stars) {
+						 ws.rec2_main[k].gx = data.gx[pi];
+						 ws.rec2_main[k].gy = data.gy[pi];
+						 ws.rec2_main[k].gz = data.gz[pi];
+						 }*/
 					}
 				}
 			}
@@ -1085,9 +1129,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 				const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 				const float c0inv = 1.0f / c0;
 				if (use) {
-					const float gx_i = data.gx[i];
-					const float gy_i = data.gy[i];
-					const float gz_i = data.gz[i];
 					const auto x_i = data.x[i];
 					const auto y_i = data.y[i];
 					const auto z_i = data.z[i];
@@ -1096,13 +1137,30 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const auto vz_i = data.vz[i];
 					const float T_i = data.T[i];
 					const float h_i = data.h[i];
+					float gamma_i;
+					if (data.chem) {
+						gamma_i = data.gamma[i];
+					} else {
+						gamma_i = data.def_gamma;
+					}
+					float gx_i;
+					float gy_i;
+					float gz_i;
+					if (data.gravity) {
+						gx_i = data.gx[i];
+						gy_i = data.gy[i];
+						gz_i = data.gz[i];
+					} else {
+						gx_i = 0.f;
+						gy_i = 0.f;
+						gz_i = 0.f;
+					}
 					const float h2_i = sqr(h_i);
 					const float hinv_i = 1.f / h_i;
 					const float h3inv_i = (sqr(hinv_i) * hinv_i);
 					const float rho_i = m * c0 * h3inv_i;
 					const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;
 					const float alpha_i = data.alpha[i];
-					const float gamma_i = data.gamma[i];
 					const float p_i = data.ent[i] * powf(rho_i, gamma_i);
 					const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 					const int jmax = round_up(ws.rec1_main.size(), block_size);
@@ -1291,12 +1349,13 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						div_v *= fpre;
 						const float dt_cfl = params.a * h_i / vsig_max;
 						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
-						const float lt = T_i / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * T_i);
-						const float kappa_sp = data.kappa0 / data.colog[i]; // Jubelgas et al 2004, Smith et al 2021
-						const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
-						const float tmp = data.code_dif_to_cgs * constants::kb / sqr(sqr(params.a));
-						float Dcond = 2.f * data.mmw[i] * (data.gamma[i] - 1.f) * kappa / tmp;
-						data.kappa_snk[snki] = Dcond;
+						if (data.conduction) {
+							const float lt = T_i / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * T_i);
+							const float kappa_sp = data.kappa0 / data.colog[i]; // Jubelgas et al 2004, Smith et al 2021
+							const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
+							const float tmp = data.code_dif_to_cgs * constants::kb / sqr(sqr(params.a));
+							data.kappa_snk[snki] = 2.f * data.mmw[i] * (data.gamma[i] - 1.f) * kappa / tmp;
+						}
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
 						data.difco_snk[snki] = Cdif;

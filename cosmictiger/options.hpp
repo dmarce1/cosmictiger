@@ -37,6 +37,8 @@ struct options {
 	bool read_check;
 	bool vsoft;
 	bool chem;
+	bool conduction;
+	bool gravity;
 	int glass;
 	int tracer_count;
 	int kernel;
@@ -83,11 +85,15 @@ struct options {
 	double cfl;
 	double rho0_b;
 	double rho0_c;
+	double gamma;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & gamma;
+		arc & conduction;
+		arc & gravity;
 		arc & glass;
 		arc & rho0_b;
 		arc & rho0_c;

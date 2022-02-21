@@ -690,7 +690,9 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 
 void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 	profiler_enter(__FUNCTION__);
-
+	if( !get_options().chem ) {
+		return;
+	}
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0, adot, dir));

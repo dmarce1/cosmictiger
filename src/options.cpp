@@ -97,6 +97,8 @@ bool process_options(int argc, char *argv[]) {
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
+	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
+	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
 	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "do variable softening") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
@@ -107,6 +109,7 @@ bool process_options(int argc, char *argv[]) {
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
+	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
@@ -204,8 +207,7 @@ bool process_options(int argc, char *argv[]) {
 		opts.sph = false;
 		opts.vsoft = false;
 		opts.chem = false;
-	}
-	else if (opts.glass == 2) {
+	} else if (opts.glass == 2) {
 		if (!opts.sph) {
 			PRINT("TURNING SPH ON FOR GLASS PHASE 2\n");
 		}
@@ -284,6 +286,10 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
+	if (opts.test == "sod") {
+		opts.chem = opts.gravity = opts.conduction = false;
+		opts.gamma = 7. / 5.;
+	}
 	kernel_set_type(opts.kernel);
 	set_options(opts);
 	kernel_adjust_options(opts);
