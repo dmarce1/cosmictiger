@@ -1268,7 +1268,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						dvz_dx -= dvz * mydWdr_x * m * myrhoinv;
 						dvz_dy -= dvz * mydWdr_y * m * myrhoinv;
 						dvz_dz -= dvz * mydWdr_z * m * myrhoinv;
-						drho_dh -= r * myhinv * mydWdr;
+						drho_dh -= r * myhinv * m * mydWdr;
 						if (stars) {
 							dgx_dx += (rec2.gx - mygx) * mydWdr_x * m * myrhoinv;
 							dgy_dy += (rec2.gy - mygy) * mydWdr_y * m * myrhoinv;
