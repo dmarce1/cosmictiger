@@ -39,6 +39,9 @@ void profiler_enter(const char* name) {
 void profiler_exit() {
 	timers[stack.top()].stop();
 	stack.pop();
+	if (!stack.empty()) {
+		timers[stack.top()].start();
+	}
 }
 
 void profiler_output() {
