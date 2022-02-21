@@ -1224,13 +1224,13 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dvz = myvz - rec2.vz;											// 1
 						const float rinv = 1.f / (r + 1e-15f);										// 5
 						const float wij = fminf(0.f, (dx * dvx + dy * dvy + dz * dvz) * rinv); // 7
-						const float hij = 0.5f * (myh + h);
+						const float hij = fmaxf(myh, h);
 						const float cij = 0.5f * (c + myc);
 						const float hfac = myh / hij;
-						float this_vsig = cij * hfac;
+						float this_vsig = 1.25f*cij * hfac;
 						if (wij < 0.f) {
-							this_vsig += 0.6f * alpha_ij * cij * hfac;
-							this_vsig -= 0.6f * alpha_ij * 1.5 * wij * hfac;
+							this_vsig += 0.75f * alpha_ij * cij * hfac;
+							this_vsig -= 0.75f * alpha_ij * 1.5 * wij * hfac;
 						}
 						vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
 						const float mydWdr = dkernelW_dq(fminf(r * myhinv, 1.f)) * rinv * myhinv * myh3inv;      // 14
@@ -1268,7 +1268,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						dvz_dx -= dvz * mydWdr_x * m * myrhoinv;
 						dvz_dy -= dvz * mydWdr_y * m * myrhoinv;
 						dvz_dz -= dvz * mydWdr_z * m * myrhoinv;
-						drho_dh -= sqr(r) * mydWdr;
+						drho_dh -= r * myhinv * mydWdr;
 						if (stars) {
 							dgx_dx += (rec2.gx - mygx) * mydWdr_x * m * myrhoinv;
 							dgy_dy += (rec2.gy - mygy) * mydWdr_y * m * myrhoinv;
@@ -1342,7 +1342,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						//		}
 						const float hsoft = fminf(fmaxf(myh, data.hsoft_min), SPH_MAX_SOFT);
 						const float factor = data.eta * sqrtf(params.a * hsoft);
-						dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
+			//			dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
