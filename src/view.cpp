@@ -364,6 +364,7 @@ void view_output_views(int cycle, double a) {
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].h);
+				y.push_back(parts.hydro[bi][i].ent);
 				z.push_back(parts.hydro[bi][i].alpha);
 			}
 //			PRINT( "h and ent\n");

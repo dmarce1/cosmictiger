@@ -1855,7 +1855,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 	const double rho_star_phys_cgs = STAR_N0 / get_options().Y0 / constants::avo;
 	const double rho_star_phys_code = rho_star_phys_cgs * (std::pow(get_options().code_to_cm, 3) / get_options().code_to_g);
 	const double rho_star_co_code = rho_star_phys_code * pow(params.a, 3);
-	cuda_data.hstar0 = powf(get_options().sph_mass * get_options().neighbor_number / (3.0/(4.0*M_PI)) / rho_star_co_code, (1./3.));
+	//cuda_data.hstar0 = powf(get_options().sph_mass * get_options().neighbor_number / (3.0/(4.0*M_PI)) / rho_star_co_code, (1./3.));
+	cuda_data.hstar0 = get_options().hsoft / params.a;
 	PRINT( "HSTAR = %e %e  %e  %e  \n", cuda_data.hstar0, rho_star_phys_cgs ,rho_star_phys_code,rho_star_co_code   );
 	cuda_data.m = get_options().sph_mass;
 	cuda_data.N = get_options().neighbor_number;

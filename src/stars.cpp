@@ -94,7 +94,8 @@ void stars_find(float a, float dt, int minrung, int step) {
 				if( sph_particles_tdyn(i) < 1e37 ) {
 					float tdyn = sph_particles_tdyn(i);
 					float p = 1.f - expf(-dt/tdyn);
-					make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
+			//		make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
+					make_cloud = true;
 				}
 				if( make_cloud ) {
 					sph_particles_tdyn(i) = 0.0;
