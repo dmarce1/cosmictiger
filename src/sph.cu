@@ -671,7 +671,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 
 #define sigma 2.0f
 
-
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hydro_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
@@ -1227,7 +1226,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float hij = fmaxf(myh, h);
 						const float cij = 0.5f * (c + myc);
 						const float hfac = myh / hij;
-						float this_vsig = 1.25f*cij * hfac;
+						float this_vsig = 1.25f * cij * hfac;
 						if (wij < 0.f) {
 							this_vsig += 0.75f * alpha_ij * cij * hfac;
 							this_vsig -= 0.75f * alpha_ij * 1.5 * wij * hfac;
@@ -1268,7 +1267,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						dvz_dx -= dvz * mydWdr_x * m * myrhoinv;
 						dvz_dy -= dvz * mydWdr_y * m * myrhoinv;
 						dvz_dz -= dvz * mydWdr_z * m * myrhoinv;
-						drho_dh -= r * myhinv * m * mydWdr;
+						const float q = fminf(1.f, r * myhinv);
+						drho_dh -= (3.f * kernelW(q) + dkernelW_dq(q));
 						if (stars) {
 							dgx_dx += (rec2.gx - mygx) * mydWdr_x * m * myrhoinv;
 							dgy_dy += (rec2.gy - mygy) * mydWdr_y * m * myrhoinv;
@@ -1317,6 +1317,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
 						const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
 						const float fpre = 1.0f / (1.0f + c0);
+					//	PRINT("%e\n", fpre);
 						div_v *= fpre;
 						const float dt_cfl = params.a * myh / vsig_max;
 						const float Cdif = SPH_DIFFUSION_C * sqr(myh) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
@@ -1342,7 +1343,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						//		}
 						const float hsoft = fminf(fmaxf(myh, data.hsoft_min), SPH_MAX_SOFT);
 						const float factor = data.eta * sqrtf(params.a * hsoft);
-			//			dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
+						//			dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
