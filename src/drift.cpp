@@ -31,6 +31,8 @@ HPX_PLAIN_ACTION (drift);
 #define CHUNK_SIZE (1024*1024)
 
 drift_return drift(double scale, double dt, double tau0, double tau1, double tau_max) {
+	profiler_enter("FUNCTION");
+
 	particles_memadvise_cpu();
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
@@ -181,6 +183,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		dr.vol += this_dr.vol;
 	}
 	tm.stop();
+	profiler_exit();
 //	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }

@@ -61,11 +61,14 @@ void output_particles(const std::string filename, const vector<output_particle>&
 }
 
 void output_tracers(int number) {
+	profiler_enter("output_tracers");
 	std::string filename = "tracers." + std::to_string(number) + ".silo";
 	output_particles(filename, particles_get_tracers());
+	profiler_exit();
 }
 
 void output_slice(int number, double time) {
+	profiler_enter("output_slice");
 	constexpr int ndim = 2;
 	auto pixels = output_get_slice();
 	const int res = get_options().slice_res;
@@ -95,6 +98,7 @@ void output_slice(int number, double time) {
 	DBPutQuadvar1(db, "intensity", "mesh", pixels.data(), dims2, ndim, NULL, 0, DB_FLOAT, DB_ZONECENT, optlist);
 	DBFreeOptlist(optlist);
 	DBClose(db);
+	profiler_exit();
 }
 
 vector<float> output_get_slice() {

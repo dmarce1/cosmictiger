@@ -41,6 +41,7 @@
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/stars.hpp>
+#include <cosmictiger/profiler.hpp>
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -57,6 +58,8 @@ double flops_per_particle = 1e5;
 bool used_gpu;
 
 void do_groups(int number, double scale) {
+	profiler_enter("FUNCTION");
+
 	timer total;
 	total.start();
 	PRINT("Doing groups\n");
@@ -121,7 +124,7 @@ void do_groups(int number, double scale) {
 	PRINT("Total time = %e\n", total.read());
 	PRINT("Group count = %li of %li candidates\n", ngroups.first, ngroups.second);
 	particles_groups_destroy();
-
+	profiler_exit();
 }
 
 sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, bool verbose = true) {
@@ -167,14 +170,18 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.start();
 		if (verbose)
 			PRINT("starting sph_tree_create = %e\n", tm.read());
+		profiler_enter( "sph_tree_create");
 		sr = sph_tree_create(tparams);
+		profiler_exit();
 		tm.stop();
 		tm.reset();
 		if (verbose)
 			PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 
 		tm.start();
+		profiler_enter( "sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		profiler_exit();
 		tm.stop();
 		if (verbose)
 			PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
@@ -195,14 +202,18 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 			tm.start();
+			profiler_enter( "sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+			profiler_exit();
 			tm.stop();
 			if (verbose)
 				PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
 			tm.reset();
 			tm.start();
 			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+			profiler_enter( "sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
 			sph_tree_neighbor(tnparams, root_id, checklist).get();
+			profiler_exit();
 			tm.stop();
 			if (verbose)
 				PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
@@ -233,7 +244,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 ///			sph_particles_apply_updates(SPH_UPDATE_NULL);
 			sph_particles_apply_updates(minrung, 1);
 
-
 			if (tau != 0.0 && chem) {
 				PRINT("Doing chemistry step\n");
 				timer tm;
@@ -262,8 +272,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			} while (err > SPH_DIFFUSION_TOLER);
 
 		}
-
-
 
 	} else {
 
@@ -349,6 +357,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		sph_particles_cache_free();
 	}
 //	PRINT( "%i\n", max_rung);
+	profiler_exit();
 	return kr;
 
 }
@@ -366,10 +375,12 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 	const bool vsoft = get_options().sph && get_options().vsoft;
 	const float h = vsoft ? sph_particles_max_smooth_len() : get_options().hsoft;
-	ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
+	//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
 	tree_create_params tparams(minrung, theta, h);
 	PRINT("Create tree %i %e\n", minrung, theta);
+	profiler_enter("tree_create");
 	auto sr = tree_create(tparams);
+	profiler_exit();
 	PRINT("gravity nactive = %i\n", sr.nactive);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
@@ -407,7 +418,9 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
 	PRINT("Do kick\n");
+	profiler_enter("tree_create");
 	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+	profiler_exit();
 	tm.stop();
 	kick_time += tm.read();
 	tree_destroy();
@@ -423,6 +436,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 }
 
 void do_power_spectrum(int num, double a) {
+	profiler_enter("FUNCTION");
 	PRINT("Computing power spectrum\n");
 	const float h = get_options().hubble;
 	const float omega_m = get_options().omega_m;
@@ -443,9 +457,11 @@ void do_power_spectrum(int num, double a) {
 		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h * factor * invs2);
 	}
 	fclose(fp);
+	profiler_exit();
 }
 
 void output_time_file() {
+	profiler_enter("FUNCTION");
 	const double a0 = 1.0 / (1.0 + get_options().z0);
 	const double tau_max = cosmos_conformal_time(a0, 1.0);
 	double a = a0;
@@ -473,6 +489,7 @@ void output_time_file() {
 		}
 	}
 	fclose(fp);
+	profiler_exit();
 }
 
 void driver() {
@@ -502,7 +519,7 @@ void driver() {
 		params.step = 0;
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
-		PRINT( "TAU_MAX = %e\n", params.tau_max);
+		PRINT("TAU_MAX = %e\n", params.tau_max);
 		params.tau = 0.0;
 		params.a = a0;
 		params.max_rung = 0;
@@ -577,7 +594,7 @@ void driver() {
 	};
 
 	for (;; step++) {
-
+		profiler_enter("main driver");
 		double t0 = tau_max / get_options().nsteps;
 		do {
 			tmr.stop();
@@ -762,6 +779,9 @@ void driver() {
 		if (jiter > 50) {
 			break;
 		}
+		profiler_exit();
+		profiler_output();
+		profiler_enter("main driver");
 	}
 	if (glass) {
 		if (glass == 1) {
@@ -789,6 +809,8 @@ bool dir_exists(const char *path) {
 }
 
 void write_checkpoint(driver_params params) {
+	profiler_enter("FUNCTION");
+
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
 		std::string command;
@@ -832,6 +854,7 @@ void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");
 	}
+	profiler_exit();
 }
 
 driver_params read_checkpoint() {

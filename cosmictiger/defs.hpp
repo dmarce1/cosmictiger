@@ -22,6 +22,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef DEFS_HPP_
 #define DEFS_HPP_
 
+#include <cosmictiger/profiler.hpp>
+
 
 #ifndef NDEBUG
 #define CHECK_BOUNDS

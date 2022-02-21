@@ -1362,6 +1362,9 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
+	std::string profile_name = "sph_run:" + std::to_string(params.run_type);
+	profiler_enter( profile_name.c_str());
+
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
@@ -1510,6 +1513,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 	for (auto& f : futs) {
 		rc += f.get();
 	}
+	profiler_exit();
 	return rc;
 }
 
@@ -1952,6 +1956,7 @@ HPX_PLAIN_ACTION (sph_apply_diffusion_update);
 HPX_PLAIN_ACTION (sph_init_diffusion);
 
 float sph_apply_diffusion_update(int minrung, float toler) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<float>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_apply_diffusion_update_action>(c, minrung, toler));
@@ -2029,6 +2034,7 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 	for (auto& f : futs) {
 		error = std::max(error, f.get());
 	}
+	profiler_exit();
 	return error;
 }
 

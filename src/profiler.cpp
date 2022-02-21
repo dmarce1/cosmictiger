@@ -42,18 +42,27 @@ void profiler_exit() {
 }
 
 void profiler_output() {
-	vector<std::pair<std::string,timer>> results(timers.begin(), timers.end());
+	if (!stack.empty()) {
+		timers[stack.top()].stop();
+	}
+	vector<std::pair<std::string, timer>> results(timers.begin(), timers.end());
 	std::sort(results.begin(), results.end(), [](std::pair<std::string,timer>& a, std::pair<std::string,timer>& b) {
 		return a.second.read() > b.second.read();
 	});
 
 	FILE* fp = fopen("profile.txt", "wt");
-
+	double total = 0.0;
+	for (int i = 0; i < results.size(); i++) {
+		total += results[i].second.read();
+	}
+	double totalinv = 1.0 / total;
+	for (int i = 0; i < results.size(); i++) {
+		fprintf(fp, "%s %e %f%%\n", results[i].first.c_str(), results[i].second.read(), results[i].second.read() * totalinv * 100.0);
+	}
 
 	fclose(fp);
+	if (!stack.empty()) {
+		timers[stack.top()].start();
+	}
 }
-
-
-
-
 

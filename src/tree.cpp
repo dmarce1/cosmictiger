@@ -590,6 +590,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 }
 
 void tree_destroy(bool free_tree) {
+	profiler_enter("FUNCTION");
+
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
@@ -601,6 +603,7 @@ void tree_destroy(bool free_tree) {
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
 }
 
 const tree_node* tree_get_node(tree_id id) {

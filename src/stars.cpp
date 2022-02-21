@@ -62,6 +62,7 @@ void stars_load(FILE* fp) {
 }
 
 void stars_find(float a, float dt, int minrung, int step) {
+	profiler_enter("FUNCTION");
 
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
@@ -169,6 +170,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
 	}
+	profiler_exit();
 }
 
 float stars_remnant_mass(float Mi, float Z);
@@ -176,6 +178,7 @@ float stars_remnant_mass(float Mi, float Z);
 HPX_PLAIN_ACTION (stars_statistics);
 
 stars_stats stars_statistics(float a) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<stars_stats>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<stars_statistics_action>(c, a));
@@ -218,12 +221,14 @@ stars_stats stars_statistics(float a) {
 		fprintf(fp, "%e %li %li %li %li %li %li\n", 1.f / a - 1.f, stats.stars, stats.clouds, stats.remnants, stats.popI, stats.popII, stats.popIII);
 		fclose(fp);
 	}
+	profiler_exit();
 	return stats;
 }
 
 #define WIND_RATIO 0.5
 
 void stars_remove(float a, float dt, int minrung, int step) {
+	profiler_enter(__FUNCTION__);
 
 	return;
 
@@ -375,6 +380,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
 	}
+	profiler_exit();
 }
 
 float stars_sample_mass(gsl_rng* rndgen) {

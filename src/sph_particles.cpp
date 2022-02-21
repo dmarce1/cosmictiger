@@ -240,6 +240,7 @@ float sph_particles_max_smooth_len() {
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
 
 void sph_particles_apply_updates(int minrung, int phase) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase));
@@ -276,6 +277,7 @@ void sph_particles_apply_updates(int minrung, int phase) {
 	for (auto& f : futs) {
 		f.get();
 	}
+	profiler_exit();
 
 }
 
@@ -375,6 +377,7 @@ float sph_particles_lambda_e(part_int i, float a, float T) {
 HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
 
 void sph_particles_energy_to_entropy(float a) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_particles_energy_to_entropy_action>(c, a));
@@ -411,6 +414,7 @@ void sph_particles_energy_to_entropy(float a) {
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
 
 }
 void sph_particles_swap(part_int i, part_int j) {

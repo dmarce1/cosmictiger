@@ -18,3 +18,7 @@
  */
 
 #pragma once
+
+void profiler_enter(const char* name);
+void profiler_exit();
+void profiler_output();

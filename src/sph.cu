@@ -877,11 +877,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float alpha_ij = 0.5f * (alpha_i * fvel_i + alpha_j * fvel_j);
 					const float h_ij = 0.5f * (h_i + h_j);
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
-					const float u_ij = vdotx_ij * h_ij / (r2 + ETA1 * sqr(h_ij));
+					const float u_ij = vdotx_ij * rinv;//* h_ij / (r2 + ETA1 * sqr(h_ij));
 					const float c_ij = 0.5f * (c_i + c_j);
 					vsig = fmaxf(vsig, c_ij - vdotx_ij * rinv);
 					const float rho_ij = 0.5f * (rho_i + rho_j);
-					const float Pi = -alpha_ij * u_ij * (c_ij - SPH_BETA * u_ij) / rho_ij;
+					const float Pi = -alpha_ij * u_ij * (c_ij - 1.5f * u_ij) / rho_ij;
 					const float q_i = fminf(r * hinv_i, 1.f);								// 1
 					const float q_j = fminf(r * hinv_j, 1.f);									// 1
 					const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i;
@@ -1183,10 +1183,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 						const float h_ij = 0.5f * (h_i + h_j);
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
-						const float u_ij = vdotx_ij * h_ij / (r2 + ETA1 * sqr(h_ij));
+						const float u_ij = vdotx_ij * rinv;//* h_ij / (r2 + ETA1 * sqr(h_ij));
 						const float c_ij = 0.5f * (c_i + c_j);
 						const float rho_ij = 0.5f * (rho_i + rho_j);
-						const float Pi = -alpha_ij * u_ij * (c_ij - SPH_BETA * u_ij) / rho_ij;
+						const float Pi = -alpha_ij * u_ij * (c_ij - 1.5f * u_ij) / rho_ij;
 						const float q_i = fminf(r * hinv_i, 1.f);								// 1
 						const float q_j = fminf(r * hinv_j, 1.f);									// 1
 						const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i;
@@ -1249,8 +1249,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float shear_yz = 0.5f * (dvy_dz + dvz_dy);
 					float div_g;
 					if (stars) {
-						div_g = dgx_dx + dgy_dy + dgz_dz;
-						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
+//						div_g = dgx_dx + dgy_dy + dgz_dz;
+//						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
 					}
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(div_g);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);

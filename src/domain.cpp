@@ -54,6 +54,7 @@ static void domains_check();
 static vector<domain_local> local_domains;
 
 double domains_get_load_imbalance() {
+	profiler_enter(__FUNCTION__);
 	const auto loads = domains_get_loads();
 	size_t max = 0;
 	double avg = 0;
@@ -63,6 +64,7 @@ double domains_get_load_imbalance() {
 	}
 	avg /= loads.size();
 	const double imbalance = max / avg - 1.0;
+	profiler_exit();
 	return imbalance;
 }
 
@@ -204,6 +206,7 @@ void domains_rebound_sort(vector<double> bounds, int depth) {
 }
 
 void domains_rebound() {
+	profiler_enter(__FUNCTION__);
 	domains_init_rebounds();
 	vector<domain_global> domains(1);
 	boxes_by_key = decltype(boxes_by_key)();
@@ -312,6 +315,7 @@ void domains_rebound() {
 		depth++;
 	}
 	domains_transmit_boxes(boxes_by_key);
+	profiler_exit();
 }
 
 void domains_transmit_particles(vector<particle> parts) {

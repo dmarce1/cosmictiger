@@ -288,6 +288,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 }
 
 void view_output_views(int cycle, double a) {
+	profiler_enter( "view_output_views");
 	const bool chem = get_options().chem;
 	if (!view_boxes.size()) {
 		return;
@@ -548,7 +549,7 @@ void view_output_views(int cycle, double a) {
 		}
 		DBClose(db);
 	}
-
+	profiler_exit();
 }
 
 void view_read_view_file() {
@@ -574,6 +575,7 @@ void view_read_view_file() {
 }
 
 vector<float> output_view(int number, double time) {
+	profiler_enter( "output_view");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<vector<float>>>val_futs;
 	for (const auto& c : hpx_children()) {
@@ -634,5 +636,6 @@ vector<float> output_view(int number, double time) {
 		fwrite(&time, sizeof(double), 1, fp);
 		fclose(fp);
 	}
+	profiler_exit();
 	return results;
 }

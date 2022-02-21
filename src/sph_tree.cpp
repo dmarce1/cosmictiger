@@ -255,6 +255,7 @@ static void sph_tree_allocate_nodes() {
 
 sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box,
 		int depth, bool local_root) {
+
 	stack_trace_activate();
 	const double h = get_options().hsoft;
 	static const int bucket_size = get_options().sph_bucket_size;
@@ -433,6 +434,8 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 }
 
 void sph_tree_destroy(bool free_sph_tree) {
+	profiler_enter(__FUNCTION__);
+
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
@@ -456,6 +459,7 @@ void sph_tree_destroy(bool free_sph_tree) {
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
 }
 
 void sph_tree_set_nactive(tree_id id, part_int i) {
