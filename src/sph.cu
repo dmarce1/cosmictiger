@@ -1229,7 +1229,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						dT_dx += tmp3 * dWdr_x_i;
 						dT_dy += tmp3 * dWdr_y_i;
 						dT_dz += tmp3 * dWdr_z_i;
-						drho_dh -= (3.f * kernelW(q_i) + dkernelW_dq(q_i));
+						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
 						/*						if (stars) {
 						 dgx_dx += (rec2.gx - mygx) * mydWdr_x * m * myrhoinv;
 						 dgy_dy += (rec2.gy - mygy) * mydWdr_y * m * myrhoinv;
@@ -1281,8 +1281,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 						const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
 						const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
+						//PRINT( "%e %e\n", c0, drho_dh);
 						const float fpre = 1.0f / (1.0f + c0);
-						//	PRINT("%e\n", fpre);
+			//				PRINT("%e\n", fpre);
 						div_v *= fpre;
 						const float dt_cfl = params.a * h_i / vsig_max;
 						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
