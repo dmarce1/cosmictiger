@@ -78,6 +78,7 @@ set(cosmictiger_source_files
     src/output.cpp
     src/particles.cpp
     src/power.cpp
+    src/profiler.cpp
     src/rockstar.cpp
     src/rockstar.cu
     src/sph_particles.cpp
@@ -134,6 +135,7 @@ set(cosmictiger_header_files
     cosmictiger/output.hpp
     cosmictiger/particles.hpp
     cosmictiger/power.hpp
+    cosmictiger/profiler.hpp
     cosmictiger/range.hpp
     cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp
