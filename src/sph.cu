@@ -33,7 +33,7 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 #define WORKSPACE_SIZE (160*1024)
-#define HYDRO_SIZE (16*1024)
+#define HYDRO_SIZE (8*1024)
 
 struct smoothlen_workspace {
 	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
@@ -890,8 +890,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
 					const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 					const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
-					const float dp_i = f0_i * p_i * powf(rho_i, SIGMA - 2.f) * powf(rho_j, -SIGMA);
-					const float dp_j = f0_j * p_j * powf(rho_j, SIGMA - 2.f) * powf(rho_i, -SIGMA);
+					const float dp_i = f0_i * p_i * powf(rho_j, SIGMA - 2.f) * powf(rho_i, -SIGMA);
+					const float dp_j = f0_j * p_j * powf(rho_i, SIGMA - 2.f) * powf(rho_j, -SIGMA);
 					const float dvx_dt = -m * (dp_i + dp_j + Pi) * dWdr_x_ij;
 					const float dvy_dt = -m * (dp_i + dp_j + Pi) * dWdr_y_ij;
 					const float dvz_dt = -m * (dp_i + dp_j + Pi) * dWdr_z_ij;
@@ -1195,8 +1195,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
 						const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
-						const float dp_i = p_i * powf(rho_i, SIGMA - 2.f) * powf(rho_j, -SIGMA);
-						const float dp_j = p_j * powf(rho_j, SIGMA - 2.f) * powf(rho_i, -SIGMA);
+						const float dp_i = p_i * powf(rho_j, SIGMA - 2.f) * powf(rho_i, -SIGMA);
+						const float dp_j = p_j * powf(rho_i, SIGMA - 2.f) * powf(rho_j, -SIGMA);
 						const float dvx_dt = -m * (dp_i + dp_j + Pi) * dWdr_x_ij;
 						const float dvy_dt = -m * (dp_i + dp_j + Pi) * dWdr_y_ij;
 						const float dvz_dt = -m * (dp_i + dp_j + Pi) * dWdr_z_ij;
