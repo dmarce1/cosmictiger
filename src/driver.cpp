@@ -138,7 +138,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	timer tm;
 	timer total_tm;
 	total_tm.start();
-	tparams.h_wt = 1.5;
 	tparams.min_rung = minrung;
 	tree_id root_id;
 	root_id.proc = 0;
@@ -198,7 +197,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 			tm.reset();
 			cont = kr.rc;
-			tnparams.h_wt = cont ? 1.5 : 2.01;
+			tnparams.h_wt = cont ? 1.5 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 			tm.start();
@@ -230,7 +229,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 
 		if (tau != 0.0 && !glass) {
-			/*sph_particles_energy_to_entropy(scale);
+			sph_particles_energy_to_entropy(scale);
 			sph_particles_apply_updates(minrung, 0);
 
 			sparams.run_type = SPH_RUN_HYDRO;
@@ -240,7 +239,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
-*/
+
+///			sph_particles_apply_updates(SPH_UPDATE_NULL);
 			sph_particles_apply_updates(minrung, 1);
 
 			if (tau != 0.0 && chem) {

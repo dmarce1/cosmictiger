@@ -74,7 +74,7 @@ void hydro_driver(double tmax) {
 		step++;
 		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
-			output_line(main_step);
+//			output_line(main_step);
 			main_step++;
 		}
 	} while (true);
@@ -115,7 +115,11 @@ void hydro_sod_test() {
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
+				float x0 = x - 0.3333;
+				if( x0 < 0.0 ) {
+					x0 += 1.0;
+				}
+				sph_particles_pos(XDIM, i) = x0;
 				sph_particles_pos(YDIM, i) = y;
 				sph_particles_pos(ZDIM, i) = z;
 				sph_particles_vel(XDIM, i) = vx1;
@@ -139,8 +143,12 @@ void hydro_sod_test() {
 				double ent = p0 / pow(rho0, SPH_GAMMA);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
+				float x0 = x - 0.3333;
+				if( x0 < 0.0 ) {
+					x0 += 1.0;
+				}
 				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
+				sph_particles_pos(XDIM, i) = x0;
 				sph_particles_pos(YDIM, i) = y;
 				sph_particles_pos(ZDIM, i) = z;
 				sph_particles_vel(XDIM, i) = vx0;

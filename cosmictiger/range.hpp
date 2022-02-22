@@ -287,52 +287,58 @@ inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
 	return rc;
 }
 
-struct fixed32_range: public range<fixed32> {
+struct fixed32_range: public range<double> {
 	char valid;
 	fixed32_range() {
 		valid = false;
 	}
 	CUDA_EXPORT
 	bool contains(const array<fixed32, NDIM>& pt, float h = float(0)) const {
-		bool rc = true;
-		for( int dim = 0; dim < NDIM; dim++) {
-			const float d1 = distance(pt[dim],begin[dim]) + h;
-			const float d2 = distance(end[dim],pt[dim]) + h;
-			if( d1 >= 0.0f && d2 >= 0.0f ){
-			} else {
-				rc = false;
-				break;
+		for (int i = -1; i <= 1; i++) {
+			for (int j = -1; j <= 1; j++) {
+				for (int k = -1; k <= 1; k++) {
+					bool contains = true;
+					array<double, NDIM> I;
+					I[0] = i;
+					I[1] = j;
+					I[2] = k;
+					for (int dim = 0; dim < NDIM; dim++) {
+						if (pt[dim].to_double() < begin[dim] + I[dim]) {
+							contains = false;
+							break;
+						}
+						if (pt[dim].to_double() > end[dim] + I[dim]) {
+							contains = false;
+							break;
+						}
+					}
+					if (contains == true) {
+						return true;
+					}
+				}
 			}
 		}
-		return rc;
+		return false;
 	}
 	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
 		if (!valid) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = pt[dim] - h;
-				end[dim] = pt[dim] + h;
+				begin[dim] = pt[dim].to_double() - h;
+				end[dim] = pt[dim].to_double() + h;
 			}
 			valid = true;
 		} else {
 			for (int dim = 0; dim < NDIM; dim++) {
-				if (distance(begin[dim], pt[dim]) + h >= 0.0) {
-					begin[dim] = fixed<int32_t>(pt[dim]) - fixed<int32_t>(h);
-				}
-				if (distance(pt[dim], end[dim]) + h >= 0.0) {
-					end[dim] = fixed<int32_t>(pt[dim]) + fixed<int32_t>(h);
-				}
+				begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
+				end[dim] = std::max(end[dim], pt[dim].to_double() + h);
 			}
 		}
 	}
 	void accumulate(const fixed32_range& other) {
 		if (valid && other.valid) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				if (distance(begin[dim], other.begin[dim]) >= 0.0) {
-					begin[dim] = other.begin[dim];
-				}
-				if (distance(other.end[dim], end[dim]) >= 0.0) {
-					end[dim] = other.end[dim];
-				}
+				begin[dim] = std::min(begin[dim], other.begin[dim]);
+				end[dim] = std::max(end[dim], other.end[dim]);
 			}
 		} else if (!valid && other.valid) {
 			*this = other;
@@ -340,7 +346,7 @@ struct fixed32_range: public range<fixed32> {
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned i) {
-		range<fixed32>::serialize(arc,i);
+		range<double>::serialize(arc, i);
 		arc & valid;
 	}
 };

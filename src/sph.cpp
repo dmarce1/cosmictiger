@@ -55,7 +55,7 @@ inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 	if (intersect) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			//	print( "%i %e %e | %e %e\n", dim, a.begin[dim].to_float(), a.end[dim].to_float(), b.begin[dim].to_float(), b.end[dim].to_float());
-			if (distance(b.end[dim], a.begin[dim]) >= 0.0 && distance(a.end[dim], b.begin[dim]) >= 0.0) {
+			if (b.end[dim] - a.begin[dim] >= 0.0 && a.end[dim] - b.begin[dim] >= 0.0) {
 			} else {
 //			PRINT( "false\n");
 				intersect = false;
@@ -461,6 +461,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			break;
 		case SPH_TREE_NEIGHBOR_BOXES: {
 			fixed32_range ibox, obox;
+			float maxh = 0.f;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool active = sph_particles_rung(i) >= params.min_rung;
 				const bool semiactive = !active && sph_particles_semi_active(i);
@@ -469,6 +470,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				const auto myy = sph_particles_pos(YDIM, i);
 				const auto myz = sph_particles_pos(ZDIM, i);
 				const int k = i - self_ptr->part_range.first;
+				maxh = std::max(maxh, h);
 				array<fixed32, NDIM> X;
 				X[XDIM] = myx;
 				X[YDIM] = myy;
@@ -477,6 +479,40 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 					obox.accumulate(X, h);
 				}
 				ibox.accumulate(X);
+			}
+			for( int dim = 0; dim < NDIM; dim++) {
+			//	obox.begin[dim] = self_ptr->box.begin[dim] - maxh;
+		//		obox.end[dim] = self_ptr->box.end[dim] + maxh;
+			}
+		//	ibox = self_ptr->box;
+			bool test = true;
+			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+				array<fixed32, NDIM> X;
+				const auto myx = sph_particles_pos(XDIM, i);
+				const auto myy = sph_particles_pos(YDIM, i);
+				const auto myz = sph_particles_pos(ZDIM, i);
+				X[XDIM] = myx;
+				X[YDIM] = myy;
+				X[ZDIM] = myz;
+/*				if ((params.set & SPH_SET_ALL)) {
+					for( int dim = 0; dim < NDIM; dim++) {
+						auto Y = X;
+						Y[dim] = Y[dim].to_double() + sph_particles_smooth_len(i);
+						if (!obox.contains(Y)) {
+							PRINT("ERROR! %e %e %e\n", obox.begin[dim].to_float(), obox.end[dim].to_float(), Y[dim].to_float());
+							abort();
+						}
+						Y[dim] = Y[dim].to_double() - 2.0* sph_particles_smooth_len(i);
+						if (!obox.contains(Y)) {
+							PRINT("ERROR! %e %e %e\n", obox.begin[dim], obox.end[dim], Y[dim].to_float());
+							abort();
+						}
+					}
+					if (!obox.contains(X)) {
+						PRINT("ERROR!\n");
+						abort();
+					}
+				}*/
 			}
 			//		PRINT( "obox %e %e %e\n", obox.begin[0].to_float(), obox.end[0].to_float(), params.h_wt );
 			kr.inner_box = ibox;

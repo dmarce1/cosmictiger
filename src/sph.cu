@@ -781,7 +781,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				data.dvx_con[snki] = 0.f;
 				data.dvy_con[snki] = 0.f;
 				data.dvz_con[snki] = 0.f;
-			}
+			} /*if( tid == 0 && semi_active ) {
+				if( data.dent_con[snki]  != 0.0 ) {
+					PRINT( "%e------->\n", data.dent_con[snki] );
+				}
+			}*/
 			const float m = data.m;
 			const float minv = 1.f / m;
 			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
@@ -884,6 +888,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				float dvz_con = 0.f;
 				float vsig = 0.f;
 				const float ainv = 1.0f / params.a;
+//			/	if( semi_active) {
+		//			if( ws.rec1.size() != 9 && ws.rec1.size() != 30&& tid == 0)
+			//		PRINT( "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! %i\n", ws.rec1.size());
+			//	}
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					auto rec1 = ws.rec1[j];
 					auto rec2 = ws.rec2[j];

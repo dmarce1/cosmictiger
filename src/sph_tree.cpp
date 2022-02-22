@@ -255,7 +255,7 @@ static void sph_tree_allocate_nodes() {
 
 sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box,
 		int depth, bool local_root) {
-
+	//PRINT( "%i\n", depth);
 	stack_trace_activate();
 	const double h = get_options().hsoft;
 	static const int bucket_size = get_options().sph_bucket_size;
@@ -366,8 +366,8 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 				X[dim] = sph_particles_pos(dim, i);
 			}
 			inner_box.accumulate(X);
+			outer_box.accumulate(X, h);
 			if (sph_particles_rung(i) >= params.min_rung) {
-				outer_box.accumulate(X, h);
 				nactive++;
 			}
 		}
@@ -415,7 +415,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	rc.outer_box = node.outer_box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = box.begin[dim];
-		node.box.end[dim] = box.end[dim] == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
+		node.box.end[dim] = box.end[dim];// == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
 	//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
 	}
 	nodes[index] = node;

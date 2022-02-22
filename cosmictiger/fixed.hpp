@@ -1,22 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef COSMICTIGER_FIXED_HPP_
 #define COSMICTIGER_FIXED_HPP_
@@ -30,7 +29,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <utility>
 
 #include <limits.h>
-
 
 template<class >
 class fixed;
@@ -61,7 +59,7 @@ public:
 #ifdef __CUDA_ARCH__
 		num.i = 0xFFFFFFFFUL;
 #else
-		num.i = std::numeric_limits<T>::max();
+		num.i = std::numeric_limits < T > ::max();
 #endif
 		return num;
 	}
@@ -74,8 +72,7 @@ public:
 	inline fixed<T>() = default;
 
 	CUDA_EXPORT
-	inline
-	fixed<T>& operator=(double number) {
+	inline fixed<T>& operator=(double number) {
 		i = (c0 * number);
 		return *this;
 	}
@@ -246,13 +243,12 @@ public:
 
 	friend fixed32 rand_fixed32();
 
-
 };
 
 template<class T>
 CUDA_EXPORT
 inline fixed<T> max(const fixed<T>& a, const fixed<T>& b) {
-	if( a > b ) {
+	if (a > b) {
 		return a;
 	} else {
 		return b;
@@ -262,7 +258,7 @@ inline fixed<T> max(const fixed<T>& a, const fixed<T>& b) {
 template<class T>
 CUDA_EXPORT
 inline fixed<T> min(const fixed<T>& a, const fixed<T>& b) {
-	if( a < b ) {
+	if (a < b) {
 		return a;
 	} else {
 		return b;
@@ -276,6 +272,36 @@ inline void swap(fixed<T> &first, fixed<T> &second) {
 
 CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_float();
+}
+
+CUDA_EXPORT inline float distance(double a, double b) {
+	double dif = a - b;
+	if (dif > 0.5) {
+		dif -= 1.0;
+	} else if (dif < -0.5) {
+		dif += 1.0;
+	}
+	return dif;
+}
+
+CUDA_EXPORT inline float distance(fixed32 a, double b) {
+	double dif = a.to_double() - b;
+	if (dif > 0.5) {
+		dif -= 1.0;
+	} else if (dif < -0.5) {
+		dif += 1.0;
+	}
+	return dif;
+}
+
+CUDA_EXPORT inline float distance(double a, fixed32 b) {
+	double dif = a - b.to_double();
+	if (dif > 0.5) {
+		dif -= 1.0;
+	} else if (dif < -0.5) {
+		dif += 1.0;
+	}
+	return dif;
 }
 
 CUDA_EXPORT inline fixed32 sum(fixed32 a, fixed32 b) {
