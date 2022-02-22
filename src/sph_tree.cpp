@@ -236,7 +236,7 @@ fast_future<sph_tree_create_return> sph_tree_create_fork(sph_tree_create_params 
 
 static void sph_tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	static const int bucket_size =  get_options().sph_bucket_size;
+	static const int bucket_size = get_options().sph_bucket_size;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
@@ -358,6 +358,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		nactive = 0;
+		double maxh = 0.0;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			sph_particles_semi_active(i) = false;
 			const float h = params.h_wt * sph_particles_smooth_len(i);
@@ -365,11 +366,18 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 			for (int dim = 0; dim < NDIM; dim++) {
 				X[dim] = sph_particles_pos(dim, i);
 			}
+			maxh = std::max(maxh, (double) h);
 			inner_box.accumulate(X);
 			outer_box.accumulate(X, h);
 			if (sph_particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
+		}
+		for (int dim = 0; dim < NDIM; dim++) {
+			outer_box.begin[dim] = box.begin[dim] - h;
+			outer_box.end[dim] = box.end[dim] + h;
+			inner_box.begin[dim] = box.begin[dim];
+			inner_box.end[dim] = box.end[dim];
 		}
 //		PRINT("%e %e \n", inner_box.begin[0].to_float(), inner_box.end[0].to_float());
 		node_count = 1;
@@ -399,12 +407,12 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = !global && (nparts <= get_options().sph_bucket_size);
-/*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
-		if (node.leaf) {
-			std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
-			leaf_part_ranges.push_back(part_range);
-		}
-	}*/
+	/*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
+	 if (node.leaf) {
+	 std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
+	 leaf_part_ranges.push_back(part_range);
+	 }
+	 }*/
 	if (index >= nodes.size()) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
@@ -415,8 +423,8 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	rc.outer_box = node.outer_box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = box.begin[dim];
-		node.box.end[dim] = box.end[dim];// == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
-	//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
+		node.box.end[dim] = box.end[dim]; // == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
+		//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
 	}
 	nodes[index] = node;
 	rc.leaf_nodes = leaf_nodes;

@@ -276,9 +276,10 @@ CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 
 CUDA_EXPORT inline float distance(double a, double b) {
 	double dif = a - b;
-	if (dif > 0.5) {
+	while( dif > 0.5 ) {
 		dif -= 1.0;
-	} else if (dif < -0.5) {
+	}
+	while( dif < -0.5 ) {
 		dif += 1.0;
 	}
 	return dif;
@@ -286,9 +287,10 @@ CUDA_EXPORT inline float distance(double a, double b) {
 
 CUDA_EXPORT inline float distance(fixed32 a, double b) {
 	double dif = a.to_double() - b;
-	if (dif > 0.5) {
+	while( dif > 0.5 ) {
 		dif -= 1.0;
-	} else if (dif < -0.5) {
+	}
+	while( dif < -0.5 ) {
 		dif += 1.0;
 	}
 	return dif;
@@ -296,9 +298,10 @@ CUDA_EXPORT inline float distance(fixed32 a, double b) {
 
 CUDA_EXPORT inline float distance(double a, fixed32 b) {
 	double dif = a - b.to_double();
-	if (dif > 0.5) {
+	while( dif > 0.5 ) {
 		dif -= 1.0;
-	} else if (dif < -0.5) {
+	}
+	while( dif < -0.5 ) {
 		dif += 1.0;
 	}
 	return dif;

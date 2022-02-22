@@ -293,7 +293,7 @@ struct fixed32_range: public range<double> {
 		valid = false;
 	}
 	CUDA_EXPORT
-	bool contains(const array<fixed32, NDIM>& pt, float h = float(0)) const {
+	bool contains(const array<fixed32, NDIM>& pt) const {
 		for (int i = -1; i <= 1; i++) {
 			for (int j = -1; j <= 1; j++) {
 				for (int k = -1; k <= 1; k++) {

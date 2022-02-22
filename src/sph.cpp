@@ -55,7 +55,7 @@ inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 	if (intersect) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			//	print( "%i %e %e | %e %e\n", dim, a.begin[dim].to_float(), a.end[dim].to_float(), b.begin[dim].to_float(), b.end[dim].to_float());
-			if (b.end[dim] - a.begin[dim] >= 0.0 && a.end[dim] - b.begin[dim] >= 0.0) {
+			if (distance(b.end[dim], a.begin[dim]) >= 0.0 && distance(a.end[dim],b.begin[dim]) >= 0.0) {
 			} else {
 //			PRINT( "false\n");
 				intersect = false;
