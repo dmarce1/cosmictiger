@@ -416,7 +416,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = box.begin[dim];
 		node.box.end[dim] = box.end[dim] == 1.0 ? fixed32::max() : fixed32(box.end[dim]);
-		//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
+	//	PRINT( "---------%e %e\n", node.box.begin[dim].to_float(), node.box.end[dim].to_float());
 	}
 	nodes[index] = node;
 	rc.leaf_nodes = leaf_nodes;

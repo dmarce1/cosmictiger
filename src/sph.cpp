@@ -433,6 +433,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 }
 				 }*/
 				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
+				//				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
 				const bool test3 = level <= 9;
 				if (test1 || test2 || test3) {
 					if (other->leaf) {
@@ -509,8 +510,8 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				}
 			}
 			const float m = get_options().sph_mass;
+			float one = 0.f;
 			for (int i = 0; i < dat.xs.size(); i++) {
-				const float h = dat.hs[i];
 				const auto x = dat.xs[i];
 				const auto y = dat.ys[i];
 				const auto z = dat.zs[i];
@@ -527,6 +528,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 					const float q = r * hinv;
 					const float w = h3inv * kernelW(q) * rhoinv * m;
 					const float p = dat.ents[i] * pow(rho, SPH_GAMMA);
+					one += w;
 					values.vx += w * dat.vxs[i];
 					values.vy += w * dat.vys[i];
 					values.vz += w * dat.vzs[i];
@@ -534,6 +536,15 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 					values.p += p * w;
 					//		PRINT( "%e %e %e \n", dat.ents[i], rho, p);
 				}
+			}
+			//	PRINT( "%e\n", one );
+			if (one > 0.0) {
+				const float oneinv = 1.f / one;
+				values.vx *= oneinv;
+				values.vy *= oneinv;
+				values.vz *= oneinv;
+				values.rho *= oneinv;
+				values.p *= oneinv;
 			}
 			kr.has_value_at = true;
 //				PRINT("%e %e\n", params.x, values.vx);
@@ -1417,10 +1428,16 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							}
 							break;
 
-							case SPH_RUN_HYDRO:
 							case SPH_RUN_MARK_SEMIACTIVE:
 							test = (self->nactive > 0);
-							if( !test && params.phase == 0) {
+							if( !test ) {
+								test = has_active_neighbors(self);
+							}
+							break;
+
+							case SPH_RUN_HYDRO:
+							test = (self->nactive > 0);
+							if( !test ) {
 								test = has_active_neighbors(self);
 							}
 							break;
@@ -1837,10 +1854,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.dvy_pred = &sph_particles_dvel_pred(YDIM, 0);
 	cuda_data.dvz_pred = &sph_particles_dvel_pred(ZDIM, 0);
 	cuda_data.dent_con = &sph_particles_dent_con(0);
-	cuda_data.code_dif_to_cgs = sqr(get_options().code_to_cm) / get_options().code_to_s;
 	cuda_data.dvx_con = &sph_particles_dvel_con(XDIM, 0);
 	cuda_data.dvy_con = &sph_particles_dvel_con(YDIM, 0);
 	cuda_data.dvz_con = &sph_particles_dvel_con(ZDIM, 0);
+	cuda_data.code_dif_to_cgs = sqr(get_options().code_to_cm) / get_options().code_to_s;
 	cuda_data.sa_snk = &sph_particles_semi_active(0);
 	cuda_data.difco_snk = &sph_particles_difco(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);

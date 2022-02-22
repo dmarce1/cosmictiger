@@ -33,10 +33,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #define STAR_N0 50.0f
 #define STAR_T0 4e9f
-#define SPH_ALPHA0 1e-6f
-#define SPH_ALPHA1 1.0f
+#define SPH_ALPHA0 0.05f
+#define SPH_ALPHA1 2.0f
 #define SPH_BETA 2.0f
-#define SPH_VISC_DECAY 0.2f
+#define SPH_VISC_DECAY 0.1f
 #define SPH_DIFFUSION_TOLER 1e-4
 
 #define NDIM 3
@@ -44,12 +44,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define YDIM 1
 #define ZDIM 2
 
-#define SPH_DIFFUSION_C 0.1f
+#define SPH_DIFFUSION_C 0.03f
 #define STAR_FORM_TIME (4e9)
 
 #define NCHILD 2
 #define LEFT 0
 #define RIGHT 1
+
 
 #define SPH_GAMMA (5.0/3.0)
 
