@@ -383,9 +383,6 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				ws.h.resize(next_size);
 				ws.rungs.resize(next_size);
 				if (contains) {
-					if (j >= total) {
-						PRINT("%i %i\n", j, total);
-					}
 					ASSERT(j < total);
 					const int k = offset + j;
 					ASSERT(k < next_size);
@@ -629,7 +626,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float z_ij = distance(z_i, z_j);				// 2
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
-					const float rinv = 1.0f / (1.0f + r);
+					const float rinv = 1.0f / (1.0e-30f + r);
 					const float h_j = rec1.h;
 					const float hinv_j = 1.f / h_j;															// 4
 					const float h3inv_j = sqr(hinv_j) * hinv_j;
@@ -913,7 +910,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float vz_ij = vz_i - vz_j;
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
-					const float rinv = 1.0f / (1.0f + r);
+					const float rinv = 1.0f / (1.0e-30f + r);
 					const float alpha_ij = 0.5f * (alpha_i * fvel_i + alpha_j * fvel_j);
 					const float h_ij = 0.5f * (h_i + h_j);
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
@@ -1014,10 +1011,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float balsara = fabsf(divv) / (sqrt(sqr(curlv_x, curlv_y, curlv_z)) + fabsf(divv) + ETA2 * c_i * hinv_i);
 					float S = fmaxf(0.f, -ddivv_dt) * balsara;
 					const float alpha_targ = SPH_ALPHA1 / (1.f + sqr(vsig) / (sqr(h_i) * S));
+//					if (fabs(S) > 10) {
+//						PRINT("%e %e %e %e\n", S, alpha_targ, sqr(vsig),  sqr(h_i) * S);
+//					}
 					float dt = 0.5f * rung_dt[myrung] * params.t0; // 3
 					const float num = alpha_n + dt / t0 * alpha_targ;
 					const float den = 1.f + dt / t0;
 					alpha_np1 = fmaxf(alpha_targ, num / den);
+//					alpha_np1 = 1.f;
 				}
 			}
 		}
@@ -1245,7 +1246,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float vz_ij = vz_i - vz_j;
 						const float r2 = sqr(x_ij, y_ij, z_ij);
 						const float r = sqrt(r2);
-						const float rinv = 1.0f / (1.0f + r);
+						const float rinv = 1.0f / (1.0e-30f + r);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 						const float h_ij = 0.5f * (h_i + h_j);
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
