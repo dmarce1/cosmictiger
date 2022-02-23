@@ -122,7 +122,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.176776695), "time-step criterion (default=0.2)") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //

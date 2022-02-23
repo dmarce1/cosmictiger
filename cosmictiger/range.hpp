@@ -293,6 +293,32 @@ struct fixed32_range: public range<double> {
 		valid = false;
 	}
 	CUDA_EXPORT
+	fixed32_range& operator=(const fixed32_range& other) {
+		valid = other.valid;
+		begin = other.begin;
+		end = other.end;
+		return *this;
+	}
+	CUDA_EXPORT
+	fixed32_range& operator=(fixed32_range&& other) {
+		valid = other.valid;
+		begin = other.begin;
+		end = other.end;
+		return *this;
+	}
+	CUDA_EXPORT
+	fixed32_range(const fixed32_range& other) {
+		valid = other.valid;
+		begin = other.begin;
+		end = other.end;
+	}
+	CUDA_EXPORT
+	fixed32_range(fixed32_range&& other) {
+		valid = other.valid;
+		begin = other.begin;
+		end = other.end;
+	}
+	CUDA_EXPORT
 	bool contains(const array<fixed32, NDIM>& pt) const {
 		for (int i = -1; i <= 1; i++) {
 			for (int j = -1; j <= 1; j++) {
@@ -320,7 +346,7 @@ struct fixed32_range: public range<double> {
 		}
 		return false;
 	}
-	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
+/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
 		if (!valid) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				begin[dim] = pt[dim].to_double() - h;
@@ -333,7 +359,7 @@ struct fixed32_range: public range<double> {
 				end[dim] = std::max(end[dim], pt[dim].to_double() + h);
 			}
 		}
-	}
+	}*/
 	void accumulate(const fixed32_range& other) {
 		if (valid && other.valid) {
 			for (int dim = 0; dim < NDIM; dim++) {

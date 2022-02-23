@@ -255,7 +255,7 @@ void sph_particles_apply_updates(int minrung, int phase) {
 				const auto rung = particles_rung(k);
 				if( rung >= minrung) {
 					switch(phase) {
-//						case 0:
+						case 0:
 						case 2:
 						sph_particles_ent(i) += sph_particles_dent_pred(i);
 						for( int dim = 0; dim < NDIM; dim++) {

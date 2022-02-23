@@ -53,7 +53,7 @@ inline T kernelW(T q) {
 	switch (kernel_type) {
 #endif
 	case KERNEL_CUBIC_SPLINE: {
-		const T c0 = T(8.0f / float(M_PI));
+		const T c0 = T(8.0 / M_PI);
 		w1 = T(6);
 		w1 = fmaf(q, w1, -T(6));
 		w1 *= q;
@@ -65,7 +65,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	case KERNEL_QUARTIC_SPLINE: {
-		const T c0 = T(15625.0f / float(M_PI) / 512.0f);
+		const T c0 = T(15625.0f / M_PI / 512.0f);
 		w1 = T(6);
 		w1 *= q;
 		w1 = fmaf(q, w1, -T(12.0f / 5.0f));
@@ -107,7 +107,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C2: {
-		const T c0 = T(21.f / 2.f / float(M_PI));
+		const T c0 = T(21.f / 2.f / M_PI);
 		mq = T(1) - q;
 		w = sqr(sqr(mq));
 		w *= fmaf(T(4), q, T(1));
@@ -115,7 +115,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C4: {
-		const T c0 = T(495.f / 32.f / float(M_PI));
+		const T c0 = T(495.f / 32.f / M_PI);
 		w = T(35.0f / 3.f);
 		mq = T(1) - q;
 		w = sqr(mq) * mq;
@@ -125,7 +125,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
-		const T c0 = T(1365.f / 64.f / float(M_PI));
+		const T c0 = T(1365.f / 64.f / M_PI);
 		w = T(32);
 		w = fmaf(q, w, T(25));
 		w = fmaf(q, w, T(8));
@@ -151,7 +151,7 @@ inline T dkernelW_dq(T q) {
 	switch (kernel_type) {
 #endif
 	case KERNEL_CUBIC_SPLINE: {
-		const T c0 = T(8.0 / float(M_PI));
+		const T c0 = T(8.0 / M_PI);
 		w1 = T(18);
 		w1 = fmaf(q, w1, -T(12));
 		w1 *= q;
@@ -162,7 +162,7 @@ inline T dkernelW_dq(T q) {
 	}
 		break;
 	case KERNEL_QUARTIC_SPLINE: {
-		const T c0 = T(15625.0f / float(M_PI) / 512.0f);
+		const T c0 = T(15625.0f / M_PI / 512.0f);
 		w1 = T(24);
 		w1 *= q;
 		w1 = fmaf(q, w1, -T(24.0f / 5.0f));
@@ -200,7 +200,7 @@ inline T dkernelW_dq(T q) {
 		break;
 
 	case KERNEL_WENDLAND_C2: {
-		const T c0 = T(21.f / 2.f / float(M_PI));
+		const T c0 = T(21.f / 2.f / M_PI);
 		mq = q - T(1);
 		w = T(20);
 		w *= q * sqr(mq) * mq;
@@ -208,7 +208,7 @@ inline T dkernelW_dq(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C4: {
-		const T c0 = T(495.f / 32.f / float(M_PI));
+		const T c0 = T(495.f / 32.f / M_PI);
 		mq = q - T(1);
 		w = fmaf(T(5), q, T(1));
 		w *= q;
@@ -218,7 +218,7 @@ inline T dkernelW_dq(T q) {
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
-		const T c0 = T(-22.0 * 1365.f / 64.f / float(M_PI));
+		const T c0 = T(-22.0 * 1365.f / 64.f / M_PI);
 		w = fmaf(T(16), q, T(7));
 		w = fmaf(w, q, T(1));
 		w *= q;

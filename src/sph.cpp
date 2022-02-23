@@ -51,19 +51,7 @@ struct sph_tree_id_hash {
 };
 
 inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
-	bool intersect = a.valid && b.valid;
-	if (intersect) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			//	print( "%i %e %e | %e %e\n", dim, a.begin[dim].to_float(), a.end[dim].to_float(), b.begin[dim].to_float(), b.end[dim].to_float());
-			if (distance(b.end[dim], a.begin[dim]) >= 0.0 && distance(a.end[dim],b.begin[dim]) >= 0.0) {
-			} else {
-//			PRINT( "false\n");
-				intersect = false;
-				break;
-			}
-		}
-	}
-	return intersect;
+	return a.periodic_intersection(b).volume();
 }
 
 struct sph_run_workspace {
@@ -146,29 +134,29 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 	tm.reset();
 
 //	do {
-		sparams.set = SPH_SET_ACTIVE;
-		sparams.run_type = SPH_RUN_SMOOTHLEN;
+	sparams.set = SPH_SET_ACTIVE;
+	sparams.run_type = SPH_RUN_SMOOTHLEN;
 //		timer tm;
-		tm.start();
+	tm.start();
 //		kr = sph_run(sparams);
-		tm.stop();
+	tm.stop();
 	//	PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-		tm.reset();
-		cont = kr.rc;
-		tnparams.h_wt = cont ? 2.0 : 1.0;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-		tm.start();
-		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-		tm.stop();
-		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
-		tm.reset();
-		tm.start();
-		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		tm.stop();
-		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-		tm.reset();
+	tm.reset();
+	cont = kr.rc;
+	tnparams.h_wt = cont ? 2.0 : 1.0;
+	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+	tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+	tm.start();
+	sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
+	tm.reset();
+	tm.start();
+	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+	sph_tree_neighbor(tnparams, root_id, checklist).get();
+	tm.stop();
+	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
+	tm.reset();
 //	} while (cont);
 	tnparams.run_type = SPH_TREE_NEIGHBOR_VALUE_AT;
 
@@ -390,9 +378,12 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level) {
 ///	PRINT( "%i %i\n", level, checklist.size());
+	sph_tree_neighbor_return kr;
+	if (params.run_type == SPH_TREE_NEIGHBOR_BOXES) {
+		return hpx::make_ready_future(kr);
+	}
 	stack_trace_activate();
 	const sph_tree_node* self_ptr = sph_tree_get_node(self);
-	sph_tree_neighbor_return kr;
 	if (params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT) {
 		array<fixed32, NDIM> x;
 		x[XDIM] = params.x;
@@ -455,38 +446,36 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			pair<int> rng;
 			rng.first = sph_tree_allocate_neighbor_list(leaflist);
 			rng.second = leaflist.size() + rng.first;
-			//	if( leaflist.size() == 0) {
-			//		PRINT( "zero\n");
-			//	}
+			//		PRINT( "%i %i\n", level, leaflist.size());
 			sph_tree_set_neighbor_range(self, rng);
 		}
 			break;
 		case SPH_TREE_NEIGHBOR_BOXES: {
-			fixed32_range ibox, obox;
-			float maxh = 0.f;
-			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				const bool active = sph_particles_rung(i) >= params.min_rung;
-				const bool semiactive = !active && sph_particles_semi_active(i);
-				const float h = params.h_wt * sph_particles_smooth_len(i);
-				const auto myx = sph_particles_pos(XDIM, i);
-				const auto myy = sph_particles_pos(YDIM, i);
-				const auto myz = sph_particles_pos(ZDIM, i);
-				const int k = i - self_ptr->part_range.first;
-				maxh = std::max(maxh, h);
-				array<fixed32, NDIM> X;
-				X[XDIM] = myx;
-				X[YDIM] = myy;
-				X[ZDIM] = myz;
-				if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
-					obox.accumulate(X, h);
-				}
-				ibox.accumulate(X);
+			/*	fixed32_range ibox, obox;
+			 float maxh = 0.f;
+			 for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			 const bool active = sph_particles_rung(i) >= params.min_rung;
+			 const bool semiactive = !active && sph_particles_semi_active(i);
+			 const float h = params.h_wt * sph_particles_smooth_len(i);
+			 const auto myx = sph_particles_pos(XDIM, i);
+			 const auto myy = sph_particles_pos(YDIM, i);
+			 const auto myz = sph_particles_pos(ZDIM, i);
+			 const int k = i - self_ptr->part_range.first;
+			 maxh = std::max(maxh, h);
+			 array<fixed32, NDIM> X;
+			 X[XDIM] = myx;
+			 X[YDIM] = myy;
+			 X[ZDIM] = myz;
+			 if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+			 obox.accumulate(X, h);
+			 }
+			 ibox.accumulate(X);
+			 }*/
+			for (int dim = 0; dim < NDIM; dim++) {
+				//	obox.begin[dim] = self_ptr->box.begin[dim] - maxh;
+				//		obox.end[dim] = self_ptr->box.end[dim] + maxh;
 			}
-			for( int dim = 0; dim < NDIM; dim++) {
-			//	obox.begin[dim] = self_ptr->box.begin[dim] - maxh;
-		//		obox.end[dim] = self_ptr->box.end[dim] + maxh;
-			}
-		//	ibox = self_ptr->box;
+			//	ibox = self_ptr->box;
 			bool test = true;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				array<fixed32, NDIM> X;
@@ -496,30 +485,30 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-/*				if ((params.set & SPH_SET_ALL)) {
-					for( int dim = 0; dim < NDIM; dim++) {
-						auto Y = X;
-						Y[dim] = Y[dim].to_double() + sph_particles_smooth_len(i);
-						if (!obox.contains(Y)) {
-							PRINT("ERROR! %e %e %e\n", obox.begin[dim].to_float(), obox.end[dim].to_float(), Y[dim].to_float());
-							abort();
-						}
-						Y[dim] = Y[dim].to_double() - 2.0* sph_particles_smooth_len(i);
-						if (!obox.contains(Y)) {
-							PRINT("ERROR! %e %e %e\n", obox.begin[dim], obox.end[dim], Y[dim].to_float());
-							abort();
-						}
-					}
-					if (!obox.contains(X)) {
-						PRINT("ERROR!\n");
-						abort();
-					}
-				}*/
+				/*				if ((params.set & SPH_SET_ALL)) {
+				 for( int dim = 0; dim < NDIM; dim++) {
+				 auto Y = X;
+				 Y[dim] = Y[dim].to_double() + sph_particles_smooth_len(i);
+				 if (!obox.contains(Y)) {
+				 PRINT("ERROR! %e %e %e\n", obox.begin[dim].to_float(), obox.end[dim].to_float(), Y[dim].to_float());
+				 abort();
+				 }
+				 Y[dim] = Y[dim].to_double() - 2.0* sph_particles_smooth_len(i);
+				 if (!obox.contains(Y)) {
+				 PRINT("ERROR! %e %e %e\n", obox.begin[dim], obox.end[dim], Y[dim].to_float());
+				 abort();
+				 }
+				 }
+				 if (!obox.contains(X)) {
+				 PRINT("ERROR!\n");
+				 abort();
+				 }
+				 }*/
 			}
 			//		PRINT( "obox %e %e %e\n", obox.begin[0].to_float(), obox.end[0].to_float(), params.h_wt );
-			kr.inner_box = ibox;
-			kr.outer_box = obox;
-			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
+			//kr.inner_box = ibox;
+			//	kr.outer_box = obox;
+			//	sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
 		}
 			break;
 
@@ -545,13 +534,6 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				if (r2 < r2min) {
 					r2min = r2;
 					h = dat.hs[i];
-					const float p = dat.ents[i] * pow(rho, SPH_GAMMA);
-					one += w;
-					values.vx += w * dat.vxs[i];
-					values.vy += w * dat.vys[i];
-					values.vz += w * dat.vzs[i];
-					values.rho += rho * w;
-					values.p += p * w;
 				}
 			}
 			const float m = get_options().sph_mass;

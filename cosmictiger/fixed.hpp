@@ -42,6 +42,7 @@ template<class T>
 class fixed {
 	T i;
 	static constexpr float c0 = float(size_t(1) << size_t(32));
+	static constexpr float c0dbl = double(size_t(1) << size_t(32));
 	static constexpr float cinv = 1.f / c0;
 	static constexpr double dblecinv = 1.f / c0;
 	static constexpr T width = (sizeof(float) * CHAR_BIT);
@@ -73,7 +74,7 @@ public:
 
 	CUDA_EXPORT
 	inline fixed<T>& operator=(double number) {
-		i = (c0 * number);
+		i = (c0dbl * number);
 		return *this;
 	}
 
@@ -83,7 +84,7 @@ public:
 	}
 	CUDA_EXPORT
 	inline fixed<T>(double number) :
-			i(c0 * number) {
+			i(c0dbl * number) {
 	}
 
 	template<class V>
