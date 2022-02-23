@@ -125,7 +125,7 @@ public:
 
 	CUDA_EXPORT
 	inline float to_float() const {
-		return float(i) * cinv;
+		return (float(i) + 0.5f) * cinv;
 
 	}
 
@@ -136,7 +136,7 @@ public:
 
 	CUDA_EXPORT
 	inline double to_double() const {
-		return i * dblecinv;
+		return (i + 0.5) * dblecinv;
 
 	}
 
@@ -276,10 +276,10 @@ CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 
 CUDA_EXPORT inline float distance(double a, double b) {
 	double dif = a - b;
-	while( dif > 0.5 ) {
+	while (dif > 0.5) {
 		dif -= 1.0;
 	}
-	while( dif < -0.5 ) {
+	while (dif < -0.5) {
 		dif += 1.0;
 	}
 	return dif;
@@ -287,10 +287,10 @@ CUDA_EXPORT inline float distance(double a, double b) {
 
 CUDA_EXPORT inline float distance(fixed32 a, double b) {
 	double dif = a.to_double() - b;
-	while( dif > 0.5 ) {
+	while (dif > 0.5) {
 		dif -= 1.0;
 	}
-	while( dif < -0.5 ) {
+	while (dif < -0.5) {
 		dif += 1.0;
 	}
 	return dif;
@@ -298,10 +298,10 @@ CUDA_EXPORT inline float distance(fixed32 a, double b) {
 
 CUDA_EXPORT inline float distance(double a, fixed32 b) {
 	double dif = a - b.to_double();
-	while( dif > 0.5 ) {
+	while (dif > 0.5) {
 		dif -= 1.0;
 	}
-	while( dif < -0.5 ) {
+	while (dif < -0.5) {
 		dif += 1.0;
 	}
 	return dif;

@@ -74,7 +74,7 @@ void hydro_driver(double tmax) {
 		step++;
 		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
-//			output_line(main_step);
+			output_line(main_step);
 			main_step++;
 		}
 	} while (true);
@@ -90,8 +90,8 @@ void hydro_sod_test() {
 	double vx0 = 0.0;
 	double vy0 = 0.0;
 	double vz0 = 0.0;
-	double p1 = 0.1;
-	double p0 = 1.0;
+	double p1 = 0.625;
+	double p0 = 6.25;
 	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0), 1.0 / 3.0) + 0.49999;
 	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0), 1.0 / 3.0) + 0.49999;
 	part_int nparts_left = left_dim * sqr(2 * left_dim);

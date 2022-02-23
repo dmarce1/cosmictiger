@@ -949,7 +949,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdr_x_i = dWdr_i * rinv * x_ij;
 					const float dWdr_y_i = dWdr_i * rinv * y_ij;
 					const float dWdr_z_i = dWdr_i * rinv * z_ij;
-					const float mrhoinv_i = m * rhoinv_i;
+					const float mrhoinv_j = m * rhoinv_j;
 //					float tmp = 0.f;
 //					tmp += (p_i * powf(rho_i, -SIGMA) + p_j * powf(rho_j, -SIGMA)) * (powf(rho_i, SIGMA - 1.0f) - powf(rho_j, SIGMA - 1.f));
 //					tmp += (powf(rho_i, SIGMA - 2.0f) + powf(rho_j, SIGMA - 2.f)) * (p_i * powf(rho_i, 1.f - SIGMA) - p_j * powf(rho_j, 1.f - SIGMA));
@@ -957,18 +957,18 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 //					ddivv_dt += mrhoinv_i * (gx_j - gx_i) * dWdr_x_i;
 //					ddivv_dt += mrhoinv_i * (gy_j - gy_i) * dWdr_y_i;
 //					ddivv_dt += mrhoinv_i * (gz_j - gz_i) * dWdr_z_i;
-					dvxdx -= mrhoinv_i * vx_ij * dWdr_x_i;
-					dvydx -= mrhoinv_i * vy_ij * dWdr_x_i;
-					dvzdx -= mrhoinv_i * vz_ij * dWdr_x_i;
-					dvxdy -= mrhoinv_i * vx_ij * dWdr_y_i;
-					dvydy -= mrhoinv_i * vy_ij * dWdr_y_i;
-					dvzdy -= mrhoinv_i * vz_ij * dWdr_y_i;
-					dvxdz -= mrhoinv_i * vx_ij * dWdr_z_i;
-					dvydz -= mrhoinv_i * vy_ij * dWdr_z_i;
-					dvzdz -= mrhoinv_i * vz_ij * dWdr_z_i;
+					dvxdx -= mrhoinv_j * vx_ij * dWdr_x_i;
+					dvydx -= mrhoinv_j * vy_ij * dWdr_x_i;
+					dvzdx -= mrhoinv_j * vz_ij * dWdr_x_i;
+					dvxdy -= mrhoinv_j * vx_ij * dWdr_y_i;
+					dvydy -= mrhoinv_j * vy_ij * dWdr_y_i;
+					dvzdy -= mrhoinv_j * vz_ij * dWdr_y_i;
+					dvxdz -= mrhoinv_j * vx_ij * dWdr_z_i;
+					dvydz -= mrhoinv_j * vy_ij * dWdr_z_i;
+					dvzdz -= mrhoinv_j * vz_ij * dWdr_z_i;
 					float dt_pred, dt_con;
-					dt_pred =  rung_dt[myrung] * params.t0;		// 2
-					dt_con = fminf(rung_dt[rec1.rung] * (params.t0), dt_pred); // 3
+					dt_pred =  0.5f * rung_dt[myrung] * params.t0;		// 2
+					dt_con = fminf(0.5f * rung_dt[rec1.rung] * (params.t0), dt_pred); // 3
 					const float tmp2 = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
 					const float dA_dt = 0.5f * m * (gamma_i - 1.f) * rho1mgamma_i * Pi * tmp2;
 					if (first_step) {
@@ -1287,16 +1287,16 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_x_i = dWdr_i * rinv * x_ij;
 						const float dWdr_y_i = dWdr_i * rinv * y_ij;
 						const float dWdr_z_i = dWdr_i * rinv * z_ij;
-						const float mrhoinv_i = m * rhoinv_i;
-						dvx_dx -= mrhoinv_i * vx_ij * dWdr_x_i;
-						dvy_dx -= mrhoinv_i * vy_ij * dWdr_x_i;
-						dvz_dx -= mrhoinv_i * vz_ij * dWdr_x_i;
-						dvx_dy -= mrhoinv_i * vx_ij * dWdr_y_i;
-						dvy_dy -= mrhoinv_i * vy_ij * dWdr_y_i;
-						dvz_dy -= mrhoinv_i * vz_ij * dWdr_y_i;
-						dvx_dz -= mrhoinv_i * vx_ij * dWdr_z_i;
-						dvy_dz -= mrhoinv_i * vy_ij * dWdr_z_i;
-						dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i;
+						const float mrhoinv_j = m * rhoinv_j;
+						dvx_dx -= mrhoinv_j * vx_ij * dWdr_x_i;
+						dvy_dx -= mrhoinv_j * vy_ij * dWdr_x_i;
+						dvz_dx -= mrhoinv_j * vz_ij * dWdr_x_i;
+						dvx_dy -= mrhoinv_j * vx_ij * dWdr_y_i;
+						dvy_dy -= mrhoinv_j * vy_ij * dWdr_y_i;
+						dvz_dy -= mrhoinv_j * vz_ij * dWdr_y_i;
+						dvx_dz -= mrhoinv_j * vx_ij * dWdr_z_i;
+						dvy_dz -= mrhoinv_j * vy_ij * dWdr_z_i;
+						dvz_dz -= mrhoinv_j * vz_ij * dWdr_z_i;
 						const float hfac = h_i / h_ij;
 						float this_vsig = c_ij * hfac;
 						if (vdotx_ij < 0.f) {
@@ -1307,9 +1307,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ax += dvx_dt;
 						ay += dvy_dt;
 						az += dvz_dt;
-						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
-						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;
-						dT_dz += (T_j - T_i) * dWdr_z_i * mrhoinv_i;
+						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_j;
+						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_j;
+						dT_dz += (T_j - T_i) * dWdr_z_i * mrhoinv_j;
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
 						/*		if (stars) {
 						 dgx_dx += (rec2.gx - gx_i) * mydWdr_x * mrhoinv_i;

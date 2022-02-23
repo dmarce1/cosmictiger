@@ -145,14 +145,14 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 	PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 	tm.reset();
 
-	do {
+//	do {
 		sparams.set = SPH_SET_ACTIVE;
 		sparams.run_type = SPH_RUN_SMOOTHLEN;
-		timer tm;
+//		timer tm;
 		tm.start();
-		kr = sph_run(sparams);
+//		kr = sph_run(sparams);
 		tm.stop();
-		PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+	//	PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
 		cont = kr.rc;
 		tnparams.h_wt = cont ? 2.0 : 1.0;
@@ -169,7 +169,7 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 		tm.stop();
 		PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 		tm.reset();
-	} while (cont);
+//	} while (cont);
 	tnparams.run_type = SPH_TREE_NEIGHBOR_VALUE_AT;
 
 	vector<sph_values> values(x.size());
@@ -180,6 +180,8 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 		auto rc = sph_tree_neighbor(tnparams, root_id, checklist).get();
 		values[i] = rc.value_at;
 	}
+	sph_tree_destroy(true);
+	sph_particles_cache_free();
 	return values;
 }
 
@@ -543,6 +545,13 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				if (r2 < r2min) {
 					r2min = r2;
 					h = dat.hs[i];
+					const float p = dat.ents[i] * pow(rho, SPH_GAMMA);
+					one += w;
+					values.vx += w * dat.vxs[i];
+					values.vy += w * dat.vys[i];
+					values.vz += w * dat.vzs[i];
+					values.rho += rho * w;
+					values.p += p * w;
 				}
 			}
 			const float m = get_options().sph_mass;

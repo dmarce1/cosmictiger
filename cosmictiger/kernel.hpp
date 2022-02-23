@@ -151,7 +151,7 @@ inline T dkernelW_dq(T q) {
 	switch (kernel_type) {
 #endif
 	case KERNEL_CUBIC_SPLINE: {
-		const T c0 = T(8.0f / float(M_PI));
+		const T c0 = T(8.0 / float(M_PI));
 		w1 = T(18);
 		w1 = fmaf(q, w1, -T(12));
 		w1 *= q;
