@@ -980,7 +980,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			rc.max_vsig = vsig_max;
 			float dthydro = rc.max_vsig / (ascale * myh[0]);
 			if (dthydro > 1.0e-99) {
-				dthydro = SPH_CFL / dthydro;
+//				dthydro = SPH_CFL / dthydro;
 			} else {
 				dthydro = 1.0e99;
 			}

@@ -230,7 +230,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 		if (tau != 0.0 && !glass) {
 			sph_particles_energy_to_entropy(scale);
-			sph_particles_apply_updates(minrung, 0);
 
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
@@ -239,9 +238,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
+			sph_particles_apply_updates(minrung, 0, t0);
 
 ///			sph_particles_apply_updates(SPH_UPDATE_NULL);
-			sph_particles_apply_updates(minrung, 1);
 
 			if (tau != 0.0 && chem) {
 				PRINT("Doing chemistry step\n");
@@ -274,6 +273,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 	} else {
 
+		if (glass) {
+			sparams.run_type = SPH_RUN_HYDRO;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			tm.reset();
+			sph_particles_apply_updates(minrung, 1, t0);
+		}
 		if (stars) {
 //			sph_deposit_sn(scale);
 //			sph_particles_apply_updates();
@@ -341,7 +350,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
-			sph_particles_apply_updates(minrung, 2);
+			sph_particles_apply_updates(minrung, 2, t0);
 		}
 
 	}

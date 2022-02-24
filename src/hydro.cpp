@@ -87,10 +87,10 @@ void hydro_sod_test() {
 	double vx1 = 0.0;
 	double vy1 = 0.0;
 	double vz1 = 0.0;
-	double vx0 = -1.0e-1;
+	double vx0 = 0.0e-1;
 	double vy0 = -0.0e-1;
 	double vz0 = -0.0e-1;
-	double p1 = 0.0625;
+	double p1 = 0.625;
 	double p0 = 6.25;
 	part_int left_dim = pow(0.25 * nparts_total/2 * rho1 / (rho1 + rho0), 1.0 / 3.0) + 0.49999;
 	part_int right_dim = pow(0.25 * nparts_total/2 * rho0 / (rho1 + rho0), 1.0 / 3.0) + 0.49999;
@@ -116,7 +116,7 @@ void hydro_sod_test() {
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
-				float x0 = x - 0.25;
+				float x0 = x - 0.113;
 				if( x0 < 0.0 ) {
 					x0 += 1.0;
 				}
@@ -144,7 +144,7 @@ void hydro_sod_test() {
 				double ent = p0 / pow(rho0, SPH_GAMMA);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
-				float x0 = x - 0.25;
+				float x0 = x - 0.113;
 				if( x0 < 0.0 ) {
 					x0 += 1.0;
 				}
@@ -173,7 +173,7 @@ void hydro_sod_test() {
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
-				float x0 = x - 0.25;
+				float x0 = x - 0.113;
 				if( x0 < 0.0 ) {
 					x0 += 1.0;
 				}
@@ -201,7 +201,7 @@ void hydro_sod_test() {
 				double ent = p0 / pow(rho0, SPH_GAMMA);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
-				float x0 = x - 0.25;
+				float x0 = x - 0.113;
 				if( x0 < 0.0 ) {
 					x0 += 1.0;
 				}

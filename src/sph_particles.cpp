@@ -239,35 +239,45 @@ float sph_particles_max_smooth_len() {
 
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
 
-void sph_particles_apply_updates(int minrung, int phase) {
+void sph_particles_apply_updates(int minrung, int phase, float t0) {
 	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase));
+		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase, t0));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc, phase, minrung]() {
+		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung]() {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				const int k = sph_particles_dm_index(i);
 				const auto rung = particles_rung(k);
+				const float dt = 0.5 * t0 / (1<<rung);
 				if( rung >= minrung) {
 					switch(phase) {
 						case 0:
-						case 2:
-						sph_particles_ent(i) += sph_particles_dent_pred(i);
-						for( int dim = 0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += sph_particles_dvel_pred(dim,i);
+						sph_particles_dent_pred(i) = sph_particles_dent_con(i);
+						sph_particles_ent(i) +=sph_particles_dent_pred(i) *dt;
+						for( int dim =0; dim < NDIM; dim++) {
+							sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+							particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
 						}
 						break;
 						case 1:
-						sph_particles_ent(i) -= 2.f * sph_particles_dent_pred(i);
-						sph_particles_ent(i) += sph_particles_dent_con(i);
-						for( int dim = 0; dim < NDIM; dim++) {
-							particles_vel(dim,k) -= 2.f * sph_particles_dvel_pred(dim,i);
-							particles_vel(dim,k) += sph_particles_dvel_con(dim,i);
+						sph_particles_ent(i) -=sph_particles_dent_pred(i) *dt;
+						for( int dim =0; dim < NDIM; dim++) {
+							particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt;
+						}
+						sph_particles_ent(i) +=sph_particles_dent_con(i) *dt;
+						for( int dim =0; dim < NDIM; dim++) {
+							particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+						}
+						break;
+						case 2:
+						sph_particles_ent(i) +=sph_particles_dent_con(i) *dt;
+						for( int dim =0; dim < NDIM; dim++) {
+							particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
 						}
 						break;
 					}}
@@ -293,8 +303,8 @@ float sph_particles_coloumb_log(part_int i, float a) {
 	double ne = Hp - Hn + Hep + 2.0f * Hepp;
 	rho *= code_to_density * pow(a, -3);
 	ne *= constants::avo * rho;
-	ne = std::max(ne,1e-20);
-	const double T = std::max(sph_particles_temperature(i, a),1000.f);
+	ne = std::max(ne, 1e-20);
+	const double T = std::max(sph_particles_temperature(i, a), 1000.f);
 	const double part1 = 23.5;
 	const double part2 = -log(sqrt(ne) * pow(T, -1.2));
 	const double part3 = -sqrt((1e-5 + sqr(log(T) - 2)) / 16.0);
@@ -325,13 +335,13 @@ float sph_particles_temperature(part_int i, float a) {
 	K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
 	double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));															// 9
 	double T = energy / (n * cv);
-	if( H < 0.0 ) {
-		PRINT( "NEGATIVE H\n");
-		PRINT( "%e %e %e %e %e %e %e\n",  H, Hp, Hn,  H2,  He, Hep, Hepp);
-	//	abort();
+	if (H < 0.0) {
+		PRINT("NEGATIVE H\n");
+		PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
+		//	abort();
 	}
-	if( T > TMAX || T < 0.0) {
-		PRINT( "T == %e %e %e %e %e %e\n", T, sph_particles_ent(i), energy, K, rho, h);
+	if (T > TMAX || T < 0.0) {
+		PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_ent(i), energy, K, rho, h);
 		abort();
 	}
 	return T;
@@ -831,9 +841,9 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					mmw[j] = sph_particles_mmw(i);
 				}
 				if (colog) {
-					colog[j] = sph_particles_coloumb_log(i,a);
+					colog[j] = sph_particles_coloumb_log(i, a);
 				}
-				if( alpha ) {
+				if (alpha) {
 					alpha[j] = sph_particles_alpha(i);
 				}
 			}
@@ -869,10 +879,10 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					if (mmw) {
 						mmw[dest_index] = part.mmw;
 					}
-					if( colog ) {
+					if (colog) {
 						colog[dest_index] = part.colog;
 					}
-					if( alpha) {
+					if (alpha) {
 						alpha[dest_index] = part.alpha;
 					}
 					dest_index++;
