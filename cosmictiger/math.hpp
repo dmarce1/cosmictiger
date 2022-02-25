@@ -35,9 +35,14 @@ CUDA_EXPORT inline T sqr(const T& a, const T& b, const T& c) {
 	return a * a + b * b + c * c;
 }
 
-
 inline float rand1() {
 	return ((float) rand() + 0.5) / (float) RAND_MAX;
+}
+
+inline float rand_normal() {
+	const double x = rand1();
+	const double y = rand1();
+	return sqrt(-2.0 * log(x)) * cos(2 * M_PI * y);
 }
 
 template<class T>
@@ -128,6 +133,5 @@ inline float tsc(float x) {
 		return 0.0;
 	}
 }
-
 
 #endif /* MATH_HPP_ */

@@ -43,14 +43,14 @@ constexpr bool verbose = true;
 //0.7, 0.8
 //0.55, 0.65
 //0.4, 0.5
-
+/*
 float rand_normal() {
 	float x = 2.0 * rand1() - 1.0;
 	float y = 2.0 * rand1() - 1.0;
 	auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
 	return normal.real();
 }
-
+*/
 static void rockstar_test() {
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);

@@ -272,16 +272,19 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (distance(self.outer_box.end[dim], x[dim]) - h < 0.0f) {
+						if (self.outer_box.end[dim] - x[dim].to_double() - h < 0.0f) {
 							box_xceeded = true;
 							break;
 						}
-						if (distance(x[dim], self.outer_box.begin[dim]) - h < 0.0f) {
+						if (x[dim].to_double() - self.outer_box.begin[dim] - h < 0.0f) {
 							box_xceeded = true;
 							break;
 						}
 					}
 					if (tid == 0) {
+						if( box_xceeded) {
+				//			PRINT( "Box exceeded with h = %e\n", h);
+						}
 						const float change = h / h0 - 1.0f;
 						if (fabsf(change) > 1.0e-4) {
 							//			PRINT( "change = %e\n", change);

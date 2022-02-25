@@ -286,7 +286,7 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
-	if (opts.test == "sod" || opts.test == "blast") {
+	if (opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz") {
 		opts.chem = opts.gravity = opts.conduction = false;
 		opts.gamma = 5. / 3.;
 	}
