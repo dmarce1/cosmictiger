@@ -971,8 +971,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					float dt = 0.5f * rung_dt[myrung] * params.t0; // 3
 					const float num = alpha_n + dt * (SPH_ALPHA0 * t0inv + S);
 					const float den = 1.f + dt * (t0inv + S / SPH_ALPHA1);
-					alpha_np1 = num / den;
-//					alpha_np1 = 1.f;
+//					alpha_np1 = num / den;
+					alpha_np1 = 1.f;
 				}
 			}
 		}

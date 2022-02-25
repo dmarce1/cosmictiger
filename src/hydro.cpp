@@ -45,7 +45,7 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 	time_type itime = 0;
 	int minrung = 0;
 	double t = 0.0;
-	double t0 = tmax / 1.0;
+	double t0 = tmax / 2048.0;
 	int step = 0;
 	int main_step = 0;
 	float e0, ent0;
@@ -212,9 +212,9 @@ void hydro_sod_test() {
 		sod_state_t state;
 		float x0 = x;
 		x0 -= 0.5;
-		if( x0 > 0.25 ) {
+		if (x0 > 0.25) {
 			x0 = 0.5 - x0;
-		} else if( x0 < -0.25 ) {
+		} else if (x0 < -0.25) {
 			x0 = -0.5 - x0;
 		}
 		exact_sod(&state, &sod, x0, t, 0);
@@ -310,12 +310,14 @@ void hydro_helmholtz_test() {
 
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho = 10.0;
-	double p1 = 1.0;
-	double p0 = 1.0e-6;
+	double rho = 1.0;
+	double p1 = 1000.0;
+	double p0 = 1.0e-3;
 	auto opts = get_options();
-	const part_int ndim = get_options().parts_dim;
-	const part_int nparts = std::pow(ndim, NDIM);
+	part_int ndim = get_options().parts_dim;
+	part_int nparts = std::pow(ndim, NDIM);
+	ndim = pow(nparts / 2, 1. / 3.);
+	nparts = 2 * ndim * ndim * ndim;
 	opts.sph_mass = rho / nparts;
 	const double m = opts.sph_mass;
 	set_options(opts);
@@ -333,6 +335,25 @@ void hydro_blast_test() {
 					PRINT("CENTER at %e %e %e\n", x, y, z);
 				}
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+				sph_particles_resize(sph_particles_size() + 1);
+				//	PRINT( "%e\n", h);
+				sph_particles_smooth_len(i) = h;
+				sph_particles_pos(XDIM, i) = x;
+				sph_particles_pos(YDIM, i) = y;
+				sph_particles_pos(ZDIM, i) = z;
+				sph_particles_vel(XDIM, i) = 0.f;
+				sph_particles_vel(YDIM, i) = 0.f;
+				sph_particles_vel(ZDIM, i) = 0.f;
+				sph_particles_rung(i) = 0;
+				sph_particles_ent(i) = ent;
+				i++;
+				x = (ix) * dx;
+				y = (iy) * dx;
+				z = (iz) * dx;
+				ent = p0 / pow(rho, get_options().gamma);
+				if (center) {
+					PRINT("CENTER at %e %e %e\n", x, y, z);
+				}
 				sph_particles_resize(sph_particles_size() + 1);
 				//	PRINT( "%e\n", h);
 				sph_particles_smooth_len(i) = h;
