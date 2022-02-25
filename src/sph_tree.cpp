@@ -351,14 +351,22 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 		if (rcl.nactive || rcr.nactive) {
 			active_nodes += 1 + rcl.active_nodes + rcr.active_nodes;
 		}
-		inner_box.accumulate(iboxl);
-		inner_box.accumulate(iboxr);
-		outer_box.accumulate(oboxl);
-		outer_box.accumulate(oboxr);
+		for( int dim = 0; dim < NDIM; dim++) {
+			inner_box.begin[dim] = std::min(iboxl.begin[dim], iboxr.begin[dim]);
+			inner_box.end[dim] = std::max(iboxl.end[dim], iboxr.end[dim]);
+			outer_box.begin[dim] = std::min(oboxl.begin[dim], oboxr.begin[dim]);
+			outer_box.end[dim] = std::max(oboxl.end[dim], oboxr.end[dim]);
+		}
 //		PRINT("%i %i %i %i | %e %e %e %e |%e %e %e %e \n", iboxr.valid, iboxl.valid, oboxr.valid, oboxl.valid, iboxl.begin[XDIM], iboxl.end[XDIM], iboxr.begin[XDIM], iboxr.end[XDIM], oboxl.begin[XDIM], oboxl.end[XDIM], oboxr.begin[XDIM], oboxr.end[XDIM]);
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		nactive = 0;
+		for( int dim = 0; dim < NDIM; dim++) {
+			inner_box.begin[dim] = 1.9;
+			inner_box.end[dim] = -0.9;
+			outer_box.begin[dim] = 1.9;
+			outer_box.end[dim] = -0.9;
+		}
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			sph_particles_semi_active(i) = false;
 			const float h = params.h_wt * sph_particles_smooth_len(i);
@@ -366,25 +374,17 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 			for (int dim = 0; dim < NDIM; dim++) {
 				X[dim] = sph_particles_pos(dim, i);
 			}
-//			inner_box.accumulate(X);
-//			outer_box.accumulate(X, h);
+			for( int dim = 0; dim < NDIM; dim++) {
+				const double x = X[dim].to_double();
+				inner_box.begin[dim] = std::min(inner_box.begin[dim], x);
+				inner_box.end[dim] = std::max(inner_box.end[dim], x);
+				outer_box.begin[dim] = std::min(outer_box.begin[dim], x - h);
+				outer_box.end[dim] = std::max(outer_box.end[dim], x + h);
+			}
 			if (sph_particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
 		}
-		for( int dim = 0; dim < NDIM; dim++) {
-			inner_box.begin[dim] = box.begin[dim];
-			inner_box.end[dim] = box.end[dim];
-		}
-		const float dx = box.end[XDIM] - box.begin[XDIM];
-		const float dy = box.end[YDIM] - box.begin[YDIM];
-		const float dz = box.end[ZDIM] - box.begin[ZDIM];
-		const float maxh = sqrt(sqr(dx, dy, dz));
-		for (int dim = 0; dim < NDIM; dim++) {
-			outer_box.begin[dim] = box.begin[dim] - maxh;
-			outer_box.end[dim] = box.end[dim] + maxh;
-		}
-		inner_box.valid = outer_box.valid = true;
 		node_count = 1;
 		leaf_nodes = 1;
 		if (nactive) {

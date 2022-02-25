@@ -56,11 +56,21 @@ struct sph_tree_neighbor_return {
 	bool has_value_at;CUDA_EXPORT
 	sph_tree_neighbor_return() {
 		has_value_at = false;
+		for( int dim = 0; dim < NDIM; dim++) {
+			inner_box.begin[dim] = 1.9;
+			inner_box.end[dim] = -0.9;
+			outer_box.begin[dim] = 1.9;
+			outer_box.end[dim] = -0.9;
+		}
 	}
 	CUDA_EXPORT
 	sph_tree_neighbor_return& operator+=(const sph_tree_neighbor_return& other) {
-		inner_box.accumulate(other.inner_box);
-		outer_box.accumulate(other.outer_box);
+		for( int dim = 0; dim < NDIM; dim++) {
+			inner_box.begin[dim] = std::min(inner_box.begin[dim], other.inner_box.begin[dim]);
+			inner_box.end[dim] = std::max(inner_box.end[dim], other.inner_box.end[dim]);
+			outer_box.begin[dim] = std::min(outer_box.begin[dim], other.outer_box.begin[dim]);
+			outer_box.end[dim] = std::max(outer_box.end[dim], other.outer_box.end[dim]);
+		}
 		if (!has_value_at && other.has_value_at) {
 			value_at = other.value_at;
 			has_value_at = true;

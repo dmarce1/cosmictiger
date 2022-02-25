@@ -273,11 +273,12 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
 						if (distance(self.outer_box.end[dim], x[dim]) - h < 0.0f) {
-//							box_xceeded = true;
+							box_xceeded = true;
 							break;
 						}
 						if (distance(x[dim], self.outer_box.begin[dim]) - h < 0.0f) {
-							//						box_xceeded = true;
+							box_xceeded = true;
+							break;
 						}
 					}
 					if (tid == 0) {
@@ -971,8 +972,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					float dt = 0.5f * rung_dt[myrung] * params.t0; // 3
 					const float num = alpha_n + dt * (SPH_ALPHA0 * t0inv + S);
 					const float den = 1.f + dt * (t0inv + S / SPH_ALPHA1);
-//					alpha_np1 = num / den;
-					alpha_np1 = 1.f;
+					alpha_np1 = num / den;
+//					alpha_np1 = 1.f;
 				}
 			}
 		}

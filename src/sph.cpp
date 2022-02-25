@@ -174,14 +174,12 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 }
 
 inline bool range_contains(const fixed32_range& a, const array<fixed32, NDIM> x) {
-	bool contains = a.valid;
-	if (contains) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			if (distance(x[dim], a.begin[dim]) >= 0.0 && distance(a.end[dim], x[dim]) >= 0.0) {
-			} else {
-				contains = false;
-				break;
-			}
+	bool contains = true;
+	for (int dim = 0; dim < NDIM; dim++) {
+		if (distance(x[dim], a.begin[dim]) >= 0.0 && distance(a.end[dim], x[dim]) >= 0.0) {
+		} else {
+			contains = false;
+			break;
 		}
 	}
 	return contains;
@@ -380,7 +378,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 ///	PRINT( "%i %i\n", level, checklist.size());
 	sph_tree_neighbor_return kr;
 	if (params.run_type == SPH_TREE_NEIGHBOR_BOXES) {
-		return hpx::make_ready_future(kr);
+//		return hpx::make_ready_future(kr);
 	}
 	stack_trace_activate();
 	const sph_tree_node* self_ptr = sph_tree_get_node(self);
@@ -451,64 +449,41 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 		}
 			break;
 		case SPH_TREE_NEIGHBOR_BOXES: {
-			/*	fixed32_range ibox, obox;
-			 float maxh = 0.f;
-			 for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-			 const bool active = sph_particles_rung(i) >= params.min_rung;
-			 const bool semiactive = !active && sph_particles_semi_active(i);
-			 const float h = params.h_wt * sph_particles_smooth_len(i);
-			 const auto myx = sph_particles_pos(XDIM, i);
-			 const auto myy = sph_particles_pos(YDIM, i);
-			 const auto myz = sph_particles_pos(ZDIM, i);
-			 const int k = i - self_ptr->part_range.first;
-			 maxh = std::max(maxh, h);
-			 array<fixed32, NDIM> X;
-			 X[XDIM] = myx;
-			 X[YDIM] = myy;
-			 X[ZDIM] = myz;
-			 if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
-			 obox.accumulate(X, h);
-			 }
-			 ibox.accumulate(X);
-			 }*/
-			for (int dim = 0; dim < NDIM; dim++) {
-				//	obox.begin[dim] = self_ptr->box.begin[dim] - maxh;
-				//		obox.end[dim] = self_ptr->box.end[dim] + maxh;
+			fixed32_range ibox, obox;
+			float maxh = 0.f;
+			for( int dim = 0; dim < NDIM; dim++) {
+				ibox.begin[dim] = obox.begin[dim] = 1.9;
+				ibox.end[dim] = obox.end[dim] = -.9;
 			}
-			//	ibox = self_ptr->box;
-			bool test = true;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-				array<fixed32, NDIM> X;
+				const bool active = sph_particles_rung(i) >= params.min_rung;
+				const bool semiactive = !active && sph_particles_semi_active(i);
+				const float h = params.h_wt * sph_particles_smooth_len(i);
 				const auto myx = sph_particles_pos(XDIM, i);
 				const auto myy = sph_particles_pos(YDIM, i);
 				const auto myz = sph_particles_pos(ZDIM, i);
+				const int k = i - self_ptr->part_range.first;
+				maxh = std::max(maxh, h);
+				array<fixed32, NDIM> X;
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				/*				if ((params.set & SPH_SET_ALL)) {
-				 for( int dim = 0; dim < NDIM; dim++) {
-				 auto Y = X;
-				 Y[dim] = Y[dim].to_double() + sph_particles_smooth_len(i);
-				 if (!obox.contains(Y)) {
-				 PRINT("ERROR! %e %e %e\n", obox.begin[dim].to_float(), obox.end[dim].to_float(), Y[dim].to_float());
-				 abort();
-				 }
-				 Y[dim] = Y[dim].to_double() - 2.0* sph_particles_smooth_len(i);
-				 if (!obox.contains(Y)) {
-				 PRINT("ERROR! %e %e %e\n", obox.begin[dim], obox.end[dim], Y[dim].to_float());
-				 abort();
-				 }
-				 }
-				 if (!obox.contains(X)) {
-				 PRINT("ERROR!\n");
-				 abort();
-				 }
-				 }*/
+				if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+					for( int dim = 0; dim < NDIM; dim++) {
+						const double x = X[dim].to_double();
+						obox.begin[dim] = std::min(obox.begin[dim], x - h);
+						obox.end[dim] = std::max(obox.end[dim], x + h);
+					}
+				}
+				for( int dim = 0; dim < NDIM; dim++) {
+					const double x = X[dim].to_double();
+					ibox.begin[dim] = std::min(ibox.begin[dim], x);
+					ibox.end[dim] = std::max(ibox.end[dim], x);
+				}
 			}
-			//		PRINT( "obox %e %e %e\n", obox.begin[0].to_float(), obox.end[0].to_float(), params.h_wt );
-			//kr.inner_box = ibox;
-			//	kr.outer_box = obox;
-			//	sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
+			kr.inner_box = ibox;
+			kr.outer_box = obox;
+			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
 		}
 			break;
 
@@ -711,7 +686,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 				}
 				cnt++;
 				if (cnt > 100) {
-					PRINT("density solver failed to converge %e %e %i %i %i %i\n", h, dh, nactive, self_ptr->outer_box.valid, self_ptr->inner_box.valid, nneighbor);
+//					PRINT("density solver failed to converge %e %e %i %i %i %i\n", h, dh, nactive, self_ptr->outer_box.valid, self_ptr->inner_box.valid, nneighbor);
 					abort();
 				}
 				//			PRINT( "%e\n", h);
@@ -778,222 +753,222 @@ static sph_run_return sph_mark_semiactive(const sph_tree_node* self_ptr, const v
 
 sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>& main_xs, const vector<fixed32>& main_ys, const vector<fixed32>& main_zs,
 		const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs, const vector<float>& main_vys, const vector<float>& main_vzs,
-			int min_rung, float ascale, float t0) {
+		int min_rung, float ascale, float t0) {
 	sph_run_return rc;
 	/*const simd_float m = get_options().sph_mass;
-	const simd_float minv = simd_float(1.0f) / m;
-	static thread_local vector<simd_int> xs;
-	static thread_local vector<simd_int> ys;
-	static thread_local vector<simd_int> zs;
-	static thread_local vector<simd_float> hs;
-	static thread_local vector<simd_float> ents;
-	static thread_local vector<simd_float> vxs;
-	static thread_local vector<simd_float> vys;
-	static thread_local vector<simd_float> vzs;
-	static thread_local vector<simd_float> fvels;
-	static thread_local vector<simd_float> masks;
-	const auto rung2dt = [](simd_int rung) {
-		simd_float dt;
-		for( int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-			dt[k] = rung_dt[rung[k]];
-		}
-		return dt;
-	};
-	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-		if (sph_particles_rung(i) >= min_rung) {
-			xs.resize(0);
-			ys.resize(0);
-			zs.resize(0);
-			hs.resize(0);
-			ents.resize(0);
-			fvels.resize(0);
-			vxs.resize(0);
-			vys.resize(0);
-			vzs.resize(0);
-			masks.resize(0);
-			const simd_float myh = sph_particles_smooth_len(i);
-			const simd_int myrung = sph_particles_rung(i);
-			const simd_float myh2 = sqr(myh);
-			const simd_float myhinv = simd_float(1.0) / myh;
-			const simd_float myh3inv = myhinv * sqr(myhinv);
-			const simd_float myrho = sph_den(myh3inv);
-			const simd_float myrhoinv = simd_float(1.0) / myrho;
-			const simd_int myx = sph_particles_pos(XDIM, i).raw();
-			const simd_int myy = sph_particles_pos(YDIM, i).raw();
-			const simd_int myz = sph_particles_pos(ZDIM, i).raw();
-			const simd_float myvx = sph_particles_vel(XDIM, i);
-			const simd_float myvy = sph_particles_vel(YDIM, i);
-			const simd_float myvz = sph_particles_vel(ZDIM, i);
-			const simd_float myent = sph_particles_ent(i);
-			const simd_float myp = pow(myrho, simd_float(get_options().gamma)) * myent;
-			const simd_float myc = sqrt(simd_float(get_options().gamma) * myp * myrhoinv);
-			int base = -1;
-			int offset = SIMD_FLOAT_SIZE;
-			static const simd_float _2float(fixed2float);
+	 const simd_float minv = simd_float(1.0f) / m;
+	 static thread_local vector<simd_int> xs;
+	 static thread_local vector<simd_int> ys;
+	 static thread_local vector<simd_int> zs;
+	 static thread_local vector<simd_float> hs;
+	 static thread_local vector<simd_float> ents;
+	 static thread_local vector<simd_float> vxs;
+	 static thread_local vector<simd_float> vys;
+	 static thread_local vector<simd_float> vzs;
+	 static thread_local vector<simd_float> fvels;
+	 static thread_local vector<simd_float> masks;
+	 const auto rung2dt = [](simd_int rung) {
+	 simd_float dt;
+	 for( int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+	 dt[k] = rung_dt[rung[k]];
+	 }
+	 return dt;
+	 };
+	 for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+	 if (sph_particles_rung(i) >= min_rung) {
+	 xs.resize(0);
+	 ys.resize(0);
+	 zs.resize(0);
+	 hs.resize(0);
+	 ents.resize(0);
+	 fvels.resize(0);
+	 vxs.resize(0);
+	 vys.resize(0);
+	 vzs.resize(0);
+	 masks.resize(0);
+	 const simd_float myh = sph_particles_smooth_len(i);
+	 const simd_int myrung = sph_particles_rung(i);
+	 const simd_float myh2 = sqr(myh);
+	 const simd_float myhinv = simd_float(1.0) / myh;
+	 const simd_float myh3inv = myhinv * sqr(myhinv);
+	 const simd_float myrho = sph_den(myh3inv);
+	 const simd_float myrhoinv = simd_float(1.0) / myrho;
+	 const simd_int myx = sph_particles_pos(XDIM, i).raw();
+	 const simd_int myy = sph_particles_pos(YDIM, i).raw();
+	 const simd_int myz = sph_particles_pos(ZDIM, i).raw();
+	 const simd_float myvx = sph_particles_vel(XDIM, i);
+	 const simd_float myvy = sph_particles_vel(YDIM, i);
+	 const simd_float myvz = sph_particles_vel(ZDIM, i);
+	 const simd_float myent = sph_particles_ent(i);
+	 const simd_float myp = pow(myrho, simd_float(get_options().gamma)) * myent;
+	 const simd_float myc = sqrt(simd_float(get_options().gamma) * myp * myrhoinv);
+	 int base = -1;
+	 int offset = SIMD_FLOAT_SIZE;
+	 static const simd_float _2float(fixed2float);
 
-			int count = 0;
-			for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
-				simd_int x, y, z;
-				simd_float mask, h;
-				const int maxj = std::min((int) main_xs.size(), j + SIMD_FLOAT_SIZE);
-				for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
-					const int kmj = k - j;
-					if (k < main_xs.size()) {
-						x[kmj] = main_xs[k].raw();
-						y[kmj] = main_ys[k].raw();
-						z[kmj] = main_zs[k].raw();
-						h[kmj] = main_hs[k];
-						mask[kmj] = 1.0f;
-					} else {
-						h[kmj] = 1.0f;
-						x[kmj] = y[kmj] = z[kmj] = mask[kmj] = 0.0f;
-					}
-				}
-				const simd_float dx = simd_float(myx - x) * _2float;
-				const simd_float dy = simd_float(myy - y) * _2float;
-				const simd_float dz = simd_float(myz - z) * _2float;
-				const simd_float h2 = sqr(h);
-				const simd_float r2 = sqr(dx, dy, dz);
-				mask *= simd_float(r2 < myh2);
-				for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-					if (mask[k] > 0.0) {
-						count++;
-						if (offset == SIMD_FLOAT_SIZE) {
-							xs.push_back(myx);
-							ys.push_back(myy);
-							zs.push_back(myz);
-							hs.push_back(simd_float(1.0));
-							ents.push_back(simd_float(1.0));
-							vxs.push_back(simd_float(0.0));
-							vys.push_back(simd_float(0.0));
-							vzs.push_back(simd_float(0.0));
-							fvels.push_back(simd_float(0.0));
-							masks.push_back(simd_float(0.0));
-							base++;
-							offset = 0;
-						}
-						const int jpk = j + k;
-						xs.back()[offset] = main_xs[jpk].raw();
-						ys.back()[offset] = main_ys[jpk].raw();
-						zs.back()[offset] = main_zs[jpk].raw();
-						hs.back()[offset] = main_hs[jpk];
-						ents.back()[offset] = main_ents[jpk];
-						vxs.back()[offset] = main_vxs[jpk];
-						vys.back()[offset] = main_vys[jpk];
-						vzs.back()[offset] = main_vzs[jpk];
-						masks.back()[offset] = 1.0f;
-						offset++;
-					}
-				}
-			}
-//			if( xs.size() == 0 ) {
-//				PRINT( "%i\n", count);
-//				PRINT( "ZERO %i %i %e %e\n", self_ptr->neighbor_range.second - self_ptr->neighbor_range.first, main_xs.size(), myh[0], myx[0]*_2float[0]);
-//				abort();
-//			}
-			static const simd_float tiny = simd_float(1e-15);
-			static const simd_float one(1.0f);
-			static const simd_float zero(0.0f);
-			static const simd_float half(0.5f);
-			simd_float dvx_dx = 0.0f;
-			simd_float dvx_dy = 0.0f;
-			simd_float dvx_dz = 0.0f;
-			simd_float dvy_dx = 0.0f;
-			simd_float dvy_dy = 0.0f;
-			simd_float dvy_dz = 0.0f;
-			simd_float dvz_dx = 0.0f;
-			simd_float dvz_dy = 0.0f;
-			simd_float dvz_dz = 0.0f;
-			simd_float drho_dh = 0.f;
-			simd_float max_vsig(zero);
-			simd_float vsig(0.f);
-			for (int j = 0; j < xs.size(); j++) {
-				const simd_float dx = simd_float(myx - xs[j]) * _2float;
-				const simd_float dy = simd_float(myy - ys[j]) * _2float;
-				const simd_float dz = simd_float(myz - zs[j]) * _2float;
-				const simd_float h = hs[j];
-				const simd_float hinv = one / h;
-				const simd_float hinv3 = hinv * sqr(hinv);
-				const simd_float rho = sph_den(hinv3);
-				const simd_float rhoinv = one / rho;
-				const simd_float dvx = myvz - vxs[j];
-				const simd_float dvy = myvy - vys[j];
-				const simd_float dvz = myvz - vzs[j];
-				const simd_float c = sqrt(simd_float(get_options().gamma) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
-				const simd_float r = sqrt(sqr(dx, dy, dz));
-				static const simd_float tiny = simd_float(1e-15);
-				const simd_float rinv = one / (r + tiny);
-				const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
-				const simd_float this_vsig = (c + myc + simd_float(3) * max(-dv, simd_float(0))) * masks[j];
-				max_vsig = max(max_vsig, this_vsig);
-				const simd_float q = r * myhinv;
-				const simd_float dWdr = dkernelW_dq(q) * hinv * hinv3;
-				const simd_float tmp = m * dWdr * rhoinv * masks[j];
-				const simd_float dWdr_x = dx * tmp * rinv;
-				const simd_float dWdr_y = dy * tmp * rinv;
-				const simd_float dWdr_z = dz * tmp * rinv;
-				dvx_dx -= dvx * dWdr_x;
-				dvx_dy -= dvx * dWdr_y;
-				dvx_dz -= dvx * dWdr_z;
-				dvy_dx -= dvy * dWdr_x;
-				dvy_dy -= dvy * dWdr_y;
-				dvy_dz -= dvy * dWdr_z;
-				dvz_dx -= dvz * dWdr_x;
-				dvz_dy -= dvz * dWdr_y;
-				dvz_dz -= dvz * dWdr_z;
-				drho_dh += -q * dkernelW_dq(q) * masks[j];
-			}
-			const float dvx_dx_sum = dvx_dx.sum();
-			const float dvx_dy_sum = dvx_dy.sum();
-			const float dvx_dz_sum = dvx_dz.sum();
-			const float dvy_dx_sum = dvy_dx.sum();
-			const float dvy_dy_sum = dvy_dy.sum();
-			const float dvy_dz_sum = dvy_dz.sum();
-			const float dvz_dx_sum = dvz_dx.sum();
-			const float dvz_dy_sum = dvz_dy.sum();
-			const float dvz_dz_sum = dvz_dz.sum();
-			const float abs_div_v = fabs(dvx_dx_sum + dvy_dy_sum + dvz_dz_sum);
-			const float curl_vx = dvz_dy_sum - dvy_dz_sum;
-			const float curl_vy = -dvz_dx_sum + dvx_dz_sum;
-			const float curl_vz = dvy_dx_sum - dvx_dy_sum;
-			const float sw = 1e-4 * myc[0] / myh[0];
-			const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
-			const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-			const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * get_options().neighbor_number);
-			const float pre = 1.0f / (1.0f + c0);
-			sph_particles_fpre(i) = pre;
-			sph_particles_fvel(i) = fvel;
-			const float vsig_max = max_vsig.max();
-			rc.max_vsig = vsig_max;
-			float dthydro = rc.max_vsig / (ascale * myh[0]);
-			if (dthydro > 1.0e-99) {
-//				dthydro = SPH_CFL / dthydro;
-			} else {
-				dthydro = 1.0e99;
-			}
-			static const float eta = get_options().eta;
-			static const float hgrav = myh[0];
-			const float gx = sph_particles_gforce(XDIM, i);
-			const float gy = sph_particles_gforce(YDIM, i);
-			const float gz = sph_particles_gforce(ZDIM, i);
-			char& rung = sph_particles_rung(i);
-			const float g2 = sqr(gx, gy, gz);
-			const float factor = eta * sqrtf(ascale * hgrav);
-			const float dt_grav = std::min(factor / sqrtf(sqrtf(g2 + tiny[0])), (float) t0);
-			const float dt = std::min(dt_grav, dthydro);
-			const int rung_hydro = ceilf(log2f(t0) - log2f(dthydro));
-			const int rung_grav = ceilf(log2f(t0) - log2f(dt_grav));
-			rung = std::max(std::max((int) std::max(rung_hydro, rung_grav), std::max(min_rung, (int) rung - 1)), 1);
-//			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
-			if (rung < 0 || rung >= MAX_RUNG) {
-				PRINT("Rung out of range \n");
-			}
-			rc.max_rung_hydro = std::max(rc.max_rung_hydro, (int) rung_hydro);
-			rc.max_rung_grav = std::max(rc.max_rung_grav, (int) rung_grav);
-			rc.max_rung = std::max(rc.max_rung, (int) rung);
+	 int count = 0;
+	 for (int j = 0; j < main_xs.size(); j += SIMD_FLOAT_SIZE) {
+	 simd_int x, y, z;
+	 simd_float mask, h;
+	 const int maxj = std::min((int) main_xs.size(), j + SIMD_FLOAT_SIZE);
+	 for (int k = j; k < j + SIMD_FLOAT_SIZE; k++) {
+	 const int kmj = k - j;
+	 if (k < main_xs.size()) {
+	 x[kmj] = main_xs[k].raw();
+	 y[kmj] = main_ys[k].raw();
+	 z[kmj] = main_zs[k].raw();
+	 h[kmj] = main_hs[k];
+	 mask[kmj] = 1.0f;
+	 } else {
+	 h[kmj] = 1.0f;
+	 x[kmj] = y[kmj] = z[kmj] = mask[kmj] = 0.0f;
+	 }
+	 }
+	 const simd_float dx = simd_float(myx - x) * _2float;
+	 const simd_float dy = simd_float(myy - y) * _2float;
+	 const simd_float dz = simd_float(myz - z) * _2float;
+	 const simd_float h2 = sqr(h);
+	 const simd_float r2 = sqr(dx, dy, dz);
+	 mask *= simd_float(r2 < myh2);
+	 for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+	 if (mask[k] > 0.0) {
+	 count++;
+	 if (offset == SIMD_FLOAT_SIZE) {
+	 xs.push_back(myx);
+	 ys.push_back(myy);
+	 zs.push_back(myz);
+	 hs.push_back(simd_float(1.0));
+	 ents.push_back(simd_float(1.0));
+	 vxs.push_back(simd_float(0.0));
+	 vys.push_back(simd_float(0.0));
+	 vzs.push_back(simd_float(0.0));
+	 fvels.push_back(simd_float(0.0));
+	 masks.push_back(simd_float(0.0));
+	 base++;
+	 offset = 0;
+	 }
+	 const int jpk = j + k;
+	 xs.back()[offset] = main_xs[jpk].raw();
+	 ys.back()[offset] = main_ys[jpk].raw();
+	 zs.back()[offset] = main_zs[jpk].raw();
+	 hs.back()[offset] = main_hs[jpk];
+	 ents.back()[offset] = main_ents[jpk];
+	 vxs.back()[offset] = main_vxs[jpk];
+	 vys.back()[offset] = main_vys[jpk];
+	 vzs.back()[offset] = main_vzs[jpk];
+	 masks.back()[offset] = 1.0f;
+	 offset++;
+	 }
+	 }
+	 }
+	 //			if( xs.size() == 0 ) {
+	 //				PRINT( "%i\n", count);
+	 //				PRINT( "ZERO %i %i %e %e\n", self_ptr->neighbor_range.second - self_ptr->neighbor_range.first, main_xs.size(), myh[0], myx[0]*_2float[0]);
+	 //				abort();
+	 //			}
+	 static const simd_float tiny = simd_float(1e-15);
+	 static const simd_float one(1.0f);
+	 static const simd_float zero(0.0f);
+	 static const simd_float half(0.5f);
+	 simd_float dvx_dx = 0.0f;
+	 simd_float dvx_dy = 0.0f;
+	 simd_float dvx_dz = 0.0f;
+	 simd_float dvy_dx = 0.0f;
+	 simd_float dvy_dy = 0.0f;
+	 simd_float dvy_dz = 0.0f;
+	 simd_float dvz_dx = 0.0f;
+	 simd_float dvz_dy = 0.0f;
+	 simd_float dvz_dz = 0.0f;
+	 simd_float drho_dh = 0.f;
+	 simd_float max_vsig(zero);
+	 simd_float vsig(0.f);
+	 for (int j = 0; j < xs.size(); j++) {
+	 const simd_float dx = simd_float(myx - xs[j]) * _2float;
+	 const simd_float dy = simd_float(myy - ys[j]) * _2float;
+	 const simd_float dz = simd_float(myz - zs[j]) * _2float;
+	 const simd_float h = hs[j];
+	 const simd_float hinv = one / h;
+	 const simd_float hinv3 = hinv * sqr(hinv);
+	 const simd_float rho = sph_den(hinv3);
+	 const simd_float rhoinv = one / rho;
+	 const simd_float dvx = myvz - vxs[j];
+	 const simd_float dvy = myvy - vys[j];
+	 const simd_float dvz = myvz - vzs[j];
+	 const simd_float c = sqrt(simd_float(get_options().gamma) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
+	 const simd_float r = sqrt(sqr(dx, dy, dz));
+	 static const simd_float tiny = simd_float(1e-15);
+	 const simd_float rinv = one / (r + tiny);
+	 const simd_float dv = (dvx * dx + dvy * dy + dvz * dz) * rinv;
+	 const simd_float this_vsig = (c + myc + simd_float(3) * max(-dv, simd_float(0))) * masks[j];
+	 max_vsig = max(max_vsig, this_vsig);
+	 const simd_float q = r * myhinv;
+	 const simd_float dWdr = dkernelW_dq(q) * hinv * hinv3;
+	 const simd_float tmp = m * dWdr * rhoinv * masks[j];
+	 const simd_float dWdr_x = dx * tmp * rinv;
+	 const simd_float dWdr_y = dy * tmp * rinv;
+	 const simd_float dWdr_z = dz * tmp * rinv;
+	 dvx_dx -= dvx * dWdr_x;
+	 dvx_dy -= dvx * dWdr_y;
+	 dvx_dz -= dvx * dWdr_z;
+	 dvy_dx -= dvy * dWdr_x;
+	 dvy_dy -= dvy * dWdr_y;
+	 dvy_dz -= dvy * dWdr_z;
+	 dvz_dx -= dvz * dWdr_x;
+	 dvz_dy -= dvz * dWdr_y;
+	 dvz_dz -= dvz * dWdr_z;
+	 drho_dh += -q * dkernelW_dq(q) * masks[j];
+	 }
+	 const float dvx_dx_sum = dvx_dx.sum();
+	 const float dvx_dy_sum = dvx_dy.sum();
+	 const float dvx_dz_sum = dvx_dz.sum();
+	 const float dvy_dx_sum = dvy_dx.sum();
+	 const float dvy_dy_sum = dvy_dy.sum();
+	 const float dvy_dz_sum = dvy_dz.sum();
+	 const float dvz_dx_sum = dvz_dx.sum();
+	 const float dvz_dy_sum = dvz_dy.sum();
+	 const float dvz_dz_sum = dvz_dz.sum();
+	 const float abs_div_v = fabs(dvx_dx_sum + dvy_dy_sum + dvz_dz_sum);
+	 const float curl_vx = dvz_dy_sum - dvy_dz_sum;
+	 const float curl_vy = -dvz_dx_sum + dvx_dz_sum;
+	 const float curl_vz = dvy_dx_sum - dvx_dy_sum;
+	 const float sw = 1e-4 * myc[0] / myh[0];
+	 const float abs_curl_v = sqrt(sqr(curl_vx, curl_vy, curl_vz));
+	 const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
+	 const float c0 = drho_dh.sum() * 4.0 * M_PI / (9.0 * get_options().neighbor_number);
+	 const float pre = 1.0f / (1.0f + c0);
+	 sph_particles_fpre(i) = pre;
+	 sph_particles_fvel(i) = fvel;
+	 const float vsig_max = max_vsig.max();
+	 rc.max_vsig = vsig_max;
+	 float dthydro = rc.max_vsig / (ascale * myh[0]);
+	 if (dthydro > 1.0e-99) {
+	 //				dthydro = SPH_CFL / dthydro;
+	 } else {
+	 dthydro = 1.0e99;
+	 }
+	 static const float eta = get_options().eta;
+	 static const float hgrav = myh[0];
+	 const float gx = sph_particles_gforce(XDIM, i);
+	 const float gy = sph_particles_gforce(YDIM, i);
+	 const float gz = sph_particles_gforce(ZDIM, i);
+	 char& rung = sph_particles_rung(i);
+	 const float g2 = sqr(gx, gy, gz);
+	 const float factor = eta * sqrtf(ascale * hgrav);
+	 const float dt_grav = std::min(factor / sqrtf(sqrtf(g2 + tiny[0])), (float) t0);
+	 const float dt = std::min(dt_grav, dthydro);
+	 const int rung_hydro = ceilf(log2f(t0) - log2f(dthydro));
+	 const int rung_grav = ceilf(log2f(t0) - log2f(dt_grav));
+	 rung = std::max(std::max((int) std::max(rung_hydro, rung_grav), std::max(min_rung, (int) rung - 1)), 1);
+	 //			PRINT( "%i %e %e %e %e\n", rung, dt_grav, gx, gy, gz);
+	 if (rung < 0 || rung >= MAX_RUNG) {
+	 PRINT("Rung out of range \n");
+	 }
+	 rc.max_rung_hydro = std::max(rc.max_rung_hydro, (int) rung_hydro);
+	 rc.max_rung_grav = std::max(rc.max_rung_grav, (int) rung_grav);
+	 rc.max_rung = std::max(rc.max_rung, (int) rung);
 
-		}
-	}*/
+	 }
+	 }*/
 	return rc;
 }
 
@@ -1437,9 +1412,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 
 							case SPH_RUN_SMOOTHLEN:
 							test = (params.set & SPH_SET_ACTIVE) && (self->nactive > 0);
-							if( !test && (params.set & SPH_SET_SEMIACTIVE) ) {
-								test = has_active_neighbors(self);
-							}
 							break;
 
 							case SPH_RUN_MARK_SEMIACTIVE:
@@ -1451,9 +1423,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 
 							case SPH_RUN_HYDRO:
 							test = (self->nactive > 0);
-							if( !test ) {
-								test = has_active_neighbors(self);
-							}
 							break;
 
 							case SPH_RUN_COURANT:

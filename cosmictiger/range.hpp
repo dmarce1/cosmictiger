@@ -288,33 +288,27 @@ inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
 }
 
 struct fixed32_range: public range<double> {
-	char valid;
 	fixed32_range() {
-		valid = false;
 	}
 	CUDA_EXPORT
 	fixed32_range& operator=(const fixed32_range& other) {
-		valid = other.valid;
 		begin = other.begin;
 		end = other.end;
 		return *this;
 	}
 	CUDA_EXPORT
 	fixed32_range& operator=(fixed32_range&& other) {
-		valid = other.valid;
 		begin = other.begin;
 		end = other.end;
 		return *this;
 	}
 	CUDA_EXPORT
 	fixed32_range(const fixed32_range& other) {
-		valid = other.valid;
 		begin = other.begin;
 		end = other.end;
 	}
 	CUDA_EXPORT
 	fixed32_range(fixed32_range&& other) {
-		valid = other.valid;
 		begin = other.begin;
 		end = other.end;
 	}
@@ -360,7 +354,7 @@ struct fixed32_range: public range<double> {
 			}
 		}
 	}*/
-	void accumulate(const fixed32_range& other) {
+/*	void accumulate(const fixed32_range& other) {
 		if (valid && other.valid) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				begin[dim] = std::min(begin[dim], other.begin[dim]);
@@ -369,11 +363,10 @@ struct fixed32_range: public range<double> {
 		} else if (!valid && other.valid) {
 			*this = other;
 		}
-	}
+	}*/
 	template<class A>
 	void serialize(A&& arc, unsigned i) {
 		range<double>::serialize(arc, i);
-		arc & valid;
 	}
 };
 
