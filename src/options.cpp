@@ -288,7 +288,7 @@ bool process_options(int argc, char *argv[]) {
 #endif
 	if (opts.test == "sod") {
 		opts.chem = opts.gravity = opts.conduction = false;
-		opts.gamma = 7. / 5.;
+		opts.gamma = 5. / 3.;
 	}
 	kernel_set_type(opts.kernel);
 	set_options(opts);

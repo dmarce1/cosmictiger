@@ -70,6 +70,7 @@ set(cosmictiger_source_files
     src/kernel.cu
     src/kick.cpp
     src/kick.cu
+    src/exact_sod.cpp
     src/kick_workspace.cpp
     src/lightcone.cpp
     src/main.cpp
@@ -128,6 +129,7 @@ set(cosmictiger_header_files
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lc_group_archive.hpp
+    cosmictiger/exact_sod.hpp
     cosmictiger/lightcone.hpp
     cosmictiger/math.hpp
     cosmictiger/memused.hpp

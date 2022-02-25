@@ -273,11 +273,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
 						if (distance(self.outer_box.end[dim], x[dim]) - h < 0.0f) {
-							box_xceeded = true;
+//							box_xceeded = true;
 							break;
 						}
 						if (distance(x[dim], self.outer_box.begin[dim]) - h < 0.0f) {
-							box_xceeded = true;
+	//						box_xceeded = true;
 						}
 					}
 					if (tid == 0) {

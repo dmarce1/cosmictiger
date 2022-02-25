@@ -554,7 +554,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 					const float rhoinv = 1.0 / rho;
 					const float q = r * hinv;
 					const float w = h3inv * kernelW(q) * rhoinv * m;
-					const float p = dat.ents[i] * pow(rho, SPH_GAMMA);
+					const float p = dat.ents[i] * pow(rho, get_options().gamma);
 					one += w;
 					values.vx += w * dat.vxs[i];
 					values.vy += w * dat.vys[i];
@@ -778,9 +778,9 @@ static sph_run_return sph_mark_semiactive(const sph_tree_node* self_ptr, const v
 
 sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>& main_xs, const vector<fixed32>& main_ys, const vector<fixed32>& main_zs,
 		const vector<float>& main_hs, const vector<float>& main_ents, const vector<float>& main_vxs, const vector<float>& main_vys, const vector<float>& main_vzs,
-		int min_rung, float ascale, float t0) {
+			int min_rung, float ascale, float t0) {
 	sph_run_return rc;
-	const simd_float m = get_options().sph_mass;
+	/*const simd_float m = get_options().sph_mass;
 	const simd_float minv = simd_float(1.0f) / m;
 	static thread_local vector<simd_int> xs;
 	static thread_local vector<simd_int> ys;
@@ -824,15 +824,9 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			const simd_float myvx = sph_particles_vel(XDIM, i);
 			const simd_float myvy = sph_particles_vel(YDIM, i);
 			const simd_float myvz = sph_particles_vel(ZDIM, i);
-#ifdef SPH_TOTAL_ENERGY
-			const simd_float ekin = m * sqr(myvx, myvy, myvz) * simd_float(0.5f);
-			const simd_float etherm = max(simd_float(sph_particles_ent(i)) - ekin, simd_float(0));
-			const simd_float myp = myrho * minv * etherm * simd_float(SPH_GAMMA - 1.0f);
-#else
 			const simd_float myent = sph_particles_ent(i);
-			const simd_float myp = pow(myrho, simd_float(SPH_GAMMA)) * myent;
-#endif
-			const simd_float myc = sqrt(simd_float(SPH_GAMMA) * myp * myrhoinv);
+			const simd_float myp = pow(myrho, simd_float(get_options().gamma)) * myent;
+			const simd_float myc = sqrt(simd_float(get_options().gamma) * myp * myrhoinv);
 			int base = -1;
 			int offset = SIMD_FLOAT_SIZE;
 			static const simd_float _2float(fixed2float);
@@ -925,14 +919,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 				const simd_float dvx = myvz - vxs[j];
 				const simd_float dvy = myvy - vys[j];
 				const simd_float dvz = myvz - vzs[j];
-#ifdef SPH_TOTAL_ENERGY
-				const simd_float ekin = half * m * (sqr(vxs[j], vys[j], vzs[j]));
-				const simd_float etherm = max(zero, ents[j] - ekin);
-				const simd_float p = simd_float(SPH_GAMMA - 1.0) * minv * rho * etherm;
-				const simd_float c = sqrt(simd_float(SPH_GAMMA) * p * rhoinv);
-#else
-				const simd_float c = sqrt(simd_float(SPH_GAMMA) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
-#endif
+				const simd_float c = sqrt(simd_float(get_options().gamma) * pow(rho, simd_float(SPH_GAMMA - 1.0f)) * ents[j]);
 				const simd_float r = sqrt(sqr(dx, dy, dz));
 				static const simd_float tiny = simd_float(1e-15);
 				const simd_float rinv = one / (r + tiny);
@@ -1006,7 +993,7 @@ sph_run_return sph_courant(const sph_tree_node* self_ptr, const vector<fixed32>&
 			rc.max_rung = std::max(rc.max_rung, (int) rung);
 
 		}
-	}
+	}*/
 	return rc;
 }
 
