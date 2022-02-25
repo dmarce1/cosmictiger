@@ -201,6 +201,8 @@ void hydro_sod_test() {
 	hydro_driver(t);
 
 	FILE* fp = fopen("sod.txt", "wt");
+	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
+	double norm1 = 0.0, norm2 = 0.0;
 	for (int l = 0; l < N; l++) {
 		const int i = rand() % sph_particles_size();
 		const int j = sph_particles_dm_index(i);
@@ -209,14 +211,25 @@ void hydro_sod_test() {
 		const float rho = sph_den(1 / (h * h * h));
 		sod_state_t state;
 		float x0 = x;
-		if (x0 > 0.75) {
-			x0 -= 0.5;
-		} else if (x0 < 0.25) {
-			x0 += 0.5;
+		x0 -= 0.5;
+		if( x0 > 0.25 ) {
+			x0 = 0.5 - x0;
+		} else if( x0 < -0.25 ) {
+			x0 = -0.5 - x0;
 		}
-		exact_sod(&state, &sod, x0 - 0.5, t, 0);
+		exact_sod(&state, &sod, x0, t, 0);
+		double dif = fabs(rho - state.rho);
+		norm1 += state.rho;
+		norm2 += sqr(state.rho);
+		l1 += dif;
+		l2 += dif * dif;
+		lmax = std::max(lmax, dif);
 		fprintf(fp, "%e %e %e\n", x, rho, state.rho);
 	}
+	l1 /= norm1;
+	l2 /= norm2;
+	l2 = sqrt(l2);
+	PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
 	fclose(fp);
 }
 void hydro_helmholtz_test() {

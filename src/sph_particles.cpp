@@ -257,10 +257,8 @@ void sph_particles_apply_updates(int minrung, int phase, float t0) {
 				if( rung >= minrung) {
 					switch(phase) {
 						case 0:
-						sph_particles_dent_pred(i) = sph_particles_dent_con(i);
 						sph_particles_ent(i) +=sph_particles_dent_pred(i) *dt;
 						for( int dim =0; dim < NDIM; dim++) {
-							sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
 							particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
 						}
 						break;
@@ -275,6 +273,10 @@ void sph_particles_apply_updates(int minrung, int phase, float t0) {
 						}
 						break;
 						case 2:
+						sph_particles_dent_pred(i) = sph_particles_dent_con(i);
+						for( int dim =0; dim < NDIM; dim++) {
+							sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+						}
 						sph_particles_ent(i) +=sph_particles_dent_con(i) *dt;
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
