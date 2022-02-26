@@ -45,17 +45,17 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 	time_type itime = 0;
 	int minrung = 0;
 	double t = 0.0;
-	double t0 = tmax / 1024.0;
+	double t0 = tmax / 32.0;
 	int step = 0;
 	int main_step = 0;
 	float e0, ent0;
 	do {
 		int minrung = min_rung(itime);
-//		if (minrung == 0) {
-		view_output_views(main_step, 1.0);
+		if (minrung == 0) {
+			view_output_views(main_step, 1.0);
 //			output_line(main_step);
-		main_step++;
-//		}
+			main_step++;
+		}
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, false);
 		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, false);
 		int maxrung = rc2.max_rung;
@@ -83,7 +83,7 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 
 void hydro_sod_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho0 = 1.0;
+	double rho0 = 0.125;
 	double rho1 = 1.0;
 	double vx1 = 0.0;
 	double vy1 = 0.0;
@@ -91,13 +91,13 @@ void hydro_sod_test() {
 	double vx0 = 0.0;
 	double vy0 = -0.0;
 	double vz0 = -0.0e-1;
-	double p0 = 1.0e-7/sqrt(5./3.);
-	double p1 = 1.0e-7/sqrt(5./3.);
+	double p0 = 1.0e-1;
+	double p1 = 1.0;
 	sod_init_t sod;
-	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0), 1.0 / 3.0) + 0.49999;
-	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0), 1.0 / 3.0) + 0.49999;
-	part_int nparts_left = left_dim * sqr(2 * left_dim);
-	part_int nparts_right = right_dim * sqr(2 * right_dim);
+	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+	part_int nparts_left = 2 * left_dim * sqr(2 * left_dim);
+	part_int nparts_right = 2 * right_dim * sqr(2 * right_dim);
 	nparts_total = nparts_left + nparts_right;
 	double dx = 0.5 / left_dim;
 	part_int i = 0;
@@ -116,17 +116,12 @@ void hydro_sod_test() {
 	const double Ne = get_options().neighbor_number;
 	PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * right_dim, 2 * left_dim, rho0 / (m * Ne) * (4.0 * M_PI / 3.0),
 			rho1 / (m * Ne) * (4.0 * M_PI / 3.0));
-	dx = 0.25 / left_dim;
-	for (int ix = 0; ix < 2 * left_dim; ix++) {
-		for (int iy = 0; iy < 4 * left_dim; iy++) {
-			for (int iz = 0; iz < 4 * left_dim; iz++) {
+	for (int ix = 0; ix < left_dim; ix++) {
+		for (int iy = 0; iy < 2 * left_dim; iy++) {
+			for (int iz = 0; iz < 2 * left_dim; iz++) {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				if (sqr(x - 0.25, y - 0.5, z - 0.5) > 0.0001) {
-					continue;
-				}
-
 				double ent = p1 / pow(rho1, get_options().gamma);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
@@ -134,28 +129,28 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 1;
-				sph_particles_vel(YDIM, i) = -0;
-				sph_particles_vel(ZDIM, i) = -0;
+				sph_particles_vel(XDIM, i) = vx0;
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
 				sph_particles_ent(i) = ent;
 				i++;
 				//			PRINT("%i\n", i);
-				/*				x = (ix + 0.5) * dx;
-				 y = (iy + 0.5) * dx;
-				 z = (iz + 0.5) * dx;
-				 ent = p1 / pow(rho1, get_options().gamma);
-				 sph_particles_resize(sph_particles_size() + 1);
-				 sph_particles_smooth_len(i) = h;
-				 sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
-				 sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
-				 sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				 sph_particles_vel(XDIM, i) = vx0;
-				 sph_particles_vel(YDIM, i) = vy0;
-				 sph_particles_vel(ZDIM, i) = vz0;
-				 sph_particles_rung(i) = 0;
-				 sph_particles_ent(i) = ent;
-				 i++;*/
+				x = (ix + 0.5) * dx;
+				y = (iy + 0.5) * dx;
+				z = (iz + 0.5) * dx;
+				ent = p1 / pow(rho1, get_options().gamma);
+				sph_particles_resize(sph_particles_size() + 1);
+				sph_particles_smooth_len(i) = h;
+				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
+				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
+				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
+				sph_particles_vel(XDIM, i) = vx0;
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = vz0;
+				sph_particles_rung(i) = 0;
+				sph_particles_ent(i) = ent;
+				i++;
 				//			PRINT("%i\n", i);
 			}
 		}
@@ -168,9 +163,6 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				if (sqr(x - 0.75, y - 0.5, z - 0.5) > 0.01) {
-					continue;
-				}
 				double ent = p0 / pow(rho0, get_options().gamma);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
@@ -178,7 +170,7 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = -0.0;
+				sph_particles_vel(XDIM, i) = 0;
 				sph_particles_vel(YDIM, i) = 0;
 				sph_particles_vel(ZDIM, i) = 0;
 				;
@@ -186,28 +178,27 @@ void hydro_sod_test() {
 				sph_particles_ent(i) = ent;
 				//		PRINT("%i\n", i);
 				i++;
-				/*				x = (ix + 0.5) * dx;
-				 y = (iy + 0.5) * dx;
-				 z = (iz + 0.5) * dx;
-				 sph_particles_resize(sph_particles_size() + 1);
-				 sph_particles_smooth_len(i) = h;
-				 sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
-				 sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
-				 sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				 sph_particles_vel(XDIM, i) = 0;
-				 sph_particles_vel(YDIM, i) = 0;
-				 sph_particles_vel(ZDIM, i) = 0;
-				 ;
-				 sph_particles_rung(i) = 0;
-				 sph_particles_ent(i) = ent;
-				 i++;*/
+				x = (ix + 0.5) * dx;
+				y = (iy + 0.5) * dx;
+				z = (iz + 0.5) * dx;
+				sph_particles_resize(sph_particles_size() + 1);
+				sph_particles_smooth_len(i) = h;
+				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
+				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
+				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
+				;
+				sph_particles_rung(i) = 0;
+				sph_particles_ent(i) = ent;
+				i++;
 			}
 		}
 	}
-	constexpr float t = 2.5;
+	constexpr float t = 0.10;
 	constexpr int N = 1000;
 	hydro_driver(t);
-
 	FILE* fp = fopen("sod.txt", "wt");
 	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
 	double norm1 = 0.0, norm2 = 0.0;
@@ -240,6 +231,7 @@ void hydro_sod_test() {
 	PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
 	fclose(fp);
 }
+
 void hydro_helmholtz_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho1 = 0.5;

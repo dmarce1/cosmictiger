@@ -287,7 +287,9 @@ inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
 	return rc;
 }
 
-struct fixed32_range: public range<double> {
+using range_fixed = fixed<int,29>;
+
+struct fixed32_range: public range<range_fixed> {
 	fixed32_range() {
 	}
 	CUDA_EXPORT
@@ -323,11 +325,11 @@ struct fixed32_range: public range<double> {
 					I[1] = j;
 					I[2] = k;
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (pt[dim].to_double() < begin[dim] + I[dim]) {
+						if (pt[dim].to_double() < begin[dim].to_double() + I[dim]) {
 							contains = false;
 							break;
 						}
-						if (pt[dim].to_double() > end[dim] + I[dim]) {
+						if (pt[dim].to_double() > end[dim].to_double() + I[dim]) {
 							contains = false;
 							break;
 						}
@@ -340,34 +342,52 @@ struct fixed32_range: public range<double> {
 		}
 		return false;
 	}
-/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
-		if (!valid) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = pt[dim].to_double() - h;
-				end[dim] = pt[dim].to_double() + h;
-			}
-			valid = true;
-		} else {
-			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
-				end[dim] = std::max(end[dim], pt[dim].to_double() + h);
-			}
-		}
-	}*/
-/*	void accumulate(const fixed32_range& other) {
-		if (valid && other.valid) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = std::min(begin[dim], other.begin[dim]);
-				end[dim] = std::max(end[dim], other.end[dim]);
-			}
-		} else if (!valid && other.valid) {
-			*this = other;
-		}
-	}*/
+	/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
+	 if (!valid) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 begin[dim] = pt[dim].to_double() - h;
+	 end[dim] = pt[dim].to_double() + h;
+	 }
+	 valid = true;
+	 } else {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
+	 end[dim] = std::max(end[dim], pt[dim].to_double() + h);
+	 }
+	 }
+	 }*/
+	/*	void accumulate(const fixed32_range& other) {
+	 if (valid && other.valid) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 begin[dim] = std::min(begin[dim], other.begin[dim]);
+	 end[dim] = std::max(end[dim], other.end[dim]);
+	 }
+	 } else if (!valid && other.valid) {
+	 *this = other;
+	 }
+	 }*/
 	template<class A>
 	void serialize(A&& arc, unsigned i) {
-		range<double>::serialize(arc, i);
+		range<range_fixed>::serialize(arc, i);
 	}
 };
 
+CUDA_EXPORT
+inline float distance(range_fixed a, fixed32 b) {
+	float f = a.to_double() - b.to_double();
+	while (f > 0.5) {
+		f -= 1.0;
+	}
+	while (f < -0.5) {
+		f += 1.0;
+	}
+	return f;
+}
+
+
+CUDA_EXPORT
+inline float distance(fixed32 b, range_fixed a) {
+	return -distance(a,b);
+
+}
 #endif /* RANGE_HPP_ */

@@ -197,7 +197,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 			tm.reset();
 			cont = kr.rc;
-			tnparams.h_wt = cont ? 2.5 : 1.01;
+			tnparams.h_wt = cont ? 1.5 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 			tm.start();
@@ -250,7 +250,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("Took %e s\n", tm.read());
 			}
 
-			sph_init_diffusion();
+/*			sph_init_diffusion();
 			sparams.run_type = SPH_RUN_DIFFUSION;
 			float err;
 			do {
@@ -266,7 +266,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 				tm.reset();
-			} while (err > SPH_DIFFUSION_TOLER);
+			} while (err > SPH_DIFFUSION_TOLER);*/
 
 		}
 
@@ -289,7 +289,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			max_rung = kr.max_rung;
 
-		sph_init_diffusion();
+/*		sph_init_diffusion();
 			sparams.run_type = SPH_RUN_DIFFUSION;
 			float err;
 			do {
@@ -305,7 +305,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 				tm.reset();
-			} while (err > SPH_DIFFUSION_TOLER);
+			} while (err > SPH_DIFFUSION_TOLER);*/
 
 			const bool chem = get_options().chem;
 				if (chem) {
