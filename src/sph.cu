@@ -35,18 +35,107 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 #define WORKSPACE_SIZE (160*1024)
 #define HYDRO_SIZE (8*1024)
 
+template<class T>
+class device_vector {
+	int sz;
+	int cap;
+	T* ptr;
+public:
+	__device__ device_vector() {
+		const int& tid = threadIdx.x;
+		__syncthreads();
+		if (tid == 0) {
+			sz = 0;
+			cap = 0;
+			ptr = nullptr;
+		}
+		__syncthreads();
+	}
+	__device__ ~device_vector() {
+		const int& tid = threadIdx.x;
+		__syncthreads();
+		if (tid == 0) {
+			if (ptr) {
+				free(ptr);
+			}
+		}
+		__syncthreads();
+	}
+	__device__
+	void resize(int new_sz) {
+		const int& tid = threadIdx.x;
+		const int& block_size = blockDim.x;
+		if (new_sz <= cap) {
+			__syncthreads();
+			if (tid == 0) {
+				sz = new_sz;
+			}
+			__syncthreads();
+		} else {
+			__shared__ T* new_ptr;
+			__syncthreads();
+			int new_cap = 1;
+			if (tid == 0) {
+				while (new_cap < new_sz) {
+					new_cap *= 2;
+				}
+				new_ptr = (T*) malloc(sizeof(T) * new_cap);
+				if( new_ptr == nullptr) {
+					PRINT( "OOM in device_vector while requesting %i!\n", new_cap);
+					__trap();
+				}
+			}
+			__syncthreads();
+			if (ptr) {
+				for (int i = tid; i < sz; i += block_size) {
+					new_ptr[i] = ptr[i];
+				}
+			}
+			__syncthreads();
+			if (tid == 0) {
+				if (ptr) {
+					free(ptr);
+				}
+				ptr = new_ptr;
+				sz = new_sz;
+				cap = new_cap;
+			}
+			__syncthreads();
+		}
+	}
+	__device__
+	int size() const {
+		return sz;
+	}
+	__device__ T& operator[](int i) {
+		if (i > sz) {
+			PRINT("Bound exceeded in device_vector\n");
+			__trap();
+		}
+		return ptr[i];
+	}
+	__device__
+	 const T& operator[](int i) const {
+		if (i > sz) {
+			PRINT("Bound exceeded in device_vector\n");
+			__trap();
+		}
+		return ptr[i];
+	}
+};
+
 struct smoothlen_workspace {
-	array<fixed32, WORKSPACE_SIZE> x;
-	array<fixed32, WORKSPACE_SIZE> y;
-	array<fixed32, WORKSPACE_SIZE> z;
+	device_vector<fixed32> x;
+	device_vector<fixed32> y;
+	device_vector<fixed32> z;
 };
 
 struct mark_semiactive_workspace {
-	array<fixed32, WORKSPACE_SIZE + 1> x;
-	array<fixed32, WORKSPACE_SIZE + 1> y;
-	array<fixed32, WORKSPACE_SIZE + 1> z;
-	array<float, WORKSPACE_SIZE + 1> h;
-	array<char, WORKSPACE_SIZE + 1> rungs;
+	device_vector<fixed32> x;
+	device_vector<fixed32> y;
+	device_vector<fixed32> z;
+	device_vector<float> h;
+	device_vector<char> rungs;
 };
 
 struct hydro_record1 {
@@ -89,28 +178,17 @@ struct dif_record2 {
 };
 
 struct hydro_workspace {
-	array<hydro_record1, WORKSPACE_SIZE + 2> rec1_main;
-	array<hydro_record2, WORKSPACE_SIZE + 2> rec2_main;
-	array<hydro_record1, HYDRO_SIZE + 2> rec1;
-	array<hydro_record2, HYDRO_SIZE + 2> rec2;
+	device_vector<hydro_record1> rec1_main;
+	device_vector<hydro_record2> rec2_main;
+	device_vector<hydro_record1> rec1;
+	device_vector<hydro_record2> rec2;
 };
 
 struct dif_workspace {
-	array<dif_record1, WORKSPACE_SIZE + 2> rec1_main;
-	array<dif_record2, WORKSPACE_SIZE + 2> rec2_main;
-	array<dif_record1, HYDRO_SIZE + 2> rec1;
-	array<dif_record2, HYDRO_SIZE + 2> rec2;
-};
-
-struct deposit_workspace {
-	array<float, WORKSPACE_SIZE + 2> sn;
-	array<fixed32, WORKSPACE_SIZE + 2> x;
-	array<fixed32, WORKSPACE_SIZE + 2> y;
-	array<fixed32, WORKSPACE_SIZE + 2> z;
-	array<float, WORKSPACE_SIZE + 2> vx;
-	array<float, WORKSPACE_SIZE + 2> vy;
-	array<float, WORKSPACE_SIZE + 2> vz;
-	array<float, WORKSPACE_SIZE + 2> h;
+	device_vector<dif_record1> rec1_main;
+	device_vector<dif_record2> rec2_main;
+	device_vector<dif_record1> rec1;
+	device_vector<dif_record2> rec2;
 };
 
 struct courant_record1 {
@@ -159,19 +237,18 @@ struct aux_record2 {
 };
 
 struct courant_workspace {
-	array<courant_record1, WORKSPACE_SIZE + 3> rec1_main;
-	array<courant_record2, WORKSPACE_SIZE + 3> rec2_main;
-	array<courant_record1, HYDRO_SIZE + 3> rec1;
-	array<courant_record2, HYDRO_SIZE + 3> rec2;
+	device_vector<courant_record1> rec1_main;
+	device_vector<courant_record2> rec2_main;
+	device_vector<courant_record1> rec1;
+	device_vector<courant_record2> rec2;
 };
 
 struct aux_workspace {
-	array<aux_record1, WORKSPACE_SIZE + 3> rec1_main;
-	array<aux_record2, WORKSPACE_SIZE + 3> rec2_main;
-	array<aux_record1, HYDRO_SIZE + 3> rec1;
-	array<aux_record2, HYDRO_SIZE + 3> rec2;
-};
-
+	device_vector<aux_record1> rec1_main;
+	device_vector<aux_record2> rec2_main;
+	device_vectory<aux_record> rec1;
+	device_vector<aux_record2> rec2;
+}
 #define SMOOTHLEN_BLOCK_SIZE 512
 #define HYDRO_BLOCK_SIZE 32
 
@@ -189,17 +266,20 @@ struct sph_reduction {
 
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
-	const int bid = blockIdx.x;
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
 	__shared__
 	float error;
-	smoothlen_workspace& ws = workspaces[bid];
+	__shared__ smoothlen_workspace ws;
+	__syncthreads();
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
 	__syncthreads();
+	new (&ws.x) device_vector<fixed32>();
+	new (&ws.y) device_vector<fixed32>();
+	new (&ws.z) device_vector<fixed32>();
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
 		int size = 0;
@@ -354,20 +434,27 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		}
 		__syncthreads();
 	}
-
+	(&ws.x)->~device_vector<fixed32>();
+	(&ws.y)->~device_vector<fixed32>();
+	(&ws.z)->~device_vector<fixed32>();
 }
 
 __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_data data, mark_semiactive_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
-	const int bid = blockIdx.x;
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	mark_semiactive_workspace& ws = workspaces[bid];
+	__shared__ mark_semiactive_workspace ws;
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
 	__syncthreads();
+	new (&ws.x) device_vector<fixed32>();
+	new (&ws.y) device_vector<fixed32>();
+	new (&ws.z) device_vector<fixed32>();
+	new (&ws.h) device_vector<float>();
+	new (&ws.rungs) device_vector<char>();
+
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
 		int flops = 0;
@@ -476,16 +563,25 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 		}
 		__syncthreads();
 	}
+	(&ws.x)->~device_vector<fixed32>();
+	(&ws.y)->~device_vector<fixed32>();
+	(&ws.z)->~device_vector<fixed32>();
+	(&ws.h)->~device_vector<float>();
+	(&ws.rungs)->~device_vector<char>();
 
 }
 
 __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data, dif_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
-	const int bid = blockIdx.x;
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	dif_workspace& ws = workspaces[bid];
+	__shared__
+	dif_workspace ws;
+	new (&ws.rec1_main) dif_record1();
+	new (&ws.rec2_main) dif_record2();
+	new (&ws.rec1) dif_record1();
+	new (&ws.rec2) dif_record2();
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
@@ -690,6 +786,10 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 		flops = 0;
 		__syncthreads();
 	}
+	(&ws.rec1_main)->~device_vector<dif_record1>();
+	(&ws.rec2_main)->~device_vector<dif_record2>();
+	(&ws.rec1)->~device_vector<dif_record1>();
+	(&ws.rec2)->~device_vector<dif_record2>();
 }
 
 #define SIGMA 2.0f
@@ -698,11 +798,15 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hydro_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
-	const int bid = blockIdx.x;
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	hydro_workspace& ws = workspaces[bid];
+	__shared__
+	hydro_workspace ws;
+	new (&ws.rec1_main) hydro_record1();
+	new (&ws.rec2_main) hydro_record2();
+	new (&ws.rec1) hydro_record1();
+	new (&ws.rec2) hydro_record2();
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
@@ -1027,15 +1131,23 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 		flops = 0;
 		__syncthreads();
 	}
+	(&ws.rec1_main)->~device_vector<hydro_record1>();
+	(&ws.rec2_main)->~device_vector<hydro_record2>();
+	(&ws.rec1)->~device_vector<hydro_record1>();
+	(&ws.rec2)->~device_vector<hydro_record2>();
 }
 
 __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, courant_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
-	const int bid = blockIdx.x;
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	courant_workspace& ws = workspaces[bid];
+	__shared__
+	courant_workspace ws;
+	new (&ws.rec1_main) courant_record1();
+	new (&ws.rec2_main) courant_record2();
+	new (&ws.rec1) courant_record1();
+	new (&ws.rec2) courant_record2();
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
@@ -1378,6 +1490,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 		atomicMax(&reduce->max_rung_hydro, max_rung_hydro);
 		atomicMax(&reduce->max_rung_grav, max_rung_grav);
 	}
+	(&ws.rec1_main)->~device_vector<courant_record1>();
+	(&ws.rec2_main)->~device_vector<courant_record2>();
+	(&ws.rec1)->~device_vector<courant_record1>();
+	(&ws.rec2)->~device_vector<courant_record2>();
 }
 
 __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_workspace* workspaces, sph_reduction* reduce) {

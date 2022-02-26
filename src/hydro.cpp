@@ -340,9 +340,10 @@ void hydro_sod_test() {
 	const double Ne = get_options().neighbor_number;
 	PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * right_dim, 2 * left_dim, rho0 / (m * Ne) * (4.0 * M_PI / 3.0),
 			rho1 / (m * Ne) * (4.0 * M_PI / 3.0));
-	for (int ix = 0; ix < left_dim; ix++) {
-		for (int iy = 0; iy < 2 * left_dim; iy++) {
-			for (int iz = 0; iz < 2 * left_dim; iz++) {
+	dx = 0.25 / left_dim;
+	for (int ix = 0; ix < 2 * left_dim; ix++) {
+		for (int iy = 0; iy < 4 * left_dim; iy++) {
+			for (int iz = 0; iz < 4 * left_dim; iz++) {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
