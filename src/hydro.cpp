@@ -45,7 +45,7 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 	time_type itime = 0;
 	int minrung = 0;
 	double t = 0.0;
-	double t0 = tmax / 32.0;
+	double t0 = tmax / 4.0;
 	int step = 0;
 	int main_step = 0;
 	float e0, ent0;
@@ -79,6 +79,7 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 		}
 		step++;
 	} while (t < tmax);
+	view_output_views(main_step, 1.0);
 }
 
 void hydro_sod_test() {
