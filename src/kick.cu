@@ -143,6 +143,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
 		gz[i] -= L2(0, 0, 1);
+//		PRINT( "%e %e %e\n", gx[i], gy[i], gz[i]);
 		phi[i] *= params.GM;
 		gx[i] *= params.GM;
 		gy[i] *= params.GM;

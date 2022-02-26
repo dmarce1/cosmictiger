@@ -660,12 +660,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const auto vec0_i = data.vec0_snk[snki];
 				const auto vec_i = data.dif_vec[i];
 				const float mmw_i = data.mmw[i];
-				float gamma_i;
-				if (data.chem) {
-					gamma_i = data.gamma[i];
-				} else {
-					gamma_i = data.def_gamma;
-				}
 				float kappa_i;
 				if (data.conduction) {
 					kappa_i = data.kappa[i];
@@ -724,7 +718,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const fixed32& x_j = rec1.x;
 					const fixed32& y_j = rec1.y;
 					const fixed32& z_j = rec1.z;
-					const float& gamma_j = rec2.gamma;
 					const float& kappa_j = rec2.kappa;
 					const float& difco_j = rec2.difco;
 					const float& mmw_j = rec2.mmw;
@@ -751,7 +744,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					}
 					den += diff_factor;
 					if (data.conduction) {
-						float adjust = powf(rho_j, gamma_j - 1.f) * powf(rho_i, 1.f - gamma_i) * mmw_j / mmw_i;
+						float adjust = mmw_j / mmw_i;
 						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS] * adjust;
 						den_A += diff_factor + cond_factor;
 					}
@@ -1442,7 +1435,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						//		}
 						const float hsoft = fminf(fmaxf(h_i, data.hsoft_min), SPH_MAX_SOFT);
 						const float factor = data.eta * sqrtf(params.a * hsoft);
-						//			dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
+						dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));

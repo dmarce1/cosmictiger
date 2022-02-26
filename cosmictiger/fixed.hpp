@@ -44,7 +44,7 @@ class fixed {
 	static constexpr float c0 = float(size_t(1) << size_t(32));
 	static constexpr float c0dbl = double(size_t(1) << size_t(32));
 	static constexpr float cinv = 1.f / c0;
-	static constexpr double dblecinv = 1.f / c0;
+	static constexpr double dblecinv = 1.f / c0dbl;
 	static constexpr T width = (sizeof(float) * CHAR_BIT);
 public:
 	friend class simd_fixed32;
@@ -126,7 +126,7 @@ public:
 
 	CUDA_EXPORT
 	inline float to_float() const {
-		return (float(i) + 0.5f) * cinv;
+		return (float(i)) * cinv;
 
 	}
 
@@ -137,7 +137,7 @@ public:
 
 	CUDA_EXPORT
 	inline double to_double() const {
-		return (i + 0.5) * dblecinv;
+		return (i) * dblecinv;
 
 	}
 

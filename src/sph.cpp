@@ -2017,7 +2017,10 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 							const bool sa = sph_particles_semi_active(j);
 							auto vec = sph_particles_dif_vec(j);
 							if( rung >= minrung || sa) {
-								sph_particles_ent(j) = vec[NCHEMFRACS];
+								const float h = sph_particles_smooth_len(j);
+								const float gamma = sph_particles_gamma(j);
+								const float rho = sph_den(1/h/h/h);
+								sph_particles_ent(j) = vec[NCHEMFRACS] / (powf(rho,gamma) / (gamma-1.0f));
 								double total = 0.0;
 								for( int l = 0; l < NCHEMFRACS; l++) {
 									total += vec[l];
@@ -2075,7 +2078,10 @@ void sph_init_diffusion() {
 			for( int i = b; i < e; i++) {
 				sph_particles_old_rung(i) = particles_rung(sph_particles_dm_index(i));
 				dif_vector vec;
-				vec[NCHEMFRACS] = sph_particles_ent(i);
+				const float h = sph_particles_smooth_len(i);
+				const float gamma = sph_particles_gamma(i);
+				const float rho = sph_den(1/h/h/h);
+				vec[NCHEMFRACS] = sph_particles_ent(i) * powf(rho,gamma) / (gamma-1.0f);
 				if( chem ) {
 					vec[0] = std::max(sph_particles_He0(i),1e-30f);
 					vec[1] = std::max(sph_particles_Hep(i),1e-30f);
