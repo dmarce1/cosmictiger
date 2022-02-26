@@ -191,6 +191,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
 			timer tm;
 			tm.start();
+			PRINT( "Doing smoothlen\n");
 			kr = sph_run(sparams, true);
 			tm.stop();
 			if (verbose)

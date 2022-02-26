@@ -120,8 +120,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						float c0 = exp(dloghdt*dt);
 						h *= c0;
 						if( h > 0.5 ) {
-							PRINT( "BIG H!\n");
-							abort();
+//							PRINT( "BIG H!\n");
+//							abort();
 						}
 					}
 					const float h3 = sqr(h)*h;
