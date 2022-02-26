@@ -53,9 +53,9 @@ public:
 	CUDA_EXPORT
 	inline fixed operator=(const fixed<T, M>& other) {
 		if (M > SIGBITS) {
-			i = other.i >> (M - SIGBITS);
+			i = unsigned(other.i) >> (M - SIGBITS);
 		} else {
-			i = other.i << (SIGBITS - M);
+			i = unsigned(other.i) << (SIGBITS - M);
 		}
 		return *this;
 	}
@@ -66,8 +66,8 @@ public:
 	}
 
 	CUDA_EXPORT
-	inline static fixed<T,SIGBITS> max() {
-		fixed<T,SIGBITS> num;
+	inline static fixed<T, SIGBITS> max() {
+		fixed<T, SIGBITS> num;
 #ifdef __CUDA_ARCH__
 		num.i = 0xFFFFFFFFUL;
 #else
@@ -76,37 +76,40 @@ public:
 		return num;
 	}
 	CUDA_EXPORT
-	inline static fixed<T,SIGBITS> min() {
-		fixed<T,SIGBITS> num;
+	inline static fixed<T, SIGBITS> min() {
+		fixed<T, SIGBITS> num;
 		num.i = 1;
 		return num;
 	}
-	inline fixed<T,SIGBITS>() = default;
+	inline fixed<T, SIGBITS>() = default;
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS>& operator=(double number) {
+	inline fixed<T, SIGBITS>& operator=(double number) {
 		i = (c0dbl * number);
 		return *this;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS>(float number) :
+	inline fixed<T, SIGBITS>(float number) :
 			i(c0 * number) {
 	}
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS>(int number) :
+	inline fixed<T, SIGBITS>(int number) :
 			i(c0 * number) {
 	}
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS>(double number) :
+	inline fixed<T, SIGBITS>(double number) :
 			i(c0dbl * number) {
 	}
 
-	template<class V>
-
+	template<class V, int M>
 	CUDA_EXPORT
-	inline constexpr fixed<T,SIGBITS>(fixed<V> other) :
-			i(other.i) {
+	inline constexpr fixed<T, SIGBITS>(fixed<V, M> other) {
+		if (M > SIGBITS) {
+			i = unsigned(other.i) >> abs(M - SIGBITS);
+		} else {
+			i = unsigned(other.i) << abs(SIGBITS - M);
+		}
 	}
 
 	CUDA_EXPORT
@@ -157,18 +160,18 @@ public:
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator*(const fixed<T,SIGBITS> &other) const {
+	inline fixed<T, SIGBITS> operator*(const fixed<T, SIGBITS> &other) const {
 		int64_t a;
 		const int64_t b = i;
 		const int64_t c = other.i;
 		a = (b * c) >> width;
-		fixed<T,SIGBITS> res;
+		fixed<T, SIGBITS> res;
 		res.i = (T) a;
 		return res;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator*=(const fixed<T,SIGBITS> &other) {
+	inline fixed<T, SIGBITS> operator*=(const fixed<T, SIGBITS> &other) {
 		int64_t a;
 		const int64_t b = i;
 		const int64_t c = other.i;
@@ -178,7 +181,7 @@ public:
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator*=(int other) {
+	inline fixed<T, SIGBITS> operator*=(int other) {
 		int64_t a;
 		const int64_t b = i;
 		const int64_t c = other;
@@ -188,18 +191,18 @@ public:
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator/(const fixed<T,SIGBITS> &other) const {
+	inline fixed<T, SIGBITS> operator/(const fixed<T, SIGBITS> &other) const {
 		int64_t a;
 		const int64_t b = i;
 		const int64_t c = other.i;
 		a = b / (c >> width);
-		fixed<T,SIGBITS> res;
+		fixed<T, SIGBITS> res;
 		res.i = (T) a;
 		return res;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator/=(const fixed<T,SIGBITS> &other) {
+	inline fixed<T, SIGBITS> operator/=(const fixed<T, SIGBITS> &other) {
 		int64_t a;
 		const int64_t b = i;
 		const int64_t c = other.i;
@@ -209,34 +212,34 @@ public:
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator+(const fixed<T,SIGBITS> &other) const {
-		fixed<T,SIGBITS> a;
+	inline fixed<T, SIGBITS> operator+(const fixed<T, SIGBITS> &other) const {
+		fixed<T, SIGBITS> a;
 		a.i = i + other.i;
 		return a;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator-(const fixed<T,SIGBITS> &other) const {
-		fixed<T,SIGBITS> a;
+	inline fixed<T, SIGBITS> operator-(const fixed<T, SIGBITS> &other) const {
+		fixed<T, SIGBITS> a;
 		a.i = i - other.i;
 		return a;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS> operator-() const {
-		fixed<T,SIGBITS> a;
+	inline fixed<T, SIGBITS> operator-() const {
+		fixed<T, SIGBITS> a;
 		a.i = -i;
 		return a;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS>& operator+=(const fixed<T,SIGBITS> &other) {
+	inline fixed<T, SIGBITS>& operator+=(const fixed<T, SIGBITS> &other) {
 		i += other.i;
 		return *this;
 	}
 
 	CUDA_EXPORT
-	inline fixed<T,SIGBITS>& operator-=(const fixed<T,SIGBITS> &other) {
+	inline fixed<T, SIGBITS>& operator-=(const fixed<T, SIGBITS> &other) {
 		i -= other.i;
 		return *this;
 	}
@@ -251,7 +254,7 @@ public:
 		arc & i;
 	}
 
-	template<class, int >
+	template<class, int>
 	friend class fixed;
 
 	template<class V>
@@ -263,7 +266,7 @@ public:
 
 template<class T, int M>
 CUDA_EXPORT
-inline fixed<T,M> max(const fixed<T,M>& a, const fixed<T,M>& b) {
+inline fixed<T, M> max(const fixed<T, M>& a, const fixed<T, M>& b) {
 	if (a > b) {
 		return a;
 	} else {
@@ -273,7 +276,7 @@ inline fixed<T,M> max(const fixed<T,M>& a, const fixed<T,M>& b) {
 
 template<class T, int M>
 CUDA_EXPORT
-inline fixed<T,M> min(const fixed<T,M>& a, const fixed<T,M>& b) {
+inline fixed<T, M> min(const fixed<T, M>& a, const fixed<T, M>& b) {
 	if (a < b) {
 		return a;
 	} else {
@@ -322,7 +325,6 @@ CUDA_EXPORT inline float distance(double a, fixed32 b) {
 	}
 	return dif;
 }
-
 
 CUDA_EXPORT inline fixed32 sum(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) + fixed<int32_t>(b));

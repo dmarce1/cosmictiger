@@ -325,11 +325,11 @@ struct fixed32_range: public range<range_fixed> {
 					I[1] = j;
 					I[2] = k;
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (pt[dim].to_double() < begin[dim].to_double() + I[dim]) {
+						if (range_fixed(pt[dim]) + range_fixed::min() < begin[dim] + range_fixed(I[dim])) {
 							contains = false;
 							break;
 						}
-						if (pt[dim].to_double() > end[dim].to_double() + I[dim]) {
+						if (range_fixed(pt[dim]) > end[dim] + range_fixed(I[dim]) + range_fixed::min()) {
 							contains = false;
 							break;
 						}
@@ -384,10 +384,9 @@ inline float distance(range_fixed a, fixed32 b) {
 	return f;
 }
 
-
 CUDA_EXPORT
 inline float distance(fixed32 b, range_fixed a) {
-	return -distance(a,b);
+	return -distance(a, b);
 
 }
 #endif /* RANGE_HPP_ */

@@ -80,8 +80,8 @@ public:
 					new_cap *= 2;
 				}
 				new_ptr = (T*) malloc(sizeof(T) * new_cap);
-				if( new_ptr == nullptr) {
-					PRINT( "OOM in device_vector while requesting %i!\n", new_cap);
+				if (new_ptr == nullptr) {
+					PRINT("OOM in device_vector while requesting %i!\n", new_cap);
 					__trap();
 				}
 			}
@@ -115,7 +115,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	 const T& operator[](int i) const {
+	    const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -353,11 +353,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (self.outer_box.end[dim].to_double() - x[dim].to_double() - h < 0.0f) {
+						if (self.outer_box.end[dim] < range_fixed(x[dim] + fixed32(h)) + range_fixed::min()) {
 							box_xceeded = true;
 							break;
 						}
-						if (x[dim].to_double() - self.outer_box.begin[dim].to_double() - h < 0.0f) {
+						if (range_fixed(x[dim]) < self.outer_box.begin[dim] + range_fixed(h) + range_fixed::min()) {
 							box_xceeded = true;
 							break;
 						}
@@ -559,8 +559,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	dif_workspace ws;
+	__shared__ dif_workspace ws;
 	new (&ws.rec1_main) dif_record1();
 	new (&ws.rec2_main) dif_record2();
 	new (&ws.rec1) dif_record1();
@@ -789,8 +788,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	hydro_workspace ws;
+	__shared__ hydro_workspace ws;
 	new (&ws.rec1_main) hydro_record1();
 	new (&ws.rec2_main) hydro_record2();
 	new (&ws.rec1) hydro_record1();
@@ -1097,8 +1095,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	courant_workspace ws;
+	__shared__ courant_workspace ws;
 	new (&ws.rec1_main) courant_record1();
 	new (&ws.rec2_main) courant_record2();
 	new (&ws.rec1) courant_record1();
