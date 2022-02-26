@@ -287,7 +287,9 @@ inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
 	return rc;
 }
 
-struct fixed32_range: public range<double> {
+struct fixed32_range {
+	array<fixed40, NDIM> begin;
+	array<fixed40, NDIM> end;
 	fixed32_range() {
 	}
 	CUDA_EXPORT
@@ -323,11 +325,11 @@ struct fixed32_range: public range<double> {
 					I[1] = j;
 					I[2] = k;
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (pt[dim].to_double() < begin[dim] + I[dim]) {
+						if (begin[dim] + I[dim] > pt[dim]) {
 							contains = false;
 							break;
 						}
-						if (pt[dim].to_double() > end[dim] + I[dim]) {
+						if (end[dim] + I[dim] < pt[dim]) {
 							contains = false;
 							break;
 						}
@@ -340,33 +342,34 @@ struct fixed32_range: public range<double> {
 		}
 		return false;
 	}
-/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
-		if (!valid) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = pt[dim].to_double() - h;
-				end[dim] = pt[dim].to_double() + h;
-			}
-			valid = true;
-		} else {
-			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
-				end[dim] = std::max(end[dim], pt[dim].to_double() + h);
-			}
-		}
-	}*/
-/*	void accumulate(const fixed32_range& other) {
-		if (valid && other.valid) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				begin[dim] = std::min(begin[dim], other.begin[dim]);
-				end[dim] = std::max(end[dim], other.end[dim]);
-			}
-		} else if (!valid && other.valid) {
-			*this = other;
-		}
-	}*/
+	/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
+	 if (!valid) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 begin[dim] = pt[dim].to_double() - h;
+	 end[dim] = pt[dim].to_double() + h;
+	 }
+	 valid = true;
+	 } else {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
+	 end[dim] = std::max(end[dim], pt[dim].to_double() + h);
+	 }
+	 }
+	 }*/
+	/*	void accumulate(const fixed32_range& other) {
+	 if (valid && other.valid) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 begin[dim] = std::min(begin[dim], other.begin[dim]);
+	 end[dim] = std::max(end[dim], other.end[dim]);
+	 }
+	 } else if (!valid && other.valid) {
+	 *this = other;
+	 }
+	 }*/
 	template<class A>
 	void serialize(A&& arc, unsigned i) {
-		range<double>::serialize(arc, i);
+		arc & begin;
+		arc & end;
 	}
 };
 

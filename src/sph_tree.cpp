@@ -376,10 +376,10 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 			}
 			for( int dim = 0; dim < NDIM; dim++) {
 				const double x = X[dim].to_double();
-				inner_box.begin[dim] = std::min(inner_box.begin[dim], x);
-				inner_box.end[dim] = std::max(inner_box.end[dim], x);
-				outer_box.begin[dim] = std::min(outer_box.begin[dim], x - h);
-				outer_box.end[dim] = std::max(outer_box.end[dim], x + h);
+				inner_box.begin[dim] = std::min(inner_box.begin[dim].to_double(), x);
+				inner_box.end[dim] = std::max(inner_box.end[dim].to_double(), x);
+				outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h);
+				outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h);
 			}
 			if (sph_particles_rung(i) >= params.min_rung) {
 				nactive++;

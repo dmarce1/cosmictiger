@@ -45,7 +45,7 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 	time_type itime = 0;
 	int minrung = 0;
 	double t = 0.0;
-	double t0 = tmax / 1024.0;
+	double t0 = tmax / 256.0;
 	int step = 0;
 	int main_step = 0;
 	float e0, ent0;
@@ -123,7 +123,7 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				if (sqr(x - 0.25, y - 0.5, z - 0.5) > 0.0001) {
+				if (sqr(x - 0.25, y - 0.5, z - 0.5) > 0.0002) {
 					continue;
 				}
 
@@ -169,7 +169,7 @@ void hydro_sod_test() {
 				double y = (iy) * dx;
 				double z = (iz) * dx;
 				if (sqr(x - 0.75, y - 0.5, z - 0.5) > 0.01) {
-					continue;
+	//				continue;
 				}
 				double ent = p0 / pow(rho0, get_options().gamma);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);

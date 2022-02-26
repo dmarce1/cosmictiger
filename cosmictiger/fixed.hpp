@@ -316,4 +316,98 @@ CUDA_EXPORT inline float double_distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_double();
 }
 
+class fixed40 {
+	fixed32 a;
+	signed char b;
+public:
+	CUDA_EXPORT
+	fixed40& operator=(double c) {
+		b = floor(c);
+		a = c - (double) b;
+		return *this;
+	}
+	double to_double() const {
+		return b + a.to_double();
+	}
+	CUDA_EXPORT
+	bool operator<(const fixed40& other) const {
+		if (b < other.b) {
+			return true;
+		} else if (b > other.b) {
+			return false;
+		} else {
+			return a < other.a;
+		}
+	}
+	CUDA_EXPORT
+	bool operator>(const fixed40& other) const {
+		if (b > other.b) {
+			return true;
+		} else if (b < other.b) {
+			return false;
+		} else {
+			return a > other.a;
+		}
+	}
+	CUDA_EXPORT
+	bool operator<(const fixed32& other) const {
+		if (b < 0) {
+			return true;
+		} else if (b > 0) {
+			return false;
+		} else {
+			return a < other;
+		}
+	}
+	CUDA_EXPORT
+	bool operator>(const fixed32& other) const {
+		if (b > 0) {
+			return true;
+		} else if (b < 0) {
+			return false;
+		} else {
+			return a > other;
+		}
+	}
+	CUDA_EXPORT
+	bool operator==(const fixed40& other) const {
+		return b == other.b && a == other.a;
+	}
+	CUDA_EXPORT
+	bool operator>=(const fixed40& other) const {
+		return (*this) > other || (*this) == other;
+	}
+	CUDA_EXPORT
+	bool operator<=(const fixed40& other) const {
+		return (*this) < other || (*this) == other;
+	}
+	CUDA_EXPORT
+	fixed40 operator+(int I) const {
+		fixed40 c;
+		c.a = a;
+		c.b = b + I;
+		return c;
+
+	}
+
+	CUDA_EXPORT
+	friend float distance(fixed32 a, fixed40 b);CUDA_EXPORT
+	friend float distance(fixed40 a, fixed32 b);
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & a;
+		arc & b;
+	}
+};
+
+CUDA_EXPORT
+inline float distance(fixed32 a, fixed40 b) {
+	return distance(a, b.a);
+}
+
+CUDA_EXPORT
+inline float distance(fixed40 a, fixed32 b) {
+	return distance(a.a, b);
+}
+
 #endif /* COSMICTIGER_FIXED_HPP_ */
