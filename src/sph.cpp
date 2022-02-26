@@ -51,14 +51,7 @@ struct sph_tree_id_hash {
 };
 
 inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
-	bool i = true;
-	for (int dim = 0; dim < NDIM; dim++) {
-		if (a.end[dim] < b.begin[dim] || b.end[dim] < a.begin[dim]) {
-			i = false;
-			break;
-		}
-	}
-	return i;
+	return a.periodic_intersection(b).volume();
 }
 
 struct sph_run_workspace {
@@ -462,6 +455,10 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				ibox.begin[dim] = obox.begin[dim] = 1.9;
 				ibox.end[dim] = obox.end[dim] = -.9;
 			}
+			double max_span = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				max_span = std::max(max_span, self_ptr->outer_box.end[dim] - self_ptr->outer_box.begin[dim]);
+			}
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool active = sph_particles_rung(i) >= params.min_rung;
 				const bool semiactive = !active && sph_particles_semi_active(i);
@@ -476,18 +473,26 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				//			if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+	//			if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const double x = X[dim].to_double();
+						obox.begin[dim] = std::min(obox.begin[dim], x - h);
+						obox.end[dim] = std::max(obox.end[dim], x + h);
+					}
+	//			}
 				for (int dim = 0; dim < NDIM; dim++) {
 					const double x = X[dim].to_double();
-					obox.begin[dim] = std::min(obox.begin[dim].to_double(), x - h);
-					obox.end[dim] = std::max(obox.end[dim].to_double(), x + h);
+					ibox.begin[dim] = std::min(ibox.begin[dim], x);
+					ibox.end[dim] = std::max(ibox.end[dim], x);
 				}
-				//			}
-				for (int dim = 0; dim < NDIM; dim++) {
-					const double x = X[dim].to_double();
-					ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x);
-					ibox.end[dim] = std::max(ibox.end[dim].to_double(), x);
-				}
+			}
+			double max_span0 = max_span;
+			max_span = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				max_span = std::max(max_span, obox.end[dim] - obox.begin[dim]);
+			}
+			if (max_span - max_span0 > 1e-3) {
+		//		PRINT("box extended by %e\n", max_span - max_span0);
 			}
 			kr.inner_box = ibox;
 			kr.outer_box = obox;
