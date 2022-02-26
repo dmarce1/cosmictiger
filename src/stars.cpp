@@ -231,7 +231,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 //	profiler_enter(__FUNCTION__);
 
 	return;
-
+/*
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {
@@ -380,7 +380,7 @@ void stars_remove(float a, float dt, int minrung, int step) {
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
 	}
-//	profiler_exit();
+//	profiler_exit();*/
 }
 
 float stars_sample_mass(gsl_rng* rndgen) {

@@ -122,24 +122,23 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				double ent = p1 / pow(rho1, get_options().gamma);
+				double eint = p1 / rho1 / (get_options().gamma - 1);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx0;
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = vz0;
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = -0;
+				sph_particles_vel(ZDIM, i) = -0;
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 				//			PRINT("%i\n", i);
 				x = (ix + 0.5) * dx;
 				y = (iy + 0.5) * dx;
 				z = (iz + 0.5) * dx;
-				ent = p1 / pow(rho1, get_options().gamma);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
@@ -149,7 +148,7 @@ void hydro_sod_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 				//			PRINT("%i\n", i);
 			}
@@ -163,7 +162,7 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				double ent = p0 / pow(rho0, get_options().gamma);
+				double eint = p0 / rho0 / (get_options().gamma - 1);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
@@ -175,7 +174,7 @@ void hydro_sod_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				//		PRINT("%i\n", i);
 				i++;
 				x = (ix + 0.5) * dx;
@@ -191,7 +190,7 @@ void hydro_sod_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 			}
 		}
@@ -264,7 +263,7 @@ void hydro_helmholtz_test() {
 				double x = (ix + 0.5) * dx;
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
-				double ent = p1 / pow(rho1, get_options().gamma);
+				double eint = p1 / rho1 / (get_options().gamma - 1);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
@@ -275,7 +274,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 				x = (ix) * dx;
 				y = (iy) * dx;
@@ -289,7 +288,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 				//			PRINT("%i\n", i);
 			}
@@ -303,7 +302,7 @@ void hydro_helmholtz_test() {
 				double x = (ix + 0.5) * dx;
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
-				double ent = p0 / pow(rho0, get_options().gamma);
+				double eint = p0 / rho0 / (get_options().gamma - 1);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
@@ -314,7 +313,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				//		PRINT("%i\n", i);
 				i++;
 				x = (ix) * dx;
@@ -329,7 +328,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				//		PRINT("%i\n", i);
 				i++;
 			}
@@ -359,7 +358,7 @@ void hydro_blast_test() {
 				double x = (ix + 0.5) * dx;
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
-				double ent = p0 / pow(rho0, get_options().gamma);
+				double eint = p0 / rho0 / (get_options().gamma - 1);
 				/*				const bool center = (ix == ndim / 2 && iy == ndim / 2 && iz == ndim / 2);
 				 double ent = center ? p1 : p0 / pow(rho, get_options().gamma);
 				 if (center) {
@@ -374,7 +373,7 @@ void hydro_blast_test() {
 					if (rand1() > 1 / f) {
 						continue;
 					}
-					ent = 0.0;
+					eint = 0.0;
 					do {
 						x = rand1();
 						y = rand1();
@@ -403,7 +402,7 @@ void hydro_blast_test() {
 				sph_particles_vel(YDIM, i) = vy;
 				sph_particles_vel(ZDIM, i) = vz;
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 			}
 		}
@@ -429,7 +428,7 @@ void hydro_wave_test() {
 				double x = (ix + 0.5) * dx;
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
-				double ent = p0 / pow(rho, get_options().gamma);
+				double eint = p0 / rho / (get_options().gamma - 1);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 				//	PRINT( "%e\n", h);
 				if (ix == ndim / 2) {
@@ -446,7 +445,7 @@ void hydro_wave_test() {
 				sph_particles_vel(YDIM, i) = 0.f;
 				sph_particles_vel(ZDIM, i) = 0.f;
 				sph_particles_rung(i) = 0;
-				sph_particles_ent(i) = ent;
+				sph_particles_eint(i) = eint;
 				i++;
 				//			PRINT("%i\n", i);
 			}

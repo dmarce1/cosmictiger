@@ -99,7 +99,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					float& h = sph_particles_smooth_len(j);
 					char rung = particles_rung(i);
 					float dt0 = tau_max / 64 / (1 <<rung);
-					const float ent = sph_particles_ent(j);
+					const float eint = sph_particles_eint(j);
 					if( tau0 != 0.0 ) {
 						const float divv = sph_particles_divv(j);
 						float dloghdt = (1.f/3.f)*divv/scale;
@@ -127,14 +127,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
 					const float rho = sph_den(1./h3);
-#ifdef SPH_TOTAL_ENERGY
-			const float ekin = 0.5f * mass * sqr(vx,vy,vz);
-			const float etherm = sph_particles_ent(j) - ekin;
-			const float e = etherm;
-#else
-			const float p = ent * pow(rho, get_options().gamma);
-			const float e = p * (1.0f/(get_options().gamma-1.0f)) * vol;
-#endif
+			const float p = eint * rho * (get_options().gamma-1.0f);
+			const float e =eint * sph_mass;
 			this_dr.therm += e * a2inv;
 			this_dr.vol += vol;
 		}

@@ -421,6 +421,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 	int index;
 	index = atomicAdd(next_index, 1);
 	const double code_to_energy_density = params.code_to_g / (params.code_to_cm * sqr(params.code_to_s));		// 7
+	const double code_to_energy = sqr(params.code_to_cm) / sqr(params.code_to_s);		// 7
 	const double code_to_density = pow(params.code_to_cm, -3) * params.code_to_g;										// 10
 	int flops = 18;
 	double myflops = 0.0;
@@ -428,7 +429,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
-		N.H = 1.0 - ((double) attr.He +(double) attr.Hep +(double) attr.Hepp +(double) attr.Hp +(double) attr.Hn +  (double) attr.H2);															// 4
+		N.H = 1.0 - ((double) attr.He + (double) attr.Hep + (double) attr.Hepp + (double) attr.Hp + (double) attr.Hn + (double) attr.H2);							// 4
 		N.Hp = attr.Hp;
 		N.Hn = attr.Hn;
 		N.H2 = attr.H2;
@@ -451,11 +452,10 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double cv = (1.50 + (double) N.H2 / n0);																// 4
 		double gamma = 1.0 + 1.0 / cv;																							// 5
 		cv *= constants::kb;																							// 1
-		double K = attr.K;												// 11
-		K *= pow((double) params.a, 3.0 * (double) gamma - 5.0);												// 11
-		K *= ((double) code_to_energy_density * pow((double) code_to_density, -(double) gamma));												// 11
-		double energy = (double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0);																			// 9
-		double T0 = energy / (n * cv);
+		double eint = attr.eint;
+		eint *= code_to_energy;
+		eint /= sqr(params.a);
+		double T0 = (eint * rho) / (n * cv);
 		double Tmax = TMAX;
 		float Tmin = TMIN;
 		N0 = N;
@@ -499,10 +499,9 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.Hepp *= 4.0 * (double) rhoavoinv;																										// 1
 		gamma = 1.0 + 1.0 / cv;																									// 5
 		cv *= constants::kb;
-		energy = cv * n * T;																										 	// 1
-		K = (energy / rho) * pow(rho, 1.0 - gamma) * (gamma - 1.0);																	// 12
-		K *= (pow(code_to_density, gamma) / code_to_energy_density);													// 12
-		K *= pow(params.a, -(3.f) * gamma + 5.f);																	// 11
+		eint = cv * n * T / rho;																										 	// 1
+		eint *= sqr(params.a);
+		eint /= code_to_density;
 		attr.H2 = N.H2;
 		attr.Hep = N.Hep;
 		attr.Hepp = N.Hepp;
@@ -510,11 +509,11 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		attr.Hp = N.Hp;
 		attr.He = N.He;
 		if (dedt < 0.0) {
-			attr.tcool = -energy / dedt / params.a / params.code_to_s;
+			attr.tcool = -eint * rho / dedt / params.a / params.code_to_s;
 		} else {
 			attr.tcool = 1e38;
 		}
-		attr.K = K;
+		attr.eint = eint;
 		flops += 136;
 		myflops += flops;
 		flops = 0;
@@ -569,7 +568,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 }
 
 void test_cuda_chemistry_kernel() {
-	static const auto opts = get_options();
+/*	static const auto opts = get_options();
 	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
 	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;
 	const double Y = get_options().Y0;		// 10
@@ -630,7 +629,7 @@ void test_cuda_chemistry_kernel() {
 	for (int i = 0; i < N; i++) {
 		//PRINT("%e %e | %e %e %e | %e %e %e | \n", chem0[i].K, chems[i].K, 1 - Y - chem0[i].Hp - chem0[i].H2 * 2 - chem0[i].Hn, chem0[i].Hp, chem0[i].H2,
 		//1 - Y - chems[i].Hp - chems[i].H2 * 2 - chems[i].Hn, chems[i].Hp, chems[i].H2);
-	}
+	}*/
 }
 
 CUDA_EXPORT

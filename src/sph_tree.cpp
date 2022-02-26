@@ -39,7 +39,6 @@ HPX_PLAIN_ACTION (sph_tree_allocate_nodes);
 HPX_PLAIN_ACTION (sph_tree_create);
 HPX_PLAIN_ACTION (sph_tree_destroy);
 HPX_PLAIN_ACTION (sph_tree_fetch_cache_line);
-HPX_PLAIN_ACTION (sph_tree_sort_sph_particles_by_particles);
 HPX_PLAIN_ACTION (sph_tree_free_neighbor_list);
 
 class sph_tree_allocator {
@@ -553,22 +552,4 @@ static vector<sph_tree_node> sph_tree_fetch_cache_line(int index) {
 
 }
 
-void sph_tree_sort_sph_particles_by_particles() {
-	const int nthreads = hpx_hardware_concurrency();
-	vector<hpx::future<void>> futs;
-	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<sph_tree_sort_sph_particles_by_particles_action>(c));
-	}
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads]() {
-			const int b = (size_t) proc * leaf_part_ranges.size() / nthreads;
-			const int e = (size_t) (proc + 1) * leaf_part_ranges.size() / nthreads;
-			for( int i = b; i < e; i++) {
-				sph_particles_sort_by_particles(leaf_part_ranges[i]);
-			}
-		}));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	leaf_part_ranges.resize(0);
-}
 

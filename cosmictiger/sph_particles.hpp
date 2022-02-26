@@ -38,7 +38,7 @@
 #endif
 
 struct sph_particle {
-	float ent;
+	float eint;
 	array<float, NDIM> v;
 	float gamma;
 	float T;
@@ -50,7 +50,7 @@ struct sph_particle {
 	void serialize(A&&arc, unsigned) {
 		static const bool stars = get_options().stars;
 		arc & mmw;
-		arc & ent;
+		arc & eint;
 		arc & v;
 		arc & gamma;
 		arc & T;
@@ -110,7 +110,7 @@ void sph_particles_swap(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
+void sph_particles_global_read_sph(particle_global_range range, float a, float* eint, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
 		float* mmw, float* colog,float* alpha, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
@@ -291,12 +291,12 @@ inline float& sph_particles_tcool(part_int index) {
 	return sph_particles_tc[index];
 }
 
-inline float& sph_particles_ent(part_int index) {
+inline float& sph_particles_eint(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_e[index];
 }
 
-inline float& sph_particles_dent_pred(part_int index) {
+inline float& sph_particles_deint_pred(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de1[index];
 }
@@ -306,7 +306,7 @@ inline float& sph_particles_dvel_pred(int dim, part_int index) {
 	return sph_particles_dv1[dim][index];
 }
 
-inline float& sph_particles_dent_con(part_int index) {
+inline float& sph_particles_deint_con(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de2[index];
 }
@@ -341,7 +341,7 @@ inline float sph_particles_rho(part_int index) {
 
 inline float sph_particles_energy(part_int index) {
 	const float rho = sph_particles_rho(index);
-	const float K = sph_particles_ent(index);
+	const float K = sph_particles_eint(index);
 	const float h = sph_particles_smooth_len(index);
 	const float H2 = sph_particles_H2(index);
 	const float cv = 1.5f + H2;
@@ -355,7 +355,7 @@ float sph_particles_coloumb_log(part_int i, float a);
 
 inline sph_particle sph_particles_get_particle(part_int index, float a) {
 	sph_particle p;
-	p.ent = sph_particles_ent(index);
+	p.eint = sph_particles_eint(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}

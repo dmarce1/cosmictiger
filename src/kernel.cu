@@ -64,7 +64,7 @@ void kernel_adjust_options(options& opts) {
 	h = kernel_stddev(kernelW<double>);
 	PRINT( "kernel width = %e\n", h0/h);
 //	opts.neighbor_number *= pow(h0 / h, 3);
-	opts.sph_bucket_size = 2.0 * opts.neighbor_number;
+	opts.sph_bucket_size = 8.0 / M_PI *  opts.neighbor_number;
 	opts.cfl *= h / h0;
 	opts.hsoft *= h0 / h;
 	opts.eta *= sqrt(h / h0);

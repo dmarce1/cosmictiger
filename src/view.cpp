@@ -59,7 +59,7 @@ struct dm_part_info {
 };
 
 struct sph_part_info: public dm_part_info {
-	float ent;
+	float eint;
 	float h;
 	float Hp;
 	float H2;
@@ -73,7 +73,7 @@ struct sph_part_info: public dm_part_info {
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
-		arc & ent;
+		arc & eint;
 		arc & h;
 		arc & Hp;
 		arc & H2;
@@ -202,7 +202,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.vx = particles_vel(XDIM,i);
 								info.vy = particles_vel(YDIM,i);
 								info.vz = particles_vel(ZDIM,i);
-								info.ent = sph_particles_ent(l);
+								info.eint = sph_particles_eint(l);
 								info.h = sph_particles_smooth_len(l);
 								info.rung = particles_rung(i);
 								info.alpha = sph_particles_alpha(l);
@@ -288,7 +288,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 }
 
 void view_output_views(int cycle, double a) {
-	profiler_enter( "view_output_views");
+	profiler_enter("view_output_views");
 	const bool chem = get_options().chem;
 	if (!view_boxes.size()) {
 		return;
@@ -365,12 +365,12 @@ void view_output_views(int cycle, double a) {
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].h);
-				y.push_back(parts.hydro[bi][i].ent);
+				y.push_back(parts.hydro[bi][i].eint);
 				z.push_back(parts.hydro[bi][i].alpha);
 			}
 //			PRINT( "h and ent\n");
 			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "ent", "gas", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, NULL);
 			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, NULL);
 			x.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
@@ -411,12 +411,11 @@ void view_output_views(int cycle, double a) {
 					double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2);															// 4
 					double gamma = 1. + 1. / cv;																							// 5
 					cv *= double(constants::kb);																							// 1
-					double K = parts.hydro[bi][i].ent;												// 11
-					double K0 = K;
-					K *= pow(a, 3. * gamma - 5.);												// 11
-					K *= (code_to_energy_density * pow(code_to_density, -gamma));												// 11
+					double eint = parts.hydro[bi][i].eint;												// 11
+					eint /= sqr(a);
+					eint *= sqr(get_options().code_to_cm / get_options().code_to_s);
 					//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
-					double energy = double((double) K * pow((double) rho, (double) gamma) / ((double) gamma - 1.0));															// 9
+					double energy = eint * rho;
 					double T = energy / (n * cv);																							// 5
 					//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
 					t.push_back(T);
@@ -575,7 +574,7 @@ void view_read_view_file() {
 }
 
 vector<float> output_view(int number, double time) {
-	profiler_enter( "output_view");
+	profiler_enter("output_view");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<vector<float>>>val_futs;
 	for (const auto& c : hpx_children()) {
