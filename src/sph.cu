@@ -1334,7 +1334,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						dvy_dz -= mrhoinv_j * vy_ij * dWdr_z_i;
 						dvz_dz -= mrhoinv_j * vz_ij * dWdr_z_i;
 						const float hfac = h_i / h_ij;
-						float this_vsig = f * c_ij * hfac;
+						float this_vsig = c_ij * hfac;
 						if (vdotx_ij < 0.f) {
 							this_vsig += 0.6f * alpha_ij * c_ij * hfac;
 							this_vsig -= 0.6f * alpha_ij * SPH_BETA * vdotx_ij * rinv * hfac;

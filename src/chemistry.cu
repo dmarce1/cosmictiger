@@ -501,7 +501,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		cv *= constants::kb;
 		eint = cv * n * T / rho;																										 	// 1
 		eint *= sqr(params.a);
-		eint /= code_to_density;
+		eint /= code_to_energy;
 		attr.H2 = N.H2;
 		attr.Hep = N.Hep;
 		attr.Hepp = N.Hepp;
@@ -514,6 +514,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.tcool = 1e38;
 		}
 		attr.eint = eint;
+		//PRINT( "%e\n", eint);
 		flops += 136;
 		myflops += flops;
 		flops = 0;
