@@ -79,11 +79,15 @@ public:
 				while (new_cap < new_sz) {
 					new_cap *= 2;
 				}
-				new_ptr = (T*) malloc(sizeof(T) * new_cap);
-				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i!\n", new_cap);
-					__trap();
-				}
+				do {
+					new_ptr = (T*) malloc(sizeof(T) * new_cap);
+					if (new_ptr == nullptr) {
+						PRINT("OOM in device_vector while requesting %i! Waiting for more (fingers crosses!)\n", new_cap);
+						for( int i = 0; i < 1000; i++) {
+							;
+						}
+					}
+				} while( new_ptr == nullptr);
 			}
 			__syncthreads();
 			if (ptr) {

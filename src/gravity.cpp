@@ -388,7 +388,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
 								const simd_float q = min(r * hinv, simd_float(1));                                             // 1
 								const simd_float rinv3_near = kernelFqinv(q) * hinv3;
-								simd_float rinv1_near;
+								simd_float rinv1_near = simd_float(0);
 								if( min_rung == 0 ) {
 									rinv1_near = kernelPot(q) * hinv;
 								}
