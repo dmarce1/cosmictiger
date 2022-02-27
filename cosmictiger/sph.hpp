@@ -188,8 +188,13 @@ struct sph_run_params {
 	bool tzero;
 	float cfl;
 	int max_rung;
+	float gy;
+	sph_run_params() {
+		gy = get_options().gy;
+	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & gy;
 		arc & t0;
 		arc & phase;
 		arc & run_type;

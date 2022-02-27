@@ -470,6 +470,8 @@ void test(std::string test) {
 		kick_test();
 	} else if (test == "tree") {
 		tree_test();
+	} else if (test == "rt") {
+		hydro_rt_test();
 	} else if (test == "sod") {
 		hydro_sod_test();
 	} else if (test == "blast") {

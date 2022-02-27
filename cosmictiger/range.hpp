@@ -23,6 +23,7 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
+#include <cosmictiger/options.hpp>
 
 template<class T>
 inline array<T, NDIM> shift_up(array<T, NDIM> i) {
@@ -64,15 +65,18 @@ struct range {
 
 	inline range periodic_intersection(const range& other) const {
 		range I;
+		const static bool yreflect = get_options().yreflect;
 		for (int dim = 0; dim < N; dim++) {
 			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
 			I.end[dim] = std::min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+			if (!(yreflect && dim == YDIM)) {
 				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
-					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+					I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
+					I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+					if (I.end[dim] <= I.begin[dim]) {
+						I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+						I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+					}
 				}
 			}
 		}

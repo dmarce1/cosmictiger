@@ -24,4 +24,5 @@ void hydro_sod_test();
 
 void hydro_helmholtz_test();
 
+void hydro_rt_test();
 void hydro_blast_test();

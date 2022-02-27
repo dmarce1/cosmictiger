@@ -278,8 +278,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						}
 					}
 					if (tid == 0) {
-						if( box_xceeded) {
-				//			PRINT( "Box exceeded with h = %e\n", h);
+						if (box_xceeded) {
+							//			PRINT( "Box exceeded with h = %e\n", h);
 						}
 						const float change = h / h0 - 1.0f;
 						if (fabsf(change) > 1.0e-4) {
@@ -930,6 +930,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curlv_z);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(vsig);
 				if (tid == 0) {
+					if (y_i.to_float() < 0.5) {
+						dvy_con -= params.gy;
+					} else {
+						dvy_con += params.gy;
+					}
 					data.deint_con[snki] += deint_con;										// 1
 					data.dvx_con[snki] += dvx_con;										// 1
 					data.dvy_con[snki] += dvy_con;										// 1
@@ -1269,6 +1274,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ax += gx_i;
 						ay += gy_i;
 						az += gz_i;
+						ay += params.gy;
 						const float sw = 1e-4f * c_i / h_i;
 						const float abs_div_v = fabsf(div_v);
 						const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
@@ -1396,15 +1402,15 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	if (first) {
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
-		smoothlen_nblocks *= cuda_smp_count()*2/3;
+		smoothlen_nblocks *= cuda_smp_count() * 2 / 3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semiactive_nblocks, (const void*) sph_cuda_mark_semiactive, SMOOTHLEN_BLOCK_SIZE, 0));
-		semiactive_nblocks *= cuda_smp_count()*2/3;
+		semiactive_nblocks *= cuda_smp_count() * 2 / 3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&dif_nblocks, (const void*) sph_cuda_diffusion, HYDRO_BLOCK_SIZE, 0));
-		dif_nblocks *= cuda_smp_count()*2/3;
+		dif_nblocks *= cuda_smp_count() * 2 / 3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
-		hydro_nblocks *= cuda_smp_count()*2/3;
+		hydro_nblocks *= cuda_smp_count() * 2 / 3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&courant_nblocks, (const void*) sph_cuda_courant, HYDRO_BLOCK_SIZE, 0));
-		courant_nblocks *= cuda_smp_count()*2/3;
+		courant_nblocks *= cuda_smp_count() * 2 / 3;
 		size_t smoothlen_mem = sizeof(smoothlen_workspace) * smoothlen_nblocks;
 		size_t semiactive_mem = sizeof(mark_semiactive_workspace) * semiactive_nblocks;
 		size_t courant_mem = sizeof(courant_workspace) * courant_nblocks;

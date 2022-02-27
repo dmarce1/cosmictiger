@@ -128,8 +128,9 @@ void do_groups(int number, double scale) {
 }
 
 sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
-		bool verbose ){
+		bool verbose) {
 	const bool stars = get_options().stars;
+	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	verbose = true;
 	if (verbose)
@@ -250,25 +251,25 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
 			}
-
-			sph_init_diffusion();
-			sparams.run_type = SPH_RUN_DIFFUSION;
-			float err;
-			do {
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-				tm.reset();
-				tm.start();
-				err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-				tm.reset();
-			} while (err > SPH_DIFFUSION_TOLER);
-
+			if (diff) {
+				sph_init_diffusion();
+				sparams.run_type = SPH_RUN_DIFFUSION;
+				float err;
+				do {
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+					tm.reset();
+					tm.start();
+					err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+					tm.reset();
+				} while (err > SPH_DIFFUSION_TOLER);
+			}
 		}
 
 	} else {
@@ -289,25 +290,25 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 			tm.reset();
 			max_rung = kr.max_rung;
-
-			sph_init_diffusion();
-			sparams.run_type = SPH_RUN_DIFFUSION;
-			float err;
-			do {
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-				tm.reset();
-				tm.start();
-				err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-				tm.reset();
-			} while (err > SPH_DIFFUSION_TOLER);
-
+			if (diff) {
+				sph_init_diffusion();
+				sparams.run_type = SPH_RUN_DIFFUSION;
+				float err;
+				do {
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+					tm.reset();
+					tm.start();
+					err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+					tm.reset();
+				} while (err > SPH_DIFFUSION_TOLER);
+			}
 			const bool chem = get_options().chem;
 			if (chem) {
 				PRINT("Doing chemistry step\n");
@@ -631,6 +632,7 @@ void driver() {
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
+
 			if (!glass) {
 				if (z > 50.0) {
 					theta = 0.4;

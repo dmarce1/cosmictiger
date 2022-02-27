@@ -43,6 +43,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	std::atomic<part_int> next(0);
 	const auto func = [dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
 		const bool sph = get_options().sph;
+		const bool reflect= get_options().yreflect;
 		const float dm_mass = get_options().dm_mass;
 		const float sph_mass = get_options().sph_mass;
 		vector<lc_particle> this_part_buffer;
@@ -78,7 +79,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				double y = particles_pos(YDIM,i).to_double();
 				double z = particles_pos(ZDIM,i).to_double();
 				float vx = particles_vel(XDIM,i);
-				float vy = particles_vel(YDIM,i);
+				float& vy = particles_vel(YDIM,i);
 				float vz = particles_vel(ZDIM,i);
 				int type = DARK_MATTER_TYPE;
 				float mass = 1.0f;
@@ -103,18 +104,11 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					if( tau0 != 0.0 ) {
 						const float divv = sph_particles_divv(j);
 						float dloghdt = (1.f/3.f)*divv/scale;
-						if( fabs(dloghdt*dt) > 5.0e-3) {
-				//			PRINT( "%e\n",dloghdt*dt);
-						}
 						if( dloghdt > 1.0 / dt0 ) {
 							PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
-	//						PRINT( "Hmult = %e\n", c0);
-//							abort();
 							dloghdt = 1.0 / dt0;
 						} else if( dloghdt < -1.0 / dt0) {
 							PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
-//							PRINT( "Hmult = %e\n", c0);
-//							abort();
 							dloghdt = -1.0 / dt0;
 						}
 						float c0 = exp(dloghdt*dt);
@@ -127,41 +121,56 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
 					const float rho = sph_den(1./h3);
-			const float p = eint * rho * (get_options().gamma-1.0f);
-			const float e =eint * sph_mass;
-			this_dr.therm += e * a2inv;
-			this_dr.vol += vol;
-		}
-		vx *= ainv;
-		vy *= ainv;
-		vz *= ainv;
-		double x0, y0, z0;
-		x0 = x;
-		y0 = y;
-		z0 = z;
-		x += double(vx*dt);
-		if( std::isnan(vy)) {
-			PRINT( "vy is nan\n");
-			abort();
-		}
-		y += double(vy*dt);
-		z += double(vz*dt);
-		if( do_lc) {
-			this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
-		}
-		constrain_range(x);
-		constrain_range(y);
-		constrain_range(z);
-		particles_pos(XDIM,i) = x;
-		particles_pos(YDIM,i) = y;
-		particles_pos(ZDIM,i) = z;
-		this_dr.flops += 34;
-	}
-	if (do_lc) {
-		lc_add_parts(std::move(this_part_buffer));
-	}
-	return this_dr;
-}	;
+					const float p = eint * rho * (get_options().gamma-1.0f);
+					const float e =eint * sph_mass;
+					this_dr.therm += e * a2inv;
+					this_dr.vol += vol;
+				}
+				vx *= ainv;
+				vy *= ainv;
+				vz *= ainv;
+				double x0, y0, z0;
+				x0 = x;
+				y0 = y;
+				z0 = z;
+				x += double(vx*dt);
+				if( std::isnan(vy)) {
+					PRINT( "vy is nan\n");
+					abort();
+				}
+				y += double(vy*dt);
+				z += double(vz*dt);
+				if( do_lc) {
+					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
+				}
+				if( !reflect) {
+					constrain_range(y);
+				} else {
+					double dt2;
+					if( y > 1.0 ) {
+						dt2 =(y-1.0)/vy;
+						y = 1.0;
+						vy = -vy/sqrt(2);
+						y += vy * dt2;
+					} else if( y < 0.0 ) {
+						dt2 =y/vy;
+						y = 0.0;
+						vy = -vy/sqrt(2);
+						y += vy * dt2;
+					}
+				}
+				constrain_range(x);
+				constrain_range(z);
+				particles_pos(XDIM,i) = x;
+				particles_pos(YDIM,i) = y;
+				particles_pos(ZDIM,i) = z;
+				this_dr.flops += 34;
+			}
+			if (do_lc) {
+				lc_add_parts(std::move(this_part_buffer));
+			}
+			return this_dr;
+		};
 	timer tm;
 	tm.start();
 	for (int proc = 1; proc < nthreads; proc++) {

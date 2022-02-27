@@ -104,17 +104,20 @@ bool process_options(int argc, char *argv[]) {
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
+	("diffusion", po::value<bool>(&(opts.diffusion))->default_value(true), "do diffusion") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
-	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
-	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
+			("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
+			("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
+			("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
+			("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
-	("kernel", po::value<int>(&(opts.kernel))->default_value(0), "kernel type") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(90), "neighbor number") //
+	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("nsteps", po::value<int>(&(opts.nsteps))->default_value(128), "Number of super-timesteps") //
@@ -230,6 +233,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(code_to_g);
 	SHOW(code_to_s);
 	SHOW(cuda);
+	SHOW(diffusion);
 	SHOW(dm_mass);
 	SHOW(do_lc);
 	SHOW(do_groups);
@@ -286,8 +290,8 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
-	if (opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz") {
-		opts.chem = opts.gravity = opts.conduction = false;
+	if (opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt") {
+		opts.chem = opts.gravity = opts.conduction = opts.diffusion = false;
 		opts.gamma = 5. / 3.;
 	}
 	kernel_set_type(opts.kernel);

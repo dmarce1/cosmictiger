@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 struct options {
 	bool sph;
+	bool yreflect;
 	bool cuda;
 	bool save_force;
 	bool do_lc;
@@ -52,6 +53,7 @@ struct options {
 	int lc_map_size;
 	int min_group;
 	int slice_res;
+	bool diffusion;
 	int nsteps;
 	int sph_bucket_size;
 	double lc_b;
@@ -86,11 +88,14 @@ struct options {
 	double rho0_b;
 	double rho0_c;
 	double gamma;
+	double gy;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & gy;
+		arc & yreflect;
 		arc & gamma;
 		arc & conduction;
 		arc & gravity;
@@ -99,6 +104,7 @@ struct options {
 		arc & rho0_c;
 		arc & stars;
 		arc & chem;
+		arc & diffusion;
 		arc & neighbor_number;
 		arc & kernel;
 		arc & vsoft;
