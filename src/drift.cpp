@@ -43,7 +43,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	std::atomic<part_int> next(0);
 	const auto func = [dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
 		const bool sph = get_options().sph;
-		const bool reflect= get_options().yreflect;
+//		const bool reflect= get_options().yreflect;
 		const float dm_mass = get_options().dm_mass;
 		const float sph_mass = get_options().sph_mass;
 		vector<lc_particle> this_part_buffer;
@@ -79,7 +79,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				double y = particles_pos(YDIM,i).to_double();
 				double z = particles_pos(ZDIM,i).to_double();
 				float vx = particles_vel(XDIM,i);
-				float& vy = particles_vel(YDIM,i);
+				float vy = particles_vel(YDIM,i);
 				float vz = particles_vel(ZDIM,i);
 				int type = DARK_MATTER_TYPE;
 				float mass = 1.0f;
@@ -143,9 +143,9 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				if( do_lc) {
 					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
 				}
-				if( !reflect) {
+//				if( !reflect) {
 					constrain_range(y);
-				} else {
+/*				} else {
 					double dt2;
 					if( y > 1.0 ) {
 						dt2 =(y-1.0)/vy;
@@ -158,7 +158,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						vy = -vy/sqrt(2);
 						y += vy * dt2;
 					}
-				}
+				}*/
 				constrain_range(x);
 				constrain_range(z);
 				particles_pos(XDIM,i) = x;

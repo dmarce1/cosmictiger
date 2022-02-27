@@ -133,6 +133,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	verbose = true;
+	*eheat = 0.0;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
 	sph_tree_create_params tparams;
