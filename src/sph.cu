@@ -36,17 +36,17 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 #define HYDRO_SIZE (8*1024)
 
 struct smoothlen_workspace {
-	fixedcapvec<fixed32, WORKSPACE_SIZE> x;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> y;
-	fixedcapvec<fixed32, WORKSPACE_SIZE> z;
+	array<fixed32, WORKSPACE_SIZE> x;
+	array<fixed32, WORKSPACE_SIZE> y;
+	array<fixed32, WORKSPACE_SIZE> z;
 };
 
 struct mark_semiactive_workspace {
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 1> x;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 1> y;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 1> z;
-	fixedcapvec<float, WORKSPACE_SIZE + 1> h;
-	fixedcapvec<char, WORKSPACE_SIZE + 1> rungs;
+	array<fixed32, WORKSPACE_SIZE + 1> x;
+	array<fixed32, WORKSPACE_SIZE + 1> y;
+	array<fixed32, WORKSPACE_SIZE + 1> z;
+	array<float, WORKSPACE_SIZE + 1> h;
+	array<char, WORKSPACE_SIZE + 1> rungs;
 };
 
 struct hydro_record1 {
@@ -89,28 +89,28 @@ struct dif_record2 {
 };
 
 struct hydro_workspace {
-	fixedcapvec<hydro_record1, WORKSPACE_SIZE + 2> rec1_main;
-	fixedcapvec<hydro_record2, WORKSPACE_SIZE + 2> rec2_main;
-	fixedcapvec<hydro_record1, HYDRO_SIZE + 2> rec1;
-	fixedcapvec<hydro_record2, HYDRO_SIZE + 2> rec2;
+	array<hydro_record1, WORKSPACE_SIZE + 2> rec1_main;
+	array<hydro_record2, WORKSPACE_SIZE + 2> rec2_main;
+	array<hydro_record1, HYDRO_SIZE + 2> rec1;
+	array<hydro_record2, HYDRO_SIZE + 2> rec2;
 };
 
 struct dif_workspace {
-	fixedcapvec<dif_record1, WORKSPACE_SIZE + 2> rec1_main;
-	fixedcapvec<dif_record2, WORKSPACE_SIZE + 2> rec2_main;
-	fixedcapvec<dif_record1, HYDRO_SIZE + 2> rec1;
-	fixedcapvec<dif_record2, HYDRO_SIZE + 2> rec2;
+	array<dif_record1, WORKSPACE_SIZE + 2> rec1_main;
+	array<dif_record2, WORKSPACE_SIZE + 2> rec2_main;
+	array<dif_record1, HYDRO_SIZE + 2> rec1;
+	array<dif_record2, HYDRO_SIZE + 2> rec2;
 };
 
 struct deposit_workspace {
-	fixedcapvec<float, WORKSPACE_SIZE + 2> sn;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> x;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> y;
-	fixedcapvec<fixed32, WORKSPACE_SIZE + 2> z;
-	fixedcapvec<float, WORKSPACE_SIZE + 2> vx;
-	fixedcapvec<float, WORKSPACE_SIZE + 2> vy;
-	fixedcapvec<float, WORKSPACE_SIZE + 2> vz;
-	fixedcapvec<float, WORKSPACE_SIZE + 2> h;
+	array<float, WORKSPACE_SIZE + 2> sn;
+	array<fixed32, WORKSPACE_SIZE + 2> x;
+	array<fixed32, WORKSPACE_SIZE + 2> y;
+	array<fixed32, WORKSPACE_SIZE + 2> z;
+	array<float, WORKSPACE_SIZE + 2> vx;
+	array<float, WORKSPACE_SIZE + 2> vy;
+	array<float, WORKSPACE_SIZE + 2> vz;
+	array<float, WORKSPACE_SIZE + 2> h;
 };
 
 struct courant_record1 {
@@ -138,10 +138,10 @@ struct courant_record2 {
 };
 
 struct courant_workspace {
-	fixedcapvec<courant_record1, WORKSPACE_SIZE + 3> rec1_main;
-	fixedcapvec<courant_record2, WORKSPACE_SIZE + 3> rec2_main;
-	fixedcapvec<courant_record1, HYDRO_SIZE + 3> rec1;
-	fixedcapvec<courant_record2, HYDRO_SIZE + 3> rec2;
+	array<courant_record1, WORKSPACE_SIZE + 3> rec1_main;
+	array<courant_record2, WORKSPACE_SIZE + 3> rec2_main;
+	array<courant_record1, HYDRO_SIZE + 3> rec1;
+	array<courant_record2, HYDRO_SIZE + 3> rec2;
 };
 
 #define SMOOTHLEN_BLOCK_SIZE 512
@@ -199,6 +199,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				const int offset = size;
 				const int next_size = offset + total;
 				size = next_size;
+				ALWAYS_ASSERT(size < WORKSPACE_SIZE);
 				if (contains) {
 					const int k = offset + j;
 					ws.x[k] = x[XDIM];
@@ -379,6 +380,7 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				const int offset = size;
 				const int next_size = offset + total;
 				size = next_size;
+				ALWAYS_ASSERT(size < WORKSPACE_SIZE);
 				if (contains) {
 					ASSERT(j < total);
 					const int k = offset + j;
@@ -495,6 +497,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const int offset = size1;
 				const int next_size = offset + total;
 				size1 = next_size;
+				ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
 				if (contains) {
 					const int k = offset + j;
 					ws.rec1_main[k].x = x[XDIM];
@@ -581,6 +584,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const int offset = size2;
 					const int next_size = offset + total;
 					size2 = next_size;
+					ALWAYS_ASSERT(size2 < HYDRO_SIZE);
 					if (flag) {
 						const int l = offset + k;
 						ws.rec1[l] = ws.rec1_main[j];
@@ -711,6 +715,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const int offset = size1;
 				const int next_size = offset + total;
 				size1 = next_size;
+				ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
 				if (contains) {
 					const int k = offset + j;
 					ws.rec1_main[k].x = x[XDIM];
@@ -807,6 +812,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const int offset = size2;
 					const int next_size = offset + total;
 					size2 = next_size;
+					ALWAYS_ASSERT(size2 < HYDRO_SIZE);
 					if (flag) {
 						const int l = offset + k;
 						ws.rec1[l] = ws.rec1_main[j];
@@ -1015,6 +1021,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const int offset = size1;
 					const int next_size = offset + total;
 					size1 = next_size;
+					ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
 					if (contains) {
 						const int k = offset + j;
 						ws.rec1_main[k].x = x[XDIM];
@@ -1113,6 +1120,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const int offset = size2;
 						const int next_size = offset + total;
 						size2 = next_size;
+						ALWAYS_ASSERT(size2 < HYDRO_SIZE);
 						if (flag) {
 							const int l = offset + k;
 							ws.rec1[l] = ws.rec1_main[j];
@@ -1388,22 +1396,22 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	if (first) {
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
-		smoothlen_nblocks *= cuda_smp_count();
+		smoothlen_nblocks *= cuda_smp_count()*2/3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semiactive_nblocks, (const void*) sph_cuda_mark_semiactive, SMOOTHLEN_BLOCK_SIZE, 0));
-		semiactive_nblocks *= cuda_smp_count();
+		semiactive_nblocks *= cuda_smp_count()*2/3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&dif_nblocks, (const void*) sph_cuda_diffusion, HYDRO_BLOCK_SIZE, 0));
-		dif_nblocks *= cuda_smp_count();
+		dif_nblocks *= cuda_smp_count()*2/3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
-		hydro_nblocks *= cuda_smp_count();
+		hydro_nblocks *= cuda_smp_count()*2/3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&courant_nblocks, (const void*) sph_cuda_courant, HYDRO_BLOCK_SIZE, 0));
-		courant_nblocks *= cuda_smp_count();
+		courant_nblocks *= cuda_smp_count()*2/3;
 		size_t smoothlen_mem = sizeof(smoothlen_workspace) * smoothlen_nblocks;
 		size_t semiactive_mem = sizeof(mark_semiactive_workspace) * semiactive_nblocks;
 		size_t courant_mem = sizeof(courant_workspace) * courant_nblocks;
 		size_t hydro_mem = sizeof(hydro_workspace) * hydro_nblocks;
 		size_t dif_mem = sizeof(dif_workspace) * dif_nblocks;
 		size_t max_mem = std::max(std::max(std::max(smoothlen_mem, semiactive_mem), std::max(hydro_mem, courant_mem)), dif_mem);
-		CUDA_CHECK(cudaMalloc(&workspace_ptr, max_mem));
+		CUDA_CHECK(cudaMallocManaged(&workspace_ptr, max_mem));
 		PRINT("Allocating %i GB in workspace memory\n", max_mem / 1024 / 1024 / 1024);
 //		sleep(10);
 	}
