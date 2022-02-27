@@ -104,12 +104,7 @@ void cuda_init() {
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
-	value = HEAP_SIZE;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMallocHeapSize));
-	if (value != HEAP_SIZE) {
-		THROW_ERROR("Unable to set Heap size to %li\n", HEAP_SIZE);
-	}
 }
+
 
 #endif

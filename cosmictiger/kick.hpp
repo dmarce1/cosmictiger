@@ -20,6 +20,7 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
+#include <cosmictiger/cuda_vector.hpp>
 #include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/tree.hpp>
 

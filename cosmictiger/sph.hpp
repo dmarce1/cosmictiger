@@ -25,6 +25,7 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/options.hpp>
 
+#include <cosmictiger/cuda_vector.hpp>
 #include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/range.hpp>
