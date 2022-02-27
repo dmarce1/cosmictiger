@@ -31,6 +31,7 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	float* fpot;
 	float def_gamma;
 	bool conduction;
 	bool gravity;
@@ -79,6 +80,7 @@ struct sph_run_cuda_data {
 	float* dvz_con;
 	float* deint_pred;
 	dif_vector* dvec_snk;
+	float* fpot_snk;
 	float* dvx_pred;
 	float* kappa_snk;
 	float* dvy_pred;

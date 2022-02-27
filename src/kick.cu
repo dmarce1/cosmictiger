@@ -31,7 +31,6 @@
 
 #include <atomic>
 
-
 /*__managed__ int node_count;
  __managed__ double total_time;
  __managed__ double tree_time;
@@ -164,17 +163,19 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vz = vel_z[snki];
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
+		if (my_type == SPH_TYPE) {
+		//	PRINT("%e\n", sqrtf(sqr(sph_gx[i], sph_gy[i], sph_gz[i]))/ sqrtf(sqr(gx[i], gy[i], gz[i])));
+			sph_gx[j] += gx[i];
+			sph_gy[j] += gy[i];
+			sph_gz[j] += gz[i];
+		}
 		if (!params.first_call) {
 			vx = fmaf(gx[i], dt, vx);
 			vy = fmaf(gy[i], dt, vy);
 			vz = fmaf(gz[i], dt, vz);
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-		if (my_type == SPH_TYPE) {
-			sph_gx[j] = gx[i];
-			sph_gy[j] = gy[i];
-			sph_gz[j] = gz[i];
-		} else {
+		if (my_type != SPH_TYPE) {
 			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
 			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 			max_rung = max(rung, max_rung);

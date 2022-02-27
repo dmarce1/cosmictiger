@@ -69,11 +69,23 @@ struct difco_data {
 	}
 };
 
+struct fs_return {
+	float fvel;
+	float fpre;
+	float fpot;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & fvel;
+		arc & fpre;
+		arc & fpot;
+	}
+};
+
 static const array<fixed32, NDIM>* sph_particles_cache_read_line(line_id_type line_id);
 static const array<float, NDIM>* sph_particles_gforce_cache_read_line(line_id_type line_id);
 static const sph_particle* sph_particles_sph_cache_read_line(line_id_type line_id, float);
 static const pair<char, float>* sph_particles_rung_cache_read_line(line_id_type line_id);
-static const pair<float>* sph_particles_fvel_cache_read_line(line_id_type line_id);
+static const fs_return* sph_particles_fvel_cache_read_line(line_id_type line_id);
 //static const float* sph_particles_sn_cache_read_line(line_id_type line_id);
 static const difco_data* sph_particles_difco_cache_read_line(line_id_type line_id);
 static const dif_vector* sph_particles_difvecs_cache_read_line(line_id_type line_id);
@@ -82,7 +94,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 static vector<array<float, NDIM>> sph_particles_fetch_gforce_cache_line(part_int index);
 static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int index);
 static vector<sph_particle> sph_particles_fetch_sph_cache_line(part_int index, float);
-static vector<pair<float>> sph_particles_fetch_fvel_cache_line(part_int index);
+static vector<fs_return> sph_particles_fetch_fvel_cache_line(part_int index);
 //static vector<float> sph_particles_fetch_sn_cache_line(part_int index);
 static vector<difco_data> sph_particles_fetch_difco_cache_line(part_int index);
 static vector<dif_vector> sph_particles_fetch_difvecs_cache_line(part_int index);
@@ -101,7 +113,7 @@ static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fi
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<float, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> gforce_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<sph_particle>>, line_id_hash_hi>, PART_CACHE_SIZE> sph_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<char, float>>> , line_id_hash_hi>, PART_CACHE_SIZE> rung_part_cache;
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>> , line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<fs_return>>, line_id_hash_hi>, PART_CACHE_SIZE> fvel_cache;
 //static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>, line_id_hash_hi>, PART_CACHE_SIZE> sn_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<difco_data>>, line_id_hash_hi>, PART_CACHE_SIZE> difco_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<dif_vector>>, line_id_hash_hi>, PART_CACHE_SIZE> difvec_cache;
@@ -297,10 +309,10 @@ void sph_particles_swap(part_int i, part_int j) {
 	const bool stars = get_options().stars;
 	std::swap(sph_particles_a[i], sph_particles_a[j]);
 	std::swap(sph_particles_e[i], sph_particles_e[j]);
-	std::swap(sph_particles_de2[i], sph_particles_de2[j]);
 	std::swap(sph_particles_cond[i], sph_particles_cond[j]);
 	std::swap(sph_particles_de1[i], sph_particles_de1[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
+	std::swap(sph_particles_dvv[i], sph_particles_fp[j]);
 	std::swap(sph_particles_fv[i], sph_particles_fv[j]);
 	std::swap(sph_particles_f0[i], sph_particles_f0[j]);
 	std::swap(sph_particles_dc[i], sph_particles_dc[j]);
@@ -312,7 +324,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_g[dim][i], sph_particles_g[dim][j]);
 		std::swap(sph_particles_dv1[dim][i], sph_particles_dv1[dim][j]);
-		std::swap(sph_particles_dv2[dim][i], sph_particles_dv2[dim][j]);
 	}
 	if (chem) {
 		for (int l = 0; l < NCHEMFRACS; l++) {
@@ -387,6 +398,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
+		sph_particles_array_resize(sph_particles_fp, new_capacity, true);
 		sph_particles_array_resize(sph_particles_or, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cond, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
@@ -470,6 +482,7 @@ void sph_particles_free() {
 		CUDA_CHECK(cudaFree(sph_particles_or));
 		CUDA_CHECK(cudaFree(sph_particles_dc));
 		CUDA_CHECK(cudaFree(sph_particles_a));
+		CUDA_CHECK(cudaFree(sph_particles_fp));
 		if( stars ) {
 			//		CUDA_CHECK(cudaFree(sph_particles_fZ));
 //			CUDA_CHECK(cudaFree(sph_particles_fY));
@@ -497,6 +510,7 @@ void sph_particles_free() {
 		free(sph_particles_h);
 		free(sph_particles_e);
 		free(sph_particles_dc);
+		free(sph_particles_fp);
 		free(sph_particles_or);
 		free(sph_particles_de1);
 		free(sph_particles_de2);
@@ -863,7 +877,7 @@ static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int in
 	return line;
 }
 
-void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpres, part_int offset) {
+void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpres, float* fpots, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -873,6 +887,7 @@ void sph_particles_global_read_fvels(particle_global_range range, float* fvels, 
 				const int j = offset + i - range.range.first;
 				fvels[j] = sph_particles_fvel(i);
 				fpres[j] = sph_particles_fpre(i);
+				fpots[j] = sph_particles_fpot(i);
 			}
 		} else {
 			line_id_type line_id;
@@ -887,8 +902,9 @@ void sph_particles_global_read_fvels(particle_global_range range, float* fvels, 
 				const auto end = std::min(line_id.index + line_size, range.range.second);
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
-					fvels[dest_index] = ptr[src_index].first;
-					fpres[dest_index] = ptr[src_index].second;
+					fvels[dest_index] = ptr[src_index].fvel;
+					fpres[dest_index] = ptr[src_index].fpre;
+					fpots[dest_index] = ptr[src_index].fpot;
 					dest_index++;
 				}
 			}
@@ -896,13 +912,13 @@ void sph_particles_global_read_fvels(particle_global_range range, float* fvels, 
 	}
 }
 
-static const pair<float>* sph_particles_fvel_cache_read_line(line_id_type line_id) {
+static const fs_return* sph_particles_fvel_cache_read_line(line_id_type line_id) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const size_t bin = line_id_hash_lo()(line_id);
 	std::unique_lock<spinlock_type> lock(fvel_mutexes[bin]);
 	auto iter = fvel_cache[bin].find(line_id);
 	if (iter == fvel_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<pair<float>>> >();
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<fs_return>> >();
 		fvel_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -917,14 +933,16 @@ static const pair<float>* sph_particles_fvel_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-static vector<pair<float>> sph_particles_fetch_fvel_cache_line(part_int index) {
+static vector<fs_return> sph_particles_fetch_fvel_cache_line(part_int index) {
 	const part_int line_size = get_options().part_cache_line_size;
-	vector<pair<float>> line(line_size);
+	vector<fs_return> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
 	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {
-		line[i - begin].first = sph_particles_fvel(i);
-		line[i - begin].second = sph_particles_fpre(i);
+		line[i - begin].fvel = sph_particles_fvel(i);
+		line[i - begin].fpre = sph_particles_fpre(i);
+		line[i - begin].fpot = sph_particles_fpot(i);
+
 	}
 	return line;
 }

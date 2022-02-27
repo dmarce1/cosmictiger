@@ -81,6 +81,7 @@ SPH_PARTICLES_EXTERN dif_vector* sph_particles_vec;
 SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
+SPH_PARTICLES_EXTERN float* sph_particles_fp;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2;
 SPH_PARTICLES_EXTERN float* sph_particles_de1;
@@ -113,7 +114,7 @@ void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixe
 void sph_particles_global_read_sph(particle_global_range range, float a, float* eint, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
 		float* mmw, float* colog,float* alpha, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
-void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
+void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, float* fgrav, part_int offset);
 //void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
 void sph_particles_global_read_difcos(particle_global_range range, float* difcos, float*, char*, part_int offset);
 void sph_particles_global_read_difvecs(particle_global_range range, dif_vector* difvecs, part_int offset);
@@ -262,6 +263,11 @@ inline float& sph_particles_fvel(part_int index) {
 inline float& sph_particles_fpre(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_f0[index];
+}
+
+inline float& sph_particles_fpot(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_fp[index];
 }
 
 inline part_int& sph_particles_dm_index(part_int index) {
