@@ -23,6 +23,7 @@
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/view.hpp>
 #include <cosmictiger/exact_sod.hpp>
+#include <cosmictiger/driver.hpp>
 
 static void output_line(int num) {
 
@@ -39,8 +40,6 @@ static void output_line(int num) {
 	fclose(fp);
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, bool verbose = true);
-
 void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 	time_type itime = 0;
 	int minrung = 0;
@@ -56,8 +55,9 @@ void hydro_driver(double tmax, float vdrag = 0.f, bool adiabatic = false) {
 //			output_line(main_step);
 			main_step++;
 		}
-		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, false);
-		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, false);
+		double dummy;
+		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
+		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
 		int maxrung = rc2.max_rung;
 		double dt = t0 / (1 << maxrung);
 		auto dr = drift(1.0, dt, t, t + dt, tmax);

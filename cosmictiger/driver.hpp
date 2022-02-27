@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <cosmictiger/time.hpp>
 #include <cstdio>
+#include <cosmictiger/sph.hpp>
 
 struct driver_params {
 	double a;
@@ -36,6 +37,7 @@ struct driver_params {
 	double flops;
 	double runtime;
 	double years;
+	double eheat;
 	time_type itime;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -51,10 +53,13 @@ struct driver_params {
 		arc & runtime;
 		arc & itime;
 		arc & years;
+		arc & eheat;
 	}
 };
 
 void write_checkpoint(driver_params params);
 driver_params read_checkpoint();
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat, bool verbose = true);
+
 
 void driver();

@@ -127,7 +127,8 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, bool verbose = true) {
+sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+		bool verbose ){
 	const bool stars = get_options().stars;
 	const bool chem = get_options().chem;
 	verbose = true;
@@ -245,7 +246,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("Doing chemistry step\n");
 				timer tm;
 				tm.start();
-				chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
+				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
 			}
@@ -312,7 +313,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("Doing chemistry step\n");
 				timer tm;
 				tm.start();
-				chemistry_do_step(scale, minrung, t0, adot, +1);
+				*eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
 			}
@@ -510,6 +511,7 @@ void driver() {
 			particles_set_tracers();
 		}
 		domains_rebound();
+		params.eheat = 0;
 		params.step = 0;
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
@@ -538,6 +540,7 @@ void driver() {
 	auto& esum0 = params.esum0;
 	auto& itime = params.itime;
 	auto& iter = params.iter;
+	auto& eheat = params.eheat;
 	int& step = params.step;
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
@@ -648,8 +651,10 @@ void driver() {
 			last_theta = theta;
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
+			double heating;
 			if (sph & !glass) {
-				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt);
+				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
+				eheat += heating;
 			}
 
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
@@ -658,7 +663,8 @@ void driver() {
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt).max_rung);
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt, &eheat).max_rung);
+				eheat += heating;
 			}
 			if (stars & !glass) {
 				stars_find(a, dt, minrung, iter);
@@ -697,7 +703,7 @@ void driver() {
 			PRINT("Drift done\n");
 			dtm.stop();
 			drift_time += dtm.read();
-			const double total_kinetic = dr.kin + dr.therm;
+			const double total_kinetic = dr.kin + dr.therm + eheat;
 			cosmicK += total_kinetic * (a - a1);
 			const double esum = (a * (pot + total_kinetic) + cosmicK);
 			if (tau == 0.0) {
@@ -735,7 +741,7 @@ void driver() {
 				if (fp == NULL) {
 					THROW_ERROR("Unable to open energy.txt\n");
 				}
-				fprintf(fp, "%i %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr);
+				fprintf(fp, "%i %e %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, eheat, cosmicK, eerr);
 				fclose(fp);
 			}
 			PRINT_BOTH(textfp,

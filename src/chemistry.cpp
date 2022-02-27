@@ -688,15 +688,16 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
+double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 	profiler_enter(__FUNCTION__);
-	if( !get_options().chem ) {
-		return;
+	vector<hpx::future<double>> futs;
+	if (!get_options().chem) {
+		return 0.0;
 	}
-	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0, adot, dir));
 	}
+	double echange = 0.0;
 	int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc, nthreads, a, minrung,t0,dir,adot]() {
@@ -744,6 +745,8 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 		}
 		cuda_chemistry_step(chems, a);
 		int j = 0;
+		double echange = 0.0;
+		const double sph_mass = get_options().sph_mass;
 		for( part_int i = b; i < e; i++) {
 			int rung = sph_particles_rung(i);
 			if( rung >= minrung ) {
@@ -774,14 +777,18 @@ void chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						sph_particles_frac(c,i) *= norm;
 					}
 				}
+				echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
 				sph_particles_eint(i) = chem.eint;
 				sph_particles_tcool(i) = chem.tcool;
 			}
 		}
+		return echange;
 
 	}));
 	}
-
-	hpx::wait_all(futs.begin(), futs.end());
+	for (auto& f : futs) {
+		echange += f.get();
+	}
 	profiler_exit();
+	return echange;
 }
