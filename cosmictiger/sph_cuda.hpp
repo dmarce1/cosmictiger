@@ -35,6 +35,8 @@ struct sph_run_cuda_data {
 	bool conduction;
 	bool gravity;
 	bool chem;
+	float* fpot;
+	float* fpot_snk;
 	float* mmw;
 	float hsoft_min;
 	float G;

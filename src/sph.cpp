@@ -308,7 +308,7 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 			//		sph_particles_global_read_sph(other->global_part_range(), params.a, d.ents.data(), d.vxs.data(), d.vys.data(), d.vzs.data(), nullptr, offset);
 		}
 		if (do_fvel) {
-			sph_particles_global_read_fvels(other->global_part_range(), d.fvels.data(), d.f0s.data(), offset);
+//			sph_particles_global_read_fvels(other->global_part_range(), d.fvels.data(), d.f0s.data(), offset);
 		}
 		int i = offset;
 		while (i < d.xs.size()) {
@@ -1676,7 +1676,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								}
 								switch(params.run_type) {
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_fvels(node.global_part_range(), host_fvel.data(), host_f0.data(), offset);
+									sph_particles_global_read_fvels(node.global_part_range(), host_fvel.data(), host_f0.data(), nullptr, offset);
 									sph_particles_global_read_gforce(node.global_part_range(), host_gx.data(), host_gy.data(), host_gz.data(), offset);
 									break;
 								}

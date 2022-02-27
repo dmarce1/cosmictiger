@@ -1,17 +1,14 @@
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
-
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
  as published by the Free Software Foundation; either version 2
  of the License, or (at your option) any later version.
-
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
-
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
@@ -81,6 +78,7 @@ SPH_PARTICLES_EXTERN dif_vector* sph_particles_vec;
 SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
+SPH_PARTICLES_EXTERN float* sph_particles_fp;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2;
 SPH_PARTICLES_EXTERN float* sph_particles_de1;
@@ -113,7 +111,7 @@ void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixe
 void sph_particles_global_read_sph(particle_global_range range, float a, float* eint, float* vx, float* vy, float* vz, float* gamma, float* T, float* lambda_e,
 		float* mmw, float* colog,float* alpha, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
-void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, part_int offset);
+void sph_particles_global_read_fvels(particle_global_range range, float* fvels, float* fpre, float* fgrav, part_int offset);
 //void sph_particles_global_read_sns(particle_global_range range, float* sn, part_int offset);
 void sph_particles_global_read_difcos(particle_global_range range, float* difcos, float*, char*, part_int offset);
 void sph_particles_global_read_difvecs(particle_global_range range, dif_vector* difvecs, part_int offset);
@@ -168,7 +166,6 @@ inline float& sph_particles_alpha(part_int index) {
  CHECK_SPH_PART_BOUNDS(index);
  return sph_particles_fY[index];
  }
-
  inline float& sph_particles_formZ(part_int index) {
  CHECK_SPH_PART_BOUNDS(index);
  return sph_particles_fZ[index];
@@ -262,6 +259,11 @@ inline float& sph_particles_fvel(part_int index) {
 inline float& sph_particles_fpre(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_f0[index];
+}
+
+inline float& sph_particles_fpot(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_fp[index];
 }
 
 inline part_int& sph_particles_dm_index(part_int index) {
