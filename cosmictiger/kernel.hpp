@@ -456,7 +456,7 @@ inline T kernelPot(T q) {
 		sw1 = q < T(1. / 3.);
 		sw3 = q > T(2. / 3.);
 		sw2 = (T(1) - sw1) * (T(1) - sw3);
-		res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+		res = (q > T(0.f)) * c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 	}
 		break;
 
@@ -469,7 +469,7 @@ inline T kernelPot(T q) {
 		w = fmaf(q, w, T(-7));
 		w *= q;
 		w = fmaf(q, w, T(3));
-		res = w;
+		res = (q > T(0.f)) * w;
 	}
 		break;
 	case KERNEL_WENDLAND_C4: {
