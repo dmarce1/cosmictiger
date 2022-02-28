@@ -625,7 +625,6 @@ void driver() {
 				if (get_options().do_slice) {
 					output_slice(number, years);
 				}
-				view_output_views((tau + 1e-6 * t0) / t0, a);
 				if (get_options().do_views) {
 					timer tm;
 					tm.start();
@@ -668,7 +667,9 @@ void driver() {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
 				eheat += heating;
 			}
-
+			if (full_eval) {
+				view_output_views((tau + 1e-6 * t0) / t0, a);
+			}
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
