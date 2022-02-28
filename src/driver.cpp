@@ -261,7 +261,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
 			}
-	/*		if (diff) {
+			if (diff) {
 				sph_init_diffusion();
 				sparams.run_type = SPH_RUN_DIFFUSION;
 				float err;
@@ -279,7 +279,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 					tm.reset();
 				} while (err > SPH_DIFFUSION_TOLER);
-			}*/
+			}
 		}
 
 	} else {
@@ -300,7 +300,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 			tm.reset();
 			max_rung = kr.max_rung;
-		/*	if (diff) {
+			if (diff) {
 				sph_init_diffusion();
 				sparams.run_type = SPH_RUN_DIFFUSION;
 				float err;
@@ -318,7 +318,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 					tm.reset();
 				} while (err > SPH_DIFFUSION_TOLER);
-			}*/
+			}
 			const bool chem = get_options().chem;
 			if (chem) {
 				PRINT("Doing chemistry step\n");
