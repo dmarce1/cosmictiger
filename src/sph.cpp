@@ -1427,6 +1427,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							test = (self->nactive > 0);
 							break;
 
+							case SPH_RUN_AUX:
 							case SPH_RUN_COURANT:
 							case SPH_RUN_UPDATE:
 							case SPH_RUN_GRAVITY:
@@ -1444,67 +1445,67 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 
 									case SPH_RUN_SMOOTHLEN:
 									case SPH_RUN_MARK_SEMIACTIVE:
-//								case SPH_RUN_RUNGS:
-						case SPH_RUN_COURANT:
-						case SPH_RUN_HYDRO:
-						for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-							const auto id = sph_tree_get_neighbor(i);
-							neighbors.push_back(id);
+									case SPH_RUN_COURANT:
+									case SPH_RUN_HYDRO:
+									case SPH_RUN_AUX:
+									for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+										const auto id = sph_tree_get_neighbor(i);
+										neighbors.push_back(id);
+									}
+									break;
+
+									case SPH_RUN_UPDATE:
+									case SPH_RUN_GRAVITY:
+									break;
+
+								}
+								//		PRINT( "neighbors_size = %i\n",neighbors.size());
+						switch(params.run_type) {
+							case SPH_RUN_SMOOTHLEN:
+							load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_MARK_SEMIACTIVE:
+							load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_COURANT:
+							load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_HYDRO:
+							load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
+							break;
+							case SPH_RUN_UPDATE:
+							case SPH_RUN_GRAVITY:
+							break;
 						}
-						break;
-
-						case SPH_RUN_UPDATE:
-						case SPH_RUN_GRAVITY:
-						break;
-
+						sph_run_return this_rc;
+						switch(params.run_type) {
+							case SPH_RUN_SMOOTHLEN:
+							this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
+							break;
+							case SPH_RUN_MARK_SEMIACTIVE:
+							this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
+							break;
+							case SPH_RUN_COURANT:
+							this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
+							break;
+							case SPH_RUN_HYDRO:
+							this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
+							break;
+							case SPH_RUN_UPDATE:
+							this_rc = sph_update(self, params.min_rung, params.phase);
+							break;
+							case SPH_RUN_GRAVITY:
+							this_rc = sph_gravity(self, params.min_rung, params.t0);
+							break;
+						}
+						rc += this_rc;
 					}
-					//		PRINT( "neighbors_size = %i\n",neighbors.size());
-					switch(params.run_type) {
-						case SPH_RUN_SMOOTHLEN:
-						load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
-						break;
-						case SPH_RUN_MARK_SEMIACTIVE:
-						load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
-						break;
-						case SPH_RUN_COURANT:
-						load_data<false, true, true, true, false, true, false, false>(self, neighbors, data, params.min_rung);
-						break;
-						case SPH_RUN_HYDRO:
-						load_data<true, true, true, true, true, true, true, false>(self, neighbors, data, params.min_rung);
-						break;
-						case SPH_RUN_UPDATE:
-						case SPH_RUN_GRAVITY:
-						break;
-					}
-					sph_run_return this_rc;
-					switch(params.run_type) {
-						case SPH_RUN_SMOOTHLEN:
-						this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
-						break;
-						case SPH_RUN_MARK_SEMIACTIVE:
-						this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
-						break;
-						case SPH_RUN_COURANT:
-						this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
-						break;
-						case SPH_RUN_HYDRO:
-						this_rc = sph_hydro(self, data.xs, data.ys, data.zs, data.rungs, data.hs, data.ents, data.vxs, data.vys, data.vzs, data.fvels, data.f0s, params.min_rung, params.t0, params.phase, params.a);
-						break;
-						case SPH_RUN_UPDATE:
-						this_rc = sph_update(self, params.min_rung, params.phase);
-						break;
-						case SPH_RUN_GRAVITY:
-						this_rc = sph_gravity(self, params.min_rung, params.t0);
-						break;
-					}
-					rc += this_rc;
 				}
-			}
 
-			index = next++;
-		}
-		return rc;
-	}));
+				index = next++;
+			}
+			return rc;
+		}));
 	}
 	for (auto& f : futs2) {
 		rc += f.get();
@@ -1664,7 +1665,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
 									break;
 									case SPH_RUN_AUX:
-									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(),nullptr, host_h.data(), offset);
+									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(),host_rungs.data(), host_h.data(), offset);
 									break;
 								}
 								const bool cond = get_options().conduction;

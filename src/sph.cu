@@ -1622,6 +1622,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 						data.fvel_snk[snki] = fvel;
 						data.f0_snk[snki] = fpre;
 						data.fpot_snk[snki] = fg;
+//						PRINT( "%e %e %e\n", fvel, fpre, fg);
 					}
 				}
 			}
