@@ -689,6 +689,8 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
 double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
+
+
 	profiler_enter(__FUNCTION__);
 	vector<hpx::future<double>> futs;
 	if (!get_options().chem) {
