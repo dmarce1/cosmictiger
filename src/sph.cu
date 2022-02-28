@@ -966,7 +966,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_con);
 				//if (first_step) {
 				//}
-				float divv = (dvxdx + dvydy + dvzdz);
+				float divv = f0_i * (dvxdx + dvydy + dvzdz);
 				float curlv_x = f0_i * (dvzdy - dvydz);
 				float curlv_y = f0_i * (-dvzdx + dvxdz);
 				float curlv_z = f0_i * (dvydx - dvxdy);
@@ -1031,7 +1031,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	float total_vsig_max = 0.;
-	int max_rung_hydro = 0;
+	int max_rung_hydro = 0;courant
 	int max_rung_grav = 0;
 	int max_rung = 0;
 	const bool stars = data.gx;
@@ -1321,7 +1321,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 						const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
 						const float fpre = 1.0f / (1.0f + c0);
-						div_v *= fpre;
 						const float dt_cfl = params.a * h_i / vsig_max;
 						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
 						if (data.conduction) {

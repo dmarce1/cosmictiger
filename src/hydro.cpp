@@ -241,7 +241,7 @@ void hydro_rt_test() {
 
 void hydro_sod_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho0 = 1.0;
+	double rho0 = 0.125;
 	double rho1 = 1.0;
 	double vx1 = 0.0;
 	double vy1 = 0.0;
@@ -249,8 +249,8 @@ void hydro_sod_test() {
 	double vx0 = 0.0;
 	double vy0 = -0.0;
 	double vz0 = -0.0e-1;
-	double p0 = 1.0e-2;
-	double p1 = 1.0e-2;
+	double p0 = 1.0e-1;
+	double p1 = 1.0;
 	sod_init_t sod;
 	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
 	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
@@ -287,9 +287,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(YDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(ZDIM, i) = (2 * rand1() - 1);
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
 				i++;
@@ -302,9 +302,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(YDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(ZDIM, i) = (2 * rand1() - 1);
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
 				i++;
@@ -327,9 +327,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(YDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(ZDIM, i) = (2 * rand1() - 1);
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
@@ -343,9 +343,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(YDIM, i) = (2 * rand1() - 1);
-				sph_particles_vel(ZDIM, i) = (2 * rand1() - 1);
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
@@ -353,9 +353,9 @@ void hydro_sod_test() {
 			}
 		}
 	}
-	constexpr float t = 1.0;
+	constexpr float t = 0.11;
 	constexpr int N = 1000;
-	hydro_driver(t, 128);
+	hydro_driver(t, 16);
 	FILE* fp = fopen("sod.txt", "wt");
 	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
 	double norm1 = 0.0, norm2 = 0.0;

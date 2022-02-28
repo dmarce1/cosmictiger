@@ -106,16 +106,16 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						if( fabs(dloghdt*dt) > 5.0e-3) {
 				//			PRINT( "%e\n",dloghdt*dt);
 						}
-						if( dloghdt > 1.0 / dt0 ) {
+						if( dloghdt > 2.0 / dt0 ) {
 							PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
 	//						PRINT( "Hmult = %e\n", c0);
 //							abort();
-							dloghdt = 1.0 / dt0;
-						} else if( dloghdt < -1.0 / dt0) {
+							dloghdt = 2.0 / dt0;
+						} else if( dloghdt < -2.0 / dt0) {
 							PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
 //							PRINT( "Hmult = %e\n", c0);
 //							abort();
-							dloghdt = -1.0 / dt0;
+							dloghdt = -2.0 / dt0;
 						}
 						float c0 = exp(dloghdt*dt);
 						h *= c0;
