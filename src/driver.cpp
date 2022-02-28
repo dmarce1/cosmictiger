@@ -665,7 +665,7 @@ void driver() {
 			double heating;
 			if (sph & !glass) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
-				eheat += heating;
+				eheat -= heating;
 			}
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
@@ -677,7 +677,7 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
-				eheat += heating;
+				eheat -= heating;
 			}
 			if (stars & !glass) {
 				stars_find(a, dt, minrung, iter);
