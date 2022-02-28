@@ -955,9 +955,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dvy_con += dvy_dt;								// 2
 					dvz_con += dvz_dt;								// 2
 					const float dpot_j = -0.5f * data.G * m * fpot_j * f0_j;
-//					gx += dpot_i * dWdr_x_i + dpot_j * dWdr_x_j;
-//					gy += dpot_i * dWdr_y_i + dpot_j * dWdr_y_j;
-//					gz += dpot_i * dWdr_z_i + dpot_j * dWdr_z_j;
+					gx += dpot_i * dWdr_x_i + dpot_j * dWdr_x_j;
+					gy += dpot_i * dWdr_y_i + dpot_j * dWdr_y_j;
+					gz += dpot_i * dWdr_z_i + dpot_j * dWdr_z_j;
 					flops += 181;
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(deint_con);
