@@ -89,11 +89,15 @@ struct options {
 	double rho0_c;
 	double gamma;
 	double gy;
+	double gcentral;
+	double hcentral;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & gcentral;
+		arc & hcentral;
 		arc & gy;
 		arc & yreflect;
 		arc & gamma;

@@ -1880,6 +1880,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.alpha_snk = &sph_particles_alpha(0);
+	cuda_data.gcentral = get_options().gcentral;
+	cuda_data.hcentral = get_options().hcentral;
 	cuda_data.fvel_snk = &sph_particles_fvel(0);
 	cuda_data.fpot_snk = &sph_particles_fpot(0);
 	cuda_data.Z_snk = &sph_particles_Z(0);

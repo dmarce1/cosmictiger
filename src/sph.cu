@@ -980,11 +980,29 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gy);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gz);
-					data.gx_snk[snki] = gx;
-					data.gy_snk[snki] = gy;
-					data.gz_snk[snki] = gz;
 				}
 				if (tid == 0) {
+					if (data.gravity) {
+						data.gx_snk[snki] = gx;
+						data.gy_snk[snki] = gy;
+						data.gz_snk[snki] = gz;
+					}
+					if (data.gcentral != 0.f) {
+						const float dx = x_i.to_float() - 0.5f;
+						const float dy = y_i.to_float() - 0.5f;
+						const float dz = z_i.to_float() - 0.5f;
+						const float r = sqrt(sqr(dx, dy, dz));
+						const float q = r / data.hcentral;
+						float r3inv;
+						if (q < 1.f) {
+							r3inv = kernelFqinv(q) / (sqr(data.hcentral) * data.hcentral);
+						} else {
+							r3inv = 1.f / (sqr(r) * r);
+						}
+						dvx_con -= dx * data.gcentral * r3inv;
+						dvy_con -= dy * data.gcentral * r3inv;
+						dvz_con -= dz * data.gcentral * r3inv;
+					}
 					if (y_i.to_float() < 0.5) {
 						dvy_con -= params.gy;
 					} else {
@@ -1031,7 +1049,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	float total_vsig_max = 0.;
-	int max_rung_hydro = 0;courant
+	int max_rung_hydro = 0;
 	int max_rung_grav = 0;
 	int max_rung = 0;
 	const bool stars = data.gx;
@@ -1312,6 +1330,22 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max);
 
 					if (tid == 0) {
+						if (data.gcentral != 0.f) {
+							const float dx = x_i.to_float() - 0.5f;
+							const float dy = y_i.to_float() - 0.5f;
+							const float dz = z_i.to_float() - 0.5f;
+							const float r = sqrt(sqr(dx, dy, dz));
+							const float q = r / data.hcentral;
+							float r3inv;
+							if (q < 1.f) {
+								r3inv = kernelFqinv(q) / (sqr(data.hcentral) * data.hcentral);
+							} else {
+								r3inv = 1.f / (sqr(r) * r);
+							}
+							ax -= dx * data.gcentral * r3inv;
+							ay -= dy * data.gcentral * r3inv;
+							az -= dz * data.gcentral * r3inv;
+						}
 						ax += gx_i;
 						ay += gy_i;
 						az += gz_i;

@@ -36,6 +36,8 @@ struct sph_run_cuda_data {
 	bool gravity;
 	bool chem;
 	float* fpot;
+	float gcentral;
+	float hcentral;
 	float* fpot_snk;
 	float* mmw;
 	float hsoft_min;

@@ -50,11 +50,11 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	float e0, ent0;
 	do {
 		int minrung = min_rung(itime);
-		if (minrung == 0) {
-			view_output_views(main_step, 1.0);
+//		if (minrung == 0) {
+		view_output_views(main_step, 1.0);
 //			output_line(main_step);
-			main_step++;
-		}
+		main_step++;
+		//	}
 		double dummy;
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
 		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
@@ -113,7 +113,7 @@ void hydro_rt_test() {
 				double x = (ix + 0.5) * dx;
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
-				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x-0.5)) * (1.0 + cos(6.0 * M_PI * (x-0.5))));
+				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
 				double p = 1.5 + fabs(rho0 * gy * (y - 0.5));
 				double eint = p / (get_options().gamma - 1) / rho0;
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
@@ -140,7 +140,7 @@ void hydro_rt_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double p;
-				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x-0.5)) * (1.0 + cos(6.0 * M_PI * (x-0.5))));
+				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				if (y > 0.75 || y < 0.25) {
 					if (y >= 0.75) {
@@ -167,7 +167,7 @@ void hydro_rt_test() {
 				x = (ix + 0.0) * dx;
 				y = (iy + 0.0) * dx;
 				z = (iz + 0.0) * dx;
-				vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x-0.5)) * (1.0 + cos(6.0 * M_PI * (x-0.5))));
+				vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
 				if (y > 0.75 || y < 0.25) {
 					if (y >= 0.75) {
 						p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
@@ -237,6 +237,51 @@ void hydro_rt_test() {
 	constexpr int N = 1000;
 	hydro_driver(t, 256);
 
+}
+
+void hydro_disc_test() {
+	part_int nparts_total = pow(get_options().parts_dim, 3);
+	const double rinner = 0.025;
+	const double router = 0.25;
+	const double rho = nparts_total;
+	const double p0 = 1.0e-6;
+	const double m = 1.0;
+	double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+	int i = 0;
+	const int nz = 10;
+	int dim = sqrt(nparts_total) / nz;
+	double dx = 1.0 / dim;
+	for (int iz = -nz / 2; iz < nz / 2; iz++) {
+		for (int k = 0; k < dim; k++) {
+			for (int l = 0; l < dim; l++) {
+				double r, x, y, z;
+				x = dx * k;
+				y = dx * l;
+				z = 0.5 - iz * dx;
+				r = sqrt(sqr(x - 0.5, y - 0.5, 0.0));
+				if (r > rinner && r < router) {
+					double eint = p0 / rho / (get_options().gamma - 1);
+					sph_particles_resize(sph_particles_size() + 1);
+					sph_particles_smooth_len(i) = h;
+					sph_particles_pos(XDIM, i) = x;
+					sph_particles_pos(YDIM, i) = y;
+					sph_particles_pos(ZDIM, i) = z;
+					const double v = sqrt(1 / r);
+					const double vx = -(y - 0.5) / r * v;
+					const double vy = (x - 0.5) / r * v;
+					const double vz = 0.0;
+					sph_particles_vel(XDIM, i) = vx;
+					sph_particles_vel(YDIM, i) = vy;
+					sph_particles_vel(ZDIM, i) = vz;
+					sph_particles_rung(i) = 0;
+					sph_particles_eint(i) = eint;
+					i++;
+				}
+			}
+		}
+	}
+	const double t = 1.0;
+	hydro_driver(t, 128);
 }
 
 void hydro_sod_test() {
