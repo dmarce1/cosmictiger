@@ -40,6 +40,7 @@ struct options {
 	bool chem;
 	bool conduction;
 	bool gravity;
+	bool use_glass;
 	int glass;
 	int tracer_count;
 	int kernel;
@@ -96,6 +97,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & use_glass;
 		arc & gcentral;
 		arc & hcentral;
 		arc & gy;

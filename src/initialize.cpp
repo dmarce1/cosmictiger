@@ -505,64 +505,66 @@ void initialize(double z0) {
 			zeldovich_save(dim,false);
 			fft3d_destroy();
 		}
-		twolpt_init();
+		if( get_options().twolpt ) {
+			twolpt_init();
 
-		PRINT("2LPT phase 1\n");
-		twolpt(1, 1, phase);
-		twolpt_phase(0);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 2\n");
-		twolpt(2, 2, phase);
-		twolpt_phase(1);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 3\n");
-		twolpt(0, 0, phase);
-		twolpt_phase(2);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 4\n");
-		twolpt(2, 2, phase);
-		twolpt_phase(3);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 5\n");
-		twolpt(0, 0, phase);
-		twolpt_phase(4);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 6\n");
-		twolpt(1, 1, phase);
-		twolpt_phase(5);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 7\n");
-		twolpt(0, 1, phase);
-		twolpt_phase(6);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 8\n");
-		twolpt(0, 2, phase);
-		twolpt_phase(7);
-		fft3d_destroy();
-
-		PRINT("2LPT phase 9\n");
-		twolpt(1, 2, phase);
-		twolpt_phase(8);
-		fft3d_destroy();
-
-		twolpt_correction1();
-		twolpt_f2delta2_inv();
-		fft3d_destroy();
-
-		for (int dim = 0; dim < NDIM; dim++) {
-			PRINT("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
-			twolpt_correction2(dim);
-			zeldovich_save(dim,true);
+			PRINT("2LPT phase 1\n");
+			twolpt(1, 1, phase);
+			twolpt_phase(0);
 			fft3d_destroy();
+
+			PRINT("2LPT phase 2\n");
+			twolpt(2, 2, phase);
+			twolpt_phase(1);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 3\n");
+			twolpt(0, 0, phase);
+			twolpt_phase(2);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 4\n");
+			twolpt(2, 2, phase);
+			twolpt_phase(3);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 5\n");
+			twolpt(0, 0, phase);
+			twolpt_phase(4);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 6\n");
+			twolpt(1, 1, phase);
+			twolpt_phase(5);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 7\n");
+			twolpt(0, 1, phase);
+			twolpt_phase(6);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 8\n");
+			twolpt(0, 2, phase);
+			twolpt_phase(7);
+			fft3d_destroy();
+
+			PRINT("2LPT phase 9\n");
+			twolpt(1, 2, phase);
+			twolpt_phase(8);
+			fft3d_destroy();
+
+			twolpt_correction1();
+			twolpt_f2delta2_inv();
+			fft3d_destroy();
+
+			for (int dim = 0; dim < NDIM; dim++) {
+				PRINT("Computing 2LPT correction to %c positions and velocities\n", 'x' + dim);
+				twolpt_correction2(dim);
+				zeldovich_save(dim,true);
+				fft3d_destroy();
+			}
+			twolpt_destroy();
 		}
-		twolpt_destroy();
 		float dxmax = zeldovich_end(D1, D2, prefac1, prefac2, phase);
 		return dxmax;
 	};
@@ -868,7 +870,64 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	float entropy;
 	std::string filename = sph ? "glass_sph.bin" : "glass_dm.bin";
 	if (phase != BARYON_POWER) {
-		load_glass(filename.c_str());
+		if (get_options().use_glass) {
+			load_glass(filename.c_str());
+		} else {
+			particles_resize(box.volume());
+			vector<hpx::future<void>> local_futs;
+			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+				local_futs.push_back(hpx::async([box,Ninv](array<int64_t,NDIM> I) {
+					for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+						for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+							const int64_t index = box.index(I);
+							for (int dim1 = 0; dim1 < NDIM; dim1++) {
+								float x = (I[dim1] + 0.5) * Ninv;
+								particles_pos(dim1, index) = x;
+								particles_vel(dim1, index) = 0.0;
+							}
+							particles_rung(index) = 0;
+						}
+					}
+				}, I));
+			}
+			hpx::wait_all(local_futs.begin(), local_futs.end());
+			if (sph) {
+				sph_particles_resize(box.volume());
+				const part_int offset = box.volume();
+				vector<hpx::future<void>> local_futs;
+				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+					local_futs.push_back(hpx::async([offset,chem,box,Ninv](array<int64_t,NDIM> I) {
+						const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+						const float h = std::pow(h3, 1.0 / 3.0);
+						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+							for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+								const int64_t index = box.index(I) + offset;
+								for (int dim1 = 0; dim1 < NDIM; dim1++) {
+									float x = (I[dim1]) * Ninv;
+									particles_pos(dim1, index) = x;
+									particles_vel(dim1, index) = 0.0;
+								}
+								particles_rung(index) = 0;
+								const part_int m = particles_cat_index(index);
+								sph_particles_eint(m) = 1.0e-30f;
+								sph_particles_smooth_len(m) = h;
+								sph_particles_alpha(m) = SPH_ALPHA0;
+								if (chem) {
+									sph_particles_He0(m) = get_options().Y0;
+									sph_particles_Hn(m) = 1.e-30;
+									sph_particles_Hp(m) = 1.e-30;
+									sph_particles_H2(m) = 1.e-30;
+									sph_particles_Hep(m) = 1.e-30;
+									sph_particles_Hepp(m) = 1.e-30;
+									sph_particles_Z(m) = 1.e-30;
+								}
+
+							}
+						}
+					}, I));
+				}
+			}
+		}
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	vector<hpx::future<float>> futs3;
@@ -972,52 +1031,53 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 					disp_total = disp;
 					particles_vel(dim,i) += prefac1*disp;
 					double x = particles_pos(dim,i).to_double() + disp;
-
-					disp = 0.0;
-					J[XDIM] = x0;
-					J[YDIM] = y0;
-					J[ZDIM] = z0;
-					index = box.index(J);
-					disp += wt000 * displacement2[dim][index];
-					J[XDIM] = x0;
-					J[YDIM] = y0;
-					J[ZDIM] = z1;
-					index = box.index(J);
-					disp += wt001 * displacement2[dim][index];
-					J[XDIM] = x0;
-					J[YDIM] = y1;
-					J[ZDIM] = z0;
-					index = box.index(J);
-					disp += wt010 * displacement2[dim][index];
-					J[XDIM] = x0;
-					J[YDIM] = y1;
-					J[ZDIM] = z1;
-					index = box.index(J);
-					disp += wt011 * displacement2[dim][index];
-					J[XDIM] = x1;
-					J[YDIM] = y0;
-					J[ZDIM] = z0;
-					index = box.index(J);
-					disp += wt100 * displacement2[dim][index];
-					J[XDIM] = x1;
-					J[YDIM] = y0;
-					J[ZDIM] = z1;
-					index = box.index(J);
-					disp += wt101 * displacement2[dim][index];
-					J[XDIM] = x1;
-					J[YDIM] = y1;
-					J[ZDIM] = z0;
-					index = box.index(J);
-					disp += wt110 * displacement2[dim][index];
-					J[XDIM] = x1;
-					J[YDIM] = y1;
-					J[ZDIM] = z1;
-					index = box.index(J);
-					disp += wt111 * displacement2[dim][index];
-					disp *= D2 * box_size_inv;
-					disp_total += disp;
-					particles_vel(dim,i) += prefac2*disp;
-					x += disp;
+					if( get_options().twolpt) {
+						disp = 0.0;
+						J[XDIM] = x0;
+						J[YDIM] = y0;
+						J[ZDIM] = z0;
+						index = box.index(J);
+						disp += wt000 * displacement2[dim][index];
+						J[XDIM] = x0;
+						J[YDIM] = y0;
+						J[ZDIM] = z1;
+						index = box.index(J);
+						disp += wt001 * displacement2[dim][index];
+						J[XDIM] = x0;
+						J[YDIM] = y1;
+						J[ZDIM] = z0;
+						index = box.index(J);
+						disp += wt010 * displacement2[dim][index];
+						J[XDIM] = x0;
+						J[YDIM] = y1;
+						J[ZDIM] = z1;
+						index = box.index(J);
+						disp += wt011 * displacement2[dim][index];
+						J[XDIM] = x1;
+						J[YDIM] = y0;
+						J[ZDIM] = z0;
+						index = box.index(J);
+						disp += wt100 * displacement2[dim][index];
+						J[XDIM] = x1;
+						J[YDIM] = y0;
+						J[ZDIM] = z1;
+						index = box.index(J);
+						disp += wt101 * displacement2[dim][index];
+						J[XDIM] = x1;
+						J[YDIM] = y1;
+						J[ZDIM] = z0;
+						index = box.index(J);
+						disp += wt110 * displacement2[dim][index];
+						J[XDIM] = x1;
+						J[YDIM] = y1;
+						J[ZDIM] = z1;
+						index = box.index(J);
+						disp += wt111 * displacement2[dim][index];
+						disp *= D2 * box_size_inv;
+						disp_total += disp;
+						particles_vel(dim,i) += prefac2*disp;
+						x += disp;
+					}
 					if( x >= 1.0 ) {
 						x -= 1.0;
 					} else if( x < 0.0 ) {
@@ -1076,7 +1136,7 @@ static power_spectrum_function read_power_spectrum(int phase) {
 	func.dlogk = (func.logkmax - func.logkmin) / (func.P.size() - 1);
 	fclose(fp);
 	float sigma8 = CDM_POWER ? get_options().sigma8_c : get_options().sigma8;
-	PRINT( "READING POWER SPECTRUM\n");
+	PRINT("READING POWER SPECTRUM\n");
 	func.normalize(sigma8);
 	if (phase == BARYON_POWER) {
 		auto cdm = read_power_spectrum(CDM_POWER);
