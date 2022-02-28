@@ -662,7 +662,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					den += diff_factor;
 					if (data.conduction) {
 						//float adjust = mmw_j / mmw_i;
-						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS];// * adjust;
+						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS];													// * adjust;
 						den_A += diff_factor + cond_factor;
 					}
 				}
@@ -933,9 +933,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdr_y_i = dWdr_i * rinv * y_ij;
 					const float dWdr_z_i = dWdr_i * rinv * z_ij;
 					const float dp_j = f0_j * p_j / (rho_j * rho_j);
-					const float dvx_dt = -m * (dp_i * dWdr_x_i + dp_j * dWdr_x_j + Pi * dWdr_x_ij);
-					const float dvy_dt = -m * (dp_i * dWdr_y_i + dp_j * dWdr_y_j + Pi * dWdr_y_ij);
-					const float dvz_dt = -m * (dp_i * dWdr_z_i + dp_j * dWdr_z_j + Pi * dWdr_z_ij);
+					const float dvx_dt = -m * ainv * (dp_i * dWdr_x_i + dp_j * dWdr_x_j + Pi * dWdr_x_ij);
+					const float dvy_dt = -m * ainv * (dp_i * dWdr_y_i + dp_j * dWdr_y_j + Pi * dWdr_y_ij);
+					const float dvz_dt = -m * ainv * (dp_i * dWdr_z_i + dp_j * dWdr_z_j + Pi * dWdr_z_ij);
 					const float mrhoinv_j = m * rhoinv_j;
 					vsig += this_vsig * Wi * mrhoinv_j;
 					dvxdx -= mrhoinv_j * vx_ij * dWdr_x_i;
@@ -948,7 +948,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dvydz -= mrhoinv_j * vy_ij * dWdr_z_i;
 					dvzdz -= mrhoinv_j * vz_ij * dWdr_z_i;
 					const float tmp2 = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
-					const float de_dt = (0.5f * Pi + p_i * sqr(rhoinv_i)) * m * tmp2;
+					const float de_dt = ainv * (0.5f * Pi + p_i * sqr(rhoinv_i)) * m * tmp2;
 					flops += 8;
 					deint_con += de_dt;									// 2
 					dvx_con += dvx_dt;								// 2
@@ -1219,6 +1219,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float ax = 0.f;
 					float ay = 0.f;
 					float az = 0.f;
+					const float ainv = 1.0f / params.a;
 					for (int j = tid; j < size2; j += block_size) {
 						const auto rec1 = ws.rec1[j];
 						const auto rec2 = ws.rec2[j];
@@ -1265,9 +1266,9 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
 						const float dp_i = p_i * powf(rho_j, SIGMA - 2.f) * powf(rho_i, -SIGMA);
 						const float dp_j = p_j * powf(rho_i, SIGMA - 2.f) * powf(rho_j, -SIGMA);
-						const float dvx_dt = -m * (dp_i + dp_j + Pi) * dWdr_x_ij;
-						const float dvy_dt = -m * (dp_i + dp_j + Pi) * dWdr_y_ij;
-						const float dvz_dt = -m * (dp_i + dp_j + Pi) * dWdr_z_ij;
+						const float dvx_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_x_ij;
+						const float dvy_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_y_ij;
+						const float dvz_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_z_ij;
 						const float dWdr_x_i = dWdr_i * rinv * x_ij;
 						const float dWdr_y_i = dWdr_i * rinv * y_ij;
 						const float dWdr_z_i = dWdr_i * rinv * z_ij;
@@ -1376,7 +1377,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float a2 = sqr(ax, ay, az);
 						const float hsoft = fminf(fmaxf(h_i, data.hsoft_min), SPH_MAX_SOFT);
 						const float factor = data.eta * sqrtf(params.a * hsoft);
-						dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
+//						dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));

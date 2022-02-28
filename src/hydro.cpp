@@ -48,7 +48,31 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	int step = 0;
 	int main_step = 0;
 	float e0, ent0;
+	const double m = get_options().sph_mass;
 	do {
+		double ekin = 0.0;
+		double eint = 0.0;
+		double xmom = 0.0, ymom = 0.0, zmom = 0.0;
+		for (part_int i = 0; i < sph_particles_size(); i++) {
+			const int k = sph_particles_dm_index(i);
+			const double vx = particles_vel(XDIM, k);
+			const double vy = particles_vel(YDIM, k);
+			const double vz = particles_vel(ZDIM, k);
+			xmom += m * vx;
+			ymom += m * vy;
+			zmom += m * vz;
+			const double e = sph_particles_eint(i);
+			ekin += 0.5 * m * sqr(vx, vy, vz);
+			eint += m * e;
+		}
+		FILE* fp = fopen("energy.dat", "at");
+		const double etot = ekin + eint;
+		double etot0;
+		if (t == 0.0) {
+			etot0 = etot;
+		}
+		fprintf(fp, "%e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, (etot - etot0) / etot);
+		fclose(fp);
 		int minrung = min_rung(itime);
 //		if (minrung == 0) {
 		view_output_views(main_step, 1.0);
@@ -66,17 +90,8 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			e0 = rc1.ekin + rc1.etherm;
 			ent0 = rc1.ent;
 		}
-		float etot = rc1.ekin + rc1.etherm;
-		rc1.momx /= sqrt(2.0f * dr.kin + 1e-20);
-		rc1.momy /= sqrt(2.0f * dr.kin + 1e-20);
-		rc1.momz /= sqrt(2.0f * dr.kin + 1e-20);
 		t += dt;
-		if (minrung != 0) {
-			PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
-		} else {
-			PRINT("%i %e %e %i %i %e %e %e %e %e %e %e %e\n", step, t, dt, minrung, maxrung, rc1.ent, rc1.ekin, rc1.etherm, (etot - e0) / (rc1.ekin + 1e-20),
-					rc1.momx, rc1.momy, rc1.momz, rc1.vol);
-		}
+		PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
 		step++;
 	} while (t < tmax);
 	view_output_views(main_step, 1.0);
@@ -332,9 +347,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = 0;
-				sph_particles_vel(ZDIM, i) = 0;
+				sph_particles_vel(XDIM, i) = vx1;
+				sph_particles_vel(YDIM, i) = vy1;
+				sph_particles_vel(ZDIM, i) = vz1;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
 				i++;
@@ -347,9 +362,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = 0;
-				sph_particles_vel(ZDIM, i) = 0;
+				sph_particles_vel(XDIM, i) = vx1;
+				sph_particles_vel(YDIM, i) = vy1;
+				sph_particles_vel(ZDIM, i) = vz1;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
 				i++;
@@ -372,9 +387,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = 0;
-				sph_particles_vel(ZDIM, i) = 0;
+				sph_particles_vel(XDIM, i) = vx0;
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = vz0;
 				;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
@@ -388,9 +403,9 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = 0;
-				sph_particles_vel(ZDIM, i) = 0;
+				sph_particles_vel(XDIM, i) = vx0;
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = vz0;
 				;
 				sph_particles_rung(i) = 0;
 				sph_particles_eint(i) = eint;
@@ -398,9 +413,9 @@ void hydro_sod_test() {
 			}
 		}
 	}
-	constexpr float t = 0.11;
+	constexpr float t = 10.0;
 	constexpr int N = 1000;
-	hydro_driver(t, 16);
+	hydro_driver(t, 1);
 	FILE* fp = fopen("sod.txt", "wt");
 	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
 	double norm1 = 0.0, norm2 = 0.0;

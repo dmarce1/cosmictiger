@@ -1986,6 +1986,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	case SPH_RUN_HYDRO:
 		CUDA_CHECK(cudaFree(cuda_data.f0));
 		CUDA_CHECK(cudaFree(cuda_data.fvel));
+		CUDA_CHECK(cudaFree(cuda_data.fpot));
 	case SPH_RUN_COURANT:
 		CUDA_CHECK(cudaFree(cuda_data.alpha));
 		break;

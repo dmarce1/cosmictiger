@@ -150,6 +150,7 @@ float sph_particles_max_smooth_len() {
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
 
 void sph_particles_apply_updates(int minrung, int phase, float t0) {
+
 	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
