@@ -293,6 +293,12 @@ void view_output_views(int cycle, double a) {
 	if (!view_boxes.size()) {
 		return;
 	}
+	const double code_to_cm = get_options().code_to_cm;
+	const double code_to_s = get_options().code_to_s;
+	const double code_to_g = get_options().code_to_g;
+	const double code_to_velocity = code_to_cm / code_to_s / a;
+	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
+	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
 	for (int bi = 0; bi < view_boxes.size(); bi++) {
 		bool stars = get_options().stars;
 		PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", view_boxes[bi].begin[XDIM], view_boxes[bi].end[XDIM], view_boxes[bi].begin[YDIM],
@@ -302,6 +308,9 @@ void view_output_views(int cycle, double a) {
 		view_return parts;
 		parts = view_get_particles();
 		vector<float> x, y, z;
+		auto opts = DBMakeOptlist(1);
+		float z0 = 1.0 / a - 1.0;
+		DBAddOption(opts, DBOPT_TIME, &z0);
 		if (parts.dm[bi].size()) {
 			x.resize(0);
 			y.resize(0);
@@ -312,23 +321,23 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.dm[bi][i].z.to_float());
 			}
 			float *coords1[NDIM] = { x.data(), y.data(), z.data() };
-			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, NULL);
+			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(parts.dm[bi][i].vx);
-				y.push_back(parts.dm[bi][i].vy);
-				z.push_back(parts.dm[bi][i].vz);
+				x.push_back(parts.dm[bi][i].vx * code_to_velocity);
+				y.push_back(parts.dm[bi][i].vy * code_to_velocity);
+				z.push_back(parts.dm[bi][i].vz * code_to_velocity);
 			}
-			DBPutPointvar1(db, "dm_vx", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "dm_vy", "dark_matter", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "dm_vz", "dark_matter", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "dm_vx", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "dm_vy", "dark_matter", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "dm_vz", "dark_matter", z.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			for (int i = 0; i < parts.dm[bi].size(); i++) {
 				x.push_back(parts.dm[bi][i].rung);
 			}
-			DBPutPointvar1(db, "dm_rung", "dark_matter", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "dm_rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
 		}
 		if (parts.hydro[bi].size()) {
 			x.resize(0);
@@ -341,43 +350,45 @@ void view_output_views(int cycle, double a) {
 			}
 			float *coords2[NDIM] = { x.data(), y.data(), z.data() };
 //			PRINT( "gas points\n");
-			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, NULL);
+			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].vx);
-				y.push_back(parts.hydro[bi][i].vy);
-				z.push_back(parts.hydro[bi][i].vz);
+				x.push_back(parts.hydro[bi][i].vx * code_to_velocity);
+				y.push_back(parts.hydro[bi][i].vy * code_to_velocity);
+				z.push_back(parts.hydro[bi][i].vz * code_to_velocity);
 			}
 			//PRINT( "Vels\n");
-			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].rung);
 			}
 			//PRINT( "rungs\n");
-			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].h);
-				y.push_back(parts.hydro[bi][i].eint);
+				const double h = parts.hydro[bi][i].h;
+				const double rho = sph_den(1.0 / h / h / h);
+				x.push_back(rho * code_to_density);
+				y.push_back(parts.hydro[bi][i].eint * code_to_energy);
 				z.push_back(parts.hydro[bi][i].alpha);
 			}
 //			PRINT( "h and ent\n");
-			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
 			x.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				x.push_back(parts.hydro[bi][i].tdyn);
 			}
 //			PRINT( "h and ent\n");
-			DBPutPointvar1(db, "tdyn", "gas", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "tdyn", "gas", x.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
@@ -421,14 +432,14 @@ void view_output_views(int cycle, double a) {
 					t.push_back(T);
 
 				}
-				DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, NULL);
-				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, NULL);
+				DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, opts);
 			}
 		}
 		if (parts.star[bi].size()) {
@@ -441,23 +452,23 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.star[bi][i].z.to_float());
 			}
 			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
-			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, NULL);
+			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(parts.star[bi][i].vx);
-				y.push_back(parts.star[bi][i].vy);
-				z.push_back(parts.star[bi][i].vz);
+				x.push_back(parts.star[bi][i].vx * code_to_velocity);
+				y.push_back(parts.star[bi][i].vy * code_to_velocity);
+				z.push_back(parts.star[bi][i].vz * code_to_velocity);
 			}
-			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			for (int i = 0; i < parts.star[bi].size(); i++) {
 				x.push_back(parts.star[bi][i].rung);
 			}
-			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, opts);
 
 			vector<float> p;
 			x.resize(0);
@@ -469,10 +480,10 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.star[bi][i].M);
 				p.push_back(parts.star[bi][i].zform);
 			}
-			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
 		}
 		if (parts.remnant[bi].size()) {
 			x.resize(0);
@@ -484,23 +495,23 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.remnant[bi][i].z.to_float());
 			}
 			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
-			DBPutPointmesh(db, "remnants", NDIM, coords3, x.size(), DB_FLOAT, NULL);
+			DBPutPointmesh(db, "remnants", NDIM, coords3, x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.remnant[bi].size(); i++) {
-				x.push_back(parts.remnant[bi][i].vx);
-				y.push_back(parts.remnant[bi][i].vy);
-				z.push_back(parts.remnant[bi][i].vz);
+				x.push_back(parts.remnant[bi][i].vx * code_to_velocity);
+				y.push_back(parts.remnant[bi][i].vy * code_to_velocity);
+				z.push_back(parts.remnant[bi][i].vz * code_to_velocity);
 			}
-			DBPutPointvar1(db, "remnant_vx", "remnants", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "remnant_vy", "remnants", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "remnant_vz", "remnants", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "remnant_vx", "remnants", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "remnant_vy", "remnants", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "remnant_vz", "remnants", z.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			for (int i = 0; i < parts.remnant[bi].size(); i++) {
 				x.push_back(parts.remnant[bi][i].rung);
 			}
-			DBPutPointvar1(db, "remnant_rung", "remnants", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "remnant_rung", "remnants", x.data(), x.size(), DB_FLOAT, opts);
 
 			vector<float> y;
 			z.resize(0);
@@ -508,8 +519,8 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.remnant[bi][i].M);
 				y.push_back(parts.remnant[bi][i].zform);
 			}
-			DBPutPointvar1(db, "remnant_M", "remnants", z.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "remnant_zform", "remnants", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "remnant_M", "remnants", z.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "remnant_zform", "remnants", y.data(), x.size(), DB_FLOAT, opts);
 		}
 		if (parts.cloud[bi].size()) {
 			x.resize(0);
@@ -521,31 +532,32 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.cloud[bi][i].z.to_float());
 			}
 			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
-			DBPutPointmesh(db, "clouds", NDIM, coords3, x.size(), DB_FLOAT, NULL);
+			DBPutPointmesh(db, "clouds", NDIM, coords3, x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.cloud[bi].size(); i++) {
-				x.push_back(parts.cloud[bi][i].vx);
-				y.push_back(parts.cloud[bi][i].vy);
-				z.push_back(parts.cloud[bi][i].vz);
+				x.push_back(parts.cloud[bi][i].vx * code_to_velocity);
+				y.push_back(parts.cloud[bi][i].vy * code_to_velocity);
+				z.push_back(parts.cloud[bi][i].vz * code_to_velocity);
 			}
-			DBPutPointvar1(db, "cloud_vx", "clouds", x.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "cloud_vy", "clouds", y.data(), x.size(), DB_FLOAT, NULL);
-			DBPutPointvar1(db, "cloud_vz", "clouds", z.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "cloud_vx", "clouds", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "cloud_vy", "clouds", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "cloud_vz", "clouds", z.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			for (int i = 0; i < parts.cloud[bi].size(); i++) {
 				x.push_back(parts.cloud[bi][i].rung);
 			}
-			DBPutPointvar1(db, "cloud_rung", "clouds", x.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "cloud_rung", "clouds", x.data(), x.size(), DB_FLOAT, opts);
 
 			vector<float> y;
 			y.resize(0);
 			for (int i = 0; i < parts.cloud[bi].size(); i++) {
 				y.push_back(parts.cloud[bi][i].zform);
 			}
-			DBPutPointvar1(db, "cloud_zform", "clouds", y.data(), x.size(), DB_FLOAT, NULL);
+			DBPutPointvar1(db, "cloud_zform", "clouds", y.data(), x.size(), DB_FLOAT, opts);
 		}
+		DBFreeOptlist(opts);
 		DBClose(db);
 	}
 	profiler_exit();
