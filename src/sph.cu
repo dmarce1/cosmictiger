@@ -661,8 +661,8 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					}
 					den += diff_factor;
 					if (data.conduction) {
-						float adjust = mmw_j / mmw_i;
-						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS] * adjust;
+						//float adjust = mmw_j / mmw_i;
+						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS];// * adjust;
 						den_A += diff_factor + cond_factor;
 					}
 				}
