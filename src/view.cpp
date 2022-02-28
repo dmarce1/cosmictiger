@@ -380,7 +380,7 @@ void view_output_views(int cycle, double a) {
 				z.push_back(parts.hydro[bi][i].alpha);
 			}
 //			PRINT( "h and ent\n");
-			DBPutPointvar1(db, "h", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
 			x.resize(0);
