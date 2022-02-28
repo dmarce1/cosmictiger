@@ -309,7 +309,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_cond[i], sph_particles_cond[j]);
 	std::swap(sph_particles_de1[i], sph_particles_de1[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
-	std::swap(sph_particles_dvv[i], sph_particles_fp[j]);
+	std::swap(sph_particles_fp[i], sph_particles_fp[j]);
 	std::swap(sph_particles_fv[i], sph_particles_fv[j]);
 	std::swap(sph_particles_f0[i], sph_particles_f0[j]);
 	std::swap(sph_particles_dc[i], sph_particles_dc[j]);
