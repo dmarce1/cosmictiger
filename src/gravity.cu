@@ -302,7 +302,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						const float mass = src_sph[j] ? sph_mass : dm_mass;
 						const auto r2 = sqr(dx0, dx1, dx2);  // 5
 						if (vsoft) {
-							h = max(sink_hsoft[k], src_hsoft[j]);
+							h = 0.5f * (sink_hsoft[k] + src_hsoft[j]);
 							h2 = sqr(h);
 						}
 						if (r2 >= h2) {                      // 1

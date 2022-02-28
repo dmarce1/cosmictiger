@@ -335,7 +335,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 					if (vsoft) {
 						const static float dm_hsoft = get_options().hsoft;
 						const int type = particles_type(i);
-						if( type == SPH_TYPE) {
+						if (type == SPH_TYPE) {
 							sink_hsoft = sph_particles_smooth_len(particles_cat_index(i));
 						} else {
 							sink_hsoft = dm_hsoft;
@@ -370,7 +370,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 						if (do_sph) {
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 							if (vsoft) {
-								h = max(src_hsoft, sink_hsoft);
+								h = simd_float(0.5f) * (src_hsoft + sink_hsoft);
 								h2 = sqr(h);
 							}
 							const simd_float far_flag = r2 > h2;                                                // 1
@@ -389,7 +389,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 								const simd_float q = min(r * hinv, simd_float(1));                                             // 1
 								const simd_float rinv3_near = kernelFqinv(q) * hinv3;
 								simd_float rinv1_near = simd_float(0);
-								if( min_rung == 0 ) {
+								if (min_rung == 0) {
 									rinv1_near = kernelPot(q) * hinv;
 								}
 								const auto near_flag = (simd_float(1) - far_flag);                                // 1

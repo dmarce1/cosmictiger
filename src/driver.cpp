@@ -133,6 +133,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	verbose = true;
+	*eheat = 0.0;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
 	sph_tree_create_params tparams;
@@ -230,10 +231,18 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
 
-		if (tau != 0.0 && !glass) {
-			sph_particles_energy_to_entropy(scale);
+		sparams.run_type = SPH_RUN_AUX;
+		tm.start();
+		sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+		tm.reset();
 
-			sph_particles_apply_updates(minrung, 0, t0);
+		if (!glass) {
+			if (tau != 0.0) {
+				sph_particles_apply_updates(minrung, 0, t0);
+			}
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
 			sph_run(sparams, true);
@@ -241,8 +250,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
-			sph_particles_apply_updates(minrung, 1, t0);
-
+			if (tau != 0.0) {
+				sph_particles_apply_updates(minrung, 1, t0);
+			}
 			if (tau != 0.0 && chem) {
 				PRINT("Doing chemistry step\n");
 				timer tm;
