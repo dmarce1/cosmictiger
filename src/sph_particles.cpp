@@ -1062,7 +1062,6 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
-	fwrite(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpot(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_difco(0), sizeof(float), sph_particles_size(), fp);
