@@ -1357,12 +1357,12 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
 						const float fpre = 1.0f / (1.0f + c0);
 						const float dt_cfl = params.a * h_i / vsig_max;
-						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz));
+						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz)) / params.a;
 						if (data.conduction) {
 							const float lt = T_i / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * T_i);
 							const float kappa_sp = data.kappa0 / data.colog[i]; // Jubelgas et al 2004, Smith et al 2021
 							const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
-							const float tmp = data.code_dif_to_cgs * constants::kb / sqr(sqr(params.a));
+							const float tmp = data.code_dif_to_cgs * constants::kb / (sqr(params.a)*params.a);
 							data.kappa_snk[snki] = 2.f * data.mmw[i] * (data.gamma[i] - 1.f) * kappa / tmp;
 						}
 						data.fvel_snk[snki] = fvel;
