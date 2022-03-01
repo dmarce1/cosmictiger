@@ -648,7 +648,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float hinv_j = 1.f / h_j;															// 4
 					const float h3inv_j = sqr(hinv_j) * hinv_j;
 					const float rho_j = m * c0 * h3inv_j;													// 2
-					const float dt_ij = 0.5f * fminf(rung_dt[myrung], rung_dt[rec1.rung]) * params.t0;
+					const float dt_ij = fminf(rung_dt[myrung], rung_dt[rec1.rung]) * params.t0;
 					const float rho_ij = 0.5f * (rho_i + rho_j);
 					const float h_ij = 0.5f * (h_i + h_j);
 					const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1e-30);

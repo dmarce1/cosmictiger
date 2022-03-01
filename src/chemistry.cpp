@@ -724,12 +724,12 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					if( dir == 1 ) {
 						double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * chem.He - 0.5 * chem.H2);
 						double gamma = 1. + 1. / cv;
-						double dt = rung_dt[rung] * t0;
+						double dt = rung_dt[rung];
 						chem.eint *= exp((5. - 3.*gamma)*adot*dt);
 					}
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
 					//		PRINT( "%e\n", chem.rho);
-				chem.dt = 0.5f * t0 * rung_dt[rung];
+				chem.dt = t0 * rung_dt[rung];
 				if( T > 1e8) {
 					PRINT( "T-------------> %e\n", T);
 					if( T > TMAX) {

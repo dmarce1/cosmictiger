@@ -302,7 +302,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			max_rung = kr.max_rung;
 
-			const bool chem = get_options().chem;
+		/*	const bool chem = get_options().chem;
 			if (chem) {
 				PRINT("Doing chemistry step\n");
 				timer tm;
@@ -330,7 +330,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
 					tm.reset();
 				} while (err > SPH_DIFFUSION_TOLER);
-			}
+			}*/
 
 		}
 		if (get_options().gravity) {
