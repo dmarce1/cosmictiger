@@ -252,35 +252,35 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			if (tau != 0.0) {
 				sph_particles_apply_updates(minrung, 1, t0);
-			}/*
-			 if (diff) {
-			 sph_init_diffusion();
-			 sparams.run_type = SPH_RUN_DIFFUSION;
-			 float err;
-			 do {
-			 tm.start();
-			 sph_run(sparams, true);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-			 tm.reset();
-			 tm.start();
-			 err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-			 tm.reset();
-			 } while (err > SPH_DIFFUSION_TOLER);
-			 }
-			 if (tau != 0.0 && chem) {
-			 PRINT("Doing chemistry step\n");
-			 timer tm;
-			 tm.start();
-			 *eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
-			 tm.stop();
-			 PRINT("Took %e s\n", tm.read());
-			 }
-			 */
+			}
+			if (diff) {
+				sph_init_diffusion();
+				sparams.run_type = SPH_RUN_DIFFUSION;
+				float err;
+				do {
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+					tm.reset();
+					tm.start();
+					err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+					tm.reset();
+				} while (err > SPH_DIFFUSION_TOLER);
+			}
+			if (tau != 0.0 && chem) {
+				PRINT("Doing chemistry step\n");
+				timer tm;
+				tm.start();
+				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
+				tm.stop();
+				PRINT("Took %e s\n", tm.read());
+			}
+
 		}
 
 	} else {
@@ -301,38 +301,36 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 			tm.reset();
 			max_rung = kr.max_rung;
-			/*
-			 const bool chem = get_options().chem;
-			 if (chem) {
-			 PRINT("Doing chemistry step\n");
-			 timer tm;
-			 tm.start();
-			 *eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
-			 tm.stop();
-			 PRINT("Took %e s\n", tm.read());
-			 }
 
-			 if (diff) {
-			 sph_init_diffusion();
-			 sparams.run_type = SPH_RUN_DIFFUSION;
-			 float err;
-			 do {
-			 tm.start();
-			 sph_run(sparams, true);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-			 tm.reset();
-			 tm.start();
-			 err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-			 tm.reset();
-			 } while (err > SPH_DIFFUSION_TOLER);
-			 }
+			const bool chem = get_options().chem;
+			if (chem) {
+				PRINT("Doing chemistry step\n");
+				timer tm;
+				tm.start();
+				*eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
+				tm.stop();
+				PRINT("Took %e s\n", tm.read());
+			}
 
-			 */
+			if (diff) {
+				sph_init_diffusion();
+				sparams.run_type = SPH_RUN_DIFFUSION;
+				float err;
+				do {
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+					tm.reset();
+					tm.start();
+					err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+					tm.reset();
+				} while (err > SPH_DIFFUSION_TOLER);
+			}
 
 		}
 		if (get_options().gravity) {
@@ -722,9 +720,9 @@ void driver() {
 			PRINT("Drift done\n");
 			dtm.stop();
 			drift_time += dtm.read();
-			const double total_kinetic = dr.kin + dr.therm + eheat;
-			cosmicK += total_kinetic * (a - a1);
-			const double esum = (a * (pot + total_kinetic) + cosmicK);
+			const double total_kinetic = dr.kin + dr.therm;
+			cosmicK += (total_kinetic) * (a - a1);
+			const double esum = (a * (pot + total_kinetic + eheat) + cosmicK);
 			if (tau == 0.0) {
 				esum0 = esum;
 			}
