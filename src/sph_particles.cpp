@@ -217,7 +217,8 @@ float sph_particles_coloumb_log(part_int i, float a) {
 	rho *= code_to_density * pow(a, -3);
 	ne *= constants::avo * rho;
 	ne = std::max(ne, 1e-20);
-	const double T = std::max(sph_particles_temperature(i, a), 1000.f);
+	double T = std::max(sph_particles_temperature(i, a), 1000.f);
+	T = std::max(T,1.0);
 	const double part1 = 23.5;
 	const double part2 = -log(sqrt(ne) * pow(T, -1.2));
 	const double part3 = -sqrt((1e-5 + sqr(log(T) - 2)) / 16.0);
@@ -253,9 +254,12 @@ float sph_particles_temperature(part_int i, float a) {
 		PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
 		//	abort();
 	}
-	if (T > TMAX || T < 0.0) {
+	if (T > TMAX) {
 		PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_eint(i), eint, eint, rho, h);
 		abort();
+	}
+	if (T < 0.0) {
+		PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_eint(i), eint, eint, rho, h);
 	}
 	return T;
 }
