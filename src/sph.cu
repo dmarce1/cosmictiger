@@ -1376,9 +1376,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float g2 = sqr(gx, gy, gz);
 						const float a2 = sqr(ax, ay, az);
 						const float hsoft = fminf(fmaxf(h_i, data.hsoft_min), SPH_MAX_SOFT);
-						const float factor = data.eta * sqrtf(params.a * hsoft);
-//						dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
-						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
+						const float afactor = data.eta * sqrtf(params.a * h_i);
+						const float gfactor = data.eta * sqrtf(params.a * hsoft);
+						dthydro = fminf(fminf(afactor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
+						const float dt_grav = fminf(gfactor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
 						int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));

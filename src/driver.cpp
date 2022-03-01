@@ -669,7 +669,7 @@ void driver() {
 			double heating;
 			if (sph & !glass) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
-				eheat -= heating;
+				eheat -= a* heating;
 			}
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
@@ -681,7 +681,7 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
-				eheat -= heating;
+				eheat -= a * heating;
 			}
 			if (stars & !glass) {
 				stars_find(a, dt, minrung, iter);
@@ -722,11 +722,11 @@ void driver() {
 			drift_time += dtm.read();
 			const double total_kinetic = dr.kin + dr.therm;
 			cosmicK += (total_kinetic) * (a - a1);
-			const double esum = (a * (pot + total_kinetic + eheat) + cosmicK);
+			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat);
 			if (tau == 0.0) {
 				esum0 = esum;
 			}
-			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK);
+			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");

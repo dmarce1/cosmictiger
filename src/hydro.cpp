@@ -256,8 +256,8 @@ void hydro_rt_test() {
 
 void hydro_disc_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	const double rinner = 0.025;
-	const double router = 0.25;
+	const double rinner = 0.225;
+	const double router = 0.275;
 	const double rho = nparts_total;
 	const double p0 = 1.0e-6;
 	const double m = 1.0;
@@ -266,14 +266,14 @@ void hydro_disc_test() {
 	const int nz = 10;
 	int dim = sqrt(nparts_total) / nz;
 	double dx = 1.0 / dim;
-	for (int iz = -nz / 2; iz < nz / 2; iz++) {
+	for (int iz = 0; iz < dim; iz++) {
 		for (int k = 0; k < dim; k++) {
 			for (int l = 0; l < dim; l++) {
 				double r, x, y, z;
 				x = dx * k;
 				y = dx * l;
-				z = 0.5 - iz * dx;
-				r = sqrt(sqr(x - 0.5, y - 0.5, 0.0));
+				z = iz * dx;
+				r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
 				if (r > rinner && r < router) {
 					double eint = p0 / rho / (get_options().gamma - 1);
 					sph_particles_resize(sph_particles_size() + 1);
@@ -281,12 +281,18 @@ void hydro_disc_test() {
 					sph_particles_pos(XDIM, i) = x;
 					sph_particles_pos(YDIM, i) = y;
 					sph_particles_pos(ZDIM, i) = z;
-					const double v = sqrt(1 / r);
+					const double v = 0.00*sqrt(1 / r);
 					const double vx = -(y - 0.5) / r * v;
 					const double vy = (x - 0.5) / r * v;
 					const double vz = 0.0;
-					sph_particles_vel(XDIM, i) = vx;
-					sph_particles_vel(YDIM, i) = vy;
+					double sgn;
+					if (r > (rinner + router) / 2.0) {
+						sgn = 1.0;
+					} else {
+						sgn = 1.0;
+					}
+					sph_particles_vel(XDIM, i) = sgn * vx;
+					sph_particles_vel(YDIM, i) = sgn * vy;
 					sph_particles_vel(ZDIM, i) = vz;
 					sph_particles_rung(i) = 0;
 					sph_particles_eint(i) = eint;
