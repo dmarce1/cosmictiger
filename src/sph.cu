@@ -948,7 +948,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dvydz -= mrhoinv_j * vy_ij * dWdr_z_i;
 					dvzdz -= mrhoinv_j * vz_ij * dWdr_z_i;
 					const float tmp2 = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
-					const float de_dt = ainv * (0.5f * Pi + p_i * sqr(rhoinv_i)) * m * tmp2;
+					const float de_dt = ainv * (0.5f * Pi + f0_i * p_i * sqr(rhoinv_i)) * m * tmp2;
 					flops += 8;
 					deint_con += de_dt;									// 2
 					dvx_con += dvx_dt;								// 2
@@ -1380,7 +1380,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 //						dthydro = fminf(fminf(factor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
 						const float dt_grav = fminf(factor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
 						const float dt = fminf(dt_grav, dthydro);
-						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
+						int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
 						max_rung_grav = max(max_rung_grav, rung_grav);

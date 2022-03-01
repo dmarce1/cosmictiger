@@ -926,6 +926,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 						}
 					}, I));
 				}
+				hpx::wait_all(local_futs.begin(), local_futs.end());
 			}
 		}
 	}

@@ -103,65 +103,57 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					if( tau0 != 0.0 ) {
 						const float divv = sph_particles_divv(j);
 						float dloghdt = (1.f/3.f)*divv/scale;
-						if( fabs(dloghdt*dt) > 5.0e-3) {
-							//			PRINT( "%e\n",dloghdt*dt);
-		}
-		if( dloghdt > 1.0 / dt0 ) {
-			PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
-			//						PRINT( "Hmult = %e\n", c0);
-//							abort();
-			dloghdt = 1.0 / dt0;
-		} else if( dloghdt < -1.0 / dt0) {
-			PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
-//							PRINT( "Hmult = %e\n", c0);
-//							abort();
-			dloghdt = -1.0 / dt0;
-		}
-		float c0 = exp(dloghdt*dt);
-		h *= c0;
-		if( h > 0.5 ) {
-			PRINT( "BIG H! %e %e %e\n", x, y, z);
-	//		abort();
-		}
-	}
-	const float h3 = sqr(h)*h;
-	const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
-	const float rho = sph_den(1./h3);
-	const float p = eint * rho * (get_options().gamma-1.0f);
-	const float e =eint * sph_mass;
-	this_dr.therm += e * a2inv;
-	this_dr.vol += vol;
-}
-vx *= ainv;
-vy *= ainv;
-vz *= ainv;
-double x0, y0, z0;
-x0 = x;
-y0 = y;
-z0 = z;
-x += double(vx*dt);
-if( std::isnan(vy)) {
-	PRINT( "vy is nan\n");
-	abort();
-}
-y += double(vy*dt);
-z += double(vz*dt);
-if( do_lc) {
-	this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
-}
-constrain_range(x);
-constrain_range(y);
-constrain_range(z);
-particles_pos(XDIM,i) = x;
-particles_pos(YDIM,i) = y;
-particles_pos(ZDIM,i) = z;
-this_dr.flops += 34;
-}
-if (do_lc) {
-lc_add_parts(std::move(this_part_buffer));
-}
-return this_dr;
-}	;
+						if( dloghdt > 1.0 / dt0 ) {
+							PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
+							dloghdt = 1.0 / dt0;
+						} else if( dloghdt < -1.0 / dt0) {
+							PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
+							dloghdt = -1.0 / dt0;
+						}
+						float c0 = exp(dloghdt*dt);
+						h *= c0;
+						if( h > 0.5 ) {
+							PRINT( "BIG H! %e %e %e\n", x, y, z);
+						}
+					}
+					const float h3 = sqr(h)*h;
+					const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
+					const float rho = sph_den(1./h3);
+					const float p = eint * rho * (get_options().gamma-1.0f);
+					const float e =eint * sph_mass;
+					this_dr.therm += e * a2inv;
+					this_dr.vol += vol;
+				}
+				vx *= ainv;
+				vy *= ainv;
+				vz *= ainv;
+				double x0, y0, z0;
+				x0 = x;
+				y0 = y;
+				z0 = z;
+				x += double(vx*dt);
+				if( std::isnan(vy)) {
+					PRINT( "vy is nan\n");
+					abort();
+				}
+				y += double(vy*dt);
+				z += double(vz*dt);
+				if( do_lc) {
+					this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
+				}
+				constrain_range(x);
+				constrain_range(y);
+				constrain_range(z);
+				particles_pos(XDIM,i) = x;
+				particles_pos(YDIM,i) = y;
+				particles_pos(ZDIM,i) = z;
+				this_dr.flops += 34;
+			}
+			if (do_lc) {
+				lc_add_parts(std::move(this_part_buffer));
+			}
+			return this_dr;
+		};
 	timer tm;
 	tm.start();
 	for (int proc = 1; proc < nthreads; proc++) {
