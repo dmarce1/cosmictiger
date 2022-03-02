@@ -2036,7 +2036,11 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 									if( dfrac[fi] < -frac[fi]*0.99 ) {
 										dfrac[fi] = -frac[fi]*0.99;
 									}
-									this_error = std::max(this_error,fabs(dfrac[fi] / (0.5f * frac0[fi] + 0.5f * frac[fi])));
+									float err = fabs(dfrac[fi] / (0.5f * frac0[fi] + 0.5f * frac[fi]));
+									if( fi != NCHEMFRACS) {
+										err = std::min(err, dfrac[fi] * 1.0e6f);
+									}
+									this_error = std::max(this_error,err);
 									frac[fi] += dfrac[fi];
 									if( frac[fi] == INFINITY) {
 										PRINT( "frac infinity with dfrac = %e\n", dfrac[fi]);

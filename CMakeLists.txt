@@ -52,7 +52,6 @@ set(cosmictiger_source_files
     src/chemistry.cu
  	src/cosmology.cpp
     src/cuda.cpp
-    src/cuda_mem.cu
     src/drift.cpp
     src/driver.cpp
     src/domain.cpp

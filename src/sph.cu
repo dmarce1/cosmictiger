@@ -22,7 +22,6 @@ struct smoothlen_shmem {
 };
 
 #include <cosmictiger/sph_cuda.hpp>
-#include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/timer.hpp>
@@ -36,13 +35,12 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 #define WORKSPACE_SIZE (160*1024)
 #define HYDRO_SIZE (8*1024)
 
-__managed__ cuda_mem* memory;
-
 template<class T>
 class device_vector {
 	int sz;
 	int cap;
 	T* ptr;
+	T* new_ptr;
 public:
 	__device__ device_vector() {
 		const int& tid = threadIdx.x;
@@ -59,7 +57,7 @@ public:
 		__syncthreads();
 		if (tid == 0) {
 			if (ptr) {
-				memory->free(ptr);
+				free(ptr);
 			}
 		}
 		__syncthreads();
@@ -75,7 +73,6 @@ public:
 			}
 			__syncthreads();
 		} else {
-			__shared__ T* new_ptr;
 			__syncthreads();
 			int new_cap = 1;
 			if (tid == 0) {
@@ -83,17 +80,12 @@ public:
 					new_cap *= 2;
 				}
 				do {
-					bool waited = false;
-					new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+					new_ptr = (T*) malloc(sizeof(T) * new_cap);
 					if (new_ptr == nullptr) {
 						PRINT("OOM in device_vector while requesting %i! Waiting for more (fingers crosses!)\n", new_cap);
-						waited = true;
 						for (int i = 0; i < 1000; i++) {
 							;
 						}
-					}
-					if( waited ) {
-						PRINT( "Found memory!\n");
 					}
 				} while (new_ptr == nullptr);
 			}
@@ -106,7 +98,7 @@ public:
 			__syncthreads();
 			if (tid == 0) {
 				if (ptr) {
-					memory->free(ptr);
+					free(ptr);
 				}
 				ptr = new_ptr;
 				sz = new_sz;
@@ -123,7 +115,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	             const T& operator[](int i) const {
+	       const T& operator[](int i) const {
 		return ptr[i];
 	}
 };
@@ -272,11 +264,12 @@ struct sph_reduction {
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, smoothlen_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
+	const int bid = blockIdx.x;
 	__shared__
 	int index;
 	__shared__
 	float error;
-	__shared__ smoothlen_workspace ws;
+	auto& ws = workspaces[bid];
 	__syncthreads();
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
@@ -445,9 +438,10 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_data data, mark_semiactive_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
+	const int bid = blockIdx.x;
 	__shared__
 	int index;
-	__shared__ mark_semiactive_workspace ws;
+	auto& ws = workspaces[bid];
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
@@ -589,9 +583,10 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data, dif_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
+	const int bid = blockIdx.x;
 	__shared__
 	int index;
-	__shared__ dif_workspace ws;
+	auto& ws = workspaces[bid];
 	new (&ws.rec1_main) dif_record1();
 	new (&ws.rec2_main) dif_record2();
 	new (&ws.rec1) dif_record1();
@@ -808,15 +803,17 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 	(&ws.rec2)->~device_vector<dif_record2>();
 }
 
+#define SIGMA 2.0f
 #define ETA1 0.01f
 #define ETA2 0.0001f
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hydro_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
+	const int bid = blockIdx.x;
 	__shared__
 	int index;
-	__shared__ hydro_workspace ws;
+	auto& ws = workspaces[bid];
 	new (&ws.rec1_main) hydro_record1();
 	new (&ws.rec2_main) hydro_record2();
 	new (&ws.rec1) hydro_record1();
@@ -1164,7 +1161,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__ courant_workspace ws;
+	const int bid = blockIdx.x;
+	auto& ws = workspaces[bid];
 	new (&ws.rec1_main) courant_record1();
 	new (&ws.rec2_main) courant_record2();
 	new (&ws.rec1) courant_record1();
@@ -1382,8 +1380,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
 						const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
-						const float dp_i = p_i * sqr(rhoinv_i);
-						const float dp_j = p_j * sqr(rhoinv_j);
+						const float dp_i = p_i * powf(rho_j, SIGMA - 2.f) * powf(rho_i, -SIGMA);
+						const float dp_j = p_j * powf(rho_i, SIGMA - 2.f) * powf(rho_j, -SIGMA);
 						const float dvx_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_x_ij;
 						const float dvy_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_y_ij;
 						const float dvz_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_z_ij;
@@ -1805,8 +1803,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static bool first = true;
 	static char* workspace_ptr;
 	if (first) {
-		CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-		new (memory) cuda_mem(4ULL * 1024ULL * 1024ULL * 1024ULL);
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count() * 2 / 3;
@@ -1878,8 +1874,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	}
 	break;
 }
-//	memory->reset();
-	(cudaFree(reduce));
+	CUDA_CHECK(cudaFree(reduce));
 
 	return rc;
 }
