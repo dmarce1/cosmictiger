@@ -149,16 +149,18 @@ float sph_particles_max_smooth_len() {
 
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
 
-void sph_particles_apply_updates(int minrung, int phase, float t0) {
+double sph_particles_apply_updates(int minrung, int phase, float t0) {
 
 	profiler_enter(__FUNCTION__);
-	vector<hpx::future<void>> futs;
+	double err = 0.0;
+	vector<hpx::future<double>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase, t0));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung]() {
+			double error = 0.0;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
@@ -174,21 +176,33 @@ void sph_particles_apply_updates(int minrung, int phase, float t0) {
 							particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
 						}
 						break;
-						case 1:
-						sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt;
-						sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt;
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt;
-						}
-						sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
-						sph_particles_deint_pred(i) = sph_particles_deint_con(i);
-						for( int dim =0; dim < NDIM; dim++) {
-							sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
-						}
-						sph_particles_eint(i) += sph_particles_deint_con(i) *dt;
-						sph_particles_alpha(i) += sph_particles_dalpha_con(i) *dt;
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+						case 1: {
+							const double deint = fabs(sph_particles_deint_pred(i) - sph_particles_deint_con(i));
+							double etot = fabs(sph_particles_eint(i)+ std::min(sph_particles_deint_con(i),0.0f));
+							double dekin = 0.0;
+							for( int dim = 0; dim < NDIM; dim++) {
+								dekin += particles_vel(dim,k) * (sph_particles_dvel_con(dim,i) - sph_particles_dvel_pred(dim,i));
+								etot += 0.5 * sqr(particles_vel(dim,k));
+							}
+							dekin = fabs(dekin);
+							const double w = 1.0;
+							const double this_error = std::max(deint/etot, dekin/etot);
+							error = std::max(this_error, error);
+							sph_particles_eint(i) -= w*sph_particles_deint_pred(i) *dt;
+							sph_particles_alpha(i) -= w*sph_particles_dalpha_pred(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) -= w*sph_particles_dvel_pred(dim,i)* dt;
+							}
+							sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
+							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
+							for( int dim =0; dim < NDIM; dim++) {
+								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+							}
+							sph_particles_eint(i) += w*sph_particles_deint_con(i) *dt;
+							sph_particles_alpha(i) += w*sph_particles_dalpha_con(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) += w*sph_particles_dvel_con(dim,i)* dt;
+							}
 						}
 						break;
 						case 2:
@@ -205,12 +219,14 @@ void sph_particles_apply_updates(int minrung, int phase, float t0) {
 						break;
 					}}
 			}
+			return error;
 		}));
 	}
 	for (auto& f : futs) {
-		f.get();
+		err = std::max(f.get(), err);
 	}
 	profiler_exit();
+	return err;
 
 }
 

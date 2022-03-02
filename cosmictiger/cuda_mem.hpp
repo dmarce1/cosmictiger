@@ -26,22 +26,21 @@
 #define CUDA_MEM_NBIN 32
 #define CUDA_MEM_BLOCK_SIZE (65*1024)
 
+using cuda_mem_int = uint64_t;
+
 class cuda_mem {
 	int* lock;
-	array<array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> free_stacks;
-	array<int, CUDA_MEM_NBIN> stack_pointers;
+	array<array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> free_ptrs;
+	array<array<cuda_mem_int, CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1>, CUDA_MEM_NBIN> free_bits;
 	char* heap;
 	int next_block;
 	int heap_max;
-
-	__device__
-	void acquire_lock();
-	__device__
-	void release_lock();
 	__device__
 	char* allocate_blocks(int nblocks);
 	__device__
 	void push(int bin, char* ptr);
+	__device__
+	char* pop(int bin);
 	__device__
 	bool create_new_allocations(int bin);
 public:

@@ -20,35 +20,76 @@
 #include <cosmictiger/cuda_mem.hpp>
 
 __device__
-void cuda_mem::acquire_lock() {
-	while (atomicAdd(lock, 1) != 0) {
-		atomicAdd(lock, -1);
-	}
-}
-
-__device__
-void cuda_mem::release_lock() {
-	atomicAdd(lock, -1);
-}
-
-__device__
 char* cuda_mem::allocate_blocks(int nblocks) {
-	if (next_block + nblocks >= heap_max) {
+	size_t base = atomicAdd(&next_block, nblocks);
+	if (base + nblocks >= heap_max) {
 		return nullptr;
 	} else {
-		char* ptr = heap + next_block * CUDA_MEM_BLOCK_SIZE;
-		next_block += nblocks;
+		char* ptr = heap + base * CUDA_MEM_BLOCK_SIZE;
 		return ptr;
 	}
 }
 
 __device__
 void cuda_mem::push(int bin, char* ptr) {
-	if (stack_pointers[bin] >= CUDA_MEM_STACK_SIZE) {
-		printf("internal stack size exceeded for cuda mem\n");
-		__trap();
+	constexpr auto NBITS = sizeof(cuda_mem_int) * CHAR_BIT;
+	bool failed;
+	while (1) {
+		failed = false;
+		for (int i = 0; i < CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1; i++) {
+			if (~free_bits[bin][i] != 0) {
+				for (int k = 0; k < NBITS; k++) {
+					if (~free_bits[bin][i] & ((cuda_mem_int) 1) << k) {
+						if (atomicCAS(((unsigned long long int*) &free_ptrs[bin][NBITS * i + k]), (unsigned long long int) 0, (unsigned long long int) ptr) == 0) {
+							return;
+						} else {
+							failed = true;
+							break;
+						}
+					}
+				}
+			}
+			if (failed) {
+				break;
+			}
+		}
 	}
-	free_stacks[bin][stack_pointers[bin]++] = ptr;
+}
+
+__device__
+char* cuda_mem::pop(int bin) {
+	constexpr auto NBITS = sizeof(cuda_mem_int) * CHAR_BIT;
+	char* ptr = nullptr;
+	bool failed;
+	bool empty = false;
+	while (!empty) {
+		failed = false;
+		empty = true;
+		for (int i = 0; i < CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1; i++) {
+			if (free_bits[bin][i] != 0) {
+				empty = false;
+				for (int k = 0; k < NBITS; k++) {
+					const auto mask = ((cuda_mem_int) 1) << k;
+					if (free_bits[bin][i] & mask) {
+						const auto old = free_bits[bin][i];
+						if (atomicAnd((unsigned long long int*) &free_bits[bin][i], (unsigned long long int) ~mask) == old) {
+							ptr = free_ptrs[bin][NBITS * i + k];
+							free_ptrs[bin][NBITS * i + k] = nullptr;
+							__threadfence();
+							return ptr;
+						} else {
+							failed = true;
+							break;
+						}
+					}
+				}
+			}
+			if (failed) {
+				break;
+			}
+		}
+	}
+	return ptr;
 }
 
 __device__
@@ -74,7 +115,6 @@ bool cuda_mem::create_new_allocations(int bin) {
 
 __device__
 void* cuda_mem::allocate(size_t sz) {
-	acquire_lock();
 	int alloc_size = 1;
 	int bin = 0;
 	while (alloc_size < sz) {
@@ -85,25 +125,22 @@ void* cuda_mem::allocate(size_t sz) {
 		printf("Allocation request for %li too large\n", sz);
 		__trap();
 	}
-	if (stack_pointers[bin] == 0) {
+	char* ptr;
+	while ((ptr = pop(bin)) == nullptr) {
 		if (!create_new_allocations(bin)) {
 			return nullptr;
 		}
 	}
-	char* ptr = free_stacks[bin][stack_pointers[bin]--];
-	release_lock();
 	return ptr;
 }
 
 __device__ void cuda_mem::free(void* ptr) {
-	acquire_lock();
 	size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
 	if (*binptr >= CUDA_MEM_NBIN) {
 		printf("Corrupt free!\n");
 		__trap();
 	}
 	push(*binptr, (char*) ptr);
-	release_lock();
 }
 
 cuda_mem::cuda_mem(size_t heap_size) {
@@ -113,7 +150,12 @@ cuda_mem::cuda_mem(size_t heap_size) {
 	lock = 0;
 	next_block = 0;
 	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
-		stack_pointers[i] = 0;
+		for (int j = 0; j < CUDA_STACK_SIZE; j++) {
+			free_ptrs[i][j] = 0;
+		}
+		for (int j = 0; j < CUDA_STACK_SIZE / sizeof(cuda_mem_int) + 1; j++) {
+			free_bits[i][j] = 0;
+		}
 	}
 }
 
