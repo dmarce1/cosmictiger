@@ -33,26 +33,29 @@ char* cuda_mem::allocate_blocks(int nblocks) {
 __device__
 void cuda_mem::push(int bin, char* ptr) {
 	constexpr auto NBITS = sizeof(cuda_mem_int) * CHAR_BIT;
-	bool failed;
-	while (1) {
-		failed = false;
+	bool full = false;
+	while (!full) {
+		full = true;
 		for (int i = 0; i < CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1; i++) {
-			if (~free_bits[bin][i] != 0) {
+			if (~free_bits[bin][i] != 0ULL) {
+				full = false;
 				for (int k = 0; k < NBITS; k++) {
-					if (~free_bits[bin][i] & ((cuda_mem_int) 1) << k) {
+					const auto mask = ((cuda_mem_int) 1) << k;
+					if (~free_bits[bin][i] & mask) {
 						if (atomicCAS(((unsigned long long int*) &free_ptrs[bin][NBITS * i + k]), (unsigned long long int) 0, (unsigned long long int) ptr) == 0) {
+							atomicOr((unsigned long long int*) &free_bits[bin][i], (unsigned long long int) mask);
+				//			__threadfence();
 							return;
-						} else {
-							failed = true;
-							break;
 						}
 					}
 				}
 			}
-			if (failed) {
-				break;
-			}
 		}
+		PRINT( "Searching push\n");
+	}
+	if( full) {
+		PRINT( "STACK FULL\n");
+		__trap();
 	}
 }
 
@@ -60,10 +63,8 @@ __device__
 char* cuda_mem::pop(int bin) {
 	constexpr auto NBITS = sizeof(cuda_mem_int) * CHAR_BIT;
 	char* ptr = nullptr;
-	bool failed;
 	bool empty = false;
 	while (!empty) {
-		failed = false;
 		empty = true;
 		for (int i = 0; i < CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1; i++) {
 			if (free_bits[bin][i] != 0) {
@@ -75,19 +76,15 @@ char* cuda_mem::pop(int bin) {
 						if (atomicAnd((unsigned long long int*) &free_bits[bin][i], (unsigned long long int) ~mask) == old) {
 							ptr = free_ptrs[bin][NBITS * i + k];
 							free_ptrs[bin][NBITS * i + k] = nullptr;
+							PRINT( "pop Success  %i  %i\n", i, k);
 							__threadfence();
 							return ptr;
-						} else {
-							failed = true;
-							break;
 						}
 					}
 				}
 			}
-			if (failed) {
-				break;
-			}
 		}
+		PRINT( "Searching pop\n");
 	}
 	return ptr;
 }
@@ -115,8 +112,8 @@ bool cuda_mem::create_new_allocations(int bin) {
 
 __device__
 void* cuda_mem::allocate(size_t sz) {
-	int alloc_size = 1;
-	int bin = 0;
+	int alloc_size = 8;
+	int bin = 3;
 	while (alloc_size < sz) {
 		alloc_size *= 2;
 		bin++;

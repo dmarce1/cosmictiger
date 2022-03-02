@@ -22,6 +22,7 @@ struct smoothlen_shmem {
 };
 
 #include <cosmictiger/sph_cuda.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/timer.hpp>
@@ -34,6 +35,8 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 
 #define WORKSPACE_SIZE (160*1024)
 #define HYDRO_SIZE (8*1024)
+
+__managed__ cuda_mem* memory;
 
 template<class T>
 class device_vector {
@@ -56,7 +59,7 @@ public:
 		__syncthreads();
 		if (tid == 0) {
 			if (ptr) {
-				free(ptr);
+				memory->free(ptr);
 			}
 		}
 		__syncthreads();
@@ -79,11 +82,20 @@ public:
 				while (new_cap < new_sz) {
 					new_cap *= 2;
 				}
-				new_ptr = (T*) malloc(sizeof(T) * new_cap);
-				if( new_ptr == nullptr) {
-					PRINT( "OOM in device_vector while requesting %i!\n", new_cap);
-					__trap();
-				}
+				do {
+					bool waited = false;
+					new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+					if (new_ptr == nullptr) {
+						PRINT("OOM in device_vector while requesting %i! Waiting for more (fingers crosses!)\n", new_cap);
+						waited = true;
+						for (int i = 0; i < 1000; i++) {
+							;
+						}
+					}
+					if (waited) {
+						PRINT("Found memory!\n");
+					}
+				} while (new_ptr == nullptr);
 			}
 			__syncthreads();
 			if (ptr) {
@@ -94,7 +106,7 @@ public:
 			__syncthreads();
 			if (tid == 0) {
 				if (ptr) {
-					free(ptr);
+					memory->free(ptr);
 				}
 				ptr = new_ptr;
 				sz = new_sz;
@@ -115,7 +127,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	 const T& operator[](int i) const {
+	  const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -246,9 +258,10 @@ struct courant_workspace {
 struct aux_workspace {
 	device_vector<aux_record1> rec1_main;
 	device_vector<aux_record2> rec2_main;
-	device_vectory<aux_record> rec1;
+	device_vector<aux_record1> rec1;
 	device_vector<aux_record2> rec2;
-}
+};
+
 #define SMOOTHLEN_BLOCK_SIZE 512
 #define HYDRO_BLOCK_SIZE 32
 
@@ -282,8 +295,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	new (&ws.z) device_vector<fixed32>();
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
-		int size = 0;
+
 		int flops = 0;
+		ws.x.resize(0);
+		ws.y.resize(0);
+		ws.z.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		//	PRINT( "%i\n", self.neighbor_range.second - self.neighbor_range.first);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
@@ -304,10 +320,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				}
 				j = contains;
 				compute_indices<SMOOTHLEN_BLOCK_SIZE>(j, total);
-				const int offset = size;
+				const int offset = ws.x.size();
 				const int next_size = offset + total;
-				size = next_size;
-				ALWAYS_ASSERT(size < WORKSPACE_SIZE);
+				ws.x.resize(next_size);
+				ws.y.resize(next_size);
+				ws.z.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
 					ws.x[k] = x[XDIM];
@@ -346,7 +363,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					count = 0;
 					f = 0.f;
 					dfdh = 0.f;
-					for (int j = size - 1 - tid; j >= 0; j -= block_size) {
+					for (int j = ws.x.size() - 1 - tid; j >= 0; j -= block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
 						const float dy = distance(x[YDIM], ws.y[j]); // 2
 						const float dz = distance(x[ZDIM], ws.z[j]); // 2
@@ -403,7 +420,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					iter++;
 					if (max_dh / h < SPH_SMOOTHLEN_TOLER) {
 						if (tid == 0) {
-							PRINT("density solver failed to converge %i\n", size);
+							PRINT("density solver failed to converge %i\n", ws.x.size());
 							__trap();
 						}
 					}
@@ -458,7 +475,11 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
 		int flops = 0;
-		int size = 0;
+		ws.x.resize(0);
+		ws.y.resize(0);
+		ws.z.resize(0);
+		ws.h.resize(0);
+		ws.rungs.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		//	PRINT( "%i\n", self.neighbor_range.second - self.neighbor_range.first);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
@@ -498,13 +519,21 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				}
 				j = contains;
 				compute_indices<SMOOTHLEN_BLOCK_SIZE>(j, total);
-				const int offset = size;
+				const int offset = ws.x.size();
 				const int next_size = offset + total;
-				size = next_size;
-				ALWAYS_ASSERT(size < WORKSPACE_SIZE);
+				ws.x.resize(next_size);
+				ws.y.resize(next_size);
+				ws.z.resize(next_size);
+				ws.h.resize(next_size);
+				ws.rungs.resize(next_size);
 				if (contains) {
 					ASSERT(j < total);
 					const int k = offset + j;
+					ASSERT(k < next_size);
+					ASSERT(k < ws.x.size());
+					ASSERT(k < ws.y.size());
+					ASSERT(k < ws.z.size());
+					ASSERT(k < ws.h.size());
 					ws.x[k] = x[XDIM];
 					ws.y[k] = x[YDIM];
 					ws.z[k] = x[ZDIM];
@@ -527,12 +556,12 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				const auto h0 = data.h[i];
 				const auto h02 = sqr(h0);
 				int semiactive = 0;
-				const int jmax = round_up(size, block_size);
+				const int jmax = round_up(ws.x.size(), block_size);
 				if (tid == 0) {
 					data.sa_snk[snki] = false;
 				}
 				for (int j = tid; j < jmax; j += block_size) {
-					if (j < size) {
+					if (j < ws.x.size()) {
 						const auto x1 = ws.x[j];
 						const auto y1 = ws.y[j];
 						const auto z1 = ws.z[j];
@@ -576,8 +605,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	dif_workspace ws;
+	__shared__ dif_workspace ws;
 	new (&ws.rec1_main) dif_record1();
 	new (&ws.rec2_main) dif_record2();
 	new (&ws.rec1) dif_record1();
@@ -590,7 +618,8 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 	int flops = 0;
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		int size1 = 0;
+		ws.rec1_main.resize(0);
+		ws.rec2_main.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -624,10 +653,10 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				}
 				j = contains;
 				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-				const int offset = size1;
+				const int offset = ws.rec1_main.size();
 				const int next_size = offset + total;
-				size1 = next_size;
-				ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
+				ws.rec1_main.resize(next_size);
+				ws.rec2_main.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
 					ws.rec1_main[k].x = x[XDIM];
@@ -680,13 +709,14 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				} else {
 					kappa_i = 0.f;
 				}
-				const int jmax = round_up(size1, block_size);
-				int size2 = 0;
+				const int jmax = round_up(ws.rec1_main.size(), block_size);
+				ws.rec1.resize(0);
+				ws.rec2.resize(0);
 				for (int j = tid; j < jmax; j += block_size) {
 					bool flag = false;
 					int k;
 					int total;
-					if (j < size1) {
+					if (j < ws.rec1_main.size()) {
 						const auto rec = ws.rec1_main[j];
 						const fixed32 x_j = rec.x;
 						const fixed32 y_j = rec.y;
@@ -709,10 +739,10 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					}
 					k = flag;
 					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-					const int offset = size2;
+					const int offset = ws.rec1.size();
 					const int next_size = offset + total;
-					size2 = next_size;
-					ALWAYS_ASSERT(size2 < HYDRO_SIZE);
+					ws.rec1.resize(next_size);
+					ws.rec2.resize(next_size);
 					if (flag) {
 						const int l = offset + k;
 						ws.rec1[l] = ws.rec1_main[j];
@@ -725,7 +755,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 					num[fi] = 0.f;
 				}
-				for (int j = tid; j < size2; j += block_size) {
+				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto& rec1 = ws.rec1[j];
 					const auto& rec2 = ws.rec2[j];
 					const fixed32& x_j = rec1.x;
@@ -792,7 +822,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 	(&ws.rec2)->~device_vector<dif_record2>();
 }
 
-#define SIGMA 2.0f
 #define ETA1 0.01f
 #define ETA2 0.0001f
 
@@ -801,8 +830,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	hydro_workspace ws;
+	__shared__ hydro_workspace ws;
 	new (&ws.rec1_main) hydro_record1();
 	new (&ws.rec2_main) hydro_record2();
 	new (&ws.rec1) hydro_record1();
@@ -815,7 +843,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 	int flops = 0;
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		int size1 = 0;
+		ws.rec1_main.resize(0);
+		ws.rec2_main.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -847,10 +876,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				}
 				j = contains;
 				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-				const int offset = size1;
+				const int offset = ws.rec1_main.size();
 				const int next_size = offset + total;
-				size1 = next_size;
-				ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
+				ws.rec1_main.resize(next_size);
+				ws.rec2_main.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
 					ws.rec1_main[k].x = x[XDIM];
@@ -923,14 +952,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				const float f0_i = data.f0[i];
 				const float alpha_i = data.alpha[i];
 				const float dpot_i = -0.5f * data.G * m * fpot_i * f0_i;
-				const int jmax = round_up(size1, block_size);
+				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				flops += 36;
-				int size2 = 0;
+				ws.rec1.resize(0);
+				ws.rec2.resize(0);
 				for (int j = tid; j < jmax; j += block_size) {
 					bool flag = false;
 					int k;
 					int total;
-					if (j < size1) {
+					if (j < ws.rec1_main.size()) {
 						const auto rec = ws.rec1_main[j];
 						const auto x_j = rec.x;
 						const auto y_j = rec.y;
@@ -947,10 +977,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					}
 					k = flag;
 					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-					const int offset = size2;
+					const int offset = ws.rec1.size();
 					const int next_size = offset + total;
-					size2 = next_size;
-					ALWAYS_ASSERT(size2 < HYDRO_SIZE);
+					ws.rec1.resize(next_size);
+					ws.rec2.resize(next_size);
 					if (flag) {
 						const int l = offset + k;
 						ws.rec1[l] = ws.rec1_main[j];
@@ -976,7 +1006,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				float gz = 0.0;
 				float vsig = 0.f;
 				const float ainv = 1.0f / params.a;
-				for (int j = tid; j < size2; j += block_size) {
+				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					auto rec1 = ws.rec1[j];
 					auto rec2 = ws.rec2[j];
 					const float vx_j = rec2.vx;
@@ -1142,8 +1172,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	courant_workspace ws;
+	__shared__ courant_workspace ws;
 	new (&ws.rec1_main) courant_record1();
 	new (&ws.rec2_main) courant_record2();
 	new (&ws.rec1) courant_record1();
@@ -1164,7 +1193,8 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		if (self.nactive > 0) {
-			int size1 = 0;
+			ws.rec1_main.resize(0);
+			ws.rec2_main.resize(0);
 			for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 				const sph_tree_node& other = data.trees[data.neighbors[ni]];
 				const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -1196,10 +1226,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					}
 					j = contains;
 					compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-					const int offset = size1;
+					const int offset = ws.rec1_main.size();
 					const int next_size = offset + total;
-					size1 = next_size;
-					ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
+					ws.rec1_main.resize(next_size);
+					ws.rec2_main.resize(next_size);
 					if (contains) {
 						const int k = offset + j;
 						ws.rec1_main[k].x = x[XDIM];
@@ -1266,13 +1296,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					const float alpha_i = data.alpha[i];
 					const float p_i = fmaxf(data.eint[i] * rho_i * (gamma_i - 1.f), 0.f);
 					const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
-					const int jmax = round_up(size1, block_size);
-					int size2 = 0;
+					const int jmax = round_up(ws.rec1_main.size(), block_size);
+					ws.rec1.resize(0);
+					ws.rec2.resize(0);
 					for (int j = tid; j < jmax; j += block_size) {
 						bool flag = false;
 						int k;
 						int total;
-						if (j < size1) {
+						if (j < ws.rec1_main.size()) {
 							const auto rec = ws.rec1_main[j];
 							const auto x_j = rec.x;
 							const auto y_j = rec.y;
@@ -1289,10 +1320,10 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						}
 						k = flag;
 						compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-						const int offset = size2;
+						const int offset = ws.rec1.size();
 						const int next_size = offset + total;
-						size2 = next_size;
-						ALWAYS_ASSERT(size2 < HYDRO_SIZE);
+						ws.rec1.resize(next_size);
+						ws.rec2.resize(next_size);
 						if (flag) {
 							const int l = offset + k;
 							ws.rec1[l] = ws.rec1_main[j];
@@ -1316,7 +1347,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float ay = 0.f;
 					float az = 0.f;
 					const float ainv = 1.0f / params.a;
-					for (int j = tid; j < size2; j += block_size) {
+					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const auto rec1 = ws.rec1[j];
 						const auto rec2 = ws.rec2[j];
 						const float vx_j = rec2.vx;
@@ -1509,11 +1540,16 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	int flops = 0;
+	new (&ws.rec1_main) aux_record1();
+	new (&ws.rec2_main) aux_record2();
+	new (&ws.rec1) aux_record1();
+	new (&ws.rec2) aux_record2();
 
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		if (self.nactive > 0) {
-			int size1 = 0;
+			ws.rec1_main.resize(0);
+			ws.rec2_main.resize(0);
 			for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 				const sph_tree_node& other = data.trees[data.neighbors[ni]];
 				const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -1545,10 +1581,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 					}
 					j = contains;
 					compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-					const int offset = size1;
+					const int offset = ws.rec1_main.size();
 					const int next_size = offset + total;
-					size1 = next_size;
-					ALWAYS_ASSERT(size1 < WORKSPACE_SIZE);
+					ws.rec1_main.resize(next_size);
+					ws.rec2_main.resize(next_size);
 					if (contains) {
 						const int k = offset + j;
 						ws.rec1_main[k].x = x[XDIM];
@@ -1593,13 +1629,14 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 					}
 					const float p_i = fmaxf((gamma_i - 1.f) * rho_i * eint_i, 0.f);								// 5
 					const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);									// 6
-					const int jmax = round_up(size1, block_size);
-					int size2 = 0;
+					const int jmax = round_up(ws.rec1_main.size(), block_size);
+					ws.rec1.resize(0);
+					ws.rec2.resize(0);
 					for (int j = tid; j < jmax; j += block_size) {
 						bool flag = false;
 						int k;
 						int total;
-						if (j < size1) {
+						if (j < ws.rec1_main.size()) {
 							const auto rec = ws.rec1_main[j];
 							const auto x_j = rec.x;
 							const auto y_j = rec.y;
@@ -1616,10 +1653,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 						}
 						k = flag;
 						compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-						const int offset = size2;
+						const int offset = ws.rec1.size();
 						const int next_size = offset + total;
-						size2 = next_size;
-						ALWAYS_ASSERT(size2 < HYDRO_SIZE);
+						ws.rec1.resize(next_size);
+						ws.rec2.resize(next_size);
 						if (flag) {
 							const int l = offset + k;
 							ws.rec1[l] = ws.rec1_main[j];
@@ -1640,7 +1677,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 					float dT_dx = 0.f;
 					float dT_dy = 0.f;
 					float dT_dz = 0.f;
-					for (int j = tid; j < size2; j += block_size) {
+					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const auto rec1 = ws.rec1[j];
 						const auto rec2 = ws.rec2[j];
 						const float T_j = rec2.T;
@@ -1748,6 +1785,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 			__syncthreads();
 		}
 	}
+	(&ws.rec1_main)->~device_vector<aux_record1>();
+	(&ws.rec2_main)->~device_vector<aux_record2>();
+	(&ws.rec1)->~device_vector<aux_record1>();
+	(&ws.rec2)->~device_vector<aux_record2>();
 }
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream) {
@@ -1771,6 +1812,8 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int aux_nblocks;
 	static bool first = true;
 	static char* workspace_ptr;
+	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
+	new (memory) cuda_mem(4ULL * 1024ULL * 1024ULL * 1024ULL);
 	if (first) {
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
@@ -1796,7 +1839,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		PRINT("Allocating %i GB in workspace memory\n", max_mem / 1024 / 1024 / 1024);
 //		sleep(10);
 	}
-
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTHLEN: {
 		sph_cuda_smoothlen<<<smoothlen_nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,(smoothlen_workspace*)workspace_ptr,reduce);
@@ -1844,7 +1886,9 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	}
 	break;
 }
-	CUDA_CHECK(cudaFree(reduce));
-
+//	memory->reset();
+	(cudaFree(reduce));
+	memory->~cuda_mem();
+	CUDA_CHECK(cudaFree(memory));
 	return rc;
 }
