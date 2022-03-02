@@ -1007,15 +1007,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					data.dvz_con[snki] += dvz_con;										// 1
 					flops += 4;
 					data.divv_snk[snki] = divv;
-					const float alpha_n = data.alpha_snk[snki];
-					float& alpha_np1 = data.alpha_snk[snki];
+					const float alpha = data.alpha_snk[snki];
 					const float t0inv = vsig * SPH_VISC_DECAY * hinv_i;
 					const float balsara = fabsf(divv) / (sqrt(sqr(curlv_x, curlv_y, curlv_z)) + fabsf(divv) + ETA2 * c_i * hinv_i);
 					float S = fmaxf(0.f, -divv) * balsara;
 					float dt = 0.5f * rung_dt[myrung] * params.t0; // 3
-					const float num = alpha_n + dt * (SPH_ALPHA0 * t0inv + S);
-					const float den = 1.f + dt * (t0inv + S / SPH_ALPHA1);
-					alpha_np1 = num / den;
+					const float dalpha_dt = -(alpha - SPH_ALPHA0) * t0inv + (1.f - alpha / SPH_ALPHA1) * S;
+					data.dalpha_con[snki] = dalpha_dt;
 				}
 			}
 		}
@@ -1613,7 +1611,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 							const float lt = T_i / (sqrt(sqr(dT_dx, dT_dy, dT_dz)) + 1.0e-10f * T_i);
 							const float kappa_sp = data.kappa0 / data.colog[i]; // Jubelgas et al 2004, Smith et al 2021
 							const float kappa = kappa_sp / (1.f + 4.2f * data.lambda_e[i] / lt);
-							const float tmp = data.code_dif_to_cgs * constants::kb / (sqr(params.a)*params.a);
+							const float tmp = data.code_dif_to_cgs * constants::kb / (sqr(params.a) * params.a);
 							data.kappa_snk[snki] = 2.f * data.mmw[i] * (data.gamma[i] - 1.f) * kappa / tmp;
 						}
 						data.fvel_snk[snki] = fvel;

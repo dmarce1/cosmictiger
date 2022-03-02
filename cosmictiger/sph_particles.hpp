@@ -77,6 +77,8 @@ SPH_PARTICLES_EXTERN dif_vector* sph_particles_vec0;
 SPH_PARTICLES_EXTERN dif_vector* sph_particles_vec;
 SPH_PARTICLES_EXTERN float* sph_particles_h;
 SPH_PARTICLES_EXTERN float* sph_particles_e;
+SPH_PARTICLES_EXTERN float* sph_particles_da1;
+SPH_PARTICLES_EXTERN float* sph_particles_da2;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN float* sph_particles_fp;
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1;
@@ -303,6 +305,11 @@ inline float& sph_particles_deint_pred(part_int index) {
 	return sph_particles_de1[index];
 }
 
+inline float& sph_particles_dalpha_pred(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_da1[index];
+}
+
 inline float& sph_particles_dvel_pred(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dv1[dim][index];
@@ -311,6 +318,11 @@ inline float& sph_particles_dvel_pred(int dim, part_int index) {
 inline float& sph_particles_deint_con(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de2[index];
+}
+
+inline float& sph_particles_dalpha_con(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_da2[index];
 }
 
 inline float& sph_particles_dvel_con(int dim, part_int index) {
