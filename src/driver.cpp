@@ -230,7 +230,11 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
-
+		if (!glass) {
+			if (tau != 0.0) {
+				sph_particles_apply_updates(minrung, 0, t0);
+			}
+		}
 		sparams.run_type = SPH_RUN_AUX;
 		tm.start();
 		sph_run(sparams, true);
@@ -240,9 +244,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 
 		if (!glass) {
-			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 0, t0);
-			}
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
 			sph_run(sparams, true);
@@ -302,35 +303,39 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			max_rung = kr.max_rung;
 
-		/*	const bool chem = get_options().chem;
-			if (chem) {
-				PRINT("Doing chemistry step\n");
-				timer tm;
-				tm.start();
-				*eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
-				tm.stop();
-				PRINT("Took %e s\n", tm.read());
+			if (stars & !glass) {
+				stars_find(scale, dt, minrung, iter);
 			}
 
-			if (diff) {
-				sph_init_diffusion();
-				sparams.run_type = SPH_RUN_DIFFUSION;
-				float err;
-				do {
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-					tm.reset();
-					tm.start();
-					err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-					tm.reset();
-				} while (err > SPH_DIFFUSION_TOLER);
-			}*/
+			/*	const bool chem = get_options().chem;
+			 if (chem) {
+			 PRINT("Doing chemistry step\n");
+			 timer tm;
+			 tm.start();
+			 *eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
+			 tm.stop();
+			 PRINT("Took %e s\n", tm.read());
+			 }
+
+			 if (diff) {
+			 sph_init_diffusion();
+			 sparams.run_type = SPH_RUN_DIFFUSION;
+			 float err;
+			 do {
+			 tm.start();
+			 sph_run(sparams, true);
+			 tm.stop();
+			 if (verbose)
+			 PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
+			 tm.reset();
+			 tm.start();
+			 err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+			 tm.stop();
+			 if (verbose)
+			 PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
+			 tm.reset();
+			 } while (err > SPH_DIFFUSION_TOLER);
+			 }*/
 
 		}
 		if (get_options().gravity) {
@@ -669,7 +674,7 @@ void driver() {
 			double heating;
 			if (sph & !glass) {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
-				eheat -= a* heating;
+				eheat -= a * heating;
 			}
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
@@ -682,9 +687,6 @@ void driver() {
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
 				eheat -= a * heating;
-			}
-			if (stars & !glass) {
-				stars_find(a, dt, minrung, iter);
 			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");

@@ -1384,10 +1384,6 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dt = fminf(dt_grav, dthydro);
 						int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
-						max_rung_hydro = max(max_rung_hydro, rung_hydro);
-						max_rung_grav = max(max_rung_grav, rung_grav);
-						rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
-						max_rung = max(max_rung, rung);
 
 						if (rung < 0 || rung >= MAX_RUNG) {
 							if (tid == 0) {
@@ -1398,37 +1394,15 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						if (stars) {
 							bool is_eligible = h_i < data.hstar0;
 							if (is_eligible) {
-								//	PRINT( "Removing sink particle\n");
-							}
-							/*							bool is_eligible = false;
-							 const float N = ws.rec1.size();
-							 float tdyn;
-							 float mj;
-							 float tcool;
-							 if (div_v < 0.f) {
-							 const float Gn32 = powf(data.G, -1.5);
-							 float rho0 = data.rho0_b + data.rho0_c;
-							 float delta = -Ginv * float(1.0 / 4.0 / M_PI) * div_g;
-							 float delta_b = myrho - data.rho0_b;
-							 float rho_tot = (rho0 + delta) * powf(params.a, -3.0);
-							 tdyn = sqrtf(3.f * M_PI / (32.f * data.G * rho_tot)) / params.a;
-							 if (delta_b / data.rho0_b > 10.0 && delta > 0.f) {
-							 tcool = data.tcool_snk[snki];
-							 if (tcool < tdyn) {
-							 mj = Gn32 * rsqrt(myrho) * sqr(myc) * myc * powf(delta_b / delta, 1.5f) * powf(params.a, -1.5f);
-							 const float msph = N * m;
-							 if (mj < msph) {
-							 is_eligible = true;
-							 }
-							 }
-							 }
-							 }*/
-							if (is_eligible) {
-								//float dt = rung_dt[rung] * params.t0;
-								//data.tdyn_snk[snki] = tdyn;
 								data.tdyn_snk[snki] = 1e-10f;
+								rung = max(max((int) rung_grav, max(params.min_rung, (int) rung - 1)), 1);
+								max_rung = max(max_rung, rung);
 							} else {
 								data.tdyn_snk[snki] = 1e+38;
+								max_rung_hydro = max(max_rung_hydro, rung_hydro);
+								max_rung_grav = max(max_rung_grav, rung_grav);
+								rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+								max_rung = max(max_rung, rung);
 							}
 						}
 					}
