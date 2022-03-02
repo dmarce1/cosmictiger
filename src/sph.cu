@@ -240,8 +240,14 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		float hmin = 1e+20;
 		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			if (data.rungs[i] >= params.min_rung) {
-				const int snki = self.sink_part_range.first - self.part_range.first + i;
+			bool use;
+			const int snki = self.sink_part_range.first - self.part_range.first + i;
+			if( params.phase == 0 ) {
+				use = data.rungs[i] >= params.min_rung;
+			} else {
+				use = data.sa_snk[snki];
+			}
+			if (use) {
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];

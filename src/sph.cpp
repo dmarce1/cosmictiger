@@ -1414,6 +1414,9 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 
 							case SPH_RUN_SMOOTHLEN:
 							test = (params.set & SPH_SET_ACTIVE) && (self->nactive > 0);
+							if( !test && params.phase == 1) {
+								test = has_active_neighbors(self);
+							}
 							break;
 
 							case SPH_RUN_MARK_SEMIACTIVE:
@@ -2035,10 +2038,13 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 								auto& frac = sph_particles_dif_vec(j);
 								auto& frac0 = sph_particles_dif_vec0(j);
 								for( int fi = chem ? 0 : NCHEMFRACS - 1; fi < DIFCO_COUNT; fi++) {
-									if( dfrac[fi] < -frac[fi]*0.99 ) {
-										dfrac[fi] = -frac[fi]*0.99;
+									if( dfrac[fi] < -frac[fi]*0.99999 ) {
+										dfrac[fi] = -frac[fi]*0.99999;
 									}
 									this_error = std::max(this_error,fabs(dfrac[fi] / (0.5f * frac0[fi] + 0.5f * frac[fi])));
+									if( fi != NCHEMFRACS) {
+										this_error = std::min(this_error, fabs(dfrac[fi]) / (1e-6f));
+									}
 									frac[fi] += dfrac[fi];
 									if( frac[fi] == INFINITY) {
 										PRINT( "frac infinity with dfrac = %e\n", dfrac[fi]);
