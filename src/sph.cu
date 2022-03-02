@@ -138,9 +138,6 @@ struct courant_record2 {
 	float gy;
 	float gz;
 	float eint;
-	float T;
-	float lambda_e;
-	float mmw;
 	float alpha;
 };
 
@@ -575,7 +572,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 				const float difco_i = data.difco[i];
 				const auto vec0_i = data.vec0_snk[snki];
 				const auto vec_i = data.dif_vec[i];
-				const float mmw_i = data.mmw[i];
 				float kappa_i;
 				if (data.conduction) {
 					kappa_i = data.kappa[i];
@@ -1102,12 +1098,7 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						ws.rec2_main[k].vz = data.vz[pi];
 						ws.rec2_main[k].eint = data.eint[pi];
 						ws.rec1_main[k].h = data.h[pi];
-						ws.rec2_main[k].lambda_e = data.lambda_e[pi];
-						ws.rec2_main[k].mmw = data.mmw[pi];
 						ws.rec2_main[k].alpha = data.alpha[pi];
-						if (data.conduction) {
-							ws.rec2_main[k].T = data.T[pi];
-						}
 						if (data.chem) {
 							ws.rec2_main[k].gamma = data.gamma[pi];
 						} else {
