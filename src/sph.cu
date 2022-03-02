@@ -778,10 +778,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			bool active = myrung >= params.min_rung;
 			bool use = active;
-			data.deint_con[snki] = 0.0f;
-			data.dvx_con[snki] = 0.f;
-			data.dvy_con[snki] = 0.f;
-			data.dvz_con[snki] = 0.f;
 			const float m = data.m;
 			const float minv = 1.f / m;
 			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
@@ -975,11 +971,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gz);
 				}
 				if (tid == 0) {
-					if (data.gravity) {
-						data.gx_snk[snki] = gx;
-						data.gy_snk[snki] = gy;
-						data.gz_snk[snki] = gz;
-					}
 					if (data.gcentral != 0.f) {
 						const float dx = x_i.to_float() - 0.5f;
 						const float dy = y_i.to_float() - 0.5f;
@@ -1001,10 +992,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					} else {
 						dvy_con += params.gy;
 					}
-					data.deint_con[snki] += deint_con;										// 1
-					data.dvx_con[snki] += dvx_con;										// 1
-					data.dvy_con[snki] += dvy_con;										// 1
-					data.dvz_con[snki] += dvz_con;										// 1
+					if (data.gravity && params.phase == 0) {
+						data.gx_snk[snki] += gx;
+						data.gy_snk[snki] += gy;
+						data.gz_snk[snki] += gz;
+					}
+					data.deint_con[snki] = deint_con;										// 1
+					data.dvx_con[snki] = dvx_con + data.gx_snk[snki];										// 1
+					data.dvy_con[snki] = dvy_con + data.gy_snk[snki];										// 1
+					data.dvz_con[snki] = dvz_con + data.gz_snk[snki];										// 1
 					flops += 4;
 					data.divv_snk[snki] = divv;
 					const float alpha = data.alpha_snk[snki];

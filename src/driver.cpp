@@ -243,6 +243,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
 		tm.reset();
 
+
+	} else {
+		sparams.phase = 0;
 		if (!glass) {
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
@@ -283,16 +286,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			}
 
 		}
-
-	} else {
-
-		if (stars) {
-//			sph_deposit_sn(scale);
-//			sph_particles_apply_updates();
-		}
-
-		if (tau != 0.0) {
-		}
+		sparams.phase = 1;
 		if (!glass) {
 
 			sparams.run_type = SPH_RUN_COURANT;
@@ -337,16 +331,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			 } while (err > SPH_DIFFUSION_TOLER);
 			 }*/
 
-		}
-		if (get_options().gravity) {
-			sparams.phase = 1;
-			sparams.run_type = SPH_RUN_GRAVITY;
-			tm.start();
-			sph_run(sparams);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_GRAVITY): tm = %e\n", tm.read());
-			tm.reset();
 		}
 
 		if (!glass) {

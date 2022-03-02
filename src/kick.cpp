@@ -412,28 +412,28 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					particles_gforce(ZDIM, i) = forces.gz[j];
 					particles_pot(i) = forces.phi[j];
 				}
-				if (type == SPH_TYPE) {
-					const int k = particles_cat_index(i);
-					sph_particles_gforce(XDIM, k) += forces.gx[j];
-					sph_particles_gforce(YDIM, k) += forces.gy[j];
-					sph_particles_gforce(ZDIM, k) += forces.gz[j];
-				}
 				auto& vx = particles_vel(XDIM, i);
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
 				auto dt = 0.5f * rung_dt[rung] * params.t0;
-				if (!params.first_call) {
-					vx = fmaf(forces.gx[j], dt, vx);
-					vy = fmaf(forces.gy[j], dt, vy);
-					vz = fmaf(forces.gz[j], dt, vz);
+				if (type == SPH_TYPE) {
+					const int k = particles_cat_index(i);
+					sph_particles_gforce(XDIM, k) = forces.gx[j];
+					sph_particles_gforce(YDIM, k) = forces.gy[j];
+					sph_particles_gforce(ZDIM, k) = forces.gz[j];
+				} else {
+					if (!params.first_call) {
+						vx = fmaf(forces.gx[j], dt, vx);
+						vy = fmaf(forces.gy[j], dt, vy);
+						vz = fmaf(forces.gz[j], dt, vz);
+					}
 				}
-
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				if (type != SPH_TYPE) {
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0);
-					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)),1);
+					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
 					kr.max_rung = std::max(rung, kr.max_rung);
 					if (rung < 0 || rung >= MAX_RUNG) {
 						PRINT("Rung out of range %i\n", rung);

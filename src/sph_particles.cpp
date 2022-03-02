@@ -192,11 +192,11 @@ void sph_particles_apply_updates(int minrung, int phase, float t0) {
 						}
 						break;
 						case 2:
-							sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
-							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
-							for( int dim =0; dim < NDIM; dim++) {
-								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
-							}
+						sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
+						sph_particles_deint_pred(i) = sph_particles_deint_con(i);
+						for( int dim =0; dim < NDIM; dim++) {
+							sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+						}
 						sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt;
 						sph_particles_eint(i) +=sph_particles_deint_con(i) *dt;
 						for( int dim =0; dim < NDIM; dim++) {
@@ -461,6 +461,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		}
 		sph_particles_deint_con(oldsz + i) = 0.0f;
 		sph_particles_deint_pred(oldsz + i) = 0.0f;
+		sph_particles_dalpha_con(oldsz + i) = 0.0f;
+		sph_particles_dalpha_pred(oldsz + i) = 0.0f;
 		sph_particles_alpha(oldsz + i) = SPH_ALPHA0;
 		if (stars) {
 			sph_particles_tdyn(i) = 1e38f;

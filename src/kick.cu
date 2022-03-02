@@ -164,15 +164,15 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (my_type == SPH_TYPE) {
-	//		PRINT("%e\n", sqrtf(sqr(sph_gx[j], sph_gy[j], sph_gz[j]))/ sqrtf(sqr(gx[i], gy[i], gz[i])));
-			sph_gx[j] += gx[i];
-			sph_gy[j] += gy[i];
-			sph_gz[j] += gz[i];
-		}
-		if (!params.first_call) {
-			vx = fmaf(gx[i], dt, vx);
-			vy = fmaf(gy[i], dt, vy);
-			vz = fmaf(gz[i], dt, vz);
+			sph_gx[j] = gx[i];
+			sph_gy[j] = gy[i];
+			sph_gz[j] = gz[i];
+		} else {
+			if (!params.first_call) {
+				vx = fmaf(gx[i], dt, vx);
+				vy = fmaf(gy[i], dt, vy);
+				vz = fmaf(gz[i], dt, vz);
+			}
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		if (my_type != SPH_TYPE) {
