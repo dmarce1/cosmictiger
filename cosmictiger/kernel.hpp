@@ -85,7 +85,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	case KERNEL_QUINTIC_SPLINE: {
-		const T c0 = T(2187.0 / (40.0 * M_PI));
+		const T c0 = T(2187.0f / (40.0f * float(M_PI)));
 		w1 = T(-10);
 		w1 = fmaf(q, w1, T(10));
 		w1 *= q;
@@ -180,7 +180,7 @@ inline T dkernelW_dq(T q) {
 	}
 		break;
 	case KERNEL_QUINTIC_SPLINE: {
-		const T c0 = T(2187.0 / (40.0 * M_PI));
+		const T c0 = T(2187.0f / (40.0f * float(M_PI)));
 		w1 = T(-50);
 		w1 = fmaf(q, w1, T(40));
 		w1 *= q;
@@ -287,7 +287,7 @@ inline T kernelFqinv(T q) {
 		res = (sw1 * w1 + sw2 * w2 + sw3 * w3);
 		break;
 	case KERNEL_QUINTIC_SPLINE: {
-		const T c0 = T(218.7);
+		const T c0 = T(218.7f);
 		w1 = T(-5. / 4.);
 		w1 = fmaf(q, w1, T(10. / 7.));
 		w1 *= q;
@@ -425,7 +425,7 @@ inline T kernelPot(T q) {
 		break;
 
 	case KERNEL_QUINTIC_SPLINE: {
-		const T c0 = T(218.7);
+		const T c0 = T(218.7f);
 		w1 = T(5. / 28.);
 		w1 = fmaf(q, w1, T(-5. / 21.));
 		w1 *= q;
