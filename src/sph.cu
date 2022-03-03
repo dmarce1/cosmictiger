@@ -64,6 +64,41 @@ public:
 		}
 		__syncthreads();
 	}
+	__device__ void shrink_to_fit() {
+		const int& tid = threadIdx.x;
+		const int& block_size = blockDim.x;
+		__shared__ T* new_ptr;
+		__syncthreads();
+		int new_cap = max(1024 / sizeof(T), (size_t) 1);
+		while (new_cap < sz) {
+			new_cap *= 2;
+		}
+		if (tid == 0) {
+			if (new_cap < cap) {
+				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				if (new_ptr == nullptr) {
+					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
+					__trap();
+
+				}
+			}
+		}
+		__syncthreads();
+		if (ptr && new_cap < cap) {
+			for (int i = tid; i < sz; i += block_size) {
+				new_ptr[i] = ptr[i];
+			}
+		}
+		__syncthreads();
+		if (tid == 0 && new_cap < cap) {
+			if (ptr) {
+				memory->free(ptr);
+			}
+			ptr = new_ptr;
+			cap = new_cap;
+		}
+		__syncthreads();
+	}
 	__device__
 	void resize(int new_sz) {
 		const int& tid = threadIdx.x;
@@ -82,20 +117,12 @@ public:
 				while (new_cap < new_sz) {
 					new_cap *= 2;
 				}
-				do {
-					bool waited = false;
-					new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
-					if (new_ptr == nullptr) {
-						PRINT("OOM in device_vector while requesting %i! Waiting for more (fingers crosses!)\n", new_cap);
-						waited = true;
-						for (int i = 0; i < 1000; i++) {
-							;
-						}
-					}
-					if (waited) {
-						PRINT("Found memory!\n");
-					}
-				} while (new_ptr == nullptr);
+				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				if (new_ptr == nullptr) {
+					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
+					__trap();
+
+				}
 			}
 			__syncthreads();
 			if (ptr) {
@@ -127,7 +154,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	     const T& operator[](int i) const {
+	         const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -1814,7 +1841,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static char* workspace_ptr;
 	if (first) {
 		CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-		new (memory) cuda_mem(512ULL * 1024ULL * 1024ULL);
+		new (memory) cuda_mem(4ULL * 1024ULL * 1024ULL * 1024ULL);
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count() * 2 / 3;
