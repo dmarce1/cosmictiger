@@ -37,13 +37,11 @@ void cuda_mem::push(int bin, char* ptr) {
 	auto& this_q = q[bin];
 	auto in = qin[bin];
 	const auto& out = qout[bin];
-///	PRINT("%lli\n", CUDA_MEM_STACK_SIZE - (in -out));
 	if (in - out >= CUDA_MEM_STACK_SIZE) {
 		PRINT("Q full! %li %li\n", out, in);
 		__trap();
 	}
 	while (atomicCAS((itype*) &this_q[in % CUDA_MEM_STACK_SIZE], (itype) 0, (itype) ptr) != 0) {
-		//	PRINT( "push %i %li %li\n", bin, in, out);
 		in++;
 		if (in - out >= CUDA_MEM_STACK_SIZE) {
 			PRINT("cuda mem Q full! %li %li\n", out, in);
@@ -51,7 +49,6 @@ void cuda_mem::push(int bin, char* ptr) {
 		}
 	}
 	in++;
-///	PRINT( "push\n");
 	atomicMax((itype*) &qin[bin], (itype) in);
 }
 
@@ -66,7 +63,6 @@ char* cuda_mem::pop(int bin) {
 	}
 	char* ptr;
 	while ((ptr = (char*) atomicExch((itype*) &this_q[out % CUDA_MEM_STACK_SIZE], (itype) 0)) == nullptr) {
-		//	PRINT( "pop %li %li\n", in, out);
 		if (out >= in) {
 			return nullptr;
 		}
@@ -94,6 +90,7 @@ bool cuda_mem::create_new_allocations(int bin) {
 		for (int i = 0; i < nallocs; i++) {
 			char* ptr = base + i * alloc_size;
 			*((size_t*) ptr) = bin;
+			__threadfence();
 			push(bin, ptr + sizeof(size_t));
 		}
 		return true;

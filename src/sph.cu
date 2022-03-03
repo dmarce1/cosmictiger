@@ -154,7 +154,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	         const T& operator[](int i) const {
+	            const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -1074,10 +1074,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float Pi = -alpha_ij * u_ij * (c_ij - SPH_BETA * u_ij) / rho_ij;
 					const float q_i = fminf(r * hinv_i, 1.f);								// 1
 					const float q_j = fminf(r * hinv_j, 1.f);									// 1
-					const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i;
-					const float dWdr_j = dkernelW_dq(q_j) * hinv_j * h3inv_j;
+					const float dWdr_i = f0_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
+					const float dWdr_j = f0_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
 					const float Wi = kernelW(q_i) * h3inv_i;
-					const float dWdr_ij = 0.5f * (f0_i * dWdr_i + f0_j * dWdr_j);
+					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
 					const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
 					const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 					const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
@@ -1087,11 +1087,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdr_x_j = dWdr_j * rinv * x_ij;
 					const float dWdr_y_j = dWdr_j * rinv * y_ij;
 					const float dWdr_z_j = dWdr_j * rinv * z_ij;
-					const float dp_j = p_j * (rhoinv_j * rhoinv_i);
-					const float dp_i = p_i * (rhoinv_j * rhoinv_i);
-					const float dvx_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_x_ij;
-					const float dvy_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_y_ij;
-					const float dvz_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_z_ij;
+					const float dp_j = p_j * sqr(rhoinv_j);
+					const float dp_i = p_i * sqr(rhoinv_i);
+					const float dvx_dt = -m * ainv * (dp_i * dWdr_x_i + dp_j * dWdr_x_j + Pi * dWdr_x_ij);
+					const float dvy_dt = -m * ainv * (dp_i * dWdr_y_i + dp_j * dWdr_y_j + Pi * dWdr_y_ij);
+					const float dvz_dt = -m * ainv * (dp_i * dWdr_z_i + dp_j * dWdr_z_j + Pi * dWdr_z_ij);
+					const float tmp1 = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
+					const float tmp2 = (vx_ij * dWdr_x_i + vy_ij * dWdr_y_i + vz_ij * dWdr_z_i);
+					const float de_dt = ainv * (0.5f * Pi * tmp1 + p_i * rhoinv_i * rhoinv_i * tmp2) * m;
 					const float mrhoinv_i = m * rhoinv_i;
 					vsig += this_vsig * Wi * mrhoinv_i;
 					dvxdx -= mrhoinv_i * vx_ij * dWdr_x_i;
@@ -1103,8 +1106,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					dvxdz -= mrhoinv_i * vx_ij * dWdr_z_i;
 					dvydz -= mrhoinv_i * vy_ij * dWdr_z_i;
 					dvzdz -= mrhoinv_i * vz_ij * dWdr_z_i;
-					const float tmp2 = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
-					const float de_dt = ainv * (0.5f * Pi + p_i * rhoinv_i * rhoinv_j) * m * tmp2;
 					flops += 8;
 					deint_con += de_dt;									// 2
 					dvx_con += dvx_dt;								// 2
@@ -1122,10 +1123,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_con);
 				//if (first_step) {
 				//}
-				float divv = f0_i * (dvxdx + dvydy + dvzdz);
-				float curlv_x = f0_i * (dvzdy - dvydz);
-				float curlv_y = f0_i * (-dvzdx + dvxdz);
-				float curlv_z = f0_i * (dvydx - dvxdy);
+				float divv = (dvxdx + dvydy + dvzdz);
+				float curlv_x = (dvzdy - dvydz);
+				float curlv_y = (-dvzdx + dvxdz);
+				float curlv_z = (dvydx - dvxdy);
 				//	shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ddivv_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curlv_x);
@@ -1417,14 +1418,17 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 						const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
 						const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
-						const float dp_i = p_i * rhoinv_i * rhoinv_j;
-						const float dp_j = p_j * rhoinv_i * rhoinv_j;
-						const float dvx_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_x_ij;
-						const float dvy_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_y_ij;
-						const float dvz_dt = -m * ainv * (dp_i + dp_j + Pi) * dWdr_z_ij;
 						const float dWdr_x_i = dWdr_i * rinv * x_ij;
 						const float dWdr_y_i = dWdr_i * rinv * y_ij;
 						const float dWdr_z_i = dWdr_i * rinv * z_ij;
+						const float dWdr_x_j = dWdr_j * rinv * x_ij;
+						const float dWdr_y_j = dWdr_j * rinv * y_ij;
+						const float dWdr_z_j = dWdr_j * rinv * z_ij;
+						const float dp_i = p_i * sqr(rhoinv_i);
+						const float dp_j = p_j * sqr(rhoinv_j);
+						const float dvx_dt = -m * ainv * (dp_i * dWdr_x_i + dp_j * dWdr_x_j + Pi * dWdr_x_ij);
+						const float dvy_dt = -m * ainv * (dp_i * dWdr_y_i + dp_j * dWdr_y_j + Pi * dWdr_y_ij);
+						const float dvz_dt = -m * ainv * (dp_i * dWdr_z_i + dp_j * dWdr_z_j + Pi * dWdr_z_ij);
 						const float mrhoinv_i = m * rhoinv_i;
 						dvx_dx -= mrhoinv_i * vx_ij * dWdr_x_i;
 						dvy_dx -= mrhoinv_i * vy_ij * dWdr_x_i;
