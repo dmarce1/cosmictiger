@@ -74,11 +74,11 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		fprintf(fp, "%e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, (etot - etot0) / etot);
 		fclose(fp);
 		int minrung = min_rung(itime);
-//		if (minrung == 0) {
-		view_output_views(main_step, 1.0);
+		if (minrung == 0) {
+			view_output_views(main_step, 1.0);
 //			output_line(main_step);
-		main_step++;
-		//	}
+			main_step++;
+		}
 		double dummy;
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
 		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
@@ -256,17 +256,17 @@ void hydro_rt_test() {
 
 void hydro_disc_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	const double rinner = 0.225;
-	const double router = 0.275;
+	const double rinner = 0.025;
+	const double router = 0.3;
 	const double rho = nparts_total;
 	const double p0 = 1.0e-6;
 	const double m = 1.0;
 	double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 	int i = 0;
-	const int nz = 10;
+	const int nz = 3;
 	int dim = sqrt(nparts_total) / nz;
 	double dx = 1.0 / dim;
-	for (int iz = 0; iz < dim; iz++) {
+	for (int iz = dim / 2 - nz; iz < dim / 2 + nz; iz++) {
 		for (int k = 0; k < dim; k++) {
 			for (int l = 0; l < dim; l++) {
 				double r, x, y, z;
@@ -281,7 +281,7 @@ void hydro_disc_test() {
 					sph_particles_pos(XDIM, i) = x;
 					sph_particles_pos(YDIM, i) = y;
 					sph_particles_pos(ZDIM, i) = z;
-					const double v = 0.00*sqrt(1 / r);
+					const double v = 1.00 * sqrt(1 / r);
 					const double vx = -(y - 0.5) / r * v;
 					const double vy = (x - 0.5) / r * v;
 					const double vz = 0.0;
