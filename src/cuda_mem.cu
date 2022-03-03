@@ -22,6 +22,7 @@
 __device__
 char* cuda_mem::allocate_blocks(int nblocks) {
 	size_t base = atomicAdd(&next_block, nblocks);
+//	PRINT( "%lli %i\n", base, heap_max);
 	if (base + nblocks >= heap_max) {
 		return nullptr;
 	} else {
@@ -32,61 +33,49 @@ char* cuda_mem::allocate_blocks(int nblocks) {
 
 __device__
 void cuda_mem::push(int bin, char* ptr) {
-	constexpr auto NBITS = sizeof(cuda_mem_int) * CHAR_BIT;
-	bool full = false;
-	while (!full) {
-		full = true;
-		for (int i = 0; i < CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1; i++) {
-			if (~free_bits[bin][i] != 0ULL) {
-				full = false;
-				for (int k = 0; k < NBITS; k++) {
-					const auto mask = ((cuda_mem_int) 1) << k;
-					if (~free_bits[bin][i] & mask) {
-						if (atomicCAS(((unsigned long long int*) &free_ptrs[bin][NBITS * i + k]), (unsigned long long int) 0, (unsigned long long int) ptr) == 0) {
-							atomicOr((unsigned long long int*) &free_bits[bin][i], (unsigned long long int) mask);
-				//			__threadfence();
-							return;
-						}
-					}
-				}
-			}
-		}
-		PRINT( "Searching push\n");
-	}
-	if( full) {
-		PRINT( "STACK FULL\n");
+	using itype = unsigned long long int;
+	auto& this_q = q[bin];
+	auto in = qin[bin];
+	const auto& out = qout[bin];
+///	PRINT("%lli\n", CUDA_MEM_STACK_SIZE - (in -out));
+	if (in - out >= CUDA_MEM_STACK_SIZE) {
+		PRINT("Q full! %li %li\n", out, in);
 		__trap();
 	}
+	while (atomicCAS((itype*) &this_q[in % CUDA_MEM_STACK_SIZE], (itype) 0, (itype) ptr) != 0) {
+	//	PRINT( "push %i %li %li\n", bin, in, out);
+		in++;
+		if (in - out >= CUDA_MEM_STACK_SIZE) {
+			PRINT("cuda mem Q full! %li %li\n", out, in);
+			__trap();
+		}
+	}
+	in++;
+///	PRINT( "push\n");
+	atomicMax((itype*) &qin[bin], (itype) in);
 }
 
 __device__
 char* cuda_mem::pop(int bin) {
-	constexpr auto NBITS = sizeof(cuda_mem_int) * CHAR_BIT;
-	char* ptr = nullptr;
-	bool empty = false;
-	while (!empty) {
-		empty = true;
-		for (int i = 0; i < CUDA_MEM_STACK_SIZE / sizeof(cuda_mem_int) + 1; i++) {
-			if (free_bits[bin][i] != 0) {
-				empty = false;
-				for (int k = 0; k < NBITS; k++) {
-					const auto mask = ((cuda_mem_int) 1) << k;
-					if (free_bits[bin][i] & mask) {
-						const auto old = free_bits[bin][i];
-						if (atomicAnd((unsigned long long int*) &free_bits[bin][i], (unsigned long long int) ~mask) == old) {
-							ptr = free_ptrs[bin][NBITS * i + k];
-							free_ptrs[bin][NBITS * i + k] = nullptr;
-							PRINT( "pop Success  %i  %i\n", i, k);
-							__threadfence();
-							return ptr;
-						}
-					}
-				}
-			}
-		}
-		PRINT( "Searching pop\n");
+	using itype = unsigned long long int;
+	auto& this_q = q[bin];
+	const auto& in = qin[bin];
+	auto out = qout[bin];
+	if (out >= in) {
+		return nullptr;
 	}
+	char* ptr;
+	while ((ptr = (char*) atomicExch((itype*) &this_q[out % CUDA_MEM_STACK_SIZE], (itype) 0)) == nullptr) {
+		//	PRINT( "pop %li %li\n", in, out);
+		if (out >= in) {
+			return nullptr;
+		}
+		out++;
+	}
+	out++;
+	atomicMax((itype*) &qout[bin], (itype) out);
 	return ptr;
+
 }
 
 __device__
@@ -144,15 +133,15 @@ cuda_mem::cuda_mem(size_t heap_size) {
 	CUDA_CHECK(cudaMallocManaged(&lock, sizeof(int)));
 	CUDA_CHECK(cudaMalloc(&heap, heap_size));
 	heap_max = heap_size / CUDA_MEM_BLOCK_SIZE;
+//	PRINT( "HEAP MAX = %i\n", heap_max);
 	lock = 0;
 	next_block = 0;
 	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
 		for (int j = 0; j < CUDA_STACK_SIZE; j++) {
-			free_ptrs[i][j] = 0;
+			q[i][j] = nullptr;
 		}
-		for (int j = 0; j < CUDA_STACK_SIZE / sizeof(cuda_mem_int) + 1; j++) {
-			free_bits[i][j] = 0;
-		}
+		qin[i] = 0;
+		qout[i] = 0;
 	}
 }
 
