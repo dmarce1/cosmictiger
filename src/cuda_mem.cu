@@ -43,7 +43,7 @@ void cuda_mem::push(int bin, char* ptr) {
 		__trap();
 	}
 	while (atomicCAS((itype*) &this_q[in % CUDA_MEM_STACK_SIZE], (itype) 0, (itype) ptr) != 0) {
-	//	PRINT( "push %i %li %li\n", bin, in, out);
+		//	PRINT( "push %i %li %li\n", bin, in, out);
 		in++;
 		if (in - out >= CUDA_MEM_STACK_SIZE) {
 			PRINT("cuda mem Q full! %li %li\n", out, in);
@@ -85,6 +85,7 @@ bool cuda_mem::create_new_allocations(int bin) {
 	nblocks = 1;
 	do {
 		nallocs = nblocks * CUDA_MEM_BLOCK_SIZE / alloc_size;
+		nblocks = max(3 * nblocks / 2, 2);
 	} while (nallocs == 0);
 	char* base = allocate_blocks(nblocks);
 	if (base == nullptr) {

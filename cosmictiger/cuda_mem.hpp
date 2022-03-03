@@ -24,7 +24,7 @@
 
 #define CUDA_MEM_STACK_SIZE (256*1024*1024)
 #define CUDA_MEM_NBIN 32
-#define CUDA_MEM_BLOCK_SIZE (1024*1024)
+#define CUDA_MEM_BLOCK_SIZE (64*1024)
 
 using cuda_mem_int = uint64_t;
 
