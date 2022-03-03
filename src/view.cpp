@@ -296,9 +296,12 @@ void view_output_views(int cycle, double a) {
 	const double code_to_cm = get_options().code_to_cm;
 	const double code_to_s = get_options().code_to_s;
 	const double code_to_g = get_options().code_to_g;
-	const double code_to_velocity = code_to_cm / code_to_s / a;
-	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
-	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
+//	const double code_to_velocity = code_to_cm / code_to_s / a;
+//	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
+//	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
+	const double code_to_velocity = 1.;
+	const double code_to_energy = 1.;
+	const double code_to_density = 1.;
 	for (int bi = 0; bi < view_boxes.size(); bi++) {
 		bool stars = get_options().stars;
 		PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", view_boxes[bi].begin[XDIM], view_boxes[bi].end[XDIM], view_boxes[bi].begin[YDIM],
