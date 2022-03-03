@@ -195,7 +195,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
 			timer tm;
 			tm.start();
-			PRINT( "Doing smoothlen\n");
+			PRINT("Doing smoothlen\n");
 			kr = sph_run(sparams, true);
 			tm.stop();
 			if (verbose)
@@ -204,7 +204,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			cont = kr.rc;
 			tnparams.h_wt = cont ? 1.5 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+			tnparams.set =  SPH_SET_ALL;
 			tm.start();
 			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -252,7 +252,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			cont = kr.rc;
 			tnparams.h_wt = cont ? 1.5 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+			tnparams.set = SPH_SET_ALL;
 			tm.start();
 			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -286,26 +286,35 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			//do {
 
-				sparams.run_type = SPH_RUN_HYDRO;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-				tm.reset();
-				if (tau != 0.0) {
-					error = sph_particles_apply_updates(minrung, 1, t0);
-				}
-/*				PRINT("%e\n", error);
-				sparams.phase = 1;
-				sparams.run_type = SPH_RUN_AUX;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-				tm.reset();
-			} while (error > SPH_HYDRO_TOLER);*/
+			sparams.run_type = SPH_RUN_HYDRO;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			tm.reset();
+			if (tau != 0.0) {
+				error = sph_particles_apply_updates(minrung, 1, t0);
+			}
+			sparams.phase = 1;
+			sparams.run_type = SPH_RUN_AUX;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+			tm.reset();
+			sparams.phase = 0;
+			/*				PRINT("%e\n", error);
+			 sparams.phase = 1;
+			 sparams.run_type = SPH_RUN_AUX;
+			 tm.start();
+			 sph_run(sparams, true);
+			 tm.stop();
+			 if (verbose)
+			 PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+			 tm.reset();
+			 } while (error > SPH_HYDRO_TOLER);*/
 
 			sparams.phase = 0;
 			if (diff) {

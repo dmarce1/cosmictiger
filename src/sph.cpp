@@ -1420,6 +1420,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_MARK_SEMIACTIVE:
+							case SPH_RUN_AUX:
 							test = (self->nactive > 0);
 							if( !test ) {
 								test = has_active_neighbors(self);
@@ -1430,7 +1431,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							test = (self->nactive > 0);
 							break;
 
-							case SPH_RUN_AUX:
 							case SPH_RUN_COURANT:
 							case SPH_RUN_UPDATE:
 							case SPH_RUN_GRAVITY:
