@@ -1812,9 +1812,9 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int aux_nblocks;
 	static bool first = true;
 	static char* workspace_ptr;
-	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-	new (memory) cuda_mem(4ULL * 1024ULL * 1024ULL * 1024ULL);
 	if (first) {
+		CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
+		new (memory) cuda_mem(8ULL * 1024ULL * 1024ULL * 1024ULL);
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count() * 2 / 3;
@@ -1888,7 +1888,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 }
 //	memory->reset();
 	(cudaFree(reduce));
-	memory->~cuda_mem();
-	CUDA_CHECK(cudaFree(memory));
+	memory->reset();
 	return rc;
 }

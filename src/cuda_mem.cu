@@ -93,8 +93,8 @@ bool cuda_mem::create_new_allocations(int bin) {
 	} else {
 		for (int i = 0; i < nallocs; i++) {
 			char* ptr = base + i * alloc_size;
-			push(bin, ptr + sizeof(size_t));
 			*((size_t*) ptr) = bin;
+			push(bin, ptr + sizeof(size_t));
 		}
 		return true;
 	}
@@ -124,18 +124,19 @@ void* cuda_mem::allocate(size_t sz) {
 __device__ void cuda_mem::free(void* ptr) {
 	size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
 	if (*binptr >= CUDA_MEM_NBIN) {
-		printf("Corrupt free!\n");
+		printf("Corrupt free! %li\n", *binptr);
 		__trap();
 	}
 	push(*binptr, (char*) ptr);
 }
 
 cuda_mem::cuda_mem(size_t heap_size) {
-	CUDA_CHECK(cudaMallocManaged(&lock, sizeof(int)));
 	CUDA_CHECK(cudaMalloc(&heap, heap_size));
 	heap_max = heap_size / CUDA_MEM_BLOCK_SIZE;
-//	PRINT( "HEAP MAX = %i\n", heap_max);
-	lock = 0;
+	reset();
+}
+
+void cuda_mem::reset() {
 	next_block = 0;
 	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
 		for (int j = 0; j < CUDA_STACK_SIZE; j++) {
@@ -147,7 +148,6 @@ cuda_mem::cuda_mem(size_t heap_size) {
 }
 
 cuda_mem::~cuda_mem() {
-	CUDA_CHECK(cudaFree(lock));
 	CUDA_CHECK(cudaFree(heap));
 }
 
