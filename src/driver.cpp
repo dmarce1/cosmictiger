@@ -204,7 +204,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			cont = kr.rc;
 			tnparams.h_wt = cont ? 1.5 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.set =  SPH_SET_ALL;
+			tnparams.set = SPH_SET_ALL;
 			tm.start();
 			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -348,49 +348,15 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		}
 		sparams.phase = 1;
 		if (!glass) {
-
-
-			/*	const bool chem = get_options().chem;
-			 if (chem) {
-			 PRINT("Doing chemistry step\n");
-			 timer tm;
-			 tm.start();
-			 *eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
-			 tm.stop();
-			 PRINT("Took %e s\n", tm.read());
-			 }
-
-			 if (diff) {
-			 sph_init_diffusion();
-			 sparams.run_type = SPH_RUN_DIFFUSION;
-			 float err;
-			 do {
-			 tm.start();
-			 sph_run(sparams, true);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-			 tm.reset();
-			 tm.start();
-			 err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-			 tm.reset();
-			 } while (err > SPH_DIFFUSION_TOLER);
-			 }*/
-
-		}
-
-		if (!glass) {
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
-			sph_run(sparams, true);
+			kr = sph_run(sparams, true);
 			tm.stop();
 			if (verbose)
-				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 			tm.reset();
-			if (stars ) {
+			max_rung = kr.max_rung;
+			if (stars) {
 				stars_find(scale, dt, minrung, iter);
 			}
 			sph_particles_apply_updates(minrung, 2, t0);
