@@ -139,7 +139,7 @@ cuda_mem::cuda_mem(size_t heap_size) {
 void cuda_mem::reset() {
 	next_block = 0;
 	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
-		for (int j = 0; j < CUDA_STACK_SIZE; j++) {
+		for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
 			q[i][j] = nullptr;
 		}
 		qin[i] = 0;
