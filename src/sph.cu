@@ -1234,7 +1234,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					data.dvy_con[snki] = dvy_con;										// 1
 					data.dvz_con[snki] = dvz_con;										// 1
 					flops += 4;
-					data.divv_snk[snki] = 0;
+					data.divv_snk[snki] = divv;
 					const float alpha = data.alpha_snk[snki];
 					const float t0inv = vsig * SPH_VISC_DECAY * hinv_i;
 					const float balsara = fabsf(divv) / (sqrt(sqr(curlv_x, curlv_y, curlv_z)) + fabsf(divv) + ETA2 * c_i * hinv_i);
