@@ -204,7 +204,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			cont = kr.rc;
 			tnparams.h_wt = cont ? 1.5 : 1.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.set =  SPH_SET_ALL;
+			tnparams.set = SPH_SET_ALL;
 			tm.start();
 			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -349,18 +349,15 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		sparams.phase = 1;
 		if (!glass) {
 
-			sparams.run_type = SPH_RUN_COURANT;
-			tm.start();
-			kr = sph_run(sparams, true);
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-			tm.reset();
-			max_rung = kr.max_rung;
+			/*	sparams.run_type = SPH_RUN_COURANT;
+			 tm.start();
+			 kr = sph_run(sparams, true);
+			 if (verbose)
+			 PRINT("sph_run(SPH_RUN_COURANT): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
+			 tm.reset();
+			 max_rung = kr.max_rung;
 
-			if (stars & !glass) {
-				stars_find(scale, dt, minrung, iter);
-			}
-
+			 */
 			/*	const bool chem = get_options().chem;
 			 if (chem) {
 			 PRINT("Doing chemistry step\n");
@@ -396,12 +393,15 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (!glass) {
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
-			sph_run(sparams, true);
+			max_rung = sph_run(sparams, true).max_rung;
 			tm.stop();
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
-			max_rung = kr.max_rung;
+//			max_rung = kr.max_rung;
+			if (stars & !glass) {
+				stars_find(scale, dt, minrung, iter);
+			}
 
 			bool rc = true;
 			while (rc) {

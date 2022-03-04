@@ -92,7 +92,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				bool make_cloud = false;
-				if( sph_particles_tdyn(i) < 1e37 ) {
+				if( sph_particles_smooth_len(i) < get_options().hsoft / a ) {
 					float tdyn = sph_particles_tdyn(i);
 					float p = 1.f - expf(-dt/tdyn);
 			//		make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;

@@ -1925,11 +1925,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 	PRINT("Running with %i nodes\n", host_trees.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);
-	if (params.run_type == SPH_RUN_COURANT || params.run_type == SPH_RUN_RUNGS) {
+	if (params.run_type == SPH_RUN_COURANT || params.run_type == SPH_RUN_RUNGS || (params.run_type == SPH_RUN_HYDRO && params.phase == 1)) {
 		CUDA_CHECK(cudaMemcpyAsync(host_rungs.data(), cuda_data.rungs, sizeof(char) * host_rungs.size(), cudaMemcpyDeviceToHost, stream));
 	}
 	cuda_end_stream(stream);
-	if (params.run_type == SPH_RUN_COURANT || params.run_type == SPH_RUN_RUNGS) {
+	if (params.run_type == SPH_RUN_COURANT || params.run_type == SPH_RUN_RUNGS || (params.run_type == SPH_RUN_HYDRO && params.phase == 1)) {
 		for (int i = 0; i < host_selflist.size(); i++) {
 			const auto& node = host_trees[host_selflist[i]];
 			const part_int offset = node.sink_part_range.first - node.part_range.first;
