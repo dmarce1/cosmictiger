@@ -623,7 +623,7 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(.25, 1024);
+	hydro_driver(1.00, 128);
 }
 
 void hydro_wave_test() {

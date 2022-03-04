@@ -356,9 +356,21 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 			tm.reset();
 			max_rung = kr.max_rung;
+
+			bool rc = true;
+			while (rc) {
+				sparams.run_type = SPH_RUN_RUNGS;
+				tm.start();
+				rc = sph_run(sparams, true).rc;
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
+				tm.reset();
+			}
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
 			}
+
 			sph_particles_apply_updates(minrung, 2, t0);
 		}
 

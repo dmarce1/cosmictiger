@@ -177,6 +177,15 @@ struct mark_semiactive_workspace {
 	device_vector<char> rungs;
 };
 
+
+struct rungs_workspace {
+	device_vector<fixed32> x;
+	device_vector<fixed32> y;
+	device_vector<fixed32> z;
+	device_vector<float> h;
+	device_vector<char> rungs;
+};
+
 struct hydro_record1 {
 	fixed32 x;
 	fixed32 y;
@@ -1562,6 +1571,145 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 	(&ws.rec2)->~device_vector<aux_record2>();
 }
 
+
+
+__global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, rungs_workspace* workspaces, sph_reduction* reduce) {
+	const int tid = threadIdx.x;
+	const int block_size = blockDim.x;
+	__shared__
+	int index;
+	rungs_workspace& ws = workspaces[blockIdx.x];
+	if (tid == 0) {
+		index = atomicAdd(&reduce->counter, 1);
+	}
+	__syncthreads();
+	new (&ws.x) device_vector<fixed32>();
+	new (&ws.y) device_vector<fixed32>();
+	new (&ws.z) device_vector<fixed32>();
+	new (&ws.h) device_vector<float>();
+	new (&ws.rungs) device_vector<char>();
+
+	array<fixed32, NDIM> x;
+	int changes = 0;
+	while (index < data.nselfs) {
+		int flops = 0;
+		ws.x.resize(0);
+		ws.y.resize(0);
+		ws.z.resize(0);
+		ws.h.resize(0);
+		ws.rungs.resize(0);
+		const sph_tree_node& self = data.trees[data.selfs[index]];
+		//	PRINT( "%i\n", self.neighbor_range.second - self.neighbor_range.first);
+		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+			//PRINT( "%i\n", -self.neighbor_range.first+self.neighbor_range.second);
+			const sph_tree_node& other = data.trees[data.neighbors[ni]];
+			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+				bool contains = false;
+				int j;
+				int total;
+				float h;
+				int rung;
+				if (pi < other.part_range.second) {
+					h = data.h[pi];
+					rung = data.rungs[pi];
+					if (rung >= params.min_rung) {
+						x[XDIM] = data.x[pi];
+						x[YDIM] = data.y[pi];
+						x[ZDIM] = data.z[pi];
+						if (self.outer_box.contains(x)) {
+							contains = true;
+						}
+						if (!contains) {
+							contains = true;
+							for (int dim = 0; dim < NDIM; dim++) {
+								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+							}
+						}
+					}
+				}
+				j = contains;
+				compute_indices<SMOOTHLEN_BLOCK_SIZE>(j, total);
+				const int offset = ws.x.size();
+				const int next_size = offset + total;
+				ws.x.resize(next_size);
+				ws.y.resize(next_size);
+				ws.z.resize(next_size);
+				ws.h.resize(next_size);
+				ws.rungs.resize(next_size);
+				if (contains) {
+					ASSERT(j < total);
+					const int k = offset + j;
+					ws.x[k] = x[XDIM];
+					ws.y[k] = x[YDIM];
+					ws.z[k] = x[ZDIM];
+					ws.h[k] = h;
+					ws.rungs[k] = rung;
+				}
+			}
+		}
+
+		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			if (data.rungs[i] >= params.min_rung) {
+				const auto x_i = data.x[i];
+				const auto y_i = data.y[i];
+				const auto z_i = data.z[i];
+				const auto h_i = data.h[i];
+				const int rung_i = data.rungs[i];
+				const auto h2_i = sqr(h_i);
+				const int jmax = round_up(ws.x.size(), block_size);
+				int max_rung_j = 0;
+				for (int j = tid; j < jmax; j += block_size) {
+					if (j < ws.x.size()) {
+						const auto x_j = ws.x[j];
+						const auto y_j = ws.y[j];
+						const auto z_j = ws.z[j];
+						const auto h_j = ws.h[j];
+						const int rung_j = ws.rungs[j];
+						const auto h2_j = sqr(h_j);
+						const float x_ij = distance(x_i, x_j);
+						const float y_ij = distance(y_i, y_j);
+						const float z_ij = distance(z_i, z_j);
+						const float r2 = sqr(x_ij, y_ij, z_ij);
+						if (r2 < fmaxf(h2_i, h2_j)) {
+							max_rung_j = max(max_rung_j, rung_j);
+						}
+					}
+				}
+				shared_reduce_max<int, SMOOTHLEN_BLOCK_SIZE>(max_rung_j);
+				if (tid == 0) {
+					if (rung_i < max_rung_j - 1) {
+						changes++;
+						data.rungs[i] = max_rung_j - 1;
+					}
+				}
+			}
+		}
+		shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(flops);
+		if (tid == 0) {
+			index = atomicAdd(&reduce->counter, 1);
+		}
+		__syncthreads();
+	}
+	if (tid == 0) {
+		atomicAdd(&reduce->flag, changes);
+	}
+	(&ws.x)->~device_vector<fixed32>();
+	(&ws.y)->~device_vector<fixed32>();
+	(&ws.z)->~device_vector<fixed32>();
+	(&ws.h)->~device_vector<float>();
+	(&ws.rungs)->~device_vector<char>();
+
+}
+
+
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream) {
 	timer tm;
 	sph_run_return rc;
@@ -1579,8 +1727,8 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int semiactive_nblocks;
 	static int hydro_nblocks;
 	static int dif_nblocks;
-	static int courant_nblocks;
 	static int aux_nblocks;
+	static int rungs_nblocks;
 	static bool first = true;
 	static char* workspace_ptr;
 	if (first) {
@@ -1597,12 +1745,15 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		hydro_nblocks *= cuda_smp_count() * 2 / 3;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&aux_nblocks, (const void*) sph_cuda_aux, HYDRO_BLOCK_SIZE, 0));
 		aux_nblocks *= cuda_smp_count() * 2 / 3;
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (const void*) sph_cuda_rungs, HYDRO_BLOCK_SIZE, 0));
+		rungs_nblocks *= cuda_smp_count() * 2 / 3;
 		size_t smoothlen_mem = sizeof(smoothlen_workspace) * smoothlen_nblocks;
 		size_t semiactive_mem = sizeof(mark_semiactive_workspace) * semiactive_nblocks;
 		size_t aux_mem = sizeof(aux_workspace) * aux_nblocks;
+		size_t rungs_mem = sizeof(aux_workspace) * rungs_nblocks;
 		size_t hydro_mem = sizeof(hydro_workspace) * hydro_nblocks;
 		size_t dif_mem = sizeof(dif_workspace) * dif_nblocks;
-		size_t max_mem = std::max(aux_mem, std::max(std::max(std::max(smoothlen_mem, semiactive_mem), (hydro_mem)), dif_mem));
+		size_t max_mem = std::max(rungs_mem,std::max(aux_mem, std::max(std::max(std::max(smoothlen_mem, semiactive_mem), (hydro_mem)), dif_mem)));
 		CUDA_CHECK(cudaMallocManaged(&workspace_ptr, max_mem));
 		PRINT("Allocating %i GB in workspace memory\n", max_mem / 1024 / 1024 / 1024);
 //		sleep(10);
@@ -1632,6 +1783,17 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
 		rc.max_rung = reduce->max_rung;
+	}
+	break;
+	case SPH_RUN_RUNGS: {
+		timer tm;
+		tm.start();
+		sph_cuda_rungs<<<hydro_nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,(rungs_workspace*)workspace_ptr,reduce);
+		cuda_stream_synchronize(stream);
+		tm.stop();
+		auto gflops = reduce->flops / tm.read() / (1024.0*1024*1024);
+		PRINT( "HYDRO ran with %e GFLOPs\n", gflops);
+		rc.rc = reduce->flag;
 	}
 	break;
 	case SPH_RUN_DIFFUSION: {

@@ -1428,6 +1428,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_HYDRO:
+							case SPH_RUN_RUNGS:
 							test = (self->nactive > 0);
 							break;
 
@@ -1444,6 +1445,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 
 									case SPH_RUN_SMOOTHLEN:
 									case SPH_RUN_MARK_SEMIACTIVE:
+									case SPH_RUN_RUNGS:
 									case SPH_RUN_HYDRO:
 									case SPH_RUN_AUX:
 									for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
@@ -1558,6 +1560,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	}
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
+	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 	case SPH_RUN_DIFFUSION:
 		host_h.resize(parts_size);
@@ -1627,6 +1630,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), nullptr, offset);
 									break;
 									case SPH_RUN_HYDRO:
+									case SPH_RUN_RUNGS:
 									case SPH_RUN_MARK_SEMIACTIVE:
 									case SPH_RUN_DIFFUSION:
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
@@ -1682,6 +1686,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_DIFFUSION:
+	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		break;
@@ -1737,6 +1742,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	}
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
+	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 	case SPH_RUN_DIFFUSION:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
@@ -1848,7 +1854,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	PRINT("Running with %i nodes\n", host_trees.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);
-	const bool courant = params.run_type == SPH_RUN_HYDRO && params.phase == 1;
+	const bool courant = (params.run_type == SPH_RUN_HYDRO && params.phase == 1) || params.run_type == SPH_RUN_RUNGS;
 	if (courant) {
 		CUDA_CHECK(cudaMemcpyAsync(host_rungs.data(), cuda_data.rungs, sizeof(char) * host_rungs.size(), cudaMemcpyDeviceToHost, stream));
 	}
@@ -1874,6 +1880,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_DIFFUSION:
+	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		break;
