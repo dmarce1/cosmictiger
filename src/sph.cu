@@ -1284,7 +1284,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 		if (tid == 0) {
 			atomicAdd(&reduce->flops, (float) flops);
 			atomicMax(&reduce->vsig_max, total_vsig_max);
-//			PRINT( "%e\n", total_vsig_max);
 			atomicMax(&reduce->max_rung, max_rung);
 			atomicMax(&reduce->max_rung_hydro, max_rung_hydro);
 			atomicMax(&reduce->max_rung_grav, max_rung_grav);
