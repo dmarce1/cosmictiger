@@ -195,7 +195,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
 			timer tm;
 			tm.start();
-			PRINT( "Doing smoothlen\n");
+			PRINT("Doing smoothlen\n");
 			kr = sph_run(sparams, true);
 			tm.stop();
 			if (verbose)
@@ -232,11 +232,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
-		if (!glass) {
-			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 0, t0);
-			}
-		}
 
 		sparams.phase = 1;
 		do {
@@ -276,6 +271,11 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	} else {
 		sparams.phase = 0;
 		if (!glass) {
+			if (tau != 0.0) {
+				sph_particles_apply_updates(minrung, 0, t0);
+			}
+		}
+		if (!glass) {
 			double error;
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
@@ -286,26 +286,26 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			//do {
 
-				sparams.run_type = SPH_RUN_HYDRO;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-				tm.reset();
-				if (tau != 0.0) {
-					error = sph_particles_apply_updates(minrung, 1, t0);
-				}
-/*				PRINT("%e\n", error);
-				sparams.phase = 1;
-				sparams.run_type = SPH_RUN_AUX;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-				tm.reset();
-			} while (error > SPH_HYDRO_TOLER);*/
+			sparams.run_type = SPH_RUN_HYDRO;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			tm.reset();
+			if (tau != 0.0) {
+				error = sph_particles_apply_updates(minrung, 1, t0);
+			}
+			PRINT("%e\n", error);
+			sparams.phase = 1;
+			sparams.run_type = SPH_RUN_AUX;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+			tm.reset();
+			// } while (error > SPH_HYDRO_TOLER);*/
 
 			sparams.phase = 0;
 			if (diff) {
@@ -348,50 +348,27 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			max_rung = kr.max_rung;
 
-			if (stars & !glass) {
-				stars_find(scale, dt, minrung, iter);
+			bool rc = true;
+			while (rc) {
+				sparams.run_type = SPH_RUN_RUNGS;
+				tm.start();
+				rc = sph_run(sparams, true).rc;
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
+				tm.reset();
 			}
-
-			/*	const bool chem = get_options().chem;
-			 if (chem) {
-			 PRINT("Doing chemistry step\n");
-			 timer tm;
-			 tm.start();
-			 *eheat = chemistry_do_step(scale, minrung, t0, adot, +1);
-			 tm.stop();
-			 PRINT("Took %e s\n", tm.read());
-			 }
-
-			 if (diff) {
-			 sph_init_diffusion();
-			 sparams.run_type = SPH_RUN_DIFFUSION;
-			 float err;
-			 do {
-			 tm.start();
-			 sph_run(sparams, true);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-			 tm.reset();
-			 tm.start();
-			 err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-			 tm.stop();
-			 if (verbose)
-			 PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-			 tm.reset();
-			 } while (err > SPH_DIFFUSION_TOLER);
-			 }*/
-
-		}
-
-		if (!glass) {
+			if (stars) {
+//				stars_find(scale, dt, minrung, iter);
+			}
+		/*	sparams.phase = 0;
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
 			sph_run(sparams, true);
-			tm.stop();
 			if (verbose)
-				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-			tm.reset();
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e \n", tm.read());
+			tm.reset();*/
+
 			sph_particles_apply_updates(minrung, 2, t0);
 		}
 
