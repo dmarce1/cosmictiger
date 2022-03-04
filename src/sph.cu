@@ -154,7 +154,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                              const T& operator[](int i) const {
+	                               const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -1097,8 +1097,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float q_j = fminf(r * hinv_j, 1.f);									// 1
 					const float dWdr_i = f0_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 					const float dWdr_j = f0_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
-					if( fabs(dWdr_i) > 1e10 ) {
-						PRINT( "inf --> %e %e\n", q_i, f0_i);
+					if (fabs(dWdr_i) > 1e10) {
+						PRINT("inf --> %e %e\n", q_i, f0_i);
 					}
 					const float Wi = kernelW(q_i) * h3inv_i;
 					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
@@ -1182,37 +1182,37 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gz);
 				}
 				if (tid == 0) {
-					/*	if (data.gcentral != 0.f) {
-					 const float dx = x_i.to_float() - 0.5f;
-					 const float dy = y_i.to_float() - 0.5f;
-					 const float dz = z_i.to_float() - 0.5f;
-					 const float r = sqrt(sqr(dx, dy, dz));
-					 const float q = r / data.hcentral;
-					 float r3inv;
-					 if (q < 1.f) {
-					 r3inv = kernelFqinv(q) / (sqr(data.hcentral) * data.hcentral);
-					 } else {
-					 r3inv = 1.f / (sqr(r) * r);
-					 }
-					 dvx_con -= dx * data.gcentral * r3inv;
-					 dvy_con -= dy * data.gcentral * r3inv;
-					 dvz_con -= dz * data.gcentral * r3inv;
-					 }
-					 if (y_i.to_float() < 0.5) {
-					 dvy_con -= params.gy;
-					 } else {
-					 dvy_con += params.gy;
-					 }
-					 if (data.gravity) {
-					 if( params.phase== 0 ) {
-					 data.gx_snk[snki] += gx;
-					 data.gy_snk[snki] += gy;
-					 data.gz_snk[snki] += gz;
-					 }
-					 dvx_con += data.gx_snk[snki];
-					 dvy_con += data.gy_snk[snki];
-					 dvz_con += data.gz_snk[snki];
-					 }*/
+					if (data.gcentral != 0.f) {
+						const float dx = x_i.to_float() - 0.5f;
+						const float dy = y_i.to_float() - 0.5f;
+						const float dz = z_i.to_float() - 0.5f;
+						const float r = sqrt(sqr(dx, dy, dz));
+						const float q = r / data.hcentral;
+						float r3inv;
+						if (q < 1.f) {
+							r3inv = kernelFqinv(q) / (sqr(data.hcentral) * data.hcentral);
+						} else {
+							r3inv = 1.f / (sqr(r) * r);
+						}
+						dvx_con -= dx * data.gcentral * r3inv;
+						dvy_con -= dy * data.gcentral * r3inv;
+						dvz_con -= dz * data.gcentral * r3inv;
+					}
+					if (y_i.to_float() < 0.5) {
+						dvy_con -= params.gy;
+					} else {
+						dvy_con += params.gy;
+					}
+					if (data.gravity) {
+						if (params.phase == 0) {
+							data.gx_snk[snki] += gx;
+							data.gy_snk[snki] += gy;
+							data.gz_snk[snki] += gz;
+						}
+						dvx_con += data.gx_snk[snki];
+						dvy_con += data.gy_snk[snki];
+						dvz_con += data.gz_snk[snki];
+					}
 					data.deint_con[snki] = deint_con;										// 1
 					data.dvx_con[snki] = dvx_con;										// 1
 					data.dvy_con[snki] = dvy_con;										// 1
