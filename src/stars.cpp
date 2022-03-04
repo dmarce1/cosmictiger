@@ -85,16 +85,14 @@ void stars_find(float a, float dt, int minrung, int step) {
 	static const double code_to_g = get_options().code_to_g;
 	static const double code_to_cm = get_options().code_to_cm;
 	static const double code_to_s = get_options().code_to_s;
-	static const double hsoft = get_options().hsoft;
-	const double hstar = hsoft / a;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens,hstar]() {
+		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens]() {
 			const float code_to_s = get_options().code_to_s;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				bool make_cloud = false;
-				if( sph_particles_smooth_len(i) < hstar ) {
+				if( sph_particles_tdyn(i) < 1e37 ) {
 					float tdyn = sph_particles_tdyn(i);
 					float p = 1.f - expf(-dt/tdyn);
 			//		make_cloud = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
