@@ -154,7 +154,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                               const T& operator[](int i) const {
+	                                const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -176,7 +176,6 @@ struct mark_semiactive_workspace {
 	device_vector<float> h;
 	device_vector<char> rungs;
 };
-
 
 struct rungs_workspace {
 	device_vector<fixed32> x;
@@ -1134,6 +1133,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					ddivv_dt += mrhoinv_i * (gx_j - gx_i) * dWdr_x_i;
 					ddivv_dt += mrhoinv_i * (gy_j - gy_i) * dWdr_y_i;
 					ddivv_dt += mrhoinv_i * (gz_j - gz_i) * dWdr_z_i;
+					ddivv_dt += m * Pi * dWdr_i * rinv;
 					vsig += this_vsig * Wi * mrhoinv_i;
 					dvxdx -= mrhoinv_i * vx_ij * dWdr_x_i;
 					dvydx -= mrhoinv_i * vy_ij * dWdr_x_i;
@@ -1571,8 +1571,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 	(&ws.rec2)->~device_vector<aux_record2>();
 }
 
-
-
 __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, rungs_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
@@ -1709,7 +1707,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, ru
 
 }
 
-
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream) {
 	timer tm;
 	sph_run_return rc;
@@ -1753,7 +1750,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		size_t rungs_mem = sizeof(aux_workspace) * rungs_nblocks;
 		size_t hydro_mem = sizeof(hydro_workspace) * hydro_nblocks;
 		size_t dif_mem = sizeof(dif_workspace) * dif_nblocks;
-		size_t max_mem = std::max(rungs_mem,std::max(aux_mem, std::max(std::max(std::max(smoothlen_mem, semiactive_mem), (hydro_mem)), dif_mem)));
+		size_t max_mem = std::max(rungs_mem, std::max(aux_mem, std::max(std::max(std::max(smoothlen_mem, semiactive_mem), (hydro_mem)), dif_mem)));
 		CUDA_CHECK(cudaMallocManaged(&workspace_ptr, max_mem));
 		PRINT("Allocating %i GB in workspace memory\n", max_mem / 1024 / 1024 / 1024);
 //		sleep(10);

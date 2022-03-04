@@ -74,11 +74,11 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		fprintf(fp, "%e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, (etot - etot0) / etot);
 		fclose(fp);
 		int minrung = min_rung(itime);
-		if (minrung == 0) {
+//		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
 //			output_line(main_step);
 			main_step++;
-		}
+//		}
 		double dummy;
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
 		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
@@ -563,7 +563,7 @@ void hydro_helmholtz_test() {
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 1.0;
-	double p1 = 10000.0;
+	double p1 = 1000000.0;
 	double p0 = 1.0;
 	double sigma = 0.01;
 	auto opts = get_options();
@@ -623,7 +623,7 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(1.00, 128);
+	hydro_driver(0.4, 128);
 }
 
 void hydro_wave_test() {
