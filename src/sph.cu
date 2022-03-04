@@ -1684,7 +1684,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 		ws.rec1_main.resize(0);
 		ws.rec2_main.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
-			continue;
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
 			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
@@ -1733,7 +1732,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 			}
 		}
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			continue;
 			int myrung = data.rungs[i];
 			bool use = myrung >= params.min_rung;
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
@@ -1906,6 +1904,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, aux_
 						const float fpre = 1.0f / (1.0f + c0);
 						const float fg = -dpot_dh * h_i / (3.f * rho_i);
 						data.f0_snk[snki] = fpre;
+						PRINT( "%e\n", fpre);
 						data.fpot_snk[snki] = fg;
 					} else {
 						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz)) / params.a;
