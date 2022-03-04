@@ -28,6 +28,10 @@ struct smoothlen_shmem {
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/kernel.hpp>
 
+
+#define ETA1 0.01f
+#define ETA2 0.0001f
+
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
@@ -814,8 +818,12 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 					const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1e-30);
 					const float difco_ij = 2.f * (difco_i * difco_j) / (difco_i + difco_j + 1e-30);
 					const float dWdr_ij = 0.5f * (dkernelW_dq(fminf(r * hinv_i, 1.f)) / sqr(sqr(h_i)) + dkernelW_dq(fminf(r * hinv_j, 1.f)) / sqr(sqr(hinv_j)));
-					const float diff_factor = -2.f * dt_ij * m / rho_ij * difco_ij * dWdr_ij * rinv;
-					const float cond_factor = -dt_ij * m / (rho_i * rho_j) * kappa_ij * dWdr_ij * rinv;
+					const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
+					const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
+					const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
+					const float d2Wdr2_ij = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) / (r2 + ETA1 * sqr(h_ij));
+					const float diff_factor = -2.f * dt_ij * m / rho_ij * difco_ij * d2Wdr2_ij;
+					const float cond_factor = -dt_ij * m / (rho_i * rho_j) * kappa_ij * d2Wdr2_ij;
 					for (int fi = 0; fi < DIFCO_COUNT; fi++) {
 						num[fi] += diff_factor * rec2.vec[fi];
 					}
@@ -857,8 +865,6 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 	(&ws.rec2)->~device_vector<dif_record2>();
 }
 
-#define ETA1 0.01f
-#define ETA2 0.0001f
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hydro_workspace* workspaces, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -1106,7 +1112,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdr_i = f0_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 					const float dWdr_j = f0_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
 					if (fabs(dWdr_i) > 1e10) {
-						PRINT("inf --> %e %e\n", q_i, f0_i);
+//						PRINT("inf --> %e %e\n", q_i, f0_i);
 					}
 					const float Wi = kernelW(q_i) * h3inv_i;
 					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
@@ -1119,6 +1125,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float dWdr_x_j = dWdr_j * rinv * x_ij;
 					const float dWdr_y_j = dWdr_j * rinv * y_ij;
 					const float dWdr_z_j = dWdr_j * rinv * z_ij;
+					const float d2Wdr2_i = (x_ij * dWdr_x_i + y_ij * dWdr_y_i + z_ij * dWdr_z_i) / (r2 + ETA1 * sqr(h_i));
 					const float dp_j = p_j * sqr(rhoinv_j);
 					const float dp_i = p_i * sqr(rhoinv_i);
 					const float dvx_dt = -m * ainv * (dp_i * dWdr_x_i + dp_j * dWdr_x_j + Pi * dWdr_x_ij);
@@ -1128,12 +1135,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 					const float tmp2 = (vx_ij * dWdr_x_i + vy_ij * dWdr_y_i + vz_ij * dWdr_z_i);
 					const float de_dt = ainv * (0.5f * Pi * tmp1 + p_i * rhoinv_i * rhoinv_i * tmp2) * m;
 					const float mrhoinv_i = m * rhoinv_i;
-					ddivv_dt += m * (p_i * sqr(rhoinv_i) + p_j * sqr(rhoinv_j)) * (rho_i - rho_j) / rho_ij * dWdr_i * rinv;
-					ddivv_dt += m * 2.f * (p_i * rhoinv_i - p_j * rhoinv_j) / rho_ij * dWdr_i * rinv;
+					ddivv_dt += m * (p_i * sqr(rhoinv_i) + p_j * sqr(rhoinv_j)) * (rho_i - rho_j) / rho_ij * d2Wdr2_i;
+					ddivv_dt += m * 2.f * (p_i * rhoinv_i - p_j * rhoinv_j) / rho_ij * d2Wdr2_i;
 					ddivv_dt += mrhoinv_i * (gx_j - gx_i) * dWdr_x_i;
 					ddivv_dt += mrhoinv_i * (gy_j - gy_i) * dWdr_y_i;
 					ddivv_dt += mrhoinv_i * (gz_j - gz_i) * dWdr_z_i;
-					ddivv_dt += m * Pi * dWdr_i * rinv;
+					ddivv_dt += m * Pi * d2Wdr2_i;
 					vsig += this_vsig * Wi * mrhoinv_i;
 					dvxdx -= mrhoinv_i * vx_ij * dWdr_x_i;
 					dvydx -= mrhoinv_i * vy_ij * dWdr_x_i;
