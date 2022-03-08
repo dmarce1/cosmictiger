@@ -22,7 +22,7 @@
 #include <cosmictiger/kernel.hpp>
 
 __device__
-int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist,
+int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist,
 		gravity_cc_type type, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
@@ -61,7 +61,7 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, float dm_mass,
+int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& partlist, float dm_mass,
 		float sph_mass, bool do_phi) {
 	int flops = 0;
 	__shared__
@@ -155,7 +155,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>& multlist, int nactive, bool do_phi) {
+int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const device_vector<int>& multlist, int nactive, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
 	__shared__
@@ -201,7 +201,7 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 }
 
 __device__
-int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive, float h, float dm_mass,
+int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, int nactive, float h, float dm_mass,
 		float sph_mass, bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__

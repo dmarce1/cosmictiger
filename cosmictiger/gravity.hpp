@@ -23,7 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/fixed.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/kick.hpp>
 
@@ -52,12 +52,12 @@ size_t cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, floa
 
 #ifdef __CUDACC__
 __device__
-int cuda_gravity_cc(const cuda_kick_data&, expansion<float>&, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>&, gravity_cc_type, bool do_phi);
+int cuda_gravity_cc(const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, gravity_cc_type, bool do_phi);
 __device__
-int cuda_gravity_cp(const cuda_kick_data&, expansion<float>&, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, float dm_mass, float sph_mass, bool do_phi);
+int cuda_gravity_cp(const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, float dm_mass, float sph_mass, bool do_phi);
 __device__
-int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>&, int, bool);
+int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, bool);
 __device__
-int cuda_gravity_pp(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
 #endif
 #endif /* GRAVITY_HPP_ */

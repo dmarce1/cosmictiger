@@ -1,5 +1,9 @@
 #include <cosmictiger/cuda_mem.hpp>
 
+#pragma once
+
+#ifdef __CUDACC__
+
 template<class T>
 class device_vector {
 	int sz;
@@ -112,7 +116,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	            const T& operator[](int i) const {
+	             const T& operator[](int i) const {
 		return ptr[i];
 	}
 	__device__
@@ -120,31 +124,45 @@ public:
 		const int& tid = threadIdx.x;
 		resize(size() + 1);
 		if (tid == 0) {
+			ptr[sz - 1] = std::move(item);
+			__threadfence();
+		}
+	}
+	__device__
+	void push_back(const T& item) {
+		const int& tid = threadIdx.x;
+		resize(size() + 1);
+		if (tid == 0) {
 			ptr[sz - 1] = item;
+			__threadfence();
 		}
 	}
 	__device__
 	void pop_back() {
-		sz--;
+		const int& tid = threadIdx.x;
+		if (tid == 0) {
+			sz--;
+			__threadfence();
+		}
 	}
 	__device__ T* data() {
 		return ptr;
 	}
 	__device__
-	 const T* data() const {
+	  const T* data() const {
 		return ptr;
 	}
 	__device__ T& front() {
 		return ptr[0];
 	}
-	__device__  const T& front() const {
+	__device__   const T& front() const {
 		return ptr[0];
 	}
 	__device__ T& back() {
 		return ptr[sz - 1];
 	}
 	__device__
-	  const T& back() const {
+	   const T& back() const {
 		return ptr[sz - 1];
 	}
 	__device__
@@ -155,3 +173,4 @@ public:
 
 	}
 };
+#endif

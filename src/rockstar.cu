@@ -1,5 +1,5 @@
 #include <cosmictiger/rockstar.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/math.hpp>
@@ -9,12 +9,12 @@
 #define ROCKSTAR_MAX_STACK 16384
 
 struct rockstar_workspace {
-	fixedcapvec<int, ROCKSTAR_MAX_LIST> nextlist;
-	fixedcapvec<int, ROCKSTAR_MAX_LIST> leaflist;
-	stack_vector<int, ROCKSTAR_MAX_STACK, ROCKSTAR_MAX_DEPTH> checklist;
-	fixedcapvec<int, ROCKSTAR_MAX_DEPTH> phase;
-	fixedcapvec<int, ROCKSTAR_MAX_DEPTH> self;
-	fixedcapvec<int, ROCKSTAR_MAX_DEPTH> returns;
+	device_vector<int> nextlist;
+	device_vector<int> leaflist;
+	stack_vector<int> checklist;
+	device_vector<int> phase;
+	device_vector<int> self;
+	device_vector<int> returns;
 };
 
 struct rockstar_shmem {
@@ -39,6 +39,7 @@ __global__ void rockstar_find_subgroups_gpu(rockstar_tree* trees, int ntrees, ar
 	__shared__ rockstar_shmem shmem;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
+	new( lists + bid ) rockstar_workspace();
 	auto& nextlist = lists[bid].nextlist;
 	auto& leaflist = lists[bid].leaflist;
 	auto& phase = lists[bid].phase;
@@ -46,12 +47,6 @@ __global__ void rockstar_find_subgroups_gpu(rockstar_tree* trees, int ntrees, ar
 	auto& checklist = lists[bid].checklist;
 	auto& returns = lists[bid].returns;
 	const float link_len2 = sqr(link_len);
-	nextlist.initialize();
-	leaflist.initialize();
-	phase.initialize();
-	self_index.initialize();
-	returns.initialize();
-	checklist.initialize();
 
 	phase.resize(0);
 	self_index.resize(0);
@@ -189,12 +184,12 @@ __global__ void rockstar_find_subgroups_gpu(rockstar_tree* trees, int ntrees, ar
 					found_link = 0;
 					nparts = self.part_end - self.part_begin;
 					__syncwarp();
-					int maxi = round_up(nparts,WARP_SIZE);
+					int maxi = round_up(nparts, WARP_SIZE);
 					for (int snk_i = tid; snk_i < maxi; snk_i += WARP_SIZE) {
 						for (int src_i = snk_i - tid; src_i < nparts; src_i++) {
 							int src_link = 0;
 							float R2;
-							auto& snk_grp = shmem.snk_sg[min(snk_i,nparts-1)];
+							auto& snk_grp = shmem.snk_sg[min(snk_i, nparts - 1)];
 							auto& src_grp = shmem.snk_sg[src_i];
 							if (src_i > snk_i && snk_i < nparts) {
 								const float dx = shmem.snk_x[snk_i] - shmem.snk_x[src_i];
@@ -328,16 +323,16 @@ __global__ void rockstar_find_subgroups_gpu(rockstar_tree* trees, int ntrees, ar
 	ASSERT(returns.size() == 0);
 	ASSERT(phase.size() == 0);
 	ASSERT(self_index.size() == 0);
+	(lists + bid)->~rockstar_workspace();
 
 }
-
-
 
 __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, array<int, ROCKSTAR_MAX_LIST>* checklists, int* checklistsz,
 		rockstar_particles parts, rockstar_workspace* lists, int* self_ids, float link_len, int* next_id, int* active_cnt) {
 	__shared__ rockstar_shmem shmem;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
+	new (lists + bid) rockstar_workspace();
 	auto& nextlist = lists[bid].nextlist;
 	auto& leaflist = lists[bid].leaflist;
 	auto& phase = lists[bid].phase;
@@ -345,12 +340,6 @@ __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, arr
 	auto& checklist = lists[bid].checklist;
 	auto& returns = lists[bid].returns;
 	const float link_len2 = sqr(link_len);
-	nextlist.initialize();
-	leaflist.initialize();
-	phase.initialize();
-	self_index.initialize();
-	returns.initialize();
-	checklist.initialize();
 
 	phase.resize(0);
 	self_index.resize(0);
@@ -488,12 +477,12 @@ __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, arr
 					found_link = 0;
 					nparts = self.part_end - self.part_begin;
 					__syncwarp();
-					int maxi = round_up(nparts,WARP_SIZE);
+					int maxi = round_up(nparts, WARP_SIZE);
 					for (int snk_i = tid; snk_i < maxi; snk_i += WARP_SIZE) {
 						for (int src_i = snk_i - tid; src_i < nparts; src_i++) {
 							int src_link = 0;
 							float R2;
-							auto& snk_grp = shmem.snk_sg[min(snk_i,nparts-1)];
+							auto& snk_grp = shmem.snk_sg[min(snk_i, nparts - 1)];
 							auto& src_grp = shmem.snk_sg[src_i];
 							if (src_i > snk_i && snk_i < nparts) {
 								const float dx = shmem.snk_x[snk_i] - shmem.snk_x[src_i];
@@ -627,11 +616,12 @@ __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, arr
 	ASSERT(returns.size() == 0);
 	ASSERT(phase.size() == 0);
 	ASSERT(self_index.size() == 0);
+	(lists + bid)->~rockstar_workspace();
 
 }
 
-vector<size_t> rockstar_find_subgroups_gpu(vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles part_ptrs, const vector<int>& selves,
-		const vector<vector<int>>& checklists, float link_len, int& next_index) {
+vector<size_t> rockstar_find_subgroups_gpu(vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles part_ptrs,
+		const vector<int>& selves, const vector<vector<int>>& checklists, float link_len, int& next_index) {
 	PRINT("%i blocks\n", selves.size());
 	vector<int> active_cnts(selves.size());
 	vector<array<int, ROCKSTAR_MAX_LIST>, pinned_allocator<array<int, ROCKSTAR_MAX_LIST>>> dev_checklists(selves.size());

@@ -19,14 +19,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #pragma once
 
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/device_vector.hpp>
 
 #ifdef __CUDACC__
-
-template<class T, int SIZE, int DEPTH>
+template<class T>
 class stack_vector {
-	fixedcapvec<T,SIZE> data;
-	fixedcapvec<int,DEPTH> bounds;
+	device_vector<T> data;
+	device_vector<int> bounds;
 	__device__ inline int begin() const {
 		ASSERT(bounds.size() >= 2);
 		return bounds[bounds.size() - 2];
@@ -39,10 +38,10 @@ public:
 	__device__ inline int depth() const {
 		return bounds.size() - 2;
 	}
-	__device__ inline void destroy() {
+/*	__device__ inline void destroy() {
 		bounds.destroy();
 		data.destroy();
-	}
+	}*/
 	__device__ inline void initialize() {
 		const int& tid = threadIdx.x;
 		bounds.resize(2);
@@ -112,5 +111,5 @@ public:
 	}
 };
 
-#endif
 
+#endif

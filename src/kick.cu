@@ -28,6 +28,7 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/stars.hpp>
+#include <cosmictiger/device_vector.hpp>
 
 #include <atomic>
 
@@ -38,18 +39,17 @@
  static __managed__ double kick_time;*/
 
 struct cuda_lists_type {
-	stack_vector<int, ECHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
-	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
-	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
-	fixedcapvec<int, MULTLIST_SIZE> multlist;
-	fixedcapvec<expansion<float>, CUDA_MAX_DEPTH> L;
-	fixedcapvec<int, PARTLIST_SIZE> partlist;
-	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
-	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
-	fixedcapvec<array<fixed32, NDIM>, CUDA_MAX_DEPTH> Lpos;
-	fixedcapvec<int, CUDA_MAX_DEPTH> phase;
-	fixedcapvec<int, CUDA_MAX_DEPTH> self;
-
+	stack_vector<int> echecks;
+	stack_vector<int> dchecks;
+	device_vector<int> leaflist;
+	device_vector<int> multlist;
+	device_vector<int> partlist;
+	device_vector<int> nextlist;
+	device_vector<expansion<float>> L;
+	device_vector<kick_return> returns;
+	device_vector<array<fixed32, NDIM>> Lpos;
+	device_vector<int> phase;
+	device_vector<int> self;
 };
 
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
@@ -71,6 +71,7 @@ struct cuda_kick_params {
 __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive,
 		const tree_node& self, float dm_mass, float sph_mass, float h) {
 //	auto tm = clock64();
+
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -221,13 +222,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count,
 		int* next_item, int ntrees) {
-//	auto tm1 = clock64();
+	const int& tid = threadIdx.x;
+	const int& bid = blockIdx.x;
+	new (lists + bid) cuda_lists_type();
 	const bool sph = data.sph;
 	const bool vsoft = data.vsoft;
 	const float dm_mass = !sph ? 1.0f : global_params.dm_mass;
 	const float sph_mass = global_params.sph_mass;
-	const int& tid = threadIdx.x;
-	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	auto& L = lists[bid].L;
@@ -261,17 +262,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
-	L.initialize();
-	dchecks.initialize();
-	echecks.initialize();
-	nextlist.initialize();
-	multlist.initialize();
-	leaflist.initialize();
-	nextlist.initialize();
-	phase.initialize();
-	Lpos.initialize();
-	returns.initialize();
-	self_index.initialize();
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -662,6 +652,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	ASSERT(Lpos.size() == 0);
 	ASSERT(phase.size() == 0);
 	ASSERT(self_index.size() == 0);
+	(lists + bid)->~cuda_lists_type();
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
