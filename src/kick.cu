@@ -20,7 +20,6 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/defs.hpp>
-#include <cosmictiger/fixedcapvec.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
