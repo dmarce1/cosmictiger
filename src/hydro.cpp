@@ -19,6 +19,7 @@
 
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/domain.hpp>
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/view.hpp>
@@ -47,32 +48,11 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	double t0 = tmax / nsteps;
 	int step = 0;
 	int main_step = 0;
-	float e0, ent0;
 	const double m = get_options().sph_mass;
+	double etot0;
 	do {
-		double ekin = 0.0;
-		double eint = 0.0;
-		double xmom = 0.0, ymom = 0.0, zmom = 0.0;
-		for (part_int i = 0; i < sph_particles_size(); i++) {
-			const int k = sph_particles_dm_index(i);
-			const double vx = particles_vel(XDIM, k);
-			const double vy = particles_vel(YDIM, k);
-			const double vz = particles_vel(ZDIM, k);
-			xmom += m * vx;
-			ymom += m * vy;
-			zmom += m * vz;
-			const double e = sph_particles_eint(i);
-			ekin += 0.5 * m * sqr(vx, vy, vz);
-			eint += m * e;
-		}
+		domains_rebound();
 		FILE* fp = fopen("energy.dat", "at");
-		const double etot = ekin + eint;
-		double etot0;
-		if (t == 0.0) {
-			etot0 = etot;
-		}
-		fprintf(fp, "%e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, (etot - etot0) / etot);
-		fclose(fp);
 		int minrung = min_rung(itime);
 		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
@@ -81,15 +61,44 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		}
 		double dummy;
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
-		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
-		int maxrung = rc2.max_rung;
+		kick_return kr;
+		sph_run_return rc2;
+		int maxrung;
+		if (get_options().gravity) {
+			kr = kick_step(minrung, 1.0, t0, 0.55, step == 0, minrung == 0).first;
+			rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
+			maxrung = std::max((int) rc2.max_rung, (int) kr.max_rung);
+		} else {
+			kr.pot = 0.0;
+			rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
+			maxrung = std::max((int) rc2.max_rung, (int) kr.max_rung);
+		}
+		if (minrung == 0) {
+			double ekin = 0.0;
+			double eint = 0.0;
+			double xmom = 0.0, ymom = 0.0, zmom = 0.0;
+			for (part_int i = 0; i < sph_particles_size(); i++) {
+				const int k = sph_particles_dm_index(i);
+				const double vx = particles_vel(XDIM, k);
+				const double vy = particles_vel(YDIM, k);
+				const double vz = particles_vel(ZDIM, k);
+				xmom += m * vx;
+				ymom += m * vy;
+				zmom += m * vz;
+				const double e = sph_particles_eint(i);
+				ekin += 0.5 * m * sqr(vx, vy, vz);
+				eint += m * e;
+			}
+			const double etot = ekin + eint + kr.pot;
+			if (t == 0.0) {
+				etot0 = etot;
+			}
+			fprintf(fp, "%e %e %e %e %e %e\n", t, kr.pot, ekin, eint, etot, (etot - etot0) / etot);
+			fclose(fp);
+		}
 		double dt = t0 / (1 << maxrung);
 		auto dr = drift(1.0, dt, t, t + dt, tmax);
 		itime = inc(itime, maxrung);
-		if (t == 0.0) {
-			e0 = rc1.ekin + rc1.etherm;
-			ent0 = rc1.ent;
-		}
 		t += dt;
 		PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
 		step++;
@@ -309,12 +318,12 @@ void hydro_sod_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 0.125;
 	double rho1 = 1.0;
-	double vx1 = 0.0;
-	double vy1 = 0.0;
-	double vz1 = 0.0;
-	double vx0 = 0.0;
-	double vy0 = -0.0;
-	double vz0 = -0.0e-1;
+	double vx1 = 1.0;
+	double vy1 = 2.0;
+	double vz1 = 3.0;
+	double vx0 = -3.0;
+	double vy0 = 2.0;
+	double vz0 = -1.0e-1;
 	double p0 = 1.0e-1;
 	double p1 = 1.0;
 	sod_init_t sod;
@@ -336,29 +345,28 @@ void hydro_sod_test() {
 	sod.pl = p1;
 	sod.pr = p0;
 	sod.gamma = get_options().gamma;
-	constexpr float eta = 0.0;
+	constexpr float eta = 0.5;
 	const double Ne = get_options().neighbor_number;
 	PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * right_dim, 2 * left_dim, rho0 / (m * Ne) * (4.0 * M_PI / 3.0),
 			rho1 / (m * Ne) * (4.0 * M_PI / 3.0));
-	dx = 0.25 / left_dim;
-	for (int ix = 0; ix < 2 * left_dim; ix++) {
-		for (int iy = 0; iy < 4 * left_dim; iy++) {
-			for (int iz = 0; iz < 4 * left_dim; iz++) {
+	for (int ix = 0; ix < left_dim; ix++) {
+		for (int iy = 0; iy < 2 * left_dim; iy++) {
+			for (int iz = 0; iz < 2 * left_dim; iz++) {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				double eint = p1 / rho1 / (get_options().gamma - 1);
+				double ent = p1 / rho1 / (get_options().gamma - 1.);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx1;
-				sph_particles_vel(YDIM, i) = vy1;
-				sph_particles_vel(ZDIM, i) = vz1;
+				sph_particles_vel(XDIM, i) = vx0;
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
-				sph_particles_eint(i) = eint;
+				sph_particles_eint(i) = ent;
 				i++;
 				//			PRINT("%i\n", i);
 				x = (ix + 0.5) * dx;
@@ -369,11 +377,11 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx1;
-				sph_particles_vel(YDIM, i) = vy1;
-				sph_particles_vel(ZDIM, i) = vz1;
+				sph_particles_vel(XDIM, i) = vx0;
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
-				sph_particles_eint(i) = eint;
+				sph_particles_eint(i) = ent;
 				i++;
 				//			PRINT("%i\n", i);
 			}
@@ -387,19 +395,19 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				double eint = p0 / rho0 / (get_options().gamma - 1);
+				double ent = p0 / rho0 / (get_options().gamma - 1.);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx0;
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = vz0;
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_eint(i) = eint;
+				sph_particles_eint(i) = ent;
 				//		PRINT("%i\n", i);
 				i++;
 				x = (ix + 0.5) * dx;
@@ -410,19 +418,19 @@ void hydro_sod_test() {
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
 				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
 				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx0;
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = vz0;
+				sph_particles_vel(XDIM, i) = 0;
+				sph_particles_vel(YDIM, i) = 0;
+				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_eint(i) = eint;
+				sph_particles_eint(i) = ent;
 				i++;
 			}
 		}
 	}
-	constexpr float t = 10.0;
+	constexpr float t = 10.12;
 	constexpr int N = 1000;
-	hydro_driver(t, 1);
+	hydro_driver(t, 32);
 	FILE* fp = fopen("sod.txt", "wt");
 	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
 	double norm1 = 0.0, norm2 = 0.0;
@@ -625,7 +633,125 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(.25, 1024);
+	hydro_driver(1.00, 128);
+}
+
+void collapse_test() {
+	part_int nparts_total = pow(get_options().parts_dim, 3);
+	double rho0 = 1.0;
+	double p0 = 1.0e-5;
+	double sigma = 0.01;
+	double radius = 0.25;
+	auto opts = get_options();
+	part_int ndim = get_options().parts_dim;
+	part_int nparts = std::pow(ndim, NDIM);
+	ndim = pow(nparts / 2, 1. / 3.);
+	nparts = 2 * ndim * ndim * ndim + 1;
+	opts.sph_mass = rho0 / nparts;
+	opts.GM = 1.0 * opts.sph_mass;
+	const double m = opts.sph_mass;
+	set_options(opts);
+	part_int i = 0;
+	const double dx = 1.0 / ndim;
+	for (int ix = 0; ix < ndim; ix++) {
+		for (int iy = 0; iy < ndim; iy++) {
+			for (int iz = 0; iz < ndim; iz++) {
+				double x = (ix + 0.5) * dx;
+				double y = (iy + 0.5) * dx;
+				double z = (iz + 0.5) * dx;
+				double r = sqrt(sqr(x - 0.4, y - 0.555, z - 0.5));
+				double eint = p0 / rho0 / (get_options().gamma - 1);
+				double vx = 0.0;
+				double vy = 0.0;
+				double vz = 0.0;
+				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				if (r < radius) {
+					sph_particles_resize(sph_particles_size() + 1);
+					sph_particles_smooth_len(i) = h;
+					sph_particles_pos(XDIM, i) = x;
+					sph_particles_pos(YDIM, i) = y;
+					sph_particles_pos(ZDIM, i) = z;
+					sph_particles_vel(XDIM, i) = vx;
+					sph_particles_vel(YDIM, i) = vy;
+					sph_particles_vel(ZDIM, i) = vz;
+					sph_particles_rung(i) = 0;
+					sph_particles_eint(i) = eint;
+					i++;
+				}
+				x = (ix + 0.0) * dx;
+				y = (iy + 0.0) * dx;
+				z = (iz + 0.0) * dx;
+				r = sqrt(sqr(x - 0.4, y - 0.555, z - 0.5));
+				if (r < radius) {
+					eint = p0 / rho0 / (get_options().gamma - 1);
+					vx = 0.0;
+					vy = 0.0;
+					vz = 0.0;
+					sph_particles_resize(sph_particles_size() + 1);
+					sph_particles_smooth_len(i) = h;
+					sph_particles_pos(XDIM, i) = x;
+					sph_particles_pos(YDIM, i) = y;
+					sph_particles_pos(ZDIM, i) = z;
+					sph_particles_vel(XDIM, i) = vx;
+					sph_particles_vel(YDIM, i) = vy;
+					sph_particles_vel(ZDIM, i) = vz;
+					sph_particles_rung(i) = 0;
+					sph_particles_eint(i) = eint;
+					i++;
+				}
+			}
+		}
+	}
+	/*	for (int ix = 0; ix < ndim; ix++) {
+	 for (int iy = 0; iy < ndim; iy++) {
+	 for (int iz = 0; iz < ndim; iz++) {
+	 double x = (ix + 0.75) * dx;
+	 double y = (iy + 0.75) * dx;
+	 double z = (iz + 0.75) * dx;
+	 double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+	 double eint = p0 / rho0 / (get_options().gamma - 1);
+	 double vx = 0.0;
+	 double vy = 0.0;
+	 double vz = 0.0;
+	 double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+	 if (r < radius) {
+	 sph_particles_resize(sph_particles_size() + 1);
+	 sph_particles_smooth_len(i) = h;
+	 sph_particles_pos(XDIM, i) = x;
+	 sph_particles_pos(YDIM, i) = y;
+	 sph_particles_pos(ZDIM, i) = z;
+	 sph_particles_vel(XDIM, i) = vx;
+	 sph_particles_vel(YDIM, i) = vy;
+	 sph_particles_vel(ZDIM, i) = vz;
+	 sph_particles_rung(i) = 0;
+	 sph_particles_eint(i) = eint;
+	 i++;
+	 }
+	 x = (ix + 0.25) * dx;
+	 y = (iy + 0.25) * dx;
+	 z = (iz + 0.25) * dx;
+	 r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+	 eint = p0 / rho0 / (get_options().gamma - 1);
+	 vx = 0.0;
+	 vy = 0.0;
+	 vz = 0.0;
+	 if (r < radius) {
+	 sph_particles_resize(sph_particles_size() + 1);
+	 sph_particles_smooth_len(i) = h;
+	 sph_particles_pos(XDIM, i) = x;
+	 sph_particles_pos(YDIM, i) = y;
+	 sph_particles_pos(ZDIM, i) = z;
+	 sph_particles_vel(XDIM, i) = vx;
+	 sph_particles_vel(YDIM, i) = vy;
+	 sph_particles_vel(ZDIM, i) = vz;
+	 sph_particles_rung(i) = 0;
+	 sph_particles_eint(i) = eint;
+	 i++;
+	 }
+	 }
+	 }
+	 }*/
+	hydro_driver(100.00, 128);
 }
 
 void hydro_wave_test() {

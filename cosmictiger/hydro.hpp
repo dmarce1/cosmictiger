@@ -27,3 +27,4 @@ void hydro_helmholtz_test();
 void hydro_rt_test();
 void hydro_disc_test();
 void hydro_blast_test();
+void collapse_test();

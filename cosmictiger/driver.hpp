@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/time.hpp>
 #include <cstdio>
 #include <cosmictiger/sph.hpp>
+#include <cosmictiger/kick.hpp>
 
 struct driver_params {
 	double a;
@@ -60,6 +61,7 @@ struct driver_params {
 void write_checkpoint(driver_params params);
 driver_params read_checkpoint();
 sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat, bool verbose = true);
+std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval);
 
 
 void driver();

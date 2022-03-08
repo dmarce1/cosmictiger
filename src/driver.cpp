@@ -349,7 +349,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			max_rung = kr.max_rung;
 
 			if (stars & !glass) {
-				stars_find(scale, dt, minrung, iter);
+//				stars_find(scale, dt, minrung, iter);
 			}
 
 			/*	const bool chem = get_options().chem;

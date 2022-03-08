@@ -22,6 +22,7 @@ struct smoothlen_shmem {
 };
 
 #include <cosmictiger/sph_cuda.hpp>
+#include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/constants.hpp>
@@ -35,133 +36,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 
 #define WORKSPACE_SIZE (160*1024)
 #define HYDRO_SIZE (8*1024)
-
-__managed__ cuda_mem* memory;
-
-template<class T>
-class device_vector {
-	int sz;
-	int cap;
-	T* ptr;
-public:
-	__device__ device_vector() {
-		const int& tid = threadIdx.x;
-		__syncthreads();
-		if (tid == 0) {
-			sz = 0;
-			cap = 0;
-			ptr = nullptr;
-		}
-		__syncthreads();
-	}
-	__device__ ~device_vector() {
-		const int& tid = threadIdx.x;
-		__syncthreads();
-		if (tid == 0) {
-			if (ptr) {
-				memory->free(ptr);
-			}
-		}
-		__syncthreads();
-	}
-	__device__ void shrink_to_fit() {
-		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
-		__shared__ T* new_ptr;
-		__syncthreads();
-		int new_cap = max(1024 / sizeof(T), (size_t) 1);
-		while (new_cap < sz) {
-			new_cap *= 2;
-		}
-		if (tid == 0) {
-			if (new_cap < cap) {
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
-				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
-					__trap();
-
-				}
-			}
-		}
-		__syncthreads();
-		if (ptr && new_cap < cap) {
-			for (int i = tid; i < sz; i += block_size) {
-				new_ptr[i] = ptr[i];
-			}
-		}
-		__syncthreads();
-		if (tid == 0 && new_cap < cap) {
-			if (ptr) {
-				memory->free(ptr);
-			}
-			ptr = new_ptr;
-			cap = new_cap;
-		}
-		__syncthreads();
-	}
-	__device__
-	void resize(int new_sz) {
-		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
-		if (new_sz <= cap) {
-			__syncthreads();
-			if (tid == 0) {
-				sz = new_sz;
-			}
-			__syncthreads();
-		} else {
-			__shared__ T* new_ptr;
-			__syncthreads();
-			int new_cap = max(1024 / sizeof(T), (size_t) 1);
-			if (tid == 0) {
-				while (new_cap < new_sz) {
-					new_cap *= 2;
-				}
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
-				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
-					__trap();
-
-				}
-			}
-			__syncthreads();
-			if (ptr) {
-				for (int i = tid; i < sz; i += block_size) {
-					new_ptr[i] = ptr[i];
-				}
-			}
-			__syncthreads();
-			if (tid == 0) {
-				if (ptr) {
-					memory->free(ptr);
-				}
-				ptr = new_ptr;
-				sz = new_sz;
-				cap = new_cap;
-			}
-			__syncthreads();
-		}
-	}
-	__device__
-	int size() const {
-		return sz;
-	}
-	__device__ T& operator[](int i) {
-		if (i > sz) {
-			PRINT("Bound exceeded in device_vector\n");
-			__trap();
-		}
-		return ptr[i];
-	}
-	__device__
-	         const T& operator[](int i) const {
-		if (i > sz) {
-			PRINT("Bound exceeded in device_vector\n");
-			__trap();
-		}
-		return ptr[i];
-	}
-};
 
 struct smoothlen_workspace {
 	device_vector<fixed32> x;
@@ -1160,9 +1034,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hy
 						dvy_con += params.gy;
 					}
 					if (data.gravity && params.phase == 0) {
-						data.gx_snk[snki] += gx;
-						data.gy_snk[snki] += gy;
-						data.gz_snk[snki] += gz;
+//						data.gx_snk[snki] += gx;
+//						data.gy_snk[snki] += gy;
+//						data.gz_snk[snki] += gz;
 					}
 					data.deint_con[snki] = deint_con;										// 1
 					data.dvx_con[snki] = dvx_con + data.gx_snk[snki];										// 1
@@ -1840,8 +1714,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static bool first = true;
 	static char* workspace_ptr;
 	if (first) {
-		CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-		new (memory) cuda_mem(4ULL * 1024ULL * 1024ULL * 1024ULL);
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count() * 2 / 3;
@@ -1915,6 +1787,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 }
 //	memory->reset();
 	(cudaFree(reduce));
-	memory->reset();
+//	memory->reset();
 	return rc;
 }

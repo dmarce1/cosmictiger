@@ -54,3 +54,10 @@ public:
 	void reset();
 };
 
+
+void cuda_mem_init(size_t heap_size);
+__device__
+void* cuda_mem_allocate(size_t sz);
+__device__
+void cuda_mem_free(void* ptr);
+

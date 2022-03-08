@@ -94,6 +94,7 @@ bool cuda_mem::create_new_allocations(int bin) {
 		for (int i = 0; i < nallocs; i++) {
 			char* ptr = base + i * alloc_size;
 			*((size_t*) ptr) = bin;
+			__threadfence();
 			push(bin, ptr + sizeof(size_t));
 		}
 		return true;
@@ -149,5 +150,23 @@ void cuda_mem::reset() {
 
 cuda_mem::~cuda_mem() {
 	CUDA_CHECK(cudaFree(heap));
+}
+
+
+__managed__ cuda_mem* memory;
+
+void cuda_mem_init(size_t heap_size) {
+	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
+	new (memory) cuda_mem(4ULL * 1024ULL * 1024ULL * 1024ULL);
+}
+
+__device__
+void* cuda_mem_allocate(size_t sz) {
+	return memory->allocate(sz);
+}
+
+__device__
+void cuda_mem_free(void* ptr) {
+	return memory->free(ptr);
 }
 

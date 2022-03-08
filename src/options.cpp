@@ -110,13 +110,13 @@ bool process_options(int argc, char *argv[]) {
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
-			("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
-			("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
-			("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-			("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
-			("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
-			("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
-			("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
+	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
+	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
+	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
+	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
+	("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
+	("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
+	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(90), "neighbor number") //
@@ -296,10 +296,14 @@ bool process_options(int argc, char *argv[]) {
 	if (opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
 		opts.chem = opts.gravity = opts.conduction = opts.diffusion = false;
 		opts.gamma = 5. / 3.;
-		if( opts.test == "disc") {
+		if (opts.test == "disc") {
 			opts.sph_mass = 1.0;
 			opts.gcentral = 1.0;
 		}
+	}
+	if (opts.test == "collapse") {
+		opts.chem = opts.conduction = opts.diffusion = false;
+		opts.gamma = 5. / 3.;
 	}
 	kernel_set_type(opts.kernel);
 	set_options(opts);
