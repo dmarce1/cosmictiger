@@ -1542,23 +1542,14 @@ __global__ void sph_cuda_courant(sph_run_params params, sph_run_cuda_data data, 
 					float S = fmaxf(0.f, -div_v) * fvel;
 					float dalpha_dt = ainv * ((SPH_ALPHA0 - alpha) * t0inv + alpha_switch(alpha) * S);
 					data.dalpha_con[snki] = dalpha_dt;
-
+					max_rung_hydro = max(max_rung_hydro, rung_hydro);
+					max_rung_grav = max(max_rung_grav, rung_grav);
+					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+					max_rung = max(max_rung, rung);
 					if (rung < 0 || rung >= MAX_RUNG) {
 						if (tid == 0) {
 							PRINT("Rung out of range \n");
 							__trap();
-						}
-					}
-					if (stars) {
-						bool is_eligible = h_i < data.hstar0;
-						if (is_eligible) {
-							rung = max(max((int) rung_grav, max(params.min_rung, (int) rung - 1)), 1);
-							max_rung = max(max_rung, rung);
-						} else {
-							max_rung_hydro = max(max_rung_hydro, rung_hydro);
-							max_rung_grav = max(max_rung_grav, rung_grav);
-							rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
-							max_rung = max(max_rung, rung);
 						}
 					}
 				}
