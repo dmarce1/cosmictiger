@@ -154,7 +154,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                               const T& operator[](int i) const {
+	                                const T& operator[](int i) const {
 		if (i > sz) {
 			PRINT("Bound exceeded in device_vector\n");
 			__trap();
@@ -864,13 +864,7 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 
 __device__ float alpha_switch(float x) {
 	constexpr float d = 0.01f;
-	if (x < 1.f - d) {
-		return 1.0f;
-	} else if (x < 1.f) {
-		return 1.f - (x - (1.f - d)) / (d);
-	} else {
-		return 0.f;
-	}
+	return fmaxf(fminf(1.f, 1.f - (x - (1.f - d)) / (d)), -1.f);
 }
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, hydro_workspace* workspaces, sph_reduction* reduce) {
