@@ -57,12 +57,10 @@ struct line_id_hash_hi {
 struct difco_data {
 	float difco;
 	float kappa;
-	char rung;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & difco;
 		arc & kappa;
-		arc & rung;
 	}
 };
 
@@ -169,12 +167,13 @@ double sph_particles_apply_updates(int minrung, int phase, float t0) {
 				const float dt = t0 / (1<<rung);
 				if( rung >= minrung) {
 					switch(phase) {
-						case 0:
-						break;
-						sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt;
-						sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt;
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
+						case 0: {
+							break;
+							sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt;
+							sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
+							}
 						}
 						break;
 						case 1: {
@@ -191,16 +190,17 @@ double sph_particles_apply_updates(int minrung, int phase, float t0) {
 							}
 						}
 						break;
-						case 2:
-						/*	sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
-						 sph_particles_deint_pred(i) = sph_particles_deint_con(i);
-						 for( int dim =0; dim < NDIM; dim++) {
-						 sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
-						 }*/
-						sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt;
-						sph_particles_eint(i) +=sph_particles_deint_con(i) *dt;
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+						case 2: {
+							sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
+							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
+							for( int dim =0; dim < NDIM; dim++) {
+								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+							}
+							sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt;
+							sph_particles_eint(i) +=sph_particles_deint_con(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+							}
 						}
 						break;
 					}}
@@ -333,9 +333,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dc[i], sph_particles_dc[j]);
 	std::swap(sph_particles_h[i], sph_particles_h[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
-	if (stars) {
-		std::swap(sph_particles_ts[i], sph_particles_ts[j]);
-	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_g[dim][i], sph_particles_g[dim][j]);
 		std::swap(sph_particles_dv1[dim][i], sph_particles_dv1[dim][j]);
@@ -414,7 +411,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fp, new_capacity, true);
-		sph_particles_array_resize(sph_particles_or, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cond, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
@@ -429,9 +425,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_dvec, new_capacity, true);
 		sph_particles_array_resize(sph_particles_vec0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_vec, new_capacity, false);
-#ifdef CHECK_MUTUAL_SORT
-		sph_particles_array_resize(sph_particles_tst, new_capacity, false);
-#endif
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv1[dim], new_capacity, true);
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
@@ -441,10 +434,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			for (int f = 0; f < NCHEMFRACS; f++) {
 				sph_particles_array_resize(sph_particles_chem[f], new_capacity, false);
 			}
-		}
-		if (stars) {
-			sph_particles_array_resize(sph_particles_ts, new_capacity, true);
-			sph_particles_array_resize(sph_particles_tc, new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -466,9 +455,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_dalpha_con(oldsz + i) = 0.0f;
 		sph_particles_dalpha_pred(oldsz + i) = 0.0f;
 		sph_particles_alpha(oldsz + i) = SPH_ALPHA0;
-		if (stars) {
-			sph_particles_tdyn(i) = 1e38f;
-		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 			sph_particles_dvel_con(dim, oldsz + i) = 0.0f;
@@ -481,9 +467,6 @@ void sph_particles_free() {
 	const bool stars = get_options().stars;
 	free(sph_particles_dm);
 	free(sph_particles_vec);
-#ifdef CHECK_MUTUAL_SORT
-	free(sph_particles_tst);
-#endif
 	bool cuda = false;
 #ifdef USE_CUDA
 #ifdef SPH_TOTAL_ENERGY
@@ -500,7 +483,6 @@ void sph_particles_free() {
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
 		CUDA_CHECK(cudaFree(sph_particles_f0));
-		CUDA_CHECK(cudaFree(sph_particles_or));
 		CUDA_CHECK(cudaFree(sph_particles_dc));
 		CUDA_CHECK(cudaFree(sph_particles_a));
 		CUDA_CHECK(cudaFree(sph_particles_fp));
@@ -509,7 +491,6 @@ void sph_particles_free() {
 //			CUDA_CHECK(cudaFree(sph_particles_fY));
 //			CUDA_CHECK(cudaFree(sph_particles_sn));
 //			CUDA_CHECK(cudaFree(sph_particles_dz));
-			CUDA_CHECK(cudaFree(sph_particles_tc));
 		}
 		CUDA_CHECK(cudaFree(sph_particles_vec0));
 		CUDA_CHECK(cudaFree(sph_particles_dvec));
@@ -532,7 +513,6 @@ void sph_particles_free() {
 		free(sph_particles_e);
 		free(sph_particles_dc);
 		free(sph_particles_fp);
-		free(sph_particles_or);
 		free(sph_particles_de1);
 		free(sph_particles_de2);
 		free(sph_particles_da1);
@@ -545,11 +525,6 @@ void sph_particles_free() {
 		free(sph_particles_vec0);
 		free(sph_particles_dvec);
 		free(sph_particles_a);
-		if (stars) {
-			free(sph_particles_ts);
-//			free(sph_particles_dz);
-			free(sph_particles_tc);
-		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			free(sph_particles_dv1[NDIM]);
 			free(sph_particles_dv2[NDIM]);
@@ -1074,7 +1049,6 @@ void sph_particles_load(FILE* fp) {
 		}
 	}
 	if (stars) {
-		FREAD(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
 		stars_load(fp);
 	}
 }
@@ -1103,12 +1077,11 @@ void sph_particles_save(FILE* fp) {
 		}
 	}
 	if (stars) {
-		fwrite(sph_particles_ts, sizeof(float), sph_particles_size(), fp);
 		stars_save(fp);
 	}
 }
 
-void sph_particles_global_read_difcos(particle_global_range range, float* difcos, float* kappas, char* oldrungs, part_int offset) {
+void sph_particles_global_read_difcos(particle_global_range range, float* difcos, float* kappas, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -1117,7 +1090,6 @@ void sph_particles_global_read_difcos(particle_global_range range, float* difcos
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
 				difcos[j] = sph_particles_difco(i);
-				oldrungs[j] = sph_particles_old_rung(i);
 				kappas[j] = sph_particles_kappa(i);
 			}
 		} else {
@@ -1134,7 +1106,6 @@ void sph_particles_global_read_difcos(particle_global_range range, float* difcos
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
 					difcos[dest_index] = ptr[src_index].difco;
-					oldrungs[dest_index] = ptr[src_index].rung;
 					kappas[dest_index] = ptr[src_index].kappa;
 					dest_index++;
 				}
@@ -1172,7 +1143,6 @@ static vector<difco_data> sph_particles_fetch_difco_cache_line(part_int index) {
 	for (part_int i = begin; i < end; i++) {
 		line[i - begin].difco = sph_particles_difco(i);
 		line[i - begin].kappa = sph_particles_kappa(i);
-		line[i - begin].rung = sph_particles_old_rung(i);
 	}
 	return line;
 }

@@ -139,6 +139,7 @@ set(cosmictiger_header_files
     cosmictiger/particles.hpp
     cosmictiger/power.hpp
     cosmictiger/profiler.hpp
+    cosmictiger/rand.hpp
     cosmictiger/range.hpp
     cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp

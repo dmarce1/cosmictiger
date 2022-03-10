@@ -90,9 +90,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
-#ifdef SPH_TOTAL_ENERGY
-	auto* sph_energy = data.sph_energy;
-#endif
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;

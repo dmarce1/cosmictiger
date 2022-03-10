@@ -1655,7 +1655,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
 								switch (params.run_type) {
 									case SPH_RUN_DIFFUSION:
-									sph_particles_global_read_difcos(node.global_part_range(), host_difco.data(), host_kappa.data(), host_oldrung.data(), offset);
+									sph_particles_global_read_difcos(node.global_part_range(), host_difco.data(), host_kappa.data(), offset);
 									sph_particles_global_read_difvecs(node.global_part_range(), host_difvec.data(), offset);
 									break;
 								}
@@ -1869,7 +1869,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.chem = get_options().chem;
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
-	cuda_data.tcool_snk = &sph_particles_tcool(0);
+//cuda_data.tcool_snk = &sph_particles_tcool(0);
 	cuda_data.dvec_snk = &sph_particles_d_dif_vec(0);
 	cuda_data.kappa_snk = &sph_particles_kappa(0);
 	cuda_data.deint_pred = &sph_particles_deint_pred(0);
@@ -1896,7 +1896,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.Z_snk = &sph_particles_Z(0);
 	cuda_data.h0 = 2.0 * get_options().hsoft;
 	cuda_data.f0_snk = &sph_particles_fpre(0);
-	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
+//	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
 //	cuda_data.Yform_snk = &sph_particles_formY(0);
 //	cuda_data.Zform_snk = &sph_particles_formZ(0);
 	cuda_data.eint_snk = &sph_particles_eint(0);
@@ -2130,7 +2130,6 @@ void sph_init_diffusion() {
 			b = (size_t) proc * sph_particles_size() / nthreads;
 			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
-				sph_particles_old_rung(i) = particles_rung(sph_particles_dm_index(i));
 				dif_vector vec;
 				const float h = sph_particles_smooth_len(i);
 				const float gamma = sph_particles_gamma(i);

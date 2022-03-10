@@ -167,8 +167,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool glass = get_options().glass;
 	if (phase == 0) {
 
-		stars_statistics(scale);
-		stars_remove(scale, dt, minrung, iter);
+//		stars_statistics(scale);
+//		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)
 			PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -224,16 +224,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-		sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
+	/*	sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
 		tm.reset();
 		tm.start();
 		sph_run(sparams, true);
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
-		tm.reset();
+		tm.reset();*/
 
-		sparams.phase = 1;
+/*		sparams.phase = 1;
 		do {
 			sparams.set = SPH_SET_ACTIVE;
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
@@ -266,37 +266,37 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 			tm.reset();
 			kr = sph_run_return();
-		} while (cont);
+		} while (cont);*/
 
 	} else {
 		sparams.phase = 0;
 		if (!glass) {
 			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 0, t0);
+	//			sph_particles_apply_updates(minrung, 0, t0);
 			}
 		}
 		if (!glass) {
-			double error;
+	/*		double error;
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
 			sph_run(sparams, true);
 			tm.stop();
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-			tm.reset();
+			tm.reset();*/
 			//do {
 
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.start();
-			sph_run(sparams, true);
+	//		sph_run(sparams, true);
 			tm.stop();
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 			tm.reset();
 			if (tau != 0.0) {
-				error = sph_particles_apply_updates(minrung, 1, t0);
+		//		sph_particles_apply_updates(minrung, 1, t0);
 			}
-			PRINT("%e\n", error);
+/*			PRINT("%e\n", error);
 			sparams.phase = 1;
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
@@ -304,11 +304,11 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.stop();
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-			tm.reset();
+			tm.reset();*/
 			// } while (error > SPH_HYDRO_TOLER);*/
 
-			sparams.phase = 0;
-			if (diff) {
+//			sparams.phase = 0;
+		/*	if (diff) {
 				sph_init_diffusion();
 				sparams.run_type = SPH_RUN_DIFFUSION;
 				float err;
@@ -334,7 +334,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
-			}
+			}*/
 
 		}
 		sparams.phase = 1;
@@ -348,7 +348,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			max_rung = kr.max_rung;
 
-			bool rc = true;
+/*			bool rc = true;
 			while (rc) {
 				sparams.run_type = SPH_RUN_RUNGS;
 				tm.start();
@@ -357,7 +357,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
 				tm.reset();
-			}
+			}*/
 			if (stars) {
 //				stars_find(scale, dt, minrung, iter);
 			}
@@ -535,7 +535,9 @@ void driver() {
 	} else {
 		output_time_file();
 		if (glass) {
-			initialize_glass();
+			PRINT( "Glass not implemented\n");
+			abort();
+		//	initialize_glass();
 		} else {
 			initialize(get_options().z0);
 		}
@@ -557,6 +559,7 @@ void driver() {
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
+		write_checkpoint(params);
 		dr = drift(a0, 0.0, 0.0, 0.0, 0.0);
 		PRINT("Initial etherm = %e\n", dr.therm);
 

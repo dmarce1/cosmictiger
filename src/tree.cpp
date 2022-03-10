@@ -584,7 +584,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		particles_memadvise_gpu();
 #endif
 	}
-	//if (depth == 0)
+	if (depth == 0) {
+		PRINT( "total nodes = %i\n", rc.node_count);
+	}
 //		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
 }

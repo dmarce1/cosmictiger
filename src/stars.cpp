@@ -93,12 +93,9 @@ void stars_find(float a, float dt, int minrung, int step) {
 			for( part_int i = b; i < e; i++) {
 				bool make_cloud = false;
 				if( 1/a-1 < 20.0 && sph_particles_smooth_len(i) < get_options().hsoft / a ) {
-					float tdyn = sph_particles_tdyn(i);
-					float p = 1.f - expf(-dt/tdyn);
 					make_cloud = true;
 				}
 				if( make_cloud ) {
-					sph_particles_tdyn(i) = 0.0;
 					star_particle star;
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
@@ -148,7 +145,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 	PRINT("Creating stars\n");
 	std::sort(indices.begin(), indices.end());
 	for (auto& i : indices) {
-		while (sph_particles_tdyn(sph_particles_size() - 1) == 0.f && sph_particles_size()) {
+		while (sph_particles_smooth_len(sph_particles_size() - 1) < get_options().hsoft / a && sph_particles_size()) {
 			sph_particles_resize(sph_particles_size() - 1, false);
 		}
 		if (i < sph_particles_size()) {

@@ -565,7 +565,7 @@ static void fft3d_phase1() {
 			fftwf_complex out[N / 2 + 1];
 			float in[N];
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftwf_plan_dft_r2c_1d(N, in, out, 0);
+			p = fftwf_plan_dft_r2c_1d(N, in, out, FFTW_ESTIMATE );
 			lock.unlock();
 			auto i = j;
 			for (i[1] = real_mybox.begin[1]; i[1] != real_mybox.end[1]; i[1]++) {
@@ -647,7 +647,7 @@ static void fft3d_phase3() {
 			fftwf_complex in[N / 2 + 1];
 			float out[N];
 			std::unique_lock<mutex_type> lock(mtx);
-			p = fftwf_plan_dft_c2r_1d(N, in, out, 0);
+			p = fftwf_plan_dft_c2r_1d(N, in, out, FFTW_ESTIMATE );
 			lock.unlock();
 			auto i = j;
 			for (i[1] = cmplx_mybox[ZDIM].begin[1]; i[1] !=cmplx_mybox[ZDIM].end[1]; i[1]++) {

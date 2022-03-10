@@ -68,7 +68,6 @@ struct sph_part_info: public dm_part_info {
 	float Hepp;
 	float He;
 	float Z;
-	float tdyn;
 	float alpha;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
@@ -82,7 +81,6 @@ struct sph_part_info: public dm_part_info {
 		arc & Hepp;
 		arc & He;
 		arc & Z;
-		arc & tdyn;
 		arc & alpha;
 	}
 
@@ -206,9 +204,6 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.h = sph_particles_smooth_len(l);
 								info.rung = particles_rung(i);
 								info.alpha = sph_particles_alpha(l);
-								if( stars ) {
-									info.tdyn = sph_particles_tdyn(l);
-								}
 								if( chem ) {
 									info.Hp = sph_particles_Hp(l);
 									info.Hn = sph_particles_Hn(l);
@@ -386,12 +381,6 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
-			x.resize(0);
-			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].tdyn);
-			}
-//			PRINT( "h and ent\n");
-			DBPutPointvar1(db, "tdyn", "gas", x.data(), x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);

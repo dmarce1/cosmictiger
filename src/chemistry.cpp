@@ -781,7 +781,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				}
 				echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
 				sph_particles_eint(i) = chem.eint;
-				sph_particles_tcool(i) = chem.tcool;
+//				sph_particles_tcool(i) = chem.tcool;
 			}
 		}
 		return echange;
