@@ -164,11 +164,10 @@ double sph_particles_apply_updates(int minrung, int phase, float t0) {
 			for( int i = b; i < e; i++) {
 				const int k = sph_particles_dm_index(i);
 				const auto rung = particles_rung(k);
-				const float dt = t0 / (1<<rung);
+				const float dt = 0.5f * t0 / (1<<rung);
 				if( rung >= minrung) {
 					switch(phase) {
 						case 0: {
-							break;
 							sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt;
 							sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt;
 							for( int dim =0; dim < NDIM; dim++) {
@@ -177,7 +176,6 @@ double sph_particles_apply_updates(int minrung, int phase, float t0) {
 						}
 						break;
 						case 1: {
-							break;
 							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt;
 							sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt;
 							for( int dim =0; dim < NDIM; dim++) {
