@@ -19,8 +19,6 @@
 
 #include <cosmictiger/particles.hpp>
 
-#define REMNANT_TYPE 10
-#define CLOUD_TYPE 11
 
 
 struct star_particle {
@@ -38,36 +36,16 @@ struct star_particle {
 
 struct stars_stats {
 	size_t stars;
-	size_t remnants;
-	size_t clouds;
-	size_t popI;
-	size_t popII;
-	size_t popIII;
 	stars_stats() {
 		stars = 0;
-		remnants = 0;
-		popI = 0;
-		popII = 0;
-		popIII = 0;
-		clouds = 0;
 	}
 	stars_stats& operator+=(const stars_stats& other) {
 		stars += other.stars;
-		remnants += other.remnants;
-		popI += other.popI;
-		popII += other.popII;
-		popIII += other.popIII;
-		clouds += other.clouds;
 		return *this;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & stars;
-		arc & remnants;
-		arc & popI;
-		arc & popII;
-		arc & popIII;
-		arc & clouds;
 	}
 };
 

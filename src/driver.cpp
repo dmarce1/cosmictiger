@@ -167,7 +167,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool glass = get_options().glass;
 	if (phase == 0) {
 
-//		stars_statistics(scale);
+		stars_statistics(scale);
 //		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)

@@ -72,7 +72,6 @@ void stars_find(float a, float dt, int minrung, int step) {
 	}
 	mutex_type mutex;
 	std::atomic<int> found(0);
-	std::atomic<int> remnants(0);
 	vector<part_int> indices;
 	const int nthreads = hpx_hardware_concurrency();
 	vector<gsl_rng *> rnd_gens(nthreads);
@@ -91,11 +90,12 @@ void stars_find(float a, float dt, int minrung, int step) {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
-				bool make_cloud = false;
+				bool make_star = false;
 				if( 1/a-1 < 20.0 && sph_particles_smooth_len(i) < get_options().hsoft / a ) {
-					make_cloud = true;
+					make_star = true;
 				}
-				if( make_cloud ) {
+				if( make_star ) {
+					PRINT( "Making stars\n");
 					star_particle star;
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);
@@ -105,7 +105,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 					star.total_life = star.time_remaining;
 					star.remove = false;
 					star.Y = sph_particles_Y(i);
-					star.type = CLOUD_TYPE;
+					star.type = STAR_TYPE;
 					const int dmi = star.dm_index;
 					found++;
 					particles_type(dmi) = STAR_TYPE;
@@ -113,30 +113,6 @@ void stars_find(float a, float dt, int minrung, int step) {
 					particles_cat_index(dmi) = stars.size();
 					stars.push_back(star);
 					indices.push_back(i);
-				}
-			}
-		}));
-	}
-	hpx::wait_all(futs2.begin(), futs2.end());
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens]() {
-
-			return;
-
-			double dt0 = STAR_FORM_TIME / constants::seconds_to_years;
-			dt0 /= code_to_s;
-			dt0 /= a;
-			const float code_to_s = get_options().code_to_s;
-			const part_int b = (size_t) proc * stars.size() / nthreads;
-			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
-			for( part_int i = b; i < e; i++) {
-				if( stars[i].type == CLOUD_TYPE) {
-					const double p = 1.0 - exp(-dt/dt0);
-					const bool make_star = gsl_rng_uniform_pos(rnd_gens[proc]) < p;
-					if( make_star ) {
-						stars[i].zform = 1.f / a - 1.f;
-						stars[i].type = STAR_TYPE;
-					}
 				}
 			}
 		}));
@@ -163,7 +139,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 		}
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	PRINT("%i stars created  for a total of %i stars and remnants\n", (int ) found, stars.size());
+	PRINT("a total of %i stars\n", stars.size());
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
 	}
@@ -191,19 +167,6 @@ stars_stats stars_statistics(float a) {
 				switch(stars[i].type) {
 					case STAR_TYPE:
 					stats.stars++;
-					if( stars[i].Z < 1e-9) {
-						stats.popIII++;
-					} else if( stars[i].Z < 0.005) {
-						stats.popII++;
-					} else {
-						stats.popI++;
-					}
-					break;
-					case REMNANT_TYPE:
-					stats.remnants++;
-					break;
-					case CLOUD_TYPE:
-					stats.clouds++;
 					break;
 				}
 			}
@@ -215,7 +178,7 @@ stars_stats stars_statistics(float a) {
 	}
 	if (hpx_rank() == 0) {
 		FILE* fp = fopen("stars.txt", "at");
-		fprintf(fp, "%e %li %li %li %li %li %li\n", 1.f / a - 1.f, stats.stars, stats.clouds, stats.remnants, stats.popI, stats.popII, stats.popIII);
+		fprintf(fp, "%e %li\n", 1.f / a - 1.f, stats.stars);
 		fclose(fp);
 	}
 	profiler_exit();

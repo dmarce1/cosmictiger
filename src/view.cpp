@@ -102,40 +102,16 @@ struct star_part_info: public dm_part_info {
 
 };
 
-struct remnant_part_info: public dm_part_info {
-	float M;
-	float zform;
-	template<class A>
-	void serialize(A&& arc, unsigned ver) {
-		dm_part_info::serialize(arc, ver);
-		arc & M;
-		arc & zform;
-	}
-
-};
-
-struct cloud_part_info: public dm_part_info {
-	float zform;
-	template<class A>
-	void serialize(A&& arc, unsigned ver) {
-		arc & zform;
-	}
-
-};
 
 struct view_return {
 	vector<vector<sph_part_info>> hydro;
 	vector<vector<dm_part_info>> dm;
 	vector<vector<star_part_info>> star;
-	vector<vector<remnant_part_info>> remnant;
-	vector<vector<cloud_part_info>> cloud;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & hydro;
 		arc & dm;
 		arc & star;
-		arc & remnant;
-		arc & cloud;
 	}
 };
 
@@ -151,8 +127,6 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 	rc.hydro.resize(boxes.size());
 	rc.dm.resize(boxes.size());
 	rc.star.resize(boxes.size());
-	rc.remnant.resize(boxes.size());
-	rc.cloud.resize(boxes.size());
 	vector<hpx::future<view_return>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
@@ -166,8 +140,6 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 			rc.hydro.resize(boxes.size());
 			rc.dm.resize(boxes.size());
 			rc.star.resize(boxes.size());
-			rc.remnant.resize(boxes.size());
-			rc.cloud.resize(boxes.size());
 			const part_int b = (size_t) proc * particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
@@ -219,45 +191,19 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 							case STAR_TYPE: {
 								const int k = particles_cat_index(i);
 								const auto& star = stars_get(k);
-								if( star.type == REMNANT_TYPE) {
-									remnant_part_info info;
-									info.x = particles_pos(XDIM,i);
-									info.y = particles_pos(YDIM,i);
-									info.z = particles_pos(ZDIM,i);
-									info.vx = particles_vel(XDIM,i);
-									info.vy = particles_vel(YDIM,i);
-									info.vz = particles_vel(ZDIM,i);
-									info.rung = particles_rung(i);
-									info.zform = star.zform;
-									info.M = star.stellar_mass;
-									rc.remnant[j].push_back(info);
-								} else if( star.type == CLOUD_TYPE) {
-									cloud_part_info info;
-									info.x = particles_pos(XDIM,i);
-									info.y = particles_pos(YDIM,i);
-									info.z = particles_pos(ZDIM,i);
-									info.vx = particles_vel(XDIM,i);
-									info.vy = particles_vel(YDIM,i);
-									info.vz = particles_vel(ZDIM,i);
-									info.rung = particles_rung(i);
-									info.zform = star.zform;
-									rc.cloud[j].push_back(info);
-								} else {
-									star_part_info info;
-									info.x = particles_pos(XDIM,i);
-									info.y = particles_pos(YDIM,i);
-									info.z = particles_pos(ZDIM,i);
-									info.vx = particles_vel(XDIM,i);
-									info.vy = particles_vel(YDIM,i);
-									info.vz = particles_vel(ZDIM,i);
-									info.rung = particles_rung(i);
-									const auto& star = stars_get(k);
-									info.Y = star.Y;
-									info.Z = star.Z;
-									info.zform = star.zform;
-									info.M = star.stellar_mass;
-									rc.star[j].push_back(info);
-								}
+								star_part_info info;
+								info.x = particles_pos(XDIM,i);
+								info.y = particles_pos(YDIM,i);
+								info.z = particles_pos(ZDIM,i);
+								info.vx = particles_vel(XDIM,i);
+								info.vy = particles_vel(YDIM,i);
+								info.vz = particles_vel(ZDIM,i);
+								info.rung = particles_rung(i);
+								info.Y = star.Y;
+								info.Z = star.Z;
+								info.zform = star.zform;
+								info.M = star.stellar_mass;
+								rc.star[j].push_back(info);
 								break;
 							}
 						}
@@ -274,8 +220,6 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 			rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
 			rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
 			rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
-			rc.remnant[i].insert(rc.remnant[i].begin(), tmp.remnant[i].begin(), tmp.remnant[i].end());
-			rc.cloud[i].insert(rc.cloud[i].begin(), tmp.cloud[i].begin(), tmp.cloud[i].end());
 		}
 	}
 	return rc;
@@ -476,78 +420,6 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
-		}
-		if (parts.remnant[bi].size()) {
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.remnant[bi].size(); i++) {
-				x.push_back(parts.remnant[bi][i].x.to_float());
-				y.push_back(parts.remnant[bi][i].y.to_float());
-				z.push_back(parts.remnant[bi][i].z.to_float());
-			}
-			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
-			DBPutPointmesh(db, "remnants", NDIM, coords3, x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.remnant[bi].size(); i++) {
-				x.push_back(parts.remnant[bi][i].vx * code_to_velocity);
-				y.push_back(parts.remnant[bi][i].vy * code_to_velocity);
-				z.push_back(parts.remnant[bi][i].vz * code_to_velocity);
-			}
-			DBPutPointvar1(db, "remnant_vx", "remnants", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "remnant_vy", "remnants", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "remnant_vz", "remnants", z.data(), x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			for (int i = 0; i < parts.remnant[bi].size(); i++) {
-				x.push_back(parts.remnant[bi][i].rung);
-			}
-			DBPutPointvar1(db, "remnant_rung", "remnants", x.data(), x.size(), DB_FLOAT, opts);
-
-			vector<float> y;
-			z.resize(0);
-			for (int i = 0; i < parts.remnant[bi].size(); i++) {
-				z.push_back(parts.remnant[bi][i].M);
-				y.push_back(parts.remnant[bi][i].zform);
-			}
-			DBPutPointvar1(db, "remnant_M", "remnants", z.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "remnant_zform", "remnants", y.data(), x.size(), DB_FLOAT, opts);
-		}
-		if (parts.cloud[bi].size()) {
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.cloud[bi].size(); i++) {
-				x.push_back(parts.cloud[bi][i].x.to_float());
-				y.push_back(parts.cloud[bi][i].y.to_float());
-				z.push_back(parts.cloud[bi][i].z.to_float());
-			}
-			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
-			DBPutPointmesh(db, "clouds", NDIM, coords3, x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.cloud[bi].size(); i++) {
-				x.push_back(parts.cloud[bi][i].vx * code_to_velocity);
-				y.push_back(parts.cloud[bi][i].vy * code_to_velocity);
-				z.push_back(parts.cloud[bi][i].vz * code_to_velocity);
-			}
-			DBPutPointvar1(db, "cloud_vx", "clouds", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "cloud_vy", "clouds", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "cloud_vz", "clouds", z.data(), x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			for (int i = 0; i < parts.cloud[bi].size(); i++) {
-				x.push_back(parts.cloud[bi][i].rung);
-			}
-			DBPutPointvar1(db, "cloud_rung", "clouds", x.data(), x.size(), DB_FLOAT, opts);
-
-			vector<float> y;
-			y.resize(0);
-			for (int i = 0; i < parts.cloud[bi].size(); i++) {
-				y.push_back(parts.cloud[bi][i].zform);
-			}
-			DBPutPointvar1(db, "cloud_zform", "clouds", y.data(), x.size(), DB_FLOAT, opts);
 		}
 		DBFreeOptlist(opts);
 		DBClose(db);
