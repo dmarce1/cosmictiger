@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                const T& operator[](int i) const {
+	                                                                         const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -1106,14 +1106,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							}
 						}
 					}
-					const float dt = rung_dt[rung_i] * params.t0;
-					const float dt2 = sqr(dt);
 					const float ddivv_dtau = data.divvdt_snk[snki];
 					const float S = params.a * fmaxf(0.f, -ddivv_dtau) * (sqr(fvel_i) / (1.f - 2.f * fvel_i + 2.f * sqr(fvel_i)));
 					const float alpha_targ = fmaxf(SPH_ALPHA0, SPH_ALPHA1 * sqr(h_i) * S / (sqr(h_i) * S + sqr(vsig)));
 					float& alpha = data.alpha_snk[snki];
-					const float eps = alpha < alpha_targ ? 2.f : SPH_VISC_DECAY;
-					data.dalpha_con[snki] = (alpha_targ - alpha) * eps / dt;
+					const float dt = params.a * h_i / vsig;
+					const float dalpha = alpha_targ - alpha;
+					const float dalpha_dt = (SPH_VISC_DECAY + ((1.f + tanhf(10.0f * dalpha)) - SPH_VISC_DECAY)) * dalpha / dt;
+					data.dalpha_con[snki] = dalpha_dt;
 				}
 			}
 		}
@@ -1291,12 +1291,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const fixed32 x_j = rec1.x;
 					const fixed32 y_j = rec1.y;
 					const fixed32 z_j = rec1.z;
-					float f0_i;
-					if (params.phase == 1) {
-						f0_i = data.f0_snk[snki];
-					} else {
-						f0_i = 1.f;
-					}
+					const float f0_i = data.f0_snk[snki];
 					const float h_j = rec1.h;
 					const float hinv_j = 1.f / h_j;															// 4
 					const float h3inv_j = sqr(hinv_j) * hinv_j;
@@ -1312,6 +1307,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
 					const float h_ij = 0.5f * (h_i + h_j);
+					const float hinv_ij = 1.f / h_ij;
 					const float rho_ij = 0.5f * (rho_i + rho_j);
 					const float q_i = fminf(r * hinv_i, 1.f);								// 1
 					const float q_j = fminf(r * hinv_j, 1.f);								// 1
@@ -1331,11 +1327,11 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float q_ij = 0.5f * (q_i + q_j);
+						const float q_ij = fminf(r * hinv_ij, 1.f);
 						const float pot = kernelPot(q_ij);
 						const float force = kernelFqinv(q_ij) * q_ij;
-						dpot_dh += 0.5 / sqr(h_ij) * (pot + q_ij * force);
-					} else {
+						dpot_dh += m / sqr(h_ij) * (pot + q_ij * force);
+					} else if (params.phase == 2) {
 						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
 						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;
 						dT_dz += (T_j - T_i) * dWdr_z_i * mrhoinv_i;
@@ -1349,7 +1345,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				if (params.phase == 0) {
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(drho_dh);
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dpot_dh);
-				} else {
+				} else if (params.phase == 2) {
 					shear_xx = dvx_dx - (1.f / 3.f) * div_v;
 					shear_yy = dvy_dy - (1.f / 3.f) * div_v;
 					shear_zz = dvz_dz - (1.f / 3.f) * div_v;
@@ -1377,15 +1373,19 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
 					const float dtinv = 1.f / (params.tau - data.taux_snk[snki]);
 					if (params.phase == 0) {
+						data.divvdt_snk[snki] = (div_v - data.divv_snk[snki]) * dtinv;
+					} else {
+						data.divvdt_snk[snki] += (div_v - data.divv_snk[snki]) * dtinv;
+					}
+					data.divv_snk[snki] = div_v;
+					data.fvel_snk[snki] = fvel;
+					if (params.phase == 0) {
 						const float c0 = drho_dh * 4.0f * float(M_PI) / (9.0f * data.N);
 						const float fpre = 1.0f / (1.0f + c0);
 						const float fg = -dpot_dh * h_i / (3.f * rho_i);
-						data.fvel_snk[snki] = fvel;
-						data.divvdt_snk[snki] = (div_v - data.divv_snk[snki]) * dtinv;
-						data.divv_snk[snki] = div_v;
 						data.fpot_snk[snki] = fg * fpre;
 						data.f0_snk[snki] = fpre;
-					} else {
+					} else if (params.phase == 2) {
 						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz)) / params.a;
 						float kappa_con;
 						if (data.conduction) {
@@ -1397,12 +1397,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						} else {
 							kappa_con = 0.0f;
 						}
-						data.fvel_snk[snki] = fvel;
-						data.divvdt_snk[snki] += (div_v - data.divv_snk[snki]) * dtinv;
-						data.divv_snk[snki] = div_v;
 						data.difco_snk[snki] = Cdif;
 						data.kappa_snk[snki] = kappa_con;
 					}
+
 				}
 			}
 		}
