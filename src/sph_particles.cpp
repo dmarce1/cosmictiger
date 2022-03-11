@@ -113,7 +113,7 @@ static array<std::unordered_map<line_id_type, hpx::shared_future<vector<fs_retur
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<difco_data>>, line_id_hash_hi>, PART_CACHE_SIZE> difco_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<dif_vector>>, line_id_hash_hi>, PART_CACHE_SIZE> difvec_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
-static array<spinlock_type, PART_CACHE_SIZE> gforce_mutexes;
+static array<spinlock_type, PART_CACHE_SIZE> gfoddivv_dtrce_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> sph_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> rung_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> fvel_mutexes;
@@ -146,19 +146,18 @@ float sph_particles_max_smooth_len() {
 }
 
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
-
-std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, float t0) {
+std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, float t0, float tau) {
 
 	profiler_enter(__FUNCTION__);
 	double err = 0.0;
 	double norm = 0.0;
 	vector<hpx::future<std::pair<double, double>>>futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase, t0));
+		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase, t0, tau));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung]() {
+		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung, tau]() {
 			double error = 0.0;
 			double norm = 0.0;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
@@ -167,6 +166,9 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const int k = sph_particles_dm_index(i);
 				const auto rung = particles_rung(k);
 				const float dt = 0.5f * t0 / (1<<rung);
+				if( (rung >= minrung || sph_particles_semi_active(i)) && phase == 2) {
+					sph_particles_taux(i) = tau;
+				}
 				if( rung >= minrung) {
 					switch(phase) {
 						case 0: {
@@ -217,7 +219,10 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							}
 						}
 						break;
-					}}
+					}
+				}
+//				sph_particles_alpha(i) = std::max(sph_particles_alpha(i), 0.f);
+//				sph_particles_alpha(i) = 1.f;
 			}
 			return std::make_pair(error,norm);
 		}));
@@ -340,6 +345,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_a[i], sph_particles_a[j]);
 	std::swap(sph_particles_e[i], sph_particles_e[j]);
 	std::swap(sph_particles_cond[i], sph_particles_cond[j]);
+	std::swap(sph_particles_t0[i], sph_particles_t0[j]);
 	std::swap(sph_particles_da1[i], sph_particles_da1[j]);
 	std::swap(sph_particles_de1[i], sph_particles_de1[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
@@ -428,6 +434,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fp, new_capacity, true);
+		sph_particles_array_resize(sph_particles_t0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cond, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
@@ -474,6 +481,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_dalpha_pred(oldsz + i) = 0.0f;
 		sph_particles_ddivv_dt(oldsz + i) = 0.0f;
 		sph_particles_alpha(oldsz + i) = SPH_ALPHA0;
+		sph_particles_taux(oldsz + i) = SPH_ALPHA0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 			sph_particles_dvel_con(dim, oldsz + i) = 0.0f;
@@ -1052,6 +1060,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_taux(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fpot(0), sizeof(float), sph_particles_size(), fp);
@@ -1080,6 +1089,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_taux(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpot(0), sizeof(float), sph_particles_size(), fp);

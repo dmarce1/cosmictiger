@@ -84,6 +84,7 @@ SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem; // chemistry
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN float* sph_particles_dvvdt; // divv
 //SPH_PARTICLES_EXTERN float* sph_particles_dz;
+SPH_PARTICLES_EXTERN float* sph_particles_t0; // time of last aux
 SPH_PARTICLES_EXTERN float* sph_particles_fv; // balsara
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_dc; // diffusion constant
@@ -122,7 +123,7 @@ float sph_particles_temperature(part_int, float);
 float sph_particles_mmw(part_int);
 float sph_particles_lambda_e(part_int, float, float);
 
-std::pair<double,double> sph_particles_apply_updates(int, int,float);
+std::pair<double,double> sph_particles_apply_updates(int, int,float,float);
 /*
  inline float& sph_particles_SN(part_int index) {
  return sph_particles_sn[index];
@@ -323,6 +324,11 @@ inline float& sph_particles_divv(part_int index) {
 inline float& sph_particles_ddivv_dt(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dvvdt[index];
+}
+
+inline float& sph_particles_taux(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_t0[index];
 }
 
 inline float& sph_particles_gforce(int dim, part_int index) {

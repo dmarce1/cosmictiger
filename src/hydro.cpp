@@ -421,7 +421,7 @@ void hydro_sod_test() {
 	}
 	constexpr float t = .12;
 	constexpr int N = 1000;
-	hydro_driver(t, 32);
+	hydro_driver(t, 10);
 	FILE* fp = fopen("sod.txt", "wt");
 	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
 	double norm1 = 0.0, norm2 = 0.0;

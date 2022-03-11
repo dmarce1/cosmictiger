@@ -187,8 +187,11 @@ struct sph_run_params {
 	float cfl;
 	int max_rung;
 	float gy;
+	float tau;
 	bool implicit_hydro;
+	int iter;
 	sph_run_params() {
+		iter = 0;
 		const auto opts = get_options();
 		gy = opts.gy;
 		implicit_hydro = opts.implicit_hydro;

@@ -155,6 +155,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 
 	sph_run_params sparams;
+	sparams.tau = tau;
 	sparams.tzero = tau == 0.0;
 	sparams.max_rung = max_rung;
 	max_rung = 0;
@@ -273,7 +274,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		sparams.phase = 0;
 		if (!glass) {
 			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 0, t0);
+				sph_particles_apply_updates(minrung, 0, t0, tau);
 			}
 		}
 		if (!glass) {
@@ -290,11 +291,12 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				int iter = 0;
 				do {
 					sparams.run_type = SPH_RUN_HYDRO;
+					sparams.iter = iter;
 					tm.start();
 					sph_run(sparams, true);
 					tm.stop();
 					tm.reset();
-					auto tmp = sph_particles_apply_updates(minrung, 1, t0);
+					auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
 					error = sqrt(tmp.first / (tmp.second+1e-30));
 					if (verbose)
 						PRINT("sph_run(SPH_RUN_HYDRO): tm = %e, error = %e %e %e\n", tm.read(), error);
@@ -362,10 +364,10 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 					PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
 				tm.reset();
 			}
+			sph_particles_apply_updates(minrung, 2, t0, tau);
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
 			}
-			sph_particles_apply_updates(minrung, 2, t0);
 		}
 
 	}
