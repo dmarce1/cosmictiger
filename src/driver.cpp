@@ -270,6 +270,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			kr = sph_run_return();
 		} while (cont);
 		if (!glass) {
+			sparams.phase = 0;
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
 			sph_run(sparams, true);

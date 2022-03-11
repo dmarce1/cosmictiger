@@ -1383,7 +1383,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						data.fvel_snk[snki] = fvel;
 						data.divvdt_snk[snki] = (div_v - data.divv_snk[snki]) * dtinv;
 						data.divv_snk[snki] = div_v;
-						data.fpot_snk[snki] = fg;
+						data.fpot_snk[snki] = fg * fpre;
 						data.f0_snk[snki] = fpre;
 					} else {
 						const float Cdif = SPH_DIFFUSION_C * sqr(h_i) * sqrt(sqr(shear_xx, shear_yy, shear_zz) + 2.f * sqr(shear_xy, shear_xz, shear_yz)) / params.a;

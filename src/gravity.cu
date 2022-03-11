@@ -67,15 +67,15 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	const bool sph = data.sph;
+	const bool sph = data.fpot;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	const auto* main_src_sph = data.sph;
+	const auto* main_src_fpot = data.fpot;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-	auto& src_sph = shmem.src.sph;
+	auto& src_fpot = shmem.src.fpot;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -111,7 +111,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 					if (sph) {
-						src_sph[i1] = main_src_sph[i2];
+						src_fpot[i1] = main_src_fpot[i2];
 					}
 				}
 				__syncwarp();
@@ -130,7 +130,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-				const float mass = sph && src_sph[j] ? sph_mass : dm_mass;
+				const float mass = sph && (src_fpot[j] != 0.f) ? sph_mass : dm_mass;
 				flops += 3;
 				expansion<float> D;
 				flops += greens_function(D, dx);
@@ -211,22 +211,23 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	auto &gy = shmem.gy;
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
-	const bool sph = data.sph;
+	const bool sph = data.fpot;
 	const bool vsoft = sph && data.vsoft;
 	auto& src_hsoft = shmem.src.hsoft;
 	const auto& sink_hsoft = shmem.sink_hsoft;
+	const auto& sink_fpot = shmem.sink_fpot;
 	const auto& sink_x = shmem.sink_x;
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	const auto* main_src_sph = data.sph;
+	const auto* main_src_fpot = data.fpot;
 	const auto* main_src_hsoft = data.hsoft;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-	auto& src_sph = shmem.src.sph;
+	auto& src_fpot = shmem.src.fpot;
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
 	float hinv = 1.f / (h);
@@ -263,7 +264,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 					if (sph) {
-						src_sph[i1] = main_src_sph[i2];
+						src_fpot[i1] = main_src_fpot[i2];
 						if (vsoft) {
 							src_hsoft[i1] = main_src_hsoft[i2];
 						}
@@ -299,25 +300,40 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						dx0 = distance(sink_x[k], src_x[j]); // 1
 						dx1 = distance(sink_y[k], src_y[j]); // 1
 						dx2 = distance(sink_z[k], src_z[j]); // 1
-						const float mass = src_sph[j] ? sph_mass : dm_mass;
+						const float mass = src_fpot[j] != 0.f ? sph_mass : dm_mass;
 						const auto r2 = sqr(dx0, dx1, dx2);  // 5
-						if (vsoft) {
-							h = 0.5f * (sink_hsoft[k] + src_hsoft[j]);
-							h2 = sqr(h);
-						}
-						if (r2 >= h2) {                      // 1
+						const float h_i = sink_hsoft[k];
+						const float h_j = src_hsoft[j];
+						const float h_ij = 0.5f * (h_i + h_j);
+						const float h2_ij = sqr(h_ij);
+						if (r2 >= h2_ij) {                      // 1
 							r1inv = rsqrt(r2);                // 4
 							r3inv = r1inv * r1inv * r1inv;    // 2
 							nnear++;
 						} else {
-							if (vsoft) {
-								hinv = 1.0f / h;
-								h3inv = hinv * sqr(hinv);
-							}
-							const float q = fminf(sqrt(r2) * hinv, 1.f);
-							r3inv = kernelFqinv(q) * h3inv;
+							const float fpot_i = sink_fpot[k];
+							const float fpot_j = sink_fpot[j];
+							const float hinv_ij = 1.0f / h_ij;
+							const float hinv_i = 1.0f / h_i;
+							const float hinv_j = 1.0f / h_j;
+							const float h3inv_ij = hinv_ij * sqr(hinv_ij);
+							const float h3inv_i = hinv_i * sqr(hinv_i);
+							const float h3inv_j = hinv_j * sqr(hinv_j);
+							const float r = sqrtf(r2);
+							r1inv = 1.f / (r + 1e-30f);
+							const float q_ij = fminf(r * hinv_ij, 1.f);
+							const float q_j = fminf(r * hinv_j, 1.f);
+							const float q_i = fminf(r * hinv_i, 1.f);
+							const float dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * r1inv;
+							const float dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * r1inv;
+							r3inv = kernelFqinv(q_ij) * h3inv_ij;
+							const float correction = 0.5f * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
+			///				if( correction != 0.f ) {
+			//					PRINT( "%e\n", correction/r3inv);
+			//				}
+							r3inv += correction;
 							if (do_phi) {
-								r1inv = kernelPot(q) * hinv;
+								r1inv = kernelPot(q_ij) * hinv_ij;
 							}
 							nfar++;
 						}

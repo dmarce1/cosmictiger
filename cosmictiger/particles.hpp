@@ -160,7 +160,7 @@ void particles_random_init();
 void particles_resolve_with_sph_particles();
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
-void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, char* sph, part_int offset);
+void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* fpot, part_int offset);
 void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
@@ -177,7 +177,6 @@ void particles_memadvise_cpu();
 void particles_memadvise_gpu();
 void particles_free();
 void particles_save_glass(const char* filename);
-
 
 inline char& particles_type(part_int index) {
 	static const bool sph = get_options().sph;
