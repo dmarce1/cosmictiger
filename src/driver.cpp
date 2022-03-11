@@ -269,14 +269,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-
-	} else {
-		sparams.phase = 0;
-		if (!glass) {
-			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 0, t0, tau);
-			}
-		}
 		if (!glass) {
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
@@ -285,34 +277,35 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
 			tm.reset();
-			double error;
+		}
+	} else {
+		sparams.phase = 0;
+		if (!glass) {
+			if (tau != 0.0) {
+				sph_particles_apply_updates(minrung, 0, t0, tau);
+			}
+		}
+		if (!glass) {
 			if (tau != 0.0) {
 
-				int iter = 0;
-				do {
-					sparams.run_type = SPH_RUN_HYDRO;
-					sparams.iter = iter;
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					tm.reset();
-					auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
-					error = sqrt(tmp.first / (tmp.second+1e-30));
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_HYDRO): tm = %e, error = %e %e %e\n", tm.read(), error);
-					sparams.phase = 1;
-					sparams.run_type = SPH_RUN_AUX;
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-					tm.reset();
+				sparams.run_type = SPH_RUN_HYDRO;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				tm.reset();
+				auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+				sparams.phase = 1;
+				sparams.run_type = SPH_RUN_AUX;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+				tm.reset();
 
-					sparams.phase = 0;
-					iter++;
-				} while (error > SPH_HYDRO_TOLER && get_options().implicit_hydro);
-				PRINT("CONVERGED in %i iters\n", iter);
+				sparams.phase = 0;
 			}
 			if (diff && tau != 0.0) {
 				sph_init_diffusion();

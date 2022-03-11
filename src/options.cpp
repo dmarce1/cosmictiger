@@ -106,7 +106,6 @@ bool process_options(int argc, char *argv[]) {
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("diffusion", po::value<bool>(&(opts.diffusion))->default_value(true), "do diffusion") //
-	("implicit_hydro", po::value<bool>(&(opts.implicit_hydro))->default_value(false), "implicit hydro on 2nd substep") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
@@ -249,7 +248,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(GM);
 	SHOW(hsoft);
 	SHOW(hubble);
-	SHOW(implicit_hydro);
 	SHOW(kernel);
 	SHOW(lc_b);
 	SHOW(lc_min_group);

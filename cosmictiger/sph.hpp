@@ -188,17 +188,14 @@ struct sph_run_params {
 	int max_rung;
 	float gy;
 	float tau;
-	bool implicit_hydro;
 	int iter;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
 		gy = opts.gy;
-		implicit_hydro = opts.implicit_hydro;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & implicit_hydro;
 		arc & gy;
 		arc & t0;
 		arc & phase;

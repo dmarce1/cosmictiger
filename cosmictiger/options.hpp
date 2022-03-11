@@ -32,7 +32,6 @@ struct options {
 	bool do_tracers;
 	bool do_slice;
 	bool do_views;
-	bool implicit_hydro;
 	bool stars;
 	bool twolpt;
 	bool use_power_file;
@@ -119,7 +118,6 @@ struct options {
 		arc & sph;
 		arc & nsteps;
 		arc & cuda;
-		arc & implicit_hydro;
 		arc & do_lc;
 		arc & save_force;
 		arc & do_power;
