@@ -55,7 +55,7 @@ struct sph_tree_neighbor_return {
 	bool has_value_at;CUDA_EXPORT
 	sph_tree_neighbor_return() {
 		has_value_at = false;
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			inner_box.begin[dim] = 1.9;
 			inner_box.end[dim] = -0.9;
 			outer_box.begin[dim] = 1.9;
@@ -64,7 +64,7 @@ struct sph_tree_neighbor_return {
 	}
 	CUDA_EXPORT
 	sph_tree_neighbor_return& operator+=(const sph_tree_neighbor_return& other) {
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			inner_box.begin[dim] = std::min(inner_box.begin[dim], other.inner_box.begin[dim]);
 			inner_box.end[dim] = std::max(inner_box.end[dim], other.inner_box.end[dim]);
 			outer_box.begin[dim] = std::min(outer_box.begin[dim], other.outer_box.begin[dim]);
@@ -176,7 +176,6 @@ struct sph_run_return {
 
 void sph_particles_energy_to_entropy(float a);
 
-
 struct sph_run_params {
 	int run_type;
 	int set;
@@ -188,11 +187,15 @@ struct sph_run_params {
 	float cfl;
 	int max_rung;
 	float gy;
+	bool implicit_hydro;
 	sph_run_params() {
-		gy = get_options().gy;
+		const auto opts = get_options();
+		gy = opts.gy;
+		implicit_hydro = opts.implicit_hydro;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & implicit_hydro;
 		arc & gy;
 		arc & t0;
 		arc & phase;
@@ -222,7 +225,6 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 float sph_apply_diffusion_update(int minrung, float toler);
 void sph_init_diffusion();
 
-
 /*
  template<class T>
  CUDA_EXPORT
@@ -248,7 +250,6 @@ inline T sph_den(T hinv3) {
 	return m * c0 * hinv3;
 }
 void sph_deposit_sn(float a);
-
 
 void sph_particles_energy_to_entropy(float a);
 

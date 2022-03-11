@@ -95,7 +95,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 					make_star = true;
 				}
 				if( make_star ) {
-					PRINT( "Making stars\n");
+//					PRINT( "Making stars\n");
 					star_particle star;
 					star.zform = 1.f / a - 1.f;
 					star.dm_index = sph_particles_dm_index(i);

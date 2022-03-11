@@ -82,6 +82,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_de1; // deint_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem; // chemistry
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
+SPH_PARTICLES_EXTERN float* sph_particles_dvvdt; // divv
 //SPH_PARTICLES_EXTERN float* sph_particles_dz;
 SPH_PARTICLES_EXTERN float* sph_particles_fv; // balsara
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
@@ -121,7 +122,7 @@ float sph_particles_temperature(part_int, float);
 float sph_particles_mmw(part_int);
 float sph_particles_lambda_e(part_int, float, float);
 
-double sph_particles_apply_updates(int, int,float);
+std::pair<double,double> sph_particles_apply_updates(int, int,float);
 /*
  inline float& sph_particles_SN(part_int index) {
  return sph_particles_sn[index];
@@ -319,9 +320,27 @@ inline float& sph_particles_divv(part_int index) {
 	return sph_particles_dvv[index];
 }
 
+inline float& sph_particles_ddivv_dt(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dvvdt[index];
+}
+
 inline float& sph_particles_gforce(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_g[dim][index];
+}
+
+
+inline float sph_particles_ekin(part_int index) {
+	float ekin = 0.f;
+	for( int dim = 0; dim < NDIM; dim++) {
+		ekin += 0.5f * sqr(sph_particles_vel(dim,index));
+	}
+	return ekin;
+}
+
+inline float sph_particles_egas(part_int index) {
+	return sph_particles_eint(index) + sph_particles_ekin(index);
 }
 
 inline float& sph_particles_smooth_len(part_int index) {

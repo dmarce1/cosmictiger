@@ -33,13 +33,13 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #define STAR_N0 50.0f
 #define STAR_T0 4e9f
-#define SPH_ALPHA0 0.05f
-#define SPH_ALPHA1 2.f
-#define SPH_ALPHA_PWR 64.0f
-#define SPH_BETA 2.0f
-#define SPH_VISC_DECAY 0.2f
-#define SPH_HYDRO_TOLER 1e-1
+#define SPH_ALPHA0 0.1f
+#define SPH_ALPHA1 2.0f
+#define SPH_BETA 1.5f
+#define SPH_VISC_DECAY 0.1f
+#define SPH_HYDRO_TOLER 5e-3
 #define SPH_DIFFUSION_TOLER 1e-4
+#define SPH_SMOOTHLEN_TOLER 5.0e-6
 
 #define NDIM 3
 #define XDIM 0
@@ -70,7 +70,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #define USE_CONFORMAL_TIME
 //#define SPH_TOTAL_ENERGY
-#define SPH_SMOOTHLEN_TOLER 5.0e-5
 #define SPH_MAX_SOFT (EWALD_DIST*0.5f)
 
 

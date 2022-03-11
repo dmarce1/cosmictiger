@@ -155,6 +155,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 
 	sph_run_params sparams;
+	sparams.tzero = tau == 0.0;
 	sparams.max_rung = max_rung;
 	max_rung = 0;
 	sparams.a = scale;
@@ -283,27 +284,35 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
 			tm.reset();
-			sparams.run_type = SPH_RUN_HYDRO;
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-			tm.reset();
+			double error;
 			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 1, t0);
-			}
-			sparams.phase = 1;
-			sparams.run_type = SPH_RUN_AUX;
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-			tm.reset();
 
-			sparams.phase = 0;
-			if (diff) {
+				int iter = 0;
+				do {
+					sparams.run_type = SPH_RUN_HYDRO;
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					tm.reset();
+					auto tmp = sph_particles_apply_updates(minrung, 1, t0);
+					error = sqrt(tmp.first / (tmp.second+1e-30));
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_HYDRO): tm = %e, error = %e %e %e\n", tm.read(), error);
+					sparams.phase = 1;
+					sparams.run_type = SPH_RUN_AUX;
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+					tm.reset();
+
+					sparams.phase = 0;
+					iter++;
+				} while (error > SPH_HYDRO_TOLER && get_options().implicit_hydro);
+				PRINT("CONVERGED in %i iters\n", iter);
+			}
+			if (diff && tau != 0.0) {
 				sph_init_diffusion();
 				sparams.run_type = SPH_RUN_DIFFUSION;
 				float err;
@@ -678,9 +687,6 @@ void driver() {
 				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
 				eheat -= a * heating;
 			}
-			if (full_eval) {
-				view_output_views((tau + 1e-6 * t0) / t0, a);
-			}
 			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
@@ -689,6 +695,9 @@ void driver() {
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
 				eheat -= a * heating;
+			}
+			if (full_eval) {
+				view_output_views((tau + 1e-6 * t0) / t0, a);
 			}
 			tree_create_return sr = tmp.second;
 			PRINT("Done kicking\n");

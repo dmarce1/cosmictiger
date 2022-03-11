@@ -106,17 +106,18 @@ bool process_options(int argc, char *argv[]) {
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("diffusion", po::value<bool>(&(opts.diffusion))->default_value(true), "do diffusion") //
+	("implicit_hydro", po::value<bool>(&(opts.implicit_hydro))->default_value(false), "implicit hydro on 2nd substep") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
-			("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
-			("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
-			("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-			("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
-			("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
-			("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
-			("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
+	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
+	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
+	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
+	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
+	("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
+	("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
+	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(128), "neighbor number") //
@@ -128,7 +129,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.176), "time-step criterion (default=0.2)") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -248,6 +249,7 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(GM);
 	SHOW(hsoft);
 	SHOW(hubble);
+	SHOW(implicit_hydro);
 	SHOW(kernel);
 	SHOW(lc_b);
 	SHOW(lc_min_group);
@@ -296,7 +298,7 @@ bool process_options(int argc, char *argv[]) {
 	if (opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
 		opts.chem = opts.gravity = opts.conduction = opts.diffusion = false;
 		opts.gamma = 5. / 3.;
-		if( opts.test == "disc") {
+		if (opts.test == "disc") {
 			opts.sph_mass = 1.0;
 			opts.gcentral = 1.0;
 		}

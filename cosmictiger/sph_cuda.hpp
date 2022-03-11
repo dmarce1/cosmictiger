@@ -102,6 +102,7 @@ struct sph_run_cuda_data {
 	char* sa_snk;
 //	float* Yform_snk;
 //	float* Zform_snk;
+	float* divvdt_snk;
 	float* divv_snk;
 	int nselfs;
 	sph_tree_node* trees;

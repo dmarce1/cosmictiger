@@ -1775,6 +1775,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.nselfs = host_selflist.size();
+	cuda_data.divvdt_snk = &sph_particles_ddivv_dt(0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.chem = get_options().chem;
 	cuda_data.gravity = get_options().gravity;
