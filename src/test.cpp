@@ -482,6 +482,8 @@ void test(std::string test) {
 		bh_test();
 	} else if (test == "stars") {
 		stars_test_mass();
+	} else if (test == "star") {
+		hydro_star_test();
 	} else if (test == "disc") {
 		hydro_disc_test();
 	} else if (test == "chemistry") {

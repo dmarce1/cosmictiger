@@ -1011,7 +1011,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
-					const float alpha_ij = fmaxf(alpha_i * fvel_i, alpha_j * fvel_j);
+					const float alpha_ij = fmaxf(alpha_i * fvel_i,  alpha_j * fvel_j);
 					const float h_ij = 0.5f * (h_i + h_j);
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 					const float w_ij = vdotx_ij * rinv;
@@ -1050,7 +1050,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						float this_vsig = c_ij * hfac;
 						if (vdotx_ij < 0.f) {
 							this_vsig += 0.6f * alpha_ij * c_ij * hfac;
-							this_vsig -= 0.6f * alpha_ij * SPH_BETA * u_ij * hfac;
+							this_vsig -= 0.6f * alpha_ij * SPH_BETA * w_ij * hfac;
 						}
 						vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
 					}

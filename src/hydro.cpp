@@ -24,6 +24,98 @@
 #include <cosmictiger/view.hpp>
 #include <cosmictiger/exact_sod.hpp>
 #include <cosmictiger/driver.hpp>
+#include <cosmictiger/domain.hpp>
+
+static inline double pow_n(double y, double n) {
+	return std::pow(y, n);
+}
+
+static inline double fy(double y, double z, double r) {
+	return z;
+}
+
+static inline double fz(double y, double z, double r, double n) {
+	if (r != 0.0) {
+		return -(pow_n(y, n) + 2.0 * z / r);
+	}
+	return -3.0;
+}
+
+static inline double fm(double theta, double dummy, double r, double n) {
+	constexpr static double four_pi = double(4) * M_PI;
+	return four_pi * pow_n(theta, n) * r * r;
+}
+
+double lane_emden(double r0, double dr, double n, double& menc) {
+	double dy1, dz1, y, z, r, dy2, dz2, dy3, dz3, dy4, dz4, y0, z0;
+	double dm1, m, dm2, dm3, dm4, m0;
+	int done = 0;
+	y = 1.0;
+	z = 0.0;
+	m = 0.0;
+	int N = static_cast<int>(r0 / dr + 0.5);
+	if (N < 1) {
+		N = 1;
+	}
+	r = 0.0;
+	do {
+		if (r + dr > r0) {
+			dr = r0 - r;
+			done = 1;
+		}
+		y0 = y;
+		z0 = z;
+		m0 = m;
+		dy1 = fy(y, z, r) * dr;
+		dz1 = fz(y, z, r, n) * dr;
+		dm1 = fm(y, z, r, n) * dr;
+		y += 0.5 * dy1;
+		z += 0.5 * dz1;
+		m += 0.5 * dm1;
+		if (y <= 0.0) {
+			y = 0.0;
+			break;
+		}
+		double rdr2 = r + 0.5 * dr;
+		dy2 = fy(y, z, rdr2) * dr;
+		dz2 = fz(y, z, rdr2, n) * dr;
+		dm2 = fm(y, z, rdr2, n) * dr;
+		y = y0 + 0.5 * dy2;
+		z = z0 + 0.5 * dz2;
+		m = m0 + 0.5 * dm2;
+		if (y <= 0.0) {
+			y = 0.0;
+			break;
+		}
+		dy3 = fy(y, z, rdr2) * dr;
+		dz3 = fz(y, z, rdr2, n) * dr;
+		dm3 = fm(y, z, rdr2, n) * dr;
+		y = y0 + dy3;
+		z = z0 + dz3;
+		m = m0 + dm3;
+		if (y <= 0.0) {
+			y = 0.0;
+			break;
+		}
+		double rdr = r + dr;
+		dy4 = fy(y, z, rdr) * dr;
+		dz4 = fz(y, z, rdr, n) * dr;
+		dm4 = fm(y, z, rdr, n) * dr;
+		y = y0 + (dy1 + dy4 + 2.0 * (dy3 + dy2)) / 6.0;
+		z = z0 + (dz1 + dz4 + 2.0 * (dz3 + dz2)) / 6.0;
+		m = m0 + (dm1 + dm4 + 2.0 * (dm3 + dm2)) / 6.0;
+		if (y <= 0.0) {
+			y = 0.0;
+			break;
+		}
+		r += dr;
+	} while (done == 0);
+	menc = m;
+	if (y < 0.0) {
+		return 0.0;
+	}
+	return pow(y, n);
+}
 
 static void output_line(int num) {
 
@@ -49,30 +141,8 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	int main_step = 0;
 	float e0, ent0;
 	const double m = get_options().sph_mass;
+	domains_rebound();
 	do {
-		double ekin = 0.0;
-		double eint = 0.0;
-		double xmom = 0.0, ymom = 0.0, zmom = 0.0;
-		for (part_int i = 0; i < sph_particles_size(); i++) {
-			const int k = sph_particles_dm_index(i);
-			const double vx = particles_vel(XDIM, k);
-			const double vy = particles_vel(YDIM, k);
-			const double vz = particles_vel(ZDIM, k);
-			xmom += m * vx;
-			ymom += m * vy;
-			zmom += m * vz;
-			const double e = sph_particles_eint(i);
-			ekin += 0.5 * m * sqr(vx, vy, vz);
-			eint += m * e;
-		}
-		FILE* fp = fopen("energy.dat", "at");
-		const double etot = ekin + eint;
-		double etot0;
-		if (t == 0.0) {
-			etot0 = etot;
-		}
-		fprintf(fp, "%e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, (etot - etot0) / etot);
-		fclose(fp);
 		int minrung = min_rung(itime);
 		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
@@ -81,8 +151,42 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		}
 		double dummy;
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
+		kick_return kr;
+		if (get_options().gravity) {
+			auto tmp = kick_step(minrung, 1.0, t0, 0.7, t0 == 0.0, minrung == 0);
+			kr = tmp.first;
+		}
+		if (minrung == 0) {
+			double ekin = 0.0;
+			double eint = 0.0;
+			double epot = kr.pot / 2.0;
+			double xmom = 0.0, ymom = 0.0, zmom = 0.0;
+			for (part_int i = 0; i < sph_particles_size(); i++) {
+				const int k = sph_particles_dm_index(i);
+				const double vx = particles_vel(XDIM, k);
+				const double vy = particles_vel(YDIM, k);
+				const double vz = particles_vel(ZDIM, k);
+				xmom += m * vx;
+				ymom += m * vy;
+				zmom += m * vz;
+				const double e = sph_particles_eint(i);
+				ekin += 0.5 * m * sqr(vx, vy, vz);
+				eint += m * e;
+			}
+			FILE* fp = fopen("energy.dat", "at");
+			const double etot = ekin + eint + epot;
+			double etot0;
+			if (t == 0.0) {
+				etot0 = etot;
+			}
+			fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot, (etot - etot0) / etot);
+			fclose(fp);
+		}
 		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
-		int maxrung = rc2.max_rung;
+		if (!get_options().gravity) {
+			kr.max_rung = rc2.max_rung;
+		}
+		int maxrung = std::max((int) rc2.max_rung, (int) kr.max_rung);
 		double dt = t0 / (1 << maxrung);
 		auto dr = drift(1.0, dt, t, t + dt, tmax);
 		itime = inc(itime, maxrung);
@@ -95,6 +199,59 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		step++;
 	} while (t < tmax);
 	view_output_views(main_step, 1.0);
+}
+
+void hydro_star_test() {
+	part_int nparts_total = pow(get_options().parts_dim, 3);
+	const double r0 = 20.0;
+	constexpr int N = 100000;
+	vector<double> rho(N);
+	auto opts = get_options();
+
+	double menc;
+	for (int i = 0; i < N; i++) {
+		const double r = (i + 0.5) / N * r0;
+		rho[i] = lane_emden(r, r / 100.0, 1.5, menc);
+	}
+	PRINT("Making star\n");
+	double factor = sqr(r0) * r0 * nparts_total / menc;
+	opts.sph_mass = 1.;
+	const double m = opts.sph_mass;
+	set_options(opts);
+	double rho0 = rho[0] * factor * m;
+	double K = 4.0 * M_PI * opts.GM / (2.5) * powf(rho0, 1.0 - 1.0 / 1.5) / sqr(r0) ;
+	while (sph_particles_size() < nparts_total) {
+		double x = 0.3333 * (rand1() - 0.5) + 0.5;
+		double y = 0.3333 * (rand1() - 0.5) + 0.5;
+		double z = 0.3333 * (rand1() - 0.5) + 0.5;
+		double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+		double p = rand1();
+		const int i = std::min((int) (r * N + 0.5), (int) (N - 1));
+		if (p < rho[i]) {
+			const auto m = get_options().sph_mass;
+			double rho0 = rho[i] * factor * m;
+			double P = K * pow(rho0, 5.0 / 3.0);
+			double E = P / (2.0 / 3.0);
+			double eint = E / rho0;
+			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+			const auto j = sph_particles_size();
+			sph_particles_resize(sph_particles_size() + 1);
+			sph_particles_smooth_len(j) = h;
+			sph_particles_pos(XDIM, j) = x;
+			sph_particles_pos(YDIM, j) = y;
+			sph_particles_pos(ZDIM, j) = z;
+			sph_particles_vel(XDIM, j) = 0;
+			sph_particles_vel(YDIM, j) = 0;
+			sph_particles_vel(ZDIM, j) = 0;
+			sph_particles_rung(j) = 0;
+			sph_particles_eint(j) = eint;
+		}
+	}
+	const double tdyn = sqrt(1.0 / (opts.GM*rho0));
+	PRINT( "************************************\n");
+	PRINT( "tdyn = %e\n", tdyn);
+	PRINT( "************************************\n");
+	hydro_driver(10.0 * tdyn, 100);
 }
 
 void hydro_rt_test() {
@@ -346,7 +503,7 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				double ent = p1 / rho1  / (get_options().gamma-1.);
+				double ent = p1 / rho1 / (get_options().gamma - 1.);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
@@ -386,7 +543,7 @@ void hydro_sod_test() {
 				double x = (ix) * dx;
 				double y = (iy) * dx;
 				double z = (iz) * dx;
-				double ent = p0 / rho0 / (get_options().gamma-1.);
+				double ent = p0 / rho0 / (get_options().gamma - 1.);
 				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
@@ -452,7 +609,8 @@ void hydro_sod_test() {
 	l2 /= norm2;
 	l2 = sqrt(l2);
 	PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
-	fclose(fp);}
+	fclose(fp);
+}
 
 void hydro_helmholtz_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
@@ -563,9 +721,9 @@ void hydro_helmholtz_test() {
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 1.0;
-	double p1 = 10000.0;
+	double p1 = 1000000.0;
 	double p0 = 1.0;
-	double sigma = 0.01;
+	double sigma = 0.015;
 	auto opts = get_options();
 	part_int ndim = get_options().parts_dim;
 	part_int nparts = std::pow(ndim, NDIM);
@@ -623,7 +781,7 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(1.00, 128);
+	hydro_driver(0.10, 256);
 }
 
 void hydro_wave_test() {

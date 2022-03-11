@@ -36,10 +36,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define SPH_ALPHA0 0.0f
 #define SPH_ALPHA1 2.0f
 #define SPH_BETA 2.0f
-#define SPH_VISC_DECAY 0.05f
-#define SPH_HYDRO_TOLER 5e-3
-#define SPH_DIFFUSION_TOLER 1e-4
-#define SPH_SMOOTHLEN_TOLER 5.0e-6
+#define SPH_VISC_DECAY 0.1f
+#define SPH_DIFFUSION_TOLER 1e-6
+#define SPH_SMOOTHLEN_TOLER 1e-6
 #define HYDRO2_ITERS 2
 
 #define NDIM 3
