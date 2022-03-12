@@ -86,12 +86,13 @@ void stars_find(float a, float dt, int minrung, int step) {
 	static const double code_to_s = get_options().code_to_s;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens]() {
+			const float dm_soft = get_options().hsoft;
 			const float code_to_s = get_options().code_to_s;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				bool make_star = false;
-				if( 1/a-1 < 20.0 && sph_particles_smooth_len(i) < get_options().hsoft / a ) {
+				if( 1/a-1 < 20.0 && sph_particles_smooth_len(i) < dm_soft/* / a*/ ) {
 					make_star = true;
 				}
 				if( make_star ) {

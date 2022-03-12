@@ -634,7 +634,7 @@ void driver() {
 			PRINT( "Light cone flush took %e seconds\n", tm.read());
 		}
 	};
-
+	const float hsoft0 = get_options().hsoft;
 	for (;; step++) {
 		double t0 = tau_max / get_options().nsteps;
 		do {
@@ -675,7 +675,7 @@ void driver() {
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
-
+			opts.hsoft = std::min(hsoft0 / a, 1.0 / get_options().parts_dim);
 			if (!glass) {
 				if (z > 50.0) {
 					theta = 0.4;

@@ -132,6 +132,10 @@ inline simd_float exp(simd_float a) { 	// 24
 	return two_pow(a * c0);
 }
 
+inline simd_float expf(simd_float a) {
+	return exp(a);
+}
+
 inline void erfcexp(const simd_float &x, simd_float *ec, simd_float* ex) {				// 76
 	const simd_float p(0.3275911);
 	const simd_float a1(0.254829592);
@@ -156,6 +160,10 @@ inline simd_float erfc(const simd_float x) {				// 76
 
 inline simd_float erf(const simd_float x) {				// 76
 	return simd_float(1) - erfc(x);
+}
+
+inline simd_float erff(const simd_float x) {				// 76
+	return erf(x);
 }
 
 inline simd_float operator*(float r, const simd_float& y) {

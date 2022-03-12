@@ -1825,7 +1825,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	const double rho_star_co_code = rho_star_phys_code * pow(params.a, 3);
 	//cuda_data.hstar0 = powf(get_options().sph_mass * get_options().neighbor_number / (3.0/(4.0*M_PI)) / rho_star_co_code, (1./3.));
 	if (1 / params.a - 1 < 20 && get_options().test == "") {
-		cuda_data.hstar0 = get_options().hsoft / params.a;
+		cuda_data.hstar0 = get_options().hsoft/* / params.a*/;
 	} else {
 		cuda_data.hstar0 = 0;
 	}

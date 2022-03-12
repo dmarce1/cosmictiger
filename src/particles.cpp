@@ -490,7 +490,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* fpot, part_int offset) {
 	static const bool sph = get_options().sph;
 	static const bool vsoft = sph && get_options().vsoft;
-	static const float dm_hsoft = get_options().hsoft;
+	const float dm_hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -575,7 +575,7 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 
 static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) {
 	static const bool sph = get_options().sph;
-	static const float hsoft = get_options().hsoft;
+	const float hsoft = get_options().hsoft;
 	static const bool vsoft = sph && get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);

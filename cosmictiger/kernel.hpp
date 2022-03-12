@@ -29,6 +29,7 @@
 #define KERNEL_WENDLAND_C2 3
 #define KERNEL_WENDLAND_C4 4
 #define KERNEL_WENDLAND_C6 5
+#define KERNEL_SUPER_GAUSSIAN 6
 
 void kernel_set_type(int type);
 void kernel_output();
@@ -45,7 +46,7 @@ extern __managed__ int kernel_type;
 template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
-	T w1, w2, w3, sw, res, sw1, sw2, sw3, w, mq;
+	T w1, w2, w3, sw, res, sw1, sw2, sw3, w, mq, q2;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -135,6 +136,11 @@ inline T kernelW(T q) {
 		res = c0 * w;
 	}
 		break;
+	case KERNEL_SUPER_GAUSSIAN: {
+		q2 = T(9.f) * sqr(q);
+		res = T(27.f / 5.568327997f) * expf(-q2) * (T(2.5f) - q2);
+	}
+		break;
 
 	};
 	return res;
@@ -143,7 +149,7 @@ inline T kernelW(T q) {
 template<class T>
 CUDA_EXPORT
 inline T dkernelW_dq(T q) {
-	T w1, w2, w3, sw, res, sw1, sw2, sw3, w, mq;
+	T w1, w2, w3, sw, res, sw1, sw2, sw3, w, mq, q2;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -231,6 +237,13 @@ inline T dkernelW_dq(T q) {
 		res = c0 * w;
 	}
 		break;
+	case KERNEL_SUPER_GAUSSIAN: {
+		q2 = T(9.f) * sqr(q);
+		res = T(243.f / 5.568327997f) * expf(-q2) * q * (-T(7.f) + T(2.f) * q2);
+
+	}
+		break;
+
 	};
 	return res;
 }
@@ -238,7 +251,7 @@ inline T dkernelW_dq(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T w1, w2, sw, res, q3inv, w3, sw1, sw2, sw3, w;
+	T w1, w2, sw, res, q3inv, w3, sw1, sw2, sw3, w, q2;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -360,6 +373,12 @@ inline T kernelFqinv(T q) {
 	}
 		break;
 
+	case KERNEL_SUPER_GAUSSIAN: {
+		q2 = T(9.f) * sqr(q);
+		w = T(6.f) * expf(-q2) * q * (T(-1.f) + q2) * T(0.564189584f) + erff(T(3.f) * q);
+		res = w / (sqr(q) * q);
+	}
+		break;
 	};
 	return res;
 }
@@ -367,7 +386,7 @@ inline T kernelFqinv(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T w1, w2, sw, res, q1inv, w3, sw1, sw2, sw3, w;
+	T w1, w2, sw, res, q1inv, w3, sw1, sw2, sw3, w, q2;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -506,10 +525,17 @@ inline T kernelPot(T q) {
 		w *= q;
 		w = fmaf(q, w, T(7. / 156.));
 		res = (q > T(0)) * c0 * w;
-		break;
 	}
 		break;
 
+	case KERNEL_SUPER_GAUSSIAN: {
+		q2 = T(9.f) * sqr(q);
+		w = -(q - T(1.f)) * erff(T(3.f) * q) / sqr(q);
+		w += T(6.f) * expf(-q2) * (-T(1) + q + q2 - q * q2) * T(0.564189584f) / q;
+		w += 1.f;
+		res = w;
+	}
+		break;
 	};
 	return res;
 }
