@@ -122,7 +122,7 @@ void stars_find(float a, float dt, int minrung, int step) {
 	PRINT("Creating stars\n");
 	std::sort(indices.begin(), indices.end());
 	for (auto& i : indices) {
-		while (sph_particles_smooth_len(sph_particles_size() - 1) < get_options().hsoft / a && sph_particles_size()) {
+		while (sph_particles_smooth_len(sph_particles_size() - 1) < get_options().hsoft && sph_particles_size()) {
 			sph_particles_resize(sph_particles_size() - 1, false);
 		}
 		if (i < sph_particles_size()) {

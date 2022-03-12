@@ -304,40 +304,30 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						const auto r2 = sqr(dx0, dx1, dx2);  // 5
 						const float h_i = sink_hsoft[k];
 						const float h_j = src_hsoft[j];
-						const float h_ij = 0.5f * (h_i + h_j);
 						const float h2_i = sqr(h_i);
 						const float h2_j = sqr(h_j);
-						if (r2 >= fmaxf(h2_i,h2_j)) {                      // 1
+						if (r2 >= fmaxf(h2_i, h2_j)) {                      // 1
 							r1inv = rsqrt(r2);                // 4
 							r3inv = r1inv * r1inv * r1inv;    // 2
 							nnear++;
 						} else {
 							const float fpot_i = sink_fpot[k];
 							const float fpot_j = src_fpot[j];
-							const float hinv_ij = 1.0f / h_ij;
 							const float hinv_i = 1.0f / h_i;
 							const float hinv_j = 1.0f / h_j;
-							const float h3inv_ij = hinv_ij * sqr(hinv_ij);
 							const float h3inv_i = hinv_i * sqr(hinv_i);
 							const float h3inv_j = hinv_j * sqr(hinv_j);
 							const float r = sqrtf(r2);
 							r1inv = 1.f / (r + 1e-30f);
-							const float q_ij = fminf(r * hinv_ij, 2.f);
-							const float q_j = fminf(r * hinv_j, 1.f);
-							const float q_i = fminf(r * hinv_i, 1.f);
+							const float q_j = r * hinv_j;
+							const float q_i = r * hinv_i;
 							const float dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * r1inv;
 							const float dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * r1inv;
-							if( q_ij < 1.f ) {
-								r3inv = kernelFqinv(q_ij) * h3inv_ij;
-							} else {
-								r3inv = r1inv * sqr(r1inv);
-							}
+							r3inv = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
 							const float correction = 0.5f * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
 							r3inv += correction;
 							if (do_phi) {
-								if( q_ij < 1.f ) {
-									r1inv = kernelPot(q_ij) * hinv_ij;
-								}
+								r1inv = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
 							}
 							nfar++;
 						}

@@ -1337,10 +1337,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float q_ij = fminf(r * hinv_ij, 1.f);
-						const float pot = kernelPot(q_ij);
-						const float force = kernelFqinv(q_ij) * q_ij;
-						dpot_dh += m / sqr(h_ij) * (pot - q_ij * force);
+						const float pot = kernelPot(q_i);
+						const float force = kernelFqinv(q_i) * q_i;
+						dpot_dh += m / sqr(h_i) * (pot - q_i * force);
 					} else if (params.phase == 2) {
 						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
 						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;
