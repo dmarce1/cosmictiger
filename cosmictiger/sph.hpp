@@ -189,13 +189,17 @@ struct sph_run_params {
 	float gy;
 	float tau;
 	int iter;
+	float max_dt;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
 		gy = opts.gy;
+		max_dt = 1e30;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & iter;
+		arc & max_dt;
 		arc & gy;
 		arc & t0;
 		arc & phase;

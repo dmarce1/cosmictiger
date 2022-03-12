@@ -1077,8 +1077,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float afactor = data.eta * sqrtf(params.a * h_i);
 						const float gfactor = data.eta * sqrtf(params.a * hsoft);
 						dthydro = fminf(fminf(afactor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
-						const float dt_grav = fminf(gfactor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0);
-						const float dt = fminf(dt_grav, dthydro);
+						const float dt_grav = fminf(fminf(gfactor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0), params.max_dt);
 						int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
@@ -1322,10 +1321,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float q_ij = fminf(r * hinv_ij, 1.f);
-						const float pot = kernelPot(q_ij);
-						const float force = kernelFqinv(q_ij) * q_ij;
-						dpot_dh += m / sqr(h_ij) * (pot - q_ij * force);
+						const float pot = kernelPot(q_i);
+						const float force = kernelFqinv(q_i) * q_i;
+						dpot_dh += m / sqr(h_i) * (pot - q_i * force);
 					} else if (params.phase == 2) {
 						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
 						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;

@@ -173,7 +173,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		if (my_type != SPH_TYPE) {
-			dt = fminf(tfactor * rsqrt(sqrtf(g2)), params.t0);
+			dt = fminf(fminf(tfactor * rsqrt(sqrtf(g2)), params.t0),params.max_dt);
 			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 			max_rung = max(rung, max_rung);
 			if (rung < 0 || rung >= MAX_RUNG) {

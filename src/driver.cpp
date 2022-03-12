@@ -17,6 +17,9 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+
+#define SCALE_DT 0.01
+
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/drift.hpp>
@@ -155,6 +158,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 
 	sph_run_params sparams;
+	if( adot != 0.0 ) {
+		sparams.max_dt = SCALE_DT * scale / fabs(adot);
+	}
 	sparams.tau = tau;
 	sparams.tzero = tau == 0.0;
 	sparams.max_rung = max_rung;
@@ -389,7 +395,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 }
 
-std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double t0, double theta, bool first_call, bool full_eval) {
+std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double dadt, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
 	PRINT("domains_begin\n");
@@ -417,6 +423,9 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 //	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
+	if( dadt != 0.0 ) {
+		kparams.max_dt = SCALE_DT * scale / fabs(dadt);
+	}
 	kparams.glass = get_options().glass;
 	kparams.node_load = flops_per_node / flops_per_particle;
 	kparams.gpu = true;
@@ -688,16 +697,16 @@ void driver() {
 			const bool chem = get_options().chem;
 			double heating;
 			if (sph & !glass) {
-				sph_step(minrung, a, tau, t0, 0, cosmos_dadt(a), max_rung, iter, dt, &heating);
+				sph_step(minrung, a, tau, t0, 0, a*cosmos_dadt(a), max_rung, iter, dt, &heating);
 				eheat -= a * heating;
 			}
-			auto tmp = kick_step(minrung, a, t0, theta, tau == 0.0, full_eval);
+			auto tmp = kick_step(minrung, a, a*cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, a*cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
 				eheat -= a * heating;
 			}
 			if (full_eval) {
