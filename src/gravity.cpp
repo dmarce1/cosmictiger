@@ -378,10 +378,11 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 							const simd_float h_i = sink_hsoft;
 							const simd_float h_j = src_hsoft;
-							const auto h_ij = simd_float(0.5f) * (h_i + h_j);
-							const auto h2_j = sqr(h_j);
-							const auto h2_i = sqr(h_i);
-							const simd_float far_flag = r2 > max(h2_i, h2_j);                                                // 1
+							const simd_float mask_i = h_i > h_j;
+							const simd_float mask_j = simd_float(1) - mask_i;
+							const auto h_ij = h_i * mask_i + h_j * mask_j;
+							const auto h2_ij = sqr(h_ij);
+							const simd_float far_flag = r2 > h2_ij;                                                // 1
 							if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
 								rinv1 = mask * rsqrt(r2);                                                        // 5
 								rinv3 = -rinv1 * rinv1 * rinv1;                                                  // 2
@@ -389,29 +390,20 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 							} else {
 								const auto fpot_i = sink_fpot;
 								const auto fpot_j = src_fpot;
+								const auto fpot_ij = mask_i * fpot_i + mask_j * fpot_j;
 								const auto hinv_ij = simd_float(1.f) / h_ij;
-								const auto hinv_i = simd_float(1.f) / h_i;
-								const auto hinv_j = simd_float(1.f) / h_j;
 								const auto h3inv_ij = sqr(hinv_ij) * hinv_ij;
-								const auto h3inv_i = sqr(hinv_i) * hinv_i;
-								const auto h3inv_j = sqr(hinv_j) * hinv_j;
 								const simd_float r = sqrt(r2);                                                    // 4
-								const simd_float rinv1_far = mask * simd_float(1) / (r + tiny);                            // 5
+								const simd_float rinv1_far = (r > simd_float(0)) * mask * simd_float(1) / (r + tiny);                            // 5
 								const simd_float rinv3_far = rinv1_far * rinv1_far * rinv1_far;                   // 2
 								const auto q_ij = min(r * hinv_ij, 2.f);
-								const auto q_j = min(r * hinv_j, 1.f);
-								const auto q_i = min(r * hinv_i, 1.f);
-								const simd_float q_mask = q_ij < simd_float(1);
-								simd_float rinv3_near = kernelFqinv(q_ij) * h3inv_ij * q_mask;
-								rinv3_near += (simd_float(1) - q_mask) * rinv3_far;
-								const auto dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * rinv1_far;
-								const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1_far;
-								const auto correction = simd_float(0.5f) * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
-				//				rinv3_near += correction;
+								simd_float rinv3_near = kernelFqinv(q_ij) * h3inv_ij;
+								const auto dWdr_ij_rinv = dkernelW_dq(q_ij) * hinv_ij * h3inv_ij * rinv1_far;
+								const auto correction = fpot_ij * dWdr_ij_rinv;
+								rinv3_near += correction;
 								simd_float rinv1_near = simd_float(0);
 								if (min_rung == 0) {
-									rinv1_near = q_mask * kernelPot(q_ij) * hinv_ij;
-									rinv1_near += (simd_float(1) - q_mask) * rinv1_far;
+									rinv1_near = kernelPot(q_ij) * hinv_ij;
 								}
 								const auto near_flag = (simd_float(1) - far_flag);                                // 1
 								rinv1 = (far_flag * rinv1_far + near_flag * rinv1_near) * mask;                      // 4
