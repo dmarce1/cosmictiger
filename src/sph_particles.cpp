@@ -146,18 +146,18 @@ float sph_particles_max_smooth_len() {
 }
 
 HPX_PLAIN_ACTION (sph_particles_apply_updates);
-std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, float t0, float tau) {
+std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, float t0, float tau, float w) {
 
 	profiler_enter(__FUNCTION__);
 	double err = 0.0;
 	double norm = 0.0;
 	vector<hpx::future<std::pair<double, double>>>futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase, t0, tau));
+		futs.push_back(hpx::async<sph_particles_apply_updates_action>(c, minrung, phase, t0, tau, w));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung, tau]() {
+		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung, tau, w]() {
 			double error = 0.0;
 			double norm = 0.0;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
@@ -185,6 +185,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						}
 						break;
 						case 1: {
+							double e0 = sph_particles_egas(i);
+							sph_particles_deint_con(i) += (1.0f - w)*(sph_particles_deint_pred(i)-sph_particles_deint_con(i));
+							sph_particles_dalpha_con(i) += (1.0f - w)*(sph_particles_dalpha_pred(i)-sph_particles_dalpha_con(i));
+							for( int dim =0; dim < NDIM; dim++) {
+								sph_particles_dvel_con(dim,i) += (1.0f - w)*(sph_particles_dvel_pred(dim,i)-sph_particles_dvel_con(dim,i));
+							}
 							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt;
 							sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt;
 							for( int dim =0; dim < NDIM; dim++) {
@@ -200,6 +206,8 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
 							}
+							double e1 = sph_particles_egas(i);
+							error = std::max(error, sqrt(sqr(e0-e1)/(e0*e1)));
 						}
 						break;
 						case 2: {

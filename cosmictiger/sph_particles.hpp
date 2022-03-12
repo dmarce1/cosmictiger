@@ -123,7 +123,7 @@ float sph_particles_temperature(part_int, float);
 float sph_particles_mmw(part_int);
 float sph_particles_lambda_e(part_int, float, float);
 
-std::pair<double,double> sph_particles_apply_updates(int, int,float,float);
+std::pair<double,double> sph_particles_apply_updates(int, int,float,float, float=1.0);
 /*
  inline float& sph_particles_SN(part_int index) {
  return sph_particles_sn[index];

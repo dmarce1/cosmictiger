@@ -287,17 +287,21 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			}
 		}
 		if (!glass) {
+			double error;
 			if (tau != 0.0) {
-				for (int hydro_iter = 0; hydro_iter < HYDRO2_ITERS; hydro_iter++) {
+				double w = 1.0;
+				int iters = 0;
+			//	do {
 					sparams.run_type = SPH_RUN_HYDRO;
 					tm.start();
 					sph_run(sparams, true);
 					tm.stop();
 					tm.reset();
 					auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
+					error = tmp.first;
 					if (verbose)
 						PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-					sparams.phase = hydro_iter == HYDRO2_ITERS - 1 ? 2 : 1;
+					sparams.phase = 2;
 					sparams.run_type = SPH_RUN_AUX;
 					tm.start();
 					sph_run(sparams, true);
@@ -306,7 +310,10 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 						PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
 					tm.reset();
 					sparams.phase = 0;
-				}
+					w = 0.5;
+					iters++;
+				//} while (error > SPH_HYDRO_TOLER);
+				PRINT( "FINISHED in %i ITERS\n", iters);
 			}
 			sparams.phase = 0;
 			if (diff && tau != 0.0) {
