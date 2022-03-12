@@ -690,9 +690,9 @@ void driver() {
 				theta = 0.4;
 			}
 
-			if (last_theta != theta) {
+	///		if (last_theta != theta) {
 				set_options(opts);
-			}
+////			}
 			last_theta = theta;
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
