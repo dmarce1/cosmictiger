@@ -980,6 +980,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float az = 0.f;
 				float de_dt = 0.f;
 				const float ainv = 1.0f / params.a;
+				const float& adot = params.adot;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto rec1 = ws.rec1[j];
 					const auto rec2 = ws.rec2[j];
@@ -1004,9 +1005,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float x_ij = distance(x_i, x_j);				// 2
 					const float y_ij = distance(y_i, y_j);				// 2
 					const float z_ij = distance(z_i, z_j);				// 2
-					const float vx_ij = vx_i - vx_j;
-					const float vy_ij = vy_i - vy_j;
-					const float vz_ij = vz_i - vz_j;
+					const float vx0_ij = vx_i - vx_j;
+					const float vy0_ij = vy_i - vy_j;
+					const float vz0_ij = vz_i - vz_j;
+					const float vx_ij = vx0_ij + x_ij * adot;
+					const float vy_ij = vy0_ij + y_ij * adot;
+					const float vz_ij = vz0_ij + z_ij * adot;
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
@@ -1037,8 +1041,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float dvx_dt = -m * ainv * (dp_i * dWdr_x_i + dp_j * dWdr_x_j + Pi * dWdr_x_ij);
 					const float dvy_dt = -m * ainv * (dp_i * dWdr_y_i + dp_j * dWdr_y_j + Pi * dWdr_y_ij);
 					const float dvz_dt = -m * ainv * (dp_i * dWdr_z_i + dp_j * dWdr_z_j + Pi * dWdr_z_ij);
-					const float tmp1 = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
-					const float tmp2 = (vx_ij * dWdr_x_i + vy_ij * dWdr_y_i + vz_ij * dWdr_z_i);
+					const float tmp1 = (vx0_ij * dWdr_x_ij + vy0_ij * dWdr_y_ij + vz0_ij * dWdr_z_ij);
+					const float tmp2 = (vx0_ij * dWdr_x_i + vy0_ij * dWdr_y_i + vz0_ij * dWdr_z_i);
 					de_dt += ainv * (0.5f * Pi * tmp1 + p_i * rhoinv_i * rhoinv_i * tmp2) * m;
 					ax += dvx_dt;
 					ay += dvy_dt;
@@ -1277,6 +1281,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				float dT_dx = 0.f;
 				float dT_dy = 0.f;
 				float dT_dz = 0.f;
+				const float& adot = params.adot;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto rec1 = ws.rec1[j];
 					const auto rec2 = ws.rec2[j];
@@ -1296,9 +1301,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float x_ij = distance(x_i, x_j);				// 2
 					const float y_ij = distance(y_i, y_j);				// 2
 					const float z_ij = distance(z_i, z_j);				// 2
-					const float vx_ij = vx_i - vx_j;
-					const float vy_ij = vy_i - vy_j;
-					const float vz_ij = vz_i - vz_j;
+					const float vx_ij = vx_i - vx_j + x_ij * adot;
+					const float vy_ij = vy_i - vy_j + y_ij * adot;
+					const float vz_ij = vz_i - vz_j + z_ij * adot;
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
@@ -1323,9 +1328,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float pot = kernelPot(q_i);
-						const float force = kernelFqinv(q_i) * q_i;
-						dpot_dh += m / sqr(h_i) * (pot - q_i * force);
+						const float q_ij = fminf(r * hinv_ij, 1.f);
+						const float pot = kernelPot(q_ij);
+						const float force = kernelFqinv(q_ij) * q_ij;
+						dpot_dh += m / sqr(h_ij) * (pot - q_ij * force);
 					} else if (params.phase == 2) {
 						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
 						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;
@@ -1362,7 +1368,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
 				if (tid == 0) {
-					div_v += 3.f * params.adot * ainv;
+					//div_v += 3.f * params.adot * ainv;
 					const float sw = 1e-4f * c_i / h_i * ainv;
 					const float abs_div_v = fabsf(div_v);
 					const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
