@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                         const T& operator[](int i) const {
+	                                                                          const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -975,7 +975,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 				}
 				float vsig_max = 0.f;
-				float vsig = 0.f;
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
@@ -1011,7 +1010,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
-					const float alpha_ij = fmaxf(alpha_i * fvel_i,  alpha_j * fvel_j);
+					const float alpha_ij = fmaxf(alpha_i * fvel_i, alpha_j * fvel_j);
 					const float h_ij = 0.5f * (h_i + h_j);
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 					const float w_ij = vdotx_ij * rinv;
@@ -1044,23 +1043,19 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += dvx_dt;
 					ay += dvy_dt;
 					az += dvz_dt;
-					vsig = fmaxf(vsig, c_ij - w_ij);
-					if (params.phase == 1) {
-						const float hfac = h_i / h_ij;
-						float this_vsig = c_ij * hfac;
-						if (vdotx_ij < 0.f) {
-							this_vsig += 0.6f * alpha_ij * c_ij * hfac;
-							this_vsig -= 0.6f * alpha_ij * SPH_BETA * w_ij * hfac;
-						}
-						vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
+					const float hfac = h_i / h_ij;
+					float this_vsig = c_ij * hfac;
+					if (vdotx_ij < 0.f) {
+						this_vsig += 0.6f * alpha_ij * c_ij * hfac;
+						this_vsig -= 0.6f * alpha_ij * SPH_BETA * w_ij * hfac;
 					}
+					vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig);
 
 				if (tid == 0) {
 					ax += gx_i;
@@ -1108,11 +1103,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 					const float ddivv_dtau = data.divvdt_snk[snki];
 					const float S = params.a * fmaxf(0.f, -ddivv_dtau) * (sqr(fvel_i) / (1.f - 2.f * fvel_i + 2.f * sqr(fvel_i)));
-					const float alpha_targ = fmaxf(SPH_ALPHA0, SPH_ALPHA1 * sqr(h_i) * S / (sqr(h_i) * S + sqr(vsig)));
+					const float alpha_targ = fmaxf(SPH_ALPHA0, SPH_ALPHA1 * sqr(h_i) * S / (sqr(h_i) * S + sqr(vsig_max)));
 					float& alpha = data.alpha_snk[snki];
-					const float dt = params.a * h_i / vsig;
+					const float dt = params.cfl * params.a * h_i / vsig_max;
 					const float dalpha = alpha_targ - alpha;
-					const float dalpha_dt = (SPH_VISC_DECAY + ((1.f + tanhf(10.0f * dalpha)) - SPH_VISC_DECAY)) * dalpha / dt;
+					const float dalpha_dt = (SPH_VISC_DECAY + ((0.5f + 0.5f * tanhf(10.0f * dalpha)) - SPH_VISC_DECAY)) * dalpha / dt;
 					data.dalpha_con[snki] = dalpha_dt;
 				}
 			}

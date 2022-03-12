@@ -715,15 +715,15 @@ void hydro_helmholtz_test() {
 			}
 		}
 	}
-	hydro_driver(10.00);
+	hydro_driver(10.00, 256);
 }
 
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 1.0;
-	double p1 = 1000000.0;
+	double p1 = 1000000.0 / pow(20/15.0,3);
 	double p0 = 1.0;
-	double sigma = 0.015;
+	double sigma = 0.02;
 	auto opts = get_options();
 	part_int ndim = get_options().parts_dim;
 	part_int nparts = std::pow(ndim, NDIM);

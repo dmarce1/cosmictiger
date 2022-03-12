@@ -65,9 +65,9 @@ void kernel_adjust_options(options& opts) {
 	PRINT( "kernel width = %e\n", h0/h);
 //	opts.neighbor_number *= pow(h0 / h, 3);
 	opts.sph_bucket_size = 8.0 / M_PI *  opts.neighbor_number;
-	opts.cfl *= h / h0;
-	opts.hsoft *= h0 / h;
-	opts.eta *= sqrt(h / h0);
+//	opts.cfl *= h / h0;
+//	opts.hsoft *= h0 / h;
+//	opts.eta *= sqrt(h / h0);
 	PRINT("Setting:\n");
 	PRINT("Neighbor number       = %e\n", opts.neighbor_number);
 	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);

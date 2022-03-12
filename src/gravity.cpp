@@ -407,7 +407,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 								const auto dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * rinv1_far;
 								const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1_far;
 								const auto correction = simd_float(0.5f) * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
-								rinv3_near += correction;
+				//				rinv3_near += correction;
 								simd_float rinv1_near = simd_float(0);
 								if (min_rung == 0) {
 									rinv1_near = q_mask * kernelPot(q_ij) * hinv_ij;

@@ -119,14 +119,15 @@ bool process_options(int argc, char *argv[]) {
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
-	("kernel", po::value<int>(&(opts.kernel))->default_value(3), "kernel type") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("nsteps", po::value<int>(&(opts.nsteps))->default_value(128), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
+	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/20.0), "dark matter softening in units of interparticle spacing") //
+	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(128), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.2), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
@@ -169,7 +170,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
-	opts.hsoft = 1.0 / 25.0 / opts.parts_dim;
+	opts.hsoft *= 1.0 / opts.parts_dim;
 	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
