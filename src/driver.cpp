@@ -18,7 +18,7 @@
  */
 
 
-#define SCALE_DT 0.01
+#define SCALE_DT 0.02
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -161,6 +161,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	if( adot != 0.0 ) {
 		sparams.max_dt = SCALE_DT * scale / fabs(adot);
 	}
+	sparams.adot = adot;
 	sparams.tau = tau;
 	sparams.tzero = tau == 0.0;
 	sparams.max_rung = max_rung;

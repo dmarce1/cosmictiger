@@ -23,6 +23,7 @@
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
 
@@ -73,6 +74,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 #endif
 			bool do_lc = get_options().do_lc;
 			do_lc = do_lc && (tau_max - tau1 <= 1.0);
+			const auto adot = scale * cosmos_dadt(scale);
 			for( part_int i = begin; i < end; i++) {
 				double x = particles_pos(XDIM,i).to_double();
 				double y = particles_pos(YDIM,i).to_double();
@@ -102,7 +104,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float eint = sph_particles_eint(j);
 					if( tau0 != 0.0 ) {
 						const float divv = sph_particles_divv(j);
-						float dloghdt = (1.f/3.f)*divv/scale;
+						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
 						if( dloghdt > 1.0 / dt0 ) {
 							PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
 							dloghdt = 1.0 / dt0;

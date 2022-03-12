@@ -86,6 +86,7 @@ set(cosmictiger_source_files
     src/sph_particles.cpp
     src/sph.cpp
     src/sph.cu
+    src/sphere.cu
     src/sph_tree.cpp
     src/stack_trace.cpp
     src/stars.cpp
