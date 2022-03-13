@@ -177,7 +177,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	}
 #endif
 	kick_return kr;
-	const bool vsoft = sph && get_options().sph;
 	const int glass = get_options().glass;
 	const simd_float h = params.h;
 	const float hfloat = params.h;
@@ -212,11 +211,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	multlist.resize(0);
 	simd_float other_hsoft;
 	simd_float hsoft;
-	if (vsoft) {
-		hsoft = self_ptr->hsoft_max;
-	} else {
-		hsoft = h;
-	}
+	hsoft = self_ptr->hsoft_max;
 	for (int ci = 0; ci < echecklist.size(); ci += SIMD_FLOAT_SIZE) {
 		const int maxci = std::min((int) echecklist.size(), ci + SIMD_FLOAT_SIZE);
 		const int maxi = maxci - ci;
@@ -228,11 +223,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 			}
 			other_radius[i] = other_ptrs[i]->radius;
-			if (vsoft) {
-				other_hsoft[i] = other_ptrs[i]->hsoft_max;
-			} else {
-				other_hsoft[i] = h[0];
-			}
+			other_hsoft[i] = other_ptrs[i]->hsoft_max;
 		}
 		for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -276,11 +267,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				for (int dim = 0; dim < NDIM; dim++) {
 					other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 				}
-				if (vsoft) {
-					other_hsoft[i] = other_ptrs[i]->hsoft_max;
-				} else {
-					other_hsoft[i] = h[0];
-				}
+				other_hsoft[i] = other_ptrs[i]->hsoft_max;
 				other_radius[i] = other_ptrs[i]->radius;
 				other_leaf[i] = other_ptrs[i]->leaf;
 			}

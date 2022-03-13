@@ -375,7 +375,7 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 						const auto hinv_ij = simd_float(1.f) / h_ij;
 						const auto h3inv_i = sqr(hinv_i) * hinv_i;
 						const auto h3inv_j = sqr(hinv_j) * hinv_j;
-						const auto h3inv_ij = sqr(hinv_j) * hinv_ij;
+						const auto h3inv_ij = sqr(hinv_ij) * hinv_ij;
 						const simd_float r = sqrt(r2);                                                    // 4
 						rinv1 = simd_float(1) / (r + tiny);                            // 5
 						const auto q_j = r * hinv_j;
