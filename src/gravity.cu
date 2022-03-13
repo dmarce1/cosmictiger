@@ -324,10 +324,14 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 							const float dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * r1inv;
 							const float dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * r1inv;
 							r3inv = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-							const float correction = 0.5f * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
+							float correction = 0.5f * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
 							r3inv += correction;
 							if (do_phi) {
+								const float W_i = kernelW(q_i) * h3inv_i;
+								const float W_j = kernelW(q_j) * h3inv_j;
 								r1inv = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
+								correction = 0.5f * (fpot_i * W_i + fpot_j * W_j);
+								r1inv += correction;
 							}
 							nfar++;
 						}

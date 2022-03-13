@@ -781,10 +781,10 @@ __global__ void sph_cuda_diffusion(sph_run_params params, sph_run_cuda_data data
 						num[fi] += diff_factor * rec2.vec[fi];
 					}
 					den += diff_factor;
+					den_A += diff_factor;
 					if (data.conduction) {
-						//float adjust = mmw_j / mmw_i;
 						num[NCHEMFRACS] += cond_factor * rec2.vec[NCHEMFRACS];													// * adjust;
-						den_A += diff_factor + cond_factor;
+						den_A += cond_factor;
 					}
 				}
 				for (int fi = 0; fi < DIFCO_COUNT; fi++) {
