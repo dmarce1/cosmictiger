@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                  const T& operator[](int i) const {
+	                                                                                   const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -1329,10 +1329,15 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float q_ij = r * hinv_ij;
-						const float pot = kernelPot(q_ij);
-						const float force = kernelFqinv(q_ij) * q_ij;
-						dpot_dh += m * sqr(hinv_ij) * (pot - q_ij * force);
+						/*
+						 const float q_ij = r * hinv_ij;
+						 const float pot = kernelPot(q_ij);
+						 const float force = kernelFqinv(q_ij) * q_ij;
+						 dpot_dh += m * sqr(hinv_ij) * (pot - q_ij * force);*/
+						const float q_i = r * hinv_i;
+						const float pot = kernelPot(q_i);
+						const float force = kernelFqinv(q_i) * q_i;
+						dpot_dh += m * sqr(hinv_i) * (pot - q_i * force);
 					} else if (params.phase == 2) {
 						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
 						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;
