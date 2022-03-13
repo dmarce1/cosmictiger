@@ -95,13 +95,11 @@ struct options {
 	double gy;
 	double gcentral;
 	double hcentral;
-	double hsoft_min;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & hsoft_min;
 		arc & alpha0;
 		arc & alpha1;
 		arc & beta;

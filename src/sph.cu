@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                const T& operator[](int i) const {
+	                                                                                  const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -1081,7 +1081,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						char& rung = data.rungs[i];
 						const float g2 = sqr(gx_i, gy_i, gz_i);
 						const float a2 = sqr(ax, ay, az);
-						const float hsoft = fminf(fmaxf(h_i, params.hsoft_min), SPH_MAX_SOFT);
+						const float hsoft = fminf(h_i, SPH_MAX_SOFT);
 						const float afactor = data.eta * sqrtf(params.a * 0.5f * (h_i + hsoft));
 						const float gfactor = data.eta * sqrtf(params.a * hsoft);
 						dthydro = fminf(fminf(afactor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
@@ -1329,11 +1329,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						if (h_i > params.hsoft_min) {
-							const float pot = kernelPot(q_i);
-							const float force = kernelFqinv(q_i) * q_i;
-							dpot_dh += m / sqr(h_i) * (pot - q_i * force);
-						}
+						const float q_ij = r * hinv_ij;
+						const float pot = kernelPot(q_ij);
+						const float force = kernelFqinv(q_ij) * q_ij;
+						dpot_dh += m * sqr(hinv_ij) * (pot - q_ij * force);
 					} else if (params.phase == 2) {
 						dT_dx += (T_j - T_i) * dWdr_x_i * mrhoinv_i;
 						dT_dy += (T_j - T_i) * dWdr_y_i * mrhoinv_i;

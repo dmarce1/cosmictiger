@@ -283,105 +283,60 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 			float r3inv;
 			float r1inv;
 			__syncwarp();
-			if (sph) {
-				for (int k = tid; k < nactive; k += WARP_SIZE) {
-					fx = 0.f;
-					fy = 0.f;
-					fz = 0.f;
-					pot = 0.f;
-					for (int j = 0; j < part_index; j++) {
-						dx0 = distance(sink_x[k], src_x[j]); // 1
-						dx1 = distance(sink_y[k], src_y[j]); // 1
-						dx2 = distance(sink_z[k], src_z[j]); // 1
-						const float mass = src_fpot[j] != 0.f ? sph_mass : dm_mass;
-						const auto r2 = sqr(dx0, dx1, dx2);  // 5
-						const float h_i = sink_hsoft[k];
-						const float h_j = src_hsoft[j];
-						const float h2_i = sqr(h_i);
-						const float h2_j = sqr(h_j);
-						if (r2 >= fmaxf(h2_i, h2_j)) {                      // 1
-							r1inv = rsqrt(r2);                // 4
-							r3inv = r1inv * r1inv * r1inv;    // 2
-							nnear++;
-						} else {
-							const float fpot_i = sink_fpot[k];
-							const float fpot_j = src_fpot[j];
-							const float hinv_i = 1.0f / h_i;
-							const float hinv_j = 1.0f / h_j;
-							const float h3inv_i = hinv_i * sqr(hinv_i);
-							const float h3inv_j = hinv_j * sqr(hinv_j);
-							const float r = sqrtf(r2);
-							r1inv = 1.f / (r + 1e-30f);
-							const float q_j = r * hinv_j;
-							const float q_i = r * hinv_i;
-							const float dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * r1inv;
-							const float dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * r1inv;
-							r3inv = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-							float correction = 0.5f * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
-							r3inv += correction;
-							if (do_phi) {
-								const float W_i = kernelW(q_i) * h3inv_i;
-								const float W_j = kernelW(q_j) * h3inv_j;
-								r1inv = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-								correction = 0.5f * (fpot_i * W_i + fpot_j * W_j);
-								r1inv += correction;
-							}
-							nfar++;
-						}
-						r3inv *= mass;
-						r1inv *= mass;
-						flops += 2;
-						fx = fmaf(dx0, r3inv, fx);                     // 2
-						fy = fmaf(dx1, r3inv, fy);                     // 2
-						fz = fmaf(dx2, r3inv, fz);                     // 2
-						pot -= r1inv;                                  // 1
+			for (int k = tid; k < nactive; k += WARP_SIZE) {
+				fx = 0.f;
+				fy = 0.f;
+				fz = 0.f;
+				pot = 0.f;
+				for (int j = 0; j < part_index; j++) {
+					dx0 = distance(sink_x[k], src_x[j]); // 1
+					dx1 = distance(sink_y[k], src_y[j]); // 1
+					dx2 = distance(sink_z[k], src_z[j]); // 1
+					const float mass = sph ? (src_fpot[j] != 0.f ? sph_mass : dm_mass) : 1.f;
+					const auto r2 = sqr(dx0, dx1, dx2);  // 5
+					const float h_i = sink_hsoft[k];
+					const float h_j = src_hsoft[j];
+					const float h_ij = 0.5f * (h_i + h_j);
+					const float fpot_i = sink_fpot[k];
+					const float fpot_j = src_fpot[j];
+					const float hinv_i = 1.0f / h_i;
+					const float hinv_j = 1.0f / h_j;
+					const float hinv_ij = 1.0f / h_ij;
+					const float h3inv_i = hinv_i * sqr(hinv_i);
+					const float h3inv_j = hinv_j * sqr(hinv_j);
+					const float h3inv_ij = hinv_ij * sqr(hinv_ij);
+					const float r = sqrtf(r2);
+					r1inv = 1.f / (r + 1e-30f);
+					const float q_j = r * hinv_j;
+					const float q_i = r * hinv_i;
+					const float q_ij = r * hinv_ij;
+					const float F0 = kernelFqinv(q_ij) * h3inv_ij;
+					const float dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * r1inv;
+					const float dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * r1inv;
+					float Fc = 0.5f * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
+					r3inv = F0 + Fc;
+					if (do_phi) {
+						const float pot0 = kernelPot(q_ij) * hinv_ij;
+						const float W_i = kernelW(q_i) * h3inv_i;
+						const float W_j = kernelW(q_j) * h3inv_j;
+						const float potc = 0.5f * (fpot_i * W_i + fpot_j * W_j);
+						r1inv = pot0 + potc;
 					}
-					gx[k] -= fx;
-					gy[k] -= fy;
-					gz[k] -= fz;
-					phi[k] += pot;
+					r3inv *= mass;
+					r1inv *= mass;
+					flops += 2;
+					fx = fmaf(dx0, r3inv, fx);                     // 2
+					fy = fmaf(dx1, r3inv, fy);                     // 2
+					fz = fmaf(dx2, r3inv, fz);                     // 2
+					pot -= r1inv;                                  // 1
 				}
-			} else {
-				for (int k = tid; k < nactive; k += WARP_SIZE) {
-					fx = 0.f;
-					fy = 0.f;
-					fz = 0.f;
-					pot = 0.f;
-					for (int j = 0; j < part_index; j++) {
-						dx0 = distance(sink_x[k], src_x[j]); // 1
-						dx1 = distance(sink_y[k], src_y[j]); // 1
-						dx2 = distance(sink_z[k], src_z[j]); // 1
-						const auto r2 = sqr(dx0, dx1, dx2);  // 5
-						if (r2 >= h2) {                      // 1
-							r1inv = rsqrt(r2);                // 4
-							r3inv = r1inv * r1inv * r1inv;    // 2
-							nnear++;
-						} else {
-							const float r1oh1 = sqrtf(r2) * hinv; // 5
-							const float r2oh2 = r1oh1 * r1oh1;    // 1
-							r3inv = +15.0f / 8.0f;
-							r1inv = -5.0f / 16.0f;
-							r3inv = fmaf(r3inv, r2oh2, -21.0f / 4.0f);  // 2
-							r1inv = fmaf(r1inv, r2oh2, 21.0f / 16.0f);  // 2
-							r3inv = fmaf(r3inv, r2oh2, +35.0f / 8.0f);  // 2
-							r1inv = fmaf(r1inv, r2oh2, -35.0f / 16.0f); // 2
-							r3inv *= h3inv;                             // 1
-							r1inv = fmaf(r1inv, r2oh2, 35.0f / 16.0f);  // 2
-							r1inv *= hinv;                              // 1
-							nfar++;
-						}
-						fx = fmaf(dx0, r3inv, fx);                     // 2
-						fy = fmaf(dx1, r3inv, fy);                     // 2
-						fz = fmaf(dx2, r3inv, fz);                     // 2
-						pot -= r1inv;                                  // 1
-					}
-					gx[k] -= fx;
-					gy[k] -= fy;
-					gz[k] -= fz;
-					phi[k] += pot;
-				}
+				gx[k] -= fx;
+				gy[k] -= fy;
+				gz[k] -= fz;
+				phi[k] += pot;
 			}
 		}
+
 		__syncwarp();
 	}
 	shared_reduce_add(nnear);

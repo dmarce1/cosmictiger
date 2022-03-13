@@ -195,13 +195,11 @@ struct sph_run_params {
 	float alpha1;
 	float beta;
 	float alpha_decay;
-	float hsoft_min;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
 		gy = opts.gy;
 		max_dt = 1e30;
-		hsoft_min = opts.hsoft_min;
 		alpha0 = opts.alpha0;
 		alpha1 = opts.alpha1;
 		beta = opts.beta;

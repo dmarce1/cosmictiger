@@ -230,7 +230,6 @@ bool process_options(int argc, char *argv[]) {
 	}
 	if (!opts.sph) {
 	}
-	opts.hsoft_min = 1.0 / 50.0 / opts.parts_dim;
 	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
 		opts.chem = opts.conduction = false;
 		opts.stars = false;
@@ -245,7 +244,6 @@ bool process_options(int argc, char *argv[]) {
 			opts.alpha1 = 0.001;
 			opts.beta = 1.0;
 			opts.diffusion = false;
-			opts.hsoft_min = 0.0;
 		}
 	}
 	SHOW(alpha0);
