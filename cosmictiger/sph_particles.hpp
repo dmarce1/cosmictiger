@@ -82,7 +82,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_de1; // deint_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN array<float*, NCHEMFRACS> sph_particles_chem; // chemistry
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
-SPH_PARTICLES_EXTERN float* sph_particles_dvvdt; // divv
 //SPH_PARTICLES_EXTERN float* sph_particles_dz;
 SPH_PARTICLES_EXTERN float* sph_particles_t0; // time of last aux
 SPH_PARTICLES_EXTERN float* sph_particles_fv; // balsara
@@ -321,10 +320,6 @@ inline float& sph_particles_divv(part_int index) {
 	return sph_particles_dvv[index];
 }
 
-inline float& sph_particles_ddivv_dt(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dvvdt[index];
-}
 
 inline float& sph_particles_taux(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);

@@ -207,6 +207,60 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	view_output_views(main_step, 1.0);
 }
 
+void hydro_plummer() {
+	part_int N = pow(get_options().parts_dim, 3);
+	const double a = 0.01;
+	auto opts = get_options();
+	opts.sph_mass = 1. / N;
+	const double m = opts.sph_mass;
+	set_options(opts);
+	const double G = opts.GM;
+	const double M0 = N * m;
+	const double rho0 = 3.0 * M0 / (4.0 * M_PI) / (a * a * a);
+	PRINT("Central density = %e\n", rho0);
+	double pot = 0.0;
+	double ekin = 0.0;
+	double maxr = 5.0 * a;
+	while (sph_particles_size() < N) {
+		double x = maxr * (2.0 * rand1() - 1.0);
+		double y = maxr * (2.0 * rand1() - 1.0);
+		double z = maxr * (2.0 * rand1() - 1.0);
+		double r = sqrt(sqr(x, y, z));
+		double dist = powf(1.0 + sqr(r / a), -2.5);
+		if (rand1() < dist) {
+			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+			part_int k = sph_particles_size();
+			sph_particles_resize(k + 1);
+			double phi = -G * M0 / sqrt(r * r + a * a);
+			double v = sqrt(-phi / 2.0);
+			sph_particles_pos(XDIM, k) = x - 0.5;
+			sph_particles_pos(YDIM, k) = y - 0.5;
+			sph_particles_pos(ZDIM, k) = z - 0.5;
+			x = rand1();
+			y = rand1();
+			v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
+			x = rand1() - 0.5;
+			y = rand1() - 0.5;
+			z = rand1() - 0.5;
+			double norminv = 1.0 / sqrt(sqr(x, y, z));
+			x *= norminv;
+			y *= norminv;
+			z *= norminv;
+			sph_particles_vel(XDIM, k) = x * v;
+			sph_particles_vel(YDIM, k) = y * v;
+			sph_particles_vel(ZDIM, k) = z * v;
+			sph_particles_eint (k) = 1.0e-30;
+			sph_particles_rung(k) = 0;
+			sph_particles_smooth_len(k) = h;
+			ekin +=0.5 * m * sqr(v);
+			pot += 0.5 * m * phi;
+		}
+	}
+	PRINT("Virial error is %e\n", (2.0 * ekin + pot) / (2.0 * ekin - pot));
+	const double tdyn = sqrt(4.0 * M_PI * a * a * a / (3.0 * G * M0));
+	hydro_driver(10.0 * tdyn, 1024);
+}
+
 void hydro_star_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	const double r0 = 20.0;
@@ -286,7 +340,7 @@ void hydro_star_test() {
 	PRINT("************************************\n");
 	PRINT("tdyn = %e\n", 1.0 / sqrt(opts.GM * rho0));
 	PRINT("************************************\n");
-	hydro_driver(2.0*tdyn, 100);
+	hydro_driver(2.0 * tdyn, 100);
 	const int Nsample = 1000;
 	double l2 = 0.0;
 	double norm = 0.0;
@@ -296,7 +350,7 @@ void hydro_star_test() {
 		const float x = sph_particles_pos(XDIM, k).to_float();
 		const float y = sph_particles_pos(YDIM, k).to_float();
 		const float z = sph_particles_pos(ZDIM, k).to_float();
-		const float r = sqrt(sqr(x-0.5, y-0.5, z-0.5));
+		const float r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
 		float d1 = 0.0;
 		if (r < rmax) {
 			d1 = rho(r * r0);

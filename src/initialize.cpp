@@ -420,7 +420,7 @@ void load_glass(const char* filename) {
 								const part_int m = particles_cat_index(index);
 								sph_particles_eint(m) = 1.0e-30f;
 								sph_particles_smooth_len(m) = h;
-								sph_particles_alpha(m) = SPH_ALPHA0;
+								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
 									sph_particles_He0(m) = get_options().Y0;
 									sph_particles_Hn(m) = 1.e-30;
@@ -911,7 +911,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								const part_int m = particles_cat_index(index);
 								sph_particles_eint(m) = 1.0e-30f;
 								sph_particles_smooth_len(m) = h;
-								sph_particles_alpha(m) = SPH_ALPHA0;
+								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
 									sph_particles_He0(m) = get_options().Y0;
 									sph_particles_Hn(m) = 1.e-30;

@@ -28,3 +28,4 @@ void hydro_rt_test();
 void hydro_disc_test();
 void hydro_blast_test();
 void hydro_star_test();
+void hydro_plummer();

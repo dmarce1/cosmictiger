@@ -113,6 +113,10 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.05), "alpha0 viscosity") //
+	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.5), "alpha1 for viscosity") //
+	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
+	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
 	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
 	("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
 	("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
@@ -230,6 +234,28 @@ bool process_options(int argc, char *argv[]) {
 	if (!opts.sph) {
 		opts.vsoft = false;
 	}
+	opts.hsoft_min = 1.0 / 50.0 / opts.parts_dim;
+	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
+		opts.chem = opts.conduction = false;
+		opts.stars = false;
+		opts.gravity = opts.test == "star" || opts.test == "plummer";
+		opts.gamma = 5. / 3.;
+		if (opts.test == "disc") {
+			opts.sph_mass = 1.0;
+			opts.gcentral = 1.0;
+		}
+		if( opts.test == "plummer") {
+			opts.alpha0 = 0.0001;
+			opts.alpha1 = 0.001;
+			opts.beta = 1.0;
+			opts.diffusion = false;
+			opts.hsoft_min = 0.0;
+		}
+	}
+	SHOW(alpha0);
+	SHOW(alpha1);
+	SHOW(alpha_decay);
+	SHOW(beta);
 	SHOW(check_freq);
 	SHOW(chem);
 	SHOW(code_to_cm);
@@ -294,15 +320,6 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
-	if (opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
-		opts.chem = opts.conduction = false;
-		opts.gravity = opts.test == "star";
-		opts.gamma = 5. / 3.;
-		if (opts.test == "disc") {
-			opts.sph_mass = 1.0;
-			opts.gcentral = 1.0;
-		}
-	}
 	kernel_set_type(opts.kernel);
 	set_options(opts);
 	kernel_adjust_options(opts);

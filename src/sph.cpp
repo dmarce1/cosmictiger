@@ -1777,12 +1777,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.nselfs = host_selflist.size();
-	cuda_data.divvdt_snk = &sph_particles_ddivv_dt(0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.chem = get_options().chem;
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
-//cuda_data.tcool_snk = &sph_particles_tcool(0);
 	cuda_data.dvec_snk = &sph_particles_d_dif_vec(0);
 	cuda_data.kappa_snk = &sph_particles_kappa(0);
 	cuda_data.deint_pred = &sph_particles_deint_pred(0);
@@ -1836,7 +1834,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
-	cuda_data.hsoft_min = get_options().hsoft;
 	PRINT("Running with %i nodes\n", host_trees.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);

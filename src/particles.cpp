@@ -499,6 +499,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 			std::memcpy(x + offset, &particles_pos(XDIM, range.range.first), sizeof(float) * sz);
 			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
 			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
+			const float hsoft_min = get_options().hsoft_min;
 			if (sph) {
 				for (int i = range.range.first; i < range.range.second; i++) {
 					const int j = offset + i - range.range.first;
@@ -508,7 +509,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 						if (type != SPH_TYPE) {
 							hsoft[j] = dm_hsoft;
 						} else {
-							hsoft[j] = std::max(dm_hsoft, std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
+							hsoft[j] = std::max(hsoft_min, std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
 						}
 					}
 					if (fpot) {

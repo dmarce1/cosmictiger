@@ -40,7 +40,6 @@ struct sph_run_cuda_data {
 	float hcentral;
 	float* fpot_snk;
 	float* mmw;
-	float hsoft_min;
 	float G;
 	float t0;
 	float kappa0;
@@ -100,9 +99,6 @@ struct sph_run_cuda_data {
 	float hstar0;
 	float N;
 	char* sa_snk;
-//	float* Yform_snk;
-//	float* Zform_snk;
-	float* divvdt_snk;
 	float* divv_snk;
 	float* taux_snk;
 	int nselfs;

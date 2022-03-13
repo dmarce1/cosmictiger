@@ -489,6 +489,8 @@ void test(std::string test) {
 		hydro_disc_test();
 	} else if (test == "sphere") {
 		sphere_surface_test();
+	} else if (test == "plummer") {
+		hydro_plummer();
 	} else if (test == "chemistry") {
 		test_cuda_chemistry_kernel();
 	//	chemistry_test();

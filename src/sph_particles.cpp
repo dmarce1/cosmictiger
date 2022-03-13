@@ -225,8 +225,8 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						break;
 					}
 				}
-				sph_particles_alpha(i) = std::max(sph_particles_alpha(i), SPH_ALPHA0);
-				sph_particles_alpha(i) = std::min(sph_particles_alpha(i), SPH_ALPHA1);
+//				sph_particles_alpha(i) = std::max(sph_particles_alpha(i), SPH_ALPHA0);
+//				sph_particles_alpha(i) = std::min(sph_particles_alpha(i), SPH_ALPHA1);
 			}
 			return std::make_pair(error,norm);
 		}));
@@ -353,7 +353,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_da1[i], sph_particles_da1[j]);
 	std::swap(sph_particles_de1[i], sph_particles_de1[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
-	std::swap(sph_particles_dvvdt[i], sph_particles_dvvdt[j]);
 	std::swap(sph_particles_fp[i], sph_particles_fp[j]);
 	std::swap(sph_particles_fv[i], sph_particles_fv[j]);
 	std::swap(sph_particles_f0[i], sph_particles_f0[j]);
@@ -449,7 +448,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dc, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
-		sph_particles_array_resize(sph_particles_dvvdt, new_capacity, true);
 		sph_particles_array_resize(sph_particles_a, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvec, new_capacity, true);
 		sph_particles_array_resize(sph_particles_vec0, new_capacity, true);
@@ -483,8 +481,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_deint_pred(oldsz + i) = 0.0f;
 		sph_particles_dalpha_con(oldsz + i) = 0.0f;
 		sph_particles_dalpha_pred(oldsz + i) = 0.0f;
-		sph_particles_ddivv_dt(oldsz + i) = 0.0f;
-		sph_particles_alpha(oldsz + i) = SPH_ALPHA0;
+		sph_particles_alpha(oldsz + i) = get_options().alpha0;
 		sph_particles_taux(oldsz + i) = 0.f;
 		sph_particles_fpre(oldsz + i) = 1.f;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -512,7 +509,6 @@ void sph_particles_free() {
 		CUDA_CHECK(cudaFree(sph_particles_da1));
 		CUDA_CHECK(cudaFree(sph_particles_de2));
 		CUDA_CHECK(cudaFree(sph_particles_da2));
-		CUDA_CHECK(cudaFree(sph_particles_dvvdt));
 		CUDA_CHECK(cudaFree(sph_particles_dvv));
 		CUDA_CHECK(cudaFree(sph_particles_sa));
 		CUDA_CHECK(cudaFree(sph_particles_f0));

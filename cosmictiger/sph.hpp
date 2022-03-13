@@ -191,11 +191,21 @@ struct sph_run_params {
 	float tau;
 	int iter;
 	float max_dt;
+	float alpha0;
+	float alpha1;
+	float beta;
+	float alpha_decay;
+	float hsoft_min;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
 		gy = opts.gy;
 		max_dt = 1e30;
+		hsoft_min = opts.hsoft_min;
+		alpha0 = opts.alpha0;
+		alpha1 = opts.alpha1;
+		beta = opts.beta;
+		alpha_decay = opts.alpha_decay;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
