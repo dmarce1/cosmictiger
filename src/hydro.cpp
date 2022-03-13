@@ -25,6 +25,7 @@
 #include <cosmictiger/exact_sod.hpp>
 #include <cosmictiger/driver.hpp>
 #include <cosmictiger/domain.hpp>
+#include <cosmictiger/sphere.hpp>
 
 static inline double pow_n(double y, double n) {
 	return std::pow(y, n);
@@ -159,6 +160,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		if (minrung == 0) {
 			double ekin = 0.0;
 			double eint = 0.0;
+			double rho_max = 0.0;
 			double epot = kr.pot / 2.0;
 			double xmom = 0.0, ymom = 0.0, zmom = 0.0;
 			for (part_int i = 0; i < sph_particles_size(); i++) {
@@ -166,6 +168,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 				const double vx = particles_vel(XDIM, k);
 				const double vy = particles_vel(YDIM, k);
 				const double vz = particles_vel(ZDIM, k);
+				rho_max = std::max(rho_max, (double) sph_particles_rho(k));
 				xmom += m * vx;
 				ymom += m * vy;
 				zmom += m * vz;
@@ -180,6 +183,9 @@ void hydro_driver(double tmax, int nsteps = 64) {
 				etot0 = etot;
 			}
 			fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot, (etot - etot0) / etot);
+			fclose(fp);
+			fp = fopen("rho.dat", "at");
+			fprintf(fp, "%e %e\n", t, rho_max);
 			fclose(fp);
 		}
 		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, false);
@@ -204,54 +210,83 @@ void hydro_driver(double tmax, int nsteps = 64) {
 void hydro_star_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	const double r0 = 20.0;
-	constexpr int N = 100000;
-	vector<double> rho(N);
+	const int N = nparts_total;
 	auto opts = get_options();
-
-	double menc;
-	for (int i = 0; i < N; i++) {
-		const double r = (i + 0.5) / N * r0;
-		rho[i] = lane_emden(r, r / 100.0, 1.5, menc);
-	}
 	PRINT("Making star\n");
-	double factor = sqr(r0) * r0 * nparts_total / menc;
-	opts.sph_mass = 1.;
+	opts.sph_mass = 1. / N;
 	const double m = opts.sph_mass;
 	set_options(opts);
-	double rho0 = rho[0] * factor * m;
-	double K = 4.0 * M_PI * opts.GM / (2.5) * powf(rho0, 1.0 - 1.0 / 1.5) / sqr(r0) ;
-	while (sph_particles_size() < nparts_total) {
-		double x = 0.3333 * (rand1() - 0.5) + 0.5;
-		double y = 0.3333 * (rand1() - 0.5) + 0.5;
-		double z = 0.3333 * (rand1() - 0.5) + 0.5;
-		double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-		double p = rand1();
-		const int i = std::min((int) (r * N + 0.5), (int) (N - 1));
-		if (p < rho[i]) {
-			const auto m = get_options().sph_mass;
-			double rho0 = rho[i] * factor * m;
-			double P = K * pow(rho0, 5.0 / 3.0);
-			double E = P / (2.0 / 3.0);
-			double eint = E / rho0;
-			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
-			const auto j = sph_particles_size();
-			sph_particles_resize(sph_particles_size() + 1);
-			sph_particles_smooth_len(j) = h;
-			sph_particles_pos(XDIM, j) = x;
-			sph_particles_pos(YDIM, j) = y;
-			sph_particles_pos(ZDIM, j) = z;
-			sph_particles_vel(XDIM, j) = 0;
-			sph_particles_vel(YDIM, j) = 0;
-			sph_particles_vel(ZDIM, j) = 0;
-			sph_particles_rung(j) = 0;
-			sph_particles_eint(j) = eint;
+	double rho0 = 230.0 * 1000000 / 980107.;
+	const auto rho = [rho0]( double r ) {
+		if( r == 0.0 ) {
+			return rho0;
+		} else {
+			double menc;
+			return rho0 * lane_emden(r, r / 100.0, 1.5, menc);
+		}
+	};
+	double K = 4.0 * M_PI * opts.GM / (2.5) * powf(rho0, 1.0 - 1.0 / 1.5) / sqr(r0);
+	double d;
+	double r = 0.0;
+	int Ntot = 0;
+	int Nr = 0;
+	double rmax = 3.65375 / r0;
+	vector<array<vector<float>, NDIM>> X;
+	vector<float> radius;
+	do {
+		d = rho(r * r0);
+		double dr1 = pow(m / d, 1.0 / 3.0);
+		double dr2;
+		r += 0.5 * dr1;
+		if (r < rmax) {
+			double diff;
+			d = rho(r * r0);
+			dr2 = pow(m / d, 1.0 / 3.0);
+			r += 0.5 * (dr2 - dr1);
+			if (r < rmax) {
+				dr1 = dr2;
+				const int N = 4.0 * M_PI * r * r * pow(d / m, 2.0 / 3.0) + 0.5;
+				array<vector<float>, NDIM> x;
+				for (int dim = 0; dim < NDIM; dim++) {
+					x[dim].resize(N);
+				}
+				X.push_back(std::move(x));
+				printf("%i %e %i %e\n", Nr, r, N, dr1);
+				Ntot += N;
+				radius.push_back(r);
+				r += 0.5 * dr1;
+				Nr++;
+			}
+		}
+	} while (r < rmax);
+	printf("Ntot = %i\n", Ntot);
+	solve_sphere_surface_problem(X);
+	for (int i = 0; i < X.size(); i++) {
+		const double d = rho(radius[i] * r0);
+		double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
+		const int N = X[i][XDIM].size();
+		for (int l = 0; l < N; l++) {
+			const part_int k = sph_particles_size();
+			sph_particles_resize(k + 1);
+			sph_particles_pos(XDIM, k) = X[i][XDIM][l] * radius[i] + 0.5;
+			sph_particles_pos(YDIM, k) = X[i][YDIM][l] * radius[i] + 0.5;
+			sph_particles_pos(ZDIM, k) = X[i][ZDIM][l] * radius[i] + 0.5;
+			sph_particles_smooth_len(k) = h;
+			const double P = K * pow(d, 5.0 / 3.0);
+			const double E = P / (2.0 / 3.0);
+			const double eint = E / d;
+			sph_particles_eint(k) = eint;
+			sph_particles_vel(XDIM, k) = 0;
+			sph_particles_vel(YDIM, k) = 0;
+			sph_particles_vel(ZDIM, k) = 0;
+			sph_particles_rung(k) = 0;
 		}
 	}
-	const double tdyn = sqrt(1.0 / (opts.GM*rho0));
-	PRINT( "************************************\n");
-	PRINT( "tdyn = %e\n", tdyn);
-	PRINT( "************************************\n");
-	hydro_driver(10.0 * tdyn, 100);
+	const double tdyn = sqrt(1.0 / (opts.GM * rho0));
+	PRINT("************************************\n");
+	PRINT("tdyn = %e\n", 1.0 / sqrt(opts.GM * rho0));
+	PRINT("************************************\n");
+	hydro_driver(10.0 * tdyn, 1000);
 }
 
 void hydro_rt_test() {
@@ -721,7 +756,7 @@ void hydro_helmholtz_test() {
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 1.0;
-	double p1 = 1000000.0 / pow(20/15.0,3);
+	double p1 = 1000000.0 / pow(20 / 15.0, 3);
 	double p0 = 1.0;
 	double sigma = 0.02;
 	auto opts = get_options();

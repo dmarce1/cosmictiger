@@ -295,7 +295,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 #endif
 	if (opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
-		opts.chem = opts.conduction = opts.diffusion = false;
+		opts.chem = opts.conduction = false;
 		opts.gravity = opts.test == "star";
 		opts.gamma = 5. / 3.;
 		if (opts.test == "disc") {

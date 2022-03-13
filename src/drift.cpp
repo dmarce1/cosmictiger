@@ -74,7 +74,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 #endif
 			bool do_lc = get_options().do_lc;
 			do_lc = do_lc && (tau_max - tau1 <= 1.0);
-			const auto adot = scale * cosmos_dadt(scale);
+			const auto adot = get_options().test != "" ? 0.0 : scale * cosmos_dadt(scale);
 			for( part_int i = begin; i < end; i++) {
 				double x = particles_pos(XDIM,i).to_double();
 				double y = particles_pos(YDIM,i).to_double();
