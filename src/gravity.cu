@@ -67,7 +67,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	const bool sph = data.fpot;
+	const bool sph = data.sph;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
@@ -110,9 +110,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
-					if (sph) {
-						src_fpot[i1] = main_src_fpot[i2];
-					}
+					src_fpot[i1] = main_src_fpot[i2];
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -130,7 +128,7 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-				const float mass = sph && (src_fpot[j] != 0.f) ? sph_mass : dm_mass;
+				const float mass = !sph ? 1.f : (sph && (src_fpot[j] != 0.f) ? sph_mass : dm_mass);
 				flops += 3;
 				expansion<float> D;
 				flops += greens_function(D, dx);
@@ -211,8 +209,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 	auto &gy = shmem.gy;
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
-	const bool sph = data.fpot;
-	const bool vsoft = sph && data.vsoft;
+	const bool sph = data.sph;
 	auto& src_hsoft = shmem.src.hsoft;
 	const auto& sink_hsoft = shmem.sink_hsoft;
 	const auto& sink_fpot = shmem.sink_fpot;
@@ -263,12 +260,8 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
-					if (sph) {
-						src_fpot[i1] = main_src_fpot[i2];
-						if (vsoft) {
-							src_hsoft[i1] = main_src_hsoft[i2];
-						}
-					}
+					src_fpot[i1] = main_src_fpot[i2];
+					src_hsoft[i1] = main_src_hsoft[i2];
 				}
 				__syncwarp();
 				these_parts.first += sz;

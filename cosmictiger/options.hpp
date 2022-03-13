@@ -36,7 +36,6 @@ struct options {
 	bool twolpt;
 	bool use_power_file;
 	bool read_check;
-	bool vsoft;
 	bool chem;
 	bool conduction;
 	bool gravity;
@@ -123,7 +122,6 @@ struct options {
 		arc & diffusion;
 		arc & neighbor_number;
 		arc & kernel;
-		arc & vsoft;
 		arc & cfl;
 		arc & sph;
 		arc & nsteps;

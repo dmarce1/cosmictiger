@@ -17,7 +17,6 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
 #define SCALE_DT 0.02
 
 #include <cosmictiger/constants.hpp>
@@ -158,7 +157,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 
 	sph_run_params sparams;
-	if( adot != 0.0 ) {
+	if (adot != 0.0) {
 		sparams.max_dt = SCALE_DT * scale / fabs(adot);
 	}
 	sparams.adot = adot;
@@ -298,29 +297,29 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (tau != 0.0) {
 				double w = 1.0;
 				int iters = 0;
-			//	do {
-					sparams.run_type = SPH_RUN_HYDRO;
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					tm.reset();
-					auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
-					error = tmp.first;
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-					sparams.phase = 2;
-					sparams.run_type = SPH_RUN_AUX;
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-					tm.reset();
-					sparams.phase = 0;
-					w = 0.5;
-					iters++;
+				//	do {
+				sparams.run_type = SPH_RUN_HYDRO;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				tm.reset();
+				auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
+				error = tmp.first;
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+				sparams.phase = 2;
+				sparams.run_type = SPH_RUN_AUX;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+				tm.reset();
+				sparams.phase = 0;
+				w = 0.5;
+				iters++;
 				//} while (error > SPH_HYDRO_TOLER);
-				PRINT( "FINISHED in %i ITERS\n", iters);
+				PRINT("FINISHED in %i ITERS\n", iters);
 			}
 			sparams.phase = 0;
 			if (diff && tau != 0.0) {
@@ -407,10 +406,10 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	domain_time += tm.read();
 	tm.reset();
 	tm.start();
-	const bool vsoft = get_options().sph && get_options().vsoft;
-	PRINT( "-----\n");
-	const float h = vsoft ? sph_particles_max_smooth_len() : get_options().hsoft;
-	PRINT( "!!!!!\n");
+	PRINT("-----\n");
+	const bool sph = get_options().sph;
+	const float h = sph ? std::max((float) sph_particles_max_smooth_len(), (float) get_options().hsoft) : get_options().hsoft;
+	PRINT("!!!!!\n");
 	//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
 	tree_create_params tparams(minrung, theta, h);
 	PRINT("Create tree %i %e\n", minrung, theta);
@@ -426,7 +425,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.start();
 //	PRINT("nactive = %li\n", sr.nactive);
 	kick_params kparams;
-	if( dadt != 0.0 ) {
+	if (dadt != 0.0) {
 		kparams.max_dt = SCALE_DT * scale / fabs(dadt);
 	}
 	kparams.glass = get_options().glass;
@@ -692,24 +691,24 @@ void driver() {
 				theta = 0.4;
 			}
 
-	///		if (last_theta != theta) {
-				set_options(opts);
+			///		if (last_theta != theta) {
+			set_options(opts);
 ////			}
 			last_theta = theta;
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			double heating;
 			if (sph & !glass) {
-				sph_step(minrung, a, tau, t0, 0, a*cosmos_dadt(a), max_rung, iter, dt, &heating);
+				sph_step(minrung, a, tau, t0, 0, a * cosmos_dadt(a), max_rung, iter, dt, &heating);
 				eheat -= a * heating;
 			}
-			auto tmp = kick_step(minrung, a, a*cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
+			auto tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, a*cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
+				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
 				eheat -= a * heating;
 			}
 			if (full_eval) {

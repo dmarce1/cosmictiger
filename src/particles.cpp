@@ -44,14 +44,8 @@ struct particles_cache_entry {
 	float hsoft;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		static const bool do_sph = get_options().sph;
-		static const bool vsoft = do_sph && get_options().vsoft;
-		if (do_sph) {
-			arc & fpot;
-		}
-		if (vsoft) {
-			arc & hsoft;
-		}
+		arc & fpot;
+		arc & hsoft;
 		arc & x;
 	}
 };
@@ -489,7 +483,6 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* fpot, part_int offset) {
 	static const bool sph = get_options().sph;
-	static const bool vsoft = sph && get_options().vsoft;
 	const float dm_hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
@@ -500,25 +493,24 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
 			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
 			const float hsoft_min = get_options().hsoft_min;
-			if (sph) {
-				for (int i = range.range.first; i < range.range.second; i++) {
-					const int j = offset + i - range.range.first;
+			for (int i = range.range.first; i < range.range.second; i++) {
+				const int j = offset + i - range.range.first;
+				if (sph) {
 					const int k = particles_cat_index(i);
 					int type = particles_type(i);
-					if (hsoft) {
-						if (type != SPH_TYPE) {
-							hsoft[j] = dm_hsoft;
-						} else {
-							hsoft[j] = std::max(hsoft_min, std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
-						}
+					if (type != SPH_TYPE) {
+						hsoft[j] = dm_hsoft;
+					} else {
+						hsoft[j] = std::max(hsoft_min, std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT));
 					}
-					if (fpot) {
-						if (type != SPH_TYPE) {
-							fpot[j] = 0.f;
-						} else {
-							fpot[j] = sph_particles_fpot(k);
-						}
+					if (type != SPH_TYPE) {
+						fpot[j] = 0.f;
+					} else {
+						fpot[j] = sph_particles_fpot(k);
 					}
+				} else {
+					fpot[j] = 0.f;
+					hsoft[j] = get_options().hsoft;
 				}
 			}
 		} else {
@@ -538,12 +530,11 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					y[dest_index] = ptr[src_index].x[YDIM];
 					z[dest_index] = ptr[src_index].x[ZDIM];
 					if (sph) {
-						if (vsoft) {
-							hsoft[dest_index] = ptr[src_index].hsoft;
-						}
-						if (fpot) {
-							fpot[dest_index] = ptr[src_index].fpot;
-						}
+						hsoft[dest_index] = ptr[src_index].hsoft;
+						fpot[dest_index] = ptr[src_index].fpot;
+					} else {
+						hsoft[dest_index] = get_options().hsoft;
+						fpot[dest_index] = 0.0;
 					}
 					dest_index++;
 				}
@@ -577,7 +568,6 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) {
 	static const bool sph = get_options().sph;
 	const float hsoft = get_options().hsoft;
-	static const bool vsoft = sph && get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
@@ -595,13 +585,14 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			} else {
 				ln.fpot = sph_particles_fpot(kk);
 			}
-			if (vsoft) {
-				if (type != SPH_TYPE) {
-					ln.hsoft = hsoft;
-				} else {
-					ln.hsoft = std::max(hsoft, std::min(SPH_MAX_SOFT, sph_particles_smooth_len(kk)));
-				}
+			if (type != SPH_TYPE) {
+				ln.hsoft = hsoft;
+			} else {
+				ln.hsoft = std::max(hsoft, std::min(SPH_MAX_SOFT, sph_particles_smooth_len(kk)));
 			}
+		} else {
+			ln.hsoft = get_options().hsoft;
+			ln.fpot = 0.0f;
 		}
 	}
 	return line;

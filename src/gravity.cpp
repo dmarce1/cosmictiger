@@ -266,7 +266,6 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 	size_t near_count = 0;
 	size_t far_count = 0;
 	const static bool do_sph = get_options().sph;
-	const static bool vsoft = do_sph && get_options().vsoft;
 	const static float dm_mass = get_options().dm_mass;
 	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {

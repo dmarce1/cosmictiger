@@ -64,7 +64,6 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 
 void kick_workspace::to_gpu() {
 	const static bool sph = get_options().sph;
-	const static bool vsoft = sph && get_options().vsoft;
 #ifdef USE_CUDA
 	timer tm;
 	lock1.wait();
@@ -165,12 +164,8 @@ void kick_workspace::to_gpu() {
 	host_x.resize(part_count);
 	host_y.resize(part_count);
 	host_z.resize(part_count);
-	if( sph ) {
-		host_fpot.resize(part_count);
-		if( vsoft ) {
-			host_hsoft.resize(part_count);
-		}
-	}
+	host_fpot.resize(part_count);
+	host_hsoft.resize(part_count);
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -180,7 +175,7 @@ void kick_workspace::to_gpu() {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 									const int local_index = tree_map[tree_ids_vector[i]];
 									part_int part_index = (next_index += ptr->nparts()) - ptr->nparts();
-									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), vsoft ? host_hsoft.data() : nullptr, host_fpot.data(), part_index);
+									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_hsoft.data(), host_fpot.data(), part_index);
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
 							}
@@ -196,18 +191,10 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
-	if( sph ) {
-		CUDA_CHECK(cudaMalloc(&dev_fpot, sizeof(float) * part_count));
-		if( vsoft ) {
-			CUDA_CHECK(cudaMalloc(&dev_hsoft, sizeof(float) * part_count));
-		}
-	}
-	if( sph ) {
-		CUDA_CHECK(cudaMemcpyAsync(dev_fpot, host_fpot.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
-		if( vsoft ) {
-			CUDA_CHECK(cudaMemcpyAsync(dev_hsoft, host_hsoft.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
-		}
-	}
+	CUDA_CHECK(cudaMalloc(&dev_fpot, sizeof(float) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_hsoft, sizeof(float) * part_count));
+	CUDA_CHECK(cudaMemcpyAsync(dev_fpot, host_fpot.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(dev_hsoft, host_hsoft.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
@@ -216,12 +203,8 @@ void kick_workspace::to_gpu() {
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_hsoft, dev_fpot, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_end_stream(stream);
 //	PRINT("To GPU Done %i\n", hpx_rank());
-	if( sph ) {
-		CUDA_CHECK(cudaFree(dev_fpot));
-		if( vsoft ) {
-			CUDA_CHECK(cudaFree(dev_hsoft));
-		}
-	}
+	CUDA_CHECK(cudaFree(dev_fpot));
+	CUDA_CHECK(cudaFree(dev_hsoft));
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
 	CUDA_CHECK(cudaFree(dev_z));

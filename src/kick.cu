@@ -75,7 +75,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
-	const bool sph = data.fpot;
+	const bool sph = data.sph;
 	const float hinv = 1.f / h;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
@@ -220,7 +220,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		int* next_item, int ntrees) {
 //	auto tm1 = clock64();
 	const bool sph = data.fpot;
-	const bool vsoft = data.vsoft;
 	const float dm_mass = !sph ? 1.0f : global_params.dm_mass;
 	const float sph_mass = global_params.sph_mass;
 	const int& tid = threadIdx.x;
@@ -326,22 +325,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				multlist.resize(0);
 				maxi = round_up(echecks.size(), WARP_SIZE);
 				int ninteracts = 0;
-				float hsoft = h, other_hsoft = h;
-				if (vsoft) {
+				float hsoft, other_hsoft;
 					hsoft = self.hsoft_max;
-				} else {
-					hsoft = h;
-				}
-				for (int i = tid; i < maxi; i += WARP_SIZE) {
+					for (int i = tid; i < maxi; i += WARP_SIZE) {
 					bool mult = false;
 					bool next = false;
 					if (i < echecks.size()) {
 						const tree_node& other = tree_nodes[echecks[i]];
-						if (vsoft) {
 							other_hsoft = other.hsoft_max;
-						} else {
-							other_hsoft = h;
-						}
 						for (int dim = 0; dim < NDIM; dim++) {
 							dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 						}
@@ -405,11 +396,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						bool part = false;
 						if (i < dchecks.size()) {
 							const tree_node& other = tree_nodes[dchecks[i]];
-							if (vsoft) {
 								other_hsoft = other.hsoft_max;
-							} else {
-								other_hsoft = h;
-							}
 							for (int dim = 0; dim < NDIM; dim++) {
 								dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 							}
@@ -669,7 +656,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	static const bool do_sph = get_options().sph;
-	static const bool vsoft = do_sph && get_options().vsoft;
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -738,18 +724,15 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
-	data.hsoft = vsoft ? dev_hsoft : nullptr;
-	data.fpot = do_sph ? dev_fpot : nullptr;
-	data.vsoft = get_options().vsoft;
-	if (data.fpot) {
+	data.hsoft = dev_hsoft;
+	data.fpot = dev_fpot;
+	data.sph = do_sph;
+	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type = &particles_type(0);
 		data.sph_gx = &sph_particles_gforce(XDIM, 0);
 		data.sph_gy = &sph_particles_gforce(YDIM, 0);
 		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
-#ifdef SPH_TOTAL_ENERGY
-		data.sph_energy = &sph_particles_ent(0);
-#endif
 	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);

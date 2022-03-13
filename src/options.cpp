@@ -100,7 +100,6 @@ bool process_options(int argc, char *argv[]) {
 	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
 	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "use glass") //
-	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "do variable softening") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
@@ -129,7 +128,7 @@ bool process_options(int argc, char *argv[]) {
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/20.0), "dark matter softening in units of interparticle spacing") //
+	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
 	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(128), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
@@ -216,14 +215,12 @@ bool process_options(int argc, char *argv[]) {
 			PRINT("TURNING SPH OFF FOR GLASS PHASE 1\n");
 		}
 		opts.sph = false;
-		opts.vsoft = false;
 		opts.chem = false;
 	} else if (opts.glass == 2) {
 		if (!opts.sph) {
 			PRINT("TURNING SPH ON FOR GLASS PHASE 2\n");
 		}
 		opts.sph = true;
-		opts.vsoft = false;
 		opts.chem = false;
 	}
 	if (opts.sph) {
@@ -232,7 +229,6 @@ bool process_options(int argc, char *argv[]) {
 		opts.sph_mass = opts.omega_b * omega_inv;
 	}
 	if (!opts.sph) {
-		opts.vsoft = false;
 	}
 	opts.hsoft_min = 1.0 / 50.0 / opts.parts_dim;
 	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
