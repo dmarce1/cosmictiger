@@ -39,6 +39,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/hydro.hpp>
 #include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/stars.hpp>
+#include <cosmictiger/sphere.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
@@ -486,6 +487,8 @@ void test(std::string test) {
 		hydro_star_test();
 	} else if (test == "disc") {
 		hydro_disc_test();
+	} else if (test == "sphere") {
+		sphere_surface_test();
 	} else if (test == "chemistry") {
 		test_cuda_chemistry_kernel();
 	//	chemistry_test();
