@@ -573,7 +573,7 @@ void hydro_disc_test() {
 
 void hydro_sod_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho0 = 0.125;
+	double rho0 = 0.05;
 	double rho1 = 1.0;
 	double vx1 = 0.0;
 	double vy1 = 0.0;
@@ -581,7 +581,7 @@ void hydro_sod_test() {
 	double vx0 = 0.0;
 	double vy0 = -0.0;
 	double vz0 = -0.0e-1;
-	double p0 = 1.0e-1;
+	double p0 = .025;
 	double p1 = 1.0;
 	sod_init_t sod;
 	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
@@ -685,7 +685,7 @@ void hydro_sod_test() {
 			}
 		}
 	}
-	constexpr float t = .12;
+	constexpr float t = .09;
 	constexpr int N = 1000;
 	hydro_driver(t, 10);
 	FILE* fp = fopen("sod.txt", "wt");

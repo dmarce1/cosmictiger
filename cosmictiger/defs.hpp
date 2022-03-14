@@ -35,8 +35,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define STAR_T0 4e9f
 #define SPH_DIFFUSION_TOLER 5e-6
 #define SPH_SMOOTHLEN_TOLER 5e-6
-#define SPH_HYDRO_TOLER 5e-3
-//#define HYDRO2_ITERS 3
 
 #define NDIM 3
 #define XDIM 0
@@ -76,7 +74,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define SN_REMNANT_RATE 0.5f
 #define MAX_LOAD_IMBALANCE 0.005
 #define CUDA_MAX_MEM 0.3
-#define GPU_MIN_LOAD (1.0/64.0)
+#define GPU_MIN_LOAD (1.0/32.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
 #define CUDA_KICK_PARTS_MAX (16*1024)
 #define HEAP_SIZE (4ULL*1024ULL*1024ULL*1024ULL)

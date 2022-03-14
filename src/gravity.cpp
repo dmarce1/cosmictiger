@@ -367,16 +367,34 @@ size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector
 						const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 						const simd_float h_i = sink_hsoft;
 						const simd_float h_j = src_hsoft;
+						const auto hinv_i = simd_float(1.f) / h_i;
+						const auto h3inv_i = sqr(hinv_i) * hinv_i;
 						const simd_float near_flags = r2 < max(sqr(h_i), sqr(h_j));
+						const auto fpot_i = sink_fpot;
 						if (near_flags.sum() == 0) {
 							rinv1 = simd_float(1) / sqrt(r2);
 							rinv3 = rinv1 * sqr(rinv1);
-						} else {
-							const auto fpot_i = sink_fpot;
+						} else if (fpot_i[0] == 0.0f) {
 							const auto fpot_j = src_fpot;
-							const auto hinv_i = simd_float(1.f) / h_i;
 							const auto hinv_j = simd_float(1.f) / h_j;
-							const auto h3inv_i = sqr(hinv_i) * hinv_i;
+							const auto h3inv_j = sqr(hinv_j) * hinv_j;
+							const simd_float r = sqrt(r2);                                                    // 4
+							rinv1 = simd_float(1) / (r + tiny);                            // 5
+							const auto q_i = r * hinv_i;
+							const auto q_j = r * hinv_j;
+							const auto F0 = simd_float(0.5f) * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
+							const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1;
+							const auto Fc = simd_float(0.5f) * (fpot_j * dWdr_j_rinv);
+							rinv3 = F0 + Fc;
+							if (min_rung == 0) {
+								const auto pot0 = simd_float(0.5f) * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
+								const auto W_j = kernelW(q_j) * h3inv_j;
+								const auto potc = simd_float(0.5f) * (fpot_j * W_j);
+								rinv1 = pot0 + potc;
+							}
+						} else {
+							const auto fpot_j = src_fpot;
+							const auto hinv_j = simd_float(1.f) / h_j;
 							const auto h3inv_j = sqr(hinv_j) * hinv_j;
 							const simd_float r = sqrt(r2);                                                    // 4
 							rinv1 = simd_float(1) / (r + tiny);                            // 5
