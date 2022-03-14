@@ -1387,7 +1387,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float abs_div_v = fabsf(div_v);
 					const float abs_curl_v = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					const float fvel = abs_div_v / (abs_div_v + abs_curl_v + sw);
-					const float dtinv = 1.f / (params.tau - data.taux_snk[snki]);
+					//const float dtinv = 1.f / (params.tau - data.taux_snk[snki]);
 					data.divv_snk[snki] = div_v;
 
 					data.fvel_snk[snki] = fvel;

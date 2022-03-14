@@ -327,11 +327,6 @@ inline float& sph_particles_divv(part_int index) {
 }
 
 
-inline float& sph_particles_taux(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_t0[index];
-}
-
 inline float& sph_particles_gforce(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_g[dim][index];
