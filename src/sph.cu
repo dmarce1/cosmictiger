@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                              const T& operator[](int i) const {
+	                                                                                                  const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -976,12 +976,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						ws.rec2[l] = ws.rec2_main[j];
 					}
 				}
-				float vsig_max = 0.f;
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
 				float de_dt = 0.f;
-				//	float da_dt = 0.f;
+				float dtinv_visc = 0.f;
+				float dtinv_cfl = 0.f;
 				const float ainv = 1.0f / params.a;
 				const float& adot = params.adot;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
@@ -1017,14 +1017,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
-					const float alpha_ij = 0.25f * (alpha_i + alpha_j) * (fvel_i + fvel_j);
+					const float alpha_ij = 0.5f * (alpha_i * fvel_i + alpha_j * fvel_j);
 					const float h_ij = 0.5f * (h_i + h_j);
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 					const float w_ij = vdotx_ij * rinv;
-					const float u_ij = vdotx_ij * h_ij / (r2 + ETA1 * sqr(h_ij));
+					const float u_ij = w_ij * h_ij * rinv;
 					const float c_ij = 0.5f * (c_i + c_j);
 					const float rho_ij = 0.5f * (rho_i + rho_j);
-					const float Pi = -alpha_ij * u_ij * (c_ij - params.beta * u_ij) / rho_ij;
+					const float viscco_ij = alpha_ij * (c_ij - params.beta * w_ij);
+					const float Pi = -viscco_ij * u_ij / rho_ij;
 					const float q_i = r * hinv_i;								// 1
 					const float q_j = r * hinv_j;									// 1
 					const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
@@ -1045,19 +1046,16 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += dvx_dt;
 					ay += dvy_dt;
 					az += dvz_dt;
-					const float hfac = h_i / h_ij;
-					float this_vsig = c_ij * hfac;
-					if (vdotx_ij < 0.f) {
-						this_vsig += 0.6f * alpha_ij * c_ij * hfac;
-						this_vsig -= 0.6f * alpha_ij * params.beta * w_ij * hfac;
-					}
-					vsig_max = fmaxf(vsig_max, this_vsig);									   // 2
+					const float hinv_ij = 1.f / h_ij;
+					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_ij);
+					dtinv_visc = fmaxf(dtinv_visc, viscco_ij * hinv_ij);
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig_max);
+				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
+				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_visc);
 
 				if (tid == 0) {
 					ax += gx_i;
@@ -1069,19 +1067,22 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					data.deint_con[snki] = de_dt;
 					const float div_v = data.divv_snk[snki];
 					if (params.phase == 1) {
-						float dt_cfl = fminf(params.a * h_i / vsig_max, 3.f / fabsf(div_v - 3.f * params.adot * ainv));
-						total_vsig_max = fmaxf(total_vsig_max, vsig_max);
-						float dthydro = params.cfl * dt_cfl;
-						char& rung = data.rungs[i];
-						const float g2 = sqr(gx_i, gy_i, gz_i);
+						float dtinv_divv = params.a * fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);
+						float dtinv_hydro1 = 1.0e-30f;
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_visc);
 						const float a2 = sqr(ax, ay, az);
-						const float hsoft = fminf(h_i, SPH_MAX_SOFT);
-						const float afactor = data.eta * sqrtf(params.a * 0.5f * (h_i + hsoft));
-						const float gfactor = data.eta * sqrtf(params.a * hsoft);
-						dthydro = fminf(fminf(afactor / sqrtf(sqrtf(a2 + 1e-15f)), (float) params.t0), dthydro);
-						const float dt_grav = fminf(fminf(gfactor / sqrtf(sqrtf(g2 + 1e-15f)), (float) params.t0), params.max_dt);
-						int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
-						const int rung_grav = ceilf(log2f(params.t0) - log2f(dt_grav));
+						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
+						const float dtinv_hydro2 = dtinv_acc;
+						const float dthydro = fminf(params.cfl * params.a / (dtinv_hydro1 + 1e-30f), data.eta * sqrtf(params.a) / (dtinv_hydro2 + 1e-30f));
+						const float g2 = sqr(gx_i, gy_i, gz_i);
+						const float dtinv_grav = sqrtf(sqrtf(g2) * hinv_i);
+						const float dtgrav = data.eta * sqrtf(params.a) / (dtinv_grav + 1e-30f);
+						total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);
+						char& rung = data.rungs[i];
+						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
+						const int rung_grav = ceilf(log2f(params.t0) - log2f(dtgrav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
 						max_rung_grav = max(max_rung_grav, rung_grav);
 						if (h_i < data.hstar0) {
