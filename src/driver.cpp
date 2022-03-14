@@ -308,7 +308,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				error = tmp.first;
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-				sparams.phase = 2;
+				sparams.phase = 1;
 				sparams.run_type = SPH_RUN_AUX;
 				tm.start();
 				sph_run(sparams, true);
@@ -378,7 +378,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				stars_find(scale, dt, minrung, iter);
 			}
 			if (xsph) {
-				sparams.phase = 3;
+				sparams.phase = 2;
 				sparams.run_type = SPH_RUN_AUX;
 				tm.start();
 				sph_run(sparams, true);

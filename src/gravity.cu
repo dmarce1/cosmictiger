@@ -296,23 +296,28 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					const float h_i = sink_hsoft[k];
 					const float h_j = src_hsoft[j];
-					const float fpot_i = sink_fpot[k];
-					const float fpot_j = src_fpot[j];
-					const float hinv_i = 1.0f / h_i;
-					const float hinv_j = 1.0f / h_j;
-					const float h3inv_i = hinv_i * sqr(hinv_i);
-					const float h3inv_j = hinv_j * sqr(hinv_j);
-					const float r = sqrtf(r2);
-					r1inv = 1.f / (r + 1e-30f);
-					const float q_i = r * hinv_i;
-					const float q_j = r * hinv_j;
-					const float F0 = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-					float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * h3inv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * h3inv_j) * r1inv;
-					r3inv = F0 + Fc;
-					if (do_phi) {
-						const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-						const float potc = 0.5f * (fpot_i * kernelW(q_i) * h3inv_i + fpot_j * kernelW(q_j) * h3inv_j);
-						r1inv = pot0 + potc;
+					if (r2 > fmaxf(sqr(h_i), sqr(h_j))) {
+						r1inv = rsqrt(r2);
+						r3inv = sqr(r1inv) * r1inv;
+					} else {
+						const float fpot_i = sink_fpot[k];
+						const float fpot_j = src_fpot[j];
+						const float hinv_i = 1.0f / h_i;
+						const float hinv_j = 1.0f / h_j;
+						const float h3inv_i = hinv_i * sqr(hinv_i);
+						const float h3inv_j = hinv_j * sqr(hinv_j);
+						const float r = sqrtf(r2);
+						r1inv = 1.f / (r + 1e-30f);
+						const float q_i = r * hinv_i;
+						const float q_j = r * hinv_j;
+						const float F0 = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
+						float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * h3inv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * h3inv_j) * r1inv;
+						r3inv = F0 + Fc;
+						if (do_phi) {
+							const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
+							const float potc = 0.5f * (fpot_i * kernelW(q_i) * h3inv_i + fpot_j * kernelW(q_j) * h3inv_j);
+							r1inv = pot0 + potc;
+						}
 					}
 					r3inv *= mass;
 					r1inv *= mass;
