@@ -30,6 +30,7 @@
 #define KERNEL_WENDLAND_C4 4
 #define KERNEL_WENDLAND_C6 5
 #define KERNEL_SUPER_GAUSSIAN 6
+#define KERNEL_GAUSSIAN 7
 
 void kernel_set_type(int type);
 void kernel_output();
@@ -141,7 +142,11 @@ inline T kernelW(T q) {
 		res = T(27.f / 5.568327997f) * expf(-q2) * (T(2.5f) - q2);
 	}
 		break;
-
+	case KERNEL_GAUSSIAN: {
+		q2 = sqr(q * T(3.54489));
+		res = expf(-q2) * 8.f;
+	}
+		break;
 	};
 	res *= q < T(1.f);
 	return res;
@@ -242,6 +247,11 @@ inline T dkernelW_dq(T q) {
 		q2 = T(9.f) * sqr(q);
 		res = T(243.f / 5.568327997f) * expf(-q2) * q * (-T(7.f) + T(2.f) * q2);
 
+	}
+		break;
+	case KERNEL_GAUSSIAN: {
+		q2 = sqr(q * T(3.54489));
+		res = -T(201.06) * expf(-q2) * q;
 	}
 		break;
 
@@ -379,6 +389,12 @@ inline T kernelFqinv(T q) {
 		q2 = T(9.f) * sqr(q);
 		w = T(6.f) * expf(-q2) * q * (T(-1.f) + q2) * T(0.564189584f) + erff(T(3.f) * q);
 		res = w / (sqr(q) * q);
+	}
+		break;
+	case KERNEL_GAUSSIAN: {
+		q2 = sqr(q * T(3.54489));
+		res = (-T(4.00004) * expf(-q2) * q + T(1.00001) * erff(T(3.54489) * q));
+		res /= sqr(q) * q + T(1e-30);
 	}
 		break;
 	};
@@ -539,6 +555,12 @@ inline T kernelPot(T q) {
 		w += T(6.f) * expf(-q2) * (-T(1) + q + q2 - q * q2) * T(0.564189584f) / q;
 		w += 1.f;
 		res = w;
+	}
+		break;
+	case KERNEL_GAUSSIAN: {
+		res = T(1.00001) * erff(T(3.54489) * q);
+		res /= q + T(1e-30);
+		res -= 0.0000144457;
 	}
 		break;
 	};

@@ -56,6 +56,7 @@ struct options {
 	bool diffusion;
 	int nsteps;
 	int sph_bucket_size;
+	double xsph;
 	double alpha0;
 	double alpha1;
 	double beta;
@@ -100,6 +101,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & xsph;
 		arc & alpha0;
 		arc & alpha1;
 		arc & beta;

@@ -46,6 +46,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		const bool sph = get_options().sph;
 		const float dm_mass = get_options().dm_mass;
 		const float sph_mass = get_options().sph_mass;
+		const float xeta = get_options().xsph;
+		const bool xsph = xeta != 0.0;
 		vector<lc_particle> this_part_buffer;
 		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
@@ -97,7 +99,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				this_dr.momy += mass * vy;
 				this_dr.momz += mass * vz;
 				if( type == SPH_TYPE ) {
-					int j = particles_cat_index(i);
+					part_int j = particles_cat_index(i);
 					float& h = sph_particles_smooth_len(j);
 					char rung = particles_rung(i);
 					float dt0 = tau_max / 64 / (1 <<rung);
@@ -125,6 +127,12 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float e =eint * sph_mass;
 					this_dr.therm += e * a2inv;
 					this_dr.vol += vol;
+				}
+				if( xsph && type == SPH_TYPE) {
+					part_int j = particles_cat_index(i);
+					vx += xeta * sph_particles_xvel(XDIM, j);
+					vy += xeta * sph_particles_xvel(YDIM, j);
+					vz += xeta * sph_particles_xvel(ZDIM, j);
 				}
 				vx *= ainv;
 				vy *= ainv;

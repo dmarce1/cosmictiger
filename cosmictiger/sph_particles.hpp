@@ -77,6 +77,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
 SPH_PARTICLES_EXTERN float* sph_particles_da1; // dalpha_pred
 SPH_PARTICLES_EXTERN float* sph_particles_fp; // potential correction
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_de1; // deint_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
@@ -298,6 +299,11 @@ inline float& sph_particles_dalpha_pred(part_int index) {
 inline float& sph_particles_dvel_pred(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dv1[dim][index];
+}
+
+inline float& sph_particles_xvel(int dim, part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dvx[dim][index];
 }
 
 inline float& sph_particles_deint_con(part_int index) {

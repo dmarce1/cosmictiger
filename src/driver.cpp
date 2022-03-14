@@ -134,6 +134,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
+	const bool xsph = get_options().xsph != 0.0;
 	verbose = true;
 	*eheat = 0.0;
 	if (verbose)
@@ -375,6 +376,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sph_particles_apply_updates(minrung, 2, t0, tau);
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
+			}
+			if (xsph) {
+				sparams.phase = 3;
+				sparams.run_type = SPH_RUN_AUX;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+				tm.reset();
 			}
 		}
 

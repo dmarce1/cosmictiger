@@ -195,6 +195,8 @@ struct sph_run_params {
 	float alpha1;
 	float beta;
 	float alpha_decay;
+	bool xsph;
+	float xeta;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
@@ -204,9 +206,13 @@ struct sph_run_params {
 		alpha1 = opts.alpha1;
 		beta = opts.beta;
 		alpha_decay = opts.alpha_decay;
+		xsph = opts.xsph != 0.0;
+		xeta = opts.xsph;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & xsph;
+		arc & xeta;
 		arc & adot;
 		arc & iter;
 		arc & max_dt;
