@@ -1794,7 +1794,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.kappa_snk = &sph_particles_kappa(0);
 	cuda_data.deint_pred = &sph_particles_deint_pred(0);
 	cuda_data.dalpha_pred = &sph_particles_dalpha_pred(0);
-	cuda_data.taux_snk = &sph_particles_taux(0);
 	cuda_data.dvx_pred = &sph_particles_dvel_pred(XDIM, 0);
 	cuda_data.dvy_pred = &sph_particles_dvel_pred(YDIM, 0);
 	cuda_data.dvz_pred = &sph_particles_dvel_pred(ZDIM, 0);

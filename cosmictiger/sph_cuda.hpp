@@ -103,7 +103,6 @@ struct sph_run_cuda_data {
 	float N;
 	char* sa_snk;
 	float* divv_snk;
-	float* taux_snk;
 	int nselfs;
 	sph_tree_node* trees;
 	int* selfs;
