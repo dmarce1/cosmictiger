@@ -87,6 +87,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN float* sph_particles_t0; // time of last aux
 SPH_PARTICLES_EXTERN float* sph_particles_fv; // balsara
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
+SPH_PARTICLES_EXTERN float* sph_particles_s2; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_dc; // diffusion constant
 SPH_PARTICLES_EXTERN float* sph_particles_cond; // conduction constant
 SPH_PARTICLES_EXTERN float* sph_particles_ta; // conduction constant
@@ -188,6 +189,11 @@ inline float sph_particles_H(part_int index) {
 inline float& sph_particles_frac(int j, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_chem[j][index];
+}
+
+inline float& sph_particles_S2(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_s2[index];
 }
 
 inline float& sph_particles_kappa(part_int index) {

@@ -1818,6 +1818,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.code_dif_to_cgs = sqr(get_options().code_to_cm) / get_options().code_to_s;
 	cuda_data.sa_snk = &sph_particles_semi_active(0);
 	cuda_data.difco_snk = &sph_particles_difco(0);
+	cuda_data.S2_snk = &sph_particles_S2(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
