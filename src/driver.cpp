@@ -377,16 +377,14 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
 			}
-			if (xsph) {
-				sparams.phase = 2;
-				sparams.run_type = SPH_RUN_AUX;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-				tm.reset();
-			}
+			sparams.phase = 2;
+			sparams.run_type = SPH_RUN_AUX;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+			tm.reset();
 		}
 
 	}
