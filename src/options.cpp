@@ -131,7 +131,7 @@ bool process_options(int argc, char *argv[]) {
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(1), "kernel type") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(60), "neighbor number") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(99), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.3), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.25/sqrt(2)), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //

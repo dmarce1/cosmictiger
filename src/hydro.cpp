@@ -26,6 +26,7 @@
 #include <cosmictiger/driver.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/sphere.hpp>
+#include <cosmictiger/sedov.hpp>
 
 static inline double pow_n(double y, double n) {
 	return std::pow(y, n);
@@ -249,10 +250,10 @@ void hydro_plummer() {
 			sph_particles_vel(XDIM, k) = x * v;
 			sph_particles_vel(YDIM, k) = y * v;
 			sph_particles_vel(ZDIM, k) = z * v;
-			sph_particles_eint (k) = 1.0e-30;
+			sph_particles_eint(k) = 1.0e-30;
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
-			ekin +=0.5 * m * sqr(v);
+			ekin += 0.5 * m * sqr(v);
 			pot += 0.5 * m * phi;
 		}
 	}
@@ -263,14 +264,14 @@ void hydro_plummer() {
 
 void hydro_star_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	const double r0 = 20.0;
+	const double r0 = 100.0;
 	const int N = nparts_total;
 	auto opts = get_options();
 	PRINT("Making star\n");
 	opts.sph_mass = 1. / N;
 	const double m = opts.sph_mass;
 	set_options(opts);
-	double rho0 = 230.0 * 1000000 / 980107.;
+	double rho0 = 125*230.0 * 1000000 / 980107.;
 	const double npoly = 1.666666666666;
 	const auto rho = [rho0,npoly]( double r ) {
 		if( r == 0.0 ) {
@@ -280,7 +281,7 @@ void hydro_star_test() {
 			return rho0 * lane_emden(r, r / 100.0, npoly, menc);
 		}
 	};
-	double K = 4.0 * M_PI * opts.GM / (npoly+1.0) * powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
+	double K = 4.0 * M_PI * opts.GM / (npoly + 1.0) * powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
 	double d;
 	double r = 0.0;
 	int Ntot = 0;
@@ -841,9 +842,8 @@ void hydro_helmholtz_test() {
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 1.0;
-	double p1 = 10000000.0;
-	double p0 = 1.0;
-	double sigma = 0.01 * pow(10,1.0/3.0);
+	double eblast = 1.0;
+	double p0 = 1.0e-20f;
 	auto opts = get_options();
 	part_int ndim = get_options().parts_dim;
 	part_int nparts = std::pow(ndim, NDIM);
@@ -854,6 +854,7 @@ void hydro_blast_test() {
 	set_options(opts);
 	part_int i = 0;
 	const double dx = 1.0 / ndim;
+	double sigma = .01;
 	for (int ix = 0; ix < ndim; ix++) {
 		for (int iy = 0; iy < ndim; iy++) {
 			for (int iz = 0; iz < ndim; iz++) {
@@ -861,8 +862,7 @@ void hydro_blast_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-				double p = p0 + p1 * exp(-sqr(r) / sqr(sigma));
-				double eint = p / rho0 / (get_options().gamma - 1);
+				double eint = std::max(1.0 / sigma / sigma / sigma / sqrt(8.0 * M_PI * M_PI * M_PI) * exp(-0.5 * sqr(r / sigma)), 1e-20);
 				double vx = 0.0;
 				double vy = 0.0;
 				double vz = 0.0;
@@ -882,8 +882,7 @@ void hydro_blast_test() {
 				y = (iy + 0.0) * dx;
 				z = (iz + 0.0) * dx;
 				r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-				p = p0 + p1 * exp(-sqr(r) / sqr(sigma));
-				eint = p / rho0 / (get_options().gamma - 1);
+				eint = std::max(1.0 / sigma / sigma / sigma / sqrt(8.0 * M_PI * M_PI * M_PI) * exp(-0.5 * sqr(r / sigma)), 1e-20);
 				vx = 0.0;
 				vy = 0.0;
 				vz = 0.0;
@@ -901,7 +900,40 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(0.05, 1024);
+	const double t = 5e-3;
+	hydro_driver(t, 16);
+	FILE* fp = fopen("blast.txt", "wt");
+	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
+	double norm1 = 0.0, norm2 = 0.0;
+	constexpr int N = 100000;
+	for (int l = 0; l < N; l++) {
+		const int i = rand() % sph_particles_size();
+		const int j = sph_particles_dm_index(i);
+		float x = particles_pos(XDIM, j).to_float() - 0.5;
+		float y = particles_pos(YDIM, j).to_float() - 0.5;
+		float z = particles_pos(ZDIM, j).to_float() - 0.5;
+		const float h = sph_particles_smooth_len(i);
+		const float rho = sph_den(1 / (h * h * h));
+		double time = t;
+		double r = sqrt(sqr(x, y, z));
+		double rmax = sqrt(1.5);
+		double d, v, p;
+		int ndim = 3;
+		sedov::solution(time, r, rmax, d, v, p, ndim);
+		double dif = fabs(rho - d);
+		norm1 += d;
+		norm2 += sqr(d);
+		l1 += dif;
+		l2 += dif * dif;
+		lmax = std::max(lmax, dif);
+		fprintf(fp, "%e %e %e\n", r, rho, d);
+	}
+	l1 /= norm1;
+	l2 /= norm2;
+	l2 = sqrt(l2);
+	PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
+	fclose(fp);
+
 }
 
 void hydro_wave_test() {

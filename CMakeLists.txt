@@ -83,6 +83,7 @@ set(cosmictiger_source_files
     src/profiler.cpp
     src/rockstar.cpp
     src/rockstar.cu
+    src/sedov.cpp
     src/sph_particles.cpp
     src/sph.cpp
     src/sph.cu
@@ -144,6 +145,7 @@ set(cosmictiger_header_files
     cosmictiger/range.hpp
     cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp
+    cosmictiger/sedov.hpp
     cosmictiger/simd.hpp
     cosmictiger/sph.hpp
     cosmictiger/sph_cuda.hpp
@@ -164,7 +166,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas dl silo chealpix
+    Boost::boost fftw3f gsl gslcblas dl silo chealpix quadmath
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
