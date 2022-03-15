@@ -89,6 +89,8 @@ SPH_PARTICLES_EXTERN float* sph_particles_fv; // balsara
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_dc; // diffusion constant
 SPH_PARTICLES_EXTERN float* sph_particles_cond; // conduction constant
+SPH_PARTICLES_EXTERN float* sph_particles_ta; // conduction constant
+SPH_PARTICLES_EXTERN float* sph_particles_dvvdt; // conduction constant
 
 SPH_PARTICLES_EXTERN float* sph_particles_de2; // deint_con
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_con
@@ -133,6 +135,15 @@ std::pair<double,double> sph_particles_apply_updates(int, int,float,float, float
 
 inline float& sph_particles_difco(part_int index) {
 	return sph_particles_dc[index];
+}
+
+
+inline float& sph_particles_divv_dt(part_int index) {
+	return sph_particles_dvvdt[index];
+}
+
+inline float& sph_particles_taux(part_int index) {
+	return sph_particles_ta[index];
 }
 
 inline dif_vector& sph_particles_dif_vec0(part_int index) {

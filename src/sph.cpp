@@ -60,9 +60,6 @@ struct sph_run_workspace {
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<float, pinned_allocator<float>> host_divv;
-	vector<float, pinned_allocator<float>> host_ax;
-	vector<float, pinned_allocator<float>> host_ay;
-	vector<float, pinned_allocator<float>> host_az;
 	vector<float, pinned_allocator<float>> host_vx;
 	vector<float, pinned_allocator<float>> host_vy;
 	vector<float, pinned_allocator<float>> host_vz;
@@ -1583,9 +1580,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (params.phase == 2) {
 			host_eint.resize(parts_size);
 			host_divv.resize(parts_size);
-			host_ax.resize(parts_size);
-			host_ay.resize(parts_size);
-			host_az.resize(parts_size);
 		}
 	}
 	switch (params.run_type) {
@@ -1626,7 +1620,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								const part_int offset = (part_index += size) - size;
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
 								if( params.run_type == SPH_RUN_AUX && params.phase == 2) {
-									sph_particles_global_read_force(node.global_part_range(), host_ax.data(), host_ay.data(), host_az.data(), host_divv.data(), offset);
+									sph_particles_global_read_force(node.global_part_range(), nullptr, nullptr, nullptr, host_divv.data(), offset);
 								}
 								switch (params.run_type) {
 									case SPH_RUN_DIFFUSION:
@@ -1715,9 +1709,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (params.phase == 2) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.divv, sizeof(float) * host_divv.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.ax, sizeof(float) * host_ax.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.ay, sizeof(float) * host_ay.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.az, sizeof(float) * host_az.size()));
 		}
 	}
 	switch (params.run_type) {
@@ -1786,9 +1777,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (params.phase == 2) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint, host_eint.data(), sizeof(float) * host_eint.size(), cudaMemcpyHostToDevice, stream));
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.divv, host_divv.data(), sizeof(float) * host_divv.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.ax, host_ax.data(), sizeof(float) * host_ax.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.ay, host_ay.data(), sizeof(float) * host_ay.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.az, host_az.data(), sizeof(float) * host_az.size(), cudaMemcpyHostToDevice, stream));
 		}
 	}
 	switch (params.run_type) {
@@ -1838,9 +1826,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.hcentral = get_options().hcentral;
 	cuda_data.fvel_snk = &sph_particles_fvel(0);
 	cuda_data.fpot_snk = &sph_particles_fpot(0);
+	cuda_data.taux_snk = &sph_particles_taux(0);
 	cuda_data.Z_snk = &sph_particles_Z(0);
 	cuda_data.h0 = 2.0 * get_options().hsoft;
 	cuda_data.f0_snk = &sph_particles_fpre(0);
+	cuda_data.divv_dt_snk = &sph_particles_divv_dt(0);
 //	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
 //	cuda_data.Yform_snk = &sph_particles_formY(0);
 //	cuda_data.Zform_snk = &sph_particles_formZ(0);
@@ -1914,9 +1904,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (params.phase == 2) {
 			CUDA_CHECK(cudaFree(cuda_data.eint));
 			CUDA_CHECK(cudaFree(cuda_data.divv));
-			CUDA_CHECK(cudaFree(cuda_data.ax));
-			CUDA_CHECK(cudaFree(cuda_data.ay));
-			CUDA_CHECK(cudaFree(cuda_data.az));
 		}
 	}
 	switch (params.run_type) {

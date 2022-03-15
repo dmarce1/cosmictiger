@@ -174,63 +174,52 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 					switch(phase) {
 						case 0: {
 							sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt;
-//							sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt;
-				for( int dim =0; dim < NDIM; dim++) {
-					particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
+							}
+							sph_particles_deint_con(i) = 0.f;
+							for( int dim = 0; dim < NDIM; dim++) {
+								sph_particles_dvel_con(dim,i) = 0.f;
+							}
+						}
+						break;
+						case 1: {
+							sph_particles_deint_con(i) += (1.0f - w)*(sph_particles_deint_pred(i)-sph_particles_deint_con(i));
+							for( int dim =0; dim < NDIM; dim++) {
+								sph_particles_dvel_con(dim,i) += (1.0f - w)*(sph_particles_dvel_pred(dim,i)-sph_particles_dvel_con(dim,i));
+							}
+							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt;
+							}
+							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
+							for( int dim =0; dim < NDIM; dim++) {
+								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+							}
+							sph_particles_eint(i) += sph_particles_deint_con(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+							}
+						}
+						break;
+						case 2: {
+							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
+							for( int dim =0; dim < NDIM; dim++) {
+								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+							}
+							sph_particles_eint(i) +=sph_particles_deint_con(i) *dt;
+							for( int dim =0; dim < NDIM; dim++) {
+								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+							}
+						}
+						break;
+					}
 				}
-				sph_particles_deint_con(i) = 0.f;
-				//						sph_particles_dalpha_con(i) = 0.f;
-				for( int dim = 0; dim < NDIM; dim++) {
-					sph_particles_dvel_con(dim,i) = 0.f;
-				}
-			}
-			break;
-			case 1: {
-				double e0 = sph_particles_egas(i);
-				sph_particles_deint_con(i) += (1.0f - w)*(sph_particles_deint_pred(i)-sph_particles_deint_con(i));
-				//					sph_particles_dalpha_con(i) += (1.0f - w)*(sph_particles_dalpha_pred(i)-sph_particles_dalpha_con(i));
-				for( int dim =0; dim < NDIM; dim++) {
-					sph_particles_dvel_con(dim,i) += (1.0f - w)*(sph_particles_dvel_pred(dim,i)-sph_particles_dvel_con(dim,i));
-				}
-				sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt;
-				//				sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt;
-				for( int dim =0; dim < NDIM; dim++) {
-					particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt;
-				}
-				//			sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
-				sph_particles_deint_pred(i) = sph_particles_deint_con(i);
-				for( int dim =0; dim < NDIM; dim++) {
-					sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
-				}
-				sph_particles_eint(i) += sph_particles_deint_con(i) *dt;
-				//		sph_particles_alpha(i) += sph_particles_dalpha_con(i) *dt;
-				for( int dim =0; dim < NDIM; dim++) {
-					particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
-				}
-				double e1 = sph_particles_egas(i);
-				error = std::max(error, sqrt(sqr(e0-e1)/(e0*e1)));
-			}
-			break;
-			case 2: {
-				//		sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
-				sph_particles_deint_pred(i) = sph_particles_deint_con(i);
-				for( int dim =0; dim < NDIM; dim++) {
-					sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
-				}
-				//	sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt;
-				sph_particles_eint(i) +=sph_particles_deint_con(i) *dt;
-				for( int dim =0; dim < NDIM; dim++) {
-					particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
-				}
-			}
-			break;
-		}
-	}
 //				sph_particles_alpha(i) = std::max(sph_particles_alpha(i), SPH_ALPHA0);
 //				sph_particles_alpha(i) = std::min(sph_particles_alpha(i), SPH_ALPHA1);
-}
-return std::make_pair(error,norm);
-}));
+			}
+			return std::make_pair(error,norm);
+		}));
 	}
 	for (auto& f : futs) {
 		auto tmp = f.get();
@@ -361,6 +350,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dc[i], sph_particles_dc[j]);
 	std::swap(sph_particles_h[i], sph_particles_h[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
+	std::swap(sph_particles_ta[i], sph_particles_ta[j]);
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_g[dim][i], sph_particles_g[dim][j]);
 		std::swap(sph_particles_dv1[dim][i], sph_particles_dv1[dim][j]);
@@ -445,6 +435,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_fp, new_capacity, true);
 		sph_particles_array_resize(sph_particles_t0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cond, new_capacity, true);
+		sph_particles_array_resize(sph_particles_dvvdt, new_capacity, true);
+		sph_particles_array_resize(sph_particles_ta, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
@@ -492,6 +484,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_dalpha_pred(oldsz + i) = 0.0f;
 		sph_particles_alpha(oldsz + i) = get_options().alpha0;
 		sph_particles_fpre(oldsz + i) = 1.f;
+		sph_particles_taux(oldsz + i) = 0.f;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 			sph_particles_dvel_con(dim, oldsz + i) = 0.0f;
@@ -737,9 +730,11 @@ void sph_particles_global_read_force(particle_global_range range, float* ax, flo
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				ax[j] = sph_particles_dvel_con(XDIM, i);
-				ay[j] = sph_particles_dvel_con(YDIM, i);
-				az[j] = sph_particles_dvel_con(ZDIM, i);
+				if (ax) {
+					ax[j] = sph_particles_dvel_con(XDIM, i);
+					ay[j] = sph_particles_dvel_con(YDIM, i);
+					az[j] = sph_particles_dvel_con(ZDIM, i);
+				}
 				divv[j] = sph_particles_divv(i);
 			}
 		} else {
@@ -755,9 +750,11 @@ void sph_particles_global_read_force(particle_global_range range, float* ax, flo
 				const auto end = std::min(line_id.index + line_size, range.range.second);
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
-					ax[dest_index] = ptr[src_index][XDIM];
-					ay[dest_index] = ptr[src_index][YDIM];
-					az[dest_index] = ptr[src_index][ZDIM];
+					if (ax) {
+						ax[dest_index] = ptr[src_index][XDIM];
+						ay[dest_index] = ptr[src_index][YDIM];
+						az[dest_index] = ptr[src_index][ZDIM];
+					}
 					divv[dest_index] = ptr[src_index][NDIM];
 					dest_index++;
 				}
@@ -1160,6 +1157,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_fpot(0), sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_taux(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dalpha_pred(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_difco(0), sizeof(float), sph_particles_size(), fp);
@@ -1192,6 +1190,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_fvel(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpre(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_fpot(0), sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_taux(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dalpha_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_difco(0), sizeof(float), sph_particles_size(), fp);
