@@ -28,6 +28,7 @@
 #include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/constants.hpp>
 
 #include <atomic>
 
@@ -197,6 +198,8 @@ struct sph_run_params {
 	float alpha_decay;
 	bool xsph;
 	float xeta;
+	float omega_m;
+	float H0;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
@@ -208,9 +211,17 @@ struct sph_run_params {
 		alpha_decay = opts.alpha_decay;
 		xsph = opts.xsph != 0.0;
 		xeta = opts.xsph;
+		if (opts.test == "") {
+			H0 = opts.hubble * constants::H0 * opts.code_to_s;
+			omega_m = opts.omega_m;
+		} else {
+			H0 = omega_m = 0.0;
+		}
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & omega_m;
+		arc & H0;
 		arc & xsph;
 		arc & xeta;
 		arc & adot;

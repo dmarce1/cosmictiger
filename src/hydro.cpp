@@ -340,7 +340,7 @@ void hydro_star_test() {
 	PRINT("************************************\n");
 	PRINT("tdyn = %e\n", 1.0 / sqrt(opts.GM * rho0));
 	PRINT("************************************\n");
-	hydro_driver(2.0 * tdyn, 100);
+	hydro_driver(25.0 * tdyn, 1000);
 	const int Nsample = 1000;
 	double l2 = 0.0;
 	double norm = 0.0;
@@ -573,7 +573,7 @@ void hydro_disc_test() {
 
 void hydro_sod_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho0 = 0.05;
+	double rho0 = 0.125;
 	double rho1 = 1.0;
 	double vx1 = 0.0;
 	double vy1 = 0.0;
@@ -581,7 +581,7 @@ void hydro_sod_test() {
 	double vx0 = 0.0;
 	double vy0 = -0.0;
 	double vz0 = -0.0e-1;
-	double p0 = .025;
+	double p0 = .1;
 	double p1 = 1.0;
 	sod_init_t sod;
 	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
@@ -830,9 +830,9 @@ void hydro_helmholtz_test() {
 void hydro_blast_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
 	double rho0 = 1.0;
-	double p1 = 1000000.0 / pow(20 / 15.0, 3);
+	double p1 = 10000000.0;
 	double p0 = 1.0;
-	double sigma = 0.02;
+	double sigma = 0.01 * pow(10,1.0/3.0);
 	auto opts = get_options();
 	part_int ndim = get_options().parts_dim;
 	part_int nparts = std::pow(ndim, NDIM);
@@ -890,7 +890,7 @@ void hydro_blast_test() {
 			}
 		}
 	}
-	hydro_driver(0.10, 256);
+	hydro_driver(0.05, 1024);
 }
 
 void hydro_wave_test() {
