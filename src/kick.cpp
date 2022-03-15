@@ -378,9 +378,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					m = type == DARK_MATTER_TYPE ? dm_mass : sph_mass;
 				}
 				forces.phi[j] += L2(0, 0, 0);
-				if (!sph) {
-					forces.phi[j] -= SELF_PHI * m / (2.f * params.h);
-				}
 				forces.gx[j] -= L2(1, 0, 0);
 				forces.gy[j] -= L2(0, 1, 0);
 				forces.gz[j] -= L2(0, 0, 1);

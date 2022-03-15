@@ -133,9 +133,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 		const float mass = sph ? (my_type == DARK_MATTER_TYPE ? dm_mass : sph_mass) : 1.0f;
 		phi[i] += L2(0, 0, 0);
-		if (!sph) {
-			phi[i] -= SELF_PHI * hinv * mass;
-		}
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
 		gz[i] -= L2(0, 0, 1);

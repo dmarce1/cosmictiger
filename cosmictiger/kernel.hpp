@@ -31,10 +31,14 @@
 #define KERNEL_WENDLAND_C6 5
 #define KERNEL_SUPER_GAUSSIAN 6
 #define KERNEL_GAUSSIAN 7
+#define KERNEL_SILLY 8
 
 void kernel_set_type(int type);
 void kernel_output();
 void kernel_adjust_options(options& opts);
+
+#define Power pow
+#define Pi T(M_PI)
 
 #ifdef __CUDACC__
 #ifdef __KERNEL_CU__
@@ -147,6 +151,10 @@ inline T kernelW(T q) {
 		res = expf(-q2) * 8.f;
 	}
 		break;
+	case KERNEL_SILLY: {
+		res = (T(3465) * Power(T(-1) + Power(q, T(2)), T(3)) * (-T(5) + T(13) * Power(q, T(2)))) / (T(1024.) * Pi);
+	}
+		break;
 	};
 	res *= q < T(1.f);
 	return res;
@@ -252,6 +260,10 @@ inline T dkernelW_dq(T q) {
 	case KERNEL_GAUSSIAN: {
 		q2 = sqr(q * T(3.54489));
 		res = -T(201.06) * expf(-q2) * q;
+	}
+		break;
+	case KERNEL_SILLY: {
+		res = (T(3465) * q * Power(T(-1) + Power(q, T(2)), T(2)) * (T(-7) + T(13) * Power(q, T(2)))) / (T(128.)*Pi);
 	}
 		break;
 
@@ -395,6 +407,10 @@ inline T kernelFqinv(T q) {
 		q2 = sqr(q * T(3.54489));
 		res = (-T(4.00004) * expf(-q2) * q + T(1.00001) * erff(T(3.54489) * q));
 		res /= sqr(q) * q + T(1e-30);
+	}
+		break;
+	case KERNEL_SILLY: {
+		res = (T(5775) - T(19404) * Power(q, T(2)) + T(26730) * Power(q, T(4)) - 16940 * Power(T(q), T(6)) + T(4095) * Power(T(q), T(8))) / T(256.);
 	}
 		break;
 	};
@@ -562,6 +578,12 @@ inline T kernelPot(T q) {
 		res /= q + T(1e-30);
 		res -= 0.0000144457;
 	}
+		break;
+	case KERNEL_SILLY: {
+		res = (T(2079) - T(5775) * Power(q, T(2)) + T(9702) * Power(q, T(4)) - T(8910) * Power(q, T(6)) + T(4235) * Power(q, T(8)) - T(819) * Power(q, T(10)))
+				/ T(512.);
+	}
+
 		break;
 	};
 	sw1 = q < T(1);

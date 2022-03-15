@@ -200,9 +200,11 @@ struct sph_run_params {
 	float xeta;
 	float omega_m;
 	float H0;
+	float damping;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
+		damping = opts.damping;
 		gy = opts.gy;
 		max_dt = 1e30;
 		alpha0 = opts.alpha0;

@@ -271,15 +271,16 @@ void hydro_star_test() {
 	const double m = opts.sph_mass;
 	set_options(opts);
 	double rho0 = 230.0 * 1000000 / 980107.;
-	const auto rho = [rho0]( double r ) {
+	const double npoly = 1.666666666666;
+	const auto rho = [rho0,npoly]( double r ) {
 		if( r == 0.0 ) {
 			return rho0;
 		} else {
 			double menc;
-			return rho0 * lane_emden(r, r / 100.0, 1.5, menc);
+			return rho0 * lane_emden(r, r / 100.0, npoly, menc);
 		}
 	};
-	double K = 4.0 * M_PI * opts.GM / (2.5) * powf(rho0, 1.0 - 1.0 / 1.5) / sqr(r0);
+	double K = 4.0 * M_PI * opts.GM / (npoly+1.0) * powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
 	double d;
 	double r = 0.0;
 	int Ntot = 0;
@@ -326,8 +327,8 @@ void hydro_star_test() {
 			sph_particles_pos(YDIM, k) = X[i][YDIM][l] * radius[i] + 0.5;
 			sph_particles_pos(ZDIM, k) = X[i][ZDIM][l] * radius[i] + 0.5;
 			sph_particles_smooth_len(k) = h;
-			const double P = K * pow(d, 5.0 / 3.0);
-			const double E = P / (2.0 / 3.0);
+			const double P = K * pow(d, 1.0 + 1.0 / npoly);
+			const double E = P * npoly;
 			const double eint = E / d;
 			sph_particles_eint(k) = eint;
 			sph_particles_vel(XDIM, k) = 0;
@@ -340,7 +341,17 @@ void hydro_star_test() {
 	PRINT("************************************\n");
 	PRINT("tdyn = %e\n", 1.0 / sqrt(opts.GM * rho0));
 	PRINT("************************************\n");
-	hydro_driver(25.0 * tdyn, 1000);
+	opts = get_options();
+	opts.damping = 1.0;
+	opts.alpha0 = 0.0;
+	opts.alpha1 = 0.0;
+	set_options(opts);
+	hydro_driver(10.0 * tdyn, 25);
+	opts.damping = 0.0;
+	opts.alpha0 = 0.1;
+	opts.alpha1 = 1.0;
+	set_options(opts);
+	hydro_driver(100.0 * tdyn, 250);
 	const int Nsample = 1000;
 	double l2 = 0.0;
 	double norm = 0.0;

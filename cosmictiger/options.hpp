@@ -71,6 +71,7 @@ struct options {
 	double code_to_s;
 	double code_to_cm;
 	double code_to_g;
+	double damping;
 	double sigma8_c;
 	double omega_m;
 	double omega_r;
@@ -101,6 +102,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & damping;
 		arc & xsph;
 		arc & alpha0;
 		arc & alpha1;
