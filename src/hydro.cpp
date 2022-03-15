@@ -522,10 +522,10 @@ void hydro_rt_test() {
 
 void hydro_disc_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	const double rinner = 0.025;
+	const double rinner = 0.2;
 	const double router = 0.3;
 	const double rho = nparts_total;
-	const double p0 = 1.0e-6;
+	const double p0 = 1.0e-30;
 	const double m = 1.0;
 	double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 	int i = 0;
@@ -567,8 +567,8 @@ void hydro_disc_test() {
 			}
 		}
 	}
-	const double t = 1.0;
-	hydro_driver(t, 128);
+	const double t = 16.0;
+	hydro_driver(t, 1024);
 }
 
 void hydro_sod_test() {
