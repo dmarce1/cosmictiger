@@ -595,7 +595,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			if (type != SPH_TYPE) {
 				ln.hsoft = hsoft;
 			} else {
-				ln.hsoft = std::max(hsoft, std::min(SPH_MAX_SOFT, sph_particles_smooth_len(kk)));
+				ln.hsoft = std::min(SPH_MAX_SOFT, sph_particles_smooth_len(kk));
 			}
 		} else {
 			ln.hsoft = get_options().hsoft;

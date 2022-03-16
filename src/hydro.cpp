@@ -155,7 +155,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
 		kick_return kr;
 		if (get_options().gravity) {
-			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.7, t0 == 0.0, minrung == 0);
+			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.5, t0 == 0.0, minrung == 0);
 			kr = tmp.first;
 		}
 		if (minrung == 0) {

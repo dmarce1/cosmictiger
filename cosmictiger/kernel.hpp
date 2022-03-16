@@ -177,7 +177,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	};
-	res *= q < T(1.f);
+	res *= (q < T(1.f)) * (q > T(0));
 	return res;
 }
 
@@ -308,7 +308,7 @@ inline T dkernelW_dq(T q) {
 		break;
 
 	};
-	res *= q < T(1.f);
+	res *= (q < T(1.f)) * (q > T(0));
 	return res;
 }
 
@@ -485,7 +485,7 @@ inline T kernelFqinv(T q) {
 	};
 	sw1 = q < T(1);
 	sw2 = T(1) - sw1;
-	res = sw1 * res + sw2 / (sqr(q) * q + T(1e-30));
+	res = (sw1 * res + sw2 / (sqr(q) * q + T(1e-30))) * (q > T(0));
 	return res;
 }
 
@@ -692,6 +692,6 @@ inline T kernelPot(T q) {
 	};
 	sw1 = q < T(1);
 	sw2 = T(1) - sw1;
-	res = sw1 * res + sw2 / (q + T(1e-30f));
+	res = (sw1 * res + sw2 / (q + T(1e-30f))) * (q > T(0));
 	return res;
 }

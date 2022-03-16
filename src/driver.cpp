@@ -176,7 +176,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool glass = get_options().glass;
 	if (phase == 0) {
 
-		stars_statistics(scale);
+		if( stars ) {
+			stars_statistics(scale);
+		}
 //		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)
@@ -199,6 +201,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		tm.reset();
 
 		sparams.phase = 0;
+		int doneiters = 0;
 		do {
 			sparams.set = SPH_SET_ACTIVE;
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
@@ -211,7 +214,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 			tm.reset();
 			cont = kr.rc;
-			tnparams.h_wt = cont ? 2.0 : 1.01;
+			tnparams.h_wt = cont ? 2.0 : 2.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 			tm.start();
@@ -254,7 +257,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 			tm.reset();
 			cont = kr.rc;
-			tnparams.h_wt = cont ? 2.0 : 1.01;
+			tnparams.h_wt = cont ? 2.0 : 2.01;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 			tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 			tm.start();

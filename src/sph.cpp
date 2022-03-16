@@ -424,8 +424,8 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 }*/
 				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
 				//				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
-				const bool test3 = level <= 9;
-				if (test1 || test2 || test3) {
+		//		const bool test3 = level <= 9;
+				if (test1 || test2) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
 					} else {
@@ -1407,7 +1407,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							if( !test) {
 								test = has_active_neighbors(self);
 							}
-							test = test && !self->converged;
 							break;
 
 							case SPH_RUN_SMOOTHLEN:
@@ -1433,7 +1432,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_AUX:
-							test = self->nactive > 0;// || has_active_neighbors(self);
+							test = self->nactive > 0 || has_active_neighbors(self);
 							break;
 						}
 						if(test) {
@@ -1829,7 +1828,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.fpot_snk = &sph_particles_fpot(0);
 	cuda_data.taux_snk = &sph_particles_taux(0);
 	cuda_data.Z_snk = &sph_particles_Z(0);
-	cuda_data.h0 = 2.0 * get_options().hsoft;
 	cuda_data.f0_snk = &sph_particles_fpre(0);
 	cuda_data.divv_dt_snk = &sph_particles_divv_dt(0);
 //	cuda_data.tdyn_snk = &sph_particles_tdyn(0);

@@ -256,7 +256,6 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 		int depth, bool local_root) {
 	//PRINT( "%i\n", depth);
 	stack_trace_activate();
-	const double h = get_options().hsoft;
 	static const int bucket_size = get_options().sph_bucket_size;
 	sph_tree_create_return rc;
 	if (depth >= MAX_DEPTH) {

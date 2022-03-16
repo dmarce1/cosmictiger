@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                   const T& operator[](int i) const {
+	                                                                                                                                      const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -368,7 +368,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					count = 0;
 					f = 0.f;
 					dfdh = 0.f;
-					for (int j = ws.x.size() - 1 - tid; j >= 0; j -= block_size) {
+					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
 						const float dy = distance(x[YDIM], ws.y[j]); // 2
 						const float dz = distance(x[ZDIM], ws.z[j]); // 2
@@ -393,8 +393,10 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						f -= data.N * float(3.0 / (4.0 * M_PI));
 						dh = -f / dfdh;
 						dh = fminf(fmaxf(dh, -max_dh), max_dh);
+						error = fmaxf(fabsf(f) / (data.N * float(3.0 / (4.0 * M_PI))), fabs(dh / h));
+					} else {
+						error = 1.0f;
 					}
-					error = fabsf(f) / (data.N * float(3.0 / (4.0 * M_PI)));
 					__syncthreads();
 					if (tid == 0) {
 						h += dh;
@@ -404,11 +406,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 					__syncthreads();
 					for (int dim = 0; dim < NDIM; dim++) {
-						if (self.outer_box.end[dim] < range_fixed(x[dim] + fixed32(h)) + range_fixed::min()) {
+						if (self.outer_box.end[dim].to_double() < x[dim].to_double() + h) {
 							box_xceeded = true;
 							break;
 						}
-						if (range_fixed(x[dim]) < self.outer_box.begin[dim] + range_fixed(h) + range_fixed::min()) {
+						if (x[dim].to_double() < self.outer_box.begin[dim].to_double() + h) {
 							box_xceeded = true;
 							break;
 						}
@@ -431,6 +433,24 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(box_xceeded);
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
+				count = 0;
+				for (int j = tid; j < ws.x.size(); j += block_size) {
+					const float dx = distance(x[XDIM], ws.x[j]); // 2
+					const float dy = distance(x[YDIM], ws.y[j]); // 2
+					const float dz = distance(x[ZDIM], ws.z[j]); // 2
+					const float hinv = 1.f / h;
+					const float r2 = sqr(dx, dy, dz);            // 2
+					const float r = sqrt(r2);                    // 4
+					const float q = r * hinv;                    // 1
+					if (q < 1.f) {                               // 1
+						count++;
+					}
+				}
+				shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(count);
+				if (tid == 0 && !box_xceeded && count < 5) {
+					PRINT("NO NEIGHBORS FOUND! error = %e count = %i\n", error, count);
+					__trap();
+				}
 				if (tid == 0 && h <= 0.f) {
 					PRINT("Less than ZERO H! sph.cu %e\n", h);
 					__trap();
@@ -978,7 +998,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float de_dt = 0.f;
 				float dtinv_visc = 0.f;
 				float dtinv_cfl = 0.f;
-//				float vsig = 0.0;
+				float vsig = 0.0;
 				const float ainv = 1.0f / params.a;
 				const float& adot = params.adot;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
@@ -1053,9 +1073,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float hinv_ij = 1.f / h_ij;
 					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_ij);
 					dtinv_visc = fmaxf(dtinv_visc, viscco_ij * sqr(hinv_ij));
-//					if (params.damping > 0.f) {
-//						vsig = fmaxf(vsig, c_ij - w_ij);
-//					}
+					if (params.damping > 0.f) {
+						vsig = fmaxf(vsig, c_ij - w_ij);
+					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
@@ -1063,9 +1083,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_visc);
-//				if (params.damping) {
-//					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig);
-//				}
+				if (params.damping) {
+					shared_reduce_max<float, HYDRO_BLOCK_SIZE> (vsig);
+				}
 
 				if (tid == 0) {
 					if (data.gcentral) {
@@ -1100,9 +1120,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_visc);
-//						if (params.damping > 0.f) {
-//							dtinv_hydro1 = fmaxf(dtinv_hydro1, vsig / h_i * params.damping * ainv);
-//						}
+						if (params.damping > 0.f) {
+							dtinv_hydro1 = fmaxf(dtinv_hydro1, vsig / h_i * params.damping * ainv);
+						}
 						const float a2 = sqr(ax, ay, az);
 						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
 						const float dtinv_hydro2 = dtinv_acc;
@@ -1361,10 +1381,11 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float mrhoinv_i = m * rhoinv_i;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float q_ij = r * hinv_ij;
-						const float pot = kernelPot(q_ij);
-						const float force = kernelFqinv(q_ij) * q_ij;
-						dpot_dh += m * sqr(hinv_ij) * (pot + q_ij * force);
+						if (q_i < 1.f) {
+							const float pot = kernelPot(q_i);
+							const float force = kernelFqinv(q_i) * q_i;
+							dpot_dh += m * sqr(hinv_i) * (pot + q_i * force);
+						}
 					} else if (params.phase == 1) {
 						dvx_dx -= mrhoinv_i * vx_ij * dWdr_x_i * ainv;
 						dvy_dx -= mrhoinv_i * vy_ij * dWdr_x_i * ainv;
@@ -1410,9 +1431,12 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				if (params.phase == 0) {
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(drho_dh);
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dpot_dh);
-					if( dpot_dh == 0.0 ) {
-						PRINT( "ZERO!!!!!!!!!!!!!!! %i %i\n", ws.rec1.size(), active);
+					if (dpot_dh == 0.0 && active) {
+						PRINT("ZERO!!!!!!!!!!!!!!! %i %i\n", ws.rec1.size(), active);
 						__trap();
+					}
+					if (dpot_dh == 0.f) {
+						dpot_dh = 1e-30f;
 					}
 				} else if (params.phase == 1) {
 					div_v = dvx_dx + dvy_dy + dvz_dz;
