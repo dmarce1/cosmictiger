@@ -133,7 +133,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	bool thread_left = true;
 #ifdef USE_CUDA
 	size_t cuda_mem_usage;
-	params.gpu = false;
 	if (get_options().cuda && params.gpu) {
 		if( self_ptr->local_root) {
 			const double max_load = self_ptr->node_count * params.node_load + (self_ptr->part_range.second - self_ptr->part_range.first);
