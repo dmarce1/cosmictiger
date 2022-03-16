@@ -1193,17 +1193,17 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					x[ZDIM] = data.z[pi];
 					if (self.outer_box.contains(x)) {
 						contains = true;
-						if (!contains) {
-							contains = true;
-							for (int dim = 0; dim < NDIM; dim++) {
-								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
-								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
+					}
+					if (!contains) {
+						contains = true;
+						for (int dim = 0; dim < NDIM; dim++) {
+							if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+								contains = false;
+								break;
+							}
+							if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+								contains = false;
+								break;
 							}
 						}
 					}
@@ -1361,9 +1361,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float mrhoinv_i = m * rhoinv_i;
 					if (params.phase == 0) {
 						drho_dh -= (3.f * kernelW(q_i) + q_i * dkernelW_dq(q_i));
-						const float pot = kernelPot(q_i);
-						const float force = kernelFqinv(q_i) * q_i;
-						dpot_dh += m * sqr(hinv_i) * (pot - q_i * force);
+						const float q_ij = r * hinv_ij;
+						const float pot = kernelPot(q_ij);
+						const float force = kernelFqinv(q_ij) * q_ij;
+						dpot_dh += m * sqr(hinv_ij) * (pot + q_ij * force);
 					} else if (params.phase == 1) {
 						dvx_dx -= mrhoinv_i * vx_ij * dWdr_x_i * ainv;
 						dvy_dx -= mrhoinv_i * vy_ij * dWdr_x_i * ainv;
@@ -1409,6 +1410,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				if (params.phase == 0) {
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(drho_dh);
 					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dpot_dh);
+					if( dpot_dh == 0.0 ) {
+						PRINT( "ZERO!!!!!!!!!!!!!!! %i %i\n", ws.rec1.size(), active);
+						__trap();
+					}
 				} else if (params.phase == 1) {
 					div_v = dvx_dx + dvy_dy + dvz_dz;
 					curl_vx = dvz_dy - dvy_dz;

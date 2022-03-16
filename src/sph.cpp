@@ -1433,7 +1433,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_AUX:
-							test = self->nactive > 0 || has_active_neighbors(self);
+							test = self->nactive > 0;// || has_active_neighbors(self);
 							break;
 						}
 						if(test) {

@@ -259,7 +259,7 @@ void hydro_plummer() {
 	}
 	PRINT("Virial error is %e\n", (2.0 * ekin + pot) / (2.0 * ekin - pot));
 	const double tdyn = sqrt(4.0 * M_PI * a * a * a / (3.0 * G * M0));
-	hydro_driver(10.0 * tdyn, 1024);
+	hydro_driver(10.0 * tdyn, 128);
 }
 
 void hydro_star_test() {
