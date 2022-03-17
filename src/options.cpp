@@ -241,12 +241,6 @@ bool process_options(int argc, char *argv[]) {
 			opts.sph_mass = 1.0;
 			opts.gcentral = 1.0;
 		}
-		if( opts.test == "plummer") {
-			opts.alpha0 = 0.0001;
-			opts.alpha1 = 0.001;
-			opts.beta = 1.0;
-			opts.diffusion = false;
-		}
 	}
 	SHOW(alpha0);
 	SHOW(alpha1);

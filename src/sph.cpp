@@ -413,8 +413,14 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			nextlist.resize(0);
 			for (int ci = 0; ci < checklist.size(); ci++) {
 				const auto* other = sph_tree_get_node(checklist[ci]);
-				const bool test1 = range_intersect(self_ptr->outer_box, other->inner_box);
-				const bool test2 = range_intersect(self_ptr->inner_box, other->outer_box);
+				bool test2 = false;
+				bool test1 = false;
+				if (params.set | SPH_INTERACTIONS_I) {
+					test1 = range_intersect(self_ptr->outer_box, other->inner_box);
+				}
+				if (params.set | SPH_INTERACTIONS_J) {
+					test2 = range_intersect(self_ptr->inner_box, other->outer_box);
+				}
 				if (test1 || test2) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
@@ -1415,29 +1421,18 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 						bool test;
 						switch(params.run_type) {
 
-							case SPH_RUN_DIFFUSION:
-							test = (self->nactive > 0);
-							if( !test) {
-								test = has_active_neighbors(self);
-							}
-							break;
-
 							case SPH_RUN_SMOOTHLEN:
-							test = (params.set & SPH_SET_ACTIVE) && (self->nactive > 0);
 							if( !test && params.phase == 1) {
 								test = has_active_neighbors(self);
+							} else {
+								test = self->nactive > 0;
 							}
 							break;
 
 							case SPH_RUN_MARK_SEMIACTIVE:
-							test = (self->nactive > 0);
-							if( !test ) {
-								test = has_active_neighbors(self);
-							}
-							break;
-
+							case SPH_RUN_DIFFUSION:
 							case SPH_RUN_RUNGS:
-							test = (self->nactive > 0);
+							test = has_active_neighbors(self);
 							break;
 
 							case SPH_RUN_HYDRO:
@@ -1445,7 +1440,11 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_AUX:
-							test = self->nactive > 0 || has_active_neighbors(self);
+							if(params.phase != 2 ) {
+								test = self->nactive > 0;
+							} else {
+								test = has_active_neighbors(self);
+							}
 							break;
 						}
 						if(test) {
