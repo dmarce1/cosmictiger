@@ -349,7 +349,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 		if (rcl.nactive || rcr.nactive) {
 			active_nodes += 1 + rcl.active_nodes + rcr.active_nodes;
 		}
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			inner_box.begin[dim] = std::min(iboxl.begin[dim], iboxr.begin[dim]);
 			inner_box.end[dim] = std::max(iboxl.end[dim], iboxr.end[dim]);
 			outer_box.begin[dim] = std::min(oboxl.begin[dim], oboxr.begin[dim]);
@@ -359,12 +359,13 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		nactive = 0;
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			inner_box.begin[dim] = 1.9;
 			inner_box.end[dim] = -0.9;
 			outer_box.begin[dim] = 1.9;
 			outer_box.end[dim] = -0.9;
 		}
+		const auto tiny = 2.0 * range_fixed::min().to_double();
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			sph_particles_semi_active(i) = false;
 			const float h = params.h_wt * sph_particles_smooth_len(i);
@@ -372,17 +373,36 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 			for (int dim = 0; dim < NDIM; dim++) {
 				X[dim] = sph_particles_pos(dim, i);
 			}
-			for( int dim = 0; dim < NDIM; dim++) {
+			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = X[dim].to_double();
-				inner_box.begin[dim] = std::min(inner_box.begin[dim].to_double(), x-1e-4*h);
-				inner_box.end[dim] = std::max(inner_box.end[dim].to_double(), x+1e-4*h);
-				outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h);
-				outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h);
+				inner_box.begin[dim] = std::min(inner_box.begin[dim].to_double(), x - tiny);
+				inner_box.end[dim] = std::max(inner_box.end[dim].to_double(), x + tiny);
+				//		if (sph_particles_rung(i) >= params.min_rung) {
+				outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h - tiny);
+				outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h + tiny);
+				//		}
 			}
 			if (sph_particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
 		}
+
+	/*	double small_span = 1e30;
+		double hmax = 0.0;
+		for( int dim = 0; dim < NDIM; dim++) {
+			double span = box.end[dim] - box.begin[dim];
+			small_span = std::min(small_span, span);
+			hmax += sqr(span);
+		}
+	//	hmax += 12.0 * sqr(small_span);
+		hmax = 1.5 * sqrt(hmax + 3.0 * sqr(small_span));
+		for( int dim = 0; dim < NDIM; dim++) {
+			inner_box.begin[dim] = box.begin[dim];
+			inner_box.end[dim] = box.end[dim];
+			outer_box.begin[dim] = box.begin[dim] - hmax;
+			outer_box.end[dim] = box.begin[dim] + hmax;
+		}*/
+
 		node_count = 1;
 		leaf_nodes = 1;
 		if (nactive) {
@@ -397,8 +417,6 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 	node.node_count = node_count;
 	node.inner_box = inner_box;
 	node.outer_box = outer_box;
-
-
 
 	node.children = children;
 	node.local_root = local_root;
@@ -550,5 +568,4 @@ static vector<sph_tree_node> sph_tree_fetch_cache_line(int index) {
 	return std::move(line);
 
 }
-
 

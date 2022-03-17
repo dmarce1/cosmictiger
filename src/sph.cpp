@@ -51,7 +51,7 @@ struct sph_tree_id_hash {
 };
 
 inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
-	return a.periodic_intersection(b).volume() != range_fixed(0.0);
+	return a.periodic_intersects(b);
 }
 
 struct sph_run_workspace {
@@ -414,17 +414,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			for (int ci = 0; ci < checklist.size(); ci++) {
 				const auto* other = sph_tree_get_node(checklist[ci]);
 				const bool test1 = range_intersect(self_ptr->outer_box, other->inner_box);
-				/*	if (level > 6) {
-				 if (!test1 && self_ptr == other && self_ptr->nactive > 0) {
-				 PRINT("!\n");
-				 static mutex_type mutex;
-				 std::lock_guard<mutex_type> lock(mutex);
-				 PRINT( "%i %i\n", self_ptr->outer_box.valid, self_ptr->inner_box.valid);
-				 }
-				 }*/
-				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
-				//				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
-				//		const bool test3 = level <= 9;
+				const bool test2 = range_intersect(self_ptr->inner_box, other->outer_box);
 				if (test1 || test2) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
@@ -443,17 +433,23 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			pair<int> rng;
 			rng.first = sph_tree_allocate_neighbor_list(leaflist);
 			rng.second = leaflist.size() + rng.first;
-			//		PRINT( "%i %i\n", level, leaflist.size());
+			/*			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
+			 if (sph_particles_id(i) == 591) {
+			 PRINT("--------->>> %i %i %i\n", level, leaflist.size(),  self_ptr->part_range.second- self_ptr->part_range.first);
+			 break;
+			 }
+			 }*/
 			sph_tree_set_neighbor_range(self, rng);
 		}
 			break;
 		case SPH_TREE_NEIGHBOR_BOXES: {
-			fixed32_range ibox, obox;
+			fixed32_range ibox, obox, pbox;
 			float maxh = 0.f;
 			for (int dim = 0; dim < NDIM; dim++) {
-				ibox.begin[dim] = obox.begin[dim] = 1.9;
-				ibox.end[dim] = obox.end[dim] = -.9;
+				pbox.begin[dim] = ibox.begin[dim] = obox.begin[dim] = 1.9;
+				pbox.end[dim] = ibox.end[dim] = obox.end[dim] = -.9;
 			}
+			bool show = false;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool active = sph_particles_rung(i) >= params.min_rung;
 				const bool semiactive = !active && sph_particles_semi_active(i);
@@ -468,17 +464,34 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				//			if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					const double x = X[dim].to_double();
-					obox.begin[dim] = std::min(obox.begin[dim].to_double(), x - h);
-					obox.end[dim] = std::max(obox.end[dim].to_double(), x + h);
+				const auto tiny = 2.0 * range_fixed::min().to_double();
+				/*				if (sph_particles_id(i) == 591) {
+				 show = true;
+				 PRINT("??????????? %e\n", h / params.h_wt);
+				 for (int dim = 0; dim < NDIM; dim++) {
+				 const double x = X[dim].to_double();
+				 pbox.begin[dim] = std::min(pbox.begin[dim].to_double(), x - h - tiny);
+				 pbox.end[dim] = std::max(pbox.end[dim].to_double(), x + h + tiny);
+				 PRINT("%e %e %e\n", pbox.begin[dim].to_double(), x, pbox.end[dim].to_double());
+				 }
+				 }*/
+
+				if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const double x = X[dim].to_double();
+						obox.begin[dim] = std::min(obox.begin[dim].to_double(), x - h - tiny);
+						obox.end[dim] = std::max(obox.end[dim].to_double(), x + h + tiny);
+					}
 				}
-				//			}
 				for (int dim = 0; dim < NDIM; dim++) {
 					const double x = X[dim].to_double();
-					ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - 1e-4 * h);
-					ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + 1e-4 * h);
+					ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - tiny);
+					ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + tiny);
+				}
+			}
+			if (show) {
+				for (int dim = 0; dim < NDIM; dim++) {
+					PRINT("%e %e | %e %e\n", ibox.begin[dim].to_double(), ibox.end[dim].to_double(), obox.begin[dim].to_double(), obox.end[dim].to_double());
 				}
 			}
 			kr.inner_box = ibox;
@@ -549,7 +562,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				values.p *= oneinv;
 			}
 			kr.has_value_at = true;
-//				PRINT("%e %e\n", params.x, values.vx);
+			//				PRINT("%e %e\n", params.x, values.vx);
 			kr.value_at = values;
 		}
 			break;
@@ -1829,6 +1842,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.taux_snk = &sph_particles_taux(0);
 	cuda_data.Z_snk = &sph_particles_Z(0);
 	cuda_data.f0_snk = &sph_particles_fpre(0);
+	cuda_data.id_snk = &sph_particles_id(0);
 	cuda_data.divv_dt_snk = &sph_particles_divv_dt(0);
 //	cuda_data.tdyn_snk = &sph_particles_tdyn(0);
 //	cuda_data.Yform_snk = &sph_particles_formY(0);

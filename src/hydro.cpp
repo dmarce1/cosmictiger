@@ -146,13 +146,13 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	domains_rebound();
 	do {
 		int minrung = min_rung(itime);
+		double dummy;
+		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
 		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
 //			output_line(main_step);
 			main_step++;
 		}
-		double dummy;
-		auto rc1 = sph_step(minrung, 1.0, t, t0, 0, 0.0, 0, 0, 0.0, &dummy, false);
 		kick_return kr;
 		if (get_options().gravity) {
 			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.5, t0 == 0.0, minrung == 0);

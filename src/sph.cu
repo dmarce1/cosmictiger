@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                            const T& operator[](int i) const {
+	                                                                                                                                                   const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -289,8 +289,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__
-	float error;
 	__shared__ smoothlen_workspace ws;
 	__syncthreads();
 	if (tid == 0) {
@@ -299,6 +297,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	__syncthreads();
 	new (&ws) smoothlen_workspace();
 	array<fixed32, NDIM> x;
+	float error;
 	while (index < data.nselfs) {
 
 		int flops = 0;
@@ -342,13 +341,10 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		float hmin = 1e+20;
 		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			bool use;
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			if (params.phase == 0) {
-				use = data.rungs[i] >= params.min_rung;
-			} else {
-				use = data.sa_snk[snki];
-			}
+			const bool active = data.rungs[i] >= params.min_rung;
+			const bool semiactive = !active && data.sa_snk[snki];
+			const bool use = params.phase == 0 ? active : semiactive;
 			if (use) {
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
@@ -368,7 +364,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					count = 0;
 					f = 0.f;
 					dfdh = 0.f;
-					for (int j = ws.x.size() - 1 - tid; j >= 0; j -= block_size) {
+					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
 						const float dy = distance(x[YDIM], ws.y[j]); // 2
 						const float dz = distance(x[ZDIM], ws.z[j]); // 2
@@ -415,6 +411,11 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							break;
 						}
 					}
+					__syncthreads();
+					if (tid == 0 && box_xceeded) {
+						h -= dh;
+					}
+					__syncthreads();
 					iter++;
 					if (max_dh / h < SPH_SMOOTHLEN_TOLER) {
 						if (tid == 0) {
@@ -424,13 +425,14 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(box_xceeded);
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
+				if (tid == 0 && data.id_snk[snki] == 591) {
+					PRINT("!!!!!!!!!!!!!!!! %i %e %i %i\n", box_xceeded, h, active, semiactive);
+				}
+
 				if (tid == 0 && h <= 0.f) {
 					PRINT("Less than ZERO H! sph.cu %e\n", h);
 					__trap();
 				}
-				//	if (tid == 0)
-				//	PRINT("%i %e\n", count, data.N);
-				//		PRINT( "%e\n", h);
 				hmin = fminf(hmin, h);
 				hmax = fmaxf(hmax, h);
 				if (tid == 0) {
@@ -1063,8 +1065,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_visc);
-				if (fabs(1. - one) > 1.0e-4) {
-					PRINT("one is off %e\n", one);
+				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
+					PRINT("one is off %e index = %li\n", one, data.id_snk[snki]);
 					__trap();
 				}
 				if (params.damping) {
@@ -1243,7 +1245,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 			int rung_i = data.rungs[i];
 			const bool active = rung_i >= params.min_rung;
 			const bool semi_active = !active && data.sa_snk[snki];
-			bool use = active || semi_active;
+			bool use = active || (params.phase != 2 && semi_active);
 			const float m = data.m;
 			const float minv = 1.f / m;
 			const float c0 = float(3.0f / 4.0f / M_PI * data.N);

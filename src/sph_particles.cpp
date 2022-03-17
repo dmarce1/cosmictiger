@@ -338,6 +338,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	static const bool stars = get_options().stars;
 	static const bool xsph = get_options().xsph != 0.0;
 	std::swap(sph_particles_a[i], sph_particles_a[j]);
+	std::swap(sph_particles_i[i], sph_particles_i[j]);
 	std::swap(sph_particles_e[i], sph_particles_e[j]);
 	std::swap(sph_particles_cond[i], sph_particles_cond[j]);
 	std::swap(sph_particles_t0[i], sph_particles_t0[j]);
@@ -431,6 +432,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
+		sph_particles_array_resize(sph_particles_i, new_capacity, true);
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fp, new_capacity, true);
@@ -479,6 +481,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			particles_type(offset + i) = SPH_TYPE;
 			sph_particles_dm_index(oldsz + i) = offset + i;
 		}
+		sph_particles_id(oldsz + i) = oldsz + i;
 		sph_particles_deint_con(oldsz + i) = 0.0f;
 		sph_particles_deint_pred(oldsz + i) = 0.0f;
 		sph_particles_dalpha_con(oldsz + i) = 0.0f;

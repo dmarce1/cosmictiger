@@ -62,25 +62,74 @@ struct range {
 		}
 		return I;
 	}
-
+	CUDA_EXPORT
 	inline range periodic_intersection(const range& other) const {
 		range I;
-		const static bool yreflect = get_options().yreflect;
+#ifdef __CUDA_ARCH__
 		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
-			I.end[dim] = std::min(end[dim], other.end[dim]);
-			if (!(yreflect && dim == YDIM)) {
+			I.begin[dim] = max(begin[dim], other.begin[dim]);
+			I.end[dim] = min(end[dim], other.end[dim]);
+			if (I.end[dim] <= I.begin[dim]) {
+				I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
+				I.end[dim] = min(end[dim] + T(1), other.end[dim]);
 				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
-					I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
-					if (I.end[dim] <= I.begin[dim]) {
-						I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
-						I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
-					}
+					I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
+					I.end[dim] = min(end[dim] - T(1), other.end[dim]);
 				}
 			}
 		}
+#else
+		for (int dim = 0; dim < N; dim++) {
+			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
+			I.end[dim] = std::min(end[dim], other.end[dim]);
+			if (I.end[dim] <= I.begin[dim]) {
+				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
+				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+				if (I.end[dim] <= I.begin[dim]) {
+					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+				}
+			}
+		}
+#endif
 		return I;
+	}
+	CUDA_EXPORT
+	inline bool periodic_intersects(const range& other) const {
+		range I;
+#ifdef __CUDA_ARCH__
+		for (int dim = 0; dim < N; dim++) {
+			I.begin[dim] = max(begin[dim], other.begin[dim]);
+			I.end[dim] = min(end[dim], other.end[dim]);
+			if (I.end[dim] <= I.begin[dim]) {
+				I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
+				I.end[dim] = min(end[dim] + T(1), other.end[dim]);
+				if (I.end[dim] <= I.begin[dim]) {
+					I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
+					I.end[dim] = min(end[dim] - T(1), other.end[dim]);
+				}
+			}
+		}
+#else
+		for (int dim = 0; dim < N; dim++) {
+			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
+			I.end[dim] = std::min(end[dim], other.end[dim]);
+			if (I.end[dim] <= I.begin[dim]) {
+				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
+				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+				if (I.end[dim] <= I.begin[dim]) {
+					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+				}
+			}
+		}
+#endif
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (I.end[dim] <= I.begin[dim]) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	inline bool empty() const {
