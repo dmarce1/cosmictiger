@@ -177,7 +177,7 @@ inline T kernelW(T q) {
 	}
 		break;
 	};
-	res *= (q < T(1.f)) * (q > T(0));
+	res *= (q < T(1.f));
 	return res;
 }
 

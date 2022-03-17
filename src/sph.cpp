@@ -424,7 +424,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 }*/
 				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
 				//				const bool test2 = range_intersect(params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT ? self_ptr->box : self_ptr->inner_box, other->outer_box);
-		//		const bool test3 = level <= 9;
+				//		const bool test3 = level <= 9;
 				if (test1 || test2) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
@@ -477,8 +477,8 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				//			}
 				for (int dim = 0; dim < NDIM; dim++) {
 					const double x = X[dim].to_double();
-					ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x);
-					ibox.end[dim] = std::max(ibox.end[dim].to_double(), x);
+					ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - 1e-4 * h);
+					ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + 1e-4 * h);
 				}
 			}
 			kr.inner_box = ibox;

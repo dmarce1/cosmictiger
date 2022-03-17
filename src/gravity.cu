@@ -317,7 +317,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						r3inv = F0 + Fc;
 						if (do_phi) {
 							const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-							const float potc = 0.5f * (fpot_i * kernelW(q_i) * h3inv_i + fpot_j * kernelW(q_j) * h3inv_j);
+							const float potc = q_i > 0.0f ? 0.5f * (fpot_i * kernelW(q_i) * h3inv_i + fpot_j * kernelW(q_j) * h3inv_j) : 0.f;
 							r1inv = pot0 + potc;
 						}
 					}
