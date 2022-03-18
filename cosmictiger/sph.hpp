@@ -204,10 +204,12 @@ struct sph_run_params {
 	float omega_m;
 	float H0;
 	float damping;
+	bool diffusion;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
 		damping = opts.damping;
+		diffusion = opts.diffusion;
 		gy = opts.gy;
 		max_dt = 1e30;
 		alpha0 = opts.alpha0;
@@ -250,6 +252,7 @@ struct sph_run_params {
 #define SPH_RUN_HYDRO 2
 #define SPH_RUN_AUX 3
 #define SPH_RUN_RUNGS 4
+#define SPH_RUN_XSPH 5
 
 sph_run_return sph_run(sph_run_params params, bool cuda = false);
 #ifndef __CUDACC__

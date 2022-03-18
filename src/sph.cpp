@@ -59,6 +59,7 @@ struct sph_run_workspace {
 	vector<fixed32, pinned_allocator<fixed32>> host_x;
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
+	vector<array<float, NCHEMFRACS>, pinned_allocator<array<float, NCHEMFRACS>>> host_chem;
 	vector<float, pinned_allocator<float>> host_divv;
 	vector<float, pinned_allocator<float>> host_vx;
 	vector<float, pinned_allocator<float>> host_vy;
@@ -1374,7 +1375,7 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
-	PRINT( "SPHRUN = %i\n", params.run_type);
+	PRINT("SPHRUN = %i\n", params.run_type);
 	std::string profile_name = "sph_run:" + std::to_string(params.run_type);
 	profiler_enter(profile_name.c_str());
 
@@ -1582,6 +1583,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		}
 		if (chem) {
 			host_gamma.resize(parts_size);
+			host_chem.resize(parts_size);
 		}
 	}
 	vector<hpx::future<void>> futs;
@@ -1620,10 +1622,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 								switch(params.run_type) {
 
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr,host_alpha.data(), offset);
+									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), chem ? host_gamma.data() : nullptr,host_alpha.data(), chem ? host_chem.data() : nullptr, offset);
 									break;
 									case SPH_RUN_AUX:
-									sph_particles_global_read_sph(node.global_part_range(), params.a,nullptr, host_vx.data(), host_vy.data(), host_vz.data(), nullptr,nullptr, offset);
+									sph_particles_global_read_sph(node.global_part_range(), params.a,nullptr, host_vx.data(), host_vy.data(), host_vz.data(), nullptr,nullptr,nullptr, offset);
 									break;
 								}
 								switch(params.run_type) {
@@ -1658,15 +1660,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 		break;
 	}
 	if (params.run_type == SPH_RUN_AUX) {
-		CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
-		if (params.phase == 2) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.divv, sizeof(float) * host_divv.size()));
-		}
 	} else if (params.run_type == SPH_RUN_HYDRO) {
 		CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
@@ -1682,6 +1679,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		}
 		if (chem) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
+			CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(float) * host_chem.size()));
 		} else {
 			cuda_data.gamma = nullptr;
 		}
@@ -1716,6 +1714,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.alpha, host_alpha.data(), sizeof(float) * host_alpha.size(), cudaMemcpyHostToDevice, stream));
 		if (chem) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
 		}
 	}
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
@@ -1746,11 +1745,13 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.divv_snk = &sph_particles_divv(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.nselfs = host_selflist.size();
-	cuda_data.chem = get_options().chem;
+	cuda_data.chemistry = get_options().chem;
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
 	cuda_data.deint_pred = &sph_particles_deint_pred(0);
 	cuda_data.dalpha_pred = &sph_particles_dalpha_pred(0);
+	cuda_data.dchem_pred = &sph_particles_dchem_pred(0);
+	cuda_data.dchem_con = &sph_particles_dchem_con(0);
 	cuda_data.dvx_pred = &sph_particles_dvel_pred(XDIM, 0);
 	cuda_data.dvy_pred = &sph_particles_dvel_pred(YDIM, 0);
 	cuda_data.dvz_pred = &sph_particles_dvel_pred(ZDIM, 0);
@@ -1808,15 +1809,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 		break;
 	}
 	if (params.run_type == SPH_RUN_AUX) {
-		CUDA_CHECK(cudaFree(cuda_data.gamma));
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));
 		CUDA_CHECK(cudaFree(cuda_data.vz));
-		if (params.phase == 2) {
-			CUDA_CHECK(cudaFree(cuda_data.eint));
-			CUDA_CHECK(cudaFree(cuda_data.divv));
-		}
 	} else if (params.run_type == SPH_RUN_HYDRO) {
 		CUDA_CHECK(cudaFree(cuda_data.eint));
 		CUDA_CHECK(cudaFree(cuda_data.vx));
@@ -1832,6 +1828,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		}
 		if (chem) {
 			CUDA_CHECK(cudaFree(cuda_data.gamma));
+			CUDA_CHECK(cudaFree(cuda_data.chem));
 		}
 	}
 	CUDA_CHECK(cudaFree(cuda_data.x));

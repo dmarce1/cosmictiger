@@ -127,6 +127,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([t0,nthreads, proc, phase, minrung, tau, w]() {
+			const auto chem = get_options().chem;
 			double error = 0.0;
 			double norm = 0.0;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
@@ -147,6 +148,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							for( int dim = 0; dim < NDIM; dim++) {
 								sph_particles_dvel_con(dim,i) = 0.f;
 							}
+							if( chem ) {
+								for( int fi = 0; fi < NCHEMFRACS; fi++) {
+									sph_particles_chem(i)[fi] += sph_particles_dchem_pred(i)[fi]*dt;
+									sph_particles_dchem_con(i)[fi] = 0.0;
+								}
+							}
 						}
 						break;
 						case 1: {
@@ -160,6 +167,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
 							}
+							if( chem ) {
+								for( int fi = 0; fi < NCHEMFRACS; fi++) {
+									sph_particles_chem(i)[fi] -= sph_particles_dchem_pred(i)[fi]*dt;
+									sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt;
+								}
+							}
 						}
 						break;
 						case 2: {
@@ -172,6 +185,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt;
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+							}
+							if( chem ) {
+								for( int fi = 0; fi < NCHEMFRACS; fi++) {
+									sph_particles_dchem_pred(i)[fi] -= sph_particles_dchem_con(i)[fi]*dt;
+									sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt;
+								}
 							}
 						}
 						break;
@@ -316,9 +335,8 @@ void sph_particles_swap(part_int i, part_int j) {
 		}
 	}
 	if (chem) {
-		for (int l = 0; l < NCHEMFRACS; l++) {
-			std::swap(sph_particles_chem[l][i], sph_particles_chem[l][j]);
-		}
+		std::swap(sph_particles_chem0[i], sph_particles_chem0[j]);
+		std::swap(sph_particles_dchem1[i], sph_particles_dchem1[j]);
 	}
 }
 
@@ -415,9 +433,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			}
 		}
 		if (chem) {
-			for (int f = 0; f < NCHEMFRACS; f++) {
-				sph_particles_array_resize(sph_particles_chem[f], new_capacity, false);
-			}
+			sph_particles_array_resize(sph_particles_chem0, new_capacity, false);
 		}
 		capacity = new_capacity;
 	}
@@ -490,11 +506,6 @@ void sph_particles_free() {
 		}
 #endif
 	} else {
-		if (get_options().chem) {
-			for (int f = 0; f < NCHEMFRACS; f++) {
-				free(sph_particles_chem[f]);
-			}
-		}
 		free(sph_particles_h);
 		free(sph_particles_e);
 		free(sph_particles_dc);
@@ -750,7 +761,7 @@ static vector<array<float, NDIM + 1>> sph_particles_fetch_force_cache_line(part_
 }
 
 void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* alpha,
-		part_int offset) {
+		array<float, NCHEMFRACS>* chems, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -772,6 +783,11 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 				}
 				if (alpha) {
 					alpha[j] = sph_particles_alpha(i);
+				}
+				if (chems) {
+					for (int f = 0; f < NCHEMFRACS; f++) {
+						chems[i][f] = sph_particles_chem0[i][f];
+					}
 				}
 			}
 		} else {
@@ -801,6 +817,9 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					}
 					if (alpha) {
 						alpha[dest_index] = part.alpha;
+					}
+					if (chems) {
+						chems[dest_index] = part.chem;
 					}
 					dest_index++;
 				}
@@ -1107,9 +1126,7 @@ void sph_particles_load(FILE* fp) {
 		FREAD(&sph_particles_dvel_pred(dim, 0), sizeof(float), sph_particles_size(), fp);
 	}
 	if (chem) {
-		for (int f = 0; f < NCHEMFRACS; f++) {
-			FREAD(sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);
-		}
+		FREAD(sph_particles_chem0, sizeof(sph_particles_chem0[0]), sph_particles_size(), fp);
 	}
 	if (stars) {
 		stars_load(fp);
@@ -1138,9 +1155,7 @@ void sph_particles_save(FILE* fp) {
 		fwrite(&sph_particles_dvel_pred(dim, 0), sizeof(float), sph_particles_size(), fp);
 	}
 	if (chem) {
-		for (int f = 0; f < NCHEMFRACS; f++) {
-			fwrite(sph_particles_chem[f], sizeof(float), sph_particles_size(), fp);
-		}
+		fwrite(sph_particles_chem0, sizeof(sph_particles_chem0[0]), sph_particles_size(), fp);
 	}
 	if (stars) {
 		stars_save(fp);
