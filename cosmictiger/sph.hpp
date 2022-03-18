@@ -205,11 +205,19 @@ struct sph_run_params {
 	float H0;
 	float damping;
 	bool diffusion;
+	bool conduction;
+	double code_to_s;
+	double code_to_g;
+	double code_to_cm;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
+		code_to_s = opts.code_to_s;
+		code_to_g = opts.code_to_g;
+		code_to_cm = opts.code_to_cm;
 		damping = opts.damping;
 		diffusion = opts.diffusion;
+		conduction = opts.conduction;
 		gy = opts.gy;
 		max_dt = 1e30;
 		alpha0 = opts.alpha0;

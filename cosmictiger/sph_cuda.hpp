@@ -36,6 +36,7 @@ struct sph_run_cuda_data {
 	array<float, NCHEMFRACS>* dchem_pred;
 	float* crsv;
 	float* divv;
+	float* mmw;
 	float* gradT;
 	float* shearv;
 	float* fpot_snk;

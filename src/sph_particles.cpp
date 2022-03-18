@@ -787,7 +787,7 @@ static vector<array<float, NDIM + 1>> sph_particles_fetch_force_cache_line(part_
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* alpha,
+void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* alpha, float*mmw,
 		array<float, NCHEMFRACS>* chems, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
@@ -815,6 +815,9 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					for (int f = 0; f < NCHEMFRACS; f++) {
 						chems[i][f] = sph_particles_chem0[i][f];
 					}
+				}
+				if( mmw ) {
+					mmw[j] = sph_particles_mmw(i);
 				}
 			}
 		} else {
@@ -847,6 +850,9 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					}
 					if (chems) {
 						chems[dest_index] = part.chem;
+					}
+					if( mmw ) {
+						mmw[dest_index] = part.mmw;
 					}
 					dest_index++;
 				}
