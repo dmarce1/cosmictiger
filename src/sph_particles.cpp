@@ -439,8 +439,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_dvv0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_ta, new_capacity, true);
 		sph_particles_array_resize(sph_particles_ta0, new_capacity, true);
-		sph_particles_array_resize(sph_particles_da1, new_capacity, true);
-		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
+		sph_particles_array_resize(sph_particles_da1, new_capacity, false);
+		sph_particles_array_resize(sph_particles_de1, new_capacity, false);
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
@@ -452,7 +452,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_gt, new_capacity, true);
 		sph_particles_array_resize(sph_particles_a, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
-			sph_particles_array_resize(sph_particles_dv1[dim], new_capacity, true);
+			sph_particles_array_resize(sph_particles_dv1[dim], new_capacity, false);
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
 			sph_particles_array_resize(sph_particles_g[dim], new_capacity, true);
 			if (xsph) {
@@ -461,6 +461,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		}
 		if (chem) {
 			sph_particles_array_resize(sph_particles_chem0, new_capacity, false);
+			sph_particles_array_resize(sph_particles_dchem2, new_capacity, true);
+			sph_particles_array_resize(sph_particles_dchem1, new_capacity, false);
 		}
 		capacity = new_capacity;
 	}

@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                               const T& operator[](int i) const {
+	                                                                                                                                                                                                                                 const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -958,6 +958,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float dtinv_eint1 = params.a * fabsf((gamma_i - 1.f) * (divv_i - 3.f * params.adot * ainv));
 						const float dtinv_eint2 = fabs((5.f - 3.f * gamma_i) * params.adot);
 						const float dtinv_eint3 = dtinv_dif + dtinv_con;
+						if (dtinv_con > dtinv_dif && dtinv_con > dtinv_eint2 && dtinv_con > dtinv_eint1) {
+							if (tid == 0) {
+								PRINT("timestep limited by conduction! %e %e %e %e\n", dtinv_con, dtinv_dif, dtinv_eint1, dtinv_eint2);
+							}
+						}
 						const float dtinv_eint = dtinv_eint1 + dtinv_eint2 + dtinv_eint3;
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
