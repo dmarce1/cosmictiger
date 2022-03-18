@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                                  const T& operator[](int i) const {
+	                                                                                                                                                                                                                                                       const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -970,6 +970,14 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 	__syncthreads();
 	array<fixed32, NDIM> x;
 	const float ainv = 1.0f / params.a;
+	const double kb = (double) constants::kb * sqr((double) params.code_to_s) / ((double) params.code_to_g * sqr((double) params.code_to_cm));
+	const double mh = (double) constants::mh / (double) params.code_to_g;
+	const float code_to_density = powf((double) params.code_to_cm, -3.0f) * params.code_to_g;
+	const float lambda_e0 = powf(3.0f, 1.5f) / (4.0f * sqrtf(float(M_PI)) * powf(constants::e, 4.));
+	const float cv0 = kb / mh;
+	const float kome = (double) constants::kb / (double) constants::me;
+	const float kappa0 = 1.31f * constants::kb * sqr(params.a);
+	const float code_dif_to_cgs = (double) params.code_to_g / (double) params.code_to_s / (double) params.code_to_s;
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		ws.rec1_main.resize(0);
@@ -1067,6 +1075,15 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				if (data.chemistry) {
 					chem_i = data.chem[i];
 				}
+				float mu_i, T_i, ne_i, gradT_i;
+				if (params.conduction) {
+					mu_i = data.mmw[i];
+					gradT_i = data.gradT[i];
+					T_i = mu_i * eint_i / cv0 * sqr(ainv) / (gamma_i - 1.f);
+					T_i = fmaxf(T_i, TMIN);
+					ne_i = chem_i[CHEM_HP] - chem_i[CHEM_HN] + chem_i[CHEM_HEP] + 2.0f * chem_i[CHEM_HEP];
+					ne_i *= rho_i * code_to_density / mh * sqr(ainv) * ainv;
+				}
 				const float dt_i = rung_dt[rung_i] * params.t0;
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				ws.rec1.resize(0);
@@ -1106,6 +1123,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					}
 				}
 				float den = 0.f;
+				float den_eint = 0.f;
 				float num_eint = 0.f;
 				array<float, NCHEMFRACS> num_chem;
 				if (data.chemistry) {
@@ -1156,6 +1174,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						const float dt_ij = fminf(dt_i, dt_j);
 						const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
 						den += phi_ij;
+						den_eint += phi_ij;
 						num_eint += phi_ij * eint_j;
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
@@ -1164,6 +1183,28 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						}
 						if (params.conduction) {
 							const float gamma_j = rec2.gamma;
+							const float gradT_j = rec2.gradT;
+							const float mu_j = rec2.mmw;
+							float T_j = mu_j * eint_j / cv0 * sqr(ainv) / (gamma_j - 1.f);
+							T_j = fmaxf(T_j, TMIN);
+							const float T_ij = 0.5f * (T_i / eint_i + T_j / eint_j)
+									* sqr((sqrtrho_i * sqrtf(eint_i) + sqrtrho_j * sqrtf(eint_j)) / (sqrtrho_i + sqrtrho_j));
+							float ne_j = chem_j[CHEM_HP] - chem_j[CHEM_HN] + chem_j[CHEM_HEP] + 2.0f * chem_j[CHEM_HEP];
+							ne_j *= rho_j * code_to_density / mh * sqr(ainv) * ainv;
+							const float ne_ij = sqrtf(ne_i * ne_j);
+							if (ne_ij > 0.f) {
+								const float colog_ij = 23.5f - log(sqrt(ne_ij) * pow(T_ij, -1.2f)) - sqrt((1e-5f + sqr(log(T_ij) - 2.f)) / 16.0f);
+								const float lambda_e_ij = lambda_e0 / colog_ij / params.code_to_cm * ainv * sqr(float(constants::kb) * T_ij) / ne_ij;
+								const float gradT_ij = 0.5f * (gradT_i + gradT_j);
+								float correction = 1.f;
+								if (gradT_ij > 0.f) {
+									correction = 1.0f / (1.0f + 4.2f * lambda_e_ij / gradT_ij);
+								}
+								const float kappa_ij = correction * kappa0 * ne_ij * lambda_e_ij * sqrtf(kome * T_ij) / code_dif_to_cgs;
+								const float phi_ij = -2.f * kappa_ij * dWdr_rinv * m / sqr(rho_ij) * dt_ij;
+								num_eint += phi_ij * eint_j;
+								den_eint += phi_ij;
+							}
 						}
 					}
 				}
@@ -1176,8 +1217,9 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				}
 				if (tid == 0.0) {
 					den += 1.f;
+					den_eint += 1.f;
 					num_eint += data.eint0[i];
-					data.deint_snk[snki] = num_eint / den - eint_i;
+					data.deint_snk[snki] = num_eint / den_eint - eint_i;
 					if (data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							num_chem[fi] += data.chem0[i][fi];
@@ -1244,7 +1286,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					ws.rec2_main[k].vx = data.vx[pi];
 					ws.rec2_main[k].vy = data.vy[pi];
 					ws.rec2_main[k].vz = data.vz[pi];
-					if (params.conduction) {
+					if (params.conduction && params.phase == 1) {
 						ws.rec2_main[k].gamma = data.gamma[pi];
 						ws.rec2_main[k].mmw = data.mmw[pi];
 						ws.rec2_main[k].eint = data.eint[pi];
@@ -1278,7 +1320,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float fpre_i = data.fpre_snk[snki];
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				float eint_i, mu_i, gamma_i, T_i;
-				if (params.conduction) {
+				if (params.conduction && params.phase == 1) {
 					eint_i = data.eint[i];
 					mu_i = data.mmw[i];
 					gamma_i = data.gamma[i];
@@ -1364,7 +1406,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvx_dz -= mrhoinv_i * vx_ij * dWdr_z_i * ainv;
 					dvy_dz -= mrhoinv_i * vy_ij * dWdr_z_i * ainv;
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
-					if (params.conduction) {
+					if (params.conduction && params.phase == 1) {
 						const float eint_j = rec2.eint;
 						const float mu_j = rec2.mmw;
 						const float gamma_j = rec2.gamma;
@@ -1398,7 +1440,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vx);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vy);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(curl_vz);
-				if (params.conduction) {
+				if (params.conduction && params.phase == 1) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dy);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dz);
@@ -1412,7 +1454,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					data.divv_snk[snki] = div_v;
 					data.crsv_snk[snki] = sqrtf(sqr(curl_vx) + sqr(curl_vy) + sqr(curl_vz));
 					data.shearv_snk[snki] = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
-					if (params.conduction) {
+					if (params.conduction && params.phase == 1) {
 						data.gradT_snk[snki] = sqrtf(sqr(dT_dx) + sqr(dT_dy) + sqr(dT_dz));
 					}
 				}

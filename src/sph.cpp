@@ -1578,7 +1578,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		host_vx.resize(parts_size);
 		host_vy.resize(parts_size);
 		host_vz.resize(parts_size);
-		if (params.conduction && params.run_type == SPH_RUN_AUX) {
+		if (params.conduction && params.run_type == SPH_RUN_AUX && params.phase == 1) {
 			host_mmw.resize(parts_size);
 			host_eint.resize(parts_size);
 			host_gamma.resize(parts_size);
@@ -1655,8 +1655,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 									case SPH_RUN_HYDRO:
 									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), (chem||params.conduction) ? host_gamma.data() : nullptr,host_alpha.data(), nullptr, nullptr, offset);
 									break;
-									case SPH_RUN_AUX:
-									sph_particles_global_read_sph(node.global_part_range(), params.a,params.conduction ? host_eint.data() : nullptr, host_vx.data(), host_vy.data(), host_vz.data(), params.conduction ? host_gamma.data() : nullptr,nullptr, params.conduction ? host_mmw.data() : nullptr,nullptr, offset);
+									case SPH_RUN_AUX: {
+										const bool test = params.phase ==1 && params.conduction;
+										sph_particles_global_read_sph(node.global_part_range(), params.a,test? host_eint.data() : nullptr, host_vx.data(), host_vy.data(), host_vz.data(), test ? host_gamma.data() : nullptr,nullptr, test ? host_mmw.data() : nullptr,nullptr, offset);
+									}
 									break;
 									case SPH_RUN_XSPH:
 									sph_particles_global_read_sph(node.global_part_range(), params.a,nullptr, host_vx.data(), host_vy.data(), host_vz.data(), nullptr,nullptr, nullptr,nullptr, offset);
@@ -1702,7 +1704,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
-		if (params.conduction && params.run_type == SPH_RUN_AUX) {
+		if (params.conduction && params.run_type == SPH_RUN_AUX && params.phase == 1) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.mmw, sizeof(float) * host_mmw.size()));
@@ -1753,7 +1755,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
-		if (params.conduction && params.run_type == SPH_RUN_AUX) {
+		if (params.conduction && params.run_type == SPH_RUN_AUX && params.phase == 1) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.mmw, sizeof(float) * host_mmw.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
@@ -1885,7 +1887,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));
 		CUDA_CHECK(cudaFree(cuda_data.vz));
-		if (params.conduction && params.run_type == SPH_RUN_AUX) {
+		if (params.conduction && params.run_type == SPH_RUN_AUX && params.phase == 1) {
 			CUDA_CHECK(cudaFree(cuda_data.eint));
 			CUDA_CHECK(cudaFree(cuda_data.mmw));
 			CUDA_CHECK(cudaFree(cuda_data.gamma));
