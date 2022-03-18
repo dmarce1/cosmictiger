@@ -1959,10 +1959,12 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 							const auto rung = particles_rung(k);
 							const bool sa = sph_particles_semi_active(j);
 							if( rung >= minrung || sa) {
-								this_error = std::max(this_error, fabs(2.f*sph_particles_deint(j)/(sph_particles_eint0(j)+sph_particles_eint(j)+1e-30f)));
+								float e0 = std::max(sph_particles_eint0(j),sph_particles_eint(j));
+								e0 += 0.5 * sqr(sph_particles_vel(XDIM,j));
+								e0 += 0.5 * sqr(sph_particles_vel(YDIM,j));
+								e0 += 0.5 * sqr(sph_particles_vel(ZDIM,j));
+								this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
 								sph_particles_eint(j) += sph_particles_deint(j);
-								this_error = std::max(this_error, fabs(sph_particles_dalpha(j)));
-								sph_particles_alpha(j) += sph_particles_dalpha(j);
 								if( chem ) {
 									for( int fi = 0; fi < NCHEMFRACS; fi++) {
 										this_error = std::max(this_error, fabs(sph_particles_dchem(j)[fi]));
