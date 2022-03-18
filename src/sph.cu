@@ -882,7 +882,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					PRINT("one is off %e \n", one);
 					__trap();
 				}
-
 				if (tid == 0) {
 					ax += gx_i;
 					ay += gy_i;
