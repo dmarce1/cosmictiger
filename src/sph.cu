@@ -931,7 +931,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float limiter = A2 / (A2 + sqr(shearv_i) + 1e-30f);
 						const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * params.a;
 						const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(vsig) + 1e-30f), params.alpha0);
-						const float tauinv = (alpha_i < alpha_targ ? 1.f / dt_tot : params.alpha_decay * vsig * hinv_i * ainv);
+						const float tauinv = (alpha_i < alpha_targ ? 1.f / dt_tot : params.alpha_decay * vsig * hinv_i);
 						dalpha_dt = (alpha_targ - alpha_i) * tauinv;
 					} else {
 						dalpha_dt = 0.f;
