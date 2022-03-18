@@ -903,7 +903,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float ne_ij = sqrtf(ne_i * ne_j);
 						if (ne_ij > 0.f) {
 							const float colog_ij = 23.5f - log(sqrt(ne_ij) * pow(T_ij, -1.2f)) - sqrt((1e-5f + sqr(log(T_ij) - 2.f)) / 16.0f);
-							const float lambda_e_ij = lambda_e0 / colog_ij / params.code_to_cm * ainv * sqr(float(constants::kb) * T_ij) / (ne_ij + 1e-10f);
+							const float lambda_e_ij = lambda_e0 / colog_ij / params.code_to_cm * ainv * sqr(float(constants::kb) * T_ij) / ne_ij;
 							const float gradT_ij = 0.5f * (gradT_i + gradT_j);
 							float correction = 1.f;
 							if (gradT_ij > 0.f) {
