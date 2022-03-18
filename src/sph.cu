@@ -812,7 +812,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += dvx_dt;
 					ay += dvy_dt;
 					az += dvz_dt;
-					vsig = fmaxf(c_i - w_ij, vsig_ij);
+					vsig = fmaxf(vsig, vsig_ij);
 					one += m * rhoinv_i * W_i;
 					Ri += copysign(m * rhoinv_i * W_i, divv_j);
 					const float hinv_ij = 1.f / h_ij;
