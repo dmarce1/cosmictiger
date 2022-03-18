@@ -284,7 +284,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-		if (!glass) {
+/*		if (!glass) {
 			sparams.phase = 0;
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
@@ -293,7 +293,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
 			tm.reset();
-		}
+		}*/
 	} else {
 		sparams.phase = 0;
 		if (!glass) {
