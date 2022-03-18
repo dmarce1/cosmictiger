@@ -97,14 +97,14 @@ bool process_options(int argc, char *argv[]) {
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
-	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
+	("conduction", po::value<bool>(&(opts.conduction))->default_value(false), "do conduction") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
 	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "use glass") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
-	("diffusion", po::value<bool>(&(opts.diffusion))->default_value(true), "do diffusion") //
+	("diffusion", po::value<bool>(&(opts.diffusion))->default_value(false), "do diffusion") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
@@ -127,7 +127,7 @@ bool process_options(int argc, char *argv[]) {
 	("nsteps", po::value<int>(&(opts.nsteps))->default_value(128), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
-	("xsph", po::value<double>(&(opts.xsph))->default_value(0.1), "xsph factor (0 = off)") //
+	("xsph", po::value<double>(&(opts.xsph))->default_value(0.0), "xsph factor (0 = off)") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(1), "kernel type") //

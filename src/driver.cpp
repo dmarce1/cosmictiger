@@ -284,26 +284,21 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-/*		if (!glass) {
-			sparams.phase = 0;
-			sparams.run_type = SPH_RUN_AUX;
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-			tm.reset();
-		}*/
 	} else {
-		sparams.phase = 0;
 		if (!glass) {
 			if (tau != 0.0) {
 				sph_particles_apply_updates(minrung, 0, t0, tau);
-			}
-		}
-		if (!glass) {
-			double error;
-			if (tau != 0.0) {
+				if (!glass) {
+					sparams.phase = 0;
+					sparams.run_type = SPH_RUN_AUX;
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+					tm.reset();
+					sparams.phase = 1;
+				}
 
 				tnparams.h_wt = 1.001;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -329,32 +324,14 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 				double w = 1.0;
 				int iters = 0;
-				//	do {
 				sparams.run_type = SPH_RUN_HYDRO;
 				tm.start();
 				sph_run(sparams, true);
 				tm.stop();
 				tm.reset();
 				auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
-				error = tmp.first;
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-				sparams.phase = 1;
-				sparams.run_type = SPH_RUN_AUX;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-				tm.reset();
-				sparams.phase = 0;
-				w = 0.5;
-				iters++;
-				//} while (error > SPH_HYDRO_TOLER);
-				PRINT("FINISHED in %i ITERS\n", iters);
-			}
-			sparams.phase = 0;
-			if (diff && tau != 0.0) {
 				tnparams.h_wt = 1.001;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.set = SPH_SET_ACTIVE | SPH_SET_SEMIACTIVE;
@@ -377,24 +354,20 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 					PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 				tm.reset();
 
-				sph_init_diffusion();
-				sparams.run_type = SPH_RUN_DIFFUSION;
-				float err;
-				do {
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_DIFFUSION): tm = %e \n", tm.read());
-					tm.reset();
-					tm.start();
-					err = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_apply_diffusion_update: tm = %e err = %e\n", tm.read(), err);
-					tm.reset();
-				} while (err > SPH_DIFFUSION_TOLER);
+
+
+				sparams.phase = 1;
+				sparams.run_type = SPH_RUN_AUX;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+				tm.reset();
+				sparams.phase = 0;
+				PRINT("FINISHED in %i ITERS\n", iters);
 			}
+			sparams.phase = 0;
 			if (tau != 0.0 && chem) {
 				PRINT("Doing chemistry step\n");
 				timer tm;
@@ -451,14 +424,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
 			}
-			sparams.phase = 2;
-			sparams.run_type = SPH_RUN_AUX;
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-			tm.reset();
 		}
 
 	}
