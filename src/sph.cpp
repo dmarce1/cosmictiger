@@ -1588,13 +1588,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 		host_shearv.resize(parts_size);
 		host_alpha.resize(parts_size);
 		host_fpre.resize(parts_size);
-		if (conduction) {
-			host_gradT.resize(parts_size);
-			host_mmw.resize(parts_size);
-		}
-		if (chem || conduction) {
+		if (chem) {
 			host_gamma.resize(parts_size);
-			host_chem.resize(parts_size);
 		}
 	}
 	vector<hpx::future<void>> futs;
@@ -1634,7 +1629,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								switch(params.run_type) {
 
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), (chem||params.conduction) ? host_gamma.data() : nullptr,host_alpha.data(), params.conduction ? host_mmw.data() : nullptr, (chem || params.conduction) ? host_chem.data() : nullptr, offset);
+									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), (chem||params.conduction) ? host_gamma.data() : nullptr,host_alpha.data(), nullptr, nullptr, offset);
 									break;
 									case SPH_RUN_AUX:
 									sph_particles_global_read_sph(node.global_part_range(), params.a,params.conduction ? host_eint.data() : nullptr, host_vx.data(), host_vy.data(), host_vz.data(), params.conduction ? host_gamma.data() : nullptr,nullptr, params.conduction ? host_mmw.data() : nullptr,nullptr, offset);
@@ -1694,13 +1689,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.divv, sizeof(float) * host_divv.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.crsv, sizeof(float) * host_crsv.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.shearv, sizeof(float) * host_shearv.size()));
-		if (conduction) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.gradT, sizeof(float) * host_gradT.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.mmw, sizeof(float) * host_mmw.size()));
-		}
 		if (chem) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(float) * host_chem.size()));
 		} else {
 			cuda_data.gamma = nullptr;
 		}
@@ -1733,15 +1723,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre, host_fpre.data(), sizeof(float) * host_fpre.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.crsv, host_crsv.data(), sizeof(float) * host_crsv.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.shearv, host_shearv.data(), sizeof(float) * host_shearv.size(), cudaMemcpyHostToDevice, stream));
-		if (conduction) {
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gradT, host_gradT.data(), sizeof(float) * host_gradT.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.mmw, host_mmw.data(), sizeof(float) * host_mmw.size(), cudaMemcpyHostToDevice, stream));
-		}
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.divv, host_divv.data(), sizeof(float) * host_divv.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.alpha, host_alpha.data(), sizeof(float) * host_alpha.size(), cudaMemcpyHostToDevice, stream));
 		if (chem) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
 		}
 	}
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
@@ -1856,13 +1841,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaFree(cuda_data.shearv));
 		CUDA_CHECK(cudaFree(cuda_data.divv));
 		CUDA_CHECK(cudaFree(cuda_data.alpha));
-		if (conduction) {
-			CUDA_CHECK(cudaFree(cuda_data.gradT));
-			CUDA_CHECK(cudaFree(cuda_data.mmw));
-		}
 		if (chem) {
 			CUDA_CHECK(cudaFree(cuda_data.gamma));
-			CUDA_CHECK(cudaFree(cuda_data.chem));
 		}
 	}
 	CUDA_CHECK(cudaFree(cuda_data.x));

@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                 const T& operator[](int i) const {
+	                                                                                                                                                                                                                                  const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -207,9 +207,6 @@ struct hydro_record2 {
 	float crsv;
 	float shearv;
 	float divv;
-	float mmw;
-	float gradT;
-	array<float, NCHEMFRACS> chem;
 };
 
 struct aux_record1 {
@@ -668,15 +665,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2_main[k].crsv = data.crsv[pi];
 					ws.rec2_main[k].shearv = data.shearv[pi];
 					ws.rec2_main[k].divv = data.divv[pi];
-					if (data.chemistry || data.conduction) {
+					if (data.chemistry ) {
 						ws.rec2_main[k].gamma = data.gamma[pi];
-						ws.rec2_main[k].chem = data.chem[pi];
 					} else {
 						ws.rec2_main[k].gamma = data.def_gamma;
-					}
-					if (params.conduction) {
-						ws.rec2_main[k].mmw = data.mmw[pi];
-						ws.rec2_main[k].gradT = data.gradT[pi];
 					}
 				}
 			}
@@ -731,15 +723,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float divv_i = data.divv[i];
 				const float fpre_i = data.fpre[i];
 				const float balsara_i = fabs(divv_i) / (fabs(divv_i) + crsv_i + 1e-4f * c_i * hinv_i);
-				float mu_i, T_i, ne_i, gradT_i;
-				if (params.conduction) {
-					mu_i = data.mmw[i];
-					gradT_i = data.gradT[i];
-					T_i = mu_i * eint_i / cv0 * sqr(ainv) / (gamma_i - 1.f);
-					T_i = fmaxf(T_i, TMIN);
-					ne_i = frac_i[CHEM_HP] - frac_i[CHEM_HN] + frac_i[CHEM_HEP] + 2.0f * frac_i[CHEM_HEP];
-					ne_i *= rho_i * code_to_density / mh * sqr(ainv) * ainv;
-				}
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -779,17 +762,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float az = 0.f;
 				float de_dt = 0.f;
 				float dtinv_cfl = 0.f;
-				float dtinv_dif = 0.f;
-				float dtinv_con = 0.f;
 				float one = 0.0f;
 				float vsig = 0.0f;
 				float Ri = 0.f;
-				array<float, NCHEMFRACS> df_dt;
-				if (data.chemistry) {
-					for (int fi = 0; fi < NCHEMFRACS; fi++) {
-						df_dt[fi] = 0.f;
-					}
-				}
 				const float& adot = params.adot;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					array<float, NCHEMFRACS> frac_j;
@@ -804,9 +779,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float divv_j = rec2.divv;
 					const float crsv_j = rec2.crsv;
 					const float fpre_j = rec2.fpre;
-					if (data.chemistry) {
-						frac_j = rec2.chem;
-					}
 					const float h_j = rec1.h;
 					const float h2_j = sqr(h_j);
 					const float hinv_j = 1.f / h_j;															// 4
@@ -873,48 +845,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					Ri += copysign(m * rhoinv_i * W_i, divv_j);
 					const float hinv_ij = 1.f / h_ij;
 					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_ij + 0.6f * viscco_ij * hinv_j * hinv_i);
-					float dWdr_rinv;
-					if ((params.diffusion || params.conduction) && r > 0.f) {
-						dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-					}
-					if (params.diffusion && r > 0.f) {
-						const float shearv_j = rec2.shearv;
-						const float difco_ij = SPH_DIFFUSION_C * sqr(h_ij) * 0.5f * (shearv_j + shearv_j);
-						const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-						const float D = 2.f * m * difco_ij * dWdr_rinv / rho_ij;
-						de_dt -= D * (eint_i - eint_j);
-						if (data.chemistry) {
-							for (int fi = 0; fi < NCHEMFRACS; fi++) {
-								df_dt[fi] -= D * (frac_i[fi] - frac_j[fi]);
-							}
-						}
-						dtinv_dif = fmaxf(dtinv_dif, difco_ij * sqr(hinv_ij));
-					}
-					if (params.conduction && r > 0.f) {
-						const float gradT_j = rec2.gradT;
-						const float mu_j = rec2.mmw;
-						const float gamma_j = rec2.gamma;
-						float T_j = mu_j * eint_j / cv0 * sqr(ainv) / (gamma_j - 1.f);
-						T_j = fmaxf(T_j, TMIN);
-						const float T_ij = 0.5f * (T_i / eint_i + T_j / eint_j)
-								* sqr((sqrtrho_i * sqrtf(eint_i) + sqrtrho_j * sqrtf(eint_j)) / (sqrtrho_i + sqrtrho_j));
-						float ne_j = frac_j[CHEM_HP] - frac_j[CHEM_HN] + frac_j[CHEM_HEP] + 2.0f * frac_j[CHEM_HEP];
-						ne_j *= rho_j * code_to_density / mh * sqr(ainv) * ainv;
-						const float ne_ij = sqrtf(ne_i * ne_j);
-						if (ne_ij > 0.f) {
-							const float colog_ij = 23.5f - log(sqrt(ne_ij) * pow(T_ij, -1.2f)) - sqrt((1e-5f + sqr(log(T_ij) - 2.f)) / 16.0f);
-							const float lambda_e_ij = lambda_e0 / colog_ij / params.code_to_cm * ainv * sqr(float(constants::kb) * T_ij) / ne_ij;
-							const float gradT_ij = 0.5f * (gradT_i + gradT_j);
-							float correction = 1.f;
-							if (gradT_ij > 0.f) {
-								correction = 1.0f / (1.0f + 4.2f * lambda_e_ij / gradT_ij);
-							}
-							const float kappa_ij = correction * kappa0 * ne_ij * lambda_e_ij * sqrtf(kome * T_ij) / code_dif_to_cgs;
-							const float D = 2.f * m * kappa_ij * dWdr_rinv / sqr(rho_ij);
-							de_dt -= D * (eint_i - eint_j);
-							dtinv_con = fmaxf(dtinv_con, kappa_ij * sqr(hinv_ij));
-						}
-					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Ri);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
@@ -922,17 +852,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
-				if (params.diffusion) {
-					if (data.chemistry) {
-						for (int fi = 0; fi < NCHEMFRACS; fi++) {
-							shared_reduce_add<float, HYDRO_BLOCK_SIZE>(df_dt[fi]);
-						}
-					}
-					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_dif);
-				}
-				if (params.conduction) {
-					shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_con);
-				}
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
@@ -948,22 +867,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					data.dvy_con[snki] = ay;
 					data.dvz_con[snki] = az;
 					data.deint_con[snki] = de_dt;
-					if (data.chemistry) {
-						for (int fi = 0; fi < NCHEMFRACS; fi++) {
-							data.dchem_con[snki][fi] = df_dt[fi];
-						}
-					}
 					float dt_tot;
 					if (params.phase == 1) {
 						const float dtinv_eint1 = params.a * fabsf((gamma_i - 1.f) * (divv_i - 3.f * params.adot * ainv));
 						const float dtinv_eint2 = fabs((5.f - 3.f * gamma_i) * params.adot);
-						const float dtinv_eint3 = dtinv_dif + dtinv_con;
-						if (dtinv_con > dtinv_dif && dtinv_con > dtinv_eint2 && dtinv_con > dtinv_eint1) {
-							if (tid == 0) {
-								PRINT("timestep limited by conduction! %e %e %e %e\n", dtinv_con, dtinv_dif, dtinv_eint1, dtinv_eint2);
-							}
-						}
-						const float dtinv_eint = dtinv_eint1 + dtinv_eint2 + dtinv_eint3;
+						const float dtinv_eint = dtinv_eint1 + dtinv_eint2;
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
