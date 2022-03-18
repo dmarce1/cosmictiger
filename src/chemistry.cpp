@@ -690,7 +690,6 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 
 double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 
-
 	profiler_enter(__FUNCTION__);
 	vector<hpx::future<double>> futs;
 	if (!get_options().chem) {
@@ -709,8 +708,9 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 			const float mass = get_options().sph_mass;
 			const int N = get_options().neighbor_number;
 			for( part_int i = b; i < e; i++) {
-				int rung = sph_particles_rung(i);
-				if( rung >= minrung ) {
+				int rung1 = sph_particles_rung(i);
+				int rung2 = sph_particles_oldrung(i);
+				if( rung1 >= minrung ) {
 					chem_attribs chem;
 					float T = sph_particles_temperature(i,a);
 					const float factor = 1.0f / (1.0f - sph_particles_Z(i));
@@ -721,66 +721,56 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem.Hep = sph_particles_Hep(i) * factor;
 					chem.Hepp = sph_particles_Hepp(i) * factor;
 					chem.eint = sph_particles_eint(i);
-					if( dir == 1 ) {
-						double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * chem.He - 0.5 * chem.H2);
-						double gamma = 1. + 1. / cv;
-						double dt = rung_dt[rung];
-						chem.eint *= exp((5. - 3.*gamma)*adot*dt);
-					}
+					double dt = (rung_dt[rung1] + rung_dt[rung2]) * 0.5 * t0;
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
-					//		PRINT( "%e\n", chem.rho);
-				chem.dt = t0 * rung_dt[rung];
-				if( T > 1e8) {
-					PRINT( "T-------------> %e\n", T);
-					if( T > TMAX) {
-						int k = sph_particles_dm_index(i);
-						float vx = particles_vel(XDIM,k);
-						float vy = particles_vel(YDIM,k);
-						float vz = particles_vel(ZDIM,k);
-						PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.eint, sph_particles_smooth_len(i), vx, vy, vz);
-						PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
-						abort();
+					chem.dt = dt;
+					if( T > 1e8) {
+						PRINT( "T-------------> %e\n", T);
+						if( T > TMAX) {
+							int k = sph_particles_dm_index(i);
+							float vx = particles_vel(XDIM,k);
+							float vy = particles_vel(YDIM,k);
+							float vz = particles_vel(ZDIM,k);
+							PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.eint, sph_particles_smooth_len(i), vx, vy, vz);
+							PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
+							abort();
+						}
 					}
+					chems.push_back(chem);
 				}
-				chems.push_back(chem);
 			}
-		}
-		cuda_chemistry_step(chems, a);
-		int j = 0;
-		double echange = 0.0;
-		const double sph_mass = get_options().sph_mass;
-		for( part_int i = b; i < e; i++) {
-			int rung = sph_particles_rung(i);
-			if( rung >= minrung ) {
-				chem_attribs chem = chems[j++];
-				//		PRINT( "%e %e %e %e %e %e\n", chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, chem.K);
-				if( dir == -1 ) {
+			cuda_chemistry_step(chems, a);
+			int j = 0;
+			double echange = 0.0;
+			const double sph_mass = get_options().sph_mass;
+			for( part_int i = b; i < e; i++) {
+				int rung1 = sph_particles_rung(i);
+				int rung2 = sph_particles_oldrung(i);
+				if( rung1 >= minrung ) {
+					chem_attribs chem = chems[j++];
+					double dt = (rung_dt[rung1] + rung_dt[rung2]) * 0.5 * t0;
 					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 					double gamma = 1. + 1. / cv;
-					double dt = rung_dt[rung] * t0;
-					chem.eint *= exp((5.-3.*gamma)*adot*dt);
-					//				PRINT( "%e %e %e %e\n", cv,(5.f-3.f*gamma)*adot/a*dt, chem.H2, exp((5.-3.*gamma)*adot/a*dt));
-				}
-				const float factor = 1.0f - sph_particles_Z(i);
-				sph_particles_He0(i) = chem.He * factor;
-				sph_particles_Hp(i) = chem.Hp * factor;
-				sph_particles_Hn(i) = chem.Hn * factor;
-				sph_particles_H2(i) = chem.H2 * factor;
-				sph_particles_Hep(i) = chem.Hep * factor;
-				sph_particles_Hepp(i) = chem.Hepp * factor;
-				double norm = 0.0;
-				for( int c = 0; c < NCHEMFRACS; c++) {
-					norm += sph_particles_frac(c,i);
-				}
-				if( norm > 0.999999 ) {
-					norm = 1.0 / norm;
-					norm *= 0.999999;
+					const float factor = 1.0f - sph_particles_Z(i);
+					sph_particles_He0(i) = chem.He * factor;
+					sph_particles_Hp(i) = chem.Hp * factor;
+					sph_particles_Hn(i) = chem.Hn * factor;
+					sph_particles_H2(i) = chem.H2 * factor;
+					sph_particles_Hep(i) = chem.Hep * factor;
+					sph_particles_Hepp(i) = chem.Hepp * factor;
+					double norm = 0.0;
 					for( int c = 0; c < NCHEMFRACS; c++) {
-						sph_particles_frac(c,i) *= norm;
+						norm += sph_particles_frac(c,i);
 					}
-				}
-				echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
-				sph_particles_eint(i) = chem.eint;
+					if( norm > 0.999999 ) {
+						norm = 1.0 / norm;
+						norm *= 0.999999;
+						for( int c = 0; c < NCHEMFRACS; c++) {
+							sph_particles_frac(c,i) *= norm;
+						}
+					}
+					echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
+					sph_particles_eint(i) = chem.eint;
 //				sph_particles_tcool(i) = chem.tcool;
 			}
 		}

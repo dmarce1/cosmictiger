@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                   const T& operator[](int i) const {
+	                                                                                                                                                                                                        const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -886,6 +886,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += gx_i;
 					ay += gy_i;
 					az += gz_i;
+					de_dt += (5.f - 3.f * gamma_i) * params.adot * ainv * eint_i;
 					data.dvx_con[snki] = ax;
 					data.dvy_con[snki] = ay;
 					data.dvz_con[snki] = az;
@@ -897,9 +898,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 					float dt_tot;
 					if (params.phase == 1) {
-						float dtinv_divvpdif = params.a * fabsf(divv_i - 3.f * params.adot * ainv) * (gamma_i - 1.f) + dtinv_dif;
+						const float dtinv_eint1 = params.a * fabsf((gamma_i - 1.f) * (divv_i - 3.f * params.adot * ainv));
+						const float dtinv_eint2 = fabs((5.f - 3.f * gamma_i) * params.adot);
+						const float dtinv_eint3 = dtinv_dif;
+						const float dtinv_eint = dtinv_eint1 + dtinv_eint2 + dtinv_eint3;
 						float dtinv_hydro1 = 1.0e-30f;
-						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divvpdif);
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2 = sqr(ax, ay, az);
 						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
@@ -913,6 +917,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dt_tot = fminf(dtgrav, dthydro);
 						total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);
 						char& rung = data.rungs[i];
+						data.oldrung_snk[snki] = rung;
 						const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 						const int rung_grav = ceilf(log2f(params.t0) - log2f(dtgrav));
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);

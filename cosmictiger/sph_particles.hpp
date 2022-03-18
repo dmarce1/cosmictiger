@@ -85,7 +85,8 @@ SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 SPH_PARTICLES_EXTERN float* sph_particles_de2; // deint_con
 SPH_PARTICLES_EXTERN float* sph_particles_gt; // deint_con
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_con
-SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-active
+SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-activel_con
+SPH_PARTICLES_EXTERN char* sph_particles_or;   // semi-active
 SPH_PARTICLES_EXTERN float* sph_particles_da2; // dalpha_con
 
 struct aux_quantities {
@@ -273,6 +274,10 @@ inline float& sph_particles_vel(int dim, int index) {
 
 inline char& sph_particles_rung(int index) {
 	return particles_rung(sph_particles_dm_index(index));
+}
+
+inline char& sph_particles_oldrung(int index) {
+	return sph_particles_or[index];
 }
 
 /*inline float& sph_particles_dchem(part_int index) {

@@ -1730,6 +1730,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
+	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.fpot_snk = &sph_particles_fpot(0);
 	cuda_data.crsv_snk = &sph_particles_crossv(0);
 	cuda_data.gradT_snk = &sph_particles_gradT(0);

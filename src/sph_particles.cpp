@@ -134,15 +134,17 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				const int k = sph_particles_dm_index(i);
-				const auto rung = particles_rung(k);
-				const float dt = 0.5f * t0 / (1<<rung);
-				if( rung >= minrung) {
+				const auto rung2 = particles_rung(k);
+				const auto rung1 = sph_particles_oldrung(i);
+				const float dt2 = 0.5f * t0 / (1<<rung2);
+				const float dt1 = 0.5f * t0 / (1<<rung1);
+				if( rung2 >= minrung) {
 					switch(phase) {
 						case 0: {
-							sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt;
-							sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt;
+							sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt2;
+							sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
-								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt;
+								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt2;
 							}
 							sph_particles_deint_con(i) = 0.f;
 							for( int dim = 0; dim < NDIM; dim++) {
@@ -150,46 +152,70 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							}
 							if( chem ) {
 								for( int fi = 0; fi < NCHEMFRACS; fi++) {
-									sph_particles_chem(i)[fi] += sph_particles_dchem_pred(i)[fi]*dt;
+									sph_particles_chem(i)[fi] += sph_particles_dchem_pred(i)[fi]*dt2;
 									sph_particles_dchem_con(i)[fi] = 0.0;
 								}
 							}
 						}
 						break;
 						case 1: {
-							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt;
-							sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt;
+							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt2;
+							sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
-								particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt;
+								particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt2;
 							}
-							sph_particles_eint(i) += sph_particles_deint_con(i) *dt;
-							sph_particles_alpha(i) += sph_particles_dalpha_con(i) *dt;
+							sph_particles_eint(i) += sph_particles_deint_con(i) *dt2;
+							sph_particles_alpha(i) += sph_particles_dalpha_con(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
-								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
 							}
 							if( chem ) {
 								for( int fi = 0; fi < NCHEMFRACS; fi++) {
-									sph_particles_chem(i)[fi] -= sph_particles_dchem_pred(i)[fi]*dt;
-									sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt;
+									sph_particles_chem(i)[fi] -= sph_particles_dchem_pred(i)[fi]*dt2;
+									sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt2;
 								}
 							}
-						}
-						break;
-						case 2: {
 							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
 							sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
 							for( int dim =0; dim < NDIM; dim++) {
 								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
 							}
-							sph_particles_eint(i) +=sph_particles_deint_con(i) *dt;
-							sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt;
+							if( chem ) {
+								for( int fi = 0; fi < NCHEMFRACS; fi++) {
+									sph_particles_dchem_pred(i)[fi] -= sph_particles_dchem_con(i)[fi]*dt2;
+								}
+							}
+						}
+						break;
+						case 2: {
+							if( tau != 0.0 ) {
+								sph_particles_eint(i) -=sph_particles_deint_pred(i) *dt1;
+								sph_particles_eint(i) +=sph_particles_deint_con(i) *dt1;
+								sph_particles_alpha(i) -=sph_particles_dalpha_pred(i) *dt1;
+								sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt1;
+								for( int dim =0; dim < NDIM; dim++) {
+									particles_vel(dim,k) -=sph_particles_dvel_pred(dim,i) *dt1;
+									particles_vel(dim,k) +=sph_particles_dvel_con(dim,i) *dt1;
+								}
+								if( chem ) {
+									for( int fi = 0; fi < NCHEMFRACS; fi++) {
+										sph_particles_chem(i)[fi] -= sph_particles_dchem_pred(i)[fi]*dt1;
+										sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt1;
+									}
+								}
+							}
+							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
+							sph_particles_eint(i) +=sph_particles_deint_con(i) *dt2;
+							sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
+							sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
-								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt;
+								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
+								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
 							}
 							if( chem ) {
 								for( int fi = 0; fi < NCHEMFRACS; fi++) {
-									sph_particles_dchem_pred(i)[fi] -= sph_particles_dchem_con(i)[fi]*dt;
-									sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt;
+									sph_particles_dchem_pred(i)[fi] -= sph_particles_dchem_con(i)[fi]*dt2;
+									sph_particles_chem(i)[fi] += sph_particles_dchem_con(i)[fi]*dt2;
 								}
 							}
 						}
@@ -405,6 +431,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		}
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_or, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
 		sph_particles_array_resize(sph_particles_e, new_capacity, true);
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);

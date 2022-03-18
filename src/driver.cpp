@@ -366,14 +366,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("FINISHED in %i ITERS\n", iters);
 			}
 			sparams.phase = 0;
-			if (tau != 0.0 && chem) {
-				PRINT("Doing chemistry step\n");
-				timer tm;
-				tm.start();
-				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
-				tm.stop();
-				PRINT("Took %e s\n", tm.read());
-			}
 
 		}
 		sparams.phase = 1;
@@ -440,6 +432,14 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_XSPH): tm = %e \n", tm.read());
 				tm.reset();
+			}
+			if (tau != 0.0 && chem) {
+				PRINT("Doing chemistry step\n");
+				timer tm;
+				tm.start();
+				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
+				tm.stop();
+				PRINT("Took %e s\n", tm.read());
 			}
 		}
 
