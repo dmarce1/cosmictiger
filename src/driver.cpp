@@ -367,6 +367,21 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			}
 			sparams.phase = 0;
 
+			if (get_options().diffusion && tau != 0.0) {
+				float error = 0.0;
+				sph_init_diffusion();
+				do {
+					sparams.run_type = SPH_RUN_PARABOLIC;
+					tm.start();
+					sph_run(sparams, true);
+					tm.stop();
+					tm.reset();
+					error = sph_apply_diffusion_update(minrung, SPH_DIFFUSION_TOLER);
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_PARABOLIC): tm = %e error = %e\n", tm.read(), error);
+				} while (error > SPH_DIFFUSION_TOLER);
+			}
+
 		}
 		sparams.phase = 1;
 		if (!glass) {

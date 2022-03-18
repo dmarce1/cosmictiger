@@ -95,9 +95,9 @@ bool process_options(int argc, char *argv[]) {
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
-	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
+	("chem", po::value<bool>(&(opts.chem))->default_value(false), "do chemistry (true)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
-	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
+	("conduction", po::value<bool>(&(opts.conduction))->default_value(false), "do conduction") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
 	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "use glass") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
