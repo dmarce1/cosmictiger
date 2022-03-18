@@ -854,7 +854,7 @@ void hydro_blast_test() {
 	set_options(opts);
 	part_int i = 0;
 	const double dx = 1.0 / ndim;
-	double sigma = .01;
+	double sigma = .015;
 	for (int ix = 0; ix < ndim; ix++) {
 		for (int iy = 0; iy < ndim; iy++) {
 			for (int iz = 0; iz < ndim; iz++) {
