@@ -337,10 +337,13 @@ static void kick_test() {
 
 static void force_test() {
 	timer tm;
-
+	if( get_options().sph == true ) {
+		PRINT( "FORCE_TEST should be run without sph !\n");
+		abort();
+	}
 	tm.start();
-//	particles_random_init();
-	initialize(get_options().z0);
+	particles_random_init();
+//	initialize(get_options().z0);
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();

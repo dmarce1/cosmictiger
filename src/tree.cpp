@@ -182,7 +182,7 @@ int tree_min_level(double theta, double h) {
 		lev++;
 		r = std::max(r1, r2);
 	} while (dx <= r);
-	return lev + 1;
+	return 0;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,

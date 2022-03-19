@@ -284,7 +284,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		these_flops += cpu_gravity_cc(gtype, L, multlist, self, params.min_rung == 0);
 		these_flops += cpu_gravity_cp(gtype, L, partlist, self, params.min_rung == 0);
 		if (self_ptr->leaf) {
-			if (cuda_workspace != nullptr) {
+			if (cuda_workspace != nullptr && gtype == GRAVITY_EWALD) {
 				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 			}
 			partlist.resize(0);
@@ -331,7 +331,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, multlist);
 			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, partlist, params.h);
 		} else {
-			dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
+			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		}
 	}
 	if (self_ptr->leaf) {
