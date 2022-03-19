@@ -859,7 +859,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					one += m * rhoinv_i * W_i;
 					Ri += copysign(m * rhoinv_i * W_i, divv_j);
 					const float hinv_ij = 1.f / h_ij;
-					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_ij + 0.6f * viscco_ij * hinv_j * hinv_i);
+					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_i + 0.6f * viscco_ij * sqr(hinv_i));
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Ri);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
@@ -1173,7 +1173,6 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						den += phi_ij;
 						den_eint += phi_ij;
 						num_eint += phi_ij * eint_j;
-						ALWAYS_ASSERT(phi_ij >= 0.f);
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
 								num_chem[fi] += phi_ij * chem_j[fi];
