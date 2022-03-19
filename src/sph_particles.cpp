@@ -771,7 +771,7 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 				}
 				if (chems) {
 					for (int f = 0; f < NCHEMFRACS; f++) {
-						chems[i][f] = sph_particles_c0[i][f];
+						chems[j][f] = sph_particles_c0[i][f];
 					}
 				}
 				if (mmw) {
@@ -868,7 +868,7 @@ void sph_particles_global_read_sph0(particle_global_range range, float* eint0, f
 				}
 				if (chem0) {
 					for (int f = 0; f < NCHEMFRACS; f++) {
-						chem0[i][f] = sph_particles_chem0(i)[f];
+						chem0[j][f] = sph_particles_chem0(i)[f];
 					}
 				}
 			}

@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                                                const T& operator[](int i) const {
+	                                                                                                                                                                                                                                                                 const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -1221,10 +1221,12 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					den_eint += 1.f;
 					num_eint += data.eint0[i];
 					data.deint_snk[snki] = (num_eint - den_eint * eint_i) / den_eint;
+					ALWAYS_ASSERT(isfinite(data.deint_snk[snki]));
 					if (data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							num_chem[fi] += data.chem0[i][fi];
 							data.dchem_snk[snki][fi] = (num_chem[fi] - den * chem_i[fi]) / den;
+							ALWAYS_ASSERT(isfinite(data.dchem_snk[snki][fi]));
 						}
 					}
 				}
@@ -1323,8 +1325,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float fpre_i = data.fpre_snk[snki];
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				float eint_i, mu_i, gamma_i, T_i;
-				if (params.conduction && params.phase == 1) {
+				if (params.diffusion && params.phase == 1) {
 					eint_i = data.eint[i];
+				}
+				if (params.conduction && params.phase == 1) {
 					mu_i = data.mmw[i];
 					gamma_i = data.gamma[i];
 					T_i = mu_i * eint_i / cv0 * sqr(ainv) / (gamma_i - 1.f);
@@ -1424,6 +1428,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						const float W_i = kernelW(q_i) * h3inv_i;
 						const float etot = eint_j + 0.5f * (sqr(vx_j) + sqr(vy_j) + sqr(vz_j));
 						eavg += etot * mrhoinv_i * W_i;
+						if (!isfinite(eavg)) {
+							PRINT("!!!!!!!!!!! eavg off %e %e %e %e %e %e\n",  eint_j , sqr(vx_j) ,sqr(vy_j) , sqr(vz_j), mrhoinv_i, W_i);
+						}
 					}
 				}
 

@@ -1761,11 +1761,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
 		if (params.conduction && params.run_type == SPH_RUN_AUX && params.phase == 1) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.mmw, sizeof(float) * host_mmw.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.mmw, host_mmw.data(), sizeof(float) * host_mmw.size(), cudaMemcpyHostToDevice, stream));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
 		}
 		if (params.diffusion && params.run_type == SPH_RUN_AUX && params.phase == 1) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint, host_eint.data(), sizeof(float) * host_eint.size(), cudaMemcpyHostToDevice, stream));
 		}
 	} else if (params.run_type == SPH_RUN_HYDRO) {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint, host_eint.data(), sizeof(float) * host_eint.size(), cudaMemcpyHostToDevice, stream));
@@ -1975,11 +1975,17 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 							const auto rung = particles_rung(k);
 							const bool sa = sph_particles_semi_active(j);
 							if( rung >= minrung || sa) {
-								const float e0 = sph_particles_eavg(j);
+								const float e1 = sph_particles_eint(j) + sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j));
+								const float e0 = std::max(sph_particles_eavg(j), e1);
+								if(!isfinite(e0)) {
+									PRINT( "e0 = %e\n", e0);
+								}
+								ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
 								this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
 								apply_d(sph_particles_eint(j), sph_particles_deint(j));
 								if( chem ) {
 									for( int fi = 0; fi < NCHEMFRACS; fi++) {
+									//	ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
 										this_error = std::max(this_error, fabs(sph_particles_dchem(j)[fi]));
 										apply_d(sph_particles_chem(j)[fi], sph_particles_dchem(j)[fi]);
 									}
