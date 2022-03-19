@@ -1815,6 +1815,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.alpha_snk = &sph_particles_alpha(0);
 	cuda_data.fpre_snk = &sph_particles_fpre(0);
 	cuda_data.divv_snk = &sph_particles_divv(0);
+	cuda_data.eavg_snk = &sph_particles_eavg(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.chemistry = get_options().chem;
@@ -1953,22 +1954,25 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 				auto* self = sph_tree_get_node(sid);
 				if( !self->converged ) {
 					float this_error = 0.f;
+					const auto apply_d = [](float& a, float& da) {
+						if( da < -0.999*a) {
+							da = -0.999*a;
+						}
+						a += da;
+					};
 					if( self->nactive || has_active_neighbors(self)) {
 						for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
 							const part_int k = sph_particles_dm_index(j);
 							const auto rung = particles_rung(k);
 							const bool sa = sph_particles_semi_active(j);
 							if( rung >= minrung || sa) {
-								float e0 = std::max(sph_particles_eint0(j),sph_particles_eint(j));
-								e0 += 0.5 * sqr(sph_particles_vel(XDIM,j));
-								e0 += 0.5 * sqr(sph_particles_vel(YDIM,j));
-								e0 += 0.5 * sqr(sph_particles_vel(ZDIM,j));
+								const float e0 = sph_particles_eavg(j);
 								this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
-								sph_particles_eint(j) += sph_particles_deint(j);
+								apply_d(sph_particles_eint(j), sph_particles_deint(j));
 								if( chem ) {
 									for( int fi = 0; fi < NCHEMFRACS; fi++) {
 										this_error = std::max(this_error, fabs(sph_particles_dchem(j)[fi]));
-										sph_particles_chem(j)[fi] += sph_particles_dchem(j)[fi];
+										apply_d(sph_particles_chem(j)[fi], sph_particles_dchem(j)[fi]);
 									}
 								}
 							}

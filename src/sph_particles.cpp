@@ -385,6 +385,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
+		sph_particles_array_resize(sph_particles_ea, new_capacity, true);
 		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_or, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, false);
