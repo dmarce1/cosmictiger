@@ -213,6 +213,7 @@ void hydro_plummer() {
 	const double a = 0.01;
 	auto opts = get_options();
 	opts.sph_mass = 1. / N;
+	opts.dm_mass = 1. / N;
 	const double m = opts.sph_mass;
 	set_options(opts);
 	const double G = opts.GM;
@@ -222,7 +223,38 @@ void hydro_plummer() {
 	double pot = 0.0;
 	double ekin = 0.0;
 	double maxr = 5.0 * a;
-	while (sph_particles_size() < N) {
+	while (particles_size() < N / 2) {
+		double x = maxr * (2.0 * rand1() - 1.0);
+		double y = maxr * (2.0 * rand1() - 1.0);
+		double z = maxr * (2.0 * rand1() - 1.0);
+		double r = sqrt(sqr(x, y, z));
+		double dist = powf(1.0 + sqr(r / a), -2.5);
+		if (rand1() < dist) {
+			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+			part_int k = particles_size();
+			particles_resize(k + 1);
+			double phi = -G * M0 / sqrt(r * r + a * a);
+			double v = sqrt(-phi / 2.0);
+			particles_pos(XDIM, k) = x - 0.5;
+			particles_pos(YDIM, k) = y - 0.5;
+			particles_pos(ZDIM, k) = z - 0.5;
+			x = rand1();
+			y = rand1();
+			v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
+			x = rand1() - 0.5;
+			y = rand1() - 0.5;
+			z = rand1() - 0.5;
+			double norminv = 1.0 / sqrt(sqr(x, y, z));
+			x *= norminv;
+			y *= norminv;
+			z *= norminv;
+			particles_vel(XDIM, k) = x * v;
+			particles_vel(YDIM, k) = y * v;
+			particles_vel(ZDIM, k) = z * v;
+			particles_rung(k) = 0;
+		}
+	}
+	while (sph_particles_size() < N / 2) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
@@ -271,7 +303,7 @@ void hydro_star_test() {
 	opts.sph_mass = 1. / N;
 	const double m = opts.sph_mass;
 	set_options(opts);
-	double rho0 = 125*230.0 * 1000000 / 980107.;
+	double rho0 = 125 * 230.0 * 1000000 / 980107.;
 	const double npoly = 1.666666666666;
 	const auto rho = [rho0,npoly]( double r ) {
 		if( r == 0.0 ) {

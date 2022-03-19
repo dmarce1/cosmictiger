@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                                                 const T& operator[](int i) const {
+	                                                                                                                                                                                                                                                                   const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -922,19 +922,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							}
 						}
 					}
-					if (params.tau > 0.f && params.phase == 0) {
+					if (params.tau > 0.f) {
 						const float ddivv_dt = (divv_i - data.divv0_snk[snki]) / (params.tau - data.taux0_snk[snki]);
 						const float A2 = sqr(2.f * sqr(sqr(1.f - Ri)) * divv_i);
 						const float limiter = A2 / (A2 + sqr(shearv_i) + 1e-30f);
 						const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * params.a;
-						const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(vsig) + 1e-30f), params.alpha0);
-						if (alpha_i < alpha_targ) {
-							data.alpha_snk[snki] = alpha_targ;
-						} else {
-							const float dt_i = rung_dt[rung_i] * params.t0;
-							const float lambda = params.alpha_decay * vsig * hinv_i * ainv * dt_i;
-							data.alpha_snk[snki] = (alpha_i + lambda * alpha_targ) / (1.f + lambda);
-						}
+						const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(vsig)), params.alpha0);
+						const float dt_i = rung_dt[rung_i] * params.t0;
+						const float tauinv = (alpha_i < alpha_targ ? 1.f / params.cfl : params.alpha_decay) * vsig * hinv_i * ainv;
+						data.dalpha_con[snki] = tauinv * (alpha_targ - alpha_i);
 					}
 				}
 			}
@@ -1222,7 +1218,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					den += 1.f;
 					den_eint += 1.f;
 					num_eint += data.eint0[i];
-					const float de = (num_eint  / den_eint-  eint_i);
+					const float de = (num_eint / den_eint - eint_i);
 					data.deint_snk[snki] = de;
 					ALWAYS_ASSERT(isfinite(data.deint_snk[snki]));
 					if (data.chemistry) {
@@ -1432,7 +1428,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						const float etot = eint_j + 0.5f * (sqr(vx_j) + sqr(vy_j) + sqr(vz_j));
 						eavg += etot * mrhoinv_i * W_i;
 						if (!isfinite(eavg)) {
-							PRINT("!!!!!!!!!!! eavg off %e %e %e %e %e %e\n",  eint_j , sqr(vx_j) ,sqr(vy_j) , sqr(vz_j), mrhoinv_i, W_i);
+							PRINT("!!!!!!!!!!! eavg off %e %e %e %e %e %e\n", eint_j, sqr(vx_j), sqr(vy_j), sqr(vz_j), mrhoinv_i, W_i);
 						}
 					}
 				}
