@@ -1171,12 +1171,13 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
 						const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-						const float difco_ij = SPH_DIFFUSION_C * h_i * h_j * 0.5f * (shearv_i + shearv_j);
+						const float difco_ij = SPH_DIFFUSION_C * 0.25f * sqr(h_i + h_j) * 0.5f * (shearv_i + shearv_j);
 						const float dt_ij = fminf(dt_i, dt_j);
 						const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
 						den += phi_ij;
 						den_eint += phi_ij;
 						num_eint += phi_ij * eint_j;
+						ALWAYS_ASSERT(phi_ij >= 0.f);
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
 								num_chem[fi] += phi_ij * chem_j[fi];
@@ -1210,6 +1211,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(den);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(den_eint);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(num_eint);
 				if (data.chemistry) {
 					for (int fi = 0; fi < NCHEMFRACS; fi++) {
@@ -1220,12 +1222,13 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					den += 1.f;
 					den_eint += 1.f;
 					num_eint += data.eint0[i];
-					data.deint_snk[snki] = (num_eint - den_eint * eint_i) / den_eint;
+					const float de = (num_eint  / den_eint-  eint_i);
+					data.deint_snk[snki] = de;
 					ALWAYS_ASSERT(isfinite(data.deint_snk[snki]));
 					if (data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							num_chem[fi] += data.chem0[i][fi];
-							data.dchem_snk[snki][fi] = (num_chem[fi] - den * chem_i[fi]) / den;
+							data.dchem_snk[snki][fi] = (num_chem[fi] / den - chem_i[fi]);
 							ALWAYS_ASSERT(isfinite(data.dchem_snk[snki][fi]));
 						}
 					}

@@ -1441,8 +1441,11 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							break;
 
 							case SPH_RUN_AUX:
+							test = has_active_neighbors(self);
+							break;
 							case SPH_RUN_PARABOLIC:
 							test = has_active_neighbors(self);
+							test = test && !self->converged;
 							break;
 						}
 						if(test) {
@@ -1953,54 +1956,56 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 	float error = 0.f;
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc, toler, minrung]() {
-			float error = 0.f;
-			const part_int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * sph_tree_leaflist_size() / nthreads;
-			const bool chem = get_options().chem;
-			for( int i = b; i < e; i++) {
-				const auto sid = sph_tree_get_leaf(i);
-				auto* self = sph_tree_get_node(sid);
-				if( !self->converged ) {
-					float this_error = 0.f;
-					const auto apply_d = [](float& a, float& da) {
-						if( da < -0.999*a) {
-							da = -0.999*a;
-						}
-						a += da;
-					};
-					if( self->nactive || has_active_neighbors(self)) {
-						for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
-							const part_int k = sph_particles_dm_index(j);
-							const auto rung = particles_rung(k);
-							const bool sa = sph_particles_semi_active(j);
-							if( rung >= minrung || sa) {
-								const float e1 = sph_particles_eint(j) + sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j));
-								const float e0 = std::max(sph_particles_eavg(j), e1);
-								if(!isfinite(e0)) {
-									PRINT( "e0 = %e\n", e0);
-								}
-								ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
-								this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
-								apply_d(sph_particles_eint(j), sph_particles_deint(j));
-								if( chem ) {
-									for( int fi = 0; fi < NCHEMFRACS; fi++) {
-									//	ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
-										this_error = std::max(this_error, fabs(sph_particles_dchem(j)[fi]));
-										apply_d(sph_particles_chem(j)[fi], sph_particles_dchem(j)[fi]);
+		futs.push_back(
+				hpx::async(
+						[nthreads, proc, toler, minrung]() {
+							float error = 0.f;
+							const part_int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
+							const part_int e = (size_t) (proc+1) * sph_tree_leaflist_size() / nthreads;
+							const bool chem = get_options().chem;
+							for( int i = b; i < e; i++) {
+								const auto sid = sph_tree_get_leaf(i);
+								auto* self = sph_tree_get_node(sid);
+								if( !self->converged ) {
+									float this_error = 0.f;
+									const auto apply_d = [](float& a, float& da) {
+										a += da;
+									};
+									if( self->nactive || has_active_neighbors(self)) {
+										for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
+											const part_int k = sph_particles_dm_index(j);
+											const auto rung = particles_rung(k);
+											const bool sa = sph_particles_semi_active(j);
+											if( rung >= minrung || sa) {
+												const float e1 = sph_particles_eint(j) + 0.5*(sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j)));
+												const float e0 = std::max(sph_particles_eavg(j), e1);
+												if(!isfinite(e0)) {
+													PRINT( "e0 = %e\n", e0);
+												}
+												ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
+												this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
+												if( fabs(3.467579e-03 - fabs(sph_particles_deint(j)/e0)) < 1e-4) {
+//													PRINT( "%e %e\n", sph_particles_eint(j),sph_particles_deint(j));
+												}
+												apply_d(sph_particles_eint(j), sph_particles_deint(j));
+												if( chem ) {
+													for( int fi = 0; fi < NCHEMFRACS; fi++) {
+														ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
+														this_error = std::max(this_error, fabs(sph_particles_dchem(j)[fi]));
+														apply_d(sph_particles_chem(j)[fi], sph_particles_dchem(j)[fi]);
+													}
+												}
+											}
+										}
 									}
+									if( this_error < toler ) {
+										sph_tree_set_converged(sid);
+									}
+									error = std::max(error, this_error);
 								}
 							}
-						}
-					}
-					if( this_error < toler ) {
-						sph_tree_set_converged(sid);
-					}
-					error = std::max(error, this_error);
-				}
-			}
-			return error;
-		}));
+							return error;
+						}));
 	}
 	for (auto& f : futs) {
 		error = std::max(error, f.get());
@@ -2029,8 +2034,12 @@ void sph_init_diffusion() {
 			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				sph_particles_eint0(i) = sph_particles_eint(i);
+				sph_particles_deint(i) = 0.f;
 				if( chem ) {
 					sph_particles_chem0(i) = sph_particles_chem(i);
+					for( int f = 0; f < NCHEMFRACS; f++) {
+						sph_particles_dchem(i)[f] = 0.0;
+					}
 				}
 			}
 		}));
