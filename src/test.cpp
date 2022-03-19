@@ -342,8 +342,8 @@ static void force_test() {
 		abort();
 	}
 	tm.start();
-	particles_random_init();
-//	initialize(get_options().z0);
+//	particles_random_init();
+	initialize(get_options().z0);
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();

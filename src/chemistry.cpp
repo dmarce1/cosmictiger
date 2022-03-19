@@ -467,9 +467,6 @@ species_t chemistry_update(species_t species, float rho, float& T0, float z, flo
 	float Hall = N.H + N.Hn + N.Hp + 2.0 * (N.H2);
 //	PRINT("@!1111111111111111$ %e %e %e %e\n", N.H, N.Hn, N.Hp, N.H2);
 	float Heall = N.He + N.Hep + N.Hepp;
-	feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
 	float oldT;
 #define Power(a, b) pow(a, b)
 #define Sqrt(a) sqrt(a)

@@ -77,6 +77,8 @@ void analytic_compare(int Nsamples) {
 	double lmax_force = 0.0;
 	double lerr_phi = 0.0;
 	double lerr_force = 0.0;
+	double phi_norm = 0.0;
+	double force_norm = 0.0;
 	for (int i = 0; i < Nsamples; i++) {
 		double f1 = 0.0, f2 = 0.0;
 		double g1 = 0.0, g2 = 0.0;
@@ -88,16 +90,18 @@ void analytic_compare(int Nsamples) {
 		g2 = sqrt(g2);
 		f1 = samples[i].p;
 		f2 = gm * results.first[i];
-		const double gerr = std::abs(std::log(std::abs(g1/g2)));
-		const double ferr = std::abs(std::log(std::abs(f1/f2)));
-		lerr_phi += sqr(ferr) / Nsamples;
-		lerr_force += sqr(gerr) / Nsamples;
+		phi_norm += fabs(f1);
+		force_norm += fabs(g1);
+		const double gerr = fabs(g1-g2);
+		const double ferr = fabs(f1-f2);
+		lerr_phi += (ferr);
+		lerr_force += gerr;
 		lmax_phi = std::max(lmax_phi, ferr);
 		lmax_force = std::max(lmax_force, gerr);
 		printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1, f1, f2, f1/f2);
 	}
-	lerr_force = sqrt(lerr_force);
-	lerr_phi = sqrt(lerr_phi);
+	lerr_force =(lerr_force/force_norm);
+	lerr_phi = (lerr_phi/phi_norm);
 	PRINT("Force RMS Error     = %e\n", lerr_force);
 	PRINT("Force Max Error     = %e\n", lmax_force);
 	PRINT("Potential RMS Error = %e\n", lerr_phi);

@@ -264,6 +264,8 @@ size_t cpu_gravity_pc(gravity_cc_type type, force_vectors& f, int min_rung, tree
 	return flops;
 }
 
+#include <fenv.h>
+
 size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
 	size_t flops = 0;
 	timer tm;
@@ -337,85 +339,198 @@ size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree
 			simd_float sink_fpot;
 			simd_float dm_soft = get_options().hsoft;
 			const simd_float tiny = 1.0e-15;
-			for (part_int i = range.first; i < range.second; i++) {
-				if (particles_rung(i) >= min_rung) {
-					const int type = particles_type(i);
-					if (type == SPH_TYPE) {
-						const auto kk = particles_cat_index(i);
-						sink_hsoft = sph_particles_smooth_len(kk);
-						sink_fpot = sph_particles_fpot(kk);
-					} else {
-						sink_hsoft = dm_soft;
-						sink_fpot = simd_float(0);
-					}
-					simd_float gx(0.0);
-					simd_float gy(0.0);
-					simd_float gz(0.0);
-					simd_float phi(0.0);
-					for (int dim = 0; dim < NDIM; dim++) {
-						X[dim] = particles_pos(dim, i).raw();
-					}
-					for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
-						const int& count = maxi;
-						const int k = j / SIMD_FLOAT_SIZE;
-						simd_float mass;
-						for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-							Y[XDIM][l] = srcx[j + l].raw();
-							Y[YDIM][l] = srcy[j + l].raw();
-							Y[ZDIM][l] = srcz[j + l].raw();
-							mass[l] = masses[j + l];
-							src_hsoft[l] = hsoft[j + l];
-							src_fpot[l] = fpot[j + l];
-						}
-						array<simd_float, NDIM> dx;
-						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
-						}
-						simd_float rinv1 = 0.f, rinv3 = 0.f;
-						const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
-						const simd_float h_i = sink_hsoft;
-						const simd_float h_j = src_hsoft;
-						const auto hinv_i = simd_float(1.f) / h_i;
-						const auto h3inv_i = sqr(hinv_i) * hinv_i;
-						const simd_float near_flags = r2 < max(sqr(h_i), sqr(h_j));
-						const auto fpot_i = sink_fpot;
-						if (near_flags.sum() == 0) {
-							rinv1 = simd_float(1) / sqrt(r2);
-							rinv3 = rinv1 * sqr(rinv1);
+			feenableexcept (FE_DIVBYZERO);
+			feenableexcept (FE_INVALID);
+			feenableexcept (FE_OVERFLOW);
+			if (type == GRAVITY_DIRECT) {
+				for (part_int i = range.first; i < range.second; i++) {
+					if (particles_rung(i) >= min_rung) {
+						const int type = particles_type(i);
+						if (type == SPH_TYPE) {
+							const auto kk = particles_cat_index(i);
+							sink_hsoft = sph_particles_smooth_len(kk);
+							sink_fpot = sph_particles_fpot(kk);
 						} else {
-							const auto fpot_j = src_fpot;
-							const auto h_ij = simd_float(0.5) * (h_i + h_j);
-							const auto hinv_j = simd_float(1.f) / h_j;
-							const auto h3inv_j = sqr(hinv_j) * hinv_j;
-							const simd_float r = sqrt(r2);                                                    // 4
-							rinv1 = simd_float(1) / (r + tiny);                            // 5
-							const auto q_i = r * hinv_i;
-							const auto q_j = r * hinv_j;
-							const auto F0 = simd_float(0.5f) * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-							const auto dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * rinv1;
-							const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1;
-							const auto Fc = simd_float(0.5f) * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
-							rinv3 = F0 + Fc;
-							if (min_rung == 0) {
-								const auto pot0 = simd_float(0.5f) * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-								const auto W_i = (q_i > simd_float(0)) * kernelW(q_i) * h3inv_i;
-								const auto W_j = (q_j > simd_float(0)) * kernelW(q_j) * h3inv_j;
-								const auto potc = simd_float(0.5f) * (fpot_i * W_i + fpot_j * W_j);
-								rinv1 = pot0 + potc;
-							}
+							sink_hsoft = dm_soft;
+							sink_fpot = simd_float(0);
 						}
-						rinv3 *= mass;
-						rinv1 *= mass;
-						gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
-						gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
-						gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
-						phi -= rinv1;																									// 1
+						simd_float gx(0.0);
+						simd_float gy(0.0);
+						simd_float gz(0.0);
+						simd_float phi(0.0);
+						for (int dim = 0; dim < NDIM; dim++) {
+							X[dim] = particles_pos(dim, i).raw();
+						}
+						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
+							const int& count = maxi;
+							const int k = j / SIMD_FLOAT_SIZE;
+							simd_float mass;
+							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+								Y[XDIM][l] = srcx[j + l].raw();
+								Y[YDIM][l] = srcy[j + l].raw();
+								Y[ZDIM][l] = srcz[j + l].raw();
+								mass[l] = masses[j + l];
+								src_hsoft[l] = hsoft[j + l];
+								src_fpot[l] = fpot[j + l];
+							}
+							array<simd_float, NDIM> dx;
+							for (int dim = 0; dim < NDIM; dim++) {
+								dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
+							}
+							simd_float rinv1 = 0.f, rinv3 = 0.f;
+							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
+							const simd_float h_i = sink_hsoft;
+							const simd_float h_j = src_hsoft;
+							const auto hinv_i = simd_float(1.f) / h_i;
+							const auto h3inv_i = sqr(hinv_i) * hinv_i;
+							const simd_float near_flags = r2 < max(sqr(h_i), sqr(h_j));
+							const auto fpot_i = sink_fpot;
+							if (near_flags.sum() == 0) {
+								rinv1 = simd_float(1) / sqrt(r2);
+								rinv3 = rinv1 * sqr(rinv1);
+							} else {
+								const auto fpot_j = src_fpot;
+								const auto h_ij = simd_float(0.5) * (h_i + h_j);
+								const auto hinv_j = simd_float(1.f) / h_j;
+								const auto h3inv_j = sqr(hinv_j) * hinv_j;
+								const simd_float r = sqrt(r2);                                                    // 4
+								rinv1 = simd_float(1) / (r + tiny);                            // 5
+								const auto q_i = r * hinv_i;
+								const auto q_j = r * hinv_j;
+								const auto k1 = kernelFqinv(q_i);
+								const auto k2 = kernelFqinv(q_j);
+								const auto F0 = simd_float(0.5f) * (k1 * h3inv_i + k2 * h3inv_j);
+								const auto dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * rinv1;
+								const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1;
+								const auto Fc = simd_float(0.5f) * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
+								rinv3 = F0 + Fc;
+								if (min_rung == 0) {
+									const auto pot0 = simd_float(0.5f) * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
+									const auto W_i = (q_i > simd_float(0)) * kernelW(q_i) * h3inv_i;
+									const auto W_j = (q_j > simd_float(0)) * kernelW(q_j) * h3inv_j;
+									const auto potc = simd_float(0.5f) * (fpot_i * W_i + fpot_j * W_j);
+									rinv1 = pot0 + potc;
+								}
+							}
+							rinv3 *= mass;
+							rinv1 *= mass;
+							gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
+							gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
+							gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
+							phi -= rinv1;																									// 1
+						}
+						const int j = i - range.first;
+						f.gx[j] -= gx.sum();
+						f.gy[j] -= gy.sum();
+						f.gz[j] -= gz.sum();
+						f.phi[j] += phi.sum();
 					}
-					const int j = i - range.first;
-					f.gx[j] -= gx.sum();
-					f.gy[j] -= gy.sum();
-					f.gz[j] -= gz.sum();
-					f.phi[j] += phi.sum();
+				}
+			}
+			if (type == GRAVITY_EWALD) {
+
+				for (part_int i = range.first; i < range.second; i++) {
+					if (particles_rung(i) >= min_rung) {
+						const int type = particles_type(i);
+						if (type == SPH_TYPE) {
+							const auto kk = particles_cat_index(i);
+							sink_hsoft = sph_particles_smooth_len(kk);
+							sink_fpot = sph_particles_fpot(kk);
+						} else {
+							sink_hsoft = dm_soft;
+							sink_fpot = simd_float(0);
+						}
+						for (int dim = 0; dim < NDIM; dim++) {
+							X[dim] = particles_pos(dim, i).raw();
+						}
+						simd_float fx(0.f);
+						simd_float fy(0.f);
+						simd_float fz(0.f);
+						simd_float pot(0.f);
+						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
+							const int& count = maxi;
+							const int k = j / SIMD_FLOAT_SIZE;
+							simd_float mass;
+							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+								Y[XDIM][l] = srcx[j + l].raw();
+								Y[YDIM][l] = srcy[j + l].raw();
+								Y[ZDIM][l] = srcz[j + l].raw();
+								mass[l] = masses[j + l];
+							}
+							array<simd_float, NDIM> dx0;
+							for (int dim = 0; dim < NDIM; dim++) {
+								dx0[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
+							}
+							const simd_float R2 = sqr(dx0[XDIM], dx0[YDIM], dx0[ZDIM]);
+							const auto m_j = mass;
+							const auto r0mask = simd_float(1) - (R2 > 0.0f);
+							const auto r1mask = simd_float(1) - r0mask;
+							for (int xi = -4; xi <= +4; xi++) {
+								for (int yi = -4; yi <= +4; yi++) {
+									for (int zi = -4; zi <= +4; zi++) {
+										const auto dx = dx0[XDIM] - simd_float(xi);
+										const auto dy = dx0[YDIM] - simd_float(yi);
+										const auto dz = dx0[ZDIM] - simd_float(zi);
+										const auto r2 = sqr(dx, dy, dz);
+										const auto mask = r2 < simd_float(2.6f * 2.6f);
+										if (mask.sum()) {
+											const auto r = sqrt(r2);
+											const auto rinv = simd_float(1.f) / (r + r0mask);
+											const auto r2inv = rinv * rinv;
+											const auto r3inv = r2inv * rinv;
+											const auto exp0 = expf(-4.f * r2);
+											const auto erfc0 = erfc(2.f * r);
+											const auto expfactor = simd_float(4.0f / sqrt(M_PI)) * r * exp0;
+											const auto d0 = -erfc0 * rinv;
+											const auto d1 = (expfactor + erfc0) * r3inv;
+											pot += r1mask * d0;
+											fx -= r1mask * mask * dx * d1;
+											fy -= r1mask * mask * dy * d1;
+											fz -= r1mask * mask * dz * d1;
+										}
+									}
+								}
+							}
+							pot += simd_float(M_PI / 4.f);
+							for (int xi = -2; xi <= +2; xi++) {
+								for (int yi = -2; yi <= +2; yi++) {
+									for (int zi = -2; zi <= +2; zi++) {
+										const auto hx = xi;
+										const auto hy = yi;
+										const auto hz = zi;
+										const auto h2 = simd_float(sqr(hx, hy, hz));
+										const auto hmask = (h2 > 0.f) * (h2 < simd_float(8.001f));
+										const auto hdotx = dx0[XDIM] * hx + dx0[YDIM] * hy + dx0[ZDIM] * hz;
+										const auto omega = simd_float(2.0 * M_PI) * hdotx;
+										const auto c = cos(omega);
+										const auto s = sin(omega);
+										const auto c0 = -hmask / (h2 + (simd_float(1) - hmask)) * expf(simd_float(-M_PI * M_PI * 0.25f) * h2) * simd_float(1.f / M_PI);
+										const auto c1 = -hmask * s * 2.0 * M_PI * c0;
+										pot += r1mask * c0 * c;
+										fx -= r1mask * c1 * hx;
+										fy -= r1mask * c1 * hy;
+										fz -= r1mask * c1 * hz;
+									}
+								}
+							}
+							pot = pot * r1mask + r0mask * simd_float(2.8372975);
+							const simd_float r1inv = rsqrt(R2 + r0mask);
+							const simd_float r3inv = sqr(r1inv) * r1inv;
+							pot += r1inv * r1mask;
+							fx += dx0[XDIM] * r3inv * r1mask;
+							fy += dx0[YDIM] * r3inv * r1mask;
+							fz += dx0[ZDIM] * r3inv * r1mask;
+							pot *= m_j;
+							fx *= m_j;
+							fy *= m_j;
+							fz *= m_j;
+							const int l = i - range.first;
+							f.gx[l] += fx.sum();
+							f.gy[l] += fy.sum();
+							f.gz[l] += fz.sum();
+							f.phi[l] += pot.sum();
+						}
+					}
 				}
 			}
 		}

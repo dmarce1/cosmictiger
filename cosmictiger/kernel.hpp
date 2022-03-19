@@ -316,10 +316,12 @@ template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
 	T w1, w2, sw, res, q3inv, w3, sw1, sw2, sw3, w, q2;
+	const auto q0 = q;
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
+	q *= (q < T(1));
 	switch (kernel_type) {
 #endif
 	case KERNEL_CUBIC_SPLINE: {
@@ -485,7 +487,7 @@ inline T kernelFqinv(T q) {
 	};
 	sw1 = q < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (sqr(q) * q + T(1e-30))) * (q > T(0));
+	res = (sw1 * res + sw2 / (sqr(q0) * q0+ T(1e-30))) * (q > T(0));
 	return res;
 }
 
@@ -493,6 +495,8 @@ template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
 	T w1, w2, sw, res, q1inv, w3, sw1, sw2, sw3, w, q2;
+	const auto q0 = q;
+	q *= (q < T(1));
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
@@ -692,6 +696,6 @@ inline T kernelPot(T q) {
 	};
 	sw1 = q < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (q + T(1e-30f))) * (q > T(0));
+	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q > T(0));
 	return res;
 }

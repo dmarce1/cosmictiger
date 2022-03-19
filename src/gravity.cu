@@ -347,7 +347,6 @@ int cuda_gravity_pp(gravity_cc_type type, const cuda_kick_data& data, const tree
 				}
 			} else {
 				for (int k = tid; k < nactive; k += WARP_SIZE) {
-					float g0 = gx[k];
 					for (int j = 0; j < part_index; j++) {
 						fx = 0.f;
 						fy = 0.f;
@@ -361,62 +360,62 @@ int cuda_gravity_pp(gravity_cc_type type, const cuda_kick_data& data, const tree
 						const float m_j = sph ? (fpot_j != 0.f ? sph_mass : dm_mass) : 1.f;
 						if (R2 == 0.f) {
 							pot += 2.8372975 * m_j;
-							continue;
-						}
-						for (int xi = -4; xi <= +4; xi++) {
-							for (int yi = -4; yi <= +4; yi++) {
-								for (int zi = -4; zi <= +4; zi++) {
-									const float dx = X - xi;
-									const float dy = Y - yi;
-									const float dz = Z - zi;
-									const float r2 = sqr(dx, dy, dz);
-									if (r2 < 2.6f * 2.6f) {
-										const float r = sqrt(r2);
-										const float rinv = 1.f / r;
-										const float r2inv = rinv * rinv;
-										const float r3inv = r2inv * rinv;
-										const float exp0 = expf(-4.f * r2);
-										const float erfc0 = erfcf(2.f * r);
-										const float expfactor = float(4.0f / sqrt(M_PI)) * r * exp0;
-										const float d0 = -erfc0 * rinv;
-										const float d1 = (expfactor + erfc0) * r3inv;
-										pot += d0;
-										fx -= dx * d1;
-										fy -= dy * d1;
-										fz -= dz * d1;
+						} else {
+							for (int xi = -4; xi <= +4; xi++) {
+								for (int yi = -4; yi <= +4; yi++) {
+									for (int zi = -4; zi <= +4; zi++) {
+										const float dx = X - xi;
+										const float dy = Y - yi;
+										const float dz = Z - zi;
+										const float r2 = sqr(dx, dy, dz);
+										if (r2 < 2.6f * 2.6f) {
+											const float r = sqrt(r2);
+											const float rinv = 1.f / r;
+											const float r2inv = rinv * rinv;
+											const float r3inv = r2inv * rinv;
+											const float exp0 = expf(-4.f * r2);
+											const float erfc0 = erfcf(2.f * r);
+											const float expfactor = float(4.0f / sqrt(M_PI)) * r * exp0;
+											const float d0 = -erfc0 * rinv;
+											const float d1 = (expfactor + erfc0) * r3inv;
+											pot += d0;
+											fx -= dx * d1;
+											fy -= dy * d1;
+											fz -= dz * d1;
+										}
 									}
 								}
 							}
-						}
-						pot += float(M_PI / 4.f);
-						for (int xi = -2; xi <= +2; xi++) {
-							for (int yi = -2; yi <= +2; yi++) {
-								for (int zi = -2; zi <= +2; zi++) {
-									const float hx = xi;
-									const float hy = yi;
-									const float hz = zi;
-									const float h2 = sqr(hx, hy, hz);
-									if (h2 > 0.0f && h2 <= 8) {
-										const float hdotx = X * hx + Y * hy + Z * hz;
-										const float omega = float(2.0 * M_PI) * hdotx;
-										const float c = cosf(omega);
-										const float s = sinf(omega);
-										const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
-										const float c1 = -s * 2.0 * M_PI * c0;
-										pot += c0 * c;
-										fx -= c1 * hx;
-										fy -= c1 * hy;
-										fz -= c1 * hz;
+							pot += float(M_PI / 4.f);
+							for (int xi = -2; xi <= +2; xi++) {
+								for (int yi = -2; yi <= +2; yi++) {
+									for (int zi = -2; zi <= +2; zi++) {
+										const float hx = xi;
+										const float hy = yi;
+										const float hz = zi;
+										const float h2 = sqr(hx, hy, hz);
+										if (h2 > 0.0f && h2 <= 8) {
+											const float hdotx = X * hx + Y * hy + Z * hz;
+											const float omega = float(2.0 * M_PI) * hdotx;
+											const float c = cosf(omega);
+											const float s = sinf(omega);
+											const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
+											const float c1 = -s * 2.0 * M_PI * c0;
+											pot += c0 * c;
+											fx -= c1 * hx;
+											fy -= c1 * hy;
+											fz -= c1 * hz;
+										}
 									}
 								}
 							}
+							r1inv = rsqrt(R2);
+							r3inv = sqr(r1inv) * r1inv;
+							pot += r1inv;
+							fx += X * r3inv;
+							fy += Y * r3inv;
+							fz += Z * r3inv;
 						}
-						r1inv = rsqrt(R2);
-						r3inv = sqr(r1inv) * r1inv;
-						pot += r1inv;
-						fx += X * r3inv;
-						fy += Y * r3inv;
-						fz += Z * r3inv;
 						pot *= m_j;
 						fx *= m_j;
 						fy *= m_j;
