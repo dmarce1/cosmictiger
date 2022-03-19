@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                                       const T& operator[](int i) const {
+	                                                                                                                                                                                                                                                        const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -738,7 +738,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float shearv_i = data.shearv[i];
 				const float divv_i = data.divv[i];
 				const float fpre_i = data.fpre[i];
-				const float balsara_i = fabs(divv_i) / (fabs(divv_i) + crsv_i + 1e-4f * c_i * hinv_i);
+				const float balsara_i = fabs(divv_i) / (fabs(divv_i) + crsv_i + 1e-4f * c_i * hinv_i * ainv);
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
 				ws.rec1.resize(0);
 				ws.rec2.resize(0);
@@ -817,7 +817,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float r = sqrt(r2);
 					const float rinv = 1.0f / (1.0e-30f + r);
-					const float balsara_j = fabs(divv_j) / (fabs(divv_j) + crsv_j + 1e-4f * c_j * hinv_j);
+					const float balsara_j = fabs(divv_j) / (fabs(divv_j) + crsv_j + 1e-4f * c_j * hinv_j * ainv);
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 					const float w_ij = vdotx_ij * rinv;
 					const float q_i = r * hinv_i;								// 1
@@ -925,18 +925,20 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 					float dalpha_dt;
-					if (params.tau > 0.f) {
+					if (params.tau > 0.f && params.phase == 0) {
 						const float ddivv_dt = (divv_i - data.divv0_snk[snki]) / (params.tau - data.taux0_snk[snki]);
 						const float A2 = sqr(2.f * sqr(sqr(1.f - Ri)) * divv_i);
 						const float limiter = A2 / (A2 + sqr(shearv_i) + 1e-30f);
 						const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * params.a;
 						const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(vsig) + 1e-30f), params.alpha0);
-						const float tauinv = (alpha_i < alpha_targ ? 1.f / dt_tot : params.alpha_decay * vsig * hinv_i);
-						dalpha_dt = (alpha_targ - alpha_i) * tauinv;
-					} else {
-						dalpha_dt = 0.f;
+						if (alpha_i < alpha_targ) {
+							data.alpha_snk[snki] = alpha_targ;
+						} else {
+							const float dt_i = rung_dt[rung_i] * params.t0;
+							const float lambda = params.alpha_decay * vsig * hinv_i * ainv * dt_i;
+							data.alpha_snk[snki] = (alpha_i + lambda * alpha_targ) / (1.f + lambda);
+						}
 					}
-					data.dalpha_con[snki] = dalpha_dt;
 				}
 			}
 		}

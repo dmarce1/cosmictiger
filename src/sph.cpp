@@ -1731,8 +1731,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.shearv, sizeof(float) * host_shearv.size()));
 		if (chem) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.chem0, sizeof(float) * host_chem0.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.chem, sizeof(float) * host_chem.size()));
+			CUDA_CHECK(cudaMalloc(&cuda_data.chem0, NCHEMFRACS * sizeof(float) * host_chem0.size()));
+			CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(float) * host_chem.size()));
 		}
 		if (params.conduction) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.mmw, sizeof(float) * host_mmw.size()));
@@ -1780,8 +1780,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint0, host_eint0.data(), sizeof(float) * host_eint0.size(), cudaMemcpyHostToDevice, stream));
 		if (chem) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem0, host_chem0.data(), sizeof(float) * host_chem0.size(), cudaMemcpyHostToDevice, stream));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem0, host_chem0.data(), NCHEMFRACS * sizeof(float) * host_chem0.size(), cudaMemcpyHostToDevice, stream));
 		}
 		if (params.conduction) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.mmw, host_mmw.data(), sizeof(float) * host_mmw.size(), cudaMemcpyHostToDevice, stream));
@@ -2009,7 +2009,6 @@ void sph_init_diffusion() {
 			b = (size_t) proc * sph_particles_size() / nthreads;
 			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
-				sph_particles_alpha0(i) = sph_particles_alpha(i);
 				sph_particles_eint0(i) = sph_particles_eint(i);
 				if( chem ) {
 					sph_particles_chem0(i) = sph_particles_chem(i);
