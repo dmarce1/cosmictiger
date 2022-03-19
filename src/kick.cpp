@@ -208,159 +208,134 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, do_phi);
-	multlist.resize(0);
 	simd_float other_hsoft;
 	simd_float hsoft;
 	hsoft = self_ptr->hsoft_max;
-	for (int ci = 0; ci < echecklist.size(); ci += SIMD_FLOAT_SIZE) {
-		const int maxci = std::min((int) echecklist.size(), ci + SIMD_FLOAT_SIZE);
-		const int maxi = maxci - ci;
-		for (int i = ci; i < maxci; i++) {
-			other_ptrs[i - ci] = tree_get_node(echecklist[i]);
-		}
-		for (int i = 0; i < maxi; i++) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
-			}
-			other_radius[i] = other_ptrs[i]->radius;
-			other_hsoft[i] = other_ptrs[i]->hsoft_max;
-		}
-		for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				other_pos[dim][i] = 0.f;
-			}
-			other_radius[i] = 0.f;
-			other_hsoft[i] = 1.f;
-		}
-		for (int dim = 0; dim < NDIM; dim++) {
-			dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;              // 3
-		}
-		const simd_float R2 = max(ewald_dist2, sqr(dx[XDIM], dx[YDIM], dx[ZDIM]));          // 6
-		const simd_float r2 = sqr((sink_bias * self_radius + other_radius) * thetainv); // 5
-		const simd_float soft_sep = sqr(self_radius + other_radius + max(hsoft, other_hsoft)) < R2;
-		const simd_float far = (R2 > r2) * soft_sep;                                                     // 1
-		for (int i = 0; i < maxi; i++) {
-			if (far[i]) {
-				multlist.push_back(echecklist[ci + i]);
-			} else {
-				nextlist.push_back(other_ptrs[i]->children[LEFT]);
-				nextlist.push_back(other_ptrs[i]->children[RIGHT]);
-			}
-		}
-		kr.node_flops += maxi * 15;
-	}
-	std::swap(echecklist, nextlist);
-	kr.node_flops += cpu_gravity_cc(GRAVITY_EWALD, L, multlist, self, params.min_rung == 0);
-	nextlist.resize(0);
-	multlist.resize(0);
-	partlist.resize(0);
-	leaflist.resize(0);
-	auto& these_flops = kr.node_flops;
-	do {
-		for (int ci = 0; ci < dchecklist.size(); ci += SIMD_FLOAT_SIZE) {
-			const int maxci = std::min((int) dchecklist.size(), ci + SIMD_FLOAT_SIZE);
-			const int maxi = maxci - ci;
-			for (int i = ci; i < maxci; i++) {
-				other_ptrs[i - ci] = tree_get_node(dchecklist[i]);
-			}
-			for (int i = 0; i < maxi; i++) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
-				}
-				other_hsoft[i] = other_ptrs[i]->hsoft_max;
-				other_radius[i] = other_ptrs[i]->radius;
-				other_leaf[i] = other_ptrs[i]->leaf;
-			}
-			for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					other_pos[dim][i] = 0.f;
-				}
-				other_radius[i] = 0.f;
-				other_hsoft[i] = 1.f;
-				other_leaf[i] = 0;
-			}
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
-			}
-			const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
-			const simd_float soft_sep = sqr(self_radius + other_radius + max(hsoft, other_hsoft)) < R2;
-			const simd_float far1 = soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
-			const simd_float far2 = soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
-			const simd_float mult = far1;                                                                  // 4
-			const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
-			for (int i = 0; i < maxi; i++) {
-				if (mult[i]) {
-					multlist.push_back(dchecklist[ci + i]);
-				} else if (part[i]) {
-					partlist.push_back(dchecklist[ci + i]);
-				} else if (other_leaf[i]) {
-					leaflist.push_back(dchecklist[ci + i]);
-				} else {
-					const auto child_checks = other_ptrs[i]->children;
-					nextlist.push_back(child_checks[LEFT]);
-					nextlist.push_back(child_checks[RIGHT]);
-
-				}
-			}
-			these_flops += maxi * 22;
-		}
-		std::swap(dchecklist, nextlist);
-		nextlist.resize(0);
-	} while (dchecklist.size() && self_ptr->leaf);
-	these_flops += cpu_gravity_cc(GRAVITY_DIRECT, L, multlist, self, params.min_rung == 0);
-	these_flops += cpu_gravity_cp(GRAVITY_DIRECT, L, partlist, self, params.min_rung == 0);
+	force_vectors forces;
+	const part_int mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
-		if (cuda_workspace != nullptr) {
-			cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
-		}
-		partlist.resize(0);
-		multlist.resize(0);
-		const part_int mynparts = self_ptr->nparts();
-		force_vectors forces(mynparts);
+		forces = force_vectors(mynparts);
 		for (part_int i = 0; i < mynparts; i++) {
 			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
 			forces.phi[i] = 0.0;
 		}
-		for (int i = 0; i < leaflist.size(); i++) {
-			const tree_node* other_ptr = tree_get_node(leaflist[i]);
-			if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
-				other_radius = other_ptr->radius;
-				for (int dim = 0; dim < NDIM; dim++) {
-					other_pos[dim] = other_ptr->pos[dim].raw();
+	}
+	for (int gtype = GRAVITY_DIRECT; gtype <= GRAVITY_EWALD; gtype++) {
+		nextlist.resize(0);
+		multlist.resize(0);
+		partlist.resize(0);
+		leaflist.resize(0);
+		auto& these_flops = kr.node_flops;
+		auto& checklist = gtype == GRAVITY_DIRECT ? dchecklist : echecklist;
+		do {
+			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+				const int maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+				const int maxi = maxci - ci;
+				for (int i = ci; i < maxci; i++) {
+					other_ptrs[i - ci] = tree_get_node(checklist[i]);
 				}
-				const auto myrange = self_ptr->part_range;
-				bool pp = false;
-				for (part_int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
+				for (int i = 0; i < maxi; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
-						for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-							self_pos[dim][k] = particles_pos(dim, std::min(j + k, myrange.second - 1)).raw();
+						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
+					}
+					other_hsoft[i] = other_ptrs[i]->hsoft_max;
+					other_radius[i] = other_ptrs[i]->radius;
+					other_leaf[i] = other_ptrs[i]->leaf;
+				}
+				for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						other_pos[dim][i] = 0.f;
+					}
+					other_radius[i] = 0.f;
+					other_hsoft[i] = 1.f;
+					other_leaf[i] = 0;
+				}
+				for (int dim = 0; dim < NDIM; dim++) {
+					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
+				}
+				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
+				if (gtype == GRAVITY_EWALD) {
+					R2 = max(R2, ewald_dist2);
+				}
+				const simd_float soft_sep = sqr(self_radius + other_radius + max(hsoft, other_hsoft)) < R2;
+				const simd_float far1 = soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
+				const simd_float far2 = soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
+				const simd_float mult = far1;                                                                  // 4
+				const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
+				for (int i = 0; i < maxi; i++) {
+					if (mult[i]) {
+						multlist.push_back(checklist[ci + i]);
+					} else if (part[i]) {
+						partlist.push_back(checklist[ci + i]);
+					} else if (other_leaf[i]) {
+						leaflist.push_back(checklist[ci + i]);
+					} else {
+						const auto child_checks = other_ptrs[i]->children;
+						nextlist.push_back(child_checks[LEFT]);
+						nextlist.push_back(child_checks[RIGHT]);
+
+					}
+				}
+				these_flops += maxi * 22;
+			}
+			std::swap(checklist, nextlist);
+			nextlist.resize(0);
+		} while (checklist.size() && self_ptr->leaf);
+		these_flops += cpu_gravity_cc(gtype, L, multlist, self, params.min_rung == 0);
+		these_flops += cpu_gravity_cp(gtype, L, partlist, self, params.min_rung == 0);
+		if (self_ptr->leaf) {
+			if (cuda_workspace != nullptr) {
+				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
+			}
+			partlist.resize(0);
+			multlist.resize(0);
+			for (int i = 0; i < leaflist.size(); i++) {
+				const tree_node* other_ptr = tree_get_node(leaflist[i]);
+				if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
+					other_radius = other_ptr->radius;
+					for (int dim = 0; dim < NDIM; dim++) {
+						other_pos[dim] = other_ptr->pos[dim].raw();
+					}
+					const auto myrange = self_ptr->part_range;
+					bool pp = false;
+					for (part_int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
+						for (int dim = 0; dim < NDIM; dim++) {
+							for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
+								self_pos[dim][k] = particles_pos(dim, std::min(j + k, myrange.second - 1)).raw();
+							}
+						}
+						for (int dim = 0; dim < NDIM; dim++) {
+							dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;        // 3
+						}
+						simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
+						if (gtype == GRAVITY_EWALD) {
+							R2 = max(R2, ewald_dist2);
+						}
+						const simd_float rhs = sqr(h + other_radius * thetainv);                      // 3
+						const simd_float near = R2 <= rhs;                                            // 1
+						kr.part_flops += SIMD_FLOAT_SIZE * 12;
+						if (near.sum()) {
+							pp = true;
+							break;
 						}
 					}
-					for (int dim = 0; dim < NDIM; dim++) {
-						dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;        // 3
+					if (pp) {
+						partlist.push_back(leaflist[i]);
+					} else {
+						multlist.push_back(leaflist[i]);
 					}
-					const simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
-					const simd_float rhs = sqr(h + other_radius * thetainv);                      // 3
-					const simd_float near = R2 <= rhs;                                            // 1
-					kr.part_flops += SIMD_FLOAT_SIZE * 12;
-					if (near.sum()) {
-						pp = true;
-						break;
-					}
-				}
-				if (pp) {
-					partlist.push_back(leaflist[i]);
 				} else {
-					multlist.push_back(leaflist[i]);
+					partlist.push_back(leaflist[i]);
 				}
-			} else {
-				partlist.push_back(leaflist[i]);
 			}
+			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, multlist);
+			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, partlist, params.h);
+		} else {
+			dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
 		}
-		kr.part_flops += cpu_gravity_pc(GRAVITY_DIRECT, forces, params.min_rung, self, multlist);
-		kr.part_flops += cpu_gravity_pp(GRAVITY_DIRECT, forces, params.min_rung, self, partlist, params.h);
+	}
+	if (self_ptr->leaf) {
 		cleanup_workspace(std::move(workspace));
-
 		const auto rng = self_ptr->part_range;
 		for (part_int i = rng.first; i < rng.second; i++) {
 			if (particles_rung(i) >= params.min_rung) {
@@ -436,7 +411,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		return hpx::make_ready_future(kr);
 	} else {
-		dchecklist.insert(dchecklist.end(), leaflist.begin(), leaflist.end());
 		cleanup_workspace(std::move(workspace));
 		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);
 		const tree_node* cr = tree_get_node(self_ptr->children[RIGHT]);

@@ -260,6 +260,9 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 		for (int i = 0; i < dchecks.size(); i++) {
 			tree_ids.insert(dchecks[i]);
 		}
+		for (int i = 0; i < echecks.size(); i++) {
+			tree_ids.insert(echecks[i]);
+		}
 	}
 	item.dchecklist = std::move(dchecks);
 	item.echecklist = std::move(echecks);

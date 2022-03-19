@@ -38,7 +38,7 @@
  static __managed__ double kick_time;*/
 
 struct cuda_lists_type {
-	stack_vector<int, ECHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
+	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
 	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
 	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
 	fixedcapvec<int, MULTLIST_SIZE> multlist;
@@ -302,164 +302,19 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			ASSERT(self_index.size() == depth + 1);
 			ASSERT(phase.size() == depth + 1);
 			const auto& self = tree_nodes[self_index.back()];
-			int node_flops = 0;
 			switch (phase.back()) {
 
 			case 0: {
-				// shift expansion
 				array<float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
-				node_flops += 3;
 				auto this_L = L2L_cuda(L.back(), dx, global_params.min_rung == 0);
-				node_flops += 2650 + (global_params.min_level == 0) * 332;
 				if (tid == 0) {
 					L.back() = this_L;
 				}
-				// Do ewald walk
-				nextlist.resize(0);
-				multlist.resize(0);
-				maxi = round_up(echecks.size(), WARP_SIZE);
-				int ninteracts = 0;
-				float hsoft, other_hsoft;
-				hsoft = self.hsoft_max;
-				for (int i = tid; i < maxi; i += WARP_SIZE) {
-					bool mult = false;
-					bool next = false;
-					if (i < echecks.size()) {
-						const tree_node& other = tree_nodes[echecks[i]];
-						other_hsoft = other.hsoft_max;
-						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-						}
-						float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);         // 5
-						R2 = fmaxf(R2, EWALD_DIST2);                          // 1
-						const float r2 = sqr((sink_bias * self.radius + other.radius) * thetainv); // 5
-						const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
-						//	PRINT( "%i %%e %e %e\n", soft_sep, self.radius, other.radius, max(other_hsoft, hsoft));
-						mult = soft_sep && (R2 > r2);                                       // 1
-						next = !mult;
-						ninteracts++;
-					}
-					int l;
-					int total;
-					int start;
-					l = mult;
-					compute_indices(l, total);
-					start = multlist.size();
-					multlist.resize(start + total);
-					if (mult) {
-						multlist[l + start] = echecks[i];
-					}
-					l = next;
-					compute_indices(l, total);
-					start = nextlist.size();
-					nextlist.resize(start + total);
-					if (next) {
-						nextlist[l + start] = echecks[i];
-					}
-				}
-				__syncwarp();
-				echecks.resize(NCHILD * nextlist.size());
-				for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-					//	PRINT( "nextlist = %i\n", nextlist[i]);
-					const auto children = tree_nodes[nextlist[i]].children;
-					ASSERT(children[LEFT].index!=-1);
-					ASSERT(children[RIGHT].index!=-1);
-					echecks[NCHILD * i + LEFT] = children[LEFT].index;
-					echecks[NCHILD * i + RIGHT] = children[RIGHT].index;
-				}
-				__syncwarp();
-
-//				auto tm = clock64();
-				shared_reduce_add(ninteracts);
-				node_flops += ninteracts * 15;
-				node_flops += cuda_gravity_cc(GRAVITY_EWALD, data, L.back(), self, multlist, min_rung == 0);
-//				atomicAdd(&gravity_time, (double) clock64() - tm);
-
-				// Direct walk
-				nextlist.resize(0);
-				partlist.resize(0);
-				leaflist.resize(0);
-				multlist.resize(0);
-				do {
-					maxi = round_up(dchecks.size(), WARP_SIZE);
-					ninteracts = 0;
-					for (int i = tid; i < maxi; i += WARP_SIZE) {
-						bool mult = false;
-						bool next = false;
-						bool leaf = false;
-						bool part = false;
-						if (i < dchecks.size()) {
-							const tree_node& other = tree_nodes[dchecks[i]];
-							other_hsoft = other.hsoft_max;
-							for (int dim = 0; dim < NDIM; dim++) {
-								dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-							}
-							const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
-							const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
-							const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
-							const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
-							mult = far1;
-							part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
-							leaf = !mult && !part && other.leaf;
-							next = !mult && !part && !leaf;
-							ninteracts++;
-						}
-						int l;
-						int total;
-						int start;
-						l = mult;
-						compute_indices(l, total);
-						start = multlist.size();
-						multlist.resize(start + total);
-						if (mult) {
-							multlist[l + start] = dchecks[i];
-						}
-						l = next;
-						compute_indices(l, total);
-						start = nextlist.size();
-						nextlist.resize(start + total);
-						if (next) {
-							nextlist[l + start] = dchecks[i];
-						}
-						l = part;
-						compute_indices(l, total);
-						start = partlist.size();
-						partlist.resize(start + total);
-						if (part) {
-							partlist[l + start] = dchecks[i];
-						}
-						l = leaf;
-						compute_indices(l, total);
-						start = leaflist.size();
-						leaflist.resize(start + total);
-						if (leaf) {
-							leaflist[l + start] = dchecks[i];
-						}
-					}
-					shared_reduce_add(ninteracts);
-					node_flops += 18 * ninteracts;
-					__syncwarp();
-					dchecks.resize(NCHILD * nextlist.size());
-					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-						const auto& node = tree_nodes[nextlist[i]];
-						const auto& children = node.children;
-						dchecks[NCHILD * i + LEFT] = children[LEFT].index;
-						dchecks[NCHILD * i + RIGHT] = children[RIGHT].index;
-					}
-					nextlist.resize(0);
-					__syncwarp();
-
-				} while (dchecks.size() && self.leaf);
-//				tm = clock64();
-				node_flops += cuda_gravity_cc(GRAVITY_DIRECT, data, L.back(), self, multlist, min_rung == 0);
-				node_flops += cuda_gravity_cp(GRAVITY_DIRECT, data, L.back(), self, partlist, dm_mass, sph_mass, min_rung == 0);
-//				atomicAdd(&gravity_time, (double) clock64() - tm);
-				int pflops = 0;
+				int nactive = 0;
 				if (self.leaf) {
-					int nactive = 0;
 					const part_int begin = self.sink_part_range.first;
 					const part_int end = self.sink_part_range.second;
 					const part_int src_begin = self.part_range.first;
@@ -493,82 +348,162 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						nactive += total;
 						__syncwarp();
 					}
-					__syncwarp();
-					partlist.resize(0);
-					multlist.resize(0);
-					maxi = round_up((int) leaflist.size(), WARP_SIZE);
-					for (int i = tid; i < maxi; i += WARP_SIZE) {
-						bool pc = false;
-						bool pp = false;
-						if (i < leaflist.size()) {
-							const tree_node& other = tree_nodes[leaflist[i]];
-							const part_int begin = other.part_range.first;
-							const part_int end = other.part_range.second;
-							bool far;
-							if (end - begin < MIN_PC_PARTS) {
-								far = false;
-							} else {
-								far = true;
-								for (int j = 0; j < nactive; j++) {
-									const float dx = distance(sink_x[j], other.pos[XDIM]);  // 1
-									const float dy = distance(sink_y[j], other.pos[YDIM]);  // 1
-									const float dz = distance(sink_z[j], other.pos[ZDIM]);  // 1
-									const float R2 = sqr(dx, dy, dz);                       // 5
-									far = R2 > sqr(other.radius * thetainv + h);            // 3
-									if (!far) {
-										break;
-									}
-									pflops += 11;
-								}
-							}
-							pp = !far;
-							pc = far;
-						}
-						int total;
-						int l = pp;
-						compute_indices(l, total);
-						l += partlist.size();
-						partlist.resize(partlist.size() + total);
-						if (pp) {
-							partlist[l] = leaflist[i];
-						}
-						l = pc;
-						compute_indices(l, total);
-						l += multlist.size();
-						multlist.resize(multlist.size() + total);
-						if (pc) {
-							multlist[l] = leaflist[i];
-						}
-					}
-					shared_reduce_add(pflops);
-					__syncwarp();
 					for (int i = tid; i < nactive; i += WARP_SIZE) {
 						phi[i] = 0.0;
 						gx[i] = gy[i] = gz[i] = 0.f;
 					}
-					pflops += nactive * 2;
 					__syncwarp();
-//					tm = clock64();
-					pflops += cuda_gravity_pc(GRAVITY_DIRECT, data, self, multlist, nactive, min_rung == 0);
-					pflops += cuda_gravity_pp(GRAVITY_DIRECT, data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
+				}
+				__syncwarp();
+				for (int gtype = GRAVITY_DIRECT; gtype <= GRAVITY_EWALD; gtype++) {
+					nextlist.resize(0);
+					partlist.resize(0);
+					leaflist.resize(0);
+					multlist.resize(0);
+					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
+					const float hsoft = self.hsoft_max;
+					do {
+						maxi = round_up(checks.size(), WARP_SIZE);
+						for (int i = tid; i < maxi; i += WARP_SIZE) {
+							bool mult = false;
+							bool next = false;
+							bool leaf = false;
+							bool part = false;
+							if (i < checks.size()) {
+								const tree_node& other = tree_nodes[checks[i]];
+								const float other_hsoft = other.hsoft_max;
+								for (int dim = 0; dim < NDIM; dim++) {
+									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+								}
+								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+								if (gtype == GRAVITY_EWALD) {
+									R2 = fmaxf(R2, EWALD_DIST2);
+								}
+								const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
+								const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
+								const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
+								mult = far1;
+								part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
+								leaf = !mult && !part && other.leaf;
+								next = !mult && !part && !leaf;
+							}
+							int l;
+							int total;
+							int start;
+							l = mult;
+							compute_indices(l, total);
+							start = multlist.size();
+							multlist.resize(start + total);
+							if (mult) {
+								multlist[l + start] = checks[i];
+							}
+							l = next;
+							compute_indices(l, total);
+							start = nextlist.size();
+							nextlist.resize(start + total);
+							if (next) {
+								nextlist[l + start] = checks[i];
+							}
+							l = part;
+							compute_indices(l, total);
+							start = partlist.size();
+							partlist.resize(start + total);
+							if (part) {
+								partlist[l + start] = checks[i];
+							}
+							l = leaf;
+							compute_indices(l, total);
+							start = leaflist.size();
+							leaflist.resize(start + total);
+							if (leaf) {
+								leaflist[l + start] = checks[i];
+							}
+						}
+						__syncwarp();
+						checks.resize(NCHILD * nextlist.size());
+						for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+							const auto& node = tree_nodes[nextlist[i]];
+							const auto& children = node.children;
+							checks[NCHILD * i + LEFT] = children[LEFT].index;
+							checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+						}
+						nextlist.resize(0);
+						__syncwarp();
+
+					} while (checks.size() && self.leaf);
+					cuda_gravity_cc(gtype, data, L.back(), self, multlist, min_rung == 0);
+					cuda_gravity_cp(gtype, data, L.back(), self, partlist, dm_mass, sph_mass, min_rung == 0);
+					if (self.leaf) {
+						partlist.resize(0);
+						multlist.resize(0);
+						maxi = round_up((int) leaflist.size(), WARP_SIZE);
+						for (int i = tid; i < maxi; i += WARP_SIZE) {
+							bool pc = false;
+							bool pp = false;
+							if (i < leaflist.size()) {
+								const tree_node& other = tree_nodes[leaflist[i]];
+								const part_int begin = other.part_range.first;
+								const part_int end = other.part_range.second;
+								bool far;
+								if (end - begin < MIN_PC_PARTS) {
+									far = false;
+								} else {
+									far = true;
+									for (int j = 0; j < nactive; j++) {
+										const float dx = distance(sink_x[j], other.pos[XDIM]);  // 1
+										const float dy = distance(sink_y[j], other.pos[YDIM]);  // 1
+										const float dz = distance(sink_z[j], other.pos[ZDIM]);  // 1
+										float R2 = sqr(dx, dy, dz);
+										if (gtype == GRAVITY_EWALD) {
+											R2 = fmaxf(R2, EWALD_DIST2);
+										}
+										far = R2 > sqr(other.radius * thetainv + h);            // 3
+										if (!far) {
+											break;
+										}
+									}
+								}
+								pp = !far;
+								pc = far;
+							}
+							int total;
+							int l = pp;
+							compute_indices(l, total);
+							l += partlist.size();
+							partlist.resize(partlist.size() + total);
+							if (pp) {
+								partlist[l] = leaflist[i];
+							}
+							l = pc;
+							compute_indices(l, total);
+							l += multlist.size();
+							multlist.resize(multlist.size() + total);
+							if (pc) {
+								multlist[l] = leaflist[i];
+							}
+						}
+					__syncwarp();
+						//					tm = clock64();
+						cuda_gravity_pc(gtype, data, self, multlist, nactive, min_rung == 0);
+						cuda_gravity_pp(gtype, data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
+					} else {
+						const int start = checks.size();
+						checks.resize(start + leaflist.size());
+						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
+							checks[start + i] = leaflist[i];
+						}
+						__syncwarp();
+					}
+				}
+				if (self.leaf) {
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					pflops += do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass, h);
+					do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass, h);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
 					depth--;
-					if (tid == 0) {
-						returns.back().part_flops += pflops;
-						returns.back().node_flops += node_flops;
-					}
 				} else {
-					const int start = dchecks.size();
-					dchecks.resize(start + leaflist.size());
-					for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
-						dchecks[start + i] = leaflist[i];
-					}
-					__syncwarp();
 					const int active_left = tree_nodes[self.children[LEFT].index].nactive;
 					const int active_right = tree_nodes[self.children[RIGHT].index].nactive;
 					Lpos.push_back(self.pos);
