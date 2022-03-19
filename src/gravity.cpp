@@ -28,7 +28,7 @@
 
 #include <boost/align/aligned_allocator.hpp>
 
-size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id self, gravity_cc_type type, bool do_phi) {
+size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -81,7 +81,7 @@ size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			}
 			flops += 3 * count;
 			expansion<simd_float> D;
-			if (type == GRAVITY_CC_DIRECT) {
+			if (type == GRAVITY_DIRECT) {
 				flops += count * greens_function(D, dx);
 			} else {
 				flops += count * ewald_greens_function(D, dx);
@@ -95,7 +95,7 @@ size_t cpu_gravity_cc(expansion<float>& L, const vector<tree_id>& list, tree_id 
 	return flops;
 }
 
-size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+size_t cpu_gravity_cp(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
 	const static bool do_sph = get_options().sph;
 	size_t flops = 0;
@@ -168,7 +168,11 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 				}
 				flops += cnt * 3;
 				expansion<simd_float> D;
-				flops += cnt * greens_function(D, dx);
+				if (type == GRAVITY_DIRECT) {
+					flops += count * greens_function(D, dx);
+				} else {
+					flops += count * ewald_greens_function(D, dx);
+				}
 				for (int l = 0; l < EXPANSION_SIZE; l++) {
 					L0[l] += mass * D[l];
 				}
@@ -182,7 +186,7 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 	return flops;
 }
 
-size_t cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
+size_t cpu_gravity_pc(gravity_cc_type type, force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
 	size_t flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -242,7 +246,11 @@ size_t cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector
 					}
 					flops += 3 * count;
 					expansion<simd_float> D;
-					flops += count * greens_function(D, dx);
+					if (type == GRAVITY_DIRECT) {
+						flops += count * greens_function(D, dx);
+					} else {
+						flops += count * ewald_greens_function(D, dx);
+					}
 					flops += count * M2L(L, M[j], D, min_rung == 0);
 				}
 				const int j = i - range.first;
@@ -256,7 +264,7 @@ size_t cpu_gravity_pc(force_vectors& f, int min_rung, tree_id self, const vector
 	return flops;
 }
 
-size_t cpu_gravity_pp(force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
+size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
 	size_t flops = 0;
 	timer tm;
 	tm.start();

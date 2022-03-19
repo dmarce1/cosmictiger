@@ -250,7 +250,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		kr.node_flops += maxi * 15;
 	}
 	std::swap(echecklist, nextlist);
-	kr.node_flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_EWALD, params.min_rung == 0);
+	kr.node_flops += cpu_gravity_cc(GRAVITY_EWALD, L, multlist, self, params.min_rung == 0);
 	nextlist.resize(0);
 	multlist.resize(0);
 	partlist.resize(0);
@@ -307,8 +307,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		std::swap(dchecklist, nextlist);
 		nextlist.resize(0);
 	} while (dchecklist.size() && self_ptr->leaf);
-	these_flops += cpu_gravity_cc(L, multlist, self, GRAVITY_CC_DIRECT, params.min_rung == 0);
-	these_flops += cpu_gravity_cp(L, partlist, self, params.min_rung == 0);
+	these_flops += cpu_gravity_cc(GRAVITY_DIRECT, L, multlist, self, params.min_rung == 0);
+	these_flops += cpu_gravity_cp(GRAVITY_DIRECT, L, partlist, self, params.min_rung == 0);
 	if (self_ptr->leaf) {
 		if (cuda_workspace != nullptr) {
 			cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
@@ -357,8 +357,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				partlist.push_back(leaflist[i]);
 			}
 		}
-		kr.part_flops += cpu_gravity_pc(forces, params.min_rung, self, multlist);
-		kr.part_flops += cpu_gravity_pp(forces, params.min_rung, self, partlist, params.h);
+		kr.part_flops += cpu_gravity_pc(GRAVITY_DIRECT, forces, params.min_rung, self, multlist);
+		kr.part_flops += cpu_gravity_pp(GRAVITY_DIRECT, forces, params.min_rung, self, partlist, params.h);
 		cleanup_workspace(std::move(workspace));
 
 		const auto rng = self_ptr->part_range;

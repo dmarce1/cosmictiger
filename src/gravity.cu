@@ -22,8 +22,8 @@
 #include <cosmictiger/kernel.hpp>
 
 __device__
-int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, MULTLIST_SIZE>& multlist,
-		gravity_cc_type type, bool do_phi) {
+int cuda_gravity_cc(gravity_cc_type type, const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self,
+		const fixedcapvec<int, MULTLIST_SIZE>& multlist, bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
 	const auto& tree_nodes = data.tree_nodes;
@@ -41,7 +41,7 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
 			flops += 3;
-			if (type == GRAVITY_CC_DIRECT) {
+			if (type == GRAVITY_DIRECT) {
 				flops += greens_function(D, dx);
 			} else {
 				flops += ewald_greens_function(D, dx);
@@ -61,8 +61,8 @@ int cuda_gravity_cc(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, float dm_mass,
-		float sph_mass, bool do_phi) {
+int cuda_gravity_cp(gravity_cc_type type, const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self,
+		const fixedcapvec<int, PARTLIST_SIZE>& partlist, float dm_mass, float sph_mass, bool do_phi) {
 	int flops = 0;
 	__shared__
 	extern int shmem_ptr[];
@@ -131,7 +131,11 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 				const float mass = !sph ? 1.f : (sph && (src_fpot[j] != 0.f) ? sph_mass : dm_mass);
 				flops += 3;
 				expansion<float> D;
-				flops += greens_function(D, dx);
+				if (type == GRAVITY_DIRECT) {
+					flops += greens_function(D, dx);
+				} else {
+					flops += ewald_greens_function(D, dx);
+				}
 				for (int k = 0; k < EXPANSION_SIZE; k++) {
 					L[k] += mass * D[k];
 				}
@@ -153,7 +157,8 @@ int cuda_gravity_cp(const cuda_kick_data& data, expansion<float>& Lacc, const tr
 }
 
 __device__
-int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>& multlist, int nactive, bool do_phi) {
+int cuda_gravity_pc(gravity_cc_type type, const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>& multlist, int nactive,
+		bool do_phi) {
 	int flops = 0;
 	const int &tid = threadIdx.x;
 	__shared__
@@ -181,7 +186,11 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 				flops += 3;
 				expansion<float> D;
-				flops += greens_function(D, dx);
+				if (type == GRAVITY_DIRECT) {
+					flops += greens_function(D, dx);
+				} else {
+					flops += ewald_greens_function(D, dx);
+				}
 				flops += M2L(L, M, D, do_phi);
 			}
 			gx[k] -= L(1, 0, 0);
@@ -199,8 +208,8 @@ int cuda_gravity_pc(const cuda_kick_data& data, const tree_node&, const fixedcap
 }
 
 __device__
-int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive, float h, float dm_mass,
-		float sph_mass, bool do_phi) {
+int cuda_gravity_pp(gravity_cc_type type, const cuda_kick_data& data, const tree_node& self, const fixedcapvec<int, PARTLIST_SIZE>& partlist, int nactive,
+		float h, float dm_mass, float sph_mass, bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
@@ -315,7 +324,7 @@ int cuda_gravity_pp(const cuda_kick_data& data, const tree_node& self, const fix
 						const float F0 = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
 						float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * h3inv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * h3inv_j) * r1inv;
 						r3inv = F0 + Fc;
-				//		PRINT( "%e\n", Fc/F0);
+						//		PRINT( "%e\n", Fc/F0);
 						if (do_phi) {
 							const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
 							const float potc = q_i > 0.0f ? 0.5f * (fpot_i * kernelW(q_i) * h3inv_i + fpot_j * kernelW(q_j) * h3inv_j) : 0.f;

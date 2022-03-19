@@ -169,7 +169,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 				const double vx = particles_vel(XDIM, k);
 				const double vy = particles_vel(YDIM, k);
 				const double vz = particles_vel(ZDIM, k);
-				rho_max = std::max(rho_max, (double) sph_particles_rho(k));
+				rho_max = std::max(rho_max, (double) sph_particles_rho(i));
 				xmom += m * vx;
 				ymom += m * vy;
 				zmom += m * vz;
@@ -254,7 +254,9 @@ void hydro_plummer() {
 			particles_rung(k) = 0;
 		}
 	}
-	while (sph_particles_size() < N / 2) {
+	sph_particles_resize(N/2);
+	int k = 0;
+	while (k < N / 2) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
@@ -262,8 +264,8 @@ void hydro_plummer() {
 		double dist = powf(1.0 + sqr(r / a), -2.5);
 		if (rand1() < dist) {
 			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
-			part_int k = sph_particles_size();
-			sph_particles_resize(k + 1);
+//			part_int k = sph_particles_size();
+//			sph_particles_resize(k + 1);
 			double phi = -G * M0 / sqrt(r * r + a * a);
 			double v = sqrt(-phi / 2.0);
 			sph_particles_pos(XDIM, k) = x - 0.5;
@@ -287,6 +289,7 @@ void hydro_plummer() {
 			sph_particles_smooth_len(k) = h;
 			ekin += 0.5 * m * sqr(v);
 			pot += 0.5 * m * phi;
+			k++;
 		}
 	}
 	PRINT("Virial error is %e\n", (2.0 * ekin + pot) / (2.0 * ekin - pot));
