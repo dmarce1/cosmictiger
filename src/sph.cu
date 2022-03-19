@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                                           const T& operator[](int i) const {
+	                                                                                                                                                                                                                                                                const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -1029,16 +1029,17 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					ws.rec2_main[k].fpre = data.fpre[pi];
 					ws.rec2_main[k].shearv = data.shearv[pi];
 					if (data.chemistry) {
-						ws.rec2_main[k].gamma = data.gamma[pi];
 						ws.rec2_main[k].chem = data.chem[pi];
 						ws.rec2_main[k].chem0 = data.chem0[pi];
+					}
+					if (data.conduction) {
+						ws.rec2_main[k].gamma = data.gamma[pi];
+						ws.rec2_main[k].mmw = data.mmw[pi];
+						ws.rec2_main[k].gradT = data.gradT[pi];
 					} else {
 						ws.rec2_main[k].gamma = data.def_gamma;
 					}
-					if (data.conduction) {
-						ws.rec2_main[k].mmw = data.mmw[pi];
-						ws.rec2_main[k].gradT = data.gradT[pi];
-					}
+
 				}
 			}
 		}
@@ -1219,11 +1220,11 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					den += 1.f;
 					den_eint += 1.f;
 					num_eint += data.eint0[i];
-					data.deint_snk[snki] = num_eint / den_eint - eint_i;
+					data.deint_snk[snki] = (num_eint - den_eint * eint_i) / den_eint;
 					if (data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							num_chem[fi] += data.chem0[i][fi];
-							data.dchem_snk[snki][fi] = num_chem[fi] / den - chem_i[fi];
+							data.dchem_snk[snki][fi] = (num_chem[fi] - den * chem_i[fi]) / den;
 						}
 					}
 				}
@@ -1289,6 +1290,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					if (params.conduction && params.phase == 1) {
 						ws.rec2_main[k].gamma = data.gamma[pi];
 						ws.rec2_main[k].mmw = data.mmw[pi];
+					}
+					if (params.diffusion && params.phase == 1) {
 						ws.rec2_main[k].eint = data.eint[pi];
 					}
 				}
@@ -1407,8 +1410,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvx_dz -= mrhoinv_i * vx_ij * dWdr_z_i * ainv;
 					dvy_dz -= mrhoinv_i * vy_ij * dWdr_z_i * ainv;
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
+					const float eint_j = rec2.eint;
 					if (params.conduction && params.phase == 1) {
-						const float eint_j = rec2.eint;
 						const float mu_j = rec2.mmw;
 						const float gamma_j = rec2.gamma;
 						const float T_j = mu_j * eint_j / cv0 * sqr(ainv) / (gamma_j - 1.f);
@@ -1416,9 +1419,11 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						dT_dx += mrhoinv_i * tmp * dWdr_x_i * ainv;
 						dT_dy += mrhoinv_i * tmp * dWdr_y_i * ainv;
 						dT_dz += mrhoinv_i * tmp * dWdr_z_i * ainv;
+					}
+					if (params.diffusion && params.phase == 1) {
 						const float W_i = kernelW(q_i) * h3inv_i;
 						const float etot = eint_j + 0.5f * (sqr(vx_j) + sqr(vy_j) + sqr(vz_j));
-						eavg += etot * mrhoinv_i;
+						eavg += etot * mrhoinv_i * W_i;
 					}
 				}
 
@@ -1448,6 +1453,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dx);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dy);
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dT_dz);
+				}
+				if (params.diffusion && params.phase == 1) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(eavg);
 				}
 				if (tid == 0) {
@@ -1460,8 +1467,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					data.crsv_snk[snki] = sqrtf(sqr(curl_vx) + sqr(curl_vy) + sqr(curl_vz));
 					data.shearv_snk[snki] = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
 					if (params.conduction && params.phase == 1) {
-						data.eavg_snk[snki] = eavg;
 						data.gradT_snk[snki] = sqrtf(sqr(dT_dx) + sqr(dT_dy) + sqr(dT_dz));
+					}
+					if (params.diffusion && params.phase == 1) {
+						data.eavg_snk[snki] = eavg;
 					}
 				}
 			}
