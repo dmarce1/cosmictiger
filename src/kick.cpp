@@ -331,10 +331,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const auto myrange = self_ptr->part_range;
 				bool pp = false;
 				for (part_int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
-					j = std::min(j, std::max(myrange.second - SIMD_FLOAT_SIZE,0));
 					for (int dim = 0; dim < NDIM; dim++) {
 						for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-							self_pos[dim][k] = particles_pos(dim, j + k).raw();
+							self_pos[dim][k] = particles_pos(dim, std::min(j + k, myrange.second - 1)).raw();
 						}
 					}
 					for (int dim = 0; dim < NDIM; dim++) {
