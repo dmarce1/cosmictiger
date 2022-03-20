@@ -414,12 +414,12 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				const auto* other = sph_tree_get_node(checklist[ci]);
 				bool test2 = false;
 				bool test1 = false;
-				if (params.seti | SPH_INTERACTIONS_I) {
+			//	if (params.seti | SPH_INTERACTIONS_I) {
 					test1 = range_intersect(self_ptr->outer_box, other->inner_box);
-				}
-				if (params.seti | SPH_INTERACTIONS_J) {
+			//	}
+			//	if (params.seti | SPH_INTERACTIONS_J) {
 					test2 = range_intersect(self_ptr->inner_box, other->outer_box);
-				}
+			//	}
 				if (test1 || test2) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
@@ -481,20 +481,20 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 }
 				 }*/
 
-				if ((params.seto & SPH_SET_ALL) || (active && (params.seto & SPH_SET_ACTIVE)) || (semiactive && (params.seto & SPH_SET_SEMIACTIVE))) {
+			//	if ((params.seto & SPH_SET_ALL) || (active && (params.seto & SPH_SET_ACTIVE)) || (semiactive && (params.seto & SPH_SET_SEMIACTIVE))) {
 					for (int dim = 0; dim < NDIM; dim++) {
 						const double x = X[dim].to_double();
 						obox.begin[dim] = std::min(obox.begin[dim].to_double(), x - h - tiny);
 						obox.end[dim] = std::max(obox.end[dim].to_double(), x + h + tiny);
 					}
-				}
-				if ((params.seti & SPH_SET_ALL) || (active && (params.seti & SPH_SET_ACTIVE)) || (semiactive && (params.seti & SPH_SET_SEMIACTIVE))) {
+			//	}
+				//if ((params.seti & SPH_SET_ALL) || (active && (params.seti & SPH_SET_ACTIVE)) || (semiactive && (params.seti & SPH_SET_SEMIACTIVE))) {
 					for (int dim = 0; dim < NDIM; dim++) {
 						const double x = X[dim].to_double();
 						ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - tiny);
 						ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + tiny);
 					}
-				}
+			//	}
 			}
 			if (show) {
 				for (int dim = 0; dim < NDIM; dim++) {
