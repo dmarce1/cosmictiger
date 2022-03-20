@@ -285,24 +285,22 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			kr = sph_run_return();
 		} while (cont);
 		sparams.phase = 0;
-		if (tau != 0.0) {
-			sph_particles_apply_updates(minrung, 0, t0, tau);
-			if (!glass) {
-				sparams.phase = 0;
-				sparams.run_type = SPH_RUN_AUX;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-				tm.reset();
-				sparams.phase = 1;
-			}
-		}
 	} else {
 		if (!glass) {
 			if (tau != 0.0) {
+				sph_particles_apply_updates(minrung, 0, t0, tau);
+			}
+			sparams.phase = 0;
+			sparams.run_type = SPH_RUN_AUX;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+			tm.reset();
+			sparams.phase = 1;
 
+			if (tau != 0.0) {
 				tnparams.h_wt = 1.001;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.set = SPH_SET_ACTIVE;
