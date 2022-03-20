@@ -57,10 +57,10 @@ void kernel_adjust_options(options& opts) {
 	case KERNEL_WENDLAND_C2:
 	case KERNEL_WENDLAND_C4:
 	case KERNEL_WENDLAND_C6:
-	case KERNEL_SUPER_GAUSSIAN:
 		break;
 	default:
 		PRINT("Error ! Unknown kernel!\n");
+		abort();
 	}
 	h = kernel_stddev(kernelW<double>);
 	PRINT( "kernel width = %e\n", h0/h);
