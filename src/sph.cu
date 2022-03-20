@@ -737,6 +737,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float crsv_i = data.crsv[i];
 				const float shearv_i = data.shearv[i];
 				const float divv_i = data.divv[i];
+				if( divv_i != 1.0e-10f ) {
+					PRINT( "!!!!!!!!!1 %e\n", divv_i);
+					__trap();
+				}
 				const float fpre_i = data.fpre[i];
 				const float balsara_i = fabs(divv_i) / (fabs(divv_i) + crsv_i + 1e-4f * c_i * hinv_i * ainv);
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
@@ -792,6 +796,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vy_j = rec2.vy;
 					const float vz_j = rec2.vz;
 					const float divv_j = rec2.divv;
+					if( divv_j != 1.0e-10f ) {
+						PRINT( "!!!!!!!!!1 \n");
+						__trap();
+					}
 					const float crsv_j = rec2.crsv;
 					const float fpre_j = rec2.fpre;
 					const float h_j = rec1.h;

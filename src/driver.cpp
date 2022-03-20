@@ -354,18 +354,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
 				tm.reset();
-
-				sparams.phase = 1;
-				sparams.run_type = SPH_RUN_AUX;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-				tm.reset();
-				sparams.phase = 0;
-				PRINT("FINISHED in %i ITERS\n", iters);
 			}
+
+			sparams.phase = 1;
+			sparams.run_type = SPH_RUN_AUX;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+			tm.reset();
 			sparams.phase = 0;
 
 			if (get_options().diffusion && tau != 0.0) {

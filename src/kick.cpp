@@ -120,7 +120,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
-	params.gpu = false;
+	//params.gpu = false;
 	stack_trace_activate();
 	const static bool sph = get_options().sph;
 	const static float dm_mass = get_options().dm_mass;
