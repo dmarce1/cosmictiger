@@ -403,15 +403,13 @@ size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree
 								const auto dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * rinv1;
 								const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1;
 								auto Fc = simd_float(0.5f) * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
-								Fc *= (fpot_j < simd_float(0))*(fpot_i < simd_float(0));
 								rinv3 = F0 + Fc;                            // + Fc;
 								if (min_rung == 0) {
 									const auto pot0 = simd_float(0.5f) * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
 									const auto W_i = (q_i > simd_float(0)) * kernelW(q_i) * h3inv_i;
 									const auto W_j = (q_j > simd_float(0)) * kernelW(q_j) * h3inv_j;
 									auto potc = simd_float(0.5f) * (fpot_i * W_i + fpot_j * W_j);
-									potc *= (fpot_j < simd_float(0))*(fpot_i < simd_float(0));
-									rinv1 = pot0 + potc;                            // + potc;
+									rinv1 = pot0 - potc;                            // + potc;
 								}
 							}
 							rinv3 *= mass;
