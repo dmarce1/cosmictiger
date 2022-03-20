@@ -115,7 +115,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 							dloghdt = -2.0 / dt0;
 						}
 						float c0 = exp(dloghdt*dt);
-						h *= c0;
+				//		h *= c0;
 						if( h > 0.5 ) {
 							PRINT( "BIG H! %e %e %e\n", x, y, z);
 						}
