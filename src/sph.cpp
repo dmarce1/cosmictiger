@@ -91,7 +91,8 @@ struct sph_run_workspace {
 };
 
 vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z) {
-	int max_rung = 0;
+	return vector<sph_values>();
+	/*int max_rung = 0;
 	sph_tree_create_params tparams;
 	PRINT("Doing values at\n");
 	tparams.h_wt = 2.0;
@@ -167,7 +168,7 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 	}
 	sph_tree_destroy(true);
 	sph_particles_cache_free();
-	return values;
+	return values;*/
 }
 
 inline bool range_contains(const fixed32_range& a, const array<fixed32, NDIM> x) {
@@ -413,10 +414,10 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				const auto* other = sph_tree_get_node(checklist[ci]);
 				bool test2 = false;
 				bool test1 = false;
-				if (params.set | SPH_INTERACTIONS_I) {
+				if (params.seti | SPH_INTERACTIONS_I) {
 					test1 = range_intersect(self_ptr->outer_box, other->inner_box);
 				}
-				if (params.set | SPH_INTERACTIONS_J) {
+				if (params.seti | SPH_INTERACTIONS_J) {
 					test2 = range_intersect(self_ptr->inner_box, other->outer_box);
 				}
 				if (test1 || test2) {
@@ -480,17 +481,19 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 }
 				 }*/
 
-				if ((params.set & SPH_SET_ALL) || (active && (params.set & SPH_SET_ACTIVE)) || (semiactive && (params.set & SPH_SET_SEMIACTIVE))) {
+				if ((params.seto & SPH_SET_ALL) || (active && (params.seto & SPH_SET_ACTIVE)) || (semiactive && (params.seto & SPH_SET_SEMIACTIVE))) {
 					for (int dim = 0; dim < NDIM; dim++) {
 						const double x = X[dim].to_double();
 						obox.begin[dim] = std::min(obox.begin[dim].to_double(), x - h - tiny);
 						obox.end[dim] = std::max(obox.end[dim].to_double(), x + h + tiny);
 					}
 				}
-				for (int dim = 0; dim < NDIM; dim++) {
-					const double x = X[dim].to_double();
-					ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - tiny);
-					ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + tiny);
+				if ((params.seti & SPH_SET_ALL) || (active && (params.seti & SPH_SET_ACTIVE)) || (semiactive && (params.seti & SPH_SET_SEMIACTIVE))) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const double x = X[dim].to_double();
+						ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - tiny);
+						ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + tiny);
+					}
 				}
 			}
 			if (show) {
@@ -1982,11 +1985,11 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 												if(!isfinite(e0)) {
 													PRINT( "e0 = %e\n", e0);
 												}
-												e0 =  sph_particles_eint(j);
+												e0 = sph_particles_eint(j);
 												ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
 												this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
 												if( fabs(5.303934e-04 - fabs(sph_particles_deint(j)/e0)) < 1e-4) {
-							//						PRINT( "%e %e\n", sph_particles_eint(j),sph_particles_deint(j));
+													//						PRINT( "%e %e\n", sph_particles_eint(j),sph_particles_deint(j));
 												}
 												apply_d(sph_particles_eint(j), sph_particles_deint(j));
 												if( chem ) {

@@ -102,7 +102,8 @@ struct sph_tree_neighbor_params {
 	int run_type;
 	float h_wt;
 	int min_rung;
-	int set;
+	int seti;
+	int seto;
 	double x;
 	double y;
 	double z;

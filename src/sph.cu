@@ -1476,8 +1476,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						data.taux_snk[snki] = params.tau;
 					}
 					data.divv_snk[snki] = div_v;
-					data.crsv_snk[snki] = sqrtf(sqr(curl_vx) + sqr(curl_vy) + sqr(curl_vz));
-					data.shearv_snk[snki] = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
+					data.crsv_snk[snki] = 0.;
+					data.shearv_snk[snki] = 0.;
 					if (params.conduction && params.phase == 1) {
 						data.gradT_snk[snki] = sqrtf(sqr(dT_dx) + sqr(dT_dy) + sqr(dT_dz));
 					}
