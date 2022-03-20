@@ -316,6 +316,8 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 	std::swap(sph_particles_ta[i], sph_particles_ta[j]);
 	std::swap(sph_particles_ta0[i], sph_particles_ta0[j]);
+	std::swap(sph_particles_fp[i], sph_particles_fp[j]);
+	std::swap(sph_particles_f0[i], sph_particles_f0[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
 	std::swap(sph_particles_dvv0[i], sph_particles_dvv0[j]);
 	std::swap(sph_particles_crsv[i], sph_particles_crsv[j]);
@@ -416,7 +418,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
-		sph_particles_array_resize(sph_particles_fv, new_capacity, true);
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dc, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
@@ -498,7 +499,6 @@ void sph_particles_free() {
 //			CUDA_CHECK(cudaFree(sph_particles_sn));
 //			CUDA_CHECK(cudaFree(sph_particles_dz));
 		}
-		CUDA_CHECK(cudaFree(sph_particles_fv));
 		CUDA_CHECK(cudaFree(sph_particles_h));
 		for (int dim = 0; dim < NDIM; dim++) {
 			CUDA_CHECK(cudaFree(sph_particles_dv1[NDIM]));
@@ -518,7 +518,6 @@ void sph_particles_free() {
 		free(sph_particles_dvv);
 		free(sph_particles_sa);
 		free(sph_particles_f0);
-		free(sph_particles_fv);
 		free(sph_particles_a);
 		for (int dim = 0; dim < NDIM; dim++) {
 			free(sph_particles_dv1[NDIM]);
@@ -1214,6 +1213,8 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_alpha(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_crsv[0], sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_fp[0], sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_f0[0], sizeof(float), sph_particles_size(), fp);
 	if (cond) {
 		FREAD(&sph_particles_gt[0], sizeof(float), sph_particles_size(), fp);
 	}
@@ -1253,6 +1254,8 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_alpha(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_crsv[0], sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_fp[0], sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_f0[0], sizeof(float), sph_particles_size(), fp);
 	if (cond) {
 		fwrite(&sph_particles_gt[0], sizeof(float), sph_particles_size(), fp);
 	}

@@ -94,7 +94,6 @@ SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistr
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem2; // chemistry
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN float* sph_particles_crsv; // divv
-SPH_PARTICLES_EXTERN float* sph_particles_fv; // balsara
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_ea; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //

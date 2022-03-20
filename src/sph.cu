@@ -156,7 +156,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	                                                                                                                                                                                                                                                                   const T& operator[](int i) const {
+	                                                                                                                                                                                                                                                                    const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -394,7 +394,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float pot = kernelPot(q);
 							const float force = kernelFqinv(q) * q;
 							drho_dh -= (3.f * kernelW(q) + q * dwdq);
-							dpot_dh -= (pot - q * force);
+							dpot_dh -= 0.f;
 							f += w;                                   // 1
 							dfdh += dwdh;                             // 1
 							flops += 15;
@@ -451,8 +451,10 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					drho_dh *= 4.0f * float(M_PI) / (9.0f * data.N);
 					dpot_dh *= sqr(h) * 4.0f * float(M_PI) / (9.f * data.N);
 					const float fpre = 1.0f / (1.0f + drho_dh);
-					data.fpre_snk[snki] = fpre;
-					data.fpot_snk[snki] = dpot_dh * fpre;
+					if (tid == 0) {
+						data.fpre_snk[snki] = fpre;
+						data.fpot_snk[snki] = dpot_dh * fpre;
+					}
 					if (tid == 0 && h <= 0.f) {
 						PRINT("Less than ZERO H! sph.cu %e\n", h);
 						__trap();
@@ -736,9 +738,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 				const float crsv_i = data.crsv[i];
 				const float shearv_i = data.shearv[i];
-				const float divv_i = data.divv[i];
-				if( divv_i != 1.0e-10f ) {
-					PRINT( "!!!!!!!!!1 %e\n", divv_i);
+				float divv_i = data.divv[i];
+				divv_i = 1e-10;
+				if (divv_i != 1.0e-10f) {
+					PRINT("!!!!!!!!!1 %e\n", divv_i);
 					__trap();
 				}
 				const float fpre_i = data.fpre[i];
@@ -795,9 +798,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vx_j = rec2.vx;
 					const float vy_j = rec2.vy;
 					const float vz_j = rec2.vz;
-					const float divv_j = rec2.divv;
-					if( divv_j != 1.0e-10f ) {
-						PRINT( "!!!!!!!!!1 \n");
+					float divv_j = rec2.divv;
+					divv_j = 1e-10;
+					if (divv_j != 1.0e-10f) {
+						PRINT("!!!!!!!!!1 \n");
 						__trap();
 					}
 					const float crsv_j = rec2.crsv;
@@ -837,7 +841,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float rhoinv_ij = 1.f / rho_ij;
 					const float c_ij = (sqrtrho_i * c_i + sqrtrho_j * c_j) / (sqrtrho_i + sqrtrho_j);
 					const float vsig_ij = (c_ij - params.beta * w_ij);								// 1
-					const float alpha_ij = 0.5f * (alpha_i * balsara_i + alpha_j * balsara_j);
+					const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 					const float viscco_ij = alpha_ij * h_ij * vsig_ij;
 					const float dvisc_ij = -viscco_ij * w_ij * rinv * rhoinv_ij;					//
 					const float W_i = kernelW(q_i) * h3inv_i;
@@ -935,7 +939,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float A2 = sqr(2.f * sqr(sqr(1.f - Ri)) * divv_i);
 						const float limiter = A2 / (A2 + sqr(shearv_i) + 1e-30f);
 						const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * params.a;
-						const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(vsig)), params.alpha0);
+						const float alpha_targ = fmaxf(params.alpha0, S / (S + sqr(vsig)) * params.alpha1);
 						const float dt_i = rung_dt[rung_i] * params.t0;
 						const float tauinv = (alpha_i < alpha_targ ? 1.f / params.cfl : params.alpha_decay) * vsig * hinv_i * ainv;
 						data.dalpha_con[snki] = tauinv * (alpha_targ - alpha_i);

@@ -284,21 +284,23 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
+		if (tau != 0.0) {
+			sph_particles_apply_updates(minrung, 0, t0, tau);
+			if (!glass) {
+				sparams.phase = 0;
+				sparams.run_type = SPH_RUN_AUX;
+				tm.start();
+				sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
+				tm.reset();
+				sparams.phase = 1;
+			}
+		}
 	} else {
 		if (!glass) {
 			if (tau != 0.0) {
-				sph_particles_apply_updates(minrung, 0, t0, tau);
-				if (!glass) {
-					sparams.phase = 0;
-					sparams.run_type = SPH_RUN_AUX;
-					tm.start();
-					sph_run(sparams, true);
-					tm.stop();
-					if (verbose)
-						PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
-					tm.reset();
-					sparams.phase = 1;
-				}
 
 				tnparams.h_wt = 1.001;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -425,15 +427,15 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 
 			bool rc = true;
-	/*		while (rc) {
-				sparams.run_type = SPH_RUN_RUNGS;
-				tm.start();
-				rc = sph_run(sparams, true).rc;
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
-				tm.reset();
-			}*/
+			/*		while (rc) {
+			 sparams.run_type = SPH_RUN_RUNGS;
+			 tm.start();
+			 rc = sph_run(sparams, true).rc;
+			 tm.stop();
+			 if (verbose)
+			 PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
+			 tm.reset();
+			 }*/
 			sph_particles_apply_updates(minrung, 2, t0, tau);
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
