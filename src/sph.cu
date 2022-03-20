@@ -859,7 +859,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					one += m * rhoinv_i * W_i;
 					Ri += copysign(m * rhoinv_i * W_i, divv_j);
 					const float hinv_ij = 1.f / h_ij;
-					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_i + 0.6f * viscco_ij * sqr(hinv_i));
+					dtinv_cfl = fmaxf(dtinv_cfl, c_ij * hinv_i + 0.6f * viscco_ij * hinv_i * hinv_ij);
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Ri);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
@@ -1167,7 +1167,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
 						const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-						const float difco_ij = SPH_DIFFUSION_C * 0.25f * sqr(h_i + h_j) * 0.5f * (shearv_i + shearv_j);
+						const float difco_ij = SPH_DIFFUSION_C * 0.25f * sqr(h_ij) * 0.5f * (shearv_i + shearv_j);
 						const float dt_ij = fminf(dt_i, dt_j);
 						const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
 						den += phi_ij;
@@ -1463,14 +1463,15 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(eavg);
 				}
 				if (tid == 0) {
+					div_v = 1.e-10;
 					if (params.phase == 0) {
 						data.divv0_snk[snki] = data.divv_snk[snki];
 						data.taux0_snk[snki] = data.taux_snk[snki];
 						data.taux_snk[snki] = params.tau;
 					}
 					data.divv_snk[snki] = div_v;
-					data.crsv_snk[snki] = sqrtf(sqr(curl_vx) + sqr(curl_vy) + sqr(curl_vz));
-					data.shearv_snk[snki] = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
+					data.crsv_snk[snki] = 0.f;
+					data.shearv_snk[snki] = 0.f;
 					if (params.conduction && params.phase == 1) {
 						data.gradT_snk[snki] = sqrtf(sqr(dT_dx) + sqr(dT_dy) + sqr(dT_dz));
 					}

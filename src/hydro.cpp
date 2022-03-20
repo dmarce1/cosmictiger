@@ -164,18 +164,19 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			double rho_max = 0.0;
 			double epot = kr.pot / 2.0;
 			double xmom = 0.0, ymom = 0.0, zmom = 0.0;
-			for (part_int i = 0; i < sph_particles_size(); i++) {
-				const int k = sph_particles_dm_index(i);
-				const double vx = particles_vel(XDIM, k);
-				const double vy = particles_vel(YDIM, k);
-				const double vz = particles_vel(ZDIM, k);
-				rho_max = std::max(rho_max, (double) sph_particles_rho(i));
+			for (part_int i = 0; i < particles_size(); i++) {
+				const double vx = particles_vel(XDIM, i);
+				const double vy = particles_vel(YDIM, i);
+				const double vz = particles_vel(ZDIM, i);
 				xmom += m * vx;
 				ymom += m * vy;
 				zmom += m * vz;
-				const double e = sph_particles_eint(i);
 				ekin += 0.5 * m * sqr(vx, vy, vz);
-				eint += m * e;
+				if (particles_type(i) == SPH_TYPE) {
+					rho_max = std::max(rho_max, (double) sph_particles_rho(particles_cat_index(i)));
+					const double e = sph_particles_eint(particles_cat_index(i));
+					eint += m * e;
+				}
 			}
 			FILE* fp = fopen("energy.dat", "at");
 			const double etot = ekin + eint + epot;
@@ -254,7 +255,7 @@ void hydro_plummer() {
 			particles_rung(k) = 0;
 		}
 	}
-	sph_particles_resize(N/2);
+	sph_particles_resize(N / 2);
 	int k = 0;
 	while (k < N / 2) {
 		double x = maxr * (2.0 * rand1() - 1.0);
@@ -284,7 +285,7 @@ void hydro_plummer() {
 			sph_particles_vel(XDIM, k) = x * v;
 			sph_particles_vel(YDIM, k) = y * v;
 			sph_particles_vel(ZDIM, k) = z * v;
-			sph_particles_eint(k) = 1.0e-30;
+			sph_particles_eint(k) = 1e-3 * (v * v * 0.5);
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
 			ekin += 0.5 * m * sqr(v);
@@ -294,7 +295,7 @@ void hydro_plummer() {
 	}
 	PRINT("Virial error is %e\n", (2.0 * ekin + pot) / (2.0 * ekin - pot));
 	const double tdyn = sqrt(4.0 * M_PI * a * a * a / (3.0 * G * M0));
-	hydro_driver(10.0 * tdyn, 128);
+	hydro_driver(100.0 * tdyn, 1024);
 }
 
 void hydro_star_test() {

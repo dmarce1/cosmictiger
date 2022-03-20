@@ -304,6 +304,8 @@ void sph_particles_energy_to_entropy(float a) {
 
 void sph_particles_swap(part_int i, part_int j) {
 	static const bool chem = get_options().chem;
+	static const bool diff = get_options().diffusion;
+	static const bool cond = get_options().conduction;
 	static const bool stars = get_options().stars;
 	static const bool xsph = get_options().xsph != 0.0;
 	std::swap(sph_particles_a[i], sph_particles_a[j]);
@@ -316,6 +318,14 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_ta0[i], sph_particles_ta0[j]);
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
 	std::swap(sph_particles_dvv0[i], sph_particles_dvv0[j]);
+	std::swap(sph_particles_crsv[i], sph_particles_crsv[j]);
+	std::swap(sph_particles_s2[i], sph_particles_s2[j]);
+	if (cond) {
+		std::swap(sph_particles_gt[i], sph_particles_gt[j]);
+	}
+	if (diff) {
+		std::swap(sph_particles_ea[i], sph_particles_ea[j]);
+	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_dv1[dim][i], sph_particles_dv1[dim][j]);
 		if (xsph) {
@@ -1187,6 +1197,8 @@ void sph_particles_cache_free() {
 
 void sph_particles_load(FILE* fp) {
 	const bool chem = get_options().chem;
+	const bool diff = get_options().diffusion;
+	const bool cond = get_options().conduction;
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
@@ -1200,6 +1212,14 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dalpha_pred(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_alpha(0), sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_crsv[0], sizeof(float), sph_particles_size(), fp);
+	FREAD(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
+	if (cond) {
+		FREAD(&sph_particles_gt[0], sizeof(float), sph_particles_size(), fp);
+	}
+	if (diff) {
+		FREAD(&sph_particles_ea[0], sizeof(float), sph_particles_size(), fp);
+	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (xsph) {
 			FREAD(&sph_particles_xvel(dim, 0), sizeof(float), sph_particles_size(), fp);
@@ -1216,6 +1236,8 @@ void sph_particles_load(FILE* fp) {
 
 void sph_particles_save(FILE* fp) {
 	const bool chem = get_options().chem;
+	const bool diff = get_options().diffusion;
+	const bool cond = get_options().conduction;
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
@@ -1229,6 +1251,14 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dalpha_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_alpha(0), sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_crsv[0], sizeof(float), sph_particles_size(), fp);
+	fwrite(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
+	if (cond) {
+		fwrite(&sph_particles_gt[0], sizeof(float), sph_particles_size(), fp);
+	}
+	if (diff) {
+		fwrite(&sph_particles_ea[0], sizeof(float), sph_particles_size(), fp);
+	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (xsph) {
 			fwrite(&sph_particles_xvel(dim, 0), sizeof(float), sph_particles_size(), fp);

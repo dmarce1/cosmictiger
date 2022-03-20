@@ -1880,8 +1880,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 		for (int i = 0; i < host_selflist.size(); i++) {
 			const auto& node = host_trees[host_selflist[i]];
 			const part_int offset = node.sink_part_range.first - node.part_range.first;
-			for (part_int i = node.part_range.first; i < node.part_range.second; i++) {
-				sph_particles_rung(i + offset) = host_rungs[i];
+			for (part_int j = node.part_range.first; j < node.part_range.second; j++) {
+				sph_particles_rung(j + offset) = host_rungs[j];
 			}
 		}
 	}
@@ -1978,14 +1978,15 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 											const bool sa = sph_particles_semi_active(j);
 											if( rung >= minrung || sa) {
 												const float e1 = sph_particles_eint(j) + 0.5*(sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j)));
-												const float e0 = std::max(sph_particles_eavg(j), e1);
+												float e0 = std::max(sph_particles_eavg(j), e1);
 												if(!isfinite(e0)) {
 													PRINT( "e0 = %e\n", e0);
 												}
+												e0 =  sph_particles_eint(j);
 												ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
 												this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
-												if( fabs(3.467579e-03 - fabs(sph_particles_deint(j)/e0)) < 1e-4) {
-//													PRINT( "%e %e\n", sph_particles_eint(j),sph_particles_deint(j));
+												if( fabs(5.303934e-04 - fabs(sph_particles_deint(j)/e0)) < 1e-4) {
+							//						PRINT( "%e %e\n", sph_particles_eint(j),sph_particles_deint(j));
 												}
 												apply_d(sph_particles_eint(j), sph_particles_deint(j));
 												if( chem ) {

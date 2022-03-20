@@ -427,7 +427,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 
 			bool rc = true;
-			while (rc) {
+	/*		while (rc) {
 				sparams.run_type = SPH_RUN_RUNGS;
 				tm.start();
 				rc = sph_run(sparams, true).rc;
@@ -435,7 +435,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
 				tm.reset();
-			}
+			}*/
 			sph_particles_apply_updates(minrung, 2, t0, tau);
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
