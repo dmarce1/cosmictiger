@@ -1421,7 +1421,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 						switch(params.run_type) {
 
 							case SPH_RUN_SMOOTHLEN:
-							if( !test && params.phase == 1) {
+							if( params.phase == 1) {
 								test = has_active_neighbors(self);
 							} else {
 								test = self->nactive > 0;

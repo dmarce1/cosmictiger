@@ -495,7 +495,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 			for (int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
 				if (sph) {
-					const int k = particles_cat_index(i);
+					const part_int k = particles_cat_index(i);
 					int type = particles_type(i);
 					if (hsoft) {
 						if (type != SPH_TYPE) {
