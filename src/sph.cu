@@ -394,7 +394,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float pot = kernelPot(q);
 							const float force = kernelFqinv(q) * q;
 							drho_dh -= (3.f * kernelW(q) + q * dwdq);
-							dpot_dh -= 0.f;
+							dpot_dh -= (pot - q * force);
 							f += w;                                   // 1
 							dfdh += dwdh;                             // 1
 							flops += 15;
@@ -454,7 +454,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					if (tid == 0) {
 						data.fpre_snk[snki] = fpre;
 						data.fpot_snk[snki] = dpot_dh * fpre;
-					}
+				}
 					if (tid == 0 && h <= 0.f) {
 						PRINT("Less than ZERO H! sph.cu %e\n", h);
 						__trap();
@@ -739,11 +739,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float crsv_i = data.crsv[i];
 				const float shearv_i = data.shearv[i];
 				float divv_i = data.divv[i];
-				divv_i = 1e-10;
-				if (divv_i != 1.0e-10f) {
-					PRINT("!!!!!!!!!1 %e\n", divv_i);
-					__trap();
-				}
 				const float fpre_i = data.fpre[i];
 				const float balsara_i = fabs(divv_i) / (fabs(divv_i) + crsv_i + 1e-4f * c_i * hinv_i * ainv);
 				const int jmax = round_up(ws.rec1_main.size(), block_size);
@@ -841,7 +836,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float rhoinv_ij = 1.f / rho_ij;
 					const float c_ij = (sqrtrho_i * c_i + sqrtrho_j * c_j) / (sqrtrho_i + sqrtrho_j);
 					const float vsig_ij = (c_ij - params.beta * w_ij);								// 1
-					const float alpha_ij = 0.5f * (alpha_i + alpha_j);
+					const float alpha_ij = 0.5f * (alpha_i * balsara_i + alpha_j * balsara_j);
 					const float viscco_ij = alpha_ij * h_ij * vsig_ij;
 					const float dvisc_ij = -viscco_ij * w_ij * rinv * rhoinv_ij;					//
 					const float W_i = kernelW(q_i) * h3inv_i;
@@ -1475,7 +1470,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(eavg);
 				}
 				if (tid == 0) {
-					div_v = 1.e-10;
 					if (params.phase == 0) {
 						data.divv0_snk[snki] = data.divv_snk[snki];
 						data.taux0_snk[snki] = data.taux_snk[snki];
