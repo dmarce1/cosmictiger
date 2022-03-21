@@ -21,11 +21,12 @@
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 
 #define alpha 2.0f
 #define eta 0.25f
 
-#define BLOCK_SIZE 1024
+#define BLOCK_SIZE 512
 
 __global__ void sphere_surface_kernel(float** x_main, float** y_main, float** z_main, int* N_main) {
 	const int tid = threadIdx.x;
@@ -33,31 +34,29 @@ __global__ void sphere_surface_kernel(float** x_main, float** y_main, float** z_
 	float* x = x_main[bid];
 	float* y = y_main[bid];
 	float* z = z_main[bid];
-	int N = N_main[bid];
+	const int N = N_main[bid];
 	constexpr unsigned a0 = 1103515245;
 	constexpr unsigned c0 = 12345;
 	constexpr unsigned m0 = 1UL << 31;
 	unsigned rnd_num = tid;
-	__shared__ float* vx;
-	__shared__ float* vy;
-	__shared__ float* vz;
-	__shared__ float* gx;
-	__shared__ float* gy;
-	__shared__ float* gz;
+	__shared__ device_vector<float> vx;
+	__shared__ device_vector<float> vy;
+	__shared__ device_vector<float> vz;
+	__shared__ device_vector<float> gx;
+	__shared__ device_vector<float> gy;
+	__shared__ device_vector<float> gz;
+	new(&vx) device_vector<float>(N);
+	new(&vy) device_vector<float>(N);
+	new(&vz) device_vector<float>(N);
+	new(&gx) device_vector<float>(N);
+	new(&gy) device_vector<float>(N);
+	new(&gz) device_vector<float>(N);
 	float gmax;
 	const float h = 0.9f * sqrt(4.f * float(M_PI) / N);
 	const float h2 = h * h;
 	const float hinv = 1.f / h;
 	const float h3inv = hinv * hinv * hinv;
 	const float m = 1.0f / N;
-	if (tid == 0) {
-		vx = new float[N];
-		vy = new float[N];
-		vz = new float[N];
-		gx = new float[N];
-		gy = new float[N];
-		gz = new float[N];
-	}
 	__syncthreads();
 	const float m0inv = 1.f / m0;
 	for (int i = tid; i < N; i += BLOCK_SIZE) {
@@ -159,14 +158,12 @@ __global__ void sphere_surface_kernel(float** x_main, float** y_main, float** z_
 		PRINT("Solved for %i\n", N);
 	}
 	__syncthreads();
-	if (tid == 0) {
-		delete[] vx;
-		delete[] vy;
-		delete[] vz;
-		delete[] gx;
-		delete[] gy;
-		delete[] gz;
-	}
+	(&vx)->~device_vector<float>();
+	(&vy)->~device_vector<float>();
+	(&vz)->~device_vector<float>();
+	(&gx)->~device_vector<float>();
+	(&gy)->~device_vector<float>();
+	(&gz)->~device_vector<float>();
 
 }
 

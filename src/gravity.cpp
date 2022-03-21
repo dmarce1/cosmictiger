@@ -517,12 +517,12 @@ size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree
 							fx *= m_j;
 							fy *= m_j;
 							fz *= m_j;
-							const int l = i - range.first;
-							f.gx[l] += fx.sum();
-							f.gy[l] += fy.sum();
-							f.gz[l] += fz.sum();
-							f.phi[l] += pot.sum();
 						}
+						const int l = i - range.first;
+						f.gx[l] += fx.sum();
+						f.gy[l] += fy.sum();
+						f.gz[l] += fz.sum();
+						f.phi[l] += pot.sum();
 					}
 				}
 			}

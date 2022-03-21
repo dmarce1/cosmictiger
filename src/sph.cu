@@ -858,6 +858,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ay += gy_i;
 					az += gz_i;
 					de_dt += (5.f - 3.f * gamma_i) * params.adot * ainv * eint_i;
+					if( params.damping > 0.0f ) {
+						const float c0 = -vsig * hinv_i * params.damping;
+						ax += c0 * vx_i;
+						ay += c0 * vy_i;
+						az += c0 * vz_i;
+					}
 					data.dvx_con[snki] = ax;
 					data.dvy_con[snki] = ay;
 					data.dvz_con[snki] = az;

@@ -66,8 +66,7 @@ class device_vector {
 	int cap;
 	T* ptr;
 	T* new_ptr;
-public:
-	__device__ device_vector() {
+	__device__ void init() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
@@ -76,6 +75,14 @@ public:
 			ptr = nullptr;
 		}
 		__syncthreads();
+	}
+public:
+	__device__ device_vector() {
+		init();
+	}
+	__device__ device_vector(int sz0) {
+		init();
+		resize(sz0);
 	}
 	__device__ ~device_vector() {
 		const int& tid = threadIdx.x;

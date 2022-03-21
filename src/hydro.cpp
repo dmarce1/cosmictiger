@@ -300,15 +300,15 @@ void hydro_plummer() {
 
 void hydro_star_test() {
 	part_int nparts_total = pow(get_options().parts_dim, 3);
-	const double r0 = 100.0;
+	const double r0 = 20.0;
 	const int N = nparts_total;
 	auto opts = get_options();
 	PRINT("Making star\n");
-	opts.sph_mass = 1. / N;
+	opts.sph_mass = 203. / N / (r0*r0*r0) / 5.99071;
 	const double m = opts.sph_mass;
 	set_options(opts);
-	double rho0 = 125 * 230.0 * 1000000 / 980107.;
-	const double npoly = 1.666666666666;
+	double rho0 = 1.0;
+	const double npoly = 1.5;
 	const auto rho = [rho0,npoly]( double r ) {
 		if( r == 0.0 ) {
 			return rho0;
@@ -337,7 +337,7 @@ void hydro_star_test() {
 			r += 0.5 * (dr2 - dr1);
 			if (r < rmax) {
 				dr1 = dr2;
-				const int N = 4.0 * M_PI * r * r * pow(d / m, 2.0 / 3.0) + 0.5;
+				const int N = 4.0 * M_PI * r * r * dr2 * (d / m) + 0.5;
 				array<vector<float>, NDIM> x;
 				for (int dim = 0; dim < NDIM; dim++) {
 					x[dim].resize(N);
@@ -385,8 +385,8 @@ void hydro_star_test() {
 	set_options(opts);
 	hydro_driver(10.0 * tdyn, 25);
 	opts.damping = 0.0;
-	opts.alpha0 = 0.1;
-	opts.alpha1 = 1.0;
+	opts.alpha0 = 0.05;
+	opts.alpha1 = 1.5;
 	set_options(opts);
 	hydro_driver(100.0 * tdyn, 250);
 	const int Nsample = 1000;
