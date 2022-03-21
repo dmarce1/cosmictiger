@@ -55,10 +55,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define DOMAIN_REBOUND_ITERS 20
 
 #ifdef USE_CUDA
-#define BUCKET_SIZE 160
-#define BUCKET_SIZE 160
-#else
 #define BUCKET_SIZE 90
+#else
 #define BUCKET_SIZE 90
 #endif
 
@@ -81,7 +79,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define L2FETCH 64
 #define STACK_SIZE (16*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
-#define KICK_PP_MAX (32*8)
+#define KICK_PP_MAX (32*7)
 #define MIN_KICK_PC_WARP 8
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024
