@@ -40,11 +40,11 @@
 struct cuda_lists_type {
 	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
 	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
-	fixedcapvec<int, PARTLIST_SIZE> closelist;
 	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
 	fixedcapvec<int, MULTLIST_SIZE> multlist;
 	fixedcapvec<expansion<float>, CUDA_MAX_DEPTH> L;
 	fixedcapvec<int, PARTLIST_SIZE> partlist;
+	fixedcapvec<int, PARTLIST_SIZE> closelist;
 	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
 	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
 	fixedcapvec<array<fixed32, NDIM>, CUDA_MAX_DEPTH> Lpos;
@@ -385,9 +385,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 									R2 = fmaxf(R2, EWALD_DIST2);
 								}
 								const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
-								const bool far1 = (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
-								const bool far2 = (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
-								close = !soft_sep;
+								const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
+								const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
+								close = !soft_sep && self.leaf;
 								mult = !close && far1;
 								part = !close && !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
 								leaf = !close && !mult && !part && other.leaf;
@@ -496,9 +496,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							}
 						}
 						__syncwarp();
-						//					tm = clock64();
+		//				if (gtype == GRAVITY_DIRECT) {
+		//					PRINT("C %i L %i M %i\n", closelist.size(), partlist.size(), multlist.size());
+		//				}
 						cuda_gravity_pc(gtype, data, self, multlist, nactive, min_rung == 0);
-						if (gtype == GRAVITY_DIRECT) {
+						if( gtype == GRAVITY_DIRECT ) {
 							cuda_gravity_pp_direct(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 							cuda_gravity_pp_close(data, self, closelist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 						} else {
@@ -510,10 +512,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						checks.resize(start + leaflist.size());
 						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
 							checks[start + i] = leaflist[i];
-						}
-						checks.resize(start + closelist.size());
-						for (int i = tid; i < closelist.size(); i += WARP_SIZE) {
-							checks[start + i] = closelist[i];
 						}
 						__syncwarp();
 					}
