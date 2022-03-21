@@ -373,6 +373,8 @@ void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlis
 }
 
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level) {
+	ALWAYS_ASSERT(params.seti);
+//	ALWAYS_ASSERT(params.seto);
 ///	PRINT( "%i %i\n", level, checklist.size());
 	sph_tree_neighbor_return kr;
 	if (params.run_type == SPH_TREE_NEIGHBOR_BOXES) {
@@ -414,12 +416,12 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				const auto* other = sph_tree_get_node(checklist[ci]);
 				bool test2 = false;
 				bool test1 = false;
-			//	if (params.seti | SPH_INTERACTIONS_I) {
+				if (params.seti | SPH_INTERACTIONS_I) {
 					test1 = range_intersect(self_ptr->outer_box, other->inner_box);
-			//	}
-			//	if (params.seti | SPH_INTERACTIONS_J) {
+				}
+				if (params.seti | SPH_INTERACTIONS_J) {
 					test2 = range_intersect(self_ptr->inner_box, other->outer_box);
-			//	}
+				}
 				if (test1 || test2) {
 					if (other->leaf) {
 						leaflist.push_back(checklist[ci]);
@@ -469,7 +471,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				const auto tiny = 2.0 * range_fixed::min().to_double();
+				const auto tiny = 10.0 * range_fixed::min().to_double();
 				/*				if (sph_particles_id(i) == 591) {
 				 show = true;
 				 PRINT("??????????? %e\n", h / params.h_wt);
@@ -481,20 +483,20 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 }
 				 }*/
 
-			//	if ((params.seto & SPH_SET_ALL) || (active && (params.seto & SPH_SET_ACTIVE)) || (semiactive && (params.seto & SPH_SET_SEMIACTIVE))) {
+				if ((params.seto & SPH_SET_ALL) || (active && (params.seto & SPH_SET_ACTIVE)) || (semiactive && (params.seto & SPH_SET_SEMIACTIVE))) {
 					for (int dim = 0; dim < NDIM; dim++) {
 						const double x = X[dim].to_double();
 						obox.begin[dim] = std::min(obox.begin[dim].to_double(), x - h - tiny);
 						obox.end[dim] = std::max(obox.end[dim].to_double(), x + h + tiny);
 					}
-			//	}
-				//if ((params.seti & SPH_SET_ALL) || (active && (params.seti & SPH_SET_ACTIVE)) || (semiactive && (params.seti & SPH_SET_SEMIACTIVE))) {
+				}
+				if ((params.seti & SPH_SET_ALL) || (active && (params.seti & SPH_SET_ACTIVE)) || (semiactive && (params.seti & SPH_SET_SEMIACTIVE))) {
 					for (int dim = 0; dim < NDIM; dim++) {
 						const double x = X[dim].to_double();
 						ibox.begin[dim] = std::min(ibox.begin[dim].to_double(), x - tiny);
 						ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + tiny);
 					}
-			//	}
+				}
 			}
 			if (show) {
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -1424,11 +1426,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 						switch(params.run_type) {
 
 							case SPH_RUN_SMOOTHLEN:
-							if( params.phase == 1) {
-								test = has_active_neighbors(self);
-							} else {
 								test = self->nactive > 0;
-							}
 							break;
 
 							case SPH_RUN_MARK_SEMIACTIVE:
@@ -1864,7 +1862,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	} else {
 		cuda_data.hstar0 = 0;
 	}
-	PRINT("HSTAR = %e %e  %e  %e  \n", cuda_data.hstar0, rho_star_phys_cgs, rho_star_phys_code, rho_star_co_code);
+//	PRINT("HSTAR = %e %e  %e  %e  \n", cuda_data.hstar0, rho_star_phys_cgs, rho_star_phys_code, rho_star_co_code);
 	cuda_data.m = get_options().sph_mass;
 	cuda_data.N = get_options().neighbor_number;
 	cuda_data.kappa0 = 1.31 * pow(3.0, 1.5) * pow(constants::kb, 3.5) / 4.0 / sqrt(M_PI) / pow(constants::e, 4) / sqrt(constants::me);
@@ -1980,12 +1978,12 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 											const auto rung = particles_rung(k);
 											const bool sa = sph_particles_semi_active(j);
 											if( rung >= minrung || sa) {
-												const float e1 = sph_particles_eint(j) + 0.5*(sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j)));
-												float e0 = std::max(sph_particles_eavg(j), e1);
+//												const float e1 = sph_particles_eint(j) + 0.5*(sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j)));
+												float e0 = sph_particles_eavg(j);
 												if(!isfinite(e0)) {
 													PRINT( "e0 = %e\n", e0);
 												}
-												e0 = sph_particles_eint(j);
+//												e0 = sph_particles_eint(j);
 												ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
 												this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
 												if( fabs(5.303934e-04 - fabs(sph_particles_deint(j)/e0)) < 1e-4) {

@@ -109,6 +109,8 @@ struct sph_tree_neighbor_params {
 	double z;
 	template<class T>
 	void serialize(T&& arc, unsigned) {
+		arc & seti;
+		arc & seto;
 		arc & run_type;
 		arc & h_wt;
 		arc & min_rung;

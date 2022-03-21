@@ -377,31 +377,31 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 				const double x = X[dim].to_double();
 				inner_box.begin[dim] = std::min(inner_box.begin[dim].to_double(), x - tiny);
 				inner_box.end[dim] = std::max(inner_box.end[dim].to_double(), x + tiny);
-				//		if (sph_particles_rung(i) >= params.min_rung) {
-				outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h - tiny);
-				outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h + tiny);
-				//		}
+				if (sph_particles_rung(i) >= params.min_rung) {
+					outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h - tiny);
+					outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h + tiny);
+				}
 			}
 			if (sph_particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
 		}
 
-	/*	double small_span = 1e30;
-		double hmax = 0.0;
-		for( int dim = 0; dim < NDIM; dim++) {
-			double span = box.end[dim] - box.begin[dim];
-			small_span = std::min(small_span, span);
-			hmax += sqr(span);
-		}
-	//	hmax += 12.0 * sqr(small_span);
-		hmax = 1.5 * sqrt(hmax + 3.0 * sqr(small_span));
-		for( int dim = 0; dim < NDIM; dim++) {
-			inner_box.begin[dim] = box.begin[dim];
-			inner_box.end[dim] = box.end[dim];
-			outer_box.begin[dim] = box.begin[dim] - hmax;
-			outer_box.end[dim] = box.begin[dim] + hmax;
-		}*/
+		/*	double small_span = 1e30;
+		 double hmax = 0.0;
+		 for( int dim = 0; dim < NDIM; dim++) {
+		 double span = box.end[dim] - box.begin[dim];
+		 small_span = std::min(small_span, span);
+		 hmax += sqr(span);
+		 }
+		 //	hmax += 12.0 * sqr(small_span);
+		 hmax = 1.5 * sqrt(hmax + 3.0 * sqr(small_span));
+		 for( int dim = 0; dim < NDIM; dim++) {
+		 inner_box.begin[dim] = box.begin[dim];
+		 inner_box.end[dim] = box.end[dim];
+		 outer_box.begin[dim] = box.begin[dim] - hmax;
+		 outer_box.end[dim] = box.begin[dim] + hmax;
+		 }*/
 
 		node_count = 1;
 		leaf_nodes = 1;

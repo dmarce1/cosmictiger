@@ -136,6 +136,7 @@ inline T kernelW(T q) {
 		const T mq8 = sqr(sqr(sqr(T(1) - q)));
 		w *= mq8;
 		res = c0 * w;
+		break;
 	}
 	};
 	res *= (q < T(1.f));
@@ -398,7 +399,7 @@ inline T kernelPot(T q) {
 		q1inv = T(1) / (q + T(1.0e-15));
 		w2 -= T(1.0 / 15.0) * q1inv;
 		sw = q < T(0.5);
-		res = (q > T(0.f)) * (sw * w1 + (T(1) - sw) * w2);
+		res =  (sw * w1 + (T(1) - sw) * w2);
 	}
 		break;
 	case KERNEL_QUARTIC_SPLINE:
@@ -429,7 +430,7 @@ inline T kernelPot(T q) {
 		sw1 = q < T(0.2f);
 		sw3 = q > T(0.6f);
 		sw2 = (T(1) - sw1) * (T(1) - sw3);
-		res = (q > T(0)) * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+		res = (sw1 * w1 + sw2 * w2 + sw3 * w3);
 		break;
 
 	case KERNEL_QUINTIC_SPLINE: {
@@ -464,7 +465,7 @@ inline T kernelPot(T q) {
 		sw1 = q < T(1. / 3.);
 		sw3 = q > T(2. / 3.);
 		sw2 = (T(1) - sw1) * (T(1) - sw3);
-		res = (q > T(0.f)) * c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
+		res =  c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 	}
 		break;
 
@@ -477,7 +478,7 @@ inline T kernelPot(T q) {
 		w = fmaf(q, w, T(-7));
 		w *= q;
 		w = fmaf(q, w, T(3));
-		res = (q > T(0.f)) * w;
+		res = w;
 	}
 		break;
 	case KERNEL_WENDLAND_C4: {
@@ -493,7 +494,7 @@ inline T kernelPot(T q) {
 		w = fmaf(q, w, T(-1.0f / 6.0f));
 		w *= q;
 		w = fmaf(q, w, T(1.0f / 18.0f));
-		res = (q > T(0)) * c0 * w;
+		res =  c0 * w;
 	}
 		break;
 	case KERNEL_WENDLAND_C6: {
@@ -512,7 +513,7 @@ inline T kernelPot(T q) {
 		w = fmaf(q, w, T(-1. / 6.));
 		w *= q;
 		w = fmaf(q, w, T(7. / 156.));
-		res = (q > T(0)) * c0 * w;
+		res =  c0 * w;
 	}
 		break;
 	};

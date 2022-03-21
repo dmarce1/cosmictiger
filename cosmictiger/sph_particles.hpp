@@ -95,6 +95,7 @@ SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem2; // chemistr
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN float* sph_particles_crsv; // divv
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
+SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_ea; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
 SPH_PARTICLES_EXTERN float* sph_particles_dc; // diffusion constant
@@ -155,8 +156,8 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
  }
  */
 
-inline float& sph_particles_difco(part_int index) {
-	return sph_particles_dc[index];
+inline float& sph_particles_eint0(part_int index) {
+	return sph_particles_e0[index];
 }
 
 inline float& sph_particles_divv0(part_int index) {
@@ -355,9 +356,6 @@ inline array<float, NCHEMFRACS>& sph_particles_dchem(part_int index) {
 	return sph_particles_dchem2[index];
 }
 
-inline float& sph_particles_eint0(part_int index) {
-	return sph_particles_de1[index];
-}
 
 inline float& sph_particles_deint(part_int index) {
 	return sph_particles_de2[index];
