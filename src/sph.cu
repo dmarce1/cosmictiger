@@ -556,7 +556,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpot_dh);
 					drho_dh *= 4.0f * float(M_PI) / (9.0f * data.N);
-					dpot_dh *= sqr(h) * 4.0f * float(M_PI) / (9.f * data.N);
+					dpot_dh *= 4.0f * float(M_PI) / (9.f * data.N);
 					const float fpre = 1.0f / (1.0f + drho_dh);
 					if (tid == 0) {
 						data.fpre_snk[snki] = fpre;

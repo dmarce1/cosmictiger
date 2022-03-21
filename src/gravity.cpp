@@ -396,21 +396,13 @@ size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree
 								rinv1 = simd_float(1) / (r + tiny);                            // 5
 								const auto q_i = r * hinv_i;
 								const auto q_j = r * hinv_j;
-								const auto k1 = kernelFqinv(q_i);
-								const auto k2 = kernelFqinv(q_j);
-								const auto F0 = simd_float(0.5f) * (k1 * h3inv_i + k2 * h3inv_j);
-								const auto dWdr_i_rinv = dkernelW_dq(q_i) * hinv_i * h3inv_i * rinv1;
-								const auto dWdr_j_rinv = dkernelW_dq(q_j) * hinv_j * h3inv_j * rinv1;
-								auto Fc = simd_float(0.5f) * (fpot_i * dWdr_i_rinv + fpot_j * dWdr_j_rinv);
-					//			Fc *= (fpot_j < simd_float(0))*(fpot_i < simd_float(0));
-								rinv3 = F0+ Fc;                            // + Fc;
+								const auto F0 = simd_float(0.5f) * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
+								auto Fc = simd_float(0.5f) * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j) * rinv1;
+								rinv3 = F0 + Fc;
 								if (min_rung == 0) {
 									const auto pot0 = simd_float(0.5f) * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-									const auto W_i = (q_i > simd_float(0)) * kernelW(q_i) * h3inv_i;
-									const auto W_j = (q_j > simd_float(0)) * kernelW(q_j) * h3inv_j;
-									auto potc = simd_float(0.5f) * (fpot_i * W_i + fpot_j * W_j);
-						//			potc *= (fpot_j < simd_float(0))*(fpot_i < simd_float(0));
-									rinv1 = pot0 - potc;                            // + potc;
+									auto potc = (q_i > simd_float(0)) * simd_float(0.5f) * (fpot_i * kernelW(q_i) * hinv_i + fpot_j * kernelW(q_j) * hinv_j);
+									rinv1 = pot0 - potc;
 								}
 							}
 							rinv3 *= mass;

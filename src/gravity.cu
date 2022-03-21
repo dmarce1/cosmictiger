@@ -123,12 +123,13 @@ int cuda_gravity_cp(gravity_cc_type type, const cuda_kick_data& data, expansion<
 				}
 			}
 			__syncwarp();
+			const float16 zero = __float2half(0.f);
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-				const float mass = !sph ? 1.f : (sph && (src_fpot[j] != 0.f) ? sph_mass : dm_mass);
+				const float mass = !sph ? 1.f : (sph && (src_fpot[j] != zero) ? sph_mass : dm_mass);
 				flops += 3;
 				expansion<float> D;
 				if (type == GRAVITY_DIRECT) {
@@ -289,12 +290,13 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
+				const float zero = __float2half(0.f);
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1
 					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const float fpot_j = src_fpot[j];
-					const float m_j = sph ? (fpot_j != 0.f ? sph_mass : dm_mass) : 1.f;
+					const float m_j = sph ? (fpot_j != zero ? sph_mass : dm_mass) : 1.f;
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					r1inv = rsqrt(r2);
 					r3inv = sqr(r1inv) * r1inv;
@@ -437,11 +439,11 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 						const float q_i = r * hinv_i;
 						const float q_j = r * hinv_j;
 						const float F0 = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-						float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * h3inv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * h3inv_j) * r1inv;
+						float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j) * r1inv;
 						r3inv = F0 + Fc;
 						if (do_phi) {
 							const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-							float potc = q_i > 0.0f ? 0.5f * (fpot_i * kernelW(q_i) * h3inv_i + fpot_j * kernelW(q_j) * h3inv_j) : 0.f;
+							float potc = q_i > 0.0f ? 0.5f * (fpot_i * kernelW(q_i) * hinv_i + fpot_j * kernelW(q_j) * hinv_j) : 0.f;
 							r1inv = pot0 - potc;
 						}
 					}
