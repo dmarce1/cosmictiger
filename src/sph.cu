@@ -28,6 +28,8 @@ struct smoothlen_shmem {
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/kernel.hpp>
 
+#include <cosmictiger/math.hpp>
+
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
 		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
@@ -36,136 +38,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 #define WORKSPACE_SIZE (160*1024)
 #define HYDRO_SIZE (8*1024)
 
-__managed__ cuda_mem* memory;
-
-template<class T>
-class device_vector {
-	int sz;
-	int cap;
-	T* ptr;
-public:
-	__device__ device_vector() {
-		const int& tid = threadIdx.x;
-		__syncthreads();
-		if (tid == 0) {
-			sz = 0;
-			cap = 0;
-			ptr = nullptr;
-		}
-		__syncthreads();
-	}
-	__device__ ~device_vector() {
-		const int& tid = threadIdx.x;
-		__syncthreads();
-		if (tid == 0) {
-			if (ptr) {
-				memory->free(ptr);
-			}
-		}
-		__syncthreads();
-	}
-	__device__ void shrink_to_fit() {
-		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
-		__shared__ T* new_ptr;
-		__syncthreads();
-		int new_cap = max(1024 / sizeof(T), (size_t) 1);
-		while (new_cap < sz) {
-			new_cap *= 2;
-		}
-		if (tid == 0) {
-			if (new_cap < cap) {
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
-				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
-					__trap();
-
-				}
-			}
-		}
-		__syncthreads();
-		if (ptr && new_cap < cap) {
-			for (int i = tid; i < sz; i += block_size) {
-				new_ptr[i] = ptr[i];
-			}
-		}
-		__syncthreads();
-		if (tid == 0 && new_cap < cap) {
-			if (ptr) {
-				memory->free(ptr);
-			}
-			ptr = new_ptr;
-			cap = new_cap;
-		}
-		__syncthreads();
-	}
-	__device__
-	void resize(int new_sz) {
-		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
-		if (new_sz <= cap) {
-			__syncthreads();
-			if (tid == 0) {
-				sz = new_sz;
-			}
-			__syncthreads();
-		} else {
-			__shared__ T* new_ptr;
-			__syncthreads();
-			int new_cap = max(1024 / sizeof(T), (size_t) 1);
-			if (tid == 0) {
-				while (new_cap < new_sz) {
-					new_cap *= 2;
-				}
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
-				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
-					__trap();
-
-				}
-			}
-			__syncthreads();
-			if (ptr) {
-				for (int i = tid; i < sz; i += block_size) {
-					new_ptr[i] = ptr[i];
-				}
-			}
-			__syncthreads();
-			if (tid == 0) {
-				if (ptr) {
-					memory->free(ptr);
-				}
-				ptr = new_ptr;
-				sz = new_sz;
-				cap = new_cap;
-			}
-			__syncthreads();
-		}
-	}
-	__device__
-	int size() const {
-		return sz;
-	}
-	__device__ T& operator[](int i) {
-#ifdef CHECK_BOUNDS
-		if (i >= sz) {
-			PRINT("Bound exceeded in device_vector\n");
-			__trap();
-		}
-#endif
-		return ptr[i];
-	}
-	__device__
-	                                                                                                                                                                                                                                                                                  const T& operator[](int i) const {
-#ifdef CHECK_BOUNDS
-		if (i >= sz) {
-			PRINT("Bound exceeded in device_vector\n");
-			__trap();
-		}
-#endif
-		return ptr[i];
-	}
-};
 
 struct smoothlen_workspace {
 	device_vector<fixed32> x;
@@ -1748,8 +1620,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int rungs_nblocks;
 	static bool first = true;
 	if (first) {
-		CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-		new (memory) cuda_mem(8ULL * 1024ULL * 1024ULL * 1024ULL);
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count();
@@ -1819,8 +1689,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	}
 	break;
 }
-//	memory->reset();
 	(cudaFree(reduce));
-	memory->reset();
 	return rc;
 }

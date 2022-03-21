@@ -18,6 +18,7 @@
  */
 
 #include <cosmictiger/cuda.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/ewald_indices.hpp>
@@ -104,12 +105,7 @@ void cuda_init() {
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
-	value = HEAP_SIZE;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMallocHeapSize, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMallocHeapSize));
-	if (value != HEAP_SIZE) {
-		THROW_ERROR("Unable to set Heap size to %li\n", HEAP_SIZE);
-	}
+	cuda_mem_init(HEAP_SIZE);
 }
 
 #endif

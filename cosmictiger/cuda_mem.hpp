@@ -21,6 +21,7 @@
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
+#include <cosmictiger/math.hpp>
 
 #define CUDA_MEM_STACK_SIZE (128*1024)
 #define CUDA_MEM_NBIN 32
@@ -54,3 +55,142 @@ public:
 	void reset();
 };
 
+void cuda_mem_init(size_t heap_size);
+__device__ cuda_mem* get_cuda_heap();
+
+#ifdef __CUDACC__
+
+template<class T>
+class device_vector {
+	int sz;
+	int cap;
+	T* ptr;
+	T* new_ptr;
+public:
+	__device__ device_vector() {
+		const int& tid = threadIdx.x;
+		__syncthreads();
+		if (tid == 0) {
+			sz = 0;
+			cap = 0;
+			ptr = nullptr;
+		}
+		__syncthreads();
+	}
+	__device__ ~device_vector() {
+		const int& tid = threadIdx.x;
+		__syncthreads();
+		if (tid == 0) {
+			if (ptr) {
+				auto* memory = get_cuda_heap();
+				memory->free(ptr);
+			}
+		}
+		__syncthreads();
+	}
+	__device__ void shrink_to_fit() {
+		const int& tid = threadIdx.x;
+		const int& block_size = blockDim.x;
+		__syncthreads();
+		int new_cap = max(1024 / sizeof(T), (size_t) 1);
+		while (new_cap < sz) {
+			new_cap *= 2;
+		}
+		if (tid == 0) {
+			if (new_cap < cap) {
+				auto* memory = get_cuda_heap();
+				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				if (new_ptr == nullptr) {
+					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
+					__trap();
+
+				}
+			}
+		}
+		__syncthreads();
+		if (ptr && new_cap < cap) {
+			for (int i = tid; i < sz; i += block_size) {
+				new_ptr[i] = ptr[i];
+			}
+		}
+		__syncthreads();
+		if (tid == 0 && new_cap < cap) {
+			if (ptr) {
+				auto* memory = get_cuda_heap();
+				memory->free(ptr);
+			}
+			ptr = new_ptr;
+			cap = new_cap;
+		}
+		__syncthreads();
+	}
+	__device__
+	void resize(int new_sz) {
+		const int& tid = threadIdx.x;
+		const int& block_size = blockDim.x;
+		if (new_sz <= cap) {
+			__syncthreads();
+			if (tid == 0) {
+				sz = new_sz;
+			}
+			__syncthreads();
+		} else {
+			__syncthreads();
+			int new_cap = max(1024 / sizeof(T), (size_t) 1);
+			if (tid == 0) {
+				while (new_cap < new_sz) {
+					new_cap *= 2;
+				}
+				auto* memory = get_cuda_heap();
+				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				if (new_ptr == nullptr) {
+					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
+					__trap();
+
+				}
+			}
+			__syncthreads();
+			if (ptr) {
+				for (int i = tid; i < sz; i += block_size) {
+					new_ptr[i] = ptr[i];
+				}
+			}
+			__syncthreads();
+			if (tid == 0) {
+				if (ptr) {
+					auto* memory = get_cuda_heap();
+					memory->free(ptr);
+				}
+				ptr = new_ptr;
+				sz = new_sz;
+				cap = new_cap;
+			}
+			__syncthreads();
+		}
+	}
+	__device__
+	int size() const {
+		return sz;
+	}
+	__device__ T& operator[](int i) {
+#ifdef CHECK_BOUNDS
+		if (i >= sz) {
+			PRINT("Bound exceeded in device_vector\n");
+			__trap();
+		}
+#endif
+		return ptr[i];
+	}
+	__device__
+	const T& operator[](int i) const {
+#ifdef CHECK_BOUNDS
+		if (i >= sz) {
+			PRINT("Bound exceeded in device_vector\n");
+			__trap();
+		}
+#endif
+		return ptr[i];
+	}
+};
+
+#endif

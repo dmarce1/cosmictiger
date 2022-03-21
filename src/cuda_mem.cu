@@ -16,8 +16,9 @@
  along with this program; if not, write to the Free Software
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-
+#define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
+
 
 __device__
 char* cuda_mem::allocate_blocks(int nblocks) {
@@ -146,5 +147,16 @@ void cuda_mem::reset() {
 
 cuda_mem::~cuda_mem() {
 	CUDA_CHECK(cudaFree(heap));
+}
+
+__managed__ cuda_mem* memory;
+
+__device__ cuda_mem* get_cuda_heap() {
+	return memory;
+}
+
+void cuda_mem_init(size_t heap_size) {
+	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
+	new (memory) cuda_mem(heap_size);
 }
 
