@@ -1384,7 +1384,7 @@ sph_run_return sph_gravity(const sph_tree_node* self_ptr, int min_rung, float t0
 }
 
 sph_run_return sph_run(sph_run_params params, bool cuda) {
-	PRINT("SPHRUN = %i\n", params.run_type);
+//	PRINT("SPHRUN = %i\n", params.run_type);
 	std::string profile_name = "sph_run:" + std::to_string(params.run_type);
 	profiler_enter(profile_name.c_str());
 
@@ -1869,7 +1869,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
-	PRINT("Running with %i nodes\n", host_trees.size());
+//	PRINT("Running with %i nodes\n", host_trees.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);
 	const bool courant = (params.run_type == SPH_RUN_HYDRO && params.phase == 1) || params.run_type == SPH_RUN_RUNGS;
