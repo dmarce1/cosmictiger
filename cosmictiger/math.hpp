@@ -47,13 +47,13 @@ inline float rand_normal() {
 
 template<class T>
 CUDA_EXPORT void constrain_range(T& x) {
-	if (x >= T(1)) {
+	if (x > T(1)) {
 		x -= T(1);
 	}
 	if (x < T(0)) {
 		x += T(1);
 	}
-	if (x >= T(1)) {
+	if (x > T(1)) {
 		PRINT("Print particle out of range %e\n", x);
 	}
 	if (x < T(0)) {

@@ -57,6 +57,10 @@ int cuda_gravity_cp(gravity_cc_type, const cuda_kick_data&, expansion<float>&, c
 __device__
 int cuda_gravity_pc(gravity_cc_type, const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>&, int, bool);
 __device__
-int cuda_gravity_pp(gravity_cc_type, const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+__device__
+int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+__device__
+int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
 #endif
 #endif /* GRAVITY_HPP_ */
