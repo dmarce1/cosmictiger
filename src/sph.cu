@@ -979,7 +979,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
-					PRINT("one is off %e %i\n", one, nactive);
+					PRINT("one is off %e\n", one);
 					__trap();
 				}
 				if (tid == 0) {
