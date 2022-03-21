@@ -19,14 +19,14 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #pragma once
 
-#include <cosmictiger/fixedcapvec.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 
 #ifdef __CUDACC__
 
-template<class T, int SIZE, int DEPTH>
+template<class T>
 class stack_vector {
-	fixedcapvec<T,SIZE> data;
-	fixedcapvec<int,DEPTH> bounds;
+	device_vector<T> data;
+	device_vector<int> bounds;
 	__device__ inline int begin() const {
 		ASSERT(bounds.size() >= 2);
 		return bounds[bounds.size() - 2];
@@ -39,28 +39,14 @@ public:
 	__device__ inline int depth() const {
 		return bounds.size() - 2;
 	}
-	__device__ inline void destroy() {
-		bounds.destroy();
-		data.destroy();
-	}
-	__device__ inline void initialize() {
-		const int& tid = threadIdx.x;
-		bounds.resize(2);
-		if (tid == 0) {
-			bounds[0] = 0;
-			bounds[1] = 0;
-		}
-		__syncwarp();
-	}
 	__device__ inline stack_vector() {
 		const int& tid = threadIdx.x;
-		bounds.reserve(CUDA_MAX_DEPTH + 1);
 		bounds.resize(2);
 		if (tid == 0) {
 			bounds[0] = 0;
 			bounds[1] = 0;
 		}
-		__syncwarp();
+		__syncthreads();
 	}
 	__device__ inline void push(const T &a) {
 		const int& tid = threadIdx.x;
@@ -69,7 +55,7 @@ public:
 		if (tid == 0) {
 			bounds.back()++;
 		}
-		__syncwarp();
+		__syncthreads();
 
 	}
 	__device__ inline int size() const {
@@ -83,7 +69,7 @@ public:
 		if (tid == 0) {
 			bounds.back() = data.size();
 		}
-		__syncwarp();
+		__syncthreads();
 	}
 	__device__ inline T operator[](int i) const {
 		ASSERT(i < size());
@@ -100,10 +86,10 @@ public:
 		const auto sz = size();
 		bounds.push_back(end() + sz);
 		data.resize(data.size() + sz);
-		for (int i = begin() + tid; i < end(); i += WARP_SIZE) {
+		for (int i = begin() + tid; i < end(); i += blockDim.x) {
 			data[i] = data[i - sz];
 		}
-		__syncwarp();
+		__syncthreads();
 	}
 	__device__ inline void pop_top() {
 		ASSERT(bounds.size() >= 2);

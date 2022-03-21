@@ -28,6 +28,7 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/stars.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 
 #include <atomic>
 
@@ -38,18 +39,18 @@
  static __managed__ double kick_time;*/
 
 struct cuda_lists_type {
-	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> echecks;
-	stack_vector<int, DCHECKS_SIZE, CUDA_MAX_DEPTH> dchecks;
-	fixedcapvec<int, LEAFLIST_SIZE> leaflist;
-	fixedcapvec<int, MULTLIST_SIZE> multlist;
-	fixedcapvec<expansion<float>, CUDA_MAX_DEPTH> L;
-	fixedcapvec<int, PARTLIST_SIZE> partlist;
-	fixedcapvec<int, PARTLIST_SIZE> closelist;
-	fixedcapvec<int, NEXTLIST_SIZE> nextlist;
-	fixedcapvec<kick_return, CUDA_MAX_DEPTH> returns;
-	fixedcapvec<array<fixed32, NDIM>, CUDA_MAX_DEPTH> Lpos;
-	fixedcapvec<int, CUDA_MAX_DEPTH> phase;
-	fixedcapvec<int, CUDA_MAX_DEPTH> self;
+	stack_vector<int> echecks;
+	stack_vector<int> dchecks;
+	device_vector<int> leaflist;
+	device_vector<int> multlist;
+	device_vector<expansion<float>> L;
+	device_vector<int> partlist;
+	device_vector<int> closelist;
+	device_vector<int> nextlist;
+	device_vector<kick_return> returns;
+	device_vector<array<fixed32, NDIM>> Lpos;
+	device_vector<int> phase;
+	device_vector<int> self;
 
 };
 
@@ -224,6 +225,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
+	new(&lists[bid]) cuda_lists_type;
 	auto& L = lists[bid].L;
 	auto& phase = lists[bid].phase;
 	auto& Lpos = lists[bid].Lpos;
@@ -258,18 +260,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
-	L.initialize();
-	dchecks.initialize();
-	echecks.initialize();
-	nextlist.initialize();
-	multlist.initialize();
-	leaflist.initialize();
-	closelist.initialize();
-	nextlist.initialize();
-	phase.initialize();
-	Lpos.initialize();
-	returns.initialize();
-	self_index.initialize();
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -597,6 +587,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 		returns.pop_back();
 	}
+	(&lists[bid])->~cuda_lists_type();
 	ASSERT(returns.size() == 0);
 	ASSERT(L.size() == 1);
 	ASSERT(Lpos.size() == 0);

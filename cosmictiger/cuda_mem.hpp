@@ -168,6 +168,25 @@ public:
 			__syncthreads();
 		}
 	}
+	__device__ T& back() {
+		return ptr[sz-1];
+	}
+	__device__ const T& back() const {
+		return ptr[sz-1];
+	}
+	__device__ void pop_back() {
+		if( threadIdx.x == 0 ) {
+			sz--;
+		}
+		__syncthreads();
+	}
+	__device__ void push_back(const T& item) {
+		resize(size()+1);
+		if( threadIdx.x == 0 ) {
+			back() = item;
+		}
+		__syncthreads();
+	}
 	__device__
 	int size() const {
 		return sz;

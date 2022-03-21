@@ -11,7 +11,7 @@
 struct rockstar_workspace {
 	fixedcapvec<int, ROCKSTAR_MAX_LIST> nextlist;
 	fixedcapvec<int, ROCKSTAR_MAX_LIST> leaflist;
-	stack_vector<int, ROCKSTAR_MAX_STACK, ROCKSTAR_MAX_DEPTH> checklist;
+	stack_vector<int> checklist;
 	fixedcapvec<int, ROCKSTAR_MAX_DEPTH> phase;
 	fixedcapvec<int, ROCKSTAR_MAX_DEPTH> self;
 	fixedcapvec<int, ROCKSTAR_MAX_DEPTH> returns;
@@ -46,13 +46,7 @@ __global__ void rockstar_find_subgroups_gpu(rockstar_tree* trees, int ntrees, ar
 	auto& checklist = lists[bid].checklist;
 	auto& returns = lists[bid].returns;
 	const float link_len2 = sqr(link_len);
-	nextlist.initialize();
-	leaflist.initialize();
-	phase.initialize();
-	self_index.initialize();
-	returns.initialize();
-	checklist.initialize();
-
+	new(&lists[bid]) rockstar_workspace();
 	phase.resize(0);
 	self_index.resize(0);
 	returns.push_back(0);
@@ -327,6 +321,7 @@ __global__ void rockstar_find_subgroups_gpu(rockstar_tree* trees, int ntrees, ar
 	returns.pop_back();
 	ASSERT(returns.size() == 0);
 	ASSERT(phase.size() == 0);
+	(&lists[bid])->~rockstar_workspace();
 	ASSERT(self_index.size() == 0);
 
 }
@@ -345,12 +340,7 @@ __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, arr
 	auto& checklist = lists[bid].checklist;
 	auto& returns = lists[bid].returns;
 	const float link_len2 = sqr(link_len);
-	nextlist.initialize();
-	leaflist.initialize();
-	phase.initialize();
-	self_index.initialize();
-	returns.initialize();
-	checklist.initialize();
+	new(&lists[bid]) rockstar_workspace();
 
 	phase.resize(0);
 	self_index.resize(0);
@@ -627,7 +617,7 @@ __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, arr
 	ASSERT(returns.size() == 0);
 	ASSERT(phase.size() == 0);
 	ASSERT(self_index.size() == 0);
-
+	(&lists[bid])->~rockstar_workspace();
 }
 
 vector<size_t> rockstar_find_subgroups_gpu(vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles part_ptrs, const vector<int>& selves,

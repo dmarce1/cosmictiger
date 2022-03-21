@@ -21,6 +21,7 @@
 #define GRAVITY_HPP_
 
 #include <cosmictiger/cuda.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/fixedcapvec.hpp>
 #include <cosmictiger/tree.hpp>
@@ -51,16 +52,16 @@ size_t cpu_gravity_pp(gravity_cc_type, force_vectors&, int, tree_id, const vecto
 
 #ifdef __CUDACC__
 __device__
-int cuda_gravity_cc(gravity_cc_type, const cuda_kick_data&, expansion<float>&, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>&, bool do_phi);
+int cuda_gravity_cc(gravity_cc_type, const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, bool do_phi);
 __device__
-int cuda_gravity_cp(gravity_cc_type, const cuda_kick_data&, expansion<float>&, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, float dm_mass, float sph_mass, bool do_phi);
+int cuda_gravity_cp(gravity_cc_type, const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, float dm_mass, float sph_mass, bool do_phi);
 __device__
-int cuda_gravity_pc(gravity_cc_type, const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, MULTLIST_SIZE>&, int, bool);
+int cuda_gravity_pc(gravity_cc_type, const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, bool);
 __device__
-int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
 __device__
-int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
 __device__
-int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const fixedcapvec<int, PARTLIST_SIZE>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
 #endif
 #endif /* GRAVITY_HPP_ */

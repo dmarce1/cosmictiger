@@ -18,7 +18,7 @@ struct bh_workspace {
 	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_y;
 	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_z;
 	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_m;
-	stack_vector<int, BH_STACK_SIZE, BH_MAX_DEPTH> checklist;
+	stack_vector<int> checklist;
 };
 
 struct bh_shmem {
@@ -41,8 +41,9 @@ __global__ void bh_tree_evaluate_kernel(bh_workspace* workspaces, bh_tree_node* 
 		si = atomicAdd(next_sink_bucket, 1);
 	}
 	__syncwarp();
+	bh_workspace& ws = workspaces[bid];
+	new(&ws) bh_workspace();
 	while (si < nsinks) {
-		bh_workspace& ws = workspaces[bid];
 		int sink_index = sink_buckets[si];
 		auto& checklist = ws.checklist;
 		auto& nextlist = ws.nextlist;
@@ -51,13 +52,6 @@ __global__ void bh_tree_evaluate_kernel(bh_workspace* workspaces, bh_tree_node* 
 		auto& src_z = ws.src_z;
 		auto& src_m = ws.src_m;
 		auto& leaflist = ws.leaflist;
-		checklist.initialize();
-		leaflist.initialize();
-		nextlist.initialize();
-		src_x.initialize();
-		src_y.initialize();
-		src_z.initialize();
-		src_m.initialize();
 		checklist.resize(1);
 		checklist[0] = 0;
 		const auto& self = tree_nodes[sink_index];
@@ -190,6 +184,7 @@ __global__ void bh_tree_evaluate_kernel(bh_workspace* workspaces, bh_tree_node* 
 		}
 		__syncwarp();
 	}
+	(&ws)->~bh_workspace();
 }
 
 __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree_node* tree_nodes, float* phi, array<float, NDIM>* parts,
@@ -201,8 +196,9 @@ __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree
 		si = atomicAdd(next_sink, 1);
 	}
 	__syncwarp();
+	bh_workspace& ws = workspaces[bid];
+	new(&ws) bh_workspace();
 	while (si < nsinks) {
-		bh_workspace& ws = workspaces[bid];
 		const array<float, NDIM>& sink = sinks[si];
 		auto& checklist = ws.checklist;
 		auto& nextlist = ws.nextlist;
@@ -211,13 +207,6 @@ __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree
 		auto& src_z = ws.src_z;
 		auto& src_m = ws.src_m;
 		auto& leaflist = ws.leaflist;
-		checklist.initialize();
-		leaflist.initialize();
-		nextlist.initialize();
-		src_x.initialize();
-		src_y.initialize();
-		src_z.initialize();
-		src_m.initialize();
 		checklist.resize(1);
 		checklist[0] = 0;
 		const float thetainv = 1.0 / theta;
@@ -344,6 +333,7 @@ __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree
 		}
 		__syncwarp();
 	}
+	(&ws)->~bh_workspace();
 }
 
 vector<float> bh_evaluate_potential_gpu(const vector<bh_tree_node>& tree_nodes, const vector<array<float, NDIM>>& x, const vector<int> sink_buckets,
