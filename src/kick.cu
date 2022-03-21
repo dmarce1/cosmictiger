@@ -225,7 +225,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	new(&lists[bid]) cuda_lists_type;
+	new (&lists[bid]) cuda_lists_type;
 	auto& L = lists[bid].L;
 	auto& phase = lists[bid].phase;
 	auto& Lpos = lists[bid].Lpos;
@@ -414,12 +414,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							if (leaf) {
 								leaflist[l + start] = checks[i];
 							}
-							l = close;
-							compute_indices(l, total);
-							start = closelist.size();
-							closelist.resize(start + total);
-							if (close) {
-								closelist[l + start] = checks[i];
+							if (self.leaf) {
+								l = close;
+								compute_indices(l, total);
+								start = closelist.size();
+								closelist.resize(start + total);
+								if (close) {
+									closelist[l + start] = checks[i];
+								}
 							}
 						}
 						__syncwarp();
@@ -434,8 +436,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						__syncwarp();
 
 					} while (checks.size() && self.leaf);
-					cuda_gravity_cc(gtype, data, L.back(), self, multlist, min_rung == 0);
-					cuda_gravity_cp(gtype, data, L.back(), self, partlist, dm_mass, sph_mass, min_rung == 0);
+					if (gtype == GRAVITY_DIRECT) {
+						cuda_gravity_cc_direct(data, L.back(), self, multlist, min_rung == 0);
+						cuda_gravity_cp_direct(data, L.back(), self, partlist, dm_mass, sph_mass, min_rung == 0);
+					} else {
+						cuda_gravity_cc_ewald(data, L.back(), self, multlist, min_rung == 0);
+						cuda_gravity_cp_ewald(data, L.back(), self, partlist, dm_mass, sph_mass, min_rung == 0);
+					}
 					if (self.leaf) {
 						partlist.resize(0);
 						multlist.resize(0);
@@ -486,14 +493,15 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							}
 						}
 						__syncwarp();
-		//				if (gtype == GRAVITY_DIRECT) {
-		//					PRINT("C %i L %i M %i\n", closelist.size(), partlist.size(), multlist.size());
-		//				}
-						cuda_gravity_pc(gtype, data, self, multlist, nactive, min_rung == 0);
-						if( gtype == GRAVITY_DIRECT ) {
+						//				if (gtype == GRAVITY_DIRECT) {
+						//					PRINT("C %i L %i M %i\n", closelist.size(), partlist.size(), multlist.size());
+						//				}
+						if (gtype == GRAVITY_DIRECT) {
+							cuda_gravity_pc_direct(data, self, multlist, nactive, min_rung == 0);
 							cuda_gravity_pp_direct(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 							cuda_gravity_pp_close(data, self, closelist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 						} else {
+							cuda_gravity_pc_ewald(data, self, multlist, nactive, min_rung == 0);
 							cuda_gravity_pp_ewald(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 							cuda_gravity_pp_ewald(data, self, closelist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 						}
