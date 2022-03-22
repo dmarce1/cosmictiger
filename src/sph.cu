@@ -210,6 +210,7 @@ __global__ void sph_cuda_xsph(sph_run_params params, sph_run_cuda_data data, sph
 				j = contains;
 				compute_indices<XSPH_BLOCK_SIZE>(j, total);
 				const int offset = ws.rec1_main.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.rec1_main.resize(next_size);
 				ws.rec2_main.resize(next_size);
@@ -258,6 +259,7 @@ __global__ void sph_cuda_xsph(sph_run_params params, sph_run_cuda_data data, sph
 					k = flag;
 					compute_indices<XSPH_BLOCK_SIZE>(k, total);
 					const int offset = ws.rec1.size();
+					__syncthreads();
 					const int next_size = offset + total;
 					ws.rec1.resize(next_size);
 					ws.rec2.resize(next_size);
@@ -356,6 +358,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				j = contains;
 				compute_indices<SMOOTHLEN_BLOCK_SIZE>(j, total);
 				const int offset = ws.x.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.x.resize(next_size);
 				ws.y.resize(next_size);
@@ -552,6 +555,7 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				j = contains;
 				compute_indices<MARK_SEMIACTIVE_BLOCK_SIZE>(j, total);
 				const int offset = ws.x.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.x.resize(next_size);
 				ws.y.resize(next_size);
@@ -675,6 +679,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				j = contains;
 				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
 				const int offset = ws.rec1_main.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.rec1_main.resize(next_size);
 				ws.rec2_main.resize(next_size);
@@ -775,6 +780,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					k = flag;
 					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
 					const int offset = ws.rec1.size();
+					__syncthreads();
 					const int next_size = offset + total;
 					ws.rec1.resize(next_size);
 					ws.rec2.resize(next_size);
@@ -1015,6 +1021,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				j = contains;
 				compute_indices<PARABOLIC_BLOCK_SIZE>(j, total);
 				const int offset = ws.rec1_main.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.rec1_main.resize(next_size);
 				ws.rec2_main.resize(next_size);
@@ -1116,6 +1123,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					k = flag;
 					compute_indices<PARABOLIC_BLOCK_SIZE>(k, total);
 					const int offset = ws.rec1.size();
+					__syncthreads();
 					const int next_size = offset + total;
 					ws.rec1.resize(next_size);
 					ws.rec2.resize(next_size);
@@ -1283,6 +1291,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				j = contains;
 				compute_indices<AUX_BLOCK_SIZE>(j, total);
 				const int offset = ws.rec1_main.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.rec1_main.resize(next_size);
 				ws.rec2_main.resize(next_size);
@@ -1366,6 +1375,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					k = flag;
 					compute_indices<AUX_BLOCK_SIZE>(k, total);
 					const int offset = ws.rec1.size();
+					__syncthreads();
 					const int next_size = offset + total;
 					ws.rec1.resize(next_size);
 					ws.rec2.resize(next_size);
@@ -1588,6 +1598,7 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 				j = contains;
 				compute_indices<RUNGS_BLOCK_SIZE>(j, total);
 				const int offset = ws.x.size();
+				__syncthreads();
 				const int next_size = offset + total;
 				ws.x.resize(next_size);
 				ws.y.resize(next_size);
