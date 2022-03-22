@@ -810,7 +810,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float c_ij = (sqrtrho_i * c_i + sqrtrho_j * c_j) / (sqrtrho_i + sqrtrho_j);
 					const float mu_ij = h_ij * vdotx_ij / (r2 + 0.01f * h_i * h_j);
 					const float alpha_ij = 0.5f * (alpha_i * balsara_i + alpha_j * balsara_j);
-					const float dvisc_ij = -alpha_ij * mu_ij * (c_ij - params.beta * mu_ij) / rho_ij;
+					const float dvisc_ij = -alpha_ij * mu_ij * (c_ij - params.beta * vdotx_ij * rinv) / rho_ij;
 					const float W_i = kernelW(q_i) * h3inv_i;
 					const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 					const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
@@ -849,7 +849,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig);
 				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
-				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
+				if (fabs(1. - one) > 1.0e-2 && tid == 0) {
 					PRINT("one is off %e\n", one);
 					__trap();
 				}
@@ -1358,6 +1358,15 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				float dvz_dx = 0.0f;
 				float dvz_dy = 0.0f;
 				float dvz_dz = 0.0f;
+				float xx = 0.f;
+				float xy = 0.f;
+				float xz = 0.f;
+				float yx = 0.f;
+				float yy = 0.f;
+				float yz = 0.f;
+				float zx = 0.f;
+				float zy = 0.f;
+				float zz = 0.f;
 				float dT_dx = 0.f;
 				float dT_dy = 0.f;
 				float dT_dz = 0.f;
@@ -1399,6 +1408,12 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvx_dz -= mrhoinv_i * vx_ij * dWdr_z_i * ainv;
 					dvy_dz -= mrhoinv_i * vy_ij * dWdr_z_i * ainv;
 					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
+					xx -= mrhoinv_i * x_ij * dWdr_x_i;
+					xy -= mrhoinv_i * x_ij * dWdr_y_i;
+					xz -= mrhoinv_i * x_ij * dWdr_z_i;
+					yy -= mrhoinv_i * y_ij * dWdr_y_i;
+					yz -= mrhoinv_i * y_ij * dWdr_z_i;
+					zz -= mrhoinv_i * z_ij * dWdr_z_i;
 					const float eint_j = rec2.eint;
 					if (params.conduction && params.phase == 1) {
 						const float mu_j = rec2.mmw;
@@ -1418,6 +1433,15 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						}
 					}
 				}
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(xx);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(xy);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(xz);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(yy);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(yz);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(zz);
+				yx = xy;
+				zx = xz;
+				zy = yz;
 
 				float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
 				float div_v, curl_vx, curl_vy, curl_vz;
