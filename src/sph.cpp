@@ -1642,10 +1642,10 @@ sph_run_return sph_run_workspace::to_gpu() {
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
 									break;
 									case SPH_RUN_XSPH:
-									case SPH_RUN_PARABOLIC:
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(),host_rungs.data(), nullptr, offset);
 									break;
 									case SPH_RUN_AUX:
+									case SPH_RUN_PARABOLIC:
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(),host_rungs.data(), host_h.data() , offset);
 									break;
 								}

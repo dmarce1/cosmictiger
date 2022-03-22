@@ -1030,7 +1030,8 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					const float y_ij = distance(y_i, y_j);				// 2
 					const float z_ij = distance(z_i, z_j);				// 2
 					const float r2 = sqr(x_ij, y_ij, z_ij);
-					if (r2 < fmaxf(h2_j, h2_i) && (active || rung_j >= params.min_rung)) {
+					PRINT( " %e %e %e\n", r2, h2_i, h2_j);
+					if (r2 < fmaxf(h2_j, h2_i)) {
 						const float fpre_j = rec2.fpre;
 						const float shearv_j = rec2.shearv;
 						const auto chem_j = rec2.chem;
