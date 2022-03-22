@@ -25,7 +25,7 @@
 #define AUX_BLOCK_SIZE 128
 #define PARABOLIC_BLOCK_SIZE 128
 
-#define SPH_SMOOTHLEN_TOLER 1e-6
+#define SPH_SMOOTHLEN_TOLER 2e-6
 
 struct smoothlen_shmem {
 	int index;
@@ -1363,10 +1363,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					}
 					const float alpha_i = data.alpha_snk[snki];
 					const float dt = params.t0 * rung_dt[rung_i];
-					const float ddivv_dt = (div_v - divv0) / dt;
+					const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
 					const float A2 = sqr(2.f * sqr(sqr(1.f - Ri)) * div_v);
 					const float limiter = A2 / (A2 + sqr(shearv) + 1e-30f);
-					const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * params.a;
+					const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
 					const float alpha_targ = fmaxf(params.alpha0, S / (S + sqr(vsig)) * params.alpha1);
 					const float lambda0 = alpha_i < alpha_targ ? 9.f / params.cfl : params.alpha_decay;
 					const float lambda = lambda0 * vsig * hinv_i * ainv * dt;
