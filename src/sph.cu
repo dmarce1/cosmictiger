@@ -1343,8 +1343,12 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;
 				const float fpre_i = data.fpre_snk[snki];
 				float gamma_i, eint_i, p_i, c_i;
-				gamma_i = data.gamma[i];
-				eint_i = data.eint[snki];
+				if( data.chemistry ) {
+					gamma_i = data.gamma[i];
+				} else {
+					gamma_i = data.def_gamma;
+				}
+				eint_i = data.eint[i];
 				p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
 				c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 				float mu_i, T_i;
