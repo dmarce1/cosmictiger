@@ -45,8 +45,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-#define WORKSPACE_SIZE (160*1024)
-#define HYDRO_SIZE (8*1024)
 
 struct smoothlen_workspace {
 	device_vector<fixed32> x;
@@ -137,8 +135,6 @@ struct aux_record2 {
 };
 
 struct hydro_workspace {
-	device_vector<hydro_record1> rec1_main;
-	device_vector<hydro_record2> rec2_main;
 	device_vector<hydro_record1> rec1;
 	device_vector<hydro_record2> rec2;
 };
@@ -149,8 +145,6 @@ struct xsph_workspace {
 };
 
 struct parabolic_workspace {
-	device_vector<parabolic_record1> rec1_main;
-	device_vector<parabolic_record2> rec2_main;
 	device_vector<parabolic_record1> rec1;
 	device_vector<parabolic_record2> rec2;
 };
@@ -710,7 +704,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
 				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 				const float fpre_i = data.fpre[i];
-				__syncthreads();
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
@@ -1239,7 +1232,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					mu_i = data.mmw[i];
 					T_i = mu_i * eint_i / cv0 * sqr(ainv) / (gamma_i - 1.f);
 				}
-				__syncthreads();
 				float Ri = 0.f;
 				float dvx_dx = 0.0f;
 				float dvx_dy = 0.0f;
