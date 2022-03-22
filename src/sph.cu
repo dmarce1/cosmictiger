@@ -156,8 +156,6 @@ struct parabolic_workspace {
 };
 
 struct aux_workspace {
-	device_vector<aux_record1> rec1_main;
-	device_vector<aux_record2> rec2_main;
 	device_vector<aux_record1> rec1;
 	device_vector<aux_record2> rec2;
 };
@@ -609,8 +607,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 	const float ainv = 1.0f / params.a;
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		ws.rec1_main.resize(0);
-		ws.rec2_main.resize(0);
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -642,27 +640,27 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 				j = contains;
 				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
-				const int offset = ws.rec1_main.size();
+				const int offset = ws.rec1.size();
 				__syncthreads();
 				const int next_size = offset + total;
-				ws.rec1_main.resize(next_size);
-				ws.rec2_main.resize(next_size);
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
-					ws.rec1_main[k].x = x[XDIM];
-					ws.rec1_main[k].y = x[YDIM];
-					ws.rec1_main[k].z = x[ZDIM];
-					ws.rec1_main[k].h = data.h[pi];
-					ws.rec2_main[k].vx = data.vx[pi];
-					ws.rec2_main[k].vy = data.vy[pi];
-					ws.rec2_main[k].vz = data.vz[pi];
-					ws.rec2_main[k].eint = data.eint[pi];
-					ws.rec2_main[k].alpha = data.alpha[pi];
-					ws.rec2_main[k].fpre = data.fpre[pi];
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].h = data.h[pi];
+					ws.rec2[k].vx = data.vx[pi];
+					ws.rec2[k].vy = data.vy[pi];
+					ws.rec2[k].vz = data.vz[pi];
+					ws.rec2[k].eint = data.eint[pi];
+					ws.rec2[k].alpha = data.alpha[pi];
+					ws.rec2[k].fpre = data.fpre[pi];
 					if (data.chemistry) {
-						ws.rec2_main[k].gamma = data.gamma[pi];
+						ws.rec2[k].gamma = data.gamma[pi];
 					} else {
-						ws.rec2_main[k].gamma = data.def_gamma;
+						ws.rec2[k].gamma = data.def_gamma;
 					}
 				}
 			}
@@ -712,41 +710,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
 				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 				const float fpre_i = data.fpre[i];
-				const int jmax = round_up(ws.rec1_main.size(), block_size);
-				ws.rec1.resize(0);
-				ws.rec2.resize(0);
-				for (int j = tid; j < jmax; j += block_size) {
-					bool flag = false;
-					int k;
-					int total;
-					if (j < ws.rec1_main.size()) {
-						const auto rec = ws.rec1_main[j];
-						const auto x_j = rec.x;
-						const auto y_j = rec.y;
-						const auto z_j = rec.z;
-						const float x_ij = distance(x_j, x_i);
-						const float y_ij = distance(y_j, y_i);
-						const float z_ij = distance(z_j, z_i);
-						const float h_j = rec.h;
-						const float h2_j = sqr(h_j);
-						const float r2 = sqr(x_ij, y_ij, z_ij);
-						if (r2 < fmaxf(h2_i, h2_j)) {
-							flag = true;
-						}
-					}
-					k = flag;
-					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
-					const int offset = ws.rec1.size();
-					__syncthreads();
-					const int next_size = offset + total;
-					ws.rec1.resize(next_size);
-					ws.rec2.resize(next_size);
-					if (flag) {
-						const int l = offset + k;
-						ws.rec1[l] = ws.rec1_main[j];
-						ws.rec2[l] = ws.rec2_main[j];
-					}
-				}
 				__syncthreads();
 				float ax = 0.f;
 				float ay = 0.f;
@@ -944,8 +907,8 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 	const float code_dif_to_cgs = (double) params.code_to_g / ((double) params.code_to_cm * (double) params.code_to_s);
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		ws.rec1_main.resize(0);
-		ws.rec2_main.resize(0);
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -977,32 +940,32 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				}
 				j = contains;
 				compute_indices<PARABOLIC_BLOCK_SIZE>(j, total);
-				const int offset = ws.rec1_main.size();
+				const int offset = ws.rec1.size();
 				__syncthreads();
 				const int next_size = offset + total;
-				ws.rec1_main.resize(next_size);
-				ws.rec2_main.resize(next_size);
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
-					ws.rec1_main[k].x = x[XDIM];
-					ws.rec1_main[k].y = x[YDIM];
-					ws.rec1_main[k].z = x[ZDIM];
-					ws.rec1_main[k].h = data.h[pi];
-					ws.rec1_main[k].rung = data.rungs[pi];
-					ws.rec2_main[k].eint = data.eint[pi];
-					ws.rec2_main[k].eint0 = data.eint0[pi];
-					ws.rec2_main[k].fpre = data.fpre[pi];
-					ws.rec2_main[k].shearv = data.shearv[pi];
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].h = data.h[pi];
+					ws.rec1[k].rung = data.rungs[pi];
+					ws.rec2[k].eint = data.eint[pi];
+					ws.rec2[k].eint0 = data.eint0[pi];
+					ws.rec2[k].fpre = data.fpre[pi];
+					ws.rec2[k].shearv = data.shearv[pi];
 					if (data.chemistry) {
-						ws.rec2_main[k].chem = data.chem[pi];
-						ws.rec2_main[k].chem0 = data.chem0[pi];
+						ws.rec2[k].chem = data.chem[pi];
+						ws.rec2[k].chem0 = data.chem0[pi];
 					}
 					if (data.conduction) {
-						ws.rec2_main[k].gamma = data.gamma[pi];
-						ws.rec2_main[k].mmw = data.mmw[pi];
-						ws.rec2_main[k].gradT = data.gradT[pi];
+						ws.rec2[k].gamma = data.gamma[pi];
+						ws.rec2[k].mmw = data.mmw[pi];
+						ws.rec2[k].gradT = data.gradT[pi];
 					} else {
-						ws.rec2_main[k].gamma = data.def_gamma;
+						ws.rec2[k].gamma = data.def_gamma;
 					}
 
 				}
@@ -1052,45 +1015,6 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					ne_i *= rho_i * code_to_density / mh * sqr(ainv) * ainv;
 				}
 				const float dt_i = rung_dt[rung_i] * params.t0;
-				const int jmax = round_up(ws.rec1_main.size(), block_size);
-				ws.rec1.resize(0);
-				ws.rec2.resize(0);
-				for (int j = tid; j < jmax; j += block_size) {
-					bool flag = false;
-					int k;
-					int total;
-					if (j < ws.rec1_main.size()) {
-						const auto rec = ws.rec1_main[j];
-						const auto rung_j = rec.rung;
-						if (active || rung_j >= params.min_rung) {
-							const auto x_j = rec.x;
-							const auto y_j = rec.y;
-							const auto z_j = rec.z;
-							const float x_ij = distance(x_j, x_i);
-							const float y_ij = distance(y_j, y_i);
-							const float z_ij = distance(z_j, z_i);
-							const float h_j = rec.h;
-							const float h2_j = sqr(h_j);
-							const float r2 = sqr(x_ij, y_ij, z_ij);
-							if (r2 < fmaxf(h2_i, h2_j)) {
-								flag = true;
-							}
-						}
-					}
-					k = flag;
-					compute_indices<PARABOLIC_BLOCK_SIZE>(k, total);
-					const int offset = ws.rec1.size();
-					__syncthreads();
-					const int next_size = offset + total;
-					ws.rec1.resize(next_size);
-					ws.rec2.resize(next_size);
-					if (flag) {
-						const int l = offset + k;
-						ws.rec1[l] = ws.rec1_main[j];
-						ws.rec2[l] = ws.rec2_main[j];
-					}
-				}
-				__syncthreads();
 				float den = 0.f;
 				float den_eint = 0.f;
 				float num_eint = 0.f;
@@ -1103,76 +1027,78 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto rec1 = ws.rec1[j];
 					const auto rec2 = ws.rec2[j];
+					const auto rung_j = rec1.rung;
 					const fixed32 x_j = rec1.x;
 					const fixed32 y_j = rec1.y;
 					const fixed32 z_j = rec1.z;
-					const float fpre_j = rec2.fpre;
-					const float shearv_j = rec2.shearv;
 					const float h_j = rec1.h;
-					const auto rung_j = rec1.rung;
-					const auto chem_j = rec2.chem;
-					const float dt_j = rung_dt[rung_j] * params.t0;
 					const float h2_j = sqr(h_j);
-					const float hinv_j = 1.f / h_j;															// 4
-					const float h3inv_j = sqr(hinv_j) * hinv_j;
-					const float rho_j = m * c0 * h3inv_j;													// 2
-					const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;								// 5
-					const float eint_j = rec2.eint;
 					const float x_ij = distance(x_i, x_j);				// 2
 					const float y_ij = distance(y_i, y_j);				// 2
 					const float z_ij = distance(z_i, z_j);				// 2
 					const float r2 = sqr(x_ij, y_ij, z_ij);
-					if (r2 > 0.f) {
-						const float r = sqrt(r2);
-						const float rinv = 1.0f / r;
-						const float q_i = r * hinv_i;								// 1
-						const float q_j = r * hinv_j;
-						const float sqrtrho_i = sqrtf(rho_i);
-						const float sqrtrho_j = sqrtf(rho_j);
-						const float h_ij = sqrtf(h_i * h_j);
-						const float rho_ij = sqrtrho_i * sqrtrho_j;
-						const float rhoinv_ij = 1.f / rho_ij;
-						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
-						const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
-						const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
-						const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
-						const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
-						const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
-						const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-						const float difco_ij = SPH_DIFFUSION_C * 0.25f * sqr(h_ij) * 0.5f * (shearv_i + shearv_j);
-						const float dt_ij = fminf(dt_i, dt_j);
-						const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
-						den += phi_ij;
-						den_eint += phi_ij;
-						num_eint += phi_ij * eint_j;
-						if (data.chemistry) {
-							for (int fi = 0; fi < NCHEMFRACS; fi++) {
-								num_chem[fi] += phi_ij * chem_j[fi];
-							}
-						}
-						if (params.conduction) {
-							const float gamma_j = rec2.gamma;
-							const float gradT_j = rec2.gradT;
-							const float mu_j = rec2.mmw;
-							float T_j = mu_j * eint_j / cv0 * sqr(ainv) / (gamma_j - 1.f);
-							T_j = fmaxf(T_j, TMIN);
-							const float T_ij = 0.5f * (T_i / eint_i + T_j / eint_j)
-									* sqr((sqrtrho_i * sqrtf(eint_i) + sqrtrho_j * sqrtf(eint_j)) / (sqrtrho_i + sqrtrho_j));
-							float ne_j = chem_j[CHEM_HP] - chem_j[CHEM_HN] + chem_j[CHEM_HEP] + 2.0f * chem_j[CHEM_HEP];
-							ne_j *= rho_j * code_to_density / mh * sqr(ainv) * ainv;
-							const float ne_ij = sqrtf(ne_i * ne_j);
-							if (ne_ij > 0.f) {
-								const float colog_ij = 23.5f - log(sqrt(ne_ij) * pow(T_ij, -1.2f)) - sqrt((1e-5f + sqr(log(T_ij) - 2.f)) / 16.0f);
-								const float lambda_e_ij = lambda_e0 / colog_ij / params.code_to_cm * ainv * sqr(float(constants::kb) * T_ij) / ne_ij;
-								const float gradT_ij = 0.5f * (gradT_i + gradT_j);
-								float correction = 1.f;
-								if (gradT_ij > 0.f) {
-									correction = 1.0f / (1.0f + 4.2f * lambda_e_ij / gradT_ij);
+					if (r2 < fmaxf(h2_j, h2_i) && (active || rung_j >= params.min_rung)) {
+						const float fpre_j = rec2.fpre;
+						const float shearv_j = rec2.shearv;
+						const auto chem_j = rec2.chem;
+						const float dt_j = rung_dt[rung_j] * params.t0;
+						const float hinv_j = 1.f / h_j;															// 4
+						const float h3inv_j = sqr(hinv_j) * hinv_j;
+						const float rho_j = m * c0 * h3inv_j;													// 2
+						const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;								// 5
+						const float eint_j = rec2.eint;
+						if (r2 > 0.f) {
+							const float r = sqrt(r2);
+							const float rinv = 1.0f / r;
+							const float q_i = r * hinv_i;								// 1
+							const float q_j = r * hinv_j;
+							const float sqrtrho_i = sqrtf(rho_i);
+							const float sqrtrho_j = sqrtf(rho_j);
+							const float h_ij = sqrtf(h_i * h_j);
+							const float rho_ij = sqrtrho_i * sqrtrho_j;
+							const float rhoinv_ij = 1.f / rho_ij;
+							const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
+							const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
+							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
+							const float dWdr_x_ij = x_ij * rinv * dWdr_ij;
+							const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
+							const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
+							const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
+							const float difco_ij = SPH_DIFFUSION_C * 0.25f * sqr(h_ij) * 0.5f * (shearv_i + shearv_j);
+							const float dt_ij = fminf(dt_i, dt_j);
+							const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
+							den += phi_ij;
+							den_eint += phi_ij;
+							num_eint += phi_ij * eint_j;
+							if (data.chemistry) {
+								for (int fi = 0; fi < NCHEMFRACS; fi++) {
+									num_chem[fi] += phi_ij * chem_j[fi];
 								}
-								const float kappa_ij = correction * kappa0 * ne_ij * lambda_e_ij * sqrtf(kome * T_ij) / code_dif_to_cgs;
-								const float phi_ij = -2.f * kappa_ij * dWdr_rinv * m / sqr(rho_ij) * dt_ij;
-								num_eint += phi_ij * eint_j;
-								den_eint += phi_ij;
+							}
+							if (params.conduction) {
+								const float gamma_j = rec2.gamma;
+								const float gradT_j = rec2.gradT;
+								const float mu_j = rec2.mmw;
+								float T_j = mu_j * eint_j / cv0 * sqr(ainv) / (gamma_j - 1.f);
+								T_j = fmaxf(T_j, TMIN);
+								const float T_ij = 0.5f * (T_i / eint_i + T_j / eint_j)
+										* sqr((sqrtrho_i * sqrtf(eint_i) + sqrtrho_j * sqrtf(eint_j)) / (sqrtrho_i + sqrtrho_j));
+								float ne_j = chem_j[CHEM_HP] - chem_j[CHEM_HN] + chem_j[CHEM_HEP] + 2.0f * chem_j[CHEM_HEP];
+								ne_j *= rho_j * code_to_density / mh * sqr(ainv) * ainv;
+								const float ne_ij = sqrtf(ne_i * ne_j);
+								if (ne_ij > 0.f) {
+									const float colog_ij = 23.5f - log(sqrt(ne_ij) * pow(T_ij, -1.2f)) - sqrt((1e-5f + sqr(log(T_ij) - 2.f)) / 16.0f);
+									const float lambda_e_ij = lambda_e0 / colog_ij / params.code_to_cm * ainv * sqr(float(constants::kb) * T_ij) / ne_ij;
+									const float gradT_ij = 0.5f * (gradT_i + gradT_j);
+									float correction = 1.f;
+									if (gradT_ij > 0.f) {
+										correction = 1.0f / (1.0f + 4.2f * lambda_e_ij / gradT_ij);
+									}
+									const float kappa_ij = correction * kappa0 * ne_ij * lambda_e_ij * sqrtf(kome * T_ij) / code_dif_to_cgs;
+									const float phi_ij = -2.f * kappa_ij * dWdr_rinv * m / sqr(rho_ij) * dt_ij;
+									num_eint += phi_ij * eint_j;
+									den_eint += phi_ij;
+								}
 							}
 						}
 					}
@@ -1230,8 +1156,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 	const float ainv = 1.0f / params.a;
 	while (index < data.nselfs) {
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		ws.rec1_main.resize(0);
-		ws.rec2_main.resize(0);
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -1247,29 +1173,29 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				}
 				j = contains;
 				compute_indices<AUX_BLOCK_SIZE>(j, total);
-				const int offset = ws.rec1_main.size();
+				const int offset = ws.rec1.size();
 				__syncthreads();
 				const int next_size = offset + total;
-				ws.rec1_main.resize(next_size);
-				ws.rec2_main.resize(next_size);
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
-					ws.rec1_main[k].x = x[XDIM];
-					ws.rec1_main[k].y = x[YDIM];
-					ws.rec1_main[k].z = x[ZDIM];
-					ws.rec2_main[k].vx = data.vx[pi];
-					ws.rec2_main[k].vy = data.vy[pi];
-					ws.rec2_main[k].vz = data.vz[pi];
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec2[k].vx = data.vx[pi];
+					ws.rec2[k].vy = data.vy[pi];
+					ws.rec2[k].vz = data.vz[pi];
 					if (data.chemistry) {
-						ws.rec2_main[k].gamma = data.gamma[pi];
+						ws.rec2[k].gamma = data.gamma[pi];
 					} else {
-						ws.rec2_main[k].gamma = data.def_gamma;
+						ws.rec2[k].gamma = data.def_gamma;
 					}
-					ws.rec2_main[k].h = data.h[pi];
-					ws.rec2_main[k].eint = data.eint[pi];
-					ws.rec2_main[k].divv = data.divv[pi];
+					ws.rec2[k].h = data.h[pi];
+					ws.rec2[k].eint = data.eint[pi];
+					ws.rec2[k].divv = data.divv[pi];
 					if (params.conduction) {
-						ws.rec2_main[k].mmw = data.mmw[pi];
+						ws.rec2[k].mmw = data.mmw[pi];
 					}
 				}
 			}
@@ -1312,39 +1238,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				if (params.conduction) {
 					mu_i = data.mmw[i];
 					T_i = mu_i * eint_i / cv0 * sqr(ainv) / (gamma_i - 1.f);
-				}
-				const int jmax = round_up(ws.rec1_main.size(), block_size);
-				ws.rec1.resize(0);
-				ws.rec2.resize(0);
-				for (int j = tid; j < jmax; j += block_size) {
-					bool flag = false;
-					int k;
-					int total;
-					if (j < ws.rec1_main.size()) {
-						const auto rec = ws.rec1_main[j];
-						const auto x_j = rec.x;
-						const auto y_j = rec.y;
-						const auto z_j = rec.z;
-						const float x_ij = distance(x_j, x_i);
-						const float y_ij = distance(y_j, y_i);
-						const float z_ij = distance(z_j, z_i);
-						const float r2 = sqr(x_ij, y_ij, z_ij);
-						if (r2 < h2_i) {
-							flag = true;
-						}
-					}
-					k = flag;
-					compute_indices<AUX_BLOCK_SIZE>(k, total);
-					const int offset = ws.rec1.size();
-					__syncthreads();
-					const int next_size = offset + total;
-					ws.rec1.resize(next_size);
-					ws.rec2.resize(next_size);
-					if (flag) {
-						const int l = offset + k;
-						ws.rec1[l] = ws.rec1_main[j];
-						ws.rec2[l] = ws.rec2_main[j];
-					}
 				}
 				__syncthreads();
 				float Ri = 0.f;
