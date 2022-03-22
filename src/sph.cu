@@ -881,9 +881,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(vsig);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(divv);
-				shared_reduce_max<float, HYDRO_BLOCK_SIZE>(dtinv_cfl);
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
+				shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
+				shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
 					PRINT("one is off %e\n", one);
 					__trap();
@@ -1498,7 +1498,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(curl_vy);
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(curl_vz);
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(Ri);
-				shared_reduce_max<float, AUX_BLOCK_SIZE>(vsig);
+				shared_reduce_max<AUX_BLOCK_SIZE>(vsig);
 				if (params.conduction) {
 					shared_reduce_add<float, AUX_BLOCK_SIZE>(dT_dx);
 					shared_reduce_add<float, AUX_BLOCK_SIZE>(dT_dy);
@@ -1648,7 +1648,7 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 				}
-				shared_reduce_max<int, RUNGS_BLOCK_SIZE>(max_rung_j);
+				shared_reduce_max<RUNGS_BLOCK_SIZE>(max_rung_j);
 				if (tid == 0) {
 					if (rung_i < max_rung_j - 1) {
 						changes++;

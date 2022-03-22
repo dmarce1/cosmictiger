@@ -22,31 +22,6 @@
 
 #include <cosmictiger/defs.hpp>
 
-template<int NTHREADS>
-__device__ inline void compute_indices_shmem(int& index, int& total) {
-	__shared__ int indices[NTHREADS];
-	const int& tid = threadIdx.x;
-	indices[tid] = index;
-	__syncthreads();
-	for (int P = 1; P < NTHREADS; P *= 2) {
-		int tmp = indices[tid];
-		if (tid >= P) {
-			tmp += indices[tid - P];
-		}
-		__syncthreads();
-		indices[tid] = tmp;
-	}
-	__syncthreads();
-	total = indices[NTHREADS - 1];
-	int tmp;
-	if (tid > 0) {
-		tmp = indices[tid - 1];
-	} else {
-		tmp = 0;
-	}
-	__syncthreads();
-	indices[tid] = tmp;
-}
 
 __device__ inline void compute_indices(int& index, int& total) {
 	const int& tid = threadIdx.x;
@@ -89,20 +64,39 @@ __device__ inline void shared_reduce_add(T& number) {
 	__syncthreads();
 }
 
-template<class T, int BLOCK_SIZE>
-__device__ inline void shared_reduce_max(T& number) {
+template<int BLOCK_SIZE>
+__device__ inline void shared_reduce_max(float& number) {
 	const int tid = threadIdx.x;
-	__shared__ T sum[BLOCK_SIZE];
+	__shared__ float sum[BLOCK_SIZE];
 	sum[tid] = number;
 	__syncthreads();
 	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
 		const int inbr = (tid + bit) % BLOCK_SIZE;
-		const T t = max(sum[tid], sum[inbr]);
+		const float t = fmaxf(sum[tid], sum[inbr]);
 		__syncthreads();
 		sum[tid] = t;
 		__syncthreads();
 	}
 	number = sum[tid];
+	__syncthreads();
+}
+
+
+template<int BLOCK_SIZE>
+__device__ inline void shared_reduce_max(int& number) {
+	const int tid = threadIdx.x;
+	__shared__ int sum[BLOCK_SIZE];
+	sum[tid] = number;
+	__syncthreads();
+	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % BLOCK_SIZE;
+		const int t = max(sum[tid], sum[inbr]);
+		__syncthreads();
+		sum[tid] = t;
+		__syncthreads();
+	}
+	number = sum[tid];
+	__syncthreads();
 }
 
 #include <cosmictiger/safe_io.hpp>
@@ -124,6 +118,7 @@ __device__ inline void compute_indices(int& index, int& total) {
 	}
 	total = sum[BLOCK_SIZE - 1];
 	index = tid == 0 ? 0 : sum[tid - 1];
+	__syncthreads();
 }
 
 __device__ inline void shared_reduce_min(int& number) {

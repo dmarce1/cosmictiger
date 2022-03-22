@@ -113,7 +113,7 @@ __global__ void sphere_surface_kernel(float** x_main, float** y_main, float** z_
 			const float g = sqrt(fmaf(fx, fx, fmaf(fy, fy, fz * fz)));
 			gmax = fmaxf(gmax, g);
 		}
-		shared_reduce_max<float, BLOCK_SIZE>(gmax);
+		shared_reduce_max<BLOCK_SIZE>(gmax);
 		shared_reduce_add<float, BLOCK_SIZE>(phi);
 		__syncthreads();
 		const float dt = eta * fminf(sqrtf(h / gmax), 1.f / alpha);
