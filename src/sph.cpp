@@ -710,7 +710,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					abort();
 				}
 				//			PRINT( "%e\n", h);
-			} while (error >1);
+			} while (error > 1);
 			max_cnt = std::max(max_cnt, cnt);
 			max_h = std::max(max_h, h);
 			min_h = std::min(min_h, h);
@@ -1581,7 +1581,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		host_vz.resize(parts_size);
 		if (params.run_type == SPH_RUN_AUX) {
 			host_h.resize(parts_size);
-			host_gamma.resize(parts_size);
+			if (chem) {
+				host_gamma.resize(parts_size);
+			}
 			host_eint.resize(parts_size);
 			if (params.conduction) {
 				host_mmw.resize(parts_size);
@@ -1710,7 +1712,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
 		if (params.run_type == SPH_RUN_AUX) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
+			if (chem) {
+				CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
+			}
 			CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
 			CUDA_CHECK(cudaMalloc(&cuda_data.divv, sizeof(float) * host_divv.size()));
 			if (params.conduction) {
@@ -1761,7 +1765,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
 		if (params.run_type == SPH_RUN_AUX) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
+			if (chem) {
+				CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
+			}
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint, host_eint.data(), sizeof(float) * host_eint.size(), cudaMemcpyHostToDevice, stream));
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.divv, host_divv.data(), sizeof(float) * host_divv.size(), cudaMemcpyHostToDevice, stream));
 			if (params.conduction) {
@@ -1888,7 +1894,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaFree(cuda_data.vz));
 		if (params.run_type == SPH_RUN_AUX) {
 			CUDA_CHECK(cudaFree(cuda_data.h));
-			CUDA_CHECK(cudaFree(cuda_data.gamma));
+			if (chem) {
+				CUDA_CHECK(cudaFree(cuda_data.gamma));
+			}
 			CUDA_CHECK(cudaFree(cuda_data.eint));
 			CUDA_CHECK(cudaFree(cuda_data.divv));
 			if (params.conduction) {

@@ -395,7 +395,6 @@ void domains_end() {
 		}
 		return false;
 	};
-	PRINT( "1\n");
 	hpx::future<void> fut1;
 	hpx::future<void> fut2;
 	if (free_indices.size()) {
@@ -433,7 +432,6 @@ void domains_end() {
 	}
 	fut1.get();
 	fut2.get();
-	PRINT( "2\n");
 	if (free_indices.size() < all_trans_particles.size()) {
 		const part_int diff = all_trans_particles.size() - free_indices.size();
 		for (part_int i = 0; i < diff; i++) {
@@ -449,7 +447,6 @@ void domains_end() {
 		}
 
 	}
-	//PRINT("unloading particles on %i\n", hpx_rank());
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([nthreads, proc, &all_trans_particles]() {
 			const part_int begin = (size_t) proc * free_indices.size() / nthreads;
@@ -461,12 +458,10 @@ void domains_end() {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	//PRINT("Done on %i\n", hpx_rank());
-	PRINT( "3\n");
 	free_indices = decltype(free_indices)();
 #ifdef DOMAINS_CHECK
 	domains_check();
 #endif
-	PRINT( "4\n");
 }
 
 range<double> domains_find_my_box() {
