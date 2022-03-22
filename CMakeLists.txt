@@ -17,7 +17,7 @@ if( COSMICTIGER_WITH_CUDA )
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-set(CMAKE_CXX_FLAGS "-Wno-attributes  -g")
+set(CMAKE_CXX_FLAGS "-Wno-attributes  ")
 
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)

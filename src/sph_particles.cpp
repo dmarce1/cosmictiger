@@ -147,11 +147,9 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 					switch(phase) {
 						case 0: {
 							sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt2;
-							sph_particles_alpha(i) +=sph_particles_dalpha_pred(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt2;
 							}
-							sph_particles_dalpha_con(i) = 0.f;
 							sph_particles_deint_con(i) = 0.f;
 							for( int dim = 0; dim < NDIM; dim++) {
 								sph_particles_dvel_con(dim,i) = 0.f;
@@ -160,22 +158,18 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						break;
 						case 1: {
 							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt2;
-							sph_particles_alpha(i) -= sph_particles_dalpha_pred(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt2;
 							}
 							sph_particles_eint(i) += sph_particles_deint_con(i) *dt2;
-							sph_particles_alpha(i) += sph_particles_dalpha_con(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
 							}
 						}
 						break;
 						case 2: {
-							sph_particles_dalpha_pred(i) = sph_particles_dalpha_con(i);
 							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
 							sph_particles_eint(i) +=sph_particles_deint_con(i) *dt2;
-							sph_particles_alpha(i) +=sph_particles_dalpha_con(i) *dt2;
 							for( int dim =0; dim < NDIM; dim++) {
 								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
@@ -455,8 +449,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		}
 		sph_particles_deint_con(oldsz + i) = 0.0f;
 		sph_particles_deint_pred(oldsz + i) = 0.0f;
-		sph_particles_dalpha_con(oldsz + i) = 0.0f;
-		sph_particles_dalpha_pred(oldsz + i) = 0.0f;
 		sph_particles_alpha(oldsz + i) = get_options().alpha0;
 		sph_particles_fpre(oldsz + i) = 1.f;
 		sph_particles_taux(oldsz + i) = 0.f;
@@ -1210,7 +1202,6 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_divv0(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
-	FREAD(&sph_particles_dalpha_pred(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_alpha(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_crsv[0], sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
@@ -1251,7 +1242,6 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_divv0(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_deint_pred(0), sizeof(float), sph_particles_size(), fp);
-	fwrite(&sph_particles_dalpha_pred(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_alpha(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_crsv[0], sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
