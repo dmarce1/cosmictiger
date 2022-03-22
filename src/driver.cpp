@@ -426,10 +426,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				tm.reset();
 			}
 			sph_particles_apply_updates(minrung, 2, t0, tau);
-			if (stars) {
-				stars_find(scale, dt, minrung, iter);
-			}
-			if (get_options().xsph > 0.0) {
+			if (get_options().xsph > 0.0 ) {
 				tnparams.h_wt = 1.001;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.seto = SPH_SET_ACTIVE;
@@ -464,6 +461,9 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
+			}
+			if (stars) {
+				stars_find(scale, dt, minrung, iter);
 			}
 		}
 

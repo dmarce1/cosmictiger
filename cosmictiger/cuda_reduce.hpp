@@ -22,7 +22,6 @@
 
 #include <cosmictiger/defs.hpp>
 
-
 __device__ inline void compute_indices(int& index, int& total) {
 	const int& tid = threadIdx.x;
 	for (int P = 1; P < WARP_SIZE; P *= 2) {
@@ -81,7 +80,6 @@ __device__ inline void shared_reduce_max(float& number) {
 	__syncthreads();
 }
 
-
 template<int BLOCK_SIZE>
 __device__ inline void shared_reduce_max(int& number) {
 	const int tid = threadIdx.x;
@@ -107,6 +105,7 @@ __device__ inline void compute_indices(int& index, int& total) {
 	const int& tid = threadIdx.x;
 	sum[tid] = index;
 	__syncthreads();
+	auto tm = clock64();
 	for (int P = 1; P < BLOCK_SIZE; P *= 2) {
 		int tmp = 0;
 		if (tid >= P) {
@@ -115,6 +114,9 @@ __device__ inline void compute_indices(int& index, int& total) {
 		__syncthreads();
 		sum[tid] += tmp;
 		__syncthreads();
+	}
+	if (tid == 0) {
+		tm = clock64() - tm;
 	}
 	total = sum[BLOCK_SIZE - 1];
 	index = tid == 0 ? 0 : sum[tid - 1];

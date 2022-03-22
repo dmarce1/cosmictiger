@@ -1858,6 +1858,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
 //	PRINT("Running with %i nodes\n", host_trees.size());
+	PRINT( "Sending %i\n", host_selflist.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);
 	const bool courant = (params.run_type == SPH_RUN_HYDRO && params.phase == 1) || params.run_type == SPH_RUN_RUNGS;
