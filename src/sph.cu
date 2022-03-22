@@ -225,8 +225,8 @@ __global__ void sph_cuda_xsph(sph_run_params params, sph_run_cuda_data data, sph
 				}
 			}
 		}
-		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
 			const bool use = active;
@@ -371,10 +371,10 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				}
 			}
 		}
-		__syncthreads();
 		float hmin = 1e+20;
 		float hmax = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
 			const bool use = active;
@@ -572,8 +572,8 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 				}
 			}
 		}
-		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			if (data.rungs[i] >= params.min_rung) {
 				if (tid == 0) {
@@ -703,15 +703,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 			}
 		}
-		__syncthreads();
-		//	int nactive = 0;
-		/*for (int i = self.part_range.first + tid; i < self.part_range.second; i+=block_size) {
-		 int rung_i = data.rungs[i];
-		 bool use = rung_i >= params.min_rung;
-		 nactive += use;
-		 }*/
-		//	shared_reduce_add<int, HYDRO_BLOCK_SIZE>(nactive);
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			int rung_i = data.rungs[i];
 			bool use = rung_i >= params.min_rung;
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
@@ -1051,8 +1044,8 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				}
 			}
 		}
-		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			int rung_i = data.rungs[i];
 			const bool active = rung_i >= params.min_rung;
@@ -1317,8 +1310,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				}
 			}
 		}
-		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			int rung_i = data.rungs[i];
 			const bool active = rung_i >= params.min_rung;
@@ -1620,8 +1613,8 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 				}
 			}
 		}
-		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
 			if (data.rungs[i] >= params.min_rung) {
 				const auto x_i = data.x[i];
 				const auto y_i = data.y[i];
