@@ -657,7 +657,7 @@ void driver() {
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
-		write_checkpoint(params);
+//		write_checkpoint(params);
 		dr = drift(a0, 0.0, 0.0, 0.0, 0.0);
 		PRINT("Initial etherm = %e\n", dr.therm);
 

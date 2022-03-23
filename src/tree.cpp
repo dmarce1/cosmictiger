@@ -323,7 +323,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				} else {
 					xmax = xmid;
 				}
-			} while (error > 1e-1);
+			} while (error > 0.5);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
