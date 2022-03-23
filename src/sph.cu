@@ -17,6 +17,8 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+
+#define SPH_DIFFUSION_C 0.03f
 #define SMOOTHLEN_BLOCK_SIZE 256
 #define MARK_SEMIACTIVE_BLOCK_SIZE 256
 #define RUNGS_BLOCK_SIZE 256
@@ -755,9 +757,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float rhoinv_ij = 1.f / rho_ij;
 					const float c_ij = (sqrtrho_i * c_i + sqrtrho_j * c_j) / (sqrtrho_i + sqrtrho_j);
 					const float mu_ij = h_ij * vdotx_ij / (r2 + 0.01f * h_i * h_j);
-					const float w_ij = h_ij * vdotx_ij / (r2 > 0.f ? r2 : 1.f);
 					const float alpha_ij = 0.5f * (alpha_i + alpha_j);
-					const float dvisc_ij = -alpha_ij * w_ij * (c_ij - params.beta * mu_ij) / rho_ij;
+					const float dvisc_ij = -alpha_ij * mu_ij * (c_ij - params.beta * mu_ij) / rho_ij;
 					const float W_i = kernelW(q_i) * h3inv_i;
 					const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 					const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
@@ -1059,10 +1060,11 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float rhoinv_ij = 1.f / rho_ij;
 							const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 							const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
-							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
-							const float difco_ij = SPH_DIFFUSION_C * h_i * h_j * 0.5f * (shearv_i + shearv_j);
+							const float h2_ij = h_i * h_j;
+							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j) * (r2 / (r2 + 1e-2f * h2_ij));
+							const float difco_ij = SPH_DIFFUSION_C * h2_ij * 0.5f * (shearv_i + shearv_j);
 							const float dt_ij = fminf(dt_i, dt_j);
-							const float phi_ij = -2.f * difco_ij * dWdr * rinv * m / rho_ij * dt_ij;
+							const float phi_ij = -2.f * difco_ij * dWdr_ij * rinv * m / rho_ij * dt_ij;
 							den += phi_ij;
 							den_eint += phi_ij;
 							num_eint += phi_ij * eint_j;
@@ -1091,7 +1093,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 										correction = 1.0f / (1.0f + 4.2f * lambda_e_ij / gradT_ij);
 									}
 									const float kappa_ij = correction * kappa0 * ne_ij * lambda_e_ij * sqrtf(kome * T_ij) / code_dif_to_cgs;
-									const float phi_ij = -2.f * kappa_ij * dWdr_rinv * m / sqr(rho_ij) * dt_ij;
+									const float phi_ij = -2.f * kappa_ij * dWdr_ij * rinv * m / sqr(rho_ij) * dt_ij;
 									num_eint += phi_ij * eint_j;
 									den_eint += phi_ij;
 								}
