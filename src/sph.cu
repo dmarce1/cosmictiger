@@ -17,7 +17,6 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
 #define SPH_DIFFUSION_C 0.03f
 #define SMOOTHLEN_BLOCK_SIZE 256
 #define MARK_SEMIACTIVE_BLOCK_SIZE 256
@@ -800,10 +799,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				if (params.phase == 1 || params.damping > 0.f) {
 					shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
 				}
-/*				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
-					PRINT("one is off %e\n", one);
-					__trap();
-				}*/
+				/*				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
+				 PRINT("one is off %e\n", one);
+				 __trap();
+				 }*/
 				if (tid == 0) {
 					ax += gx_i;
 					ay += gy_i;
@@ -1056,10 +1055,10 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 							const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
 							const float h2_ij = h_i * h_j;
-							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j) * (r2 / (r2 + 1e-2f * h2_ij));
 							const float difco_ij = SPH_DIFFUSION_C * h2_ij * 0.5f * (shearv_i + shearv_j);
 							const float dt_ij = fminf(dt_i, dt_j);
-							const float phi_ij = -2.f * difco_ij * dWdr_ij * rinv * m / rho_ij * dt_ij;
+							const float dwdr_rinv = (dWdr_i * rhoinv_i + dWdr_j * rhoinv_j) * rinv;
+							const float phi_ij = -m * dt_ij * difco_ij * dwdr_rinv;
 							den += phi_ij;
 							den_eint += phi_ij;
 							num_eint += phi_ij * eint_j;
@@ -1088,7 +1087,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 										correction = 1.0f / (1.0f + 4.2f * lambda_e_ij / gradT_ij);
 									}
 									const float kappa_ij = correction * kappa0 * ne_ij * lambda_e_ij * sqrtf(kome * T_ij) / code_dif_to_cgs;
-									const float phi_ij = -2.f * kappa_ij * dWdr_ij * rinv * m / sqr(rho_ij) * dt_ij;
+									const float phi_ij = -kappa_ij * m / rho_ij * dt_ij * dwdr_rinv;
 									num_eint += phi_ij * eint_j;
 									den_eint += phi_ij;
 								}
