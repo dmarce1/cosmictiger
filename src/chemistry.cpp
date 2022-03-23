@@ -721,7 +721,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					double dt = (rung_dt[rung1] + rung_dt[rung2]) * 0.5 * t0;
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
 					chem.dt = dt;
-					if( T > 1e8) {
+					if( T > 5e8) {
 						PRINT( "T-------------> %e\n", T);
 						if( T > TMAX) {
 							int k = sph_particles_dm_index(i);
