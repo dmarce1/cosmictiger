@@ -53,7 +53,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define DOMAIN_REBOUND_ITERS 20
 
 #ifdef USE_CUDA
-#define BUCKET_SIZE 90
+#define BUCKET_SIZE 128
 #else
 #define BUCKET_SIZE 90
 #endif
