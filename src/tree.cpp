@@ -476,18 +476,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const double dm_mass = get_options().dm_mass;
 		const double sph_mass = get_options().sph_mass;
 
-		if (sph) {
-			for (part_int i = part_range.first; i < part_range.second; i++) {
-				if (particles_type(i) != SPH_TYPE) {
-					hsoft_max = std::max(hsoft_max, h);
-				} else {
-					const int j = particles_cat_index(i);
-					hsoft_max = std::max(hsoft_max, (double) sph_particles_smooth_len(j));
-				}
-			}
-		} else {
-			hsoft_max = get_options().hsoft;
-		}
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
 			simd_float mask;
@@ -535,7 +523,23 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			flops += 3 * NDIM + 1;
 		}
 		radius = std::sqrt(r);
-		flops += 4;
+		r = 0.0;
+		for (part_int i = part_range.first; i < part_range.second; i++) {
+			double this_radius = 0.0;
+			double this_h;
+			this_h = h;
+			if (sph) {
+				if (particles_type(i) == SPH_TYPE) {
+					this_h = sph_particles_smooth_len(particles_cat_index(i));
+				}
+			}
+			for (int dim = 0; dim < NDIM; dim++) {
+				const double x = particles_pos(dim, i).to_double();
+				this_radius += sqr(x - Xc[dim]);
+			}
+			r = std::max(r, sqrt(this_radius) + h);
+		}
+		hsoft_max = r - radius;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}
