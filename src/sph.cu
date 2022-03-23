@@ -45,7 +45,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
 		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-
 struct smoothlen_workspace {
 	device_vector<fixed32> x;
 	device_vector<fixed32> y;
@@ -1365,7 +1364,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dt = params.t0 * rung_dt[rung_i];
 					const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
 					const float A2 = sqr(2.f * sqr(sqr(1.f - Ri)) * div_v);
-					const float limiter = A2 / (A2 + sqr(shearv) + 1e-30f);
+					const float limiter = A2 / (A2 + sqr(shearv) + 1e-6f * sqr(vsig * hinv_i * ainv));
 					const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
 					const float alpha_targ = fmaxf(params.alpha0, S / (S + sqr(vsig)) * params.alpha1);
 					const float lambda0 = alpha_i < alpha_targ ? 9.f / params.cfl : params.alpha_decay;
