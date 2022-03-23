@@ -1055,7 +1055,6 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float q_j = r * hinv_j;
 							const float sqrtrho_i = sqrtf(rho_i);
 							const float sqrtrho_j = sqrtf(rho_j);
-							const float h_ij = sqrtf(h_i * h_j);
 							const float rho_ij = sqrtrho_i * sqrtrho_j;
 							const float rhoinv_ij = 1.f / rho_ij;
 							const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
@@ -1065,7 +1064,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 							const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
 							const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-							const float difco_ij = SPH_DIFFUSION_C * sqr(h_ij) * 0.5f * (shearv_i + shearv_j);
+							const float difco_ij = SPH_DIFFUSION_C * sqrtf(h_i * h_j) * 0.5f * (shearv_i + shearv_j);
 							const float dt_ij = fminf(dt_i, dt_j);
 							const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
 							den += phi_ij;
