@@ -26,7 +26,7 @@
 #define AUX_BLOCK_SIZE 128
 #define PARABOLIC_BLOCK_SIZE 128
 
-#define SPH_SMOOTHLEN_TOLER 2e-6
+#define SPH_SMOOTHLEN_TOLER float(1.0f/(1<<19))
 
 struct smoothlen_shmem {
 	int index;
@@ -334,7 +334,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
 			const bool use = active;
-			const float w0 = kernelW(0.f) * 1.001f;
+			const float w0 = kernelW(0.f);
 			if (use) {
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
@@ -345,12 +345,18 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float drho_dh;
 				float dpot_dh;
 				float rhoh3;
-				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
+				bool too_small = false;
+				float last_dlogh = 0.f;
+				float weight = 1.0f;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
 					rhoh3 = 0.f;
+					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
+					if (too_small) {
+						rhoh30 -= w0;
+					}
 					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
 						const float dy = distance(x[YDIM], ws.y[j]); // 2
@@ -358,7 +364,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float r2 = sqr(dx, dy, dz);            // 2
 						const float r = sqrt(r2);                    // 4
 						const float q = r * hinv;                    // 1
-						if (q < 1.f) {                               // 1
+						if (q < 1.f && !(too_small && q == 0.f)) {                               // 1
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
 							const float dwdh = -q * dwdq * hinv; // 3
@@ -370,12 +376,23 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(rhoh3);
 					drho_dh *= 0.33333333333f / rhoh30;
 					const float fpre = 1.0f / (1.0f + drho_dh);
-					const float dlogh = powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f;
+					float dlogh = powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f;
+					if (last_dlogh * dlogh < 0.f) {
+						weight *= 0.5f;
+					} else {
+						weight = min(1.f, 1.1f * weight);
+					}
+					last_dlogh = dlogh;
 					error = fabs(dlogh);
 					__syncthreads();
 					if (rhoh3 <= w0) {
-						h *= 1.1f;
+						if (tid == 0) {
+							h *= 1.1f;
+						}
+						too_small = true;
 					} else {
+						too_small = dlogh > 0.f;
+						dlogh *= weight;
 						if (tid == 0) {
 							h *= (1.f + dlogh);
 						}
@@ -383,7 +400,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					__syncthreads();
 					if (tid == 0) {
 						if (iter > 30) {
-							PRINT("Solver failed to converge - %i %e %e %e\n", iter, h, dlogh, error);
+							PRINT("Solver failed to converge - %i %e %e %e %e\n", iter, h, dlogh, error, weight);
 							if (iter > 50) {
 								__trap();
 							}
@@ -408,6 +425,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
 					dpot_dh = 0.f;
+					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
 					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
 						const float dy = distance(x[YDIM], ws.y[j]); // 2

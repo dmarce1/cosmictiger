@@ -304,8 +304,26 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			flops += 7;
 		} else {
 			const int xdim = box.longest_dim();
-			const double xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
-			const part_int mid = particles_sort(part_range, xmid, xdim);
+			double xmax = box.end[xdim];
+			double xmin = box.begin[xdim];
+			double nparts_inv = 1.0 / (part_range.second - part_range.first);
+			part_int mid;
+			double xmid;
+			double error;
+			double parts_above;
+			double parts_below;
+			do {
+				xmid = 0.5 * (xmax + xmin);
+				mid = particles_sort(part_range, xmid, xdim);
+				parts_above = part_range.second - mid;
+				parts_below = mid - part_range.first;
+				error = fabs(parts_above - parts_below) * nparts_inv;
+				if (parts_above > parts_below) {
+					xmin = xmid;
+				} else {
+					xmax = xmid;
+				}
+			} while (error > 1e-1);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
