@@ -150,10 +150,6 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt2;
 							}
-							sph_particles_deint_con(i) = 0.f;
-							for( int dim = 0; dim < NDIM; dim++) {
-								sph_particles_dvel_con(dim,i) = 0.f;
-							}
 						}
 						break;
 						case 1: {
