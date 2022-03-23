@@ -703,6 +703,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
 				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 				const float fpre_i = data.fpre[i];
+				const float sqrtrho_i = sqrtf(rho_i);
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
@@ -748,7 +749,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 					const float q_i = r * hinv_i;								// 1
 					const float q_j = r * hinv_j;
-					const float sqrtrho_i = sqrtf(rho_i);
 					const float sqrtrho_j = sqrtf(rho_j);
 					const float h_ij = sqrtf(h_i * h_j);
 					const float rho_ij = sqrtrho_i * sqrtrho_j;
@@ -777,7 +777,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float dvy_dt = -m * ainv * (dp_i * dWdr_y_i + dp_j * dWdr_y_j + dvisc_ij * dWdr_y_ij);
 					const float dvz_dt = -m * ainv * (dp_i * dWdr_z_i + dp_j * dWdr_z_j + dvisc_ij * dWdr_z_ij);
 					de_dt += ainv * dp_i * (vx0_ij * dWdr_x_i + vy0_ij * dWdr_y_i + vz0_ij * dWdr_z_i) * m;
-					de_dt += 0.5f * ainv * dvisc_ij * (vx0_ij * dWdr_x_ij + vy0_ij * dWdr_y_ij + vz0_ij * dWdr_z_ij) * m;
+					de_dt += 0.5f * ainv * dvisc_ij * (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij) * m;
 					ax += dvx_dt;
 					ay += dvy_dt;
 					az += dvz_dt;
