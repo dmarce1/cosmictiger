@@ -710,7 +710,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 					abort();
 				}
 				//			PRINT( "%e\n", h);
-			} while (error >1);
+			} while (error > 1);
 			max_cnt = std::max(max_cnt, cnt);
 			max_h = std::max(max_h, h);
 			min_h = std::min(min_h, h);
@@ -1858,7 +1858,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.eta = get_options().eta;
 	cuda_data.divv_snk = &sph_particles_divv(0);
 //	PRINT("Running with %i nodes\n", host_trees.size());
-	PRINT( "Sending %i\n", host_selflist.size());
+	PRINT("Sending %i\n", host_selflist.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);
 	const bool courant = (params.run_type == SPH_RUN_HYDRO && params.phase == 1) || params.run_type == SPH_RUN_RUNGS;
@@ -1953,46 +1953,38 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 				const auto sid = sph_tree_get_leaf(i);
 				auto* self = sph_tree_get_node(sid);
 				if( !self->converged ) {
-					float this_error = 0.f;
-					const auto apply_d = [](float& a, float& da) {
-						a += da;
-					};
+					float this_error = 0.0;
 					if( self->nactive || has_active_neighbors(self)) {
 						for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
 							const part_int k = sph_particles_dm_index(j);
 							const auto rung = particles_rung(k);
 							const bool sa = sph_particles_semi_active(j);
 							if( rung >= minrung || sa) {
-//												const float e1 = sph_particles_eint(j) + 0.5*(sqr(sph_particles_vel(XDIM,j)) + sqr(sph_particles_vel(YDIM,j)) + sqr(sph_particles_vel(ZDIM,j)));
-				float e0 = sph_particles_eavg(j);
-				if(!isfinite(e0)) {
-					PRINT( "e0 = %e\n", e0);
-				}
-//												e0 = sph_particles_eint(j);
-				ALWAYS_ASSERT(isfinite(sph_particles_deint(j)));
-				this_error = std::max(this_error, fabs(sph_particles_deint(j)/e0));
-				if( fabs(5.303934e-04 - fabs(sph_particles_deint(j)/e0)) < 1e-4) {
-					//						PRINT( "%e %e\n", sph_particles_eint(j),sph_particles_deint(j));
-				}
-				apply_d(sph_particles_eint(j), sph_particles_deint(j));
-				if( chem ) {
-					for( int fi = 0; fi < NCHEMFRACS; fi++) {
-						ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
-						this_error = std::max(this_error, fabs(sph_particles_dchem(j)[fi]));
-						apply_d(sph_particles_chem(j)[fi], sph_particles_dchem(j)[fi]);
+								const float de = sph_particles_deint(j);
+								ALWAYS_ASSERT(isfinite(de));
+								float& e1 = sph_particles_eint(j);
+								e1 += de;
+								this_error = std::max(this_error,fabs(de)/sph_particles_eavg(j));
+								if( chem ) {
+									for( int fi = 0; fi < NCHEMFRACS; fi++) {
+										ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
+										const float dc = sph_particles_dchem(j)[fi];
+										float& c1 = sph_particles_chem(j)[fi];
+										this_error = std::max(this_error, fabs(dc));
+										c1 += dc;
+									}
+								}
+							}
+						}
 					}
+					if( this_error < toler ) {
+						sph_tree_set_converged(sid);
+					}
+					error = std::max(error, this_error);
 				}
 			}
-		}
-	}
-	if( this_error < toler ) {
-		sph_tree_set_converged(sid);
-	}
-	error = std::max(error, this_error);
-}
-}
-return error;
-}));
+			return error;
+		}));
 	}
 	for (auto& f : futs) {
 		error = std::max(error, f.get());

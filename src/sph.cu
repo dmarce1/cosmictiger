@@ -103,6 +103,7 @@ struct hydro_record2 {
 	float eint;
 	float alpha;
 	float fpre;
+	char rung;
 };
 
 struct parabolic_record2 {
@@ -669,6 +670,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].eint = data.eint[pi];
 					ws.rec2[k].alpha = data.alpha[pi];
 					ws.rec2[k].fpre = data.fpre[pi];
+					ws.rec2[k].rung = data.rungs[pi];
 					if (data.chemistry) {
 						ws.rec2[k].gamma = data.gamma[pi];
 					} else {
@@ -737,6 +739,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const fixed32 x_j = rec1.x;
 					const fixed32 y_j = rec1.y;
 					const fixed32 z_j = rec1.z;
+					const auto rung_j = rec2.rung;
 					const float vx_j = rec2.vx;
 					const float vy_j = rec2.vy;
 					const float vz_j = rec2.vz;
@@ -789,20 +792,26 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					az -= m * ainv * (d_i * dWdr_z_i + d_j * dWdr_z_j);
 					de_dt += m * ainv * dp_i * (vx0_ij * dWdr_x_i + vy0_ij * dWdr_y_i + vz0_ij * dWdr_z_i);
 					de_dt += m * ainv * dv_i * (vx_ij * dWdr_x_i + vy_ij * dWdr_y_i + vz_ij * dWdr_z_i);
-//					const float W_i = kernelW(q_i) * h3inv_i;
-//					one += m * rhoinv_i * W_i;
 					if (q_i < 1.f || q_j < 1.f) {
 						if (params.phase == 1 || params.damping > 0.f) {
 							vsig = fmaxf(vsig, c_i - vdotx_ij * rinv);
 						}
 						if (params.phase == 1) {
-							const float dtinv_i = c_i + 0.6f * alpha_i * (c_i - params.beta * mu_ij) * hinv_i;
-							const float dtinv_j = c_j + 0.6f * alpha_j * (c_j - params.beta * mu_ij) * hinv_j;
-							dtinv_cfl = fmaxf(dtinv_i, dtinv_j);
+							float dtinv_i = c_i * hinv_i;
+							if (mu_ij < 0.f) {
+								dtinv_i += alpha_i * (c_i - params.beta * mu_ij) * hinv_i;
+							}
+							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_i);
+							if (rung_j >= params.min_rung) {
+								float dtinv_j = c_j * hinv_j;
+								if (mu_ij < 0.f) {
+									dtinv_j += alpha_j * (c_j - params.beta * mu_ij) * hinv_j;
+								}
+								dtinv_cfl = fmaxf(dtinv_cfl, 0.5f * dtinv_j);
+							}
 						}
 					}
 				}
-//				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
@@ -1054,8 +1063,8 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						const float dt_j = rung_dt[rung_j] * params.t0;
 						const float hinv_j = 1.f / h_j;															// 4
 						const float h3inv_j = sqr(hinv_j) * hinv_j;
-						const float rho_j = m * c0 * h3inv_j;													// 2
-						const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;								// 5
+						const float rho_j = m * c0 * h3inv_j;															// 2
+						const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;															// 5
 						const float eint_j = rec2.eint;
 						if (r2 > 0.f) {
 							const float r = sqrt(r2);
@@ -1319,9 +1328,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						dT_dz += tmp * dWdr_z_i;
 					}
 					if (params.diffusion) {
-						const float W_i = kernelW(q_i) * h3inv_i;
-						const float etot = eint_j + 0.5f * (sqr(vx_j) + sqr(vy_j) + sqr(vz_j));
-						eavg += etot * m * rhoinv_i * W_i;
+						eavg = fmaxf(eint_j, eavg);
 					}
 				}
 				const float mrhoinvainv_i = m * rhoinv_i * ainv;
@@ -1369,7 +1376,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					shared_reduce_add<float, AUX_BLOCK_SIZE>(dT_dz);
 				}
 				if (params.diffusion) {
-					shared_reduce_add<float, AUX_BLOCK_SIZE>(eavg);
+					shared_reduce_max<AUX_BLOCK_SIZE>(eavg);
 				}
 				if (tid == 0) {
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
