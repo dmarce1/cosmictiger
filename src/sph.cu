@@ -781,21 +781,30 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += dvx_dt;
 					ay += dvy_dt;
 					az += dvz_dt;
-					divv -= m * rhoinv_i * (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
-					const float vsig_ij = (c_ij - params.beta * vdotx_ij * rinv);
-					vsig = fmaxf(vsig, vsig_ij);
 					one += m * rhoinv_i * W_i;
-					const float hinv_ij = 1.f / h_ij;
-					dtinv_cfl = fmaxf(dtinv_cfl, (c_ij + 0.6f * alpha_ij * vsig_ij) / h_ij);
+					float vsig_ij;
+					if (params.phase == 1 || params.damping > 0.f) {
+						vsig_ij = (c_ij - params.beta * vdotx_ij * rinv);
+						vsig = fmaxf(vsig, vsig_ij);
+					}
+					if (params.phase == 1) {
+						const float hinv_ij = 1.f / h_ij;
+						divv -= m * rhoinv_i * (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
+						dtinv_cfl = fmaxf(dtinv_cfl, (c_ij + 0.6f * alpha_ij * vsig_ij) / h_ij);
+					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
-				shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
-				shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
+				if (params.phase == 1) {
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(divv);
+					shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
+				}
+				if (params.phase == 1 || params.damping > 0.f) {
+					shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
+				}
 				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
 					PRINT("one is off %e\n", one);
 					__trap();
@@ -1056,7 +1065,7 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float dWdr_y_ij = y_ij * rinv * dWdr_ij;
 							const float dWdr_z_ij = z_ij * rinv * dWdr_ij;
 							const float dWdr_rinv = (x_ij * dWdr_x_ij + y_ij * dWdr_y_ij + z_ij * dWdr_z_ij) * sqr(rinv);
-							const float difco_ij = SPH_DIFFUSION_C * 0.25f * sqr(h_ij) * 0.5f * (shearv_i + shearv_j);
+							const float difco_ij = SPH_DIFFUSION_C * sqr(h_ij) * 0.5f * (shearv_i + shearv_j);
 							const float dt_ij = fminf(dt_i, dt_j);
 							const float phi_ij = -2.f * difco_ij * dWdr_rinv * m / rho_ij * dt_ij;
 							den += phi_ij;
@@ -1274,16 +1283,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dWdr_y_i = dWdr_i * rinv * y_ij;
 					const float dWdr_z_i = dWdr_i * rinv * z_ij;
 					const float vdotx_ij = fminf(vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij, 0.f);
-					const float mrhoinv_i = m * rhoinv_i;
-					dvx_dx -= mrhoinv_i * vx_ij * dWdr_x_i * ainv;
-					dvy_dx -= mrhoinv_i * vy_ij * dWdr_x_i * ainv;
-					dvz_dx -= mrhoinv_i * vz_ij * dWdr_x_i * ainv;
-					dvx_dy -= mrhoinv_i * vx_ij * dWdr_y_i * ainv;
-					dvy_dy -= mrhoinv_i * vy_ij * dWdr_y_i * ainv;
-					dvz_dy -= mrhoinv_i * vz_ij * dWdr_y_i * ainv;
-					dvx_dz -= mrhoinv_i * vx_ij * dWdr_z_i * ainv;
-					dvy_dz -= mrhoinv_i * vy_ij * dWdr_z_i * ainv;
-					dvz_dz -= mrhoinv_i * vz_ij * dWdr_z_i * ainv;
 					const float eint_j = rec2.eint;
 					const float h_j = rec2.h;
 					const float hinv_j = 1.f / h_j;
@@ -1298,23 +1297,47 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float w_j = sqrtf(rho_j);
 					const float c_ij = (w_i * c_i + w_j * c_j) / (w_i + w_j);
 					const float vsig_ij = c_ij - w_ij;
-					vsig = fmaxf(vsig, vsig_ij);
 					const float W_i = h3inv_i * kernelW(q_i);
 					const float divv_j = rec2.divv;
+					dvx_dx -= vx_ij * dWdr_x_i;
+					dvy_dx -= vy_ij * dWdr_x_i;
+					dvz_dx -= vz_ij * dWdr_x_i;
+					dvx_dy -= vx_ij * dWdr_y_i;
+					dvy_dy -= vy_ij * dWdr_y_i;
+					dvz_dy -= vz_ij * dWdr_y_i;
+					dvx_dz -= vx_ij * dWdr_z_i;
+					dvy_dz -= vy_ij * dWdr_z_i;
+					dvz_dz -= vz_ij * dWdr_z_i;
+					vsig = fmaxf(vsig, vsig_ij);
 					Ri += copysign(m * rhoinv_i * W_i, divv_j);
 					if (params.conduction) {
 						const float mu_j = rec2.mmw;
 						const float T_j = mu_j * eint_j / cv0 * sqr(ainv) / (gamma_j - 1.f);
 						const float tmp = logf(T_j / T_i);
-						dT_dx += mrhoinv_i * tmp * dWdr_x_i * ainv;
-						dT_dy += mrhoinv_i * tmp * dWdr_y_i * ainv;
-						dT_dz += mrhoinv_i * tmp * dWdr_z_i * ainv;
+						dT_dx += tmp * dWdr_x_i;
+						dT_dy += tmp * dWdr_y_i;
+						dT_dz += tmp * dWdr_z_i;
 					}
 					if (params.diffusion) {
 						const float W_i = kernelW(q_i) * h3inv_i;
 						const float etot = eint_j + 0.5f * (sqr(vx_j) + sqr(vy_j) + sqr(vz_j));
-						eavg += etot * mrhoinv_i * W_i;
+						eavg += etot * m * rhoinv_i * W_i;
 					}
+				}
+				const float mrhoinvainv_i = m * rhoinv_i * ainv;
+				dvx_dx *= mrhoinvainv_i;
+				dvx_dy *= mrhoinvainv_i;
+				dvx_dz *= mrhoinvainv_i;
+				dvy_dx *= mrhoinvainv_i;
+				dvy_dy *= mrhoinvainv_i;
+				dvy_dz *= mrhoinvainv_i;
+				dvz_dx *= mrhoinvainv_i;
+				dvz_dy *= mrhoinvainv_i;
+				dvz_dz *= mrhoinvainv_i;
+				if (params.conduction) {
+					dT_dx *= mrhoinvainv_i;
+					dT_dy *= mrhoinvainv_i;
+					dT_dz *= mrhoinvainv_i;
 				}
 				float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
 				float div_v, curl_vx, curl_vy, curl_vz;
