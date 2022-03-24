@@ -723,11 +723,11 @@ int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, con
 					const float fpot_j = src_fpot[j];
 					const float m_j = sph ? (fpot_j != 0.f ? sph_mass : dm_mass) : 1.f;
 					if (R2 == 0.f) {
-						pot += 2.8372975f * m_j;
+						pot += 2.8372975f;
 					} else {
-						for (int xi = -4; xi <= +4; xi++) {
-							for (int yi = -4; yi <= +4; yi++) {
-								for (int zi = -4; zi <= +4; zi++) {
+						for (int xi = -3; xi <= +3; xi++) {
+							for (int yi = -3; yi <= +3; yi++) {
+								for (int zi = -3; zi <= +3; zi++) {
 									const float dx = X - xi;
 									const float dy = Y - yi;
 									const float dz = Z - zi;
