@@ -375,23 +375,26 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(rhoh3);
-					drho_dh *= 0.33333333333f / rhoh30;
-					const float fpre = 1.0f / (1.0f + drho_dh);
-					float dlogh = powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f;
-					if (last_dlogh * dlogh < 0.f) {
-						weight *= 0.5f;
-					} else {
-						weight = min(1.f, 1.1f * weight);
-					}
-					last_dlogh = dlogh;
-					error = fabs(dlogh);
+					float dlogh;
 					__syncthreads();
 					if (rhoh3 <= w0) {
 						if (tid == 0) {
 							h *= 1.1f;
 						}
+						iter--;
+						error = 1.0;
 						too_small = true;
 					} else {
+						drho_dh *= 0.33333333333f / rhoh30;
+						const float fpre = 1.0f / (1.0f + drho_dh);
+						dlogh = powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f;
+						if (last_dlogh * dlogh < 0.f) {
+							weight *= 0.5f;
+						} else {
+							weight = min(1.f, 1.1f * weight);
+						}
+						last_dlogh = dlogh;
+						error = fabs(dlogh);
 						too_small = dlogh > 0.f;
 						dlogh *= weight;
 						if (tid == 0) {
