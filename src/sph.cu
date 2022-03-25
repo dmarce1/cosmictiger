@@ -26,7 +26,7 @@
 #define AUX_BLOCK_SIZE 128
 #define PARABOLIC_BLOCK_SIZE 128
 
-#define SPH_SMOOTHLEN_TOLER float(1.0f/(1<<19))
+#define SPH_SMOOTHLEN_TOLER float(1.0e-5)
 
 struct smoothlen_shmem {
 	int index;
@@ -346,18 +346,12 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float drho_dh;
 				float dpot_dh;
 				float rhoh3;
-				bool too_small = false;
-				float last_dlogh = 0.f;
-				float weight = 1.0f;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
 					rhoh3 = 0.f;
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
-					if (too_small) {
-						rhoh30 -= w0;
-					}
 					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
 						const float dy = distance(x[YDIM], ws.y[j]); // 2
@@ -365,7 +359,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float r2 = sqr(dx, dy, dz);            // 2
 						const float r = sqrt(r2);                    // 4
 						const float q = r * hinv;                    // 1
-						if (q < 1.f && !(too_small && q == 0.f)) {                               // 1
+						if (q < 1.f ) {                               // 1
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
 							const float dwdh = -q * dwdq * hinv; // 3
@@ -383,29 +377,20 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						}
 						iter--;
 						error = 1.0;
-						too_small = true;
 					} else {
 						drho_dh *= 0.33333333333f / rhoh30;
-						const float fpre = 1.0f / (1.0f + drho_dh);
-						dlogh = powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f;
-						if (last_dlogh * dlogh < 0.f) {
-							weight *= 0.5f;
-						} else {
-							weight = min(1.f, 1.1f * weight);
-						}
-						last_dlogh = dlogh;
-						error = fabs(dlogh);
-						too_small = dlogh > 0.f;
-						dlogh *= weight;
+						const float fpre = fminf(fmaxf(1.0f / (1.0f + drho_dh), 0.5f),2.0f);
+						dlogh = fminf(fmaxf(powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f, -.1f), .1f);
+						error = fabs(1.0f - rhoh3/rhoh30);
 						if (tid == 0) {
 							h *= (1.f + dlogh);
 						}
 					}
 					__syncthreads();
 					if (tid == 0) {
-						if (iter > 30) {
-							PRINT("Solver failed to converge - %i %e %e %e %e\n", iter, h, dlogh, error, weight);
-							if (iter > 50) {
+						if (iter > 1000) {
+							PRINT("Solver failed to converge - %i %e %e %e\n", iter, h, dlogh, error);
+							if (iter > 1010) {
 								__trap();
 							}
 						}
@@ -1082,10 +1067,11 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
 							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i;
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
+							const float difco_ij = 2.f * difco_i * difco_j / (difco_i + difco_j + 1e-30f);
 							const float dt_ij = fminf(dt_i, dt_j);
-							const float phi_i = -m * dt_ij * difco_i * dWdr_i * rhoinv_i * rinv;
-							const float phi_j = -m * dt_ij * difco_j * dWdr_j * rhoinv_j * rinv;
-							const float phi_ij = (phi_i + phi_j) * 0.5f;
+							const float phi_i = -m * dt_ij * difco_ij * dWdr_i * rhoinv_i * rinv;
+							const float phi_j = -m * dt_ij * difco_ij * dWdr_j * rhoinv_j * rinv;
+							const float phi_ij = (phi_i + phi_j);
 							den += phi_ij;
 							den_eint += phi_ij;
 							num_eint += phi_ij * eint_j;
