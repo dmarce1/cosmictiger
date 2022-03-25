@@ -148,9 +148,11 @@ CUDA_EXPORT
 inline T dkernelW_dq(T q) {
 	T w1, w2, w3, sw, res, sw1, sw2, sw3, w, mq;
 #ifdef __CUDA_ARCH__
+	q = fminf(q,1.f);
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
+	q = min(q,T(1));
 	switch (kernel_type) {
 #endif
 	case KERNEL_CUBIC_SPLINE: {
@@ -235,7 +237,6 @@ inline T dkernelW_dq(T q) {
 	}
 		break;
 	};
-	res *= (q < T(1.f));
 	return res;
 }
 
@@ -244,11 +245,11 @@ CUDA_EXPORT
 inline T kernelFqinv(T q) {
 	T w1, w2, sw, res, q3inv, w3, sw1, sw2, sw3, w;
 	const auto q0 = q;
+	q *= (q < T(1));
 #ifdef __CUDA_ARCH__
 	switch(kernel_type) {
 #else
 	static const int kernel_type = get_options().kernel;
-	q *= (q < T(1));
 	switch (kernel_type) {
 #endif
 	case KERNEL_CUBIC_SPLINE: {

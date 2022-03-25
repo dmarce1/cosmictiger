@@ -603,9 +603,13 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 						r1inv = 1.f / (r + 1e-30f);
 						const float q_i = r * hinv_i;
 						const float q_j = r * hinv_j;
-						const float F0 = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
+						const float k1 = kernelFqinv(q_i);
+						const float k2 = kernelFqinv(q_j);
+						ALWAYS_ASSERT(isfinite(k2));
+						const float F0 = 0.5f * (k1 * h3inv_i + k2 * h3inv_j);
 						float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j) * r1inv;
 						r3inv = F0 + Fc;
+						ALWAYS_ASSERT(isfinite(r3inv));
 						if (do_phi) {
 							const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
 							float potc = q_i > 0.0f ? 0.5f * (fpot_i * kernelW(q_i) * hinv_i + fpot_j * kernelW(q_j) * hinv_j) : 0.f;
