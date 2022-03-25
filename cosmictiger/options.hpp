@@ -42,7 +42,6 @@ struct options {
 	bool use_glass;
 	int glass;
 	int tracer_count;
-	int kernel;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
@@ -123,7 +122,6 @@ struct options {
 		arc & chem;
 		arc & diffusion;
 		arc & neighbor_number;
-		arc & kernel;
 		arc & cfl;
 		arc & sph;
 		arc & nsteps;

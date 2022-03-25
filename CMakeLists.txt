@@ -68,7 +68,6 @@ set(cosmictiger_source_files
     src/hydro.cpp
     src/initialize.cpp
     src/hpx.cpp
-    src/kernel.cu
     src/kick.cpp
     src/kick.cu
     src/exact_sod.cpp
