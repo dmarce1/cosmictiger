@@ -92,7 +92,6 @@ SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem2; // chemistr
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
-SPH_PARTICLES_EXTERN float* sph_particles_ea; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 SPH_PARTICLES_EXTERN float* sph_particles_de2; // deint_con
@@ -191,10 +190,6 @@ inline float& sph_particles_shear(part_int index) {
 	return sph_particles_s2[index];
 }
 
-inline float& sph_particles_eavg(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_ea[index];
-}
 
 inline float& sph_particles_Z(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -318,12 +313,12 @@ inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
 	return sph_particles_c0[index];
 }
 
-inline array<float, NCHEMFRACS>& sph_particles_chem0(part_int index) {
+inline array<float, NCHEMFRACS>& sph_particles_dchem_pred(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dchem1[index];
 }
 
-inline array<float, NCHEMFRACS>& sph_particles_dchem(part_int index) {
+inline array<float, NCHEMFRACS>& sph_particles_dchem_con(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dchem2[index];
 }
@@ -332,15 +327,6 @@ inline float& sph_particles_deint(part_int index) {
 	return sph_particles_de2[index];
 }
 
-inline array<float, NCHEMFRACS>& sph_particles_dchem_con(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dchem2[index];
-}
-
-inline array<float, NCHEMFRACS>& sph_particles_dchem_pred(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dchem1[index];
-}
 
 inline float& sph_particles_dvel_con(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -395,13 +381,6 @@ inline float sph_particles_energy(part_int index) {
 }
 
 float sph_particles_coloumb_log(part_int i, float a);
-
-inline sph_particle0 sph_particles_get_particle0(part_int index) {
-	sph_particle0 p;
-	p.chem0 = sph_particles_chem0(index);
-	p.eint0 = sph_particles_eint0(index);
-	return p;
-}
 
 inline sph_particle sph_particles_get_particle(part_int index, float a) {
 	sph_particle p;

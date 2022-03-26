@@ -60,13 +60,11 @@ struct sph_run_workspace {
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<array<float, NCHEMFRACS>, pinned_allocator<array<float, NCHEMFRACS>>> host_chem;
-	vector<array<float, NCHEMFRACS>, pinned_allocator<array<float, NCHEMFRACS>>> host_chem0;
 	vector<float, pinned_allocator<float>> host_mmw;
 	vector<float, pinned_allocator<float>> host_divv;
 	vector<float, pinned_allocator<float>> host_vx;
 	vector<float, pinned_allocator<float>> host_vy;
 	vector<float, pinned_allocator<float>> host_vz;
-	vector<float, pinned_allocator<float>> host_eint0;
 	vector<float, pinned_allocator<float>> host_eint;
 	vector<float, pinned_allocator<float>> host_alpha;
 	vector<float, pinned_allocator<float>> host_shearv;
@@ -1442,10 +1440,6 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							case SPH_RUN_AUX:
 							test = self->nactive > 0;
 							break;
-							case SPH_RUN_PARABOLIC:
-							test = has_active_neighbors(self);
-							test = test && !self->converged;
-							break;
 						}
 						if(test) {
 							if( cuda ) {
@@ -1558,6 +1552,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	const bool stars = get_options().stars;
 	const bool gravity = get_options().gravity;
 	const bool conduction = get_options().conduction;
+	const bool diffusion = get_options().diffusion;
 	for (auto& node : host_trees) {
 		parts_size += node.part_range.second - node.part_range.first;
 	}
@@ -1568,7 +1563,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
-	case SPH_RUN_PARABOLIC:
 	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		host_h.resize(parts_size);
@@ -1598,19 +1592,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (chem) {
 			host_gamma.resize(parts_size);
 		}
-	} else if (params.run_type == SPH_RUN_PARABOLIC) {
-		host_shearv.resize(parts_size);
-		host_fpre.resize(parts_size);
-		host_eint.resize(parts_size);
-		host_eint0.resize(parts_size);
-		if (chem) {
-			host_chem.resize(parts_size);
-			host_chem0.resize(parts_size);
-		}
-		if (params.conduction) {
-			host_gamma.resize(parts_size);
-			host_mmw.resize(parts_size);
-			host_gradT.resize(parts_size);
+		if (diffusion) {
+			host_shearv.resize(parts_size);
+			if (chem) {
+				host_chem.resize(parts_size);
+			}
 		}
 	}
 	vector<hpx::future<void>> futs;
@@ -1623,7 +1609,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(
 				hpx::async(
-						[&index,proc,nthreads,this,&part_index, chem, stars, conduction]() {
+						[&index,proc,nthreads,this,&part_index, chem, stars, conduction, diffusion]() {
 							int this_index = index++;
 							while( this_index < host_trees.size()) {
 								auto& node = host_trees[this_index];
@@ -1645,19 +1631,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(),host_rungs.data(), nullptr, offset);
 									break;
 									case SPH_RUN_AUX:
-									case SPH_RUN_PARABOLIC:
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(),host_rungs.data(), host_h.data() , offset);
 									break;
 								}
 								const bool cond = get_options().conduction;
 								switch(params.run_type) {
 
-									case SPH_RUN_PARABOLIC:
-									sph_particles_global_read_sph0(node.global_part_range(), host_eint0.data(), chem ? host_chem0.data() : nullptr, offset);
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), nullptr, nullptr, nullptr, params.conduction ? host_gamma.data() : nullptr, nullptr, nullptr, chem ? host_chem.data() : nullptr, offset);
-									break;
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), (chem||params.conduction) ? host_gamma.data() : nullptr,host_alpha.data(), nullptr, nullptr, offset);
+									sph_particles_global_read_sph(node.global_part_range(), params.a, host_eint.data(), host_vx.data(), host_vy.data(), host_vz.data(), (chem||params.conduction) ? host_gamma.data() : nullptr,host_alpha.data(), nullptr, diffusion ? host_chem.data() : nullptr, offset);
 									break;
 									case SPH_RUN_AUX: {
 										const bool test = params.conduction;
@@ -1671,15 +1652,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 								}
 								switch(params.run_type) {
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_aux(node.global_part_range(), host_fpre.data(), nullptr, nullptr, nullptr, offset);
+									sph_particles_global_read_aux(node.global_part_range(), host_fpre.data(), nullptr, host_shearv.data(), nullptr, offset);
 									break;
 									case SPH_RUN_AUX:
 									if( params.phase == 1 ) {
 										sph_particles_global_read_aux(node.global_part_range(), nullptr, host_divv.data(), nullptr, nullptr, offset);
 									}
-									break;
-									case SPH_RUN_PARABOLIC:
-									sph_particles_global_read_aux(node.global_part_range(), host_fpre.data(), nullptr, host_shearv.data(), conduction ? host_gradT.data(): nullptr, offset);
 									break;
 
 								}
@@ -1698,7 +1676,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
-	case SPH_RUN_PARABOLIC:
 	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
@@ -1729,26 +1706,17 @@ sph_run_return sph_run_workspace::to_gpu() {
 		} else {
 			cuda_data.gamma = nullptr;
 		}
-	} else if (params.run_type == SPH_RUN_PARABOLIC) {
-		CUDA_CHECK(cudaMalloc(&cuda_data.fpre, sizeof(float) * host_fpre.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.eint, sizeof(float) * host_eint.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.eint0, sizeof(float) * host_eint0.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.shearv, sizeof(float) * host_shearv.size()));
-		if (chem) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.chem0, NCHEMFRACS * sizeof(float) * host_chem0.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(float) * host_chem.size()));
-		}
-		if (params.conduction) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.gamma, sizeof(float) * host_gamma.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.mmw, sizeof(float) * host_mmw.size()));
-			CUDA_CHECK(cudaMalloc(&cuda_data.gradT, sizeof(float) * host_gradT.size()));
+		if (diffusion) {
+			CUDA_CHECK(cudaMalloc(&cuda_data.shearv, sizeof(float) * host_shearv.size()));
+			if (chem) {
+				CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(float) * host_chem.size()));
+			}
 		}
 	}
 	CUDA_CHECK(cudaMalloc(&cuda_data.trees, sizeof(sph_tree_node) * host_trees.size()));
 	CUDA_CHECK(cudaMalloc(&cuda_data.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
 	switch (params.run_type) {
-	case SPH_RUN_PARABOLIC:
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
@@ -1778,19 +1746,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (chem) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
 		}
-	} else if (params.run_type == SPH_RUN_PARABOLIC) {
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre, host_fpre.data(), sizeof(float) * host_fpre.size(), cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.shearv, host_shearv.data(), sizeof(float) * host_shearv.size(), cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint, host_eint.data(), sizeof(float) * host_eint.size(), cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.eint0, host_eint0.data(), sizeof(float) * host_eint0.size(), cudaMemcpyHostToDevice, stream));
-		if (chem) {
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem0, host_chem0.data(), NCHEMFRACS * sizeof(float) * host_chem0.size(), cudaMemcpyHostToDevice, stream));
-		}
-		if (params.conduction) {
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.mmw, host_mmw.data(), sizeof(float) * host_mmw.size(), cudaMemcpyHostToDevice, stream));
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gradT, host_gradT.data(), sizeof(float) * host_gradT.size(), cudaMemcpyHostToDevice, stream));
+		if (diffusion) {
+			CUDA_CHECK(cudaMemcpyAsync(cuda_data.shearv, host_shearv.data(), sizeof(float) * host_shearv.size(), cudaMemcpyHostToDevice, stream));
+			if (chem) {
+				CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
+			}
 		}
 	}
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
@@ -1817,18 +1777,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.alpha_snk = &sph_particles_alpha(0);
 	cuda_data.fpre_snk = &sph_particles_fpre(0);
 	cuda_data.divv_snk = &sph_particles_divv(0);
-	cuda_data.eavg_snk = &sph_particles_eavg(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.chemistry = get_options().chem;
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
-	cuda_data.deint_pred = &sph_particles_deint_pred(0);
-	cuda_data.deint_snk = &sph_particles_deint(0);
-	cuda_data.dchem_snk = &sph_particles_dchem(0);
-	cuda_data.dvx_pred = &sph_particles_dvel_pred(XDIM, 0);
-	cuda_data.dvy_pred = &sph_particles_dvel_pred(YDIM, 0);
-	cuda_data.dvz_pred = &sph_particles_dvel_pred(ZDIM, 0);
+	cuda_data.dchem_con = &sph_particles_dchem_con(0);
 	cuda_data.deint_con = &sph_particles_deint_con(0);
 	cuda_data.dvx_con = &sph_particles_dvel_con(XDIM, 0);
 	cuda_data.dvy_con = &sph_particles_dvel_con(YDIM, 0);
@@ -1876,7 +1830,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		}
 	}
 	switch (params.run_type) {
-	case SPH_RUN_PARABOLIC:
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_RUNGS:
 	case SPH_RUN_MARK_SEMIACTIVE:
@@ -1906,21 +1859,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (chem) {
 			CUDA_CHECK(cudaFree(cuda_data.gamma));
 		}
-	} else if (params.run_type == SPH_RUN_PARABOLIC) {
-		CUDA_CHECK(cudaFree(cuda_data.eint));
-		CUDA_CHECK(cudaFree(cuda_data.eint0));
-		CUDA_CHECK(cudaFree(cuda_data.shearv));
-		CUDA_CHECK(cudaFree(cuda_data.fpre));
-		if (chem) {
-			CUDA_CHECK(cudaFree(cuda_data.chem));
-			CUDA_CHECK(cudaFree(cuda_data.chem0));
+		if (diffusion) {
+			CUDA_CHECK(cudaFree(cuda_data.shearv));
+			if (chem) {
+				CUDA_CHECK(cudaFree(cuda_data.chem));
+			}
 		}
-		if (params.conduction) {
-			CUDA_CHECK(cudaFree(cuda_data.gamma));
-			CUDA_CHECK(cudaFree(cuda_data.mmw));
-			CUDA_CHECK(cudaFree(cuda_data.gradT));
-		}
-
 	}
 	CUDA_CHECK(cudaFree(cuda_data.x));
 	CUDA_CHECK(cudaFree(cuda_data.y));
@@ -1932,98 +1876,3 @@ sph_run_return sph_run_workspace::to_gpu() {
 	return rc;
 }
 
-HPX_PLAIN_ACTION (sph_apply_diffusion_update);
-HPX_PLAIN_ACTION (sph_init_diffusion);
-
-float sph_apply_diffusion_update(int minrung, float toler) {
-	profiler_enter(__FUNCTION__);
-	vector<hpx::future<float>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_apply_diffusion_update_action>(c, minrung, toler));
-	}
-	float error = 0.f;
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc, toler, minrung]() {
-			float error = 0.f;
-			const part_int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * sph_tree_leaflist_size() / nthreads;
-			const bool chem = get_options().chem;
-			for( int i = b; i < e; i++) {
-				const auto sid = sph_tree_get_leaf(i);
-				auto* self = sph_tree_get_node(sid);
-				if( !self->converged ) {
-					float this_error = 0.0;
-					if( self->nactive || has_active_neighbors(self)) {
-						for( part_int j = self->part_range.first; j < self->part_range.second; j++) {
-							const part_int k = sph_particles_dm_index(j);
-							const auto rung = particles_rung(k);
-							const bool sa = sph_particles_semi_active(j);
-							if( rung >= minrung || sa) {
-								const float de = sph_particles_deint(j);
-								ALWAYS_ASSERT(isfinite(de));
-								float& e1 = sph_particles_eint(j);
-								e1 += de;
-								this_error = std::max(this_error,fabs(de)/std::max(sph_particles_eavg(j),e1));
-								if( chem ) {
-									for( int fi = 0; fi < NCHEMFRACS; fi++) {
-										ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
-										const float dc = sph_particles_dchem(j)[fi];
-										float& c1 = sph_particles_chem(j)[fi];
-										this_error = std::max(this_error, fabs(dc));
-										c1 += dc;
-									}
-								}
-							}
-						}
-					}
-					if( this_error < toler ) {
-						sph_tree_set_converged(sid);
-					}
-					error = std::max(error, this_error);
-				}
-			}
-			return error;
-		}));
-	}
-	for (auto& f : futs) {
-		error = std::max(error, f.get());
-	}
-	profiler_exit();
-	return error;
-}
-
-void sph_init_diffusion() {
-	vector<hpx::future<void>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_init_diffusion_action>(c));
-	}
-	float error = 0.f;
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads, proc]() {
-			const bool chem = get_options().chem;
-			part_int b = (size_t) proc * sph_tree_leaflist_size() / nthreads;
-			part_int e = (size_t) (proc+1) * sph_tree_leaflist_size() / nthreads;
-			for( int i = b; i < e; i++) {
-				const auto sid = sph_tree_get_leaf(i);
-				sph_tree_set_converged(sid, false);
-			}
-			b = (size_t) proc * sph_particles_size() / nthreads;
-			e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			for( int i = b; i < e; i++) {
-				sph_particles_eint0(i) = sph_particles_eint(i);
-				sph_particles_deint(i) = 0.f;
-				if( chem ) {
-					sph_particles_chem0(i) = sph_particles_chem(i);
-					for( int f = 0; f < NCHEMFRACS; f++) {
-						sph_particles_dchem(i)[f] = 0.0;
-					}
-				}
-			}
-		}));
-	}
-	for (auto& f : futs) {
-		f.get();
-	}
-}
