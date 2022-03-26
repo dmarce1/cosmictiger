@@ -129,11 +129,11 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("xsph", po::value<double>(&(opts.xsph))->default_value(0.1), "xsph factor (0 = off)") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/25.0), "dark matter softening in units of interparticle spacing") //
+	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/50.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(100), "neighbor number") //
-	("cfl", po::value<double>(&(opts.cfl))->default_value(0.16), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.16), "time-step criterion (default=0.2)") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
+	("cfl", po::value<double>(&(opts.cfl))->default_value(0.20), "CFL condition") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.18), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //

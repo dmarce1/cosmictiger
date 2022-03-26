@@ -48,29 +48,31 @@ extern __managed__ int kernel_type;
 template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
-	T res, w, mq;
-	const T c0 = T(495.f / 32.f / M_PI);
-	w = T(35.0f / 3.f);
+	T res, w1, w2, mq, sw1;
+	const T c0 = T(8.f / M_PI);
+	w1 = T(6);
+	w1 = fmaf(q, w1, -T(6));
+	w1 *= q;
+	w1 = fmaf(q, w1, T(1));
 	mq = T(1) - q;
-	w = sqr(mq) * mq;
-	w *= w;
-	w *= fmaf(fmaf(T(35. / 3.), q, T(6)), q, T(1));
-	res = c0 * w;
-	res *= (q < T(1.f));
+	w2 = T(2) * sqr(mq) * mq;
+	sw1 = q < T(0.5);
+	res = c0 * (sw1 * w1 + (T(1) - sw1) * w2);
 	return res;
 }
 
 template<class T>
 CUDA_EXPORT
 inline T dkernelW_dq(T q) {
-	T res, w, mq;
-	const T c0 = T(495.f / 32.f / M_PI);
-	mq = q - T(1);
-	w = fmaf(T(5), q, T(1));
-	w *= q;
-	w *= sqr(sqr(mq)) * mq;
-	w *= T(56.0 / 3.0);
-	res = c0 * w;
+	T res, w1, w2, sw1;
+	const T c0 = T(8.f / M_PI);
+	w1 = T(18);
+	w1 = fmaf(q, w1, -T(12));
+	w1 *= q;
+	w2 = T(-6);
+	w2 *= sqr(T(1) - q);
+	sw1 = q < T(0.5);
+	res = c0 * (sw1 * w1 + (T(1) - sw1) * w2);
 	res *= (q < T(1.f));
 	return res;
 }
@@ -78,19 +80,22 @@ inline T dkernelW_dq(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T res, sw1, sw2, w;
+	T res, sw1, sw2, w1, w2, q3inv;
 	const auto q0 = q;
-	const T c0 = T(495.f / 8.f);
-	w = T(35.0f / 33.f);
-	w = fmaf(q, w, T(-32.f / 5.f));
-	w = fmaf(q, w, T(140.f / 9.f));
-	w = fmaf(q, w, T(-56.f / 3.f));
-	w = fmaf(q, w, T(10));
-	w *= q;
-	w = fmaf(q, w, T(-28.f / 15.f));
-	w *= q;
-	w = fmaf(q, w, T(1.0f / 3.0f));
-	res = c0 * w;
+	q *= (q < T(1));
+	w1 = T(32);
+	w1 = fmaf(q, w1, -T(192.f / 5.f));
+	w1 *= q;
+	w1 = fmaf(q, w1, T(32.f / 3.f));
+	w2 = -T(32.f / 3.f);
+	w2 = fmaf(q, w2, T(192 / 5.f));
+	w2 = fmaf(q, w2, -T(48.f));
+	w2 = fmaf(q, w2, T(64.f / 3.f));
+	q3inv = T(1) / (q + T(1.0e-10f));
+	q3inv = sqr(q3inv) * q3inv;
+	w2 -= T(1.f / 15.f) * q3inv;
+	sw1 = q < T(0.5);
+	res = (sw1 * w1 + (T(1) - sw1) * w2);
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
@@ -100,22 +105,25 @@ inline T kernelFqinv(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T res, sw1, sw2, w;
+	T res, sw1, sw2, w1, w2, q1inv;
 	const auto q0 = q;
 	q *= (q < T(1));
-	const T c0 = T(495.f / 8.f);
-	w = T(-7.0f / 66.f);
-	w = fmaf(q, w, T(32.f / 45.f));
-	w = fmaf(q, w, T(-35.f / 18.f));
-	w = fmaf(q, w, T(8.f / 3.f));
-	w = fmaf(q, w, T(-5.f / 3.f));
-	w *= q;
-	w = fmaf(q, w, T(7.f / 15.f));
-	w *= q;
-	w = fmaf(q, w, T(-1.0f / 6.0f));
-	w *= q;
-	w = fmaf(q, w, T(1.0f / 18.0f));
-	res = c0 * w;
+	w1 = -T(32.f / 5.f);
+	w1 = fmaf(q, w1, T(48.f / 5.f));
+	w1 *= q;
+	w1 = fmaf(q, w1, T(-16.f / 3.f));
+	w1 *= q;
+	w1 = fmaf(q, w1, T(14.f / 5.f));
+	w2 = T(32.f / 15.f);
+	w2 = fmaf(q, w2, T(-48.f / 5.f));
+	w2 = fmaf(q, w2, T(16.f));
+	w2 = fmaf(q, w2, T(-32.f / 3.f));
+	w2 *= q;
+	w2 = fmaf(q, w2, T(16.f / 5.f));
+	q1inv = T(1) / (q + T(1.0e-30f));
+	w2 -= T(1.f / 15.f) * q1inv;
+	sw1 = q < T(0.5f);
+	res = (sw1 * w1 + (T(1) - sw1) * w2);
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q > T(0));

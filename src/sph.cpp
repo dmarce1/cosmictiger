@@ -1964,7 +1964,7 @@ float sph_apply_diffusion_update(int minrung, float toler) {
 								ALWAYS_ASSERT(isfinite(de));
 								float& e1 = sph_particles_eint(j);
 								e1 += de;
-								this_error = std::max(this_error,fabs(de)/sph_particles_eavg(j));
+								this_error = std::max(this_error,fabs(de)/std::max(sph_particles_eavg(j),e1));
 								if( chem ) {
 									for( int fi = 0; fi < NCHEMFRACS; fi++) {
 										ALWAYS_ASSERT(isfinite(sph_particles_dchem(j)[fi]));
