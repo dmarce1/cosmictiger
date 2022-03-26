@@ -786,7 +786,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							float dtinv_dif_i;
 							float dtinv_dif_j;
 							shearv_j = rec2.shearv;
-							const float difco_ij = SPH_DIFFUSION_C * h_i * h_j * shearv_i * shearv_j / (shearv_i + shearv_j + tiny);
+							const float difco_ij = SPH_DIFFUSION_C * sqr(h_i * h_j) * shearv_i * shearv_j / (sqr(h_i) * shearv_i + sqr(h_j) * shearv_j + tiny);
 							float phi_ij;
 							ALWAYS_ASSERT(eint_i > 0.f);
 							ALWAYS_ASSERT(eint_j > 0.f);
