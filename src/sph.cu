@@ -755,9 +755,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float rinv = 1.0f / (r + tiny);
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 						const float sqrtrho_j = sqrtf(rho_j);
-						const float h_ij = 0.5f * (h_i + h_j);
 						const float w_ij = vdotx_ij * rinv;
-						const float mu_ij = h_ij * w_ij * rinv;
+						const float dvisc_i = alpha_i * h_i * w_ij;
+						const float dvisc_j = alpha_j * h_j * w_ij;
+						const float dvisc_ij = 2.0f * dvisc_i * dvisc_j / (dvisc_i + dvisc_j + tiny);
+						const float mu_ij = dvisc_ij * rinv;
 						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 						const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
 						const float dWdr_x_i = x_ij * rinv * dWdr_i;
@@ -768,8 +770,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float dWdr_z_j = z_ij * rinv * dWdr_j;
 						const float c_ij = 0.5f * (c_i + c_j);
 						const float vsig_ij = (c_ij - params.beta * w_ij);
-						const float dv_i = -0.5f * alpha_i * mu_ij * vsig_ij * rhoinv_i;
-						const float dv_j = -0.5f * alpha_j * mu_ij * vsig_ij * rhoinv_j;
+						const float dv_i = -0.5f * mu_ij * vsig_ij * rhoinv_i;
+						const float dv_j = -0.5f * mu_ij * vsig_ij * rhoinv_j;
 						const float dp_i = p_i * sqr(rhoinv_i);
 						const float dp_j = p_j * sqr(rhoinv_j);
 						const float d_i = dp_i + dv_i;
@@ -875,7 +877,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					data.dvz_con[snki] = az;
 					data.deint_con[snki] = de_dt;
 					if (params.diffusion && data.chemistry) {
-				//		data.dchem_con[snki] = dfrac_dt;
+						//		data.dchem_con[snki] = dfrac_dt;
 					}
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
