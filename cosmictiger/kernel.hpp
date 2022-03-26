@@ -49,16 +49,15 @@ template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
 	T res, w1, w2, mq, sw1;
-	const T c0 = T(8.f / M_PI);
-	w1 = T(6);
-	w1 = fmaf(q, w1, -T(6));
-	w1 *= q;
-	w1 = fmaf(q, w1, T(1));
-	mq = T(1) - q;
-	w2 = T(2) * sqr(mq) * mq;
-	sw1 = q < T(0.5);
-	res = c0 * (sw1 * w1 + (T(1) - sw1) * w2);
-	return res;
+	const T c0 = T(16.f / M_PI);
+#ifdef __CUDA_ARCH__
+	w1 = fmaxf(T(1)-q,T(0));
+	w2 = fmaxf(T(0.5)-q,T(0));
+#else
+#endif
+	w1 *= sqr(w1);
+	w2 *= sqr(w2);
+	return c0 *(w1 + w2);
 }
 
 template<class T>
