@@ -146,6 +146,11 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								particles_vel(dim,k) += sph_particles_dvel_pred(dim,i)* dt2;
 							}
 						}
+						if( chem ) {
+							for( int fi = 0; fi < NCHEMFRACS; fi++) {
+								sph_particles_chem(i)[fi] +=sph_particles_dchem_pred(i)[fi] *dt2;
+							}
+						}
 						break;
 						case 1: {
 							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt2;
@@ -157,6 +162,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
 							}
 						}
+						if( chem ) {
+							for( int fi = 0; fi < NCHEMFRACS; fi++) {
+								sph_particles_chem(i)[fi] -=sph_particles_dchem_pred(i)[fi] *dt2;
+								sph_particles_chem(i)[fi] +=sph_particles_dchem_con(i)[fi] *dt2;
+							}
+						}
 						break;
 						case 2: {
 							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
@@ -164,6 +175,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							for( int dim =0; dim < NDIM; dim++) {
 								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
+							}
+							if( chem ) {
+								for( int fi = 0; fi < NCHEMFRACS; fi++) {
+									sph_particles_dchem_pred(i)[fi] =sph_particles_dchem_con(i)[fi] *dt2;
+									sph_particles_chem(i)[fi] +=sph_particles_dchem_con(i)[fi] *dt2;
+								}
 							}
 						}
 						break;
@@ -829,7 +846,6 @@ static vector<sph_particle> sph_particles_fetch_sph_cache_line(part_int index, f
 	}
 	return line;
 }
-
 
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char* rungs, float* hs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;

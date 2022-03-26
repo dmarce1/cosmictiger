@@ -48,7 +48,7 @@ extern __managed__ int kernel_type;
 template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
-	T res, w1, w2, mq, sw1;
+	T w1, w2;
 	const T c0 = T(16.f / M_PI);
 #ifdef __CUDA_ARCH__
 	w1 = fmaxf(T(1)-q,T(0));
