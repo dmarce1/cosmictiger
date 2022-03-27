@@ -786,12 +786,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							float dtinv_dif_i;
 							float dtinv_dif_j;
 							shearv_j = rec2.shearv;
-							const float difco_ij = SPH_DIFFUSION_C * sqr(h_i * h_j) * shearv_i * shearv_j / (sqr(h_i) * shearv_i + sqr(h_j) * shearv_j + tiny);
+							const float difco_ij = 2.f * SPH_DIFFUSION_C * h_i * h_j * shearv_i * shearv_j / (shearv_i + shearv_j + tiny);
 							float phi_ij;
 							ALWAYS_ASSERT(eint_i > 0.f);
 							ALWAYS_ASSERT(eint_j > 0.f);
 							if (eint_i > 0.f && eint_j > 0.f) {
-								const float y = fabs(logf(eint_i / eint_j));
+								const float y = fabs(eint_i - eint_j) / fminf(eint_i, eint_j);
 								const float R = y * 2.0f * rinv * difco_ij / (c_ij - w_ij);
 								phi_ij = (2.f + R) / (2.f + 3.f * R + R * R);
 								dtinv_dif_i = 2.0f * phi_ij * difco_ij * y * rinv * hinv_i;
@@ -802,6 +802,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 								dtinv_dif_j = (c_ij - w_ij) * hinv_j;
 							}
 							if (eint_i < 0.0f || eint_j < 0.f) {
+								PRINT("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 								PRINT("%e %e\n", eint_i, eint_j);
 							}
 							const float D_ij = -difco_ij * (dWdr_i * rhoinv_i + dWdr_j * rhoinv_j) * rinv;
@@ -834,8 +835,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							float dtinv_i = c_i * hinv_i;
 							float dtinv_j = c_j * hinv_j;
 							if (w_ij < 0.f) {
-								dtinv_i += alpha_i * vsig_ij * hinv_i;
-								dtinv_j += alpha_j * vsig_ij * hinv_j;
+								dtinv_i += 0.6f * alpha_i * vsig_ij * hinv_i;
+								dtinv_j += 0.6f * alpha_j * vsig_ij * hinv_j;
 							}
 							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_i);
 							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_j);
@@ -882,10 +883,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
 						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv);
-						//		const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
+						const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-						//		dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2 = sqr(ax, ay, az);
 						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
