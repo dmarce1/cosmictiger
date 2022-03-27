@@ -94,6 +94,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_ea; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
+SPH_PARTICLES_EXTERN float* sph_particles_cv; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 SPH_PARTICLES_EXTERN float* sph_particles_de2; // deint_con
 SPH_PARTICLES_EXTERN float* sph_particles_gt; // deint_con
@@ -106,12 +107,14 @@ struct aux_quantities {
 	float divv;
 	float shearv;
 	float gradT;
+	float balsara;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & fpre;
 		arc & divv;
 		arc & shearv;
 		arc & gradT;
+		arc & balsara;
 	}
 };
 
@@ -130,7 +133,7 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 		array<float, NCHEMFRACS>* chems, part_int offset);
 void sph_particles_global_read_sph0(particle_global_range range, float* eint0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* shearv, float* gradT, part_int offset);
+void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* balsara, float* shearv, float* gradT, part_int offset);
 
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
@@ -189,6 +192,12 @@ inline float& sph_particles_frac(int j, part_int index) {
 inline float& sph_particles_shear(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_s2[index];
+}
+
+
+inline float& sph_particles_balsara(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_cv[index];
 }
 
 inline float& sph_particles_eavg(part_int index) {
@@ -432,6 +441,7 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux.fpre = sph_particles_fpre(index);
 	aux.divv = sph_particles_divv(index);
 	aux.shearv = sph_particles_shear(index);
+	aux.balsara = sph_particles_balsara(index);
 	aux.gradT = sph_particles_gradT(index);
 	return aux;
 }
