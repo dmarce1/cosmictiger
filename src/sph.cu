@@ -720,6 +720,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto rec1 = ws.rec1[j];
 					const auto rec2 = ws.rec2[j];
+					const auto rung_j = rec2.rung;
 					const float h_j = rec1.h;
 					const float hinv_j = 1.f / h_j;															// 4
 					const fixed32 x_j = rec1.x;
@@ -756,11 +757,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 						const float sqrtrho_j = sqrtf(rho_j);
 						const float w_ij = vdotx_ij * rinv;
+						const float h_ij = 0.5f*(h_i + h_j);
+						const float mu_fac_ij = h_ij * r / (r2 + 0.01f * sqr(h_ij));
+						const float mu_ij = mu_fac_ij * w_ij;
 						const float rho_ij = 0.5f * (rho_i + rho_j);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 						const float c_ij = 0.5f * (c_i + c_j);
-						const float vsig_ij = (c_ij - params.beta * w_ij);
-						const float pi_ij = -alpha_ij * w_ij * vsig_ij / rho_ij;
+						const float vsig_ij = (c_ij - params.beta * mu_ij);
+						const float pi_ij = -alpha_ij * mu_ij * vsig_ij / rho_ij;
 						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 						const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
 						const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
@@ -809,8 +813,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 						if (params.phase == 1) {
 							const float alpha_ij = 0.5f * (alpha_i + alpha_j);
-							float dtinv_i = (c_i + fmaxf(0.6 * alpha_ij * vsig_ij, (1.0f - sqr(phi_ij)) * (c_ij - w_ij))) * hinv_i;
+							float dtinv_i = (c_ij + fmaxf(0.6 * alpha_ij * vsig_ij, (1.0f - sqr(phi_ij)) * (c_ij - w_ij))) * hinv_i;
 							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_i);
+							if (rung_j >= params.min_rung) {
+								float dtinv_j = dtinv_i * h_i * hinv_j;
+								dtinv_cfl = fmaxf(dtinv_cfl, 0.5f * dtinv_j);
+							}
 						}
 					}
 				}

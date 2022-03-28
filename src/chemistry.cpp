@@ -706,7 +706,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 			const int N = get_options().neighbor_number;
 			for( part_int i = b; i < e; i++) {
 				int rung1 = sph_particles_rung(i);
-				int rung2 = sph_particles_oldrung(i);
+				//	int rung2 = sph_particles_oldrung(i);
 				if( rung1 >= minrung ) {
 					chem_attribs chem;
 					float T = sph_particles_temperature(i,a);
@@ -718,7 +718,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem.Hep = sph_particles_Hep(i) * factor;
 					chem.Hepp = sph_particles_Hepp(i) * factor;
 					chem.eint = sph_particles_eint(i);
-					double dt = (rung_dt[rung1] + rung_dt[rung2]) * 0.5 * t0;
+					double dt = (rung_dt[rung1]) * t0;
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
 					chem.dt = dt;
 					if( T > 5e8) {
@@ -732,6 +732,10 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 							PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
 							abort();
 						}
+					}
+					if(T < 0.f) {
+						PRINT( "NEGATIVE T !\n", T);
+						abort();
 					}
 					chems.push_back(chem);
 				}
@@ -769,11 +773,11 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
 					sph_particles_eint(i) = chem.eint;
 //				sph_particles_tcool(i) = chem.tcool;
+				}
 			}
-		}
-		return echange;
+			return echange;
 
-	}));
+		}));
 	}
 	for (auto& f : futs) {
 		echange += f.get();
