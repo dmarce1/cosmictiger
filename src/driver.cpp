@@ -292,6 +292,16 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.stop();
 			tm.reset();
 
+			if (tau != 0.0 && chem) {
+				PRINT("Doing chemistry step\n");
+				timer tm;
+				tm.start();
+				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
+				tm.stop();
+				PRINT("Took %e s\n", tm.read());
+			}
+
+
 			sparams.phase = 1;
 			sparams.run_type = SPH_RUN_AUX;
 			tm.start();
@@ -391,14 +401,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_XSPH): tm = %e \n", tm.read());
 				tm.reset();
-			}
-			if (tau != 0.0 && chem) {
-				PRINT("Doing chemistry step\n");
-				timer tm;
-				tm.start();
-				*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
-				tm.stop();
-				PRINT("Took %e s\n", tm.read());
 			}
 			if (stars) {
 				stars_find(scale, dt, minrung, iter);
