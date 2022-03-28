@@ -57,7 +57,7 @@ inline T kernelW(T q) {
 #endif
 	w1 *= sqr(w1);
 	w2 *= sqr(w2);
-	return c0 *(w1 + w2);
+	return c0 *(w1 - T(4)* w2);
 }
 
 template<class T>
