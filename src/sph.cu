@@ -115,6 +115,9 @@ struct parabolic_record2 {
 	float fpre;
 	float gradT;
 	float mmw;
+	float vx;
+	float vy;
+	float vz;
 	array<float, NCHEMFRACS> chem;
 	array<float, NCHEMFRACS> chem0;
 };
@@ -971,6 +974,9 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					ws.rec2[k].eint0 = data.eint0[pi];
 					ws.rec2[k].fpre = data.fpre[pi];
 					ws.rec2[k].shearv = data.shearv[pi];
+					ws.rec2[k].vx = data.vx[pi];
+					ws.rec2[k].vy = data.vy[pi];
+					ws.rec2[k].vz = data.vz[pi];
 					if (data.chemistry) {
 						ws.rec2[k].chem = data.chem[pi];
 						ws.rec2[k].chem0 = data.chem0[pi];
@@ -1001,6 +1007,9 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				const auto x_i = data.x[i];
 				const auto y_i = data.y[i];
 				const auto z_i = data.z[i];
+				const auto vx_i = data.vx[i];
+				const auto vy_i = data.vy[i];
+				const auto vz_i = data.vz[i];
 				const float h_i = data.h[i];
 				float gamma_i;
 				if (params.conduction) {
@@ -1014,6 +1023,8 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 				const float rho_i = m * c0 * h3inv_i;
 				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;
 				const float eint_i = data.eint[i];
+				const float p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
+				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
 				const float shearv_i = data.shearv[i];
 				const float fpre_i = data.fpre[i];
 				array<float, NCHEMFRACS> chem_i;
@@ -1046,6 +1057,10 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 					const fixed32 x_j = rec1.x;
 					const fixed32 y_j = rec1.y;
 					const fixed32 z_j = rec1.z;
+					const float vx_j = rec2.vx;
+					const float vy_j = rec2.vy;
+					const float vz_j = rec2.vz;
+					const float gamma_j = rec2.gamma;
 					const float h_j = rec1.h;
 					const float h2_j = sqr(h_j);
 					const float x_ij = distance(x_i, x_j);				// 2
@@ -1063,6 +1078,9 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 						const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;															// 5
 						const float eint_j = rec2.eint;
 						if (r2 > 0.f) {
+							const float vx_ij = vx_i - vx_j + x_ij * params.adot;
+							const float vy_ij = vy_i - vy_j + y_ij * params.adot;
+							const float vz_ij = vz_i - vz_j + z_ij * params.adot;
 							const float r = sqrt(r2);
 							const float rinv = 1.0f / r;
 							const float q_i = r * hinv_i;								// 1
@@ -1073,7 +1091,21 @@ __global__ void sph_cuda_parabolic(sph_run_params params, sph_run_cuda_data data
 							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i;
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
 							const float dt_ij = fminf(dt_i, dt_j);
-							const float phi_ij = -4.f * m * dt_ij * dWdr_ij * rinv * difco_i * difco_j / (rho_i * difco_i + rho_j * difco_j + 1e-36f);
+							float phi_ij = 0.f;
+							const float p_j = fmaxf(eint_j * rho_j * (gamma_j - 1.f), 0.f);
+							const float c_j = sqrtf(gamma_j * p_j * rhoinv_j);
+							const float rho_ij = 0.5f * (rho_i + rho_j);
+							if (eint_i != eint_j) {
+								float dsig = (difco_i + difco_j) * rinv;
+								const float w_ij = fminf(0.0f, (x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij) * rinv);
+								const float c_ij = 0.5f * (c_i + c_j);
+								const float vsig_ij = c_ij - w_ij;
+								const float R = dsig / vsig_ij;
+								const float lambda = (2.f/3.f + R) / (2.f/3.f + R + R * R);
+								dsig *= lambda;
+								phi_ij = -m * dt_ij * dWdr_ij * dsig / rho_ij;
+
+							}
 							den += phi_ij;
 							den_eint += phi_ij;
 							num_eint += phi_ij * eint_j;
