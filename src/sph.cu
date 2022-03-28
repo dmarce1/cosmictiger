@@ -784,16 +784,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						de_dt += m * ainv * dp_i * (vx0_ij * dWdr_x_i + vy0_ij * dWdr_y_i + vz0_ij * dWdr_z_i);
 						de_dt += 0.5f * m * ainv * pi_ij * (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
 						float shearv_j;
+						float phi_ij = 1.f;
 						if (params.diffusion) {
 							shearv_j = rec2.shearv;
 							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i;
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
 							const float difco_ij = 0.5f * (difco_i + difco_j);
-							float phi_ij;
 							ALWAYS_ASSERT(eint_i > 0.f);
 							ALWAYS_ASSERT(eint_j > 0.f);
 							const auto frac_j = rec2.chem;
-							const float y = fabs(eint_i - eint_j) / fminf(eint_i, eint_j);
 							const float R = 2.0f * difco_ij * rinv / (c_ij - w_ij);
 							phi_ij = (2.f / 3.f + R) / (2.f / 3.f + R + R * R);
 							const float rho_ij = 0.5f * (rho_i + rho_j);
@@ -809,7 +808,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							vsig = fmaxf(vsig, vsig_ij);
 						}
 						if (params.phase == 1) {
-							float dtinv_i = (c_i + vsig_ij) * hinv_i;
+							const float alpha_ij = 0.5f * (alpha_i + alpha_j);
+							float dtinv_i = (c_i + fmaxf(0.6 * alpha_ij * vsig_ij, (1.0f - sqr(phi_ij)) * (c_ij - w_ij))) * hinv_i;
 							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_i);
 						}
 					}
