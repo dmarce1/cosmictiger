@@ -232,13 +232,13 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-		sparams.run_type = SPH_RUN_COMPUTE_FPOT;
+/*		sparams.run_type = SPH_RUN_COMPUTE_FPOT;
 		tm.start();
 		sph_run(sparams, true);
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_COMPUTE_FPOT): tm = %e\n", tm.read());
-		tm.reset();
+		tm.reset();*/
 	} else {
 		if (!glass) {
 			if (tau != 0.0) {
