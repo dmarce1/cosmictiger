@@ -312,7 +312,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double error;
 			double parts_above;
 			double parts_below;
-			do {
+		//	do {
 				xmid = 0.5 * (xmax + xmin);
 				mid = particles_sort(part_range, xmid, xdim);
 				parts_above = part_range.second - mid;
@@ -323,7 +323,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				} else {
 					xmax = xmid;
 				}
-			} while (error > 0.5);
+		//	} while (error > 0.5);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
