@@ -28,6 +28,7 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/zero_order.hpp>
 #include <cosmictiger/boltzmann.hpp>
+#include <cosmictiger/kernel.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -661,6 +662,8 @@ void twolpt_correction2(int dim) {
 	}
 }
 
+#include <fenv.h>
+
 void twolpt_generate(int dim1, int dim2, int phase) {
 	const int64_t N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
@@ -672,8 +675,15 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	array<int64_t, NDIM> I;
 	constexpr int rand_init_iters = 8;
 	vector<hpx::future<void>> futs2;
+	const float z0 = get_options().z0;
+	const float a0 = 1.0f / (z0 + 1.0);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor,power](array<int64_t,NDIM> I) {
+		futs2.push_back(hpx::async([a0,N,box,box_size,&Y,dim1,dim2,factor,power](array<int64_t,NDIM> I) {
+			feenableexcept (FE_DIVBYZERO);
+			feenableexcept (FE_INVALID);
+			feenableexcept (FE_OVERFLOW);
+
+			const float h = get_options().hsoft * box_size / a0;
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
@@ -698,7 +708,9 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 							const float y = gsl_rng_uniform_pos(rndgen);
 							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
+							const float deconvo = 1.f / kernelWfourier(K0*h);
+						//	PRINT( "%e %e %e\n", sqrt(i2), K0*h, deconvo);
+							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
 						} else {
 							Y[index] = cmplx(0.f, 0.f);
 						}
@@ -732,7 +744,8 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 					const float y = gsl_rng_uniform_pos(rndgen);
 					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
+					const float deconvo = 1.f / kernelWfourier(K0*h);
+					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
 					if( I[0] > N / 2 ) {
 						Y[index] = Y[index].conj() * sgn;
 					} else if( I[0] == 0 ) {
@@ -909,7 +922,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
-								sph_particles_eint(m) = 1.0e-30f;
+								sph_particles_eint(m) = 1.0e-20f;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {

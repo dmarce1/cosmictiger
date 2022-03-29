@@ -54,8 +54,8 @@ float rand_normal() {
 */
 static void rockstar_test() {
 	feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
+		feenableexcept (FE_INVALID);
+		feenableexcept (FE_OVERFLOW);
 
 	const int N = 1000000;
 	const int M = 2;

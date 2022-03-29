@@ -688,7 +688,7 @@ void driver() {
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
-			opts.hsoft = std::min(0.8 / get_options().parts_dim, hsoft0 / a);
+			opts.hsoft = hsoft0 / a;
 			if (!glass) {
 				if (z > 50.0) {
 					theta = 0.4;

@@ -283,7 +283,7 @@ size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);
 		simd_float hinv = simd_float(1) / h;
-		simd_float hinv3 = hinv * hinv * hinv;
+		simd_float h3inv = hinv * hinv * hinv;
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		for (int li = 0; li < list.size(); li += chunk_size) {
@@ -379,34 +379,36 @@ size_t cpu_gravity_pp(gravity_cc_type type, force_vectors& f, int min_rung, tree
 							}
 							simd_float rinv1 = 0.f, rinv3 = 0.f;
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
-							const simd_float h_i = sink_hsoft;
-							const simd_float h_j = src_hsoft;
-							const auto hinv_i = simd_float(1.f) / h_i;
-							const auto h3inv_i = sqr(hinv_i) * hinv_i;
-							const simd_float near_flags = r2 < max(sqr(h_i), sqr(h_j));
-							const auto fpot_i = sink_fpot;
+			//				const simd_float h_i = sink_hsoft;
+			//				const simd_float h_j = src_hsoft;
+			//				const auto hinv_i = simd_float(1.f) / h_i;
+			//				const auto h3inv_i = sqr(hinv_i) * hinv_i;
+							const simd_float near_flags = r2 < h2;
+//							const auto fpot_i = sink_fpot;
 							if (near_flags.sum() == 0) {
 								rinv1 = simd_float(1) / sqrt(r2);
 								rinv3 = rinv1 * sqr(rinv1);
 							} else {
-								const auto fpot_j = src_fpot;
-								const auto hinv_j = simd_float(1.f) / h_j;
-								const auto h3inv_j = sqr(hinv_j) * hinv_j;
-								const auto h_ij = simd_float(0.5f)*(h_i + h_j);
-								const auto hinv_ij = (simd_float(1)) / h_ij;
-								const auto h3inv_ij = hinv_ij * sqr(hinv_ij);
+	//							const auto fpot_j = src_fpot;
+	//							const auto hinv_j = simd_float(1.f) / h_j;
+	//							const auto h3inv_j = sqr(hinv_j) * hinv_j;
+	//							const auto h_ij = simd_float(0.5f) * (h_i + h_j);
+	//							const auto hinv_ij = (simd_float(1)) / h_ij;
+	//							const auto h3inv_ij = hinv_ij * sqr(hinv_ij);
 								const simd_float r = sqrt(r2);                                                    // 4
 								rinv1 = simd_float(1) / (r + tiny);                            // 5
-								const auto q_i = r * hinv_i;
-								const auto q_j = r * hinv_j;
-								const auto q_ij = r * hinv_ij;
-								const auto F0 = kernelFqinv(q_ij) * h3inv_ij;
-								auto Fc = simd_float(0.5f) * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j) * rinv1;
-								rinv3 = F0 + Fc;
+								const auto q = r * hinv;
+//								const auto q_j = r * hinv_j;
+//								const auto q_ij = r * hinv_ij;
+								const auto F0 = kernelFqinv(q) * h3inv;
+//								const auto sphsph = (fpot_i < simd_float(0)) * (fpot_j < simd_float(0));
+//								auto Fc = simd_float(0.5f) * sphsph * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j)
+//										* rinv1;
+								rinv3 = F0;// + Fc;
 								if (min_rung == 0) {
-									const auto pot0 = kernelPot(q_ij) * hinv_ij;
-									auto potc = (q_ij > simd_float(0)) * simd_float(0.5f) * (fpot_i * kernelW(q_i) * hinv_i + fpot_j * kernelW(q_j) * hinv_j);
-									rinv1 = pot0 - potc;
+									const auto pot0 = kernelPot(q) * hinv;
+//									auto potc = (q_ij > simd_float(0)) * sphsph * simd_float(0.5f) * (fpot_i * kernelW(q_i) * hinv_i + fpot_j * kernelW(q_j) * hinv_j);
+									rinv1 = pot0;// - potc;
 								}
 							}
 							rinv3 *= mass;

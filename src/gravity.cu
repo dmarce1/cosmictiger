@@ -573,11 +573,11 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
-				const float fpot_i = sink_fpot[k];
-				const float h_i = sink_hsoft[k];
-				const float h2_i = sqr(h_i);
-				const float hinv_i = 1.0f / h_i;
-				const float h3inv_i = hinv_i * sqr(hinv_i);
+	//			const float fpot_i = sink_fpot[k];
+	//			const float h_i = sink_hsoft[k];
+	//			const float h2_i = sqr(h_i);
+	//			const float hinv_i = 1.0f / h_i;
+	//			const float h3inv_i = hinv_i * sqr(hinv_i);
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1
@@ -587,27 +587,29 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					const float h_j = src_hsoft[j];
 					const float h2_j = sqr(h_j);
-					if (r2 > fmaxf(h2_i, h2_j)) {
+					if (r2 > h2) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float h_ij = 0.5f * (h_i + h_j);
+/*						const float h_ij = 0.5f * (h_i + h_j);
 						const float hinv_j = 1.0f / h_j;
 						const float h3inv_j = hinv_j * sqr(hinv_j);
 						const float hinv_ij = 1.f / h_ij;
-						const float h3inv_ij = hinv_ij * sqr(hinv_ij);
+						const float h3inv_ij = hinv_ij * sqr(hinv_ij);*/
 						const float r = sqrtf(r2);
 						r1inv = 1.f / (r + 1e-30f);
-						const float q_i = r * hinv_i;
-						const float q_j = r * hinv_j;
-						const float q_ij = r * hinv_ij;
-						const float F0 = kernelFqinv(q_ij) * h3inv_ij;
-						float Fc = 0.5f * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j) * r1inv;
-						r3inv = F0 + Fc;
+						const float q = r * hinv;
+//						const float q_j = r * hinv_j;
+//						const float q_ij = r * hinv_ij;
+						const float F0 = kernelFqinv(q) * h3inv;
+						//const float sphsph = (fpot_i < 0.f) * (fpot_j < 0.f);
+//						float Fc = 0.5f * sphsph * (fpot_i * dkernelW_dq(q_i) * hinv_i * hinv_i + fpot_j * dkernelW_dq(q_j) * hinv_j * hinv_j) * r1inv;
+//						PRINT( "%e %e\n", fpot_i, fpot_j);
+						r3inv = F0;// + Fc;
+//						PRINT( "%e %e\n", fpot_i, Fc/F0);
 						if (do_phi) {
-							const float pot0 = kernelPot(q_ij) * hinv_ij;
-							float potc = q_ij > 0.0f ? 0.5f * (fpot_i * kernelW(q_i) * hinv_i + fpot_j * kernelW(q_j) * hinv_j) : 0.f;
-							r1inv = pot0 - potc;
+							const float pot0 = kernelPot(q) * hinv;
+							r1inv = pot0;
 						}
 					}
 					r3inv *= m_j;

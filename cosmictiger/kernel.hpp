@@ -57,7 +57,7 @@ inline T kernelW(T q) {
 #endif
 	w1 *= sqr(w1);
 	w2 *= sqr(w2);
-	return c0 *(w1 - T(4)* w2);
+	return c0 * (w1 - T(4) * w2);
 }
 
 template<class T>
@@ -74,6 +74,18 @@ inline T dkernelW_dq(T q) {
 	res = c0 * (sw1 * w1 + (T(1) - sw1) * w2);
 	res *= (q < T(1.f));
 	return res;
+}
+
+template<class T>
+CUDA_EXPORT
+inline T kernelWfourier(T k) {
+	const auto tmp = sin(k / T(4.));
+	const auto k2inv = sqr(1.f / k);
+	if (k < T(0.02)) {
+		return T(1) + T(-3.0 / 80.0) * sqr(k);
+	} else {
+		return T(-3072.f) * (k * cos(k / T(4.f)) - T(4) * sin(k / T(4.))) * tmp * sqr(tmp) * k2inv * sqr(k2inv);
+	}
 }
 
 template<class T>

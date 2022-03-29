@@ -450,7 +450,6 @@ __global__ void sph_cuda_compute_fpot(sph_run_params params, sph_run_cuda_data d
 		ws.y.resize(0);
 		ws.z.resize(0);
 		ws.h.resize(0);
-		ws.rungs.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
@@ -463,23 +462,20 @@ __global__ void sph_cuda_compute_fpot(sph_run_params params, sph_run_cuda_data d
 				int rung;
 				if (pi < other.part_range.second) {
 					h = data.h[pi];
-					rung = data.rungs[pi];
-					if (rung >= params.min_rung) {
-						x[XDIM] = data.x[pi];
-						x[YDIM] = data.y[pi];
-						x[ZDIM] = data.z[pi];
-						contains = (self.outer_box.contains(x));
-						if (!contains) {
-							contains = true;
-							for (int dim = 0; dim < NDIM; dim++) {
-								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
-								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
+					x[XDIM] = data.x[pi];
+					x[YDIM] = data.y[pi];
+					x[ZDIM] = data.z[pi];
+					contains = (self.outer_box.contains(x));
+					if (!contains) {
+						contains = true;
+						for (int dim = 0; dim < NDIM; dim++) {
+							if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+								contains = false;
+								break;
+							}
+							if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+								contains = false;
+								break;
 							}
 						}
 					}
@@ -493,59 +489,51 @@ __global__ void sph_cuda_compute_fpot(sph_run_params params, sph_run_cuda_data d
 				ws.y.resize(next_size);
 				ws.z.resize(next_size);
 				ws.h.resize(next_size);
-				ws.rungs.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
 					ws.x[k] = x[XDIM];
 					ws.y[k] = x[YDIM];
 					ws.z[k] = x[ZDIM];
 					ws.h[k] = h;
-					ws.rungs[k] = rung;
 				}
 			}
 		}
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			if (data.rungs[i] >= params.min_rung) {
-				if (tid == 0) {
-					data.sa_snk[snki] = true;
+			const auto x_i = data.x[i];
+			const auto y_i = data.y[i];
+			const auto z_i = data.z[i];
+			const auto h_i = data.h[i];
+			const auto h2_i = sqr(h_i);
+			float dpot_dh = 0.f;
+			float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
+			for (int j = tid; j < ws.x.size(); j += block_size) {
+				const auto x_j = ws.x[j];
+				const auto y_j = ws.y[j];
+				const auto z_j = ws.z[j];
+				const auto h_j = ws.h[j];
+				const auto h2_j = sqr(h_j);
+				const float x_ij = distance(x_i, x_j);
+				const float y_ij = distance(y_i, y_j);
+				const float z_ij = distance(z_i, z_j);
+				const float r2 = sqr(x_ij, y_ij, z_ij);
+				const float h_ij = 0.5f * (h_i + h_j);
+				const float h2_ij = sqr(h_ij);
+				if (r2 < h2_ij) {
+					const float r = sqrt(r2);                    // 4
+					const float hinv_ij = 1.f / h_ij;
+					const float q = r * hinv_ij;                    // 1
+					const float pot = kernelPot(q);
+					const float force = kernelFqinv(q) * q;
+					dpot_dh -= (pot - q * force);
 				}
-			} else {
-				const auto x_i = data.x[i];
-				const auto y_i = data.y[i];
-				const auto z_i = data.z[i];
-				const auto h_i = data.h[i];
-				const auto h2_i = sqr(h_i);
-				float dpot_dh = 0.f;
-				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
-				for (int j = tid; j < ws.x.size(); j += block_size) {
-					const auto x_j = ws.x[j];
-					const auto y_j = ws.y[j];
-					const auto z_j = ws.z[j];
-					const auto h_j = ws.h[j];
-					const auto h2_j = sqr(h_j);
-					const float x_ij = distance(x_i, x_j);
-					const float y_ij = distance(y_i, y_j);
-					const float z_ij = distance(z_i, z_j);
-					const float r2 = sqr(x_ij, y_ij, z_ij);
-					const float h_ij = 0.5f * (h_i + h_j);
-					const float h2_ij = sqr(h_ij);
-					if (r2 < h2_ij) {
-						const float r = sqrt(r2);                    // 4
-						const float hinv_ij = 1.f / h_ij;
-						const float q = r * hinv_ij;                    // 1
-						const float pot = kernelPot(q);
-						const float force = kernelFqinv(q) * q;
-						dpot_dh -= (pot - q * force);
-					}
-				}
-				shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpot_dh);
-				dpot_dh *= 0.33333333333f / rhoh30;
-				if (tid == 0) {
-					const float fpre = data.fpre_snk[snki];
-					data.fpot_snk[snki] = dpot_dh * fpre;
-				}
+			}
+			shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpot_dh);
+			dpot_dh *= 0.33333333333f / rhoh30;
+			if (tid == 0) {
+				const float fpre = data.fpre_snk[snki];
+				data.fpot_snk[snki] = dpot_dh * fpre;
 			}
 		}
 		if (tid == 0) {

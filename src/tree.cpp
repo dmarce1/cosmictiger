@@ -537,7 +537,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			this_h = h;
 			if (sph) {
 				if (particles_type(i) == SPH_TYPE) {
-					this_h = sph_particles_smooth_len(particles_cat_index(i));
+//					this_h = sph_particles_smooth_len(particles_cat_index(i));
 				}
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
