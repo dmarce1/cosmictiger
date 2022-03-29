@@ -721,7 +721,7 @@ static sph_run_return sph_smoothlens(const sph_tree_node* self_ptr, const vector
 	return rc;
 }
 
-static sph_run_return sph_mark_semiactive(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
+static sph_run_return sph_COMPUTE_FPOT(const sph_tree_node* self_ptr, const vector<fixed32>& xs, const vector<fixed32>& ys, const vector<fixed32>& zs,
 		const vector<char>& rungs, const vector<float>& hs, int min_rung) {
 	sph_run_return rc;
 	for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
@@ -1426,11 +1426,11 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							test = self->nactive > 0;
 							break;
 
-							case SPH_RUN_MARK_SEMIACTIVE:
 							case SPH_RUN_RUNGS:
 							test = has_active_neighbors(self);
 							break;
 
+							case SPH_RUN_COMPUTE_FPOT:
 							case SPH_RUN_HYDRO:
 							test = self->nactive > 0;
 							break;
@@ -1452,7 +1452,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 								switch(params.run_type) {
 
 									case SPH_RUN_SMOOTHLEN:
-									case SPH_RUN_MARK_SEMIACTIVE:
+									case SPH_RUN_COMPUTE_FPOT:
 									case SPH_RUN_HYDRO:
 									case SPH_RUN_RUNGS:
 									case SPH_RUN_AUX:
@@ -1469,7 +1469,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							case SPH_RUN_SMOOTHLEN:
 							load_data<false, false, false, false, false, true, false, false>(self, neighbors, data, params.min_rung);
 							break;
-							case SPH_RUN_MARK_SEMIACTIVE:
+							case SPH_RUN_COMPUTE_FPOT:
 							load_data<true, true, false, false, false, false, true, true>(self, neighbors, data, params.min_rung);
 							break;
 							case SPH_RUN_HYDRO:
@@ -1481,8 +1481,8 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							case SPH_RUN_SMOOTHLEN:
 							this_rc = sph_smoothlens(self,data.xs, data.ys, data.zs, params.min_rung, params.set & SPH_SET_ACTIVE, params.set & SPH_SET_SEMIACTIVE, self->nactive, neighbors.size());
 							break;
-							case SPH_RUN_MARK_SEMIACTIVE:
-							this_rc = sph_mark_semiactive(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
+							case SPH_RUN_COMPUTE_FPOT:
+							this_rc = sph_COMPUTE_FPOT(self,data.xs, data.ys, data.zs, data.rungs, data.hs, params.min_rung);
 							break;
 							case SPH_RUN_HYDRO:
 							this_rc = sph_courant(self,data.xs, data.ys, data.zs, data.hs,data.ents,data.vxs,data.vys,data.vzs, params.min_rung, params.a, params.t0);
@@ -1565,7 +1565,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_RUNGS:
-	case SPH_RUN_MARK_SEMIACTIVE:
+	case SPH_RUN_COMPUTE_FPOT:
 		host_h.resize(parts_size);
 		break;
 	}
@@ -1625,7 +1625,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 									break;
 									case SPH_RUN_HYDRO:
 									case SPH_RUN_RUNGS:
-									case SPH_RUN_MARK_SEMIACTIVE:
+									case SPH_RUN_COMPUTE_FPOT:
 
 									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), host_h.data(), offset);
 									break;
@@ -1679,7 +1679,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_RUNGS:
-	case SPH_RUN_MARK_SEMIACTIVE:
+	case SPH_RUN_COMPUTE_FPOT:
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		break;
 	}
@@ -1722,7 +1722,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_RUNGS:
-	case SPH_RUN_MARK_SEMIACTIVE:
+	case SPH_RUN_COMPUTE_FPOT:
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
 		break;
 	}
@@ -1837,7 +1837,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	switch (params.run_type) {
 	case SPH_RUN_HYDRO:
 	case SPH_RUN_RUNGS:
-	case SPH_RUN_MARK_SEMIACTIVE:
+	case SPH_RUN_COMPUTE_FPOT:
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		break;
 	}

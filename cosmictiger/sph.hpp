@@ -259,7 +259,7 @@ struct sph_run_params {
 };
 
 #define SPH_RUN_SMOOTHLEN 0
-#define SPH_RUN_MARK_SEMIACTIVE 1
+#define SPH_RUN_COMPUTE_FPOT 1
 #define SPH_RUN_HYDRO 2
 #define SPH_RUN_AUX 3
 #define SPH_RUN_RUNGS 4

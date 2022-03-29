@@ -19,7 +19,7 @@
 
 #define SPH_DIFFUSION_C 0.03f
 #define SMOOTHLEN_BLOCK_SIZE 256
-#define MARK_SEMIACTIVE_BLOCK_SIZE 256
+#define COMPUTE_FPOT_BLOCK_SIZE 256
 #define RUNGS_BLOCK_SIZE 256
 #define XSPH_BLOCK_SIZE 256
 #define HYDRO_BLOCK_SIZE 128
@@ -51,7 +51,7 @@ struct smoothlen_workspace {
 	device_vector<fixed32> z;
 };
 
-struct mark_semiactive_workspace {
+struct compute_fpot_workspace {
 	device_vector<fixed32> x;
 	device_vector<fixed32> y;
 	device_vector<fixed32> z;
@@ -321,7 +321,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				int iter = 0;
 				float& h = data.h_snk[snki];
 				float drho_dh;
-				float dpot_dh;
 				float rhoh3;
 				do {
 					const float hinv = 1.f / h; // 4
@@ -390,7 +389,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
-					dpot_dh = 0.f;
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
 					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
@@ -403,20 +401,14 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
 							const float dwdh = -q * dwdq * hinv; // 3
-							const float pot = kernelPot(q);
-							const float force = kernelFqinv(q) * q;
 							drho_dh -= (3.f * kernelW(q) + q * dwdq);
-							dpot_dh -= (pot - q * force);
 						}
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
-					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpot_dh);
 					drho_dh *= 0.33333333333f / rhoh30;
-					dpot_dh *= 0.33333333333f / rhoh30;
 					const float fpre = 1.0f / (1.0f + drho_dh);
 					if (tid == 0) {
 						data.fpre_snk[snki] = fpre;
-						data.fpot_snk[snki] = dpot_dh * fpre;
 					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);
@@ -439,17 +431,17 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	(&ws)->~smoothlen_workspace();
 }
 
-__global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
+__global__ void sph_cuda_compute_fpot(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
 	__shared__
 	int index;
-	__shared__ mark_semiactive_workspace ws;
+	__shared__ compute_fpot_workspace ws;
 	if (tid == 0) {
 		index = atomicAdd(&reduce->counter, 1);
 	}
 	__syncthreads();
-	new (&ws) mark_semiactive_workspace();
+	new (&ws) compute_fpot_workspace();
 
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
@@ -493,7 +485,7 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 					}
 				}
 				j = contains;
-				compute_indices<MARK_SEMIACTIVE_BLOCK_SIZE>(j, total);
+				compute_indices<COMPUTE_FPOT_BLOCK_SIZE>(j, total);
 				const int offset = ws.x.size();
 				__syncthreads();
 				const int next_size = offset + total;
@@ -520,48 +512,48 @@ __global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_dat
 					data.sa_snk[snki] = true;
 				}
 			} else {
-				const auto x0 = data.x[i];
-				const auto y0 = data.y[i];
-				const auto z0 = data.z[i];
-				const auto h0 = data.h[i];
-				const auto h02 = sqr(h0);
-				int semiactive = 0;
-				const int jmax = round_up(ws.x.size(), block_size);
-				if (tid == 0) {
-					data.sa_snk[snki] = false;
+				const auto x_i = data.x[i];
+				const auto y_i = data.y[i];
+				const auto z_i = data.z[i];
+				const auto h_i = data.h[i];
+				const auto h2_i = sqr(h_i);
+				float dpot_dh = 0.f;
+				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
+				for (int j = tid; j < ws.x.size(); j += block_size) {
+					const auto x_j = ws.x[j];
+					const auto y_j = ws.y[j];
+					const auto z_j = ws.z[j];
+					const auto h_j = ws.h[j];
+					const auto h2_j = sqr(h_j);
+					const float x_ij = distance(x_i, x_j);
+					const float y_ij = distance(y_i, y_j);
+					const float z_ij = distance(z_i, z_j);
+					const float r2 = sqr(x_ij, y_ij, z_ij);
+					const float h_ij = 0.5f * (h_i + h_j);
+					const float h2_ij = sqr(h_ij);
+					if (r2 < h2_ij) {
+						const float r = sqrt(r2);                    // 4
+						const float hinv_ij = 1.f / h_ij;
+						const float q = r * hinv_ij;                    // 1
+						const float pot = kernelPot(q);
+						const float force = kernelFqinv(q) * q;
+						dpot_dh -= (pot - q * force);
+					}
 				}
-				for (int j = tid; j < jmax; j += block_size) {
-					if (j < ws.x.size()) {
-						const auto x1 = ws.x[j];
-						const auto y1 = ws.y[j];
-						const auto z1 = ws.z[j];
-						const auto h1 = ws.h[j];
-						const auto h12 = sqr(h1);
-						const float dx = distance(x0, x1);
-						const float dy = distance(y0, y1);
-						const float dz = distance(z0, z1);
-						const float r2 = sqr(dx, dy, dz);
-						if (r2 < fmaxf(h02, h12)) {
-							semiactive++;
-						}
-					}
-					shared_reduce_add<int, MARK_SEMIACTIVE_BLOCK_SIZE>(semiactive);
-					if (semiactive) {
-						if (tid == 0) {
-							data.sa_snk[snki] = true;
-						}
-						break;
-					}
+				shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpot_dh);
+				dpot_dh *= 0.33333333333f / rhoh30;
+				if (tid == 0) {
+					const float fpre = data.fpre_snk[snki];
+					data.fpot_snk[snki] = dpot_dh * fpre;
 				}
 			}
 		}
-		shared_reduce_add<int, MARK_SEMIACTIVE_BLOCK_SIZE>(flops);
 		if (tid == 0) {
 			index = atomicAdd(&reduce->counter, 1);
 		}
 		__syncthreads();
 	}
-	(&ws)->~mark_semiactive_workspace();
+	(&ws)->~compute_fpot_workspace();
 
 }
 
@@ -861,10 +853,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
 						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv);
-					//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
+						//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-					//	dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
+						//	dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2 = sqr(ax, ay, az);
 						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
@@ -1324,7 +1316,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semiactive_nblocks, (const void*) sph_cuda_mark_semiactive, MARK_SEMIACTIVE_BLOCK_SIZE, 0));
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semiactive_nblocks, (const void*) sph_cuda_compute_fpot, COMPUTE_FPOT_BLOCK_SIZE, 0));
 		semiactive_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
 		hydro_nblocks *= cuda_smp_count();
@@ -1344,8 +1336,8 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.hmax = reduce->hmax;
 	}
 	break;
-	case SPH_RUN_MARK_SEMIACTIVE: {
-		sph_cuda_mark_semiactive<<<semiactive_nblocks, MARK_SEMIACTIVE_BLOCK_SIZE,0,stream>>>(params,data,reduce);
+	case SPH_RUN_COMPUTE_FPOT: {
+		sph_cuda_compute_fpot<<<semiactive_nblocks, COMPUTE_FPOT_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
 	}
 	break;
