@@ -666,10 +666,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float h_i = data.h[i];
 				const float balsara_i = data.balsara[i];
 				const float fpot_i = data.fpot[i];
-				if( tid == 0 ) {
-					PRINT( "%e\n", fpot_i);
-					ALWAYS_ASSERT(!(rung_i >= params.min_rung && !data.sa_snk[snki]));
-				}
 				float gamma_i;
 				if (data.chemistry) {
 					gamma_i = data.gamma[i];
@@ -722,6 +718,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				constexpr float tiny = 1e-30f;
 				float vsig = 0.0f;
 				const float& adot = params.adot;
+				float gxc = 0.f;
+				float gyc = 0.f;
+				float gzc = 0.f;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto rec1 = ws.rec1[j];
 					const auto rec2 = ws.rec2[j];
@@ -820,12 +819,28 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 								dtinv_cfl = fmaxf(dtinv_cfl, 0.5f * dtinv_j);
 							}
 						}
+						if (data.gravity && params.phase == 0) {
+							const float fpot_j = rec2.fpot;
+							gxc -= 0.5f * data.G * m * (fpot_i * dWdr_x_i * sqr(h_i) + fpot_j * dWdr_x_j * sqr(h_j));
+							gyc -= 0.5f * data.G * m * (fpot_i * dWdr_y_i * sqr(h_i) + fpot_j * dWdr_y_j * sqr(h_j));
+							gzc -= 0.5f * data.G * m * (fpot_i * dWdr_z_i * sqr(h_i) + fpot_j * dWdr_z_j * sqr(h_j));
+						}
 					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
+				if (params.phase == 0 && data.gravity) {
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gxc);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gyc);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gzc);
+					if (tid == 0) {
+						data.gx_snk[snki] += gxc;
+						data.gy_snk[snki] += gyc;
+						data.gz_snk[snki] += gzc;
+					}
+				}
 				if (params.phase == 1) {
 					shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				}
@@ -862,10 +877,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
 						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv);
-					//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
+						//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-					//	dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
+						//	dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2 = sqr(ax, ay, az);
 						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);

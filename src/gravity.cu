@@ -649,7 +649,7 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 								if (q < 1.f) {
 									const float pot = kernelPot(q);
 									const float force = kernelFqinv(q) * q;
-									const float d = c0 * m_j * (pot - q * force);
+									const float d = c0 * m_j * (pot - sqr(q) * force);
 									dpot_dh -= d;
 								}
 							}

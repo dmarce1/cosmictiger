@@ -892,11 +892,17 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 			}
 			hpx::wait_all(local_futs.begin(), local_futs.end());
 			if (sph) {
+				const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
+				const float mu = 1.0 + 3.0 * get_options().Y0;
+				const float cv_cgs = constants::kb * constants::avo / mu;
+				const float T0 = 100.0;
+				const float eps_cgs = cv_cgs * T0;
+				const float eps = eps_cgs / code_to_ene * sqr(1.0 / (1.0 + get_options().z0));
 				sph_particles_resize(box.volume());
 				const part_int offset = box.volume();
 				vector<hpx::future<void>> local_futs;
 				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([offset,chem,box,Ninv](array<int64_t,NDIM> I) {
+					local_futs.push_back(hpx::async([eps,offset,chem,box,Ninv](array<int64_t,NDIM> I) {
 						const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 						const float h = std::pow(h3, 1.0 / 3.0);
 						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
@@ -909,7 +915,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
-								sph_particles_eint(m) = 1.0e-30f;
+								sph_particles_eint(m) = eps;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {

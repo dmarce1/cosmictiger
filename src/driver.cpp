@@ -247,17 +247,17 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			}
 			sparams.phase = 1;
 
+			int iters = 0;
+			sparams.phase = 0;
+			sparams.run_type = SPH_RUN_HYDRO;
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+			tm.reset();
 			if (tau != 0.0) {
-				int iters = 0;
-				sparams.phase = 0;
-				sparams.run_type = SPH_RUN_HYDRO;
-				tm.start();
-				sph_run(sparams, true);
-				tm.stop();
-				auto tmp = sph_particles_apply_updates(minrung, 1, t0, tau);
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-				tm.reset();
+				sph_particles_apply_updates(minrung, 1, t0, tau);
 			}
 			tnparams.h_wt = 1.001;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -421,7 +421,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.reset();
 	tm.start();
 	const bool sph = get_options().sph;
-	PRINT( "Finding max smoothlen");
+	PRINT("Finding max smoothlen");
 //	const float h = sph ? std::max((float) sph_particles_max_smooth_len(), (float) get_options().hsoft) : get_options().hsoft;
 	//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
 	tree_create_params tparams(minrung, theta, 0.f);
