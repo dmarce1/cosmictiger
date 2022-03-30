@@ -192,8 +192,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 		tm.reset();
 
-
-
 		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 		tnparams.seti = SPH_INTERACTIONS_I;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
@@ -234,6 +232,14 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
+		sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
+		tm.reset();
+		tm.start();
+		sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
+		tm.reset();
 	} else {
 		if (!glass) {
 			if (tau != 0.0) {
@@ -242,26 +248,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			sparams.phase = 1;
 
 			if (tau != 0.0) {
-				tnparams.h_wt = 1.001;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-				tnparams.seti = SPH_SET_ALL;
-				tnparams.seto = SPH_SET_ALL;
-				tm.start();
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				tm.start();
-				tnparams.seti = SPH_INTERACTIONS_IJ;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-				sph_tree_neighbor(tnparams, root_id, checklist).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-
-				double w = 1.0;
 				int iters = 0;
 				sparams.phase = 0;
 				sparams.run_type = SPH_RUN_HYDRO;
@@ -300,7 +286,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				tm.stop();
 				PRINT("Took %e s\n", tm.read());
 			}
-
 
 			sparams.phase = 1;
 			sparams.run_type = SPH_RUN_AUX;
@@ -374,7 +359,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				tm.reset();
 			}
 			sph_particles_apply_updates(minrung, 2, t0, tau);
-			if (get_options().xsph > 0.0 ) {
+			if (get_options().xsph > 0.0) {
 				tnparams.h_wt = 1.001;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.seto = SPH_SET_ACTIVE;

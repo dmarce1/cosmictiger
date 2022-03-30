@@ -640,7 +640,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int dcount = 0;
 	int ecount = 0;
 	for (int i = 0; i < workitems.size(); i++) {
-		//	PRINT( "%i\n", workitems[i].echecklist.size());
+		//	PRINT( "%i\n", workitems[i].echecklifst.size());
 		dcount += workitems[i].dchecklist.size();
 		ecount += workitems[i].echecklist.size();
 	}
@@ -670,13 +670,22 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	cuda_kick_data data;
 	data.source_size = part_count;
 	data.tree_size = ntrees;
+	data.h_snk = &sph_particles_smooth_len(0);
+	data.type_snk = &particles_type(0);
+	data.cat_index_snk = &particles_cat_index(0);
 	data.sink_size = particles_size();
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
+	data.sphN = get_options().neighbor_number;
+	data.fpot = &sph_particles_fpot(0);
+	data.semiactive = &sph_particles_semi_active(0);
 	data.hsoft = dev_hsoft;
 	data.type = dev_type;
 	data.sph = do_sph;
+	data.x_snk = &particles_pos(XDIM,0);
+	data.y_snk = &particles_pos(YDIM,0);
+	data.z_snk = &particles_pos(ZDIM,0);
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type = &particles_type(0);

@@ -312,18 +312,18 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double error;
 			double parts_above;
 			double parts_below;
-		//	do {
-				xmid = 0.5 * (xmax + xmin);
-				mid = particles_sort(part_range, xmid, xdim);
-				parts_above = part_range.second - mid;
-				parts_below = mid - part_range.first;
-				error = fabs(parts_above - parts_below) * nparts_inv;
-				if (parts_above > parts_below) {
-					xmin = xmid;
-				} else {
-					xmax = xmid;
-				}
-		//	} while (error > 0.5);
+			//	do {
+			xmid = 0.5 * (xmax + xmin);
+			mid = particles_sort(part_range, xmid, xdim);
+			parts_above = part_range.second - mid;
+			parts_below = mid - part_range.first;
+			error = fabs(parts_above - parts_below) * nparts_inv;
+			if (parts_above > parts_below) {
+				xmin = xmid;
+			} else {
+				xmax = xmid;
+			}
+			//	} while (error > 0.5);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
@@ -468,6 +468,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			flops += 3 * NDIM;
 			if (particles_rung(i) >= params.min_rung) {
 				nactive++;
+			} else if (sph) {
+				if (particles_type(i) == SPH_TYPE) {
+					const part_int k = particles_cat_index(i);
+					if (sph_particles_semi_active(k)) {
+						nactive++;
+					}
+				}
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
