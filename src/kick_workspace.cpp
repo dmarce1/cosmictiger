@@ -191,7 +191,7 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
-	CUDA_CHECK(cudaMallocManaged(&dev_hsoft, sizeof(fixed32) * part_count));
+	CUDA_CHECK(cudaMallocManaged(&dev_hsoft, sizeof(float16) * part_count));
 	CUDA_CHECK(cudaMallocManaged(&dev_type, sizeof(char) * part_count));
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));

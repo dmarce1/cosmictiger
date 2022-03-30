@@ -481,7 +481,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* types, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, char* types, part_int offset) {
 	static const bool sph = get_options().sph;
 	const float dm_hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;

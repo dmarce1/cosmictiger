@@ -579,7 +579,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
-				const float type_i = sink_type[k];
 				const float h_i = sink_hsoft[k];
 				const float h2_i = sqr(h_i);
 				const float hinv_i = 1.0f / h_i;
