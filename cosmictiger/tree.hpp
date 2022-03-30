@@ -156,13 +156,13 @@ struct tree_create_return {
 struct tree_create_params {
 	int min_rung;
 	double theta;
-	double hmax;
+//	double hmax;
 	int min_level;
 	tree_create_params() = default;
 	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & hmax;
+//		arc & hmax;
 		arc & min_rung;
 		arc & theta;
 		arc & min_level;

@@ -155,8 +155,7 @@ tree_allocator::~tree_allocator() {
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
 	theta = theta_;
 	min_rung = min_rung_;
-	hmax = hmax_;
-	min_level = tree_min_level(theta, hmax);
+	min_level = 0;
 }
 
 int tree_min_level(double theta, double h) {

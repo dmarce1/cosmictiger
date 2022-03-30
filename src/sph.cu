@@ -88,6 +88,7 @@ struct hydro_record1 {
 
 struct hydro_record2 {
 	array<float, NCHEMFRACS> chem;
+	float fpot;
 	float shearv;
 	float gamma;
 	float vx;
@@ -321,7 +322,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				int iter = 0;
 				float& h = data.h_snk[snki];
 				float drho_dh;
-				float dpot_dh;
 				float rhoh3;
 				do {
 					const float hinv = 1.f / h; // 4
@@ -390,7 +390,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
-					dpot_dh = 0.f;
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
 					for (int j = tid; j < ws.x.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.x[j]); // 2
@@ -406,17 +405,13 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float pot = kernelPot(q);
 							const float force = kernelFqinv(q) * q;
 							drho_dh -= (3.f * kernelW(q) + q * dwdq);
-							dpot_dh -= (pot - q * force);
 						}
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
-					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpot_dh);
 					drho_dh *= 0.33333333333f / rhoh30;
-					dpot_dh *= 0.33333333333f / rhoh30;
 					const float fpre = 1.0f / (1.0f + drho_dh);
 					if (tid == 0) {
 						data.fpre_snk[snki] = fpre;
-						data.fpot_snk[snki] = dpot_dh * fpre;
 					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);
@@ -637,6 +632,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].fpre = data.fpre[pi];
 					ws.rec2[k].rung = data.rungs[pi];
 					ws.rec2[k].balsara = data.balsara[pi];
+					ws.rec2[k].fpot = data.fpot[pi];
 					if (data.chemistry) {
 						ws.rec2[k].gamma = data.gamma[pi];
 					} else {
@@ -669,6 +665,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto vz_i = data.vz[i];
 				const float h_i = data.h[i];
 				const float balsara_i = data.balsara[i];
+				const float fpot_i = data.fpot[i];
+				if( tid == 0 ) {
+					PRINT( "%e\n", fpot_i);
+					ALWAYS_ASSERT(!(rung_i >= params.min_rung && !data.sa_snk[snki]));
+				}
 				float gamma_i;
 				if (data.chemistry) {
 					gamma_i = data.gamma[i];

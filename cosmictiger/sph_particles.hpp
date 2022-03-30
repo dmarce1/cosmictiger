@@ -107,8 +107,10 @@ struct aux_quantities {
 	float shearv;
 	float gradT;
 	float balsara;
+	float fpot;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & fpot;
 		arc & fpre;
 		arc & divv;
 		arc & shearv;
@@ -132,7 +134,7 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 		array<float, NCHEMFRACS>* chems, part_int offset);
 void sph_particles_global_read_sph0(particle_global_range range, float* eint0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* balsara, float* shearv, float* gradT, part_int offset);
+void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* fpot, float* divv, float* balsara, float* shearv, float* gradT, part_int offset);
 
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
@@ -416,6 +418,7 @@ inline sph_particle sph_particles_get_particle(part_int index, float a) {
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
+	aux.fpot = sph_particles_fpot(index);
 	aux.fpre = sph_particles_fpre(index);
 	aux.divv = sph_particles_divv(index);
 	aux.shearv = sph_particles_shear(index);

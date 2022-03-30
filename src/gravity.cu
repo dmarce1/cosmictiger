@@ -519,11 +519,11 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 	int flops = 0;
 	if (partlist.size()) {
 		if (sph) {
-			for (int k = self.part_range.first + tid; k < self.part_range.second; k += WARP_SIZE) {
-				if (data.type[k] == SPH_TYPE) {
-					const int index = data.cat_index[k];
+			for (int k = self.sink_part_range.first + tid; k < self.sink_part_range.second; k += WARP_SIZE) {
+				if (data.type_snk[k] == SPH_TYPE) {
+					const int index = data.cat_index_snk[k];
 					if (data.semiactive[index]) {
-						data.fpot[k] = 0.f;
+						data.fpot[index] = 0.f;
 					}
 				}
 			}
@@ -626,11 +626,11 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 				phi[k] += pot;
 			}
 			if (sph) {
-				for (int k = self.part_range.first; k < self.part_range.second; k++) {
+				for (int k = self.sink_part_range.first; k < self.sink_part_range.second; k++) {
 					if (data.type_snk[k] == SPH_TYPE) {
 						const int index = data.cat_index_snk[k];
 						if (data.semiactive[index]) {
-							const float h_i = data.h_snk[k];
+							const float h_i = data.h_snk[index];
 							const auto x_i = data.x_snk[k];
 							const auto y_i = data.y_snk[k];
 							const auto z_i = data.z_snk[k];
@@ -646,20 +646,22 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 								const auto r2 = sqr(dx0, dx1, dx2);  // 5
 								const float r = sqrtf(r2);
 								const float q = r * hinv_i;
-								const float pot = kernelPot(q);
-								const float force = kernelFqinv(q) * q;
-								dpot_dh -= c0 * m_j * (pot - q * force);
+								if (q < 1.f) {
+									const float pot = kernelPot(q);
+									const float force = kernelFqinv(q) * q;
+									const float d = c0 * m_j * (pot - q * force);
+									dpot_dh -= d;
+								}
 							}
 							shared_reduce_add(dpot_dh);
 							if (tid == 0) {
-								data.fpot[k] += dpot_dh;
+								data.fpot[index] += dpot_dh;
 							}
 						}
 					}
 				}
 			}
 		}
-
 		__syncwarp();
 	}
 	shared_reduce_add(nnear);

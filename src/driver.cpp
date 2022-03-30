@@ -421,9 +421,10 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.reset();
 	tm.start();
 	const bool sph = get_options().sph;
-	const float h = sph ? std::max((float) sph_particles_max_smooth_len(), (float) get_options().hsoft) : get_options().hsoft;
+	PRINT( "Finding max smoothlen");
+//	const float h = sph ? std::max((float) sph_particles_max_smooth_len(), (float) get_options().hsoft) : get_options().hsoft;
 	//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
-	tree_create_params tparams(minrung, theta, h);
+	tree_create_params tparams(minrung, theta, 0.f);
 	PRINT("Create tree %i %e\n", minrung, theta);
 	profiler_enter("tree_create");
 	auto sr = tree_create(tparams);
