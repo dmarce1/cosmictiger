@@ -40,11 +40,11 @@ void particles_group_cache_free();
 
 struct particles_cache_entry {
 	array<fixed32, NDIM> x;
-	float fpot;
+	float type;
 	float hsoft;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & fpot;
+		arc & type;
 		arc & hsoft;
 		arc & x;
 	}
@@ -481,7 +481,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* fpot, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, float* types, part_int offset) {
 	static const bool sph = get_options().sph;
 	const float dm_hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;
@@ -504,16 +504,12 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 							hsoft[j] = std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
 						}
 					}
-					if (type != SPH_TYPE) {
-						fpot[j] = 0.f;
-					} else {
-						fpot[j] = sph_particles_fpot(k);
-					}
+					types[j] = type;
 				} else {
-					fpot[j] = 0.f;
 					if (hsoft) {
 						hsoft[j] = get_options().hsoft;
 					}
+					types[j] = DARK_MATTER_TYPE;
 				}
 			}
 		} else {
@@ -536,12 +532,12 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 						if (hsoft) {
 							hsoft[dest_index] = ptr[src_index].hsoft;
 						}
-						fpot[dest_index] = ptr[src_index].fpot;
+						types[dest_index] = ptr[src_index].type;
 					} else {
 						if (hsoft) {
 							hsoft[dest_index] = get_options().hsoft;
 						}
-						fpot[dest_index] = 0.0;
+						types[dest_index] = DARK_MATTER_TYPE;
 					}
 					dest_index++;
 				}
@@ -587,11 +583,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 		if (sph) {
 			int type = particles_type(i);
 			const auto kk = particles_cat_index(i);
-			if (type != SPH_TYPE) {
-				ln.fpot = 0.f;
-			} else {
-				ln.fpot = sph_particles_fpot(kk);
-			}
+			ln.type = type;
 			if (type != SPH_TYPE) {
 				ln.hsoft = hsoft;
 			} else {
@@ -599,7 +591,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			}
 		} else {
 			ln.hsoft = get_options().hsoft;
-			ln.fpot = 0.0f;
+			ln.type = DARK_MATTER_TYPE;
 		}
 	}
 	return line;

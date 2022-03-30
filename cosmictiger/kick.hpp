@@ -44,10 +44,8 @@ struct cuda_kick_data {
 	float* star_gy;
 	float* star_gz;
 	part_int* cat_index;
-	float16* fpot;
-	bool sph;
 	char* type;
-	bool vsoft;
+	bool sph;
 	char* rungs;
 	float* gx;
 	float* gy;
@@ -67,13 +65,13 @@ struct cuda_kick_shmem {
 	array<fixed32, BUCKET_SIZE> sink_y;
 	array<fixed32, BUCKET_SIZE> sink_z;
 	array<float16, BUCKET_SIZE> sink_hsoft;
-	array<float16, BUCKET_SIZE> sink_fpot;
+	array<char, BUCKET_SIZE> sink_type;
 	struct {
 		array<fixed32, KICK_PP_MAX> x;
 		array<fixed32, KICK_PP_MAX> y;
 		array<fixed32, KICK_PP_MAX> z;
-		array<float16, KICK_PP_MAX> fpot;
 		array<float16, KICK_PP_MAX> hsoft;
+		array<char, KICK_PP_MAX> type;
 	}src;
 	array<float, BUCKET_SIZE> gx;
 	array<float, BUCKET_SIZE> gy;
@@ -195,7 +193,7 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 #endif
 void kick_show_timings();
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, float16*, float16*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, float16*, char*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
 		int part_count, int ntrees, std::function<void()>, std::function<void()>);
 #endif
 int kick_block_count();
