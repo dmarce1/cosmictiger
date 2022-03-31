@@ -325,7 +325,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				const float h0 = h;
 				float drho_dh;
 				float rhoh3;
-				float w0 = 1.0;
+				float w1 = 1.0;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
@@ -346,7 +346,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							drho_dh -= (3.f * w + q * dwdq);
 							rhoh3 += w;
 						}
-						w0 *= 0.9995;
+						w1 *= 0.9999;
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(rhoh3);
@@ -364,14 +364,14 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						dlogh = fminf(fmaxf(powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f, -.1f), .1f);
 						error = fabs(1.0f - rhoh3 / rhoh30);
 						if (tid == 0) {
-							h *= (1.f + w0 * dlogh);
+							h *= (1.f + w1 * dlogh);
 						}
 					}
 					__syncthreads();
 					if (tid == 0) {
-						if (iter > 10000) {
+						if (iter > 100000) {
 							PRINT("Solver failed to converge - %i %e %e %e\n", iter, h, dlogh, error);
-							if (iter > 10010) {
+							if (iter > 100010) {
 								__trap();
 							}
 						}
