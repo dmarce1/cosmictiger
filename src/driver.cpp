@@ -17,7 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#define  SMOOTHLEN_BUFFER 0.33333333
+#define  SMOOTHLEN_BUFFER 0.1
 #define SCALE_DT 0.02
 
 #include <cosmictiger/constants.hpp>
