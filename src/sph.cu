@@ -818,9 +818,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 						if (data.gravity && params.phase == 0) {
 							const float fpot_j = rec2.fpot;
-							gxc -= 0.5f * data.G * m * (fpot_i * dWdr_x_i * sqr(h_i) + fpot_j * dWdr_x_j * sqr(h_j));
-							gyc -= 0.5f * data.G * m * (fpot_i * dWdr_y_i * sqr(h_i) + fpot_j * dWdr_y_j * sqr(h_j));
-							gzc -= 0.5f * data.G * m * (fpot_i * dWdr_z_i * sqr(h_i) + fpot_j * dWdr_z_j * sqr(h_j));
+						//	gxc -= 0.5f * data.G * m * (fpot_i * dWdr_x_i * sqr(h_i) + fpot_j * dWdr_x_j * sqr(h_j));
+						//	gyc -= 0.5f * data.G * m * (fpot_i * dWdr_y_i * sqr(h_i) + fpot_j * dWdr_y_j * sqr(h_j));
+						//	gzc -= 0.5f * data.G * m * (fpot_i * dWdr_z_i * sqr(h_i) + fpot_j * dWdr_z_j * sqr(h_j));
 						}
 					}
 				}

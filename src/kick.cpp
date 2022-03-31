@@ -179,7 +179,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 #endif
 	kick_return kr;
 	const int glass = get_options().glass;
-	const simd_float h = params.h;
+//	const simd_float h = params.h;
 	const float hfloat = params.h;
 	const float GM = params.GM;
 	const float eta = params.eta;
@@ -294,6 +294,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const tree_node* other_ptr = tree_get_node(leaflist[i]);
 				if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
 					other_radius = other_ptr->radius;
+					other_hsoft = other_ptr->hsoft_max;
 					for (int dim = 0; dim < NDIM; dim++) {
 						other_pos[dim] = other_ptr->pos[dim].raw();
 					}
@@ -312,7 +313,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						if (gtype == GRAVITY_EWALD) {
 							R2 = max(R2, ewald_dist2);
 						}
-						const simd_float rhs = sqr(h + other_radius * thetainv);                      // 3
+						const simd_float rhs = sqr(max(other_hsoft, hsoft) + other_radius * thetainv);                      // 3
 						const simd_float near = R2 <= rhs;                                            // 1
 						kr.part_flops += SIMD_FLOAT_SIZE * 12;
 						if (near.sum()) {
@@ -320,11 +321,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 							break;
 						}
 					}
-		//			if (pp) {
+					if (pp) {
 						partlist.push_back(leaflist[i]);
-		//			} else {
-		//				multlist.push_back(leaflist[i]);
-		//			}
+					} else {
+						multlist.push_back(leaflist[i]);
+					}
 				} else {
 					partlist.push_back(leaflist[i]);
 				}

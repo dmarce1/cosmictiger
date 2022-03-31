@@ -71,14 +71,13 @@ struct cuda_kick_params {
 };
 
 __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive,
-		const tree_node& self, float dm_mass, float sph_mass, float h) {
+		const tree_node& self, float dm_mass, float sph_mass) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
 	const bool sph = data.sph;
-	const float hinv = 1.f / h;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
@@ -249,7 +248,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
-	const float& h = global_params.h;
 	const float thetainv = 1.f / global_params.theta;
 	const int min_rung = global_params.min_rung;
 	const float sink_bias = 1.5;
@@ -465,6 +463,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 										if (gtype == GRAVITY_EWALD) {
 											R2 = fmaxf(R2, EWALD_DIST2);
 										}
+										const float h = fmaxf(other.hsoft_max, hsoft);
 										far = R2 > sqr(other.radius * thetainv + h);            // 3
 										if (!far) {
 											break;
@@ -494,6 +493,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						//				if (gtype == GRAVITY_DIRECT) {
 						//					PRINT("C %i L %i M %i\n", closelist.size(), partlist.size(), multlist.size());
 						//				}
+						const float h = global_params.h;
 						if (gtype == GRAVITY_DIRECT) {
 							cuda_gravity_pc_direct(data, self, multlist, nactive, min_rung == 0);
 							cuda_gravity_pp_direct(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
@@ -515,7 +515,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (self.leaf) {
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass, h);
+					do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
@@ -683,9 +683,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.hsoft = dev_hsoft;
 	data.type = dev_type;
 	data.sph = do_sph;
-	data.x_snk = &particles_pos(XDIM,0);
-	data.y_snk = &particles_pos(YDIM,0);
-	data.z_snk = &particles_pos(ZDIM,0);
+	data.x_snk = &particles_pos(XDIM, 0);
+	data.y_snk = &particles_pos(YDIM, 0);
+	data.z_snk = &particles_pos(ZDIM, 0);
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type = &particles_type(0);
