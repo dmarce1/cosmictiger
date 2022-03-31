@@ -312,7 +312,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
-			const bool use = active;
+			const bool converged = data.converged_snk[snki];
+			const bool use = active && !converged;
 			const float w0 = kernelW(0.f);
 			if (use) {
 				x[XDIM] = data.x[i];
@@ -409,6 +410,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					const float fpre = 1.0f / (1.0f + drho_dh);
 					if (tid == 0) {
 						data.fpre_snk[snki] = fpre;
+						data.converged_snk[snki] = true;
 					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);

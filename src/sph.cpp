@@ -227,6 +227,19 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor_fork(sph_tree_neighbor_p
 }
 HPX_PLAIN_ACTION (sph_run);
 
+bool is_converged(const sph_tree_node* self, int minrung) {
+	bool converged = true;
+	for (int i = self->part_range.first; i < self->part_range.second; i++) {
+		if (sph_particles_rung(i) >= minrung) {
+			if (!sph_particles_converged(i)) {
+				converged = false;
+				break;
+			}
+		}
+	}
+	return converged;
+}
+
 bool has_active_neighbors(const sph_tree_node* self) {
 	bool rc = false;
 	for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
@@ -1424,7 +1437,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 						switch(params.run_type) {
 
 							case SPH_RUN_SMOOTHLEN:
-							test = self->nactive > 0;
+							test = self->nactive > 0 && !is_converged(self, params.min_rung);
 							break;
 
 							case SPH_RUN_MARK_SEMIACTIVE:
@@ -1789,6 +1802,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.chemistry = get_options().chem;
+	cuda_data.converged_snk = &sph_particles_converged(0);
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
 	cuda_data.dchem_con = &sph_particles_dchem_con(0);

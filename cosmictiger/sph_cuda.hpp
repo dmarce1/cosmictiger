@@ -62,6 +62,7 @@ struct sph_run_cuda_data {
 	bool conduction;
 	bool gravity;
 	bool chemistry;
+	char* converged_snk;
 	float gcentral;
 	float hcentral;
 	float G;
