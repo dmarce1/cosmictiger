@@ -595,21 +595,19 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					const float h_j = src_hsoft[j];
 					const float h2_j = sqr(h_j);
-					if (r2 > fmaxf(h2_i, h2_j)) {
+					const float h_ij = 0.5f * (h_i + h_j);
+					if (r2 > sqr(h_ij)) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float hinv_j = 1.0f / h_j;
-						const float h3inv_j = hinv_j * sqr(hinv_j);
+						const float hinv_ij = 1.0f / h_ij;
+						const float h3inv_ij = hinv_ij * sqr(hinv_ij);
 						const float r = sqrtf(r2);
 						r1inv = 1.f / (r + 1e-30f);
-						const float q_i = r * hinv_i;
-						const float q_j = r * hinv_j;
-						const float F0 = 0.5f * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-						r3inv = F0;
+						const float q_ij = r * hinv_ij;
+						r3inv = kernelFqinv(q_ij) * h3inv_ij;
 						if (do_phi) {
-							const float pot0 = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-							r1inv = pot0;
+							r1inv = kernelPot(q_ij) * hinv_ij;
 						}
 					}
 					r3inv *= m_j;
@@ -634,22 +632,27 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 							const auto x_i = data.x_snk[k];
 							const auto y_i = data.y_snk[k];
 							const auto z_i = data.z_snk[k];
-							const float hinv_i = 1.0f / h_i;
 							float dpot_dh = 0.f;
 							const float c0 = 4.f * float(M_PI) / (9.0f * data.sphN * sph_mass);
 							for (int j = tid; j < part_index; j += WARP_SIZE) {
-								dx0 = distance(x_i, src_x[j]); // 1
-								dx1 = distance(y_i, src_y[j]); // 1
-								dx2 = distance(z_i, src_z[j]); // 1
+								const float h_j = src_hsoft[j];
+								const fixed32 x_j = src_x[j];
+								const fixed32 y_j = src_y[j];
+								const fixed32 z_j = src_z[j];
+								const float h_ij = 0.5f * (h_i + h_j);
+								const float hinv_ij = 1.0f / h_ij;
+								dx0 = distance(x_i, x_j); // 1
+								dx1 = distance(y_i, y_j); // 1
+								dx2 = distance(z_i, z_j); // 1
 								const float type_j = src_type[j];
 								const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
 								const auto r2 = sqr(dx0, dx1, dx2);  // 5
 								const float r = sqrtf(r2);
-								const float q = r * hinv_i;
+								const float q = r * hinv_ij;
 								if (q < 1.f) {
 									const float pot = kernelPot(q);
 									const float force = kernelFqinv(q) * q;
-									const float d = c0 * m_j * (pot - sqr(q) * force);
+									const float d = c0 * m_j * (pot - q * force);
 									dpot_dh -= d;
 								}
 							}

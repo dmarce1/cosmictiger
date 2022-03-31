@@ -320,14 +320,24 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 							break;
 						}
 					}
-					if (pp) {
+		//			if (pp) {
 						partlist.push_back(leaflist[i]);
-					} else {
-						multlist.push_back(leaflist[i]);
-					}
+		//			} else {
+		//				multlist.push_back(leaflist[i]);
+		//			}
 				} else {
 					partlist.push_back(leaflist[i]);
 				}
+			}
+			if (gtype == GRAVITY_DIRECT) {
+				bool foundme = false;
+				for (int i = 0; i < partlist.size(); i++) {
+					if (partlist[i] == self) {
+						foundme = true;
+						break;
+					}
+				}
+				ALWAYS_ASSERT(foundme);
 			}
 			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, multlist);
 			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, partlist, params.h);

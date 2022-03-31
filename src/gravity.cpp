@@ -286,6 +286,26 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 		simd_float hinv3 = hinv * hinv * hinv;
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
+		const auto range = self_ptr->part_range;
+		if (gtype == GRAVITY_DIRECT) {
+			const simd_float c0 = simd_float(4.f * float(M_PI) / (9.0f * get_options().neighbor_number * get_options().sph_mass));
+			for (part_int i = range.first; i < range.second; i++) {
+				bool active = particles_rung(i) >= min_rung;
+				bool dofpot = false;
+				const int this_type = particles_type(i);
+				part_int kk;
+				if (this_type == SPH_TYPE) {
+					kk = particles_cat_index(i);
+					if (active || sph_particles_semi_active(kk)) {
+						dofpot = true;
+					}
+				}
+				if (dofpot) {
+					sph_particles_fpot(kk) = 0.0;
+				}
+			}
+		}
+
 		for (int li = 0; li < list.size(); li += chunk_size) {
 			array<const tree_node*, chunk_size> tree_ptrs;
 			int nsource = 0;
@@ -330,7 +350,6 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 				hsoft[i] = 1.0f;
 				type[i] = 0;
 			}
-			const auto range = self_ptr->part_range;
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
 			simd_float src_hsoft;
@@ -343,11 +362,20 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			feenableexcept (FE_INVALID);
 			feenableexcept (FE_OVERFLOW);
 			if (gtype == GRAVITY_DIRECT) {
+				const simd_float c0 = simd_float(4.f * float(M_PI) / (9.0f * get_options().neighbor_number * get_options().sph_mass));
 				for (part_int i = range.first; i < range.second; i++) {
-					if (particles_rung(i) >= min_rung) {
-						const int this_type = particles_type(i);
+					bool active = particles_rung(i) >= min_rung;
+					bool dofpot = false;
+					const int this_type = particles_type(i);
+					part_int kk;
+					if (this_type == SPH_TYPE) {
+						kk = particles_cat_index(i);
+						if (active || sph_particles_semi_active(kk)) {
+							dofpot = true;
+						}
+					}
+					if (active || dofpot) {
 						if (this_type == SPH_TYPE) {
-							const auto kk = particles_cat_index(i);
 							sink_hsoft = sph_particles_smooth_len(kk);
 							sink_type = SPH_TYPE;
 						} else {
@@ -358,9 +386,11 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 						simd_float gy(0.0);
 						simd_float gz(0.0);
 						simd_float phi(0.0);
+						simd_float fpot(0.0);
 						for (int dim = 0; dim < NDIM; dim++) {
 							X[dim] = particles_pos(dim, i).raw();
 						}
+						//					simd_float self_flags(0);
 						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 							const int& count = maxi;
 							const int k = j / SIMD_FLOAT_SIZE;
@@ -383,41 +413,62 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 							const simd_float h_j = src_hsoft;
 							const auto hinv_i = simd_float(1.f) / h_i;
 							const auto h3inv_i = sqr(hinv_i) * hinv_i;
-							const simd_float near_flags = r2 < max(sqr(h_i), sqr(h_j));
+							const auto h_ij = simd_float(0.5f) * (h_i + h_j);
+							const simd_float near_flags = r2 < sqr(h_ij);
 							const auto type_i = sink_type;
-							if (near_flags.sum() == 0) {
-								rinv1 = simd_float(1) / sqrt(r2);
-								rinv3 = rinv1 * sqr(rinv1);
-							} else {
-								const auto type_j = src_type;
-								const auto hinv_j = simd_float(1.f) / h_j;
-								const auto h3inv_j = sqr(hinv_j) * hinv_j;
-								const simd_float r = sqrt(r2);                                                    // 4
-								rinv1 = simd_float(1) / (r + tiny);                            // 5
-								const auto q_i = r * hinv_i;
-								const auto q_j = r * hinv_j;
-								const auto F0 = simd_float(0.5f) * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
-								rinv3 = F0;
-								if (min_rung == 0) {
-									const auto pot0 = simd_float(0.5f) * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
-									rinv1 = pot0;
+//							self_flags += simd_float(1) - (r2 > simd_float(0));
+							if (active) {
+								if (near_flags.sum() == 0) {
+									rinv1 = simd_float(1) / sqrt(r2);
+									rinv3 = rinv1 * sqr(rinv1);
+								} else {
+									const auto type_j = src_type;
+									const auto hinv_ij = simd_float(1.f) / h_ij;
+									const auto h3inv_ij = sqr(hinv_ij) * hinv_ij;
+									const simd_float r = sqrt(r2);                                                    // 4
+									rinv1 = simd_float(1) / (r + tiny);                            // 5
+									const auto q_ij = r * hinv_ij;
+									rinv3 = kernelFqinv(q_ij) * h3inv_ij;
+									if (min_rung == 0) {
+										rinv1 = kernelPot(q_ij) * hinv_ij;
+									}
+								}
+								rinv3 *= mass;
+								rinv1 *= mass;
+								gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
+								gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
+								gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
+								phi -= rinv1;																									// 1
+							}
+							if (dofpot) {
+								if (near_flags.sum() == 0) {
+								} else {
+									const auto type_j = src_type;
+									const auto h_ij = simd_float(0.5f) * (h_i + h_j);
+									const auto hinv_ij = simd_float(1.f) / h_ij;
+									const auto h3inv_ij = sqr(hinv_ij) * hinv_ij;
+									const simd_float r = sqrt(r2);                                                    // 4
+									const auto q_ij = r * hinv_ij;
+									fpot -= near_flags * mass * c0 * (kernelPot(q_ij) - sqr(q_ij) * kernelFqinv(q_ij));
 								}
 							}
-							rinv3 *= mass;
-							rinv1 *= mass;
-							gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
-							gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
-							gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
-							phi -= rinv1;																									// 1
 						}
+//						PRINT( "%e\n", self_flags.sum());
+//						ALWAYS_ASSERT(self_flags.sum() > 0.0);
 						const int j = i - range.first;
-						f.gx[j] -= gx.sum();
-						f.gy[j] -= gy.sum();
-						f.gz[j] -= gz.sum();
-						f.phi[j] += phi.sum();
+						if (active) {
+							f.gx[j] -= gx.sum();
+							f.gy[j] -= gy.sum();
+							f.gz[j] -= gz.sum();
+							f.phi[j] += phi.sum();
+						}
+						if (dofpot) {
+							sph_particles_fpot(kk) += fpot.sum();
+						}
 					}
 				}
 			}
+
 			if (gtype == GRAVITY_EWALD) {
 
 				for (part_int i = range.first; i < range.second; i++) {
