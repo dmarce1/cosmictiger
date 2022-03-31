@@ -1267,7 +1267,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 		}
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
-			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			if (data.rungs[i] >= params.min_rung) {
 				const auto x_i = data.x[i];
 				const auto y_i = data.y[i];
@@ -1299,8 +1298,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 					if (rung_i < max_rung_j - 1) {
 						changes++;
 						rung_i = max_rung_j - 1;
-					} else {
-						data.converged_snk[snki] = true;
 					}
 				}
 			}
