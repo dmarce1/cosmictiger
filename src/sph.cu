@@ -340,7 +340,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
 							const float dwdh = -q * dwdq * hinv; // 3
-							drho_dh -= (3.f * kernelW(q) + q * dwdq);
+							drho_dh -= (3.f * w + q * dwdq);
 							rhoh3 += w;
 						}
 					}
@@ -401,10 +401,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						if (q < 1.f) {                               // 1
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
-							const float dwdh = -q * dwdq * hinv; // 3
-							const float pot = kernelPot(q);
-							const float force = kernelFqinv(q) * q;
-							drho_dh -= (3.f * kernelW(q) + q * dwdq);
+							drho_dh -= (3.f * w + q * dwdq);
 						}
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
@@ -672,18 +669,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				} else {
 					gamma_i = data.def_gamma;
 				}
-				float gx_i;
-				float gy_i;
-				float gz_i;
-				if (data.gravity) {
-					gx_i = data.gx_snk[snki];
-					gy_i = data.gy_snk[snki];
-					gz_i = data.gz_snk[snki];
-				} else {
-					gx_i = 0.f;
-					gy_i = 0.f;
-					gz_i = 0.f;
-				}
 				const float h2_i = sqr(h_i);
 				const float hinv_i = 1.f / h_i;
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);
@@ -857,6 +842,18 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				 __trap();
 				 }*/
 				if (tid == 0) {
+					float gx_i;
+					float gy_i;
+					float gz_i;
+					if (data.gravity) {
+						gx_i = data.gx_snk[snki];
+						gy_i = data.gy_snk[snki];
+						gz_i = data.gz_snk[snki];
+					} else {
+						gx_i = 0.f;
+						gy_i = 0.f;
+						gz_i = 0.f;
+					}
 					ax += gx_i;
 					ay += gy_i;
 					az += gz_i;
