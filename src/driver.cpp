@@ -17,7 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#define  SMOOTHLEN_BUFFER 0.201
+#define  SMOOTHLEN_BUFFER 0.5
 #define SCALE_DT 0.02
 
 #include <cosmictiger/constants.hpp>
@@ -232,6 +232,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
+		sph_particles_reset_converged();
 		sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
 		tm.reset();
 		tm.start();

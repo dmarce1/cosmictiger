@@ -111,7 +111,7 @@ float sph_particles_max_smooth_len() {
 	for (auto& f : futs) {
 		maxh = std::max(maxh, f.get());
 	}
-	PRINT( "done\n");
+	PRINT("done\n");
 	return maxh;
 }
 
@@ -528,6 +528,21 @@ void sph_particles_resolve_with_particles() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
+void sph_particles_reset_converged() {
+	const int nthread = hpx_hardware_concurrency();
+	std::vector<hpx::future<void>> futs;
+	for (int proc = 0; proc < nthread; proc++) {
+		futs.push_back(hpx::async([proc, nthread] {
+			const part_int b = (size_t) proc * sph_particles_size() / nthread;
+			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
+			for( part_int i = b; i < e; i++) {
+				sph_particles_converged(i) = false;
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
+
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
@@ -925,7 +940,8 @@ static vector<pair<char, float>> sph_particles_fetch_rung_cache_line(part_int in
 	return line;
 }
 
-void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* fpot, float* divv, float* balsara, float* shearv, float* gradT, part_int offset) {
+void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* fpot, float* divv, float* balsara, float* shearv, float* gradT,
+		part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -948,7 +964,7 @@ void sph_particles_global_read_aux(particle_global_range range, float* fpre, flo
 				if (balsara) {
 					balsara[j] = sph_particles_balsara(i);
 				}
-				if( fpot ) {
+				if (fpot) {
 					fpot[j] = sph_particles_fpot(i);
 				}
 			}
@@ -982,7 +998,7 @@ void sph_particles_global_read_aux(particle_global_range range, float* fpre, flo
 				if (balsara) {
 					balsara[j] = ptr[src_index].balsara;
 				}
-				if( fpot) {
+				if (fpot) {
 					fpot[j] = ptr[src_index].fpot;
 				}
 				dest_index++;

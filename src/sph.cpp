@@ -1440,8 +1440,11 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 							test = self->nactive > 0 && !is_converged(self, params.min_rung);
 							break;
 
-							case SPH_RUN_MARK_SEMIACTIVE:
 							case SPH_RUN_RUNGS:
+							test = self->nactive > 0 && !is_converged(self, params.min_rung);
+							break;
+
+							case SPH_RUN_MARK_SEMIACTIVE:
 							test = has_active_neighbors(self);
 							break;
 
