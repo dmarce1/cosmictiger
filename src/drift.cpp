@@ -117,7 +117,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						float c0 = exp(dloghdt*dt);
 						h *= c0;
 						if( h > 0.5 ) {
-							PRINT( "BIG H! %e %e %e\n", x, y, z);
+							PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
 						}
 					}
 					const float h3 = sqr(h)*h;

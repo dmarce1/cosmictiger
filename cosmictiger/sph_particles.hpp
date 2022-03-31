@@ -136,7 +136,7 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 void sph_particles_global_read_sph0(particle_global_range range, float* eint0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* fpot, float* divv, float* balsara, float* shearv, float* gradT, part_int offset);
-
+void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();

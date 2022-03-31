@@ -1108,7 +1108,6 @@ void sph_particles_load(FILE* fp) {
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
-	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
@@ -1144,7 +1143,6 @@ void sph_particles_save(FILE* fp) {
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
-	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_divv(0), sizeof(float), sph_particles_size(), fp);
@@ -1172,4 +1170,21 @@ void sph_particles_save(FILE* fp) {
 		stars_save(fp);
 	}
 }
+
+
+void sph_particles_reset_converged() {
+	const int nthread = hpx_hardware_concurrency();
+	std::vector<hpx::future<void>> futs;
+	for (int proc = 0; proc < nthread; proc++) {
+		futs.push_back(hpx::async([proc, nthread] {
+			const part_int b = (size_t) proc * sph_particles_size() / nthread;
+			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
+			for( part_int i = b; i < e; i++) {
+				sph_particles_converged(i) = false;
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}
+
 

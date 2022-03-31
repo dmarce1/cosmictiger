@@ -17,7 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#define  SMOOTHLEN_BUFFER 0.201
+#define  SMOOTHLEN_BUFFER 0.33333333
 #define SCALE_DT 0.02
 
 #include <cosmictiger/constants.hpp>
@@ -232,6 +232,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
+		sph_reset_converged();
 		sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
 		tm.reset();
 		tm.start();
@@ -240,6 +241,26 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_MARK_SEMIACTIVE): tm = %e \n", tm.read());
 		tm.reset();
+		tnparams.h_wt = 1.01f;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+		tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
+//			tnparams.set = SPH_SET_ACTIVE;
+		tm.start();
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+		profiler_exit();
+		tm.stop();
+		tm.reset();
+		tm.start();
+		tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		profiler_exit();
+		tm.stop();
+		tm.reset();
+
 	} else {
 		if (!glass) {
 			if (tau != 0.0) {
@@ -302,8 +323,8 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (!glass) {
 			tnparams.h_wt = 1.001;
 			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.seti = SPH_SET_ALL;
-			tnparams.seto = SPH_SET_ALL;
+			tnparams.seti = SPH_SET_ACTIVE | SPH_SET_SEMIACTIVE;
+			tnparams.seto = SPH_SET_ACTIVE | SPH_SET_SEMIACTIVE;
 			tm.start();
 			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();

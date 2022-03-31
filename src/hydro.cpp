@@ -224,7 +224,7 @@ void hydro_plummer() {
 	double pot = 0.0;
 	double ekin = 0.0;
 	double maxr = 5.0 * a;
-	while (particles_size() < N / 2) {
+	while (particles_size() < 0) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
@@ -255,9 +255,9 @@ void hydro_plummer() {
 			particles_rung(k) = 0;
 		}
 	}
-	sph_particles_resize(N / 2);
+	sph_particles_resize(N );
 	int k = 0;
-	while (k < N / 2) {
+	while (k < N ) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);

@@ -322,6 +322,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				int box_xceeded = false;
 				int iter = 0;
 				float& h = data.h_snk[snki];
+				const float h0 = h;
 				float drho_dh;
 				float rhoh3;
 				do {
@@ -388,6 +389,9 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(box_xceeded);
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
 				if (!box_xceeded) {
+					if (tid == 0) {
+						PRINT("%e\n", (h / h0 - 1.0));
+					}
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
@@ -875,7 +879,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
-						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv);
+						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv) / 3.f;
 						//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
