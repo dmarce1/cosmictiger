@@ -81,7 +81,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
-SPH_PARTICLES_EXTERN float* sph_particles_fp; // potential correction
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_de1; // deint_pred
@@ -108,10 +107,8 @@ struct aux_quantities {
 	float shearv;
 	float gradT;
 	float balsara;
-	float fpot;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & fpot;
 		arc & fpre;
 		arc & divv;
 		arc & shearv;
@@ -135,7 +132,7 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 		array<float, NCHEMFRACS>* chems, part_int offset);
 void sph_particles_global_read_sph0(particle_global_range range, float* eint0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* fpot, float* divv, float* balsara, float* shearv, float* gradT, part_int offset);
+void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* balsara, float* shearv, float* gradT, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
@@ -269,11 +266,6 @@ inline char& sph_particles_semi_active(part_int index) {
 inline float& sph_particles_fpre(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_f0[index];
-}
-
-inline float& sph_particles_fpot(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_fp[index];
 }
 
 inline part_int& sph_particles_dm_index(part_int index) {
@@ -422,7 +414,6 @@ inline sph_particle sph_particles_get_particle(part_int index, float a) {
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
-	aux.fpot = sph_particles_fpot(index);
 	aux.fpre = sph_particles_fpre(index);
 	aux.divv = sph_particles_divv(index);
 	aux.shearv = sph_particles_shear(index);

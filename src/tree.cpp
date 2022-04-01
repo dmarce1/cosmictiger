@@ -282,7 +282,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	size_t leaf_nodes = 0;
 	size_t active_leaf_nodes = 0;
 	const int index = allocator.allocate();
-	double hsoft_max = 0.0;
 
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
@@ -337,7 +336,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
-		hsoft_max = std::max(rcl.hsoft_max, rcr.hsoft_max);
 		min_depth = std::min(rcl.min_depth, rcr.min_depth);
 		max_depth = std::max(rcl.max_depth, rcr.max_depth);
 		total_flops += rcl.flops + rcr.flops;
@@ -536,23 +534,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			flops += 3 * NDIM + 1;
 		}
 		radius = std::sqrt(r);
-		r = 0.0;
-		for (part_int i = part_range.first; i < part_range.second; i++) {
-			double this_radius = 0.0;
-			double this_h;
-			this_h = h;
-			if (sph) {
-				if (particles_type(i) == SPH_TYPE) {
-			//		this_h = sph_particles_smooth_len(particles_cat_index(i));
-				}
-			}
-			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = particles_pos(dim, i).to_double();
-				this_radius += sqr(x - Xc[dim]);
-			}
-			r = std::max(r, sqrt(this_radius) + h);
-		}
-		hsoft_max = r - radius;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}
@@ -576,7 +557,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
-	node.hsoft_max = hsoft_max;
 	node.nactive = nactive;
 	node.active_nodes = active_nodes;
 	node.depth = depth;
@@ -599,7 +579,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
-	rc.hsoft_max = hsoft_max;
 	rc.leaf_nodes = leaf_nodes;
 	rc.active_leaf_nodes = active_leaf_nodes;
 	rc.node_count = node.node_count;

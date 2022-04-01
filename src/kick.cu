@@ -238,7 +238,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& leaflist = lists[bid].leaflist;
 	auto& closelist = lists[bid].closelist;
 	auto& activei = shmem.active;
-	auto& sink_hsoft = shmem.sink_hsoft;
 	auto& sink_type = shmem.sink_type;
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
@@ -253,7 +252,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const float sink_bias = 1.5;
 	auto* tree_nodes = data.tree_nodes;
 	auto* all_rungs = data.rungs;
-	auto* src_hsoft = data.hsoft;
 	auto* src_type = data.type;
 	auto* src_x = data.x;
 	auto* src_y = data.y;
@@ -331,7 +329,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							sink_x[l] = src_x[srci];
 							sink_y[l] = src_y[srci];
 							sink_z[l] = src_z[srci];
-							sink_hsoft[l] = src_hsoft[srci];
 							sink_type[l] = src_type[srci];
 						}
 						nactive += total;
@@ -351,7 +348,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					closelist.resize(0);
 					multlist.resize(0);
 					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
-					const float hsoft = self.hsoft_max;
+					const float hsoft = global_params.h;
 					do {
 						maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -362,7 +359,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							bool close = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								const float other_hsoft = other.hsoft_max;
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
@@ -370,7 +366,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (gtype == GRAVITY_EWALD) {
 									R2 = fmaxf(R2, EWALD_DIST2);
 								}
-								const bool soft_sep = sqr(self.radius + other.radius + max(other_hsoft, hsoft)) < R2;
+								const bool soft_sep = sqr(self.radius + other.radius + hsoft) < R2;
 								const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
 								const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
 								close = !soft_sep && self.leaf;
@@ -463,8 +459,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 										if (gtype == GRAVITY_EWALD) {
 											R2 = fmaxf(R2, EWALD_DIST2);
 										}
-										const float h = fmaxf(other.hsoft_max, hsoft);
-										far = R2 > sqr(other.radius * thetainv + h);            // 3
+										far = R2 > sqr(other.radius * thetainv + hsoft);            // 3
 										if (!far) {
 											break;
 										}
@@ -602,7 +597,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, float16* dev_hsoft, char* dev_type,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	static const bool do_sph = get_options().sph;
@@ -678,9 +673,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.y = dev_y;
 	data.z = dev_z;
 	data.sphN = get_options().neighbor_number;
-	data.fpot = &sph_particles_fpot(0);
 	data.semiactive = &sph_particles_semi_active(0);
-	data.hsoft = dev_hsoft;
 	data.type = dev_type;
 	data.sph = do_sph;
 	data.x_snk = &particles_pos(XDIM, 0);

@@ -495,8 +495,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
 	const bool sph = data.sph;
-	auto& src_hsoft = shmem.src.hsoft;
-	const auto& sink_hsoft = shmem.sink_hsoft;
 	const auto& sink_x = shmem.sink_x;
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
@@ -504,7 +502,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
 	const auto* main_src_type = data.type;
-	const auto* main_src_hsoft = data.hsoft;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
@@ -555,7 +552,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 					src_type[i1] = main_src_type[i2];
-					src_hsoft[i1] = main_src_hsoft[i2];
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -582,10 +578,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
-				const float h_i = sink_hsoft[k];
-				const float h2_i = sqr(h_i);
-				const float hinv_i = 1.0f / h_i;
-				const float h3inv_i = hinv_i * sqr(hinv_i);
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1
@@ -593,21 +585,16 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 					const float type_j = src_type[j];
 					const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
-					const float h_j = src_hsoft[j];
-					const float h2_j = sqr(h_j);
-					const float h_ij = 0.5f * (h_i + h_j);
-					if (r2 > sqr(h_ij)) {
+					if (r2 > h2) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float hinv_ij = 1.0f / h_ij;
-						const float h3inv_ij = hinv_ij * sqr(hinv_ij);
 						const float r = sqrtf(r2);
 						r1inv = 1.f / (r + 1e-30f);
-						const float q_ij = r * hinv_ij;
-						r3inv = kernelFqinv(q_ij) * h3inv_ij;
+						const float q_ij = r * hinv;
+						r3inv = kernelFqinv(q_ij) * h3inv;
 						if (do_phi) {
-							r1inv = kernelPot(q_ij) * hinv_ij;
+							r1inv = kernelPot(q_ij) * hinv;
 						}
 					}
 					r3inv *= m_j;
@@ -622,47 +609,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 				gy[k] -= fy;
 				gz[k] -= fz;
 				phi[k] += pot;
-			}
-			if (sph) {
-				for (int k = self.sink_part_range.first; k < self.sink_part_range.second; k++) {
-					if (data.type_snk[k] == SPH_TYPE) {
-						const int index = data.cat_index_snk[k];
-						if (data.semiactive[index]) {
-							const float h_i = data.h_snk[index];
-							const auto x_i = data.x_snk[k];
-							const auto y_i = data.y_snk[k];
-							const auto z_i = data.z_snk[k];
-							float dpot_dh = 0.f;
-							const float c0 = 4.f * float(M_PI) / (9.0f * data.sphN * sph_mass);
-							for (int j = tid; j < part_index; j += WARP_SIZE) {
-								const float h_j = src_hsoft[j];
-								const fixed32 x_j = src_x[j];
-								const fixed32 y_j = src_y[j];
-								const fixed32 z_j = src_z[j];
-								const float h_ij = 0.5f * (h_i + h_j);
-								const float hinv_ij = 1.0f / h_ij;
-								dx0 = distance(x_i, x_j); // 1
-								dx1 = distance(y_i, y_j); // 1
-								dx2 = distance(z_i, z_j); // 1
-								const float type_j = src_type[j];
-								const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
-								const auto r2 = sqr(dx0, dx1, dx2);  // 5
-								const float r = sqrtf(r2);
-								const float q = r * hinv_ij;
-								if (q < 1.f) {
-									const float pot = kernelPot(q);
-									const float force = kernelFqinv(q) * q;
-									const float d = c0 * m_j * (pot - q * force);
-									dpot_dh -= d;
-								}
-							}
-							shared_reduce_add(dpot_dh);
-							if (tid == 0) {
-								data.fpot[index] += dpot_dh;
-							}
-						}
-					}
-				}
 			}
 		}
 		__syncwarp();

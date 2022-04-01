@@ -209,9 +209,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, do_phi);
-	simd_float other_hsoft;
-	simd_float hsoft;
-	hsoft = self_ptr->hsoft_max;
+	simd_float hsoft = get_options().hsoft;
 	force_vectors forces;
 	const part_int mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
@@ -239,7 +237,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					for (int dim = 0; dim < NDIM; dim++) {
 						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 					}
-					other_hsoft[i] = other_ptrs[i]->hsoft_max;
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
 				}
@@ -248,7 +245,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						other_pos[dim][i] = 0.f;
 					}
 					other_radius[i] = 0.f;
-					other_hsoft[i] = 1.f;
 					other_leaf[i] = 0;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -258,7 +254,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (gtype == GRAVITY_EWALD) {
 					R2 = max(R2, ewald_dist2);
 				}
-				const simd_float soft_sep = sqr(self_radius + other_radius + max(hsoft, other_hsoft)) < R2;
+				const simd_float soft_sep = sqr(self_radius + other_radius + hsoft) < R2;
 				const simd_float far1 = soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
 				const simd_float far2 = soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
 				const simd_float mult = far1;                                                                  // 4
@@ -294,7 +290,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const tree_node* other_ptr = tree_get_node(leaflist[i]);
 				if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
 					other_radius = other_ptr->radius;
-					other_hsoft = other_ptr->hsoft_max;
 					for (int dim = 0; dim < NDIM; dim++) {
 						other_pos[dim] = other_ptr->pos[dim].raw();
 					}
@@ -313,7 +308,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						if (gtype == GRAVITY_EWALD) {
 							R2 = max(R2, ewald_dist2);
 						}
-						const simd_float rhs = sqr(max(other_hsoft, hsoft) + other_radius * thetainv);                      // 3
+						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
 						const simd_float near = R2 <= rhs;                                            // 1
 						kr.part_flops += SIMD_FLOAT_SIZE * 12;
 						if (near.sum()) {

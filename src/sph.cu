@@ -88,7 +88,6 @@ struct hydro_record1 {
 
 struct hydro_record2 {
 	array<float, NCHEMFRACS> chem;
-	float fpot;
 	float shearv;
 	float gamma;
 	float vx;
@@ -641,7 +640,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].fpre = data.fpre[pi];
 					ws.rec2[k].rung = data.rungs[pi];
 					ws.rec2[k].balsara = data.balsara[pi];
-					ws.rec2[k].fpot = data.fpot[pi];
 					if (data.chemistry) {
 						ws.rec2[k].gamma = data.gamma[pi];
 					} else {
@@ -674,7 +672,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto vz_i = data.vz[i];
 				const float h_i = data.h[i];
 				const float balsara_i = data.balsara[i];
-				const float fpot_i = data.fpot[i];
 				float gamma_i;
 				if (data.chemistry) {
 					gamma_i = data.gamma[i];
@@ -715,9 +712,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				constexpr float tiny = 1e-30f;
 				float vsig = 0.0f;
 				const float& adot = params.adot;
-				float gxc = 0.f;
-				float gyc = 0.f;
-				float gzc = 0.f;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto rec1 = ws.rec1[j];
 					const auto rec2 = ws.rec2[j];
@@ -760,8 +754,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 						const float sqrtrho_j = sqrtf(rho_j);
 						const float h_ij = 0.5f * (h_i + h_j);
-						const float mu_ij = vdotx_ij * h_ij / (r2 + 0.01f * sqr(h2_ij));
-						const float mu_ij = h_ij * r/  * w_ij;
+						const float w_ij = vdotx_ij * rinv;
+						const float mu_ij = vdotx_ij * h_ij / (r2 + 0.01f * sqr(h_ij));
 						const float rho_ij = 0.5f * (rho_i + rho_j);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 						const float beta_ij = 0.5f * (beta_i + beta_j);
@@ -819,12 +813,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 								dtinv_cfl = fmaxf(dtinv_cfl, 0.5f * dtinv_j);
 							}
 						}
-						if (data.gravity && params.phase == 0) {
-							const float fpot_j = rec2.fpot;
-//							gxc -= 0.5f * data.G * m * (fpot_i * dWdr_x_i * sqr(h_i) + fpot_j * dWdr_x_j * sqr(h_j));
-//							gyc -= 0.5f * data.G * m * (fpot_i * dWdr_y_i * sqr(h_i) + fpot_j * dWdr_y_j * sqr(h_j));
-//							gzc -= 0.5f * data.G * m * (fpot_i * dWdr_z_i * sqr(h_i) + fpot_j * dWdr_z_j * sqr(h_j));
-						}
 					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
@@ -832,16 +820,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
-				if (params.phase == 0 && data.gravity) {
-					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gxc);
-					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gyc);
-					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gzc);
-					if (tid == 0) {
-						data.gx_snk[snki] += gxc;
-						data.gy_snk[snki] += gyc;
-						data.gz_snk[snki] += gzc;
-					}
-				}
 				if (params.phase == 1) {
 					shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				}

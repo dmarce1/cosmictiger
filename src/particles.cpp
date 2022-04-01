@@ -40,12 +40,10 @@ void particles_group_cache_free();
 
 struct particles_cache_entry {
 	array<fixed32, NDIM> x;
-	float type;
-	float hsoft;
+	char type;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & type;
-		arc & hsoft;
 		arc & x;
 	}
 };
@@ -481,9 +479,8 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, float* hsoft, char* types, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, part_int offset) {
 	static const bool sph = get_options().sph;
-	const float dm_hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -497,18 +494,8 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 				if (sph) {
 					const part_int k = particles_cat_index(i);
 					int type = particles_type(i);
-					if (hsoft) {
-					//	if (type != SPH_TYPE) {
-							hsoft[j] = dm_hsoft;
-					//	} else {
-					//		hsoft[j] = std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
-					//	}
-					}
 					types[j] = type;
 				} else {
-					if (hsoft) {
-						hsoft[j] = get_options().hsoft;
-					}
 					types[j] = DARK_MATTER_TYPE;
 				}
 			}
@@ -529,14 +516,8 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					y[dest_index] = ptr[src_index].x[YDIM];
 					z[dest_index] = ptr[src_index].x[ZDIM];
 					if (sph) {
-						if (hsoft) {
-							hsoft[dest_index] = ptr[src_index].hsoft;
-						}
 						types[dest_index] = ptr[src_index].type;
 					} else {
-						if (hsoft) {
-							hsoft[dest_index] = get_options().hsoft;
-						}
 						types[dest_index] = DARK_MATTER_TYPE;
 					}
 					dest_index++;
@@ -570,7 +551,6 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 
 static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) {
 	static const bool sph = get_options().sph;
-	const float hsoft = get_options().hsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
@@ -584,13 +564,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			int type = particles_type(i);
 			const auto kk = particles_cat_index(i);
 			ln.type = type;
-			if (type != SPH_TYPE) {
-				ln.hsoft = hsoft;
-			} else {
-				ln.hsoft = std::min(SPH_MAX_SOFT, sph_particles_smooth_len(kk));
-			}
 		} else {
-			ln.hsoft = get_options().hsoft;
 			ln.type = DARK_MATTER_TYPE;
 		}
 	}
