@@ -515,16 +515,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 	int nfar = 0;
 	int flops = 0;
 	if (partlist.size()) {
-		if (sph) {
-			for (int k = self.sink_part_range.first + tid; k < self.sink_part_range.second; k += WARP_SIZE) {
-				if (data.type_snk[k] == SPH_TYPE) {
-					const int index = data.cat_index_snk[k];
-					if (data.semiactive[index]) {
-						data.fpot[index] = 0.f;
-					}
-				}
-			}
-		}
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
 		const auto partsz = partlist.size();
