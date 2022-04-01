@@ -31,6 +31,7 @@ struct options {
 	bool do_groups;
 	bool do_tracers;
 	bool do_slice;
+	int visc_type;
 	bool do_views;
 	bool stars;
 	bool twolpt;

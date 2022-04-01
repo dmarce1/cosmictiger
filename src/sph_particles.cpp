@@ -111,7 +111,7 @@ float sph_particles_max_smooth_len() {
 	for (auto& f : futs) {
 		maxh = std::max(maxh, f.get());
 	}
-	PRINT( "done\n");
+	PRINT("done\n");
 	return maxh;
 }
 
@@ -320,6 +320,9 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dvv[i], sph_particles_dvv[j]);
 	std::swap(sph_particles_dvv0[i], sph_particles_dvv0[j]);
 	std::swap(sph_particles_s2[i], sph_particles_s2[j]);
+	if (stars) {
+		std::swap(sph_particles_rc[i], sph_particles_rc[j]);
+	}
 	if (cond) {
 		std::swap(sph_particles_gt[i], sph_particles_gt[j]);
 	}
@@ -399,6 +402,9 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
+		if (stars) {
+			sph_particles_array_resize(sph_particles_rc, new_capacity, true);
+		}
 		sph_particles_array_resize(sph_particles_c, new_capacity, true);
 		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
@@ -447,6 +453,9 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_alpha(oldsz + i) = get_options().alpha0;
 		sph_particles_fpre(oldsz + i) = 1.f;
 		sph_particles_divv(oldsz + i) = 0.f;
+		if (stars) {
+			sph_particles_cold_mass(oldsz + i) = 0.f;
+		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 			sph_particles_dvel_con(dim, oldsz + i) = 0.0f;
@@ -1149,7 +1158,6 @@ void sph_particles_save(FILE* fp) {
 	}
 }
 
-
 void sph_particles_reset_converged() {
 	const int nthread = hpx_hardware_concurrency();
 	std::vector<hpx::future<void>> futs;
@@ -1164,5 +1172,4 @@ void sph_particles_reset_converged() {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 }
-
 

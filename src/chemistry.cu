@@ -438,7 +438,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.Hepp = attr.Hepp;
 		double dt = (double) attr.dt * (double) params.a;
 		dt *= (double) params.code_to_s;																												// 1
-		const double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
+		double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
+		rho *= 1.0f - attr.cold_mass;
 		const double rhoavo = rho * constants::avo;																		// 1
 		N.H *= rhoavo;																												// 1
 		N.Hp *= rhoavo;																											// 1
@@ -462,58 +463,83 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double z = 1.0 / (double) params.a - 1.0;																						// 2
 		double Tmid;
 		float dedt;
-		for (int i = 0; i < 28; i++) {
-			float f_mid, f_max;
-			Tmid = sqrtf(Tmax * Tmin);																							// 5
-			N = N.number_density_to_fractions();
-			N = N0;
-			if (i == 0) {
-				f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops, &dedt, false);
-			}
-			f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, false);
-			if (copysignf(1.f, f_mid) != copysignf(1.f, f_max)) {
-				Tmin = Tmid;
-			} else {
-				Tmax = Tmid;
-				f_max = f_mid;
-			}
-
-			flops += 7;
-		}
-		Tmid = sqrtf(Tmax * Tmin);																							// 5
 		float dedt0;
+		float dT = T0 * 1e-3f;
 		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
-		test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, true);
-		dedt = 0.5f * dedt + 0.5f * dedt0;
-		float T = Tmid;
-		n0 = (double) N.H + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp + (double) N.Hp + (double) N.Hn;
-		n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;											// 8
-		const double rhoavoinv = 1.0 / rhoavo;																				// 4
-		cv = (1.5 + N.H2 / n0);																		// 4
-		N.H *= (double) rhoavoinv;																											// 1
-		N.Hp *= (double) rhoavoinv;																										// 1
-		N.Hn *= (double) rhoavoinv;																										// 1
-		N.H2 *= 2.0 * (double) rhoavoinv;																										// 1
-		N.He *= 4.0 * (double) rhoavoinv;																										// 1
-		N.Hep *= 4.0 * (double) rhoavoinv;																										// 1
-		N.Hepp *= 4.0 * (double) rhoavoinv;																										// 1
-		gamma = 1.0 + 1.0 / cv;																									// 5
-		cv *= constants::kb;
-		eint = cv * n * T / rho;																										 	// 1
-		eint *= sqr(params.a);
-		eint /= code_to_energy;
-		attr.H2 = N.H2;
-		attr.Hep = N.Hep;
-		attr.Hepp = N.Hepp;
-		attr.Hn = N.Hn;
-		attr.Hp = N.Hp;
-		attr.He = N.He;
-		if (dedt < 0.0) {
-			attr.tcool = -eint * rho / dedt / params.a / params.code_to_s;
+		test_temperature(N0, N, T0, T0 + dT, dt, z, flops, &dedt, false);
+		if (dedt0 < 0.0f && (-dedt / (T0 + dT) > -dedt0 / T0)) {
+			float hot_mass = 1.f - attr.cold_mass;
+			const float tcool = -eint * rho / dedt0 / params.a / params.code_to_s;
+			float factor = fmaxf(expf(-dt / tcool), 0.9f);
+			hot_mass *= factor;
+			attr.cold_mass = 1.f - hot_mass;
+			if( hot_mass <= 0.0 || hot_mass >= 1.0f || attr.cold_mass <= 0.f || attr.cold_mass >= 1.f ) {
+				PRINT( "--------- %e %e %e\n", hot_mass, attr.cold_mass, factor);
+			}
+			PRINT("%e %e %e %e\n", hot_mass, attr.cold_mass, dt/tcool, T0);
+			attr.eint *= factor;
+			const double rhoavoinv = 1.0 / rhoavo;																				// 4
+			N.H *= (double) rhoavoinv;																											// 1
+			N.Hp *= (double) rhoavoinv;																										// 1
+			N.Hn *= (double) rhoavoinv;																										// 1
+			N.H2 *= 2.0 * (double) rhoavoinv;																										// 1
+			N.He *= 4.0 * (double) rhoavoinv;																										// 1
+			N.Hep *= 4.0 * (double) rhoavoinv;																										// 1
+			N.Hepp *= 4.0 * (double) rhoavoinv;																										// 1
+			attr.H2 = N.H2;
+			attr.Hep = N.Hep;
+			attr.Hepp = N.Hepp;
+			attr.Hn = N.Hn;
+			attr.Hp = N.Hp;
+			attr.He = N.He;
 		} else {
-			attr.tcool = 1e38;
+			for (int i = 0; i < 28; i++) {
+				float f_mid, f_max;
+				Tmid = sqrtf(Tmax * Tmin);																							// 5
+				N = N.number_density_to_fractions();
+				N = N0;
+				if (i == 0) {
+					f_max = test_temperature(N0, N, T0, Tmax, dt, z, flops, &dedt, false);
+				}
+				f_mid = test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, false);
+				if (copysignf(1.f, f_mid) != copysignf(1.f, f_max)) {
+					Tmin = Tmid;
+				} else {
+					Tmax = Tmid;
+					f_max = f_mid;
+				}
+
+				flops += 7;
+			}
+			Tmid = sqrtf(Tmax * Tmin);
+			test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
+			test_temperature(N0, N, T0, Tmid, dt, z, flops, &dedt, true);
+			dedt = 0.5f * dedt + 0.5f * dedt0;
+			float T = Tmid;
+			n0 = (double) N.H + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp + (double) N.Hp + (double) N.Hn;
+			n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;										// 8
+			const double rhoavoinv = 1.0 / rhoavo;																				// 4
+			cv = (1.5 + N.H2 / n0);																		// 4
+			N.H *= (double) rhoavoinv;																											// 1
+			N.Hp *= (double) rhoavoinv;																										// 1
+			N.Hn *= (double) rhoavoinv;																										// 1
+			N.H2 *= 2.0 * (double) rhoavoinv;																										// 1
+			N.He *= 4.0 * (double) rhoavoinv;																										// 1
+			N.Hep *= 4.0 * (double) rhoavoinv;																										// 1
+			N.Hepp *= 4.0 * (double) rhoavoinv;																										// 1
+			gamma = 1.0 + 1.0 / cv;																									// 5
+			cv *= constants::kb;
+			eint = cv * n * T / rho;																										 	// 1
+			eint *= sqr(params.a);
+			eint /= code_to_energy;
+			attr.H2 = N.H2;
+			attr.Hep = N.Hep;
+			attr.Hepp = N.Hepp;
+			attr.Hn = N.Hn;
+			attr.Hp = N.Hp;
+			attr.He = N.He;
+			attr.eint = eint;
 		}
-		attr.eint = eint;
 		//PRINT( "%e\n", eint);
 		flops += 136;
 		myflops += flops;
@@ -569,68 +595,68 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 }
 
 void test_cuda_chemistry_kernel() {
-/*	static const auto opts = get_options();
-	const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
-	const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;
-	const double Y = get_options().Y0;		// 10
-	PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
-	const int N = 10000000;
-	vector<chem_attribs> chem0;
-	vector<chem_attribs> chems;
-	float z = 0.5;
-	for (int i = 0; i < N; i++) {
-		float T = pow(10.0, 3.0 + rand1() * 5.0);
-//		PRINT("%e\n", T);
-		float rho = pow(10.0, -(24.0 + 3.0 * rand1())) * (z + 1);
-		species_t N;
-		N.H = rand1();
-		N.H2 = rand1() * 0.1;
-		N.Hp = rand1();
-		N.Hn = 0.0;
-		N.He = rand1();
-		N.Hep = rand1();
-		N.Hepp = rand1();
-		float h0 = (N.H + 2.0 * N.H2 + N.Hp + N.Hn) / (1.0 - opts.Y0);
-		float he0 = (N.He + N.Hep + N.Hepp) / opts.Y0;
-		N.H /= h0;
-		N.H2 /= h0;
-		N.Hp /= h0;
-		N.Hn /= h0;
-		N.He /= he0;
-		N.Hep /= he0;
-		N.Hepp /= he0;
-		chem_attribs chem;
-		float n0 = N.H + N.Hp + 0.5f * N.H2 + N.Hn + 0.25f * N.He + 0.25f * N.Hep + 0.25f * N.Hepp;
-		float n = (N.H + 2.f * N.Hp + 0.5f * N.H2 + 0.25f * N.He + 0.5f * N.Hep + .75f * N.Hepp) * rho * constants::avo;
-		float cv = (1.5 + 0.5f * N.H2 / n0);
-		float gamma = 1.0 + 1.0 / cv;
-		cv *= constants::kb;
-		float energy = cv * n * T;
-		double K = (double) energy * (gamma - 1.0) * pow((double) rho, -gamma);
-		K /= code_to_energy_density;
-		K *= pow(code_to_density, gamma);
-//		PRINT("!!!!!!!!!!!1 %e %e %e %e\n", energy, gamma, rho, K);
-		rho /= code_to_density;
-		chem.dt = 1e15 / opts.code_to_s;
-		chem.He = N.He;
-		chem.H2 = N.H2;
-		chem.Hp = N.Hp;
-		chem.Hep = N.Hep;
-		chem.Hepp = N.Hepp;
-		chem.rho = rho;
-		chem.K = K;
-		chem.Hn = N.Hn;
-		chem.rho = rho;
-		chems.push_back(chem);
-		chem0.push_back(chem);
-	}
-	PRINT("Starting\n");
-	cuda_chemistry_step(chems, 1.0);
+	/*	static const auto opts = get_options();
+	 const double code_to_energy_density = opts.code_to_g / (opts.code_to_cm * sqr(opts.code_to_s));		// 7
+	 const double code_to_density = pow(opts.code_to_cm, -3) * opts.code_to_g;
+	 const double Y = get_options().Y0;		// 10
+	 PRINT("%e %e %e %e %e\n", opts.code_to_g, opts.code_to_cm, opts.code_to_s, code_to_energy_density, code_to_density);
+	 const int N = 10000000;
+	 vector<chem_attribs> chem0;
+	 vector<chem_attribs> chems;
+	 float z = 0.5;
+	 for (int i = 0; i < N; i++) {
+	 float T = pow(10.0, 3.0 + rand1() * 5.0);
+	 //		PRINT("%e\n", T);
+	 float rho = pow(10.0, -(24.0 + 3.0 * rand1())) * (z + 1);
+	 species_t N;
+	 N.H = rand1();
+	 N.H2 = rand1() * 0.1;
+	 N.Hp = rand1();
+	 N.Hn = 0.0;
+	 N.He = rand1();
+	 N.Hep = rand1();
+	 N.Hepp = rand1();
+	 float h0 = (N.H + 2.0 * N.H2 + N.Hp + N.Hn) / (1.0 - opts.Y0);
+	 float he0 = (N.He + N.Hep + N.Hepp) / opts.Y0;
+	 N.H /= h0;
+	 N.H2 /= h0;
+	 N.Hp /= h0;
+	 N.Hn /= h0;
+	 N.He /= he0;
+	 N.Hep /= he0;
+	 N.Hepp /= he0;
+	 chem_attribs chem;
+	 float n0 = N.H + N.Hp + 0.5f * N.H2 + N.Hn + 0.25f * N.He + 0.25f * N.Hep + 0.25f * N.Hepp;
+	 float n = (N.H + 2.f * N.Hp + 0.5f * N.H2 + 0.25f * N.He + 0.5f * N.Hep + .75f * N.Hepp) * rho * constants::avo;
+	 float cv = (1.5 + 0.5f * N.H2 / n0);
+	 float gamma = 1.0 + 1.0 / cv;
+	 cv *= constants::kb;
+	 float energy = cv * n * T;
+	 double K = (double) energy * (gamma - 1.0) * pow((double) rho, -gamma);
+	 K /= code_to_energy_density;
+	 K *= pow(code_to_density, gamma);
+	 //		PRINT("!!!!!!!!!!!1 %e %e %e %e\n", energy, gamma, rho, K);
+	 rho /= code_to_density;
+	 chem.dt = 1e15 / opts.code_to_s;
+	 chem.He = N.He;
+	 chem.H2 = N.H2;
+	 chem.Hp = N.Hp;
+	 chem.Hep = N.Hep;
+	 chem.Hepp = N.Hepp;
+	 chem.rho = rho;
+	 chem.K = K;
+	 chem.Hn = N.Hn;
+	 chem.rho = rho;
+	 chems.push_back(chem);
+	 chem0.push_back(chem);
+	 }
+	 PRINT("Starting\n");
+	 cuda_chemistry_step(chems, 1.0);
 
-	for (int i = 0; i < N; i++) {
-		//PRINT("%e %e | %e %e %e | %e %e %e | \n", chem0[i].K, chems[i].K, 1 - Y - chem0[i].Hp - chem0[i].H2 * 2 - chem0[i].Hn, chem0[i].Hp, chem0[i].H2,
-		//1 - Y - chems[i].Hp - chems[i].H2 * 2 - chems[i].Hn, chems[i].Hp, chems[i].H2);
-	}*/
+	 for (int i = 0; i < N; i++) {
+	 //PRINT("%e %e | %e %e %e | %e %e %e | \n", chem0[i].K, chems[i].K, 1 - Y - chem0[i].Hp - chem0[i].H2 * 2 - chem0[i].Hn, chem0[i].Hp, chem0[i].H2,
+	 //1 - Y - chems[i].Hp - chems[i].H2 * 2 - chems[i].Hn, chems[i].Hp, chems[i].H2);
+	 }*/
 }
 
 CUDA_EXPORT

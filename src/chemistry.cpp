@@ -703,6 +703,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			vector<chem_attribs> chems;
 			const float mass = get_options().sph_mass;
+			const float stars = get_options().stars;
 			const int N = get_options().neighbor_number;
 			for( part_int i = b; i < e; i++) {
 				int rung1 = sph_particles_rung(i);
@@ -718,8 +719,12 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem.Hep = sph_particles_Hep(i) * factor;
 					chem.Hepp = sph_particles_Hepp(i) * factor;
 					chem.eint = sph_particles_eint(i);
+					chem.cold_mass = sph_particles_cold_mass(i);
 					double dt = (rung_dt[rung1]) * t0;
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
+					if( stars ) {
+
+					}
 					chem.dt = dt;
 					if( T > 5e8) {
 						PRINT( "T-------------> %e\n", T);
@@ -772,6 +777,12 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					}
 					echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
 					sph_particles_eint(i) = chem.eint;
+					if(stars) {
+						sph_particles_cold_mass(i) = chem.cold_mass;
+						if( chem.cold_mass != 0.0 ) {
+						//	PRINT( "%e\n", chem.cold_mass);
+						}
+					}
 //				sph_particles_tcool(i) = chem.tcool;
 				}
 			}

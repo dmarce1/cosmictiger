@@ -177,10 +177,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	const bool glass = get_options().glass;
 	if (phase == 0) {
 
-		if (stars) {
-			stars_statistics(scale);
-		}
-//		stars_remove(scale, dt, minrung, iter);
 		tm.start();
 		if (verbose)
 			PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -407,9 +403,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_run(SPH_RUN_XSPH): tm = %e \n", tm.read());
 				tm.reset();
-			}
-			if (stars) {
-				stars_find(scale, dt, minrung, iter);
 			}
 		}
 

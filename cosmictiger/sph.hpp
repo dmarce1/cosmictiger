@@ -32,6 +32,10 @@
 
 #include <atomic>
 
+#define SPH_AV_HU 0
+#define SPH_AV_MM 1
+#define SPH_AV_CONSTANT 2
+
 struct sph_values {
 	float vx;
 	float vy;
@@ -184,6 +188,7 @@ struct sph_run_return {
 void sph_particles_energy_to_entropy(float a);
 
 struct sph_run_params {
+	int av_type;
 	int run_type;
 	int set;
 	int phase;
@@ -215,6 +220,7 @@ struct sph_run_params {
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
+		av_type = opts.visc_type;
 		code_to_s = opts.code_to_s;
 		code_to_g = opts.code_to_g;
 		code_to_cm = opts.code_to_cm;
@@ -246,6 +252,7 @@ struct sph_run_params {
 		arc & iter;
 		arc & max_dt;
 		arc & gy;
+		arc & av_type;
 		arc & t0;
 		arc & phase;
 		arc & run_type;
