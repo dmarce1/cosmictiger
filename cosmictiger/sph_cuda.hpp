@@ -31,6 +31,7 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	float* cold_frac;
 	array<float, NCHEMFRACS>* chem;
 	array<float, NCHEMFRACS>* dchem_con;
 	float* divv;

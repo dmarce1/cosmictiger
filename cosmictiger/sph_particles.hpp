@@ -58,12 +58,12 @@ struct sph_particle {
 	array<float, NDIM> v;
 	float gamma;
 	float alpha;
-	float mmw;
+	float cold_frac;
 	array<float, NCHEMFRACS> chem;
 	template<class A>
 	void serialize(A&&arc, unsigned) {
 		static const bool chemistry = get_options().chem;
-		static const bool conduct = get_options().conduction;
+		static const bool stars = get_options().stars;
 		arc & eint;
 		arc & v;
 		arc & alpha;
@@ -71,8 +71,8 @@ struct sph_particle {
 			arc & gamma;
 			arc & chem;
 		}
-		if (conduct) {
-			arc & mmw;
+		if (stars) {
+			arc & cold_frac;
 		}
 	}
 };
@@ -126,8 +126,8 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_force(particle_global_range range, float* x, float* y, float* z, float* divv, part_int offset);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float a, float* eint, float* vx, float* vy, float* vz, float* gamma, float* alpha, float*mmw,
-		array<float, NCHEMFRACS>* chems, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, float a, float* eint, float* vx, float* vy, float* vz, float* gamma, float* alpha,
+		float*cold_frac, array<float, NCHEMFRACS>* chems, part_int offset);
 void sph_particles_global_read_sph0(particle_global_range range, float* eint0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* shearv, float* gradT, part_int offset);
@@ -197,8 +197,6 @@ inline float& sph_particles_shear(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_s2[index];
 }
-
-
 
 inline float& sph_particles_Z(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -331,7 +329,6 @@ inline float& sph_particles_deint(part_int index) {
 	return sph_particles_de2[index];
 }
 
-
 inline float& sph_particles_dvel_con(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dv2[dim][index];
@@ -404,7 +401,7 @@ inline sph_particle sph_particles_get_particle(part_int index, float a) {
 		p.chem = sph_particles_chem(index);
 	}
 	if (conduct) {
-		p.mmw = sph_particles_mmw(index);
+		p.cold_frac = sph_particles_cold_mass(index);
 	}
 	p.alpha = sph_particles_alpha(index);
 	return p;

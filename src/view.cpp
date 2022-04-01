@@ -183,9 +183,13 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 									info.H2 = sph_particles_H2(l);
 									info.Hep = sph_particles_Hep(l);
 									info.Hepp = sph_particles_Hepp(l);
-									info.cold_frac = sph_particles_cold_mass(l);
 									info.Z = sph_particles_Z(l);
 									info.He = sph_particles_He0(l);
+								}
+								if( stars ) {
+									info.cold_frac = sph_particles_cold_mass(l);
+								} else {
+									info.cold_frac = 0.0;
 								}
 								rc.hydro[j].push_back(info);
 								break;

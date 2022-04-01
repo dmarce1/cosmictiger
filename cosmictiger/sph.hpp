@@ -217,9 +217,11 @@ struct sph_run_params {
 	double code_to_s;
 	double code_to_g;
 	double code_to_cm;
+	bool stars;
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
+		stars = opts.stars;
 		av_type = opts.visc_type;
 		code_to_s = opts.code_to_s;
 		code_to_g = opts.code_to_g;

@@ -249,8 +249,12 @@ float sph_particles_temperature(part_int i, float a) {
 	eint *= code_to_energy;
 	double T = rho * eint / (n * cv);
 	if (H < 0.0) {
-		PRINT("NEGATIVE H\n");
-		PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
+		if (H < -5.0e-4) {
+			PRINT("NEGATIVE H\n");
+			PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
+		} else {
+			sph_particles_Hp(i) += H - 5e-7;
+		}
 		//	abort();
 	}
 	if (T > TMAX) {
@@ -748,8 +752,8 @@ static vector<array<float, NDIM + 1>> sph_particles_fetch_force_cache_line(part_
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* alpha, float*mmw,
-		array<float, NCHEMFRACS>* chems, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, float a, float* ent, float* vx, float* vy, float* vz, float* gamma, float* alpha,
+		float*cold_frac, array<float, NCHEMFRACS>* chems, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -777,8 +781,8 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 						chems[j][f] = sph_particles_c0[i][f];
 					}
 				}
-				if (mmw) {
-					mmw[j] = sph_particles_mmw(i);
+				if (cold_frac) {
+					cold_frac[j] = sph_particles_cold_mass(i);
 				}
 			}
 		} else {
@@ -812,8 +816,8 @@ void sph_particles_global_read_sph(particle_global_range range, float a, float* 
 					if (chems) {
 						chems[dest_index] = part.chem;
 					}
-					if (mmw) {
-						mmw[dest_index] = part.mmw;
+					if (cold_frac) {
+						cold_frac[dest_index] = part.cold_frac;
 					}
 					dest_index++;
 				}
@@ -1098,6 +1102,9 @@ void sph_particles_load(FILE* fp) {
 	const bool cond = get_options().conduction;
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
+	if( stars ) {
+		FREAD(&sph_particles_cold_mass(0), sizeof(float), sph_particles_size(), fp);
+	}
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	FREAD(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
@@ -1120,9 +1127,6 @@ void sph_particles_load(FILE* fp) {
 		FREAD(sph_particles_c0, sizeof(sph_particles_c0[0]), sph_particles_size(), fp);
 		FREAD(sph_particles_dchem1, sizeof(sph_particles_dchem1[0]), sph_particles_size(), fp);
 	}
-	if (stars) {
-		stars_load(fp);
-	}
 }
 
 void sph_particles_save(FILE* fp) {
@@ -1131,6 +1135,9 @@ void sph_particles_save(FILE* fp) {
 	const bool cond = get_options().conduction;
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
+	if( stars ) {
+		fwrite(&sph_particles_rc_index(0), sizeof(float), sph_particles_size(), fp);
+	}
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	fwrite(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_eint(0), sizeof(float), sph_particles_size(), fp);
@@ -1152,9 +1159,6 @@ void sph_particles_save(FILE* fp) {
 	if (chem) {
 		fwrite(sph_particles_c0, sizeof(sph_particles_c0[0]), sph_particles_size(), fp);
 		fwrite(sph_particles_c0, sizeof(sph_particles_dchem1[0]), sph_particles_size(), fp);
-	}
-	if (stars) {
-		stars_save(fp);
 	}
 }
 
