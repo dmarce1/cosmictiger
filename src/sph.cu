@@ -1151,21 +1151,24 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					data.balsara_snk[snki] = fabs(div_v) / (fabs(div_v) + curlv + 1e-30f);
 					data.divv_snk[snki] = div_v;
 					data.shearv_snk[snki] = shearv;
-					const float divv0 = data.divv0_snk[snki];
+					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
 					data.divv0_snk[snki] = div_v;
 					if (params.conduction) {
 						data.gradT_snk[snki] = sqrtf(sqr(dT_dx) + sqr(dT_dy) + sqr(dT_dz));
 					}
-					const float alpha_i = data.alpha_snk[snki];
+					float& alpha = data.alpha_snk[snki];
 					const float dt = params.t0 * rung_dt[rung_i];
 					const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
-					const float A2 = sqr(2.f * sqr(sqr(1.f - Ri)) * div_v);
-					const float limiter = A2 / (A2 + sqr(shearv) + 1e-30f);
-					const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
-					const float alpha_targ = fmaxf(params.alpha0, S / (S + sqr(c_i)) * params.alpha1);
-					const float lambda0 = alpha_i < alpha_targ ? 9.f / params.cfl : params.alpha_decay;
-					const float lambda = lambda0 * vsig * hinv_i * ainv * dt;
-					data.alpha_snk[snki] = (alpha_i + lambda * alpha_targ) / (1.f + lambda);
+					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
+					const float greek = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
+					const float alpha_targ = S / (S + sqr(c_i)) * params.alpha1;
+					const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv * dt;
+					const float lambda1 = 1.f / params.cfl * vsig * hinv_i * ainv * dt;
+					if (alpha < alpha_targ) {
+						alpha = (alpha + lambda1 * alpha_targ * greek) / (1.f + lambda1);
+					} else {
+						alpha = (alpha + lambda0 * alpha_targ * greek) / (1.f + greek * lambda0 + (1.f - greek) * lambda1);
+					}
 				}
 			}
 		}
