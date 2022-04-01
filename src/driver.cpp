@@ -200,6 +200,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 		sparams.phase = 0;
 		int doneiters = 0;
+		sph_particles_reset_converged();
 		do {
 			sparams.set = SPH_SET_ACTIVE;
 			sparams.run_type = SPH_RUN_SMOOTHLEN;
@@ -232,7 +233,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-		sph_particles_reset_converged();
 		sparams.run_type = SPH_RUN_MARK_SEMIACTIVE;
 		tm.reset();
 		tm.start();

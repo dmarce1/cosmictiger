@@ -498,11 +498,11 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					const part_int k = particles_cat_index(i);
 					int type = particles_type(i);
 					if (hsoft) {
-						if (type != SPH_TYPE) {
+					//	if (type != SPH_TYPE) {
 							hsoft[j] = dm_hsoft;
-						} else {
-							hsoft[j] = std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
-						}
+					//	} else {
+					//		hsoft[j] = std::min(sph_particles_smooth_len(k), SPH_MAX_SOFT);
+					//	}
 					}
 					types[j] = type;
 				} else {
