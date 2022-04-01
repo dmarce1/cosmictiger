@@ -469,14 +469,17 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		test_temperature(N0, N, T0, T0 + dT, dt, z, flops, &dedt, false);
 		if (dedt0 < 0.0f && (-dedt / (T0 + dT) > -dedt0 / T0)) {
 			float hot_mass = 1.f - attr.cold_mass;
-			const float tcool = -eint * rho / dedt0 / params.a / params.code_to_s;
-			float factor = fmaxf(expf(-dt / tcool), 0.9f);
+			const float tcool = -eint * rho / dedt0 / params.a;
+			float factor = fmaxf(expf(-dt / tcool), 0.5f);
 			hot_mass *= factor;
 			attr.cold_mass = 1.f - hot_mass;
-			if( hot_mass <= 0.0 || hot_mass >= 1.0f || attr.cold_mass <= 0.f || attr.cold_mass >= 1.f ) {
-				PRINT( "--------- %e %e %e\n", hot_mass, attr.cold_mass, factor);
+			if( hot_mass < 0.0 || hot_mass > 1.0f || attr.cold_mass < 0.f || attr.cold_mass > 1.f ) {
+				PRINT( "cold mass error --------- %e %e %e\n", hot_mass, attr.cold_mass, factor);
+				__trap();
 			}
-			PRINT("%e %e %e %e\n", hot_mass, attr.cold_mass, dt/tcool, T0);
+			if( hot_mass < 1.f ) {
+		//		PRINT("%e %e %e %e\n", hot_mass, attr.cold_mass, dt/tcool, T0);
+			}
 			attr.eint *= factor;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
