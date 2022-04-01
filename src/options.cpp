@@ -129,7 +129,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("xsph", po::value<double>(&(opts.xsph))->default_value(0.0), "xsph factor (0 = off)") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0/25.0), "dark matter softening in units of interparticle spacing") //
+	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
 	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.20), "CFL condition") //
@@ -232,7 +232,8 @@ bool process_options(int argc, char *argv[]) {
 	}
 	if (!opts.sph) {
 	}
-	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" || opts.test == "disc") {
+	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt"
+			|| opts.test == "disc") {
 		opts.chem = opts.conduction = false;
 		opts.stars = false;
 		opts.gravity = opts.test == "star" || opts.test == "plummer";
@@ -241,6 +242,9 @@ bool process_options(int argc, char *argv[]) {
 			opts.sph_mass = 1.0;
 			opts.gcentral = 1.0;
 		}
+	}
+	if (opts.sph) {
+		opts.hsoft = pow(opts.neighbor_number / (4.0 * M_PI / 3.0), 1.0 / 3.0) / opts.parts_dim * (1.0 / (opts.z0 + 1.0));
 	}
 	SHOW(alpha0);
 	SHOW(alpha1);
