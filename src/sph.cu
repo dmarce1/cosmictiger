@@ -800,14 +800,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							vsig = fmaxf(vsig, vsig_ij);
 						}
 						if (params.phase == 1) {
-							float dtinv_i = (c_ij + 0.6f * vsig_ij) * hinv_i;
-							float dtinv_j = (c_ij + 0.6f * vsig_ij) * hinv_j;
-							if (params.diffusion) {
-								dtinv_i += (1.f - phi_ij) * (c_ij - w_ij) * hinv_i;
-								dtinv_j += (1.f - phi_ij) * (c_ij - w_ij) * hinv_j;
-							}
-							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_i);
-							dtinv_cfl = fmaxf(dtinv_cfl, dtinv_j);
+							const float vsig = (c_ij + 0.6f * fmaxf(vsig_ij, (1.f - phi_ij) * (c_ij - w_ij)));
+							float dtinv = vsig * fmaxf(hinv_i, hinv_j);
+							dtinv_cfl = fmaxf(dtinv_cfl, dtinv);
 						}
 					}
 				}
@@ -1121,7 +1116,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
 					const float greek = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
-					const float alpha_targ = S / (S + sqr(c_i)) * params.alpha1;
+					const float alpha_targ = fmaxf(S / (S + sqr(c_i)) * params.alpha1, params.alpha0);
 					const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv * dt;
 					const float lambda1 = 1.f / params.cfl * vsig * hinv_i * ainv * dt;
 					if (alpha < alpha_targ) {
