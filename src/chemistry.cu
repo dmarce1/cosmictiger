@@ -478,7 +478,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.cold_mass = 1.f - hot_mass;
 			if (hot_mass < -1e-5f || hot_mass > 1.0 + 1e-5f || attr.cold_mass < -1e-5f || attr.cold_mass > 1.f + 1.e-5f) {
 				PRINT("cold mass error --------- %e %e %e %e %e\n", hot_mass, hotmass0, attr.cold_mass, factor, dt / tcool);
-				__trap();
+			//	__trap();
 			}
 			if (hot_mass < 5.0e-6f) {
 				attr.cold_mass = 1.f - 5e-6f;
