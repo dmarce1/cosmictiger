@@ -142,14 +142,9 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 					switch(phase) {
 						case 0: {
 							if( sph_particles_deint_pred(i) < 0.0 ) {
-								ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 								sph_particles_eint(i) -=sph_particles_deint_pred(i) *dt2;
-								ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 								const double dlog = 2.0f*sph_particles_deint_pred(i) *dt2/sph_particles_eint(i);
-								ALWAYS_ASSERT(dlog < 80.0);
-								ALWAYS_ASSERT(dlog > -80.0);
 								sph_particles_eint(i) *= exp(dlog);
-								ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 							} else {
 								sph_particles_eint(i) +=sph_particles_deint_pred(i) *dt2;
 							}
@@ -169,20 +164,11 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						}
 						break;
 						case 1: {
-							ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 							sph_particles_eint(i) -= sph_particles_deint_pred(i) *dt2;
-							ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) -= sph_particles_dvel_pred(dim,i)* dt2;
 							}
 							sph_particles_eint(i) += sph_particles_deint_con(i) *dt2;
-							if( sph_particles_eint(i) < 0.0 ) {
-								PRINT( "%e %e %e\n", sph_particles_eint(i), sph_particles_deint_con(i), sph_particles_deint_pred(i));
-								sph_particles_eint(i) -= sph_particles_deint_con(i) *dt2;
-								sph_particles_eint(i) += sph_particles_deint_pred(i) *dt2;
-								sleep(10);
-							}
-							ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 							for( int dim =0; dim < NDIM; dim++) {
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
 							}
@@ -201,17 +187,8 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						}
 						break;
 						case 2: {
-							ALWAYS_ASSERT(sph_particles_semi_active(i) == 100);
 							sph_particles_deint_pred(i) = sph_particles_deint_con(i);
-							if(sph_particles_deint_pred(i) == 0.0 ) {
-								PRINT( "%e\n", sph_particles_dvel_con(XDIM,i));
-								PRINT( "%e\n", sph_particles_dvel_con(YDIM,i));
-								PRINT( "%e\n", sph_particles_dvel_con(ZDIM,i));
-							}
-							ALWAYS_ASSERT(sph_particles_deint_pred(i) !=0.0);
-							ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 							sph_particles_eint(i) +=sph_particles_deint_con(i) *dt2;
-							ALWAYS_ASSERT(sph_particles_eint(i) >0.0);
 							for( int dim =0; dim < NDIM; dim++) {
 								sph_particles_dvel_pred(dim,i) = sph_particles_dvel_con(dim,i);
 								particles_vel(dim,k) += sph_particles_dvel_con(dim,i)* dt2;
@@ -224,7 +201,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							}
 							if( stars ) {
 								for( int fi = 0; fi < NCHEMFRACS; fi++) {
-									sph_particles_dcold_mass_pred(i) =sph_particles_dcold_mass_con(i) *dt2;
+									sph_particles_dcold_mass_pred(i) =sph_particles_dcold_mass_con(i);
 									sph_particles_cold_mass(i) +=sph_particles_dcold_mass_con(i) *dt2;
 								}
 							}
