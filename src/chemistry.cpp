@@ -724,6 +724,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					} else {
 						chem.cold_mass = 0.f;
 					}
+					ALWAYS_ASSERT(chem.cold_mass >=0.0);
 					double dt = (rung_dt[rung1]) * t0;
 					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
 					if( stars ) {
@@ -781,6 +782,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
 					sph_particles_eint(i) = chem.eint;
 					if(stars) {
+						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 						sph_particles_cold_mass(i) = chem.cold_mass;
 						if( chem.cold_mass != 0.0 ) {
 							//	PRINT( "%e\n", chem.cold_mass);

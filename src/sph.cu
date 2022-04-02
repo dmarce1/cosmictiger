@@ -802,8 +802,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
 							difco_ij = 0.5f * (difco_i + difco_j);
 //							difco_ij = 0.25f * h_ij * (c_ij - 4.f * mu_ij);
-//							ALWAYS_ASSERT(eint_i > 0.f);
-//							ALWAYS_ASSERT(eint_j > 0.f);
+							ALWAYS_ASSERT(eint_i > 0.f);
+							ALWAYS_ASSERT(eint_j > 0.f);
 							const auto frac_j = rec2.chem;
 							const float R = 2.0f * difco_ij * rinv / (c_ij - w_ij);
 							phi_ij = (2.f / 3.f + R) / (2.f / 3.f + R + R * R);
@@ -888,11 +888,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
-						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv);
-					//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny) * (gamma_i - 1.0f);
+						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv) / 3.f;
+//						const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny) * params.cfl * 0.5f;
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-						//			dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
+//						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2_1 = sqr(ax, ay, az);
 						const float a2_2 = sqr(ax - gx_i, ay - gy_i, az - gz_i);

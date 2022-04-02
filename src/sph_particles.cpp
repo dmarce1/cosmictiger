@@ -157,7 +157,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								}
 							}
 							if( stars ) {
-								sph_particles_cold_mass(i) +=sph_particles_dcold_mass_pred(i) *dt2;
+//								sph_particles_cold_mass(i) +=sph_particles_dcold_mass_pred(i) *dt2;
 							}
 						}
 						break;
@@ -177,8 +177,8 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								}
 							}
 							if( stars ) {
-								sph_particles_cold_mass(i) -=sph_particles_dcold_mass_pred(i) *dt2;
-								sph_particles_cold_mass(i) +=sph_particles_dcold_mass_con(i) *dt2;
+//								sph_particles_cold_mass(i) -=sph_particles_dcold_mass_pred(i) *dt2;
+//								sph_particles_cold_mass(i) +=sph_particles_dcold_mass_con(i) *dt2;
 							}
 						}
 						break;
@@ -196,8 +196,8 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								}
 							}
 							if( stars ) {
-								sph_particles_dcold_mass_pred(i) =sph_particles_dcold_mass_con(i);
-								sph_particles_cold_mass(i) +=sph_particles_dcold_mass_con(i) *dt2;
+//								sph_particles_dcold_mass_pred(i) =sph_particles_dcold_mass_con(i);
+//								sph_particles_cold_mass(i) +=sph_particles_dcold_mass_con(i) *dt2;
 							}
 						}
 						break;
