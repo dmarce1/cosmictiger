@@ -883,13 +883,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						data.dchem_con[snki] = dfrac_dt;
 					}
 					if (params.stars) {
-						data.dcold_mass_con[snki] = dcm_dt;
-//						data.dcold_mass_con[snki] = 0.f;
+//						data.dcold_mass_con[snki] = dcm_dt;
+						data.dcold_mass_con[snki] = 0.f;
 					}
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
 						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv);
-						const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny) * (gamma_i - 1.0f);
+					//	const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny) * (gamma_i - 1.0f);
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 						//			dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
