@@ -758,7 +758,6 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 				int rung2 = sph_particles_oldrung(i);
 				if( rung1 >= minrung ) {
 					chem_attribs chem = chems[j++];
-					double dt = (rung_dt[rung1] + rung_dt[rung2]) * 0.5 * t0;
 					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 					double gamma = 1. + 1. / cv;
 					const float factor = 1.0f - sph_particles_Z(i);

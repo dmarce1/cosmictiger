@@ -469,18 +469,19 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		float dT = T0 * 1e-3f;
 		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
 		test_temperature(N0, N, T0, T0 + dT, dt, z, flops, &dedt, false);
-		if (params.stars && (dedt0 < 0.0f && (-dedt / (T0 + dT) > -dedt0 / T0))) {
+		if (params.stars && (eint > 0.0f && dedt0 < 0.0f && (-dedt / (T0 + dT) > -dedt0 / T0))) {
 			float hot_mass = 1.f - attr.cold_mass;
+			float hotmass0 = hot_mass;
 			const float tcool = -eint * rho / dedt0 / params.a;
 			float factor = expf(-fminf(dt / tcool, 1.f));
 			hot_mass *= factor;
 			attr.cold_mass = 1.f - hot_mass;
-			if (hot_mass < -1e-6f || hot_mass > 1.0 + 1e-6f || attr.cold_mass < -1e-6f || attr.cold_mass > 1.f + 1.e-6f) {
-				PRINT("cold mass error --------- %e %e %e\n", hot_mass, attr.cold_mass, factor);
+			if (hot_mass < -1e-5f || hot_mass > 1.0 + 1e-5f || attr.cold_mass < -1e-5f || attr.cold_mass > 1.f + 1.e-5f) {
+				PRINT("cold mass error --------- %e %e %e %e %e\n", hot_mass, hotmass0, attr.cold_mass, factor, dt / tcool);
 				__trap();
 			}
-			if (hot_mass < 0.f) {
-				attr.cold_mass = 1.f;
+			if (hot_mass < 5.0e-6f) {
+				attr.cold_mass = 1.f - 5e-6f;
 			} else if (attr.cold_mass < 0.f) {
 				attr.cold_mass = 0.f;
 			}
