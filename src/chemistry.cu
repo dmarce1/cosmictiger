@@ -440,7 +440,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double dt = (double) attr.dt * (double) params.a;
 		dt *= (double) params.code_to_s;																												// 1
 		double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
-		rho *= 1.0f - attr.cold_mass;
+		const float hot_mass = 1.0f - attr.cold_mass;
+		rho *= hot_mass;
 		const double rhoavo = rho * constants::avo;																		// 1
 		N.H *= rhoavo;																												// 1
 		N.Hp *= rhoavo;																											// 1
@@ -454,7 +455,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double cv = (1.50 + (double) N.H2 / n0);																// 4
 		double gamma = 1.0 + 1.0 / cv;																							// 5
 		cv *= constants::kb;																							// 1
-		double eint = attr.eint;
+		double eint = attr.eint / hot_mass;
 		eint *= code_to_energy;
 		eint /= sqr(params.a);
 		double T0 = (eint * rho) / (n * cv);
@@ -474,12 +475,14 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float factor = expf(-fminf(dt / tcool, 1.f));
 			hot_mass *= factor;
 			attr.cold_mass = 1.f - hot_mass;
-			if (hot_mass < 0.0 || hot_mass > 1.0f || attr.cold_mass < 0.f || attr.cold_mass > 1.f) {
+			if (hot_mass < -1e-6f || hot_mass > 1.0 + 1e-6f || attr.cold_mass < -1e-6f || attr.cold_mass > 1.f + 1.e-6f) {
 				PRINT("cold mass error --------- %e %e %e\n", hot_mass, attr.cold_mass, factor);
 				__trap();
 			}
-			if (hot_mass < 1.f) {
-				//		PRINT("%e %e %e %e\n", hot_mass, attr.cold_mass, dt/tcool, T0);
+			if (hot_mass < 0.f) {
+				attr.cold_mass = 1.f;
+			} else if (attr.cold_mass < 0.f) {
+				attr.cold_mass = 0.f;
 			}
 			attr.eint *= factor;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
@@ -536,6 +539,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			eint = cv * n * T / rho;																										 	// 1
 			eint *= sqr(params.a);
 			eint /= code_to_energy;
+			eint *= hot_mass;
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;
 			attr.Hepp = N.Hepp;

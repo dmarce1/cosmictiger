@@ -888,7 +888,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny);
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
+//						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2_1 = sqr(ax, ay, az);
 						const float a2_2 = sqr(ax - gx_i, ay - gy_i, az - gz_i);
