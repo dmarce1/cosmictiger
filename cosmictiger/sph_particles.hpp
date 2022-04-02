@@ -91,6 +91,8 @@ SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem2; // chemistr
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN char* sph_particles_c;
 SPH_PARTICLES_EXTERN float* sph_particles_rc;
+SPH_PARTICLES_EXTERN float* sph_particles_drc1;
+SPH_PARTICLES_EXTERN float* sph_particles_drc2;
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
@@ -151,6 +153,14 @@ inline char& sph_particles_converged(part_int index) {
 
 inline float& sph_particles_cold_mass(part_int index) {
 	return sph_particles_rc[index];
+}
+
+inline float& sph_particles_dcold_mass_pred(part_int index) {
+	return sph_particles_drc2[index];
+}
+
+inline float& sph_particles_dcold_mass_con(part_int index) {
+	return sph_particles_drc2[index];
 }
 
 inline float& sph_particles_eint0(part_int index) {

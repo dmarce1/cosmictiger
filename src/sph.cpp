@@ -1768,6 +1768,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.gradT_snk = &sph_particles_gradT(0);
 	cuda_data.shearv_snk = &sph_particles_shear(0);
+	cuda_data.dcold_mass_con = &sph_particles_dcold_mass_con(0);
 	cuda_data.divv0_snk = &sph_particles_divv0(0);
 	cuda_data.xvx_snk = &sph_particles_xvel(XDIM, 0);
 	cuda_data.xvy_snk = &sph_particles_xvel(YDIM, 0);

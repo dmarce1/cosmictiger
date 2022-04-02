@@ -52,6 +52,7 @@ struct sph_run_cuda_data {
 	float* gx_snk;
 	float* gy_snk;
 	float* gz_snk;
+	float* dcold_mass_con;
 	float* alpha_snk;
 	float* fpre_snk;
 	float* divv_snk;

@@ -708,6 +708,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float ay = 0.f;
 				float az = 0.f;
 				float de_dt = 0.f;
+				float dcm_dt = 0.f;
 				array<float, NCHEMFRACS> dfrac_dt;
 				if (params.diffusion && data.chemistry) {
 					for (int fi = 0; fi < NCHEMFRACS; fi++) {
@@ -812,6 +813,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 									dfrac_dt[fi] += m * hfrac_ij * D_ij * (frac_j[fi] - frac_i[fi]);
 								}
 							}
+							if (params.stars) {
+								dcm_dt += m * hfrac_ij * D_ij * (cfrac_j - cfrac_i);
+							}
 						}
 						if (params.phase == 1 || params.damping > 0.f) {
 							vsig = fmaxf(vsig, vsig_ij);
@@ -830,10 +834,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				if (params.phase == 1) {
 					shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
-				}
-				if (params.phase == 1 || params.damping > 0.f) {
 					shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
 				}
+				if (params.stars) {
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dcm_dt);
+				}
+
 				if (data.chemistry && params.diffusion) {
 					for (int fi = 0; fi < NCHEMFRACS; fi++) {
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dfrac_dt[fi]);
@@ -872,6 +878,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					data.deint_con[snki] = de_dt;
 					if (params.diffusion && data.chemistry) {
 						data.dchem_con[snki] = dfrac_dt;
+					}
+					if (params.stars) {
+						data.dcold_mass_con[snki] = dcm_dt;
 					}
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
@@ -1135,7 +1144,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
 					const float greek = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
-					const float alpha_targ = S / (S + sqr(c_i)) * params.alpha1;
+					const float alpha_targ = fmaxf(S / (S + sqr(c_i)) * params.alpha1, params.alpha0);
 					const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv * dt;
 					const float lambda1 = 1.f / params.cfl * vsig * hinv_i * ainv * dt;
 					if (alpha < alpha_targ) {
