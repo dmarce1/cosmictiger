@@ -471,7 +471,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		if (params.stars && (dedt0 < 0.0f && (-dedt / (T0 + dT) > -dedt0 / T0))) {
 			float hot_mass = 1.f - attr.cold_mass;
 			const float tcool = -eint * rho / dedt0 / params.a;
-			float factor = fmaxf(expf(-dt / tcool), 0.5f);
+			float factor = expf(-fminf(dt / tcool, 1.f));
 			hot_mass *= factor;
 			attr.cold_mass = 1.f - hot_mass;
 			if (hot_mass < 0.0 || hot_mass > 1.0f || attr.cold_mass < 0.f || attr.cold_mass > 1.f) {

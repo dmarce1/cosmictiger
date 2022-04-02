@@ -881,7 +881,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
-						const float a2 = sqr(ax, ay, az);
+						const float a2_1 = sqr(ax, ay, az);
+						const float a2_2 = sqr(ax - gx_i, ay - gy_i, az - gz_i);
+						const float a2 = fminf(a2_1, a2_2);
 						const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
 						const float dtinv_hydro2 = dtinv_acc;
 						float dthydro = fminf(params.cfl * params.a / (dtinv_hydro1 + 1e-30f), data.eta * sqrtf(params.a) / (dtinv_hydro2 + 1e-30f));

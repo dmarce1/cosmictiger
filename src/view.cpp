@@ -324,22 +324,21 @@ void view_output_views(int cycle, double a) {
 					x.push_back(parts.hydro[bi][i].cold_frac);
 				}
 				DBPutPointvar1(db, "cold_frac", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			} else {
-				x.resize(0);
-				y.resize(0);
-				z.resize(0);
-				for (int i = 0; i < parts.hydro[bi].size(); i++) {
-					const double h = parts.hydro[bi][i].h;
-					const double rho = sph_den(1.0 / h / h / h);
-					x.push_back(rho * code_to_density);
-					y.push_back(parts.hydro[bi][i].eint * code_to_energy);
-					z.push_back(parts.hydro[bi][i].alpha);
-				}
-				//			PRINT( "h and ent\n");
-				DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
 			}
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				const double h = parts.hydro[bi][i].h;
+				const double rho = sph_den(1.0 / h / h / h);
+				x.push_back(rho * code_to_density);
+				y.push_back(parts.hydro[bi][i].eint * code_to_energy);
+				z.push_back(parts.hydro[bi][i].alpha);
+			}
+			//			PRINT( "h and ent\n");
+			DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);

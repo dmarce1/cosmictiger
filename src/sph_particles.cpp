@@ -249,9 +249,10 @@ float sph_particles_temperature(part_int i, float a) {
 	eint *= code_to_energy;
 	double T = rho * eint / (n * cv);
 	if (H < 0.0) {
-		if (H < -5.0e-4) {
+		if (H < -5.0e-3) {
 			PRINT("NEGATIVE H\n");
 			PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
+			abort();
 		} else {
 			sph_particles_Hp(i) += H - 5e-7;
 		}
@@ -1136,7 +1137,7 @@ void sph_particles_save(FILE* fp) {
 	const bool stars = get_options().stars;
 	const bool xsph = get_options().xsph != 0.0;
 	if( stars ) {
-		fwrite(&sph_particles_rc_index(0), sizeof(float), sph_particles_size(), fp);
+		fwrite(&sph_particles_cold_mass(0), sizeof(float), sph_particles_size(), fp);
 	}
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	fwrite(&sph_particles_smooth_len(0), sizeof(float), sph_particles_size(), fp);
