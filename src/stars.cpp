@@ -149,7 +149,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 		}
 		if (i < sph_particles_size()) {
 			const int k = sph_particles_size() - 1;
-			sph_particles_rung(k) = -sph_particles_rung(k);
+			sph_particles_rung(i) = -sph_particles_rung(i);
 			if (i != k) {
 				const int dmk = sph_particles_dm_index(k);
 				sph_particles_swap(i, k);
