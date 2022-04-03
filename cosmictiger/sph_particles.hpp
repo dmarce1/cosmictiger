@@ -102,6 +102,9 @@ SPH_PARTICLES_EXTERN float* sph_particles_gt; // deint_con
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_con
 SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-activel_con
 SPH_PARTICLES_EXTERN char* sph_particles_or;   // semi-active
+SPH_PARTICLES_EXTERN float* sph_particles_rth;   // semi-active
+SPH_PARTICLES_EXTERN float* sph_particles_ed;   // semi-active
+SPH_PARTICLES_EXTERN float* sph_particles_zd;   // semi-active
 
 struct aux_quantities {
 	float fpre;
@@ -147,6 +150,22 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
  return sph_particles_sn[index];
  }
  */
+
+inline float& sph_particles_rho_th(part_int index) {
+	return sph_particles_rth[index];
+}
+
+
+inline float& sph_particles_edep(part_int index) {
+	return sph_particles_ed[index];
+}
+
+
+inline float& sph_particles_zdep(part_int index) {
+	return sph_particles_zd[index];
+}
+
+
 inline char& sph_particles_converged(part_int index) {
 	return sph_particles_c[index];
 }

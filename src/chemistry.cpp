@@ -784,6 +784,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 						sph_particles_cold_mass(i) = chem.cold_mass;
+						sph_particles_rho_th(i) = chem.rho_th;
 						if( chem.cold_mass != 0.0 ) {
 							//	PRINT( "%e\n", chem.cold_mass);
 						}

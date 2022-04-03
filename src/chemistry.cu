@@ -519,8 +519,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			}
 		}
 		float rho_th = rho_mid;
-		if (params.stars && rho > rho_th) {
-			test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
+		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
+		if (params.stars && rho > rho_th && dedt0 < 0.f) {
 //			PRINT("making cold cloud\n");
 //			PRINT("%e %e %e %e %e\n", rho_min, rho_max, rho, rho_th, T0);
 //			__trap();
@@ -532,7 +532,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float cold_mass0 = attr.cold_mass;
 			attr.cold_mass = 1.f - hot_mass;
 			if (hot_mass < -1e-5f || hot_mass > 1.0 + 1e-5f || attr.cold_mass < -1e-5f || attr.cold_mass > 1.f + 1.e-5f) {
-				PRINT("cold mass error --------- %e %e %e %e %e\n", hot_mass, hotmass0, attr.cold_mass, cold_mass0, factor, dt / tcool);
+				PRINT("cold mass error --------- %e %e %e %e %e %e %e %e\n", T0, hot_mass, hotmass0, attr.cold_mass, cold_mass0, factor, dt / tcool, eint);
 				__trap();
 			}
 			if (hot_mass < 5.0e-6f) {
@@ -604,6 +604,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.He = N.He;
 			attr.eint = eint;
 		}
+		attr.rho_th = rho_th / code_to_density;
 		//PRINT( "%e\n", eint);
 		flops += 136;
 		myflops += flops;

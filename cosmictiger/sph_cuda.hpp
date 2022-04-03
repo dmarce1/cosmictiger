@@ -90,7 +90,6 @@ struct sph_run_cuda_data {
 	float* dvy_con;
 	float* dvz_con;
 	float code_dif_to_cgs;
-	float hstar0;
 	float N;
 	int nselfs;
 	sph_tree_node* trees;

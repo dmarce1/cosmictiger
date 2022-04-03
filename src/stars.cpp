@@ -61,14 +61,14 @@ void stars_load(FILE* fp) {
 	FREAD(stars.data(), sizeof(star_particle), size, fp);
 }
 
-void stars_find(float a, float dt, int minrung, int step) {
+void stars_find(float a, float dt, int minrung, int step, float t0) {
 	profiler_enter("FUNCTION");
 
 	PRINT("Searching for STARS\n");
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step));
+		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step, t0));
 	}
 	mutex_type mutex;
 	std::atomic<int> found(0);
@@ -85,35 +85,56 @@ void stars_find(float a, float dt, int minrung, int step) {
 	static const double code_to_cm = get_options().code_to_cm;
 	static const double code_to_s = get_options().code_to_s;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, nthreads, a, &found, &mutex,&indices,dt,&rnd_gens]() {
+		futs2.push_back(hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex,&indices,dt,&rnd_gens]() {
 			const float dm_soft = get_options().hsoft;
 			const float code_to_s = get_options().code_to_s;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			const float tstar0 = TSTAR0 / (constants::seconds_to_years * code_to_s * a);
 			for( part_int i = b; i < e; i++) {
-				bool make_star = false;
-				if( 1/a-1 < 20.0 && sph_particles_smooth_len(i) < dm_soft/* / a*/ ) {
-					make_star = true;
-				}
-				if( make_star ) {
-//					PRINT( "Making stars\n");
-					star_particle star;
-					star.zform = 1.f / a - 1.f;
-					star.dm_index = sph_particles_dm_index(i);
-					star.Z = sph_particles_Z(i);
-					star.stellar_mass = stars_sample_mass(rnd_gens[proc]) * (star.Z == 0.f ? 25.0f : 1.0f);
-					star.time_remaining = stars_lifetime(star.stellar_mass);
-					star.total_life = star.time_remaining;
-					star.remove = false;
-					star.Y = sph_particles_Y(i);
-					star.type = STAR_TYPE;
-					const int dmi = star.dm_index;
-					found++;
-					particles_type(dmi) = STAR_TYPE;
-					std::lock_guard<mutex_type> lock(mutex);
-					particles_cat_index(dmi) = stars.size();
-					stars.push_back(star);
-					indices.push_back(i);
+				char rung = sph_particles_rung(i);
+				if( rung >= minrung + 1 && sph_particles_cold_mass(i)> 0.0) {
+					float factor =sqrtf(sph_particles_rho_th(i) / sph_particles_rho(i));
+					float tstar = tstar0 * factor;
+					tstar /= sph_particles_cold_mass(i);
+					const float eps = 2.0f * rung_dt[rung] * t0 / tstar;
+					const float p = 1.0 - exp(-eps);
+					bool make_star;
+					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
+					if( make_star ) {
+//						PRINT( "Making star\n");
+						star_particle star;
+						star.zform = 1.f / a - 1.f;
+						star.dm_index = sph_particles_dm_index(i);
+						star.Z = sph_particles_Z(i);
+						star.stellar_mass = stars_sample_mass(rnd_gens[proc]) * (star.Z == 0.f ? 25.0f : 1.0f);
+						star.time_remaining = stars_lifetime(star.stellar_mass);
+						star.total_life = star.time_remaining;
+						star.remove = false;
+						star.Y = sph_particles_Y(i);
+						star.type = STAR_TYPE;
+						const int dmi = star.dm_index;
+						found++;
+						particles_type(dmi) = STAR_TYPE;
+						std::lock_guard<mutex_type> lock(mutex);
+						particles_cat_index(dmi) = stars.size();
+
+						auto dt = 0.5f * rung_dt[rung] * t0;
+						const float gx = sph_particles_gforce(XDIM, i);
+						const float gy = sph_particles_gforce(YDIM, i);
+						const float gz = sph_particles_gforce(ZDIM, i);
+						const float g2 = sqr(gx, gy, gz);
+						const float factor = get_options().eta * sqrtf(a * get_options().hsoft);
+						dt = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
+						rung = std::max(std::max((int) ceilf(log2f(t0) - log2f(dt)), std::max(rung - 1, minrung)), 1);
+						sph_particles_rung(i) = -rung;
+						dt = 0.5f * rung_dt[rung] * t0;
+						particles_vel(XDIM,dmi) += gx * dt;
+						particles_vel(XDIM,dmi) += gy * dt;
+						particles_vel(XDIM,dmi) += gz * dt;
+						stars.push_back(star);
+						indices.push_back(i);
+					}
 				}
 			}
 		}));
@@ -122,11 +143,13 @@ void stars_find(float a, float dt, int minrung, int step) {
 	PRINT("Creating stars\n");
 	std::sort(indices.begin(), indices.end());
 	for (auto& i : indices) {
-		while (sph_particles_smooth_len(sph_particles_size() - 1) < get_options().hsoft && sph_particles_size()) {
+		while (sph_particles_rung(sph_particles_size() - 1) < 0) {
+			sph_particles_rung(sph_particles_size() - 1) = -sph_particles_rung(sph_particles_size() - 1);
 			sph_particles_resize(sph_particles_size() - 1, false);
 		}
 		if (i < sph_particles_size()) {
 			const int k = sph_particles_size() - 1;
+			sph_particles_rung(k) = -sph_particles_rung(k);
 			if (i != k) {
 				const int dmk = sph_particles_dm_index(k);
 				sph_particles_swap(i, k);

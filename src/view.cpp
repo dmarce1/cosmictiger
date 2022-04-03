@@ -378,7 +378,7 @@ void view_output_views(int cycle, double a) {
 					//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
 					double energy = eint * rho;
 					double T = energy / (n * cv);																							// 5
-					if( stars ) {
+					if (stars) {
 						T /= 1.f - parts.hydro[bi][i].cold_frac;
 					}
 					//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
@@ -394,6 +394,49 @@ void view_output_views(int cycle, double a) {
 				DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, opts);
 				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, opts);
 			}
+		}
+		if (parts.star[bi].size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].x.to_float());
+				y.push_back(parts.star[bi][i].y.to_float());
+				z.push_back(parts.star[bi][i].z.to_float());
+			}
+			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
+			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].vx * code_to_velocity);
+				y.push_back(parts.star[bi][i].vy * code_to_velocity);
+				z.push_back(parts.star[bi][i].vz * code_to_velocity);
+			}
+			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, opts);
+			x.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].rung);
+			}
+			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, opts);
+
+			vector<float> p;
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].Y);
+				y.push_back(parts.star[bi][i].Z);
+				z.push_back(parts.star[bi][i].M);
+				p.push_back(parts.star[bi][i].zform);
+			}
+			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
 		}
 		DBFreeOptlist(opts);
 		DBClose(db);

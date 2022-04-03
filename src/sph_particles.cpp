@@ -219,27 +219,6 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 
 }
 
-float sph_particles_coloumb_log(part_int i, float a) {
-	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
-	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
-	const double h = sph_particles_smooth_len(i);
-	const double Hp = sph_particles_Hp(i);
-	const double Hn = sph_particles_Hn(i);
-	const double Hep = sph_particles_Hep(i);
-	const double Hepp = sph_particles_Hepp(i);
-	double rho = sph_den(1 / (h * h * h));
-	double ne = Hp - Hn + Hep + 2.0f * Hepp;
-	rho *= code_to_density * pow(a, -3);
-	ne *= constants::avo * rho;
-	ne = std::max(ne, 1e-20);
-	double T = std::max(sph_particles_temperature(i, a), 1000.f);
-	T = std::max(T, 1.0);
-	const double part1 = 23.5;
-	const double part2 = -log(sqrt(ne) * pow(T, -1.2));
-	const double part3 = -sqrt((1e-5 + sqr(log(T) - 2)) / 16.0);
-	return part1 + part2 + part3;
-}
-
 float sph_particles_temperature(part_int i, float a) {
 	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
 	const double code_to_energy = sqr(get_options().code_to_cm) / (sqr(get_options().code_to_s));		// 7
@@ -428,6 +407,9 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			sph_particles_array_resize(sph_particles_rc, new_capacity, true);
 			sph_particles_array_resize(sph_particles_drc1, new_capacity, true);
 			sph_particles_array_resize(sph_particles_drc2, new_capacity, true);
+			sph_particles_array_resize(sph_particles_rth, new_capacity, false);
+			sph_particles_array_resize(sph_particles_ed, new_capacity, true);
+			sph_particles_array_resize(sph_particles_zd, new_capacity, true);
 		}
 		sph_particles_array_resize(sph_particles_c, new_capacity, true);
 		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
@@ -1148,6 +1130,10 @@ void sph_particles_load(FILE* fp) {
 		FREAD(sph_particles_c0, sizeof(sph_particles_c0[0]), sph_particles_size(), fp);
 		FREAD(sph_particles_dchem1, sizeof(sph_particles_dchem1[0]), sph_particles_size(), fp);
 	}
+
+	if (stars) {
+		stars_load(fp);
+	}
 }
 
 void sph_particles_save(FILE* fp) {
@@ -1181,6 +1167,10 @@ void sph_particles_save(FILE* fp) {
 	if (chem) {
 		fwrite(sph_particles_c0, sizeof(sph_particles_c0[0]), sph_particles_size(), fp);
 		fwrite(sph_particles_c0, sizeof(sph_particles_dchem1[0]), sph_particles_size(), fp);
+	}
+
+	if (stars) {
+		stars_save(fp);
 	}
 }
 
