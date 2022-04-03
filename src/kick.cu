@@ -363,12 +363,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+								bool ewald_far = false;
 								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
+									ewald_far = sqrtf(R2) < 0.49f - (self.radius + other.radius);
 								}
 								const bool soft_sep = sqr(self.radius + other.radius + hsoft) < R2;
-								const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
-								const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
+								const bool far1 = ewald_far || (soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv)));     // 5
+								const bool far2 = ewald_far || (soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius)));       // 5
 								close = !soft_sep && self.leaf;
 								mult = !close && far1;
 								part = !close && !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
@@ -456,10 +457,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 										const float dy = distance(sink_y[j], other.pos[YDIM]);  // 1
 										const float dz = distance(sink_z[j], other.pos[ZDIM]);  // 1
 										float R2 = sqr(dx, dy, dz);
+										bool ewald_far = false;
 										if (gtype == GRAVITY_EWALD) {
-											R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
+											ewald_far = sqrtf(R2) < 0.49f - (self.radius + other.radius);
 										}
-										far = R2 > sqr(other.radius * thetainv + hsoft);            // 3
+										far = ewald_far || (R2 > sqr(other.radius * thetainv + hsoft));            // 3
 										if (!far) {
 											break;
 										}
