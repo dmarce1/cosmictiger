@@ -249,25 +249,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 			if (tau != 0.0) {
 				sph_particles_apply_updates(minrung, 1, t0, tau);
 			}
-			tnparams.h_wt = 1.001;
-			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.seti = SPH_SET_ACTIVE;
-			tnparams.seto = SPH_SET_ACTIVE;
-			tm.start();
-			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-			profiler_exit();
-			tm.stop();
-			tm.reset();
-			tm.start();
-			tnparams.seti = SPH_INTERACTIONS_I;
-			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-			sph_tree_neighbor(tnparams, root_id, checklist).get();
-			profiler_exit();
-			tm.stop();
-			tm.reset();
-
 			if (tau != 0.0 && chem) {
 				PRINT("Doing chemistry step\n");
 				timer tm;
@@ -277,7 +258,10 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("Took %e s\n", tm.read());
 			}
 			if (stars && minrung != max_rung) {
+
 				stars_find(scale, dt, minrung, iter, t0);
+				sph_tree_destroy(true);
+				sph_particles_cache_free();
 				tm.start();
 				if (verbose)
 					PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -288,7 +272,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (verbose)
 					PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 				tm.reset();
-
+				sparams.phase = 0;
 				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 				tnparams.seti = SPH_INTERACTIONS_I;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
@@ -309,7 +293,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 					tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
 					tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 					tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ACTIVE;
-					tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ACTIVE;
+					tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
 					//			tnparams.set = SPH_SET_ACTIVE;
 					tm.start();
 					profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
@@ -331,6 +315,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				if (stars) {
 					stars_statistics(scale);
 				}
+
 			}
 
 			sparams.phase = 1;
@@ -342,6 +327,26 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 				PRINT("sph_run(SPH_RUN_AUX): tm = %e\n", tm.read());
 			tm.reset();
 			sparams.phase = 0;
+
+		} else {
+			tnparams.h_wt = 1.001;
+			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+			tnparams.seti = SPH_SET_ALL;
+			tnparams.seto = SPH_SET_ACTIVE;
+			tm.start();
+			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+			profiler_exit();
+			tm.stop();
+			tm.reset();
+			tm.start();
+			tnparams.seti = SPH_INTERACTIONS_I;
+			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+			sph_tree_neighbor(tnparams, root_id, checklist).get();
+			profiler_exit();
+			tm.stop();
+			tm.reset();
 
 		}
 		sparams.phase = 1;
