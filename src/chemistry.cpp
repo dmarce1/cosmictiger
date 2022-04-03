@@ -740,7 +740,6 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 							float vz = particles_vel(ZDIM,k);
 							PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.eint, sph_particles_smooth_len(i), vx, vy, vz);
 							PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
-							abort();
 						}
 					}
 					if(T < 0.f) {
@@ -772,9 +771,9 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					for( int c = 0; c < NCHEMFRACS; c++) {
 						norm += sph_particles_frac(c,i);
 					}
-					if( norm > 0.999999 ) {
+					if( norm > 0.99999 ) {
+						norm /= 0.99999;
 						norm = 1.0 / norm;
-						norm *= 0.999999;
 						for( int c = 0; c < NCHEMFRACS; c++) {
 							sph_particles_frac(c,i) *= norm;
 						}

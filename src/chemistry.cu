@@ -32,6 +32,7 @@ struct chemistry_params {
 	double code_to_s;
 	bool stars;
 	float a;
+	float G;
 };
 
 #define CHEM_BLOCK_SIZE 64
@@ -489,44 +490,16 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			if( -dedt2 <= -dedt1) {
 				return 1.0f;
 			} else {
-				return -1.0f;
+				return 0.0f;
 			}
 		};
-		float bracket_mult = 0.5f;
-		bool done = false;
-		float rho_max, rho_min;
-
-		do {
-			rho_max = rho / bracket_mult;
-			rho_min = rho * bracket_mult;
-			float r_max = test_instability(rho_max, T0, N);
-			float r_min = test_instability(rho_min, T0, N);
-			if (r_max * r_min < 0.f) {
-				done = true;
-			}
-			bracket_mult *= 0.5f;
-		} while (!done);
-		float rho_mid;
-		rho_min = fmaxf(1.0e-37f, rho_min);
-		for (int n = 0; n < 16; n++) {
-			rho_mid = sqrt(double(rho_max) * double(rho_min));
-			float r_mid = test_instability(rho_mid, T0, N);
-			float r_max = test_instability(rho_max, T0, N);
-			if (r_max * r_mid < 0.f) {
-				rho_min = rho_mid;
-			} else {
-				rho_max = rho_mid;
-			}
-		}
-		float rho_th = rho_mid;
+		const bool unstable = test_instability(rho, T0, N) > 0.f;
 		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
-		if (params.stars && rho > rho_th && dedt0 < 0.f) {
-//			PRINT("making cold cloud\n");
-//			PRINT("%e %e %e %e %e\n", rho_min, rho_max, rho, rho_th, T0);
-//			__trap();
+		const float tcool = -eint * rho / dedt0 / params.a;
+		const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (params.a * double(params.G) * double(rho)));
+		if (params.stars && unstable && dedt0 < 0.f && tcool < tdyn) {
 			float hot_mass = 1.f - attr.cold_mass;
 			float hotmass0 = hot_mass;
-			const float tcool = -eint * rho / dedt0 / params.a;
 			float factor = expf(-fminf(dt / tcool, 1.f));
 			hot_mass *= factor;
 			float cold_mass0 = attr.cold_mass;
@@ -604,7 +577,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.He = N.He;
 			attr.eint = eint;
 		}
-		attr.rho_th = rho_th / code_to_density;
+//		attr.rho_th = rho_th / code_to_density;
 		//PRINT( "%e\n", eint);
 		flops += 136;
 		myflops += flops;
@@ -633,6 +606,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	*index = 0;
 	params.a = scale;
 	params.code_to_cm = opts.code_to_cm;
+	params.G = constants::G;
 	params.stars = opts.stars;
 	params.code_to_g = opts.code_to_g;
 	params.code_to_s = opts.code_to_s;

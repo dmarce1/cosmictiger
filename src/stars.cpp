@@ -84,6 +84,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 	static const double code_to_g = get_options().code_to_g;
 	static const double code_to_cm = get_options().code_to_cm;
 	static const double code_to_s = get_options().code_to_s;
+	static const double G = get_options().GM;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex,&indices,dt,&rnd_gens]() {
 			const float dm_soft = get_options().hsoft;
@@ -93,11 +94,10 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 			const float tstar0 = TSTAR0 / (constants::seconds_to_years * code_to_s * a);
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
+				const float rho = sph_particles_rho(i);
+				const float tdyn = sqrtf((4.0*M_PI/3.0)/(a*G*rho));
 				if( rung >= minrung + 1 && sph_particles_cold_mass(i)> 0.0) {
-					float factor =sqrtf(sph_particles_rho_th(i) / sph_particles_rho(i));
-					float tstar = tstar0 * factor;
-					tstar /= sph_particles_cold_mass(i);
-					const float eps = 2.0f * rung_dt[rung] * t0 / tstar;
+					const float eps = 2.0f * rung_dt[rung] * t0 / tdyn;
 					const float p = 1.0 - exp(-eps);
 					bool make_star;
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );

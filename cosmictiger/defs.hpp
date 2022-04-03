@@ -38,7 +38,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define YDIM 1
 #define ZDIM 2
 
-#define TSTAR0 (2.1e9)
+#define TSTAR0 (8.4e9)
 
 #define NCHILD 2
 #define LEFT 0
