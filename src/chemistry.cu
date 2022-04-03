@@ -466,10 +466,64 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double Tmid;
 		float dedt;
 		float dedt0;
-		float dT = T0 * 1e-3f;
-		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
-		test_temperature(N0, N, T0, T0 + dT, dt, z, flops, &dedt, false);
-		if (params.stars && (eint > 0.0f && dedt0 < 0.0f && (-dedt / (T0 + dT) > -dedt0 / T0))) {
+
+		const auto test_instability = [rho, dt, z, &flops](float rho_th, float T, species_t N) {
+			if( rho_th < 1.0e-37f) {
+				return 1.0f;
+			}
+			const float factor = rho_th / rho;
+			N.H *= factor;
+			N.Hp *= factor;
+			N.Hn *= factor;
+			N.H2 *= factor;
+			N.He *= factor;
+			N.Hep *= factor;
+			N.Hepp *= factor;
+			float T1 = T;
+			float T2 = 1.01f * T;
+			species_t N0 = N;
+			float dedt1;
+			float dedt2;
+			test_temperature(N0, N, T1, T1, 0.f, z, flops, &dedt1, false);
+			test_temperature(N0, N, T2, T2, 0.f, z, flops, &dedt2, false);
+			if( -dedt2 <= -dedt1) {
+				return 1.0f;
+			} else {
+				return -1.0f;
+			}
+		};
+		float bracket_mult = 0.5f;
+		bool done = false;
+		float rho_max, rho_min;
+
+		do {
+			rho_max = rho / bracket_mult;
+			rho_min = rho * bracket_mult;
+			float r_max = test_instability(rho_max, T0, N);
+			float r_min = test_instability(rho_min, T0, N);
+			if (r_max * r_min < 0.f) {
+				done = true;
+			}
+			bracket_mult *= 0.5f;
+		} while (!done);
+		float rho_mid;
+		rho_min = fmaxf(1.0e-37f, rho_min);
+		for (int n = 0; n < 16; n++) {
+			rho_mid = sqrt(double(rho_max) * double(rho_min));
+			float r_mid = test_instability(rho_mid, T0, N);
+			float r_max = test_instability(rho_max, T0, N);
+			if (r_max * r_mid < 0.f) {
+				rho_min = rho_mid;
+			} else {
+				rho_max = rho_mid;
+			}
+		}
+		float rho_th = rho_mid;
+		if (params.stars && rho > rho_th) {
+			test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
+//			PRINT("making cold cloud\n");
+//			PRINT("%e %e %e %e %e\n", rho_min, rho_max, rho, rho_th, T0);
+//			__trap();
 			float hot_mass = 1.f - attr.cold_mass;
 			float hotmass0 = hot_mass;
 			const float tcool = -eint * rho / dedt0 / params.a;

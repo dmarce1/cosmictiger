@@ -29,8 +29,8 @@
 #define SPECIE_HEP 5
 #define SPECIE_HEPP 6
 
-#define TMAX 1e12f
-#define TMIN 1e1f
+#define TMAX 1e9f
+#define TMIN 1e3f
 
 struct species_t {
 	union {
@@ -59,6 +59,7 @@ struct chem_attribs {
 	float rho;
 	float eint;
 	float dt;
+	float rho_th;
 	float cold_mass;
 };
 

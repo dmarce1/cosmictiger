@@ -192,7 +192,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const simd_float thetainv2(1.0 / sqr(params.theta));
 	const simd_float thetainv(1.0 / params.theta);
 	static const simd_float sink_bias(SINK_BIAS);
-	static const simd_float ewald_dist2(EWALD_DIST2);
 	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
 	const bool do_phi = params.min_rung == 0;
 	array<float, NDIM> Ldx;
@@ -252,7 +251,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
-					R2 = max(R2, ewald_dist2);
+					R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
 				}
 				const simd_float soft_sep = sqr(self_radius + other_radius + hsoft) < R2;
 				const simd_float far1 = soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
@@ -306,7 +305,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						}
 						simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
 						if (gtype == GRAVITY_EWALD) {
-							R2 = max(R2, ewald_dist2);
+							R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
 						}
 						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
 						const simd_float near = R2 <= rhs;                                            // 1

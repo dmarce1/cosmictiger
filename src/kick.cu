@@ -364,7 +364,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, EWALD_DIST2);
+									R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
 								}
 								const bool soft_sep = sqr(self.radius + other.radius + hsoft) < R2;
 								const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
@@ -457,7 +457,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 										const float dz = distance(sink_z[j], other.pos[ZDIM]);  // 1
 										float R2 = sqr(dx, dy, dz);
 										if (gtype == GRAVITY_EWALD) {
-											R2 = fmaxf(R2, EWALD_DIST2);
+											R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
 										}
 										far = R2 > sqr(other.radius * thetainv + hsoft);            // 3
 										if (!far) {
@@ -597,8 +597,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type, tree_node* dev_tree_nodes,
+		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	static const bool do_sph = get_options().sph;
 	timer tm;

@@ -87,7 +87,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define CUDA_STACK_SIZE 32767
 #define SELF_PHI float(-35.0/16.0)
 #define ANALYTIC_BLOCK_SIZE 128
-#define EWALD_DIST float(0.25)
 #define EWALD_REAL_CUTOFF2 (2.6*2.6)
 #define KICK_OVERSUBSCRIPTION 8
 #define MAX_DEPTH 64
@@ -123,7 +122,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #define LORDER ORDER
 #define MORDER (LORDER-1)
-#define EWALD_DIST2 float(EWALD_DIST*EWALD_DIST)
 
 
 

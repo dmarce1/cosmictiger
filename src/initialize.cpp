@@ -900,8 +900,8 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 			hpx::wait_all(local_futs.begin(), local_futs.end());
 			if (sph) {
 				const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
-				const float mu = 1.0 + 3.0 * get_options().Y0;
-				const float cv_cgs = constants::kb * constants::avo / mu;
+				const float n0 = 1.0 - 0.75 * get_options().Y0;
+				const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
 				const float T0 = 100.0;
 				const float eps_cgs = cv_cgs * T0;
 				const float eps = eps_cgs / code_to_ene * sqr(1.0 / (1.0 + get_options().z0));

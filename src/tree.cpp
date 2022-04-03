@@ -157,7 +157,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	min_rung = min_rung_;
 	min_level = 0;
 }
-
+/*
 int tree_min_level(double theta, double h) {
 	int lev = 1;
 	double dx;
@@ -181,9 +181,9 @@ int tree_min_level(double theta, double h) {
 		lev++;
 		r = std::max(r1, r2);
 	} while (dx <= r);
-	return 0;
+	return 12;
 }
-
+*/
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
