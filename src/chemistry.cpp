@@ -719,6 +719,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem.Hep = sph_particles_Hep(i) * factor;
 					chem.Hepp = sph_particles_Hepp(i) * factor;
 					chem.eint = sph_particles_eint(i);
+					ALWAYS_ASSERT(chem.He >= 0.f);
 					if( stars ) {
 						chem.cold_mass = sph_particles_cold_mass(i);
 					} else {

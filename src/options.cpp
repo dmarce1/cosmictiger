@@ -112,8 +112,8 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.10), "alpha0 viscosity") //
-	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0), "alpha1 for viscosity") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.0), "alpha0 viscosity") //
+	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.5), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
 	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
 	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
@@ -133,8 +133,8 @@ bool process_options(int argc, char *argv[]) {
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
 	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
-	("cfl", po::value<double>(&(opts.cfl))->default_value(0.20), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.18), "time-step criterion (default=0.2)") //
+	("cfl", po::value<double>(&(opts.cfl))->default_value(0.15), "CFL condition") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.16), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -176,7 +176,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
 	opts.hsoft *= 1.0 / opts.parts_dim;
-	opts.code_to_cm = 7.108e26 * opts.parts_dim / 1024.0 / opts.hubble;
+	opts.code_to_cm = 12.123e26 * opts.parts_dim / 1024.0 / opts.hubble;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.omega_m = opts.omega_b + opts.omega_c;

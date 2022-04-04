@@ -487,7 +487,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float dedt2;
 			test_temperature(N0, N, T1, T1, 0.f, z, flops, &dedt1, false);
 			test_temperature(N0, N, T2, T2, 0.f, z, flops, &dedt2, false);
-			if( -dedt2 <= -dedt1) {
+			if( -dedt2/T2 <= -dedt1/T1) {
 				return 1.0f;
 			} else {
 				return 0.0f;
@@ -495,12 +495,14 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		};
 		const bool unstable = test_instability(rho, T0, N) > 0.f;
 		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
-		const float tcool = -eint * rho / dedt0 / params.a;
-		const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (params.a * double(params.G) * double(rho)));
-		if (params.stars && unstable && dedt0 < 0.f && tcool < tdyn) {
+		const float tcool = -eint * rho / (dedt0 * (params.a));
+		//const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (double(params.G) * double(rho))) / params.a;
+		if (params.stars && unstable && dedt0 < 0.f) {
 			float hot_mass = 1.f - attr.cold_mass;
 			float hotmass0 = hot_mass;
 			float factor = expf(-fminf(dt / tcool, 1.f));
+	//		PRINT( "%e\n", factor);
+		//	__trap();
 			hot_mass *= factor;
 			float cold_mass0 = attr.cold_mass;
 			attr.cold_mass = 1.f - hot_mass;

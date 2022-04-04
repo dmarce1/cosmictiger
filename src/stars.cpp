@@ -91,18 +91,16 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 			const float code_to_s = get_options().code_to_s;
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			const float tstar0 = TSTAR0 / (constants::seconds_to_years * code_to_s * a);
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
 				const float rho = sph_particles_rho(i);
-				const float tdyn = sqrtf((4.0*M_PI/3.0)/(a*G*rho));
-				if( rung >= minrung + 1 && sph_particles_cold_mass(i)> 0.0) {
+				const float tdyn = sqrtf((4.0*M_PI/3.0*a*a*a)/(G*rho))/a;
+				if( rung >= minrung + 1 && sph_particles_cold_mass(i)> 0.0 && sph_particles_divv(i) < 0.0) {
 					const float eps = 2.0f * rung_dt[rung] * t0 / tdyn;
 					const float p = 1.0 - exp(-eps);
 					bool make_star;
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 					if( make_star ) {
-//						PRINT( "Making star\n");
 						star_particle star;
 						star.zform = 1.f / a - 1.f;
 						star.dm_index = sph_particles_dm_index(i);
