@@ -748,13 +748,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 						const float h_ij = 0.5f * (h_i + h_j);
 						const float w_ij = vdotx_ij * rinv;
-//						const float mu_ij = vdotx_ij * h_ij / (r2 + 0.01f * sqr(h_ij));
+						const float mu_ij = vdotx_ij * h_ij / (r2 + 0.01f * sqr(h_ij));
 						const float rho_ij = 0.5f * (rho_i + rho_j);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 						const float c_ij = 0.5f * (c_i + c_j);
 						//					const float hfrac_ij = sqrtf(hfrac_i * hfrac_j);
 ///						const float beta_ij = ;
-						const float vsig_ij = alpha_ij * (c_ij - 1.5f * w_ij);
+						const float vsig_ij = alpha_ij * (c_ij - params.beta * mu_ij);
 						const float pi_ij = -w_ij * vsig_ij / rho_ij;
 						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 						const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
@@ -782,8 +782,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							vsig = fmaxf(vsig, vsig_ij);
 						}
 						if (params.phase == 1) {
-							float dtinv = c_ij / h_i;
-							dtinv = fmaxf(dtinv, (2.f * c_ij + w_ij) / (2.f * h_i + r));
+							float dtinv = (c_ij + 0.6f * vsig_ij) / fminf(h_i, 2.f * h_j);
 							dtinv_cfl = fmaxf(dtinv_cfl, dtinv);
 						}
 					}
@@ -1079,7 +1078,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					 const float S = fmaxf(0.f, -div_v) * limiter;
 					 const float tauinv = params.alpha_decay * 2.f * c_i * hinv_i * ainv;
 					 alpha = (alpha + (S + params.alpha0 * tauinv) * dt) / (1.f + dt * tauinv);*/
-					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
+/*					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
 					data.divv0_snk[snki] = div_v;
 					float& alpha = data.alpha_snk[snki];
 					const float dt = params.t0 * rung_dt[rung_i];
@@ -1093,7 +1092,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						alpha = (alpha + lambda1 * alpha_targ * greek) / (1.f + lambda1);
 					} else {
 						alpha = (alpha + lambda0 * alpha_targ * greek) / (1.f + greek * lambda0 + (1.f - greek) * lambda1);
-					}
+					}*/
+					float& alpha = data.alpha_snk[snki];
+					alpha = 0.75f;
 				}
 			}
 		}
