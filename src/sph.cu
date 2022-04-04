@@ -89,11 +89,10 @@ struct hydro_record1 {
 struct hydro_record2 {
 	array<float, NCHEMFRACS> chem;
 	float shearv;
-	float gamma;
 	float vx;
 	float vy;
 	float vz;
-	float eint;
+	float entr;
 	float alpha;
 	float fpre;
 	float cold_frac;
@@ -110,7 +109,7 @@ struct aux_record2 {
 	float vx;
 	float vy;
 	float vz;
-	float eint;
+	float entr;
 	float gamma;
 	float h;
 };
@@ -632,7 +631,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].vx = data.vx[pi];
 					ws.rec2[k].vy = data.vy[pi];
 					ws.rec2[k].vz = data.vz[pi];
-					ws.rec2[k].eint = data.eint[pi];
+					ws.rec2[k].entr = data.entr[pi];
 					ws.rec2[k].alpha = data.alpha[pi];
 					ws.rec2[k].fpre = data.fpre[pi];
 					ws.rec2[k].rung = data.rungs[pi];
@@ -640,11 +639,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						ws.rec2[k].cold_frac = data.cold_frac[pi];
 					} else {
 						ws.rec2[k].cold_frac = 0.f;
-					}
-					if (data.chemistry) {
-						ws.rec2[k].gamma = data.gamma[pi];
-					} else {
-						ws.rec2[k].gamma = data.def_gamma;
 					}
 					if (params.diffusion) {
 						ws.rec2[k].shearv = data.shearv[pi];
@@ -672,20 +666,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto vy_i = data.vy[i];
 				const auto vz_i = data.vz[i];
 				const float h_i = data.h[i];
-				float gamma_i;
-				if (data.chemistry) {
-					gamma_i = data.gamma[i];
-				} else {
-					gamma_i = data.def_gamma;
-				}
 				const float h2_i = sqr(h_i);
 				const float hinv_i = 1.f / h_i;
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);
 				const float rho_i = m * c0 * h3inv_i;
 				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;
-				const float eint_i = data.eint[i];
+				const float K_i = data.entr[i];
 				const float alpha_i = data.alpha[i];
-				const float p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
+				const float gamma0 = data.def_gamma;
+				const float p_i = K_i * powf(rho_i, gamma0);
 				float cfrac_i;
 				if (params.stars) {
 					cfrac_i = data.cold_frac[i];
@@ -693,27 +682,27 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					cfrac_i = 0.f;
 				}
 				const float hfrac_i = 1.f - cfrac_i;
-				const float c_i = sqrtf(gamma_i * p_i * rhoinv_i);
+				const float c_i = sqrtf(gamma0 * p_i * rhoinv_i);
 				const float fpre_i = data.fpre[i];
-				float shearv_i;
-				array<float, NCHEMFRACS> frac_i;
-				if (params.diffusion) {
-					shearv_i = data.shearv[i];
-					if (data.chemistry) {
-						frac_i = data.chem[i];
-					}
-				}
+				//	float shearv_i;
+				//	array<float, NCHEMFRACS> frac_i;
+				/*	if (params.diffusion) {
+				 shearv_i = data.shearv[i];
+				 if (data.chemistry) {
+				 frac_i = data.chem[i];
+				 }
+				 }*/
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
 				float de_dt = 0.f;
 				float dcm_dt = 0.f;
-				array<float, NCHEMFRACS> dfrac_dt;
-				if (params.diffusion && data.chemistry) {
-					for (int fi = 0; fi < NCHEMFRACS; fi++) {
-						dfrac_dt[fi] = 0.f;
-					}
-				}
+				//	array<float, NCHEMFRACS> dfrac_dt;
+				/*		if (params.diffusion && data.chemistry) {
+				 for (int fi = 0; fi < NCHEMFRACS; fi++) {
+				 dfrac_dt[fi] = 0.f;
+				 }
+				 }*/
 				float dtinv_cfl = 0.f;
 				float one = 0.0f;
 				constexpr float tiny = 1e-30f;
@@ -745,10 +734,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float h3inv_j = sqr(hinv_j) * hinv_j;
 						const float rho_j = m * c0 * h3inv_j;													// 2
 						const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;								// 5
-						const float eint_j = rec2.eint;
-						const float gamma_j = rec2.gamma;
-						const float p_j = fmaxf(eint_j * rho_j * (gamma_j - 1.f), 0.f);								// 5
-						const float c_j = sqrtf(gamma_j * p_j * rhoinv_j);									// 6
+						const float K_j = rec2.entr;
+						const float p_j = K_j * powf(rho_j, gamma0);
+						const float c_j = sqrtf(gamma0 * p_j * rhoinv_j);									// 6
 						const float alpha_j = rec2.alpha;
 						const float vx0_ij = vx_i - vx_j;
 						const float vy0_ij = vy_i - vy_j;
@@ -760,7 +748,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vdotx_ij = fminf(0.0f, x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij);
 						const float h_ij = 0.5f * (h_i + h_j);
 						const float w_ij = vdotx_ij * rinv;
-						const float mu_ij = vdotx_ij * h_ij / (r2 + 0.01f * sqr(h_ij));
+//						const float mu_ij = vdotx_ij * h_ij / (r2 + 0.01f * sqr(h_ij));
 						const float rho_ij = 0.5f * (rho_i + rho_j);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 						const float c_ij = 0.5f * (c_i + c_j);
@@ -789,10 +777,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						ax -= m * ainv * pi_ij * dWdr_x_ij;
 						ay -= m * ainv * pi_ij * dWdr_y_ij;
 						az -= m * ainv * pi_ij * dWdr_z_ij;
-						de_dt += m * ainv * dp_i * (vx0_ij * dWdr_x_i + vy0_ij * dWdr_y_i + vz0_ij * dWdr_z_i);
-						const float dudt_visc = 0.5f * m * ainv * pi_ij * rho_ij * rhoinv_i * (vx_ij * dWdr_x_i + vy_ij * dWdr_y_i + vz_ij * dWdr_z_i);
-						de_dt += dudt_visc;
-						float shearv_j, difco_ij;
+						de_dt += (gamma0 - 1.f) * powf(rho_i, 1.f - gamma0) * 0.5f * m * ainv * pi_ij * (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
 						if (params.phase == 1 || params.damping > 0.f) {
 							vsig = fmaxf(vsig, vsig_ij);
 						}
@@ -837,11 +822,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += gx_i;
 					ay += gy_i;
 					az += gz_i;
-					de_dt += (5.f - 3.f * gamma_i) * params.adot * ainv * eint_i;
 					data.dvx_con[snki] = ax;
 					data.dvy_con[snki] = ay;
 					data.dvz_con[snki] = az;
-					data.deint_con[snki] = de_dt;
+					data.dentr_con[snki] = de_dt;
 					if (params.diffusion && data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							data.dchem_con[snki][fi] = 0.f;
@@ -850,10 +834,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (params.phase == 1) {
 						const float divv = data.divv_snk[snki];
 						const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv) * (1.f / 3.f);
-//						const float dtinv_eint = de_dt > 0.f ? tiny : -de_dt / (eint_i + tiny) * params.cfl * 0.5f;
 						float dtinv_hydro1 = 1.0e-30f;
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-						//		dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_eint);
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 						const float a2_1 = sqr(ax, ay, az);
 						const float a2_2 = sqr(ax - gx_i, ay - gy_i, az - gz_i);
@@ -959,7 +941,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						ws.rec2[k].gamma = data.def_gamma;
 					}
 					ws.rec2[k].h = data.h[pi];
-					ws.rec2[k].eint = data.eint[pi];
+					ws.rec2[k].entr = data.entr[pi];
 				}
 			}
 		}
@@ -988,15 +970,11 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float rho_i = m * c0 * h3inv_i;
 				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;
 				const float fpre_i = data.fpre_snk[snki];
-				float gamma_i, eint_i, p_i, c_i;
-				if (data.chemistry) {
-					gamma_i = data.gamma[i];
-				} else {
-					gamma_i = data.def_gamma;
-				}
-				eint_i = data.eint[i];
-				p_i = fmaxf(eint_i * rho_i * (gamma_i - 1.f), 0.f);
-				c_i = sqrtf(gamma_i * p_i * rhoinv_i);
+				float K_i, p_i, c_i;
+				const float gamma0 = data.def_gamma;
+				K_i = data.entr[i];
+				p_i = K_i * powf(rho_i, gamma0);
+				c_i = sqrtf(gamma0 * p_i * rhoinv_i);
 				float dvx_dx = 0.0f;
 				float dvx_dy = 0.0f;
 				float dvx_dz = 0.0f;
@@ -1006,9 +984,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				float dvz_dx = 0.0f;
 				float dvz_dy = 0.0f;
 				float dvz_dz = 0.0f;
-				float dT_dx = 0.f;
-				float dT_dy = 0.f;
-				float dT_dz = 0.f;
 				float vsig = 0.f;
 				const float adot = params.adot;
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
@@ -1043,8 +1018,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float h3inv_j = (sqr(hinv_j) * hinv_j);
 					const float rho_j = m * c0 * h3inv_j;
 					const float gamma_j = rec2.gamma;
-					const float eint_j = rec2.eint;
-					const float p_j = (gamma_j - 1.f) * rho_j * eint_j;
+					const float K_j = rec2.entr;
+					const float p_j = K_j * powf(rho_j, gamma0);
 					const float c_j = sqrtf(gamma_j * p_j / rho_j);
 					const float w_ij = vdotx_ij * rinv;
 					const float vsig_i = c_i + c_j - w_ij;

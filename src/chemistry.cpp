@@ -780,7 +780,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						}
 					}
 					echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
-					sph_particles_eint(i) = chem.eint;
+					sph_particles_entr(i) = chem.eint * (get_options().gamma-1.0)/ pow(sph_particles_rho(i),get_options().gamma-1.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 						sph_particles_cold_mass(i) = chem.cold_mass;

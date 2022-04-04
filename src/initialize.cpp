@@ -419,7 +419,7 @@ void load_glass(const char* filename) {
 							}
 							if (l >= nparts) {
 								const part_int m = particles_cat_index(index);
-								sph_particles_eint(m) = 0.0f;
+								sph_particles_entr(m) = 0.0f;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
@@ -703,57 +703,57 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
 							const float deconvo = 1.f / kernelWfourier(K0*h);
-						//	PRINT( "%e %e %e\n", sqrt(i2), K0*h, deconvo);
-							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
-						} else {
-							Y[index] = cmplx(0.f, 0.f);
-						}
-					}
-				}
-				gsl_rng_free(rndgen);
-				I[2] = 0;
-				const int64_t index = box.index(I);
-				const int J0 = I[0] > N / 2 ? N - I[0] : I[0];
-				const int J1 = I[1] > N / 2 ? N - I[1] : I[1];
-				seed = (J0 * N + J1)*1234 + 42;
-				rndgen = gsl_rng_alloc(gsl_rng_taus);
-				gsl_rng_set(rndgen, seed);
-				for( int l = 0; l < rand_init_iters; l++) {
-					gsl_rng_uniform_pos(rndgen);
-				}
-				const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
-				const int i2 = sqr(i, j, k);
-				float sgn = 1.0;
-				if( dim1 != NDIM) {
-					sgn *= -1.0;
-				}
-				if( dim2 != NDIM) {
-					sgn *= -1.0;
-				}
-				if (i2 > 0 && i2 < N * N / 4) {
-					const float kz = 2.f * (float) M_PI / box_size * float(k);
-					const float k2 = kx * kx + ky * ky + kz * kz;
-					const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-					const float x = gsl_rng_uniform_pos(rndgen);
-					const float y = gsl_rng_uniform_pos(rndgen);
-					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
-					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-					const float deconvo = 1.f / kernelWfourier(K0*h);
-					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
-					if( I[0] > N / 2 ) {
-						Y[index] = Y[index].conj() * sgn;
-					} else if( I[0] == 0 ) {
-						if( I[1] > N / 2 ) {
-							Y[index] = Y[index].conj() * sgn;
-						}
-					}
-				} else {
-					Y[index] = cmplx(0.f, 0.f);
-				}
-				gsl_rng_free(rndgen);
-
+							//	PRINT( "%e %e %e\n", sqrt(i2), K0*h, deconvo);
+				Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
+			} else {
+				Y[index] = cmplx(0.f, 0.f);
 			}
-		}, I));
+		}
+	}
+	gsl_rng_free(rndgen);
+	I[2] = 0;
+	const int64_t index = box.index(I);
+	const int J0 = I[0] > N / 2 ? N - I[0] : I[0];
+	const int J1 = I[1] > N / 2 ? N - I[1] : I[1];
+	seed = (J0 * N + J1)*1234 + 42;
+	rndgen = gsl_rng_alloc(gsl_rng_taus);
+	gsl_rng_set(rndgen, seed);
+	for( int l = 0; l < rand_init_iters; l++) {
+		gsl_rng_uniform_pos(rndgen);
+	}
+	const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
+	const int i2 = sqr(i, j, k);
+	float sgn = 1.0;
+	if( dim1 != NDIM) {
+		sgn *= -1.0;
+	}
+	if( dim2 != NDIM) {
+		sgn *= -1.0;
+	}
+	if (i2 > 0 && i2 < N * N / 4) {
+		const float kz = 2.f * (float) M_PI / box_size * float(k);
+		const float k2 = kx * kx + ky * ky + kz * kz;
+		const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
+		const float x = gsl_rng_uniform_pos(rndgen);
+		const float y = gsl_rng_uniform_pos(rndgen);
+		const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
+		const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+		const float deconvo = 1.f / kernelWfourier(K0*h);
+		Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
+		if( I[0] > N / 2 ) {
+			Y[index] = Y[index].conj() * sgn;
+		} else if( I[0] == 0 ) {
+			if( I[1] > N / 2 ) {
+				Y[index] = Y[index].conj() * sgn;
+			}
+		}
+	} else {
+		Y[index] = cmplx(0.f, 0.f);
+	}
+	gsl_rng_free(rndgen);
+
+}
+}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	fft3d_accumulate_complex(box, Y);
@@ -904,12 +904,14 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
 				const float T0 = 100.0;
 				const float eps_cgs = cv_cgs * T0;
-				const float eps = eps_cgs / code_to_ene * sqr(1.0 / (1.0 + get_options().z0));
+				const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3);
+				const float eps = eps_cgs / code_to_ene;
+				const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
 				sph_particles_resize(box.volume());
 				const part_int offset = box.volume();
 				vector<hpx::future<void>> local_futs;
 				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([eps,offset,chem,box,Ninv](array<int64_t,NDIM> I) {
+					local_futs.push_back(hpx::async([K0,offset,chem,box,Ninv](array<int64_t,NDIM> I) {
 						const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 						const float h = std::pow(h3, 1.0 / 3.0);
 						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
@@ -922,7 +924,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
-								sph_particles_eint(m) = eps;
+								sph_particles_entr(m) = K0;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {

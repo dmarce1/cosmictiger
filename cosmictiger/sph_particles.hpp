@@ -44,17 +44,17 @@
 #define CHEM_Z 6
 
 struct sph_particle0 {
-	float eint0;
+	float entr0;
 	array<float, NCHEMFRACS> chem0;
 	template<class A>
 	void serialize(A && arc, unsigned) {
-		arc & eint0;
+		arc & entr0;
 		arc & chem0;
 	}
 };
 
 struct sph_particle {
-	float eint;
+	float entr;
 	array<float, NDIM> v;
 	float gamma;
 	float alpha;
@@ -64,7 +64,7 @@ struct sph_particle {
 	void serialize(A&&arc, unsigned) {
 		static const bool chemistry = get_options().chem;
 		static const bool stars = get_options().stars;
-		arc & eint;
+		arc & entr;
 		arc & v;
 		arc & alpha;
 		if (chemistry) {
@@ -83,7 +83,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
-SPH_PARTICLES_EXTERN float* sph_particles_de1; // deint_pred
+SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_c0; // chemistry
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistry
@@ -97,8 +97,8 @@ SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
-SPH_PARTICLES_EXTERN float* sph_particles_de2; // deint_con
-SPH_PARTICLES_EXTERN float* sph_particles_gt; // deint_con
+SPH_PARTICLES_EXTERN float* sph_particles_de2; // dentr_con
+SPH_PARTICLES_EXTERN float* sph_particles_gt; // dentr_con
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_con
 SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-activel_con
 SPH_PARTICLES_EXTERN char* sph_particles_or;   // semi-active
@@ -131,9 +131,9 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_force(particle_global_range range, float* x, float* y, float* z, float* divv, part_int offset);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float a, float* eint, float* vx, float* vy, float* vz, float* gamma, float* alpha,
+void sph_particles_global_read_sph(particle_global_range range, float a, float* entr, float* vx, float* vy, float* vz, float* gamma, float* alpha,
 		float*cold_frac, array<float, NCHEMFRACS>* chems, part_int offset);
-void sph_particles_global_read_sph0(particle_global_range range, float* eint0, array<float, NCHEMFRACS>* chem0, part_int offset);
+void sph_particles_global_read_sph0(particle_global_range range, float* entr0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* shearv, float* gradT, part_int offset);
 void sph_particles_reset_converged();
@@ -155,16 +155,13 @@ inline float& sph_particles_rho_th(part_int index) {
 	return sph_particles_rth[index];
 }
 
-
 inline float& sph_particles_edep(part_int index) {
 	return sph_particles_ed[index];
 }
 
-
 inline float& sph_particles_zdep(part_int index) {
 	return sph_particles_zd[index];
 }
-
 
 inline char& sph_particles_converged(part_int index) {
 	return sph_particles_c[index];
@@ -182,7 +179,7 @@ inline float& sph_particles_dcold_mass_con(part_int index) {
 	return sph_particles_drc2[index];
 }
 
-inline float& sph_particles_eint0(part_int index) {
+inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
 }
 
@@ -314,12 +311,12 @@ inline char& sph_particles_oldrung(int index) {
 	return sph_particles_or[index];
 }
 
-inline float& sph_particles_eint(part_int index) {
+inline float& sph_particles_entr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_e[index];
 }
 
-inline float& sph_particles_deint_pred(part_int index) {
+inline float& sph_particles_dentr_pred(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de1[index];
 }
@@ -334,7 +331,7 @@ inline float& sph_particles_xvel(int dim, part_int index) {
 	return sph_particles_dvx[dim][index];
 }
 
-inline float& sph_particles_deint_con(part_int index) {
+inline float& sph_particles_dentr_con(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de2[index];
 }
@@ -354,7 +351,7 @@ inline array<float, NCHEMFRACS>& sph_particles_dchem_con(part_int index) {
 	return sph_particles_dchem2[index];
 }
 
-inline float& sph_particles_deint(part_int index) {
+inline float& sph_particles_dentr(part_int index) {
 	return sph_particles_de2[index];
 }
 
@@ -381,10 +378,6 @@ inline float sph_particles_ekin(part_int index) {
 	return ekin;
 }
 
-inline float sph_particles_egas(part_int index) {
-	return sph_particles_eint(index) + sph_particles_ekin(index);
-}
-
 inline float& sph_particles_smooth_len(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_h[index];
@@ -398,23 +391,18 @@ inline float sph_particles_rho(part_int index) {
 	return c0 / (h * sqr(h));
 }
 
-inline float sph_particles_energy(part_int index) {
+inline float sph_particles_eint(part_int index) {
+	static const float gamma0 = get_options().gamma;
 	const float rho = sph_particles_rho(index);
-	const float K = sph_particles_eint(index);
-	const float h = sph_particles_smooth_len(index);
-	const float H2 = sph_particles_H2(index);
-	const float cv = 1.5f + H2;
-	const float gamma = 1.f + 1.f / cv;
-	float E = K * powf(rho, gamma) / (gamma - 1.f);
-	E *= (4.0 * M_PI / 3.0) * h * sqr(h);
-	return E;
+	const float K = sph_particles_entr(index);
+	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
 
 float sph_particles_coloumb_log(part_int i, float a);
 
 inline sph_particle sph_particles_get_particle(part_int index, float a) {
 	sph_particle p;
-	p.eint = sph_particles_eint(index);
+	p.entr = sph_particles_entr(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}
