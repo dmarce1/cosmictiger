@@ -100,7 +100,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 					const float p = 1.0 - exp(-eps);
 					bool make_star;
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
-					PRINT( "%e %i\n", eps, make_star);
+//					PRINT( "%e %i\n", eps, make_star);
 					if( make_star ) {
 						star_particle star;
 						star.zform = 1.f / a - 1.f;

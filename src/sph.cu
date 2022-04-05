@@ -24,6 +24,7 @@
 #define XSPH_BLOCK_SIZE 256
 #define HYDRO_BLOCK_SIZE 128
 #define AUX_BLOCK_SIZE 128
+#define MAX_RUNG_DIF 2
 
 #define SPH_SMOOTHLEN_TOLER float(1.0e-5)
 
@@ -1216,9 +1217,9 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 				}
 				shared_reduce_max<RUNGS_BLOCK_SIZE>(max_rung_j);
 				if (tid == 0) {
-					if (rung_i < max_rung_j - 1) {
+					if (rung_i < max_rung_j - MAX_RUNG_DIF) {
 						changes++;
-						rung_i = max_rung_j - 1;
+						rung_i = max_rung_j - MAX_RUNG_DIF;
 					}
 				}
 			}
