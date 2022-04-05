@@ -1064,7 +1064,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(curl_vz);
 				shared_reduce_max<AUX_BLOCK_SIZE>(vsig);
 				if (tid == 0) {
-					//const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
+					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_yz) + sqr(shear_xz)));
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					data.divv_snk[snki] = div_v;
 					data.shearv_snk[snki] = shearv;
