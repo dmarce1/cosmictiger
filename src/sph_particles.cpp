@@ -223,7 +223,7 @@ float sph_particles_temperature(part_int i, float a) {
 	cv *= double(constants::kb);																							// 1
 	double entr = sph_particles_entr(i);
 	entr *= code_to_entropy;
-	const double eint = entr * pow(rho, get_options().gamma) / (gamma - 1.0);
+	const double eint = entr * pow(rho, get_options().gamma - 1.0) / (gamma - 1.0);
 	double T = rho * eint / (n * cv);
 	if (H < 0.0) {
 		if (H < -5.0e-3) {

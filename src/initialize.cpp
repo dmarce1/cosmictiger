@@ -904,7 +904,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
 				const float T0 = 100.0;
 				const float eps_cgs = cv_cgs * T0;
-				const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3);
+				const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
 				const float eps = eps_cgs / code_to_ene;
 				const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
 				sph_particles_resize(box.volume());
