@@ -50,6 +50,7 @@ struct species_t {
 };
 
 struct chem_attribs {
+	float H;
 	float Hp;
 	float H2;
 	float Hn;

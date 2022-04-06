@@ -34,14 +34,15 @@
 #define CHECK_SPH_PART_BOUNDS(i)
 #endif
 
-#define NCHEMFRACS 7
-#define CHEM_HP 0
-#define CHEM_HN 1
-#define CHEM_H2 2
-#define CHEM_HE 3
-#define CHEM_HEP 4
-#define CHEM_HEPP 5
-#define CHEM_Z 6
+#define NCHEMFRACS 8
+#define CHEM_H 0
+#define CHEM_HP 1
+#define CHEM_HN 2
+#define CHEM_H2 3
+#define CHEM_HE 4
+#define CHEM_HEP 5
+#define CHEM_HEPP 6
+#define CHEM_Z 7
 
 struct sph_particle0 {
 	float entr0;
@@ -98,6 +99,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 SPH_PARTICLES_EXTERN float* sph_particles_de2; // dentr_con
+SPH_PARTICLES_EXTERN float* sph_particles_de3; // dentr_con
 SPH_PARTICLES_EXTERN float* sph_particles_gt; // dentr_con
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_con
 SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-activel_con
@@ -172,7 +174,7 @@ inline float& sph_particles_cold_mass(part_int index) {
 }
 
 inline float& sph_particles_dcold_mass_pred(part_int index) {
-	return sph_particles_drc2[index];
+	return sph_particles_drc1[index];
 }
 
 inline float& sph_particles_dcold_mass_con(part_int index) {
@@ -205,14 +207,6 @@ inline float& sph_particles_alpha(part_int index) {
  return sph_particles_fZ[index];
  }
  */
-inline float sph_particles_H(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	float H = 1.f;
-	for (int fi = 0; fi < NCHEMFRACS; fi++) {
-		H -= sph_particles_c0[index][fi];
-	}
-	return H;
-}
 
 inline float& sph_particles_frac(int j, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -227,6 +221,21 @@ inline float& sph_particles_shear(part_int index) {
 inline float& sph_particles_Z(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_c0[index][CHEM_Z];
+}
+
+inline void sph_particles_normalize_fracs(part_int index) {
+	double sum = 0.0;
+	for( double fi = 0; fi < NCHEMFRACS; fi++) {
+		sum += sph_particles_frac(fi, index);
+	}
+	for( double fi = 0; fi < NCHEMFRACS; fi++) {
+		sph_particles_frac(fi, index) /= sum;
+	}
+}
+
+inline float& sph_particles_H(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_c0[index][CHEM_H];
 }
 
 inline float& sph_particles_He0(part_int index) {
@@ -334,6 +343,11 @@ inline float& sph_particles_xvel(int dim, part_int index) {
 inline float& sph_particles_dentr_con(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de2[index];
+}
+
+inline float& sph_particles_dentr_diss(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de3[index];
 }
 
 inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {

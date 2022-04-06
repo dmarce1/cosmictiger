@@ -112,10 +112,10 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.0), "alpha0 viscosity") //
-	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.5), "alpha1 for viscosity") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.1), "alpha0 viscosity") //
+	("alpha1", po::value<double>(&(opts.alpha1))->default_value(2.0), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
-	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
+	("beta", po::value<double>(&(opts.beta))->default_value(1.5), "beta for viscosity") //
 	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
 	("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
 	("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //

@@ -431,13 +431,21 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		chem_attribs& attr = chems[index];
 		species_t N;
 		species_t N0;
-		N.H = 1.0 - ((double) attr.He + (double) attr.Hep + (double) attr.Hepp + (double) attr.Hp + (double) attr.Hn + (double) attr.H2);							// 4
+		N.H = attr.H;
 		N.Hp = attr.Hp;
 		N.Hn = attr.Hn;
 		N.H2 = attr.H2;
 		N.He = attr.He;																	// 2
 		N.Hep = attr.Hep;
 		N.Hepp = attr.Hepp;
+		if (N.H < 0.0) {
+			if (N.H < -5.0e-7) {
+				PRINT("Negative H !\n", N.H);
+			} else {
+				N.Hp += N.H;
+				N.H = 0.f;
+			}
+		}
 		double dt = (double) attr.dt * (double) params.a;
 		dt *= (double) params.code_to_s;																												// 1
 		double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
@@ -501,8 +509,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float hot_mass = 1.f - attr.cold_mass;
 			float hotmass0 = hot_mass;
 			float factor = expf(-fminf(dt / tcool, 1.f));
-	//		PRINT( "%e\n", factor);
-		//	__trap();
+			//		PRINT( "%e\n", factor);
+			//	__trap();
 			hot_mass *= factor;
 			float cold_mass0 = attr.cold_mass;
 			attr.cold_mass = 1.f - hot_mass;
@@ -523,7 +531,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			N.H2 *= 2.0 * (double) rhoavoinv;																										// 1
 			N.He *= 4.0 * (double) rhoavoinv;																										// 1
 			N.Hep *= 4.0 * (double) rhoavoinv;																										// 1
-			N.Hepp *= 4.0 * (double) rhoavoinv;																										// 1
+			N.Hepp *= 4.0 * (double) rhoavoinv;
+			attr.H = N.H;// 1
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;
 			attr.Hepp = N.Hepp;
@@ -571,6 +580,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			eint *= sqr(params.a);
 			eint /= code_to_energy;
 			eint *= hot_mass;
+			attr.H = N.H;
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;
 			attr.Hepp = N.Hepp;

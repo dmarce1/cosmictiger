@@ -61,6 +61,7 @@ struct dm_part_info {
 struct sph_part_info: public dm_part_info {
 	float eint;
 	float h;
+	float H;
 	float Hp;
 	float H2;
 	float Hn;
@@ -75,6 +76,7 @@ struct sph_part_info: public dm_part_info {
 		dm_part_info::serialize(arc, ver);
 		arc & eint;
 		arc & h;
+		arc & H;
 		arc & Hp;
 		arc & H2;
 		arc & Hn;
@@ -178,6 +180,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.rung = particles_rung(i);
 								info.alpha = sph_particles_alpha(l);
 								if( chem ) {
+									info.H = sph_particles_H(l);
 									info.Hp = sph_particles_Hp(l);
 									info.Hn = sph_particles_Hn(l);
 									info.H2 = sph_particles_H2(l);
@@ -345,7 +348,7 @@ void view_output_views(int cycle, double a) {
 			if (chem) {
 				const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
 				const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
-				vector<float> p, q, t, u, w;
+				vector<float> p, q, t, u, w, s;
 				for (int i = 0; i < parts.hydro[bi].size(); i++) {
 					x.push_back(parts.hydro[bi][i].Hp);
 					y.push_back(parts.hydro[bi][i].Hn);
@@ -353,6 +356,7 @@ void view_output_views(int cycle, double a) {
 					p.push_back(parts.hydro[bi][i].Hep);
 					q.push_back(parts.hydro[bi][i].Hepp);
 					u.push_back(parts.hydro[bi][i].He);
+					s.push_back(parts.hydro[bi][i].H);
 					w.push_back(parts.hydro[bi][i].Z);
 					const double h = parts.hydro[bi][i].h;
 					double rho = sph_den(1 / (h * h * h));
@@ -364,7 +368,7 @@ void view_output_views(int cycle, double a) {
 					const double Hep = parts.hydro[bi][i].Hep;
 					const double Hepp = parts.hydro[bi][i].Hepp;
 					const double Y = He + Hep + Hepp;
-					const double H = 1.0 - Y - Hp - Hn - H2 - Z;
+					const double H = parts.hydro[bi][i].H;
 					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp + Z / 10.0;
 					rho *= code_to_density * pow(a, -3);
 					n *= constants::avo * rho;									// 8
@@ -385,6 +389,7 @@ void view_output_views(int cycle, double a) {
 					t.push_back(T);
 
 				}
+				DBPutPointvar1(db, "H", "gas", s.data(), x.size(), DB_FLOAT, opts);
 				DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, opts);
 				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, opts);
 				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, opts);
