@@ -400,7 +400,7 @@ inline float sph_particles_rho(part_int index) {
 
 inline float sph_particles_eint(part_int index) {
 	static const float gamma0 = get_options().gamma;
-	const float rho = sph_particles_rho(index);
+	const float rho = sph_particles_rho(index) * (1.f - sph_particles_cold_mass(index));
 	const float K = sph_particles_entr(index);
 	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }

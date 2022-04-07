@@ -679,7 +679,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float K_i = data.entr[i];
 				const float alpha_i = data.alpha[i];
 				const float gamma0 = data.def_gamma;
-				const float p_i = K_i * powf(rho_i, gamma0);
 				float cfrac_i;
 				if (params.stars) {
 					cfrac_i = data.cold_frac[i];
@@ -687,7 +686,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					cfrac_i = 0.f;
 				}
 				const float hfrac_i = 1.f - cfrac_i;
-				const float c_i = sqrtf(gamma0 * p_i * rhoinv_i);
+				const float p_i = K_i * powf(rho_i * hfrac_i, gamma0);
+				const float c_i = sqrtf(gamma0 * p_i * rhoinv_i / hfrac_i);
 				const float fpre_i = data.fpre[i];
 				const float balsara_i = data.balsara[i];
 				array<float, NCHEMFRACS> frac_i;
@@ -744,8 +744,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float rho_j = m * c0 * h3inv_j;													// 2
 						const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;								// 5
 						const float K_j = rec2.entr;
-						const float p_j = K_j * powf(rho_j, gamma0);
-						const float c_j = sqrtf(gamma0 * p_j * rhoinv_j);									// 6
+						const float p_j = K_j * powf(rho_j * hfrac_j, gamma0);
+						const float c_j = sqrtf(gamma0 * p_j * rhoinv_j / hfrac_j);									// 6
 						const float alpha_j = rec2.alpha;
 						const float vx0_ij = vx_i - vx_j;
 						const float vy0_ij = vy_i - vy_j;
@@ -796,7 +796,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float difco_ij = 2.f * (difco_i * difco_j) / (difco_i + difco_j + 1e-37f);
 							const float D_ij = -2.f * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * (h_i * h_j)));
 							D += D_ij;
-							de_dt -= D_ij * (K_i - K_j * powf(rho_j / rho_i, gamma0 - 1.f));
+							de_dt -= D_ij * (K_i - K_j * powf(hfrac_j * rho_j / (hfrac_i * rho_i), gamma0 - 1.f));
 							if (params.stars) {
 								dcm_dt -= D_ij * (cfrac_i - cfrac_j);
 							}

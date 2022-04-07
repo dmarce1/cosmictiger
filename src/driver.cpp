@@ -157,6 +157,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 
 	if (stars && minrung != max_rung) {
 		stars_find(scale, dt, minrung, iter, t0);
+		stars_statistics(scale);
 	}
 
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
