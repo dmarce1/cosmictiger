@@ -135,28 +135,16 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const float dt = dt1 + dt2;
 				if( rung2 >= minrung) {
 					if( phase == 0 ) {
-				//		sph_particles_dentr0(i) = sph_particles_dentr(i);
 						for( int dim =0; dim < NDIM; dim++) {
 							sph_particles_dvel0(dim,i) = sph_particles_dvel(dim,i);
 						}
-					//	sph_particles_entr(i) += sph_particles_dentr(i) *dt2;
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
 					} else if( phase == 1 ) {
-//						sph_particles_entr(i) += (sph_particles_dentr(i) - sph_particles_dentr0(i))*dt1;
-						sph_particles_entr(i) += 2.0f*sph_particles_dentr(i) *dt2;
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
-						}
-						if( chem ) {
-							for( int fi = 0; fi < NCHEMFRACS; fi++) {
-								sph_particles_chem(i)[fi] +=2.0f*sph_particles_dchem(i)[fi] *dt2;
-							}
-						}
-						if( stars ) {
-							sph_particles_cold_mass(i) +=2.0f*sph_particles_dcold_mass(i) *dt2;
 						}
 					}
 				}
@@ -971,7 +959,7 @@ void sph_particles_save(FILE* fp) {
 	}
 	if (chem) {
 		fwrite(sph_particles_c0, sizeof(sph_particles_c0[0]), sph_particles_size(), fp);
-		fwrite(sph_particles_c0, sizeof(sph_particles_dchem1[0]), sph_particles_size(), fp);
+		fwrite(sph_particles_dchem1, sizeof(sph_particles_dchem1[0]), sph_particles_size(), fp);
 	}
 
 	if (stars) {

@@ -44,6 +44,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	std::atomic<part_int> next(0);
 	const auto func = [dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
 		const bool sph = get_options().sph;
+		const bool chem = get_options().chem;
+		const bool stars = get_options().stars;
 		const float dm_mass = get_options().dm_mass;
 		const float sph_mass = get_options().sph_mass;
 		const float xeta = get_options().xsph;
@@ -104,20 +106,27 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					char rung = particles_rung(i);
 					float dt0 = tau_max / 64 / (1 <<rung);
 					const float eint = sph_particles_eint(j);
-					if( tau0 != 0.0 ) {
-						const float divv = sph_particles_divv(j);
-						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
-						if( dloghdt > 2.0 / dt0 ) {
-							PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
-							dloghdt = 2.0 / dt0;
-						} else if( dloghdt < -2.0 / dt0) {
-							PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
-							dloghdt = -2.0 / dt0;
-						}
-						float c0 = exp(dloghdt*dt);
-						h *= c0;
-						if( h > 0.5 ) {
-							PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
+					const float divv = sph_particles_divv(j);
+					float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
+					if( dloghdt > 2.0 / dt0 ) {
+						PRINT( "Clipping dhdt %e\n", dloghdt * dt0);
+						dloghdt = 2.0 / dt0;
+					} else if( dloghdt < -2.0 / dt0) {
+						PRINT( "Clippling dhdt %e\n", dloghdt * dt0);
+						dloghdt = -2.0 / dt0;
+					}
+					float c0 = exp(dloghdt*dt);
+					h *= c0;
+					if( h > 0.5 ) {
+						PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
+					}
+					sph_particles_entr(j) += sph_particles_dentr(j) * dt;
+					if( stars ) {
+						sph_particles_cold_mass(j) += sph_particles_dcold_mass(j) * dt;
+					}
+					if( chem ) {
+						for( int fi = 0; fi < NCHEMFRACS; fi++) {
+							sph_particles_frac(fi,j) += sph_particles_dchem(j)[fi] * dt;
 						}
 					}
 					const float h3 = sqr(h)*h;
