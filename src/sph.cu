@@ -658,6 +658,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 		double kappa00 = 20.0 * pow(2.0 / M_PI, 1.5) * pow(constants::kb, 3.5) * pow(constants::me, -0.5) * pow(constants::e, -4.0);
 		kappa00 /= (double) params.code_to_g * params.code_to_cm * pow(params.code_to_s, -3.0);
 		const double kb0 = constants::kb * pow(params.code_to_s / params.code_to_cm, 2.0);
+		const float lambda0 = pow(3, 1.5) * pow((double) constants::kb, 2.0) / (4.0 * sqrt(M_PI) * sqr(sqr((double) constants::e)));
 		kappa00 /= kb0;
 		kappa00 /= constants::avo;
 		float kappa0 = kappa00;
@@ -701,7 +702,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				if (params.diffusion) {
 					shearv_i = data.shearv[i];
 				}
-				float T_i, ne_i, colog_i, mmw_i;
+				float T_i, ne_i, colog_i, mmw_i, lambda_i;
 				if (params.conduction) {
 					const float H = frac_i[CHEM_H];
 					const float Hp = frac_i[CHEM_HP];
@@ -722,7 +723,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float eint = c1 * entr0 * powf(rho0 * hfrac_i, gamma0 - 1.0) / (gamma0 - 1.0);
 					T_i = rho0 * eint / (n0 * cv0);
 					ne_i *= c0;
-					colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
+					if (ne_i > 1e-10f) {
+						colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
+						lambda_i = lambda0 / ne_i * sqr(T_i) / colog_i / params.code_to_cm;
+					} else {
+						colog_i = 1e30f;
+						lambda_i = 1e30f;
+					}
 				}
 
 				const float p_i = K_i * powf(rho_i * hfrac_i, gamma0);
@@ -858,11 +865,23 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float eint = c1 * entr0 * powf(rho0 * hfrac_j, gamma0 - 1.0) / (gamma0 - 1.0);
 							T_j = rho0 * eint / (n0 * cv0);
 							ne_j *= c0;
-							colog_j = colog0 + 1.5f * logf(T_j) - 0.5f * logf(ne_j);
+							float lambda_j;
+							if (ne_j > 1e-10f) {
+								colog_j = colog0 + 1.5f * logf(T_j) - 0.5f * logf(ne_j);
+								lambda_j = lambda0 * sqr(T_j) / (ne_j * colog_j * params.code_to_cm);
+							} else {
+								colog_j = 1e30f;
+								lambda_j = 1e30f;
+							}
+							const float lambda_ij = 0.5f * (lambda_i + lambda_j);
+							const float gradT = fabsf(logf(T_i / T_j)) * rinv;
+							const float limiter = 1.0f / (1.0f + 4.2f * gradT * lambda_ij);
 							const float kappa_i = kappa0 * powf(T_i, 2.5f) / colog_i * mmw_i;
 							const float kappa_j = kappa0 * powf(T_j, 2.5f) / colog_j * mmw_j;
-							const float kappa_ij = 2.f * kappa0 * (kappa_i * kappa_j) / (kappa_i + kappa_j + 1e-37f);
+							const float kappa_ij = 2.f * limiter * kappa0 * (kappa_i * kappa_j) / (kappa_i + kappa_j + 1e-37f);
 							const float D_ij = -2.f * m / (rho_i * rho_j) * kappa_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * (h_i * h_j)));
+							ALWAYS_ASSERT(isfinite(colog_i));
+							ALWAYS_ASSERT(isfinite(colog_j));
 							D += D_ij / (sqr(params.a) * params.a);
 							de_dt -= D_ij * (K_i - K_j * powf(hfrac_j * rho_j * mmw_j / (hfrac_i * rho_i * mmw_i), gamma0 - 1.f));
 						}
