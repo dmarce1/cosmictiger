@@ -68,7 +68,6 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_entr;
 	vector<float, pinned_allocator<float>> host_alpha;
 	vector<float, pinned_allocator<float>> host_shearv;
-	vector<float, pinned_allocator<float>> host_balsara;
 	vector<float, pinned_allocator<float>> host_gradT;
 	vector<float, pinned_allocator<float>> host_fpre;
 	vector<float, pinned_allocator<float>> host_h;
@@ -783,7 +782,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (stars) {
 			host_cold_frac.resize(parts_size);
 		}
-		host_balsara.resize(parts_size);
 		if (diffusion) {
 			host_shearv.resize(parts_size);
 			if (chem) {
@@ -837,7 +835,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								}
 								switch(params.run_type) {
 									case SPH_RUN_HYDRO:
-									sph_particles_global_read_aux(node.global_part_range(), host_fpre.data(), nullptr, params.diffusion ? host_shearv.data() : nullptr, host_balsara.data(), offset);
+									sph_particles_global_read_aux(node.global_part_range(), host_fpre.data(), nullptr, params.diffusion ? host_shearv.data() : nullptr, offset);
 									break;
 									break;
 
@@ -884,7 +882,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		} else {
 			cuda_data.gamma = nullptr;
 		}
-		CUDA_CHECK(cudaMalloc(&cuda_data.balsara, sizeof(float) * host_balsara.size()));
 		if (diffusion) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.shearv, sizeof(float) * host_shearv.size()));
 			if (chem) {
@@ -919,7 +916,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (chem) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.gamma, host_gamma.data(), sizeof(float) * host_gamma.size(), cudaMemcpyHostToDevice, stream));
 		}
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.balsara, host_balsara.data(), sizeof(float) * host_balsara.size(), cudaMemcpyHostToDevice, stream));
 		if (diffusion) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.shearv, host_shearv.data(), sizeof(float) * host_shearv.size(), cudaMemcpyHostToDevice, stream));
 			if (chem) {
@@ -938,7 +934,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
 	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
-	cuda_data.balsara_snk = &sph_particles_balsara(0);
 	cuda_data.shearv_snk = &sph_particles_shear(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
 	cuda_data.divv0_snk = &sph_particles_divv0(0);
@@ -1021,7 +1016,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (chem) {
 			CUDA_CHECK(cudaFree(cuda_data.gamma));
 		}
-		CUDA_CHECK(cudaFree(cuda_data.balsara));
 		if (diffusion) {
 			CUDA_CHECK(cudaFree(cuda_data.shearv));
 			if (chem) {

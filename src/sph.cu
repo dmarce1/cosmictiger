@@ -71,7 +71,6 @@ struct hydro_record1 {
 
 struct hydro_record2 {
 	array<float, NCHEMFRACS> chem;
-	float balsara;
 	float vx;
 	float vy;
 	float vz;
@@ -382,7 +381,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].alpha = data.alpha[pi];
 					ws.rec2[k].fpre = data.fpre[pi];
 					ws.rec2[k].rung = data.rungs[pi];
-					ws.rec2[k].balsara = data.balsara[pi];
 					if (params.diffusion) {
 						ws.rec2[k].shearv = data.shearv[pi];
 					}
@@ -480,7 +478,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float p_i = K_i * powf(rho_i * hfrac_i, gamma0);
 				const float c_i = sqrtf(gamma0 * p_i * rhoinv_i / hfrac_i);
 				const float fpre_i = data.fpre[i];
-				const float balsara_i = data.balsara[i];
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
@@ -515,7 +512,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (q_i < 1.f || q_j < 1.f) {
 						const float cfrac_j = rec2.cold_frac;
 						const float hfrac_j = 1.f - cfrac_j;
-						const float balsara_j = rec2.balsara;
 						const float shearv_j = rec2.shearv;
 						const auto& frac_j = rec2.chem;
 						const float vx_j = rec2.vx;
@@ -917,11 +913,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_max<AUX_BLOCK_SIZE>(vsig);
 				if (tid == 0) {
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
-					const float balsara = fabs(div_v) / (fabs(div_v) + curlv + 1e-37f);
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
 					data.shearv_snk[snki] = shearv;
 					data.divv_snk[snki] = div_v;
-					data.balsara_snk[snki] = balsara;
 					/*					float& alpha = data.alpha_snk[snki];
 					 const float dt = params.t0 * rung_dt[rung_i];
 					 const float limiter = fabs(div_v) / (fabs(div_v) + curlv + 1e-30f);
