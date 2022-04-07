@@ -232,7 +232,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	} else {
 
 		if (tau != 0.0) {
-			sph_particles_apply_updates(minrung, 0, t0, tau);
+//			sph_particles_apply_updates(minrung, 0, t0, tau);
 		}
 		if (tau != 0.0 && chem) {
 			PRINT("Doing chemistry step\n");

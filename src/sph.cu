@@ -757,11 +757,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vdotx_ij = x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij;
 						const float h_ij = 0.5f * (h_i + h_j);
 						const float w_ij = vdotx_ij * rinv;
-						const float mu_ij = fminf(vdotx_ij * h_ij / (r2 + 0.01f * h_ij), 0.f);
+						const float mu_ij = fminf(vdotx_ij * h_ij / (r2 + sqr(h_ij) * 0.01f), 0.f);
 						const float rho_ij = 0.5f * (rho_i + rho_j);
 						const float c_ij = 0.5f * (c_i + c_j);
-						const float alpha_ij = 0.25f * (alpha_i + alpha_j);// * (balsara_i + balsara_j);
-						const float beta_ij = alpha_ij * 2.f;
+						const float alpha_ij = 0.5f * (alpha_i + alpha_j);									// * (balsara_i + balsara_j);
+						const float beta_ij = alpha_ij * 1.5f;
 						const float vsig_ij = alpha_ij * c_ij - beta_ij * mu_ij;
 						const float pi_ij = -mu_ij * vsig_ij / rho_ij;
 						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
@@ -798,7 +798,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							float D_ij = 0.f;
 							if (max_vsig > 0.f) {
 								const float R = 2.f * difco_ij * rinv / max_vsig / sqrtf(rho_i * rho_j);
-								const float phi = (2.0f / 3.0f + R) / (2.0f / 3.0f + R + sqr(R));
+								const float phi = (1.0f + 1.5f * R) / (1.0f + 1.5f * R + 1.5f * sqr(R));
 								D_ij = -2.f * phi * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv;
 							} else {
 								D_ij = 0.f;
@@ -1106,30 +1106,30 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					data.shearv_snk[snki] = shearv;
 					data.divv_snk[snki] = div_v;
 					data.balsara_snk[snki] = balsara;
-					float& alpha = data.alpha_snk[snki];
-					const float dt = params.t0 * rung_dt[rung_i];
-					const float limiter = fabs(div_v) / (fabs(div_v) + curlv + 1e-30f);
-					const float S = fmaxf(0.f, -div_v) * limiter;
-					const float tauinv = params.alpha_decay * c_i * hinv_i * ainv;
-					alpha = (alpha + (params.alpha1 * S + params.alpha0 * tauinv) * dt) / (1.f + dt * (S + tauinv));
-					/*float& alpha = data.alpha_snk[snki];
-					 const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
-					 data.divv0_snk[snki] = div_v;
-					 if (params.tau > 0.f) {
+					/*					float& alpha = data.alpha_snk[snki];
 					 const float dt = params.t0 * rung_dt[rung_i];
-					 const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
-					 const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
-					 const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
-					 const float alpha_targ = params.alpha1 * S / (S + sqr(c_i));
-					 const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv * dt;
-					 if (alpha < limiter * alpha_targ) {
-					 alpha = limiter * alpha_targ;
-					 } else {
-					 alpha = limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0));
-					 }
-					 } else {
-					 alpha = 0.f;
-					 }*/
+					 const float limiter = fabs(div_v) / (fabs(div_v) + curlv + 1e-30f);
+					 const float S = fmaxf(0.f, -div_v) * limiter;
+					 const float tauinv = params.alpha_decay * c_i * hinv_i * ainv;
+					 alpha = (alpha + (params.alpha1 * S + params.alpha0 * tauinv) * dt) / (1.f + dt * (S + tauinv));*/
+					float& alpha = data.alpha_snk[snki];
+					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
+					data.divv0_snk[snki] = div_v;
+					if (params.tau > 0.f) {
+						const float dt = params.t0 * rung_dt[rung_i];
+						const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
+						const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
+						const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
+						const float alpha_targ = params.alpha1 * S / (S + sqr(c_i));
+						const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv * dt;
+						if (alpha < limiter * alpha_targ) {
+							alpha = limiter * alpha_targ;
+						} else {
+							alpha = limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0));
+						}
+					} else {
+						alpha = 0.f;
+					}
 //					float& alpha = data.alpha_snk[snki];
 //					alpha = 1.f;
 				}
