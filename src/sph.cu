@@ -52,13 +52,6 @@ struct smoothlen_workspace {
 	device_vector<fixed32> z;
 };
 
-struct mark_semiactive_workspace {
-	device_vector<fixed32> x;
-	device_vector<fixed32> y;
-	device_vector<fixed32> z;
-	device_vector<float> h;
-	device_vector<char> rungs;
-};
 
 struct rungs_workspace {
 	device_vector<fixed32> x;
@@ -440,131 +433,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	(&ws)->~smoothlen_workspace();
 }
 
-__global__ void sph_cuda_mark_semiactive(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
-	const int tid = threadIdx.x;
-	const int block_size = blockDim.x;
-	__shared__
-	int index;
-	__shared__ mark_semiactive_workspace ws;
-	if (tid == 0) {
-		index = atomicAdd(&reduce->counter, 1);
-	}
-	__syncthreads();
-	new (&ws) mark_semiactive_workspace();
-
-	array<fixed32, NDIM> x;
-	while (index < data.nselfs) {
-		int flops = 0;
-		ws.x.resize(0);
-		ws.y.resize(0);
-		ws.z.resize(0);
-		ws.h.resize(0);
-		ws.rungs.resize(0);
-		const sph_tree_node& self = data.trees[data.selfs[index]];
-		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
-			const sph_tree_node& other = data.trees[data.neighbors[ni]];
-			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
-			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
-				bool contains = false;
-				int j;
-				int total;
-				float h;
-				int rung;
-				if (pi < other.part_range.second) {
-					h = data.h[pi];
-					rung = data.rungs[pi];
-					if (rung >= params.min_rung) {
-						x[XDIM] = data.x[pi];
-						x[YDIM] = data.y[pi];
-						x[ZDIM] = data.z[pi];
-						contains = (self.outer_box.contains(x));
-						if (!contains) {
-							contains = true;
-							for (int dim = 0; dim < NDIM; dim++) {
-								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
-								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
-							}
-						}
-					}
-				}
-				j = contains;
-				compute_indices<MARK_SEMIACTIVE_BLOCK_SIZE>(j, total);
-				const int offset = ws.x.size();
-				__syncthreads();
-				const int next_size = offset + total;
-				ws.x.resize(next_size);
-				ws.y.resize(next_size);
-				ws.z.resize(next_size);
-				ws.h.resize(next_size);
-				ws.rungs.resize(next_size);
-				if (contains) {
-					const int k = offset + j;
-					ws.x[k] = x[XDIM];
-					ws.y[k] = x[YDIM];
-					ws.z[k] = x[ZDIM];
-					ws.h[k] = h;
-					ws.rungs[k] = rung;
-				}
-			}
-		}
-		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			__syncthreads();
-			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			if (data.rungs[i] >= params.min_rung) {
-				if (tid == 0) {
-					data.sa_snk[snki] = true;
-				}
-			} else {
-				const auto x0 = data.x[i];
-				const auto y0 = data.y[i];
-				const auto z0 = data.z[i];
-				const auto h0 = data.h[i];
-				const auto h02 = sqr(h0);
-				int semiactive = 0;
-				const int jmax = round_up(ws.x.size(), block_size);
-				if (tid == 0) {
-					data.sa_snk[snki] = false;
-				}
-				for (int j = tid; j < jmax; j += block_size) {
-					if (j < ws.x.size()) {
-						const auto x1 = ws.x[j];
-						const auto y1 = ws.y[j];
-						const auto z1 = ws.z[j];
-						const auto h1 = ws.h[j];
-						const auto h12 = sqr(h1);
-						const float dx = distance(x0, x1);
-						const float dy = distance(y0, y1);
-						const float dz = distance(z0, z1);
-						const float r2 = sqr(dx, dy, dz);
-						if (r2 < fmaxf(h02, h12)) {
-							semiactive++;
-						}
-					}
-					shared_reduce_add<int, MARK_SEMIACTIVE_BLOCK_SIZE>(semiactive);
-					if (semiactive) {
-						if (tid == 0) {
-							data.sa_snk[snki] = true;
-						}
-						break;
-					}
-				}
-			}
-		}
-		shared_reduce_add<int, MARK_SEMIACTIVE_BLOCK_SIZE>(flops);
-		if (tid == 0) {
-			index = atomicAdd(&reduce->counter, 1);
-		}
-		__syncthreads();
-	}
-	(&ws)->~mark_semiactive_workspace();
-
-}
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -1358,7 +1226,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->max_rung_hydro = 0;
 	reduce->max_rung = 0;
 	static int smoothlen_nblocks;
-	static int semiactive_nblocks;
 	static int hydro_nblocks;
 	static int aux_nblocks;
 	static int xsph_nblocks;
@@ -1368,8 +1235,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		smoothlen_nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semiactive_nblocks, (const void*) sph_cuda_mark_semiactive, MARK_SEMIACTIVE_BLOCK_SIZE, 0));
-		semiactive_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
 		hydro_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&aux_nblocks, (const void*) sph_cuda_aux, AUX_BLOCK_SIZE, 0));
@@ -1386,11 +1251,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.rc = reduce->flag;
 		rc.hmin = reduce->hmin;
 		rc.hmax = reduce->hmax;
-	}
-	break;
-	case SPH_RUN_MARK_SEMIACTIVE: {
-		sph_cuda_mark_semiactive<<<semiactive_nblocks, MARK_SEMIACTIVE_BLOCK_SIZE,0,stream>>>(params,data,reduce);
-		cuda_stream_synchronize(stream);
 	}
 	break;
 	case SPH_RUN_RUNGS: {

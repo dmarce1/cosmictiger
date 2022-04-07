@@ -465,13 +465,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			flops += 3 * NDIM;
 			if (particles_rung(i) >= params.min_rung) {
 				nactive++;
-			} else if (sph) {
-				if (particles_type(i) == SPH_TYPE) {
-					const part_int k = particles_cat_index(i);
-					if (sph_particles_semi_active(k)) {
-						nactive++;
-					}
-				}
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {

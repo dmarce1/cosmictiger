@@ -59,8 +59,6 @@ struct cuda_kick_data {
 	int source_size;
 	int sink_size;
 	int tree_size;
-	char* semiactive;
-	int sphN;
 	int rank;
 };
 

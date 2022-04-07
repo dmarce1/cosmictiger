@@ -367,7 +367,6 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 		}
 		const auto tiny = 2.0 * range_fixed::min().to_double();
 		for (part_int i = part_range.first; i < part_range.second; i++) {
-			sph_particles_semi_active(i) = false;
 			const float h = params.h_wt * sph_particles_smooth_len(i);
 			array<fixed32, NDIM> X;
 			for (int dim = 0; dim < NDIM; dim++) {

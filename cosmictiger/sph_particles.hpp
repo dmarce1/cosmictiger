@@ -86,26 +86,18 @@ SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
-SPH_PARTICLES_EXTERN float* sph_particles_de2; // dentr_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_c0; // chemistry
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistry
-SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem2; // chemistry
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN char* sph_particles_c;
+SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN float* sph_particles_rc;
 SPH_PARTICLES_EXTERN float* sph_particles_drc1;
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
-SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
 SPH_PARTICLES_EXTERN float* sph_particles_bal; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
-SPH_PARTICLES_EXTERN float* sph_particles_gt; // dentr_con
-SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-activel_con
-SPH_PARTICLES_EXTERN char* sph_particles_or;   // semi-active
-SPH_PARTICLES_EXTERN float* sph_particles_rth;   // semi-active
-SPH_PARTICLES_EXTERN float* sph_particles_ed;   // semi-active
-SPH_PARTICLES_EXTERN float* sph_particles_zd;   // semi-active
 
 struct aux_quantities {
 	float fpre;
@@ -152,18 +144,6 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
  }
  */
 
-inline float& sph_particles_rho_th(part_int index) {
-	return sph_particles_rth[index];
-}
-
-inline float& sph_particles_edep(part_int index) {
-	return sph_particles_ed[index];
-}
-
-inline float& sph_particles_zdep(part_int index) {
-	return sph_particles_zd[index];
-}
-
 inline char& sph_particles_converged(part_int index) {
 	return sph_particles_c[index];
 }
@@ -177,16 +157,8 @@ inline float& sph_particles_dcold_mass(part_int index) {
 }
 
 
-inline float& sph_particles_entr0(part_int index) {
-	return sph_particles_e0[index];
-}
-
 inline float& sph_particles_divv0(part_int index) {
 	return sph_particles_dvv0[index];
-}
-
-inline float& sph_particles_gradT(part_int index) {
-	return sph_particles_gt[index];
 }
 
 inline float& sph_particles_alpha(part_int index) {
@@ -291,11 +263,6 @@ inline float sph_particles_gamma(part_int index) {
 	return 1.f + 1.f / cv;
 }
 
-inline char& sph_particles_semi_active(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_sa[index];
-}
-
 inline float& sph_particles_fpre(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_f0[index];
@@ -330,11 +297,6 @@ inline float& sph_particles_entr(part_int index) {
 inline float& sph_particles_dentr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de1[index];
-}
-
-inline float& sph_particles_dentr0(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_de2[index];
 }
 
 inline float& sph_particles_dvel0(int dim, part_int index) {

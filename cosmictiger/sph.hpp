@@ -99,7 +99,6 @@ struct sph_tree_neighbor_return {
 #define SPH_INTERACTIONS_J 2
 #define SPH_INTERACTIONS_IJ 3
 #define SPH_SET_ACTIVE 1
-#define SPH_SET_SEMIACTIVE 2
 #define SPH_SET_ALL 4
 
 struct sph_tree_neighbor_params {
