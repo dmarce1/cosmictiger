@@ -234,20 +234,6 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 		if (tau != 0.0) {
 			sph_particles_apply_updates(minrung, 0, t0, tau);
 		}
-		sparams.phase = 1;
-
-		int iters = 0;
-		sparams.phase = 0;
-		sparams.run_type = SPH_RUN_HYDRO;
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-		tm.reset();
-		if (tau != 0.0) {
-			sph_particles_apply_updates(minrung, 1, t0, tau);
-		}
 		if (tau != 0.0 && chem) {
 			PRINT("Doing chemistry step\n");
 			timer tm;

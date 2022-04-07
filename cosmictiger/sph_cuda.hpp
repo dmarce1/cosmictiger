@@ -33,7 +33,7 @@ struct sph_run_cuda_data {
 	fixed32* z;
 	float* cold_frac;
 	array<float, NCHEMFRACS>* chem;
-	array<float, NCHEMFRACS>* dchem_con;
+	array<float, NCHEMFRACS>* dchem;
 	float* divv;
 	float* mmw;
 	float* gradT;
@@ -41,6 +41,8 @@ struct sph_run_cuda_data {
 	char* oldrung_snk;
 	float* gradT_snk;
 	float* crsv_snk;
+	float* balsara_snk;
+	float* balsara;
 	float* shearv_snk;
 	float* divv0_snk;
 	float* xvx_snk;
@@ -52,7 +54,7 @@ struct sph_run_cuda_data {
 	float* gx_snk;
 	float* gy_snk;
 	float* gz_snk;
-	float* dcold_mass_con;
+	float* dcold_mass;
 	float* alpha_snk;
 	float* fpre_snk;
 	float* divv_snk;
@@ -85,10 +87,10 @@ struct sph_run_cuda_data {
 	float* gamma;
 	float* h;
 	char* rungs;
-	float* dentr_con;
-	float* dvx_con;
-	float* dvy_con;
-	float* dvz_con;
+	float* dentr;
+	float* dvx;
+	float* dvy;
+	float* dvz;
 	float code_dif_to_cgs;
 	float N;
 	int nselfs;

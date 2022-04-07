@@ -82,7 +82,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
-SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel_pred
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
@@ -93,15 +93,12 @@ SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
 SPH_PARTICLES_EXTERN char* sph_particles_c;
 SPH_PARTICLES_EXTERN float* sph_particles_rc;
 SPH_PARTICLES_EXTERN float* sph_particles_drc1;
-SPH_PARTICLES_EXTERN float* sph_particles_drc2;
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_e0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
+SPH_PARTICLES_EXTERN float* sph_particles_bal; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
-SPH_PARTICLES_EXTERN float* sph_particles_de2; // dentr_con
-SPH_PARTICLES_EXTERN float* sph_particles_de3; // dentr_con
 SPH_PARTICLES_EXTERN float* sph_particles_gt; // dentr_con
-SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_con
 SPH_PARTICLES_EXTERN char* sph_particles_sa;   // semi-activel_con
 SPH_PARTICLES_EXTERN char* sph_particles_or;   // semi-active
 SPH_PARTICLES_EXTERN float* sph_particles_rth;   // semi-active
@@ -112,13 +109,13 @@ struct aux_quantities {
 	float fpre;
 	float divv;
 	float shearv;
-	float gradT;
+	float balsara;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & fpre;
 		arc & divv;
 		arc & shearv;
-		arc & gradT;
+		arc & balsara;
 	}
 };
 
@@ -173,13 +170,10 @@ inline float& sph_particles_cold_mass(part_int index) {
 	return sph_particles_rc[index];
 }
 
-inline float& sph_particles_dcold_mass_pred(part_int index) {
+inline float& sph_particles_dcold_mass(part_int index) {
 	return sph_particles_drc1[index];
 }
 
-inline float& sph_particles_dcold_mass_con(part_int index) {
-	return sph_particles_drc2[index];
-}
 
 inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
@@ -216,6 +210,12 @@ inline float& sph_particles_frac(int j, part_int index) {
 inline float& sph_particles_shear(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_s2[index];
+}
+
+
+inline float& sph_particles_balsara(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_bal[index];
 }
 
 inline float& sph_particles_Z(part_int index) {
@@ -325,12 +325,12 @@ inline float& sph_particles_entr(part_int index) {
 	return sph_particles_e[index];
 }
 
-inline float& sph_particles_dentr_pred(part_int index) {
+inline float& sph_particles_dentr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de1[index];
 }
 
-inline float& sph_particles_dvel_pred(int dim, part_int index) {
+inline float& sph_particles_dvel(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dv1[dim][index];
 }
@@ -340,39 +340,20 @@ inline float& sph_particles_xvel(int dim, part_int index) {
 	return sph_particles_dvx[dim][index];
 }
 
-inline float& sph_particles_dentr_con(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_de2[index];
-}
 
-inline float& sph_particles_dentr_diss(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_de3[index];
-}
 
 inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_c0[index];
 }
 
-inline array<float, NCHEMFRACS>& sph_particles_dchem_pred(part_int index) {
+inline array<float, NCHEMFRACS>& sph_particles_dchem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dchem1[index];
 }
 
-inline array<float, NCHEMFRACS>& sph_particles_dchem_con(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dchem2[index];
-}
 
-inline float& sph_particles_dentr(part_int index) {
-	return sph_particles_de2[index];
-}
 
-inline float& sph_particles_dvel_con(int dim, part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dv2[dim][index];
-}
 
 inline float& sph_particles_divv(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -443,6 +424,6 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux.fpre = sph_particles_fpre(index);
 	aux.divv = sph_particles_divv(index);
 	aux.shearv = sph_particles_shear(index);
-	aux.gradT = sph_particles_gradT(index);
+	aux.balsara = sph_particles_balsara(index);
 	return aux;
 }
