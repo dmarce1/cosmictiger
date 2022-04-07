@@ -134,17 +134,30 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const float dt2 = 0.5f * t0 / (1<<rung2);
 				const float dt = dt1 + dt2;
 				if( rung2 >= minrung) {
-					sph_particles_entr(i) +=sph_particles_dentr(i) *dt;
-					for( int dim =0; dim < NDIM; dim++) {
-						particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt;
-					}
-					if( chem ) {
-						for( int fi = 0; fi < NCHEMFRACS; fi++) {
-							sph_particles_chem(i)[fi] +=sph_particles_dchem(i)[fi] *dt;
+					if( phase == 0 ) {
+				//		sph_particles_dentr0(i) = sph_particles_dentr(i);
+						for( int dim =0; dim < NDIM; dim++) {
+							sph_particles_dvel0(dim,i) = sph_particles_dvel(dim,i);
 						}
-					}
-					if( stars ) {
-						sph_particles_cold_mass(i) +=sph_particles_dcold_mass(i) *dt;
+					//	sph_particles_entr(i) += sph_particles_dentr(i) *dt2;
+						for( int dim =0; dim < NDIM; dim++) {
+							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
+						}
+					} else if( phase == 1 ) {
+//						sph_particles_entr(i) += (sph_particles_dentr(i) - sph_particles_dentr0(i))*dt1;
+						sph_particles_entr(i) += 2.0f*sph_particles_dentr(i) *dt2;
+						for( int dim =0; dim < NDIM; dim++) {
+							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
+							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
+						}
+						if( chem ) {
+							for( int fi = 0; fi < NCHEMFRACS; fi++) {
+								sph_particles_chem(i)[fi] +=2.0f*sph_particles_dchem(i)[fi] *dt2;
+							}
+						}
+						if( stars ) {
+							sph_particles_cold_mass(i) +=2.0f*sph_particles_dcold_mass(i) *dt2;
+						}
 					}
 				}
 			}
@@ -361,6 +374,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_h, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de1, new_capacity, true);
+		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
@@ -368,6 +382,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_a, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv1[dim], new_capacity, true);
+			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
 			sph_particles_array_resize(sph_particles_g[dim], new_capacity, true);
 			if (xsph) {
 				sph_particles_array_resize(sph_particles_dvx[dim], new_capacity, true);
@@ -399,7 +414,11 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		if (stars) {
 			sph_particles_cold_mass(oldsz + i) = 0.f;
 		}
+		sph_particles_dentr(oldsz + i) = 0.f;
+		sph_particles_dentr0(oldsz + i) = 0.f;
 		for (int dim = 0; dim < NDIM; dim++) {
+			sph_particles_dvel(dim, oldsz + i) = 0.0f;
+			sph_particles_dvel0(dim, oldsz + i) = 0.0f;
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 			if (xsph) {
 				sph_particles_xvel(dim, oldsz + i) = 0.0f;

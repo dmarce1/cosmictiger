@@ -417,7 +417,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					const float fpre = 1.0f / (1.0f + drho_dh);
 					if (tid == 0) {
 						data.fpre_snk[snki] = fpre;
-						//					data.converged_snk[snki] = true;
+						data.converged_snk[snki] = true;
 					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);
@@ -787,7 +787,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						az -= m * ainv * (pi_ij * dWdr_z_ij);
 						const float dW_ij = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
 						de_dt += (gamma0 - 1.f) * powf(rho_i, 1.f - gamma0) * 0.5f * m * ainv * pi_ij * dW_ij;
-						const float h = fminf(h_i, powf(2.f, MAX_RUNG_DIF) * h_j);
+						const float h = fminf(h_i, h_j);
 						float dtinv = (c_ij + 0.6f * vsig_ij) / h;
 						dtinv_cfl = fmaxf(dtinv_cfl, dtinv);
 						if (params.diffusion) {
@@ -798,8 +798,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							float D_ij = 0.f;
 							if (max_vsig > 0.f) {
 								const float R = 2.f * difco_ij * rinv / max_vsig / sqrtf(rho_i * rho_j);
-								const float phi = (1.0f + 1.5f * R) / (1.0f + 1.5f * R + 1.5f * sqr(R));
-								D_ij = -2.f * phi * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv;
+								//const float phi = (1.0f + 1.5f * R) / (1.0f + 1.5f * R + 1.5f * sqr(R));
+								D_ij = -2.f * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv;
 							} else {
 								D_ij = 0.f;
 							}
@@ -869,7 +869,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 					if (params.diffusion) {
-						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * params.cfl * 1.25f);
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * params.cfl * 1.1f);
 					}
 					const float a2 = sqr(ax, ay, az);
 					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);

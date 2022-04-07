@@ -84,7 +84,9 @@ SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
+SPH_PARTICLES_EXTERN float* sph_particles_de2; // dentr_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_c0; // chemistry
 SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistry
@@ -328,6 +330,16 @@ inline float& sph_particles_entr(part_int index) {
 inline float& sph_particles_dentr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de1[index];
+}
+
+inline float& sph_particles_dentr0(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de2[index];
+}
+
+inline float& sph_particles_dvel0(int dim, part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_dv2[dim][index];
 }
 
 inline float& sph_particles_dvel(int dim, part_int index) {
