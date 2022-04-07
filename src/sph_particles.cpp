@@ -266,9 +266,6 @@ void sph_particles_swap(part_int i, part_int j) {
 		std::swap(sph_particles_rc[i], sph_particles_rc[j]);
 		std::swap(sph_particles_drc1[i], sph_particles_drc1[j]);
 	}
-	if (cond) {
-		std::swap(sph_particles_gt[i], sph_particles_gt[j]);
-	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_dv1[dim][i], sph_particles_dv1[dim][j]);
 		if (xsph) {
@@ -909,9 +906,6 @@ void sph_particles_load(FILE* fp) {
 	FREAD(&sph_particles_bal[0], sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_f0[0], sizeof(float), sph_particles_size(), fp);
-	if (cond) {
-		FREAD(&sph_particles_gt[0], sizeof(float), sph_particles_size(), fp);
-	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (xsph) {
 			FREAD(&sph_particles_xvel(dim, 0), sizeof(float), sph_particles_size(), fp);
@@ -948,9 +942,6 @@ void sph_particles_save(FILE* fp) {
 	fwrite(&sph_particles_bal[0], sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_s2[0], sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_f0[0], sizeof(float), sph_particles_size(), fp);
-	if (cond) {
-		fwrite(&sph_particles_gt[0], sizeof(float), sph_particles_size(), fp);
-	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (xsph) {
 			fwrite(&sph_particles_xvel(dim, 0), sizeof(float), sph_particles_size(), fp);

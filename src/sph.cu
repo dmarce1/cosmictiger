@@ -646,7 +646,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					} else {
 						ws.rec2[k].cold_frac = 0.f;
 					}
-					if (params.diffusion) {
+					if (params.diffusion || params.conduction) {
 						if (data.chemistry) {
 							ws.rec2[k].chem = data.chem[pi];
 						}
@@ -654,6 +654,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 			}
 		}
+		const float colog0 = log(1.5 * pow(constants::kb, 1.5) * pow(constants::e, -3) * pow(M_PI, -0.5));
+		double kappa00 = 20.0 * pow(2.0 / M_PI, 1.5) * pow(constants::kb, 3.5) * pow(constants::me, -0.5) * pow(constants::e, -4.0);
+		kappa00 /= (double) params.code_to_g * params.code_to_cm * pow(params.code_to_s, -3.0);
+		const double kb0 = constants::kb * pow(params.code_to_s / params.code_to_cm, 2.0);
+		kappa00 /= kb0;
+		kappa00 /= constants::avo;
+		float kappa0 = kappa00;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			int rung_i = data.rungs[i];
@@ -686,18 +693,42 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					cfrac_i = 0.f;
 				}
 				const float hfrac_i = 1.f - cfrac_i;
+				array<float, NCHEMFRACS> frac_i;
+				float shearv_i;
+				if ((params.diffusion || params.conduction) && data.chemistry) {
+					frac_i = data.chem[i];
+				}
+				if (params.diffusion) {
+					shearv_i = data.shearv[i];
+				}
+				float T_i, ne_i, colog_i, mmw_i;
+				if (params.conduction) {
+					const float H = frac_i[CHEM_H];
+					const float Hp = frac_i[CHEM_HP];
+					const float Hn = frac_i[CHEM_HN];
+					const float H2 = frac_i[CHEM_H2];
+					const float He = frac_i[CHEM_HE];
+					const float Hep = frac_i[CHEM_HEP];
+					const float Hepp = frac_i[CHEM_HEPP];
+					const float c1 = sqr(params.code_to_cm) / sqr(params.code_to_s);
+					const float c0 = params.code_to_g / pow(params.code_to_cm, 3.);
+					const float rho0 = rho_i;
+					float n0 = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp);
+					mmw_i = 1.0f / n0;
+					n0 *= constants::avo * rho0;
+					ne_i = (Hp - Hn + 0.25f * Hep + 0.5f * Hepp) * constants::avo * rho0;
+					const float cv0 = constants::kb / (gamma0 - 1.0);															// 4
+					const float entr0 = K_i;
+					const float eint = c1 * entr0 * powf(rho0 * hfrac_i, gamma0 - 1.0) / (gamma0 - 1.0);
+					T_i = rho0 * eint / (n0 * cv0);
+					ne_i *= c0;
+					colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
+				}
+
 				const float p_i = K_i * powf(rho_i * hfrac_i, gamma0);
 				const float c_i = sqrtf(gamma0 * p_i * rhoinv_i / hfrac_i);
 				const float fpre_i = data.fpre[i];
 				const float balsara_i = data.balsara[i];
-				array<float, NCHEMFRACS> frac_i;
-				float shearv_i;
-				if (params.diffusion) {
-					shearv_i = data.shearv[i];
-					if (data.chemistry) {
-						frac_i = data.chem[i];
-					}
-				}
 				float ax = 0.f;
 				float ay = 0.f;
 				float az = 0.f;
@@ -802,9 +833,38 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							}
 							if (data.chemistry) {
 								for (int fi = 0; fi < NCHEMFRACS; fi++) {
-									dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi]);
+									dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi] * hfrac_j / hfrac_i);
 								}
 							}
+						}
+						float T_j, ne_j, colog_j, mmw_j;
+						if (params.conduction) {
+							const float H = frac_j[CHEM_H];
+							const float Hp = frac_j[CHEM_HP];
+							const float Hn = frac_j[CHEM_HN];
+							const float H2 = frac_j[CHEM_H2];
+							const float He = frac_j[CHEM_HE];
+							const float Hep = frac_j[CHEM_HEP];
+							const float Hepp = frac_j[CHEM_HEPP];
+							const float c1 = sqr(params.code_to_cm) / sqr(params.code_to_s);
+							const float c0 = params.code_to_g / pow(params.code_to_cm, 3.);
+							const float rho0 = rho_j * hfrac_j;
+							float n0 = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp);
+							mmw_j = 1.0f / n0;
+							n0 *= constants::avo * rho0;
+							ne_j = (Hp - Hn + 0.25f * Hep + 0.5f * Hepp) * constants::avo * rho0;
+							const float cv0 = constants::kb / (gamma0 - 1.0);															// 4
+							const float entr0 = K_j;
+							const float eint = c1 * entr0 * powf(rho0 * hfrac_j, gamma0 - 1.0) / (gamma0 - 1.0);
+							T_j = rho0 * eint / (n0 * cv0);
+							ne_j *= c0;
+							colog_j = colog0 + 1.5f * logf(T_j) - 0.5f * logf(ne_j);
+							const float kappa_i = kappa0 * powf(T_i, 2.5f) / colog_i * mmw_i;
+							const float kappa_j = kappa0 * powf(T_j, 2.5f) / colog_j * mmw_j;
+							const float kappa_ij = 2.f * kappa0 * (kappa_i * kappa_j) / (kappa_i + kappa_j + 1e-37f);
+							const float D_ij = -2.f * m / (rho_i * rho_j) * kappa_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * (h_i * h_j)));
+							D += D_ij / (sqr(params.a) * params.a);
+							de_dt -= D_ij * (K_i - K_j * powf(hfrac_j * rho_j * mmw_j / (hfrac_i * rho_i * mmw_i), gamma0 - 1.f));
 						}
 					}
 				}
