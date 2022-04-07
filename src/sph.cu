@@ -799,7 +799,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							if (max_vsig > 0.f) {
 								const float R = 2.f * difco_ij * rinv / max_vsig / sqrtf(rho_i * rho_j);
 								//const float phi = (1.0f + 1.5f * R) / (1.0f + 1.5f * R + 1.5f * sqr(R));
-								D_ij = -2.f * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv;
+								D_ij = -2.f * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * (h_i * h_j)));
 							} else {
 								D_ij = 0.f;
 							}
