@@ -275,110 +275,6 @@ struct sph_data_vecs {
 	}
 };
 
-template<bool do_rungs, bool do_smoothlens, bool do_ent, bool do_vel, bool do_fvel, bool check_inner, bool check_outer, bool active_only>
-void load_data(const sph_tree_node* self_ptr, const vector<tree_id>& neighborlist, sph_data_vecs& d, int min_rung) {
-	part_int offset;
-	d.clear();
-	for (int ci = 0; ci < neighborlist.size(); ci++) {
-		const auto* other = sph_tree_get_node(neighborlist[ci]);
-		const auto this_sz = other->part_range.second - other->part_range.first;
-		offset = d.xs.size();
-		const int new_sz = d.xs.size() + this_sz;
-		d.xs.resize(new_sz);
-		d.ys.resize(new_sz);
-		d.zs.resize(new_sz);
-		if (do_rungs) {
-			d.rungs.resize(new_sz);
-		}
-		if (do_smoothlens) {
-			d.hs.resize(new_sz);
-		}
-		if (do_ent) {
-			d.ents.resize(new_sz);
-		}
-		if (do_vel) {
-			d.vxs.resize(new_sz);
-			d.vys.resize(new_sz);
-			d.vzs.resize(new_sz);
-		}
-		if (do_fvel) {
-			d.fvels.resize(new_sz);
-			d.f0s.resize(new_sz);
-		}
-		sph_particles_global_read_pos(other->global_part_range(), d.xs.data(), d.ys.data(), d.zs.data(), offset);
-		if (do_rungs || do_smoothlens) {
-			sph_particles_global_read_rungs_and_smoothlens(other->global_part_range(), d.rungs.data(), d.hs.data(), offset);
-		}
-		if (do_ent || do_vel) {
-			//		sph_particles_global_read_sph(other->global_part_range(), params.a, d.ents.data(), d.vxs.data(), d.vys.data(), d.vzs.data(), nullptr, offset);
-		}
-		if (do_fvel) {
-//			sph_particles_global_read_fvels(other->global_part_range(), d.fvels.data(), d.f0s.data(), offset);
-		}
-		int i = offset;
-		while (i < d.xs.size()) {
-			array<fixed32, NDIM> X;
-			X[XDIM] = d.xs[i];
-			X[YDIM] = d.ys[i];
-			X[ZDIM] = d.zs[i];
-			bool test0 = (active_only && d.rungs[i] < min_rung);
-			bool test1 = false;
-			bool test2 = true;
-			if (!test0) {
-				test1 = check_inner && !range_contains(self_ptr->outer_box, X);
-				if (check_outer && test1) {
-					assert(do_rungs);
-					test2 = true;
-					const auto& box = self_ptr->inner_box;
-					for (int dim = 0; dim < NDIM; dim++) {
-						if (distance(box.begin[dim], X[dim]) + d.hs[i] > 0.0 || distance(X[dim], box.end[dim]) + d.hs[i] > 0.0) {
-						} else {
-							test2 = false;
-							break;
-						}
-					}
-				}
-			}
-			if (test0 || (test1 && test2)) {
-				d.xs[i] = d.xs.back();
-				d.ys[i] = d.ys.back();
-				d.zs[i] = d.zs.back();
-				d.xs.pop_back();
-				d.ys.pop_back();
-				d.zs.pop_back();
-				if (do_rungs) {
-					d.rungs[i] = d.rungs.back();
-					d.rungs.pop_back();
-				}
-				if (do_smoothlens) {
-					d.hs[i] = d.hs.back();
-					d.hs.pop_back();
-				}
-				if (do_ent) {
-					d.ents[i] = d.ents.back();
-					d.ents.pop_back();
-				}
-				if (do_vel) {
-					d.vxs[i] = d.vxs.back();
-					d.vys[i] = d.vys.back();
-					d.vzs[i] = d.vzs.back();
-					d.vxs.pop_back();
-					d.vys.pop_back();
-					d.vzs.pop_back();
-				}
-				if (do_fvel) {
-					d.fvels[i] = d.fvels.back();
-					d.f0s[i] = d.f0s.back();
-					d.fvels.pop_back();
-					d.f0s.pop_back();
-				}
-			} else {
-				i++;
-			}
-		}
-	}
-}
-
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level) {
 	ALWAYS_ASSERT(params.seti);
 //	ALWAYS_ASSERT(params.seto);
@@ -512,73 +408,6 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			kr.inner_box = ibox;
 			kr.outer_box = obox;
 			sph_tree_set_boxes(self, kr.inner_box, kr.outer_box);
-		}
-			break;
-
-		case SPH_TREE_NEIGHBOR_VALUE_AT: {
-			float h = 0.f;
-			float r2min = std::numeric_limits<float>::max();
-			sph_data_vecs dat;
-			load_data<true, true, true, true, true, true, true, false>(self_ptr, leaflist, dat, params.min_rung);
-			sph_values values;
-			values.vx = 0.0;
-			values.vy = 0.0;
-			values.vz = 0.0;
-			values.rho = 0.0;
-			values.p = 0.0;
-			for (int i = 0; i < dat.xs.size(); i++) {
-				const auto myx = dat.xs[i];
-				const auto myy = dat.ys[i];
-				const auto myz = dat.zs[i];
-				const float dx = distance(fixed32(params.x), myx);
-				const float dy = distance(fixed32(params.y), myy);
-				const float dz = distance(fixed32(params.z), myz);
-				const float r2 = sqr(dx, dy, dz);
-				if (r2 < r2min) {
-					r2min = r2;
-					h = dat.hs[i];
-				}
-			}
-			const float m = get_options().sph_mass;
-			float one = 0.f;
-			for (int i = 0; i < dat.xs.size(); i++) {
-				const auto x = dat.xs[i];
-				const auto y = dat.ys[i];
-				const auto z = dat.zs[i];
-				const float dx = distance(fixed32(params.x), x);
-				const float dy = distance(fixed32(params.y), y);
-				const float dz = distance(fixed32(params.z), z);
-				const float r2 = sqr(dx, dy, dz);
-				if (r2 < h * h) {
-					const float r = sqrt(r2);
-					const float hinv = 1.0f / h;
-					const float h3inv = sqr(hinv) * hinv;
-					const float rho = sph_den(h3inv);
-					const float rhoinv = 1.0 / rho;
-					const float q = r * hinv;
-					const float w = h3inv * kernelW(q) * rhoinv * m;
-					const float p = dat.ents[i] * pow(rho, get_options().gamma);
-					one += w;
-					values.vx += w * dat.vxs[i];
-					values.vy += w * dat.vys[i];
-					values.vz += w * dat.vzs[i];
-					values.rho += rho * w;
-					values.p += p * w;
-					//		PRINT( "%e %e %e \n", dat.ents[i], rho, p);
-				}
-			}
-			//	PRINT( "%e\n", one );
-			if (one > 0.0) {
-				const float oneinv = 1.f / one;
-				values.vx *= oneinv;
-				values.vy *= oneinv;
-				values.vz *= oneinv;
-				values.rho *= oneinv;
-				values.p *= oneinv;
-			}
-			kr.has_value_at = true;
-			//				PRINT("%e %e\n", params.x, values.vx);
-			kr.value_at = values;
 		}
 			break;
 
@@ -792,32 +621,13 @@ sph_run_return sph_run_workspace::to_gpu() {
 								const part_int size = node.part_range.second - node.part_range.first;
 								const part_int offset = (part_index += size) - size;
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
-
-								switch(params.run_type) {
-									case SPH_RUN_RUNGS:
-									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), host_rungs.data(), nullptr, offset);
-									break;
-									case SPH_RUN_HYDRO:
-									case SPH_RUN_AUX:
-									sph_particles_global_read_rungs_and_smoothlens(node.global_part_range(), nullptr, host_h.data() , offset);
-									break;
-								}
-								const bool cond = get_options().conduction;
-								switch(params.run_type) {
-
-									case SPH_RUN_HYDRO:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_entr.data(), host_vx.data(), host_vy.data(), host_vz.data(), host_alpha.data(), host_cold_frac.data(), diffusion ? host_chem.data() : nullptr, offset);
-									break;
-									case SPH_RUN_AUX:
-									sph_particles_global_read_sph(node.global_part_range(), params.a, host_entr.data() , host_vx.data(), host_vy.data(), host_vz.data(), nullptr, nullptr,nullptr, offset);
-									break;
-								}
-								switch(params.run_type) {
-									case SPH_RUN_HYDRO:
-									sph_particles_global_read_aux(node.global_part_range(), host_fpre.data(), nullptr, params.diffusion ? host_shearv.data() : nullptr, offset);
-									break;
-									break;
-
+								if( params.run_type == SPH_RUN_AUX) {
+									sph_particles_global_read_sph(node.global_part_range(),host_h.data(), host_entr.data(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
+								} else if( params.run_type == SPH_RUN_HYDRO) {
+									sph_particles_global_read_sph(node.global_part_range(),host_h.data(), nullptr,host_vx.data(), host_vy.data(), host_vz.data(), offset);
+									sph_particles_global_read_aux(node.global_part_range(), host_entr.data(), host_alpha.data(), host_fpre.data(), stars ? host_cold_frac.data() : nullptr, diffusion ? host_shearv.data() : nullptr, chem ? host_chem.data() :nullptr, offset);
+								} else if( params.run_type == SPH_RUN_RUNGS) {
+									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 								}
 								node.part_range.first = offset;
 								node.part_range.second = offset + size;

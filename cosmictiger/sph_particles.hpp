@@ -57,24 +57,12 @@ struct sph_particle0 {
 struct sph_particle {
 	float entr;
 	array<float, NDIM> v;
-	float gamma;
-	float alpha;
-	float cold_frac;
-	array<float, NCHEMFRACS> chem;
+	float h;
 	template<class A>
 	void serialize(A&&arc, unsigned) {
-		static const bool chemistry = get_options().chem;
-		static const bool stars = get_options().stars;
 		arc & entr;
 		arc & v;
-		arc & alpha;
-		if (chemistry) {
-			arc & gamma;
-			arc & chem;
-		}
-		if (stars) {
-			arc & cold_frac;
-		}
+		arc & h;
 	}
 };
 
@@ -99,13 +87,19 @@ SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 
 struct aux_quantities {
 	float fpre;
-	float divv;
 	float shearv;
+	float entr;
+	float alpha;
+	float fcold;
+	array<float, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & fpre;
-		arc & divv;
 		arc & shearv;
+		arc & entr;
+		arc & alpha;
+		arc & fcold;
+		arc & fracs;
 	}
 };
 
@@ -117,14 +111,11 @@ void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 void sph_particles_swap(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
-void sph_particles_global_read_force(particle_global_range range, float* x, float* y, float* z, float* divv, part_int offset);
-void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float a, float* entr, float* vx, float* vy, float* vz, float* alpha, float*cold_frac,
-		array<float, NCHEMFRACS>* chems, part_int offset);
-void sph_particles_global_read_sph0(particle_global_range range, float* entr0, array<float, NCHEMFRACS>* chem0, part_int offset);
-void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* shearv, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, float* h, float* vx, float* vy, float* vz, float* entr, part_int offset);
+void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
+void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* fpre, float* fcold, float* shearv,
+		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
@@ -353,34 +344,29 @@ inline float sph_particles_eint(part_int index) {
 
 float sph_particles_coloumb_log(part_int i, float a);
 
-inline sph_particle sph_particles_get_particle(part_int index, float a) {
+inline sph_particle sph_particles_get_particle(part_int index) {
 	sph_particle p;
 	p.entr = sph_particles_entr(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}
-	static const bool chem = get_options().chem;
-	static const bool stars = get_options().stars;
-	static const bool conduct = get_options().conduction;
-	if (chem) {
-		float rhoH2 = sph_particles_H2(index);
-		float nh2 = 0.5f * rhoH2 / (1.f - .75f * sph_particles_Y(index) - 0.5f * rhoH2);
-		float cv = 1.5 + nh2;
-		float gamma = 1.f + 1.f / cv;
-		p.gamma = gamma;
-		p.chem = sph_particles_chem(index);
-	}
-	if (conduct) {
-		p.cold_frac = sph_particles_cold_mass(index);
-	}
-	p.alpha = sph_particles_alpha(index);
+	p.h = sph_particles_smooth_len(index);
 	return p;
 }
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
+	aux.entr = sph_particles_entr(index);
+	aux.alpha = sph_particles_alpha(index);
 	aux.fpre = sph_particles_fpre(index);
-	aux.divv = sph_particles_divv(index);
-	aux.shearv = sph_particles_shear(index);
+	if (get_options().stars) {
+		aux.fcold = sph_particles_cold_mass(index);
+	}
+	if (get_options().diffusion) {
+		aux.shearv = sph_particles_shear(index);
+	}
+	if (get_options().chem) {
+		aux.fracs = sph_particles_chem(index);
+	}
 	return aux;
 }
