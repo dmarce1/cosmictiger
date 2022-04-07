@@ -79,7 +79,6 @@ struct hydro_record2 {
 	float fpre;
 	float shearv;
 	float cold_frac;
-	char rung;
 };
 
 struct aux_record1 {
@@ -93,7 +92,6 @@ struct aux_record2 {
 	float vy;
 	float vz;
 	float entr;
-	float gamma;
 	float h;
 };
 
@@ -178,7 +176,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			const bool active = data.rungs[i] >= params.min_rung;
+			const bool active = data.rungs_snk[data.dm_index_snk[snki]] >= params.min_rung;
 			const bool converged = data.converged_snk[snki];
 			const bool use = active && !converged;
 			const float w0 = kernelW(0.f);
@@ -380,7 +378,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].entr = data.entr[pi];
 					ws.rec2[k].alpha = data.alpha[pi];
 					ws.rec2[k].fpre = data.fpre[pi];
-					ws.rec2[k].rung = data.rungs[pi];
 					if (params.diffusion) {
 						ws.rec2[k].shearv = data.shearv[pi];
 					}
@@ -407,9 +404,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 		float kappa0 = kappa00;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
-			int rung_i = data.rungs[i];
-			bool use = rung_i >= params.min_rung;
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
+			int rung_i = data.rungs_snk[data.dm_index_snk[snki]];
+			bool use = rung_i >= params.min_rung;
 			const float m = data.m;
 			const float minv = 1.f / m;
 			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
@@ -695,7 +692,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ALWAYS_ASSERT(dcm_dt * dthydro + cfrac_i > -1e-7f);
 					dtgrav = fminf(dtgrav, params.max_dt);
 					total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);
-					char& rung = data.rungs[i];
+					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					data.oldrung_snk[snki] = rung;
 					const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 					const int rung_grav = ceilf(log2f(params.t0) - log2f(dtgrav));
@@ -779,11 +776,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					ws.rec2[k].vx = data.vx[pi];
 					ws.rec2[k].vy = data.vy[pi];
 					ws.rec2[k].vz = data.vz[pi];
-					if (data.chemistry) {
-						ws.rec2[k].gamma = data.gamma[pi];
-					} else {
-						ws.rec2[k].gamma = data.def_gamma;
-					}
 					ws.rec2[k].h = data.h[pi];
 					ws.rec2[k].entr = data.entr[pi];
 				}
@@ -792,7 +784,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			int rung_i = data.rungs[i];
+			int rung_i = data.rungs_snk[data.dm_index_snk[snki]];
 			const bool active = rung_i >= params.min_rung;
 			const bool use = active;
 			const float m = data.m;
@@ -861,10 +853,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float hinv_j = 1.f / h_j;
 					const float h3inv_j = (sqr(hinv_j) * hinv_j);
 					const float rho_j = m * c0 * h3inv_j;
-					const float gamma_j = rec2.gamma;
 					const float K_j = rec2.entr;
 					const float p_j = K_j * powf(rho_j, gamma0);
-					const float c_j = sqrtf(gamma_j * p_j / rho_j);
+					const float c_j = sqrtf(gamma0 * p_j / rho_j);
 					const float w_ij = vdotx_ij * rinv;
 					const float vsig_i = 0.5f * (c_i + c_j) - w_ij;
 					dvx_dx -= vx_ij * dWdr_x_i;

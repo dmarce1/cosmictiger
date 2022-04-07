@@ -120,8 +120,8 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_force(particle_global_range range, float* x, float* y, float* z, float* divv, part_int offset);
 void sph_particles_global_read_gforce(particle_global_range range, float* x, float* y, float* z, part_int offset);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float a, float* entr, float* vx, float* vy, float* vz, float* gamma, float* alpha,
-		float*cold_frac, array<float, NCHEMFRACS>* chems, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, float a, float* entr, float* vx, float* vy, float* vz, float* alpha, float*cold_frac,
+		array<float, NCHEMFRACS>* chems, part_int offset);
 void sph_particles_global_read_sph0(particle_global_range range, float* entr0, array<float, NCHEMFRACS>* chem0, part_int offset);
 void sph_particles_global_read_rungs_and_smoothlens(particle_global_range range, char*, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* fpre, float* divv, float* shearv, part_int offset);

@@ -77,9 +77,10 @@ struct sph_run_cuda_data {
 	float* entr0;
 	float* entr;
 	float* fpre;
-	float* gamma;
 	float* h;
 	char* rungs;
+	char* rungs_snk;
+	part_int* dm_index_snk;
 	float* dentr;
 	float* dentr_diss;
 	float* dvx;
