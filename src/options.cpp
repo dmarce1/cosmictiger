@@ -99,7 +99,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
-	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "use glass") //
+	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(true), "use glass") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
@@ -110,7 +110,7 @@ bool process_options(int argc, char *argv[]) {
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
-	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(true), "use 2LPT initial conditions (default = true)") //
+	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
 	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.1), "alpha0 viscosity") //
 	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0), "alpha1 for viscosity") //
@@ -227,8 +227,13 @@ bool process_options(int argc, char *argv[]) {
 	}
 	if (opts.sph) {
 		const double omega_inv = 1.0 / (opts.omega_m);
-		opts.dm_mass = opts.omega_c * omega_inv;
-		opts.sph_mass = opts.omega_b * omega_inv;
+		if (opts.glass) {
+			opts.dm_mass = 0.5f;
+			opts.sph_mass = 0.5f;
+		} else {
+			opts.dm_mass = opts.omega_c * omega_inv;
+			opts.sph_mass = opts.omega_b * omega_inv;
+		}
 	}
 	if (!opts.sph) {
 	}

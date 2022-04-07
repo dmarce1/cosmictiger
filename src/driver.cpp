@@ -477,9 +477,9 @@ void driver() {
 	} else {
 		output_time_file();
 		if (glass) {
-			PRINT("Glass not implemented\n");
-			abort();
-			//	initialize_glass();
+//			PRINT("Glass not implemented\n");
+	//		abort();
+			initialize_glass();
 		} else {
 			initialize(get_options().z0);
 		}
@@ -607,7 +607,7 @@ void driver() {
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
-			opts.hsoft = hsoft0 / a;
+			opts.hsoft = fminf(hsoft0 / a, 0.85 / opts.parts_dim);
 			if (!glass) {
 				if (z > 50.0) {
 					theta = 0.4;

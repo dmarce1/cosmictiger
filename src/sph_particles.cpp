@@ -248,6 +248,7 @@ void sph_particles_energy_to_entropy(float a) {
 
 void sph_particles_swap(part_int i, part_int j) {
 	static const bool chem = get_options().chem;
+	static const bool gravity = get_options().gravity;
 	static const bool diff = get_options().diffusion;
 	static const bool cond = get_options().conduction;
 	static const bool stars = get_options().stars;
@@ -266,6 +267,9 @@ void sph_particles_swap(part_int i, part_int j) {
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_dv1[dim][i], sph_particles_dv1[dim][j]);
+		if( gravity ) {
+			std::swap(sph_particles_g[dim][i], sph_particles_g[dim][j]);
+		}
 	}
 	if (chem) {
 		std::swap(sph_particles_c0[i], sph_particles_c0[j]);

@@ -387,6 +387,14 @@ void load_glass(const char* filename) {
 	int dm_index = 0;
 	int sph_index = nparts;
 	const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
+	const float n0 = 1.0 - 0.75 * get_options().Y0;
+	const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
+	const float T0 = 100.0;
+	const float eps_cgs = cv_cgs * T0;
+	const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
+	const float eps = eps_cgs / code_to_ene;
+	const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
 	const float h = std::pow(h3, 1.0 / 3.0);
 	const bool chem = get_options().chem;
 	for (int i = 0; i < multiplicity; i++) {
@@ -419,7 +427,7 @@ void load_glass(const char* filename) {
 							}
 							if (l >= nparts) {
 								const part_int m = particles_cat_index(index);
-								sph_particles_entr(m) = 0.0f;
+								sph_particles_entr(m) = K0;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
@@ -677,6 +685,7 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	const float a0 = 1.0f / (z0 + 1.0);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([a0,N,box,box_size,&Y,dim1,dim2,factor,power](array<int64_t,NDIM> I) {
+
 			const float h = get_options().hsoft * box_size / a0;
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
@@ -702,7 +711,8 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 							const float y = gsl_rng_uniform_pos(rndgen);
 							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-							const float deconvo = 1.f / kernelWfourier(K0*h);
+							const float H = 0.5/N*box_size;
+							const float deconvo = 1.f / sqr(sinc(kx*H)*sinc(ky*H)*sinc(kz*H));
 							//	PRINT( "%e %e %e\n", sqrt(i2), K0*h, deconvo);
 				Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
 			} else {
@@ -738,7 +748,8 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 		const float y = gsl_rng_uniform_pos(rndgen);
 		const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 		const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-		const float deconvo = 1.f / kernelWfourier(K0*h);
+		const float H = 0.5/N*box_size;
+		const float deconvo = 1.f / sqr(sinc(kx*H)*sinc(ky*H)*sinc(kz*H));
 		Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2 * deconvo;
 		if( I[0] > N / 2 ) {
 			Y[index] = Y[index].conj() * sgn;
@@ -888,7 +899,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 						for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 							const int64_t index = box.index(I);
 							for (int dim1 = 0; dim1 < NDIM; dim1++) {
-								float x = (I[dim1] + 0.5) * Ninv;
+								float x = (I[dim1] + 0.500) * Ninv;
 								particles_pos(dim1, index) = x;
 								particles_vel(dim1, index) = 0.0;
 							}
@@ -996,9 +1007,10 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const double wt101 = dx * (1.f - dy) * dz;
 				const double wt100 = dx * (1.f - dy) * (1.f - dz);
 				const double wt011 = (1.f - dx) * dy * dz;
-				const double wt010 =(1.f - dx) * dy * (1.f - dz);
+				const double wt010 = (1.f - dx) * dy * (1.f - dz);
 				const double wt001 = (1.f - dx) * (1.f - dy) * dz;
 				const double wt000 = (1.f - dx) * (1.f - dy) * (1.f - dz);
+//				PRINT( "%e %e %e %e %e %e %e %e \n", wt000 , wt001 , wt010 , wt011 , wt100 , wt101 , wt110 , wt111);
 				double disp = 0.0;
 				double disp_total;
 				for( int dim = 0; dim < NDIM; dim++) {

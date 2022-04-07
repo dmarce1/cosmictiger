@@ -158,7 +158,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vz = vel_z[snki];
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
-		if (my_type == SPH_TYPE) {
+		if (my_type == SPH_TYPE && !params.glass) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
 			sph_gz[j] = gz[i];
@@ -170,7 +170,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			}
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
-		if (my_type != SPH_TYPE) {
+		if (my_type != SPH_TYPE || params.glass) {
 			dt = fminf(fminf(tfactor * rsqrt(sqrtf(g2)), params.t0), params.max_dt);
 			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 			max_rung = max(rung, max_rung);

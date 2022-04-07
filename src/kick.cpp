@@ -383,7 +383,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
 				auto dt = 0.5f * rung_dt[rung] * params.t0;
-				if (type == SPH_TYPE) {
+				if (type == SPH_TYPE && !glass) {
 					const int k = particles_cat_index(i);
 					sph_particles_gforce(XDIM, k) = forces.gx[j];
 					sph_particles_gforce(YDIM, k) = forces.gy[j];
@@ -396,7 +396,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 				}
 				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				if (type != SPH_TYPE) {
+				if (type != SPH_TYPE || glass) {
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0), params.max_dt);
 					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
