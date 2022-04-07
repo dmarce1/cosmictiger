@@ -128,7 +128,6 @@ bool process_options(int argc, char *argv[]) {
 	("nsteps", po::value<int>(&(opts.nsteps))->default_value(128), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
-	("xsph", po::value<double>(&(opts.xsph))->default_value(0.0), "xsph factor (0 = off)") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
@@ -302,7 +301,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(twolpt);
 	SHOW(use_power_file);
 	SHOW(view_size);
-	SHOW(xsph);
 	SHOW(z0);
 	SHOW(z1);
 

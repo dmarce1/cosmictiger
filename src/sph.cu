@@ -61,17 +61,6 @@ struct rungs_workspace {
 	device_vector<char> rungs;
 };
 
-struct xsph_record1 {
-	fixed32 x;
-	fixed32 y;
-	fixed32 z;
-};
-
-struct xsph_record2 {
-	float vx;
-	float vy;
-	float vz;
-};
 
 struct hydro_record1 {
 	fixed32 x;
@@ -114,10 +103,6 @@ struct hydro_workspace {
 	device_vector<hydro_record2> rec2;
 };
 
-struct xsph_workspace {
-	device_vector<xsph_record1> rec1;
-	device_vector<xsph_record2> rec2;
-};
 
 struct aux_workspace {
 	device_vector<aux_record1> rec1;
@@ -136,114 +121,6 @@ struct sph_reduction {
 	int max_rung;
 };
 
-__global__ void sph_cuda_xsph(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
-	const int tid = threadIdx.x;
-	const int block_size = blockDim.x;
-	__shared__
-	int index;
-	__shared__ xsph_workspace ws;
-	__syncthreads();
-	if (tid == 0) {
-		index = atomicAdd(&reduce->counter, 1);
-	}
-	__syncthreads();
-	new (&ws) xsph_workspace();
-	array<fixed32, NDIM> x;
-	while (index < data.nselfs) {
-
-		ws.rec1.resize(0);
-		ws.rec2.resize(0);
-		const sph_tree_node& self = data.trees[data.selfs[index]];
-		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
-			const sph_tree_node& other = data.trees[data.neighbors[ni]];
-			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
-			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
-				bool contains = false;
-				int j;
-				int total;
-				if (pi < other.part_range.second) {
-					x[XDIM] = data.x[pi];
-					x[YDIM] = data.y[pi];
-					x[ZDIM] = data.z[pi];
-					contains = (self.outer_box.contains(x));
-				}
-				j = contains;
-				compute_indices<XSPH_BLOCK_SIZE>(j, total);
-				const int offset = ws.rec1.size();
-				__syncthreads();
-				const int next_size = offset + total;
-				ws.rec1.resize(next_size);
-				ws.rec2.resize(next_size);
-				if (contains) {
-					const int k = offset + j;
-					ws.rec1[k].x = x[XDIM];
-					ws.rec1[k].y = x[YDIM];
-					ws.rec1[k].z = x[ZDIM];
-					ws.rec2[k].vx = data.vx[pi];
-					ws.rec2[k].vy = data.vy[pi];
-					ws.rec2[k].vz = data.vz[pi];
-				}
-			}
-		}
-		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			__syncthreads();
-			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			const bool active = data.rungs[i] >= params.min_rung;
-			const bool use = active;
-			if (use) {
-				const auto x_i = data.x[i];
-				const auto y_i = data.y[i];
-				const auto z_i = data.z[i];
-				const float h_i = data.h_snk[snki];
-				const float h2_i = sqr(h_i);
-				const auto vx_i = data.vx[i];
-				const auto vy_i = data.vy[i];
-				const auto vz_i = data.vz[i];
-				const float hinv_i = 1.f / h_i;
-				float xvx = 0.0f;
-				float xvy = 0.0f;
-				float xvz = 0.0f;
-				for (int j = tid; j < ws.rec1.size(); j += block_size) {
-					const auto x_j = ws.rec1[j].x;
-					const auto y_j = ws.rec1[j].y;
-					const auto z_j = ws.rec1[j].z;
-					const float x_ij = distance(x_i, x_j); // 2
-					const float y_ij = distance(y_i, y_j); // 2
-					const float z_ij = distance(z_i, z_j); // 2
-					const float r2 = sqr(x_ij, y_ij, z_ij);            // 2
-					if (r2 < h2_i) {
-						const float r = sqrt(r2);                    // 4
-						const auto& vx_j = ws.rec2[j].vx;
-						const auto& vy_j = ws.rec2[j].vy;
-						const auto& vz_j = ws.rec2[j].vz;
-						const float q_i = r * hinv_i;
-						const float W_i = kernelW(q_i);
-						xvx = fmaf(W_i, vx_j - vx_i, xvx);
-						xvy = fmaf(W_i, vy_j - vy_i, xvy);
-						xvz = fmaf(W_i, vz_j - vz_i, xvz);
-					}
-				}
-				shared_reduce_add<float, XSPH_BLOCK_SIZE>(xvx);
-				shared_reduce_add<float, XSPH_BLOCK_SIZE>(xvy);
-				shared_reduce_add<float, XSPH_BLOCK_SIZE>(xvz);
-				if (tid == 0) {
-					const float c0 = float(4.0f * M_PI / 3.0f) / data.N;
-					xvx *= c0;
-					xvy *= c0;
-					xvz *= c0;
-					data.xvx_snk[snki] = xvx;
-					data.xvy_snk[snki] = xvy;
-					data.xvz_snk[snki] = xvz;
-				}
-			}
-		}
-		if (tid == 0) {
-			index = atomicAdd(&reduce->counter, 1);
-		}
-		__syncthreads();
-	}
-	(&ws)->~xsph_workspace();
-}
 
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -1228,7 +1105,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int smoothlen_nblocks;
 	static int hydro_nblocks;
 	static int aux_nblocks;
-	static int xsph_nblocks;
 	static int rungs_nblocks;
 	static bool first = true;
 	if (first) {
@@ -1239,8 +1115,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		hydro_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&aux_nblocks, (const void*) sph_cuda_aux, AUX_BLOCK_SIZE, 0));
 		aux_nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&xsph_nblocks, (const void*) sph_cuda_xsph, XSPH_BLOCK_SIZE, 0));
-		xsph_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (const void*) sph_cuda_rungs, RUNGS_BLOCK_SIZE, 0));
 		rungs_nblocks *= cuda_smp_count();
 	}
@@ -1279,15 +1153,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	case SPH_RUN_AUX: {
 		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
-	}
-	break;
-	case SPH_RUN_XSPH: {
-		timer tm;
-		tm.start();
-		sph_cuda_xsph<<<xsph_nblocks, XSPH_BLOCK_SIZE,0,stream>>>(params,data,reduce);
-		cuda_stream_synchronize(stream);
-		tm.stop();
-		PRINT( "XSPH time = %e\n", tm.read());
 	}
 	break;
 }

@@ -206,8 +206,6 @@ struct sph_run_params {
 	float alpha1;
 	float beta;
 	float alpha_decay;
-	bool xsph;
-	float xeta;
 	float omega_m;
 	float H0;
 	float damping;
@@ -234,8 +232,6 @@ struct sph_run_params {
 		alpha1 = opts.alpha1;
 		beta = opts.beta;
 		alpha_decay = opts.alpha_decay;
-		xsph = opts.xsph != 0.0;
-		xeta = opts.xsph;
 		if (opts.test == "") {
 			H0 = opts.hubble * constants::H0 * opts.code_to_s;
 			omega_m = opts.omega_m;
@@ -247,8 +243,6 @@ struct sph_run_params {
 	void serialize(A&& arc, unsigned) {
 		arc & omega_m;
 		arc & H0;
-		arc & xsph;
-		arc & xeta;
 		arc & adot;
 		arc & iter;
 		arc & max_dt;
@@ -271,7 +265,6 @@ struct sph_run_params {
 #define SPH_RUN_HYDRO 2
 #define SPH_RUN_AUX 3
 #define SPH_RUN_RUNGS 4
-#define SPH_RUN_XSPH 5
 
 
 float sph_apply_diffusion_update(int minrung, float toler);

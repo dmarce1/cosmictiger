@@ -82,7 +82,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
-SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dvx; // dvel
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
@@ -156,7 +155,6 @@ inline float& sph_particles_dcold_mass(part_int index) {
 	return sph_particles_drc1[index];
 }
 
-
 inline float& sph_particles_divv0(part_int index) {
 	return sph_particles_dvv0[index];
 }
@@ -186,7 +184,6 @@ inline float& sph_particles_shear(part_int index) {
 	return sph_particles_s2[index];
 }
 
-
 inline float& sph_particles_balsara(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_bal[index];
@@ -199,10 +196,10 @@ inline float& sph_particles_Z(part_int index) {
 
 inline void sph_particles_normalize_fracs(part_int index) {
 	double sum = 0.0;
-	for( double fi = 0; fi < NCHEMFRACS; fi++) {
+	for (double fi = 0; fi < NCHEMFRACS; fi++) {
 		sum += sph_particles_frac(fi, index);
 	}
-	for( double fi = 0; fi < NCHEMFRACS; fi++) {
+	for (double fi = 0; fi < NCHEMFRACS; fi++) {
 		sph_particles_frac(fi, index) /= sum;
 	}
 }
@@ -309,13 +306,6 @@ inline float& sph_particles_dvel(int dim, part_int index) {
 	return sph_particles_dv1[dim][index];
 }
 
-inline float& sph_particles_xvel(int dim, part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dvx[dim][index];
-}
-
-
-
 inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_c0[index];
@@ -325,9 +315,6 @@ inline array<float, NCHEMFRACS>& sph_particles_dchem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dchem1[index];
 }
-
-
-
 
 inline float& sph_particles_divv(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -362,7 +349,12 @@ inline float sph_particles_rho(part_int index) {
 
 inline float sph_particles_eint(part_int index) {
 	static const float gamma0 = get_options().gamma;
-	const float rho = sph_particles_rho(index) * (1.f - sph_particles_cold_mass(index));
+	static const float stars = get_options().stars;
+	float hfrac = 1.0f;
+	if (stars) {
+		hfrac = 1.0f - sph_particles_cold_mass(index);
+	}
+	const float rho = sph_particles_rho(index) * hfrac;
 	const float K = sph_particles_entr(index);
 	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
