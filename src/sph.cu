@@ -52,7 +52,6 @@ struct smoothlen_workspace {
 	device_vector<fixed32> z;
 };
 
-
 struct rungs_workspace {
 	device_vector<fixed32> x;
 	device_vector<fixed32> y;
@@ -60,7 +59,6 @@ struct rungs_workspace {
 	device_vector<float> h;
 	device_vector<char> rungs;
 };
-
 
 struct hydro_record1 {
 	fixed32 x;
@@ -100,7 +98,6 @@ struct hydro_workspace {
 	device_vector<hydro_record2> rec2;
 };
 
-
 struct aux_workspace {
 	device_vector<aux_record1> rec1;
 	device_vector<aux_record2> rec2;
@@ -117,7 +114,6 @@ struct sph_reduction {
 	int max_rung_grav;
 	int max_rung;
 };
-
 
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -307,7 +303,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	(&ws)->~smoothlen_workspace();
 }
 
-
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
@@ -471,7 +466,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						lambda_i = 1e30f;
 					}
 				}
-
+				const float de_dt0 = (gamma0 - 1.f) * powf(hfrac_i * rho_i, 1.f - gamma0);
 				const float p_i = K_i * powf(rho_i * hfrac_i, gamma0);
 				const float c_i = sqrtf(gamma0 * p_i * rhoinv_i / hfrac_i);
 				const float fpre_i = data.fpre[i];
@@ -562,7 +557,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						ay -= m * ainv * (pi_ij * dWdr_y_ij);
 						az -= m * ainv * (pi_ij * dWdr_z_ij);
 						const float dW_ij = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
-						de_dt += (gamma0 - 1.f) * powf(rho_i, 1.f - gamma0) * 0.5f * m * ainv * pi_ij * dW_ij;
+						de_dt += de_dt0 * 0.5f * m * ainv * pi_ij * dW_ij;
 						const float h = fminf(h_i, h_j);
 						float dtinv = (c_ij + 0.6f * vsig_ij) / h;
 						dtinv_cfl = fmaxf(dtinv_cfl, dtinv);
@@ -614,14 +609,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float lambda_ij = 0.5f * (lambda_i + lambda_j);
 							const float gradT = fabsf(logf(T_i / T_j)) * rinv;
 							const float limiter = 1.0f / (1.0f + 4.2f * gradT * lambda_ij);
-							const float kappa_i = kappa0 * powf(T_i, 2.5f) / colog_i * mmw_i;
-							const float kappa_j = kappa0 * powf(T_j, 2.5f) / colog_j * mmw_j;
+							const float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i;
+							const float kappa_j = (gamma0 - 1.f) * kappa0 * powf(T_j, 2.5f) / colog_j;
 							const float kappa_ij = 2.f * limiter * kappa0 * (kappa_i * kappa_j) / (kappa_i + kappa_j + 1e-37f);
 							const float D_ij = -2.f * m / (rho_i * rho_j) * kappa_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * (h_i * h_j)));
-							ALWAYS_ASSERT(isfinite(colog_i));
-							ALWAYS_ASSERT(isfinite(colog_j));
 							D += D_ij / (sqr(params.a) * params.a);
-							de_dt -= D_ij * (K_i - K_j * powf(hfrac_j * rho_j * mmw_j / (hfrac_i * rho_i * mmw_i), gamma0 - 1.f));
+							de_dt -= D_ij * (K_i * mmw_i - K_j * powf(hfrac_j * rho_j * mmw_j / (hfrac_i * rho_i), gamma0 - 1.f));
 						}
 					}
 				}
@@ -1127,8 +1120,11 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	}
 	break;
 	case SPH_RUN_HYDRO: {
+		timer tm;
+		tm.start();
 		sph_cuda_hydro<<<hydro_nblocks, HYDRO_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
+		tm.stop();
 		rc.max_vsig = reduce->vsig_max;
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
