@@ -112,8 +112,8 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.1), "alpha0 viscosity") //
-	("alpha1", po::value<double>(&(opts.alpha1))->default_value(2.0), "alpha1 for viscosity") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.05), "alpha0 viscosity") //
+	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.5), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
 	("beta", po::value<double>(&(opts.beta))->default_value(1.5), "beta for viscosity") //
 	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
@@ -144,6 +144,7 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
+	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1e9), "mass resolution") //
 
 			;
 
@@ -175,19 +176,21 @@ bool process_options(int argc, char *argv[]) {
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
 	opts.hsoft *= 1.0 / opts.parts_dim;
-	opts.code_to_cm = 12.123e26 * opts.parts_dim / 1024.0 / opts.hubble;
-	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
-	opts.code_to_s = opts.code_to_cm / constants::c;
 	opts.omega_m = opts.omega_b + opts.omega_c;
-	opts.slice_size = std::min((20.0 / opts.hubble) / (opts.code_to_cm / constants::mpc_to_cm), 1.0);
-	double H = constants::H0 * opts.code_to_s;
 	const size_t nparts = pow(opts.parts_dim, NDIM);
+	opts.code_to_g *= constants::M0;
+	opts.code_to_cm = pow(opts.code_to_g * (8.0 * M_PI) * nparts * constants::G / (3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble)), 1.0 / 3.0);
+	opts.code_to_s = opts.code_to_cm / constants::c;
+	double H = constants::H0 * opts.code_to_s;
+	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
+	opts.slice_size = std::min((20.0 / opts.hubble) / (opts.code_to_cm / constants::mpc_to_cm), 1.0);
 	const double Neff = 3.086;
 	const double Theta = 1.0;
 	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
 	opts.rho0_b = nparts * opts.omega_b / opts.omega_m;
 	opts.rho0_c = nparts * opts.omega_c / opts.omega_m;
-	opts.code_to_g = 3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble) / (8.0 * M_PI) / nparts / constants::G * std::pow(opts.code_to_cm, 3);
+
+
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);
 	opts.omega_nu = omega_r * opts.Neff / (8.0 / 7.0 * std::pow(11.0 / 4.0, 4.0 / 3.0) + opts.Neff);

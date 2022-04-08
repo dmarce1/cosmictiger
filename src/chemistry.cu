@@ -523,7 +523,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			} else if (attr.cold_mass < 0.f) {
 				attr.cold_mass = 0.f;
 			}
-			attr.eint *= factor;
+		//	attr.eint *= factor;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
 			N.Hp *= (double) rhoavoinv;																										// 1
