@@ -713,10 +713,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
 					const float dtinv_hydro2 = dtinv_acc;
 					float dthydro = params.cfl * params.a / (dtinv_hydro1 + 1e-30f);
-					dthydro = fminf(data.eta * sqrtf(params.a) / (dtinv_hydro2 + 1e-30f), dthydro);
+					dthydro = fminf(data.eta * sqrtf(params.a * h_i) / (dtinv_hydro2 + 1e-30f), dthydro);
 					const float g2 = sqr(gx_i, gy_i, gz_i);
 					const float dtinv_grav = sqrtf(sqrtf(g2) * hinv_i);
-					float dtgrav = data.eta * sqrtf(params.a) / (dtinv_grav + 1e-30f);
+					float dtgrav = data.eta * sqrtf(params.a * data.gsoft) / (dtinv_grav + 1e-30f);
 					dthydro = fminf(dthydro, params.max_dt);
 					ALWAYS_ASSERT(dcm_dt * dthydro + cfrac_i > -1e-7f);
 					dtgrav = fminf(dtgrav, params.max_dt);

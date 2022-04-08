@@ -719,6 +719,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.fpre_snk = &sph_particles_fpre(0);
 	cuda_data.divv_snk = &sph_particles_divv(0);
 	cuda_data.def_gamma = get_options().gamma;
+	cuda_data.gsoft = get_options().hsoft;
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.chemistry = get_options().chem;
 	cuda_data.converged_snk = &sph_particles_converged(0);
