@@ -66,6 +66,7 @@ struct sph_particle {
 	}
 };
 
+SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
@@ -83,17 +84,20 @@ SPH_PARTICLES_EXTERN float* sph_particles_rc;
 SPH_PARTICLES_EXTERN float* sph_particles_drc1;
 SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
 SPH_PARTICLES_EXTERN float* sph_particles_s2; //
+SPH_PARTICLES_EXTERN float* sph_particles_cv; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 
 struct aux_quantities {
 	float fpre;
 	float shearv;
 	float entr;
+	float curlv;
 	float alpha;
 	float fcold;
 	array<float, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & curlv;
 		arc & fpre;
 		arc & shearv;
 		arc & entr;
@@ -151,6 +155,11 @@ inline float& sph_particles_alpha(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_a[index];
 }
+
+inline float& sph_particles_dalpha(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_da[index];
+}
 /*
  inline float& sph_particles_formY(part_int index) {
  CHECK_SPH_PART_BOUNDS(index);
@@ -168,6 +177,11 @@ inline float& sph_particles_frac(int j, part_int index) {
 }
 
 inline float& sph_particles_shear(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_s2[index];
+}
+
+inline float& sph_particles_curlv(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_s2[index];
 }
@@ -362,6 +376,7 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	if (get_options().stars) {
 		aux.fcold = sph_particles_cold_mass(index);
 	}
+	aux.curlv = sph_particles_curlv(index);
 	if (get_options().diffusion) {
 		aux.shearv = sph_particles_shear(index);
 	}

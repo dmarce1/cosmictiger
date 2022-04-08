@@ -48,6 +48,9 @@ struct smoothlen_workspace {
 	device_vector<fixed32> x;
 	device_vector<fixed32> y;
 	device_vector<fixed32> z;
+	device_vector<float> vx;
+	device_vector<float> vy;
+	device_vector<float> vz;
 };
 
 struct rungs_workspace {
@@ -115,6 +118,50 @@ struct sph_reduction {
 	int max_rung;
 };
 
+__device__ void minverse(float& a00, float& a01, float& a02, float& a10, float& a11, float& a12, float &a20, float&a21, float&a22) {
+	const float b00 = -a12 * a21 + a11 * a22;
+	const float b01 = a02 * a21 - a01 * a22;
+	const float b02 = -a02 * a11 + a01 * a12;
+	const float b10 = a12 * a20 - a10 * a22;
+	const float b11 = -a02 * a20 + a00 * a22;
+	const float b12 = a02 * a10 - a00 * a12;
+	const float b20 = -a11 * a20 + a10 * a21;
+	const float b21 = a01 * a20 - a00 * a21;
+	const float b22 = -a01 * a10 + a00 * a11;
+	const float detinv = 1.f / (-(a02 * a11 * a20) + a01 * a12 * a20 + a02 * a10 * a21 - a00 * a12 * a21 - a01 * a10 * a22 + a00 * a11 * a22);
+	a00 = b00 * detinv;
+	a01 = b01 * detinv;
+	a02 = b02 * detinv;
+	a10 = b10 * detinv;
+	a11 = b11 * detinv;
+	a12 = b12 * detinv;
+	a20 = b20 * detinv;
+	a21 = b21 * detinv;
+	a22 = b22 * detinv;
+}
+
+__device__ void mmult(float& a00, float& a01, float& a02, float& a10, float& a11, float& a12, float &a20, float&a21, float&a22, float b00, float b01, float b02,
+		float b10, float b11, float b12, float b20, float b21, float b22) {
+	const float c00 = a00 * b00 + a01 * b10 + a02 * b20;
+	const float c01 = a00 * b01 + a01 * b11 + a02 * b21;
+	const float c02 = a00 * b02 + a01 * b12 + a02 * b22;
+	const float c10 = a10 * b00 + a11 * b10 + a12 * b20;
+	const float c11 = a10 * b01 + a11 * b11 + a12 * b21;
+	const float c12 = a10 * b02 + a11 * b12 + a12 * b22;
+	const float c20 = a20 * b00 + a21 * b10 + a22 * b20;
+	const float c21 = a20 * b01 + a21 * b11 + a22 * b21;
+	const float c22 = a20 * b02 + a21 * b12 + a22 * b22;
+	a00 = c00;
+	a01 = c01;
+	a02 = c02;
+	a10 = c10;
+	a11 = c11;
+	a12 = c12;
+	a20 = c20;
+	a21 = c21;
+	a22 = c22;
+}
+
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
@@ -159,11 +206,17 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				ws.x.resize(next_size);
 				ws.y.resize(next_size);
 				ws.z.resize(next_size);
+				ws.vx.resize(next_size);
+				ws.vy.resize(next_size);
+				ws.vz.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
 					ws.x[k] = x[XDIM];
 					ws.y[k] = x[YDIM];
 					ws.z[k] = x[ZDIM];
+					ws.vx[k] = data.vx[pi];
+					ws.vy[k] = data.vy[pi];
+					ws.vz[k] = data.vz[pi];
 				}
 			}
 		}
@@ -204,7 +257,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
 							const float dwdh = -q * dwdq * hinv; // 3
-							drho_dh -= (3.f * w + q * dwdq);
+							drho_dh -= dwdq;
 							rhoh3 += w;
 						}
 
@@ -221,7 +274,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						error = 1.0;
 					} else {
 						drho_dh *= 0.33333333333f / rhoh30;
-						const float fpre = fminf(fmaxf(1.0f / (1.0f + drho_dh), 0.5f), 2.0f);
+						const float fpre = fminf(fmaxf(1.0f / (drho_dh), 0.5f), 2.0f);
 						dlogh = fminf(fmaxf(powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f, -.1f), .1f);
 						error = fabs(1.0f - rhoh3 / rhoh30);
 						if (tid == 0) {
@@ -258,27 +311,133 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(box_xceeded);
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
 				if (!box_xceeded) {
+					const float vx_i = data.vx[i];
+					const float vy_i = data.vy[i];
+					const float vz_i = data.vz[i];
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
+					const fixed32& x_i = x[XDIM];
+					const fixed32& y_i = x[YDIM];
+					const fixed32& z_i = x[ZDIM];
+					float dx_dx = 0.f;
+					float dx_dy = 0.f;
+					float dx_dz = 0.f;
+					float dy_dx = 0.f;
+					float dy_dy = 0.f;
+					float dy_dz = 0.f;
+					float dz_dx = 0.f;
+					float dz_dy = 0.f;
+					float dz_dz = 0.f;
+					float dvx_dx = 0.f;
+					float dvx_dy = 0.f;
+					float dvx_dz = 0.f;
+					float dvy_dx = 0.f;
+					float dvy_dy = 0.f;
+					float dvy_dz = 0.f;
+					float dvz_dx = 0.f;
+					float dvz_dy = 0.f;
+					float dvz_dz = 0.f;
 					for (int j = tid; j < ws.x.size(); j += block_size) {
-						const float dx = distance(x[XDIM], ws.x[j]); // 2
-						const float dy = distance(x[YDIM], ws.y[j]); // 2
-						const float dz = distance(x[ZDIM], ws.z[j]); // 2
-						const float r2 = sqr(dx, dy, dz);            // 2
+						const fixed32 x_j = ws.x[j];
+						const fixed32 y_j = ws.y[j];
+						const fixed32 z_j = ws.z[j];
+						const float x_ij = distance(x_i, x_j); // 2
+						const float y_ij = distance(y_i, y_j); // 2
+						const float z_ij = distance(z_i, z_j); // 2
+						const float r2 = sqr(x_ij, y_ij, z_ij);
 						const float r = sqrt(r2);                    // 4
 						const float q = r * hinv;                    // 1
 						if (q < 1.f) {                               // 1
 							const float w = kernelW(q); // 4
 							const float dwdq = dkernelW_dq(q);
-							drho_dh -= (3.f * w + q * dwdq);
+							drho_dh -= q * dwdq;
 						}
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(drho_dh);
 					drho_dh *= 0.33333333333f / rhoh30;
-					const float fpre = 1.0f / (1.0f + drho_dh);
+					const float fpre = 1.0f / drho_dh;
+					for (int j = tid; j < ws.x.size(); j += block_size) {
+						const fixed32 x_j = ws.x[j];
+						const fixed32 y_j = ws.y[j];
+						const fixed32 z_j = ws.z[j];
+						const float x_ij = distance(x_i, x_j); // 2
+						const float y_ij = distance(y_i, y_j); // 2
+						const float z_ij = distance(z_i, z_j); // 2
+						const float r2 = sqr(x_ij, y_ij, z_ij);
+						const float r = sqrt(r2);                    // 4
+						const float q = r * hinv;                    // 1
+						const float hinv_i = 1.0f / h;
+						const float h4inv_i = sqr(sqr(hinv_i));
+						if (q < 1.f) {                               // 1
+							const float vx_j = ws.vx[j];
+							const float vy_j = ws.vy[j];
+							const float vz_j = ws.vz[j];
+							const float vx0_ij = vx_i - vx_j;
+							const float vy0_ij = vy_i - vy_j;
+							const float vz0_ij = vz_i - vz_j;
+							const float vx_ij = vx0_ij + x_ij * params.adot;
+							const float vy_ij = vy0_ij + y_ij * params.adot;
+							const float vz_ij = vz0_ij + z_ij * params.adot;
+							const float rinv = 1.0f / (1.0e-30f + r);
+							const float dWdr_i = fpre * dkernelW_dq(q) * h4inv_i;
+							dx_dx += x_ij * x_ij * dWdr_i * rinv;
+							dx_dy += x_ij * y_ij * dWdr_i * rinv;
+							dx_dz += x_ij * z_ij * dWdr_i * rinv;
+							dy_dy += y_ij * y_ij * dWdr_i * rinv;
+							dy_dz += y_ij * z_ij * dWdr_i * rinv;
+							dz_dz += z_ij * z_ij * dWdr_i * rinv;
+							dvx_dx += vx_ij * x_ij * dWdr_i * rinv;
+							dvy_dx += vy_ij * x_ij * dWdr_i * rinv;
+							dvz_dx += vz_ij * x_ij * dWdr_i * rinv;
+							dvx_dy += vx_ij * y_ij * dWdr_i * rinv;
+							dvy_dy += vy_ij * y_ij * dWdr_i * rinv;
+							dvz_dy += vz_ij * y_ij * dWdr_i * rinv;
+							dvx_dz += vx_ij * z_ij * dWdr_i * rinv;
+							dvy_dz += vy_ij * z_ij * dWdr_i * rinv;
+							dvz_dz += vz_ij * z_ij * dWdr_i * rinv;
+						}
+					}
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dx_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dx_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dx_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dy_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dy_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dz_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvx_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvx_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvx_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvy_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvy_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvy_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dz);
+					dy_dx = dx_dy;
+					dz_dx = dx_dz;
+					dz_dy = dy_dz;
+					minverse(dx_dx, dx_dy, dx_dz, dy_dx, dy_dy, dy_dz, dz_dx, dz_dy, dz_dz);
+					mmult(dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, dx_dx, dx_dy, dx_dz, dy_dx, dy_dy, dy_dz, dz_dx, dz_dy, dz_dz);
+					float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
+					float div_v, curl_vx, curl_vy, curl_vz;
+					div_v = dvx_dx + dvy_dy + dvz_dz;
+					curl_vx = dvz_dy - dvy_dz;
+					curl_vy = -dvz_dx + dvx_dz;
+					curl_vz = dvy_dx - dvx_dy;
+					shear_xx = dvx_dx - (1.f / 3.f) * div_v;
+					shear_yy = dvy_dy - (1.f / 3.f) * div_v;
+					shear_zz = dvz_dz - (1.f / 3.f) * div_v;
+					shear_xy = 0.5f * (dvx_dy + dvy_dx);
+					shear_xz = 0.5f * (dvx_dz + dvz_dx);
+					shear_yz = 0.5f * (dvy_dz + dvz_dy);
 					if (tid == 0) {
+						const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
+						const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
+						data.shearv_snk[snki] = shearv;
+						data.divv0_snk[snki] = data.divv_snk[snki];
+						data.divv_snk[snki] = div_v;
+						data.curlv_snk[snki] = curlv;
 						data.fpre_snk[snki] = fpre;
 						data.converged_snk[snki] = true;
 					}
@@ -483,6 +642,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 				float dtinv_cfl = 0.f;
 				float one = 0.0f;
+				float vsig = 0.f;
 				constexpr float tiny = 1e-30f;
 				const float& adot = params.adot;
 				float D = 0.f;
@@ -597,6 +757,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float h = fminf(h_i, h_j);
 						float dtinv = (c_ij + 0.6f * vsig_ij) / h;
 						dtinv_cfl = fmaxf(dtinv_cfl, dtinv);
+						vsig = fmaxf(vsig, c_ij - w_ij);
 						if (params.diffusion) {
 							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i * rho_i;
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j * rho_j;
@@ -660,6 +821,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
+				shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
 				if (params.diffusion) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(D);
 					if (params.stars) {
@@ -710,12 +872,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * params.cfl * 1.1f);
 					}
 					const float a2 = sqr(ax, ay, az);
-	//				const float a2_hydro = sqr(ax - gx_i, ay - gy_i, az - gz_i);
+					//				const float a2_hydro = sqr(ax - gx_i, ay - gy_i, az - gz_i);
 //					const float a2 = fminf(a2_hydro, a2_tot);
 					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
-					const float dtinv_hydro2 = dtinv_acc;
 					float dthydro = params.cfl * params.a / (dtinv_hydro1 + 1e-30f);
-					dthydro = fminf(data.eta * sqrtf(params.a) / (dtinv_hydro2 + 1e-30f), dthydro);
+					dthydro = fminf(data.eta * sqrtf(params.a) / (dtinv_acc + 1e-30f), dthydro);
 					const float g2 = sqr(gx_i, gy_i, gz_i);
 					const float dtinv_grav = sqrtf(sqrtf(g2));
 					float dtgrav = data.eta * sqrtf(params.a * data.gsoft) / (dtinv_grav + 1e-30f);
@@ -724,6 +885,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					dtgrav = fminf(dtgrav, params.max_dt);
 					total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
+					const float last_dt = rung_dt[rung] * params.t0;
 					data.oldrung_snk[snki] = rung;
 					const int rung_hydro = ceilf(log2f(params.t0) - log2f(dthydro));
 					const int rung_grav = ceilf(log2f(params.t0) - log2f(dtgrav));
@@ -737,6 +899,23 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							__trap();
 						}
 					}
+					const float alpha = data.alpha_snk[snki];
+					const float div_v = data.divv_snk[snki];
+					const float curlv = data.curlv_snk[snki];
+					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
+					const float ddivv_dt = (div_v - divv0) / last_dt - 0.5f * params.adot * ainv * (div_v + divv0);
+					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
+					const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
+					const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(c_i)), params.alpha0);
+					const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv;
+					const float lambda1 = 1.f / dthydro;
+					float dalpha_dt;
+					if (alpha < limiter * alpha_targ) {
+						dalpha_dt = (limiter * alpha_targ - alpha) * lambda1;
+					} else {
+						dalpha_dt = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * last_dt)) - alpha) * lambda1;
+					}
+					data.dalpha[snki] = dalpha_dt;
 				}
 			}
 		}
@@ -755,50 +934,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 		atomicMax(&reduce->max_rung_grav, max_rung_grav);
 	}
 	(&ws)->~hydro_workspace();
-}
-
-__device__ void minverse(float& a00, float& a01, float& a02, float& a10, float& a11, float& a12, float &a20, float&a21, float&a22) {
-	const float b00 = -a12 * a21 + a11 * a22;
-	const float b01 = a02 * a21 - a01 * a22;
-	const float b02 = -a02 * a11 + a01 * a12;
-	const float b10 = a12 * a20 - a10 * a22;
-	const float b11 = -a02 * a20 + a00 * a22;
-	const float b12 = a02 * a10 - a00 * a12;
-	const float b20 = -a11 * a20 + a10 * a21;
-	const float b21 = a01 * a20 - a00 * a21;
-	const float b22 = -a01 * a10 + a00 * a11;
-	const float detinv = 1.f / (-(a02 * a11 * a20) + a01 * a12 * a20 + a02 * a10 * a21 - a00 * a12 * a21 - a01 * a10 * a22 + a00 * a11 * a22);
-	a00 = b00 * detinv;
-	a01 = b01 * detinv;
-	a02 = b02 * detinv;
-	a10 = b10 * detinv;
-	a11 = b11 * detinv;
-	a12 = b12 * detinv;
-	a20 = b20 * detinv;
-	a21 = b21 * detinv;
-	a22 = b22 * detinv;
-}
-
-__device__ void mmult(float& a00, float& a01, float& a02, float& a10, float& a11, float& a12, float &a20, float&a21, float&a22, float b00, float b01, float b02,
-		float b10, float b11, float b12, float b20, float b21, float b22) {
-	const float c00 = a00 * b00 + a01 * b10 + a02 * b20;
-	const float c01 = a00 * b01 + a01 * b11 + a02 * b21;
-	const float c02 = a00 * b02 + a01 * b12 + a02 * b22;
-	const float c10 = a10 * b00 + a11 * b10 + a12 * b20;
-	const float c11 = a10 * b01 + a11 * b11 + a12 * b21;
-	const float c12 = a10 * b02 + a11 * b12 + a12 * b22;
-	const float c20 = a20 * b00 + a21 * b10 + a22 * b20;
-	const float c21 = a20 * b01 + a21 * b11 + a22 * b21;
-	const float c22 = a20 * b02 + a21 * b12 + a22 * b22;
-	a00 = c00;
-	a01 = c01;
-	a02 = c02;
-	a10 = c10;
-	a11 = c11;
-	a12 = c12;
-	a20 = c20;
-	a21 = c21;
-	a22 = c22;
 }
 
 __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
@@ -998,33 +1133,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
 					data.shearv_snk[snki] = shearv;
+					data.divv0_snk[snki] = data.divv_snk[snki];
 					data.divv_snk[snki] = div_v;
-					/*					float& alpha = data.alpha_snk[snki];
-					 const float dt = params.t0 * rung_dt[rung_i];
-					 const float limiter = fabs(div_v) / (fabs(div_v) + curlv + 1e-30f);
-					 const float S = fmaxf(0.f, -div_v) * limiter;
-					 const float tauinv = params.alpha_decay * c_i * hinv_i * ainv;
-					 alpha = (alpha + (params.alpha1 * S + params.alpha0 * tauinv) * dt) / (1.f + dt * (S + tauinv));*/
-					float& alpha = data.alpha_snk[snki];
-					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
-					data.divv0_snk[snki] = div_v;
-					if (params.tau > 0.f) {
-						const float dt = params.t0 * rung_dt[rung_i];
-						const float ddivv_dt = (div_v - divv0) / dt - 0.5f * params.adot * ainv * (div_v + divv0);
-						const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
-						const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
-						const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(c_i)), params.alpha0);
-						const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv * dt;
-						if (alpha < limiter * alpha_targ) {
-							alpha = limiter * alpha_targ;
-						} else {
-							alpha = limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0));
-						}
-					} else {
-						alpha = 0.f;
-					}
-//					float& alpha = data.alpha_snk[snki];
-//					alpha = 1.f;
+					data.curlv_snk[snki] = curlv;
 				}
 			}
 		}

@@ -142,6 +142,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
 					} else if( phase == 1 ) {
+						sph_particles_alpha(i) += sph_particles_dalpha(i) * 2.0 * dt2;
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
@@ -355,6 +356,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_f0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dvv, new_capacity, true);
 		sph_particles_array_resize(sph_particles_a, new_capacity, true);
+		sph_particles_array_resize(sph_particles_da, new_capacity, true);
+		sph_particles_array_resize(sph_particles_cv, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv1[dim], new_capacity, true);
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
