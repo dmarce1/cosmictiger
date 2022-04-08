@@ -569,7 +569,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);									// * (balsara_i + balsara_j);
 						const float beta_ij = alpha_ij * 1.5f;
 						const float hfrac_ij = sqrtf(hfrac_i * hfrac_j);
-						const float vsig_ij = hfrac_ij * (alpha_ij * c_ij - beta_ij * w_ij);
+						const float vsig_ij = hfrac_ij * (alpha_ij * c_ij - beta_ij * mu_ij);
 						const float pi_ij = -mu_ij * vsig_ij / rho_ij;
 						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * hinv_i * h3inv_i;
 						const float dWdr_j = fpre_j * dkernelW_dq(q_j) * hinv_j * h3inv_j;
