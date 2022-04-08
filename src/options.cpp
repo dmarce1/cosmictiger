@@ -99,7 +99,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
-	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(true), "use glass") //
+	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "use glass") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
@@ -107,7 +107,7 @@ bool process_options(int argc, char *argv[]) {
 	("diffusion", po::value<bool>(&(opts.diffusion))->default_value(true), "do diffusion") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
-	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
+	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(false),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
@@ -131,7 +131,7 @@ bool process_options(int argc, char *argv[]) {
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<int>(&(opts.kernel))->default_value(2), "kernel type") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(160), "neighbor number") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.1767), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //

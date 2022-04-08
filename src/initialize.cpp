@@ -237,12 +237,12 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 	return std::move(inter_func);
 }
 
-power_spectrum_function compute_power_spectrum() {
+power_spectrum_function compute_power_spectrum(int type) {
 	power_spectrum_function func;
 	zero_order_universe zeroverse;
 	double* result_ptr;
-	interp_functor<double> m_k;
-	interp_functor<double> vel_k;
+	interp_functor<double> dm_k;
+	interp_functor<double> bary_k;
 	int Nk = 1024;
 	vector<cos_state> states(Nk);
 
@@ -266,9 +266,10 @@ power_spectrum_function compute_power_spectrum() {
 	double kmin;
 	double kmax;
 	kmin = 1e-5 * params.hubble;
-	kmax = 25.271 * params.hubble;
-	einstein_boltzmann_interpolation_function(&m_k, &vel_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
+	kmax = 7.5 * params.hubble;
+	einstein_boltzmann_interpolation_function(&dm_k, &bary_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
 
+	auto m_k = type == BARYON_POWER ? bary_k : dm_k;
 	func.logkmin = log(kmin);
 	func.logkmax = log(kmax);
 	func.dlogk = (func.logkmax - func.logkmin) / Nk;
@@ -288,7 +289,7 @@ power_spectrum_function compute_power_spectrum() {
 		const double lh3 = lh * lh * lh;
 		for (int i = 1; i < M - 2; i++) {
 			double k = exp(logkmin + (double) i * dlogk);
-			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
+			fprintf(fp, "%e %e %e\n", k / lh, norm * bary_k(k) * lh3, norm * dm_k(k) * lh3);
 		}
 		fclose(fp);
 	}
@@ -675,7 +676,7 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
-	auto power = get_options().use_power_file ? read_power_spectrum(phase) : compute_power_spectrum();
+	auto power = get_options().use_power_file ? read_power_spectrum(phase) : compute_power_spectrum(phase);
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int64_t, NDIM> I;
@@ -1172,15 +1173,15 @@ static power_spectrum_function read_power_spectrum(int phase) {
 		const double omega_b = get_options().omega_b;
 		const double omega_c = get_options().omega_c;
 		const double omega_m = get_options().omega_m;
-		const double Ob = omega_b / omega_m;
-		const double Oc = omega_c / omega_m;
 		auto all = func;
 		power_spectrum_function bary;
 		for (int i = 0; i < func.P.size(); i++) {
-			const double P = all.P[i];
-			const double Pc = cdm.P[i];
-			const double delta_b = (sqrt(P) - sqrt(Pc) * Oc) / Ob;
-			bary.P.push_back(sqr(delta_b));
+			const double delta_2 = all.P[i];
+			const double delta_c2 = cdm.P[i];
+			const double delta = sqrt(delta_2);
+			const double delta_c = sqrt(delta_c2);
+			const double delta_b2 = (sqr(omega_m * delta) + sqr(omega_c * delta_c) - 2.0 * omega_m * omega_c * delta * delta_c) / sqr(omega_b);
+			bary.P.push_back(delta_b2);
 			bary.logkmin = std::log(kmin);
 			bary.logkmax = std::log(kmax);
 			bary.dlogk = (func.logkmax - func.logkmin) / (func.P.size() - 1);

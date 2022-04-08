@@ -206,7 +206,7 @@ void einstein_boltzmann(cos_state* uptr, const zero_order_universe *uni_ptr, dou
 	}
 }
 
-void einstein_boltzmann_interpolation_function(interp_functor<double>* m_k_func, interp_functor<double>* vel_k_func, cos_state* U, zero_order_universe* uni,
+void einstein_boltzmann_interpolation_function(interp_functor<double>* dm_k_func,interp_functor<double>* bary_k_func, cos_state* U, zero_order_universe* uni,
 		double kmin, double kmax, double norm, int N, double astart, double astop, bool cont, double ns) {
 	double dlogk = 1.0e-2;
 	double logkmin = log(kmin) - dlogk;
@@ -224,7 +224,7 @@ void einstein_boltzmann_interpolation_function(interp_functor<double>* m_k_func,
 	}
 	hpx::wait_all(futs.begin(),futs.end());
 
-	std::vector<double> m_k(N), vel_k(N);
+	std::vector<double> dm_k(N), bary_k(N);
 	double oc = uni->params.omega_c;
 	double ob = uni->params.omega_b;
 	double om = oc + ob;
@@ -237,11 +237,12 @@ void einstein_boltzmann_interpolation_function(interp_functor<double>* m_k_func,
 	for (int i = 0; i < N; i++) {
 		double k = ks[i];
 		double eps = k / (astop * H);
-		m_k[i] = sqr(oc * U[i][deltaci] + ob * U[i][deltabi]);
-		vel_k[i] = sqr((ob * (eps * U[i][thetabi] + (double) 0.5 * U[i][hdoti]) + oc * ((double) 0.5 * U[i][hdoti])));
+		dm_k[i] = sqr(U[i][deltaci]);
+		bary_k[i] = sqr(U[i][deltabi]);
+//		vel_k[i] = sqr((ob * (eps * U[i][thetabi] + (double) 0.5 * U[i][hdoti]) + oc * ((double) 0.5 * U[i][hdoti])));
 		//	printf("%e %e\n", k, vel_k[i]);
 	}
-	build_interpolation_function(m_k_func, m_k, (double) exp(logkmin), (double) exp(logkmax));
-	build_interpolation_function(vel_k_func, vel_k, (double) exp(logkmin), (double) exp(logkmax));
+	build_interpolation_function(dm_k_func, dm_k, (double) exp(logkmin), (double) exp(logkmax));
+	build_interpolation_function(bary_k_func, bary_k, (double) exp(logkmin), (double) exp(logkmax));
 }
 
