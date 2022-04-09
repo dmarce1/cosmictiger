@@ -46,7 +46,6 @@ struct sph_run_cuda_data {
 	float* gy_snk;
 	float* gz_snk;
 	float* dcold_mass;
-	float* alpha_snk;
 	char* oldrung_snk;
 	float def_gamma;
 	bool conduction;

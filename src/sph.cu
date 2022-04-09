@@ -228,7 +228,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				int box_xceeded = false;
 				int iter = 0;
-				float& h = data.h_snk[snki];
+				float& h = data.rec1_snk[snki].h;
 				float drho_dh;
 				float rhoh3;
 				float last_dh = 0.0f;
@@ -939,7 +939,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							__trap();
 						}
 					}
-					const float alpha = data.alpha_snk[snki];
+					const float alpha = alpha_i;
 					const float curlv = data.curlv_snk[snki];
 					const float divv0 = params.tau > 0.f ? data.rec3_snk[snki].divv0 : div_v;
 					const float ddivv_dt = (div_v - divv0) / last_dt - 0.5f * params.adot * ainv * (div_v + divv0);
