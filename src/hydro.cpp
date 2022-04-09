@@ -285,7 +285,7 @@ void hydro_plummer() {
 			sph_particles_vel(YDIM, k) = y * v;
 			sph_particles_vel(ZDIM, k) = z * v;
 			const float eint = 1e-3 * (v * v * 0.5);
-			sph_particles_entr(k) = eint * (get_options().gamma - 1.0) / pow(rho0, get_options().gamma - 1.0);
+			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.0) / pow(rho0, get_options().gamma - 1.0);
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
 			ekin += 0.5 * m * sqr(v);
@@ -367,7 +367,7 @@ void hydro_star_test() {
 			const double P = K * pow(d, 1.0 + 1.0 / npoly);
 			const double E = P * npoly;
 			const double eint = E / d;
-			sph_particles_entr(k) = eint * (get_options().gamma - 1.) / pow(d, get_options().gamma - 1.);
+			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.) / pow(d, get_options().gamma - 1.);
 			sph_particles_vel(XDIM, k) = 0;
 			sph_particles_vel(YDIM, k) = 0;
 			sph_particles_vel(ZDIM, k) = 0;
@@ -457,7 +457,7 @@ void hydro_rt_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
 				i++;
 			}
@@ -491,7 +491,7 @@ void hydro_rt_test() {
 					sph_particles_vel(ZDIM, i) = 0;
 					;
 					sph_particles_rung(i) = 0;
-					sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 					;
 					i++;
 				}
@@ -518,7 +518,7 @@ void hydro_rt_test() {
 					sph_particles_vel(ZDIM, i) = 0;
 					;
 					sph_particles_rung(i) = 0;
-					sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
 					i++;
 				}
 			}
@@ -611,7 +611,7 @@ void hydro_disc_test() {
 					sph_particles_vel(YDIM, i) = sgn * vy;
 					sph_particles_vel(ZDIM, i) = vz;
 					sph_particles_rung(i) = 0;
-					sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
+					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
 					;
 					i++;
 				}
@@ -674,7 +674,7 @@ void hydro_sod_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = ent;
+				sph_particles_rec2(i).A = ent;
 				i++;
 				x = (ix + 0.5) * dx;
 				y = (iy + 0.5) * dx;
@@ -688,7 +688,7 @@ void hydro_sod_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = ent;
+				sph_particles_rec2(i).A = ent;
 				i++;
 				//			PRINT("%i\n", i);
 			}
@@ -714,7 +714,7 @@ void hydro_sod_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = ent;
+				sph_particles_rec2(i).A = ent;
 				;
 				//		PRINT("%i\n", i);
 				i++;
@@ -731,7 +731,7 @@ void hydro_sod_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = ent;
+				sph_particles_rec2(i).A = ent;
 				;
 				i++;
 			}
@@ -816,7 +816,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
 				;
 
 				i++;
@@ -832,7 +832,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz1 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
 				;
 
 				i++;
@@ -859,7 +859,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
 
 				//		PRINT("%i\n", i);
@@ -876,7 +876,7 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_vel(ZDIM, i) = vz0 + eta * (2.0 * rand1() - 1.0);
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
 				//		PRINT("%i\n", i);
 				i++;
@@ -923,7 +923,7 @@ void hydro_blast_test() {
 				sph_particles_vel(YDIM, i) = vy;
 				sph_particles_vel(ZDIM, i) = vz;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
 				i++;
 				x = (ix + 0.0) * dx;
@@ -943,7 +943,7 @@ void hydro_blast_test() {
 				sph_particles_vel(YDIM, i) = vy;
 				sph_particles_vel(ZDIM, i) = vz;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
 				i++;
 			}
@@ -1020,7 +1020,7 @@ void hydro_wave_test() {
 				sph_particles_vel(YDIM, i) = 0.f;
 				sph_particles_vel(ZDIM, i) = 0.f;
 				sph_particles_rung(i) = 0;
-				sph_particles_entr(i) = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
+				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
 				i++;
 				//			PRINT("%i\n", i);
 			}

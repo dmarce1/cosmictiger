@@ -428,7 +428,7 @@ void load_glass(const char* filename) {
 							}
 							if (l >= nparts) {
 								const part_int m = particles_cat_index(index);
-								sph_particles_entr(m) = K0;
+								sph_particles_rec2(m).A = K0;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
@@ -936,7 +936,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
-								sph_particles_entr(m) = K0;
+								sph_particles_rec2(m).A = K0;
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {

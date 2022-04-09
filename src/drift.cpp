@@ -118,9 +118,9 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					if( h > 0.5 ) {
 						PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
 					}
-					sph_particles_entr(j) += sph_particles_dentr(j) * dt;
+					sph_particles_rec2(j).A += sph_particles_dentr(j) * dt;
 					if( stars ) {
-						sph_particles_cold_mass(j) += sph_particles_dcold_mass(j) * dt;
+						sph_particles_rec2(j).fcold += sph_particles_dcold_mass(j) * dt;
 					}
 					if( chem ) {
 						for( int fi = 0; fi < NCHEMFRACS; fi++) {

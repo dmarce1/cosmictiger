@@ -73,15 +73,21 @@ struct sph_record1 {
 	float pre;
 };
 
+struct sph_record2 {
+	float A;
+	float fcold;
+};
+
 SPH_PARTICLES_EXTERN sph_record1* sph_particles_r1;
+SPH_PARTICLES_EXTERN sph_record2* sph_particles_r2;
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_s2; //
  SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
  SPH_PARTICLES_EXTERN float* sph_particles_f1;			// alpha
  SPH_PARTICLES_EXTERN float* sph_particles_p;			// alpha*/
 
-SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
-SPH_PARTICLES_EXTERN float* sph_particles_rc;
+/*SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
+SPH_PARTICLES_EXTERN float* sph_particles_rc;*/
 
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
@@ -157,8 +163,8 @@ inline char& sph_particles_converged(part_int index) {
 	return sph_particles_c[index];
 }
 
-inline float& sph_particles_cold_mass(part_int index) {
-	return sph_particles_rc[index];
+inline float sph_particles_cold_mass(part_int index) {
+	return sph_particles_r2[index].fcold;
 }
 
 inline float& sph_particles_dcold_mass(part_int index) {
@@ -284,6 +290,10 @@ inline sph_record1& sph_particles_rec1(part_int index) {
 	return sph_particles_r1[index];
 }
 
+inline sph_record2& sph_particles_rec2(part_int index) {
+	return sph_particles_r2[index];
+}
+
 inline float sph_particles_fpre1(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].fpre1;
@@ -316,9 +326,9 @@ inline char& sph_particles_rung(int index) {
 	return particles_rung(sph_particles_dm_index(index));
 }
 
-inline float& sph_particles_entr(part_int index) {
+inline float sph_particles_entr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_e[index];
+	return sph_particles_r2[index].A;
 }
 
 inline float& sph_particles_dentr(part_int index) {

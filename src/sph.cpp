@@ -722,7 +722,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
 	cuda_data.divv0_snk = &sph_particles_divv0(0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
-	cuda_data.entr_snk = &sph_particles_entr(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);

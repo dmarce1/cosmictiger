@@ -789,10 +789,10 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					sph_particles_Hepp(i) = chem.Hepp * factor;
 					sph_particles_normalize_fracs(i);
 					echange += (chem.eint * (1.f - chem.cold_mass) - sph_particles_eint(i) * (1.f - sph_particles_cold_mass(i)))*sph_mass/sqr(a);
-					sph_particles_entr(i) = chem.eint * (get_options().gamma-1.0)/ pow(sph_particles_rho(i) * (1.f - chem.cold_mass),get_options().gamma-1.0);
+					sph_particles_rec2(i).A = chem.eint * (get_options().gamma-1.0)/ pow(sph_particles_rho(i) * (1.f - chem.cold_mass),get_options().gamma-1.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
-						sph_particles_cold_mass(i) = chem.cold_mass;
+						sph_particles_rec2(i).fcold = chem.cold_mass;
 					}
 				}
 			}
