@@ -88,9 +88,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_z = data.vz;
 	auto* sph_index = data.cat_index;
 	auto* type = data.type;
-	auto* sph_gx = data.sph_gx;
-	auto* sph_gy = data.sph_gy;
-	auto* sph_gz = data.sph_gz;
+	auto* sph_g = data.sph_g;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
@@ -159,9 +157,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (my_type == SPH_TYPE && !params.glass) {
-			sph_gx[j] = gx[i];
-			sph_gy[j] = gy[i];
-			sph_gz[j] = gz[i];
+			sph_g[j].dvel[XDIM] = gx[i];
+			sph_g[j].dvel[YDIM] = gy[i];
+			sph_g[j].dvel[ZDIM] = gz[i];
 		} else {
 			if (!params.first_call) {
 				vx = fmaf(gx[i], dt, vx);
@@ -682,9 +680,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type = &particles_type(0);
-		data.sph_gx = &sph_particles_gforce(XDIM, 0);
-		data.sph_gy = &sph_particles_gforce(YDIM, 0);
-		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
+		data.sph_g = &sph_particles_rec6(0);
 	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);

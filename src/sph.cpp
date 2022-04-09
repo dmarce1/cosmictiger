@@ -722,9 +722,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.rec3_snk = &sph_particles_rec3(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
-	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
-	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
-	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.dalpha = &sph_particles_dalpha(0);
@@ -736,6 +733,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
 	cuda_data.rec5_snk = &sph_particles_rec5(0);
+	cuda_data.rec6_snk = &sph_particles_rec6(0);
 	cuda_data.code_dif_to_cgs = sqr(get_options().code_to_cm) / get_options().code_to_s;
 	cuda_data.gcentral = get_options().gcentral;
 	cuda_data.hcentral = get_options().hcentral;

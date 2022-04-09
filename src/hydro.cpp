@@ -189,7 +189,8 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			fprintf(fp, "%e %e\n", t, rho_max);
 			fclose(fp);
 		}
-		sph_run_return rc2 = sph_step(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
+		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
+		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		if (!get_options().gravity) {
 			kr.max_rung = rc2.max_rung;
 		}

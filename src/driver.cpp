@@ -130,7 +130,7 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-sph_run_return sph_step(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
 		bool verbose) {
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
@@ -162,6 +162,30 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
 
+	tm.start();
+	if (verbose)
+		PRINT("starting sph_tree_create = %e\n", tm.read());
+	profiler_enter("sph_tree_create");
+	sr = sph_tree_create(tparams);
+	profiler_exit();
+	tm.stop();
+	if (verbose)
+		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
+	tm.reset();
+	return sr;
+
+}
+
+sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+		bool verbose) {
+	const bool stars = get_options().stars;
+	const bool diff = get_options().diffusion;
+	const bool chem = get_options().chem;
+	verbose = true;
+	*eheat = 0.0;
+	if (verbose)
+		PRINT("Doing SPH step with minrung = %i\n", minrung);
+
 	sph_run_params sparams;
 	if (adot != 0.0) {
 		sparams.max_dt = SCALE_DT * scale / fabs(adot);
@@ -178,17 +202,12 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	sparams.set = SPH_SET_ACTIVE;
 	sparams.phase = phase;
 	const bool glass = get_options().glass;
-
-	tm.start();
-	if (verbose)
-		PRINT("starting sph_tree_create = %e\n", tm.read());
-	profiler_enter("sph_tree_create");
-	sr = sph_tree_create(tparams);
-	profiler_exit();
-	tm.stop();
-	if (verbose)
-		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
-	tm.reset();
+	sph_tree_neighbor_params tnparams;
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
 
 	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 	tnparams.seti = SPH_INTERACTIONS_I;
@@ -245,6 +264,7 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.seti = SPH_SET_ALL;
 	tnparams.seto = SPH_SET_ALL;
+	timer tm;
 	tm.start();
 	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 	sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -290,22 +310,19 @@ sph_run_return sph_step(int minrung, double scale, double tau, double t0, int ph
 	tm.reset();
 
 	/*bool rc = true;
-	while (rc) {
-		sparams.run_type = SPH_RUN_RUNGS;
-		tm.start();
-		rc = sph_run(sparams, true).rc;
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
-		tm.reset();
-	}*/
+	 while (rc) {
+	 sparams.run_type = SPH_RUN_RUNGS;
+	 tm.start();
+	 rc = sph_run(sparams, true).rc;
+	 tm.stop();
+	 if (verbose)
+	 PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
+	 tm.reset();
+	 }*/
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
 
-	total_tm.stop();
-	if (verbose)
-		PRINT("TOTAL SPH TIME = %e\n", total_tm.read());
 
 	if (phase == 1) {
 		sph_tree_destroy(true);
@@ -467,7 +484,7 @@ void driver() {
 		output_time_file();
 		if (glass) {
 //			PRINT("Glass not implemented\n");
-	//		abort();
+			//		abort();
 			initialize_glass();
 		} else {
 			initialize(get_options().z0);
@@ -618,13 +635,16 @@ void driver() {
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
 			double heating;
+			if (sph && !glass) {
+				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating);
+			}
 			auto tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
-				max_rung = std::max(max_rung, sph_step(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
+				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
 				eheat -= a * heating;
 			}
 			if (full_eval) {

@@ -91,10 +91,14 @@ struct sph_record4 {
 
 struct sph_record5 {
 	array<float, NCHEMFRACS> dfrac;
-	array<float, NDIM> dvel;
 	float dA;
 	float dfcold;
 };
+
+struct sph_record6 {
+	array<float, NDIM> dvel;
+};
+
 /*SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
  SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
  SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistry
@@ -106,6 +110,7 @@ SPH_PARTICLES_EXTERN sph_record2* sph_particles_r2;
 SPH_PARTICLES_EXTERN sph_record3* sph_particles_r3;
 SPH_PARTICLES_EXTERN sph_record4* sph_particles_r4;
 SPH_PARTICLES_EXTERN sph_record5* sph_particles_r5;
+SPH_PARTICLES_EXTERN sph_record6* sph_particles_r6;
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_s2; //
  SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
@@ -127,7 +132,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
-SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN char* sph_particles_c;
 SPH_PARTICLES_EXTERN float* sph_particles_cv;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
@@ -324,6 +328,10 @@ inline sph_record5& sph_particles_rec5(part_int index) {
 	return sph_particles_r5[index];
 }
 
+inline sph_record6& sph_particles_rec6(part_int index) {
+	return sph_particles_r6[index];
+}
+
 inline float sph_particles_fpre1(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].fpre1;
@@ -373,7 +381,7 @@ inline float& sph_particles_dvel0(int dim, part_int index) {
 
 inline float& sph_particles_dvel(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r5[index].dvel[dim];
+	return sph_particles_r6[index].dvel[dim];
 }
 
 inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
@@ -393,7 +401,7 @@ inline float sph_particles_divv(part_int index) {
 
 inline float& sph_particles_gforce(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_g[dim][index];
+	return sph_particles_r6[index].dvel[dim];
 }
 
 inline float sph_particles_ekin(part_int index) {

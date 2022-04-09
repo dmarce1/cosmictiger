@@ -882,9 +882,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					float gy_i;
 					float gz_i;
 					if (data.gravity) {
-						gx_i = data.gx_snk[snki];
-						gy_i = data.gy_snk[snki];
-						gz_i = data.gz_snk[snki];
+						gx_i = data.rec6_snk[snki].dvel[XDIM];
+						gy_i = data.rec6_snk[snki].dvel[YDIM];
+						gz_i = data.rec6_snk[snki].dvel[ZDIM];
 					} else {
 						gx_i = 0.f;
 						gy_i = 0.f;
@@ -893,9 +893,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += gx_i;
 					ay += gy_i;
 					az += gz_i;
-					data.rec5_snk[snki].dvel[XDIM] = ax;
-					data.rec5_snk[snki].dvel[YDIM] = ay;
-					data.rec5_snk[snki].dvel[ZDIM] = az;
+					data.rec6_snk[snki].dvel[XDIM] = ax;
+					data.rec6_snk[snki].dvel[YDIM] = ay;
+					data.rec6_snk[snki].dvel[ZDIM] = az;
 					data.rec5_snk[snki].dA = de_dt;
 					if (params.stars) {
 						data.rec5_snk[snki].dfcold = dcm_dt;

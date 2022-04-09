@@ -22,6 +22,7 @@
 
 #include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/sph_particles.hpp>
 
 #include <atomic>
 
@@ -39,9 +40,7 @@ struct cuda_kick_data {
 	float* vx;
 	float* vy;
 	float* vz;
-	float* sph_gx;
-	float* sph_gy;
-	float* sph_gz;
+	sph_record6* sph_g;
 	float* star_gx;
 	float* star_gy;
 	float* star_gz;

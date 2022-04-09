@@ -258,12 +258,8 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_r3[i], sph_particles_r3[j]);
 	std::swap(sph_particles_r4[i], sph_particles_r4[j]);
 	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
+	std::swap(sph_particles_r6[i], sph_particles_r6[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
-	for (int dim = 0; dim < NDIM; dim++) {
-		if (gravity) {
-			std::swap(sph_particles_g[dim][i], sph_particles_g[dim][j]);
-		}
-	}
 }
 
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
@@ -341,7 +337,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_cv, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
-			sph_particles_array_resize(sph_particles_g[dim], new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -383,6 +378,7 @@ void sph_particles_free() {
 #endif
 	CUDA_CHECK(cudaFree(sph_particles_r2));
 	CUDA_CHECK(cudaFree(sph_particles_r5));
+	CUDA_CHECK(cudaFree(sph_particles_r6));
 	CUDA_CHECK(cudaFree(sph_particles_r3));
 	CUDA_CHECK(cudaFree(sph_particles_r1));
 	CUDA_CHECK(cudaFree(sph_particles_r4));
@@ -391,9 +387,6 @@ void sph_particles_free() {
 //			CUDA_CHECK(cudaFree(sph_particles_fY));
 //			CUDA_CHECK(cudaFree(sph_particles_sn));
 //			CUDA_CHECK(cudaFree(sph_particles_dz));
-	}
-	for (int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaFree(sph_particles_g[NDIM]));
 	}
 }
 
@@ -825,6 +818,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(sph_particles_r3, sizeof(sph_record3), sph_particles_size(), fp);
 	FREAD(sph_particles_r4, sizeof(sph_record4), sph_particles_size(), fp);
 	FREAD(sph_particles_r5, sizeof(sph_record5), sph_particles_size(), fp);
+	FREAD(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		stars_load(fp);
@@ -841,6 +835,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(sph_particles_r3, sizeof(sph_record3), sph_particles_size(), fp);
 	fwrite(sph_particles_r4, sizeof(sph_record4), sph_particles_size(), fp);
 	fwrite(sph_particles_r5, sizeof(sph_record5), sph_particles_size(), fp);
+	fwrite(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		stars_save(fp);
