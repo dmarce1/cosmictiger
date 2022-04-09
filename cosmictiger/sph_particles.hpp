@@ -44,6 +44,32 @@
 #define CHEM_HEPP 6
 #define CHEM_Z 7
 
+
+class frac_real {
+	unsigned short i;
+	constexpr static float c0 = 10000.0f;
+	constexpr static float c0inv = 1.0f / c0;
+public:
+	CUDA_EXPORT
+	operator float() const {
+		return expf(-sqr(i * c0inv));
+	}
+	CUDA_EXPORT
+	frac_real& operator=(float y) {
+		ALWAYS_ASSERT( y <= 1.0f);
+		if (y > 0.0) {
+			i = c0 * sqrtf(-logf(y));
+		} else {
+			i = (1 << 16) - 1;
+		}
+		return *this;
+	}
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & i;
+	}
+};
+
 struct sph_particle0 {
 	float entr0;
 	array<float, NCHEMFRACS> chem0;
@@ -132,7 +158,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
-SPH_PARTICLES_EXTERN char* sph_particles_c;
 SPH_PARTICLES_EXTERN float* sph_particles_cv;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 
@@ -187,7 +212,7 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
  */
 
 inline char& sph_particles_converged(part_int index) {
-	return sph_particles_c[index];
+	return sph_particles_or[index];
 }
 
 inline float sph_particles_cold_mass(part_int index) {

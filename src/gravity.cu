@@ -118,7 +118,6 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 				}
 			}
 			__syncwarp();
-			const float16 zero = __float2half(0.f);
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
@@ -291,7 +290,6 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 				}
 			}
 			__syncwarp();
-			const float16 zero = __float2half(0.f);
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
@@ -449,7 +447,6 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
-				const float zero = __float2half(0.f);
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1

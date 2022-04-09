@@ -26,9 +26,6 @@
 
 #include <atomic>
 
-#include <cuda_fp16.h>
-using float16 = __half;
-
 struct cuda_kick_data {
 	tree_node* tree_nodes;
 	fixed32* x;

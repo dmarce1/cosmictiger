@@ -330,8 +330,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_r3, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r4, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r5, new_capacity, true);
+		sph_particles_array_resize(sph_particles_r6, new_capacity, true);
 		sph_particles_array_resize(sph_particles_or, new_capacity, true);
-		sph_particles_array_resize(sph_particles_c, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cv, new_capacity, true);
@@ -813,7 +813,7 @@ void sph_particles_load(FILE* fp) {
 	const bool diff = get_options().diffusion;
 	const bool cond = get_options().conduction;
 	const bool stars = get_options().stars;
-	FREAD(sph_particles_r1, sizeof(float), sph_particles_size(), fp);
+	FREAD(sph_particles_r1, sizeof(sph_record1), sph_particles_size(), fp);
 	FREAD(sph_particles_r2, sizeof(sph_record2), sph_particles_size(), fp);
 	FREAD(sph_particles_r3, sizeof(sph_record3), sph_particles_size(), fp);
 	FREAD(sph_particles_r4, sizeof(sph_record4), sph_particles_size(), fp);
@@ -830,7 +830,7 @@ void sph_particles_save(FILE* fp) {
 	const bool diff = get_options().diffusion;
 	const bool cond = get_options().conduction;
 	const bool stars = get_options().stars;
-	fwrite(sph_particles_r1, sizeof(sph_record2), sph_particles_size(), fp);
+	fwrite(sph_particles_r1, sizeof(sph_record1), sph_particles_size(), fp);
 	fwrite(sph_particles_r2, sizeof(sph_record2), sph_particles_size(), fp);
 	fwrite(sph_particles_r3, sizeof(sph_record3), sph_particles_size(), fp);
 	fwrite(sph_particles_r4, sizeof(sph_record4), sph_particles_size(), fp);

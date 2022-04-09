@@ -432,6 +432,7 @@ void load_glass(const char* filename) {
 								sph_particles_smooth_len(m) = h;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
+									sph_particles_H(m) = 1.0 - get_options().Y0;
 									sph_particles_He0(m) = get_options().Y0;
 									sph_particles_Hn(m) = 1.e-30;
 									sph_particles_Hp(m) = 1.e-30;
