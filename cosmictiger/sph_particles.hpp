@@ -57,12 +57,12 @@ struct sph_particle0 {
 struct sph_particle {
 	float entr;
 	array<float, NDIM> v;
-	float h;
+	float cfrac;
 	template<class A>
 	void serialize(A&&arc, unsigned) {
 		arc & entr;
 		arc & v;
-		arc & h;
+		arc & cfrac;
 	}
 };
 
@@ -94,7 +94,7 @@ struct aux_quantities {
 	float fpre2;
 	float pre;
 	float shearv;
-	float entr;
+	float h;
 	float curlv;
 	float alpha;
 	float fcold;
@@ -106,7 +106,7 @@ struct aux_quantities {
 		arc & fpre2;
 		arc & pre;
 		arc & shearv;
-		arc & entr;
+		arc & h;
 		arc & alpha;
 		arc & fcold;
 		arc & fracs;
@@ -380,13 +380,13 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}
-	p.h = sph_particles_smooth_len(index);
+	p.cfrac = sph_particles_cold_mass(index);
 	return p;
 }
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
-	aux.entr = sph_particles_entr(index);
+	aux.h = sph_particles_smooth_len(index);
 	aux.alpha = sph_particles_alpha(index);
 	aux.fpre1 = sph_particles_fpre1(index);
 	aux.fpre2 = sph_particles_fpre2(index);

@@ -530,7 +530,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, float* h, float* ent, float* vx, float* vy, float* vz, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, float* cfrac, float* ent, float* vx, float* vy, float* vz, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -539,8 +539,8 @@ void sph_particles_global_read_sph(particle_global_range range, float* h, float*
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				if( h ) {
-					h[j] = sph_particles_smooth_len(i);
+				if( cfrac ) {
+					cfrac[j] = sph_particles_smooth_len(i);
 				}
 				if (ent) {
 					ent[j] = sph_particles_entr(i);
@@ -565,8 +565,8 @@ void sph_particles_global_read_sph(particle_global_range range, float* h, float*
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
 					const sph_particle& part = ptr[src_index];
-					if (h) {
-						ent[dest_index] = part.h;
+					if (cfrac) {
+						ent[dest_index] = part.cfrac;
 					}
 					if (ent) {
 						ent[dest_index] = part.entr;
@@ -678,7 +678,7 @@ static vector<char> sph_particles_fetch_rung_cache_line(part_int index) {
 	return line;
 }
 
-void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* pre, float* fpre1, float* fpre2, float* fcold, float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
+void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* fcold, float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -686,8 +686,8 @@ void sph_particles_global_read_aux(particle_global_range range, float* entr, flo
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				if( entr) {
-					entr[j] = sph_particles_entr(i);
+				if( h) {
+					h[j] = sph_particles_smooth_len(i);
 				}
 				if( alpha ) {
 					alpha[j] = sph_particles_alpha(i);
@@ -727,8 +727,8 @@ void sph_particles_global_read_aux(particle_global_range range, float* entr, flo
 			for (part_int i = begin; i < end; i++) {
 				const part_int src_index = i - line_id.index;
 				const int j = dest_index;
-				if( entr) {
-					entr[j] = ptr[src_index].entr;
+				if( h) {
+					h[j] = ptr[src_index].h;
 				}
 				if( alpha ) {
 					alpha[j] = ptr[src_index].alpha;
