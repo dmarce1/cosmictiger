@@ -716,10 +716,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.trees, host_trees.data(), sizeof(sph_tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
-	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.dm_index_snk = &sph_particles_dm_index(0);
 	cuda_data.rungs_snk = &particles_rung(0);
-	cuda_data.shearv_snk = &sph_particles_shear(0);
+	cuda_data.rec1_snk = &sph_particles_rec1(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
 	cuda_data.divv0_snk = &sph_particles_divv0(0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
@@ -728,9 +727,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.alpha_snk = &sph_particles_alpha(0);
-	cuda_data.fpre1_snk = &sph_particles_fpre1(0);
-	cuda_data.fpre2_snk = &sph_particles_fpre2(0);
-	cuda_data.pre_snk = &sph_particles_pre(0);
+	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.divv_snk = &sph_particles_divv(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.dalpha = &sph_particles_dalpha(0);

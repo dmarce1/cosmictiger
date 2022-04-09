@@ -464,13 +464,13 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					if (tid == 0) {
 						const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 						const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
-						data.shearv_snk[snki] = shearv;
+						data.rec1_snk[snki].shearv = shearv;
+						data.rec1_snk[snki].fpre1 = fpre;
+						data.rec1_snk[snki].fpre2 = dpdh;
+						data.rec1_snk[snki].pre = pre;
 						data.divv0_snk[snki] = data.divv_snk[snki];
 						data.divv_snk[snki] = div_v;
 						data.curlv_snk[snki] = curlv;
-						data.fpre1_snk[snki] = fpre;
-						data.fpre2_snk[snki] = dpdh;
-						data.pre_snk[snki] = pre;
 						data.converged_snk[snki] = true;
 					}
 					hmin = fminf(hmin, h);
@@ -765,7 +765,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float c_ij = 0.5f * (c_i + c_j);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);									// * (balsara_i + balsara_j);
 						const float beta_ij = alpha_ij * 1.5f;
-						const float hfrac_ij = sqrtf(hfrac_i * hfrac_j);
+						const float hfrac_ij = 2.0f * (hfrac_i * hfrac_j) / (hfrac_i + hfrac_j + 1e-30f);
 						const float vsig_ij = hfrac_ij * (alpha_ij * c_ij - beta_ij * w_ij);
 						const float pi_ij = -mu_ij * vsig_ij / rho_ij;
 						const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i;

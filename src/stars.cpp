@@ -94,7 +94,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
 				const float rho = sph_particles_rho(i);
-				const float tdyn = sqrtf((3.0*a*a*a)/(4.0*M_PI*G*rho))/a * 2.0;
+				const float tdyn = sqrtf((3.0*a*a*a)/(4.0*M_PI*G*rho))/a * 1.5;
 				if( rung >= minrung + 1 && sph_particles_cold_mass(i)> 0.0 && sph_particles_divv(i) < 0.0) {
 					const float eps = 2.0f * rung_dt[rung] * t0 / tdyn * sph_particles_cold_mass(i);
 					const float p = 1.0 - exp(-eps);
