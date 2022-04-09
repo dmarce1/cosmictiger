@@ -68,6 +68,8 @@ struct sph_particle {
 
 SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
+SPH_PARTICLES_EXTERN float* sph_particles_p;			// alpha
+SPH_PARTICLES_EXTERN float* sph_particles_f1;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
 SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
@@ -88,7 +90,9 @@ SPH_PARTICLES_EXTERN float* sph_particles_cv; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 
 struct aux_quantities {
-	float fpre;
+	float fpre1;
+	float fpre2;
+	float pre;
 	float shearv;
 	float entr;
 	float curlv;
@@ -98,7 +102,9 @@ struct aux_quantities {
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & curlv;
-		arc & fpre;
+		arc & fpre1;
+		arc & fpre2;
+		arc & pre;
 		arc & shearv;
 		arc & entr;
 		arc & alpha;
@@ -118,7 +124,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_sph(particle_global_range range, float* h, float* vx, float* vy, float* vz, float* entr, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* fpre, float* fcold, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* pre, float* fpre1, float* fpre2, float* fcold, float* shearv,
 		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
@@ -257,9 +263,19 @@ inline float sph_particles_gamma(part_int index) {
 	return 1.f + 1.f / cv;
 }
 
-inline float& sph_particles_fpre(part_int index) {
+inline float& sph_particles_fpre1(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_f0[index];
+}
+
+inline float& sph_particles_fpre2(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_f1[index];
+}
+
+inline float& sph_particles_pre(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_p[index];
 }
 
 inline part_int& sph_particles_dm_index(part_int index) {
@@ -372,7 +388,9 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
 	aux.entr = sph_particles_entr(index);
 	aux.alpha = sph_particles_alpha(index);
-	aux.fpre = sph_particles_fpre(index);
+	aux.fpre1 = sph_particles_fpre1(index);
+	aux.fpre2 = sph_particles_fpre2(index);
+	aux.pre = sph_particles_pre(index);
 	if (get_options().stars) {
 		aux.fcold = sph_particles_cold_mass(index);
 	}
