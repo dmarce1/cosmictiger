@@ -893,15 +893,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ax += gx_i;
 					ay += gy_i;
 					az += gz_i;
-					data.dvx[snki] = ax;
-					data.dvy[snki] = ay;
-					data.dvz[snki] = az;
-					data.dentr[snki] = de_dt;
+					data.rec5_snk[snki].dvel[XDIM] = ax;
+					data.rec5_snk[snki].dvel[YDIM] = ay;
+					data.rec5_snk[snki].dvel[ZDIM] = az;
+					data.rec5_snk[snki].dA = de_dt;
 					if (params.stars) {
-						data.dcold_mass[snki] = dcm_dt;
+						data.rec5_snk[snki].dfcold = dcm_dt;
 					}
 					if (data.chemistry) {
-						data.dchem[snki] = dfrac_dt;
+						data.rec5_snk[snki].dfrac = dfrac_dt;
 					}
 					const float div_v = data.rec3_snk[snki].divv;
 					const float dtinv_divv = params.a * fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);

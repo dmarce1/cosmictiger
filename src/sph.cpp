@@ -735,11 +735,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.converged_snk = &sph_particles_converged(0);
 	cuda_data.gravity = get_options().gravity;
 	cuda_data.conduction = get_options().conduction;
-	cuda_data.dchem = &sph_particles_dchem(0);
-	cuda_data.dentr = &sph_particles_dentr(0);
-	cuda_data.dvx = &sph_particles_dvel(XDIM, 0);
-	cuda_data.dvy = &sph_particles_dvel(YDIM, 0);
-	cuda_data.dvz = &sph_particles_dvel(ZDIM, 0);
+	cuda_data.rec5_snk = &sph_particles_rec5(0);
 	cuda_data.code_dif_to_cgs = sqr(get_options().code_to_cm) / get_options().code_to_s;
 	cuda_data.gcentral = get_options().gcentral;
 	cuda_data.hcentral = get_options().hcentral;

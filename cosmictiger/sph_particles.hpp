@@ -86,13 +86,26 @@ struct sph_record3 {
 
 struct sph_record4 {
 	float alpha;
-	array<float,NCHEMFRACS> frac;
+	array<float, NCHEMFRACS> frac;
 };
+
+struct sph_record5 {
+	array<float, NCHEMFRACS> dfrac;
+	array<float, NDIM> dvel;
+	float dA;
+	float dfcold;
+};
+/*SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
+ SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
+ SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistry
+ SPH_PARTICLES_EXTERN float* sph_particles_drc1;
+ */
 
 SPH_PARTICLES_EXTERN sph_record1* sph_particles_r1;
 SPH_PARTICLES_EXTERN sph_record2* sph_particles_r2;
 SPH_PARTICLES_EXTERN sph_record3* sph_particles_r3;
 SPH_PARTICLES_EXTERN sph_record4* sph_particles_r4;
+SPH_PARTICLES_EXTERN sph_record5* sph_particles_r5;
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_s2; //
  SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
@@ -100,21 +113,17 @@ SPH_PARTICLES_EXTERN sph_record4* sph_particles_r4;
  SPH_PARTICLES_EXTERN float* sph_particles_p;			// alpha*/
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
-SPH_PARTICLES_EXTERN float* sph_particles_rc;*/
+ SPH_PARTICLES_EXTERN float* sph_particles_rc;*/
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
-SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
-SPH_PARTICLES_EXTERN float* sph_particles_cv; //*/
+ SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
+ SPH_PARTICLES_EXTERN float* sph_particles_cv; //*/
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
-SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
-SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_c0; // chemistry*/
+ SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
+ SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_c0; // chemistry*/
 
 SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
-SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv1; // dvel_pred
-SPH_PARTICLES_EXTERN float* sph_particles_de1; // dentr_pred
-SPH_PARTICLES_EXTERN array<float, NCHEMFRACS>* sph_particles_dchem1; // chemistry
-SPH_PARTICLES_EXTERN float* sph_particles_drc1;
 
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
@@ -182,7 +191,7 @@ inline float sph_particles_cold_mass(part_int index) {
 }
 
 inline float& sph_particles_dcold_mass(part_int index) {
-	return sph_particles_drc1[index];
+	return sph_particles_r5[index].dfcold;
 }
 
 inline float sph_particles_divv0(part_int index) {
@@ -299,7 +308,6 @@ inline char& sph_particles_oldrung(int index) {
 	return sph_particles_or[index];
 }
 
-
 inline sph_record1& sph_particles_rec1(part_int index) {
 	return sph_particles_r1[index];
 }
@@ -310,6 +318,10 @@ inline sph_record2& sph_particles_rec2(part_int index) {
 
 inline sph_record3& sph_particles_rec3(part_int index) {
 	return sph_particles_r3[index];
+}
+
+inline sph_record5& sph_particles_rec5(part_int index) {
+	return sph_particles_r5[index];
 }
 
 inline float sph_particles_fpre1(part_int index) {
@@ -351,7 +363,7 @@ inline float sph_particles_entr(part_int index) {
 
 inline float& sph_particles_dentr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_de1[index];
+	return sph_particles_r5[index].dA;
 }
 
 inline float& sph_particles_dvel0(int dim, part_int index) {
@@ -361,7 +373,7 @@ inline float& sph_particles_dvel0(int dim, part_int index) {
 
 inline float& sph_particles_dvel(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dv1[dim][index];
+	return sph_particles_r5[index].dvel[dim];
 }
 
 inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
@@ -371,7 +383,7 @@ inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
 
 inline array<float, NCHEMFRACS>& sph_particles_dchem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dchem1[index];
+	return sph_particles_r5[index].dfrac;
 }
 
 inline float sph_particles_divv(part_int index) {

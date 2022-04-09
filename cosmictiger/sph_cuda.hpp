@@ -35,7 +35,6 @@ struct sph_run_cuda_data {
 	float gsoft;
 	float* dalpha;
 	array<float, NCHEMFRACS>* chem;
-	array<float, NCHEMFRACS>* dchem;
 	float* divv;
 	float* mmw;
 	float* gradT;
@@ -81,11 +80,8 @@ struct sph_run_cuda_data {
 	sph_record1* rec1_snk;
 	sph_record3* rec3_snk;
 	part_int* dm_index_snk;
-	float* dentr;
 	float* dentr_diss;
-	float* dvx;
-	float* dvy;
-	float* dvz;
+	sph_record5* rec5_snk;
 	float code_dif_to_cgs;
 	float N;
 	int nselfs;
