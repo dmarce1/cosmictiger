@@ -43,7 +43,7 @@ struct options {
 	bool use_glass;
 	int glass;
 	int tracer_count;
-	int kernel;
+	double kernel;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;

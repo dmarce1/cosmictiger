@@ -107,6 +107,7 @@ inline float anytrue(const simd_float& x) {
 
 #endif
 
+CUDA_EXPORT
 inline double sinc(double x) {
 	if (x == 0.0) {
 		return 1.0;

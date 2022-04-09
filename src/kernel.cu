@@ -23,16 +23,134 @@
 
 #include <cosmictiger/safe_io.hpp>
 
-void kernel_set_type(int type) {
-	kernel_type = type;
+constexpr int NPIECE = 16;
+constexpr float dx = 1.0 / NPIECE;
+
+__managed__ pair<float>* WLUT;
+__managed__ pair<float>* dWLUT;
+
+float kernel_index;
+float kernel_norm;
+
+CUDA_EXPORT
+float kernelW(float q) {
+	q = fminf(q * NPIECE, NPIECE * 0.9999999f);
+	const int q0 = q;
+	const int q1 = q0 + 1;
+	const float x = q - q0;
+	const float y1 = WLUT[q0].first;
+	const float k1 = WLUT[q0].second;
+	const float y2 = WLUT[q1].first;
+	const float k2 = WLUT[q1].second;
+	const float dy = y2 - y1;
+	const float a = k1 / NPIECE - dy;
+	const float b = -k2 / NPIECE + dy;
+	const float omx = 1.f - x;
+	const float w = omx * y1 + x * y2 + x * omx * (omx * a + x * b);
+	return w;
+}
+
+#define DX (1.0 / NPIECE)
+
+CUDA_EXPORT
+float dkernelW_dq(float q) {
+	q = fminf(q * NPIECE, NPIECE * 0.9999999f);
+	const int q0 = q;
+	const int q1 = q0 + 1;
+	const float x = q - q0;
+	const float y1 = WLUT[q0].first;
+	const float k1 = WLUT[q0].second;
+	const float y2 = WLUT[q1].first;
+	const float k2 = WLUT[q1].second;
+	const float dy = y2 - y1;
+	const float a = k1 / NPIECE - dy;
+	const float b = -k2 / NPIECE + dy;
+	return NPIECE*(b*(2 - 3*x)*x + a*(-1 + x)*(-1 + 3*x) - y1 + y2);
+//	const float omx = 1.f - x;
+//	const float w = omx * y1 + x * y2 + x * omx * (omx * a + x * b);
+//	return w;
+}
+
+template<class T>
+inline T W(T q) {
+	const T W0 = kernel_norm;
+	const T n = kernel_index;
+	q = fminf(q, 1.f);
+	T x = float(M_PI) * q;
+	x = fminf(x, M_PI * 0.9999999f);
+	T w = W0 * powf(sinc(x), n);
+	return w;
+}
+
+template<class T>
+inline T dWdq(T q) {
+//	return (W(q + DX) - W(q)) / DX;
+	const T W0 = kernel_norm;
+	const T n = kernel_index;
+	T x = float(M_PI) * q;
+	q = fminf(q, 1.f);
+	x = fminf(x, M_PI * 0.9999999f);
+	if (q == 0.0f) {
+		return 0.f;
+	} else {
+		T tmp, s, c;
+		s = sinf(x);
+		c = cosf(x);
+		if (x < T(0.01f)) {
+			tmp = T(-1. / 3.) * sqr(x) * x;
+		} else {
+			tmp = (x * c - s);
+		}
+		T w = W0 * n * tmp / (x * q) * powf(s / x, n - 1.0);
+		return w;
+	}
+}
+
+void kernel_set_type(double n) {
+	const auto w = [n](double r) {
+		return pow(sinc(M_PI*r),n);
+	};
+	constexpr int N = 100000;
+	double sum = 0.0;
+	const double dr = 1.0 / N;
+	for (int i = N - 1; i >= 1; i--) {
+		double r = double(i) / N;
+		sum += r * r * w(r) * 4.0 * M_PI * dr;
+	}
+	kernel_norm = 1.0 / sum;
+	PRINT("KERNEL NORM = %e\n", kernel_norm);
+	kernel_index = n;
+
+	CUDA_CHECK(cudaMallocManaged(&WLUT, sizeof(pair<float> ) * (NPIECE + 1)));
+	CUDA_CHECK(cudaMallocManaged(&dWLUT, sizeof(pair<float> ) * (NPIECE + 1)));
+	WLUT[0].first = kernel_norm;
+	WLUT[0].second = 0.0;
+	WLUT[NPIECE].first = 0.0;
+	WLUT[NPIECE].second = 0.0;
+	dWLUT[0].first = 0.0;
+	dWLUT[0].second = (dWdq(DX) - 0.0) / DX;
+	dWLUT[NPIECE].first = 0.0;
+	dWLUT[NPIECE].second = 0.0;
+	for (int n = 1; n < NPIECE; n++) {
+		const float q = (float) n / NPIECE;
+		WLUT[n].first = W(q);
+		WLUT[n].second = dWdq(q);
+		dWLUT[n].first = dWdq(q);
+		dWLUT[n].second = (dWdq(q + DX) - dWdq(q)) / DX;
+		printf("%e %e\n", WLUT[n].first, WLUT[n].second);
+	}
+	FILE* fp = fopen("kernel.txt", "wt");
+	for (float r = 0.0; r < 1.0; r += 0.01) {
+		float w0 = kernelW(r);
+		float w1 = W(r);
+		float dw0 = dkernelW_dq(r);
+		float dw1 = dWdq(r);
+		fprintf(fp, "%e %e %e %e %e\n", r, w1, w0, dw1, dw0);
+	}
+	fclose(fp);
 }
 
 void kernel_output() {
-	FILE* fp = fopen("kernel.txt", "wt");
-	for (double q = 0.0; q <= 1.0; q += 0.0001) {
-		fprintf(fp, "%e %e %e %e %e\n", q, kernelW(q), dkernelW_dq(q), kernelFqinv(q), kernelPot(q));
-	}
-	fclose(fp);
 }
 
 double kernel_stddev(std::function<double(double)> W) {
@@ -48,31 +166,4 @@ double kernel_stddev(std::function<double(double)> W) {
 }
 
 void kernel_adjust_options(options& opts) {
-	double h0 = 4.743416e-01;
-	double h;
-	switch (kernel_type) {
-	case KERNEL_CUBIC_SPLINE:
-	case KERNEL_QUARTIC_SPLINE:
-	case KERNEL_QUINTIC_SPLINE:
-	case KERNEL_WENDLAND_C2:
-	case KERNEL_WENDLAND_C4:
-	case KERNEL_WENDLAND_C6:
-		break;
-	default:
-		PRINT("Error ! Unknown kernel!\n");
-		abort();
-	}
-	h = kernel_stddev(kernelW<double>);
-	PRINT( "kernel width = %e\n", h0/h);
-//	opts.neighbor_number *= pow(h0 / h, 3);
-	opts.sph_bucket_size = 8.0 / M_PI *  opts.neighbor_number;
-//	opts.cfl *= h / h0;
-//	opts.hsoft *= h0 / h;
-//	opts.eta *= sqrt(h / h0);
-	PRINT("Setting:\n");
-	PRINT("Neighbor number       = %e\n", opts.neighbor_number);
-	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);
-	PRINT("Dark matter softening = 1/%e of mean separation.\n", 1.0 / opts.parts_dim / opts.hsoft);
-	PRINT("CFL = %f\n", opts.cfl);
-	PRINT("eta = %f\n", opts.eta);
 }
