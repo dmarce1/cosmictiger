@@ -97,7 +97,6 @@ struct aux_quantities {
 	float h;
 	float curlv;
 	float alpha;
-	float fcold;
 	array<float, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -108,7 +107,6 @@ struct aux_quantities {
 		arc & shearv;
 		arc & h;
 		arc & alpha;
-		arc & fcold;
 		arc & fracs;
 	}
 };
@@ -124,7 +122,7 @@ part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_sph(particle_global_range range, float* h, float* vx, float* vy, float* vz, float* entr, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* pre, float* fpre1, float* fpre2, float* fcold, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
 		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
@@ -380,7 +378,9 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}
-	p.cfrac = sph_particles_cold_mass(index);
+	if (get_options().stars) {
+		p.cfrac = sph_particles_cold_mass(index);
+	}
 	return p;
 }
 
@@ -391,9 +391,6 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux.fpre1 = sph_particles_fpre1(index);
 	aux.fpre2 = sph_particles_fpre2(index);
 	aux.pre = sph_particles_pre(index);
-	if (get_options().stars) {
-		aux.fcold = sph_particles_cold_mass(index);
-	}
 	aux.curlv = sph_particles_curlv(index);
 	if (get_options().diffusion) {
 		aux.shearv = sph_particles_shear(index);

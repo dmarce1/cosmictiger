@@ -678,7 +678,7 @@ static vector<char> sph_particles_fetch_rung_cache_line(part_int index) {
 	return line;
 }
 
-void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* fcold, float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
+void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2,float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -700,9 +700,6 @@ void sph_particles_global_read_aux(particle_global_range range, float* h, float*
 				}
 				if (pre) {
 					pre[j] = sph_particles_pre(i);
-				}
-				if( fcold) {
-					fcold[j] = sph_particles_cold_mass(i);
 				}
 				if (shearv) {
 					shearv[j] = sph_particles_shear(i);
@@ -741,9 +738,6 @@ void sph_particles_global_read_aux(particle_global_range range, float* h, float*
 				}
 				if (pre) {
 					pre[j] =ptr[src_index].pre;
-				}
-				if( fcold) {
-					fcold[j] = ptr[src_index].fcold;
 				}
 				if (shearv) {
 					shearv[j] = ptr[src_index].shearv;
