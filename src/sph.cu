@@ -407,7 +407,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float vy_ij = vy0_ij + y_ij * params.adot;
 						const float vz_ij = vz0_ij + z_ij * params.adot;
 						const float rinv = 1.0f / (1.0e-30f + r);
-						const float dWdr_i = fpre * dkernelW_dq(q) * h4inv_i;
+						const float dWdr_i = dkernelW_dq(q) * h4inv_i;
 						dx_dx += x_ij * x_ij * dWdr_i * rinv;
 						dx_dy += x_ij * y_ij * dWdr_i * rinv;
 						dx_dz += x_ij * z_ij * dWdr_i * rinv;
