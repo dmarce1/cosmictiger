@@ -909,7 +909,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 					if (params.diffusion) {
-						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * params.cfl * 1.1f);
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * 3.f);
 					}
 					const float a2 = sqr(ax, ay, az);
 					//				const float a2_hydro = sqr(ax - gx_i, ay - gy_i, az - gz_i);

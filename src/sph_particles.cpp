@@ -540,7 +540,7 @@ void sph_particles_global_read_sph(particle_global_range range, float* cfrac, fl
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
 				if( cfrac ) {
-					cfrac[j] = sph_particles_smooth_len(i);
+					cfrac[j] = sph_particles_cold_mass(i);
 				}
 				if (ent) {
 					ent[j] = sph_particles_entr(i);
