@@ -719,15 +719,14 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.dm_index_snk = &sph_particles_dm_index(0);
 	cuda_data.rungs_snk = &particles_rung(0);
 	cuda_data.rec1_snk = &sph_particles_rec1(0);
+	cuda_data.rec3_snk = &sph_particles_rec3(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
-	cuda_data.divv0_snk = &sph_particles_divv0(0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.alpha_snk = &sph_particles_alpha(0);
 	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
-	cuda_data.divv_snk = &sph_particles_divv(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.dalpha = &sph_particles_dalpha(0);
 	cuda_data.curlv_snk = &sph_particles_curlv(0);
@@ -756,7 +755,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.kappa0 = 1.31 * pow(3.0, 1.5) * pow(constants::kb, 3.5) / 4.0 / sqrt(M_PI) / pow(constants::e, 4) / sqrt(constants::me);
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
-	cuda_data.divv_snk = &sph_particles_divv(0);
 //	PRINT("Running with %i nodes\n", host_trees.size());
 	PRINT("Sending %i\n", host_selflist.size());
 	auto rc = sph_run_cuda(params, cuda_data, stream);

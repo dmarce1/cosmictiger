@@ -78,8 +78,14 @@ struct sph_record2 {
 	float fcold;
 };
 
+struct sph_record3 {
+	float divv;
+	float divv0;
+};
+
 SPH_PARTICLES_EXTERN sph_record1* sph_particles_r1;
 SPH_PARTICLES_EXTERN sph_record2* sph_particles_r2;
+SPH_PARTICLES_EXTERN sph_record3* sph_particles_r3;
 
 /*SPH_PARTICLES_EXTERN float* sph_particles_s2; //
  SPH_PARTICLES_EXTERN float* sph_particles_f0; // kernel correction
@@ -89,9 +95,9 @@ SPH_PARTICLES_EXTERN sph_record2* sph_particles_r2;
 /*SPH_PARTICLES_EXTERN float* sph_particles_e; // energy
 SPH_PARTICLES_EXTERN float* sph_particles_rc;*/
 
-SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
+/*SPH_PARTICLES_EXTERN float* sph_particles_dvv0; //
 SPH_PARTICLES_EXTERN float* sph_particles_dvv; // divv
-SPH_PARTICLES_EXTERN float* sph_particles_cv; //
+SPH_PARTICLES_EXTERN float* sph_particles_cv; //*/
 
 SPH_PARTICLES_EXTERN float* sph_particles_a;			// alpha
 SPH_PARTICLES_EXTERN float* sph_particles_h; // smoothing length
@@ -107,6 +113,7 @@ SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // gravity
 SPH_PARTICLES_EXTERN char* sph_particles_c;
+SPH_PARTICLES_EXTERN float* sph_particles_cv;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 
 struct aux_quantities {
@@ -171,8 +178,8 @@ inline float& sph_particles_dcold_mass(part_int index) {
 	return sph_particles_drc1[index];
 }
 
-inline float& sph_particles_divv0(part_int index) {
-	return sph_particles_dvv0[index];
+inline float sph_particles_divv0(part_int index) {
+	return sph_particles_r3[index].divv0;
 }
 
 inline float& sph_particles_alpha(part_int index) {
@@ -294,6 +301,10 @@ inline sph_record2& sph_particles_rec2(part_int index) {
 	return sph_particles_r2[index];
 }
 
+inline sph_record3& sph_particles_rec3(part_int index) {
+	return sph_particles_r3[index];
+}
+
 inline float sph_particles_fpre1(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].fpre1;
@@ -356,9 +367,9 @@ inline array<float, NCHEMFRACS>& sph_particles_dchem(part_int index) {
 	return sph_particles_dchem1[index];
 }
 
-inline float& sph_particles_divv(part_int index) {
+inline float sph_particles_divv(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_dvv[index];
+	return sph_particles_r3[index].divv;
 }
 
 inline float& sph_particles_gforce(int dim, part_int index) {

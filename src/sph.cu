@@ -468,8 +468,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						data.rec1_snk[snki].fpre1 = fpre;
 						data.rec1_snk[snki].fpre2 = dpdh;
 						data.rec1_snk[snki].pre = pre;
-						data.divv0_snk[snki] = data.divv_snk[snki];
-						data.divv_snk[snki] = div_v;
+						data.rec3_snk[snki].divv0 = data.rec3_snk[snki].divv;
+						data.rec3_snk[snki].divv = div_v;
 						data.curlv_snk[snki] = curlv;
 						data.converged_snk[snki] = true;
 					}
@@ -903,8 +903,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (data.chemistry) {
 						data.dchem[snki] = dfrac_dt;
 					}
-					const float divv = data.divv_snk[snki];
-					const float dtinv_divv = params.a * fabsf(divv - 3.f * params.adot * ainv) * (1.f / 3.f);
+					const float div_v = data.rec3_snk[snki].divv;
+					const float dtinv_divv = params.a * fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);
 					float dtinv_hydro1 = 1.0e-30f;
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
@@ -940,9 +940,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 					const float alpha = data.alpha_snk[snki];
-					const float div_v = data.divv_snk[snki];
 					const float curlv = data.curlv_snk[snki];
-					const float divv0 = params.tau > 0.f ? data.divv0_snk[snki] : div_v;
+					const float divv0 = params.tau > 0.f ? data.rec3_snk[snki].divv0 : div_v;
 					const float ddivv_dt = (div_v - divv0) / last_dt - 0.5f * params.adot * ainv * (div_v + divv0);
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
 					const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
