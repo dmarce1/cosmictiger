@@ -229,7 +229,7 @@ HPX_PLAIN_ACTION (sph_run);
 bool is_converged(const sph_tree_node* self, int minrung) {
 	bool converged = true;
 	for (int i = self->part_range.first; i < self->part_range.second; i++) {
-		if (sph_particles_rung(i) >= minrung) {
+		if (sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
 			if (!sph_particles_converged(i)) {
 				converged = false;
 				break;
