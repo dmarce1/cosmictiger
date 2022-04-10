@@ -147,15 +147,11 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
-						/*if( chem ) {
-							for( int fi = 0; fi < NCHEMFRACS; fi++) {
-								auto& frac = sph_particles_frac(fi,i);
-								auto dfrac = sph_particles_dchem(i)[fi];
-								if(frac + dfrac*dt2*2.0 < 0.0) {
-									PRINT( "%e %e\n", frac , dfrac*dt2*2.0);
-								}
-							}
-						}*/
+						const float& e = sph_particles_entr(i);
+						float& dedt = sph_particles_dentr(i);
+						const float de = dedt * 2.0f * dt2;
+						const float D = logf(1.0f + de / e) / (2.0f* dt2);
+						dedt = D;
 					}
 				}
 			}
@@ -268,6 +264,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_r4[i], sph_particles_r4[j]);
 	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
 	std::swap(sph_particles_r6[i], sph_particles_r6[j]);
+	std::swap(sph_particles_kap[i], sph_particles_kap[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 }
 
@@ -346,6 +343,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_dm, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cv, new_capacity, true);
+		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
+		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
 		}
@@ -488,7 +487,7 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 	return line;
 }
 
-void sph_particles_global_read_sph(particle_global_range range, float* cfrac, float* ent, float* vx, float* vy, float* vz, part_int offset) {
+void sph_particles_global_read_sph(particle_global_range range, float* cfrac, float* ent, float* vx, float* vy, float* vz, float* kappa, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -507,6 +506,9 @@ void sph_particles_global_read_sph(particle_global_range range, float* cfrac, fl
 					vx[j] = sph_particles_vel(XDIM, i);
 					vy[j] = sph_particles_vel(YDIM, i);
 					vz[j] = sph_particles_vel(ZDIM, i);
+				}
+				if (kappa) {
+					kappa[j] = sph_particles_kappa(i);
 				}
 			}
 		} else {
@@ -533,6 +535,9 @@ void sph_particles_global_read_sph(particle_global_range range, float* cfrac, fl
 						vx[dest_index] = part.v[XDIM];
 						vy[dest_index] = part.v[YDIM];
 						vz[dest_index] = part.v[ZDIM];
+					}
+					if (kappa) {
+						kappa[dest_index] = part.kappa;
 					}
 					dest_index++;
 				}
@@ -831,6 +836,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(sph_particles_r4, sizeof(sph_record4), sph_particles_size(), fp);
 	FREAD(sph_particles_r5, sizeof(sph_record5), sph_particles_size(), fp);
 	FREAD(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
+	FREAD(sph_particles_kap, sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		stars_load(fp);
@@ -848,6 +854,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(sph_particles_r4, sizeof(sph_record4), sph_particles_size(), fp);
 	fwrite(sph_particles_r5, sizeof(sph_record5), sph_particles_size(), fp);
 	fwrite(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
+	fwrite(sph_particles_kap, sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		stars_save(fp);

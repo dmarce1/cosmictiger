@@ -84,11 +84,13 @@ struct sph_particle {
 	float entr;
 	array<float, NDIM> v;
 	float cfrac;
+	float kappa;
 	template<class A>
 	void serialize(A&&arc, unsigned) {
 		arc & entr;
 		arc & v;
 		arc & cfrac;
+		arc & kappa;
 	}
 };
 
@@ -159,9 +161,11 @@ SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_cv;
+SPH_PARTICLES_EXTERN float* sph_particles_kap;
+SPH_PARTICLES_EXTERN float* sph_particles_e0;
+SPH_PARTICLES_EXTERN float* sph_particles_de2;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
-SPH_PARTICLES_EXTERN float* sph_particles_kap;
 
 struct aux_quantities {
 	float fpre1;
@@ -194,7 +198,7 @@ void sph_particles_sort_by_particles(pair<part_int> rng);
 void sph_particles_swap(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_sph(particle_global_range range, float* h, float* vx, float* vy, float* vz, float* entr, part_int offset);
+void sph_particles_global_read_sph(particle_global_range range, float* h, float* vx, float* vy, float* vz, float* entr, float* kappa, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* entr, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
 		array<float, NCHEMFRACS>* fracs, part_int offset);
@@ -212,6 +216,16 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
  return sph_particles_sn[index];
  }
  */
+
+inline float& sph_particles_entr0(part_int index) {
+	return sph_particles_e0[index];
+}
+
+
+inline float& sph_particles_dentr_con(part_int index) {
+	return sph_particles_de2[index];
+}
+
 
 inline char& sph_particles_converged(part_int index) {
 	return sph_particles_or[index];
@@ -403,7 +417,7 @@ inline char& sph_particles_rung(int index) {
 	return particles_rung(sph_particles_dm_index(index));
 }
 
-inline float sph_particles_entr(part_int index) {
+inline float& sph_particles_entr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r2[index].A;
 }
@@ -481,6 +495,7 @@ float sph_particles_coloumb_log(part_int i, float a);
 inline sph_particle sph_particles_get_particle(part_int index) {
 	sph_particle p;
 	p.entr = sph_particles_entr(index);
+	p.kappa = sph_particles_kappa(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		p.v[dim] = sph_particles_vel(dim, index);
 	}

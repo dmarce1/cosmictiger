@@ -20,6 +20,7 @@
 #define SPH_DIFFUSION_C 0.03f
 #define SMOOTHLEN_BLOCK_SIZE 128
 #define COND_INIT_BLOCK_SIZE 256
+#define CONDUCTION_BLOCK_SIZE 256
 #define RUNGS_BLOCK_SIZE 256
 #define HYDRO_BLOCK_SIZE 32
 #define AUX_BLOCK_SIZE 128
@@ -801,10 +802,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dtinv_cfl = fmaxf(dtinv_cfl, dtinv);
 						vsig = fmaxf(vsig, c_ij - w_ij);
 						if (params.diffusion) {
-							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i * rho_i;
-							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j * rho_j;
-							const float difco_ij = 2.f * (difco_i * difco_j) / (difco_i + difco_j + 1e-37f);
-							const float D_ij = -2.f * m / (rho_i * rho_j) * difco_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * (h_i * h_j)));//* (r2 / (r2 + 0.01f * (h_i * h_j)));
+							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i;
+							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
+							const float difco_ij = 0.5f * (difco_i + difco_j);
+							const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv * ainv * (r2 / (r2 + 0.01f * sqr(h_ij)));
 							D += D_ij;
 							de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j / (hfrac_i * rho_i), gamma0 - 1.f));
 							if (params.stars) {
@@ -1133,6 +1134,184 @@ struct cond_init_workspace {
 	device_vector<cond_init_record2> rec2;
 };
 
+struct conduction_record1 {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+	float h;
+	char rung;
+};
+struct conduction_record2 {
+	float entr;
+	float cfrac;
+	float kappa;
+	float fpre;
+};
+
+struct conduction_workspace {
+	device_vector<conduction_record1> rec1;
+	device_vector<conduction_record2> rec2;
+};
+
+__global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
+	const int tid = threadIdx.x;
+	const int block_size = blockDim.x;
+	__shared__
+	int index;
+	__shared__ conduction_workspace ws;
+	if (tid == 0) {
+		index = atomicAdd(&reduce->counter, 1);
+	}
+	__syncthreads();
+	new (&ws) conduction_workspace();
+	const float gamma0 = data.def_gamma;
+	const float m = data.m;
+	array<fixed32, NDIM> x;
+	while (index < data.nselfs) {
+		int flops = 0;
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
+		const sph_tree_node& self = data.trees[data.selfs[index]];
+		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+			const sph_tree_node& other = data.trees[data.neighbors[ni]];
+			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+				bool contains = false;
+				int j;
+				int total;
+				float h;
+				int rung;
+				if (pi < other.part_range.second) {
+					h = data.h[pi];
+					rung = data.rungs[pi];
+					if (rung >= params.min_rung) {
+						x[XDIM] = data.x[pi];
+						x[YDIM] = data.y[pi];
+						x[ZDIM] = data.z[pi];
+						contains = (self.outer_box.contains(x));
+						if (!contains) {
+							contains = true;
+							for (int dim = 0; dim < NDIM; dim++) {
+								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+							}
+						}
+					}
+				}
+				j = contains;
+				compute_indices<COND_INIT_BLOCK_SIZE>(j, total);
+				const int offset = ws.rec1.size();
+				__syncthreads();
+				const int next_size = offset + total;
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
+				if (contains) {
+					const int k = offset + j;
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].h = h;
+					ws.rec1[k].rung = data.rungs[pi];
+					ws.rec2[k].entr = data.entr[pi];
+					ws.rec2[k].kappa = data.kappa[pi];
+					ws.rec2[k].fpre = data.fpre1[pi];
+					if (params.stars) {
+						ws.rec2[k].cfrac = data.cold_frac[pi];
+					} else {
+						ws.rec2[k].cfrac = 0.f;
+					}
+				}
+			}
+			for (int i = self.part_range.first; i < self.part_range.second; i++) {
+				__syncthreads();
+				const int snki = self.sink_part_range.first - self.part_range.first + i;
+				const bool active = data.rungs[i] >= params.min_rung;
+				const bool semiactive = !active && data.sa_snk[snki];
+				if (active || semiactive) {
+					const float h_i = data.h[i];
+					const float A_i = data.entr[i];
+					const float cfrac_i = data.cold_frac[i];
+					const float hfrac_i = 1.f - cfrac_i;
+					const auto x_i = data.x[i];
+					const auto y_i = data.y[i];
+					const auto z_i = data.z[i];
+					const float fpre_i = data.fpre1[i];
+					const float h2_i = sqr(h_i);
+					const auto rung_i = data.rungs[i];
+					const float kappa_i = data.kappa[i];
+					const float c0 = float(3.0f / 4.0f / M_PI * data.N);
+					const float hinv_i = 1.f / h_i;
+					const float h3inv_i = (sqr(hinv_i) * hinv_i);
+					const float rho_i = m * c0 * h3inv_i;
+					const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);
+					const float dt_i = rung_dt[rung_i] * params.t0;
+					float den = 0.f;
+					float num = 0.f;
+					for (int j = tid; j < ws.rec1.size(); j += COND_INIT_BLOCK_SIZE) {
+						const auto& rec1 = ws.rec1[j];
+						const auto& rec2 = ws.rec2[j];
+						const fixed32 x_j = rec1.x;
+						const fixed32 y_j = rec1.y;
+						const fixed32 z_j = rec1.z;
+						const float h_j = rec1.h;
+						const auto rung_j = rec1.rung;
+						const float x_ij = distance(x_i, x_j);				// 2
+						const float y_ij = distance(y_i, y_j);				// 2
+						const float z_ij = distance(z_i, z_j);				// 2
+						const float r2 = sqr(x_ij, y_ij, z_ij);
+						const float h2_j = sqr(h_j);
+						if ((active || (rung_j >= params.min_rung)) && (r2 < h2_i || r2 < h2_j) && (r2 > 0.f)) {
+							const float A_j = rec2.entr;
+							const float fpre_j = rec2.fpre;
+							const float kappa_j = rec2.kappa;
+							const float cfrac_j = rec2.cfrac;
+							const float hfrac_j = 1.f - cfrac_j;
+							const float r = sqrtf(r2);
+							const float rinv = 1.f / r;
+							const float hinv_j = 1.f / h_j;
+							const float h3inv_j = sqr(hinv_j) * hinv_j;
+							const float rho_j = m * c0 * h3inv_j;													// 2
+							const float q_i = r * hinv_i;
+							const float q_j = r * hinv_j;
+							const float dWdr_i = fpre_i * dkernelW_dq(q_i) * h3inv_i * hinv_i;
+							const float dWdr_j = fpre_j * dkernelW_dq(q_j) * h3inv_j * hinv_j;
+							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
+							const float h_ij = 0.5f * (h_i + h_j);
+							const float dWdr_rinv = r * dWdr_ij / (r2 + 0.01f * sqr(h_ij));
+							const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f);
+							const float dt_j = rung_dt[rung_j] * params.t0;
+							const float dt_ij = fminf(dt_i, dt_j);
+							const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij;
+							num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
+							den += D_ij;
+						}
+					}
+					shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(num);
+					shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(den);
+					if (tid == 0) {
+						const float A0 = data.entr0_snk[snki];
+						const float A1 = (A0 + num) / (1.f + den);
+						data.dentr_con_snk[snki] = A1 - A0;
+					}
+				}
+			}
+		}
+		shared_reduce_add<int, CONDUCTION_BLOCK_SIZE>(flops);
+		if (tid == 0) {
+			index = atomicAdd(&reduce->counter, 1);
+		}
+		__syncthreads();
+	}
+	(&ws)->~conduction_workspace();
+
+}
+
 __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
@@ -1330,10 +1509,11 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
 					float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i;
 					const float sigmax_i = propc0 * sqrtf(T_i);
-					const float R = kappa_i * gradToT / (rho_i * sigmax_i);
+					const float R = mmw_i * kappa_i * gradToT / (rho_i * sigmax_i);
 					const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));
 					kappa_i *= phi;
 					data.kap_snk[snki] = kappa_i;
+					data.entr0_snk[snki] = A_i;
 				}
 			}
 

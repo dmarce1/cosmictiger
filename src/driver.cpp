@@ -181,6 +181,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
+	const bool conduction = get_options().conduction;
 	verbose = true;
 	*eheat = 0.0;
 	if (verbose)
@@ -280,6 +281,36 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.stop();
 	tm.reset();
 
+	if (conduction) {
+		timer dtm;
+		dtm.start();
+
+		sph_particles_reset_converged();
+
+		sparams.run_type = SPH_RUN_COND_INIT;
+		tm.reset();
+		tm.start();
+		sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
+		tm.reset();
+		float err;
+		do {
+			sparams.run_type = SPH_RUN_CONDUCTION;
+			tm.reset();
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			err = sph_apply_conduction_update(minrung);
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err = %e\n", tm.read(), err);
+			tm.reset();
+		} while (err > SPH_DIFFUSION_TOLER);
+		dtm.stop();
+		PRINT("Conduction took %e seconds total\n", dtm.read());
+	}
+
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
@@ -322,7 +353,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
-
 
 	if (phase == 1) {
 		sph_tree_destroy(true);
