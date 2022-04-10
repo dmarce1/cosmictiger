@@ -124,7 +124,17 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					}
 					if( chem ) {
 						for( int fi = 0; fi < NCHEMFRACS; fi++) {
-							sph_particles_frac(fi,j) += sph_particles_dchem(j)[fi] * dt;
+							auto& frac = sph_particles_frac(fi,j);
+							auto dfrac = sph_particles_dchem(j)[fi];
+							if( frac + dfrac *dt < 0.0) {
+								if(frac + dfrac *dt > -1e-10f) {
+									frac = 1e-30f - dfrac * dt *1.0000001;
+								} else {
+									PRINT( "%e %e\n", frac, dfrac * dt);
+									ALWAYS_ASSERT(frac + dfrac * dt >= 0.0);
+								}
+							}
+							frac += dfrac * dt;
 						}
 					}
 					const float h3 = sqr(h)*h;

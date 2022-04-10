@@ -130,8 +130,8 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
-	("kernel", po::value<double>(&(opts.kernel))->default_value(3.333333333), "kernel index") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
+	("kernel", po::value<double>(&(opts.kernel))->default_value(4), "kernel index") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(60), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.1767), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
@@ -144,7 +144,7 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(8*1.5e9), "mass resolution") //
+	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.5e9), "mass resolution") //
 
 			;
 

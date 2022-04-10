@@ -147,6 +147,15 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
+						/*if( chem ) {
+							for( int fi = 0; fi < NCHEMFRACS; fi++) {
+								auto& frac = sph_particles_frac(fi,i);
+								auto dfrac = sph_particles_dchem(i)[fi];
+								if(frac + dfrac*dt2*2.0 < 0.0) {
+									PRINT( "%e %e\n", frac , dfrac*dt2*2.0);
+								}
+							}
+						}*/
 					}
 				}
 			}

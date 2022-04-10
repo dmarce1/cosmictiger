@@ -266,7 +266,7 @@ power_spectrum_function compute_power_spectrum(int type) {
 	double kmin;
 	double kmax;
 	kmin = 1e-5 * params.hubble;
-	kmax = 7.5 * params.hubble;
+	kmax = 15.0 * params.hubble;
 	einstein_boltzmann_interpolation_function(&dm_k, &bary_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
 
 	auto m_k = type == BARYON_POWER ? bary_k : dm_k;
