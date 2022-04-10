@@ -394,8 +394,8 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	const float Htot = N.H + N.Hp + N.Hn + 2.f * N.H2;																	// 4
 	const float Hetot = N.He + N.Hep + N.Hepp;																			// 2
 	float ne_max = Htot + 4.f * Hetot;																				// 2
-	float ne_min = ne_max * 1e-7f;																					// 1
-	for (int i = 0; i < 28; i++) {
+	float ne_min = ne_max * 1e-20f;																					// 1
+	for (int i = 0; i < 32; i++) {
 		float ne_mid = sqrtf(ne_max * ne_min);
 		float fe_max, fe_mid;
 		if (i == 0) {

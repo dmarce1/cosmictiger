@@ -501,6 +501,7 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 	}
 	if (get_options().stars) {
 		p.cfrac = sph_particles_cold_mass(index);
+		ALWAYS_ASSERT(p.cfrac<=1.0);
 	}
 	return p;
 }

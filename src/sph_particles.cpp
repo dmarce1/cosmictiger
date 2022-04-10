@@ -147,11 +147,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
-						const float& e = sph_particles_entr(i);
+						float& e = sph_particles_entr(i);
 						float& dedt = sph_particles_dentr(i);
 						const float de = dedt * 2.0f * dt2;
-						const float D = logf(1.0f + de / e) / (2.0f* dt2);
-						dedt = D;
+						//const float D = logf(1.0f + de / e) / (2.0f* dt2);
+						dedt = 0.0;
+						e += de;
 					}
 				}
 			}
