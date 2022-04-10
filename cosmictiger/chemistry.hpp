@@ -29,7 +29,7 @@
 #define SPECIE_HEP 5
 #define SPECIE_HEPP 6
 
-#define TMAX 1e10f
+#define TMAX 1e9f
 #define TMIN 1e3f
 
 struct species_t {

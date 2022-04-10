@@ -391,7 +391,7 @@ void load_glass(const char* filename) {
 	const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
 	const float n0 = 1.0 - 0.75 * get_options().Y0;
 	const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
-	const float T0 = 100.0;
+	const float T0 = 1000.0;
 	const float eps_cgs = cv_cgs * T0;
 	const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
 	const float eps = eps_cgs / code_to_ene;
@@ -915,7 +915,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
 				const float n0 = 1.0 - 0.75 * get_options().Y0;
 				const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
-				const float T0 = 100.0;
+				const float T0 = 1000.0;
 				const float eps_cgs = cv_cgs * T0;
 				const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
 				const float eps = eps_cgs / code_to_ene;
