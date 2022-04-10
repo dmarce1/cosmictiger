@@ -114,6 +114,11 @@ inline simd_float sin(const simd_float &x0) {						// 17
 	return res;
 }
 
+
+inline simd_float sinf(const simd_float &x0) {
+	return sin(x0);
+}
+
 inline simd_float cos(const simd_float &x) {		// 18
 	return sin(x + simd_float(M_PI / 2.0));
 }

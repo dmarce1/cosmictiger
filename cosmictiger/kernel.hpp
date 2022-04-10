@@ -19,7 +19,7 @@
 
 #pragma once
 
-static constexpr int NPIECE = 32;
+static constexpr int NPIECE = 100;
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
@@ -89,7 +89,6 @@ inline float dWdq0(float q) {
 	}
 }
 
-
 CUDA_EXPORT
 inline float kernelW(float q) {
 //	return W0(q);
@@ -126,19 +125,12 @@ inline float dkernelW_dq(float q) {
 	return NPIECE * (b * (2 - 3 * x) * x + a * (-1 + x) * (-1 + 3 * x) - y1 + y2);
 }
 
-
-
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
 	T res, sw1, sw2, w1;
-	const auto q0 = q;
 	q *= (q < T(1));
-	const auto q2 = sqr(q);
-	w1 = T(105.0 / 16.0);
-	w1 = fmaf(w1, q2, T(-189.0 / 16.0));
-	w1 = fmaf(w1, q2, T(135.0 / 16.0));
-	w1 = fmaf(w1, q2, T(-35.0 / 16.0));
+	w1 = min(q - sinf(T(2 * M_PI) * q) / T(2. * M_PI), T(1)) / (sqr(q) * q + T(1e-30f));
 	res = w1;
 	/*w1 = T(32);
 	 w1 = fmaf(q, w1, -T(192.f / 5.f));
@@ -153,9 +145,6 @@ inline T kernelFqinv(T q) {
 	 w2 -= T(1.f / 15.f) * q3inv;
 	 sw1 = q < T(0.5);
 	 res = (sw1 * w1 + (T(1) - sw1) * w2);*/
-	sw1 = q0 < T(1);
-	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
 	return res;
 }
 
@@ -165,29 +154,25 @@ inline T kernelPot(T q) {
 	T res, sw1, sw2, w1;
 	const auto q0 = q;
 	q *= (q < T(1));
+
+	const T c0 = -2.437653393057226;
+	const T c1 = 3.2898681336964524;
+	const T c2 = -3.2469697011334144;
+	const T c3 = 2.0346861239688976;
+	const T c4 = -0.8367311301649535;
+	const T c5 = 0.2402386980306763;
+	const T c6 = -0.05066369468793888;
+	const T c7 = 0.008163765290898435;
 	const auto q2 = sqr(q);
-	w1 = T(315.0 / 128.0);
-	w1 = fmaf(w1, q2, T(-105.0 / 32.0));
-	w1 = fmaf(w1, q2, T(189.0 / 64.0));
-	w1 = fmaf(w1, q2, T(-45.0 / 32.0));
-	w1 = fmaf(w1, q2, T(35.0 / 128.0));
+	w1 = c7;
+	w1 = fmaf(q2, w1, c6);
+	w1 = fmaf(q2, w1, c5);
+	w1 = fmaf(q2, w1, c4);
+	w1 = fmaf(q2, w1, c3);
+	w1 = fmaf(q2, w1, c2);
+	w1 = fmaf(q2, w1, c1);
+	w1 = fmaf(q2, w1, c0);
 	res = w1;
-	/*w1 = -T(32.f / 5.f);
-	 w1 = fmaf(q, w1, T(48.f / 5.f));
-	 w1 *= q;
-	 w1 = fmaf(q, w1, T(-16.f / 3.f));
-	 w1 *= q;
-	 w1 = fmaf(q, w1, T(14.f / 5.f));
-	 w2 = T(32.f / 15.f);
-	 w2 = fmaf(q, w2, T(-48.f / 5.f));
-	 w2 = fmaf(q, w2, T(16.f));
-	 w2 = fmaf(q, w2, T(-32.f / 3.f));
-	 w2 *= q;
-	 w2 = fmaf(q, w2, T(16.f / 5.f));
-	 q1inv = T(1) / (q + T(1.0e-30f));
-	 w2 -= T(1.f / 15.f) * q1inv;
-	 sw1 = q < T(0.5f);
-	 res = (sw1 * w1 + (T(1) - sw1) * w2);*/
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
