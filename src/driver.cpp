@@ -18,7 +18,7 @@
  */
 
 #define  SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.01
+#define SCALE_DT 0.02
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>

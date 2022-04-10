@@ -160,6 +160,8 @@ SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_cv;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
+SPH_PARTICLES_EXTERN char* sph_particles_sa;
+SPH_PARTICLES_EXTERN float* sph_particles_kap;
 
 struct aux_quantities {
 	float fpre1;
@@ -213,6 +215,14 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
 
 inline char& sph_particles_converged(part_int index) {
 	return sph_particles_or[index];
+}
+
+inline char& sph_particles_semiactive(part_int index) {
+	return sph_particles_sa[index];
+}
+
+inline float& sph_particles_kappa(part_int index) {
+	return sph_particles_kap[index];
 }
 
 inline float sph_particles_cold_mass(part_int index) {
@@ -347,6 +357,10 @@ inline sph_record2& sph_particles_rec2(part_int index) {
 
 inline sph_record3& sph_particles_rec3(part_int index) {
 	return sph_particles_r3[index];
+}
+
+inline sph_record4& sph_particles_rec4(part_int index) {
+	return sph_particles_r4[index];
 }
 
 inline sph_record5& sph_particles_rec5(part_int index) {

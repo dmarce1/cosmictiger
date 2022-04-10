@@ -144,7 +144,7 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.5e9), "mass resolution") //
+	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(8*1.5e9), "mass resolution") //
 
 			;
 

@@ -42,6 +42,7 @@ struct sph_run_cuda_data {
 	float* curlv_snk;
 	float* h_snk;
 	float* dcold_mass;
+	char* sa_snk;
 	char* oldrung_snk;
 	float def_gamma;
 	bool conduction;
@@ -76,7 +77,10 @@ struct sph_run_cuda_data {
 	char* rungs_snk;
 	sph_record1* rec1_snk;
 	sph_record3* rec3_snk;
+	sph_record4* rec4_snk;
+	sph_record2* rec2_snk;
 	part_int* dm_index_snk;
+	float* kap_snk;
 	float* dentr_diss;
 	sph_record5* rec5_snk;
 	sph_record6* rec6_snk;

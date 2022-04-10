@@ -340,7 +340,9 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_r4, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r5, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r6, new_capacity, true);
+		sph_particles_array_resize(sph_particles_kap, new_capacity, true);
 		sph_particles_array_resize(sph_particles_or, new_capacity, true);
+		sph_particles_array_resize(sph_particles_sa, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dm, new_capacity, true);
 		sph_particles_array_resize(sph_particles_da, new_capacity, true);
 		sph_particles_array_resize(sph_particles_cv, new_capacity, true);
@@ -364,6 +366,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		}
 		sph_particles_alpha(oldsz + i) = get_options().alpha0;
 		sph_particles_rec3(oldsz + i).divv = 0.f;
+		sph_particles_semiactive(oldsz + i) = 0.0f;
 		if (stars) {
 			sph_particles_r2[(oldsz + i)].fcold = 0.f;
 		}

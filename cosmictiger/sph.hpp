@@ -264,6 +264,7 @@ struct sph_run_params {
 #define SPH_RUN_HYDRO 2
 #define SPH_RUN_AUX 3
 #define SPH_RUN_RUNGS 4
+#define SPH_RUN_COND_INIT 5
 
 
 float sph_apply_diffusion_update(int minrung, float toler);
