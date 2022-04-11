@@ -24,7 +24,7 @@
 #define RUNGS_BLOCK_SIZE 256
 #define HYDRO_BLOCK_SIZE 32
 #define AUX_BLOCK_SIZE 128
-#define MAX_RUNG_DIF 2
+#define MAX_RUNG_DIF 1
 
 #define SPH_SMOOTHLEN_TOLER float(1.0e-5)
 
@@ -51,6 +51,9 @@ struct smoothlen_record1 {
 struct smoothlen_record2 {
 	float entr;
 	float cfrac;
+	float vx;
+	float vy;
+	float vz;
 };
 
 struct smoothlen_workspace {
@@ -83,7 +86,6 @@ struct rungs_workspace {
 	device_vector<fixed32> x;
 	device_vector<fixed32> y;
 	device_vector<fixed32> z;
-	device_vector<float> h;
 	device_vector<char> rungs;
 };
 
@@ -223,6 +225,9 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					ws.x[k].x = x[XDIM];
 					ws.x[k].y = x[YDIM];
 					ws.x[k].z = x[ZDIM];
+					ws.v[k].vx = data.vx[pi];
+					ws.v[k].vy = data.vy[pi];
+					ws.v[k].vz = data.vz[pi];
 					ws.v[k].entr = data.entr[pi];
 					if (params.stars) {
 						ws.v[k].cfrac = data.cold_frac[pi];
@@ -327,6 +332,9 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(box_xceeded);
 				} while (error > SPH_SMOOTHLEN_TOLER && !box_xceeded);
 				if (!box_xceeded) {
+					const float vx_i = data.vx[i];
+					const float vy_i = data.vy[i];
+					const float vz_i = data.vz[i];
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
 					drho_dh = 0.f;
@@ -334,6 +342,24 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					const fixed32& x_i = x[XDIM];
 					const fixed32& y_i = x[YDIM];
 					const fixed32& z_i = x[ZDIM];
+					float dx_dx = 0.f;
+					float dx_dy = 0.f;
+					float dx_dz = 0.f;
+					float dy_dx = 0.f;
+					float dy_dy = 0.f;
+					float dy_dz = 0.f;
+					float dz_dx = 0.f;
+					float dz_dy = 0.f;
+					float dz_dz = 0.f;
+					float dvx_dx = 0.f;
+					float dvx_dy = 0.f;
+					float dvx_dz = 0.f;
+					float dvy_dx = 0.f;
+					float dvy_dy = 0.f;
+					float dvy_dz = 0.f;
+					float dvz_dx = 0.f;
+					float dvz_dy = 0.f;
+					float dvz_dz = 0.f;
 					float pre = 0.f;
 					float dpdh = 0.f;
 					ws.xc.resize(0);
@@ -394,6 +420,15 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float r2 = sqr(x_ij, y_ij, z_ij);
 						const float r = sqrt(r2);                    // 4
 						const float q = r * hinv;                    // 1
+						const float vx_j = ws.vc[j].vx;
+						const float vy_j = ws.vc[j].vy;
+						const float vz_j = ws.vc[j].vz;
+						const float vx0_ij = vx_i - vx_j;
+						const float vy0_ij = vy_i - vy_j;
+						const float vz0_ij = vz_i - vz_j;
+						const float vx_ij = vx0_ij + x_ij * params.adot;
+						const float vy_ij = vy0_ij + y_ij * params.adot;
+						const float vz_ij = vz0_ij + z_ij * params.adot;
 						const float rinv = 1.0f / (1.0e-30f + r);
 						const float w = kernelW(q); // 4
 						const float dwdq = dkernelW_dq(q);
@@ -401,16 +436,65 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float A0_j = fh_j * powf(A_j, 1.0f / gamma0);
 						pre += m * A0_j * kernelW(q) * h3inv_i;
 						dpdh -= A0_j * (3.f * w + q * dwdq);
+						dx_dx += x_ij * x_ij * dWdr_i * rinv;
+						dx_dy += x_ij * y_ij * dWdr_i * rinv;
+						dx_dz += x_ij * z_ij * dWdr_i * rinv;
+						dy_dy += y_ij * y_ij * dWdr_i * rinv;
+						dy_dz += y_ij * z_ij * dWdr_i * rinv;
+						dz_dz += z_ij * z_ij * dWdr_i * rinv;
+						dvx_dx += vx_ij * x_ij * dWdr_i * rinv;
+						dvy_dx += vy_ij * x_ij * dWdr_i * rinv;
+						dvz_dx += vz_ij * x_ij * dWdr_i * rinv;
+						dvx_dy += vx_ij * y_ij * dWdr_i * rinv;
+						dvy_dy += vy_ij * y_ij * dWdr_i * rinv;
+						dvz_dy += vz_ij * y_ij * dWdr_i * rinv;
+						dvx_dz += vx_ij * z_ij * dWdr_i * rinv;
+						dvy_dz += vy_ij * z_ij * dWdr_i * rinv;
+						dvz_dz += vz_ij * z_ij * dWdr_i * rinv;
 					}
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dpdh);
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(pre);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dx_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dx_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dx_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dy_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dy_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dz_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvx_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvx_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvx_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvy_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvy_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvy_dz);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dx);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dy);
+					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dz);
 					pre = powf(pre, gamma0);
 					dpdh *= 0.33333333333f / rhoh30;
+					dy_dx = dx_dy;
+					dz_dx = dx_dz;
+					dz_dy = dy_dz;
+					minverse(dx_dx, dx_dy, dx_dz, dy_dx, dy_dy, dy_dz, dz_dx, dz_dy, dz_dz);
+					mmult(dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, dx_dx, dx_dy, dx_dz, dy_dx, dy_dy, dy_dz, dz_dx, dz_dy, dz_dz);
+					float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
+					float div_v, curl_vx, curl_vy, curl_vz;
+					div_v = dvx_dx + dvy_dy + dvz_dz;
+					curl_vx = dvz_dy - dvy_dz;
+					curl_vy = -dvz_dx + dvx_dz;
+					curl_vz = dvy_dx - dvx_dy;
+					shear_xx = dvx_dx - (1.f / 3.f) * div_v;
+					shear_yy = dvy_dy - (1.f / 3.f) * div_v;
+					shear_zz = dvz_dz - (1.f / 3.f) * div_v;
+					shear_xy = 0.5f * (dvx_dy + dvy_dx);
+					shear_xz = 0.5f * (dvx_dz + dvz_dx);
+					shear_yz = 0.5f * (dvy_dz + dvz_dy);
 					if (tid == 0) {
+						const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
+						const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
+						data.rec1_snk[snki].shearv = shearv;
 						data.rec1_snk[snki].fpre1 = fpre;
 						data.rec1_snk[snki].fpre2 = dpdh;
 						data.rec1_snk[snki].pre = pre;
-						data.converged_snk[snki] = true;
 					}
 				} else {
 					if (tid == 0) {
@@ -661,7 +745,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					}
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
-					data.rec3_snk[snki].shearv = shearv;
 					const float div_v0 = data.rec3_snk[snki].divv;
 					data.rec3_snk[snki].divv = div_v;
 					const float alpha = data.rec4_snk[snki].alpha;
@@ -1100,7 +1183,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 		ws.x.resize(0);
 		ws.y.resize(0);
 		ws.z.resize(0);
-		ws.h.resize(0);
 		ws.rungs.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
@@ -1113,7 +1195,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 				float h;
 				int rung;
 				if (pi < other.part_range.second) {
-					h = data.h[pi];
 					rung = data.rungs[pi];
 					if (rung >= params.min_rung) {
 						x[XDIM] = data.x[pi];
@@ -1121,19 +1202,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 						x[ZDIM] = data.z[pi];
 						if (self.outer_box.contains(x)) {
 							contains = true;
-						}
-						if (!contains) {
-							contains = true;
-							for (int dim = 0; dim < NDIM; dim++) {
-								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
-								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
-									contains = false;
-									break;
-								}
-							}
 						}
 					}
 				}
@@ -1145,7 +1213,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 				ws.x.resize(next_size);
 				ws.y.resize(next_size);
 				ws.z.resize(next_size);
-				ws.h.resize(next_size);
 				ws.rungs.resize(next_size);
 				if (contains) {
 					ASSERT(j < total);
@@ -1153,7 +1220,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 					ws.x[k] = x[XDIM];
 					ws.y[k] = x[YDIM];
 					ws.z[k] = x[ZDIM];
-					ws.h[k] = h;
 					ws.rungs[k] = rung;
 				}
 			}
@@ -1161,10 +1227,11 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			if (data.rungs[i] >= params.min_rung) {
+				const int snki = self.sink_part_range.first - self.part_range.first + i;
 				const auto x_i = data.x[i];
 				const auto y_i = data.y[i];
 				const auto z_i = data.z[i];
-				const auto h_i = data.h[i];
+				const auto h_i = data.rec1_snk[snki].h;
 				char& rung_i = data.rungs[i];
 				const auto h2_i = sqr(h_i);
 				const int jmax = round_up(ws.x.size(), block_size);
@@ -1174,14 +1241,12 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 						const auto x_j = ws.x[j];
 						const auto y_j = ws.y[j];
 						const auto z_j = ws.z[j];
-						const auto h_j = ws.h[j];
 						const int rung_j = ws.rungs[j];
-						const auto h2_j = sqr(h_j);
 						const float x_ij = distance(x_i, x_j);
 						const float y_ij = distance(y_i, y_j);
 						const float z_ij = distance(z_i, z_j);
 						const float r2 = sqr(x_ij, y_ij, z_ij);
-						if (r2 < fmaxf(h2_i, h2_j)) {
+						if (r2 < h2_i) {
 							max_rung_j = max(max_rung_j, rung_j);
 						}
 					}

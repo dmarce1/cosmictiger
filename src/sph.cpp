@@ -527,7 +527,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 					break;
 
 					case SPH_RUN_RUNGS:
-					test = has_active_neighbors(self);
+					test = self->nactive > 0;
 					break;
 
 					case SPH_RUN_COND_INIT:
@@ -639,6 +639,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 			host_cold_frac.resize(parts_size);
 		}
 	} else if (params.run_type == SPH_RUN_SMOOTHLEN) {
+		host_vx.resize(parts_size);
+		host_vy.resize(parts_size);
+		host_vz.resize(parts_size);
 		host_entr.resize(parts_size);
 		if (stars) {
 			host_cold_frac.resize(parts_size);
@@ -685,7 +688,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								const part_int offset = (part_index += size) - size;
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
 								if( params.run_type == SPH_RUN_SMOOTHLEN) {
-									sph_particles_global_read_sph(node.global_part_range(),stars ? host_cold_frac.data() : nullptr, host_entr.data(), nullptr, nullptr, nullptr, nullptr, offset);
+									sph_particles_global_read_sph(node.global_part_range(),stars ? host_cold_frac.data() : nullptr, host_entr.data(), host_vx.data(), host_vy.data(), host_vz.data(), nullptr, offset);
 								} else if( params.run_type == SPH_RUN_AUX) {
 									sph_particles_global_read_sph(node.global_part_range(),nullptr, nullptr, host_vx.data(), host_vy.data(), host_vz.data(), nullptr, offset);
 								} else if( params.run_type == SPH_RUN_HYDRO) {
@@ -737,6 +740,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (stars) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.cold_frac, sizeof(float) * host_cold_frac.size()));
 		}
+		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
 	} else if (params.run_type == SPH_RUN_AUX) {
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
@@ -769,6 +775,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (stars) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.cold_frac, host_cold_frac.data(), sizeof(float) * host_cold_frac.size(), cudaMemcpyHostToDevice, stream));
 		}
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
 	} else if (params.run_type == SPH_RUN_AUX) {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
@@ -910,6 +919,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (stars) {
 			CUDA_CHECK(cudaFree(cuda_data.cold_frac));
 		}
+		CUDA_CHECK(cudaFree(cuda_data.vx));
+		CUDA_CHECK(cudaFree(cuda_data.vy));
+		CUDA_CHECK(cudaFree(cuda_data.vz));
 	} else if (params.run_type == SPH_RUN_AUX) {
 		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));

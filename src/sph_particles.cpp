@@ -161,6 +161,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						const float de = dedt * 2.0f * dt2;
 						dedt = 0.0;
 						e += de;
+						ALWAYS_ASSERT(e>=0.0);
 					}
 
 				}

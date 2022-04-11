@@ -99,6 +99,7 @@ struct sph_record1 {
 	float fpre2;
 	float pre;
 	float h;
+	float shearv;
 };
 
 struct sph_record2 {
@@ -108,7 +109,6 @@ struct sph_record2 {
 
 struct sph_record3 {
 	float divv;
-	float shearv;
 	float curlv;
 	float divv0;
 };
@@ -284,7 +284,7 @@ inline float& sph_particles_frac(int j, part_int index) {
 
 inline float sph_particles_shear(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r3[index].shearv;
+	return sph_particles_r1[index].shearv;
 }
 
 inline float sph_particles_curlv(part_int index) {
