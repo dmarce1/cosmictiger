@@ -646,7 +646,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					data.rec3_snk[snki].shearv = shearv;
 					data.rec3_snk[snki].divv0 = data.rec3_snk[snki].divv;
 					data.rec3_snk[snki].divv = div_v;
-					data.curlv_snk[snki] = curlv;
+					data.rec3_snk[snki].curlv = curlv;
 				}
 			}
 		}
@@ -1036,7 +1036,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 					const float alpha = alpha_i;
-					const float curlv = data.curlv_snk[snki];
+					const float curlv = data.rec3_snk[snki].curlv;
 					const float divv0 = params.tau > 0.f ? data.rec3_snk[snki].divv0 : div_v;
 					const float ddivv_dt = (div_v - divv0) / last_dt - 0.5f * params.adot * ainv * (div_v + divv0);
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
