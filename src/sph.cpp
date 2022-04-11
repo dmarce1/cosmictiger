@@ -979,7 +979,7 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 					A += dA;
 					err_max = std::max(this_err, err_max);
 					err_rms += sqr(this_err);
-					if( this_err < SPH_DIFFUSION_TOLER2) {
+					if( this_err < SPH_DIFFUSION_TOLER3) {
 						sph_particles_converged(i) = true;
 					}
 					N++;
