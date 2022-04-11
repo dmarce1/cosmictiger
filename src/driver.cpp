@@ -205,6 +205,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sparams.phase = phase;
 	const bool glass = get_options().glass;
 	sph_tree_neighbor_params tnparams;
+	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+	tnparams.min_rung = minrung;
 	tree_id root_id;
 	root_id.proc = 0;
 	root_id.index = 0;

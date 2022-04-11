@@ -238,7 +238,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& leaflist = lists[bid].leaflist;
 	auto& closelist = lists[bid].closelist;
 	auto& activei = shmem.active;
-	auto& sink_type = shmem.sink_type;
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
@@ -329,7 +328,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							sink_x[l] = src_x[srci];
 							sink_y[l] = src_y[srci];
 							sink_z[l] = src_z[srci];
-							sink_type[l] = src_type[srci];
 						}
 						nactive += total;
 						__syncwarp();
