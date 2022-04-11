@@ -643,7 +643,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				if (tid == 0) {
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
-					data.rec1_snk[snki].shearv = shearv;
+					data.rec3_snk[snki].shearv = shearv;
 					data.rec3_snk[snki].divv0 = data.rec3_snk[snki].divv;
 					data.rec3_snk[snki].divv = div_v;
 					data.curlv_snk[snki] = curlv;

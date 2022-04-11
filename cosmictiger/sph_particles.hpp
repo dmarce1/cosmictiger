@@ -95,7 +95,6 @@ struct sph_particle {
 };
 
 struct sph_record1 {
-	float shearv;
 	float fpre1;
 	float fpre2;
 	float pre;
@@ -109,6 +108,8 @@ struct sph_record2 {
 
 struct sph_record3 {
 	float divv;
+	float shearv;
+	float curlv;
 	float divv0;
 };
 
@@ -161,7 +162,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // dvel_pred
-SPH_PARTICLES_EXTERN float* sph_particles_cv;
 SPH_PARTICLES_EXTERN float* sph_particles_kap;
 SPH_PARTICLES_EXTERN float* sph_particles_e0;
 SPH_PARTICLES_EXTERN float* sph_particles_ea;
@@ -284,12 +284,12 @@ inline float& sph_particles_frac(int j, part_int index) {
 
 inline float sph_particles_shear(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r1[index].shearv;
+	return sph_particles_r3[index].shearv;
 }
 
-inline float& sph_particles_curlv(part_int index) {
+inline float sph_particles_curlv(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_cv[index];
+	return sph_particles_r3[index].curlv;
 }
 
 inline float& sph_particles_Z(part_int index) {

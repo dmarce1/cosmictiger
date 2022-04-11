@@ -836,7 +836,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.dalpha = &sph_particles_dalpha(0);
-	cuda_data.curlv_snk = &sph_particles_curlv(0);
 	cuda_data.gsoft = get_options().hsoft;
 	cuda_data.nselfs = host_selflist.size();
 	cuda_data.chemistry = get_options().chem;
