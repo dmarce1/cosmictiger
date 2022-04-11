@@ -689,9 +689,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.rungs = &particles_rung(0);
 	data.rank = hpx_rank();
 	if (kparams.save_force) {
-		data.gx = &particles_gforce(XDIM, 0);
-		data.gy = &particles_gforce(YDIM, 0);
-		data.gz = &particles_gforce(ZDIM, 0);
+		data.gx = &sph_particles_gforce(XDIM, 0);
+		data.gy = &sph_particles_gforce(YDIM, 0);
+		data.gz = &sph_particles_gforce(ZDIM, 0);
 		data.pot = &particles_pot(0);
 	} else {
 		data.gx = data.gy = data.gz = data.pot = nullptr;
