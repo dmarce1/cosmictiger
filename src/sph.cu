@@ -757,12 +757,10 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float lambda1 = 1.f / dthydro;
 					float dalpha_dt;
 					if (alpha < limiter * alpha_targ) {
-						dalpha_dt = (limiter * alpha_targ - alpha) * lambda1;
+						data.rec4_snk[snki].alpha = (limiter * alpha_targ);
 					} else {
-						dalpha_dt = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt)) - alpha) * lambda1;
+						data.rec4_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt)));
 					}
-					data.dalpha[snki] = dalpha_dt;
-
 				}
 			}
 		}
