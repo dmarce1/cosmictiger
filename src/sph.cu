@@ -1147,6 +1147,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				}
 			}
 		}
+		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
@@ -1192,6 +1193,10 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float fpre_j = rec2.fpre;
 						const float kappa_j = rec2.kappa;
 						const float cfrac_j = rec2.cfrac;
+						if(cfrac_j > 1.0f) {
+							PRINT( "%e\n", cfrac_j);
+							__trap();
+						}
 						ALWAYS_ASSERT(cfrac_j <= 1.0f);
 						const float hfrac_j = 1.f - cfrac_j;
 						const float r = sqrtf(r2);
@@ -1385,6 +1390,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const auto& rec2 = ws.rec2[j];
 					const float A_j = rec2.entr;
 					const float cfrac_j = rec2.cfrac;
+					ALWAYS_ASSERT(cfrac_j <= 1.0f);
 					const float hfrac_j = 1.f - cfrac_j;
 					const fixed32 x_j = rec1.x;
 					const fixed32 y_j = rec1.y;
