@@ -87,7 +87,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
 	auto* sph_index = data.cat_index;
-	auto* type = data.type;
+	auto* type = data.type_snk;
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
