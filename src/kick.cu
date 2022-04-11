@@ -160,8 +160,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		if (my_type == SPH_TYPE && !params.glass) {
 			sph_gx[j] = gx[i];
-			sph_gx[j] = gy[i];
-			sph_gx[j] = gz[i];
+			sph_gy[j] = gy[i];
+			sph_gz[j] = gz[i];
 		} else {
 			if (!params.first_call) {
 				vx = fmaf(gx[i], dt, vx);
