@@ -826,6 +826,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						gx_i = data.gx_snk[snki];
 						gy_i = data.gy_snk[snki];
 						gz_i = data.gz_snk[snki];
+						PRINT( "%e\n", gx_i);
 					} else {
 						gx_i = 0.f;
 						gy_i = 0.f;

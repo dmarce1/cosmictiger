@@ -37,7 +37,9 @@ struct cuda_kick_data {
 	float* vx;
 	float* vy;
 	float* vz;
-	sph_record6* sph_g;
+	float* sph_gx;
+	float* sph_gy;
+	float* sph_gz;
 	float* star_gx;
 	float* star_gy;
 	float* star_gz;
