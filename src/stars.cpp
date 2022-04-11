@@ -154,7 +154,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 						particles_type(dmi) = STAR_TYPE;
 						std::lock_guard<mutex_type> lock(mutex);
 						particles_cat_index(dmi) = stars.size();
-						auto dt = 0.5f * rung_dt[rung] * t0;
+					/*	auto dt = 0.5f * rung_dt[rung] * t0;
 						const float gx = sph_particles_gforce(XDIM, i);
 						const float gy = sph_particles_gforce(YDIM, i);
 						const float gz = sph_particles_gforce(ZDIM, i);
@@ -162,6 +162,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 						particles_vel(XDIM,dmi) += gy * dt;
 						particles_vel(XDIM,dmi) += gz * dt;
 						const float g2 = sqr(gx, gy, gz);
+						ALWAYS_ASSERT(g2 != 0.0);
 						const float factor = get_options().eta * sqrtf(a * get_options().hsoft);
 						dt = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
 						rung = std::max(std::max((int) ceilf(log2f(t0) - log2f(dt)), std::max(rung - 1, minrung)), 1);
@@ -169,7 +170,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 						dt = 0.5f * rung_dt[rung] * t0;
 						particles_vel(XDIM,dmi) += gx * dt;
 						particles_vel(XDIM,dmi) += gy * dt;
-						particles_vel(XDIM,dmi) += gz * dt;
+						particles_vel(XDIM,dmi) += gz * dt;*/
 						stars.push_back(star);
 						indices.push_back(i);
 					}
