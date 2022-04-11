@@ -822,6 +822,19 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.eta = get_options().eta;
 //	PRINT("Running with %i nodes\n", host_trees.size());
 	PRINT("Sending %i\n", host_selflist.size());
+
+	for (int i = 0; i < host_selflist.size(); i++) {
+		auto node = host_trees[host_selflist[i]];
+		bool found = false;
+		for (int j = node.neighbor_range.first; j < node.neighbor_range.second; j++) {
+			if (host_neighbors[j] == host_selflist[i]) {
+				found = true;
+				break;
+			}
+		}
+		ALWAYS_ASSERT(found);
+	}
+
 	auto rc = sph_run_cuda(params, cuda_data, stream);
 	cuda_stream_synchronize(stream);
 	if (params.run_type == SPH_RUN_RUNGS) {
@@ -894,7 +907,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 
 HPX_PLAIN_ACTION (sph_apply_conduction_update);
 
-
 cond_update_return sph_apply_conduction_update(int minrung) {
 	const int nthread = hpx_hardware_concurrency();
 	float err_max = 0.0;
@@ -940,7 +952,7 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 		rc.err_rms += tmp.err_rms;
 		rc.N += tmp.N;
 	}
-	if( hpx_rank() == 0 ) {
+	if (hpx_rank() == 0) {
 		rc.err_rms /= rc.N;
 		rc.err_rms = sqrtf(rc.err_rms);
 	}

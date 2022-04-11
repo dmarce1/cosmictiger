@@ -176,8 +176,12 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 		ws.x.resize(0);
 		ws.v.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
+		bool found_self = false;
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
+			if (data.neighbors[ni] == data.selfs[index]) {
+				found_self = true;
+			}
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
 			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
 				bool contains = false;
@@ -215,6 +219,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				}
 			}
 		}
+		ALWAYS_ASSERT(found_self);
 		ALWAYS_ASSERT(ws.x.size());
 		const float gamma0 = data.def_gamma;
 		float hmin = 1e+20;
@@ -1242,7 +1247,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					const float A1 = (A0 + num) / (1.f + den);
 					const float dA = A1 - A_i;
 					data.dentr_con_snk[snki] = dA;
-			//		data.entr_avg_snk[snki] = Aavg;
+					//		data.entr_avg_snk[snki] = Aavg;
 //					ALWAYS_ASSERT(A1-A0==0.0);
 					ALWAYS_ASSERT(isfinite(dA));
 				}
@@ -1347,7 +1352,12 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 			int semiactive = 0;
 			const float h_i = data.h[i];
 			const float A_i = data.entr[i];
-			const float cfrac_i = data.cold_frac[i];
+			float cfrac_i;
+			if (params.stars) {
+				cfrac_i = data.cold_frac[i];
+			} else {
+				cfrac_i = 0.f;
+			}
 			const float hfrac_i = 1.f - cfrac_i;
 			const auto x_i = data.x[i];
 			const auto y_i = data.y[i];
