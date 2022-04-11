@@ -82,6 +82,7 @@ struct sph_run_cuda_data {
 	sph_record4* rec4_snk;
 	sph_record2* rec2_snk;
 	part_int* dm_index_snk;
+	float* entr_avg_snk;
 	float* kap_snk;
 	float* dentr_diss;
 	sph_record5* rec5_snk;

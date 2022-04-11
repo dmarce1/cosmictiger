@@ -271,7 +271,19 @@ struct sph_run_params {
 float sph_apply_diffusion_update(int minrung, float toler);
 void sph_init_diffusion();
 
-float sph_apply_conduction_update(int minrung);
+
+struct cond_update_return {
+	float err_max;
+	float err_rms;
+	size_t N;
+	template<class A>
+	void serialize(A& arc, unsigned) {
+		arc & err_max;
+		arc & err_rms;
+		arc & N;
+	}
+};
+cond_update_return sph_apply_conduction_update(int minrung);
 sph_run_return sph_run(sph_run_params params, bool cuda = false);
 #ifndef __CUDACC__
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);

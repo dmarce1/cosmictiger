@@ -295,7 +295,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
 		tm.reset();
-		float err;
+		cond_update_return err;
 		do {
 			sparams.run_type = SPH_RUN_CONDUCTION;
 			tm.reset();
@@ -304,9 +304,9 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			tm.stop();
 			err = sph_apply_conduction_update(minrung);
 			if (verbose)
-				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err = %e\n", tm.read(), err);
+				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(), err.err_max, err.err_rms);
 			tm.reset();
-		} while (err > SPH_DIFFUSION_TOLER);
+		} while (err.err_max > SPH_DIFFUSION_TOLER1 || err.err_rms > SPH_DIFFUSION_TOLER2);
 		dtm.stop();
 		PRINT("Conduction took %e seconds total\n", dtm.read());
 	}

@@ -20,7 +20,7 @@
 #define SPH_DIFFUSION_C 0.03f
 #define SMOOTHLEN_BLOCK_SIZE 128
 #define COND_INIT_BLOCK_SIZE 32
-#define CONDUCTION_BLOCK_SIZE 256
+#define CONDUCTION_BLOCK_SIZE 128
 #define RUNGS_BLOCK_SIZE 256
 #define HYDRO_BLOCK_SIZE 32
 #define AUX_BLOCK_SIZE 128
@@ -172,6 +172,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 	while (index < data.nselfs) {
 
 		int flops = 0;
+		__syncthreads();
 		ws.x.resize(0);
 		ws.v.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
@@ -214,6 +215,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				}
 			}
 		}
+		ALWAYS_ASSERT(ws.x.size());
 		const float gamma0 = data.def_gamma;
 		float hmin = 1e+20;
 		float hmax = 0.0;
@@ -261,7 +263,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(rhoh3);
 					float dlogh;
 					__syncthreads();
-					if (rhoh3 <= w0) {
+					if (rhoh3 <= 1.01f * w0) {
+						PRINT("ZERO neighbors %i\n", ws.x.size());
 						if (tid == 0) {
 							h *= 1.1f;
 						}
@@ -475,13 +478,13 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						data.curlv_snk[snki] = curlv;
 						data.converged_snk[snki] = true;
 					}
-					hmin = fminf(hmin, h);
-					hmax = fmaxf(hmax, h);
 				} else {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 					}
 				}
+				hmin = fminf(hmin, h);
+				hmax = fmaxf(hmax, h);
 			}
 		}
 		shared_reduce_add<int, SMOOTHLEN_BLOCK_SIZE>(flops);
@@ -515,6 +518,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 	int flops = 0;
 	const float ainv = 1.0f / params.a;
 	while (index < data.nselfs) {
+		__syncthreads();
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		ws.rec1_main.resize(0);
 		ws.rec2_main.resize(0);
@@ -921,6 +925,7 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 	array<fixed32, NDIM> x;
 	int changes = 0;
 	while (index < data.nselfs) {
+		__syncthreads();
 		int flops = 0;
 		ws.x.resize(0);
 		ws.y.resize(0);
@@ -1083,6 +1088,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 	const float m = data.m;
 	array<fixed32, NDIM> x;
 	while (index < data.nselfs) {
+		__syncthreads();
 		int flops = 0;
 		ws.rec1.resize(0);
 		ws.rec2.resize(0);
@@ -1173,6 +1179,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const float dt_i = rung_dt[rung_i] * params.t0;
 				float den = 0.f;
 				float num = 0.f;
+				float Aavg = 0.0f;
 				ALWAYS_ASSERT(block_size==CONDUCTION_BLOCK_SIZE);
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto& rec1 = ws.rec1[j];
@@ -1193,8 +1200,8 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float fpre_j = rec2.fpre;
 						const float kappa_j = rec2.kappa;
 						const float cfrac_j = rec2.cfrac;
-						if(cfrac_j > 1.0f) {
-							PRINT( "%e\n", cfrac_j);
+						if (cfrac_j > 1.0f) {
+							PRINT("%e\n", cfrac_j);
 							__trap();
 						}
 						ALWAYS_ASSERT(cfrac_j <= 1.0f);
@@ -1217,6 +1224,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij;
 						num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
 						den += D_ij;
+						Aavg += A_j * kernelW(q_i);
 						if (!isfinite(num)) {
 							PRINT("%e %e %e %e %e %e\n", A_j, rho_j, hfrac_j, kappa_i, kappa_j, kappa_ij);
 						}
@@ -1226,13 +1234,16 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						ALWAYS_ASSERT(isfinite(D_ij));
 					}
 				}
+				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(Aavg);
 				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(num);
 				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(den);
 				if (tid == 0) {
+					Aavg *= m / rho_i * h3inv_i;
 					const float A0 = data.entr0_snk[snki];
 					const float A1 = (A0 + num) / (1.f + den);
 					const float dA = A1 - A_i;
 					data.dentr_con_snk[snki] = dA;
+			//		data.entr_avg_snk[snki] = Aavg;
 //					ALWAYS_ASSERT(A1-A0==0.0);
 					ALWAYS_ASSERT(isfinite(dA));
 				}
@@ -1270,6 +1281,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 	const float gamma0 = data.def_gamma;
 	const float propc0 = 0.4 * (gamma0 - 1.0) * sqrtf(2.0 * constants::kb / M_PI / constants::me) / constants::c;
 	while (index < data.nselfs) {
+		__syncthreads();
 		int flops = 0;
 		ws.rec1.resize(0);
 		ws.rec2.resize(0);
@@ -1448,8 +1460,8 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
 					float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i;
 					const float sigmax_i = propc0 * sqrtf(T_i);
-					if( !isfinite(kappa_i)) {
-						PRINT( "%e %e %e %e %e %e %e\n", kappa0, T_i, colog_i, A_i, rho_i, eint, ne_i);
+					if (!isfinite(kappa_i)) {
+						PRINT("%e %e %e %e %e %e %e\n", kappa0, T_i, colog_i, A_i, rho_i, eint, ne_i);
 					}
 					const float R = mmw_i * kappa_i * gradToT / (rho_i * sigmax_i);
 					const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));

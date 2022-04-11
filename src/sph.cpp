@@ -783,6 +783,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
 	cuda_data.dm_index_snk = &sph_particles_dm_index(0);
 	cuda_data.sa_snk = &sph_particles_semiactive(0);
+	cuda_data.entr_avg_snk = &sph_particles_entr_avg(0);
 	cuda_data.rungs_snk = &particles_rung(0);
 	cuda_data.rec1_snk = &sph_particles_rec1(0);
 	cuda_data.rec3_snk = &sph_particles_rec3(0);
@@ -893,36 +894,56 @@ sph_run_return sph_run_workspace::to_gpu() {
 
 HPX_PLAIN_ACTION (sph_apply_conduction_update);
 
-float sph_apply_conduction_update(int minrung) {
+
+cond_update_return sph_apply_conduction_update(int minrung) {
 	const int nthread = hpx_hardware_concurrency();
-	float err = 0.0;
-	std::vector<hpx::future<float>> futs;
+	float err_max = 0.0;
+	std::vector<hpx::future<cond_update_return>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<sph_apply_conduction_update_action>(c, minrung));
 	}
 	for (int proc = 0; proc < nthread; proc++) {
 		futs.push_back(hpx::async([proc, nthread,minrung] {
-			float err = 0.0;
+			float err_max = 0.0;
+			float err_rms = 0.0;
+			size_t N;
 			const part_int b = (size_t) proc * sph_particles_size() / nthread;
 			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
 				if( !sph_particles_converged(i) && sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
 					float& A = sph_particles_entr(i);
 					const float dA = sph_particles_dentr_con(i);
-					const float this_err = fabs(dA) / std::max(A, A + dA);
+					const float this_err = fabs(dA) / std::max(A, sph_particles_entr_avg(i));
 					A += dA;
-					err = std::max(this_err, err);
-					if( err < SPH_DIFFUSION_TOLER) {
+					err_max = std::max(this_err, err_max);
+					err_rms += sqr(this_err);
+					if( this_err < SPH_DIFFUSION_TOLER2) {
 						sph_particles_converged(i) = true;
 					}
+					N++;
 				}
 			}
-			return err;
+			cond_update_return rc;
+			rc.err_max = err_max;
+			rc.err_rms = err_rms;
+			rc.N = N;
+			return rc;
 		}));
 	}
+	cond_update_return rc;
+	rc.err_max = 0.0;
+	rc.err_rms = 0.0;
+	rc.N = 0;
 	for (auto& f : futs) {
-		err = std::max(err, f.get());
+		auto tmp = f.get();
+		rc.err_max = std::max(rc.err_max, tmp.err_max);
+		rc.err_rms += tmp.err_rms;
+		rc.N += tmp.N;
 	}
-	return err;
+	if( hpx_rank() == 0 ) {
+		rc.err_rms /= rc.N;
+		rc.err_rms = sqrtf(rc.err_rms);
+	}
+	return rc;
 }
 
