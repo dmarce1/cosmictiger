@@ -314,6 +314,19 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 	vector<tree_id> nextlist;
 	vector<tree_id> leaflist;
 	fixed32_range box;
+	if ((params.seti | SPH_INTERACTIONS_I) && self_ptr->nactive) {
+		if (!range_intersect(self_ptr->outer_box, self_ptr->inner_box)) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				PRINT("%e %e\n", self_ptr->outer_box.begin[dim].to_float(), self_ptr->outer_box.end[dim].to_float());
+				PRINT("%e %e\n", self_ptr->inner_box.begin[dim].to_float(), self_ptr->inner_box.end[dim].to_float());
+			}
+		}
+
+	}
+
+	if ((params.seti | SPH_INTERACTIONS_J) && self_ptr->nactive) {
+		ALWAYS_ASSERT(range_intersect(self_ptr->inner_box, self_ptr->outer_box));
+	}
 
 	if (params.run_type == SPH_TREE_NEIGHBOR_NEIGHBORS || params.run_type == SPH_TREE_NEIGHBOR_VALUE_AT) {
 		do {
@@ -346,6 +359,15 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			pair<int> rng;
 			rng.first = sph_tree_allocate_neighbor_list(leaflist);
 			rng.second = leaflist.size() + rng.first;
+			bool found = false;
+			for (int i = rng.first; i < rng.second; i++) {
+				if (sph_tree_get_neighbor(i) == self) {
+					found = true;
+					break;
+				}
+			}
+			ALWAYS_ASSERT(found);
+
 			/*			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 			 if (sph_particles_id(i) == 591) {
 			 PRINT("--------->>> %i %i %i\n", level, leaflist.size(),  self_ptr->part_range.second- self_ptr->part_range.first);
@@ -363,6 +385,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				pbox.end[dim] = ibox.end[dim] = obox.end[dim] = -.9;
 			}
 			bool show = false;
+			bool factive = false;
 			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
 				const bool active = sph_particles_rung(i) >= params.min_rung;
 				const float h = params.h_wt * sph_particles_smooth_len(i);
@@ -387,7 +410,9 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				 PRINT("%e %e %e\n", pbox.begin[dim].to_double(), x, pbox.end[dim].to_double());
 				 }
 				 }*/
-
+				if( active) {
+					factive = true;
+				}
 				if ((params.seto & SPH_SET_ALL) || (active && (params.seto & SPH_SET_ACTIVE))) {
 					for (int dim = 0; dim < NDIM; dim++) {
 						const double x = X[dim].to_double();
@@ -402,6 +427,9 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 						ibox.end[dim] = std::max(ibox.end[dim].to_double(), x + tiny);
 					}
 				}
+			}
+			if( self_ptr->nactive) {
+				ALWAYS_ASSERT(factive);
 			}
 			if (show) {
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -793,9 +821,9 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.entr0_snk = &sph_particles_entr0(0);
 	cuda_data.dentr_con_snk = &sph_particles_dentr_con(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
-	cuda_data.gx_snk = &sph_particles_gforce(XDIM,0);
-	cuda_data.gy_snk = &sph_particles_gforce(YDIM,0);
-	cuda_data.gz_snk = &sph_particles_gforce(ZDIM,0);
+	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
+	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
+	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
 	cuda_data.h_snk = &sph_particles_smooth_len(0);
 	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.def_gamma = get_options().gamma;

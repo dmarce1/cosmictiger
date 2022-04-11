@@ -166,11 +166,11 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 						const float factor = get_options().eta * sqrtf(a * get_options().hsoft);
 						dt = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
 						rung = std::max(std::max((int) ceilf(log2f(t0) - log2f(dt)), std::max(rung - 1, minrung)), 1);
-						sph_particles_rung(i) = -rung;
 						dt = 0.5f * rung_dt[rung] * t0;
 						particles_vel(XDIM,dmi) += gx * dt;
 						particles_vel(XDIM,dmi) += gy * dt;
 						particles_vel(XDIM,dmi) += gz * dt;*/
+						sph_particles_rung(i) = -rung;
 						stars.push_back(star);
 						indices.push_back(i);
 					}
