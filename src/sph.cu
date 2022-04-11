@@ -410,7 +410,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float w = kernelW(q); // 4
 						const float dwdq = dkernelW_dq(q);
 						const float dWdr_i = dwdq * h4inv_i;
-						drho_dh -= q * dwdq;
 						const float A0_j = fh_j * powf(A_j, 1.0f / gamma0);
 						pre += m * A0_j * kernelW(q) * h3inv_i;
 						dpdh -= A0_j * (3.f * w + q * dwdq);
@@ -1460,15 +1459,9 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
 					float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i;
 					const float sigmax_i = propc0 * sqrtf(T_i);
-					if (!isfinite(kappa_i)) {
-						PRINT("%e %e %e %e %e %e %e\n", kappa0, T_i, colog_i, A_i, rho_i, eint, ne_i);
-					}
 					const float R = mmw_i * kappa_i * gradToT / (rho_i * sigmax_i);
 					const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));
-					ALWAYS_ASSERT(isfinite(kappa_i));
 					kappa_i *= phi;
-					//PRINT( "%e %e\n", kappa_i, phi);
-					ALWAYS_ASSERT(isfinite(kappa_i));
 					data.kap_snk[snki] = kappa_i;
 					data.entr0_snk[snki] = A_i;
 				}
