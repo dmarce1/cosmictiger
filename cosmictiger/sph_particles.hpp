@@ -160,6 +160,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_da;			// alpha
 
 SPH_PARTICLES_EXTERN part_int* sph_particles_dm;   // dark matter index
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
+SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_cv;
 SPH_PARTICLES_EXTERN float* sph_particles_kap;
 SPH_PARTICLES_EXTERN float* sph_particles_e0;
@@ -459,7 +460,7 @@ inline float sph_particles_divv(part_int index) {
 
 inline float& sph_particles_gforce(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r6[index].dvel[dim];
+	return sph_particles_g[dim][index];
 }
 
 inline float sph_particles_ekin(part_int index) {

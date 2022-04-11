@@ -823,9 +823,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					float gy_i;
 					float gz_i;
 					if (data.gravity) {
-						gx_i = data.rec6_snk[snki].dvel[XDIM];
-						gy_i = data.rec6_snk[snki].dvel[YDIM];
-						gz_i = data.rec6_snk[snki].dvel[ZDIM];
+						gx_i = data.gx_snk[snki];
+						gy_i = data.gy_snk[snki];
+						gz_i = data.gz_snk[snki];
 					} else {
 						gx_i = 0.f;
 						gy_i = 0.f;
@@ -1169,7 +1169,12 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const auto z_i = data.z[i];
 				const float h_i = data.h[i];
 				const float A_i = data.entr[i];
-				const float cfrac_i = data.cold_frac[i];
+				float cfrac_i;
+				if (params.stars) {
+					cfrac_i = data.cold_frac[i];
+				} else {
+					cfrac_i = 0.f;
+				}
 				const float hfrac_i = 1.f - cfrac_i;
 				const float fpre_i = data.fpre1[i];
 				const float h2_i = sqr(h_i);
