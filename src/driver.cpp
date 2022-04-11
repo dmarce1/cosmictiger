@@ -265,7 +265,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	timer tm;
 
-	if (conduction) {
+	if (tau != 0.0 && conduction) {
 		timer dtm;
 		dtm.start();
 
@@ -295,6 +295,17 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("Conduction took %e seconds total\n", dtm.read());
 	}
 
+	if (tau == 0.0) {
+		sparams.run_type = SPH_RUN_AUX;
+		tm.reset();
+		tm.start();
+		sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_AUX): tm = %e \n", tm.read());
+		tm.reset();
+	}
+
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
@@ -309,9 +320,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sparams.run_type = SPH_RUN_AUX;
 	tm.reset();
 	tm.start();
-	kr = sph_run(sparams, true);
+	sph_run(sparams, true);
 	tm.stop();
-	max_rung = kr.max_rung;
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_AUX): tm = %e \n", tm.read());
 	tm.reset();

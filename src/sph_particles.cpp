@@ -135,19 +135,23 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const float dt1 = tau > 0.0 ? 0.5f * t0 / (1<<rung1) : 0.f;
 				const float dt2 = 0.5f * t0 / (1<<rung2);
 				const float dt = dt1 + dt2;
-				if( rung2 >= minrung) {
-					if( phase == 0 ) {
+				if( phase == 0 ) {
+					if( rung2 >= minrung) {
 						for( int dim =0; dim < NDIM; dim++) {
 							sph_particles_dvel0(dim,i) = sph_particles_dvel(dim,i);
 						}
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
-					} else if( phase == 1 ) {
+					}
+				} else if( phase == 1 ) {
+					if( rung1 >= minrung) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 						}
-					} else if( phase == 2 ) {
+					}
+				} else if( phase == 2 ) {
+					if( rung2 >= minrung) {
 						sph_particles_alpha(i) += sph_particles_dalpha(i) * 2.0 * dt2;
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
@@ -158,9 +162,10 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						dedt = 0.0;
 						e += de;
 					}
+
 				}
 			}
-			return std::make_pair(error,norm);
+			return std::make_pair(error, norm);
 		}));
 	}
 	for (auto& f : futs) {
