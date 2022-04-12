@@ -114,6 +114,15 @@ inline float dkernelW_dq(float q) {
 	return NPIECE * (b * (2 - 3 * x) * x + a * (-1 + x) * (-1 + 3 * x) - y1 + y2);
 }
 
+inline float kernelFourier(float k) {
+	if (k < 1e-2) {
+		return 1.0 - sqr(k) / 18.0;
+	} else {
+		const float k2 = sqr(k);
+		const float k7 = sqr(k2) * k2 * k;
+		return 105.0 / k7 * (k * (k2 - 15.0) * cos(k) + 3.0 * (5.0 - 2.0 * k2) * sin(k));
+	}
+}
 
 template<class T>
 CUDA_EXPORT
@@ -156,44 +165,44 @@ inline T kernelPot(T q) {
 
 /*
 
-template<class T>
-CUDA_EXPORT
-inline T kernelFqinv(T q) {
-	T res, sw1, sw2, w1;
-	q *= (q < T(1));
-	w1 = min(q - sinf(T(2 * M_PI) * q) / T(2. * M_PI), T(1)) / (sqr(q) * q + T(1e-30f));
-	res = w1;
+ template<class T>
+ CUDA_EXPORT
+ inline T kernelFqinv(T q) {
+ T res, sw1, sw2, w1;
+ q *= (q < T(1));
+ w1 = min(q - sinf(T(2 * M_PI) * q) / T(2. * M_PI), T(1)) / (sqr(q) * q + T(1e-30f));
+ res = w1;
 
-	return res;
-}
+ return res;
+ }
 
-template<class T>
-CUDA_EXPORT
-inline T kernelPot(T q) {
-	T res, sw1, sw2, w1;
-	const auto q0 = q;
-	q *= (q < T(1));
+ template<class T>
+ CUDA_EXPORT
+ inline T kernelPot(T q) {
+ T res, sw1, sw2, w1;
+ const auto q0 = q;
+ q *= (q < T(1));
 
-	const T c0 = -2.437653393057226;
-	const T c1 = 3.2898681336964524;
-	const T c2 = -3.2469697011334144;
-	const T c3 = 2.0346861239688976;
-	const T c4 = -0.8367311301649535;
-	const T c5 = 0.2402386980306763;
-	const T c6 = -0.05066369468793888;
-	const T c7 = 0.008163765290898435;
-	const auto q2 = sqr(q);
-	w1 = c7;
-	w1 = fmaf(q2, w1, c6);
-	w1 = fmaf(q2, w1, c5);
-	w1 = fmaf(q2, w1, c4);
-	w1 = fmaf(q2, w1, c3);
-	w1 = fmaf(q2, w1, c2);
-	w1 = fmaf(q2, w1, c1);
-	w1 = fmaf(q2, w1, c0);
-	res = w1;
-	sw1 = q0 < T(1);
-	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q0 > T(0));
-	return res;
-}*/
+ const T c0 = -2.437653393057226;
+ const T c1 = 3.2898681336964524;
+ const T c2 = -3.2469697011334144;
+ const T c3 = 2.0346861239688976;
+ const T c4 = -0.8367311301649535;
+ const T c5 = 0.2402386980306763;
+ const T c6 = -0.05066369468793888;
+ const T c7 = 0.008163765290898435;
+ const auto q2 = sqr(q);
+ w1 = c7;
+ w1 = fmaf(q2, w1, c6);
+ w1 = fmaf(q2, w1, c5);
+ w1 = fmaf(q2, w1, c4);
+ w1 = fmaf(q2, w1, c3);
+ w1 = fmaf(q2, w1, c2);
+ w1 = fmaf(q2, w1, c1);
+ w1 = fmaf(q2, w1, c0);
+ res = w1;
+ sw1 = q0 < T(1);
+ sw2 = T(1) - sw1;
+ res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q0 > T(0));
+ return res;
+ }*/

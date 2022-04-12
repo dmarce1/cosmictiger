@@ -1044,10 +1044,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i;
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
 							const float difco_ij = 0.5f * (difco_i + difco_j);
-							const float vmax = c_ij - fminf(w_ij, 0.f);
-							const float R = 2.f * difco_ij * rinv / vmax;
-							const float phi_ij = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));
-							const float D_ij = -phi_ij * 2.f * m / rho_ij * difco_ij * dWdr_ij * rinv * ainv;
+							//			const float vmax = c_ij - fminf(w_ij, 0.f);
+							//			const float R = 2.f * difco_ij * rinv / vmax;
+							//			const float phi_ij = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));
+							const float limiter = r2 / (r2 + 0.01f * sqr(h_ij));
+							const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv * ainv * limiter;
 							D += D_ij;
 							de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j / (hfrac_i * rho_i), gamma0 - 1.f));
 							if (params.stars) {
@@ -1461,7 +1462,8 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 							const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f);
 							const float dt_j = rung_dt[rung_j] * params.t0;
 							const float dt_ij = fminf(dt_i, dt_j);
-							const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij;
+							const float limiter = r2 / (r2 + 0.01f * (h_i * h_j));
+							const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij * limiter;
 							num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
 							den += D_ij;
 							ALWAYS_ASSERT(isfinite(den));
