@@ -1179,9 +1179,7 @@ static power_spectrum_function read_power_spectrum(int phase) {
 		for (int i = 0; i < func.P.size(); i++) {
 			const double delta_2 = all.P[i];
 			const double delta_c2 = cdm.P[i];
-			const double delta = sqrt(delta_2);
-			const double delta_c = sqrt(delta_c2);
-			const double delta_b2 = (sqr(omega_m * delta) + sqr(omega_c * delta_c) - 2.0 * omega_m * omega_c * delta * delta_c) / sqr(omega_b);
+			const double delta_b2 = (sqr(omega_m) * delta_2 + sqr(omega_c) * delta_c2 - 2.0 * omega_m * omega_c * sqrt(delta_2 * delta_c2)) / sqr(omega_b);
 			bary.P.push_back(delta_b2);
 			bary.logkmin = std::log(kmin);
 			bary.logkmax = std::log(kmax);
