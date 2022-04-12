@@ -98,7 +98,7 @@ void kernel_set_type(double n) {
 		err_max = std::max(err_max, dif);
 		float avg = 0.5 * (dw0 + dw1);
 		norm += avg;
-		fprintf(fp, "%e %e %e %e %e\n", r, w1, w0, dw1, dw0);
+		fprintf(fp, "%e %e %e %e %e\n", r, kernelW(r), dkernelW_dq(r), kernelFqinv(r), kernelPot(r));
 	}
 	norm /= 100.0;
 	PRINT("Kernel Error is %e\n", err_max / norm);

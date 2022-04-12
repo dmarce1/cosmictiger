@@ -982,7 +982,7 @@ static float zeldovich_end(float scale, int phase) {
 	const part_int parts_dim = get_options().parts_dim;
 	PRINT("particles size = %i\n", particles_size());
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs3.push_back(hpx::async([D1,D0,a0,a1,nthreads,proc, parts_dim, box_size_inv,phase]() {
+		futs3.push_back(hpx::async([D1,D0,a0,a1,nthreads,proc,omega_m,parts_dim, box_size_inv,phase]() {
 			part_int nparts;
 			part_int pbegin;
 			switch(phase) {
@@ -1089,8 +1089,13 @@ static float zeldovich_end(float scale, int phase) {
 					disp0 *= -D0 * box_size_inv;
 					disp1 *= -D1 * box_size_inv;
 					double x = particles_pos(dim,i).to_double() + disp0;
-					double v = (a1 * disp1 - a0 *disp0) / DELTA_A * a0 * cosmos_dadt(a0);
-					//			PRINT( "%e %e\n", v, disp0);
+					const float Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
+					const float H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
+					const float H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
+					double v = (disp1 - disp0) / DELTA_A * a0 * a0 * H;
+					const float f1 = std::pow(Om, 5.f / 9.f);
+					float prefac1 = f1 * H * a0 * a0;
+//					PRINT( "%e %e\n", v/disp0, prefac1);
 					if( x >= 1.0 ) {
 						x -= 1.0;
 					} else if( x < 0.0 ) {
