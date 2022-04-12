@@ -19,7 +19,7 @@
 
 #pragma once
 
-static constexpr int NPIECE = 32;
+static constexpr int NPIECE = 128;
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
@@ -29,8 +29,6 @@ void kernel_output();
 void kernel_adjust_options(options& opts);
 
 #define Power pow
-#define Cos cos
-#define Sin sin
 #define Pi T(M_PI)
 
 #ifdef __KERNEL_CU__
@@ -117,41 +115,31 @@ inline float dkernelW_dq(float q) {
 }
 
 inline double kernelFourier(double k) {
-
-	constexpr float C[9] = { 1.0, -0.008888390675833106, 0.0001425112054475251, -1.85843699392027e-6, 1.6091255207148952e-8, -9.657273059864925e-11,
-			4.2575707364037334e-13, -1.4424066807367349e-15, 3.883913221966831e-18 };
-	float w = C[8];
-	const float k2 = sqr(k);
-	for (int n = 7; n >= 0; n--) {
-		w = fmaf(w, k2, C[n]);
+	if (k < 0.333333333) {
+		return 1.0 - sqr(k) * 8.0 / 231.0;
+	} else {
+		const double k2 = sqr(k);
+		const double k7 = sqr(k2) * k2 * k;
+		return 105.0 / k7 * (k * (k2 - 15.0) * cos(k) + 3.0 * (5.0 - 2.0 * k2) * sin(k));
 	}
-	return w;
 }
 
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
 	T res, sw1, sw2, w1;
-
-	const T c0 = 3.2898681336964524 * 2.0;
-	const T c1 = -3.2469697011334144 * 4.0;
-	const T c2 = 2.0346861239688976 * 6.0;
-	const T c3 = -0.8367311301649535 * 8.0;
-	const T c4 = 0.2402386980306763 * 10.0;
-	const T c5 = -0.05066369468793888 * 12.0;
-	const T c6 = 0.008163765290898435 * 14.0;
 	const auto q0 = q;
-	q *= q < T(1);
+	q *= (q < T(1));
 	const auto q2 = sqr(q);
-	w1 = c6;
-	w1 = fmaf(q2, w1, c5);
-	w1 = fmaf(q2, w1, c4);
-	w1 = fmaf(q2, w1, c3);
-	w1 = fmaf(q2, w1, c2);
-	w1 = fmaf(q2, w1, c1);
-	w1 = fmaf(q2, w1, c0);
+	w1 = T(105.0 / 16.0);
+	w1 = fmaf(w1, q2, T(-189.0 / 16.0));
+	w1 = fmaf(w1, q2, T(135.0 / 16.0));
+	w1 = fmaf(w1, q2, T(-35.0 / 16.0));
+	res = w1;
+
 	sw1 = q0 < T(1);
-	res = w1 * sw1 + (T(1) - sw1) / (sqr(q0) * q0 + T(1e-30f));
+	sw2 = T(1) - sw1;
+	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
 	return res;
 }
 
@@ -161,27 +149,60 @@ inline T kernelPot(T q) {
 	T res, sw1, sw2, w1;
 	const auto q0 = q;
 	q *= (q < T(1));
-
-	const T c0 = 2.437653393057226;
-	const T c1 = -3.2898681336964524;
-	const T c2 = 3.2469697011334144;
-	const T c3 = -2.0346861239688976;
-	const T c4 = 0.8367311301649535;
-	const T c5 = -0.2402386980306763;
-	const T c6 = 0.05066369468793888;
-	const T c7 = -0.008163765290898435;
 	const auto q2 = sqr(q);
-	w1 = c7;
-	w1 = fmaf(q2, w1, c6);
-	w1 = fmaf(q2, w1, c5);
-	w1 = fmaf(q2, w1, c4);
-	w1 = fmaf(q2, w1, c3);
-	w1 = fmaf(q2, w1, c2);
-	w1 = fmaf(q2, w1, c1);
-	w1 = fmaf(q2, w1, c0);
+	w1 = T(315.0 / 128.0);
+	w1 = fmaf(w1, q2, T(-105.0 / 32.0));
+	w1 = fmaf(w1, q2, T(189.0 / 64.0));
+	w1 = fmaf(w1, q2, T(-45.0 / 32.0));
+	w1 = fmaf(w1, q2, T(35.0 / 128.0));
 	res = w1;
+
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q0 > T(0));
+	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
 	return res;
 }
+
+/*
+
+ template<class T>
+ CUDA_EXPORT
+ inline T kernelFqinv(T q) {
+ T res, sw1, sw2, w1;
+ q *= (q < T(1));
+ w1 = min(q - sinf(T(2 * M_PI) * q) / T(2. * M_PI), T(1)) / (sqr(q) * q + T(1e-30f));
+ res = w1;
+
+ return res;
+ }
+
+ template<class T>
+ CUDA_EXPORT
+ inline T kernelPot(T q) {
+ T res, sw1, sw2, w1;
+ const auto q0 = q;
+ q *= (q < T(1));
+
+ const T c0 = -2.437653393057226;
+ const T c1 = 3.2898681336964524;
+ const T c2 = -3.2469697011334144;
+ const T c3 = 2.0346861239688976;
+ const T c4 = -0.8367311301649535;
+ const T c5 = 0.2402386980306763;
+ const T c6 = -0.05066369468793888;
+ const T c7 = 0.008163765290898435;
+ const auto q2 = sqr(q);
+ w1 = c7;
+ w1 = fmaf(q2, w1, c6);
+ w1 = fmaf(q2, w1, c5);
+ w1 = fmaf(q2, w1, c4);
+ w1 = fmaf(q2, w1, c3);
+ w1 = fmaf(q2, w1, c2);
+ w1 = fmaf(q2, w1, c1);
+ w1 = fmaf(q2, w1, c0);
+ res = w1;
+ sw1 = q0 < T(1);
+ sw2 = T(1) - sw1;
+ res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q0 > T(0));
+ return res;
+ }*/
