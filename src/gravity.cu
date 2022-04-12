@@ -123,7 +123,7 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-				const float mass = !sph ? 1.f : (sph && (src_type[j] == SPH_TYPE) ? sph_mass : dm_mass);
+				const float mass = !sph ? 1.f : (src_type[j] != DARK_MATTER_TYPE ? sph_mass : dm_mass);
 				flops += 3;
 				expansion<float> D;
 				flops += greens_function(D, dx);
@@ -295,7 +295,7 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-				const float mass = !sph ? 1.f : (sph && (src_type[j] == SPH_TYPE) ? sph_mass : dm_mass);
+				const float mass = !sph ? 1.f : (src_type[j] != DARK_MATTER_TYPE ? sph_mass : dm_mass);
 				flops += 3;
 				expansion<float> D;
 				flops += ewald_greens_function(D, dx);

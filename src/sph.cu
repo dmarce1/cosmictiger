@@ -26,7 +26,7 @@
 #define AUX_BLOCK_SIZE 128
 #define MAX_RUNG_DIF 1
 
-#define SPH_SMOOTHLEN_TOLER float(1.0e-5)
+#define SPH_SMOOTHLEN_TOLER float(5.0e-5)
 
 #include <cosmictiger/sph_cuda.hpp>
 #include <cosmictiger/cuda_mem.hpp>
@@ -258,8 +258,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float& h = data.rec1_snk[snki].h;
 				float drho_dh;
 				float rhoh3;
-				float last_dh = 0.0f;
-				float w1 = 1.0f;
+				//		float last_dh = 0.0f;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
@@ -299,14 +298,14 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						dlogh = fminf(fmaxf(powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f, -.1f), .1f);
 						error = fabs(1.0f - rhoh3 / rhoh30);
 						if (tid == 0) {
-							h *= (1.f + w1 * dlogh);
+							h *= (1.f + dlogh);
 						}
-						if (last_dh * dlogh < 0.f) {
-							w1 *= 0.5;
-						} else {
-							w1 = 1.f;
-						}
-						last_dh = dlogh;
+						/*						if (last_dh * dlogh < 0.f) {
+						 w1 *= 0.5;
+						 } else {
+						 w1 = 1.f;
+						 }*/
+						//last_dh = dlogh;
 					}
 					__syncthreads();
 					if (tid == 0) {
@@ -1003,7 +1002,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vdotx_ij = x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij;
 						const float h_ij = 0.5f * (h_i + h_j);
 						const float w_ij = vdotx_ij * rinv;
-						const float mu_ij = fminf(vdotx_ij * h_ij / (r2 + sqr(h_ij) * 0.01f), 0.f);
+						const float mu_ij = fminf(vdotx_ij * h_ij * rinv * powf(r2 + sqr(h_ij) * 0.01f, -0.5f), 0.f);
 						const float rho_ij = 0.5f * (rho_i + rho_j);
 						const float c_ij = 0.5f * (c_i + c_j);
 						const float alpha_ij = 0.5f * (alpha_i + alpha_j);									// * (balsara_i + balsara_j);

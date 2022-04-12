@@ -19,7 +19,7 @@
 
 #pragma once
 
-static constexpr int NPIECE = 32;
+static constexpr int NPIECE = 128;
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>

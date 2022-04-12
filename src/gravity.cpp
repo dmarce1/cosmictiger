@@ -133,7 +133,7 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 			}
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
-					masses[i] = type[i] == SPH_TYPE ? sph_mass : dm_mass;
+					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
 					;
 				}
 			} else {
@@ -318,7 +318,7 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			}
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
-					masses[i] = type[i] == SPH_TYPE ? sph_mass : dm_mass;
+					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
 					;
 				}
 			} else {
