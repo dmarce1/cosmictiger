@@ -975,7 +975,9 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 				if( !sph_particles_converged(i) && sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
 					float& A = sph_particles_entr(i);
 					const float dA = sph_particles_dentr_con(i);
-					const float this_err = fabs(dA) / std::max(A, sph_particles_entr_avg(i));
+					ALWAYS_ASSERT(isfinite(std::max(A, A+dA)));
+					ALWAYS_ASSERT(std::max(A, A+dA) > 0.0f);
+					const float this_err = fabs(dA) /  sph_particles_entr0(i);
 					A += dA;
 					err_max = std::max(this_err, err_max);
 					err_rms += sqr(this_err);
@@ -1003,7 +1005,9 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 		rc.N += tmp.N;
 	}
 	if (hpx_rank() == 0) {
-		rc.err_rms /= rc.N;
+		if (rc.N > 0) {
+			rc.err_rms /= rc.N;
+		}
 		rc.err_rms = sqrtf(rc.err_rms);
 	}
 	return rc;

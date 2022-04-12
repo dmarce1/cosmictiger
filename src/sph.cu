@@ -1434,39 +1434,41 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					const float z_ij = distance(z_i, z_j);				// 2
 					const float r2 = sqr(x_ij, y_ij, z_ij);
 					const float h2_j = sqr(h_j);
-					if (r2 > 0.f && (active || rung_j >= params.min_rung) && (r2 < fmaxf(h2_j, h2_i))) {
+					if (r2 < fmaxf(h2_j, h2_i)) {
 						const float A_j = rec2.entr;
-						const float fpre_j = rec2.fpre;
-						const float kappa_j = rec2.kappa;
-						const float cfrac_j = rec2.cfrac;
-						if (cfrac_j > 1.0f) {
-							PRINT("%e\n", cfrac_j);
-							__trap();
-						}
-						ALWAYS_ASSERT(cfrac_j <= 1.0f);
-						const float hfrac_j = 1.f - cfrac_j;
 						const float r = sqrtf(r2);
 						const float rinv = 1.f / r;
-						const float hinv_j = 1.f / h_j;
-						const float h3inv_j = sqr(hinv_j) * hinv_j;
-						const float rho_j = m * c0 * h3inv_j;													// 2
 						const float q_i = r * hinv_i;
-						const float q_j = r * hinv_j;
-						const float dWdr_i = fpre_i * dkernelW_dq(q_i) * h3inv_i * hinv_i;
-						const float dWdr_j = fpre_j * dkernelW_dq(q_j) * h3inv_j * hinv_j;
-						const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
-						const float dWdr_rinv = dWdr_ij * rinv;
-						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f);
-						const float dt_j = rung_dt[rung_j] * params.t0;
-						const float dt_ij = fminf(dt_i, dt_j);
-						const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij;
-						num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
-						den += D_ij;
 						Aavg += A_j * kernelW(q_i);
-						ALWAYS_ASSERT(isfinite(den));
-						ALWAYS_ASSERT(isfinite(num));
-						ALWAYS_ASSERT(h_j > 0.0f);
-						ALWAYS_ASSERT(isfinite(D_ij));
+						if (r2 > 0.f && (active || rung_j >= params.min_rung)) {
+							const float fpre_j = rec2.fpre;
+							const float kappa_j = rec2.kappa;
+							const float cfrac_j = rec2.cfrac;
+							if (cfrac_j > 1.0f) {
+								PRINT("%e\n", cfrac_j);
+								__trap();
+							}
+							ALWAYS_ASSERT(cfrac_j <= 1.0f);
+							const float hfrac_j = 1.f - cfrac_j;
+							const float hinv_j = 1.f / h_j;
+							const float h3inv_j = sqr(hinv_j) * hinv_j;
+							const float rho_j = m * c0 * h3inv_j;													// 2
+							const float q_j = r * hinv_j;
+							const float dWdr_i = fpre_i * dkernelW_dq(q_i) * h3inv_i * hinv_i;
+							const float dWdr_j = fpre_j * dkernelW_dq(q_j) * h3inv_j * hinv_j;
+							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);
+							const float dWdr_rinv = dWdr_ij * rinv;
+							const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f);
+							const float dt_j = rung_dt[rung_j] * params.t0;
+							const float dt_ij = fminf(dt_i, dt_j);
+							const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij;
+							num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
+							den += D_ij;
+							ALWAYS_ASSERT(isfinite(den));
+							ALWAYS_ASSERT(isfinite(num));
+							ALWAYS_ASSERT(h_j > 0.0f);
+							ALWAYS_ASSERT(isfinite(D_ij));
+						}
 					}
 				}
 				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(Aavg);
