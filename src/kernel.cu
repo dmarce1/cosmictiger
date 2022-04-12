@@ -121,5 +121,25 @@ double kernel_stddev(std::function<double(double)> W) {
 }
 
 void kernel_adjust_options(options& opts) {
+
+	constexpr float bspline_width = 4.676649e-01;
+	constexpr float bspline_n = 60;
+	float sum = 0.0;
+	constexpr int N = 1024;
+	for( int i = 1; i < N; i++) {
+		float q = (double) i / N;
+		sum += sqr(q) * 4.0 * M_PI  / N * sqr(q) * kernelW(q);
+	}
+	float width = sqrt(sum);
+	PRINT( "kernel width = %e\n", width);
+	const float n = pow(width / bspline_width,-3)*bspline_n;
+	const float cfl = opts.cfl * width / bspline_width;
+	PRINT( "Setting neighbor number to %e\n", n);
+	PRINT( "Adjusting CFL to %e\n", cfl);
+
+	opts.neighbor_number = n;
+	opts.cfl = cfl;
+
 	opts.sph_bucket_size = 8.0 / M_PI * opts.neighbor_number;
+
 }
