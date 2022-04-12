@@ -1478,9 +1478,10 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					const float A1 = (A0 + num) / (1.f + den);
 					const float dA = A1 - A_i;
 					data.dentr_con_snk[snki] = dA;
-					//		data.entr_avg_snk[snki] = Aavg;
+					data.entr_avg_snk[snki] = Aavg;
 //					ALWAYS_ASSERT(A1-A0==0.0);
 					ALWAYS_ASSERT(isfinite(dA));
+					ALWAYS_ASSERT(isfinite(Aavg));
 				}
 			}
 		}

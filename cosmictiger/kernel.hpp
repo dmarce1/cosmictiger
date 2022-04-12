@@ -19,7 +19,7 @@
 
 #pragma once
 
-static constexpr int NPIECE = 128;
+static constexpr int NPIECE = 32;
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
@@ -30,7 +30,6 @@ void kernel_adjust_options(options& opts);
 
 #define Power pow
 #define Pi T(M_PI)
-
 
 #ifdef __KERNEL_CU__
 __managed__ pair<float>* WLUT;
@@ -115,6 +114,48 @@ inline float dkernelW_dq(float q) {
 	return NPIECE * (b * (2 - 3 * x) * x + a * (-1 + x) * (-1 + 3 * x) - y1 + y2);
 }
 
+
+template<class T>
+CUDA_EXPORT
+inline T kernelFqinv(T q) {
+	T res, sw1, sw2, w1;
+	const auto q0 = q;
+	q *= (q < T(1));
+	const auto q2 = sqr(q);
+	w1 = T(105.0 / 16.0);
+	w1 = fmaf(w1, q2, T(-189.0 / 16.0));
+	w1 = fmaf(w1, q2, T(135.0 / 16.0));
+	w1 = fmaf(w1, q2, T(-35.0 / 16.0));
+	res = w1;
+
+	sw1 = q0 < T(1);
+	sw2 = T(1) - sw1;
+	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
+	return res;
+}
+
+template<class T>
+CUDA_EXPORT
+inline T kernelPot(T q) {
+	T res, sw1, sw2, w1;
+	const auto q0 = q;
+	q *= (q < T(1));
+	const auto q2 = sqr(q);
+	w1 = T(315.0 / 128.0);
+	w1 = fmaf(w1, q2, T(-105.0 / 32.0));
+	w1 = fmaf(w1, q2, T(189.0 / 64.0));
+	w1 = fmaf(w1, q2, T(-45.0 / 32.0));
+	w1 = fmaf(w1, q2, T(35.0 / 128.0));
+	res = w1;
+
+	sw1 = q0 < T(1);
+	sw2 = T(1) - sw1;
+	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
+	return res;
+}
+
+/*
+
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
@@ -153,6 +194,6 @@ inline T kernelPot(T q) {
 	res = w1;
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
+	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q0 > T(0));
 	return res;
-}
+}*/

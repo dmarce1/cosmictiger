@@ -251,7 +251,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	const float sink_bias = 1.5;
 	auto* tree_nodes = data.tree_nodes;
 	auto* all_rungs = data.rungs;
-	auto* src_type = data.type;
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
