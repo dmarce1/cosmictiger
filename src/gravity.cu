@@ -452,7 +452,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 					dx1 = distance(sink_y[k], src_y[j]); // 1
 					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const float type_j = src_type[j];
-					const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
+					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					r1inv = rsqrt(r2);
 					r3inv = sqr(r1inv) * r1inv;
@@ -570,7 +570,7 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 					dx1 = distance(sink_y[k], src_y[j]); // 1
 					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const float type_j = src_type[j];
-					const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
+					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					if (r2 > h2) {
 						r1inv = rsqrt(r2);
@@ -692,7 +692,7 @@ int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, con
 					const float Z = distance(sink_z[k], src_z[j]); // 1
 					const float R2 = sqr(X, Y, Z);
 					const float type_j = src_type[j];
-					const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
+					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
 					if (R2 == 0.f) {
 						pot += 2.8372975f;
 					} else {

@@ -152,22 +152,22 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 					}
 				} else if( phase == 2 ) {
 					if( rung2 >= minrung) {
-				//		sph_particles_alpha(i) += sph_particles_dalpha(i) * 2.0 * dt2;
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
-						}
-						float& e = sph_particles_entr(i);
-						float& dedt = sph_particles_dentr(i);
-						const float de = dedt * 2.0f * dt2;
-						dedt = 0.0;
-						e += de;
-						ALWAYS_ASSERT(e>=0.0);
-					}
-
+						//		sph_particles_alpha(i) += sph_particles_dalpha(i) * 2.0 * dt2;
+				for( int dim =0; dim < NDIM; dim++) {
+					particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 				}
+				float& e = sph_particles_entr(i);
+				float& dedt = sph_particles_dentr(i);
+				const float de = dedt * 2.0f * dt2;
+				dedt = 0.0;
+				e += de;
+				ALWAYS_ASSERT(e>=0.0);
 			}
-			return std::make_pair(error, norm);
-		}));
+
+		}
+	}
+	return std::make_pair(error, norm);
+}));
 	}
 	for (auto& f : futs) {
 		auto tmp = f.get();
@@ -316,6 +316,7 @@ void sph_particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 	}
 #else
 	new_ptr = (T*) malloc(sizeof(T) * new_capacity);
+	memset(new_ptr, T(0), new_capacity);
 #endif
 	if (capacity > 0) {
 		hpx_copy(PAR_EXECUTION_POLICY, ptr, ptr + size, new_ptr).get();
