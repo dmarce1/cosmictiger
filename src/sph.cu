@@ -1470,6 +1470,9 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 							const float D_ij = -2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j) * dt_ij * limiter;
 							num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
 							den += D_ij;
+							if( !isfinite(den) ) {
+								PRINT( "%e %e %e %e %e %e\n", kappa_ij, dWdr_rinv, rho_i, rho_j, dt_ij, limiter);
+							}
 							ALWAYS_ASSERT(isfinite(den));
 							ALWAYS_ASSERT(isfinite(num));
 							ALWAYS_ASSERT(h_j > 0.0f);
@@ -1702,7 +1705,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					float n0 = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp);
 					const float mmw_i = 1.0f / n0;
 					n0 *= constants::avo * rho0;
-					const float ne_i = (Hp - Hn + 0.25f * Hep + 0.5f * Hepp) * rho0 * (constants::avo * code_to_density);
+					const float ne_i = fmaxf((Hp - Hn + 0.25f * Hep + 0.5f * Hepp) * rho0 * (constants::avo * code_to_density), 1e-30f);
 					const float cv0 = constants::kb / (gamma0 - 1.0);															// 4
 					const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) / (gamma0 - 1.0);
 					const float T_i = rho0 * eint / (n0 * cv0);
@@ -1712,6 +1715,10 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const float R = mmw_i * kappa_i * gradToT / (rho_i * sigmax_i);
 					const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));
 					kappa_i *= phi;
+					if( !isfinite(kappa_i)) {
+						PRINT( "%e %e %e\n", phi, ne_i, colog_i);
+					}
+					ALWAYS_ASSERT(isfinite(kappa_i));
 					data.kap_snk[snki] = kappa_i;
 					data.entr0_snk[snki] = A_i;
 				}
