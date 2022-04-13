@@ -121,13 +121,11 @@ inline T kernelFqinv(T q) {
 	T res, sw1, sw2, w1;
 	const auto q0 = q;
 	q *= (q < T(1));
-	const auto q2 = sqr(q);
-	w1 = T(105.0 / 16.0);
-	w1 = fmaf(w1, q2, T(-189.0 / 16.0));
-	w1 = fmaf(w1, q2, T(135.0 / 16.0));
-	w1 = fmaf(w1, q2, T(-35.0 / 16.0));
+	w1 = T(5.0);
+	w1 = fmaf(w1, q, T(-9.0));
+	w1 *= q;
+	w1 = fmaf(w1, q, T(5.0));
 	res = w1;
-
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
@@ -141,11 +139,11 @@ inline T kernelPot(T q) {
 	const auto q0 = q;
 	q *= (q < T(1));
 	const auto q2 = sqr(q);
-	w1 = T(315.0 / 128.0);
-	w1 = fmaf(w1, q2, T(-105.0 / 32.0));
-	w1 = fmaf(w1, q2, T(189.0 / 64.0));
-	w1 = fmaf(w1, q2, T(-45.0 / 32.0));
-	w1 = fmaf(w1, q2, T(35.0 / 128.0));
+	w1 = T(-1.0);
+	w1 = fmaf(w1, q, T(9.0 / 4.0));
+	w1 = fmaf(w1, q, T(-2.5));
+	w1 *= q;
+	w1 = fmaf(w1, q, T(9.0 / 4.0));
 	res = w1;
 
 	sw1 = q0 < T(1);
