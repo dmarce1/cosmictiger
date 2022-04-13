@@ -152,22 +152,25 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 					}
 				} else if( phase == 2 ) {
 					if( rung2 >= minrung) {
-						//		sph_particles_alpha(i) += sph_particles_dalpha(i) * 2.0 * dt2;
-				for( int dim =0; dim < NDIM; dim++) {
-					particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
-				}
-				float& e = sph_particles_entr(i);
-				float& dedt = sph_particles_dentr(i);
-				const float de = dedt * 2.0f * dt2;
-				dedt = 0.0;
-				e += de;
-				ALWAYS_ASSERT(e>=0.0);
-			}
+						for( int dim =0; dim < NDIM; dim++) {
+							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
+						}
+						sph_particles_entr(i) += sph_particles_dentr(i)* 2.0 * dt2;
+						if( stars ) {
+							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
+						}
+						if( chem ) {
+							for( int fi = 0; fi < NCHEMFRACS; fi++) {
+								sph_particles_chem(i)[fi] += sph_particles_dchem(i)[fi]* 2.0 * dt2;
+							}
+						}
 
-		}
-	}
-	return std::make_pair(error, norm);
-}));
+					}
+
+				}
+			}
+			return std::make_pair(error, norm);
+		}));
 	}
 	for (auto& f : futs) {
 		auto tmp = f.get();

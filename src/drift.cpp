@@ -118,25 +118,6 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					if( h > 0.5 ) {
 						PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
 					}
-		//			sph_particles_rec2(j).A *= expf(sph_particles_dentr(j) * dt);
-					if( stars ) {
-						sph_particles_rec2(j).fcold += sph_particles_dcold_mass(j) * dt;
-					}
-					if( chem ) {
-						for( int fi = 0; fi < NCHEMFRACS; fi++) {
-							auto& frac = sph_particles_frac(fi,j);
-							auto dfrac = sph_particles_dchem(j)[fi];
-							if( frac + dfrac *dt < 0.0) {
-								if(frac + dfrac *dt > -1e-10f) {
-									frac = 1e-30f - dfrac * dt *1.0000001;
-								} else {
-									PRINT( "%e %e\n", frac, dfrac * dt);
-									ALWAYS_ASSERT(frac + dfrac * dt >= 0.0);
-								}
-							}
-							frac += dfrac * dt;
-						}
-					}
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
 					const float rho = sph_den(1./h3);

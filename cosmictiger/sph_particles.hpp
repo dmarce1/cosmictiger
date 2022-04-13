@@ -235,7 +235,7 @@ inline float& sph_particles_kappa(part_int index) {
 	return sph_particles_kap[index];
 }
 
-inline float sph_particles_cold_mass(part_int index) {
+inline float& sph_particles_cold_mass(part_int index) {
 	return sph_particles_r2[index].fcold;
 }
 
