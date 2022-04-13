@@ -23,7 +23,6 @@
 
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_x;
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_y;
-vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_z;
 vector<char> kick_workspace::host_type;
 semaphore kick_workspace::lock1(1);
 semaphore kick_workspace::lock2(1);
@@ -188,11 +187,12 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
-	CUDA_CHECK(cudaMallocManaged(&dev_type, sizeof(char) * part_count));
+	CUDA_CHECK(cudaMalloc(&dev_type, sizeof(char) * part_count));
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(dev_type, host_type.data(), sizeof(char) * part_count, cudaMemcpyHostToDevice, stream));
 	hpx::wait_all(futs.begin(), futs.end());
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_type, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	cuda_end_stream(stream);
