@@ -665,7 +665,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.source_size = part_count;
 	data.tree_size = ntrees;
 	data.h_snk = &sph_particles_smooth_len(0);
-	data.type_snk = &particles_type(0);
 	data.cat_index_snk = &particles_cat_index(0);
 	data.sink_size = particles_size();
 	data.x = dev_x;
@@ -678,7 +677,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.z_snk = &particles_pos(ZDIM, 0);
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
-		data.type = &particles_type(0);
+		data.type_snk = &particles_type(0);
 		data.sph_gx = &sph_particles_gforce(XDIM,0);
 		data.sph_gy = &sph_particles_gforce(YDIM,0);
 		data.sph_gz = &sph_particles_gforce(ZDIM,0);
