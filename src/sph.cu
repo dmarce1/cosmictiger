@@ -879,7 +879,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					vsig += c_i;
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					float dt = params.t0 * rung_dt[rung];
-					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);
+					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv);// * (1.f / 3.f);
 					const float dt_divv = params.cfl / (dloghdt + 1e-30f);
 					if (dt_divv < dt) {
 						dt = dt_divv;
@@ -1318,7 +1318,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 //					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);
 					if (params.diffusion) {
-						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * (1.f / 3.f));
+						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D);
 					}
 					const float a2 = sqr(ax, ay, az);
 					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);
