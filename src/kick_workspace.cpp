@@ -23,6 +23,7 @@
 
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_x;
 vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_y;
+vector<fixed32, pinned_allocator<fixed32>> kick_workspace::host_z;
 vector<char> kick_workspace::host_type;
 semaphore kick_workspace::lock1(1);
 semaphore kick_workspace::lock2(1);
