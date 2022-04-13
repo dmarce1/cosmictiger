@@ -1477,7 +1477,6 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const float dt_i = rung_dt[rung_i] * params.t0;
 				float den = 0.f;
 				float num = 0.f;
-				float Aavg = 0.0f;
 				ALWAYS_ASSERT(block_size==CONDUCTION_BLOCK_SIZE);
 				for (int j = tid; j < ws.rec1.size(); j += block_size) {
 					const auto& rec1 = ws.rec1[j];
@@ -1498,7 +1497,6 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float r = sqrtf(r2);
 						const float rinv = 1.f / r;
 						const float q_i = r * hinv_i;
-						Aavg += A_j * kernelW(q_i);
 						if (r2 > 0.f && (active || rung_j >= params.min_rung)) {
 							const float fpre_j = rec2.fpre;
 							const float kappa_j = rec2.kappa;
@@ -1534,19 +1532,15 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						}
 					}
 				}
-				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(Aavg);
 				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(num);
 				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(den);
 				if (tid == 0) {
-					Aavg *= m / rho_i * h3inv_i;
 					const float A0 = data.entr0_snk[snki];
 					const float A1 = (A0 + num) / (1.f + den);
 					const float dA = A1 - A_i;
 					data.dentr_con_snk[snki] = dA;
-					data.entr_avg_snk[snki] = Aavg;
 //					ALWAYS_ASSERT(A1-A0==0.0);
 					ALWAYS_ASSERT(isfinite(dA));
-					ALWAYS_ASSERT(isfinite(Aavg));
 				}
 			}
 		}

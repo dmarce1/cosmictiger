@@ -164,7 +164,6 @@ SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_dv2; // dvel_pred
 SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_kap;
 SPH_PARTICLES_EXTERN float* sph_particles_e0;
-SPH_PARTICLES_EXTERN float* sph_particles_ea;
 SPH_PARTICLES_EXTERN float* sph_particles_de2;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
@@ -221,10 +220,6 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
 
 inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
-}
-
-inline float& sph_particles_entr_avg(part_int index) {
-	return sph_particles_ea[index];
 }
 
 
