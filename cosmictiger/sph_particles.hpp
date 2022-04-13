@@ -120,7 +120,6 @@ struct sph_record4 {
 
 struct sph_record5 {
 	array<float, NCHEMFRACS> dfrac;
-	float dA;
 	float dfcold;
 };
 
@@ -222,10 +221,6 @@ inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
 }
 
-
-inline float& sph_particles_dentr_con(part_int index) {
-	return sph_particles_de2[index];
-}
 
 
 inline char& sph_particles_converged(part_int index) {
@@ -425,7 +420,7 @@ inline float& sph_particles_entr(part_int index) {
 
 inline float& sph_particles_dentr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r5[index].dA;
+	return sph_particles_de2[index];
 }
 
 inline float& sph_particles_dvel0(int dim, part_int index) {

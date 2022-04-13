@@ -835,7 +835,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.rec2_snk = &sph_particles_rec2(0);
 	cuda_data.kap_snk = &sph_particles_kappa(0);
 	cuda_data.entr0_snk = &sph_particles_entr0(0);
-	cuda_data.dentr_con_snk = &sph_particles_dentr_con(0);
+	cuda_data.dentr_snk = &sph_particles_dentr(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
@@ -973,7 +973,7 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 			for( part_int i = b; i < e; i++) {
 				if( !sph_particles_converged(i) && sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
 					float& A = sph_particles_entr(i);
-					const float dA = sph_particles_dentr_con(i);
+					const float dA = sph_particles_dentr(i);
 					ALWAYS_ASSERT(isfinite(std::max(A, A+dA)));
 					ALWAYS_ASSERT(std::max(A, A+dA) > 0.0f);
 					const float this_err = fabs(dA) / std::max(sph_particles_entr0(i), A + dA);
