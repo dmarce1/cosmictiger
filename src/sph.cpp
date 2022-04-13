@@ -979,6 +979,9 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 					const float this_err = fabs(dA) / std::max(sph_particles_entr0(i), A + dA);
 					A += dA;
 					err_max = std::max(this_err, err_max);
+					if( this_err > 1.0 ) {
+						PRINT( "%e %e %e\n", A - dA, dA, sph_particles_entr0(i));
+					}
 					err_rms += sqr(this_err);
 					if( this_err < SPH_DIFFUSION_TOLER3) {
 						sph_particles_converged(i) = true;

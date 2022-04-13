@@ -23,16 +23,16 @@
 
 #include <cosmictiger/safe_io.hpp>
 
-constexpr float dx = 1.0 / NPIECE;
+constexpr double dx = 1.0 / NPIECE;
 
 
 template<class T>
 inline T W(T q) {
 	const T W0 = kernel_norm;
 	const T n = kernel_index;
-	q = fminf(q, 1.f);
-	T x = float(M_PI) * q;
-	x = fminf(x, M_PI * 0.9999999f);
+	q =std::min(q, 1.0);
+	T x = (M_PI) * q;
+	x = std::min(x, M_PI);
 	T w = W0 * powf(sinc(x), n);
 	return w;
 }
@@ -42,21 +42,21 @@ inline T dWdq(T q) {
 //	return (W(q + DX) - W(q)) / DX;
 	const T W0 = kernel_norm;
 	const T n = kernel_index;
-	T x = float(M_PI) * q;
-	q = fminf(q, 1.f);
-	x = fminf(x, M_PI * 0.9999999f);
-	if (q == 0.0f) {
-		return 0.f;
+	T x = (M_PI) * q;
+	q = std::min(q, 1.0);
+	x = std::min(x, M_PI);
+	if (q == 0.0) {
+		return 0.;
 	} else {
 		T tmp, s, c;
-		s = sinf(x);
-		c = cosf(x);
-		if (x < T(0.01f)) {
+		s = sin(x);
+		c = cos(x);
+		if (x < T(0.01)) {
 			tmp = T(-1. / 3.) * sqr(x) * x;
 		} else {
 			tmp = (x * c - s);
 		}
-		T w = W0 * n * tmp / (x * q) * powf(s / x, n - 1.0);
+		T w = W0 * n * tmp / (x * q) * pow(s / x, n - 1.0);
 		return w;
 	}
 }
@@ -82,21 +82,21 @@ void kernel_set_type(double n) {
 	WLUT[NPIECE].first = 0.0;
 	WLUT[NPIECE].second = 0.0;
 	for (int n = 1; n < NPIECE; n++) {
-		const float q = (float) n / NPIECE;
+		const double q = (double) n / NPIECE;
 		WLUT[n].first = W(q);
 		WLUT[n].second = dWdq(q);
 	}
 	FILE* fp = fopen("kernel.txt", "wt");
-	float err_max = 0.0;
-	float norm;
-	for (float r = 0.0; r < 1.0; r += 0.01) {
-		float w0 = kernelW(r);
-		float w1 = W(r);
-		float dw0 = dkernelW_dq(r);
-		float dw1 = dWdq(r);
-		float dif = fabsf(dw0 - dw1);
+	double err_max = 0.0;
+	double norm;
+	for (double r = 0.0; r < 1.0; r += 0.01) {
+		double w0 = kernelW(r);
+		double w1 = W(r);
+		double dw0 = dkernelW_dq(r);
+		double dw1 = dWdq(r);
+		double dif = fabsf(dw0 - dw1);
 		err_max = std::max(err_max, dif);
-		float avg = 0.5 * (dw0 + dw1);
+		double avg = 0.5 * (dw0 + dw1);
 		norm += avg;
 		fprintf(fp, "%e %e %e %e %e\n", r, w1, w0, dw1, dw0);
 	}
@@ -122,18 +122,18 @@ double kernel_stddev(std::function<double(double)> W) {
 
 void kernel_adjust_options(options& opts) {
 
-	constexpr float bspline_width = 4.676649e-01;
-	constexpr float bspline_n = 60;
-	float sum = 0.0;
+	constexpr double bspline_width = 4.676649e-01;
+	constexpr double bspline_n = 60;
+	double sum = 0.0;
 	constexpr int N = 1024;
 	for( int i = 1; i < N; i++) {
-		float q = (double) i / N;
+		double q = (double) i / N;
 		sum += sqr(q) * 4.0 * M_PI  / N * sqr(q) * kernelW(q);
 	}
-	float width = sqrt(sum);
+	double width = sqrt(sum);
 	PRINT( "kernel width = %e\n", width);
-	const float n = pow(width / bspline_width,-3)*bspline_n;
-	const float cfl = opts.cfl * width / bspline_width;
+	const double n = pow(width / bspline_width,-3)*bspline_n;
+	const double cfl = opts.cfl * width / bspline_width;
 	PRINT( "Setting neighbor number to %e\n", n);
 	PRINT( "Adjusting CFL to %e\n", cfl);
 

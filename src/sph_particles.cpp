@@ -161,7 +161,17 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						}
 						if( chem ) {
 							for( int fi = 0; fi < NCHEMFRACS; fi++) {
-								sph_particles_chem(i)[fi] += sph_particles_dchem(i)[fi]* 2.0 * dt2;
+								auto& frac = sph_particles_frac(fi,i);
+								auto dfrac = sph_particles_dchem(i)[fi];
+								/*if( frac + dfrac * 2.0 * dt2 < 0.0) {
+									if(frac + 2.0 * dt2 * dfrac > -1e-20f) {
+										frac = 1e-30f - dfrac * 2.0 * dt2 *1.0000001;
+									} else {
+										PRINT( "%e %e\n", frac, 2.0 * dt2 * dfrac);
+										ALWAYS_ASSERT(false);
+									}
+								}*/
+								frac += dfrac * dt2 * 2.0;
 							}
 						}
 
