@@ -19,7 +19,7 @@
 
 #pragma once
 
-static constexpr int NPIECE = 32;
+static constexpr int NPIECE = 128;
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
@@ -90,10 +90,10 @@ inline float kernelW(float q) {
 	const float y2 = WLUT[q1].first;
 	const float k2 = WLUT[q1].second;
 	const float dy = y2 - y1;
-	const float a = k1 / NPIECE - dy;
-	const float b = -k2 / NPIECE + dy;
+	float a = k1 / NPIECE - dy;
+	float b = -k2 / NPIECE + dy;
 	const float omx = 1.f - x;
-	const float w = fmaxf(omx * y1 + x * y2 + x * omx * (omx * a + x * b),0.f);
+	const float w = omx * y1 + x * y2 + x * omx * (omx * a + x * b);
 	return w;
 }
 
@@ -111,7 +111,7 @@ inline float dkernelW_dq(float q) {
 	const float dy = y2 - y1;
 	const float a = k1 / NPIECE - dy;
 	const float b = -k2 / NPIECE + dy;
-	return fminf(NPIECE * (b * (2 - 3 * x) * x + a * (-1 + x) * (-1 + 3 * x) - y1 + y2),0.f);
+	return NPIECE * (b * (2 - 3 * x) * x + a * (-1 + x) * (-1 + 3 * x) - y1 + y2);
 }
 
 

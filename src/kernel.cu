@@ -86,10 +86,11 @@ void kernel_set_type(double n) {
 		WLUT[n].first = W(q);
 		WLUT[n].second = dWdq(q);
 	}
+	WLUT[NPIECE].second = WLUT[NPIECE-1].second = NPIECE*(W(1.0) - W(1.0-1.0/NPIECE));
 	FILE* fp = fopen("kernel.txt", "wt");
 	double err_max = 0.0;
 	double norm;
-	for (double r = 0.0; r < 1.0; r += 0.01) {
+	for (double r = 0.0; r < 1.0; r += 0.001) {
 		double w0 = kernelW(r);
 		double w1 = W(r);
 		double dw0 = dkernelW_dq(r);
