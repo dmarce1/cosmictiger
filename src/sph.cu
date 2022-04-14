@@ -214,7 +214,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				float& h = data.rec1_snk[snki].h;
 				float drho_dh;
 				float rhoh3;
-				//		float last_dh = 0.0f;
+				float last_dlogh = 0.0f;
+				float w1 = 1.f;
 				do {
 					const float hinv = 1.f / h; // 4
 					const float h2 = sqr(h);    // 1
@@ -253,15 +254,15 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float fpre = fminf(fmaxf(1.0f / (drho_dh), 0.5f), 2.0f);
 						dlogh = fminf(fmaxf(powf(rhoh30 / rhoh3, fpre * 0.3333333333333333f) - 1.f, -.1f), .1f);
 						error = fabs(1.0f - rhoh3 / rhoh30);
-						if (tid == 0) {
-							h *= (1.f + dlogh);
+						if (last_dlogh * dlogh < 0.f) {
+							w1 *= 0.9f;
+						} else {
+							w1 = fminf(1.f, w1 / 0.9f);
 						}
-						/*						if (last_dh * dlogh < 0.f) {
-						 w1 *= 0.5;
-						 } else {
-						 w1 = 1.f;
-						 }*/
-						//last_dh = dlogh;
+						if (tid == 0) {
+							h *= (1.f + w1 * dlogh);
+						}
+						last_dlogh = dlogh;
 					}
 					__syncthreads();
 					if (tid == 0) {
@@ -1032,7 +1033,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 				}
 				float dtinv_cfl = 0.f;
-				float one = 0.0f;
+//				float one = 0.0f;
 				float vsig = 0.f;
 				constexpr float tiny = 1e-30f;
 				const float& adot = params.adot;
@@ -1141,7 +1142,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float aco = powf(A_i * A_j, 1.0f / gamma0);
 						const float dp_i = aco * powf(pre_i, 1.0f - 2.0f / gamma0);
 						const float dp_j = aco * powf(pre_j, 1.0f - 2.0f / gamma0);
-						one += m / rho_i * kernelW(q_i) * h3inv_i;
+//						one += m / rho_i * kernelW(q_i) * h3inv_i;
 						ax -= m * ainv * (dp_i * dWdr_x_i + dp_j * dWdr_x_j);
 						ay -= m * ainv * (dp_i * dWdr_y_i + dp_j * dWdr_y_j);
 						az -= m * ainv * (dp_i * dWdr_z_i + dp_j * dWdr_z_j);
@@ -1207,7 +1208,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);
-				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
+//				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
 				if (params.diffusion) {
@@ -1221,10 +1222,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 				}
-				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
-					PRINT("one is off %e %i\n", one, data.converged_snk[snki]);
-					__trap();
-				}
+				/*				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
+				 PRINT("one is off %e %i\n", one, data.converged_snk[snki]);
+				 __trap();
+				 }*/
 				if (tid == 0) {
 					float gx_i;
 					float gy_i;
