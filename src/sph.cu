@@ -229,8 +229,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float r = sqrt(r2);                    // 4
 						const float q = r * hinv;                    // 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q); // 4
-							const float dwdq = dkernelW_dq(q);
+							float w;
+							const float dwdq = dkernelW_dq(q, &w);
 							const float dwdh = -q * dwdq * hinv; // 3
 							drho_dh -= dwdq;
 							rhoh3 += w;
@@ -325,7 +325,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 							const float r = sqrt(r2);                    // 4
 							const float q = r * hinv;                    // 1
 							if (q < 1.f) {                               // 1
-								const float w = kernelW(q); // 4
 								const float dwdq = dkernelW_dq(q);
 								drho_dh -= q * dwdq;
 								contains = true;
@@ -376,8 +375,8 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						const float vy_ij = vy0_ij + y_ij * params.adot;
 						const float vz_ij = vz0_ij + z_ij * params.adot;
 						const float rinv = 1.0f / (1.0e-30f + r);
-						const float w = kernelW(q); // 4
-						const float dwdq = dkernelW_dq(q);
+						float w;
+						const float dwdq = dkernelW_dq(q, &w);
 						const float dWdr_i = dwdq * h4inv_i;
 						const float A0_j = fh_j * powf(A_j, 1.0f / gamma0);
 						pre += m * A0_j * kernelW(q) * h3inv_i;
@@ -408,7 +407,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					shared_reduce_add<float, SMOOTHLEN_BLOCK_SIZE>(dvz_dz);
 					const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 					const float rho_i = c0 * h3inv_i;
-					const float mrhoinv = 1.f /  rho_i;
+					const float mrhoinv = 1.f / rho_i;
 					dvx_dx *= mrhoinv;
 					dvx_dy *= mrhoinv;
 					dvx_dz *= mrhoinv;
@@ -783,7 +782,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_max<SMOOTHLEN_BLOCK_SIZE>(vsig);
 				const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 				const float rho_i = c0 * h3inv_i;
-				const float mrhoinv = 1.f /  rho_i;
+				const float mrhoinv = 1.f / rho_i;
 				dvx_dx *= mrhoinv;
 				dvx_dy *= mrhoinv;
 				dvx_dz *= mrhoinv;
@@ -819,6 +818,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dt_divv = params.cfl / (dloghdt + 1e-30f);
 					if (dt_divv < dt) {
 						PRINT("divv limited %e %e %e\n", dt_divv, dt, div_v - 3.f * params.adot * ainv);
+						//	__trap();
 						dt = dt_divv;
 						rung = ceilf(log2f(params.t0) - log2f(dt_divv));
 						dt = params.t0 * rung_dt[rung];
@@ -1123,7 +1123,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float beta_ij = alpha_ij * 1.5f;
 						const float hfrac_ij = 2.0f * (hfrac_i * hfrac_j) / (hfrac_i + hfrac_j + 1e-30f);
 						const float vsig_ij = hfrac_ij * (alpha_ij * c_ij - beta_ij * mu2_ij);
-						const float pi_ij = -mu1_ij * vsig_ij / rho_ij;
+						const float pi_ij = -mu2_ij * vsig_ij / rho_ij;
 						const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i;
 						const float dWdr_j = dkernelW_dq(q_j) * hinv_j * h3inv_j;
 						const float dWdr_ij = 0.5f * (fpre1_i * dWdr_i + fpre1_j * dWdr_j);
@@ -1158,7 +1158,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float difco_i = SPH_DIFFUSION_C * sqr(h_i) * shearv_i;
 							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;
 							const float difco_ij = 0.5f * (difco_i + difco_j);
-							const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;
+							const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * r / sqrtf(r2 + 0.01f * sqr(h_ij));
 							D += D_ij;
 							de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j / (hfrac_i * rho_i), gamma0 - 1.f));
 							if (params.stars) {
@@ -1456,7 +1456,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 							const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f);
 							const float dt_j = rung_dt[rung_j] * params.t0;
 							const float dt_ij = fminf(dt_i, dt_j);
-							const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv;
+							const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * r / sqrtf(r2 + 0.01f * h_i * h_j);
 							num += D_ij * A_j * powf((rho_j * hfrac_j) / (rho_i * hfrac_i), gamma0 - 1.f);
 							den += D_ij;
 							if (!isfinite(den)) {
