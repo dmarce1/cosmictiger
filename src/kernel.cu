@@ -25,12 +25,11 @@
 
 constexpr double dx = 1.0 / NPIECE;
 
-
 template<class T>
 inline T W(T q) {
 	const T W0 = kernel_norm;
 	const T n = kernel_index;
-	q =std::min(q, 1.0);
+	q = std::min(q, 1.0);
 	T x = (M_PI) * q;
 	x = std::min(x, M_PI);
 	T w = W0 * powf(sinc(x), n);
@@ -86,23 +85,23 @@ void kernel_set_type(double n) {
 		WLUT[n].first = W(q);
 		WLUT[n].second = dWdq(q);
 	}
-	WLUT[NPIECE].second = WLUT[NPIECE-1].second = NPIECE*(W(1.0) - W(1.0-1.0/NPIECE));
+	WLUT[NPIECE].second = WLUT[NPIECE - 1].second = NPIECE * (W(1.0) - W(1.0 - 1.0 / NPIECE));
 	FILE* fp = fopen("kernel.txt", "wt");
-	double err_max = 0.0;
-	double norm;
+	double err_mean = 0.0;
+	double norm = 0.0;
 	for (double r = 0.0; r < 1.0; r += 0.001) {
 		double w0 = kernelW(r);
 		double w1 = W(r);
 		double dw0 = dkernelW_dq(r);
 		double dw1 = dWdq(r);
 		double dif = fabsf(dw0 - dw1);
-		err_max = std::max(err_max, dif);
+		err_mean += dif * r * r;
+		norm += r * r;
 		double avg = 0.5 * (dw0 + dw1);
-		norm += avg;
-		fprintf(fp, "%e %e %e %e %e\n", r, w1, w0, dw1, dw0);
+		fprintf(fp, "%e %e %e %e %e %e\n", r, w1, w0, dw1, dw0, dif);
 	}
-	norm /= 100.0;
-	PRINT("Kernel Error is %e\n", err_max / norm);
+	err_mean /= norm;
+	PRINT("Mean kernel Error is %e\n", err_mean);
 	fclose(fp);
 }
 
@@ -127,16 +126,16 @@ void kernel_adjust_options(options& opts) {
 	constexpr double bspline_n = 60;
 	double sum = 0.0;
 	constexpr int N = 1024;
-	for( int i = 1; i < N; i++) {
+	for (int i = 1; i < N; i++) {
 		double q = (double) i / N;
-		sum += sqr(q) * 4.0 * M_PI  / N * sqr(q) * kernelW(q);
+		sum += sqr(q) * 4.0 * M_PI / N * sqr(q) * kernelW(q);
 	}
 	double width = sqrt(sum);
-	PRINT( "kernel width = %e\n", width);
-	const double n = pow(width / bspline_width,-3)*bspline_n;
+	PRINT("kernel width = %e\n", width);
+	const double n = pow(width / bspline_width, -3) * bspline_n;
 	const double cfl = opts.cfl * width / bspline_width;
-	PRINT( "Setting neighbor number to %e\n", n);
-	PRINT( "Adjusting CFL to %e\n", cfl);
+	PRINT("Setting neighbor number to %e\n", n);
+	PRINT("Adjusting CFL to %e\n", cfl);
 
 	opts.neighbor_number = n;
 	opts.cfl = cfl;

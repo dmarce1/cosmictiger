@@ -673,6 +673,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 	__syncthreads();
 	new (&ws) aux_workspace();
 	array<fixed32, NDIM> x;
+	char max_rung = 0;
 	while (index < data.nselfs) {
 
 		int flops = 0;
@@ -882,10 +883,12 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);
 					const float dt_divv = params.cfl / (dloghdt + 1e-30f);
 					if (dt_divv < dt) {
+						PRINT( "divv limited %e %e\n", dt_divv, dt);
 						dt = dt_divv;
 						rung = ceilf(log2f(params.t0) - log2f(dt_divv));
 						dt = params.t0 * rung_dt[rung];
 					}
+					max_rung = max(max_rung, rung);
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
 					const float div_v0 = data.rec3_snk[snki].divv;
@@ -911,6 +914,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 		if (tid == 0) {
 			atomicAdd(&reduce->flops, (double) flops);
 			index = atomicAdd(&reduce->counter, 1);
+			atomicMax(&reduce->max_rung, (int) max_rung);
 		}
 		__syncthreads();
 	}
@@ -1828,6 +1832,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	break;
 	case SPH_RUN_AUX: {
 		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE,0,stream>>>(params,data,reduce);
+		rc.max_rung = reduce->max_rung;
 		cuda_stream_synchronize(stream);
 	}
 	break;
