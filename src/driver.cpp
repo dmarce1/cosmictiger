@@ -338,9 +338,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	while (rc) {
 		sparams.run_type = SPH_RUN_RUNGS;
 		tm.start();
-		kr = sph_run(sparams, true);
-		rc = kr.rc;
-		max_rung = kr.max_rung;
+		rc = sph_run(sparams, true).rc;
+	//	max_rung = kr.max_rung;
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());

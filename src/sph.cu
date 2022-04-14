@@ -1832,8 +1832,8 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	break;
 	case SPH_RUN_AUX: {
 		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE,0,stream>>>(params,data,reduce);
-		rc.max_rung = reduce->max_rung;
 		cuda_stream_synchronize(stream);
+		rc.max_rung = reduce->max_rung;
 	}
 	break;
 	case SPH_RUN_COND_INIT: {
@@ -1872,7 +1872,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.max_rung = reduce->max_rung;
 	}
 	break;
-}
-	(cudaFree(reduce));
+}(cudaFree(reduce));
 	return rc;
 }
