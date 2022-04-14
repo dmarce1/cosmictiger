@@ -299,7 +299,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sparams.run_type = SPH_RUN_RUNGS;
 		tm.start();
 		rc = sph_run(sparams, true).rc;
-	//	max_rung = kr.max_rung;
+		//	max_rung = kr.max_rung;
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
@@ -308,7 +308,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sph_particles_apply_updates(minrung, 2, t0, tau);
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
-
+	sph_particles_cache_free1();
 
 	if (chem) {
 		PRINT("Doing chemistry step\n");
@@ -318,7 +318,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.stop();
 		PRINT("Took %e s\n", tm.read());
 	}
-
 
 	if (conduction) {
 
@@ -365,17 +364,14 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(), err.err_max, err.err_rms);
 			tm.reset();
+			sph_particles_cache_free_entr();
 		} while (err.err_max > SPH_DIFFUSION_TOLER1 || err.err_rms > SPH_DIFFUSION_TOLER2);
 		dtm.stop();
 		PRINT("Conduction took %e seconds total\n", dtm.read());
 	}
 
-
-
-	if (phase == 1) {
-		sph_tree_destroy(true);
-		sph_particles_cache_free();
-	}
+	sph_tree_destroy(true);
+	sph_particles_cache_free2();
 //	PRINT( "%i\n", max_rung);
 	return kr;
 
@@ -661,7 +657,7 @@ void driver() {
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
-			opts.hsoft = hsoft0;// / a;
+			opts.hsoft = hsoft0;			// / a;
 			if (!glass) {
 				if (z > 50.0) {
 					theta = 0.4;

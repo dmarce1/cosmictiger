@@ -678,6 +678,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float vx_i = data.vx[i];
 				const float vy_i = data.vy[i];
 				const float vz_i = data.vz[i];
+				const float fpre_i = data.rec1_snk[snki].fpre1;
 				const float hinv = 1.f / h; // 4
 				const float h2 = sqr(h);    // 1
 				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));
@@ -753,7 +754,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float vy_ij = vy0_ij + y_ij * params.adot;
 					const float vz_ij = vz0_ij + z_ij * params.adot;
 					const float rinv = 1.0f / (1.0e-30f + r);
-					const float dwdq = dkernelW_dq(q);
+					const float dwdq = fpre_i * dkernelW_dq(q);
 					const float dWdr_i = dwdq * h4inv_i;
 					const float w_ij = fminf(x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij, 0.f) * rinv;
 					vsig = fmaxf(vsig, -w_ij);
@@ -827,7 +828,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz)));
 					const float div_v0 = data.rec3_snk[snki].divv;
 					data.rec3_snk[snki].divv = div_v;
-					const float alpha = data.rec4_snk[snki].alpha;
+					const float alpha = data.rec1_snk[snki].alpha;
 					const float ddivv_dt = (div_v - div_v0) / dt - params.adot * ainv * div_v;
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);
 					const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv));
@@ -837,9 +838,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float lambda1 = 1.f / dthydro;
 					float dalpha_dt;
 					if (alpha < limiter * alpha_targ) {
-						data.rec4_snk[snki].alpha = (limiter * alpha_targ);
+						data.rec1_snk[snki].alpha = (limiter * alpha_targ);
 					} else {
-						data.rec4_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt)));
+						data.rec1_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt)));
 					}
 				}
 			}
@@ -1674,7 +1675,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				if (tid == 0) {
 					const float grad2 = sqr(gradx, grady, gradz);
 					const float gradToT = sqrtf(grad2);
-					const auto& frac_i = data.rec4_snk[snki].frac;
+					const auto& frac_i = data.rec1_snk[snki].frac;
 					const float& cfrac_i = data.rec2_snk[snki].fcold;
 					const float& A_i = data.rec2_snk[snki].A;
 					const float& H = frac_i[CHEM_H];
