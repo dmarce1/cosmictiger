@@ -691,26 +691,33 @@ sph_run_return sph_run_workspace::to_gpu() {
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_fcold(node.global_part_range(), host_entr.data(), offset);
+									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 								} else if( params.run_type == SPH_RUN_HYDRO) {
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_fcold(node.global_part_range(), host_entr.data(), offset);
+									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), host_alpha.data(), host_pre.data(), host_fpre1.data(), host_fpre2.data(), diffusion ? host_shearv.data() : nullptr, chem ? host_chem.data() :nullptr, offset);
 								} else if( params.run_type == SPH_RUN_AUX) {
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 								} else if( params.run_type == SPH_RUN_RUNGS) {
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
+								} else if( params.run_type == SPH_RUN_COND_INIT) {
+									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
+									if( stars ) {
+										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
+									}
+									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
+									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, offset);
 								} else if( params.run_type == SPH_RUN_CONDUCTION) {
 									sph_particles_global_read_kappas(node.global_part_range(), host_kappa.data(), offset);
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_fcold(node.global_part_range(), host_entr.data(), offset);
+									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
 									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), nullptr, nullptr, host_fpre1.data(), nullptr, nullptr, nullptr, offset);
 								}
 								node.part_range.first = offset;

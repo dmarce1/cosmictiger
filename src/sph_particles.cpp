@@ -591,7 +591,7 @@ static vector<float> sph_particles_fetch_fcold_cache_line(part_int index) {
 	return line;
 }
 
-void sph_particles_global_read_entr(particle_global_range range, float* cfrac, float* ent, part_int offset) {
+void sph_particles_global_read_entr(particle_global_range range, float* ent, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	const int sz = offset + range.range.second - range.range.first;
 	if (range.range.first != range.range.second) {
@@ -600,12 +600,7 @@ void sph_particles_global_read_entr(particle_global_range range, float* cfrac, f
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				if (cfrac) {
-					cfrac[j] = sph_particles_cold_mass(i);
-				}
-				if (ent) {
-					ent[j] = sph_particles_entr(i);
-				}
+				ent[j] = sph_particles_entr(i);
 			}
 		} else {
 			line_id_type line_id;
