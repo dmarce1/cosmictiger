@@ -19,6 +19,7 @@
 
 #define SPH_DIFFUSION_C 0.03f
 #define SMOOTHLEN_BLOCK_SIZE 128
+#define SEMI_BLOCK_SIZE 32
 #define COND_INIT_BLOCK_SIZE 32
 #define CONDUCTION_BLOCK_SIZE 128
 #define RUNGS_BLOCK_SIZE 256
@@ -584,6 +585,17 @@ struct cond_init_record2 {
 struct cond_init_workspace {
 	device_vector<cond_init_record1> rec1;
 	device_vector<cond_init_record2> rec2;
+};
+
+struct mark_semi_record {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+	float h;
+};
+
+struct mark_semi_workspace {
+	device_vector<mark_semi_record> rec;
 };
 
 struct conduction_record1 {
@@ -1492,6 +1504,134 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 
 }
 
+__global__ void sph_cuda_mark_semi(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
+	const int tid = threadIdx.x;
+	const int block_size = blockDim.x;
+	__shared__
+	int index;
+	__shared__ mark_semi_workspace ws;
+	if (tid == 0) {
+		index = atomicAdd(&reduce->counter, 1);
+	}
+	__syncthreads();
+	new (&ws) mark_semi_workspace();
+
+	array<fixed32, NDIM> x;
+	const float code_to_energy = sqr((double) params.code_to_cm) / sqr((double) params.code_to_s);
+	const float code_to_density = (double) params.code_to_g / pow((double) params.code_to_cm, 3.);
+	const float colog0 = log(1.5 * pow(constants::kb, 1.5) * pow(constants::e, -3) * pow(M_PI, -0.5));
+	const float kappa0 = 20.0 * pow(2.0 / M_PI, 1.5) * pow(constants::kb, 2.5) * pow(constants::me, -0.5) * pow(constants::e, -4.0) * params.code_to_s
+			* params.code_to_cm / (params.code_to_g * constants::avo);
+	const float gamma0 = data.def_gamma;
+	const float propc0 = 0.4 * (gamma0 - 1.0) * sqrtf(2.0 * constants::kb / M_PI / constants::me) / constants::c;
+	while (index < data.nselfs) {
+		__syncthreads();
+		int flops = 0;
+		ws.rec.resize(0);
+		const sph_tree_node& self = data.trees[data.selfs[index]];
+		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+			const sph_tree_node& other = data.trees[data.neighbors[ni]];
+			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+				bool contains = false;
+				int j;
+				int total;
+				float h;
+				int rung;
+				if (pi < other.part_range.second) {
+					h = data.h[pi];
+					rung = data.rungs[pi];
+					if (rung >= params.min_rung) {
+						x[XDIM] = data.x[pi];
+						x[YDIM] = data.y[pi];
+						x[ZDIM] = data.z[pi];
+						contains = (self.outer_box.contains(x));
+						if (!contains) {
+							contains = true;
+							for (int dim = 0; dim < NDIM; dim++) {
+								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+									contains = false;
+									break;
+								}
+							}
+						}
+					}
+				}
+				j = contains;
+				compute_indices<COND_INIT_BLOCK_SIZE>(j, total);
+				const int offset = ws.rec.size();
+				__syncthreads();
+				const int next_size = offset + total;
+				ws.rec.resize(next_size);
+				if (contains) {
+					const int k = offset + j;
+					ws.rec[k].x = x[XDIM];
+					ws.rec[k].y = x[YDIM];
+					ws.rec[k].z = x[ZDIM];
+					ws.rec[k].h = h;
+				}
+			}
+		}
+		const float& m = data.m;
+		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
+			const int snki = self.sink_part_range.first - self.part_range.first + i;
+			const bool active = data.rungs[i] >= params.min_rung;
+			int semiactive = 0;
+			const float h_i = data.h[i];
+			const auto x_i = data.x[i];
+			const auto y_i = data.y[i];
+			const auto z_i = data.z[i];
+			const float h2_i = sqr(h_i);
+			if (active) {
+				if (tid == 0) {
+					data.sa_snk[snki] = true;
+				}
+			} else {
+				const int jmax = round_up(ws.rec.size(), block_size);
+				if (tid == 0) {
+					data.sa_snk[snki] = false;
+				}
+				for (int j = tid; j < jmax; j += block_size) {
+					if (j < ws.rec.size()) {
+						const auto x_j = ws.rec[j].x;
+						const auto y_j = ws.rec[j].y;
+						const auto z_j = ws.rec[j].z;
+						const auto h_j = ws.rec[j].h;
+						const auto h2_j = sqr(h_j);
+						const float x_ij = distance(x_i, x_j);
+						const float y_ij = distance(y_i, y_j);
+						const float z_ij = distance(z_i, z_j);
+						const float r2 = sqr(x_ij, y_ij, z_ij);
+						if (r2 < fmaxf(h2_i, h2_j)) {
+							semiactive++;
+						}
+					}
+					shared_reduce_add<int, COND_INIT_BLOCK_SIZE>(semiactive);
+					if (semiactive) {
+						if (tid == 0) {
+							data.sa_snk[snki] = true;
+						}
+						break;
+					}
+				}
+			}
+		}
+		shared_reduce_add<int, COND_INIT_BLOCK_SIZE>(flops);
+		if (tid == 0) {
+			index = atomicAdd(&reduce->counter, 1);
+		}
+		__syncthreads();
+	}
+	(&ws)->~mark_semi_workspace();
+
+}
+
+
 __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
@@ -1577,7 +1717,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
-			int semiactive = 0;
+			const bool semiactive = !active && data.sa_snk[snki];
 			const float h_i = data.h[i];
 			const float A_i = data.entr[i];
 			float cfrac_i;
@@ -1591,39 +1731,6 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 			const auto y_i = data.y[i];
 			const auto z_i = data.z[i];
 			const float h2_i = sqr(h_i);
-			if (active) {
-				if (tid == 0) {
-					data.sa_snk[snki] = true;
-				}
-			} else {
-				const int jmax = round_up(ws.rec1.size(), block_size);
-				if (tid == 0) {
-					data.sa_snk[snki] = false;
-				}
-				for (int j = tid; j < jmax; j += block_size) {
-					if (j < ws.rec1.size()) {
-						const auto x_j = ws.rec1[j].x;
-						const auto y_j = ws.rec1[j].y;
-						const auto z_j = ws.rec1[j].z;
-						const auto h_j = ws.rec1[j].h;
-						const auto h2_j = sqr(h_j);
-						const float x_ij = distance(x_i, x_j);
-						const float y_ij = distance(y_i, y_j);
-						const float z_ij = distance(z_i, z_j);
-						const float r2 = sqr(x_ij, y_ij, z_ij);
-						if (r2 < fmaxf(h2_i, h2_j)) {
-							semiactive++;
-						}
-					}
-					shared_reduce_add<int, COND_INIT_BLOCK_SIZE>(semiactive);
-					if (semiactive) {
-						if (tid == 0) {
-							data.sa_snk[snki] = true;
-						}
-						break;
-					}
-				}
-			}
 			if (semiactive || active) {
 				const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 				const float hinv_i = 1.f / h_i;
@@ -1737,6 +1844,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int hydro_nblocks;
 	static int rungs_nblocks;
 	static int cond_init_nblocks;
+	static int semi_nblocks;
 	static int conduction_nblocks;
 	static bool first = true;
 	if (first) {
@@ -1749,6 +1857,8 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		hydro_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&conduction_nblocks, (const void*) sph_cuda_conduction, CONDUCTION_BLOCK_SIZE, 0));
 		conduction_nblocks *= cuda_smp_count();
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semi_nblocks, (const void*) sph_cuda_mark_semi, COND_INIT_BLOCK_SIZE, 0));
+		semi_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cond_init_nblocks, (const void*) sph_cuda_cond_init, COND_INIT_BLOCK_SIZE, 0));
 		cond_init_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (const void*) sph_cuda_rungs, RUNGS_BLOCK_SIZE, 0));
@@ -1767,6 +1877,11 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
 		rc.max_rung = reduce->max_rung;
+	}
+	break;
+	case SPH_RUN_SEMI: {
+		sph_cuda_mark_semi<<<semi_nblocks, SEMI_BLOCK_SIZE,0,stream>>>(params,data,reduce);
+		cuda_stream_synchronize(stream);
 	}
 	break;
 	case SPH_RUN_COND_INIT: {

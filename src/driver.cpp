@@ -172,20 +172,8 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	if (verbose)
 		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 	tm.reset();
-	return sr;
 
-}
-
-sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
-		bool verbose) {
-	const bool stars = get_options().stars;
-	const bool diff = get_options().diffusion;
-	const bool chem = get_options().chem;
-	const bool conduction = get_options().conduction;
-	verbose = true;
 	*eheat = 0.0;
-	if (verbose)
-		PRINT("Doing SPH step with minrung = %i\n", minrung);
 	sph_particles_apply_updates(minrung, 0, t0, tau);
 
 	sph_run_params sparams;
@@ -204,13 +192,10 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sparams.set = SPH_SET_ACTIVE;
 	sparams.phase = phase;
 	const bool glass = get_options().glass;
-	sph_tree_neighbor_params tnparams;
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
-	tree_id root_id;
 	root_id.proc = 0;
 	root_id.index = 0;
-	vector<tree_id> checklist;
 	checklist.push_back(root_id);
 
 	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
@@ -254,6 +239,50 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.reset();
 		kr = sph_run_return();
 	} while (cont);
+
+
+	sparams.run_type = SPH_RUN_SEMI;
+	tm.reset();
+	tm.start();
+	sph_run(sparams, true);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_SEMI): tm = %e \n", tm.read());
+	tm.reset();
+
+
+	return sr;
+
+}
+
+sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+		bool verbose) {
+	const bool stars = get_options().stars;
+	const bool diff = get_options().diffusion;
+	const bool chem = get_options().chem;
+	const bool conduction = get_options().conduction;
+	verbose = true;
+
+	*eheat = 0;
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
+	sph_run_params sparams;
+	if (adot != 0.0) {
+		sparams.max_dt = SCALE_DT * scale / fabs(adot);
+	}
+	sparams.adot = adot;
+	sparams.tau = tau;
+	sparams.tzero = tau == 0.0;
+	sparams.max_rung = max_rung;
+	sparams.a = scale;
+	sparams.t0 = t0;
+	sparams.min_rung = minrung;
+	bool cont;
+	sph_run_return kr;
+
 	timer tm;
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
@@ -275,7 +304,10 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_AUX): tm = %e \n", tm.read());
 	tm.reset();
+	sph_tree_neighbor_params tnparams;
+
 	tnparams.h_wt = 1.001;
+	tnparams.min_rung = minrung;
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.seti = SPH_SET_ALL;
 	tnparams.seto = SPH_SET_ACTIVE;
