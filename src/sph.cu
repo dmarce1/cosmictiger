@@ -1516,7 +1516,8 @@ __global__ void sph_cuda_mark_semi(sph_run_params params, sph_run_cuda_data data
 				int rung;
 				if (pi < other.part_range.second) {
 					h = data.h[pi];
-					rung = data.rungs[pi];
+					const int snki = self.sink_part_range.first - self.part_range.first + i;
+					rung = data.rungs_snk[data.dm_index_snk[snki]];
 					if (rung >= params.min_rung) {
 						x[XDIM] = data.x[pi];
 						x[YDIM] = data.y[pi];
@@ -1833,7 +1834,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		hydro_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&conduction_nblocks, (const void*) sph_cuda_conduction, CONDUCTION_BLOCK_SIZE, 0));
 		conduction_nblocks *= cuda_smp_count();
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semi_nblocks, (const void*) sph_cuda_mark_semi, COND_INIT_BLOCK_SIZE, 0));
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&semi_nblocks, (const void*) sph_cuda_mark_semi, SEMI_BLOCK_SIZE, 0));
 		semi_nblocks *= cuda_smp_count();
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cond_init_nblocks, (const void*) sph_cuda_cond_init, COND_INIT_BLOCK_SIZE, 0));
 		cond_init_nblocks *= cuda_smp_count();
