@@ -19,7 +19,8 @@
 
 #pragma once
 
-static constexpr int NPIECE = 128;
+static constexpr int NTAYLOR = 16;
+
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
@@ -28,55 +29,17 @@ void kernel_set_type(double type);
 void kernel_output();
 void kernel_adjust_options(options& opts);
 
-#define Power pow
-#define Pi T(M_PI)
-
 #ifdef __KERNEL_CU__
-__managed__ pair<float>* WLUT;
-__managed__ float kernel_index;
-__managed__ float kernel_norm;
+__managed__ double* pot_series;
+__managed__ double* f_series;
+__managed__ double kernel_index;
+__managed__ double kernel_norm;
 #else
-extern __managed__ pair<float>* WLUT;
-extern __managed__ float kernel_index;
-extern __managed__ float kernel_norm;
+extern __managed__ double* pot_series;
+extern __managed__ double* f_series;
+extern __managed__ double kernel_index;
+extern __managed__ double kernel_norm;
 #endif
-
-CUDA_EXPORT
-inline
-float W0(float q) {
-	const float W0 = kernel_norm;
-	const float n = kernel_index;
-	q = fminf(q, 1.f);
-	float x = float(M_PI) * q;
-	x = fminf(x, M_PI * 0.9999999f);
-	float w = W0 * powf(sinc(x), n);
-	ALWAYS_ASSERT(isfinite(w));
-	return w;
-}
-
-CUDA_EXPORT
-inline float dWdq0(float q) {
-//	return (W(q + DX) - W(q)) / DX;
-	const float W0 = kernel_norm;
-	const float n = kernel_index;
-	float x = float(M_PI) * q;
-	q = fminf(q, 1.f);
-	x = fminf(x, M_PI * 0.9999999f);
-	if (q == 0.0f) {
-		return 0.f;
-	} else {
-		float tmp, s, c;
-		s = sinf(x);
-		if (x < float(0.25f)) {
-			tmp = (float(-1. / 3.) + float(1. / 30.) * sqr(x)) * sqr(x) * x;
-		} else {
-			tmp = (x * sqrtf(1.f - sqr(s)) - s);
-		}
-		float xinv = 1.f / x;
-		float w = W0 * n * tmp * sqr(xinv) * float(M_PI) * powf(s * xinv, n - 1.0f);
-		return w;
-	}
-}
 
 CUDA_EXPORT
 inline float kernelW(float q) {
@@ -102,7 +65,7 @@ inline float dkernelW_dq(float q, float* w = nullptr) {
 		}
 		return 0.f;
 	} else {
-		float tmp, s, c;
+		float tmp, s;
 		s = sinf(x);
 		if (x < float(0.25f)) {
 			tmp = (float(-1. / 3.) + float(1. / 30.) * sqr(x)) * sqr(x) * x;
@@ -123,34 +86,33 @@ inline float dkernelW_dq(float q, float* w = nullptr) {
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T res, sw1, sw2, w1;
+	T res, sw1, sw2, w;
 	const auto q0 = q;
 	q *= (q < T(1));
-	w1 = T(5.0);
-	w1 = fmaf(w1, q, T(-9.0));
-	w1 *= q;
-	w1 = fmaf(w1, q, T(5.0));
-	res = w1;
+	const T q2 = sqr(q);
+	w = f_series[NTAYLOR - 1];
+	for (int n = NTAYLOR - 2; n >= 0; n--) {
+		w = fmaf(w, q2, f_series[n]);
+	}
+	res = w;
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
+	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30)));
 	return res;
 }
 
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T res, sw1, sw2, w1;
+	T res, sw1, sw2, w;
 	const auto q0 = q;
 	q *= (q < T(1));
-	const auto q2 = sqr(q);
-	w1 = T(-1.0);
-	w1 = fmaf(w1, q, T(9.0 / 4.0));
-	w1 = fmaf(w1, q, T(-2.5));
-	w1 *= q;
-	w1 = fmaf(w1, q, T(9.0 / 4.0));
-	res = w1;
-
+	const T q2 = sqr(q);
+	w = pot_series[NTAYLOR - 1];
+	for (int n = NTAYLOR - 2; n >= 0; n--) {
+		w = fmaf(w, q2, pot_series[n]);
+	}
+	res = w;
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
