@@ -377,6 +377,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_r3, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r5, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r6, new_capacity, true);
+		sph_particles_array_resize(sph_particles_fp, new_capacity, true);
 		sph_particles_array_resize(sph_particles_kap, new_capacity, true);
 		sph_particles_array_resize(sph_particles_or, new_capacity, true);
 		sph_particles_array_resize(sph_particles_sa, new_capacity, true);

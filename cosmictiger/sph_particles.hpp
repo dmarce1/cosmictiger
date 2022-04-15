@@ -160,6 +160,7 @@ SPH_PARTICLES_EXTERN array<float*, NDIM> sph_particles_g; // dvel_pred
 SPH_PARTICLES_EXTERN float* sph_particles_kap;
 SPH_PARTICLES_EXTERN float* sph_particles_e0;
 SPH_PARTICLES_EXTERN float* sph_particles_de2;
+SPH_PARTICLES_EXTERN float* sph_particles_fp;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
@@ -230,6 +231,10 @@ inline char& sph_particles_converged(part_int index) {
 
 inline char& sph_particles_semiactive(part_int index) {
 	return sph_particles_sa[index];
+}
+
+inline float& sph_particles_fpot(part_int index) {
+	return sph_particles_fp[index];
 }
 
 inline float& sph_particles_kappa(part_int index) {

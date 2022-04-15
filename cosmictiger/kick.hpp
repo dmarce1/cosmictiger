@@ -46,6 +46,7 @@ struct cuda_kick_data {
 	part_int* cat_index;
 	char* type;
 	float* hsoft;
+	char* semiactive;
 	bool sph;
 	fixed32* x_snk;
 	fixed32* y_snk;
@@ -59,6 +60,7 @@ struct cuda_kick_data {
 	int sink_size;
 	int tree_size;
 	int rank;
+	float sphN;
 };
 
 struct kick_return;

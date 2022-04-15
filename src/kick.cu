@@ -675,6 +675,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.z = dev_z;
 	data.type = dev_type;
 	data.hsoft = dev_h;
+	data.semiactive = &sph_particles_semiactive(0);
 	data.sph = do_sph;
 	data.x_snk = &particles_pos(XDIM, 0);
 	data.y_snk = &particles_pos(YDIM, 0);
@@ -692,6 +693,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.vz = &particles_vel(ZDIM, 0);
 	data.rungs = &particles_rung(0);
 	data.rank = hpx_rank();
+	data.sphN = get_options().neighbor_number;
 	if (kparams.save_force) {
 		data.gx = &particles_gforce(XDIM, 0);
 		data.gy = &particles_gforce(YDIM, 0);
