@@ -1012,6 +1012,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float az = 0.f;
 				float de_dt = 0.f;
 				float dcm_dt = 0.f;
+				float gxc = 0.f;
+				float gyc = 0.f;
+				float gzc = 0.f;
 				array<float, NCHEMFRACS> dfrac_dt;
 				if (data.chemistry) {
 					for (int fi = 0; fi < NCHEMFRACS; fi++) {
@@ -1135,6 +1138,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						ax -= m * ainv * (pi_ij * dWdr_x_ij);
 						ay -= m * ainv * (pi_ij * dWdr_y_ij);
 						az -= m * ainv * (pi_ij * dWdr_z_ij);
+						if (data.gravity) {
+							const float fpot_j = rec2.fpot;
+							gxc -= 0.5f * data.G * m * (fpot_i * dWdr_x_i * sqr(h_i) + fpot_j * dWdr_x_j * sqr(h_j));
+							gyc -= 0.5f * data.G * m * (fpot_i * dWdr_y_i * sqr(h_i) + fpot_j * dWdr_y_j * sqr(h_j));
+							gzc -= 0.5f * data.G * m * (fpot_i * dWdr_z_i * sqr(h_i) + fpot_j * dWdr_z_j * sqr(h_j));
+						}
 						const float dW_ij = (vx_ij * dWdr_x_ij + vy_ij * dWdr_y_ij + vz_ij * dWdr_z_ij);
 						de_dt += de_dt0 * 0.5f * m * ainv * pi_ij * dW_ij;
 						const float h = fminf(h_i, h_j);
@@ -1158,36 +1167,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 								}
 							}
 						}
-						/*	if (params.conduction) {
-						 const float& H = frac_j[CHEM_H];
-						 const float& Hp = frac_j[CHEM_HP];
-						 const float& Hn = frac_j[CHEM_HN];
-						 const float& H2 = frac_j[CHEM_H2];
-						 const float& He = frac_j[CHEM_HE];
-						 const float& Hep = frac_j[CHEM_HEP];
-						 const float& Hepp = frac_j[CHEM_HEPP];
-						 const float rho0 = rho_j * hfrac_j / (sqr(params.a) * params.a);
-						 float n0 = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp);
-						 const float mmw_j = 1.0f / n0;
-						 n0 *= constants::avo * rho0;
-						 const float ne_j = fmaxf((Hp - Hn + 0.25f * Hep + 0.5f * Hepp) * rho0 * (constants::avo * code_to_density), 1e-30f);
-						 const float cv0 = constants::kb / (gamma0 - 1.0);															// 4
-						 const float eint = code_to_energy * A_j * powf(rho0 * hfrac_j, gamma0 - 1.0) / (gamma0 - 1.0);
-						 const float T_j = rho0 * eint / (n0 * cv0);
-						 const float colog_j = colog0 + 1.5f * logf(T_j) - 0.5f * logf(ne_j);
-						 const float kappa_j = mmw_j * (gamma0 - 1.f) * kappa0 * powf(T_j, 2.5f) / colog_j;
-						 const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f);
-						 const float dWdr_rinv = dWdr_ij * rinv;
-						 const float gradToT = fabsf(logf(T_i / T_j)) * rinv;
-						 const float sigmax = propc0 * powf(T_i, 0.25f);
-						 const float R = gradToT * 2.f * sqr(params.a) * kappa_ij * rho_ij / (rho_i * rho_j * sigmax);
-						 const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R));
-						 //	PRINT( "%e\n", phi);
-						 const float D_ij = -phi * sqr(params.a) * 2.f * m * kappa_ij * dWdr_rinv / (rho_i * rho_j);
-						 D += D_ij;
-						 de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j / (hfrac_i * rho_i), gamma0 - 1.f));
-						 }*/
-
 					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt);
@@ -1197,6 +1176,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 //				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);
 				shared_reduce_max<HYDRO_BLOCK_SIZE>(vsig);
+				if( data.gravity ) {
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gxc);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gyc);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(gzc);
+				}
 				if (params.diffusion) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(D);
 					if (params.stars) {
@@ -1217,9 +1201,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					float gy_i;
 					float gz_i;
 					if (data.gravity) {
-						gx_i = data.gx_snk[snki];
-						gy_i = data.gy_snk[snki];
-						gz_i = data.gz_snk[snki];
+						gx_i = data.gx_snk[snki] + gxc;
+						gy_i = data.gy_snk[snki] + gyc;
+						gz_i = data.gz_snk[snki] + gzc;
 					} else {
 						gx_i = 0.f;
 						gy_i = 0.f;
