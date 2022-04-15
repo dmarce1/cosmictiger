@@ -108,7 +108,8 @@ inline float dkernelW_dq(float q, float* w = nullptr) {
 			tmp = (float(-1. / 3.) + float(1. / 30.) * sqr(x)) * sqr(x) * x;
 		} else {
 			float c = cosf(x);
-			tmp = (x * c - s);
+			float sgn = -2.0f * (x > float(M_PI / 2.0)) + 1.0;
+			tmp = (sgn * x * sqrtf(1 - sqr(s)) - s);
 		}
 		float xinv = 1.f / x;
 		float w1 = W0 * powf(s * xinv, n);

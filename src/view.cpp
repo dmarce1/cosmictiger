@@ -26,6 +26,7 @@
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/stars.hpp>
+#include <cosmictiger/cosmology.hpp>
 
 #include <silo.h>
 
@@ -262,7 +263,8 @@ void view_output_views(int cycle, double a) {
 		vector<float> x, y, z;
 		auto opts = DBMakeOptlist(1);
 		float z0 = 1.0 / a - 1.0;
-		DBAddOption(opts, DBOPT_TIME, &z0);
+		float tm = cosmos_time(1e-6, a) * get_options().code_to_s * constants::seconds_to_years / 1e9;
+		DBAddOption(opts, DBOPT_TIME, &tm);
 		if (parts.dm[bi].size()) {
 			x.resize(0);
 			y.resize(0);
