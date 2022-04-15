@@ -45,6 +45,7 @@ struct cuda_kick_data {
 	float* star_gz;
 	part_int* cat_index;
 	char* type;
+	float* hsoft;
 	bool sph;
 	fixed32* x_snk;
 	fixed32* y_snk;
@@ -193,7 +194,7 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 #endif
 void kick_show_timings();
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, char*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, char*,float*,  tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
 		int part_count, int ntrees, std::function<void()>, std::function<void()>);
 #endif
 int kick_block_count();

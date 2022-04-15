@@ -41,9 +41,11 @@ void particles_group_cache_free();
 struct particles_cache_entry {
 	array<fixed32, NDIM> x;
 	char type;
+	float h;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & type;
+		arc & h;
 		arc & x;
 	}
 };
@@ -479,9 +481,10 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, float* h, part_int offset) {
 	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
+	const float hsoft0 = get_options().hsoft;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
 			const part_int dif = offset - range.range.first;
@@ -495,8 +498,10 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					const part_int k = particles_cat_index(i);
 					int type = particles_type(i);
 					types[j] = type;
+					h[j] = sph_particles_smooth_len(k);
 				} else {
 					types[j] = DARK_MATTER_TYPE;
+					h[j] = hsoft0;
 				}
 			}
 		} else {
@@ -515,11 +520,8 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					x[dest_index] = ptr[src_index].x[XDIM];
 					y[dest_index] = ptr[src_index].x[YDIM];
 					z[dest_index] = ptr[src_index].x[ZDIM];
-					if (sph) {
-						types[dest_index] = ptr[src_index].type;
-					} else {
-						types[dest_index] = DARK_MATTER_TYPE;
-					}
+					types[dest_index] = ptr[src_index].type;
+					h[dest_index] = ptr[src_index].h;
 					dest_index++;
 				}
 			}
@@ -555,6 +557,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 	vector<particles_cache_entry> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
 	const part_int end = std::min(particles_size(), begin + line_size);
+	const float hsoft0 = get_options().hsoft;
 	for (part_int i = begin; i < end; i++) {
 		auto& ln = line[i - begin];
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -564,8 +567,10 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			int type = particles_type(i);
 			const auto kk = particles_cat_index(i);
 			ln.type = type;
+			ln.h = sph_particles_smooth_len(kk);
 		} else {
 			ln.type = DARK_MATTER_TYPE;
+			ln.h = hsoft0;
 		}
 	}
 	return line;

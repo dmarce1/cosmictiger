@@ -121,14 +121,16 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 			vector<fixed32> srcz;
 			vector<char> type;
 			vector<float> masses;
+			vector<float> hsoft;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masses.resize(nsource);
+			hsoft.resize(nsource);
 			type.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), hsoft.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
@@ -306,14 +308,16 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			vector<fixed32> srcz;
 			vector<char> type;
 			vector<float> masses;
+			vector<float> hsofts;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masses.resize(nsource);
+			hsofts.resize(nsource);
 			type.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), hsofts.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
