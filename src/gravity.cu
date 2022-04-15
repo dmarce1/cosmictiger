@@ -492,9 +492,11 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
 	const bool sph = data.sph;
+	const auto& sink_h = shmem.sink_h;
 	const auto& sink_x = shmem.sink_x;
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
+	const auto* main_src_h = data.hsoft;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
@@ -503,10 +505,8 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
 	auto& src_type = shmem.src.type;
+	auto& src_h = shmem.src.h;
 	const auto* tree_nodes = data.tree_nodes;
-	float h2 = sqr(h);
-	float hinv = 1.f / (h);
-	float h3inv = hinv * hinv * hinv;
 	int part_index;
 	int nnear = 0;
 	int nfar = 0;
@@ -539,6 +539,7 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
 					src_type[i1] = main_src_type[i2];
+					src_h[i1] = main_src_h[i2];
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -565,19 +566,24 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
+				const float h_i = sink_h[k];
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1
 					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const float type_j = src_type[j];
+					const float h_j = src_h[j];
 					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
-					if (r2 > h2) {
+					const float h_ij = 0.5f * (h_i + h_j);
+					const float h2_ij = sqr(h_ij);
+					if (r2 > h2_ij) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
+						const float hinv = 1.f / h_ij;
+						const float h3inv = sqr(hinv) * hinv;
 						const float r = sqrtf(r2);
-						r1inv = 1.f / (r + 1e-30f);
 						const float q_ij = r * hinv;
 						r3inv = kernelFqinv(q_ij) * h3inv;
 						if (do_phi) {

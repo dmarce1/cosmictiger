@@ -68,11 +68,13 @@ struct cuda_kick_shmem {
 	array<fixed32, BUCKET_SIZE> sink_x;
 	array<fixed32, BUCKET_SIZE> sink_y;
 	array<fixed32, BUCKET_SIZE> sink_z;
+	array<float, BUCKET_SIZE> sink_h;
 	struct {
 		array<fixed32, KICK_PP_MAX> x;
 		array<fixed32, KICK_PP_MAX> y;
 		array<fixed32, KICK_PP_MAX> z;
 		array<char, KICK_PP_MAX> type;
+		array<float, KICK_PP_MAX> h;
 	}src;
 	array<float, BUCKET_SIZE> gx;
 	array<float, BUCKET_SIZE> gy;

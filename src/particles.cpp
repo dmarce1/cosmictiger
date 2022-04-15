@@ -498,10 +498,14 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					const part_int k = particles_cat_index(i);
 					int type = particles_type(i);
 					types[j] = type;
-					h[j] = sph_particles_smooth_len(k);
+					if (h) {
+						h[j] = sph_particles_smooth_len(k);
+					}
 				} else {
 					types[j] = DARK_MATTER_TYPE;
-					h[j] = hsoft0;
+					if (h) {
+						h[j] = hsoft0;
+					}
 				}
 			}
 		} else {
@@ -521,7 +525,9 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					y[dest_index] = ptr[src_index].x[YDIM];
 					z[dest_index] = ptr[src_index].x[ZDIM];
 					types[dest_index] = ptr[src_index].type;
-					h[dest_index] = ptr[src_index].h;
+					if( h ) {
+						h[dest_index] = ptr[src_index].h;
+					}
 					dest_index++;
 				}
 			}

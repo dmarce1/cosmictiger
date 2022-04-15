@@ -241,6 +241,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
+	auto& sink_h = shmem.sink_h;
 	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
@@ -254,6 +255,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
+	auto* src_h = data.hsoft;
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -324,6 +326,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							ASSERT(begin + i < data.sink_size);
 							activei[l] = begin + i;
 							rungs[l] = rung;
+							sink_h[l] = src_h[srci];
 							sink_x[l] = src_x[srci];
 							sink_y[l] = src_y[srci];
 							sink_z[l] = src_z[srci];
@@ -596,8 +599,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type, float* dev_h, tree_node* dev_tree_nodes,
-		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type, float* dev_h,
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	static const bool do_sph = get_options().sph;
 	timer tm;
