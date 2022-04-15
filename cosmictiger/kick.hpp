@@ -46,6 +46,7 @@ struct cuda_kick_data {
 	part_int* cat_index;
 	char* type;
 	float* hsoft;
+	float* fpot;
 	char* semiactive;
 	bool sph;
 	fixed32* x_snk;

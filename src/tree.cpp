@@ -450,12 +450,17 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		nactive = 0;
 		array<double, NDIM> dx;
+		bool has_semi = false;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			double this_h;
 			this_h = h;
 			if (sph) {
 				if (particles_type(i) == SPH_TYPE) {
-					this_h = sph_particles_smooth_len(particles_cat_index(i));
+					const part_int kk = particles_cat_index(i);
+					this_h = sph_particles_smooth_len(kk);
+					if (!has_semi && sph_particles_semiactive(kk)) {
+						has_semi = true;
+					}
 				}
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -467,6 +472,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			if (particles_rung(i) >= params.min_rung) {
 				nactive++;
 			}
+		}
+		if (has_semi) {
+			nactive = std::max((int) nactive, (int) 1);
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
@@ -545,7 +553,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			r = std::max(r, this_radius);
 			flops += 3 * NDIM + 1;
 		}
-		hsoft_max= std::sqrt(r) - radius;
+		hsoft_max = std::sqrt(r) - radius;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}

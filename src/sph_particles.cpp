@@ -854,7 +854,7 @@ static vector<float> sph_particles_fetch_kappas_cache_line(part_int index) {
 }
 
 void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
-		array<float, NCHEMFRACS>* fracs, part_int offset) {
+		array<float, NCHEMFRACS>* fracs, float* fpot, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -882,6 +882,9 @@ void sph_particles_global_read_aux(particle_global_range range, float* h, float*
 				}
 				if (fracs) {
 					fracs[j] = sph_particles_chem(i);
+				}
+				if (fpot) {
+					fpot[j] = sph_particles_fpot(i);
 				}
 
 			}
@@ -920,6 +923,9 @@ void sph_particles_global_read_aux(particle_global_range range, float* h, float*
 				}
 				if (fracs) {
 					fracs[j] = ptr[src_index].fracs;
+				}
+				if (fpot) {
+					fpot[j] = ptr[src_index].fpot;
 				}
 				dest_index++;
 			}

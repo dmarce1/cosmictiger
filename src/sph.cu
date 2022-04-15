@@ -109,6 +109,7 @@ struct hydro_record2 {
 	float pre;
 	float shearv;
 	float cold_frac;
+	float fpot;
 };
 
 struct hydro_workspace {
@@ -942,6 +943,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2_main[k].fpre1 = data.fpre1[pi];
 					ws.rec2_main[k].fpre2 = data.fpre2[pi];
 					ws.rec2_main[k].pre = data.pre[pi];
+					ws.rec2_main[k].fpot = data.fpot[pi];
 					if (params.diffusion) {
 						ws.rec2_main[k].shearv = data.shearv[pi];
 					}
@@ -958,14 +960,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 			}
 		}
-		/*const float code_to_energy = sqr((double) params.code_to_cm) / sqr((double) params.code_to_s);
-		 const float code_to_density = (double) params.code_to_g / pow((double) params.code_to_cm, 3.);
-		 const float colog0 = log(1.5 * pow(constants::kb, 1.5) * pow(constants::e, -3) * pow(M_PI, -0.5));
-		 const float kappa0 = 20.0 * pow(2.0 / M_PI, 1.5) * pow(constants::kb, 2.5) * pow(constants::me, -0.5) * pow(constants::e, -4.0) * params.code_to_s
-		 * params.code_to_cm / (params.code_to_g * constants::avo);
-		 const float gamma0 = data.def_gamma;
-		 const float propc0 = 0.4 * (gamma0 - 1.0) * sqrtf(2.0 * constants::kb / M_PI / constants::me) / constants::c;
-		 */
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
@@ -983,6 +977,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto vy_i = data.vy[i];
 				const auto vz_i = data.vz[i];
 				const float h_i = data.h[i];
+				const float fpot_i = data.fpot[i];
+				PRINT( "%e\n", fpot_i);
 				const float h2_i = sqr(h_i);
 				const float hinv_i = 1.f / h_i;
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);
@@ -1011,27 +1007,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - 1.f / gamma0) * powf(A_i, 1.0f / gamma0));
 				const float fpre1_i = data.fpre1[i];
 				const float fpre2_i = data.fpre2[i];
-
-				/*float T_i, kappa_i;
-				 if (params.conduction) {
-				 const float& H = frac_i[CHEM_H];
-				 const float& Hp = frac_i[CHEM_HP];
-				 const float& Hn = frac_i[CHEM_HN];
-				 const float& H2 = frac_i[CHEM_H2];
-				 const float& He = frac_i[CHEM_HE];
-				 const float& Hep = frac_i[CHEM_HEP];
-				 const float& Hepp = frac_i[CHEM_HEPP];
-				 const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a);
-				 float n0 = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp);
-				 const float mmw_i = 1.0f / n0;
-				 n0 *= constants::avo * rho0;
-				 const float ne_i = fmaxf((Hp - Hn + 0.25f * Hep + 0.5f * Hepp) * rho0 * (constants::avo * code_to_density), 1e-30f);
-				 const float cv0 = constants::kb / (gamma0 - 1.0);															// 4
-				 const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) / (gamma0 - 1.0);
-				 T_i = rho0 * eint / (n0 * cv0);
-				 const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i);
-				 kappa_i = (gamma0 - 1.f) * mmw_i * kappa0 * powf(T_i, 2.5f) / colog_i;
-				 }*/
 
 				float ax = 0.f;
 				float ay = 0.f;
@@ -1101,6 +1076,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float q_i = r * hinv_i;								// 1
 					const float q_j = r * hinv_j;
 					if (q_i < 1.f || q_j < 1.f) {
+						const float fpot_j = rec2.fpot;
 						const float cfrac_j = rec2.cold_frac;
 						const float hfrac_j = 1.f - cfrac_j;
 						const float shearv_j = rec2.shearv;

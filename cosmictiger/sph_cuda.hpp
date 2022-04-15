@@ -31,6 +31,7 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	float* fpot;
 	float* dentr_snk;
 	float* entr0_snk;
 	float* entr;

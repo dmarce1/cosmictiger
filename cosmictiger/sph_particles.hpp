@@ -173,6 +173,7 @@ struct aux_quantities {
 	float curlv;
 	float alpha;
 	array<float, NCHEMFRACS> fracs;
+	float fpot;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & curlv;
@@ -183,6 +184,7 @@ struct aux_quantities {
 		arc & h;
 		arc & alpha;
 		arc & fracs;
+		arc & fpot;
 	}
 };
 
@@ -203,7 +205,7 @@ void sph_particles_global_read_rungs(particle_global_range range, char*, part_in
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
-		array<float, NCHEMFRACS>* fracs, part_int offset);
+		array<float, NCHEMFRACS>* fracs, float* fpot, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
@@ -518,5 +520,6 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	if (get_options().chem) {
 		aux.fracs = sph_particles_chem(index);
 	}
+	aux.fpot = sph_particles_fpot(index);
 	return aux;
 }

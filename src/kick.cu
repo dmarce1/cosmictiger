@@ -675,6 +675,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.z = dev_z;
 	data.type = dev_type;
 	data.hsoft = dev_h;
+	data.fpot = &sph_particles_fpot(0);
 	data.semiactive = &sph_particles_semiactive(0);
 	data.sph = do_sph;
 	data.x_snk = &particles_pos(XDIM, 0);
