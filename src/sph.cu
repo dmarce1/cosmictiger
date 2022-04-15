@@ -1825,11 +1825,15 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	}
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTHLEN: {
+		timer tm;
+		tm.start();
 		sph_cuda_smoothlen<<<smoothlen_nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
 		rc.rc = reduce->flag;
 		rc.hmin = reduce->hmin;
 		rc.hmax = reduce->hmax;
+		tm.stop();
+		PRINT( "smoothlen gpu time = %e\n", tm.read());
 	}
 	break;
 	case SPH_RUN_AUX: {

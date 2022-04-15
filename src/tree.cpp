@@ -548,7 +548,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
-				this_radius += sqr(x - Xc[dim] + this_h);
+				this_radius += sqr(fabs(x - Xc[dim]) + this_h);
 			}
 			r = std::max(r, this_radius);
 			flops += 3 * NDIM + 1;
