@@ -1516,7 +1516,7 @@ __global__ void sph_cuda_mark_semi(sph_run_params params, sph_run_cuda_data data
 				int rung;
 				if (pi < other.part_range.second) {
 					h = data.h[pi];
-					const int snki = self.sink_part_range.first - self.part_range.first + i;
+					const int snki = self.sink_part_range.first - self.part_range.first + pi;
 					rung = data.rungs_snk[data.dm_index_snk[snki]];
 					if (rung >= params.min_rung) {
 						x[XDIM] = data.x[pi];
