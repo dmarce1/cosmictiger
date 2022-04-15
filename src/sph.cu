@@ -978,7 +978,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto vz_i = data.vz[i];
 				const float h_i = data.h[i];
 				const float fpot_i = data.fpot[i];
-				PRINT( "%e\n", fpot_i);
 				const float h2_i = sqr(h_i);
 				const float hinv_i = 1.f / h_i;
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);
@@ -1516,8 +1515,7 @@ __global__ void sph_cuda_mark_semi(sph_run_params params, sph_run_cuda_data data
 				int rung;
 				if (pi < other.part_range.second) {
 					h = data.h[pi];
-					const int snki = self.sink_part_range.first - self.part_range.first + pi;
-					rung = data.rungs_snk[data.dm_index_snk[snki]];
+					rung = data.rungs[pi];
 					if (rung >= params.min_rung) {
 						x[XDIM] = data.x[pi];
 						x[YDIM] = data.y[pi];

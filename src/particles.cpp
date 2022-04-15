@@ -499,7 +499,11 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					int type = particles_type(i);
 					types[j] = type;
 					if (h) {
-						h[j] = sph_particles_smooth_len(k);
+						if (type != SPH_TYPE) {
+							h[j] = hsoft0;
+						} else {
+							h[j] = sph_particles_smooth_len(k);
+						}
 					}
 				} else {
 					types[j] = DARK_MATTER_TYPE;
@@ -525,7 +529,7 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 					y[dest_index] = ptr[src_index].x[YDIM];
 					z[dest_index] = ptr[src_index].x[ZDIM];
 					types[dest_index] = ptr[src_index].type;
-					if( h ) {
+					if (h) {
 						h[dest_index] = ptr[src_index].h;
 					}
 					dest_index++;
@@ -573,7 +577,11 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			int type = particles_type(i);
 			const auto kk = particles_cat_index(i);
 			ln.type = type;
-			ln.h = sph_particles_smooth_len(kk);
+			if (type != SPH_TYPE) {
+				ln.h = hsoft0;
+			} else {
+				ln.h = sph_particles_smooth_len(kk);
+			}
 		} else {
 			ln.type = DARK_MATTER_TYPE;
 			ln.h = hsoft0;

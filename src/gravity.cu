@@ -514,17 +514,18 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 
 	if (sph) {
 		for (int k = self.part_range.first; k < self.part_range.second; k++) {
-			if (data.type_snk[k] == SPH_TYPE) {
-				const int index = data.cat_index_snk[k];
+			if (data.type[k] == SPH_TYPE) {
+				const part_int snkk = k + self.sink_part_range.first - self.part_range.first;
+				const int index = data.cat_index_snk[snkk];
 				if (data.semiactive[index]) {
 					if (tid == 0) {
-						data.fpot[k] = 0.f;
+						data.fpot[index] = 0.f;
 					}
 				}
 			}
 		}
 	}
-
+	__syncthreads();
 	if (partlist.size()) {
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
@@ -569,13 +570,14 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 			__syncthreads();
 			if (sph) {
 				for (int k = self.part_range.first; k < self.part_range.second; k++) {
-					if (data.type_snk[k] == SPH_TYPE) {
-						const int index = data.cat_index_snk[k];
+					if (data.type[k] == SPH_TYPE) {
+						const part_int snkk = k + self.sink_part_range.first - self.part_range.first;
+						const int index = data.cat_index_snk[snkk];
 						if (data.semiactive[index]) {
-							const float h_i = data.h_snk[k];
-							const auto x_i = data.x_snk[k];
-							const auto y_i = data.y_snk[k];
-							const auto z_i = data.z_snk[k];
+							const float h_i = data.hsoft[k];
+							const auto x_i = data.x[k];
+							const auto y_i = data.y[k];
+							const auto z_i = data.z[k];
 							const float hinv_i = 1.0f / h_i;
 							float dpot_dh = 0.f;
 							const float c0 = 4.f * float(M_PI) / (9.0f * data.sphN * sph_mass);
@@ -583,24 +585,31 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 								const float x_ij = distance(x_i, src_x[j]); // 1
 								const float y_ij = distance(y_i, src_y[j]); // 1
 								const float z_ij = distance(z_i, src_z[j]); // 1
-								const float type_j = src_type[j];
-								const float m_j = sph ? (type_j == SPH_TYPE ? sph_mass : dm_mass) : 1.f;
+								const float h_j = src_h[j];
+								const float h_ij = 0.5f * (h_i + h_j);
 								const auto r2 = sqr(x_ij, y_ij, z_ij);  // 5
 								const float r = sqrtf(r2);
-								const float q = r * hinv_i;
-								const float pot = kernelPot(q);
-								const float force = kernelFqinv(q) * q;
-								dpot_dh -= c0 * m_j * (pot - q * force);
+								const float q = r / h_ij;
+								if (q < 1.f) {
+									const float type_j = src_type[j];
+									const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
+									const float pot = kernelPot(q);
+									const float force = kernelFqinv(q) * q;
+									dpot_dh -= c0 * m_j * (pot - q * force);
+									if (!isfinite(dpot_dh)) {
+										PRINT("!  %e %e %e %e\n", pot, q, force, h_i);
+										__trap();
+									}
+								}
 							}
 							shared_reduce_add(dpot_dh);
 							if (tid == 0) {
-								data.fpot[k] += dpot_dh;
+								data.fpot[index] += dpot_dh;
 							}
 						}
 					}
 				}
 			}
-
 
 			float fx;
 			float fy;
@@ -657,7 +666,6 @@ int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node& self, con
 		}
 		__syncwarp();
 	}
-
 
 	shared_reduce_add(nnear);
 	shared_reduce_add(nfar);
