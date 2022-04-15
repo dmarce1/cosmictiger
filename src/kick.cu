@@ -338,6 +338,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 				}
 				__syncwarp();
+				float my_hsoft = self.hsoft_max;
 				for (int gtype = GRAVITY_DIRECT; gtype <= GRAVITY_EWALD; gtype++) {
 					nextlist.resize(0);
 					partlist.resize(0);
@@ -345,7 +346,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					closelist.resize(0);
 					multlist.resize(0);
 					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
-					const float hsoft = global_params.h;
 					do {
 						maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -364,7 +364,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (gtype == GRAVITY_EWALD) {
 									ewald_far = sqrtf(R2) < 0.49f - (self.radius + other.radius);
 								}
-								const bool soft_sep = sqr(self.radius + other.radius + hsoft) < R2;
+								const bool soft_sep = sqr(self.radius + other.radius + fmaxf(my_hsoft, other.hsoft_max)) < R2;
 								const bool far1 = ewald_far || (soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv)));     // 5
 								const bool far2 = ewald_far || (soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius)));       // 5
 								close = !soft_sep && self.leaf;
@@ -458,7 +458,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 										if (gtype == GRAVITY_EWALD) {
 											ewald_far = sqrtf(R2) < 0.49f - (self.radius + other.radius);
 										}
-										far = ewald_far || (R2 > sqr(other.radius * thetainv + hsoft));            // 3
+										far = ewald_far || (R2 > sqr(other.radius * thetainv + fmaxf(other.hsoft_max, my_hsoft)));            // 3
 										if (!far) {
 											break;
 										}
@@ -678,9 +678,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type_snk = &particles_type(0);
-		data.sph_gx = &sph_particles_gforce(XDIM,0);
-		data.sph_gy = &sph_particles_gforce(YDIM,0);
-		data.sph_gz = &sph_particles_gforce(ZDIM,0);
+		data.sph_gx = &sph_particles_gforce(XDIM, 0);
+		data.sph_gy = &sph_particles_gforce(YDIM, 0);
+		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
 	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);

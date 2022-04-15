@@ -203,12 +203,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	array<simd_int, NDIM> other_pos;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
+	simd_float other_hsoft;
+	simd_float my_hsoft = self_ptr->hsoft_max;
 	simd_int other_leaf;
 	for (int dim = 0; dim < NDIM; dim++) {
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, do_phi);
-	simd_float hsoft = get_options().hsoft;
 	force_vectors forces;
 	const part_int mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
@@ -238,6 +239,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
+					other_hsoft[i] = other_ptrs[i]->hsoft_max;
 				}
 				for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
@@ -254,6 +256,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (gtype == GRAVITY_EWALD) {
 					ewald_far = sqrt(R2) < simd_float(0.49) - (self_radius + other_radius);
 				}
+				const simd_float hsoft = max(other_hsoft, my_hsoft);
 				const simd_float soft_sep = sqr(self_radius + other_radius + hsoft) < R2;
 				const simd_float far1 = ewald_far + soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
 				const simd_float far2 = ewald_far + soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
@@ -290,6 +293,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const tree_node* other_ptr = tree_get_node(leaflist[i]);
 				if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
 					other_radius = other_ptr->radius;
+					other_hsoft = other_ptr->hsoft_max;
 					for (int dim = 0; dim < NDIM; dim++) {
 						other_pos[dim] = other_ptr->pos[dim].raw();
 					}
@@ -309,6 +313,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						if (gtype == GRAVITY_EWALD) {
 							ewald_far = sqrt(R2) < simd_float(0.49) - (self_radius + other_radius);
 						}
+						const simd_float hsoft = max(other_hsoft, my_hsoft);
 						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
 						const simd_float near = (R2 <= rhs) + ewald_far;                                            // 1
 						kr.part_flops += SIMD_FLOAT_SIZE * 12;

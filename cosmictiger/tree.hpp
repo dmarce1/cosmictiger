@@ -79,7 +79,7 @@ struct tree_node {
 	pair<part_int> sink_part_range;
 	size_t nactive;
 	float radius;
-//	float hsoft_max;
+	float hsoft_max;
 	bool local_root;
 	bool leaf;
 	size_t node_count;
@@ -105,7 +105,7 @@ struct tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
-	//	arc & hsoft_max;
+		arc & hsoft_max;
 		arc & multi;
 		arc & children;
 		arc & pos;
@@ -128,6 +128,7 @@ struct tree_create_return {
 	size_t nactive;
 	size_t active_nodes;
 	float radius;
+	float hsoft_max;
 	size_t node_count;
 	size_t active_leaf_nodes;
 	size_t leaf_nodes;
@@ -137,6 +138,7 @@ struct tree_create_return {
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & active_leaf_nodes;
+		a & hsoft_max;
 		a & leaf_nodes;
 		a & active_nodes;
 		a & multi;

@@ -158,32 +158,32 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	min_level = 0;
 }
 /*
-int tree_min_level(double theta, double h) {
-	int lev = 1;
-	double dx;
-	double r1, r2, r;
-	do {
-		int N = 1 << (lev / NDIM);
-		dx = EWALD_DIST * N;
-		double a2;
-		constexpr double ffac = 1.01;
-		if (lev % NDIM == 0) {
-			r1 = 2.0f * std::sqrt(3) + ffac * N * h;
-			a2 = std::sqrt(3);
-		} else if (lev % NDIM == 1) {
-			r1 = 2.0f * 1.5 + ffac * N * h;
-			a2 = 1.5;
-		} else {
-			r1 = 2.0f * std::sqrt(1.5) + ffac * N * h;
-			a2 = std::sqrt(1.5);
-		}
-		r2 = (1.0 + SINK_BIAS) * a2 / theta;
-		lev++;
-		r = std::max(r1, r2);
-	} while (dx <= r);
-	return 12;
-}
-*/
+ int tree_min_level(double theta, double h) {
+ int lev = 1;
+ double dx;
+ double r1, r2, r;
+ do {
+ int N = 1 << (lev / NDIM);
+ dx = EWALD_DIST * N;
+ double a2;
+ constexpr double ffac = 1.01;
+ if (lev % NDIM == 0) {
+ r1 = 2.0f * std::sqrt(3) + ffac * N * h;
+ a2 = std::sqrt(3);
+ } else if (lev % NDIM == 1) {
+ r1 = 2.0f * 1.5 + ffac * N * h;
+ a2 = 1.5;
+ } else {
+ r1 = 2.0f * std::sqrt(1.5) + ffac * N * h;
+ a2 = std::sqrt(1.5);
+ }
+ r2 = (1.0 + SINK_BIAS) * a2 / theta;
+ lev++;
+ r = std::max(r1, r2);
+ } while (dx <= r);
+ return 12;
+ }
+ */
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
@@ -282,7 +282,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	size_t leaf_nodes = 0;
 	size_t active_leaf_nodes = 0;
 	const int index = allocator.allocate();
-
+	float hsoft_max;
 	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
 		auto left_box = box;
 		auto right_box = box;
@@ -338,6 +338,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const double Rr = rcr.radius;
 		min_depth = std::min(rcl.min_depth, rcr.min_depth);
 		max_depth = std::max(rcl.max_depth, rcr.max_depth);
+		hsoft_max = std::max(rcl.hsoft_max, rcr.hsoft_max);
 		total_flops += rcl.flops + rcr.flops;
 		nactive = rcl.nactive + rcr.nactive;
 		double rr;
@@ -527,6 +528,24 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			flops += 3 * NDIM + 1;
 		}
 		radius = std::sqrt(r);
+		r = 0.0;
+		const float hsoft0 = get_options().hsoft;
+		for (part_int i = part_range.first; i < part_range.second; i++) {
+			double this_radius = 0.0;
+			float this_h = hsoft0;
+			if (sph) {
+				if (particles_type(i) == SPH_TYPE) {
+					this_h = sph_particles_smooth_len(particles_cat_index(i));
+				}
+			}
+			for (int dim = 0; dim < NDIM; dim++) {
+				const double x = particles_pos(dim, i).to_double();
+				this_radius += sqr(x - Xc[dim] + this_h);
+			}
+			r = std::max(r, this_radius);
+			flops += 3 * NDIM + 1;
+		}
+		hsoft_max= std::sqrt(r) - radius;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}
@@ -541,6 +560,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 	}
 	tree_node node;
+	node.hsoft_max = hsoft_max;
 	node.node_count = node_count;
 	node.radius = radius;
 	node.children = children;
@@ -570,6 +590,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
 	rc.multi = node.multi;
+	rc.hsoft_max = hsoft_max;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
 	rc.leaf_nodes = leaf_nodes;
