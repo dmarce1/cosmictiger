@@ -154,10 +154,6 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	checklist.push_back(root_id);
 	sph_tree_neighbor_params tnparams;
 
-	if (stars && minrung != max_rung) {
-		stars_find(scale, dt, minrung, iter, t0);
-		stars_statistics(scale);
-	}
 
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
