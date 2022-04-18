@@ -387,6 +387,7 @@ static void force_test() {
 	kparams.min_rung = 0;
 	kparams.t0 = 1.0;
 	kparams.theta = get_options().theta;
+	PRINT( "theta = %e\n", kparams.theta);
 	expansion<float> L;
 	for (int i = 0; i < EXPANSION_SIZE; i++) {
 		L[i] = 0.0f;
