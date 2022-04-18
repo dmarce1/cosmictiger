@@ -487,7 +487,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						shear_yz = 0.5f * (dvy_dz + dvz_dy);                     // 2
 						const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz))); // 16
 						data.rec1_snk[snki].shearv = shearv;
-						data.rec1_snk[snki].fpre1 = 1.0f - fpre;
+						data.rec1_snk[snki].fpre1 = fpre - 1.0f;
 						data.rec1_snk[snki].fpre2 = dpdh;
 						data.rec1_snk[snki].pre = pre;
 					}
@@ -1092,7 +1092,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vy_j = rec2.vy;
 						const float vz_j = rec2.vz;
 						const float pre_j = rec2.pre;
-						const float fpre1_j = rec2.fpre1 + 1.0f;
+						const float fpre1_j = rec2.fpre1;
 						const float fpre2_j = rec2.fpre2;
 						const float h2_j = sqr(h_j);
 						const float h3inv_j = sqr(hinv_j) * hinv_j;
