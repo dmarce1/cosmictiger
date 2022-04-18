@@ -45,7 +45,6 @@ struct cuda_lists_type {
 	device_vector<int> multlist;
 	device_vector<expansion<float>> L;
 	device_vector<int> partlist;
-	device_vector<int> closelist;
 	device_vector<int> nextlist;
 	device_vector<kick_return> returns;
 	device_vector<array<fixed32, NDIM>> Lpos;
@@ -236,7 +235,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& multlist = lists[bid].multlist;
 	auto& partlist = lists[bid].partlist;
 	auto& leaflist = lists[bid].leaflist;
-	auto& closelist = lists[bid].closelist;
 	auto& activei = shmem.active;
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
@@ -342,7 +340,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					nextlist.resize(0);
 					partlist.resize(0);
 					leaflist.resize(0);
-					closelist.resize(0);
 					multlist.resize(0);
 					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
 					const float hsoft = global_params.h;
@@ -353,7 +350,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							bool next = false;
 							bool leaf = false;
 							bool part = false;
-							bool close = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
 								for (int dim = 0; dim < NDIM; dim++) {
@@ -363,14 +359,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (gtype == GRAVITY_EWALD) {
 									R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
 								}
-								const bool soft_sep = sqr(self.radius + other.radius + hsoft) < R2;
-								const bool far1 = soft_sep && (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv));     // 5
-								const bool far2 = soft_sep && (R2 > sqr(sink_bias * self.radius * thetainv + other.radius));       // 5
-								close = !soft_sep && self.leaf;
-								mult = !close && far1;
-								part = !close && !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
-								leaf = !close && !mult && !part && other.leaf;
-								next = !close && !mult && !part && !leaf;
+								const bool far1 = (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + hsoft));     // 5
+								const bool far2 = (R2 > sqr(sink_bias * self.radius * thetainv + other.radius + hsoft));       // 5
+								mult = far1;
+								part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
+								leaf = !mult && !part && other.leaf;
+								next = !mult && !part && !leaf;
 							}
 							int l;
 							int total;
@@ -402,15 +396,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							leaflist.resize(start + total);
 							if (leaf) {
 								leaflist[l + start] = checks[i];
-							}
-							if (self.leaf) {
-								l = close;
-								compute_indices(l, total);
-								start = closelist.size();
-								closelist.resize(start + total);
-								if (close) {
-									closelist[l + start] = checks[i];
-								}
 							}
 						}
 						__syncwarp();
@@ -482,18 +467,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							}
 						}
 						__syncwarp();
-						//				if (gtype == GRAVITY_DIRECT) {
-						//					PRINT("C %i L %i M %i\n", closelist.size(), partlist.size(), multlist.size());
-						//				}
 						const float h = global_params.h;
 						if (gtype == GRAVITY_DIRECT) {
 							cuda_gravity_pc_direct(data, self, multlist, nactive, min_rung == 0);
 							cuda_gravity_pp_direct(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
-							cuda_gravity_pp_close(data, self, closelist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 						} else {
 							cuda_gravity_pc_ewald(data, self, multlist, nactive, min_rung == 0);
 							cuda_gravity_pp_ewald(data, self, partlist, nactive, h, dm_mass, sph_mass, min_rung == 0);
-							cuda_gravity_pp_ewald(data, self, closelist, nactive, h, dm_mass, sph_mass, min_rung == 0);
 						}
 					} else {
 						const int start = checks.size();

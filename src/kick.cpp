@@ -253,9 +253,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (gtype == GRAVITY_EWALD) {
 					R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
 				}
-				const simd_float soft_sep = sqr(self_radius + other_radius + hsoft) < R2;
-				const simd_float far1 = soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
-				const simd_float far2 = soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
+				const simd_float far1 = (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + hsoft));     // 5
+				const simd_float far2 = (R2 > sqr(sink_bias * self_radius * thetainv + other_radius + hsoft));       // 5
 				const simd_float mult = far1;                                                                  // 4
 				const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
 				for (int i = 0; i < maxi; i++) {
