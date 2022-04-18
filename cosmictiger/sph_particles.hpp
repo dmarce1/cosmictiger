@@ -48,33 +48,25 @@
 using float16 = __half;
 
 class frac_real {
-	fixed32 r;
+private:
+	unsigned i;
 public:
+	frac_real() = default;
 	CUDA_EXPORT
-	inline operator float() const {
-		return r.to_float();
+	frac_real(float number) {
+		i = number * 4e9f;
 	}
 	CUDA_EXPORT
-	inline fixed32 to_fixed32() const {
-		return r;
+	double to_double() const {
+		return i * 2.5e-10;
 	}
 	CUDA_EXPORT
-	inline frac_real& operator=(float y) {
-		ALWAYS_ASSERT(y >= 0.0);
-		ALWAYS_ASSERT(y <= 1.0);
-		r = y;
-		return *this;
-	}
-	inline frac_real() = default;
-	CUDA_EXPORT
-	inline frac_real(fixed32 y) {
-		ALWAYS_ASSERT(y >= 0.0);
-		ALWAYS_ASSERT(y <= 1.0);
-		r = y;
+	float to_float() const {
+		return i * 2.5e-10f;
 	}
 	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & *(short*) &r;
+	void serialize(A&&arc, unsigned) {
+		arc & i;
 	}
 };
 
@@ -181,9 +173,9 @@ struct aux_quantities {
 	array<frac_real, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & *(short*)&fpre1;
-		arc & *(short*)&fpre2;
-		arc & *(short*)&alpha;
+		arc & *(short*) &fpre1;
+		arc & *(short*) &fpre2;
+		arc & *(short*) &alpha;
 		arc & pre;
 		arc & shearv;
 		arc & h;
@@ -307,11 +299,11 @@ inline void sph_particles_normalize_fracs(part_int index) {
 
 inline frac_real sph_particles_H(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	fixed32 others = 0.0f;
+	double others = 0.0f;
 	for (int fi = 0; fi < NCHEMFRACS; fi++) {
-		others += sph_particles_r1[index].frac[fi].to_fixed32();
+		others += (double) sph_particles_r1[index].frac[fi].to_double();
 	}
-	return frac_real(fixed32(1.0) - others);
+	return frac_real(1.0 - others);
 }
 
 inline frac_real& sph_particles_He0(part_int index) {
@@ -344,25 +336,9 @@ inline frac_real& sph_particles_Hepp(part_int index) {
 	return sph_particles_r1[index].frac[CHEM_HEPP];
 }
 
-inline float sph_particles_Y(part_int index) {
+inline double sph_particles_Y(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_He0(index) + sph_particles_Hep(index) + sph_particles_Hepp(index);
-}
-
-inline float sph_particles_gamma(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	const float H = sph_particles_H(index);
-	const float Hp = sph_particles_Hp(index);
-	const float Hn = sph_particles_Hn(index);
-	const float H2 = sph_particles_H2(index);
-	const float He = sph_particles_He0(index);
-	const float Hep = sph_particles_Hep(index);
-	const float Hepp = sph_particles_Hepp(index);
-	const float Z = sph_particles_Z(index);
-	const float ne = Hp - Hn + Hep + 2.0f * Hepp;
-	const float n = H + Hp + Hn + 0.5f * H2 + 0.25f * He + 0.25f * Hep + 0.25f * Hepp + 0.1f * Z + ne;
-	const float cv = 1.5f + 0.5f * Hn / n;
-	return 1.f + 1.f / cv;
+	return sph_particles_He0(index).to_double() + sph_particles_Hep(index).to_double() + sph_particles_Hepp(index).to_double();
 }
 
 inline char& sph_particles_oldrung(int index) {

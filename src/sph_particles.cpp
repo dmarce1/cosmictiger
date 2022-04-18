@@ -188,7 +188,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								 ALWAYS_ASSERT(false);
 								 }
 								 }*/
-								frac = frac + dfrac * dt2 * 2.0;
+								frac = frac.to_double() + dfrac * dt2 * 2.0;
 							}
 						}
 
@@ -215,19 +215,19 @@ float sph_particles_temperature(part_int i, float a) {
 	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
 	const double code_to_entropy = code_to_energy / pow(code_to_density, get_options().gamma - 1.0);
 	const double h = sph_particles_smooth_len(i);
-	const double Hp = sph_particles_Hp(i);
-	const double Hn = sph_particles_Hn(i);
-	const double H2 = sph_particles_H2(i);
+	const double Hp = sph_particles_Hp(i).to_double();
+	const double Hn = sph_particles_Hn(i).to_double();
+	const double H2 = sph_particles_H2(i).to_double();
 	const double Y = sph_particles_Y(i);
-	const double Hep = sph_particles_Hep(i);
-	const double Hepp = sph_particles_Hepp(i);
-	const double H = sph_particles_H(i);
+	const double Hep = sph_particles_Hep(i).to_double();
+	const double Hepp = sph_particles_Hepp(i).to_double();
+	const double H = sph_particles_H(i).to_double();
 	const double He = Y - Hep - Hepp;
 	double rho = sph_den(1 / (h * h * h));
-	double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
+	double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i).to_double());
 	rho *= code_to_density * pow(a, -3);
 	n *= constants::avo * rho;									// 8
-	double gamma = sph_particles_gamma(i);
+	double gamma = get_options().gamma;
 	double cv = 1.0 / (gamma - 1.0);															// 4
 	cv *= double(constants::kb);																							// 1
 	double entr = sph_particles_entr(i);
@@ -251,19 +251,6 @@ float sph_particles_temperature(part_int i, float a) {
 	return T;
 }
 
-float sph_particles_mmw(part_int i) {
-	const double Hp = sph_particles_Hp(i);
-	const double Hn = sph_particles_Hn(i);
-	const double H2 = sph_particles_H2(i);
-	const double Y = sph_particles_Y(i);
-	const double Hep = sph_particles_Hep(i);
-	const double Hepp = sph_particles_Hepp(i);
-	const double H = sph_particles_H(i);
-	const double He = Y - Hep - Hepp;
-	double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp;
-//	PRINT( "%e\n", 1.0 / n);
-	return 1.0 / n;
-}
 
 /*float sph_particles_lambda_e(part_int i, float a, float T) {
  const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7

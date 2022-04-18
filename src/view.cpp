@@ -181,14 +181,14 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 								info.rung = particles_rung(i);
 								info.alpha = sph_particles_alpha(l);
 								if( chem ) {
-									info.H = sph_particles_H(l);
-									info.Hp = sph_particles_Hp(l);
-									info.Hn = sph_particles_Hn(l);
-									info.H2 = sph_particles_H2(l);
-									info.Hep = sph_particles_Hep(l);
-									info.Hepp = sph_particles_Hepp(l);
-									info.Z = sph_particles_Z(l);
-									info.He = sph_particles_He0(l);
+									info.H = sph_particles_H(l).to_double();
+									info.Hp = sph_particles_Hp(l).to_double();
+									info.Hn = sph_particles_Hn(l).to_double();
+									info.H2 = sph_particles_H2(l).to_double();
+									info.Hep = sph_particles_Hep(l).to_double();
+									info.Hepp = sph_particles_Hepp(l).to_double();
+									info.Z = sph_particles_Z(l).to_double();
+									info.He = sph_particles_He0(l).to_double();
 								}
 								if( stars ) {
 									info.cold_frac = sph_particles_cold_mass(l);

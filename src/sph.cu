@@ -1158,7 +1158,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							}
 							if (data.chemistry) {
 								for (int fi = 0; fi < NCHEMFRACS; fi++) {
-									dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi] * hfrac_j * hfracinv_i);
+									dfrac_dt[fi] -= D_ij * (frac_i[fi].to_float() - frac_j[fi].to_float() * hfrac_j * hfracinv_i);
 								}
 							}
 						}
@@ -1639,13 +1639,13 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const auto& frac_i = data.rec1_snk[snki].frac;
 					const float& cfrac_i = data.rec2_snk[snki].fcold;
 					const float& A_i = data.rec2_snk[snki].A;
-					const float& Z = frac_i[CHEM_Z];
-					const float& Hp = frac_i[CHEM_HP];
-					const float& Hn = frac_i[CHEM_HN];
-					const float& H2 = frac_i[CHEM_H2];
-					const float& He = frac_i[CHEM_HE];
-					const float& Hep = frac_i[CHEM_HEP];
-					const float& Hepp = frac_i[CHEM_HEPP];
+					const float& Z = frac_i[CHEM_Z].to_float();
+					const float& Hp = frac_i[CHEM_HP].to_float();
+					const float& Hn = frac_i[CHEM_HN].to_float();
+					const float& H2 = frac_i[CHEM_H2].to_float();
+					const float& He = frac_i[CHEM_HE].to_float();
+					const float& Hep = frac_i[CHEM_HEP].to_float();
+					const float& Hepp = frac_i[CHEM_HEPP].to_float();
 					const float H = 1.0 - Z - Hp - Hn - H2 - He - Hep - Hepp;
 					const float hfrac_i = 1.f - cfrac_i;
 					const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a);

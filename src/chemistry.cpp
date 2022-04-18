@@ -64,14 +64,14 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem_attribs chem;
 					float T = sph_particles_temperature(i,a);
 					sph_particles_normalize_fracs(i);
-					const float factor = 1.0f / (1.0f - sph_particles_Z(i));
-					chem.H = sph_particles_H(i) * factor;
-					chem.He = sph_particles_He0(i) * factor;
-					chem.Hp = sph_particles_Hp(i) * factor;
-					chem.Hn = sph_particles_Hn(i) * factor;
-					chem.H2 = sph_particles_H2(i) * factor;
-					chem.Hep = sph_particles_Hep(i) * factor;
-					chem.Hepp = sph_particles_Hepp(i) * factor;
+					const float factor = 1.0 / (1.0 - sph_particles_Z(i).to_double());
+					chem.H = sph_particles_H(i).to_double() * factor;
+					chem.He = sph_particles_He0(i).to_double() * factor;
+					chem.Hp = sph_particles_Hp(i).to_double() * factor;
+					chem.Hn = sph_particles_Hn(i).to_double() * factor;
+					chem.H2 = sph_particles_H2(i).to_double() * factor;
+					chem.Hep = sph_particles_Hep(i).to_double() * factor;
+					chem.Hepp = sph_particles_Hepp(i).to_double() * factor;
 					chem.eint = sph_particles_eint(i);
 					if( chem.He < 0.0 && chem.He > -5e-7) {
 						chem.Hep += chem.He;
@@ -98,7 +98,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 					}
 					double dt = (rung_dt[rung1]) * t0;
-					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
+					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i).to_double());
 					if( stars ) {
 
 					}
@@ -131,7 +131,7 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chem_attribs chem = chems[j++];
 					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 					double gamma = 1. + 1. / cv;
-					const float factor = 1.0f - sph_particles_Z(i);
+					const float factor = 1.0 - sph_particles_Z(i).to_double();
 					sph_particles_H(i) = chem.H * factor;
 					sph_particles_He0(i) = chem.He * factor;
 					sph_particles_Hp(i) = chem.Hp * factor;
