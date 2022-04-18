@@ -103,22 +103,22 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 //					PRINT( "%e %i\n", eps, make_star);
 				if( make_star ) {
 					if( false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
-						float& H = sph_particles_H(i);
-						float& Hp = sph_particles_Hp(i);
-						float& Hn = sph_particles_Hn(i);
-						float& H2 = sph_particles_H2(i);
-						float& He = sph_particles_He0(i);
-						float& Hep = sph_particles_Hep(i);
-						float& Hepp = sph_particles_Hepp(i);
-						float& Z = sph_particles_Z(i);
+						frac_real& H = sph_particles_H(i);
+						frac_real& Hp = sph_particles_Hp(i);
+						frac_real& Hn = sph_particles_Hn(i);
+						frac_real& H2 = sph_particles_H2(i);
+						frac_real& He = sph_particles_He0(i);
+						frac_real& Hep = sph_particles_Hep(i);
+						frac_real& Hepp = sph_particles_Hepp(i);
+						frac_real& Z = sph_particles_Z(i);
 						float Htot = H + Hp + Hn + H2;
 						float Hetot = He + Hep + Hepp;
 						Hetot += HE_SN;
-						Z += Z_SN;
+						Z = Z + Z_SN;
 						float norm = Hetot + Htot + Z;
 						Hetot /= norm;
 						Htot /= norm;
-						Z /= norm;
+						Z = Z / norm;
 						H = 1e-30;
 						Hn = 1e-30;
 						H2 = 1e-30;

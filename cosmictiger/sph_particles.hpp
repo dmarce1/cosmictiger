@@ -44,35 +44,33 @@
 #define CHEM_HEPP 6
 #define CHEM_Z 7
 
+#include <cuda_fp16.h>
+
+using float16 = __half;
 
 class frac_real {
-	unsigned short i;
-	constexpr static float c0 = 10000.0f;
-	constexpr static float c0inv = 1.0f / c0;
+	fixed32 r;
 public:
 	CUDA_EXPORT
-	operator float() const {
-		return expf(-sqr(i * c0inv));
+	inline operator float() const {
+		return r.to_float();
 	}
 	CUDA_EXPORT
-	frac_real& operator=(float y) {
-		ALWAYS_ASSERT( y <= 1.0f);
-		if (y > 0.0) {
-			i = c0 * sqrtf(-logf(y));
-		} else {
-			i = (1 << 16) - 1;
-		}
+	inline frac_real& operator=(float y) {
+		ALWAYS_ASSERT(y >= 0.0);
+		ALWAYS_ASSERT(y <= 1.0);
+		r = y;
 		return *this;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & i;
+		arc & *(short*) &r;
 	}
 };
 
 struct sph_particle0 {
 	float entr0;
-	array<float, NCHEMFRACS> chem0;
+	array<frac_real, NCHEMFRACS> chem0;
 	template<class A>
 	void serialize(A && arc, unsigned) {
 		arc & entr0;
@@ -100,7 +98,7 @@ struct sph_record1 {
 	float pre;
 	float h;
 	float shearv;
-	array<float, NCHEMFRACS> frac;
+	array<frac_real, NCHEMFRACS> frac;
 	float alpha;
 };
 
@@ -171,7 +169,7 @@ struct aux_quantities {
 	float h;
 	float curlv;
 	float alpha;
-	array<float, NCHEMFRACS> fracs;
+	array<frac_real, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & curlv;
@@ -202,7 +200,7 @@ void sph_particles_global_read_rungs(particle_global_range range, char*, part_in
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
-		array<float, NCHEMFRACS>* fracs, part_int offset);
+		array<frac_real, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
@@ -221,8 +219,6 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
 inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
 }
-
-
 
 inline char& sph_particles_converged(part_int index) {
 	return sph_particles_or[index];
@@ -268,7 +264,7 @@ inline float& sph_particles_dalpha(part_int index) {
  }
  */
 
-inline float& sph_particles_frac(int j, part_int index) {
+inline frac_real& sph_particles_frac(int j, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[j];
 }
@@ -283,52 +279,54 @@ inline float sph_particles_curlv(part_int index) {
 	return sph_particles_r3[index].curlv;
 }
 
-inline float& sph_particles_Z(part_int index) {
+inline frac_real& sph_particles_Z(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_Z];
 }
 
 inline void sph_particles_normalize_fracs(part_int index) {
-	double sum = 0.0;
-	for (double fi = 0; fi < NCHEMFRACS; fi++) {
-		sum += sph_particles_frac(fi, index);
-	}
-	for (double fi = 0; fi < NCHEMFRACS; fi++) {
-		sph_particles_frac(fi, index) /= sum;
+	for (int iter = 0; iter < 2; iter++) {
+		double sum = 0.0;
+		for (double fi = 0; fi < NCHEMFRACS; fi++) {
+			sum += (double) sph_particles_frac(fi, index);
+		}
+		for (double fi = 0; fi < NCHEMFRACS; fi++) {
+			sph_particles_frac(fi, index) = (double) sph_particles_frac(fi, index) / sum;
+		}
 	}
 }
 
-inline float& sph_particles_H(part_int index) {
+inline frac_real& sph_particles_H(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_H];
 }
 
-inline float& sph_particles_He0(part_int index) {
+inline frac_real& sph_particles_He0(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_HE];
 }
 
-inline float& sph_particles_Hp(part_int index) {
+inline frac_real& sph_particles_Hp(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_HP];
 }
 
-inline float& sph_particles_Hn(part_int index) {
+inline frac_real& sph_particles_Hn(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_HN];
 }
 
-inline float& sph_particles_H2(part_int index) {
+inline frac_real& sph_particles_H2(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_H2];
 }
 
-inline float& sph_particles_Hep(part_int index) {
+inline frac_real& sph_particles_Hep(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_HEP];
 }
 
-inline float& sph_particles_Hepp(part_int index) {
+inline frac_real& sph_particles_Hepp(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac[CHEM_HEPP];
 }
@@ -430,7 +428,7 @@ inline float& sph_particles_dvel(int dim, part_int index) {
 	return sph_particles_r6[index].dvel[dim];
 }
 
-inline array<float, NCHEMFRACS>& sph_particles_chem(part_int index) {
+inline array<frac_real, NCHEMFRACS>& sph_particles_chem(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].frac;
 }
@@ -494,7 +492,7 @@ inline sph_particle sph_particles_get_particle(part_int index) {
 	}
 	if (get_options().stars) {
 		p.cfrac = sph_particles_cold_mass(index);
-		ALWAYS_ASSERT(p.cfrac<=1.0);
+		ALWAYS_ASSERT(p.cfrac <= 1.0);
 	}
 	return p;
 }

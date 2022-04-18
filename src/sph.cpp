@@ -59,7 +59,7 @@ struct sph_run_workspace {
 	vector<fixed32, pinned_allocator<fixed32>> host_x;
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
-	vector<array<float, NCHEMFRACS>, pinned_allocator<array<float, NCHEMFRACS>>> host_chem;
+	vector<array<frac_real, NCHEMFRACS>, pinned_allocator<array<frac_real, NCHEMFRACS>>> host_chem;
 	vector<float, pinned_allocator<float>> host_cold_frac;
 	vector<float, pinned_allocator<float>> host_divv;
 	vector<float, pinned_allocator<float>> host_vx;
@@ -778,7 +778,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (diffusion) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.shearv, sizeof(float) * host_shearv.size()));
 			if (chem) {
-				CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(float) * host_chem.size()));
+				CUDA_CHECK(cudaMalloc(&cuda_data.chem, NCHEMFRACS * sizeof(frac_real) * host_chem.size()));
 			}
 		}
 	}
@@ -810,7 +810,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (diffusion) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.shearv, host_shearv.data(), sizeof(float) * host_shearv.size(), cudaMemcpyHostToDevice, stream));
 			if (chem) {
-				CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(float) * host_chem.size(), cudaMemcpyHostToDevice, stream));
+				CUDA_CHECK(cudaMemcpyAsync(cuda_data.chem, host_chem.data(), NCHEMFRACS * sizeof(frac_real) * host_chem.size(), cudaMemcpyHostToDevice, stream));
 			}
 		}
 		if (stars) {
