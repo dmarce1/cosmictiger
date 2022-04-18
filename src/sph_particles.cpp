@@ -852,7 +852,7 @@ static vector<float> sph_particles_fetch_kappas_cache_line(part_int index) {
 	return line;
 }
 
-void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float16* fpre1, float* fpre2, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float16* fpre1, float16* fpre2, float* shearv,
 		array<frac_real,  NCHEMFRACS>* fracs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {

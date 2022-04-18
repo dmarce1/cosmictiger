@@ -104,7 +104,7 @@ struct hydro_record2 {
 	float entr;
 	float alpha;
 	float16 fpre1;
-	float fpre2;
+	float16 fpre2;
 	float pre;
 	float shearv;
 	float cold_frac;
@@ -156,7 +156,7 @@ struct conduction_record2 {
 	float entr;
 	float cfrac;
 	float kappa;
-	float fpre;
+	float16 fpre;
 };
 
 struct conduction_workspace {
@@ -703,7 +703,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float vx_i = data.vx[i];
 				const float vy_i = data.vy[i];
 				const float vz_i = data.vz[i];
-				const float fpre_i = data.rec1_snk[snki].fpre1 + 1.0f;
+				const float fpre_i = (float) data.rec1_snk[snki].fpre1 + 1.0f;
 				const float hinv = 1.f / h;                               // 4
 				const float h2 = sqr(h);                                  // 1
 				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));    // 2
@@ -1594,7 +1594,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				float gradx = 0.0f;
 				float grady = 0.0f;
 				float gradz = 0.0f;
-				const float fpre_i = data.rec1_snk[snki].fpre1  + 1.0f;
+				const float fpre_i = (float) data.rec1_snk[snki].fpre1  + 1.0f;
 				for (int j = tid; j < ws.rec1.size(); j += COND_INIT_BLOCK_SIZE) {
 					const auto& rec1 = ws.rec1[j];
 					const auto& rec2 = ws.rec2[j];

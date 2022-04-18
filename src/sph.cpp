@@ -70,7 +70,7 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_alpha;
 	vector<float, pinned_allocator<float>> host_shearv;
 	vector<float16, pinned_allocator<float16>> host_fpre1;
-	vector<float, pinned_allocator<float>> host_fpre2;
+	vector<float16, pinned_allocator<float16>> host_fpre2;
 	vector<float, pinned_allocator<float>> host_pre;
 	vector<float, pinned_allocator<float>> host_h;
 	vector<char, pinned_allocator<char>> host_rungs;
@@ -769,7 +769,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.vy, sizeof(float) * host_vy.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vz, sizeof(float) * host_vz.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.fpre1, sizeof(float16) * host_fpre1.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.fpre2, sizeof(float) * host_fpre2.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.fpre2, sizeof(float16) * host_fpre2.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.pre, sizeof(float) * host_pre.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.alpha, sizeof(float) * host_alpha.size()));
 		if (stars) {
@@ -804,7 +804,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vy, host_vy.data(), sizeof(float) * host_vy.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.vz, host_vz.data(), sizeof(float) * host_vz.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre1, host_fpre1.data(), sizeof(float16) * host_fpre1.size(), cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre2, host_fpre2.data(), sizeof(float) * host_fpre2.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre2, host_fpre2.data(), sizeof(float16) * host_fpre2.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.pre, host_pre.data(), sizeof(float) * host_pre.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.alpha, host_alpha.data(), sizeof(float) * host_alpha.size(), cudaMemcpyHostToDevice, stream));
 		if (diffusion) {
