@@ -34,15 +34,14 @@
 #define CHECK_SPH_PART_BOUNDS(i)
 #endif
 
-#define NCHEMFRACS 8
-#define CHEM_H 0
-#define CHEM_HP 1
-#define CHEM_HN 2
-#define CHEM_H2 3
-#define CHEM_HE 4
-#define CHEM_HEP 5
-#define CHEM_HEPP 6
-#define CHEM_Z 7
+#define NCHEMFRACS 7
+#define CHEM_HP 0
+#define CHEM_HN 1
+#define CHEM_H2 2
+#define CHEM_HE 3
+#define CHEM_HEP 4
+#define CHEM_HEPP 5
+#define CHEM_Z 6
 
 #include <cuda_fp16.h>
 
@@ -56,11 +55,22 @@ public:
 		return r.to_float();
 	}
 	CUDA_EXPORT
+	inline fixed32 to_fixed32() const {
+		return r;
+	}
+	CUDA_EXPORT
 	inline frac_real& operator=(float y) {
 		ALWAYS_ASSERT(y >= 0.0);
 		ALWAYS_ASSERT(y <= 1.0);
 		r = y;
 		return *this;
+	}
+	inline frac_real() = default;
+	CUDA_EXPORT
+	inline frac_real(fixed32 y) {
+		ALWAYS_ASSERT(y >= 0.0);
+		ALWAYS_ASSERT(y <= 1.0);
+		r = y;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -285,20 +295,25 @@ inline frac_real& sph_particles_Z(part_int index) {
 }
 
 inline void sph_particles_normalize_fracs(part_int index) {
-	for (int iter = 0; iter < 2; iter++) {
-		double sum = 0.0;
-		for (double fi = 0; fi < NCHEMFRACS; fi++) {
-			sum += (double) sph_particles_frac(fi, index);
-		}
-		for (double fi = 0; fi < NCHEMFRACS; fi++) {
-			sph_particles_frac(fi, index) = (double) sph_particles_frac(fi, index) / sum;
-		}
-	}
+	return;
+	/*for (int iter = 0; iter < 2; iter++) {
+	 double sum = 0.0;
+	 for (double fi = 0; fi < NCHEMFRACS; fi++) {
+	 sum += (double) sph_particles_frac(fi, index);
+	 }
+	 for (double fi = 0; fi < NCHEMFRACS; fi++) {
+	 sph_particles_frac(fi, index) = (double) sph_particles_frac(fi, index) / sum;
+	 }
+	 }*/
 }
 
-inline frac_real& sph_particles_H(part_int index) {
+inline frac_real sph_particles_H(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_r1[index].frac[CHEM_H];
+	fixed32 others = 0.0f;
+	for (int fi = 0; fi < NCHEMFRACS; fi++) {
+		others += sph_particles_r1[index].frac[fi].to_fixed32();
+	}
+	return frac_real(fixed32(1.0) - others);
 }
 
 inline frac_real& sph_particles_He0(part_int index) {

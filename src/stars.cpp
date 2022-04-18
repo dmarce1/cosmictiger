@@ -103,7 +103,7 @@ void stars_find(float a, float dt, int minrung, int step, float t0) {
 //					PRINT( "%e %i\n", eps, make_star);
 				if( make_star ) {
 					if( false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
-						frac_real& H = sph_particles_H(i);
+						frac_real H = sph_particles_H(i);
 						frac_real& Hp = sph_particles_Hp(i);
 						frac_real& Hn = sph_particles_Hn(i);
 						frac_real& H2 = sph_particles_H2(i);

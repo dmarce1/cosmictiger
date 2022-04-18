@@ -487,7 +487,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 						shear_yz = 0.5f * (dvy_dz + dvz_dy);                     // 2
 						const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz))); // 16
 						data.rec1_snk[snki].shearv = shearv;
-						data.rec1_snk[snki].fpre1 = fpre;
+						data.rec1_snk[snki].fpre1 = 1.0f - fpre;
 						data.rec1_snk[snki].fpre2 = dpdh;
 						data.rec1_snk[snki].pre = pre;
 					}
@@ -703,7 +703,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float vx_i = data.vx[i];
 				const float vy_i = data.vy[i];
 				const float vz_i = data.vz[i];
-				const float fpre_i = data.rec1_snk[snki].fpre1;
+				const float fpre_i = data.rec1_snk[snki].fpre1 + 1.0f;
 				const float hinv = 1.f / h;                               // 4
 				const float h2 = sqr(h);                                  // 1
 				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));    // 2
@@ -951,7 +951,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2_main[k].vz = data.vz[pi];
 					ws.rec2_main[k].entr = data.entr[pi];
 					ws.rec2_main[k].alpha = data.alpha[pi];
-					ws.rec2_main[k].fpre1 = data.fpre1[pi];
+					ws.rec2_main[k].fpre1 = data.fpre1[pi] + 1.0f;
 					ws.rec2_main[k].fpre2 = data.fpre2[pi];
 					ws.rec2_main[k].pre = data.pre[pi];
 					if (params.diffusion) {
@@ -1014,7 +1014,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float de_dt0 = (gamma0 - 1.f) * powf(hfrac_i * rho_i, 1.f - gamma0);
 				const float pre_i = data.pre[i];
 				const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - invgamma0) * powf(A_i, invgamma0));
-				const float fpre1_i = data.fpre1[i];
+				const float fpre1_i = data.fpre1[i] + 1.0f;
 				const float fpre2_i = data.fpre2[i];
 
 				float ax = 0.f;
@@ -1092,7 +1092,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vy_j = rec2.vy;
 						const float vz_j = rec2.vz;
 						const float pre_j = rec2.pre;
-						const float fpre1_j = rec2.fpre1;
+						const float fpre1_j = rec2.fpre1 + 1.0f;
 						const float fpre2_j = rec2.fpre2;
 						const float h2_j = sqr(h_j);
 						const float h3inv_j = sqr(hinv_j) * hinv_j;
@@ -1336,7 +1336,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					ws.rec1[k].rung = data.rungs[pi];
 					ws.rec2[k].entr = data.entr[pi];
 					ws.rec2[k].kappa = data.kappa[pi];
-					ws.rec2[k].fpre = data.fpre1[pi];
+					ws.rec2[k].fpre = data.fpre1[pi] + 1.0f;
 					if (params.stars) {
 						ws.rec2[k].cfrac = data.cold_frac[pi];
 						ALWAYS_ASSERT(ws.rec2[k].cfrac <= 1.f);
@@ -1365,7 +1365,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					cfrac_i = 0.f;
 				}
 				const float hfrac_i = 1.f - cfrac_i;
-				const float fpre_i = data.fpre1[i];
+				const float fpre_i = data.fpre1[i] + 1.0f;
 				const float h2_i = sqr(h_i);
 				const auto rung_i = data.rungs[i];
 				const float kappa_i = data.kappa[i];
@@ -1594,7 +1594,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				float gradx = 0.0f;
 				float grady = 0.0f;
 				float gradz = 0.0f;
-				const float fpre_i = data.rec1_snk[snki].fpre1;
+				const float fpre_i = data.rec1_snk[snki].fpre1  + 1.0f;
 				for (int j = tid; j < ws.rec1.size(); j += COND_INIT_BLOCK_SIZE) {
 					const auto& rec1 = ws.rec1[j];
 					const auto& rec2 = ws.rec2[j];
@@ -1639,13 +1639,14 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const auto& frac_i = data.rec1_snk[snki].frac;
 					const float& cfrac_i = data.rec2_snk[snki].fcold;
 					const float& A_i = data.rec2_snk[snki].A;
-					const float& H = frac_i[CHEM_H];
+					const float& Z = frac_i[CHEM_Z];
 					const float& Hp = frac_i[CHEM_HP];
 					const float& Hn = frac_i[CHEM_HN];
 					const float& H2 = frac_i[CHEM_H2];
 					const float& He = frac_i[CHEM_HE];
 					const float& Hep = frac_i[CHEM_HEP];
 					const float& Hepp = frac_i[CHEM_HEPP];
+					const float H = 1.0 - Z - Hp - Hn - H2 - He - Hep - Hepp;
 					const float hfrac_i = 1.f - cfrac_i;
 					const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a);
 					float n0 = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp);
