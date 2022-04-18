@@ -308,6 +308,16 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 }
 
+void sph_particles_swap2(part_int i, part_int j) {
+	sph_particles_swap(i, j);
+	std::swap(sph_particles_dentr(i), sph_particles_dentr(j));
+	std::swap(sph_particles_dcold_mass(i), sph_particles_dcold_mass(j));
+	std::swap(sph_particles_dchem(i), sph_particles_dchem(j));
+	for (int dim = 0; dim < NDIM; dim++) {
+		std::swap(sph_particles_dvel(dim, i), sph_particles_dvel(dim, j));
+	}
+}
+
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
 	part_int begin = rng.first;
 	part_int end = rng.second;
@@ -1035,7 +1045,6 @@ void sph_particles_cache_free1() {
 	hpx::wait_all(futs.begin(), futs.end());
 	profiler_exit();
 }
-
 
 void sph_particles_cache_free_entr() {
 	profiler_enter(__FUNCTION__);

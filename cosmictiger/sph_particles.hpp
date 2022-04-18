@@ -194,6 +194,7 @@ void sph_particles_cache_free_entr();
 void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 void sph_particles_swap(part_int i, part_int j);
+void sph_particles_swap2(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_fcold(particle_global_range range, float*, part_int offset);
