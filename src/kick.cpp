@@ -128,6 +128,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const tree_node* self_ptr = tree_get_node(self);
 	timer tm;
 	if (self_ptr->local_root) {
+		params.free_mem = cuda_free_mem();
 		tm.start();
 	}
 	ASSERT(self.proc == hpx_rank());
@@ -144,7 +145,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
-			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
+			if (params.free_mem > cuda_mem_usage * 2) {
 				cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 			}
 		}
@@ -201,7 +202,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		self_pos[dim] = self_ptr->pos[dim].raw();
 	}
 	array<simd_int, NDIM> other_pos;
-	array<simd_float, NDIM> dx;
+	array < simd_float, NDIM > dx;
 	simd_float other_radius;
 	simd_int other_leaf;
 	for (int dim = 0; dim < NDIM; dim++) {

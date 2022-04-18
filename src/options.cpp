@@ -125,7 +125,7 @@ bool process_options(int argc, char *argv[]) {
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("visc_type", po::value<int>(&(opts.visc_type))->default_value(0), "AV type - 0 = Hu 1 = M&M 2 = constant") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
-	("nsteps", po::value<int>(&(opts.nsteps))->default_value(128), "Number of super-timesteps") //
+	("nsteps", po::value<int>(&(opts.nsteps))->default_value(512), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
@@ -144,7 +144,7 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(2.5*1.0e9/.6732), "mass resolution") //
+	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(3*1.0e9/.6732), "mass resolution") //
 
 			;
 

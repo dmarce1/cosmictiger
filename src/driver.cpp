@@ -227,7 +227,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sparams.run_type = SPH_RUN_SMOOTHLEN;
 		timer tm;
 		tm.start();
-		kr = sph_run(sparams, true);
+		kr = sph_run(sparams);
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
@@ -258,7 +258,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
-	kr = sph_run(sparams, true);
+	kr = sph_run(sparams);
 	tm.stop();
 	max_rung = kr.max_rung;
 	if (verbose)
@@ -269,7 +269,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sparams.run_type = SPH_RUN_AUX;
 	tm.reset();
 	tm.start();
-	kr = sph_run(sparams, true);
+	kr = sph_run(sparams);
 	max_rung = kr.max_rung;
 	tm.stop();
 	if (verbose)
@@ -298,7 +298,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	while (rc) {
 		sparams.run_type = SPH_RUN_RUNGS;
 		tm.start();
-		rc = sph_run(sparams, true).rc;
+		rc = sph_run(sparams).rc;
 		//	max_rung = kr.max_rung;
 		tm.stop();
 		if (verbose)
@@ -348,7 +348,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sparams.run_type = SPH_RUN_COND_INIT;
 		tm.reset();
 		tm.start();
-		sph_run(sparams, true);
+		sph_run(sparams);
 		tm.stop();
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
@@ -358,7 +358,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			sparams.run_type = SPH_RUN_CONDUCTION;
 			tm.reset();
 			tm.start();
-			sph_run(sparams, true);
+			sph_run(sparams);
 			tm.stop();
 			err = sph_apply_conduction_update(minrung);
 			if (verbose)

@@ -284,7 +284,7 @@ struct cond_update_return {
 	}
 };
 cond_update_return sph_apply_conduction_update(int minrung);
-sph_run_return sph_run(sph_run_params params, bool cuda = false);
+sph_run_return sph_run(sph_run_params params);
 #ifndef __CUDACC__
 hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);
 #endif

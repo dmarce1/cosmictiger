@@ -477,7 +477,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 
 }
 
-sph_run_return sph_run(sph_run_params params, bool cuda) {
+sph_run_return sph_run(sph_run_params params) {
 //	PRINT("SPHRUN = %i\n", params.run_type);
 	std::string profile_name = "sph_run:" + std::to_string(params.run_type);
 	profiler_enter(profile_name.c_str());
@@ -486,82 +486,110 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
 	params.cfl = get_options().cfl;
-	if (get_options().cuda == false) {
-		cuda = false;
-	}
-//	cuda = false;
 	sph_run_return rc;
 	vector<hpx::future<sph_run_return>> futs;
 	vector<hpx::future<sph_run_return>> futs2;
 	std::shared_ptr<sph_run_workspace> workspace_ptr = std::make_shared < sph_run_workspace > (params);
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_run_action>(c, params, cuda));
+		futs.push_back(hpx::async<sph_run_action>(c, params));
 	}
 	int nthreads = hpx_hardware_concurrency();
 	if (hpx_size() > 1) {
 		nthreads *= 4;
 	}
+	nthreads = 1;
 	static std::atomic<int> next;
 	next = 0;
 	static std::atomic<int> gpu_work;
 	gpu_work = 0;
-//	PRINT( "sph_tree_list_size = %i\n", sph_tree_size());
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc,nthreads,params,cuda,workspace_ptr]() {
-			sph_run_return rc;
-			int index = next++;
-			sph_data_vecs data;
-			while( index < sph_tree_leaflist_size()) {
-				data.clear();
-				const auto selfid = sph_tree_get_leaf(index);
-				const auto* self = sph_tree_get_node(selfid);
-				bool test;
-				switch(params.run_type) {
+	static std::atomic<size_t> mem_used;
+	mem_used = 0;
+	timer tm;
+	tm.start();
+	int index = next++;
+	auto free_mem = cuda_free_mem();
+	while (index < sph_tree_leaflist_size()) {
+		const auto selfid = sph_tree_get_leaf(index);
+		const auto* self = sph_tree_get_node(selfid);
+		const part_int nparts = self->part_range.second - self->part_range.first;
+		bool test;
+		switch (params.run_type) {
 
-					case SPH_RUN_AUX:
-					test = self->nactive > 0;
-					break;
-
-					case SPH_RUN_SMOOTHLEN:
-					test = self->nactive > 0 && !is_converged(self, params.min_rung);
-					break;
-
-					case SPH_RUN_RUNGS:
-					test = self->nactive > 0;
-					break;
-
-					case SPH_RUN_COND_INIT:
-					test = has_active_neighbors(self);
-					break;
-
-					case SPH_RUN_CONDUCTION:
-					test = has_active_neighbors(self) && !is_converged(self, params.min_rung);
-					break;
-
-					case SPH_RUN_HYDRO:
-					test = self->nactive > 0;
-					break;
-
-				}
-				if(test) {
-					if( cuda ) {
-						gpu_work++;
-						workspace_ptr->add_work(selfid);
-					} else {
-						ALWAYS_ASSERT(false);
-					}
-				}
-
-				index = next++;
+		case SPH_RUN_AUX:
+			test = self->nactive > 0;
+			if (test) {
+				mem_used += nparts * NDIM * sizeof(float);
 			}
-			return rc;
-		}));
+			break;
+
+		case SPH_RUN_SMOOTHLEN:
+			test = self->nactive > 0 && !is_converged(self, params.min_rung);
+			if (test) {
+				mem_used += nparts * (2 + NDIM) * sizeof(float);
+			}
+			break;
+
+		case SPH_RUN_RUNGS:
+			test = self->nactive > 0;
+			if (test) {
+				mem_used += nparts * sizeof(char);
+			}
+			break;
+
+		case SPH_RUN_COND_INIT:
+			test = has_active_neighbors(self);
+			if (test) {
+				mem_used += nparts * sizeof(char);
+				mem_used += 3 * nparts * sizeof(float);
+			}
+			break;
+
+		case SPH_RUN_CONDUCTION:
+			test = has_active_neighbors(self) && !is_converged(self, params.min_rung);
+			if (test) {
+				mem_used += nparts * sizeof(char);
+				mem_used += 5 * nparts * sizeof(float);
+			}
+			break;
+
+		case SPH_RUN_HYDRO:
+			test = self->nactive > 0;
+			if (test) {
+				mem_used += nparts * sizeof(float) * NCHEMFRACS;
+				mem_used += 11 * nparts * sizeof(float);
+			}
+			break;
+
+		}
+		if (test) {
+			mem_used += nparts * NDIM * sizeof(fixed32) + sizeof(sph_tree_node) + sizeof(int);
+			gpu_work++;
+			workspace_ptr->add_work(selfid);
+			if (free_mem < mem_used * 2) {
+			//	PRINT("Wave\n");
+				tm.stop();
+			//	PRINT("-----------> %e\n", tm.read());
+				tm.reset();
+				rc += workspace_ptr->to_gpu();
+				tm.start();
+			//	PRINT( "%e\n", (double) (size_t)  mem_used);
+				gpu_work = 0;
+				mem_used = 0;
+				workspace_ptr->host_trees = vector<sph_tree_node, pinned_allocator<sph_tree_node>>();
+				workspace_ptr->host_neighbors = vector<int, pinned_allocator<int>>();
+				workspace_ptr->host_selflist = vector<int>();
+				workspace_ptr->tree_map = std::unordered_map<tree_id, int, sph_tree_id_hash>();
+				workspace_ptr->neighbor_ranges = std::unordered_map<int, pair<int>>();
+			}
+		}
+
+		index = next++;
 	}
-	for (auto& f : futs2) {
-		rc += f.get();
-	}
-	if (cuda && gpu_work) {
+	tm.stop();
+//	PRINT("-----------> %e\n", tm.read());
+	if (gpu_work) {
 		rc += workspace_ptr->to_gpu();
+//		PRINT( "%e\n", (double) (size_t) mem_used);
 	}
 	for (auto& f : futs) {
 		rc += f.get();
@@ -880,7 +908,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 //	PRINT("Running with %i nodes\n", host_trees.size());
-	PRINT("Sending %i\n", host_selflist.size());
+//	PRINT("Sending %i\n", host_selflist.size());
 
 	for (int i = 0; i < host_selflist.size(); i++) {
 		auto node = host_trees[host_selflist[i]];

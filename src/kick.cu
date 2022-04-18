@@ -607,7 +607,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int zero = 0;
 //	kick_time = total_time = tree_time = gravity_time = 0.0f;
 //	node_count = 0;
-	CUDA_MALLOC(&current_index, sizeof(int));
+	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
 	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
@@ -624,9 +624,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int nblocks = kick_block_count();
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_lists_type* dev_lists;
-	(CUDA_MALLOC(&dev_lists, sizeof(cuda_lists_type) * nblocks));
-	(CUDA_MALLOC(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
-	(CUDA_MALLOC(&dev_returns, sizeof(kick_return) * returns.size()));
+	CUDA_CHECK(cudaMalloc(&dev_lists, sizeof(cuda_lists_type) * nblocks));
+	CUDA_CHECK(cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
+	CUDA_CHECK(cudaMalloc(&dev_returns, sizeof(kick_return) * returns.size()));
 
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
@@ -656,8 +656,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	}
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
-	CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size());
-	CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size());
+	CUDA_CHECK(cudaMalloc(&dev_dchecks, sizeof(int) * dchecks.size()));
+	CUDA_CHECK(cudaMalloc(&dev_echecks, sizeof(int) * echecks.size()));
 	CUDA_CHECK(cudaMemcpyAsync(dev_dchecks, dchecks.data(), sizeof(int) * dchecks.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
@@ -678,9 +678,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type_snk = &particles_type(0);
-		data.sph_gx = &sph_particles_gforce(XDIM,0);
-		data.sph_gy = &sph_particles_gforce(YDIM,0);
-		data.sph_gz = &sph_particles_gforce(ZDIM,0);
+		data.sph_gx = &sph_particles_gforce(XDIM, 0);
+		data.sph_gy = &sph_particles_gforce(YDIM, 0);
+		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
 	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);
@@ -757,6 +757,7 @@ size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
 	size_t ntrees = 3 * total_parts / BUCKET_SIZE;
 	size_t nchecks = 2 * innerblocks * check_count;
 	mem += total_parts * NDIM * sizeof(fixed32);
+	mem += total_parts * sizeof(char);
 	mem += ntrees * sizeof(tree_node);
 	mem += nchecks * sizeof(int);
 	mem += sizeof(cuda_lists_type) * kick_block_count();
