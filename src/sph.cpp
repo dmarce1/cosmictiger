@@ -67,7 +67,7 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_vz;
 	vector<float, pinned_allocator<float>> host_entr;
 	vector<float, pinned_allocator<float>> host_kappa;
-	vector<float, pinned_allocator<float>> host_alpha;
+	vector<float16, pinned_allocator<float16>> host_alpha;
 	vector<float, pinned_allocator<float>> host_shearv;
 	vector<float16, pinned_allocator<float16>> host_fpre1;
 	vector<float16, pinned_allocator<float16>> host_fpre2;
@@ -771,7 +771,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.fpre1, sizeof(float16) * host_fpre1.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.fpre2, sizeof(float16) * host_fpre2.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.pre, sizeof(float) * host_pre.size()));
-		CUDA_CHECK(cudaMalloc(&cuda_data.alpha, sizeof(float) * host_alpha.size()));
+		CUDA_CHECK(cudaMalloc(&cuda_data.alpha, sizeof(float16) * host_alpha.size()));
 		if (stars) {
 			CUDA_CHECK(cudaMalloc(&cuda_data.cold_frac, sizeof(float) * host_cold_frac.size()));
 		}
@@ -806,7 +806,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre1, host_fpre1.data(), sizeof(float16) * host_fpre1.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre2, host_fpre2.data(), sizeof(float16) * host_fpre2.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.pre, host_pre.data(), sizeof(float) * host_pre.size(), cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(cuda_data.alpha, host_alpha.data(), sizeof(float) * host_alpha.size(), cudaMemcpyHostToDevice, stream));
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.alpha, host_alpha.data(), sizeof(float16) * host_alpha.size(), cudaMemcpyHostToDevice, stream));
 		if (diffusion) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.shearv, host_shearv.data(), sizeof(float) * host_shearv.size(), cudaMemcpyHostToDevice, stream));
 			if (chem) {

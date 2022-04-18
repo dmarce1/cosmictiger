@@ -102,12 +102,12 @@ struct hydro_record2 {
 	float vy;
 	float vz;
 	float entr;
-	float alpha;
-	float16 fpre1;
-	float16 fpre2;
 	float pre;
 	float shearv;
 	float cold_frac;
+	float16 alpha;
+	float16 fpre1;
+	float16 fpre2;
 };
 
 struct hydro_workspace {

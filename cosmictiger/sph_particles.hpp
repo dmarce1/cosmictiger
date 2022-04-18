@@ -105,11 +105,11 @@ struct sph_particle {
 struct sph_record1 {
 	float16 fpre1;
 	float16 fpre2;
+	float16 alpha;
 	float pre;
 	float h;
 	float shearv;
 	array<frac_real, NCHEMFRACS> frac;
-	float alpha;
 };
 
 struct sph_record2 {
@@ -173,22 +173,20 @@ SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
 struct aux_quantities {
 	float16 fpre1;
-	float fpre2;
+	float16 fpre2;
+	float16 alpha;
 	float pre;
 	float shearv;
 	float h;
-	float curlv;
-	float alpha;
 	array<frac_real, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & curlv;
 		arc & *(short*)&fpre1;
-		arc & fpre2;
+		arc & *(short*)&fpre2;
+		arc & *(short*)&alpha;
 		arc & pre;
 		arc & shearv;
 		arc & h;
-		arc & alpha;
 		arc & fracs;
 	}
 };
@@ -209,7 +207,7 @@ void sph_particles_global_read_entr(particle_global_range range, float*, part_in
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float16* fpre1, float16* fpre2, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* h, float16* alpha, float* pre, float16* fpre1, float16* fpre2, float* shearv,
 		array<frac_real, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
@@ -254,7 +252,7 @@ inline float sph_particles_divv0(part_int index) {
 	return sph_particles_r3[index].divv0;
 }
 
-inline float& sph_particles_alpha(part_int index) {
+inline float16& sph_particles_alpha(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r1[index].alpha;
 }
@@ -519,7 +517,6 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux.fpre1 = sph_particles_fpre1(index);
 	aux.fpre2 = sph_particles_fpre2(index);
 	aux.pre = sph_particles_pre(index);
-	aux.curlv = sph_particles_curlv(index);
 	if (get_options().diffusion) {
 		aux.shearv = sph_particles_shear(index);
 	}
