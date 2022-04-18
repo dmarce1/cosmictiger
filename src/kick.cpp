@@ -249,14 +249,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
 				}
-				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-				simd_float ewald_far(0.0);
+				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
-					ewald_far = sqrt(R2) < simd_float(0.49) - (self_radius + other_radius);
+					R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
 				}
 				const simd_float soft_sep = sqr(self_radius + other_radius + hsoft) < R2;
-				const simd_float far1 = ewald_far + soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
-				const simd_float far2 = ewald_far + soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
+				const simd_float far1 = soft_sep * (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv));     // 5
+				const simd_float far2 = soft_sep * (R2 > sqr(sink_bias * self_radius * thetainv + other_radius));       // 5
 				const simd_float mult = far1;                                                                  // 4
 				const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
 				for (int i = 0; i < maxi; i++) {
@@ -305,12 +304,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 							dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;        // 3
 						}
 						simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
-						simd_float ewald_far(0.0);
 						if (gtype == GRAVITY_EWALD) {
-							ewald_far = sqrt(R2) < simd_float(0.49) - (self_radius + other_radius);
+							R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
 						}
 						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
-						const simd_float near = (R2 <= rhs) + ewald_far;                                            // 1
+						const simd_float near = R2 <= rhs;                                            // 1
 						kr.part_flops += SIMD_FLOAT_SIZE * 12;
 						if (near.sum()) {
 							pp = true;
