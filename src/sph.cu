@@ -103,7 +103,7 @@ struct hydro_record2 {
 	float vz;
 	float entr;
 	float alpha;
-	float fpre1;
+	float16 fpre1;
 	float fpre2;
 	float pre;
 	float shearv;
@@ -951,7 +951,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2_main[k].vz = data.vz[pi];
 					ws.rec2_main[k].entr = data.entr[pi];
 					ws.rec2_main[k].alpha = data.alpha[pi];
-					ws.rec2_main[k].fpre1 = data.fpre1[pi] + 1.0f;
+					ws.rec2_main[k].fpre1 = data.fpre1[pi];
 					ws.rec2_main[k].fpre2 = data.fpre2[pi];
 					ws.rec2_main[k].pre = data.pre[pi];
 					if (params.diffusion) {
@@ -1014,7 +1014,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float de_dt0 = (gamma0 - 1.f) * powf(hfrac_i * rho_i, 1.f - gamma0);
 				const float pre_i = data.pre[i];
 				const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - invgamma0) * powf(A_i, invgamma0));
-				const float fpre1_i = data.fpre1[i] + 1.0f;
+				const float fpre1_i = (float) data.fpre1[i] + 1.0f;
 				const float fpre2_i = data.fpre2[i];
 
 				float ax = 0.f;
@@ -1092,7 +1092,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float vy_j = rec2.vy;
 						const float vz_j = rec2.vz;
 						const float pre_j = rec2.pre;
-						const float fpre1_j = rec2.fpre1;
+						const float fpre1_j = (float) rec2.fpre1 + 1.f;
 						const float fpre2_j = rec2.fpre2;
 						const float h2_j = sqr(h_j);
 						const float h3inv_j = sqr(hinv_j) * hinv_j;
@@ -1336,7 +1336,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					ws.rec1[k].rung = data.rungs[pi];
 					ws.rec2[k].entr = data.entr[pi];
 					ws.rec2[k].kappa = data.kappa[pi];
-					ws.rec2[k].fpre = data.fpre1[pi] + 1.0f;
+					ws.rec2[k].fpre = data.fpre1[pi];
 					if (params.stars) {
 						ws.rec2[k].cfrac = data.cold_frac[pi];
 						ALWAYS_ASSERT(ws.rec2[k].cfrac <= 1.f);
@@ -1365,7 +1365,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					cfrac_i = 0.f;
 				}
 				const float hfrac_i = 1.f - cfrac_i;
-				const float fpre_i = data.fpre1[i] + 1.0f;
+				const float fpre_i = (float) data.fpre1[i] + 1.0f;
 				const float h2_i = sqr(h_i);
 				const auto rung_i = data.rungs[i];
 				const float kappa_i = data.kappa[i];
@@ -1398,7 +1398,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float rinv = 1.f / r;
 						const float q_i = r * hinv_i;
 						if (r2 > 0.f && (active || rung_j >= params.min_rung)) {
-							const float fpre_j = rec2.fpre;
+							const float fpre_j = (float) rec2.fpre + 1.0f;
 							const float kappa_j = rec2.kappa;
 							const float cfrac_j = rec2.cfrac;
 							if (cfrac_j > 1.0f) {

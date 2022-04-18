@@ -69,7 +69,7 @@ struct sph_run_cuda_data {
 	float* vx;
 	float* vy;
 	float* vz;
-	float* fpre1;
+	float16* fpre1;
 	float* fpre2;
 	float* pre;
 	float* h;

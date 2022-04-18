@@ -172,7 +172,7 @@ SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
 struct aux_quantities {
-	float fpre1;
+	float16 fpre1;
 	float fpre2;
 	float pre;
 	float shearv;
@@ -183,7 +183,7 @@ struct aux_quantities {
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & curlv;
-		arc & fpre1;
+		arc & *(short*)&fpre1;
 		arc & fpre2;
 		arc & pre;
 		arc & shearv;
@@ -209,7 +209,7 @@ void sph_particles_global_read_entr(particle_global_range range, float*, part_in
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float16* fpre1, float* fpre2, float* shearv,
 		array<frac_real, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
