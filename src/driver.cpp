@@ -130,50 +130,18 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+void sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
 		bool verbose) {
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	verbose = true;
 	*eheat = 0.0;
-	if (verbose)
-		PRINT("Doing SPH step with minrung = %i\n", minrung);
-	sph_tree_create_params tparams;
-
-	timer tm;
-	timer total_tm;
-	total_tm.start();
-	tparams.min_rung = minrung;
-	tparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	sph_tree_create_return sr;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	sph_tree_neighbor_params tnparams;
-
 	if (stars && minrung != max_rung) {
 		stars_find(scale, dt, minrung, iter, t0);
 		stars_statistics(scale);
 	}
-
-	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-	tnparams.min_rung = minrung;
-
-	tm.start();
-	if (verbose)
-		PRINT("starting sph_tree_create = %e\n", tm.read());
-	profiler_enter("sph_tree_create");
-	sr = sph_tree_create(tparams);
-	profiler_exit();
-	tm.stop();
-	if (verbose)
-		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
-	tm.reset();
-	return sr;
-
+	sph_particles_apply_updates(minrung, 0, t0, tau);
 }
 
 sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
@@ -184,9 +152,51 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	const bool conduction = get_options().conduction;
 	verbose = true;
 	*eheat = 0.0;
+	{
+		const bool stars = get_options().stars;
+		const bool diff = get_options().diffusion;
+		const bool chem = get_options().chem;
+		verbose = true;
+		*eheat = 0.0;
+		if (verbose)
+			PRINT("Doing SPH step with minrung = %i\n", minrung);
+		sph_tree_create_params tparams;
+
+		timer tm;
+		timer total_tm;
+		total_tm.start();
+		tparams.min_rung = minrung;
+		tparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		sph_tree_create_return sr;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		sph_tree_neighbor_params tnparams;
+
+		if (stars && minrung != max_rung) {
+			stars_find(scale, dt, minrung, iter, t0);
+			stars_statistics(scale);
+		}
+
+		tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+		tnparams.min_rung = minrung;
+
+		tm.start();
+		if (verbose)
+			PRINT("starting sph_tree_create = %e\n", tm.read());
+		profiler_enter("sph_tree_create");
+		sr = sph_tree_create(tparams);
+		profiler_exit();
+		tm.stop();
+		if (verbose)
+			PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
+		tm.reset();
+	}
+
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
-	sph_particles_apply_updates(minrung, 0, t0, tau);
 
 	sph_run_params sparams;
 	if (adot != 0.0) {
@@ -528,7 +538,7 @@ void driver() {
 		output_time_file();
 		if (glass) {
 //			PRINT("Glass not implemented\n");
-			//		abort();
+//		abort();
 			initialize_glass();
 		} else {
 			initialize(get_options().z0);
@@ -672,7 +682,7 @@ void driver() {
 				theta = 0.4;
 			}
 
-			///		if (last_theta != theta) {
+///		if (last_theta != theta) {
 			set_options(opts);
 ////			}
 			last_theta = theta;
@@ -754,7 +764,7 @@ void driver() {
 			runtime += total_time.read();
 			double pps = total_processed / runtime;
 			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
-			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
+//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			params.flops += total_flops;
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			double act_pct = kr.nactive / nparts;
@@ -780,7 +790,7 @@ void driver() {
 			remaining_time.stop();
 			runtime += remaining_time.read();
 			total_time.start();
-			//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
+//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
 //			PRINT("%llx\n", itime);
 			PRINT("itime inc %i\n", max_rung);
 			itime = inc(itime, max_rung);
