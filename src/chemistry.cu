@@ -35,7 +35,7 @@ struct chemistry_params {
 	float G;
 };
 
-#define CHEM_BLOCK_SIZE 64
+#define CHEM_BLOCK_SIZE 96
 
 #define NCOOL 14
 
@@ -126,9 +126,9 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 	const float lnTev = log(Tev);						// 8
 	const float log10T = log10(T);						// 8
 	const float T3 = T * 1e-3f;					// 1
-	const float sqrtTinv = rsqrtf(T);
-	const float sqrtT = sqrtf(T);
-	const float Tinv = 1.f / T;
+	const float sqrtTinv = rsqrtf(T);			// 4
+	const float sqrtT = sqrtf(T);					// 4
+	const float Tinv = 1.f / T;					// 4
 	const float T6 = T * 1e-6f;					// 1
 	float K1, K2, K3, K4, K5, K6, K7, K8, K9, K11, K12, K14, K16;
 	{
@@ -388,14 +388,14 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 
 	flops += 625;
 
-	const float n0 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;								// 8
+	const float n0 = N.H + 2.0f * N.Hp + N.H2 + N.He + 2.0f * N.Hep + 3.0f * N.Hepp;								// 8
 	const float cv0 = (1.5f * (1.0f - N.H2) + 2.5f * N.H2);															// 4
 
 	const float Htot = N.H + N.Hp + N.Hn + 2.f * N.H2;																	// 4
 	const float Hetot = N.He + N.Hep + N.Hepp;																			// 2
 	float ne_max = Htot + 4.f * Hetot;																				// 2
 	float ne_min = ne_max * 1e-20f;																					// 1
-	for (int i = 0; i < 32; i++) {
+	for (int i = 0; i < 29; i++) {
 		float ne_mid = sqrtf(ne_max * ne_min);
 		float fe_max, fe_mid;
 		if (i == 0) {
@@ -411,7 +411,7 @@ __device__ float test_temperature(species_t N0, species_t& N, float T0, float T,
 		flops += 8;
 	}
 
-	const float n1 = N.H + 2.0 * N.Hp + N.H2 + N.He + 2.0 * N.Hep + 3.0 * N.Hepp;											// 8
+	const float n1 = N.H + 2.0f * N.Hp + N.H2 + N.He + 2.0f * N.Hep + 3.0f * N.Hepp;											// 8
 	const float cv1 = (1.5f + N.H2);																		// 4
 	*dedt_ptr = dedt;
 	return constants::kb * (cv1 * n1 * T - cv0 * n0 * T0) - dt * dedt;												// 8
@@ -523,7 +523,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			} else if (attr.cold_mass < 0.f) {
 				attr.cold_mass = 0.f;
 			}
-		//	attr.eint *= factor;
+			//	attr.eint *= factor;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
 			N.Hp *= (double) rhoavoinv;																										// 1
@@ -532,7 +532,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			N.He *= 4.0 * (double) rhoavoinv;																										// 1
 			N.Hep *= 4.0 * (double) rhoavoinv;																										// 1
 			N.Hepp *= 4.0 * (double) rhoavoinv;
-			attr.H = N.H;// 1
+			attr.H = N.H;																										// 1
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;
 			attr.Hepp = N.Hepp;
@@ -540,7 +540,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.Hp = N.Hp;
 			attr.He = N.He;
 		} else {
-			for (int i = 0; i < 28; i++) {
+			for (int i = 0; i < 27; i++) {
 				float f_mid, f_max;
 				Tmid = sqrtf(Tmax * Tmin);																							// 5
 				N = N.number_density_to_fractions();
@@ -599,7 +599,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 	atomicAdd(total_flops, myflops);
 }
 
-void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
+double cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	timer tm;
 	static const auto opts = get_options();
 	double* flops;
@@ -616,6 +616,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(dev_chems, chems.data(), sizeof(chem_attribs) * chems.size(), cudaMemcpyHostToDevice, stream));
 	*index = 0;
+	*flops = 0;
 	params.a = scale;
 	params.code_to_cm = opts.code_to_cm;
 	params.G = constants::G;
@@ -624,11 +625,11 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	params.code_to_s = opts.code_to_s;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) chemistry_kernel, CHEM_BLOCK_SIZE, 0));
 	nblocks *= cuda_smp_count();
-	nblocks = std::max(1, nblocks / hpx_hardware_concurrency());
 	tm.start();
 	chemistry_kernel<<<nblocks,CHEM_BLOCK_SIZE, 0, stream>>>(params, dev_chems, chems.size(), index, flops);
 	cuda_stream_synchronize(stream);
 	tm.stop();
+//	PRINT("CHEM GFLOPS = %e\n", *flops / 1024.0 / 1024.0 / 1024.0 / tm.read());
 	CUDA_CHECK(cudaMemcpyAsync(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost, stream));
 	CUDA_CHECK(cudaFree(flops));
 	CUDA_CHECK(cudaFree(index));
@@ -644,6 +645,7 @@ void cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 			//		PRINT("C%i = %e\n", i, cooling_totals[i] / ctot);
 		}
 	}
+	return *flops;
 }
 
 void test_cuda_chemistry_kernel() {

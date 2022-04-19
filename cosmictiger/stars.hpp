@@ -36,16 +36,25 @@ struct star_particle {
 
 struct stars_stats {
 	size_t stars;
+	size_t popI;
+	size_t popII;
+	size_t popIII;
 	stars_stats() {
-		stars = 0;
+		popI = popII = popIII = stars = 0;
 	}
 	stars_stats& operator+=(const stars_stats& other) {
 		stars += other.stars;
+		popI += other.popI;
+		popII += other.popII;
+		popIII += other.popIII;
 		return *this;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & stars;
+		arc & popI;
+		arc & popII;
+		arc & popIII;
 	}
 };
 

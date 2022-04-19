@@ -24,6 +24,7 @@
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <fenv.h>
+#include <cosmictiger/timer.hpp>
 
 #define NRATES 20
 #define NCOOL 15
@@ -685,12 +686,16 @@ static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2
 		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
 		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 
-double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
+pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 
 	profiler_enter(__FUNCTION__);
-	vector<hpx::future<double>> futs;
+	timer tm;
+	tm.start();
+	vector<hpx::future<pair<double>>>futs;
 	if (!get_options().chem) {
-		return 0.0;
+		pair<double> rc;
+		rc.first = rc.second = 0.0;
+		return rc;
 	}
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0, adot, dir));
@@ -769,7 +774,8 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					chems.push_back(chem);
 				}
 			}
-			cuda_chemistry_step(chems, a);
+			double flops;
+			flops = cuda_chemistry_step(chems, a);
 			int j = 0;
 			double echange = 0.0;
 			const double sph_mass = get_options().sph_mass;
@@ -796,13 +802,26 @@ double chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
 					}
 				}
 			}
-			return echange;
+			pair<double> rc;
+			rc.first = echange;
+			rc.second = flops;
+			return rc;
 
 		}));
 	}
+	double flops = 0.0;
 	for (auto& f : futs) {
-		echange += f.get();
+		auto tmp = f.get();
+		echange += tmp.first;
+		flops += tmp.second;
+	}
+	tm.stop();
+	if (hpx_rank() == 0) {
+		PRINT("CHEM GFLOPS = %e\n", flops / 1024 / 1024 / 1024 / tm.read());
 	}
 	profiler_exit();
-	return echange;
+	pair<double> rc;
+	rc.first = echange;
+	rc.second = flops;
+	return rc;
 }

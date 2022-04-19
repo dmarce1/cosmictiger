@@ -87,6 +87,12 @@ set(cosmictiger_source_files
     src/sph_particles.cpp
     src/sph.cpp
     src/sph.cu
+    src/sph_aux.cu
+    src/sph_cond_init.cu
+    src/sph_smoothlen.cu
+    src/sph_conduction.cu
+    src/sph_hydro.cu
+    src/sph_rungs.cu
     src/sphere.cu
     src/sph_tree.cpp
     src/stack_trace.cpp
@@ -181,10 +187,22 @@ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tenso
 target_link_libraries( fmm_kernel_codegen PUBLIC dl )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
+set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+set_source_files_properties(./src/sph.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+
+set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
+set_source_files_properties(./src/sph_smoothlen.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+set_source_files_properties(./src/sph_aux.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/sph_cond_init.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/sph_hydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/sph_conduction.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/sph_rungs.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/chemistry.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       -DUSE_CUDA --use_fast_math -maxrregcount=160;
+                       -DUSE_CUDA --use_fast_math ;
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )

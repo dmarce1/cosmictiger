@@ -22,6 +22,8 @@
 
 #include <cosmictiger/defs.hpp>
 
+#ifdef __CUDACC__
+
 __device__ inline void compute_indices(int& index, int& total) {
 	const int& tid = threadIdx.x;
 	for (int P = 1; P < WARP_SIZE; P *= 2) {
@@ -48,52 +50,82 @@ __device__ inline void shared_reduce_add(T& number) {
 
 template<class T, int BLOCK_SIZE>
 __device__ inline void shared_reduce_add(T& number) {
+	int P = WARP_SIZE;
+	while (P < BLOCK_SIZE) {
+		P *= 2;
+	}
 	const int tid = threadIdx.x;
 	__shared__ T sum[BLOCK_SIZE];
 	sum[tid] = number;
 	__syncthreads();
-	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % BLOCK_SIZE;
-		const T t = sum[tid] + sum[inbr];
+	for (int bit = P / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % P;
+		T t;
+		if (inbr < BLOCK_SIZE) {
+			t = sum[tid] + sum[inbr];
+		} else {
+			t = sum[tid] ;
+		}
 		__syncthreads();
 		sum[tid] = t;
 		__syncthreads();
 	}
-	number = sum[tid];
+	__syncthreads();
+	number = sum[0];
 	__syncthreads();
 }
 
 template<int BLOCK_SIZE>
 __device__ inline void shared_reduce_max(float& number) {
+	int P = WARP_SIZE;
+	while (P < BLOCK_SIZE) {
+		P *= 2;
+	}
 	const int tid = threadIdx.x;
-	__shared__ float sum[BLOCK_SIZE];
-	sum[tid] = number;
+	__shared__ float mx[BLOCK_SIZE];
+	mx[tid] = number;
 	__syncthreads();
-	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % BLOCK_SIZE;
-		const float t = fmaxf(sum[tid], sum[inbr]);
+	for (int bit = P / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % P;
+		float t;
+		if( inbr < BLOCK_SIZE ) {
+			t = fmaxf(mx[tid], mx[inbr]);
+		} else {
+			t = mx[tid];
+		}
 		__syncthreads();
-		sum[tid] = t;
+		mx[tid] = t;
 		__syncthreads();
 	}
-	number = sum[tid];
+	__syncthreads();
+	number = mx[0];
 	__syncthreads();
 }
 
 template<int BLOCK_SIZE>
 __device__ inline void shared_reduce_max(int& number) {
+	int P = WARP_SIZE;
+	while (P < BLOCK_SIZE) {
+		P *= 2;
+	}
 	const int tid = threadIdx.x;
-	__shared__ int sum[BLOCK_SIZE];
-	sum[tid] = number;
+	__shared__ int mx[BLOCK_SIZE];
+	mx[tid] = number;
 	__syncthreads();
-	for (int bit = BLOCK_SIZE / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % BLOCK_SIZE;
-		const int t = max(sum[tid], sum[inbr]);
+	for (int bit = P / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % P;
+		int t;
+		if( inbr < BLOCK_SIZE) {
+			t = max(mx[tid], mx[inbr]);
+		} else {
+			t = mx[tid];
+		}
 		__syncthreads();
-		sum[tid] = t;
+		mx[tid] = t;
 		__syncthreads();
 	}
-	number = sum[tid];
+	__syncthreads();
+	number = mx[0];
 	__syncthreads();
 }
 
@@ -101,25 +133,25 @@ __device__ inline void shared_reduce_max(int& number) {
 
 template<int BLOCK_SIZE>
 __device__ inline void compute_indices(int& index, int& total) {
-	__shared__ int sum[BLOCK_SIZE];
+	int M = WARP_SIZE;
+	while (M < BLOCK_SIZE) {
+		M *= 2;
+	}
+	__shared__ int ind[BLOCK_SIZE];
 	const int& tid = threadIdx.x;
-	sum[tid] = index;
+	ind[tid] = index;
 	__syncthreads();
-	auto tm = clock64();
-	for (int P = 1; P < BLOCK_SIZE; P *= 2) {
+	for (int P = 1; P < M; P *= 2) {
 		int tmp = 0;
 		if (tid >= P) {
-			tmp = sum[tid - P];
+			tmp = ind[tid - P];
 		}
 		__syncthreads();
-		sum[tid] += tmp;
+		ind[tid] += tmp;
 		__syncthreads();
 	}
-	if (tid == 0) {
-		tm = clock64() - tm;
-	}
-	total = sum[BLOCK_SIZE - 1];
-	index = tid == 0 ? 0 : sum[tid - 1];
+	total = ind[BLOCK_SIZE - 1];
+	index = tid == 0 ? 0 : ind[tid - 1];
 	__syncthreads();
 }
 
@@ -141,4 +173,5 @@ __device__ inline void shared_reduce_max(int& number) {
 	}
 }
 
+#endif
 #endif /* CUDA_REDUCE_HPP_ */

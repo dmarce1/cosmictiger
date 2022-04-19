@@ -102,7 +102,10 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 //					PRINT( "%e %i\n", eps, make_star);
 				if( make_star ) {
-					if( false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
+					sph_particles_cold_mass(i) = 0.f;
+					sph_particles_dcold_mass(i) = 0.f;
+					if(gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
+						PRINT( "SUPERNOVA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 						float& H = sph_particles_H(i);
 						float& Hp = sph_particles_Hp(i);
 						float& Hn = sph_particles_Hn(i);
@@ -231,6 +234,13 @@ stars_stats stars_statistics(float a) {
 				switch(stars[i].type) {
 					case STAR_TYPE:
 					stats.stars++;
+					if( stars[i].Z == 0.0 ) {
+						stats.popIII++;
+					} else if( stars[i].Z < 1e-2) {
+						stats.popII++;
+					} else {
+						stats.popI++;
+					}
 					break;
 				}
 			}
@@ -242,7 +252,7 @@ stars_stats stars_statistics(float a) {
 	}
 	if (hpx_rank() == 0) {
 		FILE* fp = fopen("stars.txt", "at");
-		fprintf(fp, "%e %li\n", 1.f / a - 1.f, stats.stars);
+		fprintf(fp, "%e %li %li %li %li\n", 1.f / a - 1.f, stats.stars, stats.popI, stats.popII, stats.popIII);
 		fclose(fp);
 	}
 	profiler_exit();

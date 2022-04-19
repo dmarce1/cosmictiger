@@ -126,6 +126,7 @@ struct sph_tree_neighbor_params {
 struct sph_run_return {
 	float hmin;
 	float hmax;
+	double flops;
 	int max_rung_hydro;
 	int max_rung_grav;
 	int max_rung;

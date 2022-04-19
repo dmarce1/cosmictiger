@@ -26,6 +26,13 @@
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/constants.hpp>
+#include <cosmictiger/timer.hpp>
+#include <cosmictiger/kernel.hpp>
+#include <cosmictiger/math.hpp>
+
 
 struct sph_run_cuda_data {
 	fixed32* x;
@@ -95,6 +102,43 @@ struct sph_run_cuda_data {
 	float eta;
 };
 
+
+#define SPH_DIFFUSION_C 0.03f
+#define COND_INIT_BLOCK_SIZE 32
+#define CONDUCTION_BLOCK_SIZE 32
+#define RUNGS_BLOCK_SIZE 256
+#define AUX_BLOCK_SIZE 96
+#define MAX_RUNG_DIF 1
+#define SPH_SMOOTHLEN_TOLER float(5.0e-5)
+#define SMOOTHLEN_BLOCK_SIZE 128
+#define HYDRO_BLOCK_SIZE 32
+
+struct sph_reduction {
+	int counter;
+	int flag;
+	float hmin;
+	float hmax;
+	float vsig_max;
+	double flops;
+	int max_rung_hydro;
+	int max_rung_grav;
+	int max_rung;
+};
+
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);
+__global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+
+
+
+static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
+		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
+		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+
 
 #endif /* SPH_CUDA_HPP_ */

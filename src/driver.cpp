@@ -18,7 +18,7 @@
  */
 
 #define  SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.1
+#define SCALE_DT 0.01
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -179,6 +179,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	const bool chem = get_options().chem;
 	const bool conduction = get_options().conduction;
 	verbose = true;
+	double flops;
 	*eheat = 0.0;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
@@ -389,7 +390,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("Doing chemistry step\n");
 		timer tm;
 		tm.start();
-		*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1);
+		*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
 		tm.stop();
 		PRINT("Took %e s\n", tm.read());
 	}
