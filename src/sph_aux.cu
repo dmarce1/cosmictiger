@@ -244,22 +244,23 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - invgamma) * powf(A_i, invgamma));  // 15
 					vsig += c_i;																								   // 1
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
-					float dt = params.t0 * rung_dt[rung];                                                  // 1
+					float dt2 = params.t0 * rung_dt[rung];                                                  // 1
 					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);           // 5
 					const float dt_divv = params.cfl / (dloghdt + 1e-30f);                                 // 5
 					flops += 108 + 10 * (AUX_BLOCK_SIZE - 1);
-					if (dt_divv < dt) {                                                                    // 1
-						dt = dt_divv;
+					if (dt_divv < dt2) {                                                                    // 1
+						dt2 = dt_divv;
 						rung = ceilf(log2f(params.t0) - log2f(dt_divv));                                    // 10
-						dt = params.t0 * rung_dt[rung];                                                     // 1
+						dt2 = params.t0 * rung_dt[rung];                                                     // 1
 						flops += 11;
 					}
+					const float dt1 = params.t0 * rung_dt[data.oldrung_snk[snki]];
 					max_rung = max(max_rung, rung);
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));                             // 9
 					const float div_v0 = data.rec3_snk[snki].divv;
 					data.rec3_snk[snki].divv = div_v;
 					const float alpha = data.rec1_snk[snki].alpha;
-					const float ddivv_dt = (div_v - div_v0) / dt - params.adot * ainv * div_v;             // 8
+					const float ddivv_dt = (div_v - div_v0) / dt1 - params.adot * ainv * div_v;             // 8
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);                      // 6
 					const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv)); // 14
 					const float alpha_targ = fmaxf(params.alpha1 * S / (S + sqr(c_i)), params.alpha0);     // 8
@@ -270,7 +271,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 						data.rec1_snk[snki].alpha = (limiter * alpha_targ);                                 // 1
 						flops++;
 					} else {
-						data.rec1_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt))); // 10
+						data.rec1_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt1))); // 10
 						flops += 10;
 					}
 				}
