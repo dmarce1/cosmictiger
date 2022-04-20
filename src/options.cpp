@@ -115,7 +115,7 @@ bool process_options(int argc, char *argv[]) {
 	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.0), "alpha0 viscosity") //
 	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
-	("beta", po::value<double>(&(opts.beta))->default_value(1.5), "beta for viscosity") //
+	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
 	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
 	("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
 	("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
