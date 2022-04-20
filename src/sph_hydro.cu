@@ -204,7 +204,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 				float dtinv_cfl = 0.f;
 //				float one = 0.0f;
-				constexpr float tiny = 1e-30f;
 				const float& adot = params.adot;
 				float D = 0.f;
 				ws.rec1.resize(0);

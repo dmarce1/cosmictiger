@@ -85,21 +85,6 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 						x[YDIM] = data.y[pi];
 						x[ZDIM] = data.z[pi];
 						contains = (self.outer_box.contains(x));
-						if (!contains) {
-							contains = true;
-							for (int dim = 0; dim < NDIM; dim++) {
-								if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
-									contains = false;
-									flops += 3;
-									break;
-								}
-								if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
-									contains = false;
-									flops += 3;
-									break;
-								}
-							}
-						}
 					}
 				}
 				j = contains;
@@ -131,7 +116,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs[i] >= params.min_rung;
-			int semiactive = 0;
+			const bool semiactive = data.sa_snk[i] && !active;
 			const float h_i = data.h[i];
 			const float A_i = data.entr[i];
 			const auto x_i = data.x[i];
@@ -146,40 +131,6 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 			const float hfrac_i = 1.f - cfrac_i;									// 1
 			const float h2_i = sqr(h_i);												// 1
 			flops += 2;
-			if (active) {
-				if (tid == 0) {
-					data.sa_snk[snki] = true;
-				}
-			} else {
-				const int jmax = round_up(ws.rec1.size(), block_size);
-				if (tid == 0) {
-					data.sa_snk[snki] = false;
-				}
-				for (int j = tid; j < jmax; j += block_size) {
-					if (j < ws.rec1.size()) {
-						const auto x_j = ws.rec1[j].x;
-						const auto y_j = ws.rec1[j].y;
-						const auto z_j = ws.rec1[j].z;
-						const auto h_j = ws.rec1[j].h;
-						const auto h2_j = sqr(h_j);									// 1
-						const float x_ij = distance(x_i, x_j);						// 1
-						const float y_ij = distance(y_i, y_j);						// 1
-						const float z_ij = distance(z_i, z_j);						// 1
-						const float r2 = sqr(x_ij, y_ij, z_ij);					// 5
-						if (r2 < fmaxf(h2_i, h2_j)) {									// 2
-							semiactive++;
-						}
-						flops += 11;
-					}
-					shared_reduce_add<int, COND_INIT_BLOCK_SIZE>(semiactive);
-					if (semiactive) {
-						if (tid == 0) {
-							data.sa_snk[snki] = true;
-						}
-						break;
-					}
-				}
-			}
 			if (semiactive || active) {
 				const float hinv_i = 1.f / h_i;													// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);								// 2

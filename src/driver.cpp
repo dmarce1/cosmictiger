@@ -252,6 +252,16 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		kr = sph_run_return();
 	} while (cont);
 	timer tm;
+
+	sparams.run_type = SPH_RUN_PREHYDRO;
+	tm.reset();
+	tm.start();
+	sph_run(sparams, true);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_PREHYDRO): tm = %e\n", tm.read());
+	tm.reset();
+
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
@@ -261,6 +271,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
+
+
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 
 	if (stars && minrung <= 1) {

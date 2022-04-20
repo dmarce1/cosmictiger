@@ -110,7 +110,8 @@ struct sph_run_cuda_data {
 #define AUX_BLOCK_SIZE 96
 #define MAX_RUNG_DIF 1
 #define SPH_SMOOTHLEN_TOLER float(5.0e-5)
-#define SMOOTHLEN_BLOCK_SIZE 128
+#define SMOOTHLEN_BLOCK_SIZE 160
+#define PREHYDRO_BLOCK_SIZE 64
 #define HYDRO_BLOCK_SIZE 32
 
 struct sph_reduction {
@@ -127,6 +128,7 @@ struct sph_reduction {
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);
 __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);

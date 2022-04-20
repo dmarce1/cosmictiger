@@ -65,7 +65,7 @@ inline float dWdq0(float q) {
 	if (q == 0.0f) {
 		return 0.f;
 	} else {
-		float tmp, s, c;
+		float tmp, s;
 		s = sinf(x);
 		if (x < float(0.25f)) {
 			tmp = (float(-1. / 3.) + float(1. / 30.) * sqr(x)) * sqr(x) * x;
@@ -105,7 +105,7 @@ inline float dkernelW_dq(float q, float* w = nullptr, int* flops = nullptr) {
 		}
 		return 0.f;
 	} else {
-		float tmp, s, c;
+		float tmp, s;
 		s = sinf(x);																			// 8
 		if (x < float(0.25f)) {																// 1
 			const float x2 = sqr(x);														// 2

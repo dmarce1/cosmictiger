@@ -32,6 +32,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->max_rung_hydro = 0;
 	reduce->max_rung = 0;
 	static int smoothlen_nblocks;
+	static int prehydro_nblocks;
 	static int aux_nblocks;
 	static int hydro_nblocks;
 	static int rungs_nblocks;
@@ -43,13 +44,15 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		first = false;
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&aux_nblocks, (const void*) sph_cuda_aux, AUX_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&prehydro_nblocks, (const void*) sph_cuda_prehydro, PREHYDRO_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&conduction_nblocks, (const void*) sph_cuda_conduction, CONDUCTION_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cond_init_nblocks, (const void*) sph_cuda_cond_init, COND_INIT_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (const void*) sph_cuda_rungs, RUNGS_BLOCK_SIZE, 0));
-		PRINT("%i %i %i %i %i %i\n", smoothlen_nblocks, aux_nblocks, hydro_nblocks, rungs_nblocks, cond_init_nblocks, conduction_nblocks);
+		PRINT("%i %i %i %i %i %i\n", smoothlen_nblocks, prehydro_nblocks, aux_nblocks, hydro_nblocks, rungs_nblocks, cond_init_nblocks, conduction_nblocks);
 		aux_nblocks *= 2 * cuda_smp_count();
 		smoothlen_nblocks *= 2 * cuda_smp_count();
+		prehydro_nblocks *= 2 * cuda_smp_count();
 		hydro_nblocks *= 2 * cuda_smp_count();
 		conduction_nblocks *= 2 * cuda_smp_count();
 		cond_init_nblocks *= 2 * cuda_smp_count();
@@ -59,6 +62,14 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	switch (params.run_type) {
 	case SPH_RUN_SMOOTHLEN: {
 		sph_cuda_smoothlen<<<smoothlen_nblocks, SMOOTHLEN_BLOCK_SIZE,0,stream>>>(params,data,reduce);
+		cuda_stream_synchronize(stream);
+		rc.rc = reduce->flag;
+		rc.hmin = reduce->hmin;
+		rc.hmax = reduce->hmax;
+	}
+	break;
+	case SPH_RUN_PREHYDRO: {
+		sph_cuda_prehydro<<<prehydro_nblocks, PREHYDRO_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
 		rc.rc = reduce->flag;
 		rc.hmin = reduce->hmin;
