@@ -391,6 +391,10 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_da, new_capacity, true);
 		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_fp1, new_capacity, true);
+		sph_particles_array_resize(sph_particles_fp2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_p, new_capacity, true);
+		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
 			sph_particles_array_resize(sph_particles_g[dim], new_capacity, true);

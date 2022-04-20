@@ -115,7 +115,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float vx_i = data.vx[i];
 				const float vy_i = data.vy[i];
 				const float vz_i = data.vz[i];
-				const float fpre_i = data.rec1_snk[snki].fpre1;
+				const float fpre_i = data.fpre1_snk[snki];
 				const float hinv = 1.f / h;                               // 4
 				const float h2 = sqr(h);                                  // 1
 				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));    // 2
@@ -239,7 +239,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					curl_vy = -dvz_dx + dvx_dz;                              // 2
 					curl_vz = dvy_dx - dvx_dy;
 					const float h_i = data.rec1_snk[snki].h;
-					const float pre_i = data.rec1_snk[snki].pre;
+					const float pre_i = data.pre_snk[snki];
 					const float A_i = data.rec2_snk[snki].A;
 					const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - invgamma) * powf(A_i, invgamma));  // 15
 					vsig += c_i;																								   // 1
@@ -266,7 +266,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv;                       // 3
 					const float dthydro = params.cfl * params.a * h_i / vsig;                              // 6
 					const float lambda1 = 1.f / dthydro;                                                   // 4
-					float dalpha_dt;
 					if (alpha < limiter * alpha_targ) {                                                    // 2
 						data.rec1_snk[snki].alpha = (limiter * alpha_targ);                                 // 1
 						flops++;

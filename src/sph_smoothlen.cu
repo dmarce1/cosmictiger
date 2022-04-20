@@ -512,10 +512,10 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					shear_xz = 0.5f * (dvx_dz + dvz_dx);                     // 2
 					shear_yz = 0.5f * (dvy_dz + dvz_dy);                     // 2
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz))); // 16
-					data.rec1_snk[snki].shearv = shearv;
-					data.rec1_snk[snki].fpre1 = fpre;
-					data.rec1_snk[snki].fpre2 = dpdh;
-					data.rec1_snk[snki].pre = pre;
+					data.shear_snk[snki] = shearv;
+					data.fpre1_snk[snki] = fpre;
+					data.fpre2_snk[snki] = dpdh;
+					data.pre_snk[snki] = pre;
 				}
 			}
 		}

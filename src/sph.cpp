@@ -847,6 +847,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.dm_index_snk = &sph_particles_dm_index(0);
 	cuda_data.sa_snk = &sph_particles_semiactive(0);
 	cuda_data.rungs_snk = &particles_rung(0);
+
+	cuda_data.fpre1_snk = &sph_particles_fpre1(0);
+	cuda_data.fpre2_snk = &sph_particles_fpre2(0);
+	cuda_data.pre_snk = &sph_particles_pre(0);
+	cuda_data.shear_snk = &sph_particles_shear(0);
+
 	cuda_data.rec1_snk = &sph_particles_rec1(0);
 	cuda_data.rec3_snk = &sph_particles_rec3(0);
 	cuda_data.rec2_snk = &sph_particles_rec2(0);

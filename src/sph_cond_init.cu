@@ -139,7 +139,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				float gradx = 0.0f;
 				float grady = 0.0f;
 				float gradz = 0.0f;
-				const float fpre_i = data.rec1_snk[snki].fpre1;
+				const float fpre_i = data.fpre1_snk[snki];
 				flops += 11;
 				for (int j = tid; j < ws.rec1.size(); j += COND_INIT_BLOCK_SIZE) {
 					const auto& rec1 = ws.rec1[j];
