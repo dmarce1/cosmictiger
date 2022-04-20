@@ -104,7 +104,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 				if( make_star ) {
 					sph_particles_cold_mass(i) = 0.f;
 					sph_particles_dcold_mass(i) = 0.f;
-					if(gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
+					if(false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
 						PRINT( "SUPERNOVA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 						float& H = sph_particles_H(i);
 						float& Hp = sph_particles_Hp(i);

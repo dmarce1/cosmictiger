@@ -302,17 +302,14 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_r1[i], sph_particles_r1[j]);
 	std::swap(sph_particles_r2[i], sph_particles_r2[j]);
 	std::swap(sph_particles_r3[i], sph_particles_r3[j]);
-	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
 	std::swap(sph_particles_r6[i], sph_particles_r6[j]);
-	std::swap(sph_particles_kap[i], sph_particles_kap[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 }
 
 void sph_particles_swap2(part_int i, part_int j) {
 	sph_particles_swap(i, j);
 	std::swap(sph_particles_dentr(i), sph_particles_dentr(j));
-	std::swap(sph_particles_dcold_mass(i), sph_particles_dcold_mass(j));
-	std::swap(sph_particles_dchem(i), sph_particles_dchem(j));
+	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_dvel(dim, i), sph_particles_dvel(dim, j));
 	}

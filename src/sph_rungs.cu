@@ -44,7 +44,6 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 	int changes = 0;
 	while (index < data.nselfs) {
 		__syncthreads();
-		int flops = 0;
 		ws.x.resize(0);
 		ws.y.resize(0);
 		ws.z.resize(0);

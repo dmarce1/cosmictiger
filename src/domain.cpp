@@ -23,6 +23,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/options.hpp>
 
@@ -30,6 +31,7 @@ constexpr bool verbose = true;
 #include <shared_mutex>
 
 void domains_transmit_particles(vector<particle>);
+void domains_transmit_sph_particles(vector<sph_particle>);
 void domains_init_rebounds();
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes);
 void domains_rebound_sort(vector<double> bounds, int depth);
@@ -354,7 +356,6 @@ void domains_begin() {
 						auto& send = sends[rank];
 						send.push_back(particles_get_particle(i));
 						if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-//							PRINT( "%i sending %i to %i\n", hpx_rank(), send.size(), rank);
 							futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 						}
 						my_free_indices.push_back(i);
@@ -364,7 +365,6 @@ void domains_begin() {
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
-  //             PRINT( "--1  %i sending %i to %i\n", hpx_rank(), i->second.size(), i->first);
 					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 				}
 			}

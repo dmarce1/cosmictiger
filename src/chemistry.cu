@@ -631,6 +631,7 @@ double cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 	tm.stop();
 //	PRINT("CHEM GFLOPS = %e\n", *flops / 1024.0 / 1024.0 / 1024.0 / tm.read());
 	CUDA_CHECK(cudaMemcpyAsync(chems.data(), dev_chems, sizeof(chem_attribs) * chems.size(), cudaMemcpyDeviceToHost, stream));
+	auto rflops = *flops;
 	CUDA_CHECK(cudaFree(flops));
 	CUDA_CHECK(cudaFree(index));
 	cuda_stream_synchronize(stream);
@@ -645,7 +646,7 @@ double cuda_chemistry_step(vector<chem_attribs>& chems, float scale) {
 			//		PRINT("C%i = %e\n", i, cooling_totals[i] / ctot);
 		}
 	}
-	return *flops;
+	return rflops;
 }
 
 void test_cuda_chemistry_kernel() {
