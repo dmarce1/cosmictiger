@@ -17,10 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
-
 #include <cosmictiger/sph_cuda.hpp>
-
 
 struct cond_init_record1 {
 	fixed32 x;
@@ -33,10 +30,10 @@ struct cond_init_record2 {
 	float cfrac;
 };
 
-
 struct cond_init_workspace {
 	device_vector<cond_init_record1> rec1;
 	device_vector<cond_init_record2> rec2;
+	device_vector<int> neighbors;
 };
 
 __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
@@ -88,7 +85,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					}
 				}
 				j = contains;
-				compute_indices<COND_INIT_BLOCK_SIZE>(j, total);
+				compute_indices < COND_INIT_BLOCK_SIZE > (j, total);
 				const int offset = ws.rec1.size();
 				__syncthreads();
 				const int next_size = offset + total;
@@ -141,9 +138,43 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				float gradz = 0.0f;
 				const float fpre_i = data.fpre1_snk[snki];
 				flops += 11;
-				for (int j = tid; j < ws.rec1.size(); j += COND_INIT_BLOCK_SIZE) {
-					const auto& rec1 = ws.rec1[j];
-					const auto& rec2 = ws.rec2[j];
+				ws.neighbors.resize(0);
+				const float jmax = round_up(ws.rec1.size(), block_size);
+				for (int j = tid; j < jmax; j += block_size) {
+					int k;
+					int total;
+					bool use = false;
+					if (j < ws.rec1.size()) {
+						const auto rec1 = ws.rec1[j];
+						const fixed32 x_j = rec1.x;
+						const fixed32 y_j = rec1.y;
+						const fixed32 z_j = rec1.z;
+						const float h_j = rec1.h;
+						const float x_ij = distance(x_i, x_j);				// 1
+						const float y_ij = distance(y_i, y_j);				// 1
+						const float z_ij = distance(z_i, z_j);				// 1
+						const float r2 = sqr(x_ij, y_ij, z_ij);			// 5
+						if (r2 < fmaxf(sqr(h_i), sqr(h_j))) {				// 4
+							use = true;
+						}
+						flops += 12;
+					}
+					k = use;
+					compute_indices < COND_INIT_BLOCK_SIZE > (k, total);
+					const int offset = ws.neighbors.size();
+					__syncthreads();
+					const int next_size = offset + total;
+					ws.neighbors.resize(next_size);
+					if (use) {
+						const int l = offset + k;
+						ws.neighbors[l] = j;
+					}
+				}
+				__syncthreads();
+				for (int j = tid; j < ws.neighbors.size(); j += COND_INIT_BLOCK_SIZE) {
+					const int kk = ws.neighbors[j];
+					const auto& rec1 = ws.rec1[kk];
+					const auto& rec2 = ws.rec2[kk];
 					const float A_j = rec2.entr;
 					const float cfrac_j = rec2.cfrac;
 					ALWAYS_ASSERT(cfrac_j <= 1.0f);

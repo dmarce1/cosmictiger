@@ -34,6 +34,7 @@ struct conduction_record2 {
 };
 
 struct conduction_workspace {
+	device_vector<int> neighbors;
 	device_vector<conduction_record1> rec1;
 	device_vector<conduction_record2> rec2;
 };
@@ -126,11 +127,47 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 			const bool semiactive = !active && data.sa_snk[snki];
 			const bool converged = data.converged_snk[snki];
 			if ((active || semiactive) && !converged) {
+
+				ws.neighbors.resize(0);
+				const float jmax = round_up(ws.rec1.size(), block_size);
 				const auto x_i = data.x[i];
 				const auto y_i = data.y[i];
 				const auto z_i = data.z[i];
 				const float h_i = data.h[i];
 				const float A_i = data.entr[i];
+				for (int j = tid; j < jmax; j += block_size) {
+					int k;
+					int total;
+					bool use = false;
+					if (j < ws.rec1.size()) {
+						const auto rec1 = ws.rec1[j];
+						const fixed32 x_j = rec1.x;
+						const fixed32 y_j = rec1.y;
+						const fixed32 z_j = rec1.z;
+						const auto rung_j = rec1.rung;
+						const float h_j = rec1.h;
+						const float x_ij = distance(x_i, x_j);				// 1
+						const float y_ij = distance(y_i, y_j);				// 1
+						const float z_ij = distance(z_i, z_j);				// 1
+						const float r2 = sqr(x_ij, y_ij, z_ij);			// 5
+						if (r2 < fmaxf(sqr(h_i), sqr(h_j)) && r2 > 0.f) {				// 4
+							use = active || rung_j >= params.min_rung;
+						}
+						flops += 12;
+					}
+					k = use;
+					compute_indices < CONDUCTION_BLOCK_SIZE > (k, total);
+					const int offset = ws.neighbors.size();
+					__syncthreads();
+					const int next_size = offset + total;
+					ws.neighbors.resize(next_size);
+					if (use) {
+						const int l = offset + k;
+						ws.neighbors[l] = j;
+					}
+				}
+				__syncthreads();
+
 				float cfrac_i;
 				if (params.stars) {
 					cfrac_i = data.cold_frac[i];
@@ -152,9 +189,10 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				float den = 0.f;
 				float num = 0.f;
 				flops += 28;
-				for (int j = tid; j < ws.rec1.size(); j += block_size) {
-					const auto& rec1 = ws.rec1[j];
-					const auto& rec2 = ws.rec2[j];
+				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
+					const int kk = ws.neighbors[j];
+					const auto& rec1 = ws.rec1[kk];
+					const auto& rec2 = ws.rec2[kk];
 					const fixed32 x_j = rec1.x;
 					const fixed32 y_j = rec1.y;
 					const fixed32 z_j = rec1.z;
@@ -172,27 +210,25 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float rinv = 1.f / r;						// 4
 						const float q_i = r * hinv_i;						// 1
 						flops += 10;
-						if (r2 > 0.f && (active || rung_j >= params.min_rung)) {						// 1
-							const float fpre_j = rec2.fpre;
-							const float kappa_j = rec2.kappa;
-							const float cfrac_j = rec2.cfrac;
-							const float hfrac_j = 1.f - cfrac_j;													// 1
-							const float hinv_j = 1.f / h_j;															// 4
-							const float h3inv_j = sqr(hinv_j) * hinv_j;											// 2
-							const float rho_j = m * c0 * h3inv_j;													// 2
-							const float q_j = r * hinv_j;																// 1
-							float w;
-							const float dWdr_i = fpre_i * dkernelW_dq(q_i, &w, &flops) * h3inv_i * hinv_i;																// 3
-							const float dWdr_j = fpre_j * dkernelW_dq(q_j, &w, &flops) * h3inv_j * hinv_j;																// 3
-							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);										// 22
-							const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
-							const float dt_j = rung_dt[rung_j] * params.t0;										// 2
-							const float dt_ij = fminf(dt_i, dt_j);													// 2
-							const float D_ij = cons * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv; // 10
-							num = fmaf(D_ij, A_j * powf(rho_j * hfrac_j * rhohinv_i, gamma0 - 1.f), num); // 14
-							den += D_ij;																					// 1
-							flops += 69;
-						}
+						const float fpre_j = rec2.fpre;
+						const float kappa_j = rec2.kappa;
+						const float cfrac_j = rec2.cfrac;
+						const float hfrac_j = 1.f - cfrac_j;													// 1
+						const float hinv_j = 1.f / h_j;															// 4
+						const float h3inv_j = sqr(hinv_j) * hinv_j;											// 2
+						const float rho_j = m * c0 * h3inv_j;													// 2
+						const float q_j = r * hinv_j;																// 1
+						float w;
+						const float dWdr_i = fpre_i * dkernelW_dq(q_i, &w, &flops) * h3inv_i * hinv_i;																// 3
+						const float dWdr_j = fpre_j * dkernelW_dq(q_j, &w, &flops) * h3inv_j * hinv_j;																// 3
+						const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);										// 22
+						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
+						const float dt_j = rung_dt[rung_j] * params.t0;										// 2
+						const float dt_ij = fminf(dt_i, dt_j);													// 2
+						const float D_ij = cons * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv; // 10
+						num = fmaf(D_ij, A_j * powf(rho_j * hfrac_j * rhohinv_i, gamma0 - 1.f), num); // 14
+						den += D_ij;																					// 1
+						flops += 69;
 					}
 				}
 				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(num); //31
