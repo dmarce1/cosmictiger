@@ -53,6 +53,18 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 	__syncthreads();
 	new (&ws) prehydro_workspace();
 	array<fixed32, NDIM> x;
+
+	const float gamma0 = data.def_gamma;
+	const float code_to_energy = sqr(params.code_to_cm) / sqr(params.code_to_s);									// 5
+	const float code_to_density = params.code_to_g / pow(params.code_to_cm, 3.);									// 12
+	const float colog0 = log(1.5 * pow(constants::kb, 1.5) * pow(constants::e, -3) * pow(M_PI, -0.5));    // 35
+	const float kappa0 = 20.0 * pow(2.0 / M_PI, 1.5) * pow(constants::kb, 2.5) * pow(constants::me, -0.5) * pow(constants::e, -4.0) * params.code_to_s
+			* params.code_to_cm / (params.code_to_g * constants::avo);													// 49
+	const float propc0 = 0.4 * (gamma0 - 1.0) * sqrtf(2.0 * constants::kb / (M_PI * constants::me)) / constants::c; // 17
+	const float cv0 = constants::kb / (gamma0 - 1.0f);																		// 5
+	const float invgm1 = 1.f / (gamma0 - 1.0);
+	const float c0 = float(3.0f / (4.0f * M_PI)) * data.N;					// 1
+
 	while (index < data.nselfs) {
 
 		int flops = 0;
@@ -127,7 +139,6 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const bool active = data.rungs_snk[data.dm_index_snk[snki]] >= params.min_rung;
-			int semiactive = 0;
 			x[XDIM] = data.x[i];
 			x[YDIM] = data.y[i];
 			x[ZDIM] = data.z[i];
@@ -137,6 +148,7 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 			const float& h_i = data.rec2_snk[snki].h;
 			const float hinv_i = 1.f / h_i; 										// 4
 			const float h2_i = sqr(h_i);    										// 1
+			int semiactive = 0;
 			if (active) {
 				if (tid == 0) {
 					data.sa_snk[snki] = true;
@@ -148,11 +160,10 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				}
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
-						const auto& rec1 = ws.rec1[j];
-						const auto& x_j = rec1.x;
-						const auto& y_j = rec1.y;
-						const auto& z_j = rec1.z;
-						const auto& h_j = rec1.h;
+						const auto x_j = ws.rec1[j].x;
+						const auto y_j = ws.rec1[j].y;
+						const auto z_j = ws.rec1[j].z;
+						const auto h_j = ws.rec1[j].h;
 						const auto h2_j = sqr(h_j);									// 1
 						const float x_ij = distance(x_i, x_j);						// 1
 						const float y_ij = distance(y_i, y_j);						// 1
@@ -163,15 +174,13 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 						}
 						flops += 11;
 					}
-					shared_reduce_add<int, PREHYDRO_BLOCK_SIZE>(semiactive);
+					shared_reduce_add<int, PREHYDRO_BLOCK_SIZE> (semiactive);
 					if (semiactive) {
-						if (tid == 0) {
-							data.sa_snk[snki] = true;
-						}
 						break;
 					}
 				}
 			}
+			__syncthreads();
 			if (active || semiactive) {
 				float drho_dh;
 				const float vx_i = data.vx[i];
@@ -233,13 +242,26 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				}
 				shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(drho_dh);
 				flops += (PREHYDRO_BLOCK_SIZE - 1);
-				const float m = data.m;
+				const float& m = data.m;
 				drho_dh *= 0.33333333333f / rhoh30;								// 5
 				const float fpre = 1.0f / drho_dh;								// 4
 				__syncthreads();
 				const float h3inv_i = hinv_i * sqr(hinv_i);					// 2
 				const float h4inv_i = h3inv_i * hinv_i;						// 1
+				const float rho_i = m * c0 * h3inv_i;
+				float cfrac_i;
+				if (params.stars) {
+					cfrac_i = data.cold_frac[i];
+				} else {
+					cfrac_i = 0.f;
+				}
+				const float hfrac_i = 1.f - cfrac_i;									// 1
+				const float& A_i = data.rec2_snk[snki].A;
+				const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);		// 11
 				flops += 16;
+				float gradx = 0.f;
+				float grady = 0.f;
+				float gradz = 0.f;
 				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
 					const int kk = ws.neighbors[j];
 					const auto& rec1 = ws.rec1[kk];
@@ -247,6 +269,7 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					const fixed32& x_j = rec1.x;
 					const fixed32& y_j = rec1.y;
 					const fixed32& z_j = rec1.z;
+					const float& h_j = rec1.h;
 					const float& vx_j = rec2.vx;
 					const float& vy_j = rec2.vy;
 					const float& vz_j = rec2.vz;
@@ -282,6 +305,51 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					dvx_dz -= vx_ij * dWdr_i_z; // 2
 					dvy_dz -= vy_ij * dWdr_i_z; // 2
 					dvz_dz -= vz_ij * dWdr_i_z; // 2
+					if (params.conduction) {
+						const float hinv_j = 1.f / h_j;
+						const float h3inv_j = sqr(hinv_j) * hinv_j;	// 2
+						const float rho_j = m * c0 * h3inv_j;			// 2
+						const float ene_j = A_j * powf(rho_j * fh_j, gamma0 - 1.0f); // 11
+						const float tmp = dWdr_i  * logf(ene_j / ene_i); // 14
+						gradx = fmaf(tmp, x_ij, gradx);					// 2
+						grady = fmaf(tmp, y_ij, grady);					// 2
+						gradz = fmaf(tmp, z_ij, gradz);					// 2
+					}
+					flops += 68;
+				}
+				if (params.conduction) {
+					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(gradx); //31
+					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(grady); //31
+					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(gradz); //31
+					for (int j = tid; j < ws.neighbors.size(); j += block_size) {
+						const auto& frac_i = data.rec1_snk[snki].frac;
+						const float& cfrac_i = data.cold_mass_snk[snki];
+						const float& H = frac_i[CHEM_H];
+						const float& Hp = frac_i[CHEM_HP];
+						const float& Hn = frac_i[CHEM_HN];
+						const float& H2 = frac_i[CHEM_H2];
+						const float& He = frac_i[CHEM_HE];
+						const float& Hep = frac_i[CHEM_HEP];
+						const float& Hepp = frac_i[CHEM_HEPP];
+						const float grad2 = sqr(gradx, grady, gradz);	// 5
+						const float gradToT = sqrtf(grad2);					// 4
+						const float hfrac_i = 1.f - cfrac_i;				// 1
+						const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a); // 7
+						float n0 = (H + fmaf(2.f, Hp, fmaf(.5f, H2, fmaf(.25f, He, fmaf(.5f, Hep, .75f * Hepp))))); // 10
+						const float mmw_i = 1.0f / n0;						// 4
+						const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density), 1e-30f);						// 8
+						const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) * invgm1; // 13
+						const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
+						const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
+						float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
+						const float sigmax_i = propc0 * sqrtf(T_i);      // 5
+						const float R = 2.f * mmw_i * kappa_i * gradToT / (rho_i * sigmax_i); // 7
+						const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R)); // 11
+						kappa_i *= phi;											 // 1
+						ALWAYS_ASSERT(isfinite(kappa_i));
+						data.kap_snk[snki] = kappa_i;
+						data.entr0_snk[snki] = A_i;
+					}
 					flops += 68;
 				}
 				shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(dpdh);       // 127

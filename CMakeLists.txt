@@ -88,10 +88,8 @@ set(cosmictiger_source_files
     src/sph.cpp
     src/sph.cu
     src/sph_aux.cu
-    src/sph_cond_init.cu
     src/sph_smoothlen.cu
     src/sph_prehydro.cu
-    src/sph_conduction.cu
     src/sph_hydro.cu
     src/sph_rungs.cu
     src/sphere.cu

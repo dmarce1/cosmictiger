@@ -36,6 +36,7 @@ struct hydro_record2 {
 	float fpre2;
 	float pre;
 	float shearv;
+	float kappa;
 	float cold_frac;
 };
 
@@ -127,6 +128,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (params.diffusion) {
 						ws.rec2[k].shearv = data.shearv[pi];
 					}
+					if (params.conduction) {
+						ws.rec2[k].kappa = data.kappa[pi];
+					}
 					if (params.stars) {
 						ws.rec2[k].cold_frac = data.cold_frac[pi];
 					} else {
@@ -163,6 +167,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto& vz_i = data.vz[i];
 				const float& h_i = data.h[i];
 				const float& A_i = data.entr[i];
+				float kappa_i = 0.f;
+				if (params.conduction) {
+					kappa_i = data.kappa[i];
+				}
 				const float& alpha_i = data.alpha[i];
 				const float hinv_i = 1.f / h_i;												// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 3
@@ -200,7 +208,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float dtinv_cfl = 0.f;
 //				float one = 0.0f;
 				const float& adot = params.adot;
-				float D = 0.f;
 				ws.neighbors.resize(0);
 				const float jmax = round_up(ws.rec1.size(), block_size);
 				for (int j = tid; j < jmax; j += block_size) {
@@ -242,6 +249,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const fixed32& x_j = rec1.x;
 					const fixed32& y_j = rec1.y;
 					const fixed32& z_j = rec1.z;
+					const float& kappa_j = rec2.kappa;
 					const float& cfrac_j = rec2.cold_frac;
 					const float& shearv_j = rec2.shearv;
 					const auto& frac_j = rec2.chem;
@@ -319,7 +327,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float difco_ij = 0.5f * (difco_i + difco_j);							// 2
 						const float phi = r2 / (r2 + ETA * h_ij);
 						const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
-						D += D_ij;																				// 1
 						de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j * hfracinv_i * rhoinv_i, gamma0 - 1.f)); // 16;
 						if (params.stars) {
 							dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
@@ -332,8 +339,15 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							}
 						}
 					}
+					if (params.conduction) {
+						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
+						const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * rinv; // 10
+						de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j * hfracinv_i * rhoinv_i, gamma0 - 1.f));
+					}
 				}
+				float dtinv_d = 0.f;
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt); // 31
+				dtinv_d = fmaxf(-de_dt, 0.0f) / A_i;
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ax);    // 31
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);    // 31
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);    // 31
@@ -343,9 +357,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					flops += 5 * (HYDRO_BLOCK_SIZE - 1);
 				}
 				if (params.diffusion) {
-					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(D);
 					if (params.stars) {
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dcm_dt); //31
+						dtinv_d = fmaxf(dtinv_d, fmaxf(-dcm_dt, 0.f) / cfrac_i);
 						if (tid == 0) {
 							flops += (HYDRO_BLOCK_SIZE - 1);
 						}
@@ -353,6 +367,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dfrac_dt[fi]); // 31
+							dtinv_d = fmaxf(dtinv_d, fmaxf(-dfrac_dt[fi], 0.0f) / frac_i[fi]);
 							if (tid == 0) {
 								flops += (HYDRO_BLOCK_SIZE - 1);
 							}
@@ -389,27 +404,17 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (data.chemistry) {
 						data.rec5_snk[snki].dfrac = dfrac_dt;
 					}
-//					const float div_v = data.rec3_snk[snki].divv;
-//					const float dtinv_divv = params.a * fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);
-					float dtinv_hydro1 = 1.0e-30f;
-//					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);							// 1
-					if (params.diffusion) {
-						const float dtinv_diff = params.a * D * (1.f / 3.f);
-						if (dtinv_hydro1 < dtinv_diff) {
-							dtinv_hydro1 = dtinv_diff;
-						}
-					}
 					const float a2 = sqr(ax, ay, az);											// 5
 					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);						// 9
-					float dthydro = params.cfl * params.a / (dtinv_hydro1 + 1e-30f);	// 6
+					float dthydro = params.cfl * params.a / dtinv_cfl;	// 6
+					dthydro = fminf(dthydro, 0.99f / dtinv_d);
 					dthydro = fminf(data.eta * sqrtf(params.a) / (dtinv_acc + 1e-30f), dthydro);	// 11
 					const float g2 = sqr(gx_i, gy_i, gz_i);									// 5
 					const float dtinv_grav = sqrtf(sqrtf(g2));								// 8
 					float dtgrav = data.eta * sqrtf(params.a * data.gsoft) / (dtinv_grav + 1e-30f); // 11
 					dthydro = fminf(dthydro, params.max_dt);									// 1
 					dtgrav = fminf(dtgrav, params.max_dt);										// 1
-					total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);			// 2
+					total_vsig_max = fmaxf(total_vsig_max, dtinv_cfl * h_i);			// 2
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					const float last_dt = rung_dt[rung] * params.t0;						// 1
 					data.oldrung_snk[snki] = rung;

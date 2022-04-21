@@ -36,8 +36,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	static int aux_nblocks;
 	static int hydro_nblocks;
 	static int rungs_nblocks;
-	static int cond_init_nblocks;
-	static int conduction_nblocks;
 	static bool first = true;
 	timer tm;
 	if (first) {
@@ -46,16 +44,12 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&smoothlen_nblocks, (const void*) sph_cuda_smoothlen, SMOOTHLEN_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&prehydro_nblocks, (const void*) sph_cuda_prehydro, PREHYDRO_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (const void*) sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&conduction_nblocks, (const void*) sph_cuda_conduction, CONDUCTION_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cond_init_nblocks, (const void*) sph_cuda_cond_init, COND_INIT_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (const void*) sph_cuda_rungs, RUNGS_BLOCK_SIZE, 0));
-		PRINT("%i %i %i %i %i %i\n", smoothlen_nblocks, prehydro_nblocks, aux_nblocks, hydro_nblocks, rungs_nblocks, cond_init_nblocks, conduction_nblocks);
+		PRINT("%i %i %i %i\n", smoothlen_nblocks, prehydro_nblocks, aux_nblocks, hydro_nblocks, rungs_nblocks);
 		aux_nblocks *= cuda_smp_count();
 		smoothlen_nblocks *= cuda_smp_count();
 		prehydro_nblocks *= cuda_smp_count();
 		hydro_nblocks *= cuda_smp_count();
-		conduction_nblocks *= cuda_smp_count();
-		cond_init_nblocks *= cuda_smp_count();
 		rungs_nblocks *= cuda_smp_count();
 	}
 	tm.start();
@@ -80,16 +74,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
 		rc.max_rung = reduce->max_rung;
-	}
-	break;
-	case SPH_RUN_COND_INIT: {
-		sph_cuda_cond_init<<<cond_init_nblocks, COND_INIT_BLOCK_SIZE,0,stream>>>(params,data,reduce);
-		cuda_stream_synchronize(stream);
-	}
-	break;
-	case SPH_RUN_CONDUCTION: {
-		sph_cuda_conduction<<<conduction_nblocks, CONDUCTION_BLOCK_SIZE,0,stream>>>(params,data,reduce);
-		cuda_stream_synchronize(stream);
 	}
 	break;
 	case SPH_RUN_RUNGS: {
