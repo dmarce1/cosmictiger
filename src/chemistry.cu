@@ -509,21 +509,9 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			float hot_mass = 1.f - attr.cold_mass;
 			float hotmass0 = hot_mass;
 			float factor = expf(-fminf(dt / tcool, 1.f));
-			//		PRINT( "%e\n", factor);
-			//	__trap();
 			hot_mass *= factor;
 			float cold_mass0 = attr.cold_mass;
 			attr.cold_mass = 1.f - hot_mass;
-			if (hot_mass < -1e-5f || hot_mass > 1.0 + 1e-5f || attr.cold_mass < -1e-5f || attr.cold_mass > 1.f + 1.e-5f) {
-				PRINT("cold mass error --------- %e %e %e %e %e %e %e %e\n", T0, hot_mass, hotmass0, attr.cold_mass, cold_mass0, factor, dt / tcool, eint);
-				__trap();
-			}
-			if (hot_mass < 5.0e-6f) {
-				attr.cold_mass = 1.f - 5e-6f;
-			} else if (attr.cold_mass < 0.f) {
-				attr.cold_mass = 0.f;
-			}
-			//	attr.eint *= factor;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
 			N.Hp *= (double) rhoavoinv;																										// 1

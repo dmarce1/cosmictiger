@@ -42,12 +42,12 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
-	const auto func = [dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
+	const float sph_mass = get_options().sph_mass;
+	const auto func = [sph_mass,dt, scale, tau0, tau1, tau_max, &next](int proc, int nthreads) {
 		const bool sph = get_options().sph;
 		const bool chem = get_options().chem;
 		const bool stars = get_options().stars;
 		const float dm_mass = get_options().dm_mass;
-		const float sph_mass = get_options().sph_mass;
 		vector<lc_particle> this_part_buffer;
 		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
@@ -60,6 +60,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		this_dr.nmapped = 0;
 		this_dr.therm = 0.0;
 		this_dr.vol = 0.0;
+		this_dr.cold_mass = 0.0;
 		part_int begin = (size_t) proc * particles_size() / nthreads;
 		part_int end = (size_t) (proc+1) * particles_size() / nthreads;
 #ifdef USE_CUDA
@@ -126,7 +127,6 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					this_dr.therm += e * a2inv;
 					this_dr.vol += vol;
 					if( stars ) {
-						this_dr.sph_mass += sph_mass;
 						this_dr.cold_mass += sph_mass * sph_particles_cold_mass(j);
 					}
 				}
@@ -177,13 +177,13 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		dr.therm += this_dr.therm;
 		dr.vol += this_dr.vol;
 		dr.cold_mass += this_dr.cold_mass;
-		dr.sph_mass += this_dr.sph_mass;
 	}
 	tm.stop();
 	profiler_exit();
 	if (hpx_rank() == 0 && get_options().stars && dr.cold_mass) {
+		const double baryon_mass = sph_mass * pow(get_options().parts_dim, NDIM);
 		FILE* fp = fopen("coldmass.txt", "at");
-		fprintf(fp, "%e %e\n", 1.0 / scale - 1.0, dr.cold_mass / dr.sph_mass);
+		fprintf(fp, "%e %e\n", 1.0 / scale - 1.0, dr.cold_mass / baryon_mass);
 		fclose(fp);
 	}
 //	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
