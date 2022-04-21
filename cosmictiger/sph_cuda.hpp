@@ -108,17 +108,19 @@ struct sph_run_cuda_data {
 	float eta;
 };
 
-
-#define SPH_DIFFUSION_C 0.03f
-#define COND_INIT_BLOCK_SIZE 64
-#define CONDUCTION_BLOCK_SIZE 64
-#define RUNGS_BLOCK_SIZE 256
-#define AUX_BLOCK_SIZE 96
-#define MAX_RUNG_DIF 1
-#define SPH_SMOOTHLEN_TOLER float(5.0e-5)
 #define SMOOTHLEN_BLOCK_SIZE 160
 #define PREHYDRO_BLOCK_SIZE 64
-#define HYDRO_BLOCK_SIZE 32
+#define HYDRO_BLOCK_SIZE 96
+#define AUX_BLOCK_SIZE 64
+#define RUNGS_BLOCK_SIZE 256
+
+#define COND_INIT_BLOCK_SIZE 32
+#define CONDUCTION_BLOCK_SIZE 32
+
+
+#define SPH_DIFFUSION_C 0.03f
+#define MAX_RUNG_DIF 1
+#define SPH_SMOOTHLEN_TOLER float(5.0e-5)
 
 struct sph_reduction {
 	int counter;

@@ -145,26 +145,25 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			int rung_i = data.rungs_snk[data.dm_index_snk[snki]];
 			bool use = rung_i >= params.min_rung;
-			const float m = data.m;
+			const float& m = data.m;
 			const float minv = 1.f / m;
 			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
 			const float c0inv = 1.0f / c0;
 			if (use) {
 				float difco_i;
 				float cfrac_i;
-				const auto x_i = data.x[i];
-				const auto y_i = data.y[i];
-				const auto z_i = data.z[i];
-				const float pre_i = data.pre[i];
-				const float fpre1_i = data.fpre1[i];
-				const float fpre2_i = data.fpre2[i];
-				const auto vx_i = data.vx[i];
-				const auto vy_i = data.vy[i];
-				const auto vz_i = data.vz[i];
-				const float h_i = data.h[i];
-				const float A_i = data.entr[i];
-				const float alpha_i = data.alpha[i];
-				const float h2_i = sqr(h_i);
+				const auto& x_i = data.x[i];
+				const auto& y_i = data.y[i];
+				const auto& z_i = data.z[i];
+				const float& pre_i = data.pre[i];
+				const float& fpre1_i = data.fpre1[i];
+				const float& fpre2_i = data.fpre2[i];
+				const auto& vx_i = data.vx[i];
+				const auto& vy_i = data.vy[i];
+				const auto& vz_i = data.vz[i];
+				const float& h_i = data.h[i];
+				const float& A_i = data.entr[i];
+				const float& alpha_i = data.alpha[i];
 				const float hinv_i = 1.f / h_i;												// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 3
 				const float rho_i = m * c0 * h3inv_i;										// 2
@@ -209,11 +208,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					int total;
 					bool use = false;
 					if (j < ws.rec1.size()) {
-						const auto rec1 = ws.rec1[j];
-						const fixed32 x_j = rec1.x;
-						const fixed32 y_j = rec1.y;
-						const fixed32 z_j = rec1.z;
-						const float h_j = rec1.h;
+						const auto& rec1 = ws.rec1[j];
+						const fixed32& x_j = rec1.x;
+						const fixed32& y_j = rec1.y;
+						const fixed32& z_j = rec1.z;
+						const float& h_j = rec1.h;
 						const float x_ij = distance(x_i, x_j);				// 1
 						const float y_ij = distance(y_i, y_j);				// 1
 						const float z_ij = distance(z_i, z_j);				// 1
@@ -255,6 +254,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float& A_j = rec2.entr;
 					const float& alpha_j = rec2.alpha;
 					const float hinv_j = 1.f / h_j;															// 4
+					const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3
 					const float x_ij = distance(x_i, x_j);													// 1
 					const float y_ij = distance(y_i, y_j);													// 1
 					const float z_ij = distance(z_i, z_j);													// 1
@@ -263,10 +263,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float q_i = r * hinv_i;																// 1
 					const float q_j = r * hinv_j;																// 1
 					const float hfrac_j = 1.f - cfrac_j;												// 1
-					const float h2_j = sqr(h_j);															// 1
-					const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3
 					const float rho_j = m * c0 * h3inv_j;												// 2
-					const float rhoinv_j = minv * c0inv * sqr(h_j) * h_j;							// 5
 					const float c_j = sqrtf(gamma0 * powf(pre_j, 1.0f - invgamma0) * powf(A_j, invgamma0)); //23
 					const float vx_ij = vx_i - vx_j + x_ij * adot;									// 3
 					const float vy_ij = vy_i - vy_j + y_ij * adot;									// 3
@@ -304,7 +301,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float dp_i = mainv * aco * powf(pre_i, 1.0f - 2.0f * invgamma0);	// 12
 					const float dp_j = mainv * aco * powf(pre_j, 1.0f - 2.0f * invgamma0);	// 12
 					const float pi_ij = -mainv * w_ij * h_ij * rinv * vsig_ij / rho_ij;     // 9
-//						one += m / rho_i * kernelW(q_i) * h3inv_i;
 					ax -= dp_i * dWdr_x_i + dp_j * dWdr_x_j;											// 4
 					ay -= dp_i * dWdr_y_i + dp_j * dWdr_y_j;											// 4
 					az -= dp_i * dWdr_z_i + dp_j * dWdr_z_j;											// 4

@@ -148,10 +148,11 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				}
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
-						const auto x_j = ws.rec1[j].x;
-						const auto y_j = ws.rec1[j].y;
-						const auto z_j = ws.rec1[j].z;
-						const auto h_j = ws.rec1[j].h;
+						const auto& rec1 = ws.rec1[j];
+						const auto& x_j = rec1.x;
+						const auto& y_j = rec1.y;
+						const auto& z_j = rec1.z;
+						const auto& h_j = rec1.h;
 						const auto h2_j = sqr(h_j);									// 1
 						const float x_ij = distance(x_i, x_j);						// 1
 						const float y_ij = distance(y_i, y_j);						// 1
@@ -199,9 +200,10 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				for (int j = tid; j < jmax; j += block_size) {
 					bool contains = false;
 					if (j < ws.rec1.size()) {
-						const fixed32 x_j = ws.rec1[j].x;
-						const fixed32 y_j = ws.rec1[j].y;
-						const fixed32 z_j = ws.rec1[j].z;
+						const auto& rec1 = ws.rec1[j];
+						const fixed32& x_j = rec1.x;
+						const fixed32& y_j = rec1.y;
+						const fixed32& z_j = rec1.z;
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1

@@ -190,17 +190,20 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
 set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
 set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
-set_source_files_properties(./src/sph.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
-set_source_files_properties(./src/sph_smoothlen.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
-set_source_files_properties(./src/sph_prehydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+set_source_files_properties(./src/chemistry.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
+
+
+set_source_files_properties(./src/sph.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/sph_smoothlen.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/sph_prehydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_aux.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_cond_init.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_hydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_conduction.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_rungs.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/chemistry.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
+
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:

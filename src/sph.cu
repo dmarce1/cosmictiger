@@ -50,13 +50,13 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cond_init_nblocks, (const void*) sph_cuda_cond_init, COND_INIT_BLOCK_SIZE, 0));
 		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (const void*) sph_cuda_rungs, RUNGS_BLOCK_SIZE, 0));
 		PRINT("%i %i %i %i %i %i\n", smoothlen_nblocks, prehydro_nblocks, aux_nblocks, hydro_nblocks, rungs_nblocks, cond_init_nblocks, conduction_nblocks);
-		aux_nblocks *= 2 * cuda_smp_count();
-		smoothlen_nblocks *= 2 * cuda_smp_count();
-		prehydro_nblocks *= 2 * cuda_smp_count();
-		hydro_nblocks *= 2 * cuda_smp_count();
-		conduction_nblocks *= 2 * cuda_smp_count();
-		cond_init_nblocks *= 2 * cuda_smp_count();
-		rungs_nblocks *= 2 * cuda_smp_count();
+		aux_nblocks *= cuda_smp_count();
+		smoothlen_nblocks *= cuda_smp_count();
+		prehydro_nblocks *= cuda_smp_count();
+		hydro_nblocks *= cuda_smp_count();
+		conduction_nblocks *= cuda_smp_count();
+		cond_init_nblocks *= cuda_smp_count();
+		rungs_nblocks *= cuda_smp_count();
 	}
 	tm.start();
 	switch (params.run_type) {
