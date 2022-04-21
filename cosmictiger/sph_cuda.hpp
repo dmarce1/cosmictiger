@@ -34,6 +34,9 @@
 #include <cosmictiger/math.hpp>
 
 
+#define ETA 0.01f
+
+
 struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;

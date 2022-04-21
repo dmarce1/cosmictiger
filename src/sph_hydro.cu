@@ -17,8 +17,6 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-
-
 #include <cosmictiger/sph_cuda.hpp>
 struct hydro_record1 {
 	fixed32 x;
@@ -47,7 +45,6 @@ struct hydro_workspace {
 	device_vector<hydro_record1> rec1;
 	device_vector<hydro_record2> rec2;
 };
-
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
 	const int tid = threadIdx.x;
@@ -108,7 +105,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 				}
 				j = contains;
-				compute_indices<HYDRO_BLOCK_SIZE>(j, total);
+				compute_indices < HYDRO_BLOCK_SIZE > (j, total);
 				const int offset = ws.rec1_main.size();
 				__syncthreads();
 				const int next_size = offset + total;
@@ -229,7 +226,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						flops += 12;
 					}
 					k = use;
-					compute_indices<HYDRO_BLOCK_SIZE>(k, total);
+					compute_indices < HYDRO_BLOCK_SIZE > (k, total);
 					const int offset = ws.rec1.size();
 					__syncthreads();
 					const int next_size = offset + total;
@@ -281,7 +278,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vdotx_ij = fmaf(x_ij, vx_ij, fmaf(y_ij, vy_ij, z_ij * vz_ij));								// 5
 					const float h_ij = 0.5f * (h_i + h_j);												// 2
 					const float w_ij = fminf(vdotx_ij * rinv, 0.f);									// 2
-					const float mu_ij = w_ij * h_ij / sqrtf(r2 + 0.01f * sqr(h_ij));			// 12
+					const float mu_ij = w_ij * h_ij / sqrtf(r2 + ETA * sqr(h_ij));			// 12
 					const float rho_ij = 0.5f * (rho_i + rho_j);										// 2
 					const float c_ij = 0.5f * (c_i + c_j);												// 2
 					const float alpha_ij = 0.5f * (alpha_i + alpha_j);								// 2
@@ -327,7 +324,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						flops += 29;
 						const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;			// 3
 						const float difco_ij = 0.5f * (difco_i + difco_j);							// 2
-						const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij_rinv;		// 7
+						const float phi = r2 / (r2 + ETA * h_ij);
+						const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
 						D += D_ij;																				// 1
 						de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j * hfracinv_i * rhoinv_i, gamma0 - 1.f)); // 16;
 						if (params.stars) {
@@ -347,23 +345,23 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(ay);    // 31
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);    // 31
 //				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
-				shared_reduce_max<HYDRO_BLOCK_SIZE>(dtinv_cfl);    // 31
+				shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_cfl);    // 31
 				if (tid == 0) {
-					flops += 5 * (HYDRO_BLOCK_SIZE-1);
+					flops += 5 * (HYDRO_BLOCK_SIZE - 1);
 				}
 				if (params.diffusion) {
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(D);
 					if (params.stars) {
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dcm_dt); //31
 						if (tid == 0) {
-							flops += (HYDRO_BLOCK_SIZE-1);
+							flops += (HYDRO_BLOCK_SIZE - 1);
 						}
 					}
 					if (data.chemistry) {
 						for (int fi = 0; fi < NCHEMFRACS; fi++) {
 							shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dfrac_dt[fi]); // 31
 							if (tid == 0) {
-								flops += (HYDRO_BLOCK_SIZE-1);
+								flops += (HYDRO_BLOCK_SIZE - 1);
 							}
 						}
 					}
@@ -404,7 +402,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 //					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
 					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);							// 1
 					if (params.diffusion) {
-						dtinv_hydro1 = fmaxf(dtinv_hydro1, params.a * D * (1.f / 3.f));							// 3
+						const float dtinv_diff = params.a * D * (1.f / 3.f);
+						if (dtinv_hydro1 < dtinv_diff) {
+							dtinv_hydro1 = dtinv_diff;
+						}
 					}
 					const float a2 = sqr(ax, ay, az);											// 5
 					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);						// 9
