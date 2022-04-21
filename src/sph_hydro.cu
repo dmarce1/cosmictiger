@@ -40,10 +40,9 @@ struct hydro_record2 {
 };
 
 struct hydro_workspace {
-	device_vector<hydro_record1> rec1_main;
-	device_vector<hydro_record2> rec2_main;
 	device_vector<hydro_record1> rec1;
 	device_vector<hydro_record2> rec2;
+	device_vector<int> neighbors;
 };
 
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
@@ -71,8 +70,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 	while (index < data.nselfs) {
 		__syncthreads();
 		const sph_tree_node& self = data.trees[data.selfs[index]];
-		ws.rec1_main.resize(0);
-		ws.rec2_main.resize(0);
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const sph_tree_node& other = data.trees[data.neighbors[ni]];
 			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
@@ -106,36 +105,36 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 				j = contains;
 				compute_indices < HYDRO_BLOCK_SIZE > (j, total);
-				const int offset = ws.rec1_main.size();
+				const int offset = ws.rec1.size();
 				__syncthreads();
 				const int next_size = offset + total;
-				ws.rec1_main.resize(next_size);
-				ws.rec2_main.resize(next_size);
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
-					ws.rec1_main[k].x = x[XDIM];
-					ws.rec1_main[k].y = x[YDIM];
-					ws.rec1_main[k].z = x[ZDIM];
-					ws.rec1_main[k].h = data.h[pi];
-					ws.rec2_main[k].vx = data.vx[pi];
-					ws.rec2_main[k].vy = data.vy[pi];
-					ws.rec2_main[k].vz = data.vz[pi];
-					ws.rec2_main[k].entr = data.entr[pi];
-					ws.rec2_main[k].alpha = data.alpha[pi];
-					ws.rec2_main[k].fpre1 = data.fpre1[pi];
-					ws.rec2_main[k].fpre2 = data.fpre2[pi];
-					ws.rec2_main[k].pre = data.pre[pi];
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].h = data.h[pi];
+					ws.rec2[k].vx = data.vx[pi];
+					ws.rec2[k].vy = data.vy[pi];
+					ws.rec2[k].vz = data.vz[pi];
+					ws.rec2[k].entr = data.entr[pi];
+					ws.rec2[k].alpha = data.alpha[pi];
+					ws.rec2[k].fpre1 = data.fpre1[pi];
+					ws.rec2[k].fpre2 = data.fpre2[pi];
+					ws.rec2[k].pre = data.pre[pi];
 					if (params.diffusion) {
-						ws.rec2_main[k].shearv = data.shearv[pi];
+						ws.rec2[k].shearv = data.shearv[pi];
 					}
 					if (params.stars) {
-						ws.rec2_main[k].cold_frac = data.cold_frac[pi];
+						ws.rec2[k].cold_frac = data.cold_frac[pi];
 					} else {
-						ws.rec2_main[k].cold_frac = 0.f;
+						ws.rec2[k].cold_frac = 0.f;
 					}
 					if (params.diffusion) {
 						if (data.chemistry) {
-							ws.rec2_main[k].chem = data.chem[pi];
+							ws.rec2[k].chem = data.chem[pi];
 						}
 					}
 				}
@@ -203,15 +202,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 //				float one = 0.0f;
 				const float& adot = params.adot;
 				float D = 0.f;
-				ws.rec1.resize(0);
-				ws.rec2.resize(0);
-				const float jmax = round_up(ws.rec1_main.size(), block_size);
+				ws.neighbors.resize(0);
+				const float jmax = round_up(ws.rec1.size(), block_size);
 				for (int j = tid; j < jmax; j += block_size) {
 					int k;
 					int total;
 					bool use = false;
-					if (j < ws.rec1_main.size()) {
-						const auto rec1 = ws.rec1_main[j];
+					if (j < ws.rec1.size()) {
+						const auto rec1 = ws.rec1[j];
 						const fixed32 x_j = rec1.x;
 						const fixed32 y_j = rec1.y;
 						const fixed32 z_j = rec1.z;
@@ -227,25 +225,35 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 					k = use;
 					compute_indices < HYDRO_BLOCK_SIZE > (k, total);
-					const int offset = ws.rec1.size();
+					const int offset = ws.neighbors.size();
 					__syncthreads();
 					const int next_size = offset + total;
-					ws.rec1.resize(next_size);
-					ws.rec2.resize(next_size);
+					ws.neighbors.resize(next_size);
 					if (use) {
 						const int l = offset + k;
-						ws.rec1[l] = ws.rec1_main[j];
-						ws.rec2[l] = ws.rec2_main[j];
+						ws.neighbors[l] = j;
 					}
 				}
 				__syncthreads();
-				for (int j = tid; j < ws.rec1.size(); j += block_size) {
-					const auto rec1 = ws.rec1[j];
-					const auto rec2 = ws.rec2[j];
-					const float h_j = rec1.h;
-					const fixed32 x_j = rec1.x;
-					const fixed32 y_j = rec1.y;
-					const fixed32 z_j = rec1.z;
+				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
+					const int kk = ws.neighbors[j];
+					const auto& rec1 = ws.rec1[kk];
+					const auto& rec2 = ws.rec2[kk];
+					const float& h_j = rec1.h;
+					const fixed32& x_j = rec1.x;
+					const fixed32& y_j = rec1.y;
+					const fixed32& z_j = rec1.z;
+					const float& cfrac_j = rec2.cold_frac;
+					const float& shearv_j = rec2.shearv;
+					const auto& frac_j = rec2.chem;
+					const float& vx_j = rec2.vx;
+					const float& vy_j = rec2.vy;
+					const float& vz_j = rec2.vz;
+					const float& pre_j = rec2.pre;
+					const float& fpre1_j = rec2.fpre1;
+					const float& fpre2_j = rec2.fpre2;
+					const float& A_j = rec2.entr;
+					const float& alpha_j = rec2.alpha;
 					const float hinv_j = 1.f / h_j;															// 4
 					const float x_ij = distance(x_i, x_j);													// 1
 					const float y_ij = distance(y_i, y_j);													// 1
@@ -254,17 +262,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float r = sqrtf(r2);																   // 4
 					const float q_i = r * hinv_i;																// 1
 					const float q_j = r * hinv_j;																// 1
-					const float cfrac_j = rec2.cold_frac;
-					const float shearv_j = rec2.shearv;
-					const auto& frac_j = rec2.chem;
-					const float vx_j = rec2.vx;
-					const float vy_j = rec2.vy;
-					const float vz_j = rec2.vz;
-					const float pre_j = rec2.pre;
-					const float fpre1_j = rec2.fpre1;
-					const float fpre2_j = rec2.fpre2;
-					const float A_j = rec2.entr;
-					const float alpha_j = rec2.alpha;
 					const float hfrac_j = 1.f - cfrac_j;												// 1
 					const float h2_j = sqr(h_j);															// 1
 					const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3

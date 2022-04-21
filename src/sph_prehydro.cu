@@ -35,10 +35,9 @@ struct prehydro_record2 {
 };
 
 struct prehydro_workspace {
-	device_vector<prehydro_record1> x;
-	device_vector<prehydro_record2> v;
-	device_vector<prehydro_record1> xc;
-	device_vector<prehydro_record2> vc;
+	device_vector<prehydro_record1> rec1;
+	device_vector<prehydro_record2> rec2;
+	device_vector<int> neighbors;
 };
 
 __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
@@ -58,8 +57,8 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 
 		int flops = 0;
 		__syncthreads();
-		ws.x.resize(0);
-		ws.v.resize(0);
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
 		const sph_tree_node& self = data.trees[data.selfs[index]];
 		bool found_self = false;
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
@@ -98,31 +97,31 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				}
 				j = contains;
 				compute_indices < PREHYDRO_BLOCK_SIZE > (j, total);
-				const int offset = ws.x.size();
+				const int offset = ws.rec1.size();
 				__syncthreads();
 				const int next_size = offset + total;
-				ws.x.resize(next_size);
-				ws.v.resize(next_size);
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
-					ws.x[k].x = x[XDIM];
-					ws.x[k].y = x[YDIM];
-					ws.x[k].z = x[ZDIM];
-					ws.x[k].h = data.h[pi];
-					ws.v[k].vx = data.vx[pi];
-					ws.v[k].vy = data.vy[pi];
-					ws.v[k].vz = data.vz[pi];
-					ws.v[k].entr = data.entr[pi];
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].h = data.h[pi];
+					ws.rec2[k].vx = data.vx[pi];
+					ws.rec2[k].vy = data.vy[pi];
+					ws.rec2[k].vz = data.vz[pi];
+					ws.rec2[k].entr = data.entr[pi];
 					if (params.stars) {
-						ws.v[k].cfrac = data.cold_frac[pi];
+						ws.rec2[k].cfrac = data.cold_frac[pi];
 					} else {
-						ws.v[k].cfrac = 0.f;
+						ws.rec2[k].cfrac = 0.f;
 					}
 				}
 			}
 		}
 		ALWAYS_ASSERT(found_self);
-		ALWAYS_ASSERT(ws.x.size());
+		ALWAYS_ASSERT(ws.rec1.size());
 		const float gamma0 = data.def_gamma;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
@@ -143,16 +142,16 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					data.sa_snk[snki] = true;
 				}
 			} else {
-				const int jmax = round_up(ws.x.size(), block_size);
+				const int jmax = round_up(ws.rec1.size(), block_size);
 				if (tid == 0) {
 					data.sa_snk[snki] = false;
 				}
 				for (int j = tid; j < jmax; j += block_size) {
-					if (j < ws.x.size()) {
-						const auto x_j = ws.x[j].x;
-						const auto y_j = ws.x[j].y;
-						const auto z_j = ws.x[j].z;
-						const auto h_j = ws.x[j].h;
+					if (j < ws.rec1.size()) {
+						const auto x_j = ws.rec1[j].x;
+						const auto y_j = ws.rec1[j].y;
+						const auto z_j = ws.rec1[j].z;
+						const auto h_j = ws.rec1[j].h;
 						const auto h2_j = sqr(h_j);									// 1
 						const float x_ij = distance(x_i, x_j);						// 1
 						const float y_ij = distance(y_i, y_j);						// 1
@@ -193,17 +192,16 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				float dvz_dz = 0.f;
 				float pre = 0.f;
 				float dpdh = 0.f;
-				ws.xc.resize(0);
-				ws.vc.resize(0);
+				ws.neighbors.resize(0);
 				__syncthreads();
 				flops += 10;
-				const int jmax = round_up(ws.x.size(), PREHYDRO_BLOCK_SIZE);
+				const int jmax = round_up(ws.rec1.size(), PREHYDRO_BLOCK_SIZE);
 				for (int j = tid; j < jmax; j += block_size) {
 					bool contains = false;
-					if (j < ws.x.size()) {
-						const fixed32 x_j = ws.x[j].x;
-						const fixed32 y_j = ws.x[j].y;
-						const fixed32 z_j = ws.x[j].z;
+					if (j < ws.rec1.size()) {
+						const fixed32 x_j = ws.rec1[j].x;
+						const fixed32 y_j = ws.rec1[j].y;
+						const fixed32 z_j = ws.rec1[j].z;
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1
@@ -222,15 +220,13 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					int k = contains;
 					int total;
 					compute_indices < PREHYDRO_BLOCK_SIZE > (k, total);
-					const int offset = ws.xc.size();
+					const int offset = ws.neighbors.size();
 					__syncthreads();
 					const int next_size = offset + total;
-					ws.xc.resize(next_size);
-					ws.vc.resize(next_size);
+					ws.neighbors.resize(next_size);
 					if (contains) {
 						const int l = offset + k;
-						ws.xc[l] = ws.x[j];
-						ws.vc[l] = ws.v[j];
+						ws.neighbors[l] = j;
 					}
 				}
 				shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(drho_dh);
@@ -242,12 +238,18 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 				const float h3inv_i = hinv_i * sqr(hinv_i);					// 2
 				const float h4inv_i = h3inv_i * hinv_i;						// 1
 				flops += 16;
-				for (int j = tid; j < ws.xc.size(); j += block_size) {
-					const fixed32 x_j = ws.xc[j].x;
-					const fixed32 y_j = ws.xc[j].y;
-					const fixed32 z_j = ws.xc[j].z;
-					const float A_j = ws.vc[j].entr;
-					const float fc_j = ws.vc[j].cfrac;
+				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
+					const int kk = ws.neighbors[j];
+					const auto& rec1 = ws.rec1[kk];
+					const auto& rec2 = ws.rec2[kk];
+					const fixed32& x_j = rec1.x;
+					const fixed32& y_j = rec1.y;
+					const fixed32& z_j = rec1.z;
+					const float& vx_j = rec2.vx;
+					const float& vy_j = rec2.vy;
+					const float& vz_j = rec2.vz;
+					const float& A_j = rec2.entr;
+					const float& fc_j = rec2.cfrac;
 					const float fh_j = 1.f - fc_j;
 					const float x_ij = distance(x_i, x_j);                  // 1
 					const float y_ij = distance(y_i, y_j);                  // 1
@@ -255,9 +257,6 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					const float r2 = sqr(x_ij, y_ij, z_ij);                 // 5
 					const float r = sqrtf(r2);                               // 4
 					const float q = r * hinv_i;                               // 1
-					const float vx_j = ws.vc[j].vx;
-					const float vy_j = ws.vc[j].vy;
-					const float vz_j = ws.vc[j].vz;
 					const float vx_ij = vx_i - vx_j + x_ij * params.adot;   // 3
 					const float vy_ij = vy_i - vy_j + y_ij * params.adot;   // 3
 					const float vz_ij = vz_i - vz_j + z_ij * params.adot;   // 3
