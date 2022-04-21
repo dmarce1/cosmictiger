@@ -137,7 +137,6 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 					__syncthreads();
 
 					if (rhoh3 <= 1.01f * w0) {											// 2
-						PRINT("ZERO neighbors %i\n", ws.x.size());
 						if (tid == 0) {
 							h *= 1.1f;														// 1
 							flops++;
