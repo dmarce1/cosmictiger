@@ -134,6 +134,8 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					sph_particles_H2(i) = chem.H2 * factor;
 					sph_particles_Hep(i) = chem.Hep * factor;
 					sph_particles_Hepp(i) = chem.Hepp * factor;
+					double dt = (rung_dt[rung1]) * t0;
+					sph_particles_cold_mass_chance(i) += chem.cold_mass_rate * dt * a * get_options().code_to_s;
 					sph_particles_normalize_fracs(i);
 					echange += (chem.eint - sph_particles_eint(i))*sph_mass/sqr(a);
 					const float rho = sph_particles_rho(i);

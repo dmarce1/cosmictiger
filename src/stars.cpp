@@ -65,7 +65,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 	profiler_enter("FUNCTION");
 
 	PRINT("------------------------------------>>> Searching for STARS <<<--------------------------------------------------------\n");
-	vector<hpx::future<size_t>> futs;
+	vector < hpx::future < size_t >> futs;
 	vector<hpx::future<void>> futs2;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step, t0));
@@ -93,14 +93,12 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
-				const float rho = sph_particles_rho(i);
-				const float tdyn = sqrtf((3.0*a*a*a)/(8.0*M_PI*G*rho))/a;
-				if( false && sph_particles_divv(i) < 0.0) {
-					//const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
-//					const float p = 1.0 - exp(-eps);
+				const float rate = sph_particles_cold_mass_chance(i);
+				if( rate > 0.0) {
+					sph_particles_cold_mass_chance(i) = 0.f;
+					const float p = 1.0 - exp(-rate);
 					bool make_star;
-	//				make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
-//					PRINT( "%e %i\n", eps, make_star);
+					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 				if( make_star ) {
 					if(false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
 						PRINT( "SUPERNOVA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
@@ -200,7 +198,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 		}
 	}
 	size_t count = indices.size();
-	for( auto& f : futs) {
+	for (auto& f : futs) {
 		count += f.get();
 	}
 	PRINT("TOTAL of %i stars\n", stars.size());

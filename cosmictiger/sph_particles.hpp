@@ -145,6 +145,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_fp1;
 SPH_PARTICLES_EXTERN float* sph_particles_fp2;
 SPH_PARTICLES_EXTERN float* sph_particles_p;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
+SPH_PARTICLES_EXTERN float* sph_particles_cm;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
@@ -199,6 +200,11 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
  return sph_particles_sn[index];
  }
  */
+
+inline float& sph_particles_cold_mass_chance(part_int index) {
+	return sph_particles_cm[index];
+}
+
 
 inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];

@@ -501,9 +501,12 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		};
 		const bool unstable = test_instability(rho, T0, N) > 0.f;
 		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
-		const float tcool = -eint * rho / (dedt0 * (params.a));
+//		const float tcool = -eint * rho / (dedt0 * (params.a));
 		//const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (double(params.G) * double(rho))) / params.a;
 		if (params.stars && unstable && dedt0 < 0.f) {
+			attr.cold_mass_rate = -dedt0 / (rho*eint);
+		} else {
+			attr.cold_mass_rate = 0.f;
 		}
 		for (int i = 0; i < 27; i++) {
 			float f_mid, f_max;
