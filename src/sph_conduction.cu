@@ -226,7 +226,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float dt_j = rung_dt[rung_j] * params.t0;										// 2
 						const float dt_ij = fminf(dt_i, dt_j);													// 2
 						const float D_ij = cons * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv; // 10
-						num = fmaf(D_ij, A_j * powf(rho_j * hfrac_j * rhohinv_i, gamma0 - 1.f), num); // 14
+						num = fmaf(D_ij, A_j * powf(rho_j * hfrac_j * rhohinv_i, gamma0 - 1.f) * hfrac_j / hfrac_i, num); // 14
 						den += D_ij;																					// 1
 						flops += 69;
 					}

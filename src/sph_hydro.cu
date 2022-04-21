@@ -313,6 +313,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					float dtinv = (c_ij + 0.6f * vsig_ij) / h;										// 6
 					dtinv_cfl = fmaxf(dtinv_cfl, dtinv);												// 1
 					flops += 206;
+					const float hf_ij = hfrac_j * hfracinv_i;
 					if (params.diffusion) {
 						flops += 29;
 						const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;			// 3
@@ -320,14 +321,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float phi = r2 / (r2 + ETA * h_ij);
 						const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
 						D += D_ij;																				// 1
-						de_dt -= D_ij * (A_i - A_j * powf(hfrac_j * rho_j * hfracinv_i * rhoinv_i, gamma0 - 1.f)); // 16;
+						de_dt -= D_ij * (A_i - A_j * powf(rho_j * hf_ij * rhoinv_i, gamma0 - 1.f) * hf_ij); // 16;
 						if (params.stars) {
 							dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
 							flops += 3;
 						}
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
-								dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi] * hfrac_j * hfracinv_i);										// 5
+								dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi] * hf_ij);										// 5
 								flops += 5;
 							}
 						}

@@ -440,7 +440,6 @@ inline float sph_particles_eint(part_int index) {
 	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
 
-float sph_particles_coloumb_log(part_int i, float a);
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
