@@ -23,7 +23,6 @@
 
 #include <cosmictiger/safe_io.hpp>
 
-constexpr double dx = 1.0 / NPIECE;
 
 template<class T>
 inline T W(T q) {

@@ -90,6 +90,7 @@ set(cosmictiger_source_files
     src/sph_aux.cu
     src/sph_cond_init.cu
     src/sph_smoothlen.cu
+    src/sph_prehydro.cu
     src/sph_conduction.cu
     src/sph_hydro.cu
     src/sph_rungs.cu
@@ -193,6 +194,7 @@ set_source_files_properties(./src/sph.cu PROPERTIES COMPILE_FLAGS -maxrregcount=
 
 set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
 set_source_files_properties(./src/sph_smoothlen.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+set_source_files_properties(./src/sph_prehydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
 set_source_files_properties(./src/sph_aux.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_cond_init.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 set_source_files_properties(./src/sph_hydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)

@@ -82,87 +82,6 @@ struct sph_run_workspace {
 	}
 };
 
-vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z) {
-	return vector<sph_values>();
-	/*int max_rung = 0;
-	 sph_tree_create_params tparams;
-	 PRINT("Doing values at\n");
-	 tparams.h_wt = 2.0;
-	 tparams.min_rung = 0;
-	 tree_id root_id;
-	 root_id.proc = 0;
-	 root_id.index = 0;
-	 sph_tree_create_return sr;
-	 vector<tree_id> checklist;
-	 checklist.push_back(root_id);
-	 sph_tree_neighbor_params tnparams;
-
-	 tnparams.h_wt = 2.0;
-	 tnparams.min_rung = 0;
-	 tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-
-	 sph_run_params sparams;
-	 sparams.a = 1.0f;
-	 sparams.t0 = 0.0;
-	 sparams.min_rung = 0;
-	 bool cont;
-	 sph_run_return kr;
-	 sparams.set = SPH_SET_ACTIVE;
-	 sparams.phase = 0;
-	 timer tm;
-	 tm.start();
-	 PRINT("starting sph_tree_create = %e\n", tm.read());
-	 sr = sph_tree_create(tparams);
-	 tm.stop();
-	 tm.reset();
-	 PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
-
-	 tm.start();
-	 sph_tree_neighbor(tnparams, root_id, checklist).get();
-	 tm.stop();
-	 PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-	 tm.reset();
-
-	 //	do {
-	 sparams.set = SPH_SET_ACTIVE;
-	 sparams.run_type = SPH_RUN_SMOOTHLEN;
-	 //		timer tm;
-	 tm.start();
-	 //		kr = sph_run(sparams);
-	 tm.stop();
-	 //	PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-	 tm.reset();
-	 cont = kr.rc;
-	 tnparams.h_wt = cont ? 2.0 : 1.0;
-	 tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-	 tnparams.set = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-	 tm.start();
-	 sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-	 tm.stop();
-	 PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_BOXES): %e\n", tm.read());
-	 tm.reset();
-	 tm.start();
-	 tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-	 sph_tree_neighbor(tnparams, root_id, checklist).get();
-	 tm.stop();
-	 PRINT("sph_tree_neighbor(SPH_TREE_NEIGHBOR_NEIGHBORS): %e\n", tm.read());
-	 tm.reset();
-	 //	} while (cont);
-	 tnparams.run_type = SPH_TREE_NEIGHBOR_VALUE_AT;
-
-	 vector<sph_values> values(x.size());
-	 for (int i = 0; i < x.size(); i++) {
-	 tnparams.x = x[i];
-	 tnparams.y = y[i];
-	 tnparams.z = z[i];
-	 auto rc = sph_tree_neighbor(tnparams, root_id, checklist).get();
-	 values[i] = rc.value_at;
-	 }
-	 sph_tree_destroy(true);
-	 sph_particles_cache_free();
-	 return values;*/
-}
-
 inline bool range_contains(const fixed32_range& a, const array<fixed32, NDIM> x) {
 	bool contains = true;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -691,16 +610,15 @@ sph_run_return sph_run_workspace::to_gpu() {
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
+									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(), host_h.data(),offset);
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
-									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, offset);
 								} else if( params.run_type == SPH_RUN_HYDRO) {
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
+									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(), host_h.data(), offset);
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
-									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), host_alpha.data(), host_pre.data(), host_fpre1.data(), host_fpre2.data(), diffusion ? host_shearv.data() : nullptr, chem ? host_chem.data() :nullptr, offset);
+									sph_particles_global_read_aux(node.global_part_range(),host_alpha.data(), host_pre.data(), host_fpre1.data(), host_fpre2.data(), diffusion ? host_shearv.data() : nullptr, chem ? host_chem.data() :nullptr, offset);
 								} else if( params.run_type == SPH_RUN_AUX) {
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 								} else if( params.run_type == SPH_RUN_RUNGS) {
@@ -710,16 +628,16 @@ sph_run_return sph_run_workspace::to_gpu() {
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
-									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, offset);
+									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(),host_h.data(), offset);
+									sph_particles_global_read_aux(node.global_part_range(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, offset);
 								} else if( params.run_type == SPH_RUN_CONDUCTION) {
 									sph_particles_global_read_kappas(node.global_part_range(), host_kappa.data(), offset);
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
 									}
-									sph_particles_global_read_entr(node.global_part_range(), host_entr.data(), offset);
-									sph_particles_global_read_aux(node.global_part_range(), host_h.data(), nullptr, nullptr, host_fpre1.data(), nullptr, nullptr, nullptr, offset);
+									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(),host_h.data(), offset);
+									sph_particles_global_read_aux(node.global_part_range(), nullptr, nullptr, host_fpre1.data(), nullptr, nullptr, nullptr, offset);
 								}
 								node.part_range.first = offset;
 								node.part_range.second = offset + size;

@@ -181,7 +181,6 @@ struct aux_quantities {
 	float fpre2;
 	float pre;
 	float shearv;
-	float h;
 	float alpha;
 	array<float, NCHEMFRACS> fracs;
 	template<class A>
@@ -190,7 +189,6 @@ struct aux_quantities {
 		arc & fpre2;
 		arc & pre;
 		arc & shearv;
-		arc & h;
 		arc & alpha;
 		arc & fracs;
 	}
@@ -209,11 +207,11 @@ void sph_particles_swap2(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_fcold(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_entr(particle_global_range range, float*, part_int offset);
+void sph_particles_global_read_entr_and_smoothlen(particle_global_range range, float*, float*, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* h, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
 		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
@@ -492,7 +490,6 @@ float sph_particles_coloumb_log(part_int i, float a);
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
-	aux.h = sph_particles_smooth_len(index);
 	aux.alpha = sph_particles_alpha(index);
 	aux.fpre1 = sph_particles_fpre1(index);
 	aux.fpre2 = sph_particles_fpre2(index);
