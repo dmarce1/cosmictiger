@@ -464,7 +464,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double cv = (1.50 + (double) N.H2 / n0);																// 4
 		double gamma = 1.0 + 1.0 / cv;																							// 5
 		cv *= constants::kb;																							// 1
-		double eint = attr.eint / hot_mass;
+		double eint = attr.eint;
 		eint *= code_to_energy;
 		eint /= sqr(params.a);
 		double T0 = (eint * rho) / (n * cv);
@@ -567,7 +567,6 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			eint = cv * n * T / rho;																										 	// 1
 			eint *= sqr(params.a);
 			eint /= code_to_energy;
-			eint *= hot_mass;
 			attr.H = N.H;
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;

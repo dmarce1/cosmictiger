@@ -224,6 +224,7 @@ float sph_particles_temperature(part_int i, float a) {
 	const double H = sph_particles_H(i);
 	const double He = Y - Hep - Hepp;
 	double rho = sph_den(1 / (h * h * h));
+	rho *= 1.0 - sph_particles_cold_mass(i);
 	double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
 	rho *= code_to_density * pow(a, -3);
 	n *= constants::avo * rho;									// 8
