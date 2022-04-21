@@ -125,6 +125,10 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float e =eint * sph_mass;
 					this_dr.therm += e * a2inv;
 					this_dr.vol += vol;
+					if( stars ) {
+						this_dr.sph_mass += sph_mass;
+						this_dr.cold_mass += sph_mass * sph_particles_cold_mass(j);
+					}
 				}
 				vx *= ainv;
 				vy *= ainv;
@@ -172,9 +176,16 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		dr.nmapped += this_dr.nmapped;
 		dr.therm += this_dr.therm;
 		dr.vol += this_dr.vol;
+		dr.cold_mass += this_dr.cold_mass;
+		dr.sph_mass += this_dr.sph_mass;
 	}
 	tm.stop();
 	profiler_exit();
+	if (hpx_rank() == 0 && get_options().stars && dr.cold_mass) {
+		FILE* fp = fopen("coldmass.txt", "at");
+		fprintf(fp, "%e %e\n", 1.0 / scale - 1.0, dr.cold_mass / dr.sph_mass);
+		fclose(fp);
+	}
 //	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }

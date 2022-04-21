@@ -199,14 +199,14 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 						float w;
 						const float dwdq = dkernelW_dq(q, &w, &flops);
 						const float dWdr_i = fpre_i * dwdq * h3inv_i * hinv_i; // 3
-						const float tmp = dWdr_i * rinv * logf(ene_j / ene_i); // 14
+						const float tmp = dWdr_i * rinv * (ene_j - ene_i); // 14
 						gradx = fmaf(tmp, x_ij, gradx);					// 2
 						grady = fmaf(tmp, y_ij, grady);					// 2
 						gradz = fmaf(tmp, z_ij, gradz);					// 2
 						flops += 49;
 					}
 				}
-				const float tmp = m / (params.a * rho_i);		// 5
+				const float tmp = m / (params.a * rho_i * ene_i);		// 5
 				gradx *= tmp;												// 1
 				grady *= tmp;												// 1
 				gradz *= tmp;												// 1
