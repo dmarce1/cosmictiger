@@ -186,7 +186,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				if (tid == 0) {
 					flops += 93;
 					const auto& frac_i = data.rec1_snk[snki].frac;
-					const float& cfrac_i = data.rec2_snk[snki].fcold;
+					const float& cfrac_i = data.cold_mass_snk[snki];
 					const float& A_i = data.rec2_snk[snki].A;
 					const float& H = frac_i[CHEM_H];
 					const float& Hp = frac_i[CHEM_HP];

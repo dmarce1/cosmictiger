@@ -135,7 +135,7 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 			const fixed32& x_i = x[XDIM];
 			const fixed32& y_i = x[YDIM];
 			const fixed32& z_i = x[ZDIM];
-			const float& h_i = data.rec1_snk[snki].h;
+			const float& h_i = data.rec2_snk[snki].h;
 			const float hinv_i = 1.f / h_i; 										// 4
 			const float h2_i = sqr(h_i);    										// 1
 			if (active) {

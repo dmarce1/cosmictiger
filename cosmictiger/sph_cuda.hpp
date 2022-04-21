@@ -47,12 +47,12 @@ struct sph_run_cuda_data {
 	float* kappa;
 	float* cold_frac;
 	float gsoft;
-	float* dalpha;
 	array<float, NCHEMFRACS>* chem;
-	float* divv;
+	float* divv_snk;
 	float* mmw;
 	float* gradT;
 	float* shearv;
+	float* cold_mass_snk;
 	float* dcold_mass;
 	char* sa_snk;
 	char* oldrung_snk;
@@ -90,7 +90,6 @@ struct sph_run_cuda_data {
 	float* pre_snk;
 	float* shear_snk;
 	sph_record1* rec1_snk;
-	sph_record3* rec3_snk;
 	sph_record2* rec2_snk;
 	part_int* dm_index_snk;
 	float* gx_snk;

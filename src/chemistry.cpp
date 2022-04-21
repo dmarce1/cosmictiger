@@ -798,7 +798,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					sph_particles_rec2(i).A = chem.eint * (get_options().gamma-1.0)/ pow(sph_particles_rho(i) * (1.f - chem.cold_mass),get_options().gamma-1.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
-						sph_particles_rec2(i).fcold = chem.cold_mass;
+						sph_particles_cold_mass(i) = chem.cold_mass;
 					}
 				}
 			}

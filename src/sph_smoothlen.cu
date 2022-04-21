@@ -98,7 +98,7 @@ __global__ void sph_cuda_smoothlen(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				int box_xceeded = false;
 				int iter = 0;
-				float& h = data.rec1_snk[snki].h;
+				float& h = data.rec2_snk[snki].h;
 				float drho_dh;
 				float rhoh3;
 				float last_dlogh = 0.0f;

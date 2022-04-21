@@ -94,7 +94,7 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 				const auto x_i = data.x[i];
 				const auto y_i = data.y[i];
 				const auto z_i = data.z[i];
-				const auto h_i = data.rec1_snk[snki].h;
+				const auto h_i = data.rec2_snk[snki].h;
 				char& rung_i = data.rungs[i];
 				const auto h2_i = sqr(h_i);
 				const int jmax = round_up(ws.x.size(), block_size);

@@ -111,7 +111,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];
-				float& h = data.rec1_snk[snki].h;
+				float& h = data.rec2_snk[snki].h;
 				const float vx_i = data.vx[i];
 				const float vy_i = data.vy[i];
 				const float vz_i = data.vz[i];
@@ -238,7 +238,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					curl_vx = dvz_dy - dvy_dz;										   // 1
 					curl_vy = -dvz_dx + dvx_dz;                              // 2
 					curl_vz = dvy_dx - dvx_dy;
-					const float h_i = data.rec1_snk[snki].h;
+					const float h_i = data.rec2_snk[snki].h;
 					const float pre_i = data.pre_snk[snki];
 					const float A_i = data.rec2_snk[snki].A;
 					const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - invgamma) * powf(A_i, invgamma));  // 15
@@ -257,8 +257,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dt1 = params.t0 * rung_dt[data.oldrung_snk[snki]];
 					max_rung = max(max_rung, rung);
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));                             // 9
-					const float div_v0 = data.rec3_snk[snki].divv;
-					data.rec3_snk[snki].divv = div_v;
+					const float div_v0 = data.divv_snk[snki];
+					data.divv_snk[snki] = div_v;
 					const float alpha = data.rec1_snk[snki].alpha;
 					const float ddivv_dt = (div_v - div_v0) / dt1 - params.adot * ainv * div_v;             // 8
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);                      // 6
