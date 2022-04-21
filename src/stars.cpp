@@ -99,80 +99,80 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					const float p = 1.0 - exp(-rate);
 					bool make_star;
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
-				if( make_star ) {
-					if(false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
-						PRINT( "SUPERNOVA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-						float& H = sph_particles_H(i);
-						float& Hp = sph_particles_Hp(i);
-						float& Hn = sph_particles_Hn(i);
-						float& H2 = sph_particles_H2(i);
-						float& He = sph_particles_He0(i);
-						float& Hep = sph_particles_Hep(i);
-						float& Hepp = sph_particles_Hepp(i);
-						float& Z = sph_particles_Z(i);
-						float Htot = H + Hp + Hn + H2;
-						float Hetot = He + Hep + Hepp;
-						Hetot += HE_SN;
-						Z += Z_SN;
-						float norm = Hetot + Htot + Z;
-						Hetot /= norm;
-						Htot /= norm;
-						Z /= norm;
-						H = 1e-30;
-						Hn = 1e-30;
-						H2 = 1e-30;
-						Hp = Htot;
-						He = 1e-30;
-						Hep = 1e-30;
-						Hepp = Hetot;
+					if( make_star ) {
+						if(false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
+							PRINT( "SUPERNOVA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+							float& H = sph_particles_H(i);
+							float& Hp = sph_particles_Hp(i);
+							float& Hn = sph_particles_Hn(i);
+							float& H2 = sph_particles_H2(i);
+							float& He = sph_particles_He0(i);
+							float& Hep = sph_particles_Hep(i);
+							float& Hepp = sph_particles_Hepp(i);
+							float& Z = sph_particles_Z(i);
+							float Htot = H + Hp + Hn + H2;
+							float Hetot = He + Hep + Hepp;
+							Hetot += HE_SN;
+							Z += Z_SN;
+							float norm = Hetot + Htot + Z;
+							Hetot /= norm;
+							Htot /= norm;
+							Z /= norm;
+							H = 1e-30;
+							Hn = 1e-30;
+							H2 = 1e-30;
+							Hp = Htot;
+							He = 1e-30;
+							Hep = 1e-30;
+							Hepp = Hetot;
 
-						const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
-						const float n0 = 2.0 - 1.25 * Hetot;
-						const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
-						const float T0 = T_SN;
-						const float eps_cgs = cv_cgs * T0;
-						const float rho = sph_particles_rho(i) /(a*a*a);
-						const float eps = eps_cgs / code_to_ene;
-						const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
-						sph_particles_rec2(i).A = K0;
-						//				PRINT( "SUPERNOVA ! %e\n", sph_particles_temperature(i,a ));
+							const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
+							const float n0 = 2.0 - 1.25 * Hetot;
+							const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
+							const float T0 = T_SN;
+							const float eps_cgs = cv_cgs * T0;
+							const float rho = sph_particles_rho(i) /(a*a*a);
+							const float eps = eps_cgs / code_to_ene;
+							const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
+							sph_particles_rec2(i).A = K0;
+							//				PRINT( "SUPERNOVA ! %e\n", sph_particles_temperature(i,a ));
 
-					} else {
-						star_particle star;
-						star.zform = 1.f / a - 1.f;
-						star.dm_index = sph_particles_dm_index(i);
-						star.Z = sph_particles_Z(i);
-						star.stellar_mass = stars_sample_mass(rnd_gens[proc]) * (star.Z == 0.f ? 25.0f : 1.0f);
-						star.time_remaining = stars_lifetime(star.stellar_mass);
-						star.total_life = star.time_remaining;
-						star.remove = false;
-						star.Y = sph_particles_Y(i);
-						star.type = STAR_TYPE;
-						const int dmi = star.dm_index;
-						found++;
-						particles_type(dmi) = STAR_TYPE;
-						std::lock_guard<mutex_type> lock(mutex);
-						particles_cat_index(dmi) = stars.size();
-						const float gx = sph_particles_gforce(XDIM, i);
-						const float gy = sph_particles_gforce(YDIM, i);
-						const float gz = sph_particles_gforce(ZDIM, i);
-						const float g2 = sqr(gx, gy, gz);
-						ALWAYS_ASSERT(g2 != 0.0);
-						const float factor = get_options().eta * sqrtf(a * get_options().hsoft);
-						float dt = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
-						rung = std::max(std::max((int) ceilf(log2f(t0) - log2f(dt)), std::max(rung - 1, minrung)), 1);
-						dt = 0.5f * rung_dt[rung] * t0;
-						particles_vel(XDIM,dmi) += gx * dt;
-						particles_vel(XDIM,dmi) += gy * dt;
-						particles_vel(XDIM,dmi) += gz * dt;
-						sph_particles_rung(i) = -rung;
-						stars.push_back(star);
-						indices.push_back(i);
-					}
-				}
+			} else {
+				star_particle star;
+				star.zform = 1.f / a - 1.f;
+				star.dm_index = sph_particles_dm_index(i);
+				star.Z = sph_particles_Z(i);
+				star.stellar_mass = stars_sample_mass(rnd_gens[proc]) * (star.Z == 0.f ? 25.0f : 1.0f);
+				star.time_remaining = stars_lifetime(star.stellar_mass);
+				star.total_life = star.time_remaining;
+				star.remove = false;
+				star.Y = sph_particles_Y(i);
+				star.type = STAR_TYPE;
+				const int dmi = star.dm_index;
+				found++;
+				particles_type(dmi) = STAR_TYPE;
+				std::lock_guard<mutex_type> lock(mutex);
+				particles_cat_index(dmi) = stars.size();
+				const float gx = sph_particles_gforce(XDIM, i);
+				const float gy = sph_particles_gforce(YDIM, i);
+				const float gz = sph_particles_gforce(ZDIM, i);
+				const float g2 = sqr(gx, gy, gz);
+				ALWAYS_ASSERT(g2 != 0.0);
+				const float factor = get_options().eta * sqrtf(a * get_options().hsoft);
+				float dt = std::min(factor / sqrtf(sqrtf(g2)), (float) t0);
+				rung = std::max(std::max((int) ceilf(log2f(t0) - log2f(dt)), std::max(rung - 1, minrung)), 1);
+				dt = 0.5f * rung_dt[rung] * t0;
+				particles_vel(XDIM,dmi) += gx * dt;
+				particles_vel(XDIM,dmi) += gy * dt;
+				particles_vel(XDIM,dmi) += gz * dt;
+				sph_particles_rung(i) = -rung;
+				stars.push_back(star);
+				indices.push_back(i);
 			}
 		}
-	}));
+	}
+}
+}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	PRINT("Creating stars\n");
