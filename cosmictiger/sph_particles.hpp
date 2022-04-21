@@ -88,7 +88,6 @@ struct sph_particle {
 	float shearv;
 	float alpha;
 	float A;
-	float fcold;
 	float divv;
 	template<class Arc>
 	void serialize(Arc&&arc, unsigned) {
@@ -101,7 +100,6 @@ struct sph_particle {
 		arc & shearv;
 		arc & alpha;
 		arc & A;
-		arc & fcold;
 		arc & divv;
 	}
 };
@@ -119,7 +117,6 @@ struct sph_record2 {
 
 struct sph_record5 {
 	array<float, NCHEMFRACS> dfrac;
-	float dfcold;
 };
 
 struct sph_record6 {
@@ -148,7 +145,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_fp1;
 SPH_PARTICLES_EXTERN float* sph_particles_fp2;
 SPH_PARTICLES_EXTERN float* sph_particles_p;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
-SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
@@ -183,7 +179,6 @@ void sph_particles_swap(part_int i, part_int j);
 void sph_particles_swap2(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_fcold(particle_global_range range, float*, part_int offset);
 void sph_particles_global_read_entr_and_smoothlen(particle_global_range range, float*, float*, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
@@ -221,13 +216,7 @@ inline float& sph_particles_kappa(part_int index) {
 	return sph_particles_kap[index];
 }
 
-inline float& sph_particles_cold_mass(part_int index) {
-	return sph_particles_fc[index];
-}
 
-inline float& sph_particles_dcold_mass(part_int index) {
-	return sph_particles_r5[index].dfcold;
-}
 
 inline float& sph_particles_alpha(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -431,11 +420,7 @@ inline float sph_particles_rho(part_int index) {
 inline float sph_particles_eint(part_int index) {
 	static const float gamma0 = get_options().gamma;
 	static const float stars = get_options().stars;
-	float hfrac = 1.0f;
-	if (stars) {
-		hfrac = 1.0f - sph_particles_cold_mass(index);
-	}
-	const float rho = sph_particles_rho(index) * hfrac;
+	const float rho = sph_particles_rho(index);
 	const float K = sph_particles_entr(index);
 	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
@@ -471,7 +456,6 @@ inline sph_particle get_sph_particle(part_int i) {
 	part.shearv = sph_particles_shear(i);
 	part.alpha = sph_particles_alpha(i);
 	part.A = sph_particles_entr(i);
-	part.fcold = sph_particles_cold_mass(i);
 	part.divv = sph_particles_divv(i);
 	return part;
 }

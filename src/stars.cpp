@@ -95,15 +95,13 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 				char rung = sph_particles_rung(i);
 				const float rho = sph_particles_rho(i);
 				const float tdyn = sqrtf((3.0*a*a*a)/(8.0*M_PI*G*rho))/a;
-				if( rung >= minrung + 1 && sph_particles_cold_mass(i)> 0.0 && sph_particles_divv(i) < 0.0) {
-					const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
-					const float p = 1.0 - exp(-eps);
+				if( false && sph_particles_divv(i) < 0.0) {
+					//const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
+//					const float p = 1.0 - exp(-eps);
 					bool make_star;
-					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
+	//				make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 //					PRINT( "%e %i\n", eps, make_star);
 				if( make_star ) {
-					sph_particles_cold_mass(i) = 0.f;
-					sph_particles_dcold_mass(i) = 0.f;
 					if(false && gsl_rng_uniform(rnd_gens[proc]) < BETA_SN) {
 						PRINT( "SUPERNOVA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 						float& H = sph_particles_H(i);

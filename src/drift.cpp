@@ -60,7 +60,6 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		this_dr.nmapped = 0;
 		this_dr.therm = 0.0;
 		this_dr.vol = 0.0;
-		this_dr.cold_mass = 0.0;
 		part_int begin = (size_t) proc * particles_size() / nthreads;
 		part_int end = (size_t) (proc+1) * particles_size() / nthreads;
 #ifdef USE_CUDA
@@ -126,9 +125,6 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float e =eint * sph_mass;
 					this_dr.therm += e * a2inv;
 					this_dr.vol += vol;
-					if( stars ) {
-						this_dr.cold_mass += sph_mass * sph_particles_cold_mass(j);
-					}
 				}
 				vx *= ainv;
 				vy *= ainv;
@@ -176,16 +172,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 		dr.nmapped += this_dr.nmapped;
 		dr.therm += this_dr.therm;
 		dr.vol += this_dr.vol;
-		dr.cold_mass += this_dr.cold_mass;
 	}
 	tm.stop();
 	profiler_exit();
-	if (hpx_rank() == 0 && get_options().stars && dr.cold_mass) {
-		const double baryon_mass = sph_mass * pow(get_options().parts_dim, NDIM);
-		FILE* fp = fopen("coldmass.txt", "at");
-		fprintf(fp, "%e %e\n", 1.0 / scale - 1.0, dr.cold_mass / baryon_mass);
-		fclose(fp);
-	}
-//	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }
