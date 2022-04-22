@@ -232,9 +232,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					curl_vy = -dvz_dx + dvx_dz;                              // 2
 					curl_vz = dvy_dx - dvx_dy;
 					const float h_i = data.rec2_snk[snki].h;
-					const float pre_i = data.pre_snk[snki];
-					const float A_i = data.rec2_snk[snki].A;
-					const float c_i = sqrtf(gamma0 * powf(pre_i, 1.0f - invgamma) * powf(A_i, invgamma));  // 15
+					const float eint_i = data.rec2_snk[snki].eint;
+					const float pre_i = (gamma0 - 1.f) * rho_i * eint_i;
+					const float c_i = sqrtf(gamma0 * pre_i / rho_i);  // 15
 					vsig += c_i;																								   // 1
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					float dt2 = params.t0 * rung_dt[rung];                                                  // 1

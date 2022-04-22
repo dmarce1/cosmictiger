@@ -462,7 +462,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			if (verbose)
 				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(), err.err_max, err.err_rms);
 			tm.reset();
-			sph_particles_cache_free_entr();
+			sph_particles_cache_free_eint();
 		} while (err.err_max > SPH_DIFFUSION_TOLER1 || err.err_rms > SPH_DIFFUSION_TOLER2);
 		dtm.stop();
 		PRINT("Conduction took %e seconds total\n", dtm.read());

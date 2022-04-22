@@ -149,7 +149,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					echange += (chem.eint * (1.f - chem.cold_mass) - sph_particles_eint(i) * (1.f - sph_particles_cold_mass(i)))*sph_mass/sqr(a);
 					const float fh = 1.f - chem.cold_mass;
 					const float rho = sph_particles_rho(i);
-					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
+					sph_particles_eint(i) = chem.eint;
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 						sph_particles_cold_mass(i) = chem.cold_mass;

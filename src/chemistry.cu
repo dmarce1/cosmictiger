@@ -449,7 +449,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double dt = (double) attr.dt * (double) params.a;
 		dt *= (double) params.code_to_s;																												// 1
 		double rho = (double) attr.rho * (double) code_to_density * pow((double) params.a, -3.0);
-		const float hot_mass = 1.0f - attr.cold_mass;
+		float hot_mass = 1.0f - attr.cold_mass;
 		rho *= hot_mass;
 		const double rhoavo = rho * constants::avo;																		// 1
 		N.H *= rhoavo;																												// 1
@@ -467,6 +467,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double eint = attr.eint;
 		eint *= code_to_energy;
 		eint /= sqr(params.a);
+		eint /= hot_mass;
 		double T0 = (eint * rho) / (n * cv);
 		double Tmax = TMAX;
 		float Tmin = TMIN;
@@ -506,12 +507,6 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		const float tcool = -eint * rho / (dedt0 * (params.a));
 		//const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (double(params.G) * double(rho))) / params.a;
 		if (params.stars && unstable && dedt0 < 0.f) {
-			float hot_mass = 1.f - attr.cold_mass;
-			float hotmass0 = hot_mass;
-			float factor = expf(-fminf(dt / tcool, 1.f));
-			hot_mass *= factor;
-			float cold_mass0 = attr.cold_mass;
-			attr.cold_mass = 1.f - hot_mass;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
 			N.Hp *= (double) rhoavoinv;																										// 1
@@ -520,6 +515,11 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			N.He *= 4.0 * (double) rhoavoinv;																										// 1
 			N.Hep *= 4.0 * (double) rhoavoinv;																										// 1
 			N.Hepp *= 4.0 * (double) rhoavoinv;
+			float factor = expf(-fminf(dt / tcool, 1.f));
+			attr.eint /= hot_mass;
+			hot_mass *= factor;
+			attr.eint *= hot_mass;
+			attr.cold_mass = 1.f - hot_mass;
 			attr.H = N.H;																										// 1
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;
@@ -567,6 +567,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			eint = cv * n * T / rho;																										 	// 1
 			eint *= sqr(params.a);
 			eint /= code_to_energy;
+			eint *= hot_mass;
 			attr.H = N.H;
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;

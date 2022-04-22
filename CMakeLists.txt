@@ -207,7 +207,7 @@ set_source_files_properties(./src/sph_rungs.cu PROPERTIES COMPILE_FLAGS -maxrreg
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       -DUSE_CUDA --use_fast_math ;
+                       -DUSE_CUDA --use_fast_math;
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )

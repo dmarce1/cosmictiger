@@ -27,8 +27,7 @@ struct conduction_record1 {
 	char rung;
 };
 struct conduction_record2 {
-	float entr;
-	float cfrac;
+	float eint;
 	float kappa;
 	float fpre;
 };
@@ -50,7 +49,6 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 	}
 	__syncthreads();
 	new (&ws) conduction_workspace();
-	const float gamma0 = data.def_gamma;
 	const float m = data.m;
 	array<fixed32, NDIM> x;
 	const float cons = -2.f * sqr(params.a) * m;
@@ -108,15 +106,9 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					ALWAYS_ASSERT(h > 0.f);
 					ws.rec1[k].h = h;
 					ws.rec1[k].rung = data.rungs[pi];
-					ws.rec2[k].entr = data.entr[pi];
+					ws.rec2[k].eint = data.eint[pi];
 					ws.rec2[k].kappa = data.kappa[pi];
 					ws.rec2[k].fpre = data.fpre1[pi];
-					if (params.stars) {
-						ws.rec2[k].cfrac = data.cold_frac[pi];
-						ALWAYS_ASSERT(ws.rec2[k].cfrac <= 1.f);
-					} else {
-						ws.rec2[k].cfrac = 0.f;
-					}
 				}
 			}
 		}
@@ -134,7 +126,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const auto y_i = data.y[i];
 				const auto z_i = data.z[i];
 				const float h_i = data.h[i];
-				const float A_i = data.entr[i];
+				const float eint_i = data.eint[i];
 				for (int j = tid; j < jmax; j += block_size) {
 					int k;
 					int total;
@@ -183,7 +175,6 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const float hinv_i = 1.f / h_i;												// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 2
 				const float rho_i = m * c0 * h3inv_i;										// 2
-				const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);	// 11
 				const float dt_i = rung_dt[rung_i] * params.t0;							// 1
 				const float rhohinv_i = 1.f / (rho_i * hfrac_i);							// 5
 				float den = 0.f;
@@ -205,15 +196,13 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					const float h2_j = sqr(h_j);							// 1
 					flops += 11;
 					if (r2 < fmaxf(h2_j, h2_i)) {							// 2
-						const float A_j = rec2.entr;
+						const float eint_j = rec2.eint;
 						const float r = sqrtf(r2);							// 4
 						const float rinv = 1.f / r;						// 4
 						const float q_i = r * hinv_i;						// 1
 						flops += 10;
 						const float fpre_j = rec2.fpre;
 						const float kappa_j = rec2.kappa;
-						const float cfrac_j = rec2.cfrac;
-						const float hfrac_j = 1.f - cfrac_j;													// 1
 						const float hinv_j = 1.f / h_j;															// 4
 						const float h3inv_j = sqr(hinv_j) * hinv_j;											// 2
 						const float rho_j = m * c0 * h3inv_j;													// 2
@@ -226,7 +215,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float dt_j = rung_dt[rung_j] * params.t0;										// 2
 						const float dt_ij = fminf(dt_i, dt_j);													// 2
 						const float D_ij = cons * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv; // 10
-						num = fmaf(D_ij, A_j * powf(rho_j * hfrac_j * rhohinv_i, gamma0 - 1.f) * hfrac_j / hfrac_i, num); // 14
+						num = fmaf(D_ij, eint_j, num); // 14
 						den += D_ij;																					// 1
 						flops += 69;
 					}
@@ -236,12 +225,12 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				if (tid == 0) {
 					flops += (CONDUCTION_BLOCK_SIZE - 1) * 2;
 					flops += 7;
-					const float A0 = data.entr0_snk[snki];
-					const float A1 = (A0 + num) / (1.f + den);
-					const float dA = A1 - A_i;
-					data.dentr_snk[snki] = dA;
+					const float eint0 = data.eint0_snk[snki];
+					const float eint1 = (eint0 + num) / (1.f + den);
+					const float deint = eint1 - eint_i;
+					data.deint_snk[snki] = deint;
 //					ALWAYS_ASSERT(A1-A0==0.0);
-					ALWAYS_ASSERT(isfinite(dA));
+					ALWAYS_ASSERT(isfinite(deint));
 				}
 			}
 		}

@@ -135,7 +135,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 							const float rho = sph_particles_rho(i) /(a*a*a);
 							const float eps = eps_cgs / code_to_ene;
 							const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
-							sph_particles_rec2(i).A = K0;
+							sph_particles_set_eint_with_entr(i, K0);
 							//				PRINT( "SUPERNOVA ! %e\n", sph_particles_temperature(i,a ));
 
 			} else {
