@@ -276,8 +276,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 
 	if (stars && minrung <= 1) {
+		stars_statistics(scale);
 		if (stars_find(scale, dt, minrung, iter, t0)) {
-			stars_statistics(scale);
 
 			tm.start();
 			if (verbose)

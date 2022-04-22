@@ -467,6 +467,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		double eint = attr.eint;
 		eint *= code_to_energy;
 		eint /= sqr(params.a);
+		eint /= hot_mass;
 		double T0 = (eint * rho) / (n * cv);
 		double Tmax = TMAX;
 		float Tmin = TMIN;
@@ -507,10 +508,10 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		//const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (double(params.G) * double(rho))) / params.a;
 		if (params.stars && unstable && dedt0 < 0.f) {
 			float hot_mass = 1.f - attr.cold_mass;
-			float hotmass0 = hot_mass;
 			float factor = expf(-fminf(dt / tcool, 1.f));
+			attr.eint /= hot_mass;
 			hot_mass *= factor;
-			float cold_mass0 = attr.cold_mass;
+			attr.eint *= hot_mass;
 			attr.cold_mass = 1.f - hot_mass;
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
@@ -567,6 +568,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			eint = cv * n * T / rho;																										 	// 1
 			eint *= sqr(params.a);
 			eint /= code_to_energy;
+			eint *= hot_mass;
 			attr.H = N.H;
 			attr.H2 = N.H2;
 			attr.Hep = N.Hep;

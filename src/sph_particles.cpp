@@ -172,22 +172,18 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
-						sph_particles_entr(i) += sph_particles_dentr(i)* 2.0 * dt2;
+						sph_particles_entr(i) += sph_particles_dentr1(i)* 2.0 * dt2;
+						sph_particles_entr(i) += sph_particles_dentr2(i)* 2.0 * dt2;
 						if( stars ) {
+							const float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
+							ALWAYS_ASSERT(dadtoa>=0.0);
+							sph_particles_cold_mass(i) /= 1.f + 2.0 * dt2 * dadtoa;
 						}
 						if( chem ) {
 							for( int fi = 0; fi < NCHEMFRACS; fi++) {
 								auto& frac = sph_particles_frac(fi,i);
 								auto dfrac = sph_particles_dchem(i)[fi];
-								/*if( frac + dfrac * 2.0 * dt2 < 0.0) {
-								 if(frac + 2.0 * dt2 * dfrac > -1e-20f) {
-								 frac = 1e-30f - dfrac * 2.0 * dt2 *1.0000001;
-								 } else {
-								 PRINT( "%e %e\n", frac, 2.0 * dt2 * dfrac);
-								 ALWAYS_ASSERT(false);
-								 }
-								 }*/
 								frac += dfrac * dt2 * 2.0;
 							}
 						}
@@ -224,7 +220,7 @@ float sph_particles_temperature(part_int i, float a) {
 	const double H = sph_particles_H(i);
 	const double He = Y - Hep - Hepp;
 	double rho = sph_den(1 / (h * h * h));
-	rho *= 1.0 - sph_particles_cold_mass(i);
+	const double hfrac = 1.0 - sph_particles_cold_mass(i);
 	double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
 	rho *= code_to_density * pow(a, -3);
 	n *= constants::avo * rho;									// 8
@@ -233,7 +229,7 @@ float sph_particles_temperature(part_int i, float a) {
 	cv *= double(constants::kb);																							// 1
 	double entr = sph_particles_entr(i);
 	entr *= code_to_entropy;
-	const double eint = entr * pow(rho, get_options().gamma - 1.0) / (gamma - 1.0);
+	const double eint = entr * pow(rho, get_options().gamma - 1.0) / (gamma - 1.0) / hfrac;
 	double T = rho * eint / (n * cv);
 	if (H < 0.0) {
 		if (H < -5.0e-3) {
@@ -310,7 +306,8 @@ void sph_particles_swap(part_int i, part_int j) {
 
 void sph_particles_swap2(part_int i, part_int j) {
 	sph_particles_swap(i, j);
-	std::swap(sph_particles_dentr(i), sph_particles_dentr(j));
+	std::swap(sph_particles_dentr1(i), sph_particles_dentr1(j));
+	std::swap(sph_particles_dentr2(i), sph_particles_dentr2(j));
 	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(sph_particles_dvel(dim, i), sph_particles_dvel(dim, j));
@@ -393,6 +390,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_dm, new_capacity, true);
 		sph_particles_array_resize(sph_particles_e0, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_de3, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fp1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fp2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_p, new_capacity, true);
@@ -420,9 +418,10 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_divv(oldsz + i) = 0.f;
 		sph_particles_semiactive(oldsz + i) = 0.0f;
 		if (stars) {
-			sph_particles_cold_mass((oldsz + i))= 0.f;
+			sph_particles_cold_mass((oldsz + i)) = 0.f;
 		}
-		sph_particles_dentr(oldsz + i) = 0.f;
+		sph_particles_dentr1(oldsz + i) = 0.f;
+		sph_particles_dentr2(oldsz + i) = 0.f;
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_dvel(dim, oldsz + i) = 0.0f;
 			sph_particles_dvel0(dim, oldsz + i) = 0.0f;

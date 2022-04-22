@@ -544,18 +544,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 		host_rungs.resize(parts_size);
 		host_h.resize(parts_size);
 		host_entr.resize(parts_size);
-		if (stars) {
-			host_cold_frac.resize(parts_size);
-		}
 	} else if (params.run_type == SPH_RUN_CONDUCTION) {
 		host_rungs.resize(parts_size);
 		host_h.resize(parts_size);
 		host_entr.resize(parts_size);
 		host_kappa.resize(parts_size);
 		host_fpre1.resize(parts_size);
-		if (stars) {
-			host_cold_frac.resize(parts_size);
-		}
 	} else if (params.run_type == SPH_RUN_PREHYDRO) {
 		host_h.resize(parts_size);
 		host_vx.resize(parts_size);
@@ -625,17 +619,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 								} else if( params.run_type == SPH_RUN_COND_INIT) {
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
-									if( stars ) {
-										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
-									}
 									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(),host_h.data(), offset);
 									sph_particles_global_read_aux(node.global_part_range(), nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, offset);
 								} else if( params.run_type == SPH_RUN_CONDUCTION) {
 									sph_particles_global_read_kappas(node.global_part_range(), host_kappa.data(), offset);
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
-									if( stars ) {
-										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), offset);
-									}
 									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(),host_h.data(), offset);
 									sph_particles_global_read_aux(node.global_part_range(), nullptr, nullptr, host_fpre1.data(), nullptr, nullptr, nullptr, offset);
 								}
@@ -657,18 +645,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.entr, sizeof(float) * host_entr.size()));
-		if (stars) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.cold_frac, sizeof(float) * host_cold_frac.size()));
-		}
 	} else if (params.run_type == SPH_RUN_CONDUCTION) {
 		CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.entr, sizeof(float) * host_entr.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.kappa, sizeof(float) * host_kappa.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.fpre1, sizeof(float) * host_fpre1.size()));
-		if (stars) {
-			CUDA_CHECK(cudaMalloc(&cuda_data.cold_frac, sizeof(float) * host_cold_frac.size()));
-		}
 	} else if (params.run_type == SPH_RUN_PREHYDRO) {
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.entr, sizeof(float) * host_entr.size()));
@@ -743,18 +725,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.rungs, host_rungs.data(), sizeof(char) * host_rungs.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.entr, host_entr.data(), sizeof(float) * host_entr.size(), cudaMemcpyHostToDevice, stream));
-		if (stars) {
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.cold_frac, host_cold_frac.data(), sizeof(float) * host_cold_frac.size(), cudaMemcpyHostToDevice, stream));
-		}
 	} else if (params.run_type == SPH_RUN_CONDUCTION) {
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.fpre1, host_fpre1.data(), sizeof(float) * host_fpre1.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.rungs, host_rungs.data(), sizeof(char) * host_rungs.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.entr, host_entr.data(), sizeof(float) * host_entr.size(), cudaMemcpyHostToDevice, stream));
 		CUDA_CHECK(cudaMemcpyAsync(cuda_data.kappa, host_kappa.data(), sizeof(float) * host_kappa.size(), cudaMemcpyHostToDevice, stream));
-		if (stars) {
-			CUDA_CHECK(cudaMemcpyAsync(cuda_data.cold_frac, host_cold_frac.data(), sizeof(float) * host_cold_frac.size(), cudaMemcpyHostToDevice, stream));
-		}
 	}
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
@@ -776,7 +752,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.rec2_snk = &sph_particles_rec2(0);
 	cuda_data.kap_snk = &sph_particles_kappa(0);
 	cuda_data.entr0_snk = &sph_particles_entr0(0);
-	cuda_data.dentr_snk = &sph_particles_dentr(0);
+	cuda_data.dentr1_snk = &sph_particles_dentr1(0);
+	cuda_data.dentr2_snk = &sph_particles_dentr2(0);
 	cuda_data.dcold_mass = &sph_particles_dcold_mass(0);
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
@@ -841,18 +818,12 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaFree(cuda_data.rungs));
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		CUDA_CHECK(cudaFree(cuda_data.entr));
-		if (stars) {
-			CUDA_CHECK(cudaFree(cuda_data.cold_frac));
-		}
 	} else if (params.run_type == SPH_RUN_CONDUCTION) {
 		CUDA_CHECK(cudaFree(cuda_data.rungs));
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		CUDA_CHECK(cudaFree(cuda_data.entr));
 		CUDA_CHECK(cudaFree(cuda_data.fpre1));
 		CUDA_CHECK(cudaFree(cuda_data.kappa));
-		if (stars) {
-			CUDA_CHECK(cudaFree(cuda_data.cold_frac));
-		}
 	} else if (params.run_type == SPH_RUN_PREHYDRO) {
 		CUDA_CHECK(cudaFree(cuda_data.h));
 		CUDA_CHECK(cudaFree(cuda_data.entr));
@@ -914,7 +885,7 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 			for( part_int i = b; i < e; i++) {
 				if( !sph_particles_converged(i) && sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
 					float& A = sph_particles_entr(i);
-					const float dA = sph_particles_dentr(i);
+					const float dA = sph_particles_dentr1(i);
 					ALWAYS_ASSERT(isfinite(std::max(A, A+dA)));
 					ALWAYS_ASSERT(std::max(A, A+dA) > 0.0f);
 					const float this_err = fabs(dA) / std::max(sph_particles_entr0(i), A + dA);
