@@ -78,6 +78,9 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	case SPH_RUN_PREHYDRO2: {
 		sph_cuda_prehydro2<<<prehydro2_nblocks, PREHYDRO2_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
+		rc.rc = reduce->flag;
+		rc.hmin = reduce->hmin;
+		rc.hmax = reduce->hmax;
 	}
 	break;
 	case SPH_RUN_AUX: {

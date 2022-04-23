@@ -443,7 +443,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 					break;
 
 					case SPH_RUN_PREHYDRO2:
-					test = has_active_neighbors(self);
+					test = has_active_neighbors(self) > 0&& !is_converged(self, params.min_rung);
 					break;
 
 					case SPH_RUN_COND_INIT:

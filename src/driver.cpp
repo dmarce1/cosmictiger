@@ -236,7 +236,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
 		cont = kr.rc;
-		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
+		tnparams.h_wt =(1.0 + SMOOTHLEN_BUFFER);
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 		tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
@@ -257,16 +257,40 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.reset();
 		kr = sph_run_return();
 	} while (cont);
+	sph_particles_reset_converged();
+	do {
+		sparams.set = SPH_SET_ACTIVE;
+		sparams.run_type = SPH_RUN_PREHYDRO2;
+		timer tm;
+		tm.start();
+		kr = sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+		tm.reset();
+		cont = kr.rc;
+		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.seto = SPH_SET_ALL;
+		tnparams.seti = SPH_SET_ALL;
+//			tnparams.set = SPH_SET_ACTIVE;
+		tm.start();
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+		profiler_exit();
+		tm.stop();
+		tm.reset();
+		tm.start();
+		tnparams.seti = SPH_INTERACTIONS_IJ;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		profiler_exit();
+		tm.stop();
+		tm.reset();
+		kr = sph_run_return();
+	} while (cont);
 	timer tm;
-
-	sparams.run_type = SPH_RUN_PREHYDRO2;
-	tm.reset();
-	tm.start();
-	sph_run(sparams, true);
-	tm.stop();
-	if (verbose)
-		PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e\n", tm.read());
-	tm.reset();
 
 	sparams.phase = 0;
 
@@ -331,11 +355,11 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 					PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 				tm.reset();
 				cont = kr.rc;
-				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
+				tnparams.h_wt =  (1.0 + SMOOTHLEN_BUFFER);
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 				tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-				//			tnparams.set = SPH_SET_ACTIVE;
+		//			tnparams.set = SPH_SET_ACTIVE;
 				tm.start();
 				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -352,15 +376,39 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				tm.reset();
 				kr = sph_run_return();
 			} while (cont);
-
-			sparams.run_type = SPH_RUN_PREHYDRO2;
-			tm.reset();
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e\n", tm.read());
-			tm.reset();
+			sph_particles_reset_converged();
+			do {
+				sparams.set = SPH_SET_ACTIVE;
+				sparams.run_type = SPH_RUN_PREHYDRO2;
+				timer tm;
+				tm.start();
+				kr = sph_run(sparams, true);
+				tm.stop();
+				if (verbose)
+					PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+				tm.reset();
+				cont = kr.rc;
+				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
+				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+				tnparams.seto = SPH_SET_ALL;
+				tnparams.seti = SPH_SET_ALL;
+		//			tnparams.set = SPH_SET_ACTIVE;
+				tm.start();
+				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+				profiler_exit();
+				tm.stop();
+				tm.reset();
+				tm.start();
+				tnparams.seti = SPH_INTERACTIONS_IJ;
+				tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+				sph_tree_neighbor(tnparams, root_id, checklist).get();
+				profiler_exit();
+				tm.stop();
+				tm.reset();
+				kr = sph_run_return();
+			} while (cont);
 
 			sparams.phase = 1;
 			sparams.run_type = SPH_RUN_HYDRO;
@@ -436,7 +484,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("Took %e s\n", tm.read());
 	}
 #ifdef IMPLICIT_CONDUCTION
-	if ( conduction) {
+	if (conduction) {
 
 		tnparams.h_wt = 1.001;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -502,25 +550,25 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	fprintf(fp, "%e %i %e %e %e %e %e %e %e ", tau, max_rung, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_cond, dtinv_acc, dtinv_divv, dtinv_omega);
 	if (dtinv_max == dtinv_cfl) {
 		PRINT("CFL");
-		fprintf( fp, "%s\n", "CFL");
+		fprintf(fp, "%s\n", "CFL");
 	} else if (dtinv_max == dtinv_visc) {
 		PRINT("VISCOSITY");
-		fprintf( fp, "%s\n", "VISCOSITY");
+		fprintf(fp, "%s\n", "VISCOSITY");
 	} else if (dtinv_max == dtinv_diff) {
 		PRINT("DIFFUSION");
-		fprintf( fp, "%s\n", "DIFFUSION");
+		fprintf(fp, "%s\n", "DIFFUSION");
 	} else if (dtinv_max == dtinv_cond) {
 		PRINT("CONDUCTION");
-		fprintf( fp, "%s\n", "CONDUCTION");
+		fprintf(fp, "%s\n", "CONDUCTION");
 	} else if (dtinv_max == dtinv_acc) {
 		PRINT("ACCELERATION");
-		fprintf( fp, "%s\n", "ACCELERATION");
+		fprintf(fp, "%s\n", "ACCELERATION");
 	} else if (dtinv_max == dtinv_divv) {
 		PRINT("VELOCITY DIVERGENCE");
-		fprintf( fp, "%s\n", "DIVV");
+		fprintf(fp, "%s\n", "DIVV");
 	} else if (dtinv_max == dtinv_omega) {
 		PRINT("OMEGA");
-		fprintf( fp, "%s\n", "OMEGA");
+		fprintf(fp, "%s\n", "OMEGA");
 	} else {
 		ALWAYS_ASSERT(false);
 	}

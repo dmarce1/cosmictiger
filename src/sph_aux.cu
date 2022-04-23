@@ -263,7 +263,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float ddivv_dt = (div_v - div_v0) / dt1 - params.adot * ainv * div_v;             // 8
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);                      // 6
 					const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv)); // 14
-					const float alpha_targ = params.alpha1 * S / (S + sqr(c_i));     // 8
+					const float alpha_targ = params.alpha0 + (params.alpha1 - params.alpha0) * S / (S + sqr(c_i));     // 8
 					const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv;                       // 3
 					const float dthydro = params.cfl * params.a * h_i / vsig;                              // 6
 					const float lambda1 = 1.f / dthydro;                                                   // 4
