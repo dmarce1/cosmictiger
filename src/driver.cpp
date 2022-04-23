@@ -227,13 +227,13 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sph_particles_reset_converged();
 	do {
 		sparams.set = SPH_SET_ACTIVE;
-		sparams.run_type = SPH_RUN_PREHYDRO;
+		sparams.run_type = SPH_RUN_PREHYDRO1;
 		timer tm;
 		tm.start();
 		kr = sph_run(sparams, true);
 		tm.stop();
 		if (verbose)
-			PRINT("sph_run(SPH_RUN_PREHYDRO (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+			PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
 		cont = kr.rc;
 		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
@@ -258,6 +258,15 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		kr = sph_run_return();
 	} while (cont);
 	timer tm;
+
+	sparams.run_type = SPH_RUN_PREHYDRO2;
+	tm.reset();
+	tm.start();
+	sph_run(sparams, true);
+	tm.stop();
+	if (verbose)
+		PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e\n", tm.read());
+	tm.reset();
 
 	sparams.phase = 0;
 
@@ -313,13 +322,13 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			sph_particles_reset_converged();
 			do {
 				sparams.set = SPH_SET_ACTIVE;
-				sparams.run_type = SPH_RUN_PREHYDRO;
+				sparams.run_type = SPH_RUN_PREHYDRO1;
 				timer tm;
 				tm.start();
 				kr = sph_run(sparams, true);
 				tm.stop();
 				if (verbose)
-					PRINT("sph_run(SPH_RUN_PREHYDRO (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+					PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 				tm.reset();
 				cont = kr.rc;
 				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
@@ -343,6 +352,15 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				tm.reset();
 				kr = sph_run_return();
 			} while (cont);
+
+			sparams.run_type = SPH_RUN_PREHYDRO2;
+			tm.reset();
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e\n", tm.read());
+			tm.reset();
 
 			sparams.phase = 1;
 			sparams.run_type = SPH_RUN_HYDRO;

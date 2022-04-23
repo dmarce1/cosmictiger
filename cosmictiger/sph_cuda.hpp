@@ -44,7 +44,6 @@ struct sph_run_cuda_data {
 	float* dentr1_snk;
 	float* dentr2_snk;
 	float* entr0_snk;
-	float* domega_snk;
 	float* entr;
 	float* kappa;
 	float* cold_frac;
@@ -106,7 +105,8 @@ struct sph_run_cuda_data {
 	float eta;
 };
 
-#define PREHYDRO_BLOCK_SIZE 128
+#define PREHYDRO1_BLOCK_SIZE 160
+#define PREHYDRO2_BLOCK_SIZE 64
 #define HYDRO_BLOCK_SIZE 96
 #define AUX_BLOCK_SIZE 64
 #define RUNGS_BLOCK_SIZE 256
@@ -139,7 +139,8 @@ struct sph_reduction {
 };
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);
-__global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
+__global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);

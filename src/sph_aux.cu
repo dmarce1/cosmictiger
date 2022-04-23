@@ -163,7 +163,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				const float h4inv_i = h3inv_i * hinv_i;             // 1
 				flops += 8;
 				float vsig = 0.0f;
-				float domega_dt = 0.f;
 				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
 					const int kk = ws.neighbors[j];
 					const auto& rec1 = ws.rec1[kk];
@@ -188,14 +187,8 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float vz_ij = vz0_ij + z_ij * params.adot; // 3
 					const float rinv = 1.0f / (1.0e-30f + r);             // 5
 					float w;
-					const float dq = 0.01f;
-					float q1 = q;
-					float q2 = q + dq;
-					const float dwdq1 = dkernelW_dq(q1, &w, &flops) / omega_i;
-					const float dwdq2 = dkernelW_dq(q2, &w, &flops) / omega_i;
-					const float& dwdq = dwdq1;
-					const float d2wdq2 = (dwdq2 - dwdq1) / dq;
-					const float dWdr_i = dwdq1 * h4inv_i;                  // 1
+					const float dwdq = dkernelW_dq(q, &w, &flops) / omega_i;
+					const float dWdr_i = dwdq * h4inv_i;                  // 1
 					const float vr_ij = (x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij) * rinv;
 					const float vr0_ij = (x_ij * vx0_ij + y_ij * vy0_ij + z_ij * vz0_ij) * rinv;
 					const float w_ij = fminf(vr_ij, 0.f); // 7
@@ -204,7 +197,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dWdr_i_x = dWdr_i_rinv * x_ij;                   // 1
 					const float dWdr_i_y = dWdr_i_rinv * y_ij;                   // 1
 					const float dWdr_i_z = dWdr_i_rinv * z_ij;                   // 1
-					domega_dt -= vr0_ij * hinv_i * (2.f * dwdq + q * d2wdq2);
 					dvx_dx -= vx_ij * dWdr_i_x;									// 2
 					dvy_dx -= vy_ij * dWdr_i_x;									// 2
 					dvz_dx -= vz_ij * dWdr_i_x;									// 2
@@ -216,7 +208,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					dvz_dz -= vz_ij * dWdr_i_z;									// 2
 					flops += 59;
 				}
-				shared_reduce_add<float, AUX_BLOCK_SIZE>(domega_dt); // 127
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(dvx_dx); // 127
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(dvx_dy); // 127
 				shared_reduce_add<float, AUX_BLOCK_SIZE>(dvx_dz); // 127
@@ -229,8 +220,6 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_max < AUX_BLOCK_SIZE > (vsig);          // 127
 				if (tid == 0) {
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));   // 5
-					domega_dt *= 0.33333333333f / rhoh30 / omega_i;
-					data.domega_snk[snki] = domega_dt;
 					float div_v, curl_vx, curl_vy, curl_vz;
 					const float c0 = float(3.0f / 4.0f / M_PI) * data.N;    // 1
 					const float rho_i = data.m * c0 * h3inv_i;                       // 1
@@ -257,19 +246,11 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					float dt2 = params.t0 * rung_dt[rung];                                                  // 1
 					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);           // 5
 					const float dtinv_divv = params.a * (dloghdt);
-					const float dtinv_omega = params.a * fabs(domega_dt);
 					atomicMax(&reduce->dtinv_divv, dtinv_divv);
-					atomicMax(&reduce->dtinv_omega, dtinv_omega);
 					const float dt_divv = params.cfl * params.a / (dtinv_divv + 1e-33f);                                 // 5
-					const float dt_omega = params.cfl * params.a / (dtinv_omega + 1e-33f);
 					flops += 108 + 10 * (AUX_BLOCK_SIZE - 1);
 					if (dt_divv < dt2) {                                                                    // 1
 						rung = ceilf(log2f(params.t0) - log2f(dt_divv));                                    // 10
-						dt2 = params.t0 * rung_dt[rung];                                                     // 1
-						flops += 11;
-					}
-					if (dt_omega < dt2) {                                                                    // 1
-						rung = ceilf(log2f(params.t0) - log2f(dt_omega));                                    // 10
 						dt2 = params.t0 * rung_dt[rung];                                                     // 1
 						flops += 11;
 					}

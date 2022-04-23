@@ -142,7 +142,6 @@ SPH_PARTICLES_EXTERN float* sph_particles_e0;
 SPH_PARTICLES_EXTERN float* sph_particles_de3;
 SPH_PARTICLES_EXTERN float* sph_particles_de2;
 SPH_PARTICLES_EXTERN float* sph_particles_fp1;
-SPH_PARTICLES_EXTERN float* sph_particles_do;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
 SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
@@ -330,11 +329,6 @@ inline sph_record6& sph_particles_rec6(part_int index) {
 inline float& sph_particles_omega(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_fp1[index];
-}
-
-inline float& sph_particles_domega_dt(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_do[index];
 }
 
 
