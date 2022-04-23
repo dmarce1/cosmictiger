@@ -229,7 +229,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 				shared_reduce_max < AUX_BLOCK_SIZE > (vsig);          // 127
 				if (tid == 0) {
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));   // 5
-					domega_dt *= 0.33333333333f / rhoh30;
+					domega_dt *= 0.33333333333f / rhoh30 / omega_i;
 					data.domega_snk[snki] = domega_dt;
 					float div_v, curl_vx, curl_vy, curl_vz;
 					const float c0 = float(3.0f / 4.0f / M_PI) * data.N;    // 1

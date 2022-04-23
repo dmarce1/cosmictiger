@@ -108,8 +108,8 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float domega_dt = sph_particles_domega_dt(j);
 					float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
 //					PRINT( "%e %e\n", sph_particles_omega(j), domega_dt*dt);
-					sph_particles_omega(j) += domega_dt * dt;
-					float c0 = exp(dloghdt*dt);
+					sph_particles_omega(j) *= expf(domega_dt * dt);
+					float c0 = expf(dloghdt*dt);
 					h *= c0;
 					if( h > 0.5 ) {
 						PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);

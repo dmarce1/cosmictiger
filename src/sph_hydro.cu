@@ -308,6 +308,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float R = params.a * 2.f * difco_ij * rinv / (c_ij - w_ij);
 						const float phi = (2.0f + 3.0f * R) / (2.0f + 3.0f * R + 3.0f * sqr(R));
 						const float D_ij = -2.f * phi * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
+						ALWAYS_ASSERT(D_ij>=0.f);
 						D += D_ij;																				// 1
 						de_dt1 -= D_ij * (A_i - A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f)); // 16;
 						if (params.stars) {
@@ -316,6 +317,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
+								ALWAYS_ASSERT(frac_j[fi]>=0.f);
 								dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi]);										// 5
 								flops += 5;
 							}
