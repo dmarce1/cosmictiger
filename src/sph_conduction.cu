@@ -29,7 +29,7 @@ struct conduction_record1 {
 struct conduction_record2 {
 	float entr;
 	float kappa;
-	float fpre;
+	float omega;
 };
 
 struct conduction_workspace {
@@ -109,7 +109,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					ws.rec1[k].rung = data.rungs[pi];
 					ws.rec2[k].entr = data.entr[pi];
 					ws.rec2[k].kappa = data.kappa[pi];
-					ws.rec2[k].fpre = data.fpre1[pi];
+					ws.rec2[k].omega = data.omega[pi];
 				}
 			}
 		}
@@ -161,7 +161,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				}
 				__syncthreads();
 
-				const float fpre_i = data.fpre1[i];
+				const float omega_i = data.omega[i];
 				const auto rung_i = data.rungs[i];
 				const float kappa_i = data.kappa[i];
 				const float h2_i = sqr(h_i);													// 1
@@ -196,15 +196,15 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float rinv = 1.f / r;						// 4
 						const float q_i = r * hinv_i;						// 1
 						flops += 10;
-						const float fpre_j = rec2.fpre;
+						const float omega_j = rec2.omega;
 						const float kappa_j = rec2.kappa;
 						const float hinv_j = 1.f / h_j;															// 4
 						const float h3inv_j = sqr(hinv_j) * hinv_j;											// 2
 						const float rho_j = m * c0 * h3inv_j;													// 2
 						const float q_j = r * hinv_j;																// 1
 						float w;
-						const float dWdr_i = fpre_i * dkernelW_dq(q_i, &w, &flops) * h3inv_i * hinv_i;																// 3
-						const float dWdr_j = fpre_j * dkernelW_dq(q_j, &w, &flops) * h3inv_j * hinv_j;																// 3
+						const float dWdr_i = dkernelW_dq(q_i, &w, &flops) * h3inv_i * hinv_i / omega_i;																// 3
+						const float dWdr_j = dkernelW_dq(q_j, &w, &flops) * h3inv_j * hinv_j / omega_j;																// 3
 						const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);										// 22
 						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
 						const float dt_j = rung_dt[rung_j] * params.t0;										// 2

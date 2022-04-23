@@ -81,9 +81,7 @@ struct sph_particle0 {
 struct sph_particle {
 	array<float, NCHEMFRACS> frac;
 	array<float, NDIM> dvel;
-	float fpre1;
-	float fpre2;
-	float pre;
+	float omega;
 	float h;
 	float shearv;
 	float alpha;
@@ -94,9 +92,7 @@ struct sph_particle {
 	void serialize(Arc&&arc, unsigned) {
 		arc & frac;
 		arc & dvel;
-		arc & fpre1;
-		arc & fpre2;
-		arc & pre;
+		arc & omega;
 		arc & h;
 		arc & shearv;
 		arc & alpha;
@@ -146,8 +142,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_e0;
 SPH_PARTICLES_EXTERN float* sph_particles_de3;
 SPH_PARTICLES_EXTERN float* sph_particles_de2;
 SPH_PARTICLES_EXTERN float* sph_particles_fp1;
-SPH_PARTICLES_EXTERN float* sph_particles_fp2;
-SPH_PARTICLES_EXTERN float* sph_particles_p;
+SPH_PARTICLES_EXTERN float* sph_particles_do;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
 SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
@@ -155,17 +150,13 @@ SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
 
 struct aux_quantities {
-	float fpre1;
-	float fpre2;
-	float pre;
+	float omega;
 	float shearv;
 	float alpha;
 	array<float, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & fpre1;
-		arc & fpre2;
-		arc & pre;
+		arc & omega;
 		arc & shearv;
 		arc & alpha;
 		arc & fracs;
@@ -189,7 +180,7 @@ void sph_particles_global_read_entr_and_smoothlen(particle_global_range range, f
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* pre, float* fpre1, float* fpre2, float* shearv,
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv,
 		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_load(FILE* fp);
@@ -336,20 +327,16 @@ inline sph_record6& sph_particles_rec6(part_int index) {
 	return sph_particles_r6[index];
 }
 
-inline float& sph_particles_fpre1(part_int index) {
+inline float& sph_particles_omega(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_fp1[index];
 }
 
-inline float& sph_particles_fpre2(part_int index) {
+inline float& sph_particles_domega_dt(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_fp2[index];
+	return sph_particles_do[index];
 }
 
-inline float& sph_particles_pre(part_int index) {
-	CHECK_SPH_PART_BOUNDS(index);
-	return sph_particles_p[index];
-}
 
 inline part_int& sph_particles_dm_index(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -450,9 +437,7 @@ inline float sph_particles_eint(part_int index) {
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
 	aux.alpha = sph_particles_alpha(index);
-	aux.fpre1 = sph_particles_fpre1(index);
-	aux.fpre2 = sph_particles_fpre2(index);
-	aux.pre = sph_particles_pre(index);
+	aux.omega = sph_particles_omega(index);
 	if (get_options().diffusion) {
 		aux.shearv = sph_particles_shear(index);
 	}
@@ -470,9 +455,7 @@ inline sph_particle get_sph_particle(part_int i) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		part.dvel[dim] = sph_particles_dvel(dim, i);
 	}
-	part.fpre1 = sph_particles_fpre1(i);
-	part.fpre2 = sph_particles_fpre2(i);
-	part.pre = sph_particles_pre(i);
+	part.omega = sph_particles_omega(i);
 	part.h = sph_particles_smooth_len(i);
 	part.shearv = sph_particles_shear(i);
 	part.alpha = sph_particles_alpha(i);

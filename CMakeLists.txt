@@ -89,7 +89,6 @@ set(cosmictiger_source_files
     src/sph.cu
     src/sph_aux.cu
     src/sph_cond_init.cu
-    src/sph_smoothlen.cu
     src/sph_prehydro.cu
     src/sph_conduction.cu
     src/sph_hydro.cu
