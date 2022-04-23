@@ -31,6 +31,12 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->max_rung_grav = 0;
 	reduce->max_rung_hydro = 0;
 	reduce->max_rung = 0;
+	reduce->dtinv_acc = 0.f;
+	reduce->dtinv_cond = 0.f;
+	reduce->dtinv_diff = 0.f;
+	reduce->dtinv_divv = 0.f;
+	reduce->dtinv_cfl = 0.f;
+	reduce->dtinv_visc = 0.f;
 	static int prehydro_nblocks;
 	static int aux_nblocks;
 	static int hydro_nblocks;
