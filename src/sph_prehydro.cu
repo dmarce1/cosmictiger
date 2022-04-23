@@ -392,6 +392,7 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 						data.omega_snk[snki] = omega_i;
 						if (params.conduction) {
 							const auto& frac_i = data.rec1_snk[snki].frac;
+							const float& cfrac_i = data.cold_mass_snk[snki];
 							const float& A_i = data.rec2_snk[snki].A;
 							const float& H = frac_i[CHEM_H];
 							const float& Hp = frac_i[CHEM_HP];
@@ -407,7 +408,7 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 							const float rho0 = rho_i / (sqr(params.a) * params.a); // 7
 							float n0 = (H + fmaf(2.f, Hp, fmaf(.5f, H2, fmaf(.25f, He, fmaf(.5f, Hep, .75f * Hepp))))); // 10
 							const float mmw_i = 1.0f / n0;						// 4
-							const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density), 1e-30f) * hfrac_i;		// 8
+							const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density) * hfrac_i, 1e-30f);		// 8
 							const float eint = code_to_energy * A_i * powf(rho0, gamma0 - 1.0) * invgm1 / hfrac_i; // 13
 							const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
 							const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
