@@ -310,6 +310,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 	std::swap(sph_particles_fc[i], sph_particles_fc[j]);
 	std::swap(sph_particles_dv[i], sph_particles_dv[j]);
+	std::swap(sph_particles_kap[i], sph_particles_kap[j]);
 }
 
 void sph_particles_swap2(part_int i, part_int j) {
@@ -1033,6 +1034,8 @@ void sph_particles_load(FILE* fp) {
 	if (stars) {
 		stars_load(fp);
 	}
+
+	FREAD(sph_particles_kap, sizeof(float), sph_particles_size(), fp);
 }
 
 void sph_particles_save(FILE* fp) {
@@ -1052,6 +1055,7 @@ void sph_particles_save(FILE* fp) {
 	if (stars) {
 		stars_save(fp);
 	}
+	fwrite(sph_particles_kap, sizeof(float), sph_particles_size(), fp);
 }
 
 HPX_PLAIN_ACTION (sph_particles_reset_converged);

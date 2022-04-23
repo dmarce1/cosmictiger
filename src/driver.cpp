@@ -401,7 +401,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("Took %e s\n", tm.read());
 	}
 
-	if (conduction) {
+	if (false && conduction) {
 
 		tnparams.h_wt = 1.001;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;

@@ -35,6 +35,7 @@ struct hydro_record2 {
 	float omega;
 	float shearv;
 	float cold_frac;
+	float kappa;
 };
 
 struct hydro_workspace {
@@ -122,6 +123,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].omega = data.omega[pi];
 					if (params.diffusion) {
 						ws.rec2[k].shearv = data.shearv[pi];
+					}
+					if (params.conduction) {
+						ws.rec2[k].kappa = data.kappa[pi];
 					}
 					if (params.stars) {
 						ws.rec2[k].cold_frac = data.cold_frac[pi];
@@ -308,7 +312,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float R = params.a * 2.f * difco_ij * rinv / (c_ij - w_ij);
 						const float phi = (2.0f + 3.0f * R) / (2.0f + 3.0f * R + 3.0f * sqr(R));
 						const float D_ij = -2.f * phi * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
-						ALWAYS_ASSERT(D_ij>=0.f);
+						ALWAYS_ASSERT(D_ij >= 0.f);
 						D += D_ij;																				// 1
 						de_dt1 -= D_ij * (A_i - A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f)); // 16;
 						if (params.stars) {
@@ -317,11 +321,20 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
-								ALWAYS_ASSERT(frac_j[fi]>=0.f);
+								ALWAYS_ASSERT(frac_j[fi] >= 0.f);
 								dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi]);										// 5
 								flops += 5;
 							}
 						}
+					}
+					if (params.conduction) {
+						const float& kappa_i = data.kappa[i];
+						const float& kappa_j = rec2.kappa;
+						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
+						const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * rinv; // 10
+						ALWAYS_ASSERT(D_ij >= 0.f);
+						D += D_ij;																				// 1
+						de_dt1 -= D_ij * (A_i - A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f)); // 16;
 					}
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt1); // 31

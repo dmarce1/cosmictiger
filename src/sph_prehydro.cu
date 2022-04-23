@@ -29,6 +29,8 @@ struct prehydro_record2 {
 	float vx;
 	float vy;
 	float vz;
+	float entr;
+	float h;
 };
 
 struct prehydro_workspace {
@@ -51,6 +53,15 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 	new (&ws) prehydro_workspace();
 	array<fixed32, NDIM> x;
 	float error;
+	const float gamma0 = data.def_gamma;
+	const float code_to_energy = sqr(params.code_to_cm) / sqr(params.code_to_s);									// 5
+	const float code_to_density = params.code_to_g / pow(params.code_to_cm, 3.);									// 12
+	const float colog0 = log(1.5 * pow(constants::kb, 1.5) * pow(constants::e, -3) * pow(M_PI, -0.5));    // 35
+	const float kappa0 = 20.0 * pow(2.0 / M_PI, 1.5) * pow(constants::kb, 2.5) * pow(constants::me, -0.5) * pow(constants::e, -4.0) * params.code_to_s
+			* params.code_to_cm / (params.code_to_g * constants::avo);													// 49
+	const float propc0 = 0.4 * (gamma0 - 1.0) * sqrtf(2.0 * constants::kb / (M_PI * constants::me)) / constants::c; // 17
+	const float cv0 = constants::kb / (gamma0 - 1.0f);																		// 5
+	const float invgm1 = 1.f / (gamma0 - 1.0);
 	while (index < data.nselfs) {
 
 		int flops = 0;
@@ -86,6 +97,10 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					ws.rec2[k].vx = data.vx[pi];
 					ws.rec2[k].vy = data.vy[pi];
 					ws.rec2[k].vz = data.vz[pi];
+					if (params.conduction) {
+						ws.rec2[k].entr = data.entr[pi];
+						ws.rec2[k].h = data.h[pi];
+					}
 				}
 			}
 		}
@@ -207,11 +222,19 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					x[ZDIM] = data.z[i];
 					const float& h_i = data.rec2_snk[snki].h;
 					const float hinv_i = 1.f / h_i; 										// 4
+					const float h3inv_i = sqr(hinv_i) * hinv_i;
 					const float h2_i = sqr(h_i);    										// 1
 					float drho_dh;
 					const float vx_i = data.vx[i];
 					const float vy_i = data.vy[i];
 					const float vz_i = data.vz[i];
+					const float c0 = float(3.0f / 4.0f / M_PI * data.N);     // 1
+					const float rho_i = data.m * c0 * h3inv_i;                        // 1
+					float A_i, ene_i;
+					if (params.conduction) {
+						A_i = data.entr[i];
+						ene_i = A_i * powf(rho_i, gamma0 - 1.0f);		// 11
+					}
 					drho_dh = 0.f;
 					float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));   // 5
 					const fixed32& x_i = x[XDIM];
@@ -226,6 +249,9 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					float dvz_dx = 0.f;
 					float dvz_dy = 0.f;
 					float dvz_dz = 0.f;
+					float gradx = 0.0f;
+					float grady = 0.0f;
+					float gradz = 0.0f;
 					ws.neighbors.resize(0);
 					__syncthreads();
 					flops += 10;
@@ -266,9 +292,8 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					}
 					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(drho_dh);
 					flops += (PREHYDRO_BLOCK_SIZE - 1);
-					const float omega = 0.33333333333f * drho_dh / rhoh30;								// 4
+					const float omega_i = 0.33333333333f * drho_dh / rhoh30;								// 4
 					__syncthreads();
-					const float h3inv_i = hinv_i * sqr(hinv_i);					// 2
 					const float h4inv_i = h3inv_i * hinv_i;						// 1
 					flops += 16;
 					for (int j = tid; j < ws.neighbors.size(); j += block_size) {
@@ -293,7 +318,7 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 						const float rinv = 1.0f / (1.0e-30f + r);               // 5
 						float w;
 						const float dwdq = dkernelW_dq(q, &w, &flops);
-						const float dWdr_i = dwdq * h4inv_i / omega;             // 2
+						const float dWdr_i = dwdq * h4inv_i / omega_i;             // 2
 						const float dWdr_i_rinv = dWdr_i * rinv;                // 1
 						const float dWdr_i_x = dWdr_i_rinv * x_ij;				  // 1
 						const float dWdr_i_y = dWdr_i_rinv * y_ij;              // 1
@@ -307,6 +332,19 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 						dvx_dz -= vx_ij * dWdr_i_z; // 2
 						dvy_dz -= vy_ij * dWdr_i_z; // 2
 						dvz_dz -= vz_ij * dWdr_i_z; // 2
+						if (params.conduction) {
+							const float h_j = rec2.h;
+							const float A_j = rec2.entr;
+							const float hinv_j = 1.f / h_j;					// 4
+							const float h3inv_j = sqr(hinv_j) * hinv_j;	// 2
+							const float rho_j = data.m * c0 * h3inv_j;			// 2
+							const float ene_j = A_j * powf(rho_j, gamma0 - 1.0f); // 11
+							const float tmp = dWdr_i * rinv * (ene_j - ene_i); // 14
+							gradx = fmaf(tmp, x_ij, gradx);					// 2
+							grady = fmaf(tmp, y_ij, grady);					// 2
+							gradz = fmaf(tmp, z_ij, gradz);					// 2
+						}
+
 						flops += 68;
 					}
 					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(dvx_dx);		// 127
@@ -318,13 +356,21 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(dvz_dx);		// 127
 					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(dvz_dy);		// 127
 					shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(dvz_dz);		// 127
+					if( params.conduction ) {
+						const float tmp = data.m / (params.a * rho_i * ene_i);		// 5
+						gradx *= tmp;												// 1
+						grady *= tmp;												// 1
+						gradz *= tmp;												// 1
+						flops += 8;
+						shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(gradx); //31
+						shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(grady); //31
+						shared_reduce_add<float, PREHYDRO_BLOCK_SIZE>(gradz); //31
+					}
 					if (tid == 0) {
 						flops += 38 + (PREHYDRO_BLOCK_SIZE - 1) * 11;
 						float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
 						float div_v;
-						const float c0 = float(3.0f / 4.0f / M_PI * data.N);     // 1
-						const float rho_i = c0 * h3inv_i;                        // 1
-						const float mrhoinv = 1.f / rho_i;                       // 4
+						const float mrhoinv = data.m / rho_i;                       // 4
 						dvx_dx *= mrhoinv;                                       // 1
 						dvx_dy *= mrhoinv;                                       // 1
 						dvx_dz *= mrhoinv;                                       // 1
@@ -343,7 +389,37 @@ __global__ void sph_cuda_prehydro(sph_run_params params, sph_run_cuda_data data,
 						shear_yz = 0.5f * (dvy_dz + dvz_dy);                     // 2
 						const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz))); // 16
 						data.shear_snk[snki] = shearv;
-						data.omega_snk[snki] = omega;
+						data.omega_snk[snki] = omega_i;
+						if( params.conduction ){
+							const auto& frac_i = data.rec1_snk[snki].frac;
+							const float& cfrac_i = data.cold_mass_snk[snki];
+							const float& A_i = data.rec2_snk[snki].A;
+							const float& H = frac_i[CHEM_H];
+							const float& Hp = frac_i[CHEM_HP];
+							const float& Hn = frac_i[CHEM_HN];
+							const float& H2 = frac_i[CHEM_H2];
+							const float& He = frac_i[CHEM_HE];
+							const float& Hep = frac_i[CHEM_HEP];
+							const float& Hepp = frac_i[CHEM_HEPP];
+							const float grad2 = sqr(gradx, grady, gradz);	// 5
+							const float gradToT = sqrtf(grad2);					// 4
+
+							const float hfrac_i = 1.f - cfrac_i;				// 1
+							const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a); // 7
+							float n0 = (H + fmaf(2.f, Hp, fmaf(.5f, H2, fmaf(.25f, He, fmaf(.5f, Hep, .75f * Hepp))))); // 10
+							const float mmw_i = 1.0f / n0;						// 4
+							const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density), 1e-30f);						// 8
+							const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) * invgm1 / hfrac_i; // 13
+							const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
+							const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
+							float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
+							const float sigmax_i = propc0 * sqrtf(T_i);      // 5
+							const float R = 2.f * mmw_i * kappa_i * gradToT / (rho_i * sigmax_i); // 7
+							const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R)); // 11
+							kappa_i *= phi;											 // 1
+							ALWAYS_ASSERT(isfinite(kappa_i));
+							data.kap_snk[snki] = kappa_i;
+						}
 					}
 				}
 
