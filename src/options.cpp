@@ -112,7 +112,7 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.0), "alpha0 viscosity") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.00), "alpha0 viscosity") //
 	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
 	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //

@@ -157,7 +157,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto& vz_i = data.vz[i];
 				const float& h_i = data.h[i];
 				const float& A_i = data.entr[i];
-				const float& alpha_i = data.alpha[i];
+				const float& alpha_i = fmaxf(data.alpha[i], params.alpha0);
 				const float hinv_i = 1.f / h_i;												// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 3
 				const float rho_i = m * c0 * h3inv_i;										// 2
@@ -244,7 +244,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float& vz_j = rec2.vz;
 					const float& omega_j = rec2.omega;
 					const float& A_j = rec2.entr;
-					const float& alpha_j = rec2.alpha;
+					const float& alpha_j = fmaxf(rec2.alpha, params.alpha0);
 					const float hinv_j = 1.f / h_j;															// 4
 					const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3
 					const float x_ij = distance(x_i, x_j);													// 1
