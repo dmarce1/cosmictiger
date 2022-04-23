@@ -106,7 +106,7 @@ struct sph_run_cuda_data {
 	float eta;
 };
 
-#define PREHYDRO_BLOCK_SIZE 64
+#define PREHYDRO_BLOCK_SIZE 128
 #define HYDRO_BLOCK_SIZE 96
 #define AUX_BLOCK_SIZE 64
 #define RUNGS_BLOCK_SIZE 256
