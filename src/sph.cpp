@@ -439,7 +439,7 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 					break;
 
 					case SPH_RUN_PREHYDRO1:
-					test = self->nactive > 0;
+					test = self->nactive > 0&& !is_converged(self, params.min_rung);
 					break;
 
 					case SPH_RUN_PREHYDRO2:
