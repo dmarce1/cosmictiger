@@ -139,6 +139,12 @@ struct sph_run_return {
 	float momy;
 	float momz;
 	float vol;
+	float dtinv_cfl;
+	float dtinv_visc;
+	float dtinv_diff;
+	float dtinv_cond;
+	float dtinv_divv;
+	float dtinv_acc;
 	sph_run_return() {
 		ent = 0.0;
 		hmax = 0.0;
@@ -148,10 +154,22 @@ struct sph_run_return {
 		max_rung = 0;
 		max_vsig = 0.0;
 		etherm = vol = ekin = momx = momy = momz = 0.0;
+		dtinv_cfl = 0.0f;
+		dtinv_visc = 0.0f;
+		dtinv_diff = 0.0f;
+		dtinv_cond = 0.0f;
+		dtinv_divv = 0.0f;
+		dtinv_acc = 0.0f;
 		rc = false;
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & dtinv_cfl;
+		arc & dtinv_visc;
+		arc & dtinv_diff;
+		arc & dtinv_cond;
+		arc & dtinv_divv;
+		arc & dtinv_acc;
 		arc & hmin;
 		arc & hmax;
 		arc & max_rung_hydro;
@@ -173,6 +191,12 @@ struct sph_run_return {
 		max_rung_grav = std::max(max_rung_grav, other.max_rung_grav);
 		max_rung = std::max(max_rung, other.max_rung);
 		max_vsig = std::max(max_vsig, other.max_vsig);
+		dtinv_cfl = std::max(dtinv_cfl, other.dtinv_cfl);
+		dtinv_visc = std::max(dtinv_visc, other.dtinv_visc);
+		dtinv_acc = std::max(dtinv_acc, other.dtinv_acc);
+		dtinv_diff = std::max(dtinv_diff, other.dtinv_diff);
+		dtinv_cond = std::max(dtinv_cond, other.dtinv_cond);
+		dtinv_divv = std::max(dtinv_divv, other.dtinv_divv);
 		ekin += other.ekin;
 		momx += other.momx;
 		momy += other.momy;
@@ -268,10 +292,8 @@ struct sph_run_params {
 #define SPH_RUN_COND_INIT 5
 #define SPH_RUN_CONDUCTION 6
 
-
 float sph_apply_diffusion_update(int minrung, float toler);
 void sph_init_diffusion();
-
 
 struct cond_update_return {
 	float err_max;

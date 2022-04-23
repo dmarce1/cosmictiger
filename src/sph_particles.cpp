@@ -188,7 +188,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 								auto& frac = sph_particles_frac(fi,i);
 								auto dfrac = sph_particles_dchem(i)[fi];
 								if( frac +dfrac * dt2 * 2.0 < 0.0f ) {
-									PRINT( "%e %e\n", frac,frac + dfrac * dt2 * 2.0 );
+									PRINT( "-----> %e %e\n", frac,frac + dfrac * dt2 * 2.0 );
 								}
 								frac += dfrac * dt2 * 2.0;
 							}

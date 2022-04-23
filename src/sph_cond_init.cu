@@ -260,7 +260,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) * invgm1 / hfrac_i; // 13
 					const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
 					const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
-					float kappa_i = (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
+					float kappa_i = mmw_i * (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
 					const float sigmax_i = propc0 * sqrtf(T_i);      // 5
 					const float R = 2.f * mmw_i * kappa_i * gradToT / (rho_i * sigmax_i); // 7
 					const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R)); // 11

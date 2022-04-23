@@ -154,7 +154,6 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	checklist.push_back(root_id);
 	sph_tree_neighbor_params tnparams;
 
-
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
 
@@ -178,6 +177,12 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	const bool conduction = get_options().conduction;
+	float dtinv_cfl;
+	float dtinv_visc;
+	float dtinv_diff;
+	float dtinv_cond;
+	float dtinv_acc;
+	float dtinv_divv;
 	verbose = true;
 	double flops;
 	*eheat = 0.0;
@@ -259,12 +264,16 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
+	dtinv_cfl = kr.dtinv_cfl;
+	dtinv_visc = kr.dtinv_visc;
+	dtinv_diff = kr.dtinv_diff;
+	dtinv_cond = kr.dtinv_cond;
+	dtinv_acc = kr.dtinv_acc;
 	tm.stop();
 	max_rung = kr.max_rung;
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
-
 
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 
@@ -339,6 +348,11 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			tm.reset();
 			tm.start();
 			kr = sph_run(sparams, true);
+			dtinv_cfl = kr.dtinv_cfl;
+			dtinv_visc = kr.dtinv_visc;
+			dtinv_diff = kr.dtinv_diff;
+			dtinv_cond = kr.dtinv_cond;
+			dtinv_acc = kr.dtinv_acc;
 			tm.stop();
 			max_rung = kr.max_rung;
 			if (verbose)
@@ -352,6 +366,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
+	dtinv_divv = kr.dtinv_divv;
 	max_rung = kr.max_rung;
 	tm.stop();
 	if (verbose)
@@ -400,8 +415,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.stop();
 		PRINT("Took %e s\n", tm.read());
 	}
-
-	if (false && conduction) {
+#ifdef IMPLICIT_CONDUCTION
+	if ( conduction) {
 
 		tnparams.h_wt = 1.001;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -451,10 +466,42 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		dtm.stop();
 		PRINT("Conduction took %e seconds total\n", dtm.read());
 	}
+#endif
 
 	sph_tree_destroy(true);
 	sph_particles_cache_free2();
 //	PRINT( "%i\n", max_rung);
+
+	float dtinv_max = std::max(dtinv_cfl, dtinv_visc);
+	dtinv_max = std::max(dtinv_max, dtinv_diff);
+	dtinv_max = std::max(dtinv_max, dtinv_cond);
+	dtinv_max = std::max(dtinv_max, dtinv_acc);
+	dtinv_max = std::max(dtinv_max, dtinv_divv);
+	FILE* fp = fopen("timestep.txt", "at");
+	fprintf(fp, "%e %i %e %e %e %e %e %e ", tau, max_rung, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_cond, dtinv_acc, dtinv_divv);
+	if (dtinv_max == dtinv_cfl) {
+		PRINT("CFL");
+		fprintf( fp, "%s\n", "CFL");
+	} else if (dtinv_max == dtinv_visc) {
+		PRINT("VISCOSITY");
+		fprintf( fp, "%s\n", "VISCOSITY");
+	} else if (dtinv_max == dtinv_diff) {
+		PRINT("DIFFUSION");
+		fprintf( fp, "%s\n", "DIFFUSION");
+	} else if (dtinv_max == dtinv_cond) {
+		PRINT("CONDUCTION");
+		fprintf( fp, "%s\n", "CONDUCTION");
+	} else if (dtinv_max == dtinv_acc) {
+		PRINT("ACCELERATION");
+		fprintf( fp, "%s\n", "ACCELERATION");
+	} else if (dtinv_max == dtinv_divv) {
+		PRINT("VELOCITY DIVERGENCE");
+		fprintf( fp, "%s\n", "DIVV");
+	} else {
+		ALWAYS_ASSERT(false);
+	}
+	PRINT(" LIMITED TIMESTEP\n");
+	fclose(fp);
 	return kr;
 
 }

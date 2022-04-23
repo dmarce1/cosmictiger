@@ -124,9 +124,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (params.diffusion) {
 						ws.rec2[k].shearv = data.shearv[pi];
 					}
+#ifndef IMPLICIT_CONDUCTION
 					if (params.conduction) {
 						ws.rec2[k].kappa = data.kappa[pi];
 					}
+#endif
 					if (params.stars) {
 						ws.rec2[k].cold_frac = data.cold_frac[pi];
 					} else {
@@ -196,9 +198,13 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 				}
 				float dtinv_cfl = 0.f;
+				float dtinv_visc = 0.f;
 //				float one = 0.0f;
 				const float& adot = params.adot;
-				float D = 0.f;
+				float Dd = 0.f;
+#ifndef IMPLICIT_CONDUCTION
+				float Dc = 0.f;
+#endif
 				ws.neighbors.resize(0);
 				const float jmax = round_up(ws.rec1.size(), block_size);
 				for (int j = tid; j < jmax; j += block_size) {
@@ -302,8 +308,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vdW_ij = fmaf(vx_ij, dWdr_x_ij, fmaf(vy_ij, dWdr_y_ij, vz_ij * dWdr_z_ij));																// 5
 					de_dt2 = fmaf(de_dt0, 0.5f * pi_ij * vdW_ij, de_dt2);                     // 4
 					const float h = fminf(h_i, h_j * (1 << MAX_RUNG_DIF));                  // 3
-					float dtinv = (c_ij + 0.6f * vsig_ij) / h;										// 6
-					dtinv_cfl = fmaxf(dtinv_cfl, dtinv);												// 1
+					dtinv_cfl = fmaxf(dtinv_cfl, c_ij / h);												// 1
+					dtinv_visc = fmaxf(dtinv_visc, 0.6f * vsig_ij / h);												// 1
 					flops += 206;
 					if (params.diffusion) {
 						flops += 29;
@@ -313,7 +319,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float phi = (2.0f + 3.0f * R) / (2.0f + 3.0f * R + 3.0f * sqr(R));
 						const float D_ij = -2.f * phi * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
 						ALWAYS_ASSERT(D_ij >= 0.f);
-						D += D_ij;																				// 1
+						Dd += D_ij;																				// 1
 						de_dt1 -= D_ij * (A_i - A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f)); // 16;
 						if (params.stars) {
 							dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
@@ -327,15 +333,18 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							}
 						}
 					}
+#ifndef IMPLICIT_CONDUCTION
 					if (params.conduction) {
 						const float& kappa_i = data.kappa[i];
 						const float& kappa_j = rec2.kappa;
 						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
-						const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * rinv; // 10
+						const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * r / (r2 + ETA * h_i * h_j); // 10
 						ALWAYS_ASSERT(D_ij >= 0.f);
-						D += D_ij;																				// 1
-						de_dt1 -= D_ij * (A_i - A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f)); // 16;
+						const float A0_j = A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f);
+						Dc += D_ij * fabs((A_i - A0_j)) / fmaxf(A_i, A0_j);																				// 1
+						de_dt1 -= D_ij * (A_i - A0_j); // 16;
 					}
+#endif
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt1); // 31
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt2); // 31
@@ -344,11 +353,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(az);    // 31
 //				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(one);
 				shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_cfl);    // 31
+				shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_visc);    // 31
 				if (tid == 0) {
 					flops += 5 * (HYDRO_BLOCK_SIZE - 1);
 				}
 				if (params.diffusion) {
-					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(D);
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Dd);
 					if (params.stars) {
 						shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dcm_dt); //31
 						if (tid == 0) {
@@ -364,6 +374,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 				}
+#ifndef IMPLICIT_CONDUCTION
+				if (params.conduction) {
+					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(Dc);
+				}
+#endif
 				/*				if (fabs(1. - one) > 1.0e-4 && tid == 0) {
 				 PRINT("one is off %e %i\n", one, data.converged_snk[snki]);
 				 __trap();
@@ -397,25 +412,30 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					}
 //					const float div_v = data.rec3_snk[snki].divv;
 //					const float dtinv_divv = params.a * fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);
-					float dtinv_hydro1 = 1.0e-30f;
+					float dtinv_hydro = 0.f;
 //					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_divv);
-					dtinv_hydro1 = fmaxf(dtinv_hydro1, dtinv_cfl);							// 1
+					float dtinv_diff = 0.0f, dtinv_cond = 0.f;
 					if (params.diffusion) {
-						const float dtinv_diff = params.a * D * (1.f / 3.f);
-						if (dtinv_hydro1 < dtinv_diff) {
-							dtinv_hydro1 = dtinv_diff;
-						}
+						dtinv_diff = params.a * Dd * (1.0f / 3.0f);
 					}
+#ifndef IMPLICIT_CONDUCTION
+					if (params.conduction) {
+						dtinv_cond = params.a * Dc * (1.0f / 3.0f);
+					}
+#endif
 					const float a2 = sqr(ax, ay, az);											// 5
-					const float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i);						// 9
-					float dthydro = params.cfl * params.a / (dtinv_hydro1 + 1e-30f);	// 6
+					float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i) * params.a * params.cfl / data.eta * sqrtf(params.a);	// 11
+					dtinv_hydro = fmaxf(dtinv_hydro, dtinv_cfl + dtinv_visc);							// 1
+					dtinv_hydro = fmaxf(dtinv_hydro, dtinv_diff + dtinv_cond);							// 1
+					dtinv_hydro = fmaxf(dtinv_hydro, dtinv_acc);							// 1
+					float dthydro = params.cfl * params.a / dtinv_hydro;	// 6
 					dthydro = fminf(data.eta * sqrtf(params.a) / (dtinv_acc + 1e-30f), dthydro);	// 11
 					const float g2 = sqr(gx_i, gy_i, gz_i);									// 5
 					const float dtinv_grav = sqrtf(sqrtf(g2));								// 8
 					float dtgrav = data.eta * sqrtf(params.a * data.gsoft) / (dtinv_grav + 1e-30f); // 11
 					dthydro = fminf(dthydro, params.max_dt);									// 1
 					dtgrav = fminf(dtgrav, params.max_dt);										// 1
-					total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);			// 2
+					total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro * h_i);			// 2
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					const float last_dt = rung_dt[rung] * params.t0;						// 1
 					int orung;
@@ -438,6 +458,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							__trap();
 						}
 					}
+					atomicMax(&reduce->dtinv_cfl, dtinv_cfl);
+					atomicMax(&reduce->dtinv_visc, dtinv_visc);
+					atomicMax(&reduce->dtinv_diff, dtinv_diff);
+					atomicMax(&reduce->dtinv_acc, dtinv_acc);
+					atomicMax(&reduce->dtinv_cond, dtinv_cond);
 				}
 			}
 		}

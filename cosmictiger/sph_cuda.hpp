@@ -129,6 +129,12 @@ struct sph_reduction {
 	int max_rung_hydro;
 	int max_rung_grav;
 	int max_rung;
+	float dtinv_cfl;
+	float dtinv_visc;
+	float dtinv_diff;
+	float dtinv_cond;
+	float dtinv_acc;
+	float dtinv_divv;
 };
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);

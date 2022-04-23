@@ -69,6 +69,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
 		rc.max_rung = reduce->max_rung;
+		rc.dtinv_divv = reduce->dtinv_divv;
 	}
 	break;
 	case SPH_RUN_COND_INIT: {
@@ -99,6 +100,11 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
 		rc.max_rung = reduce->max_rung;
+		rc.dtinv_acc = reduce->dtinv_acc;
+		rc.dtinv_cfl = reduce->dtinv_cfl;
+		rc.dtinv_visc = reduce->dtinv_visc;
+		rc.dtinv_diff = reduce->dtinv_diff;
+		rc.dtinv_cond = reduce->dtinv_cond;
 	}
 	break;
 }
@@ -106,5 +112,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	rc.flops = reduce->flops;
 	PRINT("GFLOPS = %e\n", reduce->flops / (1024.0 * 1024.0 * 1024.0) / tm.read());
 	(cudaFree(reduce));
+
 	return rc;
 }

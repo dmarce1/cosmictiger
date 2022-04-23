@@ -256,7 +256,9 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					float dt2 = params.t0 * rung_dt[rung];                                                  // 1
 					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);           // 5
-					const float dt_divv = params.cfl / (dloghdt);                                 // 5
+					const float dtinv_divv = params.a * (dloghdt);
+					atomicMax(&reduce->dtinv_divv, dtinv_divv);
+					const float dt_divv = params.cfl * params.a / dtinv_divv;                                 // 5
 					flops += 108 + 10 * (AUX_BLOCK_SIZE - 1);
 					if (dt_divv < dt2) {                                                                    // 1
 						dt2 = dt_divv;
