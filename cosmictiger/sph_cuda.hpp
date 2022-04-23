@@ -135,6 +135,7 @@ struct sph_reduction {
 	float dtinv_cond;
 	float dtinv_acc;
 	float dtinv_divv;
+	float dtinv_omega;
 };
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);

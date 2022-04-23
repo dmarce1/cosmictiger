@@ -183,6 +183,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	float dtinv_cond;
 	float dtinv_acc;
 	float dtinv_divv;
+	float dtinv_omega;
 	verbose = true;
 	double flops;
 	*eheat = 0.0;
@@ -367,6 +368,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.start();
 	kr = sph_run(sparams, true);
 	dtinv_divv = kr.dtinv_divv;
+	dtinv_omega = kr.dtinv_omega;
 	max_rung = kr.max_rung;
 	tm.stop();
 	if (verbose)
@@ -477,8 +479,9 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	dtinv_max = std::max(dtinv_max, dtinv_cond);
 	dtinv_max = std::max(dtinv_max, dtinv_acc);
 	dtinv_max = std::max(dtinv_max, dtinv_divv);
+	dtinv_max = std::max(dtinv_max, dtinv_omega);
 	FILE* fp = fopen("timestep.txt", "at");
-	fprintf(fp, "%e %i %e %e %e %e %e %e ", tau, max_rung, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_cond, dtinv_acc, dtinv_divv);
+	fprintf(fp, "%e %i %e %e %e %e %e %e %e ", tau, max_rung, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_cond, dtinv_acc, dtinv_divv, dtinv_omega);
 	if (dtinv_max == dtinv_cfl) {
 		PRINT("CFL");
 		fprintf( fp, "%s\n", "CFL");
@@ -497,6 +500,9 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	} else if (dtinv_max == dtinv_divv) {
 		PRINT("VELOCITY DIVERGENCE");
 		fprintf( fp, "%s\n", "DIVV");
+	} else if (dtinv_max == dtinv_omega) {
+		PRINT("OMEGA");
+		fprintf( fp, "%s\n", "OMEGA");
 	} else {
 		ALWAYS_ASSERT(false);
 	}

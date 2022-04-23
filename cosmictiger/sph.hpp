@@ -145,6 +145,7 @@ struct sph_run_return {
 	float dtinv_cond;
 	float dtinv_divv;
 	float dtinv_acc;
+	float dtinv_omega;
 	sph_run_return() {
 		ent = 0.0;
 		hmax = 0.0;
@@ -160,6 +161,7 @@ struct sph_run_return {
 		dtinv_cond = 0.0f;
 		dtinv_divv = 0.0f;
 		dtinv_acc = 0.0f;
+		dtinv_omega = 0.0f;
 		rc = false;
 	}
 	template<class A>
@@ -183,6 +185,7 @@ struct sph_run_return {
 		arc & vol;
 		arc & ent;
 		arc & etherm;
+		arc & dtinv_omega;
 	}
 	sph_run_return& operator+=(const sph_run_return& other) {
 		hmax = std::max(hmax, other.hmax);
@@ -197,6 +200,7 @@ struct sph_run_return {
 		dtinv_diff = std::max(dtinv_diff, other.dtinv_diff);
 		dtinv_cond = std::max(dtinv_cond, other.dtinv_cond);
 		dtinv_divv = std::max(dtinv_divv, other.dtinv_divv);
+		dtinv_omega = std::max(dtinv_omega, other.dtinv_omega);
 		ekin += other.ekin;
 		momx += other.momx;
 		momy += other.momy;

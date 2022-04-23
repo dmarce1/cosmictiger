@@ -274,11 +274,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vdotx_ij = fmaf(x_ij, vx_ij, fmaf(y_ij, vy_ij, z_ij * vz_ij));								// 5
 					const float h_ij = 0.5f * (h_i + h_j);												// 2
 					const float w_ij = fminf(vdotx_ij * rinv, 0.f);									// 2
-					const float mu_ij = fminf(vdotx_ij, 0.f) * h_ij / (r2 + ETA * sqr(h_ij));			// 12
+					const float mu_ij = fminf(vdotx_ij, 0.f) * h_ij * rinv * rinv;			// 12
 					const float rho_ij = 0.5f * (rho_i + rho_j);										// 2
 					const float c_ij = 0.5f * (c_i + c_j);												// 2
 					const float alpha_ij = 0.5f * (alpha_i + alpha_j);								// 2
-					const float vsig_ij = alpha_ij * (c_ij - params.beta * mu_ij); // 4
+					const float vsig_ij = alpha_ij * (c_ij - params.beta * w_ij); // 4
 					float w;
 					const float dWdr_i = dkernelW_dq(q_i, &w, &flops) * hinv_i * h3inv_i / omega_i;   // 2
 					const float dWdr_j = dkernelW_dq(q_j, &w, &flops) * hinv_j * h3inv_j / omega_j;   // 2
@@ -313,36 +313,39 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					flops += 206;
 					if (params.diffusion) {
 						flops += 29;
+						float dif_max = 0.f;
 						const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;			// 3
 						const float difco_ij = 0.5f * (difco_i + difco_j);							// 2
-						const float R = params.a * 2.f * difco_ij * rinv / (c_ij - w_ij);
-						const float phi = (2.0f + 3.0f * R) / (2.0f + 3.0f * R + 3.0f * sqr(R));
-						const float D_ij = -2.f * phi * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
+						const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
 						ALWAYS_ASSERT(D_ij >= 0.f);
-						Dd += D_ij;																				// 1
-						de_dt1 -= D_ij * (A_i - A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f)); // 16;
+						const float A0_j = A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f);
+						dif_max = fabs(A0_j - A_i) / fmaxf(A0_j, A_i);
+						de_dt1 -= D_ij * (A_i - A0_j); // 16;
 						if (params.stars) {
 							dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
+							dif_max = fmaxf(dif_max, fabs(cfrac_j - cfrac_i) / fmaxf(cfrac_j, cfrac_i));
 							flops += 3;
 						}
 						if (data.chemistry) {
 							for (int fi = 0; fi < NCHEMFRACS; fi++) {
 								ALWAYS_ASSERT(frac_j[fi] >= 0.f);
 								dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi]);										// 5
+								dif_max = fmaxf(dif_max, fabs(frac_i[fi] - frac_j[fi]) / fmaxf(frac_i[fi], frac_j[fi]));
 								flops += 5;
 							}
 						}
+						Dd += D_ij * dif_max;																				// 1
 					}
 #ifndef IMPLICIT_CONDUCTION
 					if (params.conduction) {
 						const float& kappa_i = data.kappa[i];
 						const float& kappa_j = rec2.kappa;
 						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
-						const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * r / (r2 + ETA * h_i * h_j); // 10
+						const float D_ij = -2.f * sqr(params.a) * m * kappa_ij * dWdr_ij / (rho_i * rho_j) * r / (r2 + ETA * h_i * h_j);// 10
 						ALWAYS_ASSERT(D_ij >= 0.f);
 						const float A0_j = A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f);
-						Dc += D_ij * fabs((A_i - A0_j)) / fmaxf(A_i, A0_j);																				// 1
-						de_dt1 -= D_ij * (A_i - A0_j); // 16;
+						Dc += D_ij * fabs((A_i - A0_j)) / fmaxf(A_i, A0_j);// 1
+						de_dt1 -= D_ij * (A_i - A0_j);// 16;
 					}
 #endif
 				}

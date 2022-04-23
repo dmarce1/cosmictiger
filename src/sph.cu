@@ -37,6 +37,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->dtinv_divv = 0.f;
 	reduce->dtinv_cfl = 0.f;
 	reduce->dtinv_visc = 0.f;
+	reduce->dtinv_omega = 0.f;
 	static int prehydro_nblocks;
 	static int aux_nblocks;
 	static int hydro_nblocks;
@@ -76,6 +77,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		cuda_stream_synchronize(stream);
 		rc.max_rung = reduce->max_rung;
 		rc.dtinv_divv = reduce->dtinv_divv;
+		rc.dtinv_omega = reduce->dtinv_omega;
 	}
 	break;
 	case SPH_RUN_COND_INIT: {

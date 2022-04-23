@@ -204,7 +204,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float dWdr_i_x = dWdr_i_rinv * x_ij;                   // 1
 					const float dWdr_i_y = dWdr_i_rinv * y_ij;                   // 1
 					const float dWdr_i_z = dWdr_i_rinv * z_ij;                   // 1
-					domega_dt -= vr0_ij * hinv_i * (dwdq + q * d2wdq2);
+					domega_dt -= vr0_ij * hinv_i * (2.f * dwdq + q * d2wdq2);
 					dvx_dx -= vx_ij * dWdr_i_x;									// 2
 					dvy_dx -= vy_ij * dWdr_i_x;									// 2
 					dvz_dx -= vz_ij * dWdr_i_x;									// 2
@@ -257,12 +257,19 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					float dt2 = params.t0 * rung_dt[rung];                                                  // 1
 					const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);           // 5
 					const float dtinv_divv = params.a * (dloghdt);
+					const float dtinv_omega = params.a * fabs(domega_dt);
 					atomicMax(&reduce->dtinv_divv, dtinv_divv);
-					const float dt_divv = params.cfl * params.a / dtinv_divv;                                 // 5
+					atomicMax(&reduce->dtinv_omega, dtinv_omega);
+					const float dt_divv = params.cfl * params.a / (dtinv_divv + 1e-33f);                                 // 5
+					const float dt_omega = params.cfl * params.a / (dtinv_omega + 1e-33f);
 					flops += 108 + 10 * (AUX_BLOCK_SIZE - 1);
 					if (dt_divv < dt2) {                                                                    // 1
-						dt2 = dt_divv;
 						rung = ceilf(log2f(params.t0) - log2f(dt_divv));                                    // 10
+						dt2 = params.t0 * rung_dt[rung];                                                     // 1
+						flops += 11;
+					}
+					if (dt_omega < dt2) {                                                                    // 1
+						rung = ceilf(log2f(params.t0) - log2f(dt_omega));                                    // 10
 						dt2 = params.t0 * rung_dt[rung];                                                     // 1
 						flops += 11;
 					}
