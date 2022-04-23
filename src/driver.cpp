@@ -253,6 +253,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	} while (cont);
 	timer tm;
 
+	sparams.phase = 0;
+
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
@@ -332,16 +334,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				kr = sph_run_return();
 			} while (cont);
 
-			sparams.run_type = SPH_RUN_PREHYDRO;
-			tm.reset();
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_PREHYDRO): tm = %e\n", tm.read());
-			tm.reset();
-
-
+			sparams.phase = 1;
 			sparams.run_type = SPH_RUN_HYDRO;
 			tm.reset();
 			tm.start();
