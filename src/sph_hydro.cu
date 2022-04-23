@@ -403,14 +403,18 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro1 * h_i);			// 2
 					char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 					const float last_dt = rung_dt[rung] * params.t0;						// 1
+					int orung;
 					if (params.phase == 0) {
 						data.oldrung_snk[snki] = rung;
+						orung = rung;
+					} else {
+						orung = data.oldrung_snk[snki];
 					}
 					const int rung_hydro = ceilf(log2fparamst0 - log2f(dthydro));     // 10
 					const int rung_grav = ceilf(log2fparamst0 - log2f(dtgrav));       // 10
 					max_rung_hydro = max(max_rung_hydro, rung_hydro);
 					max_rung_grav = max(max_rung_grav, rung_grav);
-					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+					rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) orung - 1)), 1);
 					max_rung = max(max_rung, rung);
 					flops += 87;
 					if (rung < 0 || rung >= MAX_RUNG) {
