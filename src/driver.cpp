@@ -293,20 +293,14 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	timer tm;
 
 	sparams.phase = 0;
-
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
-	dtinv_cfl = kr.dtinv_cfl;
-	dtinv_visc = kr.dtinv_visc;
-	dtinv_diff = kr.dtinv_diff;
-	dtinv_cond = kr.dtinv_cond;
-	dtinv_acc = kr.dtinv_acc;
 	tm.stop();
 	max_rung = kr.max_rung;
 	if (verbose)
-		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
+		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 	tm.reset();
 
 	sph_particles_apply_updates(minrung, 1, t0, tau);
@@ -410,36 +404,30 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				kr = sph_run_return();
 			} while (cont);
 
-			sparams.phase = 1;
-			sparams.run_type = SPH_RUN_HYDRO;
-			tm.reset();
-			tm.start();
-			kr = sph_run(sparams, true);
-			dtinv_cfl = kr.dtinv_cfl;
-			dtinv_visc = kr.dtinv_visc;
-			dtinv_diff = kr.dtinv_diff;
-			dtinv_cond = kr.dtinv_cond;
-			dtinv_acc = kr.dtinv_acc;
-			tm.stop();
-			max_rung = kr.max_rung;
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-			tm.reset();
 		}
 		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
 	}
 
-	sparams.run_type = SPH_RUN_AUX;
+
+	sparams.phase = 1;
+	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
+	dtinv_cfl = kr.dtinv_cfl;
 	dtinv_divv = kr.dtinv_divv;
-	dtinv_omega = kr.dtinv_omega;
-	max_rung = kr.max_rung;
+	dtinv_visc = kr.dtinv_visc;
+	dtinv_diff = kr.dtinv_diff;
+	dtinv_cond = kr.dtinv_cond;
+	dtinv_acc = kr.dtinv_acc;
 	tm.stop();
+	max_rung = kr.max_rung;
 	if (verbose)
-		PRINT("sph_run(SPH_RUN_AUX): tm = %e \n", tm.read());
+		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
+
+
+
 	tnparams.h_wt = 1.001;
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.seti = SPH_SET_ALL;

@@ -160,12 +160,15 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
+						sph_particles_entr0(i) = sph_particles_dentr2(i);
+						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
 					}
 				} else if( phase == 1 ) {
 					if( rung1 >= minrung) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
 						}
+						sph_particles_entr(i) += (sph_particles_dentr2(i) - sph_particles_entr0(i)) * dt1;
 					}
 				} else if( phase == 2 ) {
 					if( rung2 >= minrung) {
@@ -173,7 +176,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
 						sph_particles_entr(i) += sph_particles_dentr1(i)* 2.0 * dt2;
-						sph_particles_entr(i) += sph_particles_dentr2(i)* 2.0 * dt2;
+						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
 						if( stars ) {
 							float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;

@@ -272,19 +272,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					} else {
 						data.rec1_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt1))); // 10
 						flops += 10;
-					}/*
-					 const float limiter = fabs(div_v) / (fabs(div_v) + (curlv) + 1e-36f); // 14
-					 const float S = limiter * fmaxf(-div_v, 0.0f);
-					 const float tau = h_i / c_i * params.a / params.alpha_decay;
-					 const float alpha0 = params.alpha0;
-					 const float alpha1 = params.alpha1;
-					 const float dt = dt1;
-					 const float alpha_targ = (alpha0 + alpha1 * S * tau) / (1.f + S * tau);
-					 if (alpha < alpha_targ) {
-					 alpha = alpha_targ;
-					 } else {
-					 alpha = (alpha + dt / tau * alpha0) / (1.f + dt / tau);
-					 }*/
+					}
 				}
 			}
 		}
