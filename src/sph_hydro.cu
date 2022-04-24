@@ -403,7 +403,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					data.rec6_snk[snki].dvel[YDIM] = ay;
 					data.rec6_snk[snki].dvel[ZDIM] = az;
 					data.dentr1_snk[snki] = de_dt1;
-					data.dentr2_snk[snki] = de_dt2;
+					if( de_dt2 < 0.0 ) {
+						PRINT( "Negative visc !\n", de_dt2, A_i);
+					}
+					data.dentr2_snk[snki] = fmaxf(de_dt2,0.0f);
 					if (params.stars) {
 						data.rec5_snk[snki].dfcold = dcm_dt;
 					}

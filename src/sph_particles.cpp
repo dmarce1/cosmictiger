@@ -162,13 +162,15 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						}
 						sph_particles_entr0(i) = sph_particles_dentr2(i);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 1 ) {
 					if( rung1 >= minrung) {
 						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt1;
+							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
 						}
-						sph_particles_entr(i) += (sph_particles_dentr2(i) - sph_particles_entr0(i)) * dt1;
+						sph_particles_entr(i) += (sph_particles_dentr2(i) - sph_particles_entr0(i)) * dt2;
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 2 ) {
 					if( rung2 >= minrung) {
@@ -176,10 +178,13 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
 						sph_particles_entr(i) += sph_particles_dentr1(i)* 2.0 * dt2;
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						if( stars ) {
 							float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
+							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 							ALWAYS_ASSERT(dadtoa>=-1e-10);
 							if( dadtoa < 0.0 ) {
 								dadtoa = 0.0;
@@ -312,17 +317,17 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 	std::swap(sph_particles_fc[i], sph_particles_fc[j]);
 	std::swap(sph_particles_dv[i], sph_particles_dv[j]);
-	std::swap(sph_particles_kap[i], sph_particles_kap[j]);
+//	std::swap(sph_particles_kap[i], sph_particles_kap[j]);
+	std::swap(sph_particles_dentr2(i), sph_particles_dentr2(j));
 }
 
 void sph_particles_swap2(part_int i, part_int j) {
 	sph_particles_swap(i, j);
-	std::swap(sph_particles_dentr1(i), sph_particles_dentr1(j));
-	std::swap(sph_particles_dentr2(i), sph_particles_dentr2(j));
+	/*std::swap(sph_particles_dentr1(i), sph_particles_dentr1(j));
 	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
 	for (int dim = 0; dim < NDIM; dim++) {
-		std::swap(sph_particles_dvel(dim, i), sph_particles_dvel(dim, j));
-	}
+		std::swap(sph_particles_dvel0(dim, i), sph_particles_dvel0(dim, j));
+	}*/
 }
 
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
