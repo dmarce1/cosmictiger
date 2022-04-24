@@ -39,6 +39,7 @@ struct options {
 	bool read_check;
 	bool chem;
 	bool conduction;
+	bool vsoft;
 	bool gravity;
 	bool use_glass;
 	int glass;
@@ -102,6 +103,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & vsoft;
 		arc & damping;
 		arc & alpha0;
 		arc & alpha1;

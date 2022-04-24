@@ -135,6 +135,9 @@ PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
 PARTICLES_EXTERN array<float*, NDIM> particles_v;
 PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
+PARTICLES_EXTERN float* particles_s;
+PARTICLES_EXTERN float* particles_z;
+PARTICLES_EXTERN char* particles_c;
 PARTICLES_EXTERN float* particles_p;
 PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 #ifdef PARTICLES_CPP
@@ -156,11 +159,13 @@ part_int particles_size();
 std::unordered_map<int, part_int> particles_groups_init();
 void particles_groups_destroy();
 void particles_resize(part_int);
+void particles_reset_converged();
 void particles_random_init();
 void particles_resolve_with_sph_particles();
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, part_int offset);
+void particles_global_read_softlens(particle_global_range range, float* h, part_int offset);
 void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
@@ -194,6 +199,11 @@ inline float& particles_pot(part_int index) {
 	return particles_p[index];
 }
 
+inline char& particles_converged(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_c[index];
+}
+
 inline fixed32& particles_pos(int dim, part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_x[dim][index];
@@ -207,6 +217,16 @@ inline float& particles_vel(int dim, part_int index) {
 inline char& particles_rung(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_r[index];
+}
+
+inline float& particles_softlen(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_s[index];
+}
+
+inline float& particles_zeta(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_z[index];
 }
 
 inline float& particles_gforce(int dim, part_int index) {

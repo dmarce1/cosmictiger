@@ -72,8 +72,11 @@ struct tree_id_hash_hi {
 
 struct tree_node {
 	multipole<float> multi;
+	fixed32_range ibox;
+	fixed32_range obox;
 	array<fixed32, NDIM> pos;
 	array<tree_id, NCHILD> children;
+	pair<int,int> neighbor_range;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
 	pair<part_int> sink_part_range;
@@ -84,7 +87,9 @@ struct tree_node {
 	bool leaf;
 	size_t node_count;
 	size_t active_nodes;
-	int depth;CUDA_EXPORT
+	int depth;
+
+	CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
 		return (multipole_pos*) &multi;
 	}
@@ -107,6 +112,8 @@ struct tree_node {
 	void serialize(A && arc, unsigned) {
 	//	arc & hsoft_max;
 		arc & multi;
+		arc & ibox;
+		arc & obox;
 		arc & children;
 		arc & pos;
 		arc & proc_range;
@@ -173,5 +180,11 @@ void tree_destroy(bool free_tree = false);
 int tree_min_level(double theta, double hsoft);
 const tree_node* tree_get_node(tree_id);
 void tree_sort_particles_by_sph_particles();
-
+void tree_free_neighbor_list();
+void tree_clear_neighbor_ranges();
+int tree_allocate_neighbor_list(const vector<tree_id>& values);
+void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
+int tree_leaflist_size();
+const tree_id tree_get_leaf(int i);
+tree_id& tree_get_neighbor(int i);
 #endif /* TREE_HPP_ */

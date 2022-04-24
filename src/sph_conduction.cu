@@ -202,9 +202,8 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float h3inv_j = sqr(hinv_j) * hinv_j;											// 2
 						const float rho_j = m * c0 * h3inv_j;													// 2
 						const float q_j = r * hinv_j;																// 1
-						float w;
-						const float dWdr_i = dkernelW_dq(q_i, &w, &flops) * h3inv_i * hinv_i / omega_i;																// 3
-						const float dWdr_j = dkernelW_dq(q_j, &w, &flops) * h3inv_j * hinv_j / omega_j;																// 3
+						const float dWdr_i = dkernelW_dq(q_i) * h3inv_i * hinv_i / omega_i;																// 3
+						const float dWdr_j = dkernelW_dq(q_j) * h3inv_j * hinv_j / omega_j;																// 3
 						const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);										// 22
 						const float kappa_ij = 2.f * kappa_i * kappa_j / (kappa_i + kappa_j + 1.0e-35f); // 8
 						const float dt_j = rung_j >= params.min_rung ? rung_dt[rung_j] * params.t0 : 0.f;							// 1

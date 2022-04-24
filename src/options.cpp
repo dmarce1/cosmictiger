@@ -96,6 +96,7 @@ bool process_options(int argc, char *argv[]) {
 	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
+	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "variable softening") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
@@ -112,7 +113,7 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.1), "alpha0 viscosity") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.0), "alpha0 viscosity") //
 	("alpha1", po::value<double>(&(opts.alpha1))->default_value(2.0), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
 	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
@@ -131,7 +132,7 @@ bool process_options(int argc, char *argv[]) {
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<double>(&(opts.kernel))->default_value(4.746), "kernel index") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(64), "neighbor number") //
+	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(80), "neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.1767), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
@@ -322,7 +323,6 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
-	kernel_set_type(opts.kernel);
 	set_options(opts);
 	kernel_adjust_options(opts);
 	set_options(opts);

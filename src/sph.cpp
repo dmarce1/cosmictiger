@@ -51,9 +51,6 @@ inline bool range_intersect(const fixed32_range& a, const fixed32_range& b) {
 
 struct sph_run_workspace {
 	sph_run_params params;
-	vector<fixed32, pinned_allocator<fixed32>> host_x;
-	vector<fixed32, pinned_allocator<fixed32>> host_y;
-	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<array<float, NCHEMFRACS>, pinned_allocator<array<float, NCHEMFRACS>>> host_chem;
 	vector<float, pinned_allocator<float>> host_cold_frac;
 	vector<float, pinned_allocator<float>> host_divv;
@@ -68,6 +65,9 @@ struct sph_run_workspace {
 	vector<float, pinned_allocator<float>> host_h;
 	vector<char, pinned_allocator<char>> host_rungs;
 	vector<sph_tree_node, pinned_allocator<sph_tree_node>> host_trees;
+	vector<fixed32, pinned_allocator<fixed32>> host_x;
+	vector<fixed32, pinned_allocator<fixed32>> host_y;
+	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
 	std::unordered_map<tree_id, int, sph_tree_id_hash> tree_map;
@@ -151,7 +151,7 @@ bool is_converged(const sph_tree_node* self, int minrung) {
 	return converged;
 }
 
-bool has_active_neighbors(const sph_tree_node* self) {
+static bool has_active_neighbors(const sph_tree_node* self) {
 	bool rc = false;
 	for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
 		const auto id = sph_tree_get_neighbor(i);
@@ -271,23 +271,6 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 			pair<int> rng;
 			rng.first = sph_tree_allocate_neighbor_list(leaflist);
 			rng.second = leaflist.size() + rng.first;
-			bool found = false;
-			for (int i = rng.first; i < rng.second; i++) {
-				if (sph_tree_get_neighbor(i) == self) {
-					found = true;
-					break;
-				}
-			}
-			/*if( !found ) {
-			 PRINT("%i\n", rng.second - rng.first);
-			 }*/
-			//	ALWAYS_ASSERT(found || (rng.second - rng.first == 0));
-			/*			for (part_int i = self_ptr->part_range.first; i < self_ptr->part_range.second; i++) {
-			 if (sph_particles_id(i) == 591) {
-			 PRINT("--------->>> %i %i %i\n", level, leaflist.size(),  self_ptr->part_range.second- self_ptr->part_range.first);
-			 break;
-			 }
-			 }*/
 			sph_tree_set_neighbor_range(self, rng);
 		}
 			break;

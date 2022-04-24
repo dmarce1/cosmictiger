@@ -186,8 +186,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float vy_ij = vy0_ij + y_ij * params.adot; // 3
 					const float vz_ij = vz0_ij + z_ij * params.adot; // 3
 					const float rinv = 1.0f / (1.0e-30f + r);             // 5
-					float w;
-					const float dwdq = dkernelW_dq(q, &w, &flops) / omega_i;
+					const float dwdq = dkernelW_dq(q) / omega_i;
 					const float dWdr_i = dwdq * h4inv_i;                  // 1
 					const float vr_ij = (x_ij * vx_ij + y_ij * vy_ij + z_ij * vz_ij) * rinv;
 					const float vr0_ij = (x_ij * vx0_ij + y_ij * vy0_ij + z_ij * vz0_ij) * rinv;
@@ -259,7 +258,7 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));                             // 9
 					const float div_v0 = data.divv_snk[snki];
 					data.divv_snk[snki] = div_v;
-					const float alpha = data.rec1_snk[snki].alpha;
+					float& alpha = data.rec1_snk[snki].alpha;
 					const float ddivv_dt = (div_v - div_v0) / dt1 - params.adot * ainv * div_v;             // 8
 					const float S = sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);                      // 6
 					const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv)); // 14
@@ -273,7 +272,19 @@ __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_
 					} else {
 						data.rec1_snk[snki].alpha = (limiter * (alpha_targ + (alpha - alpha_targ) * expf(-lambda0 * dt1))); // 10
 						flops += 10;
-					}
+					}/*
+					 const float limiter = fabs(div_v) / (fabs(div_v) + (curlv) + 1e-36f); // 14
+					 const float S = limiter * fmaxf(-div_v, 0.0f);
+					 const float tau = h_i / c_i * params.a / params.alpha_decay;
+					 const float alpha0 = params.alpha0;
+					 const float alpha1 = params.alpha1;
+					 const float dt = dt1;
+					 const float alpha_targ = (alpha0 + alpha1 * S * tau) / (1.f + S * tau);
+					 if (alpha < alpha_targ) {
+					 alpha = alpha_targ;
+					 } else {
+					 alpha = (alpha + dt / tau * alpha0) / (1.f + dt / tau);
+					 }*/
 				}
 			}
 		}

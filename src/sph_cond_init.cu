@@ -196,8 +196,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 						const float h3inv_j = sqr(hinv_j) * hinv_j;	// 2
 						const float rho_j = m * c0 * h3inv_j;			// 2
 						const float ene_j = A_j * powf(rho_j, gamma0 - 1.0f); // 11
-						float w;
-						const float dwdq = dkernelW_dq(q, &w, &flops);
+						const float dwdq = dkernelW_dq(q);
 						const float dWdr_i = dwdq * h3inv_i * hinv_i / omega_i; // 3
 						const float tmp = dWdr_i * rinv * (ene_j - ene_i); // 14
 						gradx = fmaf(tmp, x_ij, gradx);					// 2

@@ -1068,7 +1068,6 @@ void sph_particles_reset_converged() {
 			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
 				sph_particles_converged(i) = false;
-				sph_particles_semiactive(i) = false;
 			}
 		}));
 	}

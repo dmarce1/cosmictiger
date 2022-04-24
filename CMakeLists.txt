@@ -41,6 +41,8 @@ set(cosmictiger_source_files
     healpix/healpix_tables.cc
     healpix/pointing.cc
     healpix/string_utils.cc
+    src/all_tree.cpp
+    src/all_tree.cu
     src/analytic.cu
     src/analytic.cpp
     src/assert.cpp
@@ -108,6 +110,7 @@ set(cosmictiger_source_files
 
 set(cosmictiger_header_files
     cosmictiger/assert.hpp
+    cosmictiger/all_tree.hpp
     cosmictiger/bh.hpp
     cosmictiger/boltzmann.hpp
     cosmictiger/chemistry.hpp

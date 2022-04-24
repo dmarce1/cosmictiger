@@ -39,7 +39,11 @@ HPX_PLAIN_ACTION (tree_allocate_nodes);
 HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
-//HPX_PLAIN_ACTION (tree_sort_particles_by_sph_particles);
+
+static vector<tree_id> neighbor_list;
+static vector<int> leaflist;
+static mutex_type leaflist_mutex;
+static mutex_type neighbor_list_mutex;
 
 class tree_allocator {
 	int next;
@@ -67,6 +71,49 @@ static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
+
+void tree_set_neighbor_range(tree_id id, pair<int, int> rng) {
+	nodes[id.index].neighbor_range = rng;
+}
+
+void tree_clear_neighbor_ranges() {
+	for (int i = 0; i < leaflist.size(); i++) {
+		nodes[leaflist[i]].neighbor_range.first = -1;
+		nodes[leaflist[i]].neighbor_range.second = -1;
+	}
+}
+
+int tree_leaflist_size() {
+	return leaflist.size();
+}
+
+const tree_id tree_get_leaf(int i) {
+	tree_id id;
+	id.index = leaflist[i];
+	id.proc = hpx_rank();
+	return id;
+}
+
+void tree_free_neighbor_list() {
+//	PRINT("leaflist size = %i\n", leaflist.size());
+	neighbor_list.resize(0);
+}
+
+int tree_allocate_neighbor_list(const vector<tree_id>& values) {
+	std::lock_guard<mutex_type> lock(neighbor_list_mutex);
+	if (values.size()) {
+		int i = neighbor_list.size();
+		neighbor_list.resize(i + values.size());
+		memcpy(&neighbor_list[i], values.data(), sizeof(tree_id) * values.size());
+		return i;
+	} else {
+		return 0;
+	}
+}
+
+tree_id& tree_get_neighbor(int i) {
+	return neighbor_list[i];
+}
 
 long long tree_nodes_size() {
 	return nodes.size();
@@ -157,33 +204,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	min_rung = min_rung_;
 	min_level = 0;
 }
-/*
-int tree_min_level(double theta, double h) {
-	int lev = 1;
-	double dx;
-	double r1, r2, r;
-	do {
-		int N = 1 << (lev / NDIM);
-		dx = EWALD_DIST * N;
-		double a2;
-		constexpr double ffac = 1.01;
-		if (lev % NDIM == 0) {
-			r1 = 2.0f * std::sqrt(3) + ffac * N * h;
-			a2 = std::sqrt(3);
-		} else if (lev % NDIM == 1) {
-			r1 = 2.0f * 1.5 + ffac * N * h;
-			a2 = 1.5;
-		} else {
-			r1 = 2.0f * std::sqrt(1.5) + ffac * N * h;
-			a2 = std::sqrt(1.5);
-		}
-		r2 = (1.0 + SINK_BIAS) * a2 / theta;
-		lev++;
-		r = std::max(r1, r2);
-	} while (dx <= r);
-	return 12;
-}
-*/
+
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
@@ -254,7 +275,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	cudaStream_t stream;
 #endif
 	if (local_root) {
-//		PRINT("Sorting on %i at %li\n", hpx_rank(), time(NULL));
+		leaflist.resize(0);
 		part_range.first = 0;
 		part_range.second = particles_size();
 #ifdef USE_CUDA
@@ -450,13 +471,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		nactive = 0;
 		array<double, NDIM> dx;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
-			double this_h;
-			this_h = h;
-			if (sph) {
-				if (particles_type(i) == SPH_TYPE) {
-					this_h = sph_particles_smooth_len(particles_cat_index(i));
-				}
-			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				Xmax[dim] = std::max(Xmax[dim], x + h);
@@ -538,6 +552,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		if (nactive) {
 			active_leaf_nodes++;
 			active_nodes++;
+		}
+		static const auto vsoft = get_options().vsoft;
+		if (vsoft) {
+			std::lock_guard<mutex_type> lock(leaflist_mutex);
+			leaflist.push_back(index);
 		}
 	}
 	tree_node node;
