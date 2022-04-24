@@ -165,7 +165,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 1 ) {
-					if( rung1 >= minrung) {
+					if( rung2 >= minrung) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
 						}

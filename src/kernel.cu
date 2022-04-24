@@ -23,11 +23,16 @@
 
 #include <cosmictiger/safe_io.hpp>
 
-
-void kernel_set_type(double n) {
+void kernel_set_type(int type) {
+	kernel_type = type;
 }
 
 void kernel_output() {
+	FILE* fp = fopen("kernel.txt", "wt");
+	for (double q = 0.0; q <= 1.0; q += 0.0001) {
+		fprintf(fp, "%e %e %e %e %e\n", q, kernelW(q), dkernelW_dq(q), kernelFqinv(q), kernelPot(q));
+	}
+	fclose(fp);
 }
 
 double kernel_stddev(std::function<double(double)> W) {
@@ -43,7 +48,31 @@ double kernel_stddev(std::function<double(double)> W) {
 }
 
 void kernel_adjust_options(options& opts) {
-
-	opts.sph_bucket_size = 8.0 / M_PI * opts.neighbor_number;
-
+	double h0 = 4.743416e-01;
+	double h;
+	switch (kernel_type) {
+	case KERNEL_CUBIC_SPLINE:
+	case KERNEL_QUARTIC_SPLINE:
+	case KERNEL_QUINTIC_SPLINE:
+	case KERNEL_WENDLAND_C2:
+	case KERNEL_WENDLAND_C4:
+	case KERNEL_WENDLAND_C6:
+	case KERNEL_SUPER_GAUSSIAN:
+		break;
+	default:
+		PRINT("Error ! Unknown kernel!\n");
+	}
+	h = kernel_stddev(kernelW<double>);
+	PRINT( "kernel width = %e\n", h0/h);
+//	opts.neighbor_number *= pow(h0 / h, 3);
+	opts.sph_bucket_size = 8.0 / M_PI *  opts.neighbor_number;
+//	opts.cfl *= h / h0;
+//	opts.hsoft *= h0 / h;
+//	opts.eta *= sqrt(h / h0);
+	PRINT("Setting:\n");
+	PRINT("Neighbor number       = %e\n", opts.neighbor_number);
+	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);
+	PRINT("Dark matter softening = 1/%e of mean separation.\n", 1.0 / opts.parts_dim / opts.hsoft);
+	PRINT("CFL = %f\n", opts.cfl);
+	PRINT("eta = %f\n", opts.eta);
 }
