@@ -251,7 +251,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
-					R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
+					const simd_float sw = sqr(max(simd_float(0.49) - (self_radius + other_radius), simd_float(0))) > R2;
+					R2 = sw * (simd_float(1) - R2) + (simd_float(1) - sw) * R2;
 				}
 				const simd_float far1 = (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + hsoft));     // 5
 				const simd_float far2 = (R2 > sqr(sink_bias * self_radius * thetainv + other_radius + hsoft));       // 5
@@ -304,7 +305,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						}
 						simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
 						if (gtype == GRAVITY_EWALD) {
-							R2 = max(R2, sqr(max(simd_float(0.49) - (self_radius + other_radius), 0.0)));
+							const simd_float sw = sqr(max(simd_float(0.49) - (self_radius + other_radius), simd_float(0))) > R2;
+							R2 = sw * (simd_float(1) - R2) + (simd_float(1) - sw) * R2;
 						}
 						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
 						const simd_float near = R2 <= rhs;                                            // 1
@@ -356,6 +358,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					type = particles_type(i);
 					m = type == DARK_MATTER_TYPE ? dm_mass : sph_mass;
 				}
+				float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+				if (sqrtf(g2) > 1e9)
+					PRINT("%e\n", sqrtf(g2));
 				forces.phi[j] += L2(0, 0, 0);
 				forces.gx[j] -= L2(1, 0, 0);
 				forces.gy[j] -= L2(0, 1, 0);
@@ -392,14 +397,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						vz = fmaf(forces.gz[j], dt, vz);
 					}
 				}
-				const float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+				g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				if (type != SPH_TYPE || glass) {
 					const float factor = eta * sqrtf(params.a * hfloat);
 					dt = std::min(std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0), params.max_dt);
 					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
 					kr.max_rung = std::max(rung, kr.max_rung);
-					if (rung < 0 || rung >= MAX_RUNG) {
-						PRINT("Rung out of range %i\n", rung);
+					if (rung < 0 || rung >= 10) {
+						PRINT("Rung out of range %i %e\n", rung, sqrtf(g2));
 					} else {
 						dt = 0.5f * rung_dt[rung] * params.t0;
 					}

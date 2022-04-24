@@ -357,7 +357,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
+									if (sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)) > R2) {
+										R2 = 1.f - R2;
+									}
 								}
 								const bool far1 = (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + hsoft));     // 5
 								const bool far2 = (R2 > sqr(sink_bias * self.radius * thetainv + other.radius + hsoft));       // 5
@@ -439,7 +441,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 										const float dz = distance(sink_z[j], other.pos[ZDIM]);  // 1
 										float R2 = sqr(dx, dy, dz);
 										if (gtype == GRAVITY_EWALD) {
-											R2 = fmaxf(R2, sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)));
+											if (sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)) > R2) {
+												R2 = 1.f - R2;
+											}
 										}
 										far = R2 > sqr(other.radius * thetainv + hsoft);            // 3
 										if (!far) {
@@ -656,9 +660,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
 		data.type_snk = &particles_type(0);
-		data.sph_gx = &sph_particles_gforce(XDIM,0);
-		data.sph_gy = &sph_particles_gforce(YDIM,0);
-		data.sph_gz = &sph_particles_gforce(ZDIM,0);
+		data.sph_gx = &sph_particles_gforce(XDIM, 0);
+		data.sph_gy = &sph_particles_gforce(YDIM, 0);
+		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
 	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);
