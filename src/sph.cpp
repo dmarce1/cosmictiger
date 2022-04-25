@@ -858,13 +858,17 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 			const part_int b = (size_t) proc * sph_particles_size() / nthread;
 			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
-				if( !sph_particles_converged(i) && sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
+				if( !sph_particles_converged(i) && (sph_particles_rung(i) >= minrung || sph_particles_semiactive(i))) {
 					float& A = sph_particles_entr(i);
 					const float dA = sph_particles_dentr1(i);
 					ALWAYS_ASSERT(isfinite(std::max(A, A+dA)));
 					ALWAYS_ASSERT(std::max(A, A+dA) > 0.0f);
 					const float this_err = fabs(dA) / std::max(sph_particles_entr0(i), A + dA);
 					A += dA;
+					if( A < 0.0f) {
+						PRINT( "%e %e\n", A, dA);
+					}
+					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					err_max = std::max(this_err, err_max);
 					if( this_err > 1.0 ) {
 						PRINT( "%e %e %e\n", A - dA, dA, sph_particles_entr0(i));
@@ -872,6 +876,7 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 					err_rms += sqr(this_err);
 					if( this_err < SPH_DIFFUSION_TOLER3) {
 						sph_particles_converged(i) = true;
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 					N++;
 				}

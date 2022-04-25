@@ -150,6 +150,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					const float fh = 1.f - chem.cold_mass;
 					const float rho = sph_particles_rho(i);
 					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
+					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 						sph_particles_cold_mass(i) = chem.cold_mass;

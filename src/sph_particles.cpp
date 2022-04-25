@@ -157,8 +157,10 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr0(i) = sph_particles_dentr2(i);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
+						ALWAYS_ASSERT(sph_particles_dentr2(i)>=0.f);
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 1 ) {
@@ -166,7 +168,12 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
 						}
-						sph_particles_entr(i) += (sph_particles_dentr2(i) - sph_particles_entr0(i)) * dt2;
+						sph_particles_entr(i) += (-sph_particles_entr0(i)) * dt2;
+						if( sph_particles_entr(i) < 0.0 ) {
+							PRINT( "%e %e\n", sph_particles_entr(i),  (-sph_particles_entr0(i)) * dt2);
+						}
+						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+						sph_particles_entr(i) += (sph_particles_dentr2(i)) * dt2;
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 2 ) {
