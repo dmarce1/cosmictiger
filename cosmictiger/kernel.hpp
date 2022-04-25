@@ -103,7 +103,7 @@ inline float dkernelW_dq(float q, float* w = nullptr, int* flops = nullptr) {
 		if(flops) {
 			*flops += 3;
 		}
-		return -n * float(sqr(M_PI) / 3.f);
+		return -n * float(sqr(M_PI) / 3.f) * x;
 	} else {
 		float tmp, s;
 		s = sinf(x);																			// 8
