@@ -413,7 +413,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					if (data.chemistry) {
 						data.rec5_snk[snki].dfrac = dfrac_dt;
 					}
-					if (params.phase == 0) {
+					if (params.phase == 0 && params.tau > 0.f) {
 						float div_v, curl_vx, curl_vy, curl_vz;
 						div_v = dvx_dx + dvy_dy + dvz_dz;                        // 2
 						curl_vx = dvz_dy - dvy_dz;										   // 1
@@ -427,14 +427,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float ddivv_dt = (div_v - div_v0) / dt1 - params.adot * ainv * div_v;             // 8
 						const float limiter = sqr(div_v) / (sqr(div_v) + sqr(curlv) + 1.0e-4f * sqr(c_i / h_i * ainv)); // 14
 						const float S = limiter * sqr(h_i) * fmaxf(0.f, -ddivv_dt) * sqr(params.a);                      // 6
-						const float alpha_targ = params.alpha0 + (params.alpha1 - params.alpha0) * S / (S + sqr(c_i));     // 8
 						vsig += c_i;
+						const float alpha_targ = params.alpha0 + (params.alpha1 - params.alpha0) * S / (S + sqr(c_i));     // 8
 						const float lambda0 = params.alpha_decay * vsig * hinv_i * ainv;                       // 3
+						const float lambda1 = vsig * hinv_i * ainv / params.cfl;                       // 3
 						if (alpha < alpha_targ) {                                                    // 2
-							alpha = alpha_targ;                                 // 1
+							alpha = (alpha + lambda1 * dt1 * alpha_targ) / (1.f + lambda1 * dt1);
 							flops++;
 						} else {
-							PRINT("%e %e %e\n", alpha, alpha_targ, lambda0 * dt1);
 							alpha = (alpha + lambda0 * dt1 * alpha_targ) / (1.f + lambda0 * dt1);
 							flops += 10;
 						}
