@@ -209,6 +209,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 						const float dt_j = rung_j >= params.min_rung ? rung_dt[rung_j] * params.t0 : 0.f;							// 1
 						const float dt_ij = 0.5f * (dt_i + dt_j);													// 2
 						const float D_ij = cons * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv; // 10
+						ALWAYS_ASSERT(D_ij >= 0.f);
 						num = fmaf(D_ij, A_j * powf(rho_j * rhoinv_i, gamma0 - 1.f), num); // 14
 						den += D_ij;																					// 1
 						flops += 69;
@@ -223,7 +224,7 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					const float A1 = (A0 + num) / (1.f + den);
 					const float dA = A1 - A_i;
 					data.dentr1_snk[snki] = dA;
-//					ALWAYS_ASSERT(A1-A0==0.0);
+					ALWAYS_ASSERT(A_i+dA>0.0);
 					ALWAYS_ASSERT(isfinite(dA));
 				}
 			}

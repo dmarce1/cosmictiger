@@ -182,6 +182,7 @@ void sph_particles_global_read_kappas(particle_global_range range, float*, part_
 void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv,
 		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
+void sph_particles_reset_semiactive();
 void sph_particles_load(FILE* fp);
 void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();

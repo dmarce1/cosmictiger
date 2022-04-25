@@ -526,6 +526,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	sph_tree_destroy(true);
 	sph_particles_cache_free2();
+	sph_particles_reset_semiactive();
 //	PRINT( "%i\n", max_rung);
 
 	float dtinv_max = std::max(dtinv_cfl, dtinv_visc);
