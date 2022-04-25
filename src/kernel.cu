@@ -133,10 +133,10 @@ void kernel_adjust_options(options& opts) {
 	PRINT("kernel width = %e\n", width);
 	const double n = pow(width / bspline_width, -3) * bspline_n;
 	const double cfl = opts.cfl * width / bspline_width;
-	PRINT("Setting neighbor number to %e\n", n);
+	//PRINT("Setting neighbor number to %e\n", n);
 	PRINT("Adjusting CFL to %e\n", cfl);
 
-	opts.neighbor_number = n;
+	//opts.neighbor_number = n;
 	opts.cfl = cfl;
 
 	opts.sph_bucket_size = 8.0 / M_PI * opts.neighbor_number;

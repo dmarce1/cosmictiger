@@ -374,7 +374,6 @@ void view_output_views(int cycle, double a) {
 					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp + Z / 10.0;
 					rho *= code_to_density * pow(a, -3);
 					n *= constants::avo * rho;									// 8
-
 					double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2);															// 4
 					double gamma = 1. + 1. / cv;																							// 5
 					cv *= double(constants::kb);																							// 1

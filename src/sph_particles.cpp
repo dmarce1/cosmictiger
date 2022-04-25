@@ -160,6 +160,9 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr0(i) = sph_particles_dentr2(i);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
+						if( sph_particles_dentr2(i) < 0.0 ) {
+							PRINT( "%e %e\n", sph_particles_dentr2(i) * dt2, sph_particles_entr(i));
+						}
 						ALWAYS_ASSERT(sph_particles_dentr2(i)>=0.f);
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
@@ -185,7 +188,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-						if( stars ) {
+						if(false &&  stars ) {
 							float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
 							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
@@ -317,7 +320,6 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_r1[i], sph_particles_r1[j]);
 	std::swap(sph_particles_r2[i], sph_particles_r2[j]);
 	std::swap(sph_particles_r6[i], sph_particles_r6[j]);
-	std::swap(sph_particles_fp1[i], sph_particles_fp1[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
 	std::swap(sph_particles_fc[i], sph_particles_fc[j]);
 	std::swap(sph_particles_dv[i], sph_particles_dv[j]);
@@ -1038,7 +1040,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
 	FREAD(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
-	FREAD(sph_particles_fp1, sizeof(float), sph_particles_size(), fp);
+	FREAD(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		stars_load(fp);
@@ -1058,7 +1060,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
 	fwrite(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
-	fwrite(sph_particles_fp1, sizeof(float), sph_particles_size(), fp);
+	fwrite(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		stars_save(fp);

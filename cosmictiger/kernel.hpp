@@ -80,58 +80,24 @@ inline float dWdq0(float q) {
 
 CUDA_EXPORT
 inline float kernelW(float q) {
-	const float W0 = kernel_norm;
-	const float n = kernel_index;
-	q = fminf(q, 1.f);
-	float x = float(M_PI) * q;
-	x = fminf(x, M_PI * 0.9999999f);
-	float w = W0 * powf(sinc(x), n);
-	return w;
+	float tmp1 = fmaxf(1.f - q, 0.f);
+	float tmp2 = fmaxf((2.f / 3.f) - q, 0.f);
+	float tmp3 = fmaxf((1.f / 3.f) - q, 0.f);
+	tmp1 *= sqr(sqr(tmp1));
+	tmp2 *= -6.f * sqr(sqr(tmp2));
+	tmp3 *= 15.f * sqr(sqr(tmp3));
+	return 17.403593027f * (tmp1 + tmp2 + tmp3);
 }
 
 CUDA_EXPORT
 inline float dkernelW_dq(float q, float* w = nullptr, int* flops = nullptr) {
-	const float W0 = kernel_norm;
-	const float n = kernel_index;
-	float x = float(M_PI) * q;
-	q = fminf(q, 1.f);											// 1
-	x = fminf(x, M_PI * 0.9999999f);							// 1
-	if (q < 1e-6f) {												// 1
-		if (w) {
-			*w = W0;
-		}
-		if(flops) {
-			*flops += 3;
-		}
-		return -n * float(sqr(M_PI) / 3.f) * x;
-	} else {
-		float tmp, s;
-		s = sinf(x);																			// 8
-		if (x < float(0.25f)) {																// 1
-			const float x2 = sqr(x);														// 2
-			tmp = (float(-1. / 3.) + float(1. / 30.) * x2) * x2 * x;				// 4
-			if(flops) {
-				*flops += 6;
-			}
-		} else {
-			float c = cosf(x);																// 8
-			float sgn = -2.0f * (x > float(M_PI / 2.0)) + 1.0;						// 4
-			tmp = (sgn * x * sqrtf(1 - sqr(s)) - s);									// 9
-			if(flops) {
-				*flops += 21;
-			}
-		}
-		float xinv = 1.f / x;																// 4
-		float w1 = W0 * powf(s * xinv, n);												// 6
-		if (w) {
-			*w = w1;
-		}
-		float dw = n * tmp * xinv * float(M_PI) * w1 / s;							// 8
-		if( flops) {
-			*flops += 30;
-		}
-		return dw;
-	}
+	float tmp1 = fmaxf(1.f - q, 0.f);
+	float tmp2 = fmaxf((2.f / 3.f) - q, 0.f);
+	float tmp3 = fmaxf((1.f / 3.f) - q, 0.f);
+	tmp1 *= -5.f * tmp1 * (sqr(tmp1));
+	tmp2 *= 30.f * tmp2 * (sqr(tmp2));
+	tmp3 *= -75.f * tmp3 * (sqr(tmp3));
+	return 17.403593027f * (tmp1 + tmp2 + tmp3);
 }
 
 template<class T>
