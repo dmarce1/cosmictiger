@@ -149,7 +149,6 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const part_int k = sph_particles_dm_index(i);
 				const auto rung2 = sph_particles_rung(i);
 				const float dt2 = 0.5f * t0 / (1<<rung2);
-				const float dt = dt1 + dt2;
 				if( phase == 0 ) {
 					if( rung2 >= minrung) {
 						for( int dim =0; dim < NDIM; dim++) {
@@ -322,10 +321,10 @@ void sph_particles_swap(part_int i, part_int j) {
 void sph_particles_swap2(part_int i, part_int j) {
 	sph_particles_swap(i, j);
 	/*std::swap(sph_particles_dentr1(i), sph_particles_dentr1(j));
-	std::swap(sph_particles_r5[i], sph_particles_r5[j]);
+	 std::swap(sph_particles_r5[i], sph_particles_r5[j]);*/
 	for (int dim = 0; dim < NDIM; dim++) {
-		std::swap(sph_particles_dvel0(dim, i), sph_particles_dvel0(dim, j));
-	}*/
+		std::swap(sph_particles_gforce(dim, i), sph_particles_gforce(dim, j));
+	}
 }
 
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xmid, int xdim) {
