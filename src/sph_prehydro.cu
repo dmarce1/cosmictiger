@@ -496,6 +496,9 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						if (q < 1.f) {                               // 1
 							const float dwdq = dkernelW_dq(q);
 							drho_dh -= q * dwdq;                      // 2
+							if( !isfinite(drho_dh)) {
+								PRINT( "%e %e %e\n", drho_dh, q, dwdq);
+							}
 							contains = true;
 							flops += 2;
 						}
@@ -516,6 +519,10 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(drho_dh);
 				flops += (PREHYDRO2_BLOCK_SIZE - 1);
 				const float omega_i = 0.33333333333f * drho_dh / rhoh30;								// 4
+				if( omega_i <= 0.f || !isfinite(omega_i) ) {
+					PRINT( "%e %i\n", omega_i, ws.rec1.size());
+				}
+				ALWAYS_ASSERT(omega_i > 0.f);
 				__syncthreads();
 				const float h4inv_i = h3inv_i * hinv_i;						// 1
 				flops += 16;

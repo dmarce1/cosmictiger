@@ -96,14 +96,14 @@ inline float dkernelW_dq(float q, float* w = nullptr, int* flops = nullptr) {
 	float x = float(M_PI) * q;
 	q = fminf(q, 1.f);											// 1
 	x = fminf(x, M_PI * 0.9999999f);							// 1
-	if (q == 0.0f) {												// 1
+	if (q < 1e-6f) {												// 1
 		if (w) {
 			*w = W0;
 		}
 		if(flops) {
 			*flops += 3;
 		}
-		return 0.f;
+		return -n * float(sqr(M_PI) / 3.f);
 	} else {
 		float tmp, s;
 		s = sinf(x);																			// 8
