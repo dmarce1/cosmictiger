@@ -247,6 +247,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		profiler_exit();
 		tm.stop();
+		PRINT( "%e\n", tm.read());
 		tm.reset();
 		tm.start();
 		tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
@@ -255,7 +256,9 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		profiler_exit();
 		tm.stop();
+		PRINT( "%e\n", tm.read());
 		tm.reset();
+
 		kr = sph_run_return();
 	} while (cont);
 	sph_particles_reset_converged();
@@ -280,6 +283,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		profiler_exit();
 		tm.stop();
+		PRINT( "%e\n", tm.read());
 		tm.reset();
 		tm.start();
 		tnparams.seti = SPH_INTERACTIONS_IJ;
@@ -288,6 +292,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		profiler_exit();
 		tm.stop();
+		PRINT( "%e\n", tm.read());
 		tm.reset();
 		kr = sph_run_return();
 	} while (cont);

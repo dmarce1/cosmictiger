@@ -981,6 +981,7 @@ vector<particle_sample> particles_sample(int cnt) {
 }
 
 void particles_load(FILE* fp) {
+	const bool vsoft = get_options().vsoft;
 	part_int size, sph_size, stars_size0;
 	FREAD(&size, sizeof(part_int), 1, fp);
 	FREAD(&sph_size, sizeof(part_int), 1, fp);
@@ -1015,6 +1016,7 @@ void particles_load(FILE* fp) {
 }
 
 void particles_save(FILE* fp) {
+	const bool vsoft = get_options().vsoft;
 	part_int size = particles_size();
 	part_int sph_size = sph_particles_size();
 	part_int stars_size0 = stars_size();

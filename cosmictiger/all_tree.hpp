@@ -20,6 +20,7 @@
 #pragma once
 
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/hpx.hpp>
 
 struct softlens_return {
 	float hmax;
@@ -66,8 +67,10 @@ struct all_tree_range_return {
 	}
 };
 
-all_tree_range_return all_tree_find_ranges(tree_id self_id, int, double = 1.01);
-void all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist);
+#ifndef __CUDACC__
+hpx::future<void> all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist);
+hpx::future<all_tree_range_return> all_tree_find_ranges(tree_id self_id, int, double = 1.01);
+#endif
 softlens_return all_tree_softlens(int minrung);
 softlens_return all_tree_derivatives(int minrung);
 softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream);

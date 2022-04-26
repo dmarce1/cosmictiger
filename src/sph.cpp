@@ -128,7 +128,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor_fork(sph_tree_neighbor_p
 		rc = hpx::async<sph_tree_neighbor_action>(HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, self, std::move(checklist), level + 1);
 	} else {
 		const auto thread_priority = all_local ? HPX_PRIORITY_LO : HPX_PRIORITY_NORMAL;
-		rc = hpx::async(thread_priority, [self,level, params] (vector<tree_id> checklist) {
+			rc = hpx::async(thread_priority, [self,level, params] (vector<tree_id> checklist) {
 			auto rc = sph_tree_neighbor(params, self,std::move(checklist), level + 1);
 			nthreads--;
 			return rc;
@@ -194,6 +194,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 	ALWAYS_ASSERT(params.seti);
 //	ALWAYS_ASSERT(params.seto);
 ///	PRINT( "%i %i\n", level, checklist.size());
+	timer tm;
 	sph_tree_neighbor_return kr;
 	if (params.run_type == SPH_TREE_NEIGHBOR_BOXES) {
 //		return hpx::make_ready_future(kr);
