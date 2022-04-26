@@ -165,6 +165,9 @@ void kick_workspace::to_gpu() {
 	host_x.resize(part_count);
 	host_y.resize(part_count);
 	host_z.resize(part_count);
+	if( vsoft ) {
+		host_h.resize(part_count);
+	}
 	host_type.resize(part_count);
 	futs.resize(0);
 

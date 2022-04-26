@@ -201,6 +201,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		self_pos[dim] = self_ptr->pos[dim].raw();
 	}
 	array<simd_int, NDIM> other_pos;
+	simd_float other_hsoft;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
 	simd_int other_leaf;
@@ -208,7 +209,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, do_phi);
-	simd_float hsoft = get_options().hsoft;
+	const bool vsoft = get_options().vsoft;
+	simd_float my_hsoft;
+	if (vsoft) {
+		my_hsoft = self_ptr->hsoft_max;
+	} else {
+		my_hsoft = get_options().hsoft;
+	}
 	force_vectors forces;
 	const part_int mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
@@ -238,6 +245,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
+					if (vsoft) {
+						other_hsoft[i] = other_ptrs[i]->hsoft_max;
+					} else {
+						other_hsoft[i] = get_options().hsoft;
+					}
 				}
 				for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
@@ -245,6 +257,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 					other_radius[i] = 0.f;
 					other_leaf[i] = 0;
+					other_hsoft[i] = 1.f;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
@@ -257,6 +270,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 									(simd_float(0.49) - (self_radius + other_radius) - sqrt(R2) + sqrt(R2) * (self_radius + other_radius))
 											/ (simd_float(0.49) - sqrt(R2))) + (simd_float(1) - sw) * R2;
 				}
+				const auto hsoft = max(other_hsoft, my_hsoft);
 				const simd_float far1 = (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + hsoft));     // 5
 				const simd_float far2 = (R2 > sqr(sink_bias * self_radius * thetainv + other_radius + hsoft));       // 5
 				const simd_float mult = far1;                                                                  // 4
@@ -295,6 +309,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					for (int dim = 0; dim < NDIM; dim++) {
 						other_pos[dim] = other_ptr->pos[dim].raw();
 					}
+					if (vsoft) {
+						other_hsoft = other_ptr->hsoft_max;
+					} else {
+						other_hsoft = get_options().hsoft;
+					}
 					const auto myrange = self_ptr->part_range;
 					bool pp = false;
 					for (part_int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
@@ -312,6 +331,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 							R2 = sw * sqr((simd_float(0.49) - other_radius - sqrt(R2) + sqrt(R2) * other_radius) / (simd_float(0.49) - sqrt(R2)))
 									+ (simd_float(1) - sw) * R2;
 						}
+						const auto hsoft = max(my_hsoft, other_hsoft);
 						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
 						const simd_float near = R2 <= rhs;                                            // 1
 						kr.part_flops += SIMD_FLOAT_SIZE * 12;

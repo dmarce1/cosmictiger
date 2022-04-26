@@ -217,6 +217,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		int* next_item, int ntrees) {
 //	auto tm1 = clock64();
 	const bool sph = data.sph;
+	const bool vsoft = data.vsoft;
 	const float dm_mass = !sph ? 1.0f : global_params.dm_mass;
 	const float sph_mass = global_params.sph_mass;
 	const int& tid = threadIdx.x;
@@ -239,6 +240,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
+	auto& sink_h = shmem.sink_h;
 	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
@@ -252,6 +254,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
+	auto* src_h = data.h;
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -325,6 +328,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							sink_x[l] = src_x[srci];
 							sink_y[l] = src_y[srci];
 							sink_z[l] = src_z[srci];
+							if( vsoft ) {
+								sink_h[l] = src_h[srci];
+							} else {
+								sink_h[l] = global_params.h;
+							}
 						}
 						nactive += total;
 						__syncwarp();
@@ -342,7 +350,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					leaflist.resize(0);
 					multlist.resize(0);
 					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
-					const float hsoft = global_params.h;
+					float my_hsoft;
+					if (vsoft) {
+						my_hsoft = self.hsoft_max;
+					} else {
+						my_hsoft = global_params.h;
+					}
 					do {
 						maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -352,6 +365,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							bool part = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
+								float other_hsoft;
+								if (vsoft) {
+									other_hsoft = other.hsoft_max;
+								} else {
+									other_hsoft = global_params.h;
+								}
+								const float hsoft = fmaxf(other_hsoft, my_hsoft);
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
@@ -430,6 +450,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								const tree_node& other = tree_nodes[leaflist[i]];
 								const part_int begin = other.part_range.first;
 								const part_int end = other.part_range.second;
+								float other_hsoft;
+								if (vsoft) {
+									other_hsoft = other.hsoft_max;
+								} else {
+									other_hsoft = global_params.h;
+								}
+								const float hsoft = fmaxf(other_hsoft, my_hsoft);
 								bool far;
 								if (end - begin < MIN_PC_PARTS) {
 									far = false;
@@ -578,8 +605,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type, float* dev_h, tree_node* dev_tree_nodes,
-		vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type, float* dev_h,
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	static const bool do_sph = get_options().sph;
 	timer tm;
@@ -646,14 +673,15 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	cuda_kick_data data;
 	data.source_size = part_count;
 	data.tree_size = ntrees;
-	data.h_snk = &sph_particles_smooth_len(0);
 	data.cat_index_snk = &particles_cat_index(0);
 	data.sink_size = particles_size();
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
+	data.h = dev_h;
 	data.type = dev_type;
 	data.sph = do_sph;
+	data.vsoft = get_options().vsoft;
 	data.x_snk = &particles_pos(XDIM, 0);
 	data.y_snk = &particles_pos(YDIM, 0);
 	data.z_snk = &particles_pos(ZDIM, 0);

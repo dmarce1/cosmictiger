@@ -33,7 +33,7 @@ struct cuda_kick_data {
 	fixed32* z;
 	char* type_snk;
 	part_int* cat_index_snk;
-	float* h_snk;
+	float* h;
 	float* vx;
 	float* vy;
 	float* vz;
@@ -46,6 +46,7 @@ struct cuda_kick_data {
 	part_int* cat_index;
 	char* type;
 	bool sph;
+	bool vsoft;
 	fixed32* x_snk;
 	fixed32* y_snk;
 	fixed32* z_snk;
@@ -67,11 +68,13 @@ struct cuda_kick_shmem {
 	array<fixed32, BUCKET_SIZE> sink_x;
 	array<fixed32, BUCKET_SIZE> sink_y;
 	array<fixed32, BUCKET_SIZE> sink_z;
+	array<float, BUCKET_SIZE> sink_h;
 	struct {
 		array<fixed32, KICK_PP_MAX> x;
 		array<fixed32, KICK_PP_MAX> y;
 		array<fixed32, KICK_PP_MAX> z;
 		array<char, KICK_PP_MAX> type;
+		array<float, KICK_PP_MAX> h;
 	}src;
 	array<float, BUCKET_SIZE> gx;
 	array<float, BUCKET_SIZE> gy;
