@@ -41,12 +41,16 @@ struct all_tree_data {
 	char* rung_snk;
 	char* converged_snk;
 	float* zeta_snk;
+	float* divv_snk;
 	part_int* cat_snk;
 	char* type_snk;
 	int minrung;
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	float* vx;
+	float* vy;
+	float* vz;
 	float* h;
 	int* selfs;
 	tree_node* trees;

@@ -139,6 +139,7 @@ PARTICLES_EXTERN float* particles_s;
 PARTICLES_EXTERN float* particles_z;
 PARTICLES_EXTERN char* particles_c;
 PARTICLES_EXTERN float* particles_p;
+PARTICLES_EXTERN float* particles_dv;
 PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 #ifdef PARTICLES_CPP
 = nullptr
@@ -179,6 +180,7 @@ int particles_group_home(group_int);
 void particles_set_tracers(size_t count = 0);
 vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
+void particles_global_read_vels(particle_global_range range, float* vx, float* vy, float* z, part_int offset);
 void particles_memadvise_gpu();
 void particles_free();
 void particles_save_glass(const char* filename);
@@ -192,6 +194,11 @@ inline char& particles_type(part_int index) {
 		static char dm = DARK_MATTER_TYPE;
 		return dm;
 	}
+}
+
+inline float& particles_divv(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_dv[index];
 }
 
 inline float& particles_pot(part_int index) {

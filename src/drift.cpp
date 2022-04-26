@@ -99,6 +99,13 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				this_dr.momx += mass * vx;
 				this_dr.momy += mass * vy;
 				this_dr.momz += mass * vz;
+				if(get_options().vsoft ) {
+					float& h = particles_softlen(i);
+					const float divv = particles_divv(i);
+					float dloghdt = (1.f/3.f)*divv;
+					float c0 = expf(dloghdt*dt);
+					h *= c0;
+				}
 				if( type == SPH_TYPE ) {
 					part_int j = particles_cat_index(i);
 					float& h = sph_particles_smooth_len(j);
