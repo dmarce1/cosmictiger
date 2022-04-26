@@ -924,9 +924,6 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 						std::swap(particles_sph[hi], particles_sph[lo]);
 						std::swap(particles_ty[hi], particles_ty[lo]);
 					}
-					if (vsoft) {
-						std::swap(particles_s[hi], particles_s[lo]);
-					}
 					break;
 				}
 			}
