@@ -112,7 +112,6 @@ struct sph_record2 {
 	float h;
 };
 
-
 struct sph_record5 {
 	array<float, NCHEMFRACS> dfrac;
 	float dfcold;
@@ -147,11 +146,11 @@ SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 
-
 struct aux_quantities {
 	float omega;
 	float shearv;
 	float alpha;
+	float divv;
 	array<float, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -159,6 +158,7 @@ struct aux_quantities {
 		arc & shearv;
 		arc & alpha;
 		arc & fracs;
+		arc & divv;
 	}
 };
 
@@ -179,8 +179,8 @@ void sph_particles_global_read_entr_and_smoothlen(particle_global_range range, f
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv,
-		array<float, NCHEMFRACS>* fracs, part_int offset);
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv, array<float, NCHEMFRACS>* fracs,
+		part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_reset_semiactive();
 void sph_particles_load(FILE* fp);
@@ -332,7 +332,6 @@ inline float& sph_particles_omega(part_int index) {
 	return sph_particles_fp1[index];
 }
 
-
 inline part_int& sph_particles_dm_index(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dm[index];
@@ -428,11 +427,11 @@ inline float sph_particles_eint(part_int index) {
 	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
 
-
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
 	aux.alpha = sph_particles_alpha(index);
 	aux.omega = sph_particles_omega(index);
+	aux.divv = sph_particles_divv(index);
 	if (get_options().diffusion) {
 		aux.shearv = sph_particles_shear(index);
 	}

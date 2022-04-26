@@ -160,10 +160,9 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr0(i) = sph_particles_dentr2(i);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
-						if( sph_particles_dentr2(i) < 0.0 ) {
-							PRINT( "%e %e\n", sph_particles_dentr2(i) * dt2, sph_particles_entr(i));
+						if( sph_particles_dentr2(i) < -1.0e-7 / sph_particles_entr(i)) {
+							ALWAYS_ASSERT(sph_particles_dentr2(i)>=0.f);
 						}
-						ALWAYS_ASSERT(sph_particles_dentr2(i)>=0.f);
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 1 ) {
@@ -173,7 +172,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						}
 						sph_particles_entr(i) += (-sph_particles_entr0(i)) * dt2;
 						if( sph_particles_entr(i) < 0.0 ) {
-							PRINT( "%e %e\n", sph_particles_entr(i),  (-sph_particles_entr0(i)) * dt2);
+							PRINT( "%e %e\n", sph_particles_entr(i), (-sph_particles_entr0(i)) * dt2);
 						}
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += (sph_particles_dentr2(i)) * dt2;
@@ -188,7 +187,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-						if(false &&  stars ) {
+						if(false && stars ) {
 							float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
 							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);

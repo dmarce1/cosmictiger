@@ -574,7 +574,6 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(dvz_dz);		// 127
 				if (tid == 0) {
 					flops += 38 + (PREHYDRO2_BLOCK_SIZE - 1) * 11;
-					float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
 					float div_v;
 					const float mrhoinv = data.m / rho_i;                       // 4
 					dvx_dx *= mrhoinv;                                       // 1
@@ -587,6 +586,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					dvz_dy *= mrhoinv;                                       // 1
 					dvz_dz *= mrhoinv;                                       // 1
 					div_v = dvx_dx + dvy_dy + dvz_dz;                        // 2
+					float shear_xx, shear_xy, shear_xz, shear_yy, shear_yz, shear_zz;
 					shear_xx = dvx_dx - (1.f / 3.f) * div_v;                 // 2
 					shear_yy = dvy_dy - (1.f / 3.f) * div_v;                 // 2
 					shear_zz = dvz_dz - (1.f / 3.f) * div_v;                 // 2
