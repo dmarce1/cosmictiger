@@ -112,7 +112,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 						PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
 					}
 					const float h3 = sqr(h)*h;
-					const float vol = (4.0*M_PI/3.0) * h3 / get_options().neighbor_number;
+					const float vol = (4.0*M_PI/3.0) * h3 / get_options().sneighbor_number;
 					const float rho = sph_den(1./h3);
 					const float p = eint * rho * (get_options().gamma-1.0f);
 					const float e =eint * sph_mass;

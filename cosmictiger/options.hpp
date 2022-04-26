@@ -64,7 +64,8 @@ struct options {
 	double alpha_decay;
 	double lc_b;
 	double slice_size;
-	double neighbor_number;
+	double gneighbor_number;
+	double sneighbor_number;
 	double link_len;
 	double hsoft;
 	double GM;
@@ -123,7 +124,8 @@ struct options {
 		arc & stars;
 		arc & chem;
 		arc & diffusion;
-		arc & neighbor_number;
+		arc & gneighbor_number;
+		arc & sneighbor_number;
 		arc & kernel;
 		arc & cfl;
 		arc & sph;

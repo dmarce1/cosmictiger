@@ -387,7 +387,8 @@ void load_glass(const char* filename) {
 	double minv = 1.0 / multiplicity;
 	int dm_index = 0;
 	int sph_index = nparts;
-	const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float h3s = get_options().sneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float h3g = get_options().gneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 	const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
 	const float n0 = 1.0 - 0.75 * get_options().Y0;
 	const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
@@ -396,7 +397,8 @@ void load_glass(const char* filename) {
 	const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
 	const float eps = eps_cgs / code_to_ene;
 	const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
-	const float h = std::pow(h3, 1.0 / 3.0);
+	const float hs = std::pow(h3s, 1.0 / 3.0);
+	const float hg = std::pow(h3g, 1.0 / 3.0);
 	const bool chem = get_options().chem;
 	for (int i = 0; i < multiplicity; i++) {
 		for (int j = 0; j < multiplicity; j++) {
@@ -429,7 +431,7 @@ void load_glass(const char* filename) {
 							if (l >= nparts) {
 								const part_int m = particles_cat_index(index);
 								sph_particles_rec2(m).A = K0;
-								sph_particles_smooth_len(m) = h;
+								sph_particles_smooth_len(m) = hs;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
 									sph_particles_H(m) = 1.0 - get_options().Y0;
@@ -891,8 +893,10 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	vector<hpx::future<void>> local_futs;
 	float entropy;
 	std::string filename = sph ? "glass_sph.bin" : "glass_dm.bin";
-	const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float h = std::pow(h3, 1.0 / 3.0);
+	const float h3s = get_options().sneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float h3g = get_options().gneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float hs = std::pow(h3s, 1.0 / 3.0);
+	const float hg = std::pow(h3g, 1.0 / 3.0);
 	if (phase != BARYON_POWER) {
 		if (get_options().use_glass) {
 			load_glass(filename.c_str());
@@ -900,7 +904,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 			particles_resize(box.volume());
 			vector<hpx::future<void>> local_futs;
 			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-				local_futs.push_back(hpx::async([box,Ninv,h,parts_dim,vsoft](array<int64_t,NDIM> I) {
+				local_futs.push_back(hpx::async([box,Ninv,hg,parts_dim,vsoft](array<int64_t,NDIM> I) {
 					for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 						for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 							const int64_t index = box.index(I);
@@ -911,7 +915,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 							}
 							particles_rung(index) = 0;
 							if( vsoft ) {
-								particles_softlen(index) = h;
+								particles_softlen(index) = hg;
 							}
 						}
 					}
@@ -931,7 +935,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const part_int offset = box.volume();
 				vector<hpx::future<void>> local_futs;
 				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([K0,offset,chem,box,h,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
+					local_futs.push_back(hpx::async([K0,offset,chem,box,hs,hg,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
 						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 							for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 								const int64_t index = box.index(I) + offset;
@@ -941,12 +945,12 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 									particles_vel(dim1, index) = 0.0;
 								}
 								if( vsoft ) {
-									particles_softlen(index) = h;
+									particles_softlen(index) = hg;
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
 								sph_particles_rec2(m).A = K0;
-								sph_particles_smooth_len(m) = h;
+								sph_particles_smooth_len(m) = hs;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
 									sph_particles_H(m) = 1.0 - get_options().Y0;

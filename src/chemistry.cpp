@@ -61,7 +61,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 			vector<chem_attribs> chems;
 			const float mass = get_options().sph_mass;
 			const float stars = get_options().stars;
-			const int N = get_options().neighbor_number;
+			const int N = get_options().sneighbor_number;
 			for( part_int i = b; i < e; i++) {
 				int rung1 = sph_particles_rung(i);
 				//	int rung2 = sph_particles_oldrung(i);

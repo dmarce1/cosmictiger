@@ -94,7 +94,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 		}
 		float hmin = 1e+20f;
 		float hmax = 0.0;
-		const float w0 = kernelW(0.f);
+		const float w0 = kernelG(0.f);
 		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
@@ -130,8 +130,8 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 						const float q = r * hinv;                             // 1
 						flops += 13;
 						if (q < 1.f) {                                        // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
+							const float w = kernelG(q);
+							const float dwdq = dkernelG_dq(q);
 							const float dwdh = -q * dwdq * hinv; 					// 3
 							drho_dh -= dwdq;												// 1
 							rhoh3 += w;														// 1
@@ -299,7 +299,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 		float error;
 		float hmin = 1e+20;
 		float hmax = 0.0;
-		const float w0 = kernelW(0.f);
+		const float w0 = kernelG(0.f);
 		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
@@ -365,8 +365,8 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						const float q = r * hinv;                             // 1
 						flops += 13;
 						if (q < 1.f) {                                        // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
+							const float w = kernelG(q);
+							const float dwdq = dkernelG_dq(q);
 							const float dwdh = -q * dwdq * hinv; 					// 3
 							drho_dh -= dwdq;												// 1
 							rhoh3 += w;														// 1
@@ -472,8 +472,8 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						const float r = sqrtf(r2);                    // 4
 						const float q = r * hinv_i;                    // 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
+							const float w = kernelG(q);
+							const float dwdq = dkernelG_dq(q);
 							drho_dh -= q * dwdq;                      // 2
 							flops += 2;
 						}

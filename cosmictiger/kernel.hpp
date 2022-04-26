@@ -42,43 +42,6 @@ extern __managed__ float kernel_norm;
 #endif
 
 CUDA_EXPORT
-inline
-float W0(float q) {
-	const float W0 = kernel_norm;
-	const float n = kernel_index;
-	q = fminf(q, 1.f);
-	float x = float(M_PI) * q;
-	x = fminf(x, M_PI * 0.9999999f);
-	float w = W0 * powf(sinc(x), n);
-	ALWAYS_ASSERT(isfinite(w));
-	return w;
-}
-
-CUDA_EXPORT
-inline float dWdq0(float q) {
-//	return (W(q + DX) - W(q)) / DX;
-	const float W0 = kernel_norm;
-	const float n = kernel_index;
-	float x = float(M_PI) * q;
-	q = fminf(q, 1.f);
-	x = fminf(x, M_PI * 0.9999999f);
-	if (q == 0.0f) {
-		return 0.f;
-	} else {
-		float tmp, s;
-		s = sinf(x);
-		if (x < float(0.25f)) {
-			tmp = (float(-1. / 3.) + float(1. / 30.) * sqr(x)) * sqr(x) * x;
-		} else {
-			tmp = (x * sqrtf(1.f - sqr(s)) - s);
-		}
-		float xinv = 1.f / x;
-		float w = W0 * n * tmp * sqr(xinv) * float(M_PI) * powf(s * xinv, n - 1.0f);
-		return w;
-	}
-}
-
-CUDA_EXPORT
 inline float kernelW(float q) {
 	float tmp1 = fmaxf(1.f - q, 0.f);
 	float tmp2 = fmaxf((2.f / 3.f) - q, 0.f);
@@ -98,6 +61,25 @@ inline float dkernelW_dq(float q, float* w = nullptr, int* flops = nullptr) {
 	tmp2 *= 30.f * tmp2 * (sqr(tmp2));
 	tmp3 *= -75.f * tmp3 * (sqr(tmp3));
 	return 17.403593027f * (tmp1 + tmp2 + tmp3);
+}
+
+
+CUDA_EXPORT
+inline float kernelG(float q) {
+	float tmp1 = fmaxf(1.f - q, 0.f);
+	float tmp2 = fmaxf((1.f / 3.f) - q, 0.f);
+	tmp1 *= tmp1;
+	tmp2 *= -3.f * tmp2;
+	return 2.417165698f * (tmp1 + tmp2);
+}
+
+CUDA_EXPORT
+inline float dkernelG_dq(float q, float* w = nullptr, int* flops = nullptr) {
+	float tmp1 = fmaxf(1.f - q, 0.f);
+	float tmp2 = fmaxf((1.f / 3.f) - q, 0.f);
+	tmp1 *= 2.f;
+	tmp2 *= -6.f;
+	return 2.417165698f * (tmp1 + tmp2);
 }
 
 template<class T>

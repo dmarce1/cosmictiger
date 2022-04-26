@@ -217,7 +217,7 @@ void hydro_plummer() {
 		double r = sqrt(sqr(x, y, z));
 		double dist = powf(1.0 + sqr(r / a), -2.5);
 		if (rand1() < dist) {
-			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+			double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
 			part_int k = particles_size();
 			particles_resize(k + 1);
 			double phi = -G * M0 / sqrt(r * r + a * a);
@@ -250,7 +250,7 @@ void hydro_plummer() {
 		double r = sqrt(sqr(x, y, z));
 		double dist = powf(1.0 + sqr(r / a), -2.5);
 		if (rand1() < dist) {
-			double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+			double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
 //			part_int k = sph_particles_size();
 //			sph_particles_resize(k + 1);
 			double phi = -G * M0 / sqrt(r * r + a * a);
@@ -342,7 +342,7 @@ void hydro_star_test() {
 	solve_sphere_surface_problem(X);
 	for (int i = 0; i < X.size(); i++) {
 		const double d = rho(radius[i] * r0);
-		double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
+		double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
 		const int N = X[i][XDIM].size();
 		for (int l = 0; l < N; l++) {
 			const part_int k = sph_particles_size();
@@ -432,7 +432,7 @@ void hydro_rt_test() {
 				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
 				double p = 1.5 + fabs(rho0 * gy * (y - 0.5));
 				double eint = p / (get_options().gamma - 1) / rho0;
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -458,7 +458,7 @@ void hydro_rt_test() {
 				double z = (iz + 0.5) * dx;
 				double p;
 				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				if (y > 0.75 || y < 0.25) {
 					if (y >= 0.75) {
 						p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
@@ -520,7 +520,7 @@ void hydro_rt_test() {
 	 double z = (iz + 0.25) * dx;
 	 double p = -(1.0 - y) * rho1 * gy;
 	 double eint = p / rho1 / (get_options().gamma - 1);
-	 double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+	 double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 	 sph_particles_resize(sph_particles_size() + 1);
 	 sph_particles_smooth_len (i) = h;
 	 sph_particles_pos(XDIM, i) = x;
@@ -564,7 +564,7 @@ void hydro_disc_test() {
 	const double rho = nparts_total;
 	const double p0 = 1.0e-30;
 	const double m = 1.0;
-	double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+	double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 	int i = 0;
 	const int nz = 3;
 	int dim = sqrt(nparts_total) / nz;
@@ -641,7 +641,7 @@ void hydro_sod_test() {
 	sod.pr = p0;
 	sod.gamma = get_options().gamma;
 	constexpr float eta = 0.0;
-	const double Ne = get_options().neighbor_number;
+	const double Ne = get_options().sneighbor_number;
 	PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * right_dim, 2 * left_dim, rho0 / (m * Ne) * (4.0 * M_PI / 3.0),
 			rho1 / (m * Ne) * (4.0 * M_PI / 3.0));
 	for (int ix = 0; ix < left_dim; ix++) {
@@ -651,7 +651,7 @@ void hydro_sod_test() {
 				double y = (iy) * dx;
 				double z = (iz) * dx;
 				double ent = p1 / powf(rho1, get_options().gamma);
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
@@ -690,7 +690,7 @@ void hydro_sod_test() {
 				double y = (iy) * dx;
 				double z = (iz) * dx;
 				double ent = p0 / powf(rho0, get_options().gamma);
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
@@ -793,7 +793,7 @@ void hydro_helmholtz_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double eint = p1 / rho1 / (get_options().gamma - 1);
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -836,7 +836,7 @@ void hydro_helmholtz_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double eint = p0 / rho0 / (get_options().gamma - 1);
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -900,7 +900,7 @@ void hydro_blast_test() {
 				double vx = 0.0;
 				double vy = 0.0;
 				double vz = 0.0;
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
 				sph_particles_resize(sph_particles_size() + 1);
 				sph_particles_smooth_len(i) = h;
 				sph_particles_pos(XDIM, i) = x;
@@ -991,7 +991,7 @@ void hydro_wave_test() {
 				double y = (iy + 0.5) * dx;
 				double z = (iz + 0.5) * dx;
 				double eint = p0 / rho / (get_options().gamma - 1);
-				double h = pow(m * get_options().neighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
 				//	PRINT( "%e\n", h);
 				if (ix == ndim / 2) {
 					x += 0.99 * dx;

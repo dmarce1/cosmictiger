@@ -132,7 +132,8 @@ bool process_options(int argc, char *argv[]) {
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<double>(&(opts.kernel))->default_value(5), "kernel index") //
-	("neighbor_number", po::value<double>(&(opts.neighbor_number))->default_value(100), "neighbor number") //
+	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(100), "SPH neighbor number") //
+	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(25), "gravity neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.15), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.15), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
@@ -285,7 +286,8 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(link_len);
 	SHOW(max_iter);
 	SHOW(min_group);
-	SHOW(neighbor_number);
+	SHOW(sneighbor_number);
+	SHOW(gneighbor_number);
 	SHOW(omega_b);
 	SHOW(omega_c);
 	SHOW(omega_gam);

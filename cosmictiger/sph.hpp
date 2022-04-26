@@ -336,7 +336,7 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
 template<class T>
 inline T sph_den(T hinv3) {
 	static const T m = get_options().sph_mass;
-	static const T N = get_options().neighbor_number;
+	static const T N = get_options().sneighbor_number;
 	static const T c0 = T(3.0 / 4.0 / M_PI) * N;
 //	PRINT("%e %e\n", m, N);
 	return m * c0 * hinv3;

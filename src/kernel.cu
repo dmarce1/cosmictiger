@@ -139,6 +139,6 @@ void kernel_adjust_options(options& opts) {
 	//opts.neighbor_number = n;
 //	opts.cfl = cfl;
 
-	opts.sph_bucket_size = 8.0 / M_PI * opts.neighbor_number;
+	opts.sph_bucket_size = 8.0 / M_PI * opts.sneighbor_number;
 
 }

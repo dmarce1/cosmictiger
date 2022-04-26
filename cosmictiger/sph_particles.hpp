@@ -410,7 +410,7 @@ inline float& sph_particles_smooth_len(part_int index) {
 inline float sph_particles_rho(part_int index) {
 	const float h = sph_particles_smooth_len(index);
 	static const float mass = get_options().sph_mass;
-	static const float N = get_options().neighbor_number;
+	static const float N = get_options().sneighbor_number;
 	static const float c0 = N * mass * 3.0 / (4.0 * M_PI);
 	return c0 / (h * sqr(h));
 }

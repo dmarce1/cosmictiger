@@ -778,7 +778,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.t0 = params.t0;
 //	PRINT("HSTAR = %e %e  %e  %e  \n", cuda_data.hstar0, rho_star_phys_cgs, rho_star_phys_code, rho_star_co_code);
 	cuda_data.m = get_options().sph_mass;
-	cuda_data.N = get_options().neighbor_number;
+	cuda_data.N = get_options().sneighbor_number;
 	cuda_data.kappa0 = 1.31 * pow(3.0, 1.5) * pow(constants::kb, 3.5) / 4.0 / sqrt(M_PI) / pow(constants::e, 4) / sqrt(constants::me);
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
