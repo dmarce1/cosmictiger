@@ -184,6 +184,7 @@ void tree_free_neighbor_list();
 void tree_clear_neighbor_ranges();
 int tree_allocate_neighbor_list(const vector<tree_id>& values);
 void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
+void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox);
 int tree_leaflist_size();
 const tree_id tree_get_leaf(int i);
 tree_id& tree_get_neighbor(int i);

@@ -119,20 +119,6 @@ double lane_emden(double r0, double dr, double n, double& menc) {
 	return pow(y, n);
 }
 
-static void output_line(int num) {
-
-	vector<double> x(1000), y(1000, 0.5), z(1000, 0.5);
-	for (int i = 0; i < 1000; i++) {
-		x[i] = i / 1000.0;
-	}
-	std::string filename = "lineout." + std::to_string(num) + ".txt";
-	FILE* fp = fopen(filename.c_str(), "wt");
-	auto values = sph_values_at(x, y, z);
-	for (int i = 0; i < 1000; i++) {
-		fprintf(fp, "%e %e %e %e %e %e\n", x[i], values[i].rho, values[i].vx, values[i].vy, values[i].vz, values[i].p);
-	}
-	fclose(fp);
-}
 
 void hydro_driver(double tmax, int nsteps = 64) {
 	time_type itime = 0;

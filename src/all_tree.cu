@@ -92,7 +92,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 				}
 			}
 		}
-		float hmin = 1e+20;
+		float hmin = 1e+20f;
 		float hmax = 0.0;
 		const float w0 = kernelW(0.f);
 		__syncthreads();

@@ -393,10 +393,10 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 		futs.push_back(hpx::async<sph_run_action>(c, params, cuda));
 	}
 	int nthreads = hpx_hardware_concurrency();
-	if (hpx_size() > 1) {
-		nthreads *= 4;
-	}
-	static std::atomic<int> next;
+		if (hpx_size() > 1) {
+			nthreads *= 4;
+		}
+		static std::atomic<int> next;
 	next = 0;
 	static std::atomic<int> gpu_work;
 	gpu_work = 0;

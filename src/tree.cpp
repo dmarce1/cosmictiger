@@ -89,6 +89,7 @@ int tree_leaflist_size() {
 
 const tree_id tree_get_leaf(int i) {
 	tree_id id;
+	ALWAYS_ASSERT(i < leaflist.size());
 	id.index = leaflist[i];
 	id.proc = hpx_rank();
 	return id;
@@ -632,6 +633,15 @@ void tree_destroy(bool free_tree) {
 	hpx::wait_all(futs.begin(), futs.end());
 	profiler_exit();
 }
+
+
+
+
+void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox) {
+	nodes[id.index].obox = obox;
+	nodes[id.index].ibox = ibox;
+}
+
 
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {

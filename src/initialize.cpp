@@ -873,6 +873,8 @@ static void zeldovich_begin(int dim1, int dim2, int phase) {
 static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int phase) {
 	const bool sph = get_options().sph;
 	const bool chem = get_options().chem;
+	const bool vsoft = get_options().vsoft;
+	const int parts_dim = get_options().parts_dim;
 	const float Y0 = get_options().Y0;
 	float dxmax = 0.0;
 	spinlock_type mutex;
@@ -889,6 +891,8 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	vector<hpx::future<void>> local_futs;
 	float entropy;
 	std::string filename = sph ? "glass_sph.bin" : "glass_dm.bin";
+	const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
+	const float h = std::pow(h3, 1.0 / 3.0);
 	if (phase != BARYON_POWER) {
 		if (get_options().use_glass) {
 			load_glass(filename.c_str());
@@ -896,7 +900,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 			particles_resize(box.volume());
 			vector<hpx::future<void>> local_futs;
 			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-				local_futs.push_back(hpx::async([box,Ninv](array<int64_t,NDIM> I) {
+				local_futs.push_back(hpx::async([box,Ninv,h,parts_dim,vsoft](array<int64_t,NDIM> I) {
 					for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 						for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 							const int64_t index = box.index(I);
@@ -906,6 +910,9 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								particles_vel(dim1, index) = 0.0;
 							}
 							particles_rung(index) = 0;
+							if( vsoft ) {
+								particles_softlen(index) = h;
+							}
 						}
 					}
 				}, I));
@@ -924,9 +931,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const part_int offset = box.volume();
 				vector<hpx::future<void>> local_futs;
 				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([K0,offset,chem,box,Ninv](array<int64_t,NDIM> I) {
-						const float h3 = get_options().neighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-						const float h = std::pow(h3, 1.0 / 3.0);
+					local_futs.push_back(hpx::async([K0,offset,chem,box,h,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
 						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 							for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 								const int64_t index = box.index(I) + offset;
@@ -934,6 +939,9 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 									float x = (I[dim1]) * Ninv;
 									particles_pos(dim1, index) = x;
 									particles_vel(dim1, index) = 0.0;
+								}
+								if( vsoft ) {
+									particles_softlen(index) = h;
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
@@ -961,7 +969,6 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	vector<hpx::future<float>> futs3;
-	const part_int parts_dim = get_options().parts_dim;
 	PRINT("particles size = %i\n", particles_size());
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs3.push_back(hpx::async([D1,D2,prefac1,prefac2,nthreads,proc, parts_dim, box_size_inv,phase]() {

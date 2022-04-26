@@ -20,6 +20,7 @@
 #define  SMOOTHLEN_BUFFER 0.21
 #define SCALE_DT 0.02
 
+#include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/drift.hpp>
@@ -236,7 +237,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
 		cont = kr.rc;
-		tnparams.h_wt =(1.0 + SMOOTHLEN_BUFFER);
+		tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 		tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
@@ -349,11 +350,11 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 					PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 				tm.reset();
 				cont = kr.rc;
-				tnparams.h_wt =  (1.0 + SMOOTHLEN_BUFFER);
+				tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
 				tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-		//			tnparams.set = SPH_SET_ACTIVE;
+				//			tnparams.set = SPH_SET_ACTIVE;
 				tm.start();
 				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -386,7 +387,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.seto = SPH_SET_ALL;
 				tnparams.seti = SPH_SET_ALL;
-		//			tnparams.set = SPH_SET_ACTIVE;
+				//			tnparams.set = SPH_SET_ACTIVE;
 				tm.start();
 				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
@@ -408,7 +409,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
 	}
 
-
 	sparams.phase = 1;
 	sparams.run_type = SPH_RUN_HYDRO;
 	tm.reset();
@@ -425,8 +425,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
-
-
 
 	tnparams.h_wt = 1.001;
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -587,6 +585,12 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	profiler_enter("tree_create");
 	auto sr = tree_create(tparams);
 	profiler_exit();
+
+	const bool vsoft = get_options().vsoft;
+	if (vsoft) {
+		all_tree_softlens(minrung);
+	}
+
 	PRINT("gravity nactive = %i\n", sr.nactive);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;

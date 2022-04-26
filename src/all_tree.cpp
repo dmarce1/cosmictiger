@@ -22,7 +22,6 @@
 #include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/sph_particles.hpp>
 
-
 softlens_return all_tree_softlens_execute(int minrung);
 softlens_return all_tree_derivatives_execute(int minrung);
 
@@ -43,8 +42,6 @@ static bool has_active_neighbors(const tree_node* self) {
 	return rc;
 }
 
-
-
 softlens_return all_tree_softlens(int minrung) {
 	tree_id root_id;
 	vector<tree_id> checklist;
@@ -52,12 +49,23 @@ softlens_return all_tree_softlens(int minrung) {
 	checklist.push_back(root_id);
 	softlens_return rc;
 	do {
+		PRINT("Find ranges\n");
 		all_tree_find_ranges(root_id, minrung, 1.2);
+		PRINT("Find neigbors\n");
 		all_tree_find_neighbors(root_id, std::move(checklist));
+		PRINT("Find softlens\n");
 		rc = all_tree_softlens_execute(minrung);
+		PRINT("%e %e \n", rc.hmin, rc.hmax);
 	} while (rc.fail);
 	return rc;
 }
+
+struct tree_id_hash2 {
+	inline size_t operator()(tree_id id) const {
+		const int i = id.index;
+		return i * hpx_size() + id.proc;
+	}
+};
 
 softlens_return all_tree_softlens_execute(int minrung) {
 	vector<hpx::future<softlens_return>> rfuts;
@@ -70,45 +78,61 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
-	std::unordered_map<tree_id, int, tree_id_hash> tree_map;
+	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
 	std::unordered_map<int, pair<int>> neighbor_ranges;
-
-	for (int i = 0; i < tree_leaflist_size(); i++) {
-		const auto selfid = tree_get_leaf(i);
-		const auto* self = tree_get_node(selfid);
-		if (self->nactive) {
-			std::unordered_map<tree_id, int, tree_id_hash>::iterator iter;
-			iter = tree_map.find(selfid);
-			if (iter == tree_map.end()) {
-				int index = host_trees.size();
-				host_trees.resize(index + 1);
-				tree_map[selfid] = index;
-				host_trees[index] = *self;
-			}
-			for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-				const auto nid = tree_get_neighbor(i);
-				iter = tree_map.find(nid);
-				if (iter == tree_map.end()) {
-					int index = host_trees.size();
-					host_trees.resize(index + 1);
-					tree_map[nid] = index;
-					const auto* node = tree_get_node(nid);
-					host_trees[index] = *node;
+	PRINT("...gathering tree data\n");
+	mutex_type mutex;
+	static std::atomic<int> next;
+	next = 0;
+	int nthreads = hpx_hardware_concurrency();
+	vector<hpx::future<void>> futs2;
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
+			int i = next++;
+			while( i < tree_leaflist_size()) {
+				const auto selfid = tree_get_leaf(i);
+				const auto* self = tree_get_node(selfid);
+				if (self->nactive) {
+					std::unordered_map<tree_id, int, tree_id_hash2>::iterator iter;
+					std::unique_lock<mutex_type> lock(mutex);
+					iter = tree_map.find(selfid);
+					if (iter == tree_map.end()) {
+						int index = host_trees.size();
+						host_trees.resize(index + 1);
+						tree_map[selfid] = index;
+						host_trees[index] = *self;
+					}
+					for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+						const auto nid = tree_get_neighbor(i);
+						iter = tree_map.find(nid);
+						if (iter == tree_map.end()) {
+							int index = host_trees.size();
+							host_trees.resize(index + 1);
+							tree_map[nid] = index;
+							lock.unlock();
+							const auto* node = tree_get_node(nid);
+							lock.lock();
+							host_trees[index] = *node;
+						}
+					}
+					int neighbor_begin = host_neighbors.size();
+					for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+						const auto nid = tree_get_neighbor(i);
+						host_neighbors.push_back(tree_map[nid]);
+					}
+					int neighbor_end = host_neighbors.size();
+					const int myindex = tree_map[selfid];
+					auto& r = neighbor_ranges[host_selflist.size()];
+					host_selflist.push_back(myindex);
+					r.first = neighbor_begin;
+					r.second = neighbor_end;
 				}
+				i = next++;
 			}
-			int neighbor_begin = host_neighbors.size();
-			for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-				const auto nid = tree_get_neighbor(i);
-				host_neighbors.push_back(tree_map[nid]);
-			}
-			int neighbor_end = host_neighbors.size();
-			const int myindex = tree_map[selfid];
-			auto& r = neighbor_ranges[host_selflist.size()];
-			host_selflist.push_back(myindex);
-			r.first = neighbor_begin;
-			r.second = neighbor_end;
-		}
+		}));
 	}
+	hpx::wait_all(futs2.begin(), futs2.end());
+	PRINT("... done gathering\n");
 	size_t parts_size = 0;
 	for (auto& node : host_trees) {
 		parts_size += node.part_range.second - node.part_range.first;
@@ -117,12 +141,12 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	host_y.resize(parts_size);
 	host_z.resize(parts_size);
 	vector<hpx::future<void>> futs;
-	const int nthreads = 8 * hpx_hardware_concurrency();
 	std::atomic<int> index(0);
 	std::atomic<part_int> part_index(0);
 	for (int i = 0; i < host_selflist.size(); i++) {
 		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
+	PRINT("...gathering particle data\n");
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_trees]() {
 			int this_index = index++;
@@ -144,6 +168,8 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	params.rung_snk = &particles_rung(0);
 	params.converged_snk = &particles_converged(0);
 	params.minrung = minrung;
+	params.nselfs = host_selflist.size();
+	PRINT( "Sending %i to gpu\n", host_selflist.size());
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&params.x, sizeof(fixed32) * host_x.size()));
 	CUDA_CHECK(cudaMalloc(&params.y, sizeof(fixed32) * host_y.size()));
@@ -158,6 +184,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
+	PRINT("...sending to gpu\n");
 	auto rc = all_tree_softlens_cuda(params, stream);
 
 	cuda_end_stream(stream);
@@ -171,7 +198,6 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	return rc;
 }
 
-
 softlens_return all_tree_derivatives_execute(int minrung) {
 	vector<hpx::future<softlens_return>> rfuts;
 	for (auto& c : hpx_children()) {
@@ -184,14 +210,14 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	vector<float, pinned_allocator<float>> host_h;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
-	std::unordered_map<tree_id, int, tree_id_hash> tree_map;
+	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
 	std::unordered_map<int, pair<int>> neighbor_ranges;
 
 	for (int i = 0; i < tree_leaflist_size(); i++) {
 		const auto selfid = tree_get_leaf(i);
 		const auto* self = tree_get_node(selfid);
 		if (has_active_neighbors(self)) {
-			std::unordered_map<tree_id, int, tree_id_hash>::iterator iter;
+			std::unordered_map<tree_id, int, tree_id_hash2>::iterator iter;
 			iter = tree_map.find(selfid);
 			if (iter == tree_map.end()) {
 				int index = host_trees.size();
@@ -246,7 +272,7 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
 				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, offset);
-				particles_global_read_softlens(node.global_part_range(), host_h.data(),  offset);
+				particles_global_read_softlens(node.global_part_range(), host_h.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
 				this_index = index++;
@@ -335,12 +361,12 @@ void all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist) {
 }
 
 pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int minrung, double h_wt) {
-	const auto& self = *tree_get_node(self_id);
+	auto& self = *tree_get_node(self_id);
 	pair<fixed32_range> myrange;
 	if (self.leaf) {
 		for (int dim = 0; dim < NDIM; dim++) {
-			myrange.first.begin[dim] = myrange.second.begin[dim] = 1.0;
-			myrange.first.end[dim] = myrange.second.end[dim] = 0.0;
+			myrange.first.begin[dim] = myrange.second.begin[dim] = 1.9;
+			myrange.first.end[dim] = myrange.second.end[dim] = -0.9;
 		}
 		const auto tiny = 10.0 * range_fixed::min().to_double();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
@@ -367,5 +393,6 @@ pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int minrung, double h_
 			myrange.second.end[dim] = max(rcr.second.end[dim], rcl.second.end[dim]);
 		}
 	}
+	tree_set_boxes(self_id, myrange.first, myrange.second);
 	return myrange;
 }
