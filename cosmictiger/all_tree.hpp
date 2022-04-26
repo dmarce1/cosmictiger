@@ -42,7 +42,6 @@ struct all_tree_data {
 	float* zeta_snk;
 	part_int* cat_snk;
 	char* type_snk;
-	float* sph_omega_snk;
 	int minrung;
 	fixed32* x;
 	fixed32* y;

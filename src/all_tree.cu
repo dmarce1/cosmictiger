@@ -221,7 +221,6 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 	(&ws)->~softlens_workspace();
 }
 
-
 struct derivatives_record1 {
 	fixed32 x;
 	fixed32 y;
@@ -452,10 +451,8 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const float hinv_i = 1.f / h_i; 										// 4
 				const float h3inv_i = sqr(hinv_i) * hinv_i;
 				const float h2_i = sqr(h_i);    										// 1
-				float drho_dh;
-				const float c0 = float(3.0f / 4.0f / M_PI * params.N);     // 1
-				drho_dh = 0.f;
-				float rhoh30 = (3.0f * params.N) / (4.0f * float(M_PI));   // 5
+				float drho_dh = 0.f;
+				float dpot_dh = 0.f;
 				__syncthreads();
 				flops += 10;
 				const int jmax = round_up(ws.rec1.size(), DERIVATIVES_BLOCK_SIZE);
@@ -474,6 +471,9 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						if (q < 1.f) {                               // 1
 							const float w = kernelG(q);
 							const float dwdq = dkernelG_dq(q);
+							const float pot = -kernelPot(q);
+							const float force = kernelFqinv(q) * q;
+							dpot_dh += (pot + q * force);
 							drho_dh -= q * dwdq;                      // 2
 							flops += 2;
 						}
@@ -481,13 +481,12 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 					}
 				}
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
 				flops += (DERIVATIVES_BLOCK_SIZE - 1);
-				const float omega_i = 0.33333333333f * drho_dh / rhoh30;
+				const float zeta_i = dpot_dh / drho_dh;
 				__syncthreads();
 				if (tid == 0) {
-					if(params.type_snk[snki] == SPH_TYPE) {
-						params.sph_omega_snk[params.cat_snk[snki]] = omega_i;
-					}
+					params.zeta_snk[snki] = zeta_i;
 				}
 			}
 		}
@@ -503,9 +502,6 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 	}
 	(&ws)->~derivatives_workspace();
 }
-
-
-
 
 softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream) {
 	softlens_return rc;
@@ -535,7 +531,6 @@ softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream
 	return rc;
 
 }
-
 
 softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t stream) {
 	softlens_return rc;

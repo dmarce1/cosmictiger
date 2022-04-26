@@ -193,7 +193,7 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 #endif
 void kick_show_timings();
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, char*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*,char*, float*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
 		int part_count, int ntrees, std::function<void()>, std::function<void()>);
 #endif
 int kick_block_count();
