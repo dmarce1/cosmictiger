@@ -484,8 +484,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 					} else {
 						const float hinv_i = 1.0f / h_i;
 						const float hinv_j = 1.0f / h_j;
-						const float hinv2_i = sqr(h_i);
-						const float hinv2_j = sqr(h_j);
+						const float hinv2_i = sqr(hinv_i);
+						const float hinv2_j = sqr(hinv_j);
 						const float hinv3_i = hinv2_i * hinv_i;
 						const float hinv3_j = hinv2_j * hinv_j;
 						const float r = sqrtf(r2);
