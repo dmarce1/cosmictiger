@@ -163,7 +163,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
 				this_index = index++;
@@ -294,7 +294,7 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, offset);
 				particles_global_read_softlens(node.global_part_range(), host_h.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;

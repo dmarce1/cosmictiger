@@ -41,10 +41,12 @@ void particles_group_cache_free();
 struct particles_cache_entry {
 	array<fixed32, NDIM> x;
 	char type;
+	float zeta;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & type;
 		arc & x;
+		arc & zeta;
 	}
 };
 
@@ -190,8 +192,6 @@ struct line_id_hash_hi {
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<particles_cache_entry>>, line_id_hash_hi>, PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static int group_cache_epoch = 0;
-
-
 
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>, line_id_hash_hi>, PART_CACHE_SIZE> part_cache_softlens;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes_softlens;
@@ -489,16 +489,19 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, float* zeta, part_int offset) {
 	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
 			const part_int dif = offset - range.range.first;
 			const part_int sz = range.range.second - range.range.first;
-			std::memcpy(x + offset, &particles_pos(XDIM, range.range.first), sizeof(float) * sz);
-			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(float) * sz);
-			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(float) * sz);
+			std::memcpy(x + offset, &particles_pos(XDIM, range.range.first), sizeof(fixed32) * sz);
+			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(fixed32) * sz);
+			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(fixed32) * sz);
+			if (zeta) {
+				std::memcpy(zeta + offset, &particles_zeta(range.range.first), sizeof(float) * sz);
+			}
 			if (types) {
 				for (int i = range.range.first; i < range.range.second; i++) {
 					const int j = offset + i - range.range.first;
@@ -533,6 +536,9 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 						} else {
 							types[dest_index] = DARK_MATTER_TYPE;
 						}
+					}
+					if (zeta) {
+						zeta[dest_index] = ptr[src_index].zeta;
 					}
 					dest_index++;
 				}
@@ -616,6 +622,7 @@ static const float* particles_cache_read_line_softlens(line_id_type line_id) {
 
 static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) {
 	static const bool sph = get_options().sph;
+	static const bool vsoft = get_options().vsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
@@ -631,6 +638,9 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			ln.type = type;
 		} else {
 			ln.type = DARK_MATTER_TYPE;
+		}
+		if (vsoft) {
+			ln.zeta = particles_zeta(i);
 		}
 	}
 	return line;
