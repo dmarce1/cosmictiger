@@ -114,7 +114,6 @@ inline simd_float sin(const simd_float &x0) {						// 17
 	return res;
 }
 
-
 inline simd_float sinf(const simd_float &x0) {
 	return sin(x0);
 }
@@ -180,5 +179,6 @@ inline simd_float8 pow(const simd_float8& a, const simd_float8& b) {
 }
 
 #endif /* SIMD_HPP_ */
+
 
 #endif

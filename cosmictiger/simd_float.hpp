@@ -802,4 +802,7 @@ inline simd_float16 fmaf(const simd_float16& a, const simd_float16& b, const sim
 
 #endif
 
+inline simd_float8 fmaxf(simd_float8 a, simd_float8 b) {
+	return max(a, b);
+}
 #endif /* SIMD_FLOAT_HPP_ */

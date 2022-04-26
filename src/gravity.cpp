@@ -279,12 +279,8 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 	const static bool vsoft = get_options().vsoft;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
-		simd_float h = hfloat;
-		simd_float h2 = h * h;
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);
-		simd_float hinv = simd_float(1) / h;
-		simd_float hinv3 = hinv * hinv * hinv;
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		const auto range = self_ptr->part_range;
@@ -293,7 +289,8 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			array<simd_int, NDIM> Y;
 			simd_float src_type;
 			simd_float sink_type;
-			simd_float hsoft = get_options().hsoft;
+			simd_float sink_hsoft;
+			simd_float sink_zeta;
 			array<const tree_node*, chunk_size> tree_ptrs;
 			int nsource = 0;
 			const int maxi = std::min((int) list.size(), li + chunk_size) - li;
@@ -305,19 +302,24 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
-			vector<float> vsofts;
+			vector<float> zetas;
+			vector<float> hs;
 			vector<char> type;
 			vector<float> masses;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masses.resize(nsource);
-			vsofts.resize(nsource);
+			zetas.resize(nsource);
 			type.resize(nsource);
+			hs.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), vsoft ? vsofts.data() : nullptr,
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), vsoft ? zetas.data() : nullptr,
 						count);
+				if (vsoft) {
+					particles_global_read_softlens(tree_ptrs[i]->global_part_range(), hs.data(), count);
+				}
 				count += tree_ptrs[i]->nparts();
 			}
 			if (do_sph) {
@@ -336,13 +338,13 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 				srcz[i] = 0.f;
 				masses[i] = 0.0f;
 				type[i] = 0;
+				zetas[i] = 0.0;
+				hs[i] = 1.0;
 			}
 			const simd_float tiny = 1.0e-15;
 			feenableexcept (FE_DIVBYZERO);
 			feenableexcept (FE_INVALID);
 			feenableexcept (FE_OVERFLOW);
-			const auto hinv = simd_float(1.f) / hsoft;
-			const auto h3inv = sqr(hinv) * hinv;
 			if (gtype == GRAVITY_DIRECT) {
 				for (part_int i = range.first; i < range.second; i++) {
 					bool active = particles_rung(i) >= min_rung;
@@ -357,6 +359,13 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 						} else {
 							sink_type = DARK_MATTER_TYPE;
 						}
+						if (vsoft) {
+							sink_hsoft = particles_softlen(i);
+							sink_zeta = particles_zeta(i);
+						} else {
+							sink_hsoft = get_options().hsoft;
+							sink_zeta = simd_float(0);
+						}
 						simd_float gx(0.0);
 						simd_float gy(0.0);
 						simd_float gz(0.0);
@@ -369,12 +378,21 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 							const int& count = maxi;
 							const int k = j / SIMD_FLOAT_SIZE;
 							simd_float mass;
+							simd_float hsoft;
+							simd_float zeta;
 							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
 								Y[XDIM][l] = srcx[j + l].raw();
 								Y[YDIM][l] = srcy[j + l].raw();
 								Y[ZDIM][l] = srcz[j + l].raw();
 								mass[l] = masses[j + l];
 								src_type[l] = type[j + l];
+								if (vsoft) {
+									hsoft[l] = hs[j + l];
+									zeta[l] = zetas[j + l];
+								} else {
+									hsoft[l] = get_options().hsoft;
+									zeta[l] = 0.0;
+								}
 							}
 							array<simd_float, NDIM> dx;
 							for (int dim = 0; dim < NDIM; dim++) {
@@ -382,7 +400,7 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 							}
 							simd_float rinv1 = 0.f, rinv3 = 0.f;
 							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
-							const simd_float near_flags = r2 < h2;
+							const simd_float near_flags = r2 < max(sqr(sink_hsoft), sqr(hsoft));
 							const auto type_i = sink_type;
 //							self_flags += simd_float(1) - (r2 > simd_float(0));
 							if (active) {
@@ -390,13 +408,25 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									rinv1 = simd_float(1) / sqrt(r2);
 									rinv3 = rinv1 * sqr(rinv1);
 								} else {
+									const auto& h_i = sink_hsoft;
+									const auto& h_j = hsoft;
+									const auto& zeta_i = sink_zeta;
+									const auto& zeta_j = zeta;
+									const auto hinv_i = simd_float(1) / h_i;
+									const auto hinv_j = simd_float(1) / h_j;
+									const auto h2inv_i = sqr(hinv_i);
+									const auto h2inv_j = sqr(hinv_j);
+									const auto h3inv_i = h2inv_i * hinv_i;
+									const auto h3inv_j = h2inv_j * hinv_j;
 									const auto type_j = src_type;
 									const simd_float r = sqrt(r2);                                                    // 4
 									rinv1 = simd_float(1) / (r + tiny);                                                    // 5
-									const auto q = r * hinv;
-									rinv3 = kernelFqinv(q) * h3inv;
+									const auto q_i = r * hinv_i;
+									const auto q_j = r * hinv_j;
+									rinv3 = simd_float(0.5) * (kernelFqinv(q_i) * h3inv_i + kernelFqinv(q_j) * h3inv_j);
+									rinv3 += simd_float(0.5) * (zeta_i * dkernelG_dq(q_i) * h2inv_j + zeta_j * dkernelG_dq(q_j) * h2inv_j) * rinv1;
 									if (min_rung == 0) {
-										rinv1 = kernelPot(q) * hinv;
+										rinv1 = (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
 									}
 								}
 								rinv3 *= mass;
