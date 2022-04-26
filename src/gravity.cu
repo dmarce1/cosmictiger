@@ -366,12 +366,11 @@ int cuda_gravity_pc_ewald(const cuda_kick_data& data, const tree_node&, const de
 }
 
 __device__
-int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, int nactive, float h0, float dm_mass,
+int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, int nactive, float h, float dm_mass,
 		float sph_mass, bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
-	const bool vsoft = data.vsoft;
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
 	auto &gx = shmem.gx;
 	auto &gy = shmem.gy;
@@ -381,21 +380,25 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const auto& sink_x = shmem.sink_x;
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
+	const bool vsoft = data.vsoft;
 	const auto& sink_h = shmem.sink_h;
 	const auto& sink_zeta = shmem.sink_zeta;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	const auto* main_src_type = data.type;
 	const auto* main_src_h = data.h;
 	const auto* main_src_zeta = data.zeta;
+	const auto* main_src_type = data.type;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-	auto& src_type = shmem.src.type;
 	auto& src_h = shmem.src.h;
 	auto& src_zeta = shmem.src.zeta;
+	auto& src_type = shmem.src.type;
 	const auto* tree_nodes = data.tree_nodes;
+	float h2 = sqr(h);
+	float hinv = 1.f / (h);
+	float h3inv = hinv * hinv * hinv;
 	int part_index;
 	int nnear = 0;
 	int nfar = 0;
@@ -432,7 +435,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						src_h[i1] = main_src_h[i2];
 						src_zeta[i1] = main_src_zeta[i2];
 					} else {
-						src_h[i1] = h0;
+						src_h[i1] = h;
 						src_zeta[i1] = 0.f;
 					}
 				}
@@ -461,43 +464,41 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
-				const fixed32& x_i = sink_x[k];
-				const fixed32& y_i = sink_y[k];
-				const fixed32& z_i = sink_z[k];
 				const float& h_i = sink_h[k];
 				const float& zeta_i = sink_zeta[k];
+				const float hinv_i = 1.f / h_i;
+				const float h2inv_i = sqr(hinv_i);
+				const float h3inv_i = h2inv_i * hinv_i;
 				for (int j = 0; j < part_index; j++) {
-					const fixed32& x_j = src_x[j];
-					const fixed32& y_j = src_y[j];
-					const fixed32& z_j = src_z[j];
+					dx0 = distance(sink_x[k], src_x[j]); // 1
+					dx1 = distance(sink_y[k], src_y[j]); // 1
+					dx2 = distance(sink_z[k], src_z[j]); // 1
+					const float type_j = src_type[j];
+					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
+					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					const float& h_j = src_h[j];
 					const float& zeta_j = src_zeta[j];
-					const float& type_j = src_type[j];
-					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
-					const float x_ij = distance(x_i, x_j);
-					const float y_ij = distance(y_i, y_j);
-					const float z_ij = distance(z_i, z_j);
-					const auto r2 = sqr(x_ij, y_ij, z_ij);  // 5
-					if (r2 > fmaxf(sqr(h_i), sqr(h_j))) {
+					const float h2 = sqr(fmaxf(h_i, h_j));
+					if (r2 > h2) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float hinv_i = 1.0f / h_i;
 						const float hinv_j = 1.0f / h_j;
-						const float hinv2_i = sqr(hinv_i);
-						const float hinv2_j = sqr(hinv_j);
-						const float hinv3_i = hinv2_i * hinv_i;
-						const float hinv3_j = hinv2_j * hinv_j;
+						const float h2inv_j = sqr(hinv_j);
+						const float h3inv_j = h2inv_j * hinv_j;
 						const float r = sqrtf(r2);
 						r1inv = 1.f / (r + 1e-30f);
 						const float q_i = r * hinv_i;
 						const float q_j = r * hinv_j;
-						r3inv = 0.5f * (kernelFqinv(q_i) * hinv3_i + kernelFqinv(q_j) * hinv3_j);
-						const float fc =  0.5f * (zeta_i * dkernelG_dq(q_i) * hinv2_i + zeta_j * dkernelG_dq(q_j) * hinv2_j) * r1inv;
-						r3inv += fc;
-			//			PRINT( "%e %e %e\n", r3inv, fc, fc / r3inv);
+						r3inv = kernelFqinv(q_i) * h3inv_i;
+						r3inv += kernelFqinv(q_j) * h3inv_j;
+						r3inv += zeta_i * dkernelG_dq(q_i) * h2inv_i * r1inv;
+						r3inv += zeta_j * dkernelG_dq(q_j) * h2inv_j * r1inv;
+						r3inv *= 0.5f;
 						if (do_phi) {
-							r1inv = 0.5f * (kernelPot(q_i) * hinv_i + kernelPot(q_j) * hinv_j);
+							r1inv = kernelPot(q_i) * hinv_i;
+							r1inv += kernelPot(q_j) * hinv_j;
+							r1inv *= 0.5f;
 						}
 					}
 					r3inv *= m_j;
