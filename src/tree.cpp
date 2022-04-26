@@ -637,9 +637,10 @@ void tree_destroy(bool free_tree) {
 
 
 
-void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox) {
+void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float h) {
 	nodes[id.index].obox = obox;
 	nodes[id.index].ibox = ibox;
+	nodes[id.index].hsoft_max = h;
 }
 
 

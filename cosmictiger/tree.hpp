@@ -82,7 +82,7 @@ struct tree_node {
 	pair<part_int> sink_part_range;
 	size_t nactive;
 	float radius;
-//	float hsoft_max;
+	float hsoft_max;
 	bool local_root;
 	bool leaf;
 	size_t node_count;
@@ -110,7 +110,7 @@ struct tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
-	//	arc & hsoft_max;
+		arc & hsoft_max;
 		arc & multi;
 		arc & ibox;
 		arc & obox;
@@ -184,7 +184,7 @@ void tree_free_neighbor_list();
 void tree_clear_neighbor_ranges();
 int tree_allocate_neighbor_list(const vector<tree_id>& values);
 void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
-void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox);
+void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float hmax);
 int tree_leaflist_size();
 const tree_id tree_get_leaf(int i);
 tree_id& tree_get_neighbor(int i);

@@ -396,24 +396,31 @@ void all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist) {
 	}
 }
 
-pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int minrung, double h_wt) {
+all_tree_range_return all_tree_find_ranges(tree_id self_id, int minrung, double h_wt) {
 	auto& self = *tree_get_node(self_id);
 	pair<fixed32_range> myrange;
+	float hmax;
 	if (self.leaf) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			myrange.first.begin[dim] = myrange.second.begin[dim] = 1.9;
 			myrange.first.end[dim] = myrange.second.end[dim] = -0.9;
 		}
 		const auto tiny = 10.0 * range_fixed::min().to_double();
+		double rph = 0.0;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
-			const double h = h_wt * particles_softlen(i) + tiny;
+			const double h = particles_softlen(i) + tiny;
+			double r2 = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
+				r2 += sqr(x - self.pos[dim].to_double());
 				myrange.first.begin[dim] = std::min(myrange.first.begin[dim].to_double(), x - tiny);
-				myrange.second.begin[dim] = std::min(myrange.second.begin[dim].to_double(), x - h);
+				myrange.second.begin[dim] = std::min(myrange.second.begin[dim].to_double(), x - h_wt * h);
 				myrange.first.end[dim] = std::max(myrange.first.end[dim].to_double(), x + tiny);
-				myrange.second.end[dim] = std::max(myrange.second.end[dim].to_double(), x + h);
+				myrange.second.end[dim] = std::max(myrange.second.end[dim].to_double(), x + h_wt * h);
 			}
+			double r = sqrt(r2) + h;
+			rph = std::max(r, rph);
+			hmax = std::max(rph - self.radius, 0.0);
 		}
 	} else {
 		static const auto locs = hpx_localities();
@@ -422,10 +429,10 @@ pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int minrung, double h_
 
 		static std::atomic<int> thread_cnt(0);
 		const bool thread = thread_cnt++ < hpx_hardware_concurrency();
-		pair<fixed32_range> rcr, rcl;
+		all_tree_range_return rcr, rcl;
 		if (thread) {
 			auto fut = hpx::async<all_tree_find_ranges_action>(locs[children[LEFT].proc], children[LEFT], minrung, h_wt).then(
-					[](hpx::future<pair<fixed32_range> > f) {
+					[](hpx::future<all_tree_range_return > f) {
 						thread_cnt--;
 						return f.get();
 					});
@@ -438,12 +445,17 @@ pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int minrung, double h_
 		}
 
 		for (int dim = 0; dim < NDIM; dim++) {
-			myrange.first.begin[dim] = min(rcr.first.begin[dim], rcl.first.begin[dim]);
-			myrange.second.begin[dim] = min(rcr.second.begin[dim], rcl.second.begin[dim]);
-			myrange.first.end[dim] = max(rcr.first.end[dim], rcl.first.end[dim]);
-			myrange.second.end[dim] = max(rcr.second.end[dim], rcl.second.end[dim]);
+			myrange.first.begin[dim] = min(rcr.ibox.begin[dim], rcl.ibox.begin[dim]);
+			myrange.second.begin[dim] = min(rcr.obox.begin[dim], rcl.obox.begin[dim]);
+			myrange.first.end[dim] = max(rcr.ibox.end[dim], rcl.ibox.end[dim]);
+			myrange.second.end[dim] = max(rcr.obox.end[dim], rcl.obox.end[dim]);
+			hmax = std::max(rcr.hmax, rcl.hmax);
 		}
 	}
-	tree_set_boxes(self_id, myrange.first, myrange.second);
-	return myrange;
+	tree_set_boxes(self_id, myrange.first, myrange.second, hmax);
+	all_tree_range_return rc;
+	rc.ibox = myrange.first;
+	rc.obox = myrange.second;
+	rc.hmax = hmax;
+	return rc;
 }

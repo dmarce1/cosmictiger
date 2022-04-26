@@ -35,7 +35,6 @@ struct softlens_return {
 	}
 };
 
-
 struct all_tree_data {
 	float* softlen_snk;
 	char* rung_snk;
@@ -56,11 +55,22 @@ struct all_tree_data {
 	float N;
 };
 
-pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int, double = 1.01);
+struct all_tree_range_return {
+	fixed32_range ibox;
+	fixed32_range obox;
+	float hmax;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & ibox;
+		arc & obox;
+		arc & hmax;
+	}
+};
+
+all_tree_range_return all_tree_find_ranges(tree_id self_id, int, double = 1.01);
 void all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist);
 softlens_return all_tree_softlens(int minrung);
 softlens_return all_tree_derivatives(int minrung);
 softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream);
 softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t stream);
-
 
