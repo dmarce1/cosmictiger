@@ -482,7 +482,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				}
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);
 				flops += (DERIVATIVES_BLOCK_SIZE - 1);
-				const float omega_i = 0.33333333333f * drho_dh / rhoh30;								// 4
+				const float omega_i = 0.33333333333f * drho_dh / rhoh30;
 				__syncthreads();
 				if (tid == 0) {
 					if(params.type_snk[snki] == SPH_TYPE) {
@@ -550,11 +550,11 @@ softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t str
 	timer tm;
 	if (first) {
 		first = false;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&derivatives_nblocks, (const void*) cuda_derivatives, SOFTLENS_BLOCK_SIZE, 0));
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&derivatives_nblocks, (const void*) cuda_derivatives, DERIVATIVES_BLOCK_SIZE, 0));
 		derivatives_nblocks *= cuda_smp_count();
 	}
 	tm.start();
-	cuda_derivatives<<<derivatives_nblocks, SOFTLENS_BLOCK_SIZE,0,stream>>>(params,reduce);
+	cuda_derivatives<<<derivatives_nblocks, DERIVATIVES_BLOCK_SIZE,0,stream>>>(params,reduce);
 	cuda_stream_synchronize(stream);
 	rc.fail = reduce->flag;
 	rc.hmin = reduce->hmin;

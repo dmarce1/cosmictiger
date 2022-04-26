@@ -52,9 +52,18 @@ softlens_return all_tree_softlens(int minrung) {
 		PRINT("Find ranges\n");
 		all_tree_find_ranges(root_id, minrung, 1.2);
 		PRINT("Find neigbors\n");
-		all_tree_find_neighbors(root_id, std::move(checklist));
+		all_tree_find_neighbors(root_id, checklist);
 		PRINT("Find softlens\n");
 		rc = all_tree_softlens_execute(minrung);
+		PRINT("%e %e \n", rc.hmin, rc.hmax);
+	} while (rc.fail);
+	do {
+		PRINT("Find ranges\n");
+		all_tree_find_ranges(root_id, minrung, 1.2);
+		PRINT("Find neigbors\n");
+		all_tree_find_neighbors(root_id, checklist);
+		PRINT("Find derivs\n");
+		rc = all_tree_derivatives_execute(minrung);
 		PRINT("%e %e \n", rc.hmin, rc.hmax);
 	} while (rc.fail);
 	return rc;
@@ -169,7 +178,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	params.converged_snk = &particles_converged(0);
 	params.minrung = minrung;
 	params.nselfs = host_selflist.size();
-	PRINT( "Sending %i to gpu\n", host_selflist.size());
+	PRINT("Sending %i to gpu\n", host_selflist.size());
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&params.x, sizeof(fixed32) * host_x.size()));
 	CUDA_CHECK(cudaMalloc(&params.y, sizeof(fixed32) * host_y.size()));
@@ -213,42 +222,57 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
 	std::unordered_map<int, pair<int>> neighbor_ranges;
 
-	for (int i = 0; i < tree_leaflist_size(); i++) {
-		const auto selfid = tree_get_leaf(i);
-		const auto* self = tree_get_node(selfid);
-		if (has_active_neighbors(self)) {
-			std::unordered_map<tree_id, int, tree_id_hash2>::iterator iter;
-			iter = tree_map.find(selfid);
-			if (iter == tree_map.end()) {
-				int index = host_trees.size();
-				host_trees.resize(index + 1);
-				tree_map[selfid] = index;
-				host_trees[index] = *self;
-			}
-			for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-				const auto nid = tree_get_neighbor(i);
-				iter = tree_map.find(nid);
-				if (iter == tree_map.end()) {
-					int index = host_trees.size();
-					host_trees.resize(index + 1);
-					tree_map[nid] = index;
-					const auto* node = tree_get_node(nid);
-					host_trees[index] = *node;
+	mutex_type mutex;
+	static std::atomic<int> next;
+	next = 0;
+	int nthreads = hpx_hardware_concurrency();
+	vector<hpx::future<void>> futs2;
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
+			int i = next++;
+			while( i < tree_leaflist_size()) {
+				const auto selfid = tree_get_leaf(i);
+				const auto* self = tree_get_node(selfid);
+				if (has_active_neighbors(self)) {
+					std::unordered_map<tree_id, int, tree_id_hash2>::iterator iter;
+					std::unique_lock<mutex_type> lock(mutex);
+					iter = tree_map.find(selfid);
+					if (iter == tree_map.end()) {
+						int index = host_trees.size();
+						host_trees.resize(index + 1);
+						tree_map[selfid] = index;
+						host_trees[index] = *self;
+					}
+					for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+						const auto nid = tree_get_neighbor(i);
+						iter = tree_map.find(nid);
+						if (iter == tree_map.end()) {
+							int index = host_trees.size();
+							host_trees.resize(index + 1);
+							tree_map[nid] = index;
+							lock.unlock();
+							const auto* node = tree_get_node(nid);
+							lock.lock();
+							host_trees[index] = *node;
+						}
+					}
+					int neighbor_begin = host_neighbors.size();
+					for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
+						const auto nid = tree_get_neighbor(i);
+						host_neighbors.push_back(tree_map[nid]);
+					}
+					int neighbor_end = host_neighbors.size();
+					const int myindex = tree_map[selfid];
+					auto& r = neighbor_ranges[host_selflist.size()];
+					host_selflist.push_back(myindex);
+					r.first = neighbor_begin;
+					r.second = neighbor_end;
 				}
+				i = next++;
 			}
-			int neighbor_begin = host_neighbors.size();
-			for (int i = self->neighbor_range.first; i < self->neighbor_range.second; i++) {
-				const auto nid = tree_get_neighbor(i);
-				host_neighbors.push_back(tree_map[nid]);
-			}
-			int neighbor_end = host_neighbors.size();
-			const int myindex = tree_map[selfid];
-			auto& r = neighbor_ranges[host_selflist.size()];
-			host_selflist.push_back(myindex);
-			r.first = neighbor_begin;
-			r.second = neighbor_end;
-		}
+		}));
 	}
+	hpx::wait_all(futs2.begin(), futs2.end());
 	size_t parts_size = 0;
 	for (auto& node : host_trees) {
 		parts_size += node.part_range.second - node.part_range.first;
@@ -258,7 +282,6 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	host_z.resize(parts_size);
 	host_h.resize(parts_size);
 	vector<hpx::future<void>> futs;
-	const int nthreads = 8 * hpx_hardware_concurrency();
 	std::atomic<int> index(0);
 	std::atomic<part_int> part_index(0);
 	for (int i = 0; i < host_selflist.size(); i++) {
@@ -290,6 +313,7 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	params.cat_snk = &particles_cat_index(0);
 	params.type_snk = &particles_type(0);
 	params.sph_omega_snk = &sph_particles_omega(0);
+	params.nselfs = host_selflist.size();
 
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&params.x, sizeof(fixed32) * host_x.size()));
@@ -307,6 +331,7 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
+	PRINT("Derivatives\n");
 	auto rc = all_tree_derivatives_cuda(params, stream);
 
 	cuda_end_stream(stream);
@@ -354,9 +379,20 @@ void all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist) {
 		static const auto locs = hpx_localities();
 		const auto children = self.children;
 		all_tree_find_neighbors_action func;
-		auto fut = hpx::async<all_tree_find_neighbors_action>(locs[children[LEFT].proc], children[LEFT], checklist);
-		func(locs[children[RIGHT].proc], children[RIGHT], std::move(checklist));
-		fut.get();
+		static std::atomic<int> thread_cnt(0);
+		const bool thread = thread_cnt++ < hpx_hardware_concurrency();
+		if (thread) {
+			auto fut = hpx::async<all_tree_find_neighbors_action>(locs[children[LEFT].proc], children[LEFT], checklist).then([](hpx::future<void> f) {
+				thread_cnt--;
+				f.get();
+			});
+			func(locs[children[RIGHT].proc], children[RIGHT], std::move(checklist));
+			fut.get();
+		} else {
+			thread_cnt--;
+			func(locs[children[LEFT].proc], children[LEFT], checklist);
+			func(locs[children[RIGHT].proc], children[RIGHT], std::move(checklist));
+		}
 	}
 }
 
@@ -383,9 +419,24 @@ pair<fixed32_range> all_tree_find_ranges(tree_id self_id, int minrung, double h_
 		static const auto locs = hpx_localities();
 		const auto children = self.children;
 		all_tree_find_ranges_action func;
-		auto fut = hpx::async<all_tree_find_ranges_action>(locs[children[LEFT].proc], children[LEFT], minrung, h_wt);
-		const auto rcr = func(locs[children[RIGHT].proc], children[RIGHT], minrung, h_wt);
-		const auto rcl = fut.get();
+
+		static std::atomic<int> thread_cnt(0);
+		const bool thread = thread_cnt++ < hpx_hardware_concurrency();
+		pair<fixed32_range> rcr, rcl;
+		if (thread) {
+			auto fut = hpx::async<all_tree_find_ranges_action>(locs[children[LEFT].proc], children[LEFT], minrung, h_wt).then(
+					[](hpx::future<pair<fixed32_range> > f) {
+						thread_cnt--;
+						return f.get();
+					});
+			rcr = func(locs[children[RIGHT].proc], children[RIGHT], minrung, h_wt);
+			rcl = fut.get();
+		} else {
+			thread_cnt--;
+			rcl = func(locs[children[LEFT].proc], children[LEFT], minrung, h_wt);
+			rcr = func(locs[children[RIGHT].proc], children[RIGHT], minrung, h_wt);
+		}
+
 		for (int dim = 0; dim < NDIM; dim++) {
 			myrange.first.begin[dim] = min(rcr.first.begin[dim], rcl.first.begin[dim]);
 			myrange.second.begin[dim] = min(rcr.second.begin[dim], rcl.second.begin[dim]);

@@ -401,6 +401,10 @@ inline simd_float8 max(const simd_float8& a, const simd_float8& b) {
 	return c;
 }
 
+inline simd_float8 fmaxf(const simd_float8& a, const simd_float8& b) {
+	return max(a,b);
+}
+
 inline simd_float8 min(const simd_float8& a, const simd_float8& b) {
 	simd_float8 c;
 	c.v[0] = _mm_min_ps(a.v[0], b.v[0]);

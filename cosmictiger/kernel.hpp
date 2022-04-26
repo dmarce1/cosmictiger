@@ -63,36 +63,45 @@ inline float dkernelW_dq(float q, float* w = nullptr, int* flops = nullptr) {
 	return 17.403593027f * (tmp1 + tmp2 + tmp3);
 }
 
-
+template<class T>
 CUDA_EXPORT
-inline float kernelG(float q) {
-	float tmp1 = fmaxf(1.f - q, 0.f);
-	float tmp2 = fmaxf((1.f / 3.f) - q, 0.f);
-	tmp1 *= tmp1;
-	tmp2 *= -3.f * tmp2;
-	return 2.417165698f * (tmp1 + tmp2);
+inline T kernelG(T q) {
+	T tmp1 = fmaxf(T(1.f) - q, T(0));
+	T tmp2 = fmaxf(T(0.5f) - q, T(0));
+	tmp1 *= sqr(tmp1);
+	tmp2 *= -4.f * sqr(tmp2);
+	return 5.092958179f * (tmp1 + tmp2);
 }
 
+template<class T>
 CUDA_EXPORT
-inline float dkernelG_dq(float q, float* w = nullptr, int* flops = nullptr) {
-	float tmp1 = fmaxf(1.f - q, 0.f);
-	float tmp2 = fmaxf((1.f / 3.f) - q, 0.f);
-	tmp1 *= 2.f;
-	tmp2 *= -6.f;
-	return 2.417165698f * (tmp1 + tmp2);
+inline T dkernelG_dq(T q) {
+	T tmp1 = fmaxf(T(1.f) - q, T(0));
+	T tmp2 = fmaxf(T(0.5f) - q, T(0));
+	tmp1 *= -3.f * tmp1;
+	tmp2 *= 12.f * tmp2;
+	return 5.092958179f * (tmp1 + tmp2);
 }
 
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T res, sw1, sw2, w1;
+	T w1, w2, sw, res, q3inv, sw1, sw2;
 	const auto q0 = q;
 	q *= (q < T(1));
-	w1 = T(5.0);
-	w1 = fmaf(w1, q, T(-9.0));
+	w1 = T(32);
+	w1 = fmaf(q, w1, -T(192.0 / 5.0));
 	w1 *= q;
-	w1 = fmaf(w1, q, T(5.0));
-	res = w1;
+	w1 = fmaf(q, w1, T(32.0 / 3.0));
+	w2 = -T(32.0 / 3.0);
+	w2 = fmaf(q, w2, T(192 / 5.0));
+	w2 = fmaf(q, w2, -T(48.0));
+	w2 = fmaf(q, w2, T(64.0 / 3.0));
+	q3inv = T(1) / (q + T(1.0e-10f));
+	q3inv = sqr(q3inv) * q3inv;
+	w2 -= T(1.0 / 15.0) * q3inv;
+	sw = q < T(0.5);
+	res = (sw * w1 + (T(1) - sw) * w2);
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
@@ -102,63 +111,27 @@ inline T kernelFqinv(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T res, sw1, sw2, w1;
+	T w1, w2, sw, res, q1inv, sw1, sw2;
 	const auto q0 = q;
 	q *= (q < T(1));
-	const auto q2 = sqr(q);
-	w1 = T(-1.0);
-	w1 = fmaf(w1, q, T(9.0 / 4.0));
-	w1 = fmaf(w1, q, T(-2.5));
+	w1 = -T(32.0 / 5.0);
+	w1 = fmaf(q, w1, T(48.0 / 5.0));
 	w1 *= q;
-	w1 = fmaf(w1, q, T(9.0 / 4.0));
-	res = w1;
-
+	w1 = fmaf(q, w1, T(-16.0 / 3.0));
+	w1 *= q;
+	w1 = fmaf(q, w1, T(14.0 / 5.0));
+	w2 = T(32.0 / 15.0);
+	w2 = fmaf(q, w2, T(-48.0 / 5.0));
+	w2 = fmaf(q, w2, T(16.0));
+	w2 = fmaf(q, w2, T(-32.0 / 3.0));
+	w2 *= q;
+	w2 = fmaf(q, w2, T(16.0 / 5.0));
+	q1inv = T(1) / (q + T(1.0e-15));
+	w2 -= T(1.0 / 15.0) * q1inv;
+	sw = q < T(0.5);
+	res = (sw * w1 + (T(1) - sw) * w2);
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
+	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q > T(0));
 	return res;
 }
-
-/*
-
- template<class T>
- CUDA_EXPORT
- inline T kernelFqinv(T q) {
- T res, sw1, sw2, w1;
- q *= (q < T(1));
- w1 = min(q - sinf(T(2 * M_PI) * q) / T(2. * M_PI), T(1)) / (sqr(q) * q + T(1e-30f));
- res = w1;
-
- return res;
- }
-
- template<class T>
- CUDA_EXPORT
- inline T kernelPot(T q) {
- T res, sw1, sw2, w1;
- const auto q0 = q;
- q *= (q < T(1));
-
- const T c0 = -2.437653393057226;
- const T c1 = 3.2898681336964524;
- const T c2 = -3.2469697011334144;
- const T c3 = 2.0346861239688976;
- const T c4 = -0.8367311301649535;
- const T c5 = 0.2402386980306763;
- const T c6 = -0.05066369468793888;
- const T c7 = 0.008163765290898435;
- const auto q2 = sqr(q);
- w1 = c7;
- w1 = fmaf(q2, w1, c6);
- w1 = fmaf(q2, w1, c5);
- w1 = fmaf(q2, w1, c4);
- w1 = fmaf(q2, w1, c3);
- w1 = fmaf(q2, w1, c2);
- w1 = fmaf(q2, w1, c1);
- w1 = fmaf(q2, w1, c0);
- res = w1;
- sw1 = q0 < T(1);
- sw2 = T(1) - sw1;
- res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q0 > T(0));
- return res;
- }*/
