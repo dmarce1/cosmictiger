@@ -419,8 +419,8 @@ all_tree_range_return all_tree_find_ranges(tree_id self_id, int minrung, double 
 			}
 			double r = sqrt(r2) + h;
 			rph = std::max(r, rph);
-			hmax = std::max(rph - self.radius, 0.0);
 		}
+		hmax = rph - self.radius;
 	} else {
 		static const auto locs = hpx_localities();
 		const auto children = self.children;

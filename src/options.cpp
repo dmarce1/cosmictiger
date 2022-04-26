@@ -133,7 +133,7 @@ bool process_options(int argc, char *argv[]) {
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<double>(&(opts.kernel))->default_value(5), "kernel index") //
 	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(101), "SPH neighbor number") //
-	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(60), "gravity neighbor number") //
+	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(25), "gravity neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.15), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.15), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //

@@ -18,7 +18,7 @@
  */
 
 #define  SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.02
+#define SCALE_DT 0.05
 
 #include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/constants.hpp>
