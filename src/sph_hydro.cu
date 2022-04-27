@@ -270,7 +270,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float q_j = r * hinv_j;																// 1
 					const float rho_j = m * c0 * h3inv_j;												// 2
 					const float pre_j = A_j * powf(rho_j * hfrac_j, gamma0);
-					const float c_j = sqrtf(gamma0 * pre_j / (rho_j*hfrac_j)); //23
+					const float c_j = sqrtf(gamma0 * pre_j / (rho_j * hfrac_j)); //23
 					const float vx_ij = vx_i - vx_j + x_ij * adot;									// 3
 					const float vy_ij = vy_i - vy_j + y_ij * adot;									// 3
 					const float vz_ij = vz_i - vz_j + z_ij * adot;									// 3
@@ -278,7 +278,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vdotx_ij = fmaf(x_ij, vx_ij, fmaf(y_ij, vy_ij, z_ij * vz_ij));								// 5
 					const float h_ij = 0.5f * (h_i + h_j);												// 2
 					const float w_ij = fminf(vdotx_ij * rinv, 0.f);									// 2
-					const float mu_ij = w_ij * h_ij  / sqrtf(r2 + ETA * h_ij);			// 12
+					const float mu_ij = w_ij * h_ij / sqrtf(r2 + ETA * h_ij);			// 12
 					const float rho_ij = 0.5f * (rho_i + rho_j);										// 2
 					const float c_ij = 0.5f * (c_i + c_j);												// 2
 					const float hfrac_ij = 2.0f * hfrac_i * hfrac_j / (hfrac_i + hfrac_j + 1e-36f);
@@ -461,7 +461,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						float dthydro = params.cfl * params.a / dtinv_hydro;	// 6
 						const float g2 = sqr(gx_i, gy_i, gz_i);									// 5
 						const float dtinv_grav = sqrtf(sqrtf(g2));								// 8
-						float dtgrav = data.eta * sqrtf(params.a * (params.vsoft ? h_i : data.gsoft) / (dtinv_grav + 1e-30f)); // 11
+						float dtgrav = data.eta * sqrtf(params.a * (params.vsoft ? h_i : data.gsoft)) / (dtinv_grav + 1e-30f); // 11
 						dthydro = fminf(dthydro, params.max_dt);									// 1
 						dtgrav = fminf(dtgrav, params.max_dt);										// 1
 						total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro * h_i);			// 2
@@ -479,9 +479,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						atomicMax(&reduce->dtinv_diff, dtinv_diff);
 						atomicMax(&reduce->dtinv_acc, dtinv_acc);
 						atomicMax(&reduce->dtinv_divv, dtinv_divv);
-						if (rung < 0 || rung >= 10) {
+						if (rung < 0 || rung > 16) {
 							if (tid == 0) {
-								PRINT("Rung out of range %i %e %e |%e %e %e %e %e\n",rung_hydro, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_acc, dtinv_divv);
+								PRINT("Rung out of range %i %e %e |%e %e %e %e %e\n", rung_grav, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_acc, dtinv_divv);
+								__trap();
 							}
 						}
 
