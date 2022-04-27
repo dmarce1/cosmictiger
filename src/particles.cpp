@@ -276,7 +276,6 @@ void particles_apply_updates(int minrung, float t0, float a) {
 					auto new_rung = (int) ceilf(log2f(t0/dt));
 					if( rung != new_rung ) {
 						PRINT( "DIVV LIMITED %i %i\n", rung, new_rung);
-						ALWAYS_ASSERT(false);
 					}
 					rung = new_rung;
 					dt = 0.5f * rung_dt[rung] * t0;
