@@ -460,7 +460,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		N.Hep *= 0.25 * rhoavo;																								// 2
 		N.Hepp *= 0.25 * rhoavo;																								// 2
 		double n0 = (double) N.H + (double) N.Hp + (double) N.Hn + (double) N.H2 + (double) N.He + (double) N.Hep + (double) N.Hepp;									// 8
-		double n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;									// 8
+		double n = (double) N.H + 2.0 * (double) N.Hp + (double) N.H2 + (double) N.He + 2.0 * (double) N.Hep + 3.0 * (double) N.Hepp;
+		n *= hot_mass;
 		double cv = (1.50 + (double) N.H2 / n0);																// 4
 		double gamma = 1.0 + 1.0 / cv;																							// 5
 		cv *= constants::kb;																							// 1
