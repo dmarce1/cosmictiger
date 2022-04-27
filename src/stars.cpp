@@ -57,7 +57,6 @@ void stars_load(FILE* fp) {
 }
 
 size_t stars_find(float a, float dt, int minrung, int step, float t0) {
-	return 0;
 	profiler_enter("FUNCTION");
 
 	PRINT("------------------------------------>>> Searching for STARS <<<--------------------------------------------------------\n");

@@ -356,32 +356,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		stars_statistics(scale);
 		if (stars_find(scale, dt, minrung, iter, t0)) {
 
-			tm.start();
-			if (verbose)
-				PRINT("starting sph_tree_create = %e\n", tm.read());
-			profiler_enter("sph_tree_create");
-			sph_tree_create_params tparams;
-			tparams.min_rung = minrung;
-			tparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-			tree_id root_id;
-			root_id.proc = 0;
-			root_id.index = 0;
-			sph_tree_create_return sr;
-			vector<tree_id> checklist;
-			checklist.push_back(root_id);
-			sr = sph_tree_create(tparams);
-			profiler_exit();
-			tm.stop();
-			if (verbose)
-				PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
-			tm.reset();
-
-			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-			tnparams.seti = SPH_INTERACTIONS_I;
-			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-			sph_tree_neighbor(tnparams, root_id, checklist).get();
-			profiler_exit();
-
 			sparams.phase = 0;
 			int doneiters = 0;
 			sph_particles_reset_converged();
