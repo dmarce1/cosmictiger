@@ -429,7 +429,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					const float factor = eta * sqrtf(params.a);
 					dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
 					if (vsoft) {
-						dt = std::min(dt, 3.0f * params.a * hsoft / (fabs(divv) + 1.0e-37f));
+						dt = std::min(dt, params.cfl * 3.0f * params.a * hsoft / (fabs(divv) + 1.0e-37f));
 					}
 					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
 					kr.max_rung = std::max(rung, kr.max_rung);

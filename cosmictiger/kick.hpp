@@ -160,7 +160,9 @@ struct kick_params {
 	float node_load;
 	int glass;
 	float max_dt;
+	float cfl;
 	kick_params() {
+		cfl = get_options().cfl;
 		dm_mass = get_options().dm_mass;
 		sph_mass = get_options().sph_mass;
 		glass = 0;
@@ -168,6 +170,7 @@ struct kick_params {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & cfl;
 		arc & max_dt;
 		arc & dm_mass;
 		arc & sph_mass;
