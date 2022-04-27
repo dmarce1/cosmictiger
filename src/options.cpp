@@ -131,11 +131,11 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
-	("kernel", po::value<double>(&(opts.kernel))->default_value(5), "kernel index") //
-	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(101), "SPH neighbor number") //
-	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(25), "gravity neighbor number") //
-	("cfl", po::value<double>(&(opts.cfl))->default_value(0.15), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.15), "time-step criterion (default=0.2)") //
+	("kernel", po::value<double>(&(opts.kernel))->default_value(2), "kernel index") //
+	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(128), "SPH neighbor number") //
+	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(128), "gravity neighbor number") //
+	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.25), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -252,6 +252,9 @@ bool process_options(int argc, char *argv[]) {
 			opts.sph_mass = 1.0;
 			opts.gcentral = 1.0;
 		}
+	}
+	if( opts.gravity == false) {
+		opts.vsoft = false;
 	}
 //	if (opts.sph) {
 //		opts.hsoft = pow(opts.neighbor_number / (4.0 * M_PI / 3.0), 1.0 / 3.0) / opts.parts_dim * (1.0 / (opts.z0 + 1.0));

@@ -111,10 +111,12 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					float& h = sph_particles_smooth_len(j);
 					char rung = particles_rung(i);
 					const float eint = sph_particles_eint(j);
-					const float divv = sph_particles_divv(j);
-					float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
-					float c0 = expf(dloghdt*dt);
-					h *= c0;
+					if( !get_options().vsoft ) {
+						const float divv = sph_particles_divv(j);
+						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
+						float c0 = expf(dloghdt*dt);
+						h *= c0;
+					}
 					if( h > 0.5 ) {
 						PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
 					}

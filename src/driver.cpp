@@ -645,9 +645,9 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	if (vsoft && !sph) {
 		timer tm;
 		tm.start();
-		softlens_return all_tree_divv(int minrung, float a);
+		all_tree_divv(minrung, scale);
 		tm.stop();
-		PRINT( "divv = %e\n", tm.read());
+		PRINT("divv = %e\n", tm.read());
 		particles_apply_updates(minrung, t0, scale);
 	}
 

@@ -273,7 +273,12 @@ void particles_apply_updates(int minrung, float t0, float a) {
 					const auto& divv = particles_divv(i);
 					const float dt_divv = cfl * 3.0f * a / (fabs(divv) + 1e-37f);
 					float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
-					rung = (int) ceilf(log2f(t0/dt));
+					auto new_rung = (int) ceilf(log2f(t0/dt));
+					if( rung != new_rung ) {
+						PRINT( "DIVV LIMITED %i %i\n", rung, new_rung);
+						ALWAYS_ASSERT(false);
+					}
+					rung = new_rung;
 					dt = 0.5f * rung_dt[rung] * t0;
 					vx += dt * gx;
 					vy += dt * gy;
