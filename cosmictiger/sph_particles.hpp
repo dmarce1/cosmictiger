@@ -188,7 +188,7 @@ void sph_particles_save(FILE* fp);
 float sph_particles_max_smooth_len();
 float sph_particles_temperature(part_int, float);
 float sph_particles_mmw(part_int);
-float sph_particles_lambda_e(part_int, float, float);
+void sph_particles_softlens2smoothlens(int minrung);
 
 std::pair<double, double> sph_particles_apply_updates(int, int, float, float, float = 1.0);
 /*

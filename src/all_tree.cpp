@@ -70,14 +70,17 @@ softlens_return all_tree_softlens(int minrung, float a) {
 	do {
 		tm.reset();
 		tm.start();
+		PRINT( "Find ranges\n");
 		all_tree_find_ranges(root_id, minrung, softlen_buffer).get();
 		tm.stop();
 		tm.reset();
 		tm.start();
+		PRINT( "Find neighbors\n");
 		all_tree_find_neighbors(root_id, checklist).get();
 		tm.stop();
 		tm.reset();
 		tm.start();
+		PRINT( "Softlens\n");
 		rc = all_tree_softlens_execute(minrung);
 		tm.stop();
 		PRINT("softlens %e %e %e\n", rc.hmin, rc.hmax, tm.read());
@@ -207,6 +210,9 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	params.N = get_options().gneighbor_number;
 	params.softlen_snk = &particles_softlen(0);
 	params.rung_snk = &particles_rung(0);
+	params.type_snk = &particles_type(0);
+	params.cat_snk = &particles_cat_index(0);
+	params.sph_h_snk = &sph_particles_smooth_len(0);
 	params.converged_snk = &particles_converged(0);
 	params.minrung = minrung;
 	params.nselfs = host_selflist.size();
@@ -349,9 +355,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	params.type_snk = &particles_type(0);
 	params.nselfs = host_selflist.size();
 	params.sa_snk = &particles_semiactive(0);
-	params.sph_omega_snk = &sph_particles_omega(0);
 	params.sph_h_snk = &sph_particles_smooth_len(0);
-	params.sph_divv_snk = &sph_particles_divv(0);
 	params.a = a;
 
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));

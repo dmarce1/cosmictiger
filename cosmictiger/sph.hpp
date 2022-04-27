@@ -216,6 +216,7 @@ struct sph_run_return {
 void sph_particles_energy_to_entropy(float a);
 
 struct sph_run_params {
+	bool vsoft;
 	int av_type;
 	int run_type;
 	int set;
@@ -248,6 +249,7 @@ struct sph_run_params {
 		iter = 0;
 		const auto opts = get_options();
 		stars = opts.stars;
+		vsoft = opts.vsoft;
 		av_type = opts.visc_type;
 		code_to_s = opts.code_to_s;
 		code_to_g = opts.code_to_g;
@@ -271,6 +273,7 @@ struct sph_run_params {
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & omega_m;
+		arc & vsoft;
 		arc & H0;
 		arc & adot;
 		arc & iter;

@@ -178,6 +178,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	const bool conduction = get_options().conduction;
+	const bool vsoft = get_options().vsoft;
 	float dtinv_cfl;
 	float dtinv_visc;
 	float dtinv_diff;
@@ -225,22 +226,52 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	sparams.phase = 0;
 	int doneiters = 0;
-	sph_particles_reset_converged();
-	do {
-		sparams.set = SPH_SET_ACTIVE;
-		sparams.run_type = SPH_RUN_PREHYDRO1;
+	if (!vsoft) {
+		sph_particles_reset_converged();
+		do {
+			sparams.set = SPH_SET_ACTIVE;
+			sparams.run_type = SPH_RUN_PREHYDRO1;
+			timer tm;
+			tm.start();
+			kr = sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+			tm.reset();
+			cont = kr.rc;
+			tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+			tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+			tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
+//			tnparams.set = SPH_SET_ACTIVE;
+			tm.start();
+			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+			profiler_exit();
+			tm.stop();
+			PRINT("%e\n", tm.read());
+			tm.reset();
+			tm.start();
+			tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
+			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+			sph_tree_neighbor(tnparams, root_id, checklist).get();
+			profiler_exit();
+			tm.stop();
+			PRINT("%e\n", tm.read());
+			tm.reset();
+
+			kr = sph_run_return();
+		} while (cont);
+	} else {
+
+		sph_particles_softlens2smoothlens(minrung);
+
 		timer tm;
-		tm.start();
-		kr = sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-		tm.reset();
-		cont = kr.rc;
 		tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-		tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
+		tnparams.seto = SPH_SET_ALL;
+		tnparams.seti = SPH_SET_ALL;
 //			tnparams.set = SPH_SET_ACTIVE;
 		tm.start();
 		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
@@ -250,7 +281,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
-		tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
+		tnparams.seti = SPH_INTERACTIONS_IJ;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
@@ -258,9 +289,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.reset();
-
-		kr = sph_run_return();
-	} while (cont);
+	}
 	sph_particles_reset_converged();
 	do {
 		sparams.set = SPH_SET_ACTIVE;
@@ -310,6 +339,15 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 
 	sph_particles_apply_updates(minrung, 1, t0, tau);
+
+	if (vsoft) {
+		tm.reset();
+		tm.start();
+		all_tree_divv(minrung, scale);
+		tm.stop();
+		PRINT("divv = %e\n", tm.read());
+		kr.max_rung = particles_apply_updates(minrung, t0, scale);
+	}
 
 	if (stars && minrung <= 1) {
 		stars_statistics(scale);
@@ -582,15 +620,13 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.reset();
 	tm.start();
 	const bool sph = get_options().sph;
-	PRINT("Finding max smoothlen");
-//	const float h = sph ? std::max((float) sph_particles_max_smooth_len(), (float) get_options().hsoft) : get_options().hsoft;
 //ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
 	tree_create_params tparams(minrung, theta, 0.f);
 	PRINT("Create tree %i %e\n", minrung, theta);
 	profiler_enter("tree_create");
 	auto sr = tree_create(tparams);
 	profiler_exit();
-
+	PRINT("Done with tree\n");
 	const bool vsoft = get_options().vsoft;
 	if (vsoft) {
 		all_tree_softlens(minrung, scale);

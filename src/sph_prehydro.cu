@@ -349,7 +349,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				}
 			}
 			int box_xceeded = false;
-			if (semiactive) {
+			if (semiactive && !params.vsoft) {
 				int iter = 0;
 				float& h = data.rec2_snk[snki].h;
 				float drho_dh;

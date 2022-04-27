@@ -209,9 +209,6 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 						atomicAdd(&reduce->flag, 1);
 					}
 				} else {
-					if (tid == 0 && type_i == SPH_TYPE) {
-						params.sph_h_snk[params.cat_snk[snki]] = h;
-					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);
 				}
@@ -336,20 +333,17 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
 						const auto& rec1 = ws.rec1[j];
-						const auto& type_j = rec1.type;
-						if (type_i == type_j) {
-							const auto& x_j = rec1.x;
-							const auto& y_j = rec1.y;
-							const auto& z_j = rec1.z;
-							const auto& h_j = rec1.h;
-							const auto h2_j = sqr(h_j);									// 1
-							const float x_ij = distance(x_i, x_j);						// 1
-							const float y_ij = distance(y_i, y_j);						// 1
-							const float z_ij = distance(z_i, z_j);						// 1
-							const float r2 = sqr(x_ij, y_ij, z_ij);					// 5
-							if (r2 < fmaxf(h2_i, h2_j)) {									// 2
-								semiactive++;
-							}
+						const auto& x_j = rec1.x;
+						const auto& y_j = rec1.y;
+						const auto& z_j = rec1.z;
+						const auto& h_j = rec1.h;
+						const auto h2_j = sqr(h_j);									// 1
+						const float x_ij = distance(x_i, x_j);						// 1
+						const float y_ij = distance(y_i, y_j);						// 1
+						const float z_ij = distance(z_i, z_j);						// 1
+						const float r2 = sqr(x_ij, y_ij, z_ij);					// 5
+						if (r2 < fmaxf(h2_i, h2_j)) {									// 2
+							semiactive++;
 						}
 						flops += 11;
 					}
@@ -460,9 +454,6 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						atomicAdd(&reduce->flag, 1);
 					}
 				} else {
-					if (tid == 0 && type_i == SPH_TYPE) {
-						params.sph_h_snk[params.cat_snk[snki]] = h;
-					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);
 				}
@@ -515,15 +506,10 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
 				flops += (DERIVATIVES_BLOCK_SIZE - 1);
-				const float rhoh30 = (3.0f * params.N) / (4.0f * float(M_PI));
 				const float zeta_i = dpot_dh / drho_dh;
-				const float omega_i = drho_dh / (3.f * rhoh30);
 				__syncthreads();
 				if (tid == 0) {
 					params.zeta_snk[snki] = zeta_i;
-					if (type_i == SPH_TYPE) {
-						params.sph_omega_snk[params.cat_snk[snki]];
-					}
 				}
 			}
 		}
@@ -675,9 +661,6 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 				__syncthreads();
 				if (tid == 0) {
 					params.divv_snk[snki] = divv;
-					if (type_i == SPH_TYPE) {
-						params.sph_divv_snk[params.cat_snk[snki]] = divv;
-					}
 				}
 			}
 		}
