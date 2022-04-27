@@ -181,8 +181,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		if (my_type != SPH_TYPE || params.glass) {
 			dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
 			if (vsoft) {
-				const float dt1 = params.cfl * 3.f * hsoft * params.a / (fabs(divv) + 1e-37f);
-				if( dt1 < dt ) {
+				const float dt1 = params.cfl * 3.f * params.a / (fabs(divv) + 1e-37f);
+				if (dt1 < dt) {
 					dt = dt1;
 				}
 			}
