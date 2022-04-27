@@ -916,7 +916,7 @@ cond_update_return sph_apply_conduction_update(int minrung) {
 			const part_int b = (size_t) proc * sph_particles_size() / nthread;
 			const part_int e = (size_t) (proc + 1) * sph_particles_size() / nthread;
 			for( part_int i = b; i < e; i++) {
-				if( !sph_particles_converged(i) && (sph_particles_rung(i) >= minrung || sph_particles_semiactive(i))) {
+				if( !sph_particles_converged(i) && (sph_particles_rung(i) >= minrung || sph_particles_semiactive(i))&& !sph_particles_isstar(i)) {
 					float& A = sph_particles_entr(i);
 					const float dA = sph_particles_dentr1(i);
 					ALWAYS_ASSERT(isfinite(std::max(A, A+dA)));

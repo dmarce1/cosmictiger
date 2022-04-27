@@ -128,7 +128,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 			const double sph_mass = get_options().sph_mass;
 			for( part_int i = b; i < e; i++) {
 				int rung1 = sph_particles_rung(i);
-				if( rung1 >= minrung ) {
+				if( rung1 >= minrung && !sph_particles_isstar(i)) {
 					chem_attribs chem = chems[j++];
 					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 					double gamma = 1. + 1. / cv;
@@ -144,6 +144,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					echange += (chem.eint * (1.f - chem.cold_mass) - sph_particles_eint(i) * (1.f - sph_particles_cold_mass(i)))*sph_mass/sqr(a);
 					const float fh = 1.f - chem.cold_mass;
 					const float rho = sph_particles_rho(i);
+					ALWAYS_ASSERT(fh > 0.0);
 					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
 					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					if(stars) {

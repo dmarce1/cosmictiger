@@ -155,7 +155,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const auto rung2 = sph_particles_rung(i);
 				const float dt2 = 0.5f * t0 / (1<<rung2);
 				if( phase == 0 ) {
-					if( rung2 >= minrung) {
+					if( rung2 >= minrung && !sph_particles_isstar(i)) {
 						for( int dim =0; dim < NDIM; dim++) {
 							sph_particles_dvel0(dim,i) = sph_particles_dvel(dim,i);
 						}
@@ -171,7 +171,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 1 ) {
-					if( rung2 >= minrung) {
+					if( rung2 >= minrung && !sph_particles_isstar(i)) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
 						}
@@ -184,7 +184,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 2 ) {
-					if( rung2 >= minrung) {
+					if( rung2 >= minrung && !sph_particles_isstar(i)) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
@@ -474,8 +474,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_semiactive(oldsz + i) = 0.0f;
 		if (stars) {
 			sph_particles_cold_mass((oldsz + i)) = 0.f;
-			sph_particles_isstar((oldsz + i)) = false;
 		}
+		sph_particles_isstar((oldsz + i)) = false;
 		sph_particles_dentr1(oldsz + i) = 0.f;
 		sph_particles_dentr2(oldsz + i) = 0.f;
 		for (int dim = 0; dim < NDIM; dim++) {

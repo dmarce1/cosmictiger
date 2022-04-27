@@ -96,7 +96,6 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					bool make_star;
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 					if( make_star ) {
-						PRINT( "MADE STAR\n");
 						sph_particles_isstar(i) =true;
 					}
 				}
