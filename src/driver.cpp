@@ -301,7 +301,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
-		if( vsoft ) {
+		if (vsoft) {
 			break;
 		}
 		cont = kr.rc;
@@ -336,7 +336,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.start();
 	kr = sph_run(sparams, true);
 	tm.stop();
-	max_rung = kr.max_rung;
+	max_rung = 0;
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
 	tm.reset();
@@ -349,7 +349,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		all_tree_divv(minrung, scale);
 		tm.stop();
 		PRINT("divv = %e\n", tm.read());
-		kr.max_rung = particles_apply_updates(minrung, t0, scale);
+		max_rung = particles_apply_updates(minrung, t0, scale);
 	}
 
 	if (stars && minrung <= 1) {
@@ -467,7 +467,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	dtinv_cond = kr.dtinv_cond;
 	dtinv_acc = kr.dtinv_acc;
 	tm.stop();
-	max_rung = kr.max_rung;
+	max_rung = std::max(kr.max_rung, max_rung);
 	if (verbose)
 		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
@@ -607,6 +607,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 	PRINT(" LIMITED TIMESTEP\n");
 	fclose(fp);
+	kr.max_rung = max_rung;
 	return kr;
 
 }
@@ -687,7 +688,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 		all_tree_divv(minrung, scale);
 		tm.stop();
 		PRINT("divv = %e\n", tm.read());
-		kr.max_rung = particles_apply_updates(minrung, t0, scale);
+		kr.max_rung = std::max((int)kr.max_rung,(int) particles_apply_updates( minrung, t0, scale));
 	}
 
 	tree_destroy();
