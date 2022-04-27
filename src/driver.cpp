@@ -1026,7 +1026,7 @@ bool dir_exists(const char *path) {
 
 void write_checkpoint(driver_params params) {
 	profiler_enter("FUNCTION");
-	params.step--;
+//	params.step--;
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
 		std::string command;
