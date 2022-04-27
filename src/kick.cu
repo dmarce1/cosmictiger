@@ -251,6 +251,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& sink_z = shmem.sink_z;
 	auto& sink_h = shmem.sink_h;
 	auto& sink_zeta = shmem.sink_zeta;
+	auto& sink_type = shmem.sink_type;
 	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
@@ -266,6 +267,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_z = data.z;
 	auto* src_h = data.h;
 	auto* src_zeta = data.zeta;
+	auto* src_type = data.type;
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -346,6 +348,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								sink_h[l] = global_params.h;
 								sink_zeta[l] = 0.f;
 							}
+							sink_type[l] = src_type[srci];
 						}
 						nactive += total;
 						__syncwarp();

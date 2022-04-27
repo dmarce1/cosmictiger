@@ -383,6 +383,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const bool vsoft = data.vsoft;
 	const auto& sink_h = shmem.sink_h;
 	const auto& sink_zeta = shmem.sink_zeta;
+	const auto& sink_type = shmem.sink_type;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
@@ -466,6 +467,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				pot = 0.f;
 				const float& h_i = sink_h[k];
 				const float& zeta_i = sink_zeta[k];
+				const auto& type_i = sink_type[k];
 				const float hinv_i = 1.f / h_i;
 				const float h2inv_i = sqr(hinv_i);
 				const float h3inv_i = h2inv_i * hinv_i;
