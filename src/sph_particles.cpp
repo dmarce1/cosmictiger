@@ -602,7 +602,9 @@ void sph_particles_global_read_fcold(particle_global_range range, float* cfrac, 
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				cfrac[j] = sph_particles_cold_mass(i);
+				if( cfrac ) {
+					cfrac[j] = sph_particles_cold_mass(i);
+				}
 				if (isstar) {
 					isstar[j] = sph_particles_isstar(i);
 				}
@@ -621,7 +623,9 @@ void sph_particles_global_read_fcold(particle_global_range range, float* cfrac, 
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
 					const pair<float,char>& part = ptr[src_index];
-					cfrac[dest_index] = part.first;
+					if( cfrac ) {
+						cfrac[dest_index] = part.first;
+					}
 					if (isstar) {
 						isstar[dest_index] = part.second;
 					}

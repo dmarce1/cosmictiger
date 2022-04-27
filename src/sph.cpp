@@ -630,6 +630,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), host_star.data(), offset);
 									}
 									sph_particles_global_read_kappas(node.global_part_range(), host_kappa.data(), offset);
+									sph_particles_global_read_rho(node.global_part_range(), host_rho.data(), offset);
 									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(),host_h.data(), offset);
 									sph_particles_global_read_aux(node.global_part_range(), nullptr, host_omega.data(), nullptr, nullptr, offset);

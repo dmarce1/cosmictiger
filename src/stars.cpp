@@ -97,6 +97,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					bool make_star;
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 					if( make_star ) {
+						PRINT( "MADE STAR\n");
 						sph_particles_isstar(i) =true;
 					}
 				}
@@ -153,21 +154,12 @@ stars_stats stars_statistics(float a) {
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc, nthreads]() {
-			const part_int b = (size_t) proc * stars.size() / nthreads;
-			const part_int e = (size_t) (proc+1) * stars.size() / nthreads;
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			stars_stats stats;
 			for( part_int i = b; i < e; i++) {
-				switch(stars[i].type) {
-					case STAR_TYPE:
+				if( sph_particles_isstar(i)) {
 					stats.stars++;
-					if( stars[i].Z == 0.0 ) {
-						stats.popIII++;
-					} else if( stars[i].Z < 1e-2) {
-						stats.popII++;
-					} else {
-						stats.popI++;
-					}
-					break;
 				}
 			}
 			return stats;
@@ -178,7 +170,7 @@ stars_stats stars_statistics(float a) {
 	}
 	if (hpx_rank() == 0) {
 		FILE* fp = fopen("stars.txt", "at");
-		fprintf(fp, "%e %li %li %li %li\n", 1.f / a - 1.f, stats.stars, stats.popI, stats.popII, stats.popIII);
+		fprintf(fp, "%e %li \n", 1.f / a - 1.f, stats.stars);
 		fclose(fp);
 	}
 	profiler_exit();
