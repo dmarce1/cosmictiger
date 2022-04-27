@@ -382,6 +382,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					type = particles_type(i);
 					m = type == DARK_MATTER_TYPE ? dm_mass : sph_mass;
 				}
+				float divv, hsoft = get_options().hsoft;
+				if (vsoft) {
+					hsoft = particles_softlen(i);
+					divv = particles_divv(i);
+				}
 				float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				forces.phi[j] += L2(0, 0, 0);
 				forces.gx[j] -= L2(1, 0, 0);
@@ -421,8 +426,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				if (type != SPH_TYPE || glass) {
-					const float factor = eta * sqrtf(params.a * hfloat);
-					dt = std::min(std::min(factor / sqrtf(sqrtf(g2)), (float) params.t0), params.max_dt);
+					const float factor = eta * sqrtf(params.a);
+					dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
+					if (vsoft) {
+						dt = std::min(dt, 3.0f * params.a * hsoft / (divv + 1.0e-37f));
+					}
 					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
 					kr.max_rung = std::max(rung, kr.max_rung);
 					if (rung < 0 || rung >= 10) {
