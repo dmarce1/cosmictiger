@@ -286,8 +286,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					const float vsig_ij = alpha_ij * (c_ij - params.beta * mu_ij); // 4
 					const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i / omega_i;   // 2
 					const float dWdr_j = dkernelW_dq(q_j) * hinv_j * h3inv_j / omega_j;   // 2
-					ALWAYS_ASSERT(omega_i > 0.f);
-					ALWAYS_ASSERT(omega_j > 0.f);
+	//				ALWAYS_ASSERT(omega_i > 0.f);
+					if( omega_j <= 0.0 ) {
+						PRINT( "%i %e %e %e\n", data.selfs[index], omega_j, q_i, q_j);
+					}
+//					ALWAYS_ASSERT(omega_j > 0.f);
 					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);     // 4
 					const float dWdr_i_rinv = dWdr_i * rinv;						// 2
 					const float dWdr_j_rinv = dWdr_j * rinv;						// 2
@@ -467,7 +470,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro * h_i);			// 2
 						char& rung = data.rungs_snk[data.dm_index_snk[snki]];
 						const float last_dt = rung_dt[rung] * params.t0;						// 1
-						data.oldrung_snk[snki] = rung;
 						const int rung_hydro = ceilf(log2fparamst0 - log2f(dthydro));     // 10
 						const int rung_grav = ceilf(log2fparamst0 - log2f(dtgrav));       // 10
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);

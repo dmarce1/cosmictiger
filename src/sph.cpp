@@ -128,7 +128,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor_fork(sph_tree_neighbor_p
 		rc = hpx::async<sph_tree_neighbor_action>(HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, self, std::move(checklist), level + 1);
 	} else {
 		const auto thread_priority = all_local ? HPX_PRIORITY_LO : HPX_PRIORITY_NORMAL;
-			rc = hpx::async(thread_priority, [self,level, params] (vector<tree_id> checklist) {
+		rc = hpx::async(thread_priority, [self,level, params] (vector<tree_id> checklist) {
 			auto rc = sph_tree_neighbor(params, self,std::move(checklist), level + 1);
 			nthreads--;
 			return rc;
@@ -141,11 +141,9 @@ HPX_PLAIN_ACTION (sph_run);
 bool is_converged(const sph_tree_node* self, int minrung) {
 	bool converged = true;
 	for (int i = self->part_range.first; i < self->part_range.second; i++) {
-		if (sph_particles_rung(i) >= minrung || sph_particles_semiactive(i)) {
-			if (!sph_particles_converged(i)) {
-				converged = false;
-				break;
-			}
+		if (!sph_particles_converged(i)) {
+			converged = false;
+			break;
 		}
 	}
 	return converged;
@@ -394,10 +392,10 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 		futs.push_back(hpx::async<sph_run_action>(c, params, cuda));
 	}
 	int nthreads = hpx_hardware_concurrency();
-		if (hpx_size() > 1) {
-			nthreads *= 4;
-		}
-		static std::atomic<int> next;
+	if (hpx_size() > 1) {
+		nthreads *= 4;
+	}
+	static std::atomic<int> next;
 	next = 0;
 	static std::atomic<int> gpu_work;
 	gpu_work = 0;
@@ -427,7 +425,8 @@ sph_run_return sph_run(sph_run_params params, bool cuda) {
 					break;
 
 					case SPH_RUN_PREHYDRO2:
-					test = has_active_neighbors(self) > 0&& !is_converged(self, params.min_rung);
+					test = has_active_neighbors(self);
+					test = test && !is_converged(self, params.min_rung);
 					break;
 
 					case SPH_RUN_COND_INIT:
@@ -759,7 +758,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.gx_snk = &sph_particles_gforce(XDIM, 0);
 	cuda_data.gy_snk = &sph_particles_gforce(YDIM, 0);
 	cuda_data.gz_snk = &sph_particles_gforce(ZDIM, 0);
-	cuda_data.oldrung_snk = &sph_particles_oldrung(0);
 	cuda_data.def_gamma = get_options().gamma;
 	cuda_data.gsoft = get_options().hsoft;
 	cuda_data.nselfs = host_selflist.size();

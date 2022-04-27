@@ -307,10 +307,6 @@ inline float sph_particles_gamma(part_int index) {
 	return 1.f + 1.f / cv;
 }
 
-inline char& sph_particles_oldrung(int index) {
-	return sph_particles_or[index];
-}
-
 inline sph_record1& sph_particles_rec1(part_int index) {
 	return sph_particles_r1[index];
 }

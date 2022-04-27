@@ -260,12 +260,12 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						contains = true;
 						const float& h = data.h[pi];
 						for (int dim = 0; dim < NDIM; dim++) {
-							if (distance(x[dim], self.inner_box.begin[dim]) + h < 0.f) {
+							if (distance(x[dim], self.inner_box.begin[dim]) + 1.01f*h < 0.f) {
 								flops += 3;
 								contains = false;
 								break;
 							}
-							if (distance(self.inner_box.end[dim], x[dim]) + h < 0.f) {
+							if (distance(self.inner_box.end[dim], x[dim]) + 1.01f*h < 0.f) {
 								flops += 3;
 								contains = false;
 								break;
@@ -334,7 +334,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						const float y_ij = distance(y_i, y_j);						// 1
 						const float z_ij = distance(z_i, z_j);						// 1
 						const float r2 = sqr(x_ij, y_ij, z_ij);					// 5
-						if (r2 < fmaxf(h2_i, h2_j)) {									// 2
+						if (r2 < fmaxf(sqr(h_i), sqr(h_j))) {									// 2
 							semiactive++;
 						}
 						flops += 11;

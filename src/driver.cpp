@@ -268,7 +268,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_particles_softlens2smoothlens(minrung);
 
 		timer tm;
-		tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+		tnparams.h_wt = 1.01;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.seto = SPH_SET_ALL;
 		tnparams.seti = SPH_SET_ALL;
@@ -301,8 +301,11 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
+		if( vsoft ) {
+			break;
+		}
 		cont = kr.rc;
-		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
+		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.seto = SPH_SET_ALL;
 		tnparams.seti = SPH_SET_ALL;
@@ -426,7 +429,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 					PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 				tm.reset();
 				cont = kr.rc;
-				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
+				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
 				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 				tnparams.seto = SPH_SET_ALL;
 				tnparams.seti = SPH_SET_ALL;
@@ -469,7 +472,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
 	tm.reset();
 
-	tnparams.h_wt = 1.001;
+	tnparams.h_wt = 1.01;
 	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 	tnparams.seti = SPH_SET_ALL;
 	tnparams.seto = SPH_SET_ACTIVE;
@@ -515,7 +518,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 #ifdef IMPLICIT_CONDUCTION
 	if (conduction) {
 
-		tnparams.h_wt = 1.001;
+		tnparams.h_wt = 1.01;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
 		tnparams.seti = SPH_SET_ALL;
 		tnparams.seto = SPH_SET_ALL;

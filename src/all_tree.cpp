@@ -48,11 +48,9 @@ static bool has_active_neighbors(const tree_node* self) {
 bool is_converged(const tree_node* self, int minrung) {
 	bool converged = true;
 	for (int i = self->part_range.first; i < self->part_range.second; i++) {
-		if (particles_rung(i) >= minrung || particles_semiactive(i)) {
-			if (!particles_converged(i)) {
-				converged = false;
-				break;
-			}
+		if (!particles_converged(i)) {
+			converged = false;
+			break;
 		}
 	}
 	return converged;
@@ -70,17 +68,17 @@ softlens_return all_tree_softlens(int minrung, float a) {
 	do {
 		tm.reset();
 		tm.start();
-		PRINT( "Find ranges\n");
+		PRINT("Find ranges\n");
 		all_tree_find_ranges(root_id, minrung, softlen_buffer).get();
 		tm.stop();
 		tm.reset();
 		tm.start();
-		PRINT( "Find neighbors\n");
+		PRINT("Find neighbors\n");
 		all_tree_find_neighbors(root_id, checklist).get();
 		tm.stop();
 		tm.reset();
 		tm.start();
-		PRINT( "Softlens\n");
+		PRINT("Softlens\n");
 		rc = all_tree_softlens_execute(minrung);
 		tm.stop();
 		PRINT("softlens %e %e %e\n", rc.hmin, rc.hmax, tm.read());

@@ -242,9 +242,9 @@ void sph_particles_softlens2smoothlens(int minrung) {
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				const part_int k = sph_particles_dm_index(i);
-				if( particles_rung(k) >= minrung || particles_semiactive(k)) {
+		//		if( particles_rung(k) >= minrung || particles_semiactive(k)) {
 					sph_particles_smooth_len(i) = particles_softlen(k);
-				}
+			//	}
 			}
 		}));
 	}
