@@ -648,7 +648,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 		all_tree_divv(minrung, scale);
 		tm.stop();
 		PRINT("divv = %e\n", tm.read());
-		particles_apply_updates(minrung, t0, scale);
+		kr.max_rung = particles_apply_updates(minrung, t0, scale);
 	}
 
 	tree_destroy();

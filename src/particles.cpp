@@ -249,15 +249,16 @@ vector<output_particle> particles_get_sample(const range<double>& box) {
 
 HPX_PLAIN_ACTION (particles_apply_updates);
 
-void particles_apply_updates(int minrung, float t0, float a) {
+int particles_apply_updates(int minrung, float t0, float a) {
 	profiler_enter(__FUNCTION__);
-	vector<hpx::future<void>> futs;
+	vector<hpx::future<int>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_apply_updates_action>(c, minrung, t0, a));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([t0,nthreads, proc,minrung,a]() {
+			int max_rung = 0;
 			const float cfl = get_options().cfl;
 			const part_int b = (size_t) proc * particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
@@ -278,18 +279,22 @@ void particles_apply_updates(int minrung, float t0, float a) {
 						PRINT( "DIVV LIMITED %i %i\n", rung, new_rung);
 					}
 					rung = new_rung;
+					max_rung = std::max(max_rung, rung);
 					dt = 0.5f * rung_dt[rung] * t0;
 					vx += dt * gx;
 					vy += dt * gy;
 					vz += dt * gz;
 				}
 			}
+			return max_rung;
 		}));
 	}
+	int max_rung = 0;
 	for (auto& f : futs) {
-		f.get();
+		max_rung = std::max(max_rung, f.get());
 	}
 	profiler_exit();
+	return max_rung;
 }
 
 vector<output_particle> particles_get_tracers() {
