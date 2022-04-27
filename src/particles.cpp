@@ -272,11 +272,12 @@ void particles_apply_updates(int minrung, float t0, float a) {
 					auto& gz = particles_gforce(ZDIM,i);
 					const auto& divv = particles_divv(i);
 					const float dt_divv = cfl * 3.0f * a / (fabs(divv) + 1e-37f);
-					const float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
+					float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
 					rung = (int) ceilf(log2f(t0/dt));
-					vx += 0.5f * dt * gx;
-					vy += 0.5f * dt * gy;
-					vz += 0.5f * dt * gz;
+					dt = 0.5f * rung_dt[rung] * t0;
+					vx += dt * gx;
+					vy += dt * gy;
+					vz += dt * gz;
 				}
 			}
 		}));
