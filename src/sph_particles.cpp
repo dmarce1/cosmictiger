@@ -187,7 +187,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-						if(false && stars ) {
+						if(stars ) {
 							float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
 							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
@@ -278,7 +278,7 @@ float sph_particles_temperature(part_int i, float a) {
 	cv *= double(constants::kb);																							// 1
 	double entr = sph_particles_entr(i);
 	entr *= code_to_entropy;
-	const double eint = entr * pow(rho, get_options().gamma - 1.0) / (gamma - 1.0) / hfrac;
+	const double eint = entr * pow(rho * hfrac, get_options().gamma - 1.0) / (gamma - 1.0);
 	double T = rho * eint / (n * cv);
 	if (H < 0.0) {
 		if (H < -5.0e-3) {
