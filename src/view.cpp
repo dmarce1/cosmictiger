@@ -381,7 +381,7 @@ void view_output_views(int cycle, double a) {
 					eint /= sqr(a);
 					eint *= sqr(get_options().code_to_cm / get_options().code_to_s);
 					//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
-					double energy = eint * rho / (1.0 - parts.hydro[bi][i].cold_frac);
+					double energy = eint * rho;
 					double T = energy / (n * cv);																							// 5
 					if (stars) {
 						T /= 1.f - parts.hydro[bi][i].cold_frac;
