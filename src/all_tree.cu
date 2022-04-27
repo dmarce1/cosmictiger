@@ -229,15 +229,8 @@ struct derivatives_record1 {
 	float h;
 };
 
-struct derivatives_record2 {
-	float vx;
-	float vy;
-	float vz;
-};
-
 struct derivatives_workspace {
 	device_vector<derivatives_record1> rec1;
-	device_vector<derivatives_record2> rec2;
 };
 
 __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduce) {
@@ -257,7 +250,6 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 		int flops = 0;
 		__syncthreads();
 		ws.rec1.resize(0);
-		ws.rec2.resize(0);
 		const tree_node& self = params.trees[params.selfs[index]];
 		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
 			const tree_node& other = params.trees[params.neighbors[ni]];
@@ -294,16 +286,12 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				__syncthreads();
 				const int next_size = offset + total;
 				ws.rec1.resize(next_size);
-				ws.rec2.resize(next_size);
 				if (contains) {
 					const int k = offset + j;
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
 					ws.rec1[k].h = params.h[pi];
-					ws.rec2[k].vx = params.vx[pi];
-					ws.rec2[k].vy = params.vy[pi];
-					ws.rec2[k].vz = params.vz[pi];
 				}
 			}
 		}
@@ -466,9 +454,6 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const fixed32& x_i = x[XDIM];
 				const fixed32& y_i = x[YDIM];
 				const fixed32& z_i = x[ZDIM];
-				const float& vx_i = params.vx[i];
-				const float& vy_i = params.vy[i];
-				const float& vz_i = params.vz[i];
 				const float hinv_i = 1.f / h_i; 										// 4
 				const float h3inv_i = sqr(hinv_i) * hinv_i;
 				const float h2_i = sqr(h_i);    										// 1
@@ -476,6 +461,161 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				float dpot_dh = 0.f;
 				__syncthreads();
 				flops += 10;
+				const int jmax = round_up(ws.rec1.size(), DERIVATIVES_BLOCK_SIZE);
+				for (int j = tid; j < jmax; j += block_size) {
+					if (j < ws.rec1.size()) {
+						const auto& rec1 = ws.rec1[j];
+						const fixed32& x_j = rec1.x;
+						const fixed32& y_j = rec1.y;
+						const fixed32& z_j = rec1.z;
+						const float x_ij = distance(x_i, x_j); // 1
+						const float y_ij = distance(y_i, y_j); // 1
+						const float z_ij = distance(z_i, z_j); // 1
+						const float r2 = sqr(x_ij, y_ij, z_ij);
+						const float r = sqrtf(r2);                    // 4
+						const float rinv = 1.0f / (r + 1e-37f);
+						const float q = r * hinv_i;                    // 1
+						if (q < 1.f) {                               // 1
+							const float w = kernelG(q);
+							const float dwdq = dkernelG_dq(q);
+							const float pot = -kernelPot(q);
+							const float force = kernelFqinv(q) * q;
+							dpot_dh += (pot + q * force);
+							drho_dh -= q * dwdq;                      // 2
+							flops += 2;
+						}
+						flops += 9;
+					}
+				}
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
+				flops += (DERIVATIVES_BLOCK_SIZE - 1);
+				const float zeta_i = dpot_dh / drho_dh;
+				__syncthreads();
+				if (tid == 0) {
+					params.zeta_snk[snki] = zeta_i;
+				}
+			}
+		}
+		shared_reduce_add<int, DERIVATIVES_BLOCK_SIZE>(flops);
+		if (tid == 0) {
+			atomicMax(&reduce->hmax, hmax);
+			atomicMin(&reduce->hmin, hmin);
+			atomicAdd(&reduce->flops, (double) flops);
+			index = atomicAdd(&reduce->counter, 1);
+		}
+		flops = 0;
+		__syncthreads();
+	}
+	(&ws)->~derivatives_workspace();
+}
+
+struct divv_record1 {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+};
+
+struct divv_record2 {
+	float vx;
+	float vy;
+	float vz;
+};
+
+struct divv_workspace {
+	device_vector<divv_record1> rec1;
+	device_vector<divv_record2> rec2;
+};
+
+__global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
+	const int tid = threadIdx.x;
+	const int block_size = blockDim.x;
+	__shared__
+	int index;
+	__shared__ divv_workspace ws;
+	__syncthreads();
+	if (tid == 0) {
+		index = atomicAdd(&reduce->counter, 1);
+	}
+	__syncthreads();
+	new (&ws) divv_workspace();
+	array<fixed32, NDIM> x;
+	while (index < params.nselfs) {
+		int flops = 0;
+		__syncthreads();
+		ws.rec1.resize(0);
+		ws.rec2.resize(0);
+		const tree_node& self = params.trees[params.selfs[index]];
+		for (int ni = self.neighbor_range.first; ni < self.neighbor_range.second; ni++) {
+			const tree_node& other = params.trees[params.neighbors[ni]];
+			const int maxpi = round_up(other.part_range.second - other.part_range.first, block_size) + other.part_range.first;
+			for (int pi = other.part_range.first + tid; pi < maxpi; pi += block_size) {
+				bool contains = false;
+				int j;
+				int total;
+				if (pi < other.part_range.second) {
+					x[XDIM] = params.x[pi];
+					x[YDIM] = params.y[pi];
+					x[ZDIM] = params.z[pi];
+					contains = (self.obox.contains(x));
+					if (!contains) {
+						contains = true;
+						const float& h = params.h[pi];
+						for (int dim = 0; dim < NDIM; dim++) {
+							if (distance(x[dim], self.ibox.begin[dim]) + h < 0.f) {
+								flops += 3;
+								contains = false;
+								break;
+							}
+							if (distance(self.ibox.end[dim], x[dim]) + h < 0.f) {
+								flops += 3;
+								contains = false;
+								break;
+							}
+						}
+					}
+				}
+				j = contains;
+				compute_indices < DERIVATIVES_BLOCK_SIZE > (j, total);
+				const int offset = ws.rec1.size();
+				__syncthreads();
+				const int next_size = offset + total;
+				ws.rec1.resize(next_size);
+				ws.rec2.resize(next_size);
+				if (contains) {
+					const int k = offset + j;
+					ws.rec1[k].x = x[XDIM];
+					ws.rec1[k].y = x[YDIM];
+					ws.rec1[k].z = x[ZDIM];
+					ws.rec2[k].vx = params.vx[pi];
+					ws.rec2[k].vy = params.vy[pi];
+					ws.rec2[k].vz = params.vz[pi];
+				}
+			}
+		}
+		__syncthreads();
+		for (int i = self.part_range.first; i < self.part_range.second; i++) {
+			__syncthreads();
+			const int snki = self.sink_part_range.first - self.part_range.first + i;
+			const auto rung = params.rung_snk[snki];
+			const bool active = rung >= params.minrung;
+			x[XDIM] = params.x[i];
+			x[YDIM] = params.y[i];
+			x[ZDIM] = params.z[i];
+			const fixed32& x_i = x[XDIM];
+			const fixed32& y_i = x[YDIM];
+			const fixed32& z_i = x[ZDIM];
+			if (active) {
+				const int snki = self.sink_part_range.first - self.part_range.first + i;
+				const float& h_i = params.softlen_snk[snki];
+				const fixed32& x_i = x[XDIM];
+				const fixed32& y_i = x[YDIM];
+				const fixed32& z_i = x[ZDIM];
+				const float& vx_i = params.vx[i];
+				const float& vy_i = params.vy[i];
+				const float& vz_i = params.vz[i];
+				const float hinv_i = 1.f / h_i;
+				float drho_dh = 0.f;
 				const int jmax = round_up(ws.rec1.size(), DERIVATIVES_BLOCK_SIZE);
 				float divv = 0.f;
 				for (int j = tid; j < jmax; j += block_size) {
@@ -501,40 +641,31 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						if (q < 1.f) {                               // 1
 							const float w = kernelG(q);
 							const float dwdq = dkernelG_dq(q);
-							const float pot = -kernelPot(q);
-							const float force = kernelFqinv(q) * q;
-							dpot_dh += (pot + q * force);
 							drho_dh -= q * dwdq;                      // 2
-							flops += 2;
 							divv += (vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij) * rinv * dwdq;
 						}
-						flops += 9;
 					}
 				}
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(divv);
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);
-				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
 				flops += (DERIVATIVES_BLOCK_SIZE - 1);
-				const float zeta_i = dpot_dh / drho_dh;
-				divv /= drho_dh * params.a;
+				const float rhoh30 = (3.0f * params.N) / (4.0f * float(M_PI));
+				divv *= rhoh30 * 3.f / (drho_dh * params.a);				  // 4
 				__syncthreads();
 				if (tid == 0) {
-					params.zeta_snk[snki] = zeta_i;
 					params.divv_snk[snki] = divv;
 				}
 			}
 		}
 		shared_reduce_add<int, DERIVATIVES_BLOCK_SIZE>(flops);
 		if (tid == 0) {
-			atomicMax(&reduce->hmax, hmax);
-			atomicMin(&reduce->hmin, hmin);
 			atomicAdd(&reduce->flops, (double) flops);
 			index = atomicAdd(&reduce->counter, 1);
 		}
 		flops = 0;
 		__syncthreads();
 	}
-	(&ws)->~derivatives_workspace();
+	(&ws)->~divv_workspace();
 }
 
 softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream) {
@@ -555,6 +686,35 @@ softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream
 	}
 	tm.start();
 	cuda_softlens<<<softlens_nblocks, SOFTLENS_BLOCK_SIZE,0,stream>>>(params,reduce);
+	cuda_stream_synchronize(stream);
+	rc.fail = reduce->flag;
+	rc.hmin = reduce->hmin;
+	rc.hmax = reduce->hmax;
+	tm.stop();
+	rc.flops = reduce->flops;
+	CUDA_CHECK(cudaFree(reduce));
+	return rc;
+
+}
+
+softlens_return all_tree_divv_cuda(all_tree_data params, cudaStream_t stream) {
+	softlens_return rc;
+	all_tree_reduction* reduce;
+	CUDA_CHECK(cudaMallocManaged(&reduce, sizeof(all_tree_reduction)));
+	reduce->counter = reduce->flag = 0;
+	reduce->hmin = std::numeric_limits<float>::max();
+	reduce->hmax = 0.0f;
+	reduce->flops = 0.0;
+	static int divv_nblocks;
+	static bool first = true;
+	timer tm;
+	if (first) {
+		first = false;
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&divv_nblocks, (const void*) cuda_divv, DERIVATIVES_BLOCK_SIZE, 0));
+		divv_nblocks *= cuda_smp_count();
+	}
+	tm.start();
+	cuda_divv<<<divv_nblocks, DERIVATIVES_BLOCK_SIZE,0,stream>>>(params,reduce);
 	cuda_stream_synchronize(stream);
 	rc.fail = reduce->flag;
 	rc.hmin = reduce->hmin;

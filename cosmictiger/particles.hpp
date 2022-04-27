@@ -34,6 +34,13 @@
 #include <fstream>
 #include <unordered_map>
 
+
+
+static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
+		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
+				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
+		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+
 #define NO_INDEX ((part_int) 0xFFFFFFFFU)
 
 #define DARK_MATTER_TYPE 0
@@ -164,6 +171,7 @@ void particles_resize(part_int);
 void particles_reset_converged();
 void particles_random_init();
 void particles_resolve_with_sph_particles();
+void particles_apply_updates(int minrung, float t0, float a );
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, float* zeta, part_int offset);

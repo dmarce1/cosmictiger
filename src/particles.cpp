@@ -247,6 +247,46 @@ vector<output_particle> particles_get_sample(const range<double>& box) {
 	return std::move(output);
 }
 
+HPX_PLAIN_ACTION (particles_apply_updates);
+
+void particles_apply_updates(int minrung, float t0, float a) {
+	profiler_enter(__FUNCTION__);
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_apply_updates_action>(c, minrung, t0, a));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([t0,nthreads, proc,minrung,a]() {
+			const float cfl = get_options().cfl;
+			const part_int b = (size_t) proc * particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				auto& rung = particles_rung(i);
+				if( particles_rung(i) >= minrung && particles_type(i) == DARK_MATTER_TYPE) {
+					auto& vx = particles_vel(XDIM,i);
+					auto& vy = particles_vel(YDIM,i);
+					auto& vz = particles_vel(ZDIM,i);
+					auto& gx = particles_gforce(XDIM,i);
+					auto& gy = particles_gforce(YDIM,i);
+					auto& gz = particles_gforce(ZDIM,i);
+					const auto& divv = particles_divv(i);
+					const float dt_divv = cfl * 3.0f * a / (fabs(divv) + 1e-37f);
+					const float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
+					rung = (int) ceilf(log2f(t0/dt));
+					vx += 0.5f * dt * gx;
+					vy += 0.5f * dt * gy;
+					vz += 0.5f * dt * gz;
+				}
+			}
+		}));
+	}
+	for (auto& f : futs) {
+		f.get();
+	}
+	profiler_exit();
+}
+
 vector<output_particle> particles_get_tracers() {
 	vector<hpx::future<vector<output_particle>>>futs;
 	vector<output_particle> output;
@@ -797,7 +837,7 @@ void particles_resize(part_int sz) {
 				particles_lgrp[i] = NO_GROUP;
 			}
 		}
-		if (get_options().save_force) {
+		if (get_options().save_force || get_options().vsoft) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				particles_array_resize(particles_g[dim], new_capacity, true);
 			}

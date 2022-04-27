@@ -247,7 +247,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		profiler_exit();
 		tm.stop();
-		PRINT( "%e\n", tm.read());
+		PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
 		tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
@@ -256,7 +256,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		profiler_exit();
 		tm.stop();
-		PRINT( "%e\n", tm.read());
+		PRINT("%e\n", tm.read());
 		tm.reset();
 
 		kr = sph_run_return();
@@ -283,7 +283,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
 		profiler_exit();
 		tm.stop();
-		PRINT( "%e\n", tm.read());
+		PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
 		tnparams.seti = SPH_INTERACTIONS_IJ;
@@ -292,7 +292,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
 		profiler_exit();
 		tm.stop();
-		PRINT( "%e\n", tm.read());
+		PRINT("%e\n", tm.read());
 		tm.reset();
 		kr = sph_run_return();
 	} while (cont);
@@ -641,6 +641,16 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	profiler_exit();
 	tm.stop();
 	kick_time += tm.read();
+
+	if (vsoft && !sph) {
+		timer tm;
+		tm.start();
+		softlens_return all_tree_divv(int minrung, float a);
+		tm.stop();
+		PRINT( "divv = %e\n", tm.read());
+		particles_apply_updates(minrung, t0, scale);
+	}
+
 	tree_destroy();
 	particles_cache_free();
 	kr.nactive = sr.nactive;

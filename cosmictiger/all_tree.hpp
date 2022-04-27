@@ -43,6 +43,9 @@ struct all_tree_data {
 	char* converged_snk;
 	float* zeta_snk;
 	float* divv_snk;
+	float* gx_snk;
+	float* gy_snk;
+	float* gz_snk;
 	part_int* cat_snk;
 	char* type_snk;
 	int minrung;
@@ -79,6 +82,8 @@ hpx::future<all_tree_range_return> all_tree_find_ranges(tree_id self_id, int, do
 #endif
 softlens_return all_tree_softlens(int minrung, float a);
 softlens_return all_tree_derivatives(int minrung);
+softlens_return all_tree_divv(int minrung, float a);
 softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream);
 softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t stream);
+softlens_return all_tree_divv_cuda(all_tree_data params, cudaStream_t stream);
 

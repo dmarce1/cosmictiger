@@ -53,11 +53,6 @@ struct cuda_lists_type {
 
 };
 
-static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
-		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
-		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
-
 struct cuda_kick_params {
 	array<fixed32, NDIM> Lpos;
 	expansion<float> L;
@@ -86,7 +81,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
-	auto* divvs = data.divv_snk;
 	auto* softlens = data.h_snk;
 	auto* sph_index = data.cat_index;
 	auto* type = data.type_snk;
@@ -149,7 +143,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			gy[i] *= -1.f;
 			gz[i] *= -1.f;
 		}
-		if (params.save_force) {
+		if (params.save_force || vsoft) {
 			all_gx[snki] = gx[i];
 			all_gy[snki] = gy[i];
 			all_gz[snki] = gz[i];
@@ -161,9 +155,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
 		float hsoft = params.h;
-		float divv;
 		if (vsoft) {
-			divv = divvs[snki];
 			hsoft = softlens[snki];
 		}
 		if (my_type == SPH_TYPE && !params.glass) {
@@ -180,12 +172,12 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		if (my_type != SPH_TYPE || params.glass) {
 			dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
-			if (vsoft) {
+	/*		if (vsoft) {
 				const float dt1 = params.cfl * 3.f * params.a / (fabs(divv) + 1e-37f);
 				if (dt1 < dt) {
 					dt = dt1;
 				}
-			}
+			}*/
 			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 			max_rung = max(rung, max_rung);
 			if (rung < 0 || rung >= MAX_RUNG) {
@@ -194,9 +186,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			ASSERT(rung >= 0);
 			ASSERT(rung < MAX_RUNG);
 			dt = 0.5f * rung_dt[rung] * params.t0;
-			vx = fmaf(gx[i], dt, vx);
-			vy = fmaf(gy[i], dt, vy);
-			vz = fmaf(gz[i], dt, vz);
+			if (!vsoft) {
+				vx = fmaf(gx[i], dt, vx);
+				vy = fmaf(gy[i], dt, vy);
+				vz = fmaf(gz[i], dt, vz);
+			}
 			write_rungs[snki] = rung;
 		}
 		vel_x[snki] = vx;
@@ -720,7 +714,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.vz = &particles_vel(ZDIM, 0);
 	data.rungs = &particles_rung(0);
 	data.rank = hpx_rank();
-	if (kparams.save_force) {
+	if (kparams.save_force || get_options().vsoft) {
 		data.gx = &particles_gforce(XDIM, 0);
 		data.gy = &particles_gforce(YDIM, 0);
 		data.gz = &particles_gforce(ZDIM, 0);

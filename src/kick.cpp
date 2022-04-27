@@ -48,10 +48,6 @@ struct workspace {
 	workspace& operator=(workspace&&) = default;
 };
 
-static float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0
-		/ (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-		/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24), 1.0
-		/ (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
 static thread_local std::stack<workspace> local_workspaces;
 static part_int cuda_workspace_max_parts;
 static part_int cuda_branch_max_parts;
@@ -382,10 +378,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					type = particles_type(i);
 					m = type == DARK_MATTER_TYPE ? dm_mass : sph_mass;
 				}
-				float divv, hsoft = get_options().hsoft;
+				float hsoft = get_options().hsoft;
 				if (vsoft) {
 					hsoft = particles_softlen(i);
-					divv = particles_divv(i);
 				}
 				float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				forces.phi[j] += L2(0, 0, 0);
@@ -401,7 +396,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					forces.gy[j] *= -1.f;
 					forces.gz[j] *= -1.f;
 				}
-				if (save_force) {
+				if (save_force || vsoft) {
 					particles_gforce(XDIM, i) = forces.gx[j];
 					particles_gforce(YDIM, i) = forces.gy[j];
 					particles_gforce(ZDIM, i) = forces.gz[j];
@@ -428,9 +423,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (type != SPH_TYPE || glass) {
 					const float factor = eta * sqrtf(params.a);
 					dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
-					if (vsoft) {
-						dt = std::min(dt, params.cfl * 3.0f * params.a / (fabs(divv) + 1.0e-37f));
-					}
 					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
 					kr.max_rung = std::max(rung, kr.max_rung);
 					if (rung < 0 || rung >= 10) {
@@ -438,9 +430,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					} else {
 						dt = 0.5f * rung_dt[rung] * params.t0;
 					}
-					vx = fmaf(forces.gx[j], dt, vx);
-					vy = fmaf(forces.gy[j], dt, vy);
-					vz = fmaf(forces.gz[j], dt, vz);
+					if (!vsoft) {
+						vx = fmaf(forces.gx[j], dt, vx);
+						vy = fmaf(forces.gy[j], dt, vy);
+						vz = fmaf(forces.gz[j], dt, vz);
+					}
 				}
 				kr.pot += m * forces.phi[j];
 				kr.fx += forces.gx[j];
