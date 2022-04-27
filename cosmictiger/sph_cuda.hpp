@@ -41,6 +41,7 @@ struct sph_run_cuda_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
+	char* stars;
 	float* dentr1_snk;
 	float* dentr2_snk;
 	float* entr0_snk;
@@ -50,6 +51,7 @@ struct sph_run_cuda_data {
 	float gsoft;
 	array<float, NCHEMFRACS>* chem;
 	float* divv_snk;
+	float* rho_snk;
 	float* mmw;
 	float* gradT;
 	float* shearv;
@@ -58,6 +60,7 @@ struct sph_run_cuda_data {
 	char* sa_snk;
 	float def_gamma;
 	bool conduction;
+	float* rho;
 	bool gravity;
 	bool chemistry;
 	char* converged_snk;

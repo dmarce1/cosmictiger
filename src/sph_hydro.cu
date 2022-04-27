@@ -36,6 +36,8 @@ struct hydro_record2 {
 	float shearv;
 	float cold_frac;
 	float kappa;
+	float rho;
+	char star;
 };
 
 struct hydro_workspace {
@@ -121,13 +123,16 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].entr = data.entr[pi];
 					ws.rec2[k].alpha = data.alpha[pi];
 					ws.rec2[k].omega = data.omega[pi];
+					ws.rec2[k].rho = data.rho[pi];
 					if (params.diffusion && params.phase == 1) {
 						ws.rec2[k].shearv = data.shearv[pi];
 					}
 					if (params.stars) {
 						ws.rec2[k].cold_frac = data.cold_frac[pi];
+						ws.rec2[k].star = data.stars[pi];
 					} else {
 						ws.rec2[k].cold_frac = 0.f;
+						ws.rec2[k].star = false;
 					}
 					if (params.diffusion & params.phase == 1) {
 						if (data.chemistry) {
@@ -144,8 +149,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 			bool use = rung_i >= params.min_rung;
 			const float& m = data.m;
 			const float minv = 1.f / m;
-			const float c0 = float(3.0f / 4.0f / M_PI * data.N);
-			const float c0inv = 1.0f / c0;
 			if (use) {
 				float difco_i;
 				float cfrac_i;
@@ -158,17 +161,20 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const auto& vz_i = data.vz[i];
 				const float& h_i = data.h[i];
 				const float& A_i = data.entr[i];
-				const float& alpha_i = fmaxf(data.alpha[i], params.alpha0);
+				const float rho_i = data.rho[i];										// 2
+				const float alpha_i = data.alpha[i];
 				const float hinv_i = 1.f / h_i;												// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 3
-				const float rho_i = m * c0 * h3inv_i;										// 2
+				bool star_i;
 				if (params.stars) {
 					cfrac_i = data.cold_frac[i];
+					star_i = data.stars[i];
 				} else {
 					cfrac_i = 0.f;
+					star_i = false;
 				}
 				const float hfrac_i = 1.f - cfrac_i;
-				const float rhoinv_i = minv * c0inv * sqr(h_i) * h_i;					// 4
+				const float rhoinv_i = 1.f / rho_i;					// 4
 				const float pre_i = A_i * powf(rho_i * hfrac_i, gamma0);
 				array<float, NCHEMFRACS> frac_i;
 				if ((params.diffusion && params.phase == 1) && data.chemistry) {
@@ -241,120 +247,125 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float dvz_dz = 0.f;
 				float vsig = 0.f;
 				__syncthreads();
-				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
-					const int kk = ws.neighbors[j];
-					const auto& rec1 = ws.rec1[kk];
-					const auto& rec2 = ws.rec2[kk];
-					const float& h_j = rec1.h;
-					const fixed32& x_j = rec1.x;
-					const fixed32& y_j = rec1.y;
-					const fixed32& z_j = rec1.z;
-					const float& cfrac_j = rec2.cold_frac;
-					const float& shearv_j = rec2.shearv;
-					const auto& frac_j = rec2.chem;
-					const float& vx_j = rec2.vx;
-					const float& vy_j = rec2.vy;
-					const float& vz_j = rec2.vz;
-					const float& omega_j = rec2.omega;
-					const float& A_j = rec2.entr;
-					const float& alpha_j = fmaxf(rec2.alpha, params.alpha0);
-					const float hfrac_j = 1.f - cfrac_j;
-					const float hinv_j = 1.f / h_j;															// 4
-					const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3
-					const float x_ij = distance(x_i, x_j);													// 1
-					const float y_ij = distance(y_i, y_j);													// 1
-					const float z_ij = distance(z_i, z_j);													// 1
-					const float r2 = sqr(x_ij, y_ij, z_ij);												// 5
-					const float r = sqrtf(r2);																   // 4
-					const float q_i = r * hinv_i;																// 1
-					const float q_j = r * hinv_j;																// 1
-					const float rho_j = m * c0 * h3inv_j;												// 2
-					const float pre_j = A_j * powf(rho_j * hfrac_j, gamma0);
-					const float c_j = sqrtf(gamma0 * pre_j / (rho_j * hfrac_j)); //23
-					const float vx_ij = vx_i - vx_j + x_ij * adot;									// 3
-					const float vy_ij = vy_i - vy_j + y_ij * adot;									// 3
-					const float vz_ij = vz_i - vz_j + z_ij * adot;									// 3
-					const float rinv = 1.0f / (r > 0.f ? r : 1e37f);								// 5
-					const float vdotx_ij = fmaf(x_ij, vx_ij, fmaf(y_ij, vy_ij, z_ij * vz_ij));								// 5
-					const float h_ij = 0.5f * (h_i + h_j);												// 2
-					const float w_ij = fminf(vdotx_ij * rinv, 0.f);									// 2
-					const float mu_ij = w_ij * h_ij / sqrtf(r2 + ETA * h_ij);			// 12
-					const float rho_ij = 0.5f * (rho_i + rho_j);										// 2
-					const float c_ij = 0.5f * (c_i + c_j);												// 2
-					const float hfrac_ij = 2.0f * hfrac_i * hfrac_j / (hfrac_i + hfrac_j + 1e-36f);
-					const float alpha_ij = 0.5f * (alpha_i + alpha_j);								// 2
-					const float vsig_ij = alpha_ij * (c_ij - params.beta * mu_ij); // 4
-					const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i / omega_i;   // 2
-					const float dWdr_j = dkernelW_dq(q_j) * hinv_j * h3inv_j / omega_j;   // 2
-	//				ALWAYS_ASSERT(omega_i > 0.f);
-					if( omega_j <= 0.0 ) {
-						PRINT( "%i %e %e %e\n", data.selfs[index], omega_j, q_i, q_j);
-					}
-//					ALWAYS_ASSERT(omega_j > 0.f);
-					const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);     // 4
-					const float dWdr_i_rinv = dWdr_i * rinv;						// 2
-					const float dWdr_j_rinv = dWdr_j * rinv;						// 2
-					const float dWdr_ij_rinv = dWdr_ij * rinv;										// 1
-					const float dWdr_x_ij = x_ij * dWdr_ij_rinv;										// 1
-					const float dWdr_y_ij = y_ij * dWdr_ij_rinv;										// 1
-					const float dWdr_z_ij = z_ij * dWdr_ij_rinv;										// 1
-					const float dWdr_x_i = dWdr_i_rinv * x_ij;								// 1
-					const float dWdr_y_i = dWdr_i_rinv * y_ij;								// 1
-					const float dWdr_z_i = dWdr_i_rinv * z_ij;								// 1
-					const float dWdr_x_j = dWdr_j_rinv * x_ij;								// 1
-					const float dWdr_y_j = dWdr_j_rinv * y_ij;								// 1
-					const float dWdr_z_j = dWdr_j_rinv * z_ij;								// 1
-					const float mainv = m * ainv;															// 1
-					const float dp_i = mainv * pre_i / sqr(rho_i);
-					const float dp_j = mainv * pre_j / sqr(rho_j);
-					const float pi_ij = -mainv * w_ij * h_ij * rinv * vsig_ij / rho_ij;     // 9
-					ax -= dp_i * dWdr_x_i + dp_j * dWdr_x_j;											// 4
-					ay -= dp_i * dWdr_y_i + dp_j * dWdr_y_j;											// 4
-					az -= dp_i * dWdr_z_i + dp_j * dWdr_z_j;											// 4
-					ax -= pi_ij * dWdr_x_ij;																// 2
-					ay -= pi_ij * dWdr_y_ij;																// 2
-					az -= pi_ij * dWdr_z_ij;																// 2
-					const float vdW_ij = fmaf(vx_ij, dWdr_x_ij, fmaf(vy_ij, dWdr_y_ij, vz_ij * dWdr_z_ij));																// 5
-					de_dt2 = fmaf(de_dt0, 0.5f * pi_ij * vdW_ij, de_dt2);                     // 4
-					dvx_dx -= m * rhoinv_i * vx_ij * dWdr_x_i;									// 2
-					dvy_dy -= m * rhoinv_i * vy_ij * dWdr_y_i;									// 2
-					dvz_dz -= m * rhoinv_i * vz_ij * dWdr_z_i;									// 2
-					if (params.phase == 0) {
-						dvy_dx -= m * rhoinv_i * vy_ij * dWdr_x_i;									// 2
-						dvz_dx -= m * rhoinv_i * vz_ij * dWdr_x_i;									// 2
-						dvx_dy -= m * rhoinv_i * vx_ij * dWdr_y_i;									// 2
-						dvz_dy -= m * rhoinv_i * vz_ij * dWdr_y_i;									// 2
-						dvx_dz -= m * rhoinv_i * vx_ij * dWdr_z_i;									// 2
-						dvy_dz -= m * rhoinv_i * vy_ij * dWdr_z_i;									// 2
-						vsig = fmaxf(vsig, -w_ij);												// 1
-					} else if (params.phase == 1) {
-						const float h = fminf(h_i, h_j * (1 << MAX_RUNG_DIF));                  // 3
-						dtinv_cfl = fmaxf(dtinv_cfl, c_ij / h);												// 1
-						dtinv_visc = fmaxf(dtinv_visc, 0.6f * vsig_ij / h);
-						if (params.diffusion) {
-							flops += 29;
-							float dif_max = 0.f;
-							const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;			// 3
-							const float difco_ij = 0.5f * (difco_i + difco_j);							// 2
-							const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
-							ALWAYS_ASSERT(D_ij >= 0.f);
-							const float A0_j = A_j * powf(rho_j * rhoinv_i / hfrac_i * hfrac_j, gamma0 - 1.f);
-							dif_max = fabs(A0_j - A_i) / fmaxf(A0_j, A_i);
-							de_dt1 -= D_ij * (A_i - A0_j); // 16;
-							if (params.stars) {
-								dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
-								dif_max = fmaxf(dif_max, fabs(cfrac_j - cfrac_i) / fmaxf(cfrac_j, cfrac_i));
-								flops += 3;
+				if (!star_i) {
+					for (int j = tid; j < ws.neighbors.size(); j += block_size) {
+						const int kk = ws.neighbors[j];
+						const auto& rec1 = ws.rec1[kk];
+						const auto& rec2 = ws.rec2[kk];
+						const auto& star_j = rec2.star;
+						if (!star_j) {
+							const float& h_j = rec1.h;
+							const fixed32& x_j = rec1.x;
+							const fixed32& y_j = rec1.y;
+							const fixed32& z_j = rec1.z;
+							const float& cfrac_j = rec2.cold_frac;
+							const float& shearv_j = rec2.shearv;
+							const auto& frac_j = rec2.chem;
+							const float& vx_j = rec2.vx;
+							const float& vy_j = rec2.vy;
+							const float& vz_j = rec2.vz;
+							const float& omega_j = rec2.omega;
+							const float& A_j = rec2.entr;
+							const float& alpha_j = fmaxf(rec2.alpha, params.alpha0);
+							const float& rho_j = rec2.rho;												// 2
+							const float hfrac_j = 1.f - cfrac_j;
+							const float hinv_j = 1.f / h_j;															// 4
+							const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3
+							const float x_ij = distance(x_i, x_j);													// 1
+							const float y_ij = distance(y_i, y_j);													// 1
+							const float z_ij = distance(z_i, z_j);													// 1
+							const float r2 = sqr(x_ij, y_ij, z_ij);												// 5
+							const float r = sqrtf(r2);																   // 4
+							const float q_i = r * hinv_i;																// 1
+							const float q_j = r * hinv_j;																// 1
+							const float pre_j = A_j * powf(rho_j * hfrac_j, gamma0);
+							const float c_j = sqrtf(gamma0 * pre_j / (rho_j * hfrac_j)); //23
+							const float vx_ij = vx_i - vx_j + x_ij * adot;									// 3
+							const float vy_ij = vy_i - vy_j + y_ij * adot;									// 3
+							const float vz_ij = vz_i - vz_j + z_ij * adot;									// 3
+							const float rinv = 1.0f / (r > 0.f ? r : 1e37f);								// 5
+							const float vdotx_ij = fmaf(x_ij, vx_ij, fmaf(y_ij, vy_ij, z_ij * vz_ij));								// 5
+							const float h_ij = 0.5f * (h_i + h_j);												// 2
+							const float w_ij = fminf(vdotx_ij * rinv, 0.f);									// 2
+							const float mu_ij = w_ij * h_ij / sqrtf(r2 + ETA * h_ij);			// 12
+							const float rho_ij = 0.5f * (rho_i + rho_j);										// 2
+							const float c_ij = 0.5f * (c_i + c_j);												// 2
+							const float hfrac_ij = 2.0f * hfrac_i * hfrac_j / (hfrac_i + hfrac_j + 1e-36f);
+							const float alpha_ij = 0.5f * (alpha_i + alpha_j);								// 2
+							const float vsig_ij = alpha_ij * (c_ij - params.beta * mu_ij); // 4
+							const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i / omega_i;   // 2
+							const float dWdr_j = dkernelW_dq(q_j) * hinv_j * h3inv_j / omega_j;   // 2
+							//				ALWAYS_ASSERT(omega_i > 0.f);
+							if (omega_j <= 0.0) {
+								PRINT("%i %e %e %e\n", data.selfs[index], omega_j, q_i, q_j);
 							}
-							if (data.chemistry) {
-								for (int fi = 0; fi < NCHEMFRACS; fi++) {
-									ALWAYS_ASSERT(frac_j[fi] >= 0.f);
-									dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi]);										// 5
-									dif_max = fmaxf(dif_max, fabs(frac_i[fi] - frac_j[fi]) / fmaxf(frac_i[fi], frac_j[fi]));
-									flops += 5;
+//					ALWAYS_ASSERT(omega_j > 0.f);
+							const float dWdr_ij = 0.5f * (dWdr_i + dWdr_j);     // 4
+							const float dWdr_i_rinv = dWdr_i * rinv;						// 2
+							const float dWdr_j_rinv = dWdr_j * rinv;						// 2
+							const float dWdr_ij_rinv = dWdr_ij * rinv;										// 1
+							const float dWdr_x_ij = x_ij * dWdr_ij_rinv;										// 1
+							const float dWdr_y_ij = y_ij * dWdr_ij_rinv;										// 1
+							const float dWdr_z_ij = z_ij * dWdr_ij_rinv;										// 1
+							const float dWdr_x_i = dWdr_i_rinv * x_ij;								// 1
+							const float dWdr_y_i = dWdr_i_rinv * y_ij;								// 1
+							const float dWdr_z_i = dWdr_i_rinv * z_ij;								// 1
+							const float dWdr_x_j = dWdr_j_rinv * x_ij;								// 1
+							const float dWdr_y_j = dWdr_j_rinv * y_ij;								// 1
+							const float dWdr_z_j = dWdr_j_rinv * z_ij;								// 1
+							const float mainv = m * ainv;															// 1
+							const float dp_i = mainv * pre_i / sqr(rho_i);
+							const float dp_j = mainv * pre_j / sqr(rho_j);
+							const float pi_ij = -mainv * w_ij * h_ij * rinv * vsig_ij / rho_ij;     // 9
+							ax -= dp_i * dWdr_x_i + dp_j * dWdr_x_j;											// 4
+							ay -= dp_i * dWdr_y_i + dp_j * dWdr_y_j;											// 4
+							az -= dp_i * dWdr_z_i + dp_j * dWdr_z_j;											// 4
+							ax -= pi_ij * dWdr_x_ij;																// 2
+							ay -= pi_ij * dWdr_y_ij;																// 2
+							az -= pi_ij * dWdr_z_ij;																// 2
+							const float vdW_ij = fmaf(vx_ij, dWdr_x_ij, fmaf(vy_ij, dWdr_y_ij, vz_ij * dWdr_z_ij));																// 5
+							de_dt2 = fmaf(de_dt0, 0.5f * pi_ij * vdW_ij, de_dt2);                     // 4
+							dvx_dx -= m * rhoinv_i * vx_ij * dWdr_x_i;									// 2
+							dvy_dy -= m * rhoinv_i * vy_ij * dWdr_y_i;									// 2
+							dvz_dz -= m * rhoinv_i * vz_ij * dWdr_z_i;									// 2
+							if (params.phase == 0) {
+								dvy_dx -= m * rhoinv_i * vy_ij * dWdr_x_i;									// 2
+								dvz_dx -= m * rhoinv_i * vz_ij * dWdr_x_i;									// 2
+								dvx_dy -= m * rhoinv_i * vx_ij * dWdr_y_i;									// 2
+								dvz_dy -= m * rhoinv_i * vz_ij * dWdr_y_i;									// 2
+								dvx_dz -= m * rhoinv_i * vx_ij * dWdr_z_i;									// 2
+								dvy_dz -= m * rhoinv_i * vy_ij * dWdr_z_i;									// 2
+								vsig = fmaxf(vsig, -w_ij);												// 1
+							} else if (params.phase == 1) {
+								const float h = fminf(h_i, h_j * (1 << MAX_RUNG_DIF));                  // 3
+								dtinv_cfl = fmaxf(dtinv_cfl, c_ij / h);												// 1
+								dtinv_visc = fmaxf(dtinv_visc, 0.6f * vsig_ij / h);
+								if (params.diffusion) {
+									flops += 29;
+									float dif_max = 0.f;
+									const float difco_j = SPH_DIFFUSION_C * sqr(h_j) * shearv_j;			// 3
+									const float difco_ij = 0.5f * (difco_i + difco_j);							// 2
+									const float D_ij = -2.f * m / rho_ij * difco_ij * dWdr_ij * rinv;		// 7
+									ALWAYS_ASSERT(D_ij >= 0.f);
+									const float A0_j = A_j * powf(rho_j * rhoinv_i / hfrac_i * hfrac_j, gamma0 - 1.f);
+									dif_max = fabs(A0_j - A_i) / fmaxf(A0_j, A_i);
+									de_dt1 -= D_ij * (A_i - A0_j); // 16;
+									if (params.stars) {
+										dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
+										dif_max = fmaxf(dif_max, fabs(cfrac_j - cfrac_i) / fmaxf(cfrac_j, cfrac_i));
+										flops += 3;
+									}
+									if (data.chemistry) {
+										for (int fi = 0; fi < NCHEMFRACS; fi++) {
+											ALWAYS_ASSERT(frac_j[fi] >= 0.f);
+											dfrac_dt[fi] -= D_ij * (frac_i[fi] - frac_j[fi]);										// 5
+											dif_max = fmaxf(dif_max, fabs(frac_i[fi] - frac_j[fi]) / fmaxf(frac_i[fi], frac_j[fi]));
+											flops += 5;
+										}
+									}
+									Dd += D_ij * dif_max;																				// 1
 								}
 							}
-							Dd += D_ij * dif_max;																				// 1
 						}
 					}
 				}

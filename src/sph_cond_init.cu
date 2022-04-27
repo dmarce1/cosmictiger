@@ -28,6 +28,8 @@ struct cond_init_record1 {
 struct cond_init_record2 {
 	float entr;
 	float cfrac;
+	float rho;
+	char star;
 };
 
 struct cond_init_workspace {
@@ -114,16 +116,18 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].z = x[ZDIM];
 					ws.rec1[k].h = h;
 					ws.rec2[k].entr = data.entr[pi];
+					ws.rec2[k].rho = data.rho[pi];
 					if (params.stars) {
 						ws.rec2[k].cfrac = data.cold_frac[pi];
+						ws.rec2[k].star = data.stars[pi];
 					} else {
 						ws.rec2[k].cfrac = 0.f;
+						ws.rec2[k].star = false;
 					}
 				}
 			}
 		}
 		const float& m = data.m;
-		const float c0 = float(3.0f / (4.0f * M_PI)) * data.N;					// 1
 		flops++;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
@@ -132,20 +136,22 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 			const bool semiactive = !active && data.sa_snk[snki];
 			flops += 2;
 			if (semiactive || active) {
+				float cfrac_i = 0.f;
+				bool star_i = false;
+				if (params.stars) {
+					cfrac_i = data.cold_frac[i];
+					star_i = data.stars[i];
+				}
+				const float& rho_i = data.rho[i];											// 2
 				const float& h_i = data.h[i];
 				const float& A_i = data.entr[i];
-				float cfrac_i = 0.f;
-				if( params.stars ) {
-					cfrac_i = data.cold_frac[i];
-				}
-				const float hfrac_i = 1.f - cfrac_i;
 				const auto& x_i = data.x[i];
 				const auto& y_i = data.y[i];
 				const auto& z_i = data.z[i];
+				const float hfrac_i = 1.f - cfrac_i;
 				const float hinv_i = 1.f / h_i;
 				const float h2_i = sqr(h_i);
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);								// 2
-				const float rho_i = m * c0 * h3inv_i;											// 2
 				const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);		// 11
 				float gradx = 0.0f;
 				float grady = 0.0f;
@@ -185,75 +191,80 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					}
 				}
 				__syncthreads();
-				for (int j = tid; j < ws.neighbors.size(); j += COND_INIT_BLOCK_SIZE) {
-					const int kk = ws.neighbors[j];
-					const auto& rec1 = ws.rec1[kk];
-					const auto& rec2 = ws.rec2[kk];
-					const float A_j = rec2.entr;
-					const float cfrac_j = rec2.cfrac;
-					const float hfrac_j = 1.f - cfrac_j;
-					const fixed32 x_j = rec1.x;
-					const fixed32 y_j = rec1.y;
-					const fixed32 z_j = rec1.z;
-					const float x_ij = distance(x_i, x_j);				// 1
-					const float y_ij = distance(y_i, y_j);				// 1
-					const float z_ij = distance(z_i, z_j);				// 1
-					const float r2 = sqr(x_ij, y_ij, z_ij);			// 5
-					flops += 10;
-					if (r2 < h2_i && r2 != 0.0f) {						// 2
-						const float h_j = rec1.h;
-						const float r = sqrtf(r2);							// 4
-						const float rinv = 1.f / r;						// 4
-						const float q = r * hinv_i;						// 1
-						const float hinv_j = 1.f / h_j;					// 4
-						const float h3inv_j = sqr(hinv_j) * hinv_j;	// 2
-						const float rho_j = m * c0 * h3inv_j;			// 2
-						const float ene_j = A_j * powf(rho_j * hfrac_j, gamma0 - 1.0f); // 11
-						const float dwdq = dkernelW_dq(q);
-						const float dWdr_i = dwdq * h3inv_i * hinv_i / omega_i; // 3
-						const float tmp = dWdr_i * rinv * (ene_j - ene_i); // 14
-						gradx = fmaf(tmp, x_ij, gradx);					// 2
-						grady = fmaf(tmp, y_ij, grady);					// 2
-						gradz = fmaf(tmp, z_ij, gradz);					// 2
-						flops += 49;
+				if (!star_i) {
+					for (int j = tid; j < ws.neighbors.size(); j += COND_INIT_BLOCK_SIZE) {
+						const int kk = ws.neighbors[j];
+						const auto& rec1 = ws.rec1[kk];
+						const auto& rec2 = ws.rec2[kk];
+						const auto& star_j = rec2.star;
+						if (!star_j) {
+							const float& rho_j = rec2.rho;			// 2
+							const float& A_j = rec2.entr;
+							const float& cfrac_j = rec2.cfrac;
+							const float hfrac_j = 1.f - cfrac_j;
+							const fixed32 x_j = rec1.x;
+							const fixed32 y_j = rec1.y;
+							const fixed32 z_j = rec1.z;
+							const float x_ij = distance(x_i, x_j);				// 1
+							const float y_ij = distance(y_i, y_j);				// 1
+							const float z_ij = distance(z_i, z_j);				// 1
+							const float r2 = sqr(x_ij, y_ij, z_ij);			// 5
+							flops += 10;
+							if (r2 < h2_i && r2 != 0.0f) {						// 2
+								const float h_j = rec1.h;
+								const float r = sqrtf(r2);							// 4
+								const float rinv = 1.f / r;						// 4
+								const float q = r * hinv_i;						// 1
+								const float hinv_j = 1.f / h_j;					// 4
+								const float h3inv_j = sqr(hinv_j) * hinv_j;	// 2
+								const float ene_j = A_j * powf(rho_j * hfrac_j, gamma0 - 1.0f); // 11
+								const float dwdq = dkernelW_dq(q);
+								const float dWdr_i = dwdq * h3inv_i * hinv_i / omega_i; // 3
+								const float tmp = dWdr_i * rinv * (ene_j - ene_i); // 14
+								gradx = fmaf(tmp, x_ij, gradx);					// 2
+								grady = fmaf(tmp, y_ij, grady);					// 2
+								gradz = fmaf(tmp, z_ij, gradz);					// 2
+								flops += 49;
+							}
+						}
 					}
-				}
-				const float tmp = m / (params.a * rho_i * ene_i);		// 5
-				gradx *= tmp;												// 1
-				grady *= tmp;												// 1
-				gradz *= tmp;												// 1
-				flops += 8;
-				shared_reduce_add<float, COND_INIT_BLOCK_SIZE>(gradx); //31
-				shared_reduce_add<float, COND_INIT_BLOCK_SIZE>(grady); //31
-				shared_reduce_add<float, COND_INIT_BLOCK_SIZE>(gradz); //31
-				if (tid == 0) {
-					flops += 93;
-					const auto& frac_i = data.rec1_snk[snki].frac;
-					const float& A_i = data.rec2_snk[snki].A;
-					const float& H = frac_i[CHEM_H];
-					const float& Hp = frac_i[CHEM_HP];
-					const float& Hn = frac_i[CHEM_HN];
-					const float& H2 = frac_i[CHEM_H2];
-					const float& He = frac_i[CHEM_HE];
-					const float& Hep = frac_i[CHEM_HEP];
-					const float& Hepp = frac_i[CHEM_HEPP];
-					const float grad2 = sqr(gradx, grady, gradz);	// 5
-					const float gradToT = sqrtf(grad2);					// 4
-					const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a); // 7
-					float n0 = (H + fmaf(2.f, Hp, fmaf(.5f, H2, fmaf(.25f, He, fmaf(.5f, Hep, .75f * Hepp))))); // 10
-					const float mmw_i = 1.0f / n0;						// 4
-					const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density), 1e-30f);						// 8
-					const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) * invgm1; // 13
-					const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
-					const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
-					float kappa_i = mmw_i * (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
-					const float sigmax_i = propc0 * sqrtf(T_i);      // 5
-					const float R = 2.f * mmw_i * kappa_i * gradToT / (rho_i * sigmax_i); // 7
-					const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R)); // 11
-					kappa_i *= phi;											 // 1
-					ALWAYS_ASSERT(isfinite(kappa_i));
-					data.kap_snk[snki] = kappa_i;
-					data.entr0_snk[snki] = A_i;
+					const float tmp = m / (params.a * rho_i * ene_i);		// 5
+					gradx *= tmp;												// 1
+					grady *= tmp;												// 1
+					gradz *= tmp;												// 1
+					flops += 8;
+					shared_reduce_add<float, COND_INIT_BLOCK_SIZE>(gradx); //31
+					shared_reduce_add<float, COND_INIT_BLOCK_SIZE>(grady); //31
+					shared_reduce_add<float, COND_INIT_BLOCK_SIZE>(gradz); //31
+					if (tid == 0) {
+						flops += 93;
+						const auto& frac_i = data.rec1_snk[snki].frac;
+						const float& A_i = data.rec2_snk[snki].A;
+						const float& H = frac_i[CHEM_H];
+						const float& Hp = frac_i[CHEM_HP];
+						const float& Hn = frac_i[CHEM_HN];
+						const float& H2 = frac_i[CHEM_H2];
+						const float& He = frac_i[CHEM_HE];
+						const float& Hep = frac_i[CHEM_HEP];
+						const float& Hepp = frac_i[CHEM_HEPP];
+						const float grad2 = sqr(gradx, grady, gradz);	// 5
+						const float gradToT = sqrtf(grad2);					// 4
+						const float rho0 = rho_i * hfrac_i / (sqr(params.a) * params.a); // 7
+						float n0 = (H + fmaf(2.f, Hp, fmaf(.5f, H2, fmaf(.25f, He, fmaf(.5f, Hep, .75f * Hepp))))); // 10
+						const float mmw_i = 1.0f / n0;						// 4
+						const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density), 1e-30f);						// 8
+						const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) * invgm1; // 13
+						const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
+						const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
+						float kappa_i = mmw_i * (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
+						const float sigmax_i = propc0 * sqrtf(T_i);      // 5
+						const float R = 2.f * mmw_i * kappa_i * gradToT / (rho_i * sigmax_i); // 7
+						const float phi = (2.f + 3.f * R) / (2.f + 3.f * R + 3.f * sqr(R)); // 11
+						kappa_i *= phi;											 // 1
+						ALWAYS_ASSERT(isfinite(kappa_i));
+						data.kap_snk[snki] = kappa_i;
+						data.entr0_snk[snki] = A_i;
+					}
 				}
 			}
 

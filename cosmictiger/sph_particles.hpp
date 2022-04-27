@@ -143,8 +143,10 @@ SPH_PARTICLES_EXTERN float* sph_particles_de2;
 SPH_PARTICLES_EXTERN float* sph_particles_fp1;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
 SPH_PARTICLES_EXTERN float* sph_particles_fc;
+SPH_PARTICLES_EXTERN float* sph_particles_rh;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
+SPH_PARTICLES_EXTERN char* sph_particles_st;
 
 struct aux_quantities {
 	float omega;
@@ -174,11 +176,12 @@ void sph_particles_swap(part_int i, part_int j);
 void sph_particles_swap2(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_fcold(particle_global_range range, float*, part_int offset);
+void sph_particles_global_read_fcold(particle_global_range range, float*, char*, part_int offset);
 void sph_particles_global_read_entr_and_smoothlen(particle_global_range range, float*, float*, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
+void sph_particles_global_read_rho(particle_global_range range, float*, part_int offset);
 void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv, array<float, NCHEMFRACS>* fracs,
 		part_int offset);
 void sph_particles_reset_converged();
@@ -199,6 +202,10 @@ std::pair<double, double> sph_particles_apply_updates(int, int, float, float, fl
 
 inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
+}
+
+inline char& sph_particles_isstar(part_int index) {
+	return sph_particles_st[index];
 }
 
 inline char& sph_particles_converged(part_int index) {
@@ -403,12 +410,8 @@ inline float& sph_particles_smooth_len(part_int index) {
 	return sph_particles_r2[index].h;
 }
 
-inline float sph_particles_rho(part_int index) {
-	const float h = sph_particles_smooth_len(index);
-	static const float mass = get_options().sph_mass;
-	static const float N = get_options().sneighbor_number;
-	static const float c0 = N * mass * 3.0 / (4.0 * M_PI);
-	return c0 / (h * sqr(h));
+inline float& sph_particles_rho(part_int index) {
+	return sph_particles_rh[index];
 }
 
 inline float sph_particles_eint(part_int index) {
