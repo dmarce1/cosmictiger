@@ -279,7 +279,7 @@ int particles_apply_updates(int minrung, float t0, float a) {
 						PRINT( "DIVV LIMITED %i %i\n", rung, new_rung);
 					}
 					rung = new_rung;
-					max_rung = std::max(max_rung, rung);
+					max_rung = std::max(max_rung, (int) rung);
 					dt = 0.5f * rung_dt[rung] * t0;
 					vx += dt * gx;
 					vy += dt * gy;

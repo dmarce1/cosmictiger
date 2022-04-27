@@ -43,9 +43,13 @@ struct all_tree_data {
 	char* converged_snk;
 	float* zeta_snk;
 	float* divv_snk;
+	float* sph_divv_snk;
 	float* gx_snk;
 	float* gy_snk;
 	float* gz_snk;
+	float* sph_omega_snk;
+	float* sph_h_snk;
+	char* types;
 	part_int* cat_snk;
 	char* type_snk;
 	int minrung;
@@ -56,6 +60,9 @@ struct all_tree_data {
 	float* vy;
 	float* vz;
 	float* h;
+	float dm_mass;
+	float sph_mass;
+	bool sph;
 	int* selfs;
 	tree_node* trees;
 	int* neighbors;

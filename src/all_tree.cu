@@ -31,6 +31,7 @@ struct softlens_record {
 	fixed32 x;
 	fixed32 y;
 	fixed32 z;
+	char type;
 };
 
 struct softlens_workspace {
@@ -89,6 +90,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 					ws.rec[k].x = x[XDIM];
 					ws.rec[k].y = x[YDIM];
 					ws.rec[k].z = x[ZDIM];
+					ws.rec[k].type = params.types[pi];
 				}
 			}
 		}
@@ -107,6 +109,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 				x[XDIM] = params.x[i];
 				x[YDIM] = params.y[i];
 				x[ZDIM] = params.z[i];
+				const auto type_i = params.types[i];
 				int box_xceeded = false;
 				int iter = 0;
 				float& h = params.softlen_snk[snki];
@@ -122,22 +125,24 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 					float rhoh30 = (3.0f * params.N) / (4.0f * float(M_PI));   // 4
 					flops += 9;
 					for (int j = tid; j < ws.rec.size(); j += block_size) {
-						const float dx = distance(x[XDIM], ws.rec[j].x);        // 1
-						const float dy = distance(x[YDIM], ws.rec[j].y);        // 1
-						const float dz = distance(x[ZDIM], ws.rec[j].z);        // 1
-						const float r2 = sqr(dx, dy, dz);                     // 5
-						const float r = sqrtf(r2);                            // 4
-						const float q = r * hinv;                             // 1
-						flops += 13;
-						if (q < 1.f) {                                        // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
-							const float dwdh = -q * dwdq * hinv; 					// 3
-							drho_dh -= dwdq;												// 1
-							rhoh3 += w;														// 1
-							flops += 5;
+						const auto type_j = ws.rec[j].type;
+						if (type_i == type_j) {
+							const float dx = distance(x[XDIM], ws.rec[j].x);        // 1
+							const float dy = distance(x[YDIM], ws.rec[j].y);        // 1
+							const float dz = distance(x[ZDIM], ws.rec[j].z);        // 1
+							const float r2 = sqr(dx, dy, dz);                     // 5
+							const float r = sqrtf(r2);                            // 4
+							const float q = r * hinv;                             // 1
+							flops += 13;
+							if (q < 1.f) {                                        // 1
+								const float w = kernelW(q);
+								const float dwdq = dkernelW_dq(q);
+								const float dwdh = -q * dwdq * hinv; 					// 3
+								drho_dh -= dwdq;												// 1
+								rhoh3 += w;														// 1
+								flops += 5;
+							}
 						}
-
 					}
 					shared_reduce_add<float, SOFTLENS_BLOCK_SIZE>(drho_dh);	 // 127
 					shared_reduce_add<float, SOFTLENS_BLOCK_SIZE>(rhoh3);	 // 127
@@ -204,6 +209,9 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 						atomicAdd(&reduce->flag, 1);
 					}
 				} else {
+					if (tid == 0 && type_i == SPH_TYPE) {
+						params.sph_h_snk[params.cat_snk[snki]] = h;
+					}
 					hmin = fminf(hmin, h);
 					hmax = fmaxf(hmax, h);
 				}
@@ -227,6 +235,7 @@ struct derivatives_record1 {
 	fixed32 y;
 	fixed32 z;
 	float h;
+	char type;
 };
 
 struct derivatives_workspace {
@@ -292,6 +301,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
 					ws.rec1[k].h = params.h[pi];
+					ws.rec1[k].type = params.types[pi];
 				}
 			}
 		}
@@ -310,6 +320,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 			x[XDIM] = params.x[i];
 			x[YDIM] = params.y[i];
 			x[ZDIM] = params.z[i];
+			const auto& type_i = params.types[i];
 			const fixed32& x_i = x[XDIM];
 			const fixed32& y_i = x[YDIM];
 			const fixed32& z_i = x[ZDIM];
@@ -325,17 +336,20 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
 						const auto& rec1 = ws.rec1[j];
-						const auto& x_j = rec1.x;
-						const auto& y_j = rec1.y;
-						const auto& z_j = rec1.z;
-						const auto& h_j = rec1.h;
-						const auto h2_j = sqr(h_j);									// 1
-						const float x_ij = distance(x_i, x_j);						// 1
-						const float y_ij = distance(y_i, y_j);						// 1
-						const float z_ij = distance(z_i, z_j);						// 1
-						const float r2 = sqr(x_ij, y_ij, z_ij);					// 5
-						if (r2 < fmaxf(h2_i, h2_j)) {									// 2
-							semiactive++;
+						const auto& type_j = rec1.type;
+						if (type_i == type_j) {
+							const auto& x_j = rec1.x;
+							const auto& y_j = rec1.y;
+							const auto& z_j = rec1.z;
+							const auto& h_j = rec1.h;
+							const auto h2_j = sqr(h_j);									// 1
+							const float x_ij = distance(x_i, x_j);						// 1
+							const float y_ij = distance(y_i, y_j);						// 1
+							const float z_ij = distance(z_i, z_j);						// 1
+							const float r2 = sqr(x_ij, y_ij, z_ij);					// 5
+							if (r2 < fmaxf(h2_i, h2_j)) {									// 2
+								semiactive++;
+							}
 						}
 						flops += 11;
 					}
@@ -362,22 +376,24 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 					float rhoh30 = (3.0f * params.N) / (4.0f * float(M_PI));   // 4
 					flops += 9;
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
-						const float dx = distance(x[XDIM], ws.rec1[j].x);        // 1
-						const float dy = distance(x[YDIM], ws.rec1[j].y);        // 1
-						const float dz = distance(x[ZDIM], ws.rec1[j].z);        // 1
-						const float r2 = sqr(dx, dy, dz);                     // 5
-						const float r = sqrtf(r2);                            // 4
-						const float q = r * hinv;                             // 1
-						flops += 13;
-						if (q < 1.f) {                                        // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
-							const float dwdh = -q * dwdq * hinv; 					// 3
-							drho_dh -= dwdq;												// 1
-							rhoh3 += w;														// 1
-							flops += 5;
+						const auto& type_j = ws.rec1[j].type;
+						if (type_i == type_j) {
+							const float dx = distance(x[XDIM], ws.rec1[j].x);        // 1
+							const float dy = distance(x[YDIM], ws.rec1[j].y);        // 1
+							const float dz = distance(x[ZDIM], ws.rec1[j].z);        // 1
+							const float r2 = sqr(dx, dy, dz);                     // 5
+							const float r = sqrtf(r2);                            // 4
+							const float q = r * hinv;                             // 1
+							flops += 13;
+							if (q < 1.f) {                                        // 1
+								const float w = kernelW(q);
+								const float dwdq = dkernelW_dq(q);
+								const float dwdh = -q * dwdq * hinv; 					// 3
+								drho_dh -= dwdq;												// 1
+								rhoh3 += w;														// 1
+								flops += 5;
+							}
 						}
-
 					}
 					shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);	 // 127
 					shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(rhoh3);	 // 127
@@ -443,13 +459,18 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 					}
+				} else {
+					if (tid == 0 && type_i == SPH_TYPE) {
+						params.sph_h_snk[params.cat_snk[snki]] = h;
+					}
+					hmin = fminf(hmin, h);
+					hmax = fmaxf(hmax, h);
 				}
-				hmin = fminf(hmin, h);
-				hmax = fmaxf(hmax, h);
 			}
 			if (active || (semiactive && !box_xceeded)) {
 				__syncthreads();
 				const int snki = self.sink_part_range.first - self.part_range.first + i;
+				const float m_i = params.sph ? (type_i == DARK_MATTER_TYPE ? params.dm_mass : params.sph_mass) : 1.f;
 				const float& h_i = params.softlen_snk[snki];
 				const fixed32& x_i = x[XDIM];
 				const fixed32& y_i = x[YDIM];
@@ -465,6 +486,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
 						const auto& rec1 = ws.rec1[j];
+						const auto& type_j = rec1.type;
 						const fixed32& x_j = rec1.x;
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
@@ -476,12 +498,15 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i;                    // 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
+							if (type_i == type_j) {
+								const float w = kernelW(q);
+								const float dwdq = dkernelW_dq(q);
+								drho_dh -= q * dwdq;                      // 2
+							}
+							const float m_j = params.sph ? (type_j == DARK_MATTER_TYPE ? params.dm_mass : params.sph_mass) : 1.f;
 							const float pot = -kernelPot(q);
 							const float force = kernelFqinv(q) * q;
-							dpot_dh += (pot + q * force);
-							drho_dh -= q * dwdq;                      // 2
+							dpot_dh += m_j * (pot + q * force) / m_i;
 							flops += 2;
 						}
 						flops += 9;
@@ -490,10 +515,15 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(drho_dh);
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
 				flops += (DERIVATIVES_BLOCK_SIZE - 1);
+				const float rhoh30 = (3.0f * params.N) / (4.0f * float(M_PI));
 				const float zeta_i = dpot_dh / drho_dh;
+				const float omega_i = drho_dh / (3.f * rhoh30);
 				__syncthreads();
 				if (tid == 0) {
 					params.zeta_snk[snki] = zeta_i;
+					if (type_i == SPH_TYPE) {
+						params.sph_omega_snk[params.cat_snk[snki]];
+					}
 				}
 			}
 		}
@@ -514,6 +544,7 @@ struct divv_record1 {
 	fixed32 x;
 	fixed32 y;
 	fixed32 z;
+	char type;
 };
 
 struct divv_record2 {
@@ -571,6 +602,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].type = params.types[pi];
 					ws.rec2[k].vx = params.vx[pi];
 					ws.rec2[k].vy = params.vy[pi];
 					ws.rec2[k].vz = params.vz[pi];
@@ -594,6 +626,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 				const fixed32& x_i = x[XDIM];
 				const fixed32& y_i = x[YDIM];
 				const fixed32& z_i = x[ZDIM];
+				const auto& type_i = params.types[i];
 				const float& vx_i = params.vx[i];
 				const float& vy_i = params.vy[i];
 				const float& vz_i = params.vz[i];
@@ -609,6 +642,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 						const fixed32& x_j = rec1.x;
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
+						const auto& type_j = rec1.type;
 						const float& vx_j = rec2.vx;
 						const float& vy_j = rec2.vy;
 						const float& vz_j = rec2.vz;
@@ -622,7 +656,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 						const float r = sqrtf(r2);                    // 4
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i;                    // 1
-						if (q < 1.f) {                               // 1
+						if (q < 1.f && (type_i == type_j)) {                               // 1
 							const float w = kernelW(q);
 							const float dwdq = dkernelW_dq(q);
 							drho_dh -= q * dwdq;                      // 2
@@ -641,6 +675,9 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 				__syncthreads();
 				if (tid == 0) {
 					params.divv_snk[snki] = divv;
+					if (type_i == SPH_TYPE) {
+						params.sph_divv_snk[params.cat_snk[snki]] = divv;
+					}
 				}
 			}
 		}
@@ -721,6 +758,9 @@ softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t str
 	reduce->hmin = std::numeric_limits<float>::max();
 	reduce->hmax = 0.0f;
 	reduce->flops = 0.0;
+	params.dm_mass = get_options().dm_mass;
+	params.sph_mass = get_options().sph_mass;
+	params.sph = get_options().sph;
 	static int derivatives_nblocks;
 	static bool first = true;
 	timer tm;

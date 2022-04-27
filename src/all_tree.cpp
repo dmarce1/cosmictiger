@@ -20,6 +20,7 @@
  */
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/all_tree.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/timer.hpp>
 
 softlens_return all_tree_softlens_execute(int minrung);
@@ -65,7 +66,7 @@ softlens_return all_tree_softlens(int minrung, float a) {
 	softlens_return rc;
 	timer tm;
 	particles_reset_converged();
-	double softlen_buffer = 1.1;
+	double softlen_buffer = 1.201;
 	do {
 		tm.reset();
 		tm.start();
@@ -80,9 +81,8 @@ softlens_return all_tree_softlens(int minrung, float a) {
 		rc = all_tree_softlens_execute(minrung);
 		tm.stop();
 		PRINT("softlens %e %e %e\n", rc.hmin, rc.hmax, tm.read());
-		softlen_buffer *= 1.1;
 	} while (rc.fail);
-	softlen_buffer = 1.1;
+	softlen_buffer = 1.201;
 	particles_reset_converged();
 	do {
 		tm.reset();
@@ -98,7 +98,6 @@ softlens_return all_tree_softlens(int minrung, float a) {
 		rc = all_tree_derivatives_execute(minrung, a);
 		tm.stop();
 		PRINT("derivs %e %e %e\n", rc.hmin, rc.hmax, tm.read());
-		softlen_buffer *= 1.1;
 	} while (rc.fail);
 	return rc;
 }
@@ -119,6 +118,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	vector<fixed32, pinned_allocator<fixed32>> host_x;
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
+	vector<char, pinned_allocator<char>> host_types;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
 	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
@@ -181,6 +181,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	host_x.resize(parts_size);
 	host_y.resize(parts_size);
 	host_z.resize(parts_size);
+	host_types.resize(parts_size);
 	vector<hpx::future<void>> futs;
 	std::atomic<int> index(0);
 	std::atomic<part_int> part_index(0);
@@ -188,13 +189,13 @@ softlens_return all_tree_softlens_execute(int minrung) {
 		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_trees]() {
+		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_types, &host_trees]() {
 			int this_index = index++;
 			while( this_index < host_trees.size()) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
 				this_index = index++;
@@ -213,6 +214,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	CUDA_CHECK(cudaMalloc(&params.x, sizeof(fixed32) * host_x.size()));
 	CUDA_CHECK(cudaMalloc(&params.y, sizeof(fixed32) * host_y.size()));
 	CUDA_CHECK(cudaMalloc(&params.z, sizeof(fixed32) * host_z.size()));
+	CUDA_CHECK(cudaMalloc(&params.types, sizeof(char) * host_types.size()));
 	CUDA_CHECK(cudaMalloc(&params.trees, sizeof(tree_node) * host_trees.size()));
 	CUDA_CHECK(cudaMalloc(&params.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
@@ -220,6 +222,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	CUDA_CHECK(cudaMemcpyAsync(params.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(params.types, host_types.data(), sizeof(char) * host_types.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
@@ -229,6 +232,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	CUDA_CHECK(cudaFree(params.x));
 	CUDA_CHECK(cudaFree(params.y));
 	CUDA_CHECK(cudaFree(params.z));
+	CUDA_CHECK(cudaFree(params.types));
 	CUDA_CHECK(cudaFree(params.trees));
 	CUDA_CHECK(cudaFree(params.selfs));
 	CUDA_CHECK(cudaFree(params.neighbors));
@@ -246,6 +250,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	vector<fixed32, pinned_allocator<fixed32>> host_y;
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<float, pinned_allocator<float>> host_h;
+	vector<char, pinned_allocator<char>> host_types;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
 	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
@@ -257,7 +262,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	int nthreads = KICK_OVERSUBSCRIPTION * hpx_hardware_concurrency();
 	vector<hpx::future<void>> futs2;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,minrung,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
+		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,minrung,&host_trees,&host_types, &host_neighbors,&host_selflist,&neighbor_ranges]() {
 			int i = next++;
 			while( i < tree_leaflist_size()) {
 				const auto selfid = tree_get_leaf(i);
@@ -309,6 +314,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	host_x.resize(parts_size);
 	host_y.resize(parts_size);
 	host_z.resize(parts_size);
+	host_types.resize(parts_size);
 	host_h.resize(parts_size);
 	vector<hpx::future<void>> futs;
 	std::atomic<int> index(0);
@@ -317,13 +323,13 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_trees, &host_h]() {
+		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z,&host_types, &host_trees, &host_h]() {
 			int this_index = index++;
 			while( this_index < host_trees.size()) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				particles_global_read_softlens(node.global_part_range(), host_h.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
@@ -343,6 +349,9 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	params.type_snk = &particles_type(0);
 	params.nselfs = host_selflist.size();
 	params.sa_snk = &particles_semiactive(0);
+	params.sph_omega_snk = &sph_particles_omega(0);
+	params.sph_h_snk = &sph_particles_smooth_len(0);
+	params.sph_divv_snk = &sph_particles_divv(0);
 	params.a = a;
 
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
@@ -350,6 +359,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	CUDA_CHECK(cudaMalloc(&params.y, sizeof(fixed32) * host_y.size()));
 	CUDA_CHECK(cudaMalloc(&params.z, sizeof(fixed32) * host_z.size()));
 	CUDA_CHECK(cudaMalloc(&params.h, sizeof(float) * host_h.size()));
+	CUDA_CHECK(cudaMalloc(&params.types, sizeof(char) * host_types.size()));
 	CUDA_CHECK(cudaMalloc(&params.trees, sizeof(tree_node) * host_trees.size()));
 	CUDA_CHECK(cudaMalloc(&params.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
@@ -358,6 +368,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	CUDA_CHECK(cudaMemcpyAsync(params.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(params.types, host_types.data(), sizeof(char) * host_types.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
@@ -368,6 +379,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	CUDA_CHECK(cudaFree(params.x));
 	CUDA_CHECK(cudaFree(params.y));
 	CUDA_CHECK(cudaFree(params.z));
+	CUDA_CHECK(cudaFree(params.types));
 	CUDA_CHECK(cudaFree(params.trees));
 	CUDA_CHECK(cudaFree(params.selfs));
 	CUDA_CHECK(cudaFree(params.neighbors));
@@ -387,6 +399,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 	vector<float, pinned_allocator<float>> host_vx;
 	vector<float, pinned_allocator<float>> host_vy;
 	vector<float, pinned_allocator<float>> host_vz;
+	vector<char, pinned_allocator<char>> host_types;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
 	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
@@ -450,6 +463,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 	host_x.resize(parts_size);
 	host_y.resize(parts_size);
 	host_z.resize(parts_size);
+	host_types.resize(parts_size);
 	host_vx.resize(parts_size);
 	host_vy.resize(parts_size);
 	host_vz.resize(parts_size);
@@ -460,13 +474,13 @@ softlens_return all_tree_divv(int minrung, float a) {
 		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_vx, &host_vy, &host_vz, &host_trees]() {
+		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_vx, &host_vy, &host_types, &host_vz, &host_trees]() {
 			int this_index = index++;
 			while( this_index < host_trees.size()) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
@@ -496,6 +510,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 	CUDA_CHECK(cudaMalloc(&params.vx, sizeof(float) * host_vx.size()));
 	CUDA_CHECK(cudaMalloc(&params.vy, sizeof(float) * host_vy.size()));
 	CUDA_CHECK(cudaMalloc(&params.vz, sizeof(float) * host_vz.size()));
+	CUDA_CHECK(cudaMalloc(&params.types, sizeof(char) * host_types.size()));
 	auto stream = cuda_get_stream();
 
 	CUDA_CHECK(cudaMemcpyAsync(params.vx, host_vx.data(), sizeof(float) * host_vx.size(), cudaMemcpyHostToDevice, stream));
@@ -504,6 +519,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 	CUDA_CHECK(cudaMemcpyAsync(params.x, host_x.data(), sizeof(fixed32) * host_x.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(params.types, host_types.data(), sizeof(char) * host_types.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
@@ -513,6 +529,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 	CUDA_CHECK(cudaFree(params.x));
 	CUDA_CHECK(cudaFree(params.y));
 	CUDA_CHECK(cudaFree(params.z));
+	CUDA_CHECK(cudaFree(params.types));
 	CUDA_CHECK(cudaFree(params.trees));
 	CUDA_CHECK(cudaFree(params.selfs));
 	CUDA_CHECK(cudaFree(params.neighbors));
