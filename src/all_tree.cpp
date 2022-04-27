@@ -21,10 +21,10 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/timer.hpp>
-#include <cosmictiger/sph_particles.hpp>
+
 
 softlens_return all_tree_softlens_execute(int minrung);
-softlens_return all_tree_derivatives_execute(int minrung);
+softlens_return all_tree_derivatives_execute(int minrung, float a);
 
 HPX_PLAIN_ACTION (all_tree_find_ranges);
 HPX_PLAIN_ACTION (all_tree_find_neighbors);
@@ -43,47 +43,61 @@ static bool has_active_neighbors(const tree_node* self) {
 	return rc;
 }
 
-softlens_return all_tree_softlens(int minrung) {
+bool is_converged(const tree_node* self, int minrung) {
+	bool converged = true;
+	for (int i = self->part_range.first; i < self->part_range.second; i++) {
+		if (particles_rung(i) >= minrung || particles_semiactive(i)) {
+			if (!particles_converged(i)) {
+				converged = false;
+				break;
+			}
+		}
+	}
+	return converged;
+}
+
+softlens_return all_tree_softlens(int minrung, float a) {
 	tree_id root_id;
 	vector<tree_id> checklist;
 	root_id.proc = root_id.index = 0;
 	checklist.push_back(root_id);
 	softlens_return rc;
 	timer tm;
+	particles_reset_converged();
+	double softlen_buffer = 1.1;
 	do {
 		tm.reset();
 		tm.start();
-		all_tree_find_ranges(root_id, minrung, 1.2).get();
+		all_tree_find_ranges(root_id, minrung, softlen_buffer).get();
 		tm.stop();
-		PRINT("find ranges = %e\n", tm.read());
 		tm.reset();
 		tm.start();
 		all_tree_find_neighbors(root_id, checklist).get();
 		tm.stop();
-		PRINT("find neighbors = %e\n", tm.read());
 		tm.reset();
 		tm.start();
 		rc = all_tree_softlens_execute(minrung);
 		tm.stop();
-		PRINT("softlens = %e\n", tm.read());
-		PRINT("%e %e \n", rc.hmin, rc.hmax);
+		PRINT("softlens %e %e %e\n", rc.hmin, rc.hmax, tm.read());
+		softlen_buffer *= 1.1;
 	} while (rc.fail);
+	softlen_buffer = 1.1;
+	particles_reset_converged();
 	do {
 		tm.reset();
 		tm.start();
-		all_tree_find_ranges(root_id, minrung, 1.2).get();
+		all_tree_find_ranges(root_id, minrung, softlen_buffer).get();
 		tm.stop();
-		PRINT("find ranges = %e\n", tm.read());
 		tm.reset();
 		tm.start();
 		all_tree_find_neighbors(root_id, checklist).get();
 		tm.stop();
-		PRINT("find neighbors = %e\n", tm.read());
 		tm.reset();
 		tm.start();
-		rc = all_tree_derivatives_execute(minrung);
+		rc = all_tree_derivatives_execute(minrung, a);
 		tm.stop();
-		PRINT("derivs = %e\n", tm.read());
+		PRINT("derivs %e %e %e\n", rc.hmin, rc.hmax, tm.read());
+		softlen_buffer *= 1.1;
 	} while (rc.fail);
 	return rc;
 }
@@ -108,19 +122,18 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	vector<int> host_selflist;
 	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
 	std::unordered_map<int, pair<int>> neighbor_ranges;
-	PRINT("...gathering tree data\n");
 	mutex_type mutex;
 	static std::atomic<int> next;
 	next = 0;
 	int nthreads = KICK_OVERSUBSCRIPTION * hpx_hardware_concurrency();
 	vector<hpx::future<void>> futs2;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
+		futs2.push_back(hpx::async([proc,nthreads,&mutex,minrung,&tree_map,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
 			int i = next++;
 			while( i < tree_leaflist_size()) {
 				const auto selfid = tree_get_leaf(i);
 				const auto* self = tree_get_node(selfid);
-				if (self->nactive) {
+				if (self->nactive && !is_converged(self,minrung)) {
 					std::unordered_map<tree_id, int, tree_id_hash2>::iterator iter;
 					std::unique_lock<mutex_type> lock(mutex);
 					iter = tree_map.find(selfid);
@@ -160,7 +173,6 @@ softlens_return all_tree_softlens_execute(int minrung) {
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
-	PRINT("... done gathering\n");
 	size_t parts_size = 0;
 	for (auto& node : host_trees) {
 		parts_size += node.part_range.second - node.part_range.first;
@@ -174,7 +186,6 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	for (int i = 0; i < host_selflist.size(); i++) {
 		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
-	PRINT("...gathering particle data\n");
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z, &host_trees]() {
 			int this_index = index++;
@@ -197,7 +208,6 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	params.converged_snk = &particles_converged(0);
 	params.minrung = minrung;
 	params.nselfs = host_selflist.size();
-	PRINT("Sending %i to gpu\n", host_selflist.size());
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&params.x, sizeof(fixed32) * host_x.size()));
 	CUDA_CHECK(cudaMalloc(&params.y, sizeof(fixed32) * host_y.size()));
@@ -212,7 +222,6 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
-	PRINT("...sending to gpu\n");
 	auto rc = all_tree_softlens_cuda(params, stream);
 
 	cuda_end_stream(stream);
@@ -226,10 +235,10 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	return rc;
 }
 
-softlens_return all_tree_derivatives_execute(int minrung) {
+softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	vector<hpx::future<softlens_return>> rfuts;
 	for (auto& c : hpx_children()) {
-		rfuts.push_back(hpx::async<all_tree_derivatives_execute_action>(c, minrung));
+		rfuts.push_back(hpx::async<all_tree_derivatives_execute_action>(c, minrung, a));
 	}
 	vector<tree_node, pinned_allocator<tree_node>> host_trees;
 	vector<fixed32, pinned_allocator<fixed32>> host_x;
@@ -250,12 +259,12 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	int nthreads = KICK_OVERSUBSCRIPTION * hpx_hardware_concurrency();
 	vector<hpx::future<void>> futs2;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
+		futs2.push_back(hpx::async([proc,nthreads,&mutex,&tree_map,minrung,&host_trees,&host_neighbors,&host_selflist,&neighbor_ranges]() {
 			int i = next++;
 			while( i < tree_leaflist_size()) {
 				const auto selfid = tree_get_leaf(i);
 				const auto* self = tree_get_node(selfid);
-				if (has_active_neighbors(self)) {
+				if (has_active_neighbors(self) && !is_converged(self,minrung)) {
 					std::unordered_map<tree_id, int, tree_id_hash2>::iterator iter;
 					std::unique_lock<mutex_type> lock(mutex);
 					iter = tree_map.find(selfid);
@@ -340,6 +349,8 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	params.cat_snk = &particles_cat_index(0);
 	params.type_snk = &particles_type(0);
 	params.nselfs = host_selflist.size();
+	params.sa_snk = &particles_semiactive(0);
+	params.a = a;
 
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
 	CUDA_CHECK(cudaMalloc(&params.x, sizeof(fixed32) * host_x.size()));
@@ -363,7 +374,6 @@ softlens_return all_tree_derivatives_execute(int minrung) {
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
-	PRINT("Derivatives\n");
 	auto rc = all_tree_derivatives_cuda(params, stream);
 
 	cuda_end_stream(stream);

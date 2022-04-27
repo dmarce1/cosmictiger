@@ -785,6 +785,7 @@ void particles_resize(part_int sz) {
 		}
 		particles_array_resize(particles_r, new_capacity, true);
 		if (get_options().vsoft) {
+			particles_array_resize(particles_sa, new_capacity, true);
 			particles_array_resize(particles_c, new_capacity, true);
 			particles_array_resize(particles_z, new_capacity, true);
 			particles_array_resize(particles_s, new_capacity, true);
@@ -934,6 +935,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 					}
 					if (vsoft) {
 						std::swap(particles_dv[hi], particles_dv[lo]);
+						std::swap(particles_s[hi], particles_s[lo]);
 					}
 					break;
 				}

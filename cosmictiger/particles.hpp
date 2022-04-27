@@ -138,6 +138,7 @@ PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_s;
 PARTICLES_EXTERN float* particles_z;
 PARTICLES_EXTERN char* particles_c;
+PARTICLES_EXTERN char* particles_sa;
 PARTICLES_EXTERN float* particles_p;
 PARTICLES_EXTERN float* particles_dv;
 PARTICLES_EXTERN std::atomic<group_int>* particles_grp
@@ -209,6 +210,11 @@ inline float& particles_pot(part_int index) {
 inline char& particles_converged(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_c[index];
+}
+
+inline char& particles_semiactive(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_sa[index];
 }
 
 inline fixed32& particles_pos(int dim, part_int index) {

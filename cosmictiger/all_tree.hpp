@@ -37,6 +37,7 @@ struct softlens_return {
 };
 
 struct all_tree_data {
+	float a;
 	float* softlen_snk;
 	char* rung_snk;
 	char* converged_snk;
@@ -56,6 +57,7 @@ struct all_tree_data {
 	tree_node* trees;
 	int* neighbors;
 	int nselfs;
+	char* sa_snk;
 	float N;
 };
 
@@ -75,7 +77,7 @@ struct all_tree_range_return {
 hpx::future<void> all_tree_find_neighbors(tree_id self_id, vector<tree_id> checklist);
 hpx::future<all_tree_range_return> all_tree_find_ranges(tree_id self_id, int, double = 1.01);
 #endif
-softlens_return all_tree_softlens(int minrung);
+softlens_return all_tree_softlens(int minrung, float a);
 softlens_return all_tree_derivatives(int minrung);
 softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream);
 softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t stream);

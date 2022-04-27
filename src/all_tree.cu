@@ -328,7 +328,11 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 			const float& h_i = params.softlen_snk[snki];
 			const float hinv_i = 1.f / h_i; 										// 4
 			const float h2_i = sqr(h_i);    										// 1
-			if (!active) {
+			auto& sa_snk = params.sa_snk[snki];
+			if (active) {
+				sa_snk = true;
+			} else {
+				sa_snk = false;
 				const int jmax = round_up(ws.rec1.size(), block_size);
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
@@ -349,6 +353,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 					}
 					shared_reduce_add<int, DERIVATIVES_BLOCK_SIZE>(semiactive);
 					if (semiactive) {
+						sa_snk = true;
 						break;
 					}
 				}
@@ -491,6 +496,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						const float z_ij = distance(z_i, z_j); // 1
 						const float r2 = sqr(x_ij, y_ij, z_ij);
 						const float r = sqrtf(r2);                    // 4
+						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i;                    // 1
 						if (q < 1.f) {                               // 1
 							const float w = kernelG(q);
@@ -500,7 +506,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 							dpot_dh += (pot + q * force);
 							drho_dh -= q * dwdq;                      // 2
 							flops += 2;
-							divv += (vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij) * dwdq;
+							divv += (vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij) * rinv * dwdq;
 						}
 						flops += 9;
 					}
@@ -510,7 +516,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
 				flops += (DERIVATIVES_BLOCK_SIZE - 1);
 				const float zeta_i = dpot_dh / drho_dh;
-				divv /= drho_dh;
+				divv /= drho_dh * params.a;
 				__syncthreads();
 				if (tid == 0) {
 					params.zeta_snk[snki] = zeta_i;

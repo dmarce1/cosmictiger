@@ -77,6 +77,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
 	const bool sph = data.sph;
+	const bool vsoft = data.vsoft;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
@@ -85,6 +86,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
+	auto* divvs = data.divv_snk;
+	auto* softlens = data.h_snk;
 	auto* sph_index = data.cat_index;
 	auto* type = data.type_snk;
 	auto* sph_gx = data.sph_gx;
@@ -100,7 +103,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	const auto& sink_z = shmem.sink_z;
 	const auto& read_rungs = shmem.rungs;
 	const float log2ft0 = log2f(params.t0);
-	const float tfactor = params.eta * sqrtf(params.a * params.h);
+	const float tfactor = params.eta * sqrtf(params.a);
 	int max_rung = 0;
 	expansion2<float> L2;
 	float vx;
@@ -157,6 +160,12 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vz = vel_z[snki];
 		rung = read_rungs[i];
 		dt = 0.5f * rung_dt[rung] * params.t0;
+		float hsoft = params.h;
+		float divv;
+		if (vsoft) {
+			divv = divvs[snki];
+			hsoft = softlens[snki];
+		}
 		if (my_type == SPH_TYPE && !params.glass) {
 			sph_gx[j] = gx[i];
 			sph_gy[j] = gy[i];
@@ -170,7 +179,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 		g2 = sqr(gx[i], gy[i], gz[i]);
 		if (my_type != SPH_TYPE || params.glass) {
-			dt = fminf(fminf(tfactor * rsqrt(sqrtf(g2)), params.t0), params.max_dt);
+			dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
+			if (vsoft) {
+				const float dt1 = 3.f * hsoft * params.a / (divv + 1e-37f);
+				if( dt1 < dt ) {
+					dt = dt1;
+				}
+			}
 			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 			max_rung = max(rung, max_rung);
 			if (rung < 0 || rung >= MAX_RUNG) {
@@ -683,6 +698,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.y = dev_y;
 	data.z = dev_z;
 	data.h = dev_h;
+	data.divv_snk = &particles_divv(0);
+	data.h_snk = &particles_softlen(0);
 	data.zeta = dev_zeta;
 	data.type = dev_type;
 	data.sph = do_sph;

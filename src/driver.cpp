@@ -593,7 +593,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 
 	const bool vsoft = get_options().vsoft;
 	if (vsoft) {
-		all_tree_softlens(minrung);
+		all_tree_softlens(minrung, scale);
 	}
 
 	PRINT("gravity nactive = %i\n", sr.nactive);

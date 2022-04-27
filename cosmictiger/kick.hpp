@@ -35,6 +35,8 @@ struct cuda_kick_data {
 	part_int* cat_index_snk;
 	float* h;
 	float* zeta;
+	float* divv_snk;
+	float* h_snk;
 	float* vx;
 	float* vy;
 	float* vz;
