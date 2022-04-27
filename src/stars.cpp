@@ -97,6 +97,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 					if( make_star ) {
 						sph_particles_isstar(i) =true;
+						sph_particles_entr(i) = 0.0;
 					}
 				}
 			}
@@ -104,28 +105,6 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
-	PRINT("Creating stars\n");
-	std::sort(indices.begin(), indices.end());
-	for (auto& i : indices) {
-		while (sph_particles_rung(sph_particles_size() - 1) < 0) {
-			sph_particles_rung(sph_particles_size() - 1) = -sph_particles_rung(sph_particles_size() - 1);
-			sph_particles_resize(sph_particles_size() - 1, false);
-		}
-		if (i < sph_particles_size()) {
-			const int k = sph_particles_size() - 1;
-			sph_particles_rung(i) = -sph_particles_rung(i);
-			if (i != k) {
-				const int dmk = sph_particles_dm_index(k);
-				sph_particles_swap2(i, k);
-				particles_cat_index(dmk) = i;
-				if (particles_type(dmk) == STAR_TYPE) {
-					PRINT("Error %s %i\n", __FILE__, __LINE__);
-					abort();
-				}
-			}
-			sph_particles_resize(k, false);
-		}
-	}
 	size_t count = indices.size();
 	for (auto& f : futs) {
 		count += f.get();

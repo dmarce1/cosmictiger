@@ -260,46 +260,50 @@ void sph_particles_softlens2smoothlens(int minrung) {
 }
 
 float sph_particles_temperature(part_int i, float a) {
-	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
-	const double code_to_energy = sqr(get_options().code_to_cm) / (sqr(get_options().code_to_s));		// 7
-	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
-	const double code_to_entropy = code_to_energy / pow(code_to_density, get_options().gamma - 1.0);
-	const double h = sph_particles_smooth_len(i);
-	const double Hp = sph_particles_Hp(i);
-	const double Hn = sph_particles_Hn(i);
-	const double H2 = sph_particles_H2(i);
-	const double Y = sph_particles_Y(i);
-	const double Hep = sph_particles_Hep(i);
-	const double Hepp = sph_particles_Hepp(i);
-	const double H = sph_particles_H(i);
-	const double He = Y - Hep - Hepp;
-	double rho = sph_den(1 / (h * h * h));
-	const double hfrac = 1.0 - sph_particles_cold_mass(i);
-	double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
-	rho *= code_to_density * pow(a, -3);
-	n *= constants::avo * rho;									// 8
-	double gamma = sph_particles_gamma(i);
-	double cv = 1.0 / (gamma - 1.0);															// 4
-	cv *= double(constants::kb);																							// 1
-	double entr = sph_particles_entr(i);
-	entr *= code_to_entropy;
-	const double eint = entr * pow(rho * hfrac, get_options().gamma - 1.0) / (gamma - 1.0);
-	double T = rho * eint / (n * cv);
-	if (H < 0.0) {
-		if (H < -5.0e-3) {
-			PRINT("NEGATIVE H\n");
-			PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
+	if (sph_particles_isstar(i)) {
+		return 0.0;
+	} else {
+		const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
+		const double code_to_energy = sqr(get_options().code_to_cm) / (sqr(get_options().code_to_s));		// 7
+		const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
+		const double code_to_entropy = code_to_energy / pow(code_to_density, get_options().gamma - 1.0);
+		const double h = sph_particles_smooth_len(i);
+		const double Hp = sph_particles_Hp(i);
+		const double Hn = sph_particles_Hn(i);
+		const double H2 = sph_particles_H2(i);
+		const double Y = sph_particles_Y(i);
+		const double Hep = sph_particles_Hep(i);
+		const double Hepp = sph_particles_Hepp(i);
+		const double H = sph_particles_H(i);
+		const double He = Y - Hep - Hepp;
+		double rho = sph_particles_rho(i);
+		const double hfrac = 1.0 - sph_particles_cold_mass(i);
+		double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
+		rho *= code_to_density * pow(a, -3);
+		n *= constants::avo * rho;									// 8
+		double gamma = sph_particles_gamma(i);
+		double cv = 1.0 / (gamma - 1.0);															// 4
+		cv *= double(constants::kb);																							// 1
+		double entr = sph_particles_entr(i);
+		entr *= code_to_entropy;
+		const double eint = entr * pow(rho * hfrac, get_options().gamma - 1.0) / (gamma - 1.0);
+		double T = rho * eint / (n * cv);
+		if (H < 0.0) {
+			if (H < -5.0e-3) {
+				PRINT("NEGATIVE H\n");
+				PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
+				abort();
+			}
+		}
+		if (T > TMAX) {
+			PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_entr(i), eint, eint, rho, h);
 			abort();
 		}
+		if (T < 0.0) {
+			PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_entr(i), eint, eint, rho, h);
+		}
+		return T;
 	}
-	if (T > TMAX) {
-		PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_entr(i), eint, eint, rho, h);
-		abort();
-	}
-	if (T < 0.0) {
-		PRINT("T == %e %e %e %e %e %e\n", T, sph_particles_entr(i), eint, eint, rho, h);
-	}
-	return T;
 }
 
 float sph_particles_mmw(part_int i) {
@@ -315,29 +319,6 @@ float sph_particles_mmw(part_int i) {
 //	PRINT( "%e\n", 1.0 / n);
 	return 1.0 / n;
 }
-
-/*float sph_particles_lambda_e(part_int i, float a, float T) {
- const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
- const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
- const double h = sph_particles_smooth_len(i);
- const double Hp = sph_particles_Hp(i);
- const double Hn = sph_particles_Hn(i);
- const double Hep = sph_particles_Hep(i);
- const double Hepp = sph_particles_Hepp(i);
- double rho = sph_den(1 / (h * h * h));
- double ne = Hp - Hn + 0.25f * Hep + 0.5f * Hepp;
- rho *= code_to_density * pow(a, -3);
- ne *= constants::avo * rho;									// 8
- constexpr float colog = logf(37.8f);
- static const double lambda_e0 = pow(3.0, 1.5) / (4.0 * sqrt(M_PI) * pow(constants::e, 4.) * colog);
- double lambda_e = lambda_e0 * sqr(constants::kb * T) / (ne + 1e-10);
- lambda_e /= get_options().code_to_cm;
- lambda_e /= a;
- if (T > 1e6 && lambda_e > 0.0) {
- //		PRINT("lambda_e %e %e %e\n", lambda_e, lambda_e0, ne);
- }
- return lambda_e;
- }*/
 
 HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
 
@@ -357,6 +338,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_fc[i], sph_particles_fc[j]);
 	std::swap(sph_particles_dv[i], sph_particles_dv[j]);
 	std::swap(sph_particles_st[i], sph_particles_st[j]);
+	std::swap(sph_particles_rh[i], sph_particles_rh[j]);
 	std::swap(sph_particles_dentr2(i), sph_particles_dentr2(j));
 }
 
@@ -602,7 +584,7 @@ void sph_particles_global_read_fcold(particle_global_range range, float* cfrac, 
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
-				if( cfrac ) {
+				if (cfrac) {
 					cfrac[j] = sph_particles_cold_mass(i);
 				}
 				if (isstar) {
@@ -622,8 +604,8 @@ void sph_particles_global_read_fcold(particle_global_range range, float* cfrac, 
 				const auto end = std::min(line_id.index + line_size, range.range.second);
 				for (part_int i = begin; i < end; i++) {
 					const part_int src_index = i - line_id.index;
-					const pair<float,char>& part = ptr[src_index];
-					if( cfrac ) {
+					const pair<float, char>& part = ptr[src_index];
+					if (cfrac) {
 						cfrac[dest_index] = part.first;
 					}
 					if (isstar) {

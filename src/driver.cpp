@@ -361,39 +361,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			sph_particles_reset_converged();
 			do {
 				sparams.set = SPH_SET_ACTIVE;
-				sparams.run_type = SPH_RUN_PREHYDRO1;
-				timer tm;
-				tm.start();
-				kr = sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-				tm.reset();
-				cont = kr.rc;
-				tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-				tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-				tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-				//			tnparams.set = SPH_SET_ACTIVE;
-				tm.start();
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				tm.start();
-				tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-				sph_tree_neighbor(tnparams, root_id, checklist).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				kr = sph_run_return();
-			} while (cont);
-			sph_particles_reset_converged();
-			do {
-				sparams.set = SPH_SET_ACTIVE;
 				sparams.run_type = SPH_RUN_PREHYDRO2;
 				timer tm;
 				tm.start();
