@@ -155,9 +155,9 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 							atomicAdd(&reduce->flag, 1);
 							h = hmax;
 							converged = false;
-							break;
 						}
 						__syncthreads();
+						break;
 					}
 					iters++;
 				} while (fabs(factor - 1.0f) > 1e-4f && iters < MAX_ITERS);
@@ -353,9 +353,9 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 							atomicAdd(&reduce->flag, 1);
 							h = hmax;
 							converged = false;
-							break;
 						}
 						__syncthreads();
+						break;
 					}
 					iters++;
 				} while (fabs(factor - 1.0f) > 1e-4f && iters < MAX_ITERS);
