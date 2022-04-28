@@ -508,9 +508,11 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		//const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (double(params.G) * double(rho))) / params.a;
 		if (params.stars && unstable && dedt0 < 0.f) {
 			float hot_mass = 1.f - attr.cold_mass;
-			float factor = expf(-fminf(dt / tcool, 1.f));
-			hot_mass *= factor;
+			float hotmass0 = hot_mass;
+			float factor = expf(-dt / tcool);
+			hot_mass = fmaxf(hot_mass * factor, 0.5f * (2.5e-7f + hot_mass));
 			attr.cold_mass = 1.f - hot_mass;
+			ALWAYS_ASSERT(attr.cold_mass < 1.f);
 			const double rhoavoinv = 1.0 / rhoavo;																				// 4
 			N.H *= (double) rhoavoinv;																											// 1
 			N.Hp *= (double) rhoavoinv;																										// 1

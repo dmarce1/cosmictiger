@@ -20,9 +20,9 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 
-//#define KERNEL_CUBIC_SPLINE
+#define KERNEL_CUBIC_SPLINE
 //#define KERNEL_QUARTIC_SPLINE
-#define KERNEL_QUINTIC_SPLINE
+//#define KERNEL_QUINTIC_SPLINE
 
 void kernel_set_type(int type);
 void kernel_output();

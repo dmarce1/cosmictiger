@@ -90,7 +90,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 				char rung = sph_particles_rung(i);
 				const float rho = sph_particles_rho(i);
 				const float tdyn = sqrtf((3.0*a*a*a)/(8.0*M_PI*G*rho))/a;
-				if( sph_particles_cold_mass(i) > 0.0 && sph_particles_divv(i) < 0.0) {
+				if( sph_particles_cold_mass(i) > 0.0) {
 					const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
 					const float p = 1.0 - exp(-eps);
 					bool make_star;
@@ -98,6 +98,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					if( make_star ) {
 						sph_particles_isstar(i) =true;
 						sph_particles_entr(i) = 0.0;
+						sph_particles_cold_mass(i) = 0.0;
 					}
 				}
 			}
