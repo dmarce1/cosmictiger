@@ -205,6 +205,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	all_tree_data params;
+	params.hmin = get_options().hmin;
 	params.N = get_options().gneighbor_number;
 	params.softlen_snk = &particles_softlen(0);
 	params.rung_snk = &particles_rung(0);
@@ -343,6 +344,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	all_tree_data params;
+	params.hmin = get_options().hmin;
 	params.N = get_options().gneighbor_number;
 	params.softlen_snk = &particles_softlen(0);
 	params.rung_snk = &particles_rung(0);
@@ -492,6 +494,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	all_tree_data params;
+	params.hmin = get_options().hmin;
 	params.N = get_options().gneighbor_number;
 	params.softlen_snk = &particles_softlen(0);
 	params.rung_snk = &particles_rung(0);

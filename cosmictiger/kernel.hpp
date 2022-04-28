@@ -331,3 +331,13 @@ inline T kernelPot(T q) {
 	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q > T(0));
 	return res;
 }
+CUDA_EXPORT
+inline float smoothX(float h, float hmin) {
+	return 1.f - sqr(hmin / h);
+}
+
+CUDA_EXPORT
+inline void dsmoothX_dh(float h, float hmin, float& x, float& dxdh) {
+	x = 1.f - sqr(hmin / h);
+	dxdh = 2.f * sqr(hmin / h) / h;
+}

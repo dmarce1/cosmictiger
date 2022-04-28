@@ -26,6 +26,7 @@
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/kernel.hpp>
 
 HPX_PLAIN_ACTION (drift);
 
@@ -102,7 +103,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				if(get_options().vsoft ) {
 					float& h = particles_softlen(i);
 					const float divv = particles_divv(i);
-					float dloghdt = (1.f/3.f)*divv;
+					float dloghdt = smoothX(h,get_options().hsoft)*(1.f/3.f)*divv;
 					float c0 = expf(dloghdt*dt);
 					h *= c0;
 				}
@@ -113,7 +114,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float eint = sph_particles_eint(j);
 					if( !get_options().vsoft ) {
 						const float divv = sph_particles_divv(j);
-						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale);
+						float dloghdt = smoothX(h,get_options().hsoft)*(1.f/3.f)*(divv - 3.0f * adot / scale);
 						float c0 = expf(dloghdt*dt);
 						h *= c0;
 					}

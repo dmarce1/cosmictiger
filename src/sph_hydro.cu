@@ -459,7 +459,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						data.divv_snk[snki] = div_v;
 						float dtinv_hydro = 0.f;
 						const float h_i = data.rec2_snk[snki].h;
-						const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);           // 5
+						const float dloghdt = smoothX(h_i, params.hmin) * fabsf(div_v - 3.f * params.adot * ainv) * (1.f / 3.f);           // 5
 						const float dtinv_divv = params.a * (dloghdt);
 						const float dt_divv = params.cfl * params.a / (dtinv_divv + 1e-33f);                                 // 5
 						float dtinv_diff = 0.0f;
@@ -494,8 +494,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						atomicMax(&reduce->dtinv_divv, dtinv_divv);
 						if (rung < 0 || rung > 10) {
 							if (tid == 0) {
-								PRINT("Rung out of range %i %i %e %e %e |%e %e %e %e %e\n", rung_grav, star_i, cfrac_i, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_acc, dtinv_divv);
-						//		__trap();
+								PRINT("Rung out of range %i %i %e %e %e |%e %e %e %e %e\n", rung_grav, star_i, cfrac_i, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff,
+										dtinv_acc, dtinv_divv);
+								//		__trap();
 							}
 						}
 

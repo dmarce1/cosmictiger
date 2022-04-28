@@ -84,7 +84,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
 			const auto rung = data.rungs_snk[data.dm_index_snk[snki]];
 			const bool active = rung >= params.min_rung;
-			const auto& converged = data.converged_snk[snki];
+			auto& converged = data.converged_snk[snki];
 			const bool use = active && !converged;
 			if (use) {
 				x[XDIM] = data.x[i];
@@ -93,7 +93,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				float& h = data.rec2_snk[snki].h;
 				float h0 = params.hmin;
 				const auto test = [h0,x,block_size,tid,&data](float h) {
-					float n = 0.f;
+					float w = 0.f;
 					const float hinv = 1.f / h;
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.rec1[j].x); // 2
@@ -103,14 +103,11 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 						const float r = sqrt(r2);// 4
 						const float q = r * hinv;// 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q);// 4
-							n+= w;// 1
+							w += kernelW(q);// 4
 						}
 					}
-					shared_reduce_add<float, PREHYDRO1_BLOCK_SIZE>(n);
-					const float h3 = sqr(h)*h;
-					n *= (4.0f * float(M_PI) / 3.0f) * (1.f - (h0*sqr(h0))/(h*sqr(h)));
-					return data.N - n;
+					shared_reduce_add<float, PREHYDRO1_BLOCK_SIZE>(w);
+					return (4.0f * float(M_PI) / 3.0f) * smoothX(h,h0) * w - data.N;
 				};
 				float hmax = 1.0f;
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -144,6 +141,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				} else {
 					if (tid == 0) {
 						h = hmid;
+						converged = true;
 						hmin_all = fminf(hmin_all, h);
 						hmax_all = fmaxf(hmax_all, h);
 					}
@@ -312,14 +310,15 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				}
 			}
 			int box_xceeded = false;
-			if (semiactive && !params.vsoft) {
+			auto& converged = data.converged_snk[snki];
+			if (semiactive && !params.vsoft && !converged) {
 				x[XDIM] = data.x[i];
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float h0 = params.hmin;
 				const auto test = [h0,x,block_size,tid,&data](float h) {
-					float n = 0.f;
+					float w = 0.f;
 					const float hinv = 1.f / h;
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const float dx = distance(x[XDIM], ws.rec1[j].x); // 2
@@ -329,14 +328,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						const float r = sqrt(r2);// 4
 						const float q = r * hinv;// 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q);// 4
-							n+= w;// 1
+							w += kernelW(q);// 4
 						}
 					}
-					shared_reduce_add<float, PREHYDRO1_BLOCK_SIZE>(n);
-					const float h3 = sqr(h)*h;
-					n *= (4.0f * float(M_PI) / 3.0f) * (1.f - (h0*sqr(h0))/(h*sqr(h)));
-					return data.N - n;
+					shared_reduce_add<float, PREHYDRO1_BLOCK_SIZE>(w);
+					return (4.0f * float(M_PI) / 3.0f) * smoothX(h,h0) * w - data.N;
 				};
 				float hmax = 1.0f;
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -370,6 +366,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					}
 				} else {
 					if (tid == 0) {
+						converged = true;
 						h = hmid;
 					}
 				}
@@ -387,8 +384,9 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				const float hinv_i = 1.f / h_i; 										// 4
 				const float h3inv_i = sqr(hinv_i) * hinv_i;
 				const float h2_i = sqr(h_i);    										// 1
-				float drho_dh;
-				drho_dh = 0.f;
+				float dw_sum, w_sum;
+				dw_sum = 0.f;
+				w_sum = 0.f;
 				float rhoh30 = (3.0f * data.N) / (4.0f * float(M_PI));   // 5
 				float dvx_dx = 0.f;
 				float dvx_dy = 0.f;
@@ -421,7 +419,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						if (q < 1.f) {                               // 1
 							const float w = kernelW(q);
 							const float dwdq = dkernelW_dq(q);
-							drho_dh -= 3.f * w + q * dwdq;                      // 2
+							dw_sum -= q * dwdq;                      // 2
+							w_sum += w;
 							if (!star_j) {
 								rho_i += data.m * w * h3inv_i;
 							}
@@ -442,10 +441,15 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						ws.neighbors[l] = j;
 					}
 				}
-				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(drho_dh);
+				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(dw_sum);
+				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(w_sum);
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(rho_i);
 				data.rho_snk[snki] = rho_i;
-				const float omega_i = 1.f + 0.33333333333f * drho_dh / rhoh30;								// 4
+				const float A = 0.33333333333f * dw_sum / w_sum;
+				float f, dfdh;
+				dsmoothX_dh(h_i, params.hmin, f, dfdh);
+				const float B = 0.33333333333f * h_i / f * dfdh;
+				const float omega_i = (A + B) / (1.0f + B);
 				ALWAYS_ASSERT(omega_i > 0.f);
 				__syncthreads();
 				const float h4inv_i = h3inv_i * hinv_i;						// 1

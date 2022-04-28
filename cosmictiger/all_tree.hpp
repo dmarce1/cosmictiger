@@ -48,6 +48,7 @@ struct all_tree_data {
 	float* gz_snk;
 	float* sph_h_snk;
 	char* types;
+	float hmin;
 	part_int* cat_snk;
 	char* type_snk;
 	int minrung;

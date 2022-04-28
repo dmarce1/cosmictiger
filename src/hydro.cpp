@@ -948,8 +948,7 @@ void hydro_blast_test() {
 		float x = particles_pos(XDIM, j).to_float() - 0.5;
 		float y = particles_pos(YDIM, j).to_float() - 0.5;
 		float z = particles_pos(ZDIM, j).to_float() - 0.5;
-		const float h = sph_particles_smooth_len(i);
-		const float rho = sph_den(1 / (h * h * h));
+		const float rho = sph_particles_rho(i);
 		double time = t;
 		double r = sqrt(sqr(x, y, z));
 		double rmax = sqrt(1.5);
