@@ -806,7 +806,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 //	cuda_data.dchem_snk = &sph_particles_dchem(0);
 	cuda_data.eta = get_options().eta;
 //	PRINT("Running with %i nodes\n", host_trees.size());
-	PRINT("Sending %i\n", host_selflist.size());
+	PRINT("Sending %i %i\n", params.run_type, host_selflist.size());
 
 	for (int i = 0; i < host_selflist.size(); i++) {
 		auto node = host_trees[host_selflist[i]];

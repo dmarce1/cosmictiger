@@ -363,8 +363,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					} while (hmax > 1.001f * hmin);
 				}
 				if (hmax <= hmin || hmin == hmin0 || hmax == hmax0) {
+					box_xceeded = true;
 					if (tid == 0) {
-						box_xceeded = true;
 						atomicAdd(&reduce->flag, 1);
 						h = hmax0;
 					}
