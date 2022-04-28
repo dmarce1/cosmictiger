@@ -27,6 +27,8 @@
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 
+#define MAX_ITERS 100
+
 struct softlens_record {
 	fixed32 x;
 	fixed32 y;
@@ -110,13 +112,22 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 				x[ZDIM] = params.z[i];
 				const auto type_i = params.types[i];
 				float& h = params.softlen_snk[snki];
-				float h0 = params.hmin;
-				const auto test = [h0,x,block_size,tid,&params,type_i](float h) {
+				int iters = 0;
+				float hmax = 1.0f;
+				for (int dim = 0; dim < NDIM; dim++) {
+					hmax = fminf(hmax, fabs(distance(self.obox.begin[dim], x[dim])));
+					hmax = fminf(hmax, fabs(distance(self.obox.end[dim], x[dim])));
+				}
+				float factor;
+				converged = true;
+				do {
 					float w = 0.f;
+					float qdwdq = 0.f;
+
 					const float hinv = 1.f / h;
 					for (int j = tid; j < ws.rec.size(); j += block_size) {
 						const auto type_j = ws.rec[j].type;
-						if( type_i == type_j ) {
+						if (type_i == type_j) {
 							const float dx = distance(x[XDIM], ws.rec[j].x);
 							const float dy = distance(x[YDIM], ws.rec[j].y);
 							const float dz = distance(x[ZDIM], ws.rec[j].z);
@@ -125,49 +136,34 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 							const float q = r * hinv;
 							if (q < 1.f) {
 								w += kernelW(q);
+								qdwdq += q * dkernelW_dq(q);
 							}
 						}
 					}
 					shared_reduce_add<float, SOFTLENS_BLOCK_SIZE>(w);
-					return (4.0f * float(M_PI) / 3.0f) * smoothX(h,h0) * w - params.N;
-				};
-				float hmax = 1.0f;
-				for (int dim = 0; dim < NDIM; dim++) {
-					hmax = fminf(hmax, fabs(distance(self.obox.begin[dim], x[dim])));
-					hmax = fminf(hmax, fabs(distance(self.obox.end[dim], x[dim])));
-				}
-				float hmin = h0;
-				const float hmax0 = hmax;
-				const float hmin0 = hmin;
-				float test_max = test(hmax);
-				float hmid;
-				int iters = 0;
-				if (hmax > hmin) {
-					do {
-						hmid = 0.5f * hmax + 0.5f * hmin;
-						const float test_mid = test(hmid);
-						if (test_mid * test_max < 0.f) {
-							hmin = hmid;
-						} else {
-							hmax = hmid;
-							test_max = test_mid;
+					shared_reduce_add<float, SOFTLENS_BLOCK_SIZE>(qdwdq);
+					float f, dfdh;
+					dsmoothX_dh(h, params.hmin, f, dfdh);
+					const float pwr = w / (-qdwdq + dfdh * f / h);
+					factor = powf(params.N / w / 4.186666667f, pwr);
+					if (tid == 0) {
+						h *= factor;
+					}
+					__syncthreads();
+					if (h > hmax) {
+						if (tid == 0) {
+							atomicAdd(&reduce->flag, 1);
+							h = hmax;
+							converged = false;
+							break;
 						}
-						iters++;
-					} while (hmax > 1.001f * hmin);
-				}
-				if (hmax <= hmin || hmin == hmin0 || hmax == hmax0) {
-					if (tid == 0) {
-						atomicAdd(&reduce->flag, 1);
-						h = hmax0;
+						__syncthreads();
 					}
-				} else {
-					if (tid == 0) {
-						h = hmid;
-						converged = true;
-						hmin_all = fminf(hmin_all, h);
-						hmax_all = fmaxf(hmax_all, h);
-					}
-				}
+					iters++;
+				} while (fabs(factor - 1.0f) > 1e-4f && iters < MAX_ITERS);
+				ALWAYS_ASSERT(iters < MAX_ITERS);
+				hmin_all = fminf(hmin_all, h);
+				hmax_all = fmaxf(hmax_all, h);
 			}
 		}
 		shared_reduce_add<int, SOFTLENS_BLOCK_SIZE>(flops);
@@ -315,12 +311,21 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const auto type_i = params.types[i];
 				float& h = params.softlen_snk[snki];
 				float h0 = params.hmin;
-				const auto test = [h0,x,block_size,tid,&params,type_i](float h) {
+				int iters = 0;
+				float hmax = 1.0f;
+				for (int dim = 0; dim < NDIM; dim++) {
+					hmax = fminf(hmax, fabs(distance(self.obox.begin[dim], x[dim])));
+					hmax = fminf(hmax, fabs(distance(self.obox.end[dim], x[dim])));
+				}
+				float factor;
+				converged = true;
+				do {
 					float w = 0.f;
+					float qdwdq = 0.f;
 					const float hinv = 1.f / h;
 					for (int j = tid; j < ws.rec1.size(); j += block_size) {
 						const auto type_j = ws.rec1[j].type;
-						if( type_i == type_j ) {
+						if (type_i == type_j) {
 							const float dx = distance(x[XDIM], ws.rec1[j].x);
 							const float dy = distance(x[YDIM], ws.rec1[j].y);
 							const float dz = distance(x[ZDIM], ws.rec1[j].z);
@@ -329,49 +334,34 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 							const float q = r * hinv;
 							if (q < 1.f) {
 								w += kernelW(q);
+								qdwdq += q * dkernelW_dq(q);
 							}
 						}
 					}
 					shared_reduce_add<float, SOFTLENS_BLOCK_SIZE>(w);
-					return (4.0f * float(M_PI) / 3.0f) * smoothX(h,h0) * w - params.N;
-				};
-				float hmax = 1.0f;
-				for (int dim = 0; dim < NDIM; dim++) {
-					hmax = fminf(hmax, fabs(distance(self.obox.begin[dim], x[dim])));
-					hmax = fminf(hmax, fabs(distance(self.obox.end[dim], x[dim])));
-				}
-				float hmin = h0;
-				const float hmax0 = hmax;
-				const float hmin0 = hmin;
-				float test_max = test(hmax);
-				float hmid;
-				int iters = 0;
-				if (hmax > hmin) {
-					do {
-						hmid = 0.5f * hmax + 0.5f * hmin;
-						const float test_mid = test(hmid);
-						if (test_mid * test_max < 0.f) {
-							hmin = hmid;
-						} else {
-							hmax = hmid;
-							test_max = test_mid;
+					shared_reduce_add<float, SOFTLENS_BLOCK_SIZE>(qdwdq);
+					float f, dfdh;
+					dsmoothX_dh(h, params.hmin, f, dfdh);
+					const float pwr = w / (-qdwdq + dfdh * f / h);
+					factor = powf(params.N / w / 4.186666667f, pwr);
+					if (tid == 0) {
+						h *= factor;
+					}
+					__syncthreads();
+					if (h > hmax) {
+						if (tid == 0) {
+							atomicAdd(&reduce->flag, 1);
+							h = hmax;
+							converged = false;
+							break;
 						}
-						iters++;
-					} while (hmax > 1.001f * hmin);
-				}
-				if (hmax <= hmin || hmin == hmin0 || hmax == hmax0) {
-					if (tid == 0) {
-						atomicAdd(&reduce->flag, 1);
-						h = hmax0;
+						__syncthreads();
 					}
-				} else {
-					if (tid == 0) {
-						h = hmid;
-						converged = true;
-						hmin_all = fminf(hmin_all, h);
-						hmax_all = fmaxf(hmax_all, h);
-					}
-				}
+					iters++;
+				} while (fabs(factor - 1.0f) > 1e-4f && iters < MAX_ITERS);
+				ALWAYS_ASSERT(iters < MAX_ITERS);
+				hmin_all = fminf(hmin_all, h);
+				hmax_all = fmaxf(hmax_all, h);
 			}
 			if (active || (semiactive && !box_xceeded)) {
 				__syncthreads();

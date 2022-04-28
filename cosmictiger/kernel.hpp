@@ -341,3 +341,9 @@ inline void dsmoothX_dh(float h, float hmin, float& x, float& dxdh) {
 	x = 1.f - sqr(hmin / h);
 	dxdh = 2.f * sqr(hmin / h) / h;
 }
+
+CUDA_EXPORT inline float dlogsmoothX_dlogh(float h, float hmin) {
+	float f, dfdh;
+	dsmoothX_dh(h, hmin, f, dfdh);
+	return dfdh * h / f;
+}
