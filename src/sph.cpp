@@ -609,9 +609,6 @@ sph_run_return sph_run_workspace::to_gpu() {
 									if( stars ) {
 										sph_particles_global_read_fcold(node.global_part_range(), host_cold_frac.data(), host_star.data(), offset);
 									}
-									if( explicit_conduction ) {
-										sph_particles_global_read_kappas(node.global_part_range(), host_kappa.data(), offset);
-									}
 									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(), host_h.data(), offset);
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 									sph_particles_global_read_aux(node.global_part_range(),host_alpha.data(), host_omega.data(), diffusion ? host_shearv.data() : nullptr, chem ? host_chem.data() :nullptr, offset);

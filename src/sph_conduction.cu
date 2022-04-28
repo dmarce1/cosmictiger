@@ -134,7 +134,10 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 
 				ws.neighbors.resize(0);
 				const float jmax = round_up(ws.rec1.size(), block_size);
-				const auto& star_i = data.stars[i];
+				bool star_i = false;
+				if (params.stars) {
+					star_i = data.stars[i];
+				}
 				if (!star_i) {
 					const auto& x_i = data.x[i];
 					const auto& y_i = data.y[i];
