@@ -735,7 +735,7 @@ void hydro_sod_test() {
 		const int j = sph_particles_dm_index(i);
 		float x = particles_pos(XDIM, j).to_float();
 		const float h = sph_particles_smooth_len(i);
-		const float rho = sph_den(1 / (h * h * h));
+		const float rho = sph_particles_rho(i);
 		sod_state_t state;
 		float x0 = x;
 		x0 -= 0.5;

@@ -227,6 +227,7 @@ struct sph_run_params {
 	float adot;
 	bool tzero;
 	float cfl;
+	float hmin;
 	int max_rung;
 	float gy;
 	float tau;
@@ -248,6 +249,7 @@ struct sph_run_params {
 	sph_run_params() {
 		iter = 0;
 		const auto opts = get_options();
+		hmin = opts.hmin;
 		stars = opts.stars;
 		vsoft = opts.vsoft;
 		av_type = opts.visc_type;

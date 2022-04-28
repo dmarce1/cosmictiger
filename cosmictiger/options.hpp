@@ -70,6 +70,7 @@ struct options {
 	double hsoft;
 	double GM;
 	double eta;
+	double hmin;
 	double code_to_s;
 	double code_to_cm;
 	double code_to_g;
@@ -106,6 +107,7 @@ struct options {
 	void serialize(A&& arc, unsigned) {
 		arc & vsoft;
 		arc & damping;
+		arc & hmin;
 		arc & alpha0;
 		arc & alpha1;
 		arc & beta;
