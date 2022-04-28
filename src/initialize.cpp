@@ -1171,7 +1171,6 @@ static power_spectrum_function read_power_spectrum(int phase) {
 			func.P.push_back(p);
 			kmax = std::max(kmax, (float) k);
 			kmin = std::min(kmin, (float) k);
-			PRINT( "kmin = %e kmax = %e\n", kmin, kmax);
 		}
 	}
 	func.logkmin = std::log(kmin);

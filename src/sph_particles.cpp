@@ -192,7 +192,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-						if(stars ) {
+						if(stars && false) {
 							float dadtoa = sph_particles_dentr2(i) / sph_particles_entr(i);
 							sph_particles_cold_mass(i) += sph_particles_dcold_mass(i)* 2.0 * dt2;
 							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);

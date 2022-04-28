@@ -18,8 +18,8 @@
  along with this program; if not, write to the Free Software
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
-#define SOFTLENS_BLOCK_SIZE 128
-#define DERIVATIVES_BLOCK_SIZE 64
+#define SOFTLENS_BLOCK_SIZE 256
+#define DERIVATIVES_BLOCK_SIZE 256
 
 #include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/timer.hpp>

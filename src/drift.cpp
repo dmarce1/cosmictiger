@@ -122,7 +122,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					}
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / get_options().sneighbor_number;
-					const float rho = sph_particles_rho(i);
+					const float rho = sph_particles_rho(i) *(1.f - sph_particles_cold_mass(i));
 					const float p = eint * rho * (get_options().gamma-1.0f);
 					const float e = eint * sph_mass;
 					if( !sph_particles_isstar(j)) {
