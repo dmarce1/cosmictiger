@@ -492,10 +492,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						atomicMax(&reduce->dtinv_diff, dtinv_diff);
 						atomicMax(&reduce->dtinv_acc, dtinv_acc);
 						atomicMax(&reduce->dtinv_divv, dtinv_divv);
-						if (rung < 0 || rung > 16) {
+						if (rung < 0 || rung > 10) {
 							if (tid == 0) {
-								PRINT("Rung out of range %i %e %e |%e %e %e %e %e\n", rung_grav, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_acc, dtinv_divv);
-								__trap();
+								PRINT("Rung out of range %i %i %e %e %e |%e %e %e %e %e\n", rung_grav, star_i, cfrac_i, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff, dtinv_acc, dtinv_divv);
+						//		__trap();
 							}
 						}
 

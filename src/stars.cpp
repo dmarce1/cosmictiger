@@ -98,7 +98,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 					if( make_star ) {
 						sph_particles_isstar(i) =true;
 						sph_particles_entr(i) = 0.0;
-						sph_particles_cold_mass(i) = 0.0;
+						sph_particles_cold_mass(i)  = 0.0;
 					}
 				}
 			}
