@@ -266,7 +266,7 @@ power_spectrum_function compute_power_spectrum(int type) {
 	double kmin;
 	double kmax;
 	kmin = 1e-5 * params.hubble;
-	kmax = 8.0 * params.hubble;
+	kmax = 20.0 * params.hubble;
 	einstein_boltzmann_interpolation_function(&dm_k, &bary_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
 
 	auto m_k = type == BARYON_POWER ? bary_k : dm_k;
@@ -284,7 +284,7 @@ power_spectrum_function compute_power_spectrum(int type) {
 		const double logkmin = log(kmin);
 		const double logkmax = log(kmax);
 		const double dlogk = (logkmax - logkmin) / M;
-		FILE* fp = fopen("power.dat", "wt");
+		FILE* fp = fopen("power.computed.dat", "wt");
 		const double lh = params.hubble;
 		const double lh3 = lh * lh * lh;
 		for (int i = 1; i < M - 2; i++) {
@@ -1171,6 +1171,7 @@ static power_spectrum_function read_power_spectrum(int phase) {
 			func.P.push_back(p);
 			kmax = std::max(kmax, (float) k);
 			kmin = std::min(kmin, (float) k);
+			PRINT( "kmin = %e kmax = %e\n", kmin, kmax);
 		}
 	}
 	func.logkmin = std::log(kmin);
