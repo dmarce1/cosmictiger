@@ -48,9 +48,9 @@ void kernel_adjust_options(options& opts) {
 	double h0 = 4.743416e-01;
 	double h;
 	h = kernel_stddev(kernelW<double>);
-	PRINT( "kernel width = %e\n", h0/h);
+	PRINT("kernel width = %e\n", h0 / h);
 //	opts.neighbor_number *= pow(h0 / h, 3);
-	opts.sph_bucket_size = 8.0 / M_PI *  opts.sneighbor_number;
+	opts.sph_bucket_size = 8.0 / M_PI * opts.sneighbor_number;
 #ifdef KERNEL_CUBIC_SPLINE
 	opts.cfl = 0.2;
 	opts.eta = 0.17;
@@ -69,6 +69,10 @@ void kernel_adjust_options(options& opts) {
 	opts.gneighbor_number = 142;
 	opts.sneighbor_number = 142;
 #endif
+	if (opts.gravity) {
+		opts.sneighbor_number *= 2;
+		opts.gneighbor_number *= 2;
+	}
 	PRINT("Setting:\n");
 	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);
 	PRINT("CFL = %f\n", opts.cfl);

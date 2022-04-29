@@ -18,8 +18,8 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef SPH_CUDA_HPP_
-#define SPH_CUDA_HPP_
+#ifndef SPH_CUDA123_HPP_
+#define SPH_CUDA123_HPP_
 
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/sph.hpp>
@@ -141,6 +141,7 @@ struct sph_reduction {
 };
 
 sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream);
+
 __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
@@ -151,4 +152,105 @@ __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sp
 
 
 
+struct softlens_record {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
+	char type;
+};
+
+#ifdef __CUDACC__
+template<int BLOCK_SIZE>
+inline __device__ bool compute_softlens(float & h,float hmin, float N, const device_vector<softlens_record>& rec, const array<fixed32, NDIM>& x,
+		const fixed32_range& obox, float& wcount) {
+	const int tid = threadIdx.x;
+	const int block_size = blockDim.x;
+	if (h < hmin) {
+		if (tid == 0) {
+			h = hmin;
+		}
+		__syncthreads();
+	}
+	const float hinv = 1.f / h;
+	float err;
+	__syncthreads();
+	int count;
+	float f;
+	float dfdh;
+	int box_xceeded = false;
+	int iter = 0;
+	float dh;
+	float error;
+	do {
+		float max_dh = h / sqrtf(iter + 100);
+		const float hinv = 1.f / h; // 4
+		const float h2 = sqr(h);    // 1
+		count = 0;
+		f = 0.f;
+		dfdh = 0.f;
+		for (int j = rec.size() - 1 - tid; j >= 0; j -= block_size) {
+			const float dx = distance(x[XDIM], rec[j].x); // 2
+			const float dy = distance(x[YDIM], rec[j].y); // 2
+			const float dz = distance(x[ZDIM], rec[j].z); // 2
+			const float r2 = sqr(dx, dy, dz);            // 2
+			const float r = sqrt(r2);                    // 4
+			const float q = r * hinv;                    // 1
+			if (q < 1.f) {                               // 1
+				const float w = kernelW(q); // 4
+				const float dwdh = -q * dkernelW_dq(q) * hinv; // 3
+				f += w;                                   // 1
+				dfdh += dwdh;                             // 1
+				count++;
+			}
+		}
+		shared_reduce_add<float, BLOCK_SIZE>(f);
+		shared_reduce_add<int, BLOCK_SIZE>(count);
+		wcount = float(4 * M_PI / 3) * f;
+		shared_reduce_add<float, BLOCK_SIZE>(dfdh);
+		float X, dXdh;
+		dsmoothX_dh(h, hmin, X, dXdh);
+		dh = 0.2f * h;
+		if (count > 1) {
+			dfdh = dfdh + dXdh * f;
+			f *= X;
+			f -= N * float(3.0 / (4.0 * M_PI));
+			dh = -f / dfdh;
+			dh = fminf(fmaxf(dh, -max_dh), max_dh);
+		}
+		error = fabsf(f) / (N * float(3.0 / (4.0 * M_PI)));
+		__syncthreads();
+		if (tid == 0) {
+			h += dh;
+			if (iter > 30) {
+				PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, max_dh, error, count);
+			}
+		}
+		__syncthreads();
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (obox.end[dim] < range_fixed(x[dim] + fixed32(h)) + range_fixed::min()) {
+				box_xceeded = true;
+				break;
+			}
+			if (range_fixed(x[dim]) < obox.begin[dim] + range_fixed(h) + range_fixed::min()) {
+				box_xceeded = true;
+				break;
+			}
+		}
+		iter++;
+		if (max_dh / h < 1e-4f) {
+			if (tid == 0) {
+				PRINT("density solver failed to converge %i\n", rec.size());
+				__trap();
+			}
+		}
+		shared_reduce_add<int, BLOCK_SIZE>(box_xceeded);
+	} while (error > 1e-4f && !box_xceeded);
+	if (tid == 0 && h <= 0.f) {
+		PRINT("Less than ZERO H! sph.cu %e\n", h);
+		__trap();
+	}
+	return !box_xceeded;
+
+}
+#endif
 #endif /* SPH_CUDA_HPP_ */

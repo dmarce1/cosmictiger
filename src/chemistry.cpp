@@ -98,7 +98,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 					}
 					double dt = (rung_dt[rung1]) * t0;
-					chem.rho = mass * float(3.0f / 4.0f / M_PI * N) * powf(sph_particles_smooth_len(i),-3) * (1.f - sph_particles_Z(i));
+					chem.rho = sph_particles_rho(i);
 					if( stars ) {
 
 					}

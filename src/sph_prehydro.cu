@@ -19,14 +19,8 @@
 
 #include <cosmictiger/sph_cuda.hpp>
 
-struct prehydro1_record1 {
-	fixed32 x;
-	fixed32 y;
-	fixed32 z;
-};
-
 struct prehydro1_workspace {
-	device_vector<prehydro1_record1> rec1;
+	device_vector<softlens_record> rec1;
 };
 
 __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
@@ -91,56 +85,14 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
-				float h0 = params.hmin;
-				const auto test = [h0,x,block_size,tid,&data](float h) {
-					float w = 0.f;
-					const float hinv = 1.f / h;
-					for (int j = tid; j < ws.rec1.size(); j += block_size) {
-						const float dx = distance(x[XDIM], ws.rec1[j].x); // 2
-						const float dy = distance(x[YDIM], ws.rec1[j].y);// 2
-						const float dz = distance(x[ZDIM], ws.rec1[j].z);// 2
-						const float r2 = sqr(dx, dy, dz);// 2
-						const float r = sqrt(r2);// 4
-						const float q = r * hinv;// 1
-						if (q < 1.f) {                               // 1
-							w += kernelW(q);// 4
-						}
-					}
-					shared_reduce_add<float, PREHYDRO1_BLOCK_SIZE>(w);
-					return (4.0f * float(M_PI) / 3.0f) * smoothX(h,h0) * w - data.N;
-				};
-				float hmax = 1.0f;
-				for (int dim = 0; dim < NDIM; dim++) {
-					hmax = fminf(hmax, fabs(distance(self.outer_box.begin[dim], x[dim])));
-					hmax = fminf(hmax, fabs(distance(self.outer_box.end[dim], x[dim])));
-				}
-				float hmin = h0;
-				const float hmax0 = hmax;
-				const float hmin0 = hmin;
-				float test_max = test(hmax);
-				float hmid;
-				int iters = 0;
-				if (hmax > hmin) {
-					do {
-						hmid = 0.5f * hmax + 0.5f * hmin;
-						const float test_mid = test(hmid);
-						if (test_mid * test_max < 0.f) {
-							hmin = hmid;
-						} else {
-							hmax = hmid;
-							test_max = test_mid;
-						}
-						iters++;
-					} while (hmax > 1.001f * hmin);
-				}
-				if (hmax <= hmin || hmin == hmin0 || hmax == hmax0) {
+				float wcount;
+				if (!compute_softlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin, data.N, ws.rec1, x, self.outer_box, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
-						h = hmax0;
+						converged = false;
 					}
 				} else {
 					if (tid == 0) {
-						h = hmid;
 						converged = true;
 						hmin_all = fminf(hmin_all, h);
 						hmax_all = fmaxf(hmax_all, h);
@@ -161,23 +113,18 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 	(&ws)->~prehydro1_workspace();
 }
 
-struct prehydro2_record1 {
-	fixed32 x;
-	fixed32 y;
-	fixed32 z;
-	float h;
-	char star;
-};
 
 struct prehydro2_record2 {
 	float vx;
 	float vy;
 	float vz;
 	float entr;
+	float h;
+	char star;
 };
 
 struct prehydro2_workspace {
-	device_vector<prehydro2_record1> rec1;
+	device_vector<softlens_record> rec1;
 	device_vector<prehydro2_record2> rec2;
 	device_vector<int> neighbors;
 };
@@ -242,11 +189,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
-					ws.rec1[k].h = data.h[pi];
+					ws.rec2[k].h = data.h[pi];
 					if (params.stars) {
-						ws.rec1[k].star = data.stars[pi];
+						ws.rec2[k].star = data.stars[pi];
 					} else {
-						ws.rec1[k].star = false;
+						ws.rec2[k].star = false;
 					}
 					ws.rec2[k].vx = data.vx[pi];
 					ws.rec2[k].vy = data.vy[pi];
@@ -286,10 +233,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
 						const auto& rec1 = ws.rec1[j];
+						const auto& rec2 = ws.rec2[j];
 						const auto& x_j = rec1.x;
 						const auto& y_j = rec1.y;
 						const auto& z_j = rec1.z;
-						const auto& h_j = rec1.h;
+						const auto& h_j = rec2.h;
 						const auto h2_j = sqr(h_j);									// 1
 						const float x_ij = distance(x_i, x_j);						// 1
 						const float y_ij = distance(y_i, y_j);						// 1
@@ -316,58 +264,15 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
-				float h0 = params.hmin;
-				const auto test = [h0,x,block_size,tid,&data](float h) {
-					float w = 0.f;
-					const float hinv = 1.f / h;
-					for (int j = tid; j < ws.rec1.size(); j += block_size) {
-						const float dx = distance(x[XDIM], ws.rec1[j].x); // 2
-						const float dy = distance(x[YDIM], ws.rec1[j].y);// 2
-						const float dz = distance(x[ZDIM], ws.rec1[j].z);// 2
-						const float r2 = sqr(dx, dy, dz);// 2
-						const float r = sqrt(r2);// 4
-						const float q = r * hinv;// 1
-						if (q < 1.f) {                               // 1
-							w += kernelW(q);// 4
-						}
-					}
-					shared_reduce_add<float, PREHYDRO1_BLOCK_SIZE>(w);
-					return (4.0f * float(M_PI) / 3.0f) * smoothX(h,h0) * w - data.N;
-				};
-				float hmax = 1.0f;
-				for (int dim = 0; dim < NDIM; dim++) {
-					hmax = fminf(hmax, fabs(distance(self.outer_box.begin[dim], x[dim])));
-					hmax = fminf(hmax, fabs(distance(self.outer_box.end[dim], x[dim])));
-				}
-				float hmin = h0;
-				const float hmax0 = hmax;
-				const float hmin0 = hmin;
-				float test_max = test(hmax);
-				float hmid;
-				int iters = 0;
-				if (hmax > hmin) {
-					do {
-						hmid = 0.5f * hmax + 0.5f * hmin;
-						const float test_mid = test(hmid);
-						if (test_mid * test_max < 0.f) {
-							hmin = hmid;
-						} else {
-							hmax = hmid;
-							test_max = test_mid;
-						}
-						iters++;
-					} while (hmax > 1.001f * hmin);
-				}
-				if (hmax <= hmin || hmin == hmin0 || hmax == hmax0) {
-					box_xceeded = true;
+				float wcount;
+				if (!compute_softlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin, data.N, ws.rec1, x, self.outer_box, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
-						h = hmax0;
+						converged = false;
 					}
 				} else {
 					if (tid == 0) {
 						converged = true;
-						h = hmid;
 					}
 				}
 			}
@@ -406,10 +311,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					bool contains = false;
 					if (j < ws.rec1.size()) {
 						const auto& rec1 = ws.rec1[j];
+						const auto& rec2 = ws.rec2[j];
 						const fixed32& x_j = rec1.x;
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
-						const auto star_j = rec1.star;
+						const auto star_j = rec2.star;
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1

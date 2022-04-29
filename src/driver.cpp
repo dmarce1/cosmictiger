@@ -879,6 +879,7 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
+				PRINT( "--------------------------------------------%e\n", heating);
 				eheat -= a * heating;
 			}
 			if (full_eval) {

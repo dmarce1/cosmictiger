@@ -485,7 +485,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const int rung_grav = ceilf(log2fparamst0 - log2f(dtgrav));       // 10
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
 						max_rung_grav = max(max_rung_grav, rung_grav);
-						rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+						if( data.gravity ) {
+							rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+						} else {
+							rung = max(max((int) (rung_hydro), max(params.min_rung, (int) rung - 1)), 1);
+						}
 						max_rung = max(max_rung, rung);
 						atomicMax(&reduce->dtinv_cfl, dtinv_cfl);
 						atomicMax(&reduce->dtinv_visc, dtinv_visc);
@@ -494,7 +498,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						atomicMax(&reduce->dtinv_divv, dtinv_divv);
 						if (rung < 0 || rung > 10) {
 							if (tid == 0) {
-								PRINT("Rung out of range %i %i %e %e %e |%e %e %e %e %e\n", rung_grav, star_i, cfrac_i, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff,
+								PRINT("Rung out of range %i %e %e %e %e |%e %e %e %e %e\n", rung_hydro, vsig, cfrac_i, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff,
 										dtinv_acc, dtinv_divv);
 								//		__trap();
 							}
