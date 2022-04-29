@@ -328,7 +328,7 @@ inline T kernelPot(T q) {
 #endif
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
-	res = (sw1 * res + sw2 / (q0 + T(1e-30f))) * (q > T(0));
+	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
 	return res;
 }
 CUDA_EXPORT
