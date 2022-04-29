@@ -103,7 +103,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 				if(get_options().vsoft ) {
 					float& h = particles_softlen(i);
 					const float divv = particles_divv(i);
-					float dloghdt = divv / (3.f + dlogsmoothX_dlogh(h,get_options().hmin));
+					float dloghdt = divv / (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax));
 					float c0 = expf(dloghdt*dt);
 					h *= c0;
 				}
@@ -114,7 +114,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					const float eint = sph_particles_eint(j);
 					if( !get_options().vsoft ) {
 						const float divv = sph_particles_divv(j);
-						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale) / (3.f + dlogsmoothX_dlogh(h,get_options().hmin));
+						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale) / (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax));
 						float c0 = expf(dloghdt*dt);
 						h *= c0;
 					}

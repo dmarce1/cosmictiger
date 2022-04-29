@@ -86,7 +86,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin, data.N, ws.rec1, x, self.outer_box, wcount)) {
+				if (!compute_softlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin,params.hmax, data.N, ws.rec1, x, self.outer_box, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 						converged = false;
@@ -265,7 +265,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin, data.N, ws.rec1, x, self.outer_box, wcount)) {
+				if (!compute_softlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin,  params.hmax, data.N, ws.rec1, x, self.outer_box, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 						converged = false;
@@ -353,7 +353,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				data.rho_snk[snki] = rho_i;
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
-				dsmoothX_dh(h_i, params.hmin, f, dfdh);
+				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega_i = (A + B) / (1.0f + B);
 				ALWAYS_ASSERT(omega_i > 0.f);

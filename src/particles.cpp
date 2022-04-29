@@ -275,7 +275,7 @@ int particles_apply_updates(int minrung, float t0, float a) {
 					auto& gz = particles_gforce(ZDIM,i);
 					const auto& divv = particles_divv(i);
 					const auto h = particles_softlen(i);
-					const float dt_divv = cfl * (3.f + dlogsmoothX_dlogh(h,get_options().hmin)) * a / (fabs(divv) + 1e-37f);
+					const float dt_divv = cfl * (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax)) * a / (fabs(divv) + 1e-37f);
 					float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
 					auto new_rung = (int) ceilf(log2f(t0/dt));
 					rung = new_rung;

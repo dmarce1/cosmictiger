@@ -131,6 +131,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hmin", po::value<double>(&(opts.hmin))->default_value(1.0/50.0), "minimum smoothing length") //
+	("hmax", po::value<double>(&(opts.hmax))->default_value(5.0), "maximum smoothing length") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<double>(&(opts.kernel))->default_value(2), "kernel index") //
 	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(128), "SPH neighbor number") //
@@ -176,6 +177,7 @@ bool process_options(int argc, char *argv[]) {
 		po::notify(vm);
 	}
 	opts.hmin /= opts.parts_dim;
+	opts.hmax /= opts.parts_dim;
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";

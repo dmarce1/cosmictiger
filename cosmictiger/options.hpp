@@ -71,6 +71,7 @@ struct options {
 	double GM;
 	double eta;
 	double hmin;
+	double hmax;
 	double code_to_s;
 	double code_to_cm;
 	double code_to_g;

@@ -161,7 +161,7 @@ struct softlens_record {
 
 #ifdef __CUDACC__
 template<int BLOCK_SIZE>
-inline __device__ bool compute_softlens(float & h,float hmin, float N, const device_vector<softlens_record>& rec, const array<fixed32, NDIM>& x,
+inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float N, const device_vector<softlens_record>& rec, const array<fixed32, NDIM>& x,
 		const fixed32_range& obox, float& wcount) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
@@ -208,7 +208,7 @@ inline __device__ bool compute_softlens(float & h,float hmin, float N, const dev
 		wcount = float(4 * M_PI / 3) * f;
 		shared_reduce_add<float, BLOCK_SIZE>(dfdh);
 		float X, dXdh;
-		dsmoothX_dh(h, hmin, X, dXdh);
+		dsmoothX_dh(h, hmin, hmax, X, dXdh);
 		dh = 0.2f * h;
 		if (count > 1) {
 			dfdh = dfdh + dXdh * f;

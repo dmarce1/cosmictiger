@@ -50,6 +50,7 @@ struct all_tree_data {
 	float* sph_h_snk;
 	char* types;
 	float hmin;
+	float hmax;
 	part_int* cat_snk;
 	char* type_snk;
 	int minrung;

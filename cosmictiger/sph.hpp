@@ -228,6 +228,7 @@ struct sph_run_params {
 	bool tzero;
 	float cfl;
 	float hmin;
+	float hmax;
 	int max_rung;
 	float gy;
 	float tau;
@@ -250,6 +251,7 @@ struct sph_run_params {
 		iter = 0;
 		const auto opts = get_options();
 		hmin = opts.hmin;
+		hmax = opts.hmax;
 		stars = opts.stars;
 		vsoft = opts.vsoft;
 		av_type = opts.visc_type;
@@ -274,6 +276,8 @@ struct sph_run_params {
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & hmin;
+		arc & hmax;
 		arc & omega_m;
 		arc & vsoft;
 		arc & H0;

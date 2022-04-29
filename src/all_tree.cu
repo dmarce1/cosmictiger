@@ -115,7 +115,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 				__syncthreads();
 				float& h = params.softlen_snk[snki];
 				float count;
-				const bool box_xceeded = !compute_softlens<SOFTLENS_BLOCK_SIZE>(h, params.hmin, params.N, ws.rec, x, self.obox, count);
+				const bool box_xceeded = !compute_softlens < SOFTLENS_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec, x, self.obox, count);
 				hmin_all = fminf(hmin_all, h);
 				hmax_all = fmaxf(hmax_all, h);
 				if (tid == 0) {
@@ -289,10 +289,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const auto type_i = params.types[i];
 				float& h = params.softlen_snk[snki];
 				float count;
-				box_xceeded = !compute_softlens<DERIVATIVES_BLOCK_SIZE>(h, params.hmin, params.N, ws.rec1, x, self.obox, count);
-				if (box_xceeded) {
-					PRINT("!!!!!!!!!!!!!!!!\n");
-				}
+				box_xceeded = !compute_softlens < DERIVATIVES_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec1, x, self.obox, count);
 				hmin_all = fminf(hmin_all, h);
 				hmax_all = fmaxf(hmax_all, h);
 				if (tid == 0) {
@@ -356,10 +353,10 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
-				dsmoothX_dh(h_i, params.hmin, f, dfdh);
+				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega = (A + B) / (1.0f + B);
-		//		const float zeta2_i = dpot_dh * f / (omega * (3.f + dfdh * h_i / f) * w_sum);
+				//		const float zeta2_i = dpot_dh * f / (omega * (3.f + dfdh * h_i / f) * w_sum);
 				const float zeta_i = 0.33333333333f * dpot_dh / (w_sum * (A + B));
 				__syncthreads();
 				if (tid == 0) {
@@ -512,7 +509,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(divv);
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
-				dsmoothX_dh(h_i, params.hmin, f, dfdh);
+				dsmoothX_dh(h_i, params.hmin,  params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega = (A + B) / (1.0f + B);
 				divv /= omega * params.a;				  // 4
@@ -543,6 +540,9 @@ softlens_return all_tree_softlens_cuda(all_tree_data params, cudaStream_t stream
 	reduce->flops = 0.0;
 	reduce->gnmax = reduce->snmax = 0.0;
 	reduce->gnmin = reduce->snmin = 1e37;
+	params.hmin = get_options().hmin;
+	params.hmax = get_options().hmax;
+
 	static int softlens_nblocks;
 	static bool first = true;
 	timer tm;
@@ -578,6 +578,8 @@ softlens_return all_tree_divv_cuda(all_tree_data params, cudaStream_t stream) {
 	reduce->hmin = std::numeric_limits<float>::max();
 	reduce->hmax = 0.0f;
 	reduce->flops = 0.0;
+	params.hmin = get_options().hmin;
+	params.hmax = get_options().hmax;
 	static int divv_nblocks;
 	static bool first = true;
 	timer tm;
@@ -610,6 +612,8 @@ softlens_return all_tree_derivatives_cuda(all_tree_data params, cudaStream_t str
 	params.dm_mass = get_options().dm_mass;
 	params.sph_mass = get_options().sph_mass;
 	params.sph = get_options().sph;
+	params.hmin = get_options().hmin;
+	params.hmax = get_options().hmax;
 	static int derivatives_nblocks;
 	static bool first = true;
 	timer tm;
