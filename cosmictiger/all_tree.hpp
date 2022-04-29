@@ -44,6 +44,7 @@ struct all_tree_data {
 	float* zeta_snk;
 	float* divv_snk;
 	float* gx_snk;
+	int pass;
 	float* gy_snk;
 	float* gz_snk;
 	float* sph_h_snk;

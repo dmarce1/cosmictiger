@@ -406,7 +406,7 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 							if (active) {
 								if (near_flags.sum() == 0) {
 									rinv1 = simd_float(1) / sqrt(r2);
-									rinv3 = rinv1 * sqr(rinv1);
+									rinv3 = mass * rinv1 * sqr(rinv1);
 								} else {
 									const auto& h_i = sink_hsoft;
 									const auto& h_j = hsoft;
@@ -423,11 +423,10 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									rinv1 = simd_float(1) / (r + tiny);                                                    // 5
 									const auto q_i = r * hinv_i;
 									const auto q_j = r * hinv_j;
-									rinv3 = kernelFqinv(q_i) * h3inv_i;
-									rinv3 += kernelFqinv(q_j) * h3inv_j;
-									const simd_float same = simd_float(type_i == type_j);
-									rinv3 += same * zeta_i * dkernelW_dq(q_i) * h2inv_i * rinv1;
-									rinv3 += same * zeta_j * dkernelW_dq(q_j) * h2inv_j * rinv1;
+									rinv3 = mass * kernelFqinv(q_i) * h3inv_i;
+									rinv3 += mass * kernelFqinv(q_j) * h3inv_j;
+									rinv3 += zeta_i * dkernelW_dq(q_i) * h2inv_i * rinv1;
+									rinv3 += zeta_j * dkernelW_dq(q_j) * h2inv_j * rinv1;
 									rinv3 *= simd_float(0.5);
 									if (min_rung == 0) {
 										rinv1 = kernelPot(q_i) * hinv_i;
@@ -435,7 +434,6 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 										rinv1 *= simd_float(0.5);
 									}
 								}
-								rinv3 *= mass;
 								rinv1 *= mass;
 								gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
 								gy = fmaf(rinv3, dx[YDIM], gy);																			// 2

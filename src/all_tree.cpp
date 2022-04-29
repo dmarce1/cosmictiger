@@ -24,7 +24,7 @@
 #include <cosmictiger/timer.hpp>
 
 softlens_return all_tree_softlens_execute(int minrung);
-softlens_return all_tree_derivatives_execute(int minrung, float a);
+softlens_return all_tree_derivatives_execute(int minrung, float a, int);
 softlens_return all_tree_divv(int minrung, float a);
 
 HPX_PLAIN_ACTION (all_tree_find_ranges);
@@ -85,6 +85,7 @@ softlens_return all_tree_softlens(int minrung, float a) {
 	} while (rc.fail);
 	softlen_buffer = 1.201;
 	particles_reset_converged();
+	int pass = 0;
 	do {
 		tm.reset();
 		tm.start();
@@ -96,7 +97,8 @@ softlens_return all_tree_softlens(int minrung, float a) {
 		tm.stop();
 		tm.reset();
 		tm.start();
-		rc = all_tree_derivatives_execute(minrung, a);
+		rc = all_tree_derivatives_execute(minrung, a, pass);
+		pass++;
 		tm.stop();
 		PRINT("derivs %e %e %e\n", rc.hmin, rc.hmax, tm.read());
 	} while (rc.fail);
@@ -245,10 +247,10 @@ softlens_return all_tree_softlens_execute(int minrung) {
 	return rc;
 }
 
-softlens_return all_tree_derivatives_execute(int minrung, float a) {
+softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	vector<hpx::future<softlens_return>> rfuts;
 	for (auto& c : hpx_children()) {
-		rfuts.push_back(hpx::async<all_tree_derivatives_execute_action>(c, minrung, a));
+		rfuts.push_back(hpx::async<all_tree_derivatives_execute_action>(c, minrung, a, pass));
 	}
 	vector<tree_node, pinned_allocator<tree_node>> host_trees;
 	vector<fixed32, pinned_allocator<fixed32>> host_x;
@@ -354,6 +356,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a) {
 	params.cat_snk = &particles_cat_index(0);
 	params.type_snk = &particles_type(0);
 	params.nselfs = host_selflist.size();
+	params.pass = pass;
 	params.sa_snk = &particles_semiactive(0);
 	params.sph_h_snk = &sph_particles_smooth_len(0);
 	params.a = a;

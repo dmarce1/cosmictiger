@@ -55,9 +55,9 @@ __device__ bool compute_softlens(float & h, all_tree_data params, const device_v
 		const fixed32_range& obox) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
-	if (h <= 2.f * params.hmin) {
+	if (h <  params.hmin) {
 		if (tid == 0) {
-			h = 2.f * params.hmin;
+			h = params.hmin;
 		}
 		__syncthreads();
 	}
@@ -71,7 +71,6 @@ __device__ bool compute_softlens(float & h, all_tree_data params, const device_v
 	int iter = 0;
 	float dh;
 	float error;
-	float h0 = h;
 	do {
 		float max_dh = h / sqrtf(iter + 100);
 		const float hinv = 1.f / h; // 4
@@ -340,35 +339,39 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 			const float hinv_i = 1.f / h_i; 										// 4
 			const float h2_i = sqr(h_i); 										// 1
 			auto& sa_snk = params.sa_snk[snki];
-			if (active) {
-				sa_snk = true;
-			} else {
-				sa_snk = false;
-				const int jmax = round_up(ws.rec1.size(), block_size);
-				for (int j = tid; j < jmax; j += block_size) {
-					if (j < ws.rec1.size()) {
-						const auto& rec1 = ws.rec1[j];
-						const auto& rec2 = ws.rec2[j];
-						const auto& x_j = rec1.x;
-						const auto& y_j = rec1.y;
-						const auto& z_j = rec1.z;
-						const auto& h_j = rec2.h;
-						const auto h2_j = sqr(h_j);									// 1
-						const float x_ij = distance(x_i, x_j);									// 1
-						const float y_ij = distance(y_i, y_j);									// 1
-						const float z_ij = distance(z_i, z_j);									// 1
-						const float r2 = sqr(x_ij, y_ij, z_ij);									// 5
-						if (r2 < fmaxf(h2_i, h2_j)) {									// 2
-							semiactive++;
+			if (params.pass == 0) {
+				if (active) {
+					sa_snk = true;
+				} else {
+					sa_snk = false;
+					const int jmax = round_up(ws.rec1.size(), block_size);
+					for (int j = tid; j < jmax; j += block_size) {
+						if (j < ws.rec1.size()) {
+							const auto& rec1 = ws.rec1[j];
+							const auto& rec2 = ws.rec2[j];
+							const auto& x_j = rec1.x;
+							const auto& y_j = rec1.y;
+							const auto& z_j = rec1.z;
+							const auto& h_j = rec2.h;
+							const auto h2_j = sqr(h_j);									// 1
+							const float x_ij = distance(x_i, x_j);									// 1
+							const float y_ij = distance(y_i, y_j);									// 1
+							const float z_ij = distance(z_i, z_j);									// 1
+							const float r2 = sqr(x_ij, y_ij, z_ij);									// 5
+							if (r2 < fmaxf(h2_i, h2_j)) {									// 2
+								semiactive++;
+							}
+							flops += 11;
 						}
-						flops += 11;
-					}
-					shared_reduce_add<int, DERIVATIVES_BLOCK_SIZE>(semiactive);
-					if (semiactive) {
-						sa_snk = true;
-						break;
+						shared_reduce_add<int, DERIVATIVES_BLOCK_SIZE>(semiactive);
+						if (semiactive) {
+							sa_snk = true;
+							break;
+						}
 					}
 				}
+			} else {
+				semiactive = sa_snk;
 			}
 			int box_xceeded = false;
 			if (semiactive) {
@@ -376,6 +379,9 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const auto type_i = params.types[i];
 				float& h = params.softlen_snk[snki];
 				box_xceeded = !compute_softlens<DERIVATIVES_BLOCK_SIZE>(h, params, ws.rec1, x, self.obox);
+				if( box_xceeded ) {
+					PRINT( "!!!!!!!!!!!!!!!!\n");
+				}
 				hmin_all = fminf(hmin_all, h);
 				hmax_all = fmaxf(hmax_all, h);
 				if (tid == 0) {
