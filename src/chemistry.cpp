@@ -141,11 +141,12 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					sph_particles_Hep(i) = chem.Hep * factor;
 					sph_particles_Hepp(i) = chem.Hepp * factor;
 					sph_particles_normalize_fracs(i);
-				//	echange += (chem.eint * (1.f - chem.cold_mass) - sph_particles_eint(i) * (1.f - sph_particles_cold_mass(i)))*sph_mass/sqr(a);
+					const float change = (chem.eint * (1.f - chem.cold_mass) - sph_particles_eint(i) * (1.f - sph_particles_cold_mass(i)))*sph_mass/sqr(a);
+					echange += change;
 					const float fh = 1.f - chem.cold_mass;
 					const float rho = sph_particles_rho(i);
 					ALWAYS_ASSERT(fh > 0.0);
-			//		sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
+					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
 					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
@@ -168,7 +169,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 	}
 	tm.stop();
 	if (hpx_rank() == 0) {
-		PRINT("CHEM GFLOPS = %e\n", flops / 1024 / 1024 / 1024 / tm.read());
+		PRINT("CHEM GFLOPS = %e eheat = %e\n", flops / 1024 / 1024 / 1024 / tm.read(), echange);
 	}
 	profiler_exit();
 	pair<double> rc;
