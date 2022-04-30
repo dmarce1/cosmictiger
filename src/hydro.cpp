@@ -143,6 +143,8 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.5, t0 == 0.0, minrung == 0);
 			kr = tmp.first;
 		}
+		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
+		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		if (minrung == 0) {
 			double ekin = 0.0;
 			double eint = 0.0;
@@ -175,8 +177,6 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			fprintf(fp, "%e %e\n", t, rho_max);
 			fclose(fp);
 		}
-		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
-		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		if (!get_options().gravity) {
 			kr.max_rung = rc2.max_rung;
 		}
@@ -199,8 +199,8 @@ void hydro_plummer() {
 	part_int N = pow(get_options().parts_dim, 3);
 	const double a = 0.01;
 	auto opts = get_options();
-	opts.sph_mass = 1. / N;
-	opts.dm_mass = 1. / N;
+	opts.sph_mass = 1.;
+	opts.dm_mass = 1.;
 	const double m = opts.sph_mass;
 	set_options(opts);
 	const double G = opts.GM;
@@ -210,7 +210,7 @@ void hydro_plummer() {
 	double pot = 0.0;
 	double ekin = 0.0;
 	double maxr = 5.0 * a;
-	while (particles_size() < 0) {
+	while (particles_size() < N) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
@@ -239,11 +239,12 @@ void hydro_plummer() {
 			particles_vel(YDIM, k) = y * v;
 			particles_vel(ZDIM, k) = z * v;
 			particles_rung(k) = 0;
+			particles_softlen(k) = h;
 		}
 	}
-	sph_particles_resize(N);
+	sph_particles_resize(0);
 	int k = 0;
-	while (k < N) {
+	while (k < 0) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
@@ -275,6 +276,7 @@ void hydro_plummer() {
 			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.0) / pow(rho0, get_options().gamma - 1.0);
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
+			particles_softlen(sph_particles_dm_index(k)) = h;
 			ekin += 0.5 * m * sqr(v);
 			pot += 0.5 * m * phi;
 			k++;

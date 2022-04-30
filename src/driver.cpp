@@ -921,11 +921,13 @@ void driver() {
 			drift_time += dtm.read();
 			const double total_kinetic = dr.kin + dr.therm;
 			cosmicK += (total_kinetic) * (a - a1);
-			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat);
+			eheat *= a / a1;
+			eheat = 0.f;
+			const double esum = (a * (pot + total_kinetic) + cosmicK +  eheat);
 			if (tau == 0.0) {
 				esum0 = esum;
 			}
-			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat);
+			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK +  eheat);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");

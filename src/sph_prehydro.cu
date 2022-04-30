@@ -66,6 +66,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].type = SPH_TYPE;
 				}
 			}
 		}
@@ -86,7 +87,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin,params.hmax, data.N, ws.rec1, x, self.outer_box, wcount)) {
+				if (!compute_softlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin,params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 						converged = false;
@@ -189,6 +190,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
+					ws.rec1[k].type = SPH_TYPE;
 					ws.rec2[k].h = data.h[pi];
 					if (params.stars) {
 						ws.rec2[k].star = data.stars[pi];
@@ -265,7 +267,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin,  params.hmax, data.N, ws.rec1, x, self.outer_box, wcount)) {
+				if (!compute_softlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin,  params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 						converged = false;
@@ -356,6 +358,9 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega_i = (A + B) / (1.0f + B);
+				if( !(omega_i > 0.0) ) {
+					PRINT( "%e %e %e %e\n", omega_i, A, B, h_i);
+				}
 				ALWAYS_ASSERT(omega_i > 0.f);
 				__syncthreads();
 				const float h4inv_i = h3inv_i * hinv_i;						// 1

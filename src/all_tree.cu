@@ -99,7 +99,6 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 		float snmax = 0.0f;
 		float gnmin = 1.0e37f;
 		float snmin = 1.0e37f;
-		float error;
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
@@ -111,11 +110,11 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 				x[XDIM] = params.x[i];
 				x[YDIM] = params.y[i];
 				x[ZDIM] = params.z[i];
-				const auto type_i = params.types[i];
+				const auto& type_i = params.types[i];
 				__syncthreads();
 				float& h = params.softlen_snk[snki];
 				float count;
-				const bool box_xceeded = !compute_softlens < SOFTLENS_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec, x, self.obox, count);
+				const bool box_xceeded = !compute_softlens < SOFTLENS_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec, x, self.obox, type_i, count);
 				hmin_all = fminf(hmin_all, h);
 				hmax_all = fmaxf(hmax_all, h);
 				if (tid == 0) {
@@ -241,7 +240,6 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 			x[XDIM] = params.x[i];
 			x[YDIM] = params.y[i];
 			x[ZDIM] = params.z[i];
-			const auto& type_i = params.types[i];
 			const fixed32& x_i = x[XDIM];
 			const fixed32& y_i = x[YDIM];
 			const fixed32& z_i = x[ZDIM];
@@ -289,7 +287,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const auto type_i = params.types[i];
 				float& h = params.softlen_snk[snki];
 				float count;
-				box_xceeded = !compute_softlens < DERIVATIVES_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec1, x, self.obox, count);
+				box_xceeded = !compute_softlens < DERIVATIVES_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec1, x, self.obox, type_i, count);
 				hmin_all = fminf(hmin_all, h);
 				hmax_all = fmaxf(hmax_all, h);
 				if (tid == 0) {
@@ -309,12 +307,14 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				const fixed32& x_i = x[XDIM];
 				const fixed32& y_i = x[YDIM];
 				const fixed32& z_i = x[ZDIM];
+				const auto& type_i = params.types[i];
 				const float hinv_i = 1.f / h_i;									// 4
 				const float h3inv_i = sqr(hinv_i) * hinv_i;
 				const float h2_i = sqr(h_i);									// 1
 				float w_sum = 0.f;
 				float dw_sum = 0.f;
-				float dpot_dh = 0.f;
+				float dpot_dh1 = 0.f;
+				float dpot_dh2 = 0.f;
 				__syncthreads();
 				flops += 10;
 				const int jmax = round_up(ws.rec1.size(), DERIVATIVES_BLOCK_SIZE);
@@ -333,16 +333,23 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i; // 1
 						if (q < 1.f) {                               // 1
-							//		if (type_i == type_j) {
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
-							dw_sum -= q * dwdq;							// 2
-							w_sum += w;
-							//		}
-							const float m_j = params.sph ? (type_j == DARK_MATTER_TYPE ? params.dm_mass : params.sph_mass) : 1.f;
-							const float pot = -kernelPot(q);
-							const float force = kernelFqinv(q) * q;
-							dpot_dh += m_j * (pot + q * force);
+							if (type_i == type_j) {
+								const float w = kernelW(q);
+								const float dwdq = dkernelW_dq(q);
+								dw_sum -= q * dwdq;							// 2
+								w_sum += w;
+							}
+							if (type_j == DARK_MATTER_TYPE) {
+								const float m_j = params.sph ? params.dm_mass : 1.f;
+								const float pot = -kernelPot(q);
+								const float force = kernelFqinv(q) * q;
+								dpot_dh1 += m_j * (pot + q * force);
+							} else {
+								const float m_j = params.sph_mass;
+								const float pot = -kernelPot(q);
+								const float force = kernelFqinv(q) * q;
+								dpot_dh2 += m_j * (pot + q * force);
+							}
 							flops += 2;
 						}
 						flops += 9;
@@ -350,17 +357,20 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				}
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(w_sum);
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dw_sum);
-				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh2);
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh1);
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
 				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega = (A + B) / (1.0f + B);
 				//		const float zeta2_i = dpot_dh * f / (omega * (3.f + dfdh * h_i / f) * w_sum);
-				const float zeta_i = 0.33333333333f * dpot_dh / (w_sum * (A + B));
+				const float zeta1_i = 0.33333333333f * dpot_dh1 / (w_sum * (A + B));
+				const float zeta2_i = 0.33333333333f * dpot_dh2 / (w_sum * (A + B));
 				__syncthreads();
 				if (tid == 0) {
-					params.zeta_snk[snki] = zeta_i;
+					params.zeta1_snk[snki] = zeta1_i;
+					params.zeta2_snk[snki] = zeta2_i;
 				}
 			}
 		}
@@ -463,7 +473,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 				const fixed32& x_i = x[XDIM];
 				const fixed32& y_i = x[YDIM];
 				const fixed32& z_i = x[ZDIM];
-				//const auto& type_i = params.types[i];
+				const auto& type_i = params.types[i];
 				const float& vx_i = params.vx[i];
 				const float& vy_i = params.vy[i];
 				const float& vz_i = params.vz[i];
@@ -480,7 +490,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 						const fixed32& x_j = rec1.x;
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
-						//			const auto& type_j = rec1.type;
+						const auto& type_j = rec1.type;
 						const float& vx_j = rec2.vx;
 						const float& vy_j = rec2.vy;
 						const float& vz_j = rec2.vz;
@@ -494,7 +504,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 						const float r = sqrtf(r2);							// 4
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i;							// 1
-						if (q < 1.f /*&& (type_i == type_j)*/) {                               // 1
+						if (q < 1.f && (type_i == type_j)) {                               // 1
 							const float w = kernelW(q);
 							const float dwdq = dkernelW_dq(q);
 							dw_sum -= q * dwdq;                               // 2
@@ -509,7 +519,7 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(divv);
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
-				dsmoothX_dh(h_i, params.hmin,  params.hmax, f, dfdh);
+				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega = (A + B) / (1.0f + B);
 				divv /= omega * params.a;				  // 4

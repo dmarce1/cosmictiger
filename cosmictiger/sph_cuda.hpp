@@ -33,9 +33,7 @@
 #include <cosmictiger/kernel.hpp>
 #include <cosmictiger/math.hpp>
 
-
 #define ETA 0.01f
-
 
 struct sph_run_cuda_data {
 	fixed32* x;
@@ -116,7 +114,6 @@ struct sph_run_cuda_data {
 #define COND_INIT_BLOCK_SIZE 32
 #define CONDUCTION_BLOCK_SIZE 32
 
-
 #define SPH_DIFFUSION_C 0.03f
 #define MAX_RUNG_DIF 2
 #define SPH_SMOOTHLEN_TOLER float(1.0e-4)
@@ -150,8 +147,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 __global__ void sph_cuda_rungs(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce);
 
-
-
 struct softlens_record {
 	fixed32 x;
 	fixed32 y;
@@ -162,7 +157,7 @@ struct softlens_record {
 #ifdef __CUDACC__
 template<int BLOCK_SIZE>
 inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float N, const device_vector<softlens_record>& rec, const array<fixed32, NDIM>& x,
-		const fixed32_range& obox, float& wcount) {
+		const fixed32_range& obox, int type_i,float& wcount) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
 	if (h < hmin) {
@@ -172,7 +167,6 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 		__syncthreads();
 	}
 	const float hinv = 1.f / h;
-	float err;
 	__syncthreads();
 	int count;
 	float f;
@@ -181,26 +175,39 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 	int iter = 0;
 	float dh;
 	float error;
+	float sgn;
+	float last_sgn = 0.f;
+	float w = 1.0f;
 	do {
-		float max_dh = h / sqrtf(iter + 100);
+		float max_dh = h * 0.1f;
 		const float hinv = 1.f / h; // 4
-		const float h2 = sqr(h);    // 1
+		const float h2 = sqr(h);// 1
 		count = 0;
 		f = 0.f;
 		dfdh = 0.f;
+		const auto& x_i = x[XDIM];
+		const auto& y_i = x[YDIM];
+		const auto& z_i = x[ZDIM];
 		for (int j = rec.size() - 1 - tid; j >= 0; j -= block_size) {
-			const float dx = distance(x[XDIM], rec[j].x); // 2
-			const float dy = distance(x[YDIM], rec[j].y); // 2
-			const float dz = distance(x[ZDIM], rec[j].z); // 2
-			const float r2 = sqr(dx, dy, dz);            // 2
-			const float r = sqrt(r2);                    // 4
-			const float q = r * hinv;                    // 1
-			if (q < 1.f) {                               // 1
-				const float w = kernelW(q); // 4
-				const float dwdh = -q * dkernelW_dq(q) * hinv; // 3
-				f += w;                                   // 1
-				dfdh += dwdh;                             // 1
-				count++;
+			const auto& r = rec[j];
+			const auto& type_j = r.type;
+			if( type_j == type_i ) {
+				const auto& x_j = r.x;
+				const auto& y_j = r.y;
+				const auto& z_j = r.z;
+				const float x_ij = distance(x_i, x_j);
+				const float y_ij = distance(y_i, y_j);
+				const float z_ij = distance(z_i, z_j);
+				const float r2 = sqr(x_ij, y_ij, z_ij); // 2
+				const float r = sqrt(r2);// 4
+				const float q = r * hinv;// 1
+				if (q < 1.f) {                               // 1
+					const float w = kernelW(q);// 4
+					const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
+					f += w;// 1
+					dfdh += dwdh;// 1
+					count++;
+				}
 			}
 		}
 		shared_reduce_add<float, BLOCK_SIZE>(f);
@@ -215,14 +222,21 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 			f *= X;
 			f -= N * float(3.0 / (4.0 * M_PI));
 			dh = -f / dfdh;
-			dh = fminf(fmaxf(dh, -max_dh), max_dh);
+			sgn = copysignf(1.f,dh);
+			if( sgn * last_sgn < 0.f ) {
+				w *= 0.5f;
+			} else {
+				w = fminf(1.f,w*1.1f);
+			}
+			last_sgn = sgn;
+			dh = w * fminf(fmaxf(dh, -max_dh), max_dh);
 		}
 		error = fabsf(f) / (N * float(3.0 / (4.0 * M_PI)));
 		__syncthreads();
 		if (tid == 0) {
 			h += dh;
-			if (iter > 30) {
-				PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, max_dh, error, count);
+			if (iter >= 100) {
+				PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, w, error, count);
 			}
 		}
 		__syncthreads();
@@ -237,14 +251,8 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 			}
 		}
 		iter++;
-		if (max_dh / h < 1e-4f) {
-			if (tid == 0) {
-				PRINT("density solver failed to converge %i\n", rec.size());
-				__trap();
-			}
-		}
 		shared_reduce_add<int, BLOCK_SIZE>(box_xceeded);
-	} while (error > 1e-4f && !box_xceeded);
+	}while (error > 1e-4f && !box_xceeded);
 	if (tid == 0 && h <= 0.f) {
 		PRINT("Less than ZERO H! sph.cu %e\n", h);
 		__trap();
@@ -253,4 +261,6 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 
 }
 #endif
+
+
 #endif /* SPH_CUDA_HPP_ */

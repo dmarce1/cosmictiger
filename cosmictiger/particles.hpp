@@ -143,7 +143,8 @@ PARTICLES_EXTERN array<float*, NDIM> particles_v;
 PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_s;
-PARTICLES_EXTERN float* particles_z;
+PARTICLES_EXTERN float* particles_z1;
+PARTICLES_EXTERN float* particles_z2;
 PARTICLES_EXTERN char* particles_c;
 PARTICLES_EXTERN char* particles_sa;
 PARTICLES_EXTERN float* particles_p;
@@ -174,7 +175,7 @@ void particles_resolve_with_sph_particles();
 int particles_apply_updates(int minrung, float t0, float a );
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
-void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, float* zeta, part_int offset);
+void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, float* zeta1,float* zeta2, part_int offset);
 void particles_global_read_softlens(particle_global_range range, float* h, part_int offset);
 void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
@@ -245,9 +246,14 @@ inline float& particles_softlen(part_int index) {
 	return particles_s[index];
 }
 
-inline float& particles_zeta(part_int index) {
+inline float& particles_zeta1(part_int index) {
 	CHECK_PART_BOUNDS(index);
-	return particles_z[index];
+	return particles_z1[index];
+}
+
+inline float& particles_zeta2(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_z2[index];
 }
 
 inline float& particles_gforce(int dim, part_int index) {

@@ -60,7 +60,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 			for( part_int i = b; i < e; i++) {
 				int rung1 = sph_particles_rung(i);
 				//	int rung2 = sph_particles_oldrung(i);
-				if( rung1 >= minrung ) {
+				if( rung1 >= minrung && !sph_particles_isstar(i)) {
 					chem_attribs chem;
 					float T = sph_particles_temperature(i,a);
 					sph_particles_normalize_fracs(i);

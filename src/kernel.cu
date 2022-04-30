@@ -69,10 +69,6 @@ void kernel_adjust_options(options& opts) {
 	opts.gneighbor_number = 142;
 	opts.sneighbor_number = 142;
 #endif
-	if (opts.gravity) {
-		opts.sneighbor_number *= 2;
-		opts.gneighbor_number *= 2;
-	}
 	PRINT("Setting:\n");
 	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);
 	PRINT("CFL = %f\n", opts.cfl);

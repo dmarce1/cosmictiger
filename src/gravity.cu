@@ -382,19 +382,22 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const auto& sink_z = shmem.sink_z;
 	const bool vsoft = data.vsoft;
 	const auto& sink_h = shmem.sink_h;
-	const auto& sink_zeta = shmem.sink_zeta;
+	const auto& sink_zeta1 = shmem.sink_zeta1;
+	const auto& sink_zeta2 = shmem.sink_zeta2;
 	const auto& sink_type = shmem.sink_type;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
 	const auto* main_src_h = data.h;
-	const auto* main_src_zeta = data.zeta;
+	const auto* main_src_zeta1 = data.zeta1;
+	const auto* main_src_zeta2 = data.zeta2;
 	const auto* main_src_type = data.type;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
 	auto& src_h = shmem.src.h;
-	auto& src_zeta = shmem.src.zeta;
+	auto& src_zeta1 = shmem.src.zeta1;
+	auto& src_zeta2 = shmem.src.zeta2;
 	auto& src_type = shmem.src.type;
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
@@ -434,10 +437,12 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 					src_type[i1] = main_src_type[i2];
 					if (vsoft) {
 						src_h[i1] = main_src_h[i2];
-						src_zeta[i1] = main_src_zeta[i2];
+						src_zeta1[i1] = main_src_zeta1[i2];
+						src_zeta2[i1] = main_src_zeta2[i2];
 					} else {
 						src_h[i1] = h;
-						src_zeta[i1] = 0.f;
+						src_zeta1[i1] = 0.f;
+						src_zeta2[i1] = 0.f;
 					}
 				}
 				__syncwarp();
@@ -466,7 +471,6 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				fz = 0.f;
 				pot = 0.f;
 				const float& h_i = sink_h[k];
-				const float& zeta_i = sink_zeta[k];
 				const auto& type_i = sink_type[k];
 				const float hinv_i = 1.f / h_i;
 				const float h2inv_i = sqr(hinv_i);
@@ -479,12 +483,13 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					const float& h_j = src_h[j];
-					const float& zeta_j = src_zeta[j];
 					const float h2 = sqr(fmaxf(h_i, h_j));
 					if (r2 > h2) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
+						const float& zeta_j = type_j == DARK_MATTER_TYPE ? src_zeta1[j] : src_zeta2[j];
+						const float& zeta_i = type_j == DARK_MATTER_TYPE ? sink_zeta1[k] : sink_zeta2[k];
 						const float hinv_j = 1.0f / h_j;
 						const float h2inv_j = sqr(hinv_j);
 						const float h3inv_j = h2inv_j * hinv_j;
