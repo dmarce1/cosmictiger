@@ -353,7 +353,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 
 	if (stars && minrung <= 1) {
-		stars_statistics(scale);
 		if (stars_find(scale, dt, minrung, iter, t0)) {
 
 			sparams.phase = 0;
@@ -391,7 +390,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				tm.reset();
 				kr = sph_run_return();
 			} while (cont);
-
+			stars_statistics(scale);
 		}
 		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
 	}
@@ -921,8 +920,6 @@ void driver() {
 			drift_time += dtm.read();
 			const double total_kinetic = dr.kin + dr.therm;
 			cosmicK += (total_kinetic) * (a - a1);
-			eheat *= a / a1;
-			eheat = 0.f;
 			const double esum = (a * (pot + total_kinetic) + cosmicK +  eheat);
 			if (tau == 0.0) {
 				esum0 = esum;

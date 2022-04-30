@@ -89,14 +89,15 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
 				const float rho = sph_particles_rho(i);
-				const float rho0 = get_options().sneighbor_number / (4.0/3.0*M_PI*pow(sph_particles_smooth_len(i),3));
+				const float rho0 = get_options().sneighbor_number * get_options().sph_mass / (4.0/3.0*M_PI*pow(sph_particles_smooth_len(i),3));
 				const float tdyn = sqrtf((3.0*a*a*a)/(8.0*M_PI*G*rho))/a;
-				if( rho/rho0 > 10.0 && sph_particles_smooth_len(i) < 0.5*get_options().hmax ) {
+//				PRINT( "%e\n", rho/rho0);
+				if( rho/rho0 > 5.0 && sph_particles_smooth_len(i) < 0.5*get_options().hmax ) {
 					PRINT( "Forming star\n");
 				//				if( sph_particles_cold_mass(i) > 0.0) {
 //					const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
 //					const float p = 1.0 - exp(-eps);
-					bool make_star = false;
+					bool make_star = true;
 //					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 					if( make_star ) {
 						sph_particles_isstar(i) =true;
@@ -140,6 +141,7 @@ stars_stats stars_statistics(float a) {
 			stars_stats stats;
 			for( part_int i = b; i < e; i++) {
 				if( sph_particles_isstar(i)) {
+
 					stats.stars++;
 				}
 			}
