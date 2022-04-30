@@ -390,9 +390,9 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 				tm.reset();
 				kr = sph_run_return();
 			} while (cont);
-			stars_statistics(scale);
 		}
 		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
+		stars_statistics(scale);
 	}
 
 	sparams.phase = 1;

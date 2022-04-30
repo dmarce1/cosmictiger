@@ -340,15 +340,13 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 								w_sum += w;
 							}
 							if (type_j == DARK_MATTER_TYPE) {
-								const float m_j = params.sph ? params.dm_mass : 1.f;
 								const float pot = -kernelPot(q);
 								const float force = kernelFqinv(q) * q;
-								dpot_dh1 += m_j * (pot + q * force);
+								dpot_dh1 += (pot + q * force);
 							} else {
-								const float m_j = params.sph_mass;
 								const float pot = -kernelPot(q);
 								const float force = kernelFqinv(q) * q;
-								dpot_dh2 += m_j * (pot + q * force);
+								dpot_dh2 += (pot + q * force);
 							}
 							flops += 2;
 						}
