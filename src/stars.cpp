@@ -89,16 +89,19 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
 				const float rho = sph_particles_rho(i);
+				const float rho0 = get_options().sneighbor_number / (4.0/3.0*M_PI*pow(sph_particles_smooth_len(i),3));
 				const float tdyn = sqrtf((3.0*a*a*a)/(8.0*M_PI*G*rho))/a;
-				if( sph_particles_cold_mass(i) > 0.0) {
-					const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
-					const float p = 1.0 - exp(-eps);
-					bool make_star;
-					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
+				if( rho/rho0 > 10.0 && sph_particles_smooth_len(i) < 0.5*get_options().hmax ) {
+					PRINT( "Forming star\n");
+				//				if( sph_particles_cold_mass(i) > 0.0) {
+//					const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
+//					const float p = 1.0 - exp(-eps);
+					bool make_star = false;
+//					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 					if( make_star ) {
 						sph_particles_isstar(i) =true;
 						sph_particles_entr(i) = 0.0;
-						sph_particles_cold_mass(i)  = 0.0;
+						sph_particles_cold_mass(i) = 0.0;
 					}
 				}
 			}

@@ -488,7 +488,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float& zeta_j = type_j == DARK_MATTER_TYPE ? src_zeta1[j] : src_zeta2[j];
+						const float& zeta_j = type_i == DARK_MATTER_TYPE ? src_zeta1[j] : src_zeta2[j];
 						const float& zeta_i = type_j == DARK_MATTER_TYPE ? sink_zeta1[k] : sink_zeta2[k];
 						const float hinv_j = 1.0f / h_j;
 						const float h2inv_j = sqr(hinv_j);

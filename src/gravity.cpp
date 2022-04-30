@@ -419,9 +419,10 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 								} else {
 									const auto& h_i = sink_hsoft;
 									const auto& h_j = hsoft;
-									const auto sw = simd_float(src_type == simd_int(DARK_MATTER_TYPE));
-									const auto& zeta_i = sink_zeta1 * sw + (simd_float(1) - sw) * sink_zeta2;
-									const auto& zeta_j = zeta1 * sw + (simd_float(1) - sw) * zeta2;
+									const auto sw_j = simd_float(src_type == simd_int(DARK_MATTER_TYPE));
+									const auto sw_i = simd_float(sink_type == simd_int(DARK_MATTER_TYPE));
+									const auto& zeta_i = sink_zeta1 * sw_j + (simd_float(1) - sw_j) * sink_zeta2;
+									const auto& zeta_j = zeta1 * sw_i + (simd_float(1) - sw_i) * zeta2;
 									const auto hinv_i = simd_float(1) / h_i;
 									const auto hinv_j = simd_float(1) / h_j;
 									const auto h2inv_i = sqr(hinv_i);
