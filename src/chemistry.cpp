@@ -130,8 +130,10 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 				int rung1 = sph_particles_rung(i);
 				if( rung1 >= minrung && !sph_particles_isstar(i)) {
 					chem_attribs chem = chems[j++];
-					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
-					double gamma = 1. + 1. / cv;
+//					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
+//					double gamma = 1. + 1. / cv;
+					double gamma = get_options().gamma;
+				//		PRINT( "%e\n", gamma);
 					const float factor = 1.0f - sph_particles_Z(i);
 					sph_particles_H(i) = chem.H * factor;
 					sph_particles_He0(i) = chem.He * factor;
@@ -141,12 +143,13 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					sph_particles_Hep(i) = chem.Hep * factor;
 					sph_particles_Hepp(i) = chem.Hepp * factor;
 					sph_particles_normalize_fracs(i);
-					const float change = (chem.eint * (1.f - chem.cold_mass) - sph_particles_eint(i) * (1.f - sph_particles_cold_mass(i)))*sph_mass/sqr(a);
-					echange += change;
+					const float e0 = sph_particles_eint(i);
 					const float fh = 1.f - chem.cold_mass;
 					const float rho = sph_particles_rho(i);
-					ALWAYS_ASSERT(fh > 0.0);
 					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
+					const float this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
+					echange += this_change;
+					ALWAYS_ASSERT(fh > 0.0);
 					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);

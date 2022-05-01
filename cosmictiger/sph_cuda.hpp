@@ -162,13 +162,13 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 	const int block_size = blockDim.x;
 	if (h < hmin) {
 		if (tid == 0) {
-			h = hmin;
+		//	h = hmin;
 		}
 		__syncthreads();
 	}
 	if (h > hmax) {
 		if (tid == 0) {
-			h = hmax * 0.5f;
+	//		h = hmax * 0.5f;
 		}
 		__syncthreads();
 	}
