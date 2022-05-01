@@ -41,8 +41,7 @@ struct all_tree_data {
 	float* softlen_snk;
 	char* rung_snk;
 	char* converged_snk;
-	float* zeta1_snk;
-	float* zeta2_snk;
+	float* zeta_snk;
 	float* divv_snk;
 	float* gx_snk;
 	int pass;

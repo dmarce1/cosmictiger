@@ -338,6 +338,22 @@ inline float smoothX(float h, float hmin) {
 
 CUDA_EXPORT
 inline void dsmoothX_dh(float h, float hmin, float hmax, float& x, float& dxdh) {
+	if (h < 2.0f * hmin) {
+		const float y = (h / hmin - 1.0f);
+		x = y;
+		dxdh = 1.0f;
+	} else if (h < hmax) {
+		x = 1.0f;
+		dxdh = 0.0f;
+	} else {
+		const float y = 1.0f - h / hmax;
+		x = y;
+		dxdh = 1.0;
+	}
+
+//	x = 1.;
+//	dxdh = 0.;
+//	return;
 	const float emax = expf(h / hmax);
 	const float emin = expf(-(h - hmin) / hmin);
 	x = (1.0 - emin) * emax;

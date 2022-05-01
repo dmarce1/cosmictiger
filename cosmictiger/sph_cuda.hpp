@@ -166,6 +166,12 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 		}
 		__syncthreads();
 	}
+	if (h > hmax) {
+		if (tid == 0) {
+			h = hmax * 0.5f;
+		}
+		__syncthreads();
+	}
 	const float hinv = 1.f / h;
 	__syncthreads();
 	int count;
@@ -224,17 +230,17 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 			dh = -f / dfdh;
 			sgn = copysignf(1.f,dh);
 			if( sgn * last_sgn < 0.f ) {
-				w *= 0.5f;
+				w = fmaxf(0.5f * w,0.001f);
 			} else {
 				w = fminf(1.f,w*1.1f);
 			}
 			last_sgn = sgn;
-			dh = w * fminf(fmaxf(dh, -max_dh), max_dh);
+			dh = fminf(fmaxf(dh, -max_dh), max_dh);
 		}
-		error = fabsf(f) / (N * float(3.0 / (4.0 * M_PI)));
+		error = fabsf(dh/h);
 		__syncthreads();
 		if (tid == 0) {
-			h += dh;
+			h += w * dh;
 			if (iter >= 100) {
 				PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, w, error, count);
 			}

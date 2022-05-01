@@ -599,7 +599,7 @@ static const float* particles_cache_read_line_softlens(line_id_type line_id) {
 	return fut.get().data();
 }
 
-void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, float* zeta1, float* zeta2, part_int offset) {
+void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, char* types, float* zeta, part_int offset) {
 	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
@@ -609,11 +609,8 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 			std::memcpy(x + offset, &particles_pos(XDIM, range.range.first), sizeof(fixed32) * sz);
 			std::memcpy(y + offset, &particles_pos(YDIM, range.range.first), sizeof(fixed32) * sz);
 			std::memcpy(z + offset, &particles_pos(ZDIM, range.range.first), sizeof(fixed32) * sz);
-			if (zeta1) {
-				std::memcpy(zeta1 + offset, &particles_zeta1(range.range.first), sizeof(float) * sz);
-			}
-			if (zeta2) {
-				std::memcpy(zeta2 + offset, &particles_zeta2(range.range.first), sizeof(float) * sz);
+			if (zeta) {
+				std::memcpy(zeta + offset, &particles_zeta(range.range.first), sizeof(float) * sz);
 			}
 			if (types) {
 				for (int i = range.range.first; i < range.range.second; i++) {
@@ -650,11 +647,8 @@ void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32*
 							types[dest_index] = DARK_MATTER_TYPE;
 						}
 					}
-					if (zeta1) {
-						zeta1[dest_index] = ptr[src_index].zeta1;
-					}
-					if (zeta1) {
-						zeta2[dest_index] = ptr[src_index].zeta2;
+					if (zeta) {
+						zeta[dest_index] = ptr[src_index].zeta1;
 					}
 					dest_index++;
 				}
@@ -705,8 +699,7 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 			ln.type = DARK_MATTER_TYPE;
 		}
 		if (vsoft) {
-			ln.zeta1 = particles_zeta1(i);
-			ln.zeta2 = particles_zeta2(i);
+			ln.zeta1 = particles_zeta(i);
 		}
 	}
 	return line;
@@ -846,8 +839,7 @@ void particles_resize(part_int sz) {
 		if (get_options().vsoft) {
 			particles_array_resize(particles_sa, new_capacity, true);
 			particles_array_resize(particles_c, new_capacity, true);
-			particles_array_resize(particles_z1, new_capacity, true);
-			particles_array_resize(particles_z2, new_capacity, true);
+			particles_array_resize(particles_z, new_capacity, true);
 			particles_array_resize(particles_s, new_capacity, true);
 			particles_array_resize(particles_dv, new_capacity, true);
 		}

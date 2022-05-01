@@ -382,22 +382,19 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const auto& sink_z = shmem.sink_z;
 	const bool vsoft = data.vsoft;
 	const auto& sink_h = shmem.sink_h;
-	const auto& sink_zeta1 = shmem.sink_zeta1;
-	const auto& sink_zeta2 = shmem.sink_zeta2;
+	const auto& sink_zeta = shmem.sink_zeta;
 	const auto& sink_type = shmem.sink_type;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
 	const auto* main_src_h = data.h;
-	const auto* main_src_zeta1 = data.zeta1;
-	const auto* main_src_zeta2 = data.zeta2;
+	const auto* main_src_zeta = data.zeta;
 	const auto* main_src_type = data.type;
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
 	auto& src_h = shmem.src.h;
-	auto& src_zeta1 = shmem.src.zeta1;
-	auto& src_zeta2 = shmem.src.zeta2;
+	auto& src_zeta = shmem.src.zeta;
 	auto& src_type = shmem.src.type;
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
@@ -437,12 +434,10 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 					src_type[i1] = main_src_type[i2];
 					if (vsoft) {
 						src_h[i1] = main_src_h[i2];
-						src_zeta1[i1] = main_src_zeta1[i2];
-						src_zeta2[i1] = main_src_zeta2[i2];
+						src_zeta[i1] = main_src_zeta[i2];
 					} else {
 						src_h[i1] = h;
-						src_zeta1[i1] = 0.f;
-						src_zeta2[i1] = 0.f;
+						src_zeta[i1] = 0.f;
 					}
 				}
 				__syncwarp();
@@ -488,8 +483,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float& zeta_j = type_i == DARK_MATTER_TYPE ? src_zeta1[j] : src_zeta2[j];
-						const float& zeta_i = type_j == DARK_MATTER_TYPE ? sink_zeta1[k] : sink_zeta2[k];
+						const float& zeta_j = (type_i == type_j) ? src_zeta[j] : 0.f;
+						const float& zeta_i = (type_i == type_j) ? sink_zeta[k] : 0.f;
 						const float hinv_j = 1.0f / h_j;
 						const float h2inv_j = sqr(hinv_j);
 						const float h3inv_j = h2inv_j * hinv_j;
@@ -499,8 +494,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						const float q_j = r * hinv_j;
 						r3inv = kernelFqinv(q_i) * h3inv_i;
 						r3inv += kernelFqinv(q_j) * h3inv_j;
-						float fc = (q_i < 1.f) * zeta_i * dkernelW_dq(q_i) * h2inv_i * r1inv / m_j;
-						fc += (q_j < 1.f) * zeta_j * dkernelW_dq(q_j) * h2inv_j * r1inv / m_j;
+						float fc = (q_i < 1.f) * zeta_i * dkernelW_dq(q_i) * h2inv_i * r1inv;
+						fc += (q_j < 1.f) * zeta_j * dkernelW_dq(q_j) * h2inv_j * r1inv;
 						r3inv = 0.5f * (r3inv + fc);
 						if (do_phi) {
 							r1inv = kernelPot(q_i) * hinv_i;

@@ -198,7 +198,7 @@ softlens_return all_tree_softlens_execute(int minrung) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
 				this_index = index++;
@@ -336,7 +336,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				particles_global_read_softlens(node.global_part_range(), host_h.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
@@ -352,8 +352,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	params.rung_snk = &particles_rung(0);
 	params.converged_snk = &particles_converged(0);
 	params.minrung = minrung;
-	params.zeta1_snk = &particles_zeta1(0);
-	params.zeta2_snk = &particles_zeta2(0);
+	params.zeta_snk = &particles_zeta(0);
 	params.cat_snk = &particles_cat_index(0);
 	params.type_snk = &particles_type(0);
 	params.nselfs = host_selflist.size();
@@ -488,7 +487,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, nullptr, offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr,  offset);
 				particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;

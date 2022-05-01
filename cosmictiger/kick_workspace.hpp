@@ -51,8 +51,7 @@ class kick_workspace {
 	static vector<fixed32, pinned_allocator<fixed32>> host_y;
 	static vector<fixed32, pinned_allocator<fixed32>> host_z;
 	static vector<float, pinned_allocator<float>> host_h;
-	static vector<float, pinned_allocator<float>> host_zeta1;
-	static vector<float, pinned_allocator<float>> host_zeta2;
+	static vector<float, pinned_allocator<float>> host_zeta;
 	static vector<char> host_type;
 	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
 	static semaphore lock1;

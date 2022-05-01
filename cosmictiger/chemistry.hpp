@@ -30,7 +30,7 @@
 #define SPECIE_HEPP 6
 
 #define TMAX 1e10f
-#define TMIN 1e3f
+#define TMIN 100.f
 
 struct species_t {
 	union {
