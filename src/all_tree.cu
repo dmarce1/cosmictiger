@@ -120,9 +120,13 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 				if (tid == 0) {
 					if (box_xceeded) {
 						atomicAdd(&reduce->flag, 1);
-						converged = false;
+						if( tid == 0 ) {
+							converged = false;
+						}
 					} else {
-						converged = true;
+						if( tid == 0 ) {
+							converged = true;
+						}
 						if (type_i == DARK_MATTER_TYPE) {
 							gnmin = fminf(gnmin, count);
 							gnmax = fmaxf(gnmax, count);
@@ -249,11 +253,17 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 			auto& sa_snk = params.sa_snk[snki];
 			if (params.pass == 0) {
 				if (active) {
-					sa_snk = true;
+					if (tid == 0) {
+						sa_snk = true;
+					}
+					__syncthreads();
 				} else {
-					sa_snk = false;
+					if (tid == 0) {
+						sa_snk = false;
+					}
+					__syncthreads();
 					const int jmax = round_up(ws.rec1.size(), block_size);
-					for (int j = tid; j < jmax; j += block_size) {
+					for (int j = tid; j < jmax && !sa_snk; j += block_size) {
 						if (j < ws.rec1.size()) {
 							const auto& rec1 = ws.rec1[j];
 							const auto& rec2 = ws.rec2[j];
@@ -273,14 +283,17 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						}
 						shared_reduce_add<int, DERIVATIVES_BLOCK_SIZE>(semiactive);
 						if (semiactive) {
-							sa_snk = true;
-							break;
+							if (tid == 0) {
+								sa_snk = true;
+							}
+							__syncthreads();
 						}
 					}
 				}
 			} else {
 				semiactive = sa_snk;
 			}
+			__syncthreads();
 			int box_xceeded = false;
 			if (semiactive) {
 				auto& converged = params.converged_snk[snki];
@@ -293,9 +306,13 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				if (tid == 0) {
 					if (box_xceeded) {
 						converged = false;
-						atomicAdd(&reduce->flag, 1);
+						if( tid == 0 ) {
+							atomicAdd(&reduce->flag, 1);
+						}
 					} else {
-						converged = true;
+						if( tid == 0 ) {
+							converged = true;
+						}
 					}
 				}
 			}

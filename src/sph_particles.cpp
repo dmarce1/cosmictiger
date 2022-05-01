@@ -431,6 +431,8 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_de2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_de3, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fp1, new_capacity, true);
+		sph_particles_array_resize(sph_particles_fp2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_pre, new_capacity, true);
 		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
@@ -986,7 +988,7 @@ static vector<float> sph_particles_fetch_rho_cache_line(part_int index) {
 	return line;
 }
 
-void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* omegaP, float* pre, float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -999,6 +1001,12 @@ void sph_particles_global_read_aux(particle_global_range range, float* alpha, fl
 				}
 				if (omega) {
 					omega[j] = sph_particles_omega(i);
+				}
+				if (omegaP) {
+					omegaP[j] = sph_particles_omegaP(i);
+				}
+				if (pre) {
+					pre[j] = sph_particles_pressure(i);
 				}
 				if (shearv) {
 					shearv[j] = sph_particles_shear(i);
@@ -1028,6 +1036,12 @@ void sph_particles_global_read_aux(particle_global_range range, float* alpha, fl
 				}
 				if (omega) {
 					omega[j] = ptr[src_index].omega;
+				}
+				if (omegaP) {
+					omegaP[j] = ptr[src_index].omegaP;
+				}
+				if (pre) {
+					pre[j] = ptr[src_index].pre;
 				}
 				if (shearv) {
 					shearv[j] = ptr[src_index].shearv;

@@ -148,6 +148,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					const float rho = sph_particles_rho(i);
 					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
 					const float this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
+		//			PRINT( "%e\n", this_change );
 					echange += this_change;
 					ALWAYS_ASSERT(fh > 0.0);
 					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);

@@ -332,11 +332,6 @@ inline T kernelPot(T q) {
 	return res;
 }
 CUDA_EXPORT
-inline float smoothX(float h, float hmin) {
-	return 1.f - sqr(hmin / h);
-}
-
-CUDA_EXPORT
 inline void dsmoothX_dh(float h, float hmin, float hmax, float& x, float& dxdh) {
 
 	if (h < 2.0f * hmin) {
@@ -348,8 +343,6 @@ inline void dsmoothX_dh(float h, float hmin, float hmax, float& x, float& dxdh) 
 		dxdh = 0.0f;
 	}
 
-	x = 1.;
-	dxdh = 0.;
 	return;
 }
 
@@ -358,3 +351,12 @@ CUDA_EXPORT inline float dlogsmoothX_dlogh(float h, float hmin, float hmax) {
 	dsmoothX_dh(h, hmin, hmax, f, dfdh);
 	return dfdh * h / f;
 }
+
+
+CUDA_EXPORT
+inline float smoothX(float h, float hmin, float hmax) {
+	float f, dfdh;
+	dsmoothX_dh(h, hmin, hmax, f, dfdh);
+	return f;
+}
+

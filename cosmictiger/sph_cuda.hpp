@@ -81,10 +81,14 @@ struct sph_run_cuda_data {
 	float* vy;
 	float* vz;
 	float* omega;
+	float* omegaP;
+	float* pre;
 	float* h;
 	char* rungs;
 	char* rungs_snk;
 	float* omega_snk;
+	float* omegaP_snk;
+	float* pre_snk;
 	float* shear_snk;
 	sph_record1* rec1_snk;
 	sph_record2* rec2_snk;
@@ -162,13 +166,13 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 	const int block_size = blockDim.x;
 	if (h < hmin) {
 		if (tid == 0) {
-		//	h = hmin;
+			h = hmin * 1.1f;
 		}
 		__syncthreads();
 	}
 	if (h > hmax) {
 		if (tid == 0) {
-	//		h = hmax * 0.5f;
+			h = hmax * 0.5f;
 		}
 		__syncthreads();
 	}
@@ -194,7 +198,7 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 		const auto& x_i = x[XDIM];
 		const auto& y_i = x[YDIM];
 		const auto& z_i = x[ZDIM];
-		for (int j = rec.size() - 1 - tid; j >= 0; j -= block_size) {
+		for (int j = tid; j < rec.size(); j += block_size) {
 			const auto& r = rec[j];
 			const auto& type_j = r.type;
 			if( type_j == type_i ) {
@@ -267,6 +271,5 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 
 }
 #endif
-
 
 #endif /* SPH_CUDA_HPP_ */

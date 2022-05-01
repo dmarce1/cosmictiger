@@ -88,6 +88,8 @@ struct sph_particle {
 	float A;
 	float fcold;
 	float divv;
+	float omegaP;
+	float pre;
 	template<class Arc>
 	void serialize(Arc&&arc, unsigned) {
 		arc & frac;
@@ -99,6 +101,8 @@ struct sph_particle {
 		arc & A;
 		arc & fcold;
 		arc & divv;
+		arc & omegaP;
+		arc & pre;
 	}
 };
 
@@ -140,6 +144,8 @@ SPH_PARTICLES_EXTERN float* sph_particles_kap;
 SPH_PARTICLES_EXTERN float* sph_particles_e0;
 SPH_PARTICLES_EXTERN float* sph_particles_de3;
 SPH_PARTICLES_EXTERN float* sph_particles_de2;
+SPH_PARTICLES_EXTERN float* sph_particles_fp2;
+SPH_PARTICLES_EXTERN float* sph_particles_pre;
 SPH_PARTICLES_EXTERN float* sph_particles_fp1;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
 SPH_PARTICLES_EXTERN float* sph_particles_fc;
@@ -153,6 +159,8 @@ struct aux_quantities {
 	float shearv;
 	float alpha;
 	float divv;
+	float omegaP;
+	float pre;
 	array<float, NCHEMFRACS> fracs;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -161,6 +169,8 @@ struct aux_quantities {
 		arc & alpha;
 		arc & fracs;
 		arc & divv;
+		arc & omegaP;
+		arc & pre;
 	}
 };
 
@@ -182,7 +192,7 @@ void sph_particles_global_read_rungs(particle_global_range range, char*, part_in
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
 void sph_particles_global_read_rho(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* shearv, array<float, NCHEMFRACS>* fracs,
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* omegaP, float* pre, float* shearv, array<float, NCHEMFRACS>* fracs,
 		part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_reset_semiactive();
@@ -335,6 +345,16 @@ inline float& sph_particles_omega(part_int index) {
 	return sph_particles_fp1[index];
 }
 
+inline float& sph_particles_omegaP(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_fp2[index];
+}
+
+inline float& sph_particles_pressure(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_pre[index];
+}
+
 inline part_int& sph_particles_dm_index(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_dm[index];
@@ -430,6 +450,8 @@ inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;
 	aux.alpha = sph_particles_alpha(index);
 	aux.omega = sph_particles_omega(index);
+	aux.omegaP = sph_particles_omegaP(index);
+	aux.pre = sph_particles_pressure(index);
 	aux.divv = sph_particles_divv(index);
 	if (get_options().diffusion) {
 		aux.shearv = sph_particles_shear(index);
