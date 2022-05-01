@@ -87,14 +87,18 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin,params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
+				if (!compute_softlens < PREHYDRO1_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
-						converged = false;
+						if (tid == 0) {
+							converged = false;
+						}
 					}
 				} else {
 					if (tid == 0) {
-						converged = true;
+						if (tid == 0) {
+							converged = true;
+						}
 						hmin_all = fminf(hmin_all, h);
 						hmax_all = fmaxf(hmax_all, h);
 					}
@@ -113,7 +117,6 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 	}
 	(&ws)->~prehydro1_workspace();
 }
-
 
 struct prehydro2_record2 {
 	float vx;
@@ -267,10 +270,12 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin,  params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
+				if (!compute_softlens < PREHYDRO2_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
-						converged = false;
+						if (tid == 0) {
+							converged = false;
+						}
 					}
 				} else {
 					if (tid == 0) {
@@ -278,7 +283,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					}
 				}
 			}
-			if (active || (semiactive && !box_xceeded)) {
+			if ((active || semiactive) && !box_xceeded) {
 				__syncthreads();
 				const int snki = self.sink_part_range.first - self.part_range.first + i;
 				const float& h_i = data.rec2_snk[snki].h;
@@ -305,6 +310,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				float dvz_dy = 0.f;
 				float dvz_dz = 0.f;
 				float rho_i = 0.f;
+				float pre = 0.f;
+				float dpredh = 0.f;
 				ws.neighbors.resize(0);
 				__syncthreads();
 				flops += 10;
@@ -317,7 +324,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						const fixed32& x_j = rec1.x;
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
-						const auto star_j = rec2.star;
+						const auto& star_j = rec2.star;
+						const float& A_i = rec2.entr;
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1
@@ -329,6 +337,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 							const float dwdq = dkernelW_dq(q);
 							dw_sum -= q * dwdq;                      // 2
 							w_sum += w;
+							pre += data.m * powf(A_i, 1.f / data.def_gamma) * w;
+							dpredh += powf(A_i, 1.f / data.def_gamma) * w;
 							if (!star_j) {
 								rho_i += data.m * w * h3inv_i;
 							}
@@ -352,14 +362,19 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(dw_sum);
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(w_sum);
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(rho_i);
+				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(pre);
+				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(dpredh);
 				data.rho_snk[snki] = rho_i;
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
 				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega_i = (A + B) / (1.0f + B);
-				if( !(omega_i > 0.0) ) {
-					PRINT( "%e %e %e %e\n", omega_i, A, B, h_i);
+				data.omega_snk[snki] = omega_i;
+				data.omegaP_snk[snki] = w_sum / (0.33333333333333f * dpredh) * omega_i;
+				data.pre_snk[snki] = powf(pre, data.def_gamma);
+				if (!(omega_i > 0.0)) {
+					PRINT("%e %e %e %e\n", omega_i, A, B, h_i);
 				}
 				ALWAYS_ASSERT(omega_i > 0.f);
 				__syncthreads();
@@ -434,7 +449,6 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					shear_yz = 0.5f * (dvy_dz + dvz_dy);                     // 2
 					const float shearv = sqrtf(sqr(shear_xx) + sqr(shear_yy) + sqr(shear_zz) + 2.0f * (sqr(shear_xy) + sqr(shear_xz) + sqr(shear_yz))); // 16
 					data.shear_snk[snki] = shearv;
-					data.omega_snk[snki] = omega_i;
 				}
 			}
 		}
