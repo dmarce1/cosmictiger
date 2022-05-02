@@ -20,9 +20,9 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 
-#define KERNEL_CUBIC_SPLINE
-///#define KERNEL_QUARTIC_SPLINE
-//#define KERNEL_QUINTIC_SPLINE
+//#define KERNEL_CUBIC_SPLINE
+//#define KERNEL_QUARTIC_SPLINE
+#define KERNEL_QUINTIC_SPLINE
 
 void kernel_set_type(int type);
 void kernel_output();
@@ -338,10 +338,13 @@ inline void dsmoothX_dh(float h, float hmin, float hmax, float& x, float& dxdh) 
 		const float y = (h / hmin - 1.0f);
 		x = y;
 		dxdh = 1.0f / hmin;
-	} else  {
+	} else/* if (h < hmax) */{
 		x = 1.0f;
 		dxdh = 0.0f;
-	}
+	} /*else {
+		x = (h / hmax);
+		dxdh = 1.f / (hmax);
+	}*/
 
 	return;
 }
@@ -351,7 +354,6 @@ CUDA_EXPORT inline float dlogsmoothX_dlogh(float h, float hmin, float hmax) {
 	dsmoothX_dh(h, hmin, hmax, f, dfdh);
 	return dfdh * h / f;
 }
-
 
 CUDA_EXPORT
 inline float smoothX(float h, float hmin, float hmax) {

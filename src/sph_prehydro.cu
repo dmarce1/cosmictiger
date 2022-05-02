@@ -203,6 +203,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					ws.rec2[k].vx = data.vx[pi];
 					ws.rec2[k].vy = data.vy[pi];
 					ws.rec2[k].vz = data.vz[pi];
+					ws.rec2[k].entr = data.entr[pi];
 				}
 			}
 		}
@@ -325,7 +326,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
 						const auto& star_j = rec2.star;
-						const float& A_i = rec2.entr;
+						const float& A_j = rec2.entr;
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1
@@ -337,9 +338,9 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 							const float dwdq = dkernelW_dq(q);
 							dw_sum -= q * dwdq;                      // 2
 							w_sum += w;
-							pre += data.m * powf(A_i, 1.f / data.def_gamma) * w;
-							dpredh += powf(A_i, 1.f / data.def_gamma) * w;
 							if (!star_j) {
+								pre += powf(A_j, 1.f / data.def_gamma) * w;
+								dpredh -= powf(A_j, 1.f / data.def_gamma) * q * dwdq;
 								rho_i += data.m * w * h3inv_i;
 							}
 							contains = true;
@@ -371,10 +372,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				const float B = 0.33333333333f * h_i / f * dfdh;
 				const float omega_i = (A + B) / (1.0f + B);
 				data.omega_snk[snki] = omega_i;
-				data.omegaP_snk[snki] = w_sum / (0.33333333333333f * dpredh) * omega_i;
-				data.pre_snk[snki] = powf(pre, data.def_gamma);
+				data.omegaP_snk[snki] = 1.f / ((-pre + 0.33333333333333f * dpredh) / (f * w_sum)) * omega_i;
+			//	PRINT( "%e\n", 	data.omegaP_snk[snki] );
+				data.pre_snk[snki] = powf(data.m * pre * h3inv_i, data.def_gamma);
 				if (!(omega_i > 0.0)) {
-					PRINT("%e %e %e %e\n", omega_i, A, B, h_i);
+					PRINT("%e %e %e %e %e %e\n", omega_i, A, B, h_i, w_sum, dw_sum);
 				}
 				ALWAYS_ASSERT(omega_i > 0.f);
 				__syncthreads();

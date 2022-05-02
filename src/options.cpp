@@ -113,7 +113,7 @@ bool process_options(int argc, char *argv[]) {
 	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.0), "alpha0 viscosity") //
+	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.05), "alpha0 viscosity") //
 	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0), "alpha1 for viscosity") //
 	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
 	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
@@ -130,8 +130,8 @@ bool process_options(int argc, char *argv[]) {
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-	("hmin", po::value<double>(&(opts.hmin))->default_value(1.0/50.0), "minimum smoothing length") //
-	("hmax", po::value<double>(&(opts.hmax))->default_value(5.0), "maximum smoothing length") //
+	("hmin", po::value<double>(&(opts.hmin))->default_value(1.0e-6), "minimum smoothing length") //
+	("hmax", po::value<double>(&(opts.hmax))->default_value(1000.0), "maximum smoothing length") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
 	("kernel", po::value<double>(&(opts.kernel))->default_value(2), "kernel index") //
 	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(128), "SPH neighbor number") //
@@ -148,7 +148,7 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9), "mass resolution") //
+	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(5.e9), "mass resolution") //
 
 			;
 

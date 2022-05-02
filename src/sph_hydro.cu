@@ -126,8 +126,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					ws.rec2[k].alpha = data.alpha[pi];
 					ws.rec2[k].omega = data.omega[pi];
 					ws.rec2[k].omegaP = data.omegaP[pi];
-					ws.rec2[k].pre = data.pre[pi];
 					ws.rec2[k].rho = data.rho[pi];
+					ws.rec2[k].pre = data.pre[pi];
 					if (params.diffusion && params.phase == 1) {
 						ws.rec2[k].shearv = data.shearv[pi];
 					}
@@ -275,8 +275,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float& A_j = rec2.entr;
 							const float& alpha_j = fmaxf(rec2.alpha, params.alpha0);
 							const float& rho_j = rec2.rho;												// 2
-							const float f_ij = (1.f - smoothX(h_j, params.hmin, params.hmax) * powf(A_j, 1.0f / gamma0) / omegaP_i) * omega_i;
-							const float f_ji = (1.f - smoothX(h_i, params.hmin, params.hmax) * powf(A_i, 1.0f / gamma0) / omegaP_j) * omega_j;
+							const float f_ij = (1.f - smoothX(h_i, params.hmin, params.hmax) * powf(A_j, -1.0f / gamma0) / omegaP_i) * omega_i;
+							const float f_ji = (1.f - smoothX(h_j, params.hmin, params.hmax) * powf(A_i, -1.0f / gamma0) / omegaP_j) * omega_j;
 							const float hfrac_j = 1.f - cfrac_j;
 							const float hinv_j = 1.f / h_j;															// 4
 							const float h3inv_j = sqr(hinv_j) * hinv_j;										// 3

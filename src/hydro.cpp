@@ -119,7 +119,6 @@ double lane_emden(double r0, double dr, double n, double& menc) {
 	return pow(y, n);
 }
 
-
 void hydro_driver(double tmax, int nsteps = 64) {
 	time_type itime = 0;
 	int minrung = 0;
@@ -767,13 +766,15 @@ void hydro_helmholtz_test() {
 	double rho1 = 0.5;
 	double rho0 = 1.0;
 	double vx1 = 0.0;
-	double vy1 = 0.5;
+	double vy1 = 1.0;
 	double vz1 = 0.0;
 	double vx0 = 0.0;
-	double vy0 = -0.5;
+	double vy0 = -1.0;
 	double vz0 = 0.0;
-	double p1 = 1.0;
-	double p0 = 1.0;
+	double p1 = 19.2;
+	double p0 = 19.2;
+	constexpr double eta = 1e-1;
+	constexpr double freq = 2.0;
 	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
 	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
 	part_int nparts_left = 2 * left_dim * sqr(2 * left_dim);
@@ -787,7 +788,6 @@ void hydro_helmholtz_test() {
 	set_options(opts);
 	rho1 = nparts_left * m / 0.5f;
 	rho0 = nparts_right * m / 0.5f;
-	constexpr double eta = 1e-6;
 	for (int ix = 0; ix < left_dim; ix++) {
 		for (int iy = 0; iy < 2 * left_dim; iy++) {
 			for (int iz = 0; iz < 2 * left_dim; iz++) {
@@ -801,9 +801,9 @@ void hydro_helmholtz_test() {
 				sph_particles_pos(XDIM, i) = x;
 				sph_particles_pos(YDIM, i) = y;
 				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = vx1 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(YDIM, i) = vy1 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(ZDIM, i) = vz1 + eta * (2.0 * rand1() - 1.0);
+				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
+				sph_particles_vel(YDIM, i) = vy1;
+				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
 				;
@@ -817,9 +817,9 @@ void hydro_helmholtz_test() {
 				sph_particles_pos(XDIM, i) = x;
 				sph_particles_pos(YDIM, i) = y;
 				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = vx1 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(YDIM, i) = vy1 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(ZDIM, i) = vz1 + eta * (2.0 * rand1() - 1.0);
+				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
+				sph_particles_vel(YDIM, i) = vy1;
+				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
 				;
@@ -844,9 +844,9 @@ void hydro_helmholtz_test() {
 				sph_particles_pos(XDIM, i) = x;
 				sph_particles_pos(YDIM, i) = y;
 				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = vx0 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(YDIM, i) = vy0 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(ZDIM, i) = vz0 + eta * (2.0 * rand1() - 1.0);
+				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
@@ -861,9 +861,9 @@ void hydro_helmholtz_test() {
 				sph_particles_pos(XDIM, i) = x;
 				sph_particles_pos(YDIM, i) = y;
 				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = vx0 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(YDIM, i) = vy0 + eta * (2.0 * rand1() - 1.0);
-				sph_particles_vel(ZDIM, i) = vz0 + eta * (2.0 * rand1() - 1.0);
+				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
+				sph_particles_vel(YDIM, i) = vy0;
+				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
 				;
@@ -872,7 +872,7 @@ void hydro_helmholtz_test() {
 			}
 		}
 	}
-	hydro_driver(10.00, 256);
+	hydro_driver(10.00, 1024);
 }
 
 void hydro_blast_test() {

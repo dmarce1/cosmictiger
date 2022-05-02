@@ -172,7 +172,7 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 	}
 	if (h > hmax) {
 		if (tid == 0) {
-			h = hmax * 0.5f;
+//			h = hmax * 0.5f;
 		}
 		__syncthreads();
 	}
