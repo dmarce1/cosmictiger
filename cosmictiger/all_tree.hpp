@@ -43,6 +43,7 @@ struct all_tree_data {
 	char* converged_snk;
 	float* zeta_snk;
 	float* divv_snk;
+	float* rho_snk;
 	float* gx_snk;
 	int pass;
 	float* gy_snk;
@@ -65,6 +66,7 @@ struct all_tree_data {
 	float sph_mass;
 	bool sph;
 	int* selfs;
+	char* rungs;
 	tree_node* trees;
 	int* neighbors;
 	int nselfs;

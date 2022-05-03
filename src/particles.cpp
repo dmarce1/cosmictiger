@@ -62,7 +62,9 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 void particles_cache_free();
 
 static vector<float> particles_fetch_cache_line_softlens(part_int index);
+static vector<char> particles_fetch_cache_line_rungs(part_int index);
 static const float* particles_cache_read_line_softlens(line_id_type line_id);
+static const char* particles_cache_read_line_rungs(line_id_type line_id);
 void particles_cache_free_softlens();
 
 static void particles_set_global_offset(vector<size_t>);
@@ -75,6 +77,7 @@ HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
 HPX_PLAIN_ACTION (particles_destroy);
 HPX_PLAIN_ACTION (particles_fetch_cache_line_softlens);
+HPX_PLAIN_ACTION (particles_fetch_cache_line_rungs);
 HPX_PLAIN_ACTION (particles_fetch_cache_line);
 HPX_PLAIN_ACTION (particles_fetch_cache_line_vels);
 HPX_PLAIN_ACTION (particles_group_refresh_cache_line);
@@ -200,6 +203,9 @@ struct line_id_hash_hi {
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<particles_cache_entry>>, line_id_hash_hi>, PART_CACHE_SIZE> part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static int group_cache_epoch = 0;
+
+static array<std::unordered_map<line_id_type, hpx::shared_future<vector<char>>, line_id_hash_hi>, PART_CACHE_SIZE> part_cache_rungs;
+static array<spinlock_type, PART_CACHE_SIZE> mutexes_rungs;
 
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>, line_id_hash_hi>, PART_CACHE_SIZE> part_cache_softlens;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes_softlens;
@@ -582,7 +588,6 @@ static const float* particles_cache_read_line_softlens(line_id_type line_id) {
 	const size_t bin = line_id_hash_lo()(line_id);
 	std::unique_lock<spinlock_type> lock(mutexes[bin]);
 	auto iter = part_cache_softlens[bin].find(line_id);
-	const pair<array<fixed32, NDIM>, char>* ptr;
 	if (iter == part_cache_softlens[bin].end()) {
 		auto prms = std::make_shared<hpx::lcos::local::promise<vector<float>> >();
 		part_cache_softlens[bin][line_id] = prms->get_future();
@@ -861,6 +866,7 @@ void particles_resize(part_int sz) {
 		if (get_options().sph) {
 			particles_array_resize(particles_sph, new_capacity, true);
 			particles_array_resize(particles_ty, new_capacity, true);
+			particles_array_resize(particles_rh, new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -998,6 +1004,74 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	return hi;
 
 }
+
+
+
+void particles_global_read_rungs(particle_global_range range, char* r, part_int offset) {
+	static const bool sph = get_options().sph;
+	const part_int line_size = get_options().part_cache_line_size;
+	if (range.range.first != range.range.second) {
+		if (range.proc == hpx_rank()) {
+			const part_int dif = offset - range.range.first;
+			const part_int sz = range.range.second - range.range.first;
+			std::memcpy(r + offset, &particles_rung(range.range.first), sizeof(char) * sz);
+		} else {
+			line_id_type line_id;
+			line_id.proc = range.proc;
+			const part_int start_line = (range.range.first / line_size) * line_size;
+			const part_int stop_line = ((range.range.second - 1) / line_size) * line_size;
+			part_int dest_index = offset;
+			for (part_int line = start_line; line <= stop_line; line += line_size) {
+				line_id.index = line;
+				const auto* ptr = particles_cache_read_line_rungs(line_id);
+				const auto begin = std::max(line_id.index, range.range.first);
+				const auto end = std::min(line_id.index + line_size, range.range.second);
+				for (part_int i = begin; i < end; i++) {
+					const part_int src_index = i - line_id.index;
+					r[dest_index] = ptr[src_index];
+					dest_index++;
+				}
+			}
+		}
+	}
+}
+
+static const char* particles_cache_read_line_rungs(line_id_type line_id) {
+	const part_int line_size = get_options().part_cache_line_size;
+	const size_t bin = line_id_hash_lo()(line_id);
+	std::unique_lock<spinlock_type> lock(mutexes[bin]);
+	auto iter = part_cache_rungs[bin].find(line_id);
+	if (iter == part_cache_rungs[bin].end()) {
+		auto prms = std::make_shared<hpx::lcos::local::promise<vector<char>> >();
+		part_cache_rungs[bin][line_id] = prms->get_future();
+		lock.unlock();
+		hpx::apply([prms,line_id]() {
+			auto line_fut = hpx::async<particles_fetch_cache_line_rungs_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			prms->set_value(line_fut.get());
+		});
+		lock.lock();
+		iter = part_cache_rungs[bin].find(line_id);
+	}
+	auto fut = iter->second;
+	lock.unlock();
+	return fut.get().data();
+}
+
+
+
+static vector<char> particles_fetch_cache_line_rungs(part_int index) {
+	static const bool sph = get_options().sph;
+	const part_int line_size = get_options().part_cache_line_size;
+	vector<char> line(line_size);
+	const part_int begin = (index / line_size) * line_size;
+	const part_int end = std::min(particles_size(), begin + line_size);
+	for (part_int i = begin; i < end; i++) {
+		auto& ln = line[i - begin];
+		ln = particles_rung(i);
+	}
+	return line;
+}
+
 
 vector<particle_sample> particles_sample(int cnt) {
 	const bool save_force = get_options().save_force;

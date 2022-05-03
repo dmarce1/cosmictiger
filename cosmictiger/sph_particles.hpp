@@ -150,6 +150,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_fp1;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
 SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN float* sph_particles_rh;
+SPH_PARTICLES_EXTERN float* sph_particles_tc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN char* sph_particles_st;
@@ -192,8 +193,8 @@ void sph_particles_global_read_rungs(particle_global_range range, char*, part_in
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
 void sph_particles_global_read_rho(particle_global_range range, float*, part_int offset);
-void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* omegaP, float* pre, float* shearv, array<float, NCHEMFRACS>* fracs,
-		part_int offset);
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* omegaP, float* pre, float* shearv,
+		array<float, NCHEMFRACS>* fracs, part_int offset);
 void sph_particles_reset_converged();
 void sph_particles_reset_semiactive();
 void sph_particles_load(FILE* fp);
@@ -216,6 +217,10 @@ inline float& sph_particles_entr0(part_int index) {
 
 inline char& sph_particles_isstar(part_int index) {
 	return sph_particles_st[index];
+}
+
+inline float& sph_particles_tcool(part_int index) {
+	return sph_particles_tc[index];
 }
 
 inline char& sph_particles_converged(part_int index) {
@@ -443,7 +448,7 @@ inline float sph_particles_eint(part_int index) {
 	}
 	const float rho = sph_particles_rho(index) * hfrac;
 	const float K = sph_particles_entr(index);
-	return K * pow(rho, gamma0 - 1.0) / (gamma0 - 1.0);
+	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {

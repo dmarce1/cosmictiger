@@ -176,11 +176,15 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
 						}
 						sph_particles_entr(i) += (-sph_particles_entr0(i)) * dt2;
-						if( sph_particles_entr(i) < 0.0 ) {
+						if( sph_particles_entr(i) <= 0.0 ) {
 							PRINT( "%e %e\n", sph_particles_entr(i), (-sph_particles_entr0(i)) * dt2);
 						}
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 						sph_particles_entr(i) += (sph_particles_dentr2(i)) * dt2;
+						if( sph_particles_entr(i) <= 0.0 ) {
+							PRINT( "%e %e\n", sph_particles_entr(i),(sph_particles_dentr2(i)) * dt2);
+						}
+						ALWAYS_ASSERT( isfinite(sph_particles_entr(i)));
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					}
 				} else if( phase == 2 ) {
@@ -434,6 +438,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_array_resize(sph_particles_fp2, new_capacity, true);
 		sph_particles_array_resize(sph_particles_pre, new_capacity, true);
 		sph_particles_array_resize(sph_particles_s2, new_capacity, true);
+		sph_particles_array_resize(sph_particles_tc, new_capacity, false);
 		for (int dim = 0; dim < NDIM; dim++) {
 			sph_particles_array_resize(sph_particles_dv2[dim], new_capacity, true);
 			sph_particles_array_resize(sph_particles_g[dim], new_capacity, true);

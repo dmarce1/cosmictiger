@@ -138,63 +138,64 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				if (params.stars) {
 					star_i = data.stars[i];
 				}
-				if (!star_i) {
-					const auto& x_i = data.x[i];
-					const auto& y_i = data.y[i];
-					const auto& z_i = data.z[i];
-					const float& h_i = data.h[i];
-					const float& A_i = data.entr[i];
-					float cfrac_i = 0.f;
-					if (params.stars) {
-						cfrac_i = data.cold_frac[i];
-					}
-					const float hfrac_i = 1.f - cfrac_i;
-					for (int j = tid; j < jmax; j += block_size) {
-						int k;
-						int total;
-						bool use = false;
-						if (j < ws.rec1.size()) {
-							const auto rec1 = ws.rec1[j];
-							const fixed32 x_j = rec1.x;
-							const fixed32 y_j = rec1.y;
-							const fixed32 z_j = rec1.z;
-							const auto rung_j = rec1.rung;
-							const float h_j = rec1.h;
-							const float x_ij = distance(x_i, x_j);				// 1
-							const float y_ij = distance(y_i, y_j);				// 1
-							const float z_ij = distance(z_i, z_j);				// 1
-							const float r2 = sqr(x_ij, y_ij, z_ij);			// 5
-							if (r2 < fmaxf(sqr(h_i), sqr(h_j)) && r2 > 0.f) {				// 4
-								use = active || rung_j >= params.min_rung;
-							}
-							flops += 12;
+				const auto& x_i = data.x[i];
+				const auto& y_i = data.y[i];
+				const auto& z_i = data.z[i];
+				const float& h_i = data.h[i];
+				const float& A_i = data.entr[i];
+				float cfrac_i = 0.f;
+				if (params.stars) {
+					cfrac_i = data.cold_frac[i];
+				}
+				const float hfrac_i = 1.f - cfrac_i;
+				for (int j = tid; j < jmax; j += block_size) {
+					int k;
+					int total;
+					bool use = false;
+					if (j < ws.rec1.size()) {
+						const auto rec1 = ws.rec1[j];
+						const fixed32 x_j = rec1.x;
+						const fixed32 y_j = rec1.y;
+						const fixed32 z_j = rec1.z;
+						const auto rung_j = rec1.rung;
+						const float h_j = rec1.h;
+						const float x_ij = distance(x_i, x_j);				// 1
+						const float y_ij = distance(y_i, y_j);				// 1
+						const float z_ij = distance(z_i, z_j);				// 1
+						const float r2 = sqr(x_ij, y_ij, z_ij);			// 5
+						if (r2 < fmaxf(sqr(h_i), sqr(h_j)) && r2 > 0.f) {				// 4
+							use = active || rung_j >= params.min_rung;
 						}
-						k = use;
-						compute_indices < CONDUCTION_BLOCK_SIZE > (k, total);
-						const int offset = ws.neighbors.size();
-						__syncthreads();
-						const int next_size = offset + total;
-						ws.neighbors.resize(next_size);
-						if (use) {
-							const int l = offset + k;
-							ws.neighbors[l] = j;
-						}
+						flops += 12;
 					}
+					k = use;
+					compute_indices < CONDUCTION_BLOCK_SIZE > (k, total);
+					const int offset = ws.neighbors.size();
 					__syncthreads();
+					const int next_size = offset + total;
+					ws.neighbors.resize(next_size);
+					if (use) {
+						const int l = offset + k;
+						ws.neighbors[l] = j;
+					}
+				}
+				__syncthreads();
 
-					const float& omega_i = data.omega[i];
-					const auto& rung_i = data.rungs[i];
-					const float &kappa_i = data.kappa[i];
-					const float& rho_i = data.rho[i];
-					const float h2_i = sqr(h_i);													// 1
-					const float hinv_i = 1.f / h_i;												// 4
-					const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 2
-					const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);	// 11
-					const float dt_i = rung_i >= params.min_rung ? rung_dt[rung_i] * params.t0 : 0.f;							// 1
-					const float rhoinv_i = 1.f / (rho_i);							// 5
-					float den = 0.f;
-					float num = 0.f;
-					flops += 28;
+				const float& omega_i = data.omega[i];
+				const auto& rung_i = data.rungs[i];
+				const float &kappa_i = data.kappa[i];
+				const float& rho_i = data.rho[i];
+				const float h2_i = sqr(h_i);													// 1
+				const float hinv_i = 1.f / h_i;												// 4
+				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 2
+				const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);	// 11
+				const float dt_i = rung_i >= params.min_rung ? rung_dt[rung_i] * params.t0 : 0.f;							// 1
+				const float rhoinv_i = 1.f / (rho_i);							// 5
+				float den = 0.f;
+				float num = 0.f;
+				flops += 28;
+				if (!star_i) {
+
 					for (int j = tid; j < ws.neighbors.size(); j += block_size) {
 						const int kk = ws.neighbors[j];
 						const auto& rec1 = ws.rec1[kk];
@@ -240,20 +241,21 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 							}
 						}
 					}
-					shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(num); //31
-					shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(den); //31
-					if (tid == 0) {
-						flops += (CONDUCTION_BLOCK_SIZE - 1) * 2;
-						flops += 7;
-						const float A0 = data.entr0_snk[snki];
-						const float A1 = (A0 + num) / (1.f + den);
-						const float dA = A1 - A_i;
-						data.dentr1_snk[snki] = dA;
-						ALWAYS_ASSERT(A_i + dA > 0.0);
-						ALWAYS_ASSERT(isfinite(dA));
-					}
+				}
+				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(num); //31
+				shared_reduce_add<float, CONDUCTION_BLOCK_SIZE>(den); //31
+				if (tid == 0) {
+					flops += (CONDUCTION_BLOCK_SIZE - 1) * 2;
+					flops += 7;
+					const float A0 = data.entr0_snk[snki];
+					const float A1 = (A0 + num) / (1.f + den);
+					const float dA = A1 - A_i;
+					data.dentr1_snk[snki] = dA;
+					ALWAYS_ASSERT(A_i + dA >= 0.0);
+					ALWAYS_ASSERT(isfinite(dA));
 				}
 			}
+
 		}
 
 		shared_reduce_add<int, CONDUCTION_BLOCK_SIZE>(flops);

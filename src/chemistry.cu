@@ -507,7 +507,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 		test_temperature(N0, N, T0, T0, dt, z, flops, &dedt0, false);
 		const float tcool = -eint * rho / (dedt0 * (params.a));
 		//const float tdyn = sqrt(double(4.0 / 3.0 * M_PI) / (double(params.G) * double(rho))) / params.a;
-		if (params.stars && unstable && dedt0 < 0.f) {
+	/*	if (params.stars && unstable && dedt0 < 0.f) {
 			float hot_mass = 1.f - attr.cold_mass;
 			float hotmass0 = hot_mass;
 			float factor = expf(-dt / tcool);
@@ -529,7 +529,7 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.Hn = N.Hn;
 			attr.Hp = N.Hp;
 			attr.He = N.He;
-		} else {
+		} else {*/
 			for (int i = 0; i < 27; i++) {
 				float f_mid, f_max;
 				Tmid = sqrtf(Tmax * Tmin);																							// 5
@@ -578,7 +578,8 @@ __global__ void chemistry_kernel(chemistry_params params, chem_attribs* chems, i
 			attr.Hp = N.Hp;
 			attr.He = N.He;
 			attr.eint = eint;
-		}
+			attr.tcool = tcool;
+/*		}*/
 //		attr.rho_th = rho_th / code_to_density;
 		//PRINT( "%e\n", eint);
 		flops += 136;

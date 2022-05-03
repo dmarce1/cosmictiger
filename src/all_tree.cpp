@@ -258,6 +258,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	vector<fixed32, pinned_allocator<fixed32>> host_z;
 	vector<float, pinned_allocator<float>> host_h;
 	vector<char, pinned_allocator<char>> host_types;
+	vector<char, pinned_allocator<char>> host_rungs;
 	vector<int, pinned_allocator<int>> host_neighbors;
 	vector<int> host_selflist;
 	std::unordered_map<tree_id, int, tree_id_hash2> tree_map;
@@ -323,6 +324,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	host_z.resize(parts_size);
 	host_types.resize(parts_size);
 	host_h.resize(parts_size);
+	host_rungs.resize(parts_size);
 	vector<hpx::future<void>> futs;
 	std::atomic<int> index(0);
 	std::atomic<part_int> part_index(0);
@@ -330,7 +332,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 		host_trees[host_selflist[i]].neighbor_range = neighbor_ranges[i];
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z,&host_types, &host_trees, &host_h]() {
+		futs.push_back(hpx::async([&index,proc,nthreads,&part_index, &host_x, &host_y, &host_z,&host_types,&host_rungs, &host_trees, &host_h]() {
 			int this_index = index++;
 			while( this_index < host_trees.size()) {
 				auto& node = host_trees[this_index];
@@ -338,6 +340,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 				const part_int offset = (part_index += size) - size;
 				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				particles_global_read_softlens(node.global_part_range(), host_h.data(), offset);
+				particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;
 				this_index = index++;
@@ -359,6 +362,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	params.pass = pass;
 	params.sa_snk = &particles_semiactive(0);
 	params.sph_h_snk = &sph_particles_smooth_len(0);
+	params.rho_snk = &particles_rho(0);
 	params.a = a;
 
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));
@@ -367,6 +371,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	CUDA_CHECK(cudaMalloc(&params.z, sizeof(fixed32) * host_z.size()));
 	CUDA_CHECK(cudaMalloc(&params.h, sizeof(float) * host_h.size()));
 	CUDA_CHECK(cudaMalloc(&params.types, sizeof(char) * host_types.size()));
+	CUDA_CHECK(cudaMalloc(&params.rungs, sizeof(char) * host_rungs.size()));
 	CUDA_CHECK(cudaMalloc(&params.trees, sizeof(tree_node) * host_trees.size()));
 	CUDA_CHECK(cudaMalloc(&params.neighbors, sizeof(int) * host_neighbors.size()));
 	auto stream = cuda_get_stream();
@@ -375,6 +380,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	CUDA_CHECK(cudaMemcpyAsync(params.y, host_y.data(), sizeof(fixed32) * host_y.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.z, host_z.data(), sizeof(fixed32) * host_z.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.h, host_h.data(), sizeof(float) * host_h.size(), cudaMemcpyHostToDevice, stream));
+	CUDA_CHECK(cudaMemcpyAsync(params.rungs, host_rungs.data(), sizeof(char) * host_rungs.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.types, host_types.data(), sizeof(char) * host_types.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.trees, host_trees.data(), sizeof(tree_node) * host_trees.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(params.selfs, host_selflist.data(), sizeof(int) * host_selflist.size(), cudaMemcpyHostToDevice, stream));
@@ -386,6 +392,7 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	CUDA_CHECK(cudaFree(params.x));
 	CUDA_CHECK(cudaFree(params.y));
 	CUDA_CHECK(cudaFree(params.z));
+	CUDA_CHECK(cudaFree(params.rungs));
 	CUDA_CHECK(cudaFree(params.types));
 	CUDA_CHECK(cudaFree(params.trees));
 	CUDA_CHECK(cudaFree(params.selfs));
@@ -487,7 +494,7 @@ softlens_return all_tree_divv(int minrung, float a) {
 				auto& node = host_trees[this_index];
 				const part_int size = node.part_range.second - node.part_range.first;
 				const part_int offset = (part_index += size) - size;
-				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr,  offset);
+				particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_types.data(), nullptr, offset);
 				particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 				node.part_range.first = offset;
 				node.part_range.second = offset + size;

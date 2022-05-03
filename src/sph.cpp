@@ -556,6 +556,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		host_vx.resize(parts_size);
 		host_vy.resize(parts_size);
 		host_vz.resize(parts_size);
+		host_rungs.resize(parts_size);
 		if (stars) {
 			host_star.resize(parts_size);
 		}
@@ -604,6 +605,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 								const part_int offset = (part_index += size) - size;
 								sph_particles_global_read_pos(node.global_part_range(), host_x.data(), host_y.data(), host_z.data(), offset);
 								if( params.run_type == SPH_RUN_PREHYDRO2) {
+									sph_particles_global_read_rungs(node.global_part_range(), host_rungs.data(), offset);
 									sph_particles_global_read_vels(node.global_part_range(), host_vx.data(), host_vy.data(), host_vz.data(), offset);
 									sph_particles_global_read_entr_and_smoothlen(node.global_part_range(), host_entr.data(),host_h.data(), offset);
 									if( stars ) {
@@ -671,6 +673,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 			CUDA_CHECK(cudaMalloc(&cuda_data.stars, sizeof(char) * host_star.size()));
 		}
 	} else if (params.run_type == SPH_RUN_PREHYDRO2) {
+		CUDA_CHECK(cudaMalloc(&cuda_data.rungs, sizeof(char) * host_rungs.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.entr, sizeof(float) * host_entr.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.h, sizeof(float) * host_h.size()));
 		CUDA_CHECK(cudaMalloc(&cuda_data.vx, sizeof(float) * host_vx.size()));
@@ -716,6 +719,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		if (stars) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.stars, host_star.data(), sizeof(char) * host_star.size(), cudaMemcpyHostToDevice, stream));
 		}
+		CUDA_CHECK(cudaMemcpyAsync(cuda_data.rungs, host_rungs.data(), sizeof(char) * host_rungs.size(), cudaMemcpyHostToDevice, stream));
 	} else if (params.run_type == SPH_RUN_HYDRO) {
 		if (explicit_conduction) {
 			CUDA_CHECK(cudaMemcpyAsync(cuda_data.kappa, host_kappa.data(), sizeof(float) * host_kappa.size(), cudaMemcpyHostToDevice, stream));
@@ -870,6 +874,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 		CUDA_CHECK(cudaFree(cuda_data.vx));
 		CUDA_CHECK(cudaFree(cuda_data.vy));
 		CUDA_CHECK(cudaFree(cuda_data.vz));
+		CUDA_CHECK(cudaFree(cuda_data.rungs));
 		if (stars) {
 			CUDA_CHECK(cudaFree(cuda_data.stars));
 		}

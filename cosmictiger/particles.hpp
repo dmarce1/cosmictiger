@@ -144,6 +144,7 @@ PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_s;
 PARTICLES_EXTERN float* particles_z;
+PARTICLES_EXTERN float* particles_rh;
 PARTICLES_EXTERN char* particles_c;
 PARTICLES_EXTERN char* particles_sa;
 PARTICLES_EXTERN float* particles_p;
@@ -185,6 +186,7 @@ vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);
 void particles_save(FILE* fp);
 void particles_inc_group_cache_epoch();
+void particles_global_read_rungs(particle_global_range range, char* r, part_int offset);
 int particles_group_home(group_int);
 void particles_set_tracers(size_t count = 0);
 vector<output_particle> particles_get_tracers();
@@ -213,6 +215,11 @@ inline float& particles_divv(part_int index) {
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_p[index];
+}
+
+inline float& particles_rho(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_rh[index];
 }
 
 inline char& particles_converged(part_int index) {

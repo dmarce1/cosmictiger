@@ -82,29 +82,59 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 	static const double G = get_options().GM;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex,&indices,dt,&rnd_gens]() {
-			const float dm_soft = get_options().hsoft;
-			const float code_to_s = get_options().code_to_s;
+			const double dm_soft = get_options().hsoft;
+			const double code_to_s = get_options().code_to_s;
+			const double code_to_g = get_options().code_to_g;
+			const double code_to_cm = get_options().code_to_cm;
+			const double rho0 = 3.0 / (8.0*M_PI*constants::G) * pow(get_options().hubble*constants::H0,2);
+			const double rho0_b = rho0 * get_options().omega_b;
+			const double rho0_c = rho0 * get_options().omega_c;
+			const double code_to_density = code_to_g / pow(code_to_cm,3);
+			const double code_to_energy = pow(code_to_cm/code_to_s,2);
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
 				char rung = sph_particles_rung(i);
-				const float rho = sph_particles_rho(i);
-				const float rho0 = get_options().sneighbor_number * get_options().sph_mass / (4.0/3.0*M_PI*pow(sph_particles_smooth_len(i),3));
-				const float tdyn = sqrtf((3.0*a*a*a)/(8.0*M_PI*G*rho))/a;
-//				PRINT( "%e\n", rho/rho0);
-				if( rho/rho0 > 5.0 && sph_particles_smooth_len(i) < 0.5*get_options().hmax ) {
-					PRINT( "Forming star\n");
-				//				if( sph_particles_cold_mass(i) > 0.0) {
-//					const float eps = 0.5f * t0 / tdyn * sph_particles_cold_mass(i);
-//					const float p = 1.0 - exp(-eps);
-					bool make_star = true;
-//					make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
-					if( make_star ) {
-						sph_particles_isstar(i) =true;
-						sph_particles_entr(i) = 0.0;
-						sph_particles_cold_mass(i) = 0.0;
+				const part_int kk = sph_particles_dm_index(i);
+				const double rho_tot = particles_rho(kk) * code_to_density;
+				const double rho_b = sph_particles_rho(i) * code_to_density;
+				const double rho_c = rho_tot - rho_b;
+				const double tcool = sph_particles_tcool(i);
+				if( rho_b > 0.0f ) {
+					const double tdyn = sqrt((3.0*M_PI*a*a*a)/(32.0*constants::G*rho_b));
+					const double eint = sph_particles_eint(i) * code_to_energy;
+					const double pre = (get_options().gamma-1.0) * rho_b * eint;
+					const double cs = sqrt(pre/rho_b*get_options().gamma);
+					const double delta_b = (rho_b-rho0_b);
+					const double delta0 = (rho_tot - rho0);
+					const double dt = t0 * 0.5 * code_to_s;
+					constexpr double eta = 20.0;
+					if( delta_b / delta0 > 0.0 ) {
+						const double a = pow(constants::G,-1.5);
+						const double b = pow(rho_b,-0.5);
+						const double c = pow(cs,3);
+						const double d = pow(delta_b/delta0,1.5);
+						const double mj = a * b * c * d;
+						const double m0 = get_options().sph_mass * code_to_g;
+						if( rho_b > eta * rho0_b) {
+							if( tcool < tdyn ) {
+								if( m0 > mj ) {
+									if( sph_particles_divv(i) < 0.0 ) {
+										const double eps = 0.1 * dt / tdyn;
+										const double p = 1.0 - exp(-eps);
+										const bool make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
+										if( make_star ) {
+											sph_particles_isstar(i) =true;
+											sph_particles_entr(i) = 0.0;
+											sph_particles_cold_mass(i) = 0.0;
+										}
+									}
+								}
+							}
+						}
 					}
 				}
+//				PRINT( "%e\n", rho/rho0);
 			}
 
 		}));

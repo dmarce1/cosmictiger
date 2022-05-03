@@ -60,6 +60,7 @@ struct chem_attribs {
 	float rho;
 	float eint;
 	float dt;
+	float tcool;
 	float cold_mass;
 };
 

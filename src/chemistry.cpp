@@ -146,6 +146,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					const float e0 = sph_particles_eint(i);
 					const float fh = 1.f - chem.cold_mass;
 					const float rho = sph_particles_rho(i);
+					sph_particles_tcool(i) = chem.tcool > 0.0 ? chem.tcool : 1e38;
 					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
 					const float this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
 		//			PRINT( "%e\n", this_change );

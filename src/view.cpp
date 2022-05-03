@@ -170,50 +170,46 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 							case SPH_TYPE: {
 								sph_part_info info;
 								const int l = particles_cat_index(i);
-								info.x = particles_pos(XDIM,i);
-								info.y = particles_pos(YDIM,i);
-								info.z = particles_pos(ZDIM,i);
-								info.vx = particles_vel(XDIM,i);
-								info.vy = particles_vel(YDIM,i);
-								info.vz = particles_vel(ZDIM,i);
-								info.eint = sph_particles_eint(l);
-								info.h = sph_particles_smooth_len(l);
-								info.rung = particles_rung(i);
-								info.alpha = sph_particles_alpha(l);
-								if( chem ) {
-									info.H = sph_particles_H(l);
-									info.Hp = sph_particles_Hp(l);
-									info.Hn = sph_particles_Hn(l);
-									info.H2 = sph_particles_H2(l);
-									info.Hep = sph_particles_Hep(l);
-									info.Hepp = sph_particles_Hepp(l);
-									info.Z = sph_particles_Z(l);
-									info.He = sph_particles_He0(l);
+								if( !sph_particles_isstar(l) ) {
+									info.x = particles_pos(XDIM,i);
+									info.y = particles_pos(YDIM,i);
+									info.z = particles_pos(ZDIM,i);
+									info.vx = particles_vel(XDIM,i);
+									info.vy = particles_vel(YDIM,i);
+									info.vz = particles_vel(ZDIM,i);
+									info.eint = sph_particles_eint(l);
+									info.h = sph_particles_smooth_len(l);
+									info.rung = particles_rung(i);
+									info.alpha = sph_particles_alpha(l);
+									if( chem ) {
+										info.H = sph_particles_H(l);
+										info.Hp = sph_particles_Hp(l);
+										info.Hn = sph_particles_Hn(l);
+										info.H2 = sph_particles_H2(l);
+										info.Hep = sph_particles_Hep(l);
+										info.Hepp = sph_particles_Hepp(l);
+										info.Z = sph_particles_Z(l);
+										info.He = sph_particles_He0(l);
+									}
+									if( stars ) {
+										info.cold_frac = sph_particles_cold_mass(l);
+									} else {
+										info.cold_frac = 0.0;
+									}
+									rc.hydro[j].push_back(info);
+								} else
+								{
+									const int k = particles_cat_index(i);
+									star_part_info info;
+									info.x = particles_pos(XDIM,i);
+									info.y = particles_pos(YDIM,i);
+									info.z = particles_pos(ZDIM,i);
+									info.vx = particles_vel(XDIM,i);
+									info.vy = particles_vel(YDIM,i);
+									info.vz = particles_vel(ZDIM,i);
+									info.rung = particles_rung(i);
+									rc.star[j].push_back(info);
 								}
-								if( stars ) {
-									info.cold_frac = sph_particles_cold_mass(l);
-								} else {
-									info.cold_frac = 0.0;
-								}
-								rc.hydro[j].push_back(info);
-								break;
-							}
-							case STAR_TYPE: {
-								const int k = particles_cat_index(i);
-								const auto& star = stars_get(k);
-								star_part_info info;
-								info.x = particles_pos(XDIM,i);
-								info.y = particles_pos(YDIM,i);
-								info.z = particles_pos(ZDIM,i);
-								info.vx = particles_vel(XDIM,i);
-								info.vy = particles_vel(YDIM,i);
-								info.vz = particles_vel(ZDIM,i);
-								info.rung = particles_rung(i);
-								info.Y = star.Y;
-								info.Z = star.Z;
-								info.zform = star.zform;
-								info.M = star.stellar_mass;
-								rc.star[j].push_back(info);
 								break;
 							}
 						}
