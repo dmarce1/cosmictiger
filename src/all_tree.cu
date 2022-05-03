@@ -305,7 +305,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				float& h = params.softlen_snk[snki];
 				float count;
 				box_xceeded = !compute_softlens < DERIVATIVES_BLOCK_SIZE > (h, params.hmin, params.hmax, params.N, ws.rec1, x, self.obox, type_i, count);
-				ALWAYS_ASSERT(h > params.hmin);
+				ALWAYS_ASSERT(box_xceeded || h > params.hmin);
 				hmin_all = fminf(hmin_all, h);
 				hmax_all = fmaxf(hmax_all, h);
 				if (tid == 0) {

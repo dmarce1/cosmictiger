@@ -123,7 +123,7 @@ size_t stars_find(float a, float dt, int minrung, int step, float t0) {
 										const double eps = 0.1 * dt / tdyn;
 										const double p = 1.0 - exp(-eps);
 										const bool make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
-										if( make_star ) {
+										if( make_star && false ) {
 											sph_particles_isstar(i) =true;
 											sph_particles_entr(i) = 0.0;
 											sph_particles_cold_mass(i) = 0.0;

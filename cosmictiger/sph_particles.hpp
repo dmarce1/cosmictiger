@@ -440,6 +440,16 @@ inline float& sph_particles_rho(part_int index) {
 }
 
 inline float sph_particles_eint(part_int index) {
+#ifdef HOPKINS
+	if (sph_particles_isstar(index)) {
+		return 0.0;
+	} else {
+		const float pre = sph_particles_pressure(index);
+		const float A = sph_particles_entr(index);
+		const float gamma = get_options().gamma;
+		return A * pow(pre / A, 1.0 - 1.0 / gamma) / (gamma - 1.0);
+	}
+#else
 	static const float gamma0 = get_options().gamma;
 	static const float stars = get_options().stars;
 	float hfrac = 1.0f;
@@ -449,6 +459,7 @@ inline float sph_particles_eint(part_int index) {
 	const float rho = sph_particles_rho(index) * hfrac;
 	const float K = sph_particles_entr(index);
 	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
+#endif
 }
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {

@@ -34,7 +34,7 @@ const float Ktoev = float(1. / 11604.45);
 HPX_PLAIN_ACTION (chemistry_do_step);
 
 pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
-
+	return pair<double>(0.0,0.0);
 	profiler_enter(__FUNCTION__);
 	timer tm;
 	tm.start();
