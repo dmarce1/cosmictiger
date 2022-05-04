@@ -103,11 +103,11 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					const double rho_tot = particles_rho(kk) * code_to_density;
 #ifdef HOPKINS
 					const double rho_b = sph_particles_rho_rho(i) * code_to_density;
-					const double eint = sph_particles_eint_rho(i) * code_to_energy;
 #else
 					const double rho_b = sph_particles_rho(i) * code_to_density;
-					const double eint = sph_particles_eint(i) * code_to_energy;
 #endif
+					// entropy was temporarilty converted to energy
+					const double eint = sph_particles_entr(i) * code_to_energy;
 					const double rho_c = rho_tot - rho_b;
 					const double tcool = sph_particles_tcool(i);
 					if( rho_b > 0.0f ) {
@@ -126,6 +126,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 							const double mj = a * b * c * d;
 							const double m0 = get_options().sph_mass * code_to_g;
 							if( rho_b > eta * rho0_b) {
+
 								if( tcool < tdyn ) {
 									if( m0 > mj ) {
 										if( sph_particles_divv(i) < 0.0 ) {
