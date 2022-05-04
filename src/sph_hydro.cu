@@ -404,9 +404,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_dx); // 127
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_dy); // 127
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvy_dx); // 127
+					shared_reduce_max < HYDRO_BLOCK_SIZE > (vsig);    // 31
+				} else if( params.phase == 1 ) {
 					shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_cfl);    // 31
 					shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_visc);    // 31
-					shared_reduce_max < HYDRO_BLOCK_SIZE > (vsig);    // 31
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt1); // 31
 				}
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvx_dx); // 127

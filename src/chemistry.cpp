@@ -34,7 +34,6 @@ const float Ktoev = float(1. / 11604.45);
 HPX_PLAIN_ACTION (chemistry_do_step);
 
 pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
-	return pair<double>(0.0,0.0);
 	profiler_enter(__FUNCTION__);
 	timer tm;
 	tm.start();
@@ -72,7 +71,14 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					chem.H2 = sph_particles_H2(i) * factor;
 					chem.Hep = sph_particles_Hep(i) * factor;
 					chem.Hepp = sph_particles_Hepp(i) * factor;
+#ifdef HOPKINS
+					chem.eint = sph_particles_eint_rho(i);
+					chem.rho = sph_particles_rho_rho(i);
+#else
 					chem.eint = sph_particles_eint(i);
+					chem.rho = sph_particles_rho(i);
+#endif
+
 					if( chem.He < 0.0 && chem.He > -5e-7) {
 						chem.Hep += chem.He;
 						chem.He = 0.0;
@@ -89,7 +95,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 //					if( stars ) {
 //						chem.cold_mass = sph_particles_cold_mass(i);
 //					} else {
-						chem.cold_mass = 0.f;
+					chem.cold_mass = 0.f;
 //					}
 					if( chem.cold_mass > -1e-4 && chem.cold_mass < 0.0) {
 						chem.cold_mass = 0.0;
@@ -98,7 +104,6 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);
 					}
 					double dt = (rung_dt[rung1]) * t0;
-					chem.rho = sph_particles_rho(i);
 					if( stars ) {
 
 					}
@@ -133,7 +138,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 //					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 //					double gamma = 1. + 1. / cv;
 					double gamma = get_options().gamma;
-				//		PRINT( "%e\n", gamma);
+//		PRINT( "%e\n", gamma);
 					const float factor = 1.0f - sph_particles_Z(i);
 					sph_particles_H(i) = chem.H * factor;
 					sph_particles_He0(i) = chem.He * factor;
@@ -143,21 +148,20 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					sph_particles_Hep(i) = chem.Hep * factor;
 					sph_particles_Hepp(i) = chem.Hepp * factor;
 					sph_particles_normalize_fracs(i);
-					const float e0 = sph_particles_eint(i);
-					const float fh = 1.f - chem.cold_mass;
 					sph_particles_tcool(i) = chem.tcool > 0.0 ? chem.tcool : 1e38;
 #ifdef HOPKINS
-					const float A = sph_particles_entr(i);
-					const float P = sph_particles_pressure(i);
-					const float rho = pow(P/A,1.0/gamma);
+					const double e0 = sph_particles_eint_rho(i);
+					const double rho = sph_particles_rho_rho(i);
+					sph_particles_rec2(i).A = (gamma-1.0)*chem.eint*pow(rho,(1.0-gamma));
+					const double this_change = (sph_particles_eint_rho(i) - e0) * sph_mass / sqr(a);
 #else
-					const float rho = sph_particles_rho(i);
-					sph_particles_rec2(i).A = chem.eint * (gamma - 1.0) / powf(fh*rho,gamma-1.0);
+					const double e0 = sph_particles_eint(i);
+					const double rho = sph_particles_rho(i);
+					sph_particles_rec2(i).A = (gamma-1.0)*chem.eint*pow(rho,(1.0-gamma));
+					const double this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
 #endif
-					const float this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
-		//			PRINT( "%e\n", this_change );
+//			PRINT( "%e\n", this_change );
 					echange += this_change;
-					ALWAYS_ASSERT(fh > 0.0);
 					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 					if(stars) {
 						ALWAYS_ASSERT(chem.cold_mass >=0.0);

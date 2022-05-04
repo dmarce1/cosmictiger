@@ -205,6 +205,10 @@ float sph_particles_mmw(part_int);
 void sph_particles_softlens2smoothlens(int minrung);
 
 std::pair<double, double> sph_particles_apply_updates(int, int, float, float, float = 1.0);
+void sph_particles_entropy_to_energy();
+
+void sph_particles_energy_to_entropy();
+
 /*
  inline float& sph_particles_SN(part_int index) {
  return sph_particles_sn[index];
@@ -435,21 +439,38 @@ inline float& sph_particles_smooth_len(part_int index) {
 	return sph_particles_r2[index].h;
 }
 
+#ifdef HOPKINS
+
+inline float& sph_particles_rho_rho(part_int index) {
+	return sph_particles_rh[index];
+}
+
+inline float sph_particles_rho_pre(part_int index) {
+	ALWAYS_ASSERT(sph_particles_entr(index)>0.0f);
+	const float gamma = get_options().gamma;
+	return powf(sph_particles_pressure(index) / sph_particles_entr(index), 1.0f/gamma);
+}
+
+inline float sph_particles_eint_pre(part_int index) {
+	ALWAYS_ASSERT(sph_particles_entr(index)>0.0f);
+	const float gamma = get_options().gamma;
+	return sph_particles_pressure(index) / sph_particles_rho_pre(index) / (gamma-1.f);
+}
+
+inline float sph_particles_eint_rho(part_int index) {
+	static const float gamma0 = get_options().gamma;
+	const float rho = sph_particles_rho_rho(index);
+	const float K = sph_particles_entr(index);
+	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
+}
+
+#else
+
 inline float& sph_particles_rho(part_int index) {
 	return sph_particles_rh[index];
 }
 
 inline float sph_particles_eint(part_int index) {
-#ifdef HOPKINS
-	if (sph_particles_isstar(index)) {
-		return 0.0;
-	} else {
-		const float pre = sph_particles_pressure(index);
-		const float A = sph_particles_entr(index);
-		const float gamma = get_options().gamma;
-		return A * pow(pre / A, 1.0 - 1.0 / gamma) / (gamma - 1.0);
-	}
-#else
 	static const float gamma0 = get_options().gamma;
 	static const float stars = get_options().stars;
 	float hfrac = 1.0f;
@@ -459,8 +480,8 @@ inline float sph_particles_eint(part_int index) {
 	const float rho = sph_particles_rho(index) * hfrac;
 	const float K = sph_particles_entr(index);
 	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
-#endif
 }
+#endif
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
 	aux_quantities aux;

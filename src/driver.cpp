@@ -413,48 +413,99 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 #endif
 
-
+	bool found_stars = false;
 	if (stars && minrung <= 1) {
-		if (stars_find(scale, dt, minrung, iter, t0)) {
-
-			sparams.phase = 0;
-			int doneiters = 0;
-			sph_particles_reset_converged();
-			do {
-				sparams.set = SPH_SET_ACTIVE;
-				sparams.run_type = SPH_RUN_PREHYDRO2;
-				timer tm;
-				tm.start();
-				kr = sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-				tm.reset();
-				cont = kr.rc;
-				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-				tnparams.seto = SPH_SET_ALL;
-				tnparams.seti = SPH_SET_ALL;
-				//			tnparams.set = SPH_SET_ACTIVE;
-				tm.start();
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				tm.start();
-				tnparams.seti = SPH_INTERACTIONS_IJ;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-				sph_tree_neighbor(tnparams, root_id, checklist).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				kr = sph_run_return();
-			} while (cont);
+		sph_particles_entropy_to_energy();
+		double eloss = 0.0;
+		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
+			*eheat -= eloss;
 		}
 		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
+		sph_particles_energy_to_entropy();
 		stars_statistics(scale);
+		found_stars = true;
+	}
+
+#ifdef HOPKINS
+	bool rerun2 = true;
+#else
+	bool rerun2 = found_stars;
+#endif
+	if (rerun2) {
+		sparams.phase = 0;
+		int doneiters = 0;
+		sph_particles_reset_converged();
+		do {
+			sparams.set = SPH_SET_ACTIVE;
+			sparams.run_type = SPH_RUN_PREHYDRO2;
+			timer tm;
+			tm.start();
+			kr = sph_run(sparams, true);
+			tm.stop();
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+			tm.reset();
+			cont = kr.rc;
+			tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
+			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+			tnparams.seto = SPH_SET_ALL;
+			tnparams.seti = SPH_SET_ALL;
+			//			tnparams.set = SPH_SET_ACTIVE;
+			tm.start();
+			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+			profiler_exit();
+			tm.stop();
+			tm.reset();
+			if (rerun2) {
+				sparams.phase = 0;
+				int doneiters = 0;
+				sph_particles_reset_converged();
+				do {
+					sparams.set = SPH_SET_ACTIVE;
+					sparams.run_type = SPH_RUN_PREHYDRO2;
+					timer tm;
+					tm.start();
+					kr = sph_run(sparams, true);
+					tm.stop();
+					if (verbose)
+						PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+					tm.reset();
+					cont = kr.rc;
+					tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
+					tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+					tnparams.seto = SPH_SET_ALL;
+					tnparams.seti = SPH_SET_ALL;
+					//			tnparams.set = SPH_SET_ACTIVE;
+					tm.start();
+					profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+					sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+					profiler_exit();
+					tm.stop();
+					tm.reset();
+					tm.start();
+					tnparams.seti = SPH_INTERACTIONS_IJ;
+					tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+					profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+					sph_tree_neighbor(tnparams, root_id, checklist).get();
+					profiler_exit();
+					tm.stop();
+					tm.reset();
+					kr = sph_run_return();
+				} while (cont);
+			}
+
+			tm.start();
+			tnparams.seti = SPH_INTERACTIONS_IJ;
+			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+			sph_tree_neighbor(tnparams, root_id, checklist).get();
+			profiler_exit();
+			tm.stop();
+			tm.reset();
+			kr = sph_run_return();
+		} while (cont);
+
 	}
 
 	sparams.phase = 1;
@@ -508,7 +559,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
 	sph_particles_cache_free1();
-
 
 	sph_tree_destroy(true);
 	sph_particles_cache_free2();
@@ -630,7 +680,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 		all_tree_divv(minrung, scale);
 		tm.stop();
 		PRINT("divv = %e\n", tm.read());
-		kr.max_rung = std::max((int)kr.max_rung,(int) particles_apply_updates( minrung, t0, scale));
+		kr.max_rung = std::max((int) kr.max_rung, (int) particles_apply_updates(minrung, t0, scale));
 	}
 
 	tree_destroy();
@@ -880,7 +930,7 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
-				PRINT( "--------------------------------------------   %e  %e\n", heating, eheat);
+				PRINT("--------------------------------------------   %e  %e\n", heating, eheat);
 				eheat -= a * heating;
 			}
 			if (full_eval) {
@@ -922,11 +972,11 @@ void driver() {
 			drift_time += dtm.read();
 			const double total_kinetic = dr.kin + dr.therm;
 			cosmicK += (total_kinetic) * (a - a1);
-			const double esum = (a * (pot + total_kinetic) + cosmicK +  eheat);
+			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat);
 			if (tau == 0.0) {
 				esum0 = esum;
 			}
-			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK +  eheat);
+			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");

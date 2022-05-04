@@ -111,7 +111,13 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					part_int j = particles_cat_index(i);
 					float& h = sph_particles_smooth_len(j);
 					char rung = particles_rung(i);
+#ifdef HOPKINS
+					const float eint = sph_particles_eint_rho(j);
+					const float rho = sph_particles_rho_rho(i);
+#else
 					const float eint = sph_particles_eint(j);
+					const float rho = sph_particles_rho(i);
+#endif
 					if( !get_options().vsoft ) {
 						const float divv = sph_particles_divv(j);
 						float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale) / (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax));
@@ -123,7 +129,6 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					}
 					const float h3 = sqr(h)*h;
 					const float vol = (4.0*M_PI/3.0) * h3 / get_options().sneighbor_number;
-					const float rho = sph_particles_rho(i) *(1.f - sph_particles_cold_mass(i));
 					const float p = eint * rho * (get_options().gamma-1.0f);
 					const float e = eint * sph_mass;
 					if( !sph_particles_isstar(j)) {

@@ -61,6 +61,7 @@ struct dm_part_info {
 
 struct sph_part_info: public dm_part_info {
 	float eint;
+	float rho;
 	float h;
 	float H;
 	float Hp;
@@ -177,7 +178,13 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 									info.vx = particles_vel(XDIM,i);
 									info.vy = particles_vel(YDIM,i);
 									info.vz = particles_vel(ZDIM,i);
+#ifdef HOPKINS
+									info.eint = sph_particles_eint_pre(l);
+									info.rho = sph_particles_rho_pre(l);
+#else
 									info.eint = sph_particles_eint(l);
+									info.rho = sph_particles_rho(l);
+#endif
 									info.h = sph_particles_smooth_len(l);
 									info.rung = particles_rung(i);
 									info.alpha = sph_particles_alpha(l);
@@ -331,8 +338,7 @@ void view_output_views(int cycle, double a) {
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
 				const double h = parts.hydro[bi][i].h;
-				const double rho = sph_den(1.0 / h / h / h);
-				x.push_back(rho * code_to_density);
+				x.push_back(parts.hydro[bi][i].rho * code_to_density);
 				y.push_back(parts.hydro[bi][i].eint * code_to_energy);
 				z.push_back(parts.hydro[bi][i].alpha);
 			}
@@ -357,7 +363,7 @@ void view_output_views(int cycle, double a) {
 					s.push_back(parts.hydro[bi][i].H);
 					w.push_back(parts.hydro[bi][i].Z);
 					const double h = parts.hydro[bi][i].h;
-					double rho = sph_den(1 / (h * h * h));
+					double rho = parts.hydro[bi][i].rho;
 					const double Hp = parts.hydro[bi][i].Hp;
 					const double Hn = parts.hydro[bi][i].Hn;
 					const double H2 = parts.hydro[bi][i].H2;

@@ -213,8 +213,6 @@ struct sph_run_return {
 	}
 };
 
-void sph_particles_energy_to_entropy(float a);
-
 struct sph_run_params {
 	bool vsoft;
 	int av_type;
@@ -342,16 +340,6 @@ vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<doub
  return w;
  }
  */
-template<class T>
-inline T sph_den(T hinv3) {
-	static const T m = get_options().sph_mass;
-	static const T N = get_options().sneighbor_number;
-	static const T c0 = T(3.0 / 4.0 / M_PI) * N;
-//	PRINT("%e %e\n", m, N);
-	return m * c0 * hinv3;
-}
-void sph_deposit_sn(float a);
 
-void sph_particles_energy_to_entropy(float a);
 
 #endif /* SPH_HPP_ */

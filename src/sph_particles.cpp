@@ -234,6 +234,66 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 
 }
 
+HPX_PLAIN_ACTION (sph_particles_entropy_to_energy);
+void sph_particles_entropy_to_energy() {
+	profiler_enter(__FUNCTION__);
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_particles_entropy_to_energy_action>(c));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc]() {
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			for( int i = b; i < e; i++) {
+				if( !sph_particles_isstar(i) ) {
+#ifdef HOPKINS
+				sph_particles_entr(i) = sph_particles_eint_rho(i);
+#else
+				sph_particles_entr(i) = sph_particles_eint(i);
+#endif
+				ALWAYS_ASSERT(isfinite(sph_particles_entr(i)));
+			}
+		}
+	}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
+}
+
+HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
+
+void sph_particles_energy_to_entropy() {
+	profiler_enter(__FUNCTION__);
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<sph_particles_energy_to_entropy_action>(c));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads, proc]() {
+			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
+			const float gamma = get_options().gamma;
+			for( int i = b; i < e; i++) {
+				if( !sph_particles_isstar(i) ) {
+#ifdef HOPKINS
+				const float rho = sph_particles_rho_rho(i);
+#else
+				const float rho = sph_particles_rho(i);
+#endif
+				const float eint = sph_particles_entr(i);
+				sph_particles_entr(i) = (gamma-1.0)*eint*pow(rho,1.0-gamma);
+			}
+		}
+
+	}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
+}
+
 HPX_PLAIN_ACTION (sph_particles_softlens2smoothlens);
 
 void sph_particles_softlens2smoothlens(int minrung) {
@@ -280,7 +340,11 @@ float sph_particles_temperature(part_int i, float a) {
 		const double Hepp = sph_particles_Hepp(i);
 		const double H = sph_particles_H(i);
 		const double He = Y - Hep - Hepp;
+#ifdef HOPKINS
+		double rho = sph_particles_rho_rho(i);
+#else
 		double rho = sph_particles_rho(i);
+#endif
 		const double hfrac = 1.0 - sph_particles_cold_mass(i);
 		double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
 		rho *= code_to_density * pow(a, -3);
@@ -324,11 +388,6 @@ float sph_particles_mmw(part_int i) {
 	return 1.0 / n;
 }
 
-HPX_PLAIN_ACTION (sph_particles_energy_to_entropy);
-
-void sph_particles_energy_to_entropy(float a) {
-}
-
 void sph_particles_swap(part_int i, part_int j) {
 	static const bool chem = get_options().chem;
 	static const bool gravity = get_options().gravity;
@@ -343,6 +402,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_dv[i], sph_particles_dv[j]);
 	std::swap(sph_particles_st[i], sph_particles_st[j]);
 	std::swap(sph_particles_rh[i], sph_particles_rh[j]);
+	std::swap(sph_particles_pre[i], sph_particles_pre[j]);
 	std::swap(sph_particles_dentr2(i), sph_particles_dentr2(j));
 }
 
@@ -938,7 +998,11 @@ void sph_particles_global_read_rho(particle_global_range range, float* rho, part
 			const part_int sz = range.range.second - range.range.first;
 			for (part_int i = range.range.first; i < range.range.second; i++) {
 				const int j = offset + i - range.range.first;
+#ifdef HOPKINS
+				rho[j] = sph_particles_rho_rho(i);
+#else
 				rho[j] = sph_particles_rho(i);
+#endif
 			}
 		} else {
 			line_id_type line_id;
@@ -988,12 +1052,17 @@ static vector<float> sph_particles_fetch_rho_cache_line(part_int index) {
 	const part_int begin = (index / line_size) * line_size;
 	const part_int end = std::min(sph_particles_size(), begin + line_size);
 	for (part_int i = begin; i < end; i++) {
+#ifdef HOPKINS
+		line[i - begin] = sph_particles_rho_rho(i);
+#else
 		line[i - begin] = sph_particles_rho(i);
+#endif
 	}
 	return line;
 }
 
-void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* omegaP, float* pre, float* shearv, array<float, NCHEMFRACS>* fracs, part_int offset) {
+void sph_particles_global_read_aux(particle_global_range range, float* alpha, float* omega, float* omegaP, float* pre, float* shearv,
+		array<float, NCHEMFRACS>* fracs, part_int offset) {
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {

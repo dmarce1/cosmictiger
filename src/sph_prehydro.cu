@@ -380,6 +380,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(dpredh);
 #endif
 				data.rho_snk[snki] = rho_i;
+				const auto one =  w_sum / (3.0/4.0/M_PI*data.N);
+				ALWAYS_ASSERT(fabs(one - 1.0) < .001);
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
 				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
@@ -389,6 +391,9 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 #ifdef HOPKINS
 				data.omegaP_snk[snki] = 1.f / ((-pre + 0.33333333333333f * dpredh) / (f * w_sum)) * omega_i;
 				data.pre_snk[snki] = powf(data.m * pre * h3inv_i, data.def_gamma);
+				if( tid == 0 ) {
+	//				PRINT( "%e %e %e\n", data.pre_snk[snki], rho_i, x_i.to_float());
+				}
 #else
 				data.omegaP_snk[snki] = 1.f / ((-1.f + A * f * w_sum) / (f * w_sum)) * omega_i;
 #endif

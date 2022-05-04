@@ -781,7 +781,11 @@ sph_run_return sph_run_workspace::to_gpu() {
 	cuda_data.pre_snk = &sph_particles_pressure(0);
 	cuda_data.shear_snk = &sph_particles_shear(0);
 	cuda_data.divv_snk = &sph_particles_divv(0);
+#ifdef HOPKINS
+	cuda_data.rho_snk = &sph_particles_rho_rho(0);
+#else
 	cuda_data.rho_snk = &sph_particles_rho(0);
+#endif
 	cuda_data.cold_mass_snk = &sph_particles_cold_mass(0);
 	cuda_data.rec1_snk = &sph_particles_rec1(0);
 	cuda_data.rec2_snk = &sph_particles_rec2(0);

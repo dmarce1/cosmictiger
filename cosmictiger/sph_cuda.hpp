@@ -119,7 +119,7 @@ struct sph_run_cuda_data {
 #define CONDUCTION_BLOCK_SIZE 32
 
 #define SPH_DIFFUSION_C 0.03f
-#define MAX_RUNG_DIF 2
+#define MAX_RUNG_DIF 1
 #define SPH_SMOOTHLEN_TOLER float(1.0e-4)
 
 struct sph_reduction {

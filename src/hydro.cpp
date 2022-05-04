@@ -159,8 +159,13 @@ void hydro_driver(double tmax, int nsteps = 64) {
 				zmom += m * vz;
 				ekin += 0.5 * m * sqr(vx, vy, vz);
 				if (particles_type(i) == SPH_TYPE) {
+#ifdef HOPKINS
+					rho_max = std::max(rho_max, (double) sph_particles_rho_rho(particles_cat_index(i)));
+					const double e = sph_particles_eint_rho(particles_cat_index(i));
+#else
 					rho_max = std::max(rho_max, (double) sph_particles_rho(particles_cat_index(i)));
 					const double e = sph_particles_eint(particles_cat_index(i));
+#endif
 					eint += m * e;
 				}
 			}
@@ -382,7 +387,11 @@ void hydro_star_test() {
 	double norm = 0.0;
 	for (int i = 0; i < Nsample; i++) {
 		const part_int k = rand() % sph_particles_size();
+#ifdef HOPKINS
+		const float d0 = sph_particles_rho_rho(k);
+#else
 		const float d0 = sph_particles_rho(k);
+#endif
 		const float x = sph_particles_pos(XDIM, k).to_float();
 		const float y = sph_particles_pos(YDIM, k).to_float();
 		const float z = sph_particles_pos(ZDIM, k).to_float();
@@ -725,9 +734,9 @@ void hydro_sod_test() {
 			}
 		}
 	}
-	constexpr float t = .09;
+	constexpr float t = .075;
 	constexpr int N = 1000;
-	hydro_driver(t, 10);
+	hydro_driver(t, 20);
 	FILE* fp = fopen("sod.txt", "wt");
 	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
 	double norm1 = 0.0, norm2 = 0.0;
@@ -736,7 +745,14 @@ void hydro_sod_test() {
 		const int j = sph_particles_dm_index(i);
 		float x = particles_pos(XDIM, j).to_float();
 		const float h = sph_particles_smooth_len(i);
+#ifdef HOPKINS
+		const float rho = sph_particles_rho_pre(i);
+		const float eint = sph_particles_eint_pre(i);
+#else
 		const float rho = sph_particles_rho(i);
+		const float eint = sph_particles_eint(i);
+#endif
+		const float p = (get_options().gamma - 1.0) * rho * eint;
 		sod_state_t state;
 		float x0 = x;
 		x0 -= 0.5;
@@ -752,7 +768,7 @@ void hydro_sod_test() {
 		l1 += dif;
 		l2 += dif * dif;
 		lmax = std::max(lmax, dif);
-		fprintf(fp, "%e %e %e\n", x, rho, state.rho);
+		fprintf(fp, "%e %e %e %e %e\n", x, rho, state.rho, p, state.p);
 	}
 	l1 /= norm1;
 	l2 /= norm2;
@@ -950,7 +966,11 @@ void hydro_blast_test() {
 		float x = particles_pos(XDIM, j).to_float() - 0.5;
 		float y = particles_pos(YDIM, j).to_float() - 0.5;
 		float z = particles_pos(ZDIM, j).to_float() - 0.5;
+#ifdef HOPKINS
+		const float rho = sph_particles_rho_rho(i);
+#else
 		const float rho = sph_particles_rho(i);
+#endif
 		double time = t;
 		double r = sqrt(sqr(x, y, z));
 		double rmax = sqrt(1.5);
