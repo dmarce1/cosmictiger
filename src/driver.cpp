@@ -415,13 +415,12 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	bool found_stars = false;
 	if (stars && minrung <= 1) {
-		sph_particles_entropy_to_energy();
+	//	sph_particles_entropy_to_energy();
 		double eloss = 0.0;
 		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
 			*eheat -= eloss;
 		}
-		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
-		sph_particles_energy_to_entropy();
+		PRINT("%e-----------------------------------------------------------------------------------------------------------------------\n", eloss);
 		stars_statistics(scale);
 		found_stars = true;
 	}
@@ -505,7 +504,11 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			tm.reset();
 			kr = sph_run_return();
 		} while (cont);
-
+		if (stars && minrung <= 1) {
+	//		sph_particles_energy_to_entropy();
+		}
+	} else if (stars && minrung <= 1) {
+//		sph_particles_energy_to_entropy();
 	}
 
 	sparams.phase = 1;

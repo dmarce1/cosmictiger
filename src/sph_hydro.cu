@@ -199,7 +199,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				const float pre_i = pressure(A_i, rho_i, gamma0);
 #endif
 				const float eint = A_i * powf(rho_i, gamma0 - 1.f) / (gamma0 - 1.f);
-				const float de_dt0 = 1.f / eint * A_i;	// 12
+				const float de_dt0 = A_i / eint;	// 12
 				const float c_i = sqrtf(gamma0 * powf(A_i, 1.0f / gamma0) * powf(pre_i, gamma0 - 1.f) / hfrac_i); // 22
 				flops += 55;
 				float ax = 0.f;
@@ -286,8 +286,18 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float& rho_j = rec2.rho;												// 2
 #ifdef HOPKINS
 							const float& pre_j = rec2.pre;
-							const float f_ij = (1.f - smoothX(h_i, params.hmin, params.hmax) * powf(A_j, -1.0f / gamma0) / omegaP_i) * omega_i;
-							const float f_ji = (1.f - smoothX(h_j, params.hmin, params.hmax) * powf(A_i, -1.0f / gamma0) / omegaP_j) * omega_j;
+							const float f_ij = (1.f - smoothX(h_j, params.hmin, params.hmax) * powf(A_j, -1.0f / gamma0) / omegaP_i) * omega_i;
+							const float f_ji = (1.f - smoothX(h_i, params.hmin, params.hmax) * powf(A_i, -1.0f / gamma0) / omegaP_j) * omega_j;
+			/*				if (tid == 0) {
+								if (f_ij < 0.0) {
+									PRINT("f_ij = %e\n", f_ij);
+								}
+								if (f_ji < 0.0) {
+									PRINT("f_ji = %e\n", f_ji);
+								}
+							}*/
+							//		ALWAYS_ASSERT(f_ij > 0.0);
+							//		ALWAYS_ASSERT(f_ji > 0.0);
 #else
 							const float pre_j = pressure(A_j, rho_j, gamma0);
 #endif
@@ -355,6 +365,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							dvx_dx -= m * rhoinv_i * vx_ij * dWdr_x_i;									// 2
 							dvy_dy -= m * rhoinv_i * vy_ij * dWdr_y_i;									// 2
 							dvz_dz -= m * rhoinv_i * vz_ij * dWdr_z_i;									// 2
+							vsig = fmaxf(vsig, -w_ij);												// 1
 							if (params.phase == 0) {
 								dvy_dx -= m * rhoinv_i * vy_ij * dWdr_x_i;									// 2
 								dvz_dx -= m * rhoinv_i * vz_ij * dWdr_x_i;									// 2
@@ -362,7 +373,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 								dvz_dy -= m * rhoinv_i * vz_ij * dWdr_y_i;									// 2
 								dvx_dz -= m * rhoinv_i * vx_ij * dWdr_z_i;									// 2
 								dvy_dz -= m * rhoinv_i * vy_ij * dWdr_z_i;									// 2
-								vsig = fmaxf(vsig, -w_ij);												// 1
 							} else if (params.phase == 1) {
 								const float h = fminf(h_i, h_j * (1 << MAX_RUNG_DIF));                  // 3
 								dtinv_cfl = fmaxf(dtinv_cfl, c_ij / h);												// 1
@@ -403,12 +413,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_dx); // 127
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_dy); // 127
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvy_dx); // 127
-					shared_reduce_max < HYDRO_BLOCK_SIZE > (vsig);    // 31
-				} else if( params.phase == 1 ) {
+				} else if (params.phase == 1) {
 					shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_cfl);    // 31
 					shared_reduce_max < HYDRO_BLOCK_SIZE > (dtinv_visc);    // 31
 					shared_reduce_add<float, HYDRO_BLOCK_SIZE>(de_dt1); // 31
 				}
+				shared_reduce_max < HYDRO_BLOCK_SIZE > (vsig);    // 31
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvx_dx); // 127
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvy_dy); // 127
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(dvz_dz); // 127

@@ -103,11 +103,11 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					const double rho_tot = particles_rho(kk) * code_to_density;
 #ifdef HOPKINS
 					const double rho_b = sph_particles_rho_rho(i) * code_to_density;
+					const double eint = sph_particles_eint_rho(i) * code_to_energy;
 #else
 					const double rho_b = sph_particles_rho(i) * code_to_density;
+					const double eint = sph_particles_eint(i) * code_to_energy;
 #endif
-					// entropy was temporarilty converted to energy
-					const double eint = sph_particles_entr(i) * code_to_energy;
 					const double rho_c = rho_tot - rho_b;
 					const double tcool = sph_particles_tcool(i);
 					if( rho_b > 0.0f ) {
@@ -135,7 +135,11 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 											const bool make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 											if( make_star ) {
 												sph_particles_isstar(i) = true;
-												eloss +=sph_particles_entr(i) * get_options().sph_mass/(a*a);
+#ifdef HOPKINS
+												eloss +=sph_particles_eint_rho(i) * get_options().sph_mass/(a*a);
+#else
+												eloss +=sph_particles_eint(i) * get_options().sph_mass/(a*a);
+#endif
 												sph_particles_entr(i) = 0.0;
 												sph_particles_cold_mass(i) = 0.0;
 											}
@@ -151,9 +155,13 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 		return eloss;
 	}));
 	}
-	hpx::wait_all(futs2.begin(), futs2.end());
 	for (auto& f : futs) {
 		eloss += f.get();
+		PRINT( "%e\n", eloss);
+	}
+	for (auto& f : futs2) {
+		eloss += f.get();
+		PRINT( "%e\n", eloss);
 	}
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
