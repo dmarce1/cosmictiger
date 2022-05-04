@@ -112,11 +112,16 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 					float& h = sph_particles_smooth_len(j);
 					char rung = particles_rung(i);
 #ifdef HOPKINS
-					const float eint = sph_particles_eint_rho(j);
-					const float rho = sph_particles_rho_rho(i);
+					float eint;
+					if( sph_particles_isstar(j) || sph_particles_pressure(j) <= 0.0) {
+						eint = 0.0;
+					} else {
+						eint = sph_particles_eint_rho(j);
+					}
+					float rho = sph_particles_rho_rho(j);
 #else
 					const float eint = sph_particles_eint(j);
-					const float rho = sph_particles_rho(i);
+					const float rho = sph_particles_rho(j);
 #endif
 					if( !get_options().vsoft ) {
 						const float divv = sph_particles_divv(j);

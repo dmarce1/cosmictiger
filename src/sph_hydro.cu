@@ -195,11 +195,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				}
 #ifdef HOPKINS
 				const float& pre_i = data.pre[i];
-				const float eint = A_i * powf(pre_i / A_i, (gamma0 - 1.f) / gamma0) / (gamma0 - 1.f);
 #else
 				const float pre_i = pressure(A_i, rho_i, gamma0);
-				const float eint = A_i * powf(rho_i, gamma0 - 1.f) / (gamma0 - 1.f);
 #endif
+				const float eint = A_i * powf(rho_i, gamma0 - 1.f) / (gamma0 - 1.f);
 				const float de_dt0 = 1.f / eint * A_i;	// 12
 				const float c_i = sqrtf(gamma0 * powf(A_i, 1.0f / gamma0) * powf(pre_i, gamma0 - 1.f) / hfrac_i); // 22
 				flops += 55;
