@@ -180,7 +180,7 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 									info.vz = particles_vel(ZDIM,i);
 #ifdef HOPKINS
 									info.eint = sph_particles_eint_pre(l);
-									info.rho = sph_particles_rho_pre(l);
+									info.rho = sph_particles_rho_rho(l);
 #else
 									info.eint = sph_particles_eint(l);
 									info.rho = sph_particles_rho(l);

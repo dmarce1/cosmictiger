@@ -70,11 +70,19 @@ public:
 };
 
 struct sph_particle0 {
+#ifdef ENTROPY
 	float entr0;
+#else
+	float eint0;
+#endif
 	array<float, NCHEMFRACS> chem0;
 	template<class A>
 	void serialize(A && arc, unsigned) {
+#ifdef ENTROPY
 		arc & entr0;
+#else
+		arc & eint0;
+#endif
 		arc & chem0;
 	}
 };
@@ -85,7 +93,11 @@ struct sph_particle {
 	float h;
 	float shearv;
 	float alpha;
+#ifdef ENTROPY
 	float A;
+#else
+	float eint;
+#endif
 	float fcold;
 	float divv;
 	float omegaP;
@@ -98,7 +110,11 @@ struct sph_particle {
 		arc & h;
 		arc & shearv;
 		arc & alpha;
+#ifdef ENTROPY
 		arc & A;
+#else
+		arc & eint;
+#endif
 		arc & fcold;
 		arc & divv;
 		arc & omegaP;
@@ -112,7 +128,11 @@ struct sph_record1 {
 };
 
 struct sph_record2 {
+#ifdef ENTROPY
 	float A;
+#else
+	float eint;
+#endif
 	float h;
 };
 
@@ -180,7 +200,11 @@ void sph_particles_resize(part_int sz, bool parts2 = true);
 void sph_particles_free();
 void sph_particles_cache_free1();
 void sph_particles_cache_free2();
+#ifdef ENTROPY
 void sph_particles_cache_free_entr();
+#else
+void sph_particles_cache_free_eint();
+#endif
 void sph_particles_resolve_with_particles();
 void sph_particles_sort_by_particles(pair<part_int> rng);
 void sph_particles_swap(part_int i, part_int j);
@@ -188,7 +212,7 @@ void sph_particles_swap2(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void sph_particles_global_read_fcold(particle_global_range range, float*, char*, part_int offset);
-void sph_particles_global_read_entr_and_smoothlen(particle_global_range range, float*, float*, part_int offset);
+void sph_particles_global_read_energy_and_smoothlen(particle_global_range range, float*, float*, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
 void sph_particles_global_read_kappas(particle_global_range range, float*, part_int offset);
@@ -205,9 +229,6 @@ float sph_particles_mmw(part_int);
 void sph_particles_softlens2smoothlens(int minrung);
 
 std::pair<double, double> sph_particles_apply_updates(int, int, float, float, float = 1.0);
-void sph_particles_entropy_to_energy();
-
-void sph_particles_energy_to_entropy();
 
 /*
  inline float& sph_particles_SN(part_int index) {
@@ -215,9 +236,15 @@ void sph_particles_energy_to_entropy();
  }
  */
 
+#ifdef ENTROPY
 inline float& sph_particles_entr0(part_int index) {
 	return sph_particles_e0[index];
 }
+#else
+inline float& sph_particles_eint0(part_int index) {
+	return sph_particles_e0[index];
+}
+#endif
 
 inline char& sph_particles_isstar(part_int index) {
 	return sph_particles_st[index];
@@ -381,6 +408,7 @@ inline char& sph_particles_rung(int index) {
 	return particles_rung(sph_particles_dm_index(index));
 }
 
+#ifdef ENTROPY
 inline float& sph_particles_entr(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_r2[index].A;
@@ -395,6 +423,23 @@ inline float& sph_particles_dentr1(part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
 	return sph_particles_de2[index];
 }
+
+#else
+inline float& sph_particles_eint(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_r2[index].eint;
+}
+
+inline float& sph_particles_deint2(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de3[index];
+}
+
+inline float& sph_particles_deint1(part_int index) {
+	CHECK_SPH_PART_BOUNDS(index);
+	return sph_particles_de2[index];
+}
+#endif
 
 inline float& sph_particles_dvel0(int dim, part_int index) {
 	CHECK_SPH_PART_BOUNDS(index);
@@ -446,22 +491,34 @@ inline float& sph_particles_rho_rho(part_int index) {
 }
 
 inline float sph_particles_rho_pre(part_int index) {
-	ALWAYS_ASSERT(sph_particles_entr(index)>0.0f);
+#ifdef ENTROPY
 	const float gamma = get_options().gamma;
 	return powf(sph_particles_pressure(index) / sph_particles_entr(index), 1.0f/gamma);
+#else
+	const float gamma = get_options().gamma;
+	return sph_particles_pressure(index) / sph_particles_eint(index) / (gamma - 1.f);
+#endif
 }
 
 inline float sph_particles_eint_pre(part_int index) {
-	ALWAYS_ASSERT(sph_particles_entr(index)>0.0f);
+#ifdef ENTROPY
+	ALWAYS_ASSERT(sph_particles_entr(index) > 0.0f);
 	const float gamma = get_options().gamma;
-	return sph_particles_pressure(index) / sph_particles_rho_pre(index) / (gamma-1.f);
+	return sph_particles_pressure(index) / sph_particles_rho_pre(index) / (gamma - 1.f);
+#else
+	return sph_particles_eint(index);
+#endif
 }
 
 inline float sph_particles_eint_rho(part_int index) {
+#ifdef ENTROPY
 	static const float gamma0 = get_options().gamma;
 	const float rho = sph_particles_rho_rho(index);
 	const float K = sph_particles_entr(index);
 	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
+#else
+	return sph_particles_eint(index);
+#endif
 }
 
 #else
@@ -470,6 +527,7 @@ inline float& sph_particles_rho(part_int index) {
 	return sph_particles_rh[index];
 }
 
+#ifdef ENTROPY
 inline float sph_particles_eint(part_int index) {
 	static const float gamma0 = get_options().gamma;
 	static const float stars = get_options().stars;
@@ -481,6 +539,7 @@ inline float sph_particles_eint(part_int index) {
 	const float K = sph_particles_entr(index);
 	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
+#endif
 #endif
 
 inline aux_quantities sph_particles_aux_quantities(part_int index) {
@@ -511,7 +570,11 @@ inline sph_particle get_sph_particle(part_int i) {
 	part.h = sph_particles_smooth_len(i);
 	part.shearv = sph_particles_shear(i);
 	part.alpha = sph_particles_alpha(i);
+#ifdef ENTROPY
 	part.A = sph_particles_entr(i);
+#else
+	part.eint = sph_particles_eint(i);
+#endif
 	part.fcold = sph_particles_cold_mass(i);
 	part.divv = sph_particles_divv(i);
 	return part;

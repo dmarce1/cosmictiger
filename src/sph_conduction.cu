@@ -27,7 +27,11 @@ struct conduction_record1 {
 	char rung;
 };
 struct conduction_record2 {
+#ifdef ENTROPY
 	float entr;
+#else
+	float eint;
+#endif
 	float kappa;
 	float omega;
 	float cfrac;
@@ -110,7 +114,11 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 					ALWAYS_ASSERT(h > 0.f);
 					ws.rec1[k].h = h;
 					ws.rec1[k].rung = data.rungs[pi];
+#ifdef ENTROPY
 					ws.rec2[k].entr = data.entr[pi];
+#else
+					ws.rec2[k].eint = data.eint[pi];
+#endif
 					ws.rec2[k].kappa = data.kappa[pi];
 					ws.rec2[k].omega = data.omega[pi];
 					ws.rec2[k].rho = data.rho[pi];
@@ -142,7 +150,11 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const auto& y_i = data.y[i];
 				const auto& z_i = data.z[i];
 				const float& h_i = data.h[i];
+#ifdef ENTROPY
 				const float& A_i = data.entr[i];
+#else
+				const float& eint_i = data.eint[i];
+#endif
 				float cfrac_i = 0.f;
 				if (params.stars) {
 					cfrac_i = data.cold_frac[i];
@@ -188,7 +200,6 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				const float h2_i = sqr(h_i);													// 1
 				const float hinv_i = 1.f / h_i;												// 4
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);							// 2
-				const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);	// 11
 				const float dt_i = rung_i >= params.min_rung ? rung_dt[rung_i] * params.t0 : 0.f;							// 1
 				const float rhoinv_i = 1.f / (rho_i);							// 5
 				float den = 0.f;
@@ -215,7 +226,11 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 							flops += 11;
 							if (r2 < fmaxf(h2_j, h2_i)) {							// 2
 								const float& cfrac_j = rec2.cfrac;
+#ifdef ENTROPY
 								const float& A_j = rec2.entr;
+#else
+								const float& eint_j = rec2.eint;
+#endif
 								const float& rho_j = rec2.rho;													// 2
 								const float hfrac_j = 1.f - cfrac_j;
 								const float r = sqrtf(r2);							// 4
@@ -235,7 +250,11 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 								const float dt_ij = 0.5f * (dt_i + dt_j);													// 2
 								const float D_ij = cons * kappa_ij * dWdr_ij / (rho_i * rho_j) * dt_ij * rinv; // 10
 								ALWAYS_ASSERT(D_ij >= 0.f);
+#ifdef ENTROPY
 								num = fmaf(D_ij, A_j * powf(rho_j * rhoinv_i * hfrac_j / hfrac_i, gamma0 - 1.f), num); // 14
+#else
+								num = fmaf(D_ij, eint_j, num); // 14
+#endif
 								den += D_ij;																					// 1
 								flops += 69;
 							}
@@ -247,12 +266,21 @@ __global__ void sph_cuda_conduction(sph_run_params params, sph_run_cuda_data dat
 				if (tid == 0) {
 					flops += (CONDUCTION_BLOCK_SIZE - 1) * 2;
 					flops += 7;
+#ifdef ENTROPY
 					const float A0 = data.entr0_snk[snki];
 					const float A1 = (A0 + num) / (1.f + den);
 					const float dA = A1 - A_i;
 					data.dentr1_snk[snki] = dA;
 					ALWAYS_ASSERT(A_i + dA >= 0.0);
 					ALWAYS_ASSERT(isfinite(dA));
+#else
+					const float eint0 = data.eint0_snk[snki];
+					const float eint1 = (eint0 + num) / (1.f + den);
+					const float deint = eint1 - eint_i;
+					data.deint1_snk[snki] = deint;
+					ALWAYS_ASSERT(eint_i + deint >= 0.0);
+					ALWAYS_ASSERT(isfinite(deint));
+#endif
 				}
 			}
 

@@ -40,10 +40,17 @@ struct sph_run_cuda_data {
 	fixed32* y;
 	fixed32* z;
 	char* stars;
+#ifdef ENTROPY
 	float* dentr1_snk;
 	float* dentr2_snk;
 	float* entr0_snk;
 	float* entr;
+#else
+	float* deint1_snk;
+	float* deint2_snk;
+	float* eint0_snk;
+	float* eint;
+#endif
 	float* kappa;
 	float* cold_frac;
 	float gsoft;

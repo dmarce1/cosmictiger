@@ -130,7 +130,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 								if( tcool < tdyn ) {
 									if( m0 > mj ) {
 										if( sph_particles_divv(i) < 0.0 ) {
-											const double eps = 0.1 * dt / tdyn;
+											const double eps = dt / tdyn;
 											const double p = 1.0 - exp(-eps);
 											const bool make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 											if( make_star ) {
@@ -140,8 +140,11 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 #else
 												eloss +=sph_particles_eint(i) * get_options().sph_mass/(a*a);
 #endif
+#ifdef ENTROPY
 												sph_particles_entr(i) = 0.0;
-												sph_particles_cold_mass(i) = 0.0;
+#else
+												sph_particles_eint(i) = 0.0;
+#endif
 											}
 										}
 									}

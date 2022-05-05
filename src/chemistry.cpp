@@ -72,109 +72,116 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 					chem.Hep = sph_particles_Hep(i) * factor;
 					chem.Hepp = sph_particles_Hepp(i) * factor;
 #ifdef HOPKINS
-					chem.eint = sph_particles_eint_rho(i);
-					chem.rho = sph_particles_rho_rho(i);
+				chem.eint = sph_particles_eint_rho(i);
+				chem.rho = sph_particles_rho_rho(i);
 #else
-					chem.eint = sph_particles_eint(i);
-					chem.rho = sph_particles_rho(i);
+				chem.eint = sph_particles_eint(i);
+				chem.rho = sph_particles_rho(i);
 #endif
 
-					if( chem.He < 0.0 && chem.He > -5e-7) {
-						chem.Hep += chem.He;
-						chem.He = 0.0;
-					}
-					if( chem.Hepp < 0.0 && chem.Hepp > -5e-7) {
-						chem.Hep += chem.Hepp;
-						chem.Hepp = 0.0;
-					}
-					ALWAYS_ASSERT(chem.Hepp >= 0.f);
-					ALWAYS_ASSERT(chem.H2 >= 0.f);
-					ALWAYS_ASSERT(chem.Hp >= 0.f);
-					ALWAYS_ASSERT(chem.Hn >= 0.f);
-					ALWAYS_ASSERT(chem.Hep >= 0.f);
+				if( chem.He < 0.0 && chem.He > -5e-7) {
+					chem.Hep += chem.He;
+					chem.He = 0.0;
+				}
+				if( chem.Hepp < 0.0 && chem.Hepp > -5e-7) {
+					chem.Hep += chem.Hepp;
+					chem.Hepp = 0.0;
+				}
+				ALWAYS_ASSERT(chem.Hepp >= 0.f);
+				ALWAYS_ASSERT(chem.H2 >= 0.f);
+				ALWAYS_ASSERT(chem.Hp >= 0.f);
+				ALWAYS_ASSERT(chem.Hn >= 0.f);
+				ALWAYS_ASSERT(chem.Hep >= 0.f);
 //					if( stars ) {
 //						chem.cold_mass = sph_particles_cold_mass(i);
 //					} else {
-					chem.cold_mass = 0.f;
+				chem.cold_mass = 0.f;
 //					}
-					if( chem.cold_mass > -1e-4 && chem.cold_mass < 0.0) {
-						chem.cold_mass = 0.0;
-					} else if( chem.cold_mass < 0.0) {
-						PRINT( "%e\n", chem.cold_mass);
-						ALWAYS_ASSERT(chem.cold_mass >=0.0);
-					}
-					double dt = (rung_dt[rung1]) * t0;
-					if( stars ) {
-
-					}
-					chem.dt = dt;
-					if( T > 5e8) {
-						PRINT( "T-------------> %e\n", T);
-						if( T > TMAX) {
-							int k = sph_particles_dm_index(i);
-							float vx = particles_vel(XDIM,k);
-							float vy = particles_vel(YDIM,k);
-							float vz = particles_vel(ZDIM,k);
-							PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.eint, sph_particles_smooth_len(i), vx, vy, vz);
-							PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
-						}
-					}
-					if(T < 0.f) {
-						PRINT( "NEGATIVE T !\n", T);
-						abort();
-					}
-					chems.push_back(chem);
+				if( chem.cold_mass > -1e-4 && chem.cold_mass < 0.0) {
+					chem.cold_mass = 0.0;
+				} else if( chem.cold_mass < 0.0) {
+					PRINT( "%e\n", chem.cold_mass);
+					ALWAYS_ASSERT(chem.cold_mass >=0.0);
 				}
+				double dt = (rung_dt[rung1]) * t0;
+				if( stars ) {
+
+				}
+				chem.dt = dt;
+				if( T > 5e8) {
+					PRINT( "T-------------> %e\n", T);
+					if( T > TMAX) {
+						int k = sph_particles_dm_index(i);
+						float vx = particles_vel(XDIM,k);
+						float vy = particles_vel(YDIM,k);
+						float vz = particles_vel(ZDIM,k);
+						PRINT( "CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.eint, sph_particles_smooth_len(i), vx, vy, vz);
+						PRINT( "%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
+					}
+				}
+				if(T < 0.f) {
+					PRINT( "NEGATIVE T !\n", T);
+					abort();
+				}
+				chems.push_back(chem);
 			}
-			double flops;
-			flops = cuda_chemistry_step(chems, a);
-			int j = 0;
-			double echange = 0.0;
-			const double sph_mass = get_options().sph_mass;
-			for( part_int i = b; i < e; i++) {
-				int rung1 = sph_particles_rung(i);
-				if( rung1 >= minrung && !sph_particles_isstar(i)) {
-					chem_attribs chem = chems[j++];
+		}
+		double flops;
+		flops = cuda_chemistry_step(chems, a);
+		int j = 0;
+		double echange = 0.0;
+		const double sph_mass = get_options().sph_mass;
+		for( part_int i = b; i < e; i++) {
+			int rung1 = sph_particles_rung(i);
+			if( rung1 >= minrung && !sph_particles_isstar(i)) {
+				chem_attribs chem = chems[j++];
 //					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 //					double gamma = 1. + 1. / cv;
-					double gamma = get_options().gamma;
+				double gamma = get_options().gamma;
 //		PRINT( "%e\n", gamma);
-					const float factor = 1.0f - sph_particles_Z(i);
-					sph_particles_H(i) = chem.H * factor;
-					sph_particles_He0(i) = chem.He * factor;
-					sph_particles_Hp(i) = chem.Hp * factor;
-					sph_particles_Hn(i) = chem.Hn * factor;
-					sph_particles_H2(i) = chem.H2 * factor;
-					sph_particles_Hep(i) = chem.Hep * factor;
-					sph_particles_Hepp(i) = chem.Hepp * factor;
-					sph_particles_normalize_fracs(i);
-					sph_particles_tcool(i) = chem.tcool > 0.0 ? chem.tcool : 1e38;
+				const float factor = 1.0f - sph_particles_Z(i);
+				sph_particles_H(i) = chem.H * factor;
+				sph_particles_He0(i) = chem.He * factor;
+				sph_particles_Hp(i) = chem.Hp * factor;
+				sph_particles_Hn(i) = chem.Hn * factor;
+				sph_particles_H2(i) = chem.H2 * factor;
+				sph_particles_Hep(i) = chem.Hep * factor;
+				sph_particles_Hepp(i) = chem.Hepp * factor;
+				sph_particles_normalize_fracs(i);
+				sph_particles_tcool(i) = chem.tcool > 0.0 ? chem.tcool : 1e38;
 #ifdef HOPKINS
-					const double e0 = sph_particles_eint_rho(i);
-					const double rho = sph_particles_rho_rho(i);
-					sph_particles_rec2(i).A = (gamma-1.0)*chem.eint*pow(rho,(1.0-gamma));
-					const double this_change = (sph_particles_eint_rho(i) - e0) * sph_mass / sqr(a);
+				const double e0 = sph_particles_eint_rho(i);
+				const double rho = sph_particles_rho_rho(i);
+#ifdef ENTROPY
+				sph_particles_rec2(i).A = (gamma-1.0)*chem.eint*pow(rho,(1.0-gamma));
 #else
-					const double e0 = sph_particles_eint(i);
-					const double rho = sph_particles_rho(i);
-					sph_particles_rec2(i).A = (gamma-1.0)*chem.eint*pow(rho,(1.0-gamma));
-					const double this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
+				sph_particles_rec2(i).eint = chem.eint;
+#endif
+				const double this_change = (sph_particles_eint_rho(i) - e0) * sph_mass / sqr(a);
+#else
+				const double e0 = sph_particles_eint(i);
+				const double rho = sph_particles_rho(i);
+#ifdef ENTROPY
+				sph_particles_rec2(i).A = (gamma-1.0)*chem.eint*pow(rho,(1.0-gamma));
+#else
+				sph_particles_rec2(i).eint = chem.eint;
+#endif
+				const double this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
 #endif
 //			PRINT( "%e\n", this_change );
-					echange += this_change;
-					ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-					if(stars) {
-						ALWAYS_ASSERT(chem.cold_mass >=0.0);
+				echange += this_change;
+				if(stars) {
+					ALWAYS_ASSERT(chem.cold_mass >=0.0);
 //						sph_particles_cold_mass(i) = chem.cold_mass;
-					}
 				}
 			}
-			pair<double> rc;
-			rc.first = echange;
-			rc.second = flops;
-			return rc;
+		}
+		pair<double> rc;
+		rc.first = echange;
+		rc.second = flops;
+		return rc;
 
-		}));
+	}));
 	}
 	double flops = 0.0;
 	for (auto& f : futs) {

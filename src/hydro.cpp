@@ -277,7 +277,11 @@ void hydro_plummer() {
 			sph_particles_vel(YDIM, k) = y * v;
 			sph_particles_vel(ZDIM, k) = z * v;
 			const float eint = 1e-3 * (v * v * 0.5);
+#ifdef ENTROPY
 			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.0) / pow(rho0, get_options().gamma - 1.0);
+#else
+			sph_particles_rec2(k).eint = eint;
+#endif
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
 			particles_softlen(sph_particles_dm_index(k)) = h;
@@ -360,7 +364,11 @@ void hydro_star_test() {
 			const double P = K * pow(d, 1.0 + 1.0 / npoly);
 			const double E = P * npoly;
 			const double eint = E / d;
-			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.) / pow(d, get_options().gamma - 1.);
+#ifdef ENTROPY
+			sph_particles_rec2(k).A =eint * (get_options().gamma - 1.) / pow(d, get_options().gamma - 1.);
+#else
+			sph_particles_rec2(k).eint = eint;
+#endif
 			sph_particles_vel(XDIM, k) = 0;
 			sph_particles_vel(YDIM, k) = 0;
 			sph_particles_vel(ZDIM, k) = 0;
@@ -454,7 +462,12 @@ void hydro_rt_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
+
 				;
 				i++;
 			}
@@ -488,7 +501,12 @@ void hydro_rt_test() {
 					sph_particles_vel(ZDIM, i) = 0;
 					;
 					sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+#else
+					sph_particles_rec2(i).eint = eint;
+#endif
+
 					;
 					i++;
 				}
@@ -515,7 +533,12 @@ void hydro_rt_test() {
 					sph_particles_vel(ZDIM, i) = 0;
 					;
 					sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+#else
+					sph_particles_rec2(i).eint = eint;
+#endif
+
 					i++;
 				}
 			}
@@ -608,7 +631,12 @@ void hydro_disc_test() {
 					sph_particles_vel(YDIM, i) = sgn * vy;
 					sph_particles_vel(ZDIM, i) = vz;
 					sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
+#else
+					sph_particles_rec2(i).eint = eint;
+#endif
+
 					;
 					i++;
 				}
@@ -671,7 +699,11 @@ void hydro_sod_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = ent;
+#else
+				sph_particles_rec2(i).eint = p1 / (get_options().gamma-1.0) / rho1;
+#endif
 				i++;
 				x = (ix + 0.5) * dx;
 				y = (iy + 0.5) * dx;
@@ -685,7 +717,11 @@ void hydro_sod_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = vz0;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = ent;
+#else
+				sph_particles_rec2(i).eint = p1 / (get_options().gamma-1.0) / rho1;
+#endif
 				i++;
 				//			PRINT("%i\n", i);
 			}
@@ -711,7 +747,11 @@ void hydro_sod_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = ent;
+#else
+				sph_particles_rec2(i).eint = p0 / (get_options().gamma-1.0) / rho0;
+#endif
 				;
 				//		PRINT("%i\n", i);
 				i++;
@@ -728,13 +768,17 @@ void hydro_sod_test() {
 				sph_particles_vel(ZDIM, i) = 0;
 				;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = ent;
+#else
+				sph_particles_rec2(i).eint = p0 / (get_options().gamma-1.0) / rho0;
+#endif
 				;
 				i++;
 			}
 		}
 	}
-	constexpr float t = .075;
+	constexpr float t = .09;
 	constexpr int N = 1000;
 	hydro_driver(t, 20);
 	FILE* fp = fopen("sod.txt", "wt");
@@ -746,13 +790,13 @@ void hydro_sod_test() {
 		float x = particles_pos(XDIM, j).to_float();
 		const float h = sph_particles_smooth_len(i);
 #ifdef HOPKINS
-		const float rho = sph_particles_rho_pre(i);
-		const float eint = sph_particles_eint_pre(i);
+		const float rho = sph_particles_rho_rho(i);
+		const float p = sph_particles_pressure(i);
 #else
 		const float rho = sph_particles_rho(i);
 		const float eint = sph_particles_eint(i);
-#endif
 		const float p = (get_options().gamma - 1.0) * rho * eint;
+#endif
 		sod_state_t state;
 		float x0 = x;
 		x0 -= 0.5;
@@ -821,8 +865,11 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy1;
 				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
-				;
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
 
 				i++;
 				x = (ix) * dx;
@@ -837,8 +884,11 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy1;
 				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
-				;
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
 
 				i++;
 				//			PRINT("%i\n", i);
@@ -864,7 +914,11 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
 				;
 
 				//		PRINT("%i\n", i);
@@ -881,7 +935,12 @@ void hydro_helmholtz_test() {
 				sph_particles_vel(YDIM, i) = vy0;
 				sph_particles_vel(ZDIM, i) = 0.0;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
+
 				;
 				//		PRINT("%i\n", i);
 				i++;
@@ -928,7 +987,11 @@ void hydro_blast_test() {
 				sph_particles_vel(YDIM, i) = vy;
 				sph_particles_vel(ZDIM, i) = vz;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
 				;
 				i++;
 				x = (ix + 0.0) * dx;
@@ -948,7 +1011,11 @@ void hydro_blast_test() {
 				sph_particles_vel(YDIM, i) = vy;
 				sph_particles_vel(ZDIM, i) = vz;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
 				;
 				i++;
 			}
@@ -1028,7 +1095,11 @@ void hydro_wave_test() {
 				sph_particles_vel(YDIM, i) = 0.f;
 				sph_particles_vel(ZDIM, i) = 0.f;
 				sph_particles_rung(i) = 0;
+#ifdef ENTROPY
 				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
+#else
+				sph_particles_rec2(i).eint = eint;
+#endif
 				i++;
 				//			PRINT("%i\n", i);
 			}

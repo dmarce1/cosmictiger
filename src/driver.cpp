@@ -352,67 +352,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		max_rung = particles_apply_updates(minrung, t0, scale);
 	}
 
-	if (chem) {
-		PRINT("Doing chemistry step\n");
-		timer tm;
-		tm.start();
-		*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
-		tm.stop();
-		PRINT("Took %e s\n", tm.read());
-	}
-#ifdef IMPLICIT_CONDUCTION
-	if (conduction) {
-
-		tnparams.h_wt = 1.01;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.seti = SPH_SET_ALL;
-		tnparams.seto = SPH_SET_ALL;
-		tm.start();
-		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-		profiler_exit();
-		tm.stop();
-		tm.reset();
-		tm.start();
-		tnparams.seti = SPH_INTERACTIONS_IJ;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		profiler_exit();
-		tm.stop();
-		tm.reset();
-
-		timer dtm;
-		dtm.start();
-
-		sph_particles_reset_converged();
-
-		sparams.run_type = SPH_RUN_COND_INIT;
-		tm.reset();
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
-		tm.reset();
-		cond_update_return err;
-		do {
-			sparams.run_type = SPH_RUN_CONDUCTION;
-			tm.reset();
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			err = sph_apply_conduction_update(minrung);
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(), err.err_max, err.err_rms);
-			tm.reset();
-			sph_particles_cache_free_entr();
-		} while (err.err_max > SPH_DIFFUSION_TOLER1 || err.err_rms > SPH_DIFFUSION_TOLER2);
-		dtm.stop();
-		PRINT("Conduction took %e seconds total\n", dtm.read());
-	}
-#endif
-
 	bool found_stars = false;
 	if (stars && minrung <= 1) {
 	//	sph_particles_entropy_to_energy();
@@ -561,6 +500,78 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sph_particles_apply_updates(minrung, 2, t0, tau);
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
+
+
+
+
+	if (chem) {
+		PRINT("Doing chemistry step\n");
+		timer tm;
+		tm.start();
+		*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
+		tm.stop();
+		PRINT("Took %e s\n", tm.read());
+	}
+#ifdef IMPLICIT_CONDUCTION
+	if (conduction) {
+
+		tnparams.h_wt = 1.01;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
+		tnparams.seti = SPH_SET_ALL;
+		tnparams.seto = SPH_SET_ALL;
+		tm.start();
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
+		profiler_exit();
+		tm.stop();
+		tm.reset();
+		tm.start();
+		tnparams.seti = SPH_INTERACTIONS_IJ;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		profiler_exit();
+		tm.stop();
+		tm.reset();
+
+		timer dtm;
+		dtm.start();
+
+		sph_particles_reset_converged();
+
+		sparams.run_type = SPH_RUN_COND_INIT;
+		tm.reset();
+		tm.start();
+		sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
+		tm.reset();
+		cond_update_return err;
+		do {
+			sparams.run_type = SPH_RUN_CONDUCTION;
+			tm.reset();
+			tm.start();
+			sph_run(sparams, true);
+			tm.stop();
+			err = sph_apply_conduction_update(minrung);
+			if (verbose)
+				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(), err.err_max, err.err_rms);
+			tm.reset();
+#ifdef ENTROPY
+			sph_particles_cache_free_entr();
+#else
+			sph_particles_cache_free_eint();
+#endif
+		} while (err.err_max > SPH_DIFFUSION_TOLER1 || err.err_rms > SPH_DIFFUSION_TOLER2);
+		dtm.stop();
+		PRINT("Conduction took %e seconds total\n", dtm.read());
+	}
+#endif
+
+
+
+
 	sph_particles_cache_free1();
 
 	sph_tree_destroy(true);

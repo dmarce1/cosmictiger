@@ -26,7 +26,11 @@ struct cond_init_record1 {
 	float h;
 };
 struct cond_init_record2 {
+#ifdef ENTROPY
 	float entr;
+#else
+	float eint;
+#endif
 	float cfrac;
 	float rho;
 	char star;
@@ -115,7 +119,11 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
 					ws.rec1[k].h = h;
+#ifdef ENTROPY
 					ws.rec2[k].entr = data.entr[pi];
+#else
+					ws.rec2[k].eint = data.eint[pi];
+#endif
 					ws.rec2[k].rho = data.rho[pi];
 					if (params.stars) {
 						ws.rec2[k].cfrac = data.cold_frac[pi];
@@ -144,7 +152,11 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				}
 				const float& rho_i = data.rho[i];											// 2
 				const float& h_i = data.h[i];
+#ifdef ENTROPY
 				const float& A_i = data.entr[i];
+#else
+				const float& eint_i = data.eint[i];
+#endif
 				const auto& x_i = data.x[i];
 				const auto& y_i = data.y[i];
 				const auto& z_i = data.z[i];
@@ -152,7 +164,9 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 				const float hinv_i = 1.f / h_i;
 				const float h2_i = sqr(h_i);
 				const float h3inv_i = (sqr(hinv_i) * hinv_i);								// 2
-				const float ene_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);		// 11
+#ifdef ENTROPY
+				const float eint_i = A_i * powf(rho_i * hfrac_i, gamma0 - 1.0f);		// 11
+#endif
 				float gradx = 0.0f;
 				float grady = 0.0f;
 				float gradz = 0.0f;
@@ -198,8 +212,12 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 						const auto& rec2 = ws.rec2[kk];
 						const auto& star_j = rec2.star;
 						if (!star_j) {
+#ifdef ENTROPY
 							const float& rho_j = rec2.rho;			// 2
 							const float& A_j = rec2.entr;
+#else
+							const float& eint_j = rec2.eint;
+#endif
 							const float& cfrac_j = rec2.cfrac;
 							const float hfrac_j = 1.f - cfrac_j;
 							const fixed32 x_j = rec1.x;
@@ -217,10 +235,12 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 								const float q = r * hinv_i;						// 1
 								const float hinv_j = 1.f / h_j;					// 4
 								const float h3inv_j = sqr(hinv_j) * hinv_j;	// 2
-								const float ene_j = A_j * powf(rho_j * hfrac_j, gamma0 - 1.0f); // 11
+#ifdef ENTROPY
+								const float eint_j = A_j * powf(rho_j * hfrac_j, gamma0 - 1.0f); // 11
+#endif
 								const float dwdq = dkernelW_dq(q);
 								const float dWdr_i = dwdq * h3inv_i * hinv_i / omega_i; // 3
-								const float tmp = dWdr_i * rinv * (ene_j - ene_i); // 14
+								const float tmp = dWdr_i * rinv * (eint_j - eint_i); // 14
 								gradx = fmaf(tmp, x_ij, gradx);					// 2
 								grady = fmaf(tmp, y_ij, grady);					// 2
 								gradz = fmaf(tmp, z_ij, gradz);					// 2
@@ -228,7 +248,7 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 							}
 						}
 					}
-					const float tmp = m / (params.a * rho_i * ene_i);		// 5
+					const float tmp = m / (params.a * rho_i * eint_i);		// 5
 					gradx *= tmp;												// 1
 					grady *= tmp;												// 1
 					gradz *= tmp;												// 1
@@ -239,7 +259,11 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 					if (tid == 0) {
 						flops += 93;
 						const auto& frac_i = data.rec1_snk[snki].frac;
+#ifdef ENTROPY
 						const float& A_i = data.rec2_snk[snki].A;
+#else
+						const float& eint_i = data.rec2_snk[snki].eint;
+#endif
 						const float& H = frac_i[CHEM_H];
 						const float& Hp = frac_i[CHEM_HP];
 						const float& Hn = frac_i[CHEM_HN];
@@ -253,7 +277,11 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 						float n0 = (H + fmaf(2.f, Hp, fmaf(.5f, H2, fmaf(.25f, He, fmaf(.5f, Hep, .75f * Hepp))))); // 10
 						const float mmw_i = 1.0f / n0;						// 4
 						const float ne_i = fmaxf((Hp - Hn + fmaf(0.25f, Hep, 0.5f * Hepp)) * rho0 * (constants::avo * code_to_density), 1e-30f);						// 8
+#ifdef ENTROPY
 						const float eint = code_to_energy * A_i * powf(rho0 * hfrac_i, gamma0 - 1.0) * invgm1; // 13
+#else
+						const float eint = eint_i;
+#endif
 						const float T_i = mmw_i * eint / (cv0 * constants::avo); // 6
 						const float colog_i = colog0 + 1.5f * logf(T_i) - 0.5f * logf(ne_i); // 20
 						float kappa_i = mmw_i * (gamma0 - 1.f) * kappa0 * powf(T_i, 2.5f) / colog_i; // 15
@@ -263,7 +291,11 @@ __global__ void sph_cuda_cond_init(sph_run_params params, sph_run_cuda_data data
 						kappa_i *= phi;											 // 1
 						ALWAYS_ASSERT(isfinite(kappa_i));
 						data.kap_snk[snki] = kappa_i;
+#ifdef ENTROPY
 						data.entr0_snk[snki] = A_i;
+#else
+						data.eint0_snk[snki] = eint_i;
+#endif
 					}
 				}
 			}

@@ -430,7 +430,11 @@ void load_glass(const char* filename) {
 							}
 							if (l >= nparts) {
 								const part_int m = particles_cat_index(index);
+#ifdef ENTROPY
 								sph_particles_rec2(m).A = K0;
+#else
+								sph_particles_rec2(m).eint = eps;
+#endif
 								sph_particles_smooth_len(m) = hs;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {
@@ -935,7 +939,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const part_int offset = box.volume();
 				vector<hpx::future<void>> local_futs;
 				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([K0,offset,chem,box,hs,hg,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
+					local_futs.push_back(hpx::async([K0,offset,chem,box,hs,hg,eps,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
 						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 							for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 								const int64_t index = box.index(I) + offset;
@@ -949,7 +953,11 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								}
 								particles_rung(index) = 0;
 								const part_int m = particles_cat_index(index);
+#ifdef ENTROPY
 								sph_particles_rec2(m).A = K0;
+#else
+								sph_particles_rec2(m).eint = eps;
+#endif
 								sph_particles_smooth_len(m) = hs;
 								sph_particles_alpha(m) = get_options().alpha0;
 								if (chem) {

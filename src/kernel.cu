@@ -52,7 +52,7 @@ void kernel_adjust_options(options& opts) {
 //	opts.neighbor_number *= pow(h0 / h, 3);
 	opts.sph_bucket_size = 8.0 / M_PI * opts.sneighbor_number;
 #ifdef KERNEL_CUBIC_SPLINE
-	opts.cfl = 0.15;
+	opts.cfl = 0.20;
 	opts.eta = 0.17;
 	opts.gneighbor_number = 42;
 	opts.sneighbor_number = 42;
@@ -64,7 +64,7 @@ void kernel_adjust_options(options& opts) {
 	opts.sneighbor_number = 82;
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
-	opts.cfl = 0.1;
+	opts.cfl = 0.13;
 	opts.eta = 0.14;
 	opts.gneighbor_number = 142;
 	opts.sneighbor_number = 142;

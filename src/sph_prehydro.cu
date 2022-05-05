@@ -122,7 +122,11 @@ struct prehydro2_record2 {
 	float vx;
 	float vy;
 	float vz;
+#ifdef ENTROPY
 	float entr;
+#else
+	float eint;
+#endif
 	float h;
 	char star;
 	char rung;
@@ -204,7 +208,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					ws.rec2[k].vx = data.vx[pi];
 					ws.rec2[k].vy = data.vy[pi];
 					ws.rec2[k].vz = data.vz[pi];
+#ifdef ENTROPY
 					ws.rec2[k].entr = data.entr[pi];
+#else
+					ws.rec2[k].eint = data.eint[pi];
+#endif
 					ws.rec2[k].rung = data.rungs[pi];
 				}
 			}
@@ -336,7 +344,11 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
 						const auto& star_j = rec2.star;
+#ifdef ENTROPY
 						const float& A_j = rec2.entr;
+#else
+						const float& eint_j = rec2.eint;
+#endif
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1
@@ -350,8 +362,13 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 							w_sum += w;
 							if (!star_j) {
 #ifdef HOPKINS
+#ifdef ENTROPY
 								pre += powf(A_j, 1.f / data.def_gamma) * w;
 								dpredh -= powf(A_j, 1.f / data.def_gamma) * q * dwdq;
+#else
+								pre += (data.def_gamma - 1.0f) * eint_j * w;
+								dpredh -= (data.def_gamma - 1.0f) * eint_j * q * dwdq;
+#endif
 #endif
 								rho_i += data.m * w * h3inv_i;
 							}
@@ -380,8 +397,8 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				shared_reduce_add<float, PREHYDRO2_BLOCK_SIZE>(dpredh);
 #endif
 				data.rho_snk[snki] = rho_i;
-				const auto one =  w_sum / (3.0/4.0/M_PI*data.N);
-			//	ALWAYS_ASSERT(fabs(one - 1.0) < .001);
+				const auto one = w_sum / (3.0 / 4.0 / M_PI * data.N);
+				//	ALWAYS_ASSERT(fabs(one - 1.0) < .001);
 				const float A = 0.33333333333f * dw_sum / w_sum;
 				float f, dfdh;
 				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
@@ -390,9 +407,13 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				data.omega_snk[snki] = omega_i;
 #ifdef HOPKINS
 				data.omegaP_snk[snki] = 1.f / ((-pre + 0.33333333333333f * dpredh) / (f * w_sum)) * omega_i;
+#ifdef ENTROPY
 				data.pre_snk[snki] = powf(data.m * pre * h3inv_i, data.def_gamma);
-				if( tid == 0 ) {
-	//				PRINT( "%e %e %e\n", data.pre_snk[snki], rho_i, x_i.to_float());
+#else
+				data.pre_snk[snki] = data.m * pre * h3inv_i;
+#endif
+				if (tid == 0) {
+					//				PRINT( "%e %e %e\n", data.pre_snk[snki], rho_i, x_i.to_float());
 				}
 #else
 				data.omegaP_snk[snki] = 1.f / ((-1.f + A * f * w_sum) / (f * w_sum)) * omega_i;
