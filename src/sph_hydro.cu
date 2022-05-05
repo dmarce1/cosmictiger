@@ -345,7 +345,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 #ifdef ENTROPY
 							const float c_j = sqrtf(gamma0 * powf(A_j, 1.0f / gamma0) * powf(pre_j, gamma0 - 1.f)); //23
 #else
-							const float c_j = sqrtf((gamma0 - 1.f) * eint_j); //23
+							const float c_j = sqrtf(gamma0 * (gamma0 - 1.f) * eint_j); //23
 #endif
 							const float vx0_ij = vx_i - vx_j;									// 3
 							const float vy0_ij = vy_i - vy_j;									// 3
@@ -408,7 +408,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 #ifndef ENTROPY
 							const float v0dW_i = fmaf(vx0_ij, dWdr_x_i, fmaf(vy0_ij, dWdr_y_i, vz0_ij * dWdr_z_i));
 #ifdef HOPKINS// 5
-							de_dt2 = fmaf(mainv* f_ij * v0dW_i, sqr(gamma0 - 1.f) * eint_i * eint_j / pre_i, de_dt2);													// 4
+							de_dt2 = fmaf(mainv * f_ij * v0dW_i, sqr(gamma0 - 1.f) * eint_i * eint_j / pre_i, de_dt2);													// 4
 #else
 							de_dt2 = fmaf(mainv* v0dW_i, (gamma0 - 1.f) * eint_i * rhoinv_i / omega_i, de_dt2);
 #endif
