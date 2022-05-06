@@ -20,9 +20,10 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 
-//#define KERNEL_CUBIC_SPLINE
+#define KERNEL_CUBIC_SPLINE
 //#define KERNEL_QUARTIC_SPLINE
-#define KERNEL_QUINTIC_SPLINE
+//#define KERNEL_QUINTIC_SPLINE
+//#define KERNEL_GAUSSIAN
 
 void kernel_set_type(int type);
 void kernel_output();
@@ -34,8 +35,8 @@ void kernel_adjust_options(options& opts);
 template<class T>
 CUDA_EXPORT
 inline T kernelW(T q) {
-	T w1, w2, res;
 #ifdef KERNEL_CUBIC_SPLINE
+	T w1, w2, res;
 	T sw, mq;
 	const T c0 = T(8.0 / M_PI);
 	w1 = T(6);
@@ -48,6 +49,7 @@ inline T kernelW(T q) {
 	res = c0 * (sw * w1 + (T(1) - sw) * w2);
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
+	T w1, w2, res;
 	T w3, sw3, sw1, sw2, mq;
 	const T c0 = T(15625.0f / M_PI / 512.0f);
 	w1 = T(6);
@@ -68,6 +70,7 @@ inline T kernelW(T q) {
 	res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
+	T w1, w2, res;
 	T w3, sw3, sw1, sw2;
 	const T c0 = T(2187.0 / (40.0 * M_PI));
 	w1 = T(-10);
@@ -89,6 +92,11 @@ inline T kernelW(T q) {
 	sw2 = (T(1) - sw1) * (T(1) - sw3);
 	res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 #endif
+#ifdef KERNEL_GAUSSIAN
+	T res;
+	const T q2 = sqr(q);
+	res = expf(-16.f * q2);
+#endif
 	res *= (q < T(1.f));
 	return res;
 }
@@ -96,8 +104,8 @@ inline T kernelW(T q) {
 template<class T>
 CUDA_EXPORT
 inline T dkernelW_dq(T q) {
-	T w1, w2, res;
 #ifdef KERNEL_CUBIC_SPLINE
+	T w1, w2, res;
 	T sw;
 	const T c0 = T(8.0 / M_PI);
 	w1 = T(18);
@@ -110,6 +118,7 @@ inline T dkernelW_dq(T q) {
 
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
+	T w1, w2, res;
 	T w3, sw3, mq, sw1, sw2;
 	const T c0 = T(15625.0f / M_PI / 512.0f);
 	w1 = T(24);
@@ -129,6 +138,7 @@ inline T dkernelW_dq(T q) {
 
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
+	T w1, w2, res;
 	T w3, sw3, sw2, sw1;
 	const T c0 = T(2187.0 / (40.0 * M_PI));
 	w1 = T(-50);
@@ -148,6 +158,11 @@ inline T dkernelW_dq(T q) {
 	res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 
 #endif
+#ifdef KERNEL_GAUSSIAN
+	T res;
+	const T q2 = sqr(q);
+	res = -32.f * q * expf(-16.f * q2);
+#endif
 	res *= (q < T(1.f));
 	return res;
 }
@@ -155,9 +170,9 @@ inline T dkernelW_dq(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelFqinv(T q) {
-	T w1, w2, res, q3inv, sw1, sw2;
 	const auto q0 = q;
 #ifdef KERNEL_CUBIC_SPLINE
+	T w1, w2, res, q3inv, sw1, sw2;
 	T sw;
 	w1 = T(32);
 	w1 = fmaf(q, w1, -T(192.0 / 5.0));
@@ -174,6 +189,7 @@ inline T kernelFqinv(T q) {
 	res = (sw * w1 + (T(1) - sw) * w2);
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
+	T w1, w2, res, q3inv, sw1, sw2;
 	T w3, sw3;
 	w1 = T(46875.0f / 448.0f);
 	w1 *= q;
@@ -200,6 +216,7 @@ inline T kernelFqinv(T q) {
 	res = (sw1 * w1 + sw2 * w2 + sw3 * w3);
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
+	T w1, w2, res, q3inv, sw1, sw2;
 	T w3, sw3;
 	const T c0 = T(218.7);
 	w1 = T(-5. / 4.);
@@ -230,6 +247,11 @@ inline T kernelFqinv(T q) {
 	res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 
 #endif
+#ifdef KERNEL_GAUSSIAN
+	T res;
+	T sw1, sw2;
+	res = ((-0.3926991f * q) * expf(-16.f * sqr(q)) + 0.08700512f * erff(4.f * q)) / (sqr(q) * q);
+#endif
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (sqr(q0) * q0 + T(1e-30))) * (q0 > T(0));
@@ -239,9 +261,9 @@ inline T kernelFqinv(T q) {
 template<class T>
 CUDA_EXPORT
 inline T kernelPot(T q) {
-	T w1, w2, res, q1inv, sw1, sw2;
 	const auto q0 = q;
 #ifdef KERNEL_CUBIC_SPLINE
+	T w1, w2, res, q1inv, sw1, sw2;
 	T sw;
 	w1 = -T(32.0 / 5.0);
 	w1 = fmaf(q, w1, T(48.0 / 5.0));
@@ -261,6 +283,7 @@ inline T kernelPot(T q) {
 	res = (sw * w1 + (T(1) - sw) * w2);
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
+	T w1, w2, res, q1inv, sw1, sw2;
 	T w3, sw3;
 	w1 = T(-15625.0f / 896.0f);
 	w1 *= q;
@@ -292,6 +315,7 @@ inline T kernelPot(T q) {
 	res = (sw1 * w1 + sw2 * w2 + sw3 * w3);
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
+	T w1, w2, res, q1inv, sw1, sw2;
 	T w3, sw3;
 	const T c0 = T(218.7);
 	w1 = T(5. / 28.);
@@ -326,6 +350,10 @@ inline T kernelPot(T q) {
 	sw2 = (T(1) - sw1) * (T(1) - sw3);
 	res = c0 * (sw1 * w1 + sw2 * w2 + sw3 * w3);
 #endif
+#ifdef KERNEL_GAUSSIAN
+	T sw1, sw2;
+	T res = T(0.912995f) + (0.0870051f*erff(T(4.f)*q))/q;
+#endif
 	sw1 = q0 < T(1);
 	sw2 = T(1) - sw1;
 	res = (sw1 * res + sw2 / (q0 + T(1e-30f)));
@@ -342,9 +370,9 @@ inline void dsmoothX_dh(float h, float hmin, float hmax, float& x, float& dxdh) 
 		x = 1.0f;
 		dxdh = 0.0f;
 	} /*else {
-		x = (h / hmax);
-		dxdh = 1.f / (hmax);
-	}*/
+	 x = (h / hmax);
+	 dxdh = 1.f / (hmax);
+	 }*/
 
 	return;
 }

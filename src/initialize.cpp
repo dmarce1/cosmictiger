@@ -394,6 +394,7 @@ void load_glass(const char* filename) {
 	const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
 	const float T0 = 1000.0;
 	const float eps_cgs = cv_cgs * T0;
+	const float a = 1.0 / (1.0 + get_options().z0);
 	const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
 	const float eps = eps_cgs / code_to_ene;
 	const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
@@ -433,7 +434,7 @@ void load_glass(const char* filename) {
 #ifdef ENTROPY
 								sph_particles_rec2(m).A = K0;
 #else
-								sph_particles_rec2(m).eint = eps;
+								sph_particles_rec2(m).eint = eps  * sqr(a);
 #endif
 								sph_particles_smooth_len(m) = hs;
 								sph_particles_alpha(m) = get_options().alpha0;
@@ -933,13 +934,14 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 				const float T0 = 1000.0;
 				const float eps_cgs = cv_cgs * T0;
 				const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
+				const float a = 1.0 / (1.0 + get_options().z0);
 				const float eps = eps_cgs / code_to_ene;
 				const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
 				sph_particles_resize(box.volume());
 				const part_int offset = box.volume();
 				vector<hpx::future<void>> local_futs;
 				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([K0,offset,chem,box,hs,hg,eps,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
+					local_futs.push_back(hpx::async([K0,offset,a,chem,box,hs,hg,eps,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
 						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 							for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 								const int64_t index = box.index(I) + offset;
@@ -956,7 +958,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 #ifdef ENTROPY
 								sph_particles_rec2(m).A = K0;
 #else
-								sph_particles_rec2(m).eint = eps;
+								sph_particles_rec2(m).eint = eps * sqr(a);
 #endif
 								sph_particles_smooth_len(m) = hs;
 								sph_particles_alpha(m) = get_options().alpha0;

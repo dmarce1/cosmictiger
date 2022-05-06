@@ -883,11 +883,11 @@ void driver() {
 				if (z > 50.0) {
 					theta = 0.4;
 				} else if (z > 20.0) {
-					theta = 0.5;
+					theta = 0.4;
 				} else if (z > 2.0) {
-					theta = 0.65;
+					theta = 0.55;
 				} else {
-					theta = 0.8;
+					theta = 0.7;
 				}
 			} else {
 				theta = 0.4;
@@ -911,7 +911,7 @@ void driver() {
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
 				PRINT("--------------------------------------------   %e  %e\n", heating, eheat);
-				eheat -= a * heating;
+				eheat -= a*a*heating;
 			}
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
@@ -952,11 +952,11 @@ void driver() {
 			drift_time += dtm.read();
 			const double total_kinetic = dr.kin + dr.therm;
 			cosmicK += (total_kinetic) * (a - a1);
-			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat);
+			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat/a);
 			if (tau == 0.0) {
 				esum0 = esum;
 			}
-			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat);
+			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat/a);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");
