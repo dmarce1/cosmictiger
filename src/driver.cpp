@@ -172,7 +172,7 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 
 }
 
-sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, energies_t* energies,
 		bool verbose) {
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
@@ -188,7 +188,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	float dtinv_omega;
 	verbose = true;
 	double flops;
-	*eheat = 0.0;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
 	sph_particles_apply_updates(minrung, 0, t0, tau);
@@ -343,16 +342,22 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 
-
-
-	if (chem) {
+	if (chem && tau > 0.0) {
 		PRINT("Doing chemistry step\n");
 		timer tm;
 		tm.start();
-		*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
+		energies->heating -= scale * chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
 		tm.stop();
 		PRINT("Took %e s\n", tm.read());
 	}
+
+	auto E = particles_sum_energies();
+	energies->kin = E.kin / sqr(scale);
+	if (minrung == 0) {
+		energies->pot = E.pot / scale;
+	}
+	energies->therm = E.therm / sqr(scale);
+
 #ifdef IMPLICIT_CONDUCTION
 	if (conduction) {
 
@@ -405,7 +410,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 #endif
 
-
 	if (vsoft) {
 		tm.reset();
 		tm.start();
@@ -415,13 +419,12 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		max_rung = particles_apply_updates(minrung, t0, scale);
 	}
 
-
 	bool found_stars = false;
 	if (stars && minrung <= 1) {
-	//	sph_particles_entropy_to_energy();
+		//	sph_particles_entropy_to_energy();
 		double eloss = 0.0;
 		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
-			*eheat -= eloss;
+			energies->heating += scale * eloss;
 		}
 		PRINT("%e-----------------------------------------------------------------------------------------------------------------------\n", eloss);
 		stars_statistics(scale);
@@ -471,7 +474,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 			kr = sph_run_return();
 		} while (cont);
 		if (stars && minrung <= 1) {
-	//		sph_particles_energy_to_entropy();
+			//		sph_particles_energy_to_entropy();
 		}
 	} else if (stars && minrung <= 1) {
 //		sph_particles_energy_to_entropy();
@@ -528,14 +531,10 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	if (verbose)
 		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
 
-
-
-
-
 #ifdef ENTROPY
-			sph_particles_cache_free_entr();
+	sph_particles_cache_free_entr();
 #else
-			sph_particles_cache_free_eint();
+	sph_particles_cache_free_eint();
 #endif
 
 	sph_particles_cache_free1();
@@ -758,7 +757,6 @@ void driver() {
 			particles_set_tracers();
 		}
 		domains_rebound();
-		params.eheat = 0;
 		params.step = 0;
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
@@ -766,7 +764,6 @@ void driver() {
 		params.tau = 0.0;
 		params.a = a0;
 		params.max_rung = 0;
-		params.cosmicK = 0.0;
 		params.itime = 0;
 		params.iter = 0;
 		params.runtime = 0.0;
@@ -784,11 +781,10 @@ void driver() {
 	auto& a = params.a;
 	auto& tau = params.tau;
 	auto& tau_max = params.tau_max;
-	auto& cosmicK = params.cosmicK;
-	auto& esum0 = params.esum0;
+	auto& energies = params.energies;
+	auto& energy0 = params.energy0;
 	auto& itime = params.itime;
 	auto& iter = params.iter;
-	auto& eheat = params.eheat;
 	int& step = params.step;
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
@@ -883,11 +879,11 @@ void driver() {
 				if (z > 50.0) {
 					theta = 0.4;
 				} else if (z > 20.0) {
-					theta = 0.4;
-				} else if (z > 2.0) {
 					theta = 0.55;
-				} else {
+				} else if (z > 2.0) {
 					theta = 0.7;
+				} else {
+					theta = 0.85;
 				}
 			} else {
 				theta = 0.4;
@@ -899,9 +895,9 @@ void driver() {
 			last_theta = theta;
 			PRINT("Kicking\n");
 			const bool chem = get_options().chem;
-			double heating;
 			if (sph && !glass) {
-				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating);
+				double dummy;
+				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &dummy);
 			}
 			auto tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
@@ -909,9 +905,18 @@ void driver() {
 			max_rung = kr.max_rung;
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
-				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
-				PRINT("--------------------------------------------   %e  %e\n", heating, eheat);
-				eheat -= a*a*heating;
+				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &energies).max_rung);
+				if (minrung <= 0) {
+					const double energy = a * (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
+					if (tau == 0) {
+						energy0 = energy;
+					}
+					const double norm = a * (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
+					const double err = (energy - energy0) / norm;
+					FILE* fp = fopen("energy.txt", "at");
+					fprintf(fp, "%e %e %e %e %e %e %e %e\n", tau, a, a * energies.pot, a * energies.kin, a * energies.therm, energies.heating, energies.cosmic, err);
+					fclose(fp);
+				}
 			}
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
@@ -939,6 +944,11 @@ void driver() {
 			a += 0.5 * (dadt2 - dadt1) * dt;
 			const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
 			const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
+			double ekin0 = energies.kin + energies.therm;
+			ekin0 *= sqr(a1);
+			double dekin = ekin0 * (1.0 / a1 - 1.0 / a);
+			energies.cosmic += dekin;
+
 //			PRINT("%e %e\n", a1, a);
 			timer dtm;
 			dtm.start();
@@ -950,23 +960,15 @@ void driver() {
 			PRINT("Drift done\n");
 			dtm.stop();
 			drift_time += dtm.read();
-			const double total_kinetic = dr.kin + dr.therm;
-			cosmicK += (total_kinetic) * (a - a1);
-			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat/a);
-			if (tau == 0.0) {
-				esum0 = esum;
-			}
-			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat/a);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");
 			}
 			if (full_eval) {
 				PRINT_BOTH(textfp,
-						"\n%10s %6s %10s %4s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
-						"runtime", "i", "imbalance", "mind", "maxd", "ed", "ppnode", "appanode", "Z", "a", "timestep", "years", "vol", "pot", "kin", "therm",
-						"cosmicK", "pot err", "mnr", "mxr", "active", "nmapped", "load", "dotime", "stime", "ktime", "drtime", "avg total", "pps", "GFLOPSins",
-						"GFLOPS");
+						"\n%10s %6s %10s %4s %4s %4s %10s %10s %10s %10s %10s %10s %10s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime",
+						"i", "imbalance", "mind", "maxd", "ed", "ppnode", "appanode", "Z", "a", "timestep", "years", "vol", "mnr", "mxr", "active", "nmapped", "load",
+						"dotime", "stime", "ktime", "drtime", "avg total", "pps", "GFLOPSins", "GFLOPS");
 			}
 			iter++;
 			total_processed += kr.nactive;
@@ -983,19 +985,11 @@ void driver() {
 			const double parts_per_node = nparts / sr.leaf_nodes;
 			const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
 			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
-			if (full_eval) {
-				FILE* fp = fopen("energy.txt", "at");
-				if (fp == NULL) {
-					THROW_ERROR("Unable to open energy.txt\n");
-				}
-				fprintf(fp, "%i %e %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, eheat, cosmicK, eerr);
-				fclose(fp);
-			}
 			PRINT_BOTH(textfp,
-					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %10.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
+					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %10.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
 					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1, tau / t0, years,
-					dr.vol, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time,
-					kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
+					dr.vol, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter,
+					(double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
 					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
 			total_time.reset();

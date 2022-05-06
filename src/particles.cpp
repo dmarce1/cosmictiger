@@ -27,7 +27,6 @@ constexpr bool verbose = true;
 #include <cosmictiger/stars.hpp>
 #include <cosmictiger/kernel.hpp>
 
-
 #include <gsl/gsl_rng.h>
 
 #include <unordered_map>
@@ -1005,8 +1004,6 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 
 }
 
-
-
 void particles_global_read_rungs(particle_global_range range, char* r, part_int offset) {
 	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
@@ -1057,8 +1054,6 @@ static const char* particles_cache_read_line_rungs(line_id_type line_id) {
 	return fut.get().data();
 }
 
-
-
 static vector<char> particles_fetch_cache_line_rungs(part_int index) {
 	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
@@ -1071,7 +1066,6 @@ static vector<char> particles_fetch_cache_line_rungs(part_int index) {
 	}
 	return line;
 }
-
 
 vector<particle_sample> particles_sample(int cnt) {
 	const bool save_force = get_options().save_force;
@@ -1318,3 +1312,43 @@ static vector<array<float, NDIM>> particles_fetch_cache_line_vels(part_int index
 	return line;
 }
 
+HPX_PLAIN_ACTION (particles_sum_energies);
+energies_t particles_sum_energies() {
+	std::vector<hpx::future<energies_t>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_sum_energies_action>(c));
+	}
+	energies_t energies;
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads,proc]() {
+			energies_t energies;
+			const part_int b = (size_t) proc * particles_size() / nthreads;
+			const part_int e = (size_t) (proc + 1) * particles_size() / nthreads;
+			for( part_int i = b; i != e; i++) {
+				const float vx = particles_vel(XDIM,i);
+				const float vy = particles_vel(YDIM,i);
+				const float vz = particles_vel(ZDIM,i);
+				const float m = particles_mass(i);
+				energies.pot += 0.5 * m * particles_pot(i);
+				energies.kin += 0.5 * m * (sqr(vx)+sqr(vy)+sqr(vz));
+				if( particles_type(i) == SPH_TYPE) {
+					const int kk = particles_cat_index(i);
+#ifdef HOPKINS
+					energies.therm +=  m * sph_particles_eint_rho(kk);
+#else
+					energies.therm += m * sph_particles_eint(kk);
+#endif
+				}
+
+			}
+			return energies;
+		}));
+	}
+
+	for (auto& f : futs) {
+		energies += f.get();
+	}
+	return energies;
+
+}

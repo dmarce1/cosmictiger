@@ -131,7 +131,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	domains_rebound();
 	do {
 		int minrung = min_rung(itime);
-		double dummy;
+		energies_t dummy;
 		if (minrung == 0) {
 			view_output_views(main_step, 1.0);
 //			output_line(main_step);
@@ -142,7 +142,8 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.5, t0 == 0.0, minrung == 0);
 			kr = tmp.first;
 		}
-		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
+		double dumm1;
+		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dumm1, true);
 		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		if (minrung == 0) {
 			double ekin = 0.0;

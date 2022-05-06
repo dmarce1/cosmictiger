@@ -207,6 +207,17 @@ inline char& particles_type(part_int index) {
 	}
 }
 
+
+inline float particles_mass(part_int index) {
+	const float sph_mass = get_options().sph_mass;
+	const float dm_mass = get_options().dm_mass;
+	if( particles_type(index) == SPH_TYPE) {
+		return sph_mass;
+	} else {
+		return dm_mass;
+	}
+}
+
 inline float& particles_divv(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_dv[index];
@@ -338,5 +349,34 @@ inline void particles_set_particle(particle p, part_int index) {
 inline bool particles_is_sph(int index) {
 	return particles_type(index) == SPH_TYPE;
 }
+
+struct energies_t {
+	double pot;
+	double kin;
+	double therm;
+	double heating;
+	double cosmic;
+	energies_t() {
+		cosmic = heating = pot = kin = therm = 0.f;
+	}
+	energies_t& operator+=(const energies_t& other) {
+		pot += other.pot;
+		kin += other.kin;
+		therm += other.therm;
+		heating += other.heating;
+		cosmic += other.cosmic;
+		return *this;
+	}
+	template<class A>
+	void serialize(A&& arc, unsigned ) {
+		arc & pot;
+		arc & kin;
+		arc & therm;
+		arc & heating;
+		arc & cosmic;
+	}
+};
+
+energies_t particles_sum_energies();
 
 #endif /* PARTICLES_HPP_ */

@@ -62,7 +62,6 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 
 	PRINT("------------------------------------>>> Searching for STARS <<<--------------------------------------------------------\n");
 	vector<hpx::future<double>> futs;
-	vector<hpx::future<double>> futs2;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step, t0));
 	}
@@ -83,7 +82,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 	static const double code_to_s = get_options().code_to_s;
 	static const double G = get_options().GM;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex,&indices,dt,&rnd_gens]() {
+		futs.push_back(hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex,&indices,dt,&rnd_gens]() {
 			double eloss = 0.0;
 			const double dm_soft = get_options().hsoft;
 			const double code_to_s = get_options().code_to_s;
@@ -160,11 +159,6 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 	}
 	for (auto& f : futs) {
 		eloss += f.get();
-		PRINT( "%e\n", eloss);
-	}
-	for (auto& f : futs2) {
-		eloss += f.get();
-		PRINT( "%e\n", eloss);
 	}
 	for (int i = 0; i < nthreads; i++) {
 		gsl_rng_free(rnd_gens[i]);
