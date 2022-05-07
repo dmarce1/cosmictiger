@@ -765,9 +765,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		if (!ascending || top) {
 			max_rung = std::max(max_rung, (int) this_kr.max_rung);
 			kr.max_rung = max_rung;
-			PRINT( "----> %i\n", max_rung);
+			PRINT("----> %i\n", max_rung);
 			if (max_rung > levels[li]) {
-				levels.push_back(max_rung);
+				levels.push_back(levels[li] + 1);
 			}
 		}
 		tm.stop();
@@ -1096,14 +1096,13 @@ void driver() {
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			double act_pct = kr.nactive / nparts;
 			const double parts_per_node = nparts / sr.leaf_nodes;
-	//		const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
+			//		const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
 			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
 			PRINT_BOTH(textfp,
 					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %10.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
-					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node,0, z, a1, tau / t0, years,
-					0.0, minrung, max_rung, act_pct, (double ) 0, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter,
-					(double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
-					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, 0, z, a1, tau / t0, years, 0.0, minrung, max_rung,
+					act_pct, (double ) 0, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(),
+					total_flops / total_time.read() / (1024 * 1024 * 1024), params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
