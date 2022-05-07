@@ -277,8 +277,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 #endif
 	if (local_root) {
 		leaflist.resize(0);
-		part_range.first = 0;
-		part_range.second = particles_size();
+		if( params.htime ) {
+			part_range = particles_current_range();
+		} else {
+			part_range.first = 0;
+			part_range.second = particles_size();
+		}
 #ifdef USE_CUDA
 		CUDA_CHECK(cudaStreamCreate(&stream));
 		CUDA_CHECK(cudaMemPrefetchAsync(&particles_rung(0), particles_size() * sizeof(char), cudaCpuDeviceId, stream));

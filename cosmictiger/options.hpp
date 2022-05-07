@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <string>
 
 struct options {
+	bool htime;
 	bool sph;
 	bool yreflect;
 	bool cuda;
@@ -106,6 +107,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & htime;
 		arc & vsoft;
 		arc & damping;
 		arc & hmin;

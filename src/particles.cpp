@@ -1010,15 +1010,24 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 
 }
 
-pair<part_int, part_int> particles_sort_by_rung(int minrung) {
+pair<part_int,part_int> particles_current_range() {
+	pair<part_int,part_int> rc;
+	rc.first = rung_begin;
+	rc.second = rung_end;
+	return rc;
+}
+
+HPX_PLAIN_ACTION(particles_sort_by_rung);
+
+void particles_sort_by_rung(int minrung) {
+	vector<hpx::future<void>> futs;
+	for( auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_sort_by_rung_action>(c, minrung));
+	}
 	if (minrung == 0) {
 		current_minrung = 0;
 		rung_begin = 0;
 		rung_end = particles_size();
-		pair<part_int, part_int> rc;
-		rc.first = rung_begin;
-		rc.second = rung_end;
-		return rc;
 	} else {
 		part_int begin = rung_begin;
 		part_int end = rung_end;
@@ -1069,11 +1078,10 @@ pair<part_int, part_int> particles_sort_by_rung(int minrung) {
 		current_minrung = minrung;
 		rung_begin = hi;
 		rung_end = particles_size();
-		pair<part_int, part_int> rc;
-		rc.first = rung_begin;
-		rc.second = rung_end;
-		return rc;
 	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+
 }
 
 void particles_global_read_rungs(particle_global_range range, char* r, part_int offset) {

@@ -99,6 +99,7 @@ bool process_options(int argc, char *argv[]) {
 	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "variable softening") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
+	("htime", po::value<bool>(&(opts.htime))->default_value(true), "use hierachical time integration") //
 	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
 	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(true), "use glass") //
 	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //

@@ -195,7 +195,8 @@ void particles_global_read_vels(particle_global_range range, float* vx, float* v
 void particles_memadvise_gpu();
 void particles_free();
 void particles_save_glass(const char* filename);
-pair<part_int,part_int> particles_sort_by_rung(int minrung);
+void particles_sort_by_rung(int minrung);
+pair<part_int,part_int> particles_current_range();
 
 
 inline char& particles_type(part_int index) {

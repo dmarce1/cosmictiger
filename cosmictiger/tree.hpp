@@ -76,7 +76,7 @@ struct tree_node {
 	fixed32_range obox;
 	array<fixed32, NDIM> pos;
 	array<tree_id, NCHILD> children;
-	pair<int,int> neighbor_range;
+	pair<int, int> neighbor_range;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
 	pair<part_int> sink_part_range;
@@ -161,13 +161,17 @@ struct tree_create_return {
 struct tree_create_params {
 	int min_rung;
 	double theta;
+	bool htime;
 //	double hmax;
 	int min_level;
-	tree_create_params() = default;
+	tree_create_params() {
+		htime = false;
+	}
 	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 //		arc & hmax;
+		arc & htime;
 		arc & min_rung;
 		arc & theta;
 		arc & min_level;

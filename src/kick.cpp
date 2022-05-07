@@ -1,5 +1,4 @@
 /*
- CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
@@ -382,7 +381,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (vsoft) {
 					hsoft = particles_softlen(i);
 				}
-				float g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 				forces.phi[j] += L2(0, 0, 0);
 				forces.gx[j] -= L2(1, 0, 0);
 				forces.gy[j] -= L2(0, 1, 0);
@@ -396,44 +394,71 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					forces.gy[j] *= -1.f;
 					forces.gz[j] *= -1.f;
 				}
-				if (save_force || vsoft) {
-					particles_gforce(XDIM, i) = forces.gx[j];
-					particles_gforce(YDIM, i) = forces.gy[j];
-					particles_gforce(ZDIM, i) = forces.gz[j];
-					particles_pot(i) = forces.phi[j];
-				}
 				auto& vx = particles_vel(XDIM, i);
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
-				auto dt = 0.5f * rung_dt[rung] * params.t0;
-				if (type == SPH_TYPE && !glass) {
-					const int k = particles_cat_index(i);
-					sph_particles_gforce(XDIM, k) = forces.gx[j];
-					sph_particles_gforce(YDIM, k) = forces.gy[j];
-					sph_particles_gforce(ZDIM, k) = forces.gz[j];
+				float g2;
+				if (params.htime) {
+					const float sgn = params.top ? 1 : -1;
+					ALWAYS_ASSERT(!sph);
+					ALWAYS_ASSERT(!vsoft);
+					if (params.ascending || params.top) {
+						const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+						if (!params.first_call) {
+							vx = fmaf(sgn * forces.gx[j], dt, vx);
+							vy = fmaf(sgn * forces.gy[j], dt, vy);
+							vz = fmaf(sgn * forces.gz[j], dt, vz);
+						}
+					}
+					if (params.descending || params.top) {
+						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+						const float factor = eta * sqrtf(params.a);
+						const float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) 0.5 * params.t0);
+						rung = params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung);
+						kr.max_rung = std::max(rung, kr.max_rung);
+						ALWAYS_ASSERT(rung >= 0);
+						ALWAYS_ASSERT(rung < MAX_RUNG);
+						vx = fmaf(sgn * forces.gx[j], dt, vx);
+						vy = fmaf(sgn * forces.gy[j], dt, vy);
+						vz = fmaf(sgn * forces.gz[j], dt, vz);
+					}
 				} else {
-					if (!params.first_call) {
-						vx = fmaf(forces.gx[j], dt, vx);
-						vy = fmaf(forces.gy[j], dt, vy);
-						vz = fmaf(forces.gz[j], dt, vz);
+					if (save_force || vsoft) {
+						particles_gforce(XDIM, i) = forces.gx[j];
+						particles_gforce(YDIM, i) = forces.gy[j];
+						particles_gforce(ZDIM, i) = forces.gz[j];
+						particles_pot(i) = forces.phi[j];
 					}
-				}
-				g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-				if (type != SPH_TYPE || glass) {
-					const float factor = eta * sqrtf(params.a);
-					dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
-					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
-					kr.max_rung = std::max(rung, kr.max_rung);
-					if (rung < 0 || rung >= 10) {
-						PRINT("Rung out of range %i %e\n", rung, sqrtf(g2));
+					auto dt = 0.5f * rung_dt[rung] * params.t0;
+					if (type == SPH_TYPE && !glass) {
+						const int k = particles_cat_index(i);
+						sph_particles_gforce(XDIM, k) = forces.gx[j];
+						sph_particles_gforce(YDIM, k) = forces.gy[j];
+						sph_particles_gforce(ZDIM, k) = forces.gz[j];
 					} else {
-						dt = 0.5f * rung_dt[rung] * params.t0;
+						if (!params.first_call) {
+							vx = fmaf(forces.gx[j], dt, vx);
+							vy = fmaf(forces.gy[j], dt, vy);
+							vz = fmaf(forces.gz[j], dt, vz);
+						}
 					}
-					if (!vsoft) {
-						vx = fmaf(forces.gx[j], dt, vx);
-						vy = fmaf(forces.gy[j], dt, vy);
-						vz = fmaf(forces.gz[j], dt, vz);
+					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+					if (type != SPH_TYPE || glass) {
+						const float factor = eta * sqrtf(params.a);
+						dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
+						rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
+						kr.max_rung = std::max(rung, kr.max_rung);
+						if (rung < 0 || rung >= 10) {
+							PRINT("Rung out of range %i %e\n", rung, sqrtf(g2));
+						} else {
+							dt = 0.5f * rung_dt[rung] * params.t0;
+						}
+						if (!vsoft) {
+							vx = fmaf(forces.gx[j], dt, vx);
+							vy = fmaf(forces.gy[j], dt, vy);
+							vz = fmaf(forces.gz[j], dt, vz);
+						}
 					}
 				}
 				kr.pot += m * forces.phi[j];

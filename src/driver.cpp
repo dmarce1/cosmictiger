@@ -674,8 +674,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	return std::make_pair(kr, sr);
 }
 
-std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, int max_rung, double scale, double dadt, double t0, double theta,
-		bool first_call, bool full_eval) {
+std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, int max_rung, double scale, double tau, double t0, double theta) {
 	timer tm;
 	tm.start();
 	PRINT("domains_begin\n");
@@ -687,20 +686,17 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 	tm.reset();
 	tm.start();
 	const bool sph = get_options().sph;
-
-	vector<int> levels;
+	kick_return kr;
+	tree_create_return sr;
+	vector<int> levels(max_rung - minrung + 1);
 	int k = 0;
 	for (int i = max_rung; i >= minrung; i--) {
 		levels[k++] = i;
 	}
-	for (int j = minrung + 1; j <= max_rung; j++) {
-		levels[k++] = j;
-	}
-
 	bool ascending = true;
 	bool top;
+	PRINT("climbing kick ladder\n");
 	for (int li = 0; li < levels.size(); li++) {
-
 
 		if (levels[li] == minrung) {
 			ascending = false;
@@ -708,86 +704,83 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		} else {
 			top = false;
 		}
-
-		auto range = particles_sort_by_rung(minrung);
-		PRINT("level %i\n", levels[li]);
-		auto sr = tree_create(tparams);
+		if (ascending) {
+			PRINT("Ascending  rung %i\n", levels[li]);
+		} else if (top) {
+			PRINT("At top     rung %i\n", levels[li]);
+		} else if (!ascending) {
+			PRINT("Descending rung %i\n", levels[li]);
+		}
+		particles_sort_by_rung(minrung);
+		if (ascending || top) {
+			const float dt = 0.5 * rung_dt[levels[li]] * t0;
+			drift(scale, dt, tau, tau + dt, t0, levels[li]);
+		}
+		tree_create_params tparams(minrung, theta, 0.f);
+		tparams.htime = true;
+		auto this_sr = tree_create(tparams);
+		if (top) {
+			sr = this_sr;
+		}
 		const bool vsoft = get_options().vsoft;
 		if (vsoft) {
 			ALWAYS_ASSERT(false);
 			all_tree_softlens(minrung, scale);
 		}
-
-	}
-
-//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
-	tree_create_params tparams(minrung, theta, 0.f);
-	PRINT("Create tree %i %e\n", minrung, theta);
-	PRINT("gravity nactive = %i\n", sr.nactive);
-	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
-	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
-	tm.stop();
-	sort_time += tm.read();
-	tm.reset();
-	tm.start();
-//	PRINT("nactive = %li\n", sr.nactive);
-	kick_params kparams;
-	if (dadt != 0.0) {
-		kparams.max_dt = SCALE_DT * scale / fabs(dadt);
-	}
-	kparams.glass = get_options().glass;
-	kparams.node_load = flops_per_node / flops_per_particle;
-	kparams.gpu = true;
-	used_gpu = kparams.gpu;
-	kparams.min_level = tparams.min_level;
-	kparams.save_force = get_options().save_force;
-	kparams.GM = get_options().GM;
-	kparams.eta = get_options().eta;
-	kparams.h = get_options().hsoft;
-	kparams.a = scale;
-	kparams.first_call = first_call;
-	kparams.min_rung = minrung;
-	kparams.t0 = t0;
-	kparams.theta = theta;
-	expansion<float> L;
-	for (int i = 0; i < EXPANSION_SIZE; i++) {
-		L[i] = 0.0f;
-	}
-	array<fixed32, NDIM> pos;
-	for (int dim = 0; dim < NDIM; dim++) {
-		pos[dim] = 0.f;
-	}
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	PRINT("Do kick\n");
-	profiler_enter("kick");
-	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	profiler_exit();
-	tm.stop();
-	kick_time += tm.read();
-
-	if (vsoft && !sph) {
-		timer tm;
-		tm.start();
-		all_tree_divv(minrung, scale);
+		kick_params kparams;
+		kparams.top = top;
+		kparams.ascending = ascending;
+		kparams.descending = !ascending;
+		kparams.htime = true;
+		kparams.glass = get_options().glass;
+		kparams.node_load = flops_per_node / flops_per_particle;
+		kparams.gpu = true;
+		kparams.min_level = tparams.min_level;
+		kparams.save_force = get_options().save_force;
+		kparams.GM = get_options().GM;
+		kparams.eta = get_options().eta;
+		kparams.h = get_options().hsoft;
+		kparams.a = scale;
+		kparams.first_call = tau == 0.0;
+		kparams.min_rung = levels[li];
+		kparams.t0 = t0;
+		kparams.theta = theta;
+		expansion<float> L;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		array<fixed32, NDIM> pos;
+		for (int dim = 0; dim < NDIM; dim++) {
+			pos[dim] = 0.f;
+		}
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		if (top) {
+			kr = this_kr;
+		}
+		if (!ascending || top) {
+			max_rung = std::max(max_rung, (int) this_kr.max_rung);
+			kr.max_rung = max_rung;
+			PRINT( "----> %i\n", max_rung);
+			if (max_rung > levels[li]) {
+				levels.push_back(max_rung);
+			}
+		}
 		tm.stop();
-		PRINT("divv = %e\n", tm.read());
-		kr.max_rung = std::max((int) kr.max_rung, (int) particles_apply_updates(minrung, t0, scale));
-	}
+		if (!ascending || top) {
+			const float dt = 0.5 * rung_dt[levels[li]] * t0;
+			drift(scale, dt, tau, tau + dt, t0, levels[li]);
+		}
 
-	tree_destroy();
-	particles_cache_free();
-	kr.nactive = sr.nactive;
-	PRINT("kick done\n");
-	if (min_rung == 0) {
-		flops_per_node = kr.node_flops / sr.active_nodes;
-		flops_per_particle = kr.part_flops / kr.nactive;
 	}
-	kr.load = load;
+	PRINT("done climbing kick ladder\n");
+
 	return std::make_pair(kr, sr);
+
 }
 
 void do_power_spectrum(int num, double a) {
@@ -856,7 +849,6 @@ void driver() {
 	driver_params params;
 	const bool stars = get_options().stars;
 	double a0 = 1.0 / (1.0 + get_options().z0);
-	drift_return dr;
 	const int glass = get_options().glass;
 	if (get_options().read_check) {
 		params = read_checkpoint();
@@ -886,11 +878,9 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 //		write_checkpoint(params);
-		dr = drift(a0, 0.0, 0.0, 0.0, 0.0);
-		PRINT("Initial etherm = %e\n", dr.therm);
+		drift(a0, 0.0, 0.0, 0.0, 0.0);
 
 	}
-	PRINT("ekin0 = %e\n", dr.kin);
 	PRINT("tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
 	int& max_rung = params.max_rung;
@@ -1015,7 +1005,12 @@ void driver() {
 				double dummy;
 				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &dummy);
 			}
-			auto tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
+			std::pair<kick_return, tree_create_return> tmp;
+			if (get_options().htime) {
+				tmp = kick_step_hierarchical(minrung, max_rung, a, tau, t0, theta);
+			} else {
+				tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
+			}
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
@@ -1069,7 +1064,9 @@ void driver() {
 			timer dtm;
 			dtm.start();
 			PRINT("Drift\n");
-			dr = drift(a2, dt, tau, tau + dt, tau_max);
+			if (!get_options().htime) {
+				drift(a2, dt, tau, tau + dt, tau_max);
+			}
 			if (get_options().do_lc) {
 				check_lc(false);
 			}
@@ -1093,18 +1090,18 @@ void driver() {
 			remaining_time.start();
 			runtime += total_time.read();
 			double pps = total_processed / runtime;
-			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
+			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops;
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			params.flops += total_flops;
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			double act_pct = kr.nactive / nparts;
 			const double parts_per_node = nparts / sr.leaf_nodes;
-			const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
+	//		const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
 			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
 			PRINT_BOTH(textfp,
 					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %10.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
-					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1, tau / t0, years,
-					dr.vol, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter,
+					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node,0, z, a1, tau / t0, years,
+					0.0, minrung, max_rung, act_pct, (double ) 0, kr.load, domain_time, sort_time, kick_time, drift_time, runtime / iter,
 					(double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
 					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
 			fclose(textfp);
