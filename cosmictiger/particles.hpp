@@ -173,6 +173,8 @@ void particles_reset_converged();
 void particles_random_init();
 void particles_resolve_with_sph_particles();
 int particles_apply_updates(int minrung, float t0, float a );
+void particles_pop_rungs();
+void particles_push_rungs();
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, float* zeta, part_int offset);

@@ -688,6 +688,8 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 	const bool sph = get_options().sph;
 	kick_return kr;
 	tree_create_return sr;
+//	minrung = std::max(minrung, 1);
+//	max_rung = std::max(max_rung,minrung);
 	vector<int> levels(max_rung - minrung + 1);
 	int k = 0;
 	for (int i = max_rung; i >= minrung; i--) {
@@ -711,26 +713,39 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		} else if (!ascending) {
 			PRINT("Descending rung %i\n", levels[li]);
 		}
-		particles_sort_by_rung(minrung);
+		if (!ascending && !top) {
+			particles_push_rungs();
+		}
+		if (!ascending) {
+			particles_sort_by_rung(levels[li]);
+		}
 		if (ascending || top) {
+			tm.reset();
+			tm.start();
 			const float dt = 0.5 * rung_dt[levels[li]] * t0;
 			drift(scale, dt, tau, tau + dt, t0, levels[li]);
+			tm.stop();
+			PRINT("drift = %e\n", tm.read());
 		}
-		tree_create_params tparams(minrung, theta, 0.f);
+		tree_create_params tparams(levels[li], theta, 0.f);
 		tparams.htime = true;
+		tm.reset();
+		tm.start();
 		auto this_sr = tree_create(tparams);
+		tm.stop();
+		PRINT("tree create = %e\n", tm.read());
 		if (top) {
 			sr = this_sr;
 		}
 		const bool vsoft = get_options().vsoft;
 		if (vsoft) {
 			ALWAYS_ASSERT(false);
-			all_tree_softlens(minrung, scale);
+			all_tree_softlens(levels[li], scale);
 		}
 		kick_params kparams;
 		kparams.top = top;
-		kparams.ascending = ascending;
-		kparams.descending = !ascending;
+		kparams.ascending = ascending && !top;
+		kparams.descending = !ascending && !top;
 		kparams.htime = true;
 		kparams.glass = get_options().glass;
 		kparams.node_load = flops_per_node / flops_per_particle;
@@ -758,24 +773,34 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		root_id.index = 0;
 		vector<tree_id> checklist;
 		checklist.push_back(root_id);
+		tm.reset();
+		tm.start();
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		tm.stop();
+		PRINT("kick = %e\n", tm.read());
 		if (top) {
 			kr = this_kr;
 		}
 		if (!ascending || top) {
-			max_rung = std::max(max_rung, (int) this_kr.max_rung);
+			max_rung = this_kr.max_rung;
 			kr.max_rung = max_rung;
-			PRINT("----> %i\n", max_rung);
 			if (max_rung > levels[li]) {
 				levels.push_back(levels[li] + 1);
 			}
 		}
 		tm.stop();
 		if (!ascending || top) {
+			tm.reset();
+			tm.start();
 			const float dt = 0.5 * rung_dt[levels[li]] * t0;
 			drift(scale, dt, tau, tau + dt, t0, levels[li]);
+			tm.stop();
+			PRINT("drift = %e\n", tm.read());
 		}
-
+		tree_reset();
+		if (ascending && !top) {
+			particles_pop_rungs();
+		}
 	}
 	PRINT("done climbing kick ladder\n");
 
@@ -878,7 +903,6 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 //		write_checkpoint(params);
-		drift(a0, 0.0, 0.0, 0.0, 0.0);
 
 	}
 	PRINT("tau_max = %e\n", params.tau_max);

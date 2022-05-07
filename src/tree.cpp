@@ -279,6 +279,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		leaflist.resize(0);
 		if( params.htime ) {
 			part_range = particles_current_range();
+			PRINT( "Sorting %i %i\n", part_range.first, part_range.second);
 		} else {
 			part_range.first = 0;
 			part_range.second = particles_size();
@@ -619,6 +620,22 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	}
 //		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
+}
+
+HPX_PLAIN_ACTION(tree_reset);
+
+void tree_reset() {
+
+	vector<hpx::future<void>> futs;
+	const auto children = hpx_children();
+	for (const auto& c : children) {
+		futs.push_back(hpx::async<tree_reset_action>(HPX_PRIORITY_HI, c));
+	}
+	nodes.resize(0);
+	tree_cache = decltype(tree_cache)();
+	reset_last_cache_entries();
+	hpx::wait_all(futs.begin(), futs.end());
+
 }
 
 void tree_destroy(bool free_tree) {

@@ -73,6 +73,8 @@ static part_int capacity = 0;
 static vector<size_t> global_offsets;
 static part_int rung_begin;
 static part_int rung_end;
+static std::vector<part_int> rung_begins;
+static std::vector<part_int> rung_ends;
 static int current_minrung;
 
 HPX_PLAIN_ACTION (particles_cache_free);
@@ -172,6 +174,19 @@ HPX_PLAIN_ACTION (particles_get_sample);
  }
  };
  */
+
+void particles_pop_rungs() {
+	rung_begin = rung_begins.back();
+	rung_begins.pop_back();
+	rung_end = rung_ends.back();
+	rung_ends.pop_back();
+}
+
+void particles_push_rungs() {
+	rung_begins.push_back(rung_begin);
+	rung_ends.push_back(rung_end);
+}
+
 struct line_id_type {
 	int proc;
 	part_int index;
@@ -875,8 +890,6 @@ void particles_resize(part_int sz) {
 	int oldsz = size;
 	size = sz;
 	current_minrung = 0;
-	rung_begin = 0;
-	rung_end = particles_size();
 	if (get_options().sph) {
 		for (int i = oldsz; i < sz; i++) {
 			particles_cat_index(i) = NO_INDEX;
@@ -1010,18 +1023,18 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 
 }
 
-pair<part_int,part_int> particles_current_range() {
-	pair<part_int,part_int> rc;
+pair<part_int, part_int> particles_current_range() {
+	pair<part_int, part_int> rc;
 	rc.first = rung_begin;
 	rc.second = rung_end;
 	return rc;
 }
 
-HPX_PLAIN_ACTION(particles_sort_by_rung);
+HPX_PLAIN_ACTION (particles_sort_by_rung);
 
 void particles_sort_by_rung(int minrung) {
 	vector<hpx::future<void>> futs;
-	for( auto& c : hpx_children()) {
+	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_sort_by_rung_action>(c, minrung));
 	}
 	if (minrung == 0) {
@@ -1029,8 +1042,10 @@ void particles_sort_by_rung(int minrung) {
 		rung_begin = 0;
 		rung_end = particles_size();
 	} else {
-		part_int begin = rung_begin;
-		part_int end = rung_end;
+		part_int begin;
+		part_int end;
+		begin = rung_begin;
+		end = rung_end;
 		part_int lo = begin;
 		part_int hi = end;
 		const bool do_groups = get_options().do_groups;
