@@ -346,7 +346,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("Doing chemistry step\n");
 		timer tm;
 		tm.start();
-		energies->heating -= scale * chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
+		energies->heating -= chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
 		tm.stop();
 		PRINT("Took %e s\n", tm.read());
 	}
@@ -424,7 +424,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		//	sph_particles_entropy_to_energy();
 		double eloss = 0.0;
 		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
-			energies->heating += scale * eloss;
+			energies->heating += eloss;
 		}
 		PRINT("%e-----------------------------------------------------------------------------------------------------------------------\n", eloss);
 		stars_statistics(scale);
@@ -607,6 +607,122 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 		all_tree_softlens(minrung, scale);
 	}
 
+	PRINT("gravity nactive = %i\n", sr.nactive);
+	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
+	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
+	tm.stop();
+	sort_time += tm.read();
+	tm.reset();
+	tm.start();
+//	PRINT("nactive = %li\n", sr.nactive);
+	kick_params kparams;
+	if (dadt != 0.0) {
+		kparams.max_dt = SCALE_DT * scale / fabs(dadt);
+	}
+	kparams.glass = get_options().glass;
+	kparams.node_load = flops_per_node / flops_per_particle;
+	kparams.gpu = true;
+	used_gpu = kparams.gpu;
+	kparams.min_level = tparams.min_level;
+	kparams.save_force = get_options().save_force;
+	kparams.GM = get_options().GM;
+	kparams.eta = get_options().eta;
+	kparams.h = get_options().hsoft;
+	kparams.a = scale;
+	kparams.first_call = first_call;
+	kparams.min_rung = minrung;
+	kparams.t0 = t0;
+	kparams.theta = theta;
+	expansion<float> L;
+	for (int i = 0; i < EXPANSION_SIZE; i++) {
+		L[i] = 0.0f;
+	}
+	array<fixed32, NDIM> pos;
+	for (int dim = 0; dim < NDIM; dim++) {
+		pos[dim] = 0.f;
+	}
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
+	PRINT("Do kick\n");
+	profiler_enter("kick");
+	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+	profiler_exit();
+	tm.stop();
+	kick_time += tm.read();
+
+	if (vsoft && !sph) {
+		timer tm;
+		tm.start();
+		all_tree_divv(minrung, scale);
+		tm.stop();
+		PRINT("divv = %e\n", tm.read());
+		kr.max_rung = std::max((int) kr.max_rung, (int) particles_apply_updates(minrung, t0, scale));
+	}
+
+	tree_destroy();
+	particles_cache_free();
+	kr.nactive = sr.nactive;
+	PRINT("kick done\n");
+	if (min_rung == 0) {
+		flops_per_node = kr.node_flops / sr.active_nodes;
+		flops_per_particle = kr.part_flops / kr.nactive;
+	}
+	kr.load = load;
+	return std::make_pair(kr, sr);
+}
+
+std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, int max_rung, double scale, double dadt, double t0, double theta,
+		bool first_call, bool full_eval) {
+	timer tm;
+	tm.start();
+	PRINT("domains_begin\n");
+	domains_begin();
+	PRINT("domains_end \n");
+	domains_end();
+	tm.stop();
+	domain_time += tm.read();
+	tm.reset();
+	tm.start();
+	const bool sph = get_options().sph;
+
+	vector<int> levels;
+	int k = 0;
+	for (int i = max_rung; i >= minrung; i--) {
+		levels[k++] = i;
+	}
+	for (int j = minrung + 1; j <= max_rung; j++) {
+		levels[k++] = j;
+	}
+
+	bool ascending = true;
+	bool top;
+	for (int li = 0; li < levels.size(); li++) {
+
+
+		if (levels[li] == minrung) {
+			ascending = false;
+			top = true;
+		} else {
+			top = false;
+		}
+
+		auto range = particles_sort_by_rung(minrung);
+		PRINT("level %i\n", levels[li]);
+		auto sr = tree_create(tparams);
+		const bool vsoft = get_options().vsoft;
+		if (vsoft) {
+			ALWAYS_ASSERT(false);
+			all_tree_softlens(minrung, scale);
+		}
+
+	}
+
+//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
+	tree_create_params tparams(minrung, theta, 0.f);
+	PRINT("Create tree %i %e\n", minrung, theta);
 	PRINT("gravity nactive = %i\n", sr.nactive);
 	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
 	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
@@ -907,14 +1023,14 @@ void driver() {
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &energies).max_rung);
 				if (minrung <= 0) {
-					const double energy = a * (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
+					const double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
 					if (tau == 0) {
 						energy0 = energy;
 					}
-					const double norm = a * (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
+					const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
 					const double err = (energy - energy0) / norm;
 					FILE* fp = fopen("energy.txt", "at");
-					fprintf(fp, "%e %e %e %e %e %e %e %e\n", tau, a, a * energies.pot, a * energies.kin, a * energies.therm, energies.heating, energies.cosmic, err);
+					fprintf(fp, "%e %e %e %e %e %e %e %e\n", tau, a, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
 					fclose(fp);
 				}
 			}
@@ -944,8 +1060,8 @@ void driver() {
 			a += 0.5 * (dadt2 - dadt1) * dt;
 			const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
 			const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
-			double ekin0 = energies.kin + energies.therm;
-			ekin0 *= sqr(a1);
+			double ekin0 = 2.0 * (energies.kin + energies.therm) + energies.pot;
+			ekin0 *= (a1);
 			double dekin = ekin0 * (1.0 / a1 - 1.0 / a);
 			energies.cosmic += dekin;
 

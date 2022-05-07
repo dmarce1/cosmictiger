@@ -143,49 +143,78 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			gy[i] *= -1.f;
 			gz[i] *= -1.f;
 		}
-		if (params.save_force || vsoft) {
-			all_gx[snki] = gx[i];
-			all_gy[snki] = gy[i];
-			all_gz[snki] = gz[i];
-			all_phi[snki] = phi[i];
-		}
 		vx = vel_x[snki];
 		vy = vel_y[snki];
 		vz = vel_z[snki];
-		rung = read_rungs[i];
-		dt = 0.5f * rung_dt[rung] * params.t0;
 		float hsoft = params.h;
 		if (vsoft) {
 			hsoft = softlens[snki];
 		}
-		if (my_type == SPH_TYPE && !params.glass) {
-			sph_gx[j] = gx[i];
-			sph_gy[j] = gy[i];
-			sph_gz[j] = gz[i];
+		if (params.htime) {
+			ALWAYS_ASSERT(!sph);
+			float sgn = params.top ? 1.f : -1.f;
+			if (params.ascending || params.top) {
+				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+				if (!params.first_call) {
+					vx = fmaf(sgn * gx[i], dt, vx);
+					vy = fmaf(sgn * gy[i], dt, vy);
+					vz = fmaf(sgn * gz[i], dt, vz);
+				}
+			}
+			if (params.top) {
+				g2 = sqr(gx[i], gy[i], gz[i]);
+				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
+				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
+				max_rung = max(rung, max_rung);
+				write_rungs[snki] = rung;
+				ALWAYS_ASSERT(rung >= 0);
+				ALWAYS_ASSERT(rung < MAX_RUNG);
+			}
+			if (params.descending || params.top) {
+				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+				ALWAYS_ASSERT(!vsoft);
+				vx = fmaf(sgn * gx[i], dt, vx);
+				vy = fmaf(sgn * gy[i], dt, vy);
+				vz = fmaf(sgn * gz[i], dt, vz);
+			}
 		} else {
-			if (!params.first_call) {
-				vx = fmaf(gx[i], dt, vx);
-				vy = fmaf(gy[i], dt, vy);
-				vz = fmaf(gz[i], dt, vz);
+			if (params.save_force || vsoft) {
+				all_gx[snki] = gx[i];
+				all_gy[snki] = gy[i];
+				all_gz[snki] = gz[i];
+				all_phi[snki] = phi[i];
 			}
-		}
-		g2 = sqr(gx[i], gy[i], gz[i]);
-		if (my_type != SPH_TYPE || params.glass) {
-			dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
-			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
-			max_rung = max(rung, max_rung);
-			if (rung < 0 || rung >= MAX_RUNG) {
-				PRINT("Rung out of range %i\n", rung);
-			}
-			ASSERT(rung >= 0);
-			ASSERT(rung < MAX_RUNG);
+			rung = read_rungs[i];
 			dt = 0.5f * rung_dt[rung] * params.t0;
-			if (!vsoft) {
-				vx = fmaf(gx[i], dt, vx);
-				vy = fmaf(gy[i], dt, vy);
-				vz = fmaf(gz[i], dt, vz);
+			if (my_type == SPH_TYPE && !params.glass) {
+				sph_gx[j] = gx[i];
+				sph_gy[j] = gy[i];
+				sph_gz[j] = gz[i];
+			} else {
+				if (!params.first_call) {
+					vx = fmaf(gx[i], dt, vx);
+					vy = fmaf(gy[i], dt, vy);
+					vz = fmaf(gz[i], dt, vz);
+				}
 			}
-			write_rungs[snki] = rung;
+			g2 = sqr(gx[i], gy[i], gz[i]);
+			if (my_type != SPH_TYPE || params.glass) {
+				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
+				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
+				max_rung = max(rung, max_rung);
+				if (rung < 0 || rung >= MAX_RUNG) {
+					PRINT("Rung out of range %i\n", rung);
+				}
+				ASSERT(rung >= 0);
+				ASSERT(rung < MAX_RUNG);
+				dt = 0.5f * rung_dt[rung] * params.t0;
+				if (!vsoft) {
+					vx = fmaf(gx[i], dt, vx);
+					vy = fmaf(gy[i], dt, vy);
+					vz = fmaf(gz[i], dt, vz);
+				}
+				write_rungs[snki] = rung;
+			}
 		}
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;

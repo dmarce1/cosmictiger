@@ -71,6 +71,9 @@ static void particles_set_global_offset(vector<size_t>);
 static part_int size = 0;
 static part_int capacity = 0;
 static vector<size_t> global_offsets;
+static part_int rung_begin;
+static part_int rung_end;
+static int current_minrung;
 
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
@@ -871,6 +874,9 @@ void particles_resize(part_int sz) {
 	}
 	int oldsz = size;
 	size = sz;
+	current_minrung = 0;
+	rung_begin = 0;
+	rung_end = particles_size();
 	if (get_options().sph) {
 		for (int i = oldsz; i < sz; i++) {
 			particles_cat_index(i) = NO_INDEX;
@@ -1002,6 +1008,72 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	}
 	return hi;
 
+}
+
+pair<part_int, part_int> particles_sort_by_rung(int minrung) {
+	if (minrung == 0) {
+		current_minrung = 0;
+		rung_begin = 0;
+		rung_end = particles_size();
+		pair<part_int, part_int> rc;
+		rc.first = rung_begin;
+		rc.second = rung_end;
+		return rc;
+	} else {
+		part_int begin = rung_begin;
+		part_int end = rung_end;
+		part_int lo = begin;
+		part_int hi = end;
+		const bool do_groups = get_options().do_groups;
+		const bool do_tracers = get_options().do_tracers;
+		const bool vsoft = get_options().vsoft;
+		const bool sph = get_options().sph;
+		auto& x = particles_x[XDIM];
+		auto& y = particles_x[YDIM];
+		auto& z = particles_x[ZDIM];
+		auto& ux = particles_v[XDIM];
+		auto& uy = particles_v[YDIM];
+		auto& uz = particles_v[ZDIM];
+		while (lo < hi) {
+			if (particles_rung(lo) >= minrung) {
+				while (lo != hi) {
+					hi--;
+					if (particles_rung(hi) < minrung) {
+						std::swap(x[hi], x[lo]);
+						std::swap(y[hi], y[lo]);
+						std::swap(z[hi], z[lo]);
+						std::swap(ux[hi], ux[lo]);
+						std::swap(uy[hi], uy[lo]);
+						std::swap(uz[hi], uz[lo]);
+						std::swap(particles_r[hi], particles_r[lo]);
+						if (do_groups) {
+							std::swap(particles_lgrp[hi], particles_lgrp[lo]);
+						}
+						if (do_tracers) {
+							std::swap(particles_tr[hi], particles_tr[lo]);
+						}
+						if (sph) {
+							std::swap(particles_sph[hi], particles_sph[lo]);
+							std::swap(particles_ty[hi], particles_ty[lo]);
+						}
+						if (vsoft) {
+							std::swap(particles_dv[hi], particles_dv[lo]);
+							std::swap(particles_s[hi], particles_s[lo]);
+						}
+						break;
+					}
+				}
+			}
+			lo++;
+		}
+		current_minrung = minrung;
+		rung_begin = hi;
+		rung_end = particles_size();
+		pair<part_int, part_int> rc;
+		rc.first = rung_begin;
+		rc.second = rung_end;
+		return rc;
+	}
 }
 
 void particles_global_read_rungs(particle_global_range range, char* r, part_int offset) {
@@ -1335,15 +1407,15 @@ energies_t particles_sum_energies() {
 				if( particles_type(i) == SPH_TYPE) {
 					const int kk = particles_cat_index(i);
 #ifdef HOPKINS
-					energies.therm +=  m * sph_particles_eint_rho(kk);
+				energies.therm += m * sph_particles_eint_rho(kk);
 #else
-					energies.therm += m * sph_particles_eint(kk);
+				energies.therm += m * sph_particles_eint(kk);
 #endif
-				}
-
 			}
-			return energies;
-		}));
+
+		}
+		return energies;
+	}));
 	}
 
 	for (auto& f : futs) {
