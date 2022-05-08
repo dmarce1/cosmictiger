@@ -134,7 +134,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if (self_ptr->local_root) {
 			const double max_load = self_ptr->node_count * params.node_load + (self_ptr->part_range.second - self_ptr->part_range.first);
 			const double load = self_ptr->active_nodes * params.node_load + self_ptr->nactive;
-			if (load / max_load < GPU_MIN_LOAD) {
+			if (!get_options().htime && load / max_load < GPU_MIN_LOAD) {
 				params.gpu = false;
 			}
 		}
@@ -145,7 +145,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			}
 		}
 		bool eligible;
-		eligible = params.gpu && self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local();
+		size_t max_parts = CUDA_KICK_PARTS_MAX;
+		const auto rng = particles_current_range();
+		max_parts = std::min((size_t) max_parts, (size_t) std::max((rng.second - rng.first) / kick_block_count(), BUCKET_SIZE));
+		eligible = params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local();
 		if (eligible) {
 			if (self_ptr->children[LEFT].index != -1) {
 				const part_int active_left = tree_get_node(self_ptr->children[LEFT])->nactive;

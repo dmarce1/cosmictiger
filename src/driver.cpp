@@ -1026,6 +1026,7 @@ void driver() {
 			} else {
 				theta = 0.4;
 			}
+			theta = 0.55;
 
 			///		if (last_theta != theta) {
 			set_options(opts);
