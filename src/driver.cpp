@@ -1008,13 +1008,13 @@ void driver() {
 			opts.hsoft = hsoft0;			// / a;
 			if (!glass) {
 				if (z > 50.0) {
-					theta = 0.4;
+					theta = 0.3;
 				} else if (z > 20.0) {
-					theta = 0.55;
+					theta = 0.4;
 				} else if (z > 2.0) {
-					theta = 0.7;
+					theta = 0.55;
 				} else {
-					theta = 0.85;
+					theta = 0.7;
 				}
 			} else {
 				theta = 0.4;

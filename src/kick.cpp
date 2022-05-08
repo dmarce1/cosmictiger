@@ -37,8 +37,9 @@ HPX_PLAIN_ACTION (kick);
 
 struct workspace {
 	vector<tree_id> nextlist;
-	vector<tree_id> partlist;
-	vector<tree_id> multlist;
+	vector<tree_id> cplist;
+	vector<tree_id> pclist;
+	vector<tree_id> cclist;
 	vector<tree_id> leaflist;
 	workspace() = default;
 	workspace(const workspace&) = delete;
@@ -61,8 +62,9 @@ static workspace get_workspace() {
 }
 
 static void cleanup_workspace(workspace&& workspace) {
-	workspace.multlist.resize(0);
-	workspace.partlist.resize(0);
+	workspace.cclist.resize(0);
+	workspace.cplist.resize(0);
+	workspace.pclist.resize(0);
 	workspace.nextlist.resize(0);
 	workspace.leaflist.resize(0);
 	local_workspaces.push(std::move(workspace));
@@ -188,8 +190,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const bool save_force = params.save_force;
 	auto workspace = get_workspace();
 	vector<tree_id>& nextlist = workspace.nextlist;
-	vector<tree_id>& partlist = workspace.partlist;
-	vector<tree_id>& multlist = workspace.multlist;
+	vector<tree_id>& cclist = workspace.cclist;
+	vector<tree_id>& cplist = workspace.cplist;
+	vector<tree_id>& pclist = workspace.pclist;
 	vector<tree_id>& leaflist = workspace.leaflist;
 	const simd_float thetainv2(1.0 / sqr(params.theta));
 	const simd_float thetainv(1.0 / params.theta);
@@ -206,7 +209,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	simd_float other_hsoft;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
-	simd_int other_leaf;
+	simd_float other_leaf;
 	for (int dim = 0; dim < NDIM; dim++) {
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
@@ -229,8 +232,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	}
 	for (int gtype = GRAVITY_DIRECT; gtype <= GRAVITY_EWALD; gtype++) {
 		nextlist.resize(0);
-		multlist.resize(0);
-		partlist.resize(0);
+		cclist.resize(0);
+		pclist.resize(0);
+		cplist.resize(0);
 		leaflist.resize(0);
 		auto& these_flops = kr.node_flops;
 		auto& checklist = gtype == GRAVITY_DIRECT ? dchecklist : echecklist;
@@ -269,22 +273,30 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					R2 = max(R2, sqr(simd_float(0.5) - (self_radius + other_radius)));
 				}
 				const auto hsoft = max(other_hsoft, my_hsoft);
-				const simd_float far1 = (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + hsoft));     // 5
-				const simd_float far2 = (R2 > sqr(sink_bias * self_radius * thetainv + other_radius + hsoft));       // 5
-				const simd_float mult = far1;                                                                  // 4
-				const simd_float part = far2 * other_leaf * simd_float((self_ptr->part_range.second - self_ptr->part_range.first) > MIN_CP_PARTS);
+				const simd_float dcc = (self_radius + other_radius) * thetainv + hsoft;
+				const simd_float dcp = (thetainv * self_radius + other_radius) + hsoft;
+				const simd_float dpc = (self_radius + other_radius * thetainv) + hsoft;
+				const simd_float cc = R2 > sqr(dcc);
+				simd_float pc, cp;
+				cp = simd_float(0);
+				pc = simd_float(0);
+				if (self_ptr->leaf) {
+					pc = (simd_float(1) - cc) * other_leaf * (R2 > sqr(dpc)) * (dpc > dcp);
+					cp = (simd_float(1) - cc) * other_leaf * (R2 > sqr(dcp)) * (dcp > dpc);
+				}
 				for (int i = 0; i < maxi; i++) {
-					if (mult[i]) {
-						multlist.push_back(checklist[ci + i]);
-					} else if (part[i]) {
-						partlist.push_back(checklist[ci + i]);
+					if (cc[i]) {
+						cclist.push_back(checklist[ci + i]);
+					} else if (cp[i]) {
+						cplist.push_back(checklist[ci + i]);
+					} else if (pc[i]) {
+						pclist.push_back(checklist[ci + i]);
 					} else if (other_leaf[i]) {
 						leaflist.push_back(checklist[ci + i]);
 					} else {
 						const auto child_checks = other_ptrs[i]->children;
 						nextlist.push_back(child_checks[LEFT]);
 						nextlist.push_back(child_checks[RIGHT]);
-
 					}
 				}
 				these_flops += maxi * 22;
@@ -292,74 +304,16 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			std::swap(checklist, nextlist);
 			nextlist.resize(0);
 		} while (checklist.size() && self_ptr->leaf);
-		these_flops += cpu_gravity_cc(gtype, L, multlist, self, params.min_rung == 0);
-		these_flops += cpu_gravity_cp(gtype, L, partlist, self, params.min_rung == 0);
+		these_flops += cpu_gravity_cc(gtype, L, cclist, self, params.min_rung == 0);
 		if (self_ptr->leaf) {
 			if (cuda_workspace != nullptr && gtype == GRAVITY_EWALD) {
 				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 			}
-			partlist.resize(0);
-			multlist.resize(0);
-			for (int i = 0; i < leaflist.size(); i++) {
-				const tree_node* other_ptr = tree_get_node(leaflist[i]);
-				if (other_ptr->part_range.second - other_ptr->part_range.first >= MIN_PC_PARTS) {
-					other_radius = other_ptr->radius;
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim] = other_ptr->pos[dim].raw();
-					}
-					if (vsoft) {
-						other_hsoft = other_ptr->hsoft_max;
-					} else {
-						other_hsoft = get_options().hsoft;
-					}
-					const auto myrange = self_ptr->part_range;
-					bool pp = false;
-					for (part_int j = myrange.first; j < myrange.second; j += SIMD_FLOAT_SIZE) {
-						for (int dim = 0; dim < NDIM; dim++) {
-							for (int k = 0; k < SIMD_FLOAT_SIZE; k++) {
-								self_pos[dim][k] = particles_pos(dim, std::min(j + k, myrange.second - 1)).raw();
-							}
-						}
-						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;        // 3
-						}
-						simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                      // 5
-						if (gtype == GRAVITY_EWALD) {
-							const simd_float sw = sqr(max(simd_float(0.49) - other_radius, simd_float(0))) > R2;
-							R2 = sw * sqr((simd_float(0.49) - other_radius - sqrt(R2) + sqrt(R2) * other_radius) / (simd_float(0.49) - sqrt(R2)))
-									+ (simd_float(1) - sw) * R2;
-						}
-						const auto hsoft = max(my_hsoft, other_hsoft);
-						const simd_float rhs = sqr(hsoft + other_radius * thetainv);                      // 3
-						const simd_float near = R2 <= rhs;                                            // 1
-						kr.part_flops += SIMD_FLOAT_SIZE * 12;
-						if (near.sum()) {
-							pp = true;
-							break;
-						}
-					}
-					if (pp) {
-						partlist.push_back(leaflist[i]);
-					} else {
-						multlist.push_back(leaflist[i]);
-					}
-				} else {
-					partlist.push_back(leaflist[i]);
-				}
-			}
-			if (gtype == GRAVITY_DIRECT) {
-				bool foundme = false;
-				for (int i = 0; i < partlist.size(); i++) {
-					if (partlist[i] == self) {
-						foundme = true;
-						break;
-					}
-				}
-				ALWAYS_ASSERT(foundme);
-			}
-			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, multlist);
-			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, partlist, params.h);
+			these_flops += cpu_gravity_cp(gtype, L, cplist, self, params.min_rung == 0);
+			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, pclist);
+			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, leaflist, params.h);
 		} else {
+			ALWAYS_ASSERT(cplist.size()==0);
 			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		}
 	}

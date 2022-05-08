@@ -432,8 +432,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (gtype == GRAVITY_EWALD) {
 									R2 = fmaxf(R2, sqr(0.5f - (self.radius + other.radius)));
 								}
-								const bool far1 = (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + hsoft));     // 5
-								const bool far2 = (R2 > sqr(sink_bias * self.radius * thetainv + other.radius + hsoft));       // 5
+								const bool far1 = (R2 > sqr((self.radius + other.radius) * thetainv + hsoft));     // 5
+								const bool far2 = (R2 > sqr(self.radius * thetainv + other.radius + hsoft));       // 5
 								mult = far1;
 								part = !mult && (far2 && other.leaf && (self.part_range.second - self.part_range.first) > MIN_CP_PARTS);
 								leaf = !mult && !part && other.leaf;
@@ -795,7 +795,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
 	cuda_stream_synchronize(stream);
 	tm.stop();
-	PRINT( "GPU took %e with %i blocks\n", tm.read(), nblocks);
+	PRINT("GPU took %e with %i blocks\n", tm.read(), nblocks);
 //	PRINT( "%i %e\n", nblocks, tm.read());
 //	PRINT("%i nodes traversed\n", node_count);
 	CUDA_CHECK(cudaFree(dev_dchecks));

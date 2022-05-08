@@ -165,7 +165,9 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 			for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 				const int cnt = std::min(count - j, SIMD_FLOAT_SIZE);
 				const int k = j / SIMD_FLOAT_SIZE;
+#ifndef DM_CON_H_ONLY
 				simd_float mass;
+#endif
 				for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
 					Y[XDIM][l] = srcx[j + l].raw();
 					Y[YDIM][l] = srcy[j + l].raw();
@@ -186,7 +188,12 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 					flops += count * ewald_greens_function(D, dx);
 				}
 				for (int l = 0; l < EXPANSION_SIZE; l++) {
+#ifndef DM_CON_H_ONLY
 					L0[l] += mass * D[l];
+#else
+					L0[l] +=  D[l];
+#endif
+
 				}
 				flops += cnt * EXPANSION_SIZE;
 			}
