@@ -150,7 +150,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if (params.htime) {
 			auto rng = particles_current_range();
 			size_t parts_max = std::max(std::min( CUDA_KICK_PARTS_MAX, (rng.second - rng.first) / kick_block_count() / 2), BUCKET_SIZE);
-			eligible = params.gpu && self_ptr->nparts() <= parts_max && self_ptr->is_local();
+			eligible = params.gpu && self_ptr->nparts() <= parts_max && self_ptr->is_local() && !self_ptr->leaf;
 		} else {
 			eligible = params.gpu && self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local();
 		}
@@ -270,12 +270,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
-					auto R = sqrt(R2);
-					const auto rtot = self_radius + other_radius;
-					const auto sw = (R < simd_float(0.5f) - rtot);
-					R2 = sw * (simd_float(1.f) - (simd_float(0.5f) + rtot) / (simd_float(0.5f) - rtot)) * R;
-					R2 += (simd_float(1) - sw) * R;
-					R2 = sqr(R);
+					R2 = max(R2, max(sqr(simd_float(0.5) - (self_radius + other_radius)), simd_float(0)));
 				}
 				const auto hsoft = max(other_hsoft, my_hsoft);
 				const auto mind = self_radius + other_radius + hsoft;
@@ -417,7 +412,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.xmom += m * vx;
 					kr.ymom += m * vy;
 					kr.zmom += m * vz;
-					kr.nmom += m * sqrt(sqr(vx, vy, vz));
+					kr.nmom +=  m * sqrt(sqr(vx, vy, vz));
 					if (type != SPH_TYPE || glass) {
 						const float factor = eta * sqrtf(params.a);
 						dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);

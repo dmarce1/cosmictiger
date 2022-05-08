@@ -81,8 +81,8 @@ void kick_workspace::to_gpu() {
 	);
 
 //	PRINT("To vector\n");
+	PRINT("%i tree ids\n", tree_ids.size());
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
-//	PRINT("%i tree ids\n", tree_ids_vector.size());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
 	part_int part_count = 0;
 	for (int i = 0; i < tree_ids_vector.size(); i++) {

@@ -308,8 +308,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	size_t leaf_nodes = 0;
 	size_t active_leaf_nodes = 0;
 	const int index = allocator.allocate();
-
-	if (proc_range.second - proc_range.first > 1 || part_range.second - part_range.first > bucket_size || depth < params.min_level) {
+	bool isleaf = true;
+	const auto nparts = part_range.second - part_range.first;
+	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (depth < params.min_level && nparts > 0)) {
+		isleaf = false;
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -330,7 +332,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			const int xdim = box.longest_dim();
 			double xmax = box.end[xdim];
 			double xmin = box.begin[xdim];
-			double nparts_inv = 1.0 / (part_range.second - part_range.first);
 			part_int mid;
 			double xmid;
 			double parts_above;
@@ -579,9 +580,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.nactive = nactive;
 	node.active_nodes = active_nodes;
 	node.depth = depth;
-	const part_int nparts = part_range.second - part_range.first;
 	const bool global = proc_range.second - proc_range.first > 1;
-	node.leaf = !global && (depth >= params.min_level) && (nparts <= BUCKET_SIZE);
+	node.leaf = isleaf;
 	/*	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
 	 if (node.leaf) {
 	 std::lock_guard<mutex_type> lock(leaf_part_range_mutex);

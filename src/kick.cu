@@ -182,6 +182,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 				g2 = sqr(gx[i], gy[i], gz[i]);
 				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
 				rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
+				if( rung > 4 ) {
+//					PRINT( "%i\n", rung);
+				}
 				max_rung = max(rung, max_rung);
 				write_rungs[snki] = rung;
 				ALWAYS_ASSERT(rung >= 0);
@@ -219,7 +222,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			zmom_tot += mass * vz;
 			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
 			if (my_type != SPH_TYPE || params.glass) {
-				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
+				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2+1e-35f)), params.t0), params.max_dt);
 				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 				max_rung = max(rung, max_rung);
 				if (rung < 0 || rung >= MAX_RUNG) {
@@ -443,13 +446,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									const float R = sqrtf(R2);
-									const float rtot = self.radius + other.radius;
-									if (R < 0.5f - rtot) {
-										R2 = 1.f - (0.5f + rtot) / (0.5f - rtot) * R;
-									}
+									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius),0.f)));
 								}
-
 								const float mind = self.radius + other.radius + hsoft;
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
@@ -551,6 +549,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					Lpos.pop_back();
 					depth--;
 				} else {
+					ALWAYS_ASSERT(self.children[LEFT].index!=-1);
+					ALWAYS_ASSERT(self.children[RIGHT].index!=-1);
 					const int active_left = tree_nodes[self.children[LEFT].index].nactive;
 					const int active_right = tree_nodes[self.children[RIGHT].index].nactive;
 					Lpos.push_back(self.pos);
@@ -570,6 +570,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						phase.push_back(0);
 						self_index.push_back(child.index);
 					} else {
+						ALWAYS_ASSERT(active_left || active_right);
 						const tree_id child = active_left ? self.children[LEFT] : self.children[RIGHT];
 						phase.back() += 2;
 						phase.push_back(0);
@@ -622,13 +623,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 		returns.pop_back();
+		ASSERT(returns.size() == 0);
+		ASSERT(L.size() == 1);
+		ASSERT(Lpos.size() == 0);
+		ASSERT(phase.size() == 0);
+		ASSERT(self_index.size() == 0);
 	}
 	(&lists[bid])->~cuda_lists_type();
-	ASSERT(returns.size() == 0);
-	ASSERT(L.size() == 1);
-	ASSERT(Lpos.size() == 0);
-	ASSERT(phase.size() == 0);
-	ASSERT(self_index.size() == 0);
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
