@@ -430,9 +430,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									if (sqr(fmaxf(0.49f - (self.radius + other.radius), 0.f)) > R2) {
-										R2 = sqr((0.5f - (self.radius + other.radius) - sqrtf(R2) + sqrtf(R2) * (self.radius + other.radius)) / (0.5f - sqrtf(R2)));
-									}
+									R2 = fmaxf(R2, sqr(0.5f - (self.radius + other.radius)));
 								}
 								const bool far1 = (R2 > sqr((sink_bias * self.radius + other.radius) * thetainv + hsoft));     // 5
 								const bool far2 = (R2 > sqr(sink_bias * self.radius * thetainv + other.radius + hsoft));       // 5

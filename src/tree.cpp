@@ -204,8 +204,13 @@ tree_allocator::~tree_allocator() {
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
 	theta = theta_;
 	min_rung = min_rung_;
-	min_level = 12;
-	htime = false;
+	if (get_options().htime) {
+		min_level = 12;
+		htime = true;
+	} else {
+		min_level = 0;
+		htime = false;
+	}
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
@@ -276,7 +281,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	}
 	if (local_root) {
 		leaflist.resize(0);
-		if( params.htime ) {
+		if (params.htime) {
 			part_range = particles_current_range();
 		} else {
 			part_range.first = 0;
@@ -611,7 +616,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	return rc;
 }
 
-HPX_PLAIN_ACTION(tree_reset);
+HPX_PLAIN_ACTION (tree_reset);
 
 void tree_reset() {
 
@@ -643,15 +648,11 @@ void tree_destroy(bool free_tree) {
 	profiler_exit();
 }
 
-
-
-
 void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float h) {
 	nodes[id.index].obox = obox;
 	nodes[id.index].ibox = ibox;
 	nodes[id.index].hsoft_max = h;
 }
-
 
 const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {

@@ -127,10 +127,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	}
 	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
-#ifdef USE_CUDA
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
-		if( self_ptr->local_root) {
+		if (self_ptr->local_root) {
 			const double max_load = self_ptr->node_count * params.node_load + (self_ptr->part_range.second - self_ptr->part_range.first);
 			const double load = self_ptr->active_nodes * params.node_load + self_ptr->nactive;
 #ifndef DM_CON_H_ONLY// 5
@@ -142,26 +141,27 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
 			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
-				cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
+				cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
 			}
 		}
-#ifndef DM_CON_H_ONLY
-		bool eligible = params.gpu && self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local();
-#else
-		auto rng = particles_current_range();
-		size_t parts_max = std::max(std::min( CUDA_KICK_PARTS_MAX, (rng.second - rng.first) / kick_block_count() / 2),BUCKET_SIZE);
-		bool eligible = params.gpu && self_ptr->nparts() <= parts_max && self_ptr->is_local();
-#endif
-		if( eligible ) {
-			if( self_ptr->children[LEFT].index != -1) {
+		bool eligible;
+		if (params.htime) {
+			auto rng = particles_current_range();
+			size_t parts_max = std::max(std::min( CUDA_KICK_PARTS_MAX, (rng.second - rng.first) / kick_block_count() / 2), BUCKET_SIZE);
+			eligible = params.gpu && self_ptr->nparts() <= parts_max && self_ptr->is_local();
+		} else {
+			eligible = params.gpu && self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local();
+		}
+		if (eligible) {
+			if (self_ptr->children[LEFT].index != -1) {
 				const part_int active_left = tree_get_node(self_ptr->children[LEFT])->nactive;
 				const part_int active_right = tree_get_node(self_ptr->children[RIGHT])->nactive;
-				if( active_left == 0 || active_right == 0 ) {
+				if (active_left == 0 || active_right == 0) {
 					eligible = false;
 				}
 			}
 		}
-		if( eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
+		if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			const auto all_local = [](const vector<tree_id>& list) {
 				bool all = true;
 				for( int i = 0; i < list.size(); i++) {
@@ -179,7 +179,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		}
 		thread_left = cuda_workspace != nullptr;
 	}
-#endif
 	kick_return kr;
 	const int glass = get_options().glass;
 //	const simd_float h = params.h;
@@ -267,11 +266,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
-					const simd_float sw = sqr(max(simd_float(0.49) - (self_radius + other_radius), simd_float(0))) > R2;
-					R2 = sw
-							* sqr(
-									(simd_float(0.49) - (self_radius + other_radius) - sqrt(R2) + sqrt(R2) * (self_radius + other_radius))
-											/ (simd_float(0.49) - sqrt(R2))) + (simd_float(1) - sw) * R2;
+					R2 = max(R2, sqr(simd_float(0.5) - (self_radius + other_radius)));
 				}
 				const auto hsoft = max(other_hsoft, my_hsoft);
 				const simd_float far1 = (R2 > sqr((sink_bias * self_radius + other_radius) * thetainv + hsoft));     // 5

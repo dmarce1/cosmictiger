@@ -68,7 +68,6 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 void kick_workspace::to_gpu() {
 	const static bool sph = get_options().sph;
 	const static bool vsoft = get_options().vsoft;
-#ifdef USE_CUDA
 	timer tm;
 	lock1.wait();
 	cuda_set_device();
@@ -252,7 +251,6 @@ void kick_workspace::to_gpu() {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
 	lock2.signal();
-#endif
 }
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) {
