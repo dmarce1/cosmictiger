@@ -343,7 +343,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> 
 	Dfour = 0.0f;
 	D = 0.0f;
 	const auto realsz = econst.nreal();
-	const T zero_mask = r > T(0);
+	const T zero_mask = r > T(7.126366e-04);
 	int icnt = 0;
 	for (int i = 0; i < realsz; i++) {
 		const auto n = econst.real_index(i);
