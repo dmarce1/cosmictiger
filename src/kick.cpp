@@ -428,7 +428,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						}
 					}
 				}
-				kr.pot += m * forces.phi[j];
+				kr.pot += 0.5 * m * forces.phi[j];
 			}
 		}
 		return hpx::make_ready_future(kr);
