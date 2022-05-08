@@ -674,7 +674,8 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	return std::make_pair(kr, sr);
 }
 
-std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, int max_rung, double scale, double tau, double t0, double theta) {
+std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, int max_rung, double scale, double tau, double t0, double theta,
+		energies_t* energies) {
 	timer tm;
 	tm.start();
 	PRINT("domains_begin\n");
@@ -781,6 +782,12 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		PRINT("kick = %e\n", tm.read());
 		if (top) {
 			kr = this_kr;
+			energies->pot = kr.pot / scale;
+			energies->kin = kr.kin / sqr(scale);
+			energies->xmom = kr.xmom / scale;
+			energies->ymom = kr.ymom / scale;
+			energies->zmom = kr.zmom / scale;
+			energies->nmom = kr.nmom / scale;
 		}
 		if (!ascending || top) {
 			max_rung = this_kr.max_rung;
@@ -1032,7 +1039,7 @@ void driver() {
 			}
 			std::pair<kick_return, tree_create_return> tmp;
 			if (get_options().htime) {
-				tmp = kick_step_hierarchical(minrung, max_rung, a, tau, t0, theta);
+				tmp = kick_step_hierarchical(minrung, max_rung, a, tau, t0, theta, &energies);
 			} else {
 				tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			}
@@ -1042,17 +1049,26 @@ void driver() {
 			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (sph & !glass) {
 				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &energies).max_rung);
-				if (minrung <= 0) {
-					const double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
-					if (tau == 0) {
-						energy0 = energy;
-					}
-					const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
-					const double err = (energy - energy0) / norm;
-					FILE* fp = fopen("energy.txt", "at");
-					fprintf(fp, "%e %e %e %e %e %e %e %e\n", tau, a, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
-					fclose(fp);
+			}
+			if (minrung <= 0) {
+				if (tau > 0.0) {
+					const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
+					energies.cosmic += 0.5 * cosmos_dadt(a) * t0 * ene;
 				}
+				double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
+				if (tau == 0) {
+					energy0 = 0.0;
+					energies.cosmic = -energy;
+					energy = 0.0;
+				}
+				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
+				const double err = (energy - energy0) / norm;
+				FILE* fp = fopen("energy.txt", "at");
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
+						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
+				fclose(fp);
+				const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
+				energies.cosmic += 0.5 * cosmos_dadt(a) * t0 * ene;
 			}
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
@@ -1080,10 +1096,6 @@ void driver() {
 			a += 0.5 * (dadt2 - dadt1) * dt;
 			const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
 			const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
-			double ekin0 = 2.0 * (energies.kin + energies.therm) + energies.pot;
-			ekin0 *= (a1);
-			double dekin = ekin0 * (1.0 / a1 - 1.0 / a);
-			energies.cosmic += dekin;
 
 //			PRINT("%e %e\n", a1, a);
 			timer dtm;

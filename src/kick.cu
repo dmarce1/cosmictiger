@@ -111,10 +111,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	float dt;
 	float g2;
 	float phi_tot = 0.0f;
-	float fx_tot = 0.f;
-	float fy_tot = 0.f;
-	float fz_tot = 0.f;
-	float fnorm_tot = 0.f;
+	float kin_tot = 0.f;
+	float xmom_tot = 0.0f;
+	float ymom_tot = 0.0f;
+	float zmom_tot = 0.0f;
+	float nmom_tot = 0.0f;
 	int rung;
 	array<float, NDIM> dx;
 	part_int snki;
@@ -172,6 +173,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 					vz = fmaf(sgn * gz[i], dt, vz);
 				}
 			}
+			kin_tot += 0.5f * mass * sqr(vx, vy, vz);
+			xmom_tot += mass * vx;
+			ymom_tot += mass * vy;
+			zmom_tot += mass * vz;
+			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
 			if (params.descending || params.top) {
 				g2 = sqr(gx[i], gy[i], gz[i]);
 				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
@@ -207,6 +213,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 				}
 			}
 			g2 = sqr(gx[i], gy[i], gz[i]);
+			kin_tot += 0.5f * mass * sqr(vx, vy, vz);
+			xmom_tot += mass * vx;
+			ymom_tot += mass * vy;
+			zmom_tot += mass * vz;
+			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
 			if (my_type != SPH_TYPE || params.glass) {
 				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0), params.max_dt);
 				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
@@ -228,27 +239,25 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
-		phi_tot += mass * phi[i];
-		fx_tot += gx[i];
-		fy_tot += gy[i];
-		fz_tot += gz[i];
-		fnorm_tot += g2;
+		phi_tot += 0.5f * mass * phi[i];
 		flops += 52;
 	}
 	shared_reduce_add(phi_tot);
-	shared_reduce_add(fx_tot);
-	shared_reduce_add(fy_tot);
-	shared_reduce_add(fz_tot);
-	shared_reduce_add(fnorm_tot);
+	shared_reduce_add(xmom_tot);
+	shared_reduce_add(ymom_tot);
+	shared_reduce_add(zmom_tot);
+	shared_reduce_add(nmom_tot);
+	shared_reduce_add(kin_tot);
 	shared_reduce_max(max_rung);
 	shared_reduce_add(flops);
 	if (tid == 0) {
 		return_.max_rung = max(return_.max_rung, max_rung);
 		return_.pot += phi_tot;
-		return_.fx += fx_tot;
-		return_.fy += fy_tot;
-		return_.fz += fz_tot;
-		return_.fnorm += fnorm_tot;
+		return_.xmom += xmom_tot;
+		return_.ymom += ymom_tot;
+		return_.zmom += zmom_tot;
+		return_.nmom += nmom_tot;
+		return_.kin += kin_tot;
 	}
 //	atomicAdd(&kick_time, (double) clock64() - tm);
 	return flops;

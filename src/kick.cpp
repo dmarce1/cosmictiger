@@ -313,7 +313,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, pclist);
 			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, leaflist, params.h);
 		} else {
-			ALWAYS_ASSERT(cplist.size()==0);
+			ALWAYS_ASSERT(cplist.size() == 0);
 			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		}
 	}
@@ -368,6 +368,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 							vz = fmaf(sgn * forces.gz[j], dt, vz);
 						}
 					}
+					kr.kin += 0.5 * m * sqr(vx, vy, vz);
+					kr.xmom += m * vx;
+					kr.ymom += m * vy;
+					kr.zmom += m * vz;
+					kr.nmom += 0.5 * m * sqrt(sqr(vx, vy, vz));
 					if (params.descending || params.top) {
 						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 						const float factor = eta * sqrtf(params.a);
@@ -401,6 +406,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						}
 					}
 					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+					kr.kin += 0.5 * m * sqr(vx, vy, vz);
+					kr.xmom += m * vx;
+					kr.ymom += m * vy;
+					kr.zmom += m * vz;
+					kr.nmom += 0.5 * m * sqrt(sqr(vx, vy, vz));
 					if (type != SPH_TYPE || glass) {
 						const float factor = eta * sqrtf(params.a);
 						dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
@@ -419,10 +429,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 				}
 				kr.pot += m * forces.phi[j];
-				kr.fx += forces.gx[j];
-				kr.fy += forces.gy[j];
-				kr.fz += forces.gz[j];
-				kr.fnorm += g2;
 			}
 		}
 		return hpx::make_ready_future(kr);

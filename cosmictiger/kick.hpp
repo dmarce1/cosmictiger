@@ -102,21 +102,20 @@ struct kick_return {
 	double part_flops;
 	double node_flops;
 	double pot;
-	double fx;
-	double fy;
-	double fz;
-	double fnorm;
+	double kin;
 	double load;
+	double xmom;
+	double ymom;
+	double zmom;
+	double nmom;
 	size_t nactive;CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
 		part_flops = 0.0;
 		node_flops = 0.0;
 		pot = 0.0;
-		fx = 0.0;
-		fy = 0.0;
-		fz = 0.0;
-		fnorm = 0.0;
+		kin = 0.0;
+		xmom = ymom = zmom = nmom = 0.0;
 		nactive = 0;
 		load = 0.0;
 	}
@@ -128,10 +127,11 @@ struct kick_return {
 		part_flops += other.part_flops;
 		node_flops += other.node_flops;
 		pot += other.pot;
-		fx += other.fx;
-		fy += other.fy;
-		fz += other.fz;
-		fnorm += other.fnorm;
+		kin += other.kin;
+		xmom += other.xmom;
+		ymom += other.ymom;
+		zmom += other.zmom;
+		nmom += other.nmom;
 		return *this;
 
 	}
@@ -142,10 +142,11 @@ struct kick_return {
 		arc & part_flops;
 		arc & node_flops;
 		arc & pot;
-		arc & fx;
-		arc & fy;
-		arc & fz;
-		arc & fnorm;
+		arc & kin;
+		arc & xmom;
+		arc & ymom;
+		arc & zmom;
+		arc & nmom;
 		arc & nactive;
 	}
 };
