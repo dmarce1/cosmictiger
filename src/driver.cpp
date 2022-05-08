@@ -1064,7 +1064,7 @@ void driver() {
 				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
-				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau/t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
 						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
 				fclose(fp);
 				const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;

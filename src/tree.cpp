@@ -205,7 +205,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	theta = theta_;
 	min_rung = min_rung_;
 	if (get_options().htime) {
-		min_level = 12;
+		min_level = 9;
 		htime = true;
 	} else {
 		min_level = 0;

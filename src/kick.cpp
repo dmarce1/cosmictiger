@@ -374,7 +374,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.zmom += m * vz;
 					kr.nmom += 0.5 * m * sqrt(sqr(vx, vy, vz));
 					if (params.descending || params.top) {
-						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
+						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
 						const float factor = eta * sqrtf(params.a);
 						const float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
 						rung = params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung);
