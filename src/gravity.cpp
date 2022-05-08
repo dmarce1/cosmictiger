@@ -119,18 +119,27 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
+#ifndef DM_CON_H_ONLY
 			vector<char> type;
 			vector<float> masses;
+#endif
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
+#ifndef DM_CON_H_ONLY
 			masses.resize(nsource);
 			type.resize(nsource);
+#endif
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
+#ifndef DM_CON_H_ONLY
 				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), nullptr, count);
+#else
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, nullptr, count);
+#endif
 				count += tree_ptrs[i]->nparts();
 			}
+#ifndef DM_CON_H_ONLY
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
 					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
@@ -144,6 +153,7 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 			for (int i = count; i < nsource; i++) {
 				masses[i] = 0.0;
 			}
+#endif
 			const auto range = self_ptr->part_range;
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
@@ -160,7 +170,9 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 					Y[XDIM][l] = srcx[j + l].raw();
 					Y[YDIM][l] = srcy[j + l].raw();
 					Y[ZDIM][l] = srcz[j + l].raw();
+#ifndef DM_CON_H_ONLY
 					mass[l] = masses[j + l];
+#endif
 				}
 				array<simd_float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -309,19 +321,26 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
+#ifndef DM_CON_H_ONLY
 			masses.resize(nsource);
 			zetas.resize(nsource);
 			type.resize(nsource);
 			hs.resize(nsource);
+#endif
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
+#ifndef DM_CON_H_ONLY
 				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), vsoft ? zetas.data() : nullptr,
 						count);
+#else
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, nullptr, count);
+#endif
 				if (vsoft) {
 					particles_global_read_softlens(tree_ptrs[i]->global_part_range(), hs.data(), count);
 				}
 				count += tree_ptrs[i]->nparts();
 			}
+#ifndef DM_CON_H_ONLY
 			if (do_sph) {
 				for (int i = 0; i < count; i++) {
 					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
@@ -332,14 +351,17 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 					masses[i] = 1.0;
 				}
 			}
+#endif
 			for (int i = count; i < nsource; i++) {
 				srcx[i] = 0.f;
 				srcy[i] = 0.f;
 				srcz[i] = 0.f;
+#ifndef DM_CON_H_ONLY
 				masses[i] = 0.0f;
 				type[i] = 0;
 				zetas[i] = 0.0;
 				hs[i] = 1.0;
+#endif
 			}
 			const simd_float tiny = 1.0e-15;
 			feenableexcept (FE_DIVBYZERO);
@@ -354,6 +376,7 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 						kk = particles_cat_index(i);
 					}
 					if (active) {
+#ifndef DM_CON_H_ONLY
 						if (this_type == SPH_TYPE) {
 							sink_type = SPH_TYPE;
 						} else {
@@ -366,6 +389,9 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 							sink_hsoft = get_options().hsoft;
 							sink_zeta = simd_float(0);
 						}
+#else
+						sink_hsoft = get_options().hsoft;
+#endif
 						simd_float gx(0.0);
 						simd_float gy(0.0);
 						simd_float gz(0.0);
@@ -377,13 +403,16 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 							const int& count = maxi;
 							const int k = j / SIMD_FLOAT_SIZE;
+#ifndef DM_CON_H_ONLY
 							simd_float mass;
 							simd_float hsoft;
 							simd_float zeta;
+#endif
 							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
 								Y[XDIM][l] = srcx[j + l].raw();
 								Y[YDIM][l] = srcy[j + l].raw();
 								Y[ZDIM][l] = srcz[j + l].raw();
+#ifndef DM_CON_H_ONLY
 								mass[l] = masses[j + l];
 								src_type[l] = type[j + l];
 								if (vsoft) {
@@ -393,15 +422,22 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									hsoft[l] = get_options().hsoft;
 									zeta[l] = 0.0;
 								}
+#endif
 							}
 							array<simd_float, NDIM> dx;
 							for (int dim = 0; dim < NDIM; dim++) {
 								dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
 							}
 							simd_float rinv1 = 0.f, rinv3 = 0.f;
-							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
+							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);
+#ifndef DM_CON_H_ONLY// 5
 							const simd_float near_flags = r2 < max(sqr(sink_hsoft), sqr(hsoft));
+#else
+							const simd_float near_flags = r2 < sqr(sink_hsoft);
+#endif
+#ifndef DM_CON_H_ONLY// 5
 							const simd_int type_i = sink_type;
+#endif
 //							self_flags += simd_float(1) - (r2 > simd_float(0));
 							if (active) {
 								if (near_flags.sum() == 0) {
@@ -409,34 +445,44 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									rinv3 = rinv1 * sqr(rinv1);
 								} else {
 									const auto& h_i = sink_hsoft;
+#ifndef DM_CON_H_ONLY// 5
 									const auto& h_j = hsoft;
 									const auto sw_ij = simd_float(src_type == sink_type);
 									const auto zeta_i = sink_zeta * sw_ij;
 									const auto zeta_j = zeta * sw_ij;
-									const auto hinv_i = simd_float(1) / h_i;
 									const auto hinv_j = simd_float(1) / h_j;
-									const auto h2inv_i = sqr(hinv_i);
 									const auto h2inv_j = sqr(hinv_j);
-									const auto h3inv_i = h2inv_i * hinv_i;
 									const auto h3inv_j = h2inv_j * hinv_j;
 									const auto type_j = src_type;
+#endif
+									const auto hinv_i = simd_float(1) / h_i;
+									const auto h2inv_i = sqr(hinv_i);
+									const auto h3inv_i = h2inv_i * hinv_i;
 									const simd_float r = sqrt(r2);                                                    // 4
 									rinv1 = simd_float(1) / (r + tiny);                                                    // 5
 									const auto q_i = r * hinv_i;
+#ifndef DM_CON_H_ONLY// 5
 									const auto q_j = r * hinv_j;
+#endif
 									rinv3 = kernelFqinv(q_i) * h3inv_i;
+#ifndef DM_CON_H_ONLY// 5
 									rinv3 += kernelFqinv(q_j) * h3inv_j;
 									rinv3 += (q_i < simd_float(1)) * zeta_i * dkernelW_dq(q_i) * h2inv_i * rinv1;
 									rinv3 += (q_j < simd_float(1)) * zeta_j * dkernelW_dq(q_j) * h2inv_j * rinv1;
 									rinv3 *= simd_float(0.5);
+#endif
 									if (min_rung == 0) {
 										rinv1 = kernelPot(q_i) * hinv_i;
+#ifndef DM_CON_H_ONLY// 5
 										rinv1 += kernelPot(q_j) * hinv_j;
 										rinv1 *= simd_float(0.5);
+#endif
 									}
 								}
+#ifndef DM_CON_H_ONLY// 5
 								rinv3 *= mass;
 								rinv1 *= mass;
+#endif
 								gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
 								gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
 								gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
@@ -475,19 +521,25 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 							const int& count = maxi;
 							const int k = j / SIMD_FLOAT_SIZE;
+#ifndef DM_CON_H_ONLY// 5
 							simd_float mass;
+#endif
 							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
 								Y[XDIM][l] = srcx[j + l].raw();
 								Y[YDIM][l] = srcy[j + l].raw();
 								Y[ZDIM][l] = srcz[j + l].raw();
+#ifndef DM_CON_H_ONLY// 5
 								mass[l] = masses[j + l];
+#endif
 							}
 							array<simd_float, NDIM> dx0;
 							for (int dim = 0; dim < NDIM; dim++) {
 								dx0[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
 							}
 							const simd_float R2 = sqr(dx0[XDIM], dx0[YDIM], dx0[ZDIM]);
+#ifndef DM_CON_H_ONLY// 5
 							const auto m_j = mass;
+#endif
 							const auto r0mask = simd_float(1) - (R2 > 0.0f);
 							const auto r1mask = simd_float(1) - r0mask;
 							for (int xi = -4; xi <= +4; xi++) {
@@ -545,10 +597,12 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 							fx += dx0[XDIM] * r3inv * r1mask;
 							fy += dx0[YDIM] * r3inv * r1mask;
 							fz += dx0[ZDIM] * r3inv * r1mask;
+#ifndef DM_CON_H_ONLY// 5
 							pot *= m_j;
 							fx *= m_j;
 							fy *= m_j;
 							fz *= m_j;
+#endif
 						}
 						const int l = i - range.first;
 						f.gx[l] += fx.sum();

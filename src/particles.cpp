@@ -75,7 +75,6 @@ static part_int rung_begin;
 static part_int rung_end;
 static std::vector<part_int> rung_begins;
 static std::vector<part_int> rung_ends;
-static int current_minrung;
 
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
@@ -175,16 +174,45 @@ HPX_PLAIN_ACTION (particles_get_sample);
  };
  */
 
+HPX_PLAIN_ACTION (particles_pop_rungs);
+HPX_PLAIN_ACTION (particles_push_rungs);
+HPX_PLAIN_ACTION (particles_active_pct);
+
+double particles_active_pct() {
+	vector<hpx::future<double>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_active_pct_action>(c));
+	}
+	double num_active = rung_end - rung_begin;
+	for (auto& f : futs) {
+		num_active += f.get();
+	}
+	if (hpx_rank() == 0) {
+		num_active /= pow(get_options().parts_dim, NDIM);
+	}
+	return num_active;
+}
+
 void particles_pop_rungs() {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_pop_rungs_action>(c));
+	}
 	rung_begin = rung_begins.back();
 	rung_begins.pop_back();
 	rung_end = rung_ends.back();
 	rung_ends.pop_back();
+	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void particles_push_rungs() {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_push_rungs_action>(c));
+	}
 	rung_begins.push_back(rung_begin);
 	rung_ends.push_back(rung_end);
+	hpx::wait_all(futs.begin(), futs.end());
 }
 
 struct line_id_type {
@@ -889,7 +917,6 @@ void particles_resize(part_int sz) {
 	}
 	int oldsz = size;
 	size = sz;
-	current_minrung = 0;
 	if (get_options().sph) {
 		for (int i = oldsz; i < sz; i++) {
 			particles_cat_index(i) = NO_INDEX;
@@ -1038,7 +1065,6 @@ void particles_sort_by_rung(int minrung) {
 		futs.push_back(hpx::async<particles_sort_by_rung_action>(c, minrung));
 	}
 	if (minrung == 0) {
-		current_minrung = 0;
 		rung_begin = 0;
 		rung_end = particles_size();
 	} else {
@@ -1090,7 +1116,6 @@ void particles_sort_by_rung(int minrung) {
 			}
 			lo++;
 		}
-		current_minrung = minrung;
 		rung_begin = hi;
 		rung_end = particles_size();
 	}
@@ -1242,6 +1267,17 @@ void particles_load(FILE* fp) {
 		FREAD(&particles_cat_index(0), sizeof(part_int), particles_size(), fp);
 		sph_particles_load(fp);
 	}
+	if (get_options().htime) {
+		int size;
+		FREAD(&size, sizeof(int), 1, fp);
+		rung_begins.resize(size);
+		rung_ends.resize(size);
+		FREAD(&rung_begin, sizeof(int), 1, fp);
+		FREAD(&rung_end, sizeof(int), 1, fp);
+		FREAD(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
+		FREAD(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
+	}
+
 }
 
 void particles_save(FILE* fp) {
@@ -1273,6 +1309,14 @@ void particles_save(FILE* fp) {
 		fwrite(&particles_type(0), sizeof(char), particles_size(), fp);
 		fwrite(&particles_cat_index(0), sizeof(part_int), particles_size(), fp);
 		sph_particles_save(fp);
+	}
+	if (get_options().htime) {
+		int size = rung_begins.size();
+		fwrite(&size, sizeof(int), 1, fp);
+		fwrite(&rung_begin, sizeof(int), 1, fp);
+		fwrite(&rung_end, sizeof(int), 1, fp);
+		fwrite(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
+		fwrite(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
 	}
 
 }

@@ -27,6 +27,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/timer.hpp>
 
 #include <shared_mutex>
 #include <unordered_map>
@@ -203,7 +204,8 @@ tree_allocator::~tree_allocator() {
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
 	theta = theta_;
 	min_rung = min_rung_;
-	min_level = 0;
+	min_level = 12;
+	htime = false;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
@@ -272,22 +274,14 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (depth == 0) {
 		tree_allocate_nodes();
 	}
-#ifdef USE_CUDA
-	cudaStream_t stream;
-#endif
 	if (local_root) {
 		leaflist.resize(0);
 		if( params.htime ) {
 			part_range = particles_current_range();
-			PRINT( "Sorting %i %i\n", part_range.first, part_range.second);
 		} else {
 			part_range.first = 0;
 			part_range.second = particles_size();
 		}
-#ifdef USE_CUDA
-		CUDA_CHECK(cudaStreamCreate(&stream));
-		CUDA_CHECK(cudaMemPrefetchAsync(&particles_rung(0), particles_size() * sizeof(char), cudaCpuDeviceId, stream));
-#endif
 	}
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM> x;
@@ -609,11 +603,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		if (sph) {
 			particles_resolve_with_sph_particles();
 		}
-#ifdef USE_CUDA
-		CUDA_CHECK(cudaStreamSynchronize(stream));
-		CUDA_CHECK(cudaStreamDestroy(stream));
-		particles_memadvise_gpu();
-#endif
 	}
 	if (depth == 0) {
 		PRINT("total nodes = %i\n", rc.node_count);
@@ -631,7 +620,6 @@ void tree_reset() {
 	for (const auto& c : children) {
 		futs.push_back(hpx::async<tree_reset_action>(HPX_PRIORITY_HI, c));
 	}
-	nodes.resize(0);
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());

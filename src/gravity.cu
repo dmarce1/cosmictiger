@@ -70,7 +70,9 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
+#ifndef DM_CON_H_ONLY
 	auto& src_type = shmem.src.type;
+#endif
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -105,7 +107,9 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
+#ifndef DM_CON_H_ONLY
 					src_type[i1] = main_src_type[i2];
+#endif
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -123,7 +127,11 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
+#ifndef DM_CON_H_ONLY
 				const float mass = !sph ? 1.f : (src_type[j] != DARK_MATTER_TYPE ? sph_mass : dm_mass);
+#else
+				constexpr float mass = 1.f;
+#endif
 				flops += 3;
 				expansion<float> D;
 				flops += greens_function(D, dx);
@@ -242,7 +250,9 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
+#ifndef DM_CON_H_ONLY
 	auto& src_type = shmem.src.type;
+#endif
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -277,7 +287,9 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
+#ifndef DM_CON_H_ONLY
 					src_type[i1] = main_src_type[i2];
+#endif
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -295,7 +307,11 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
+#ifndef DM_CON_H_ONLY
 				const float mass = !sph ? 1.f : (src_type[j] != DARK_MATTER_TYPE ? sph_mass : dm_mass);
+#else
+				constexpr float mass = 1.f;
+#endif
 				flops += 3;
 				expansion<float> D;
 				flops += ewald_greens_function(D, dx);
@@ -381,21 +397,27 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const auto& sink_y = shmem.sink_y;
 	const auto& sink_z = shmem.sink_z;
 	const bool vsoft = data.vsoft;
+#ifndef DM_CON_H_ONLY
 	const auto& sink_h = shmem.sink_h;
 	const auto& sink_zeta = shmem.sink_zeta;
 	const auto& sink_type = shmem.sink_type;
+#endif
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
+#ifndef DM_CON_H_ONLY
 	const auto* main_src_h = data.h;
 	const auto* main_src_zeta = data.zeta;
 	const auto* main_src_type = data.type;
+#endif
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
+#ifndef DM_CON_H_ONLY
 	auto& src_h = shmem.src.h;
 	auto& src_zeta = shmem.src.zeta;
 	auto& src_type = shmem.src.type;
+#endif
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
 	float hinv = 1.f / (h);
@@ -431,6 +453,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
+#ifndef DM_CON_H_ONLY
 					src_type[i1] = main_src_type[i2];
 					if (vsoft) {
 						src_h[i1] = main_src_h[i2];
@@ -439,6 +462,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						src_h[i1] = h;
 						src_zeta[i1] = 0.f;
 					}
+#endif
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -465,42 +489,61 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
+#ifndef DM_CON_H_ONLY
 				const float& h_i = sink_h[k];
 				const auto& type_i = sink_type[k];
+#else
+				const float h_i = h;
+#endif
 				const float hinv_i = 1.f / h_i;
 				const float h2inv_i = sqr(hinv_i);
 				const float h3inv_i = h2inv_i * hinv_i;
+				const float h2 = sqr(h_i);
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1
 					dx2 = distance(sink_z[k], src_z[j]); // 1
+#ifndef DM_CON_H_ONLY
 					const auto type_j = src_type[j];
 					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
+#else
+					constexpr float m_j = 1.f;
+#endif
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
+#ifndef DM_CON_H_ONLY
 					const float& h_j = src_h[j];
 					const float h2 = sqr(fmaxf(h_i, h_j));
+#endif
 					if (r2 > h2) {
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
+#ifndef DM_CON_H_ONLY
 						const float& zeta_j = (type_i == type_j) ? src_zeta[j] : 0.f;
 						const float& zeta_i = (type_i == type_j) ? sink_zeta[k] : 0.f;
 						const float hinv_j = 1.0f / h_j;
 						const float h2inv_j = sqr(hinv_j);
 						const float h3inv_j = h2inv_j * hinv_j;
+#endif
 						const float r = sqrtf(r2);
 						r1inv = 1.f / (r + 1e-30f);
 						const float q_i = r * hinv_i;
+#ifndef DM_CON_H_ONLY
 						const float q_j = r * hinv_j;
+#endif
 						r3inv = kernelFqinv(q_i) * h3inv_i;
+#ifndef DM_CON_H_ONLY
 						r3inv += kernelFqinv(q_j) * h3inv_j;
 						float fc = (q_i < 1.f) * zeta_i * dkernelW_dq(q_i) * h2inv_i * r1inv;
 						fc += (q_j < 1.f) * zeta_j * dkernelW_dq(q_j) * h2inv_j * r1inv;
 						r3inv = 0.5f * (r3inv + fc);
+#endif
 						if (do_phi) {
 							r1inv = kernelPot(q_i) * hinv_i;
+#ifndef DM_CON_H_ONLY
 							r1inv += kernelPot(q_j) * hinv_j;
 							r1inv *= 0.5f;
+#endif
 						}
 					}
 					r3inv *= m_j;
@@ -548,7 +591,9 @@ int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, con
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
+#ifndef DM_CON_H_ONLY
 	auto& src_type = shmem.src.type;
+#endif
 	const auto* tree_nodes = data.tree_nodes;
 	int part_index;
 	int nnear = 0;
@@ -581,7 +626,9 @@ int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, con
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
+#ifndef DM_CON_H_ONLY
 					src_type[i1] = main_src_type[i2];
+#endif
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -610,8 +657,12 @@ int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, con
 					const float Y = distance(sink_y[k], src_y[j]); // 1
 					const float Z = distance(sink_z[k], src_z[j]); // 1
 					const float R2 = sqr(X, Y, Z);
+#ifndef DM_CON_H_ONLY
 					const float type_j = src_type[j];
 					const float m_j = sph ? (type_j != DARK_MATTER_TYPE ? sph_mass : dm_mass) : 1.f;
+#else
+					constexpr float m_j = 1.f;
+#endif
 					if (R2 == 0.f) {
 						pot += 2.8372975f;
 					} else {

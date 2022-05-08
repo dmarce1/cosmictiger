@@ -81,9 +81,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
+#ifndef DM_CON_H_ONLY
 	auto* softlens = data.h_snk;
+#endif
 	auto* sph_index = data.cat_index;
+#ifndef DM_CON_H_ONLY
 	auto* type = data.type_snk;
+#endif
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
@@ -124,11 +128,15 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		L2 = L2P(L, dx, params.min_rung == 0);
 		int j = NO_INDEX;
 		char my_type = DARK_MATTER_TYPE;
+#ifndef DM_CON_H_ONLY
 		if (sph) {
 			j = sph_index[snki];
 			my_type = type[snki];
 		}
 		const float mass = sph ? (my_type == DARK_MATTER_TYPE ? dm_mass : sph_mass) : 1.0f;
+#else
+		constexpr float mass = 1.f;
+#endif
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
@@ -147,9 +155,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vy = vel_y[snki];
 		vz = vel_z[snki];
 		float hsoft = params.h;
+#ifndef DM_CON_H_ONLY
 		if (vsoft) {
 			hsoft = softlens[snki];
 		}
+#endif
 		if (params.htime) {
 			ALWAYS_ASSERT(!sph);
 			float sgn = params.top ? 1.f : -1.f;
@@ -163,7 +173,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			}
 			if (params.descending || params.top) {
 				g2 = sqr(gx[i], gy[i], gz[i]);
-				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), 0.5f * params.t0);
+				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
 				rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
 				max_rung = max(rung, max_rung);
 				write_rungs[snki] = rung;
@@ -270,9 +280,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& sink_x = shmem.sink_x;
 	auto& sink_y = shmem.sink_y;
 	auto& sink_z = shmem.sink_z;
+#ifndef DM_CON_H_ONLY
 	auto& sink_h = shmem.sink_h;
 	auto& sink_zeta = shmem.sink_zeta;
 	auto& sink_type = shmem.sink_type;
+#endif
 	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
@@ -286,9 +298,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
+#ifndef DM_CON_H_ONLY
 	auto* src_h = data.h;
 	auto* src_zeta = data.zeta;
 	auto* src_type = data.type;
+#endif
 	int index;
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -362,6 +376,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							sink_x[l] = src_x[srci];
 							sink_y[l] = src_y[srci];
 							sink_z[l] = src_z[srci];
+#ifndef DM_CON_H_ONLY
 							if (vsoft) {
 								sink_h[l] = src_h[srci];
 								sink_zeta[l] = src_zeta[srci];
@@ -370,6 +385,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								sink_zeta[l] = 0.f;
 							}
 							sink_type[l] = src_type[srci];
+#endif
 						}
 						nactive += total;
 						__syncwarp();
@@ -710,16 +726,20 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	cuda_kick_data data;
 	data.source_size = part_count;
 	data.tree_size = ntrees;
+#ifndef DM_CON_H_ONLY
 	data.cat_index_snk = &particles_cat_index(0);
+#endif
 	data.sink_size = particles_size();
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
+#ifndef DM_CON_H_ONLY
 	data.h = dev_h;
 	data.divv_snk = &particles_divv(0);
 	data.h_snk = &particles_softlen(0);
 	data.zeta = dev_zeta;
 	data.type = dev_type;
+#endif
 	data.sph = do_sph;
 	data.vsoft = get_options().vsoft;
 	data.x_snk = &particles_pos(XDIM, 0);
@@ -727,7 +747,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.z_snk = &particles_pos(ZDIM, 0);
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
+#ifndef DM_CON_H_ONLY
 		data.type_snk = &particles_type(0);
+#endif
 		data.sph_gx = &sph_particles_gforce(XDIM, 0);
 		data.sph_gy = &sph_particles_gforce(YDIM, 0);
 		data.sph_gz = &sph_particles_gforce(ZDIM, 0);

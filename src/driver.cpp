@@ -707,15 +707,16 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 			top = false;
 		}
 		if (ascending) {
-			PRINT("Ascending  rung %i\n", levels[li]);
+			PRINT("ASCENDING  rung %i\n", levels[li]);
 		} else if (top) {
-			PRINT("At top     rung %i\n", levels[li]);
+			PRINT("AT TOP     rung %i\n", levels[li]);
 		} else if (!ascending) {
-			PRINT("Descending rung %i\n", levels[li]);
+			PRINT("DESCENDING rung %i\n", levels[li]);
 		}
 		if (!ascending && !top) {
 			particles_push_rungs();
 		}
+
 		if (!ascending) {
 			particles_sort_by_rung(levels[li]);
 		}
