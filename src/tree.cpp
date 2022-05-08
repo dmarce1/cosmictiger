@@ -205,7 +205,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	theta = theta_;
 	min_rung = min_rung_;
 	if (get_options().htime) {
-		min_level = 9;
+		min_level = 16;
 		htime = true;
 	} else {
 		min_level = 0;
@@ -333,21 +333,23 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double nparts_inv = 1.0 / (part_range.second - part_range.first);
 			part_int mid;
 			double xmid;
-			double error;
 			double parts_above;
 			double parts_below;
-			//	do {
-			xmid = 0.5 * (xmax + xmin);
-			mid = particles_sort(part_range, xmid, xdim);
-			parts_above = part_range.second - mid;
-			parts_below = mid - part_range.first;
-			error = fabs(parts_above - parts_below) * nparts_inv;
-			if (parts_above > parts_below) {
-				xmin = xmid;
-			} else {
-				xmax = xmid;
-			}
-			//	} while (error > 0.5);
+			size_t dif = 0;
+			size_t last_dif;
+	//		do {
+				last_dif = dif;
+				xmid = 0.5 * (xmax + xmin);
+				mid = particles_sort(part_range, xmid, xdim);
+				parts_above = part_range.second - mid;
+				parts_below = mid - part_range.first;
+				dif = parts_above - parts_below;
+				if (parts_above > parts_below) {
+					xmin = xmid;
+				} else {
+					xmax = xmid;
+				}
+	//		} while ((dif > 1 || dif < -1) && dif != last_dif);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;

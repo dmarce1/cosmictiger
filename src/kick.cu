@@ -219,7 +219,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			zmom_tot += mass * vz;
 			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
 			if (my_type != SPH_TYPE || params.glass) {
-				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2+1e-35f)), params.t0), params.max_dt);
+				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
 				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 				max_rung = max(rung, max_rung);
 				if (rung < 0 || rung >= MAX_RUNG) {
@@ -443,11 +443,17 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, sqr(0.5f - (self.radius + other.radius)));
+									const float R = sqrtf(R2);
+									const float rtot = self.radius + other.radius;
+									if (R < 0.5f - rtot) {
+										R2 = 1.f - (0.5f + rtot) / (0.5f - rtot) * R;
+									}
 								}
-								const float dcc = (self.radius + other.radius) * thetainv + hsoft;
-								const float dcp = (self.radius * thetainv + other.radius) + hsoft;
-								const float dpc = (self.radius + other.radius * thetainv) + hsoft;
+
+								const float mind = self.radius + other.radius + hsoft;
+								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
+								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
+								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
 								const bool far = R2 > sqr(dcc);
 								cc = far;
 								if (!cc && other.leaf && self.leaf) {

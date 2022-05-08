@@ -270,12 +270,18 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
-					R2 = max(R2, sqr(simd_float(0.5) - (self_radius + other_radius)));
+					auto R = sqrt(R2);
+					const auto rtot = self_radius + other_radius;
+					const auto sw = (R < simd_float(0.5f) - rtot);
+					R2 = sw * (simd_float(1.f) - (simd_float(0.5f) + rtot) / (simd_float(0.5f) - rtot)) * R;
+					R2 += (simd_float(1) - sw) * R;
+					R2 = sqr(R);
 				}
 				const auto hsoft = max(other_hsoft, my_hsoft);
-				const simd_float dcc = (self_radius + other_radius) * thetainv + hsoft;
-				const simd_float dcp = (thetainv * self_radius + other_radius) + hsoft;
-				const simd_float dpc = (self_radius + other_radius * thetainv) + hsoft;
+				const auto mind = self_radius + other_radius + hsoft;
+				const simd_float dcc = max((self_radius + other_radius) * thetainv, mind);
+				const simd_float dcp = max((thetainv * self_radius + other_radius), mind);
+				const simd_float dpc = max((self_radius + other_radius * thetainv), mind);
 				const simd_float cc = R2 > sqr(dcc);
 				simd_float pc, cp;
 				cp = simd_float(0);
@@ -372,15 +378,16 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.xmom += m * vx;
 					kr.ymom += m * vy;
 					kr.zmom += m * vz;
-					kr.nmom += 0.5 * m * sqrt(sqr(vx, vy, vz));
+					kr.nmom += m * sqrt(sqr(vx, vy, vz));
 					if (params.descending || params.top) {
 						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
 						const float factor = eta * sqrtf(params.a);
-						const float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
+						float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
 						rung = params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung);
 						kr.max_rung = std::max(rung, kr.max_rung);
 						ALWAYS_ASSERT(rung >= 0);
 						ALWAYS_ASSERT(rung < MAX_RUNG);
+						dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 						vx = fmaf(sgn * forces.gx[j], dt, vx);
 						vy = fmaf(sgn * forces.gy[j], dt, vy);
 						vz = fmaf(sgn * forces.gz[j], dt, vz);
@@ -410,7 +417,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.xmom += m * vx;
 					kr.ymom += m * vy;
 					kr.zmom += m * vz;
-					kr.nmom += 0.5 * m * sqrt(sqr(vx, vy, vz));
+					kr.nmom += m * sqrt(sqr(vx, vy, vz));
 					if (type != SPH_TYPE || glass) {
 						const float factor = eta * sqrtf(params.a);
 						dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
