@@ -133,9 +133,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if( self_ptr->local_root) {
 			const double max_load = self_ptr->node_count * params.node_load + (self_ptr->part_range.second - self_ptr->part_range.first);
 			const double load = self_ptr->active_nodes * params.node_load + self_ptr->nactive;
+#ifndef DM_CON_H_ONLY// 5
 			if( load / max_load < GPU_MIN_LOAD) {
 				params.gpu = false;
 			}
+#endif
 		}
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
@@ -143,7 +145,13 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 			}
 		}
+#ifndef DM_CON_H_ONLY
 		bool eligible = params.gpu && self_ptr->nparts() <= CUDA_KICK_PARTS_MAX && self_ptr->is_local();
+#else
+		auto rng = particles_current_range();
+		size_t parts_max = std::max(std::min( CUDA_KICK_PARTS_MAX, (rng.second - rng.first) / kick_block_count() / 2),BUCKET_SIZE);
+		bool eligible = params.gpu && self_ptr->nparts() <= parts_max && self_ptr->is_local();
+#endif
 		if( eligible ) {
 			if( self_ptr->children[LEFT].index != -1) {
 				const part_int active_left = tree_get_node(self_ptr->children[LEFT])->nactive;

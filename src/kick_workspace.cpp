@@ -227,13 +227,15 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(dev_type, host_type.data(), sizeof(char) * part_count, cudaMemcpyHostToDevice, stream));
 #endif
 	hpx::wait_all(futs.begin(), futs.end());
+	tm.reset();
+	tm.start();
 #ifdef DM_CON_H_ONLY
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, nullptr, nullptr, nullptr, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 #else
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_type, dev_h, dev_zeta, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 #endif
+	tm.stop();
 	cuda_end_stream(stream);
-//	PRINT("To GPU Done %i\n", hpx_rank());
 
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
