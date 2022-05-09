@@ -60,7 +60,7 @@ inline float pressure(float A, float rho, float gamma) {
 #else
 __device__
 inline float pressure(float eint, float rho, float gamma) {
-	return (gamma-1.0f)*eint*rho;
+	return (gamma - 1.0f) * eint * rho;
 }
 #endif
 
@@ -225,10 +225,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 #ifdef ENTROPY
 				const float eint = A_i * powf(rho_i, gamma0 - 1.f) / (gamma0 - 1.f);
 				const float de_dt0 = A_i / eint;	// 12
-				const float c_i = sqrtf(gamma0 * powf(A_i, 1.0f / gamma0) * powf(pre_i, gamma0 - 1.f) / hfrac_i);	// 22
+				const float c_i = sqrtf(gamma0 * powf(A_i, 1.0f / gamma0) * powf(pre_i, gamma0 - 1.f) / hfrac_i);// 22
 #else
 				const float de_dt0 = 1.f;	// 12
-				const float c_i = sqrtf(gamma0 * (gamma0 - 1.f) * eint_i);// 22
+				const float c_i = sqrtf(gamma0 * (gamma0 - 1.f) * eint_i);	// 22
 #endif
 				flops += 55;
 				float ax = 0.f;
@@ -344,7 +344,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float q_i = r * hinv_i;																// 1
 							const float q_j = r * hinv_j;																// 1
 #ifdef ENTROPY
-							const float c_j = sqrtf(gamma0 * powf(A_j, 1.0f / gamma0) * powf(pre_j, gamma0 - 1.f)); //23
+									const float c_j = sqrtf(gamma0 * powf(A_j, 1.0f / gamma0) * powf(pre_j, gamma0 - 1.f)); //23
 #else
 							const float c_j = sqrtf(gamma0 * (gamma0 - 1.f) * eint_j); //23
 #endif
@@ -406,7 +406,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							az -= pi_ij * dWdr_z_ij;																// 2
 							const float vdW_ij = fmaf(vx0_ij, dWdr_x_ij, fmaf(vy0_ij, dWdr_y_ij, vz0_ij * dWdr_z_ij));														// 5
 							const float dt = rung_dt[rung_i] * 0.5f * params.t0;
-				//			const float adW_ij = fmaf(adot * x_ij, dWdr_x_ij, fmaf(adot * y_ij, dWdr_y_ij, adot * z_ij * dWdr_z_ij));
+							//			const float adW_ij = fmaf(adot * x_ij, dWdr_x_ij, fmaf(adot * y_ij, dWdr_y_ij, adot * z_ij * dWdr_z_ij));
 							de_dt2 = fmaf(de_dt0, 0.5f * pi_ij * (vdW_ij - adot), de_dt2);                     // 4
 							visc = fmaf(0.5f, -pi_ij * adot * dt, visc);                     // 4
 #ifndef ENTROPY
@@ -444,8 +444,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 									dif_max = fabs(A0_j - A_i) / fmaxf(A0_j, A_i);
 									de_dt1 -= D_ij * (A_i - A0_j); // 16;
 #else
-											dif_max = fabs(eint_j - eint_i) / fmaxf(eint_j, eint_i);
-											de_dt1 -= D_ij * (eint_i - eint_j); // 16;
+									dif_max = fabs(eint_j - eint_i) / fmaxf(eint_j, eint_i);
+									de_dt1 -= D_ij * (eint_i - eint_j); // 16;
 #endif
 									if (params.stars) {
 										dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
@@ -565,7 +565,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float h_i = data.rec2_snk[snki].h;
 						const float dloghdt = fabsf(div_v - 3.f * params.adot * ainv) / (3.f + dlogsmoothX_dlogh(h_i, params.hmin, params.hmax));           // 5
 						const float dtinv_divv = params.a * (dloghdt);
-						const float dt_divv = params.cfl * params.a / (dtinv_divv + 1e-33f);                                 // 5
+#ifndef ENTROPY
+						const float dtinv_eint = (1.01f * params.cfl) * params.a * fmaxf(-de_dt2 - de_dt1, 0.f) / (eint_i + 1e-37f);           // 5
+#endif
 						float dtinv_diff = 0.0f;
 						if (params.diffusion) {
 							dtinv_diff = params.a * Dd * (1.0f / 3.0f);
@@ -573,6 +575,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						const float a2 = sqr(ax, ay, az);											// 5
 						float dtinv_acc = sqrtf(sqrtf(a2) * hinv_i) * params.a * params.cfl / (data.eta * sqrtf(params.a));	// 11
 						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_divv);							// 1
+#ifndef ENTROPY
+						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_eint);							// 1
+#endif
 						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_cfl + dtinv_visc);							// 1
 						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_diff);							// 1
 						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_acc);							// 1

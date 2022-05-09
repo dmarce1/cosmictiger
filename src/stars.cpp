@@ -142,7 +142,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 #ifdef ENTROPY
 												sph_particles_entr(i) = 0.0;
 #else
-									//			sph_particles_eint(i) = 0.0;
+												sph_particles_eint(i) = 0.0;
 #endif
 											}
 										}
