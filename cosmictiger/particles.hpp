@@ -362,6 +362,7 @@ struct energies_t {
 	double therm;
 	double heating;
 	double cosmic;
+	double visc;
 	double xmom;
 	double ymom;
 	double zmom;
@@ -369,12 +370,14 @@ struct energies_t {
 	energies_t() {
 		cosmic = heating = pot = kin = therm = 0.f;
 		xmom = ymom = zmom = nmom = 0.0;
+		visc = 0.0;
 	}
 	energies_t& operator+=(const energies_t& other) {
 		pot += other.pot;
 		kin += other.kin;
 		therm += other.therm;
 		heating += other.heating;
+		visc += other.visc;
 		cosmic += other.cosmic;
 		xmom += other.xmom;
 		ymom += other.ymom;
@@ -390,6 +393,7 @@ struct energies_t {
 		arc & nmom;
 		arc & pot;
 		arc & kin;
+		arc & visc;
 		arc & therm;
 		arc & heating;
 		arc & cosmic;

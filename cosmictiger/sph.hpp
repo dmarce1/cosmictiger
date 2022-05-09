@@ -126,6 +126,7 @@ struct sph_tree_neighbor_params {
 struct sph_run_return {
 	float hmin;
 	float hmax;
+	float visc;
 	double flops;
 	int max_rung_hydro;
 	int max_rung_grav;
@@ -154,6 +155,7 @@ struct sph_run_return {
 		max_rung_grav = 0;
 		max_rung = 0;
 		max_vsig = 0.0;
+		visc = 0.0;
 		etherm = vol = ekin = momx = momy = momz = 0.0;
 		dtinv_cfl = 0.0f;
 		dtinv_visc = 0.0f;
@@ -201,6 +203,7 @@ struct sph_run_return {
 		dtinv_cond = std::max(dtinv_cond, other.dtinv_cond);
 		dtinv_divv = std::max(dtinv_divv, other.dtinv_divv);
 		dtinv_omega = std::max(dtinv_omega, other.dtinv_omega);
+		visc += other.visc;
 		ekin += other.ekin;
 		momx += other.momx;
 		momy += other.momy;

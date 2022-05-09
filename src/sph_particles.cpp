@@ -159,7 +159,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 				const auto rung2 = sph_particles_rung(i);
 				const float dt2 = 0.5f * t0 / (1<<rung2);
 				if( phase == 0 ) {
-					if( rung2 >= minrung && !sph_particles_isstar(i)) {
+					if( rung2 >= minrung ) {
 						for( int dim =0; dim < NDIM; dim++) {
 							sph_particles_dvel0(dim,i) = sph_particles_dvel(dim,i);
 						}
@@ -182,7 +182,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 #endif
 					}
 				} else if( phase == 1 ) {
-					if( rung2 >= minrung && !sph_particles_isstar(i)) {
+					if( rung2 >= minrung ) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
 						}
@@ -213,7 +213,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 #endif
 					}
 				} else if( phase == 2 ) {
-					if( rung2 >= minrung && !sph_particles_isstar(i)) {
+					if( rung2 >= minrung ) {
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}

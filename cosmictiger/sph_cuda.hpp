@@ -139,6 +139,7 @@ struct sph_reduction {
 	int max_rung_hydro;
 	int max_rung_grav;
 	int max_rung;
+	float visc;
 	float dtinv_cfl;
 	float dtinv_visc;
 	float dtinv_diff;

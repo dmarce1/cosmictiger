@@ -1003,7 +1003,7 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaFree(cuda_data.trees));
 	CUDA_CHECK(cudaFree(cuda_data.selfs));
 	CUDA_CHECK(cudaFree(cuda_data.neighbors));
-
+	PRINT( "%e\n", rc.visc);
 	return rc;
 }
 

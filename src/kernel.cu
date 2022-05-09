@@ -54,8 +54,8 @@ void kernel_adjust_options(options& opts) {
 #ifdef KERNEL_CUBIC_SPLINE
 	opts.cfl = 0.20;
 	opts.eta = 0.17;
-	opts.gneighbor_number = 60;
-	opts.sneighbor_number = 60;
+	opts.gneighbor_number = 57;
+	opts.sneighbor_number = 57;
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
 	opts.cfl = 0.16;

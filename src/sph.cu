@@ -38,6 +38,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	reduce->dtinv_cfl = 0.f;
 	reduce->dtinv_visc = 0.f;
 	reduce->dtinv_omega = 0.f;
+	reduce->visc = 0.f;
 	static int prehydro1_nblocks;
 	static int prehydro2_nblocks;
 	static int aux_nblocks;
@@ -104,7 +105,6 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 	case SPH_RUN_RUNGS: {
 		sph_cuda_rungs<<<hydro_nblocks, RUNGS_BLOCK_SIZE,0,stream>>>(params,data,reduce);
 		cuda_stream_synchronize(stream);
-		auto gflops = reduce->flops / tm.read() / (1024.0*1024*1024);
 		rc.max_vsig = reduce->vsig_max;
 		rc.max_rung_grav = reduce->max_rung_grav;
 		rc.max_rung_hydro = reduce->max_rung_hydro;
@@ -124,6 +124,7 @@ sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaS
 		rc.dtinv_visc = reduce->dtinv_visc;
 		rc.dtinv_diff = reduce->dtinv_diff;
 		rc.dtinv_cond = reduce->dtinv_cond;
+		rc.visc = reduce->visc;
 	}
 	break;
 }

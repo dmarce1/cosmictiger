@@ -334,6 +334,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
+	PRINT( "VISC = %e\n", kr.visc);
+	energies->visc -= kr.visc / sqr(scale);
 	tm.stop();
 	max_rung = 0;
 	if (verbose)
@@ -420,7 +422,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 
 	bool found_stars = false;
-	if (stars && minrung <= 1) {
+	if (stars && minrung <= 1 ) {
 		//	sph_particles_entropy_to_energy();
 		double eloss = 0.0;
 		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
@@ -485,6 +487,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
+	energies->visc -= kr.visc / sqr(scale);
 	dtinv_cfl = kr.dtinv_cfl;
 	dtinv_divv = kr.dtinv_divv;
 	dtinv_visc = kr.dtinv_visc;
@@ -1056,19 +1059,20 @@ void driver() {
 					const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
 					energies.cosmic += 0.5 * cosmos_dadt(a) * t0 * ene;
 				}
-				double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
+				double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic + energies.visc;;
 				if (tau == 0) {
 					energy0 = 0.0;
 					energies.cosmic = -energy;
 					energy = 0.0;
 				}
-				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
+				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + fabsf(energies.cosmic)+ fabsf(energies.visc);
+				PRINT( "%e\n", norm);
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
-				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau/t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
-						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom, energies.ymom, energies.zmom, energies.nmom, energies.pot,
+						energies.kin, energies.therm, energies.heating, energies.visc, energies.cosmic, err);
 				fclose(fp);
-				const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
+				const double ene = 2.0 * (energies.kin + energies.therm ) + energies.pot;
 				energies.cosmic += 0.5 * cosmos_dadt(a) * t0 * ene;
 			}
 			if (full_eval) {

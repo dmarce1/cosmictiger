@@ -85,6 +85,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 	const float gamma0 = data.def_gamma;
 	const float invgamma0 = 1.f / gamma0;
 	const float log2fparamst0 = log2f(params.t0);
+	float visc = 0.f;
 	flops += 16;
 	while (index < data.nselfs) {
 		__syncthreads();
@@ -224,10 +225,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 #ifdef ENTROPY
 				const float eint = A_i * powf(rho_i, gamma0 - 1.f) / (gamma0 - 1.f);
 				const float de_dt0 = A_i / eint;	// 12
-				const float c_i = sqrtf(gamma0 * powf(A_i, 1.0f / gamma0) * powf(pre_i, gamma0 - 1.f) / hfrac_i);// 22
+				const float c_i = sqrtf(gamma0 * powf(A_i, 1.0f / gamma0) * powf(pre_i, gamma0 - 1.f) / hfrac_i);	// 22
 #else
 				const float de_dt0 = 1.f;	// 12
-				const float c_i = sqrtf(gamma0 * (gamma0 - 1.f) * eint_i); // 22
+				const float c_i = sqrtf(gamma0 * (gamma0 - 1.f) * eint_i);// 22
 #endif
 				flops += 55;
 				float ax = 0.f;
@@ -309,7 +310,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float& vz_j = rec2.vz;
 							const float& omega_j = rec2.omega;
 							const float& omegaP_j = rec2.omegaP;
-							const float& alpha_j = fmaxf(rec2.alpha, params.alpha0);
+							const float& alpha_j = rec2.alpha;
 							const float& rho_j = rec2.rho;												// 2
 #ifdef ENTROPY
 							const float& A_j = rec2.entr;
@@ -361,7 +362,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							const float rho_ij = 0.5f * (rho_i + rho_j);										// 2
 							const float c_ij = 0.5f * (c_i + c_j);												// 2
 							const float hfrac_ij = 2.0f * hfrac_i * hfrac_j / (hfrac_i + hfrac_j + 1e-36f);
-							const float alpha_ij = 0.5f * hfrac_ij * (alpha_i + alpha_j);								// 2
+							const float alpha_ij = 0.5f * (alpha_i + alpha_j);
 							const float vsig_ij = alpha_ij * (c_ij - params.beta * mu_ij); // 4
 							const float dWdr_i = dkernelW_dq(q_i) * hinv_i * h3inv_i;   // 2
 							const float dWdr_j = dkernelW_dq(q_j) * hinv_j * h3inv_j;   // 2
@@ -403,8 +404,11 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							ax -= pi_ij * dWdr_x_ij;																// 2
 							ay -= pi_ij * dWdr_y_ij;																// 2
 							az -= pi_ij * dWdr_z_ij;																// 2
-							const float vdW_ij = fmaf(vx_ij, dWdr_x_ij, fmaf(vy_ij, dWdr_y_ij, vz_ij * dWdr_z_ij));														// 5
-							de_dt2 = fmaf(de_dt0, 0.5f * pi_ij * vdW_ij, de_dt2);                     // 4
+							const float vdW_ij = fmaf(vx0_ij, dWdr_x_ij, fmaf(vy0_ij, dWdr_y_ij, vz0_ij * dWdr_z_ij));														// 5
+							const float dt = rung_dt[rung_i] * 0.5f * params.t0;
+				//			const float adW_ij = fmaf(adot * x_ij, dWdr_x_ij, fmaf(adot * y_ij, dWdr_y_ij, adot * z_ij * dWdr_z_ij));
+							de_dt2 = fmaf(de_dt0, 0.5f * pi_ij * (vdW_ij - adot), de_dt2);                     // 4
+							visc = fmaf(0.5f, -pi_ij * adot * dt, visc);                     // 4
 #ifndef ENTROPY
 							const float v0dW_i = fmaf(vx0_ij, dWdr_x_i, fmaf(vy0_ij, dWdr_y_i, vz0_ij * dWdr_z_i));
 #ifdef HOPKINS// 5
@@ -440,8 +444,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 									dif_max = fabs(A0_j - A_i) / fmaxf(A0_j, A_i);
 									de_dt1 -= D_ij * (A_i - A0_j); // 16;
 #else
-									dif_max = fabs(eint_j - eint_i) / fmaxf(eint_j, eint_i);
-									de_dt1 -= D_ij * (eint_i - eint_j); // 16;
+											dif_max = fabs(eint_j - eint_i) / fmaxf(eint_j, eint_i);
+											de_dt1 -= D_ij * (eint_i - eint_j); // 16;
 #endif
 									if (params.stars) {
 										dcm_dt -= D_ij * (cfrac_i - cfrac_j);										// 3
@@ -493,7 +497,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						}
 					}
 				}
+				visc *= data.m;
+				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(visc);
 				if (tid == 0) {
+					atomicAdd(&reduce->visc, visc);
 					float gx_i;
 					float gy_i;
 					float gz_i;
@@ -513,14 +520,10 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 					data.rec6_snk[snki].dvel[YDIM] = ay;
 					data.rec6_snk[snki].dvel[ZDIM] = az;
 #ifdef ENTROPY
-					if (params.phase == 1) {
-						data.dentr1_snk[snki] = de_dt1;
-					}
+					data.dentr1_snk[snki] = de_dt1;
 					data.dentr2_snk[snki] = de_dt2;
 #else
-					if (params.phase == 1) {
-						data.deint1_snk[snki] = de_dt1;
-					}
+					data.deint1_snk[snki] = de_dt1;
 					data.deint2_snk[snki] = de_dt2;
 #endif
 					if (params.stars) {
@@ -604,9 +607,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 								//		__trap();
 							}
 						}
-
 					}
 				}
+				visc = 0.f;
 			}
 		}
 		shared_reduce_add<int, HYDRO_BLOCK_SIZE>(flops);

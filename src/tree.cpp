@@ -204,13 +204,7 @@ tree_allocator::~tree_allocator() {
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
 	theta = theta_;
 	min_rung = min_rung_;
-	if (get_options().htime) {
-		min_level = 9;
-		htime = true;
-	} else {
-		min_level = 0;
-		htime = false;
-	}
+	min_level = 9;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,

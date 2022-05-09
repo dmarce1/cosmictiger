@@ -251,6 +251,7 @@ bool process_options(int argc, char *argv[]) {
 			|| opts.test == "disc") {
 		opts.chem = opts.conduction = false;
 		opts.stars = false;
+		opts.htime = false;
 		opts.gravity = opts.test == "star" || opts.test == "plummer";
 		opts.gamma = 5. / 3.;
 		if (opts.test == "disc") {

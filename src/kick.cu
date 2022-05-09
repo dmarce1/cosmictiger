@@ -163,6 +163,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		}
 #endif
 		if (params.htime) {
+
 			ALWAYS_ASSERT(!sph);
 			float sgn = params.top ? 1.f : -1.f;
 			if (params.ascending || params.top) {

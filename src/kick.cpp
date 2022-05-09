@@ -353,6 +353,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				auto& rung = particles_rung(i);
 				float g2;
 				if (params.htime) {
+
 					const float sgn = params.top ? 1 : -1;
 					ALWAYS_ASSERT(!sph);
 					ALWAYS_ASSERT(!vsoft);

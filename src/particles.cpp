@@ -1052,8 +1052,13 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 
 pair<part_int, part_int> particles_current_range() {
 	pair<part_int, part_int> rc;
-	rc.first = rung_begin;
-	rc.second = rung_end;
+	if (get_options().htime) {
+		rc.first = rung_begin;
+		rc.second = rung_end;
+	} else {
+		rc.first = 0;
+		rc.second = particles_size();
+	}
 	return rc;
 }
 
@@ -1469,7 +1474,9 @@ energies_t particles_sum_energies() {
 				const float vy = particles_vel(YDIM,i);
 				const float vz = particles_vel(ZDIM,i);
 				const float m = particles_mass(i);
-				energies.pot += 0.5 * m * particles_pot(i);
+				if( get_options().gravity ) {
+					energies.pot += 0.5 * m * particles_pot(i);
+				}
 				energies.kin += 0.5 * m * (sqr(vx)+sqr(vy)+sqr(vz));
 				if( particles_type(i) == SPH_TYPE) {
 					const int kk = particles_cat_index(i);
