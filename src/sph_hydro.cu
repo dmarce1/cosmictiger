@@ -274,9 +274,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float vsig = 0.f;
 				__syncthreads();
 				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
-
-					continue;
-
 					const int kk = ws.neighbors[j];
 					const auto& rec1 = ws.rec1[kk];
 					const auto& rec2 = ws.rec2[kk];

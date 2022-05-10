@@ -331,7 +331,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		energies->pot = E.pot / scale;
 	}
 	energies->therm = E.therm / sqr(scale);
-	energies->therm = 0.0;
 
 #ifdef IMPLICIT_CONDUCTION
 	if (conduction) {
@@ -404,6 +403,44 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("%e-----------------------------------------------------------------------------------------------------------------------\n", eloss);
 		stars_statistics(scale);
 		found_stars = true;
+		sph_tree_destroy(true);
+
+		sph_tree_create_params tparams;
+
+		timer tm;
+		timer total_tm;
+		total_tm.start();
+		tparams.min_rung = minrung;
+		tparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		sph_tree_create_return sr;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		sph_tree_neighbor_params tnparams;
+
+		tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+		tnparams.min_rung = minrung;
+
+		tm.start();
+		if (verbose)
+			PRINT("starting sph_tree_create = %e\n", tm.read());
+		profiler_enter("sph_tree_create");
+		sr = sph_tree_create(tparams);
+		profiler_exit();
+		tm.stop();
+		if (verbose)
+			PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
+		tm.reset();
+
+
+		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
+		tnparams.seti = SPH_INTERACTIONS_I;
+		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
+		sph_tree_neighbor(tnparams, root_id, checklist).get();
+		profiler_exit();
+
 
 		sph_particles_reset_converged();
 		do {

@@ -146,6 +146,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					particles_vel(XDIM,kk) += sph_particles_gforce(XDIM,i) * dt;
 					particles_vel(YDIM,kk) += sph_particles_gforce(YDIM,i) * dt;
 					particles_vel(ZDIM,kk) += sph_particles_gforce(ZDIM,i) * dt;
+					particles_type(kk) = STAR_TYPE;
 					eloss += sph_particles_eint(i) * sph_mass / (a*a);
 					std::lock_guard<mutex_type> lock(mutex);
 					indices.push_back(i);
@@ -164,13 +165,12 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 			const int k = sph_particles_size() - 1;
 			if (i != k) {
 				const int dmk = sph_particles_dm_index(k);
-				sph_particles_swap(i, k);
+				sph_particles_swap2(i, k);
 				particles_cat_index(dmk) = i;
 				if (particles_type(dmk) == STAR_TYPE) {
 					PRINT("Error %s %i\n", __FILE__, __LINE__);
 					abort();
 				}
-				particles_type(dmk) = STAR_TYPE;
 			}
 			sph_particles_resize(k, false);
 		}
