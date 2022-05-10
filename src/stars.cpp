@@ -62,6 +62,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 
 	PRINT("------------------------------------>>> Searching for STARS <<<--------------------------------------------------------\n");
 	vector<hpx::future<double>> futs;
+	vector<hpx::future<double>> futs2;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step, t0));
 	}
@@ -81,7 +82,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 	static const double G = get_options().GM;
 	vector<part_int> indices;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, t0, nthreads, a, minrung, &mutex,&indices,dt,&rnd_gens]() {
+		futs2.push_back(hpx::async([proc, t0, nthreads, a, minrung, &mutex,&indices,dt,&rnd_gens]() {
 			double eloss = 0.0;
 			const double dm_soft = get_options().hsoft;
 			const double code_to_s = get_options().code_to_s;
@@ -109,6 +110,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 				const double tcool = sph_particles_tcool(i);
 				bool make_star = false;
 				if( rho_b > 0.0f ) {
+
 					const double tdyn = sqrt((3.0*M_PI*a*a*a)/(32.0*constants::G*rho_b));
 					const double pre = (get_options().gamma-1.0) * rho_b * eint;
 					const double cs = sqrt(pre/rho_b*get_options().gamma);
@@ -143,9 +145,9 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					star.zform = 1.0 - 1.0 / a;
 					const float dt = 0.5 * rung_dt[particles_rung(kk)] * t0;
 					sph_particles_rho_rho(i) = -1.0;
-					particles_vel(XDIM,kk) += sph_particles_gforce(XDIM,i) * dt;
-					particles_vel(YDIM,kk) += sph_particles_gforce(YDIM,i) * dt;
-					particles_vel(ZDIM,kk) += sph_particles_gforce(ZDIM,i) * dt;
+				//	particles_vel(XDIM,kk) += sph_particles_gforce(XDIM,i) * dt;
+				//	particles_vel(YDIM,kk) += sph_particles_gforce(YDIM,i) * dt;
+				//	particles_vel(ZDIM,kk) += sph_particles_gforce(ZDIM,i) * dt;
 					particles_type(kk) = STAR_TYPE;
 					eloss += sph_particles_eint(i) * sph_mass / (a*a);
 					std::lock_guard<mutex_type> lock(mutex);
@@ -157,6 +159,10 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 			return eloss;
 		}));
 	}
+	for (auto& f : futs2) {
+		eloss += f.get();
+	}
+
 	for (auto& i : indices) {
 		while (sph_particles_rho_rho(sph_particles_size() - 1) < 0.f && sph_particles_size()) {
 			sph_particles_resize(sph_particles_size() - 1, false);
@@ -167,10 +173,6 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 				const int dmk = sph_particles_dm_index(k);
 				sph_particles_swap2(i, k);
 				particles_cat_index(dmk) = i;
-				if (particles_type(dmk) == STAR_TYPE) {
-					PRINT("Error %s %i\n", __FILE__, __LINE__);
-					abort();
-				}
 			}
 			sph_particles_resize(k, false);
 		}

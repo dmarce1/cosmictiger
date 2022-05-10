@@ -469,6 +469,7 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									}
 								}
 								rinv1 *= mass;
+								rinv3 *= mass;
 								gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
 								gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
 								gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
