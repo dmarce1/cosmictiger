@@ -56,7 +56,6 @@ struct line_id_hash_hi {
 
 static const array<fixed32, NDIM>* sph_particles_cache_read_line(line_id_type line_id);
 static const pair<float>* sph_particles_energy_and_smoothlen_cache_read_line(line_id_type line_id);
-static const pair<float, char>* sph_particles_fcold_cache_read_line(line_id_type line_id);
 static const char* sph_particles_rung_cache_read_line(line_id_type line_id);
 static const array<float, NDIM>* sph_particles_vels_cache_read_line(line_id_type line_id);
 static const float* sph_particles_kappas_cache_read_line(line_id_type line_id);
@@ -69,12 +68,10 @@ static vector<array<float, NDIM>> sph_particles_fetch_vels_cache_line(part_int i
 static vector<float> sph_particles_fetch_rho_cache_line(part_int index);
 static vector<float> sph_particles_fetch_kappas_cache_line(part_int index);
 static vector<pair<float>> sph_particles_fetch_energy_and_smoothlen_cache_line(part_int index);
-static vector<pair<float, char>> sph_particles_fetch_fcold_cache_line(part_int index);
 static vector<aux_quantities> sph_particles_fetch_aux_cache_line(part_int index);
 
 HPX_PLAIN_ACTION (sph_particles_fetch_cache_line);
 HPX_PLAIN_ACTION (sph_particles_fetch_energy_and_smoothlen_cache_line);
-HPX_PLAIN_ACTION (sph_particles_fetch_fcold_cache_line);
 HPX_PLAIN_ACTION (sph_particles_fetch_rung_cache_line);
 HPX_PLAIN_ACTION (sph_particles_fetch_vels_cache_line);
 HPX_PLAIN_ACTION (sph_particles_fetch_rho_cache_line);
@@ -90,7 +87,6 @@ HPX_PLAIN_ACTION (sph_particles_fetch_aux_cache_line);
 
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<fixed32, NDIM>>> , line_id_hash_hi>,PART_CACHE_SIZE> part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float>>> , line_id_hash_hi>, PART_CACHE_SIZE> entr_part_cache;
-static array<std::unordered_map<line_id_type, hpx::shared_future<vector<pair<float, char>>> , line_id_hash_hi>, PART_CACHE_SIZE> fcold_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<char>>, line_id_hash_hi>, PART_CACHE_SIZE> rung_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<float, NDIM>>> , line_id_hash_hi>, PART_CACHE_SIZE> vels_part_cache;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>, line_id_hash_hi>, PART_CACHE_SIZE> kappas_part_cache;
@@ -98,7 +94,6 @@ static array<std::unordered_map<line_id_type, hpx::shared_future<vector<float>>,
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<aux_quantities>>, line_id_hash_hi>, PART_CACHE_SIZE> aux_cache;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> entr_mutexes;
-static array<spinlock_type, PART_CACHE_SIZE> fcold_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> rung_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> vels_mutexes;
 static array<spinlock_type, PART_CACHE_SIZE> kappas_mutexes;
@@ -166,85 +161,79 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
-						if( !sph_particles_isstar(i) ) {
 #ifdef ENTROPY
-							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-							sph_particles_entr0(i) = sph_particles_dentr2(i);
-							sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
-							if( sph_particles_dentr2(i) < -1.0e-7 / sph_particles_entr(i)) {
-								ALWAYS_ASSERT(sph_particles_dentr2(i)>=0.f);
-							}
-							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-#else
-							ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
-							sph_particles_eint0(i) = sph_particles_deint2(i);
-							sph_particles_eint(i) += sph_particles_deint2(i) * dt2;
-							ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
-#endif
-						}
-					}
-				} else if( phase == 1 ) {
-					if( rung2 >= minrung ) {
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
-						}
-						if( !sph_particles_isstar(i) ) {
-#ifdef ENTROPY
-							sph_particles_entr(i) += (-sph_particles_entr0(i)) * dt2;
-							if( sph_particles_entr(i) <= 0.0 ) {
-								PRINT( "%e %e\n", sph_particles_entr(i), (-sph_particles_entr0(i)) * dt2);
-							}
-							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-							sph_particles_entr(i) += (sph_particles_dentr2(i)) * dt2;
-							if( sph_particles_entr(i) <= 0.0 ) {
-								PRINT( "%e %e\n", sph_particles_entr(i),(sph_particles_dentr2(i)) * dt2);
-							}
-							ALWAYS_ASSERT( isfinite(sph_particles_entr(i)));
-							ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-#else
-							float& e = sph_particles_eint(i);
-							const float e0 = e;
-							e += (-sph_particles_eint0(i)) * dt2;
-							e += (sph_particles_deint2(i)) * dt2;
-							e = std::max(0.01f*e0,e);
-#endif
-						}
-					}
-				} else if( phase == 2 ) {
-					if( rung2 >= minrung ) {
-						for( int dim =0; dim < NDIM; dim++) {
-							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
-						}
-						if( !sph_particles_isstar(i) ) {
-#ifdef ENTROPY
-								sph_particles_entr(i) += sph_particles_dentr1(i)* 2.0 * dt2;
-								ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-								sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
-								ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
-#else
-								sph_particles_eint(i) += sph_particles_deint1(i)* 2.0 * dt2;
-								ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
-								sph_particles_eint(i) += sph_particles_deint2(i) * dt2;
-								ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
-#endif
-						}
-						if( chem ) {
-							for( int fi = 0; fi < NCHEMFRACS; fi++) {
-								auto& frac = sph_particles_frac(fi,i);
-								auto dfrac = sph_particles_dchem(i)[fi];
-								if( frac +dfrac * dt2 * 2.0 < 0.0f ) {
-									PRINT( "-----> %e %e\n", frac,frac + dfrac * dt2 * 2.0 );
-								}
-								frac += dfrac * dt2 * 2.0;
-							}
-						}
-
-					}
-
+				ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+				sph_particles_entr0(i) = sph_particles_dentr2(i);
+				sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
+				if( sph_particles_dentr2(i) < -1.0e-7 / sph_particles_entr(i)) {
+					ALWAYS_ASSERT(sph_particles_dentr2(i)>=0.f);
 				}
+				ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+#else
+				ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
+				sph_particles_eint0(i) = sph_particles_deint2(i);
+				sph_particles_eint(i) += sph_particles_deint2(i) * dt2;
+				ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
+#endif
 			}
-			return std::make_pair(error, norm);
-		}));
+		} else if( phase == 1 ) {
+			if( rung2 >= minrung ) {
+				for( int dim =0; dim < NDIM; dim++) {
+					particles_vel(dim,k) += (sph_particles_dvel(dim,i) - sph_particles_dvel0(dim,i))* dt2;
+				}
+#ifdef ENTROPY
+				sph_particles_entr(i) += (-sph_particles_entr0(i)) * dt2;
+				if( sph_particles_entr(i) <= 0.0 ) {
+					PRINT( "%e %e\n", sph_particles_entr(i), (-sph_particles_entr0(i)) * dt2);
+				}
+				ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+				sph_particles_entr(i) += (sph_particles_dentr2(i)) * dt2;
+				if( sph_particles_entr(i) <= 0.0 ) {
+					PRINT( "%e %e\n", sph_particles_entr(i),(sph_particles_dentr2(i)) * dt2);
+				}
+				ALWAYS_ASSERT( isfinite(sph_particles_entr(i)));
+				ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+#else
+				float& e = sph_particles_eint(i);
+				const float e0 = e;
+				e += (-sph_particles_eint0(i)) * dt2;
+				e += (sph_particles_deint2(i)) * dt2;
+				e = std::max(0.01f*e0,e);
+#endif
+			}
+		} else if( phase == 2 ) {
+			if( rung2 >= minrung ) {
+				for( int dim =0; dim < NDIM; dim++) {
+					particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
+				}
+#ifdef ENTROPY
+				sph_particles_entr(i) += sph_particles_dentr1(i)* 2.0 * dt2;
+				ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+				sph_particles_entr(i) += sph_particles_dentr2(i) * dt2;
+				ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
+#else
+				sph_particles_eint(i) += sph_particles_deint1(i)* 2.0 * dt2;
+				ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
+				sph_particles_eint(i) += sph_particles_deint2(i) * dt2;
+				ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
+#endif
+				if( chem ) {
+					for( int fi = 0; fi < NCHEMFRACS; fi++) {
+						auto& frac = sph_particles_frac(fi,i);
+						auto dfrac = sph_particles_dchem(i)[fi];
+						if( frac +dfrac * dt2 * 2.0 < 0.0f ) {
+							PRINT( "-----> %e %e\n", frac,frac + dfrac * dt2 * 2.0 );
+						}
+						frac += dfrac * dt2 * 2.0;
+					}
+				}
+
+			}
+
+		}
+	}
+	return std::make_pair(error, norm);
+}));
 	}
 	for (auto& f : futs) {
 		auto tmp = f.get();
@@ -255,7 +244,6 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 	return std::make_pair(err, 1.0);
 
 }
-
 
 HPX_PLAIN_ACTION (sph_particles_softlens2smoothlens);
 
@@ -287,58 +275,53 @@ void sph_particles_softlens2smoothlens(int minrung) {
 }
 
 float sph_particles_temperature(part_int i, float a) {
-	if (sph_particles_isstar(i)) {
-		return 0.0;
-	} else {
-		const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
-		const double code_to_energy = sqr(get_options().code_to_cm) / (sqr(get_options().code_to_s));		// 7
-		const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
-		const double code_to_entropy = code_to_energy / pow(code_to_density, get_options().gamma - 1.0);
-		const double h = sph_particles_smooth_len(i);
-		const double Hp = sph_particles_Hp(i);
-		const double Hn = sph_particles_Hn(i);
-		const double H2 = sph_particles_H2(i);
-		const double Y = sph_particles_Y(i);
-		const double Hep = sph_particles_Hep(i);
-		const double Hepp = sph_particles_Hepp(i);
-		const double H = sph_particles_H(i);
-		const double He = Y - Hep - Hepp;
+	const double code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s));		// 7
+	const double code_to_energy = sqr(get_options().code_to_cm) / (sqr(get_options().code_to_s));		// 7
+	const double code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;										// 10
+	const double code_to_entropy = code_to_energy / pow(code_to_density, get_options().gamma - 1.0);
+	const double h = sph_particles_smooth_len(i);
+	const double Hp = sph_particles_Hp(i);
+	const double Hn = sph_particles_Hn(i);
+	const double H2 = sph_particles_H2(i);
+	const double Y = sph_particles_Y(i);
+	const double Hep = sph_particles_Hep(i);
+	const double Hepp = sph_particles_Hepp(i);
+	const double H = sph_particles_H(i);
+	const double He = Y - Hep - Hepp;
 #ifdef HOPKINS
-		double rho = sph_particles_rho_rho(i);
+	double rho = sph_particles_rho_rho(i);
 #else
-		double rho = sph_particles_rho(i);
+	double rho = sph_particles_rho(i);
 #endif
-		const double hfrac = 1.0 - sph_particles_cold_mass(i);
-		double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
-		rho *= code_to_density * pow(a, -3);
-		n *= constants::avo * rho;									// 8
-		double gamma = sph_particles_gamma(i);
-		double cv = 1.0 / (gamma - 1.0);															// 4
-		cv *= double(constants::kb);																							// 1
+	double n = (H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp) * 1.0 / (1.0 - sph_particles_Z(i));
+	rho *= code_to_density * pow(a, -3);
+	n *= constants::avo * rho;									// 8
+	double gamma = sph_particles_gamma(i);
+	double cv = 1.0 / (gamma - 1.0);															// 4
+	cv *= double(constants::kb);																							// 1
 #ifdef ENTROPY
-		double entr = sph_particles_entr(i);
-		entr *= code_to_entropy;
-		const double eint = entr * pow(rho * hfrac, get_options().gamma - 1.0) / (gamma - 1.0);
+	double entr = sph_particles_entr(i);
+	entr *= code_to_entropy;
+	const double eint = entr * pow(rho, get_options().gamma - 1.0) / (gamma - 1.0);
 #else
-		const double eint = sph_particles_eint(i) * code_to_energy;
+	const double eint = sph_particles_eint(i) * code_to_energy;
 #endif
-		double T = rho * eint / (n * cv);
-		if (H < 0.0) {
-			if (H < -5.0e-3) {
-				PRINT("NEGATIVE H\n");
-				PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
-				abort();
-			}
-		}
-		if (T > TMAX) {
-			PRINT("T == %e %e %e %e %e\n", T,eint, eint, rho, h);
+	double T = rho * eint / (n * cv);
+	if (H < 0.0) {
+		if (H < -5.0e-3) {
+			PRINT("NEGATIVE H\n");
+			PRINT("%e %e %e %e %e %e %e\n", H, Hp, Hn, H2, He, Hep, Hepp);
 			abort();
 		}
-		if (T < 0.0) {
-			PRINT("T == %e %e %e %e %e\n", T, eint, eint, rho, h);
-		}
-		return T;
 	}
+	if (T > TMAX) {
+		PRINT("T == %e %e %e %e %e\n", T, eint, eint, rho, h);
+		abort();
+	}
+	if (T < 0.0) {
+		PRINT("T == %e %e %e %e %e\n", T, eint, eint, rho, h);
+	}
+	return T;
 }
 
 float sph_particles_mmw(part_int i) {
@@ -365,9 +348,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_r2[i], sph_particles_r2[j]);
 	std::swap(sph_particles_r6[i], sph_particles_r6[j]);
 	std::swap(sph_particles_dm[i], sph_particles_dm[j]);
-	std::swap(sph_particles_fc[i], sph_particles_fc[j]);
 	std::swap(sph_particles_dv[i], sph_particles_dv[j]);
-	std::swap(sph_particles_st[i], sph_particles_st[j]);
 	std::swap(sph_particles_rh[i], sph_particles_rh[j]);
 	std::swap(sph_particles_pre[i], sph_particles_pre[j]);
 #ifdef ENTROPY
@@ -451,8 +432,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		}
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
 		sph_particles_array_resize(sph_particles_rh, new_capacity, true);
-		sph_particles_array_resize(sph_particles_st, new_capacity, true);
-		sph_particles_array_resize(sph_particles_fc, new_capacity, true);
 		sph_particles_array_resize(sph_particles_dv, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r1, new_capacity, true);
 		sph_particles_array_resize(sph_particles_r2, new_capacity, true);
@@ -492,10 +471,6 @@ void sph_particles_resize(part_int sz, bool parts2) {
 		sph_particles_alpha(oldsz + i) = get_options().alpha0;
 		sph_particles_divv(oldsz + i) = 0.f;
 		sph_particles_semiactive(oldsz + i) = 0.0f;
-		if (stars) {
-			sph_particles_cold_mass((oldsz + i)) = 0.f;
-		}
-		sph_particles_isstar((oldsz + i)) = false;
 #ifdef ENTROPY
 		sph_particles_dentr1(oldsz + i) = 0.f;
 		sph_particles_dentr2(oldsz + i) = 0.f;
@@ -614,82 +589,6 @@ static vector<array<fixed32, NDIM>> sph_particles_fetch_cache_line(part_int inde
 		for (int dim = 0; dim < NDIM; dim++) {
 			line[i - begin][dim] = sph_particles_pos(dim, i);
 		}
-	}
-	return line;
-}
-
-void sph_particles_global_read_fcold(particle_global_range range, float* cfrac, char* isstar, part_int offset) {
-	const part_int line_size = get_options().part_cache_line_size;
-	const int sz = offset + range.range.second - range.range.first;
-	if (range.range.first != range.range.second) {
-		if (range.proc == hpx_rank()) {
-			const part_int dif = offset - range.range.first;
-			const part_int sz = range.range.second - range.range.first;
-			for (part_int i = range.range.first; i < range.range.second; i++) {
-				const int j = offset + i - range.range.first;
-				if (cfrac) {
-					cfrac[j] = sph_particles_cold_mass(i);
-				}
-				if (isstar) {
-					isstar[j] = sph_particles_isstar(i);
-				}
-			}
-		} else {
-			line_id_type line_id;
-			line_id.proc = range.proc;
-			const part_int start_line = (range.range.first / line_size) * line_size;
-			const part_int stop_line = ((range.range.second - 1) / line_size) * line_size;
-			part_int dest_index = offset;
-			for (part_int line = start_line; line <= stop_line; line += line_size) {
-				line_id.index = line;
-				const auto* ptr = sph_particles_fcold_cache_read_line(line_id);
-				const auto begin = std::max(line_id.index, range.range.first);
-				const auto end = std::min(line_id.index + line_size, range.range.second);
-				for (part_int i = begin; i < end; i++) {
-					const part_int src_index = i - line_id.index;
-					const pair<float, char>& part = ptr[src_index];
-					if (cfrac) {
-						cfrac[dest_index] = part.first;
-					}
-					if (isstar) {
-						isstar[dest_index] = part.second;
-					}
-					dest_index++;
-				}
-			}
-		}
-	}
-}
-
-static const pair<float, char>* sph_particles_fcold_cache_read_line(line_id_type line_id) {
-	const part_int line_size = get_options().part_cache_line_size;
-	const size_t bin = line_id_hash_lo()(line_id);
-	std::unique_lock<spinlock_type> lock(fcold_mutexes[bin]);
-	auto iter = fcold_part_cache[bin].find(line_id);
-	if (iter == fcold_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<pair<float, char>>> >();
-		fcold_part_cache[bin][line_id] = prms->get_future();
-		lock.unlock();
-		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_fcold_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
-			prms->set_value(line_fut.get());
-		});
-		lock.lock();
-		iter = fcold_part_cache[bin].find(line_id);
-	}
-	auto fut = iter->second;
-	lock.unlock();
-	return fut.get().data();
-}
-
-static vector<pair<float, char>> sph_particles_fetch_fcold_cache_line(part_int index) {
-	const part_int line_size = get_options().part_cache_line_size;
-	vector<pair<float, char>> line(line_size);
-	const part_int begin = (index / line_size) * line_size;
-	const part_int end = std::min(sph_particles_size(), begin + line_size);
-	for (part_int i = begin; i < end; i++) {
-		line[i - begin].first = sph_particles_cold_mass(i);
-		line[i - begin].second = sph_particles_isstar(i);
 	}
 	return line;
 }
@@ -1200,7 +1099,6 @@ void sph_particles_cache_free2() {
 	part_cache = decltype(part_cache)();
 	entr_part_cache = decltype(entr_part_cache)();
 	rung_part_cache = decltype(rung_part_cache)();
-	fcold_part_cache = decltype(fcold_part_cache)();
 	vels_part_cache = decltype(vels_part_cache)();
 	kappas_part_cache = decltype(kappas_part_cache)();
 	aux_cache = decltype(aux_cache)();
@@ -1217,15 +1115,12 @@ void sph_particles_load(FILE* fp) {
 	FREAD(sph_particles_r2, sizeof(sph_record2), sph_particles_size(), fp);
 	FREAD(sph_particles_r5, sizeof(sph_record5), sph_particles_size(), fp);
 	FREAD(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
-	FREAD(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
-	if (stars) {
-		FREAD(&sph_particles_isstar(0), sizeof(char), sph_particles_size(), fp);
+	if (get_options().stars) {
+		stars_load(fp);
 	}
-
-	FREAD(sph_particles_kap, sizeof(float), sph_particles_size(), fp);
 }
 
 void sph_particles_save(FILE* fp) {
@@ -1237,14 +1132,12 @@ void sph_particles_save(FILE* fp) {
 	fwrite(sph_particles_r2, sizeof(sph_record2), sph_particles_size(), fp);
 	fwrite(sph_particles_r5, sizeof(sph_record5), sph_particles_size(), fp);
 	fwrite(sph_particles_r6, sizeof(sph_record6), sph_particles_size(), fp);
-	fwrite(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
-	if (stars) {
-		fwrite(&sph_particles_isstar(0), sizeof(char), sph_particles_size(), fp);
+	if (get_options().stars) {
+		stars_save(fp);
 	}
-	fwrite(sph_particles_kap, sizeof(float), sph_particles_size(), fp);
 }
 
 HPX_PLAIN_ACTION (sph_particles_reset_converged);

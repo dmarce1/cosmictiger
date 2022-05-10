@@ -183,7 +183,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 				g2 = sqr(gx[i], gy[i], gz[i]);
 				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
 				rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
-				if( rung > 4 ) {
+				if (rung > 4) {
 //					PRINT( "%i\n", rung);
 				}
 				max_rung = max(rung, max_rung);
@@ -222,23 +222,21 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			ymom_tot += mass * vy;
 			zmom_tot += mass * vz;
 			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
-			if (my_type != SPH_TYPE || params.glass) {
-				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2+1e-35f)), params.t0), params.max_dt);
-				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
-				max_rung = max(rung, max_rung);
-				if (rung < 0 || rung >= MAX_RUNG) {
-					PRINT("Rung out of range %i\n", rung);
-				}
-				ASSERT(rung >= 0);
-				ASSERT(rung < MAX_RUNG);
-				dt = 0.5f * rung_dt[rung] * params.t0;
-				if (!vsoft) {
-					vx = fmaf(gx[i], dt, vx);
-					vy = fmaf(gy[i], dt, vy);
-					vz = fmaf(gz[i], dt, vz);
-				}
-				write_rungs[snki] = rung;
+			dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
+			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
+			max_rung = max(rung, max_rung);
+			if (rung < 0 || rung >= MAX_RUNG) {
+				PRINT("Rung out of range %i\n", rung);
 			}
+			ASSERT(rung >= 0);
+			ASSERT(rung < MAX_RUNG);
+			dt = 0.5f * rung_dt[rung] * params.t0;
+			if (!vsoft && my_type != SPH_TYPE) {
+				vx = fmaf(gx[i], dt, vx);
+				vy = fmaf(gy[i], dt, vy);
+				vz = fmaf(gz[i], dt, vz);
+			}
+			write_rungs[snki] = rung;
 		}
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
@@ -447,7 +445,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius),0.f)));
+									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
 								}
 								const float mind = self.radius + other.radius + hsoft;
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);

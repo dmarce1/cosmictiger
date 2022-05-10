@@ -32,7 +32,6 @@ struct drift_return {
 	double momx;
 	double momy;
 	double momz;
-	double cold_mass;
 	double flops;
 	part_int nmapped;
 	template<class Arc>

@@ -98,7 +98,6 @@ struct sph_particle {
 #else
 	float eint;
 #endif
-	float fcold;
 	float divv;
 	float omegaP;
 	float pre;
@@ -115,7 +114,6 @@ struct sph_particle {
 #else
 		arc & eint;
 #endif
-		arc & fcold;
 		arc & divv;
 		arc & omegaP;
 		arc & pre;
@@ -138,7 +136,6 @@ struct sph_record2 {
 
 struct sph_record5 {
 	array<float, NCHEMFRACS> dfrac;
-	float dfcold;
 };
 
 struct sph_record6 {
@@ -168,12 +165,10 @@ SPH_PARTICLES_EXTERN float* sph_particles_fp2;
 SPH_PARTICLES_EXTERN float* sph_particles_pre;
 SPH_PARTICLES_EXTERN float* sph_particles_fp1;
 SPH_PARTICLES_EXTERN float* sph_particles_s2;
-SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN float* sph_particles_rh;
 SPH_PARTICLES_EXTERN float* sph_particles_tc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
-SPH_PARTICLES_EXTERN char* sph_particles_st;
 
 struct aux_quantities {
 	float omega;
@@ -211,7 +206,6 @@ void sph_particles_swap(part_int i, part_int j);
 void sph_particles_swap2(part_int i, part_int j);
 part_int sph_particles_sort(pair<part_int> rng, fixed32 xm, int xdim);
 void sph_particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
-void sph_particles_global_read_fcold(particle_global_range range, float*, char*, part_int offset);
 void sph_particles_global_read_energy_and_smoothlen(particle_global_range range, float*, float*, part_int offset);
 void sph_particles_global_read_rungs(particle_global_range range, char*, part_int offset);
 void sph_particles_global_read_vels(particle_global_range range, float*, float*, float*, part_int offset);
@@ -246,10 +240,6 @@ inline float& sph_particles_eint0(part_int index) {
 }
 #endif
 
-inline char& sph_particles_isstar(part_int index) {
-	return sph_particles_st[index];
-}
-
 inline float& sph_particles_tcool(part_int index) {
 	return sph_particles_tc[index];
 }
@@ -264,14 +254,6 @@ inline char& sph_particles_semiactive(part_int index) {
 
 inline float& sph_particles_kappa(part_int index) {
 	return sph_particles_kap[index];
-}
-
-inline float& sph_particles_cold_mass(part_int index) {
-	return sph_particles_fc[index];
-}
-
-inline float& sph_particles_dcold_mass(part_int index) {
-	return sph_particles_r5[index].dfcold;
 }
 
 inline float& sph_particles_alpha(part_int index) {
@@ -493,7 +475,7 @@ inline float& sph_particles_rho_rho(part_int index) {
 inline float sph_particles_rho_pre(part_int index) {
 #ifdef ENTROPY
 	const float gamma = get_options().gamma;
-	return powf(sph_particles_pressure(index) / sph_particles_entr(index), 1.0f/gamma);
+	return powf(sph_particles_pressure(index) / sph_particles_entr(index), 1.0f / gamma);
 #else
 	const float gamma = get_options().gamma;
 	return sph_particles_pressure(index) / sph_particles_eint(index) / (gamma - 1.f);
@@ -502,7 +484,6 @@ inline float sph_particles_rho_pre(part_int index) {
 
 inline float sph_particles_eint_pre(part_int index) {
 #ifdef ENTROPY
-	ALWAYS_ASSERT(sph_particles_entr(index) > 0.0f);
 	const float gamma = get_options().gamma;
 	return sph_particles_pressure(index) / sph_particles_rho_pre(index) / (gamma - 1.f);
 #else
@@ -531,11 +512,7 @@ inline float& sph_particles_rho(part_int index) {
 inline float sph_particles_eint(part_int index) {
 	static const float gamma0 = get_options().gamma;
 	static const float stars = get_options().stars;
-	float hfrac = 1.0f;
-	if (stars) {
-		hfrac = 1.0f - sph_particles_cold_mass(index);
-	}
-	const float rho = sph_particles_rho(index) * hfrac;
+	const float rho = sph_particles_rho(index);
 	const float K = sph_particles_entr(index);
 	return K * powf(rho, gamma0 - 1.0) / (gamma0 - 1.0);
 }
@@ -575,7 +552,6 @@ inline sph_particle get_sph_particle(part_int i) {
 #else
 	part.eint = sph_particles_eint(i);
 #endif
-	part.fcold = sph_particles_cold_mass(i);
 	part.divv = sph_particles_divv(i);
 	return part;
 }

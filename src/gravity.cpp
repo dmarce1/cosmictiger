@@ -450,9 +450,8 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									const auto& h_i = sink_hsoft;
 #ifndef DM_CON_H_ONLY// 5
 									const auto& h_j = hsoft;
-									const auto sw_ij = simd_float(src_type == sink_type);
-									const auto zeta_i = sink_zeta * sw_ij;
-									const auto zeta_j = zeta * sw_ij;
+									const auto zeta_i = sink_zeta;
+									const auto zeta_j = zeta;
 									const auto hinv_j = simd_float(1) / h_j;
 									const auto h2inv_j = sqr(hinv_j);
 									const auto h3inv_j = h2inv_j * hinv_j;

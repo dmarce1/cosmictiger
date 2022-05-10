@@ -59,7 +59,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 			for( part_int i = b; i < e; i++) {
 				int rung1 = sph_particles_rung(i);
 				//	int rung2 = sph_particles_oldrung(i);
-				if( rung1 >= minrung && !sph_particles_isstar(i)) {
+				if( rung1 >= minrung) {
 					chem_attribs chem;
 					float T = sph_particles_temperature(i,a);
 					sph_particles_normalize_fracs(i);
@@ -133,7 +133,7 @@ pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int d
 		const double sph_mass = get_options().sph_mass;
 		for( part_int i = b; i < e; i++) {
 			int rung1 = sph_particles_rung(i);
-			if( rung1 >= minrung && !sph_particles_isstar(i)) {
+			if( rung1 >= minrung) {
 				chem_attribs chem = chems[j++];
 //					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
 //					double gamma = 1. + 1. / cv;

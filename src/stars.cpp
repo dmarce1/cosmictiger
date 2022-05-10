@@ -66,8 +66,6 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 		futs.push_back(hpx::async<stars_find_action>(c, a, dt, minrung, step, t0));
 	}
 	mutex_type mutex;
-	std::atomic<int> found(0);
-	vector<part_int> indices;
 	const int nthreads = hpx_hardware_concurrency();
 	vector<gsl_rng *> rnd_gens(nthreads);
 	for (int i = 0; i < nthreads; i++) {
@@ -81,8 +79,9 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 	static const double code_to_cm = get_options().code_to_cm;
 	static const double code_to_s = get_options().code_to_s;
 	static const double G = get_options().GM;
+	vector<part_int> indices;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, t0, nthreads, a, minrung, &found, &mutex,&indices,dt,&rnd_gens]() {
+		futs.push_back(hpx::async([proc, t0, nthreads, a, minrung, &mutex,&indices,dt,&rnd_gens]() {
 			double eloss = 0.0;
 			const double dm_soft = get_options().hsoft;
 			const double code_to_s = get_options().code_to_s;
@@ -96,66 +95,82 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( part_int i = b; i < e; i++) {
-				if( !sph_particles_isstar(i)  ) {
-					char rung = sph_particles_rung(i);
-					const part_int kk = sph_particles_dm_index(i);
-					const double rho_tot = particles_rho(kk) * code_to_density;
+				char rung = sph_particles_rung(i);
+				const part_int kk = sph_particles_dm_index(i);
+				const double rho_tot = particles_rho(kk) * code_to_density;
 #ifdef HOPKINS
-					const double rho_b = sph_particles_rho_rho(i) * code_to_density;
-					const double eint = sph_particles_eint_rho(i) * code_to_energy;
+				const double rho_b = sph_particles_rho_rho(i) * code_to_density;
+				const double eint = sph_particles_eint_rho(i) * code_to_energy;
 #else
-					const double rho_b = sph_particles_rho(i) * code_to_density;
-					const double eint = sph_particles_eint(i) * code_to_energy;
+				const double rho_b = sph_particles_rho(i) * code_to_density;
+				const double eint = sph_particles_eint(i) * code_to_energy;
 #endif
-					const double rho_c = rho_tot - rho_b;
-					const double tcool = sph_particles_tcool(i);
-					if( rho_b > 0.0f ) {
-						const double tdyn = sqrt((3.0*M_PI*a*a*a)/(32.0*constants::G*rho_b));
-						const double pre = (get_options().gamma-1.0) * rho_b * eint;
-						const double cs = sqrt(pre/rho_b*get_options().gamma);
-						const double delta_b = (rho_b-rho0_b);
-						const double delta0 = (rho_tot - rho0);
-						const double dt = t0 * 0.5 * code_to_s;
-						constexpr double eta = 20.0;
-						if( delta_b / delta0 > 0.0 ) {
-							const double a = pow(constants::G,-1.5);
-							const double b = pow(rho_b,-0.5);
-							const double c = pow(cs,3);
-							const double d = pow(delta_b/delta0,1.5);
-							const double mj = a * b * c * d;
-							const double m0 = get_options().sph_mass * code_to_g;
-							if( rho_b > eta * rho0_b) {
-
-								if( tcool < tdyn ) {
-									if( m0 > mj ) {
-										if( sph_particles_divv(i) < 0.0 ) {
-											const double eps = dt / tdyn;
-											const double p = 1.0 - exp(-eps);
-											const bool make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
-											if( make_star ) {
-												sph_particles_isstar(i) = true;
-#ifdef HOPKINS
-												eloss +=sph_particles_eint_rho(i) * get_options().sph_mass/(a*a);
-#else
-												eloss +=sph_particles_eint(i) * get_options().sph_mass/(a*a);
-#endif
-#ifdef ENTROPY
-												sph_particles_entr(i) = 0.0;
-#else
-												sph_particles_eint(i) = 0.0;
-#endif
-											}
-										}
+				const double rho_c = rho_tot - rho_b;
+				const double tcool = sph_particles_tcool(i);
+				bool make_star = false;
+				if( rho_b > 0.0f ) {
+					const double tdyn = sqrt((3.0*M_PI*a*a*a)/(32.0*constants::G*rho_b));
+					const double pre = (get_options().gamma-1.0) * rho_b * eint;
+					const double cs = sqrt(pre/rho_b*get_options().gamma);
+					const double delta_b = (rho_b-rho0_b);
+					const double delta0 = (rho_tot - rho0);
+					const double dt = t0 * 0.5 * code_to_s;
+					constexpr double eta = 20.0;
+					if( delta_b / delta0 > 0.0 ) {
+						const double a = pow(constants::G,-1.5);
+						const double b = pow(rho_b,-0.5);
+						const double c = pow(cs,3);
+						const double d = pow(delta_b/delta0,1.5);
+						const double mj = a * b * c * d;
+						const double m0 = get_options().sph_mass * code_to_g;
+						if( rho_b > eta * rho0_b) {
+							if( tcool < tdyn ) {
+								if( m0 > mj ) {
+									if( sph_particles_divv(i) < 0.0 ) {
+										const double eps = dt / tdyn;
+										const double p = 1.0 - exp(-eps);
+										make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );
 									}
 								}
 							}
 						}
 					}
-//				PRINT( "%e\n", rho/rho0);
+				}
+				if( make_star ) {
+					std::lock_guard<mutex_type> lock(mutex);
+					indices.push_back(i);
+					star_particle star;
+					const part_int kk = sph_particles_dm_index(i);
+					star.dm_index = kk;
+					star.zform = 1.0 - 1.0 / a;
+					stars.push_back(star);
+					const float dt = 0.5 * rung_dt[particles_rung(kk)] * t0;
+					sph_particles_rho_rho(i) = -1.0;
+					particles_vel(XDIM,kk) += sph_particles_gforce(XDIM,i) * dt;
+					particles_vel(YDIM,kk) += sph_particles_gforce(YDIM,i) * dt;
+					particles_vel(ZDIM,kk) += sph_particles_gforce(ZDIM,i) * dt;
+				}
 			}
+			return eloss;
+		}));
+	}
+	for (auto& i : indices) {
+		while (sph_particles_rho_rho(sph_particles_size() - 1) < 0.f && sph_particles_size()) {
+			sph_particles_resize(sph_particles_size() - 1, false);
 		}
-		return eloss;
-	}));
+		if (i < sph_particles_size()) {
+			const int k = sph_particles_size() - 1;
+			if (i != k) {
+				const int dmk = sph_particles_dm_index(k);
+				sph_particles_swap(i, k);
+				particles_cat_index(dmk) = i;
+				if (particles_type(dmk) == STAR_TYPE) {
+					PRINT("Error %s %i\n", __FILE__, __LINE__);
+					abort();
+				}
+			}
+			sph_particles_resize(k, false);
+		}
 	}
 	for (auto& f : futs) {
 		eloss += f.get();
@@ -178,24 +193,7 @@ stars_stats stars_statistics(float a) {
 		futs.push_back(hpx::async<stars_statistics_action>(c, a));
 	}
 	stars_stats stats;
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads]() {
-			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
-			stars_stats stats;
-			for( part_int i = b; i < e; i++) {
-				if( sph_particles_isstar(i)) {
-
-					stats.stars++;
-				}
-			}
-			return stats;
-		}));
-	}
-	for (auto& f : futs) {
-		stats += f.get();
-	}
+	stats.stars = stars.size();
 	if (hpx_rank() == 0) {
 		FILE* fp = fopen("stars.txt", "at");
 		fprintf(fp, "%e %li \n", 1.f / a - 1.f, stats.stars);

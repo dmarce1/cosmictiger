@@ -401,23 +401,19 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const auto& sink_h = shmem.sink_h;
 	const auto& sink_zeta = shmem.sink_zeta;
 	const auto& sink_type = shmem.sink_type;
-#endif
-	const auto* main_src_x = data.x;
-	const auto* main_src_y = data.y;
-	const auto* main_src_z = data.z;
-#ifndef DM_CON_H_ONLY
 	const auto* main_src_h = data.h;
 	const auto* main_src_zeta = data.zeta;
 	const auto* main_src_type = data.type;
-#endif
-	auto& src_x = shmem.src.x;
-	auto& src_y = shmem.src.y;
-	auto& src_z = shmem.src.z;
-#ifndef DM_CON_H_ONLY
 	auto& src_h = shmem.src.h;
 	auto& src_zeta = shmem.src.zeta;
 	auto& src_type = shmem.src.type;
 #endif
+	const auto* main_src_x = data.x;
+	const auto* main_src_y = data.y;
+	const auto* main_src_z = data.z;
+	auto& src_x = shmem.src.x;
+	auto& src_y = shmem.src.y;
+	auto& src_z = shmem.src.z;
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
 	float hinv = 1.f / (h);
@@ -519,8 +515,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
 #ifndef DM_CON_H_ONLY
-						const float& zeta_j = (type_i == type_j) ? src_zeta[j] : 0.f;
-						const float& zeta_i = (type_i == type_j) ? sink_zeta[k] : 0.f;
+						const float& zeta_j = src_zeta[j];
+						const float& zeta_i = sink_zeta[k];
 						const float hinv_j = 1.0f / h_j;
 						const float h2inv_j = sqr(hinv_j);
 						const float h3inv_j = h2inv_j * hinv_j;

@@ -319,7 +319,7 @@ int particles_apply_updates(int minrung, float t0, float a) {
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				auto& rung = particles_rung(i);
-				if( particles_rung(i) >= minrung && particles_type(i) == DARK_MATTER_TYPE) {
+				if( particles_rung(i) >= minrung) {
 					auto& vx = particles_vel(XDIM,i);
 					auto& vy = particles_vel(YDIM,i);
 					auto& vz = particles_vel(ZDIM,i);
@@ -333,10 +333,12 @@ int particles_apply_updates(int minrung, float t0, float a) {
 					auto new_rung = (int) ceilf(log2f(t0/dt));
 					rung = new_rung;
 					max_rung = std::max(max_rung, (int) rung);
-					dt = 0.5f * rung_dt[rung] * t0;
-					vx += dt * gx;
-					vy += dt * gy;
-					vz += dt * gz;
+					if( particles_type(i) != SPH_TYPE) {
+						dt = 0.5f * rung_dt[rung] * t0;
+						vx += dt * gx;
+						vy += dt * gy;
+						vz += dt * gz;
+					}
 				}
 			}
 			return max_rung;
