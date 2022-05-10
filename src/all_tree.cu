@@ -357,15 +357,13 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						if (q < 1.f) {                               // 1
 							const float m_j = params.sph ? (type_j == DARK_MATTER_TYPE ? params.dm_mass : params.sph_mass) : 1.f;
 							const float w = kernelW(q);
-							if (type_i == type_j) {
-								const float dwdq = dkernelW_dq(q);
-								dw_sum -= q * dwdq;							// 2
-								w_sum += w;
-							}
+							const float dwdq = dkernelW_dq(q);
+							dw_sum -= q * dwdq;							// 2
+							w_sum += w;
 							rho_i += m_j * w * h3inv_i;
 							const float pot = -kernelPot(q);
 							const float force = kernelFqinv(q) * q;
-							dpot_dh += m_j * (pot + q * force) / m_i;
+							dpot_dh += m_j * (pot + q * force);
 							flops += 2;
 						}
 						flops += 9;
@@ -519,13 +517,11 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 						const float r = sqrtf(r2);							// 4
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i;							// 1
-						if (q < 1.f && (type_i == type_j)) {                               // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
-							dw_sum -= q * dwdq;                               // 2
-							w_sum += w;
-							divv += (vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij) * rinv * dwdq;
-						}
+						const float w = kernelW(q);
+						const float dwdq = dkernelW_dq(q);
+						dw_sum -= q * dwdq;                               // 2
+						w_sum += w;
+						divv += (vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij) * rinv * dwdq;
 					}
 				}
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(w_sum);

@@ -450,9 +450,8 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									const auto& h_i = sink_hsoft;
 #ifndef DM_CON_H_ONLY// 5
 									const auto& h_j = hsoft;
-									const auto sw_ij = simd_float(src_type == sink_type);
-									const auto zeta_i = sink_zeta * sw_ij;
-									const auto zeta_j = zeta * sw_ij;
+									const auto zeta_i = sink_zeta;
+									const auto zeta_j = zeta;
 									const auto hinv_j = simd_float(1) / h_j;
 									const auto h2inv_j = sqr(hinv_j);
 									const auto h3inv_j = h2inv_j * hinv_j;
@@ -470,8 +469,8 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 									rinv3 = kernelFqinv(q_i) * h3inv_i;
 #ifndef DM_CON_H_ONLY// 5
 									rinv3 += kernelFqinv(q_j) * h3inv_j;
-									rinv3 += (q_i < simd_float(1)) * zeta_i * dkernelW_dq(q_i) * h2inv_i * rinv1;
-									rinv3 += (q_j < simd_float(1)) * zeta_j * dkernelW_dq(q_j) * h2inv_j * rinv1;
+									rinv3 += (q_i < simd_float(1)) * zeta_i * dkernelW_dq(q_i) * h2inv_i * rinv1 / (mass + (mass <= simd_float(0)));
+									rinv3 += (q_j < simd_float(1)) * zeta_j * dkernelW_dq(q_j) * h2inv_j * rinv1 / (mass + (mass <= simd_float(0)));
 									rinv3 *= simd_float(0.5);
 #endif
 									if (min_rung == 0) {

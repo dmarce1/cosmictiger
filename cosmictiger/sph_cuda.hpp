@@ -207,25 +207,23 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 		const auto& y_i = x[YDIM];
 		const auto& z_i = x[ZDIM];
 		for (int j = tid; j < rec.size(); j += block_size) {
-			const auto& r = rec[j];
-			const auto& type_j = r.type;
-			if( type_j == type_i ) {
-				const auto& x_j = r.x;
-				const auto& y_j = r.y;
-				const auto& z_j = r.z;
-				const float x_ij = distance(x_i, x_j);
-				const float y_ij = distance(y_i, y_j);
-				const float z_ij = distance(z_i, z_j);
-				const float r2 = sqr(x_ij, y_ij, z_ij); // 2
-				const float r = sqrt(r2);// 4
-				const float q = r * hinv;// 1
-				if (q < 1.f) {                               // 1
-					const float w = kernelW(q);// 4
-					const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
-					f += w;// 1
-					dfdh += dwdh;// 1
-					count++;
-				}
+			const auto& rc = rec[j];
+			const auto& type_j = rc.type;
+			const auto& x_j = rc.x;
+			const auto& y_j = rc.y;
+			const auto& z_j = rc.z;
+			const float x_ij = distance(x_i, x_j);
+			const float y_ij = distance(y_i, y_j);
+			const float z_ij = distance(z_i, z_j);
+			const float r2 = sqr(x_ij, y_ij, z_ij); // 2
+			const float r = sqrt(r2);// 4
+			const float q = r * hinv;// 1
+			if (q < 1.f) {                               // 1
+				const float w = kernelW(q);// 4
+				const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
+				f += w;// 1
+				dfdh += dwdh;// 1
+				count++;
 			}
 		}
 		shared_reduce_add<float, BLOCK_SIZE>(f);

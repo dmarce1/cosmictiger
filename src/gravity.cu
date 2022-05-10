@@ -519,8 +519,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
 #ifndef DM_CON_H_ONLY
-						const float& zeta_j = (type_i == type_j) ? src_zeta[j] : 0.f;
-						const float& zeta_i = (type_i == type_j) ? sink_zeta[k] : 0.f;
+						const float& zeta_j = src_zeta[j];
+						const float& zeta_i = sink_zeta[k];
 						const float hinv_j = 1.0f / h_j;
 						const float h2inv_j = sqr(hinv_j);
 						const float h3inv_j = h2inv_j * hinv_j;
@@ -536,7 +536,7 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r3inv += kernelFqinv(q_j) * h3inv_j;
 						float fc = (q_i < 1.f) * zeta_i * dkernelW_dq(q_i) * h2inv_i * r1inv;
 						fc += (q_j < 1.f) * zeta_j * dkernelW_dq(q_j) * h2inv_j * r1inv;
-						r3inv = 0.5f * (r3inv + fc);
+						r3inv = 0.5f * (r3inv + fc / m_j);
 #endif
 						if (do_phi) {
 							r1inv = kernelPot(q_i) * hinv_i;
