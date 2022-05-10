@@ -137,18 +137,20 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					}
 				}
 				if( make_star ) {
-					std::lock_guard<mutex_type> lock(mutex);
-					indices.push_back(i);
 					star_particle star;
 					const part_int kk = sph_particles_dm_index(i);
 					star.dm_index = kk;
 					star.zform = 1.0 - 1.0 / a;
-					stars.push_back(star);
 					const float dt = 0.5 * rung_dt[particles_rung(kk)] * t0;
 					sph_particles_rho_rho(i) = -1.0;
 					particles_vel(XDIM,kk) += sph_particles_gforce(XDIM,i) * dt;
 					particles_vel(YDIM,kk) += sph_particles_gforce(YDIM,i) * dt;
 					particles_vel(ZDIM,kk) += sph_particles_gforce(ZDIM,i) * dt;
+					eloss += sph_particles_eint(i) * sph_mass / (a*a);
+					std::lock_guard<mutex_type> lock(mutex);
+					indices.push_back(i);
+					particles_cat_index(kk) = stars.size();
+					stars.push_back(star);
 				}
 			}
 			return eloss;
@@ -168,6 +170,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					PRINT("Error %s %i\n", __FILE__, __LINE__);
 					abort();
 				}
+				particles_type(dmk) = STAR_TYPE;
 			}
 			sph_particles_resize(k, false);
 		}

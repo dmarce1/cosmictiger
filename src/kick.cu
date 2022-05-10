@@ -222,19 +222,21 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			ymom_tot += mass * vy;
 			zmom_tot += mass * vz;
 			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
-			dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
-			rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
-			max_rung = max(rung, max_rung);
-			if (rung < 0 || rung >= MAX_RUNG) {
-				PRINT("Rung out of range %i\n", rung);
-			}
-			ASSERT(rung >= 0);
-			ASSERT(rung < MAX_RUNG);
-			dt = 0.5f * rung_dt[rung] * params.t0;
-			if (!vsoft && my_type != SPH_TYPE) {
-				vx = fmaf(gx[i], dt, vx);
-				vy = fmaf(gy[i], dt, vy);
-				vz = fmaf(gz[i], dt, vz);
+			if (!vsoft) {
+				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
+				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
+				max_rung = max(rung, max_rung);
+				if (rung < 0 || rung >= MAX_RUNG) {
+					PRINT("Rung out of range %i\n", rung);
+				}
+				ASSERT(rung >= 0);
+				ASSERT(rung < MAX_RUNG);
+				dt = 0.5f * rung_dt[rung] * params.t0;
+				if (!vsoft && my_type != SPH_TYPE) {
+					vx = fmaf(gx[i], dt, vx);
+					vy = fmaf(gy[i], dt, vy);
+					vz = fmaf(gz[i], dt, vz);
+				}
 			}
 			write_rungs[snki] = rung;
 		}

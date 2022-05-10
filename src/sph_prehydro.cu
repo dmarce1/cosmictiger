@@ -85,7 +85,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
-				if (!compute_softlens < PREHYDRO1_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box)) {
+				if (!compute_smoothlens < PREHYDRO1_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 						if (tid == 0) {
@@ -273,7 +273,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				x[YDIM] = data.y[i];
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
-				if (!compute_softlens < PREHYDRO2_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box)) {
+				if (!compute_smoothlens < PREHYDRO2_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box)) {
 					box_xceeded = true;
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);

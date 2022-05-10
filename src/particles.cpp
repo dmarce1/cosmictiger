@@ -26,6 +26,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/stars.hpp>
 #include <cosmictiger/kernel.hpp>
+#include <cosmictiger/cosmology.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -317,6 +318,7 @@ int particles_apply_updates(int minrung, float t0, float a) {
 			const float cfl = get_options().cfl;
 			const part_int b = (size_t) proc * particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+			const float eta = get_options().eta;
 			for( int i = b; i < e; i++) {
 				auto& rung = particles_rung(i);
 				if( particles_rung(i) >= minrung) {
@@ -328,9 +330,14 @@ int particles_apply_updates(int minrung, float t0, float a) {
 					auto& gz = particles_gforce(ZDIM,i);
 					const auto& divv = particles_divv(i);
 					const auto h = particles_softlen(i);
-					const float dt_divv = cfl * (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax)) * a / (fabs(divv) + 1e-37f);
-					float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
-					auto new_rung = (int) ceilf(log2f(t0/dt));
+					const float dt_divv = cfl * (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax)) * a / (fabs(divv) + 1e-34f);
+					const float dt_scale = SCALE_DT / cosmos_dadt(a);
+					const float g2 = sqr(gx,gy,gz);
+					float dt = eta * sqrt(h * a / sqrt(g2+1e-36f));
+					dt = std::min(dt_divv,dt);
+					dt = std::min(dt_scale,dt);
+					auto new_rung = std::min(std::max((int) ceilf(log2f(t0/dt)), rung - 1),1);
+					new_rung = std::max(new_rung, minrung);
 					rung = new_rung;
 					max_rung = std::max(max_rung, (int) rung);
 					if( particles_type(i) != SPH_TYPE) {
@@ -1468,6 +1475,7 @@ energies_t particles_sum_energies() {
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([nthreads,proc]() {
+			const float pot0 = kernelPot(0.0) * get_options().GM;
 			energies_t energies;
 			const part_int b = (size_t) proc * particles_size() / nthreads;
 			const part_int e = (size_t) (proc + 1) * particles_size() / nthreads;
@@ -1476,8 +1484,10 @@ energies_t particles_sum_energies() {
 				const float vy = particles_vel(YDIM,i);
 				const float vz = particles_vel(ZDIM,i);
 				const float m = particles_mass(i);
+				const float h = particles_softlen(i);
 				if( get_options().gravity ) {
 					energies.pot += 0.5 * m * particles_pot(i);
+			//		energies.pot -= 0.5 * m * pot0 / h;
 				}
 				energies.kin += 0.5 * m * (sqr(vx)+sqr(vy)+sqr(vz));
 				if( particles_type(i) == SPH_TYPE) {

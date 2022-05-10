@@ -274,6 +274,9 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				float vsig = 0.f;
 				__syncthreads();
 				for (int j = tid; j < ws.neighbors.size(); j += block_size) {
+
+					continue;
+
 					const int kk = ws.neighbors[j];
 					const auto& rec1 = ws.rec1[kk];
 					const auto& rec2 = ws.rec2[kk];
@@ -420,8 +423,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 							dif_max = fabs(A0_j - A_i) / fmaxf(A0_j, A_i);
 							de_dt1 -= D_ij * (A_i - A0_j); // 16;
 #else
-									dif_max = fabs(eint_j - eint_i) / fmaxf(eint_j, eint_i);
-									de_dt1 -= D_ij * (eint_i - eint_j); // 16;
+							dif_max = fabs(eint_j - eint_i) / fmaxf(eint_j, eint_i);
+							de_dt1 -= D_ij * (eint_i - eint_j); // 16;
 #endif
 							if (data.chemistry) {
 								for (int fi = 0; fi < NCHEMFRACS; fi++) {
@@ -566,7 +569,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						atomicMax(&reduce->dtinv_diff, dtinv_diff);
 						atomicMax(&reduce->dtinv_acc, dtinv_acc);
 						atomicMax(&reduce->dtinv_divv, dtinv_divv);
-						if (rung < 0 || rung > 10) {
+						if (rung < 0 || rung >= 10) {
 							if (tid == 0) {
 								PRINT("Rung out of range %i %e %e %e %e %e %e %e %e\n", rung_hydro, vsig, h_i, c_i, dtinv_cfl, dtinv_visc, dtinv_diff,
 										dtinv_acc, dtinv_divv);

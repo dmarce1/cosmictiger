@@ -176,7 +176,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			if (t == 0.0) {
 				etot0 = etot;
 			}
-			fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot, (etot - etot0) / etot);
+			fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot, (etot - etot0) / (ekin + eint - epot));
 			fclose(fp);
 			fp = fopen("rho.dat", "at");
 			fprintf(fp, "%e %e\n", t, rho_max);

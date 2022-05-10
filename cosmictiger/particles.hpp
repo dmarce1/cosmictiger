@@ -217,7 +217,7 @@ inline char& particles_type(part_int index) {
 inline float particles_mass(part_int index) {
 	const float sph_mass = get_options().sph_mass;
 	const float dm_mass = get_options().dm_mass;
-	if( particles_type(index) == SPH_TYPE) {
+	if( particles_type(index) != DARK_MATTER_TYPE) {
 		return sph_mass;
 	} else {
 		return dm_mass;

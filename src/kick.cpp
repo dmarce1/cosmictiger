@@ -409,19 +409,21 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.ymom += m * vy;
 					kr.zmom += m * vz;
 					kr.nmom += m * sqrt(sqr(vx, vy, vz));
-					const float factor = eta * sqrtf(params.a);
-					dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
-					rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
-					kr.max_rung = std::max(rung, kr.max_rung);
-					if (rung < 0 || rung >= 10) {
-						PRINT("Rung out of range %i %e\n", rung, sqrtf(g2));
-					} else {
-						dt = 0.5f * rung_dt[rung] * params.t0;
-					}
-					if (!vsoft && type != SPH_TYPE) {
-						vx = fmaf(forces.gx[j], dt, vx);
-						vy = fmaf(forces.gy[j], dt, vy);
-						vz = fmaf(forces.gz[j], dt, vz);
+					if (!vsoft) {
+						const float factor = eta * sqrtf(params.a);
+						dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
+						rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
+						kr.max_rung = std::max(rung, kr.max_rung);
+						if (rung < 0 || rung >= 10) {
+							PRINT("Rung out of range %i %e\n", rung, sqrtf(g2));
+						} else {
+							dt = 0.5f * rung_dt[rung] * params.t0;
+						}
+						if (!vsoft && type != SPH_TYPE) {
+							vx = fmaf(forces.gx[j], dt, vx);
+							vy = fmaf(forces.gy[j], dt, vy);
+							vz = fmaf(forces.gz[j], dt, vz);
+						}
 					}
 				}
 				kr.pot += 0.5 * m * forces.phi[j];

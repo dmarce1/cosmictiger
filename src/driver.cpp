@@ -18,7 +18,7 @@
  */
 
 #define  SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.05
+
 
 #include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/constants.hpp>
@@ -331,6 +331,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		energies->pot = E.pot / scale;
 	}
 	energies->therm = E.therm / sqr(scale);
+	energies->therm = 0.0;
 
 #ifdef IMPLICIT_CONDUCTION
 	if (conduction) {
@@ -394,7 +395,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 
 	bool found_stars = false;
-	if (stars && minrung <= 1) {
+	if (tau > 0.0 && stars && minrung <= 1) {
 		//	sph_particles_entropy_to_energy();
 		double eloss = 0.0;
 		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
@@ -1037,7 +1038,6 @@ void driver() {
 			} else {
 				theta = 0.4;
 			}
-			theta = 0.55;
 
 			///		if (last_theta != theta) {
 			set_options(opts);

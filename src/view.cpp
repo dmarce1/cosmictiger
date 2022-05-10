@@ -72,7 +72,6 @@ struct sph_part_info: public dm_part_info {
 	float He;
 	float Z;
 	float alpha;
-	float cold_frac;
 	template<class A>
 	void serialize(A&& arc, unsigned ver) {
 		dm_part_info::serialize(arc, ver);
@@ -84,7 +83,6 @@ struct sph_part_info: public dm_part_info {
 		arc & Hn;
 		arc & Hep;
 		arc & Hepp;
-		arc & cold_frac;
 		arc & He;
 		arc & Z;
 		arc & alpha;
@@ -320,13 +318,6 @@ void view_output_views(int cycle, double a) {
 			}
 			//PRINT( "rungs\n");
 			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			if (stars) {
-				x.resize(0);
-				for (int i = 0; i < parts.hydro[bi].size(); i++) {
-					x.push_back(parts.hydro[bi][i].cold_frac);
-				}
-				DBPutPointvar1(db, "cold_frac", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			}
 			x.resize(0);
 			y.resize(0);
 			z.resize(0);
@@ -379,9 +370,6 @@ void view_output_views(int cycle, double a) {
 					//PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
 					double energy = eint * rho;
 					double T = energy / (n * cv);																							// 5
-					if (stars) {
-						T /= 1.f - parts.hydro[bi][i].cold_frac;
-					}
 					//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
 					t.push_back(T);
 
