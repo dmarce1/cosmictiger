@@ -306,6 +306,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	float dtinv_divv;
 	float dtinv_omega;
 	verbose = true;
+	timer tm;
 	double flops;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
@@ -334,20 +335,12 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	if (chem && tau > 0.0) {
 		PRINT("Doing chemistry step\n");
-		timer tm;
 		tm.start();
 		energies->heating -= chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
 		tm.stop();
 		PRINT("Took %e s\n", tm.read());
 	}
 
-	auto E = particles_sum_energies();
-	energies->kin = E.kin / sqr(scale);
-	if (minrung == 0) {
-		energies->pot = E.pot / scale;
-	}
-	energies->therm = E.therm / sqr(scale);
-	timer tm;
 #ifdef IMPLICIT_CONDUCTION
 	if (conduction) {
 
@@ -400,14 +393,13 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 #endif
 
-	if (vsoft) {
-		tm.reset();
-		tm.start();
-		all_tree_divv(minrung, scale);
-		tm.stop();
-		PRINT("divv = %e\n", tm.read());
-		max_rung = particles_apply_updates(minrung, t0, scale);
+	auto E = particles_sum_energies();
+	energies->kin = E.kin / sqr(scale);
+	if (minrung == 0) {
+		energies->pot = E.pot / scale;
 	}
+	energies->therm = E.therm / sqr(scale);
+
 
 	bool found_stars = false;
 	if (stars && minrung <= 1) {
@@ -420,6 +412,18 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		stars_statistics(scale);
 		found_stars = true;
 	}
+
+
+	if (vsoft) {
+		tm.reset();
+		tm.start();
+		all_tree_divv(minrung, scale);
+		tm.stop();
+		PRINT("divv = %e\n", tm.read());
+		max_rung = particles_apply_updates(minrung, t0, scale);
+	}
+
+
 
 #ifdef HOPKINS
 	bool rerun2 = true;

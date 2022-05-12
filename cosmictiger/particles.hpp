@@ -367,6 +367,7 @@ struct energies_t {
 	double ymom;
 	double zmom;
 	double nmom;
+	double dheat;
 	energies_t() {
 		cosmic = heating = pot = kin = therm = 0.f;
 		xmom = ymom = zmom = nmom = 0.0;

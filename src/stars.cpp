@@ -110,6 +110,7 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 					const double rho_c = rho_tot - rho_b;
 					const double tcool = sph_particles_tcool(i);
 					if( rho_b > 0.0f ) {
+			//			PRINT( "1\n");
 						const double tdyn = sqrt((3.0*M_PI*a*a*a)/(32.0*constants::G*rho_b));
 						const double pre = (get_options().gamma-1.0) * rho_b * eint;
 						const double cs = sqrt(pre/rho_b*get_options().gamma);
@@ -124,11 +125,15 @@ double stars_find(float a, float dt, int minrung, int step, float t0) {
 							const double d = pow(delta_b/delta0,1.5);
 							const double mj = a * b * c * d;
 							const double m0 = get_options().sph_mass * code_to_g;
+				//			PRINT( "%e %e\n", rho_b > eta,  rho0_b);
 							if( rho_b > eta * rho0_b) {
-
+					//			PRINT( "3\n");
 								if( tcool < tdyn ) {
+						//			PRINT( "4\n");
 									if( m0 > mj ) {
+							//			PRINT( "5\n");
 										if( sph_particles_divv(i) < 0.0 ) {
+								//			PRINT( "6\n");
 											const double eps = dt / tdyn;
 											const double p = 1.0 - exp(-eps);
 											const bool make_star = ( gsl_rng_uniform(rnd_gens[proc]) < p );

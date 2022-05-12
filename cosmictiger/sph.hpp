@@ -136,6 +136,7 @@ struct sph_run_return {
 	float ekin;
 	float ent;
 	float etherm;
+	float eheat;
 	float momx;
 	float momy;
 	float momz;

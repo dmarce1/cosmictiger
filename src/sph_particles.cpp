@@ -155,7 +155,6 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
-
 				const part_int k = sph_particles_dm_index(i);
 				const auto rung2 = sph_particles_rung(i);
 				const float dt2 = 0.5f * t0 / (1<<rung2);
@@ -213,6 +212,8 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 					}
 				} else if( phase == 2 ) {
 					if( rung2 >= minrung ) {
+
+						ALWAYS_ASSERT( particles_rung(sph_particles_dm_index(i))<=rung2);
 						for( int dim =0; dim < NDIM; dim++) {
 							particles_vel(dim,k) += sph_particles_dvel(dim,i)* dt2;
 						}
@@ -1224,7 +1225,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
-	FREAD(sph_particles_hr, sizeof(float), sph_particles_size(), fp);
+	FREAD(sph_particles_hr, sizeof(char), sph_particles_size(), fp);
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		FREAD(&sph_particles_isstar(0), sizeof(char), sph_particles_size(), fp);
@@ -1245,7 +1246,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
-	fwrite(sph_particles_hr, sizeof(float), sph_particles_size(), fp);
+	fwrite(sph_particles_hr, sizeof(char), sph_particles_size(), fp);
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		fwrite(&sph_particles_isstar(0), sizeof(char), sph_particles_size(), fp);

@@ -294,8 +294,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				if (!star_i) {
 					for (int j = tid; j < ws.neighbors.size(); j += block_size) {
 
-						continue;
-
 						const int kk = ws.neighbors[j];
 						const auto& rec1 = ws.rec1[kk];
 						const auto& rec2 = ws.rec2[kk];
@@ -417,7 +415,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 #ifdef HOPKINS// 5
 							de_dt2 = fmaf(mainv * f_ij * v0dW_i, sqr(gamma0 - 1.f) * eint_i * eint_j / pre_i, de_dt2);													// 4
 #else
-							de_dt2 = fmaf(mainv* v0dW_i, (gamma0 - 1.f) * eint_i * rhoinv_i / omega_i, de_dt2);
+									de_dt2 = fmaf(mainv* v0dW_i, (gamma0 - 1.f) * eint_i * rhoinv_i / omega_i, de_dt2);
 #endif
 #endif
 							dvx_dx -= m * rhoinv_i * vx_ij * dWdr_x_i / omega_i;									// 2
@@ -573,13 +571,14 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dthydro = fminf(dthydro, params.max_dt);									// 1
 						total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro * h_i);			// 2
 						char& rung = data.sph_rungs_snk[snki];
-						const char& rung_grav = data.part_rungs_snk[snki];
 						const float last_dt = rung_dt[rung] * params.t0;						// 1
 						const int rung_hydro = ceilf(log2fparamst0 - log2f(dthydro));     // 10
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
-						max_rung_grav = rung;
 						if (data.gravity) {
+							const char& rung_grav = data.part_rungs_snk[data.dm_index_snk[snki]];
+							max_rung_grav = rung_grav;
 							rung = max(max((int) max(rung_hydro, rung_grav), max(params.min_rung, (int) rung - 1)), 1);
+							ALWAYS_ASSERT(rung >= rung_grav);
 						} else {
 							rung = max(max((int) (rung_hydro), max(params.min_rung, (int) rung - 1)), 1);
 						}
