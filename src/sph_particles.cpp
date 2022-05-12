@@ -155,6 +155,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
+				continue;
 				const part_int k = sph_particles_dm_index(i);
 				const auto rung2 = sph_particles_rung(i);
 				const float dt2 = 0.5f * t0 / (1<<rung2);

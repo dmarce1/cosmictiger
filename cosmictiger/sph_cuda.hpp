@@ -163,27 +163,21 @@ struct softlens_record {
 	fixed32 x;
 	fixed32 y;
 	fixed32 z;
-	char type;
+	float m;
+};
+
+struct smoothlens_record {
+	fixed32 x;
+	fixed32 y;
+	fixed32 z;
 };
 
 #ifdef __CUDACC__
 template<int BLOCK_SIZE>
-inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float N, const device_vector<softlens_record>& rec, const array<fixed32, NDIM>& x,
-		const fixed32_range& obox, int type_i,float& wcount) {
+inline __device__ bool compute_softlens(float & h,float N, const device_vector<softlens_record>& rec, const array<fixed32, NDIM>& x,
+		const fixed32_range& obox, float dm_mass, float sph_mass) {
 	const int tid = threadIdx.x;
 	const int block_size = blockDim.x;
-	if (h < hmin) {
-		if (tid == 0) {
-			h = hmin * 1.1f;
-		}
-		__syncthreads();
-	}
-	if (h > hmax) {
-		if (tid == 0) {
-//			h = hmax * 0.5f;
-		}
-		__syncthreads();
-	}
 	const float hinv = 1.f / h;
 	__syncthreads();
 	int count;
@@ -207,37 +201,123 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 		const auto& y_i = x[YDIM];
 		const auto& z_i = x[ZDIM];
 		for (int j = tid; j < rec.size(); j += block_size) {
-			const auto& r = rec[j];
-			const auto& type_j = r.type;
-			if( type_j == type_i ) {
-				const auto& x_j = r.x;
-				const auto& y_j = r.y;
-				const auto& z_j = r.z;
-				const float x_ij = distance(x_i, x_j);
-				const float y_ij = distance(y_i, y_j);
-				const float z_ij = distance(z_i, z_j);
-				const float r2 = sqr(x_ij, y_ij, z_ij); // 2
-				const float r = sqrt(r2);// 4
-				const float q = r * hinv;// 1
-				if (q < 1.f) {                               // 1
-					const float w = kernelW(q);// 4
-					const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
-					f += w;// 1
-					dfdh += dwdh;// 1
-					count++;
-				}
+			const auto& rc = rec[j];
+			const auto& x_j = rc.x;
+			const auto& y_j = rc.y;
+			const auto& z_j = rc.z;
+			const float m_j = rc.m;
+			const float x_ij = distance(x_i, x_j);
+			const float y_ij = distance(y_i, y_j);
+			const float z_ij = distance(z_i, z_j);
+			const float r2 = sqr(x_ij, y_ij, z_ij); // 2
+			const float r = sqrt(r2);// 4
+			const float q = r * hinv;// 1
+			if (q < 1.f) {                               // 1
+				const float w = kernelW(q);// 4
+				const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
+				f += m_j * w;// 1
+				dfdh += m_j * dwdh;// 1
+				count++;
 			}
 		}
 		shared_reduce_add<float, BLOCK_SIZE>(f);
 		shared_reduce_add<int, BLOCK_SIZE>(count);
-		wcount = float(4 * M_PI / 3) * f;
 		shared_reduce_add<float, BLOCK_SIZE>(dfdh);
-		float X, dXdh;
-		dsmoothX_dh(h, hmin, hmax, X, dXdh);
 		dh = 0.2f * h;
 		if (count > 1) {
-			dfdh = dfdh + dXdh * f;
-			f *= X;
+			f -= N * float(3.0 / (4.0 * M_PI));
+			dh = -f / dfdh;
+			sgn = copysignf(1.f,dh);
+			if( sgn * last_sgn < 0.f ) {
+				w = fmaxf(0.5f * w,0.001f);
+			} else {
+				w = fminf(1.f,w*1.1f);
+			}
+			last_sgn = sgn;
+			dh = fminf(fmaxf(dh, -max_dh), max_dh);
+		}
+		error = fabsf(dh/h);
+		__syncthreads();
+		if (tid == 0) {
+			h += w * dh;
+			if (iter >= 100) {
+				PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, w, error, count);
+			}
+		}
+		ALWAYS_ASSERT(isfinite(h));
+			__syncthreads();
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (obox.end[dim] < range_fixed(x[dim] + fixed32(h)) + range_fixed::min()) {
+				box_xceeded = true;
+				break;
+			}
+			if (range_fixed(x[dim]) < obox.begin[dim] + range_fixed(h) + range_fixed::min()) {
+				box_xceeded = true;
+				break;
+			}
+		}
+		iter++;
+		shared_reduce_add<int, BLOCK_SIZE>(box_xceeded);
+	}while (error > 1e-4f && !box_xceeded);
+	if (tid == 0 && h <= 0.f) {
+		PRINT("Less than ZERO H! sph.cu %e\n", h);
+		__trap();
+	}
+	return !box_xceeded;
+
+}
+
+template<int BLOCK_SIZE>
+inline __device__ bool compute_smoothlens(float & h,float N, const device_vector<smoothlens_record>& rec, const array<fixed32, NDIM>& x,
+		const fixed32_range& obox) {
+	const int tid = threadIdx.x;
+	const int block_size = blockDim.x;
+	const float hinv = 1.f / h;
+	__syncthreads();
+	int count;
+	float f;
+	float dfdh;
+	int box_xceeded = false;
+	int iter = 0;
+	float dh;
+	float error;
+	float sgn;
+	float last_sgn = 0.f;
+	float w = 1.0f;
+	do {
+		float max_dh = h * 0.1f;
+		const float hinv = 1.f / h; // 4
+		const float h2 = sqr(h);// 1
+		count = 0;
+		f = 0.f;
+		dfdh = 0.f;
+		const auto& x_i = x[XDIM];
+		const auto& y_i = x[YDIM];
+		const auto& z_i = x[ZDIM];
+		for (int j = tid; j < rec.size(); j += block_size) {
+			const auto& rc = rec[j];
+			const auto& x_j = rc.x;
+			const auto& y_j = rc.y;
+			const auto& z_j = rc.z;
+			const float x_ij = distance(x_i, x_j);
+			const float y_ij = distance(y_i, y_j);
+			const float z_ij = distance(z_i, z_j);
+			const float r2 = sqr(x_ij, y_ij, z_ij); // 2
+			const float r = sqrt(r2);// 4
+			const float q = r * hinv;// 1
+			if (q < 1.f) {                               // 1
+				const float w = kernelW(q);// 4
+				const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
+				f += w;// 1
+				dfdh += dwdh;// 1
+				count++;
+			}
+		}
+		shared_reduce_add<float, BLOCK_SIZE>(f);
+		shared_reduce_add<int, BLOCK_SIZE>(count);
+		shared_reduce_add<float, BLOCK_SIZE>(dfdh);
+		dh = 0.2f * h;
+		if (count > 1) {
 			f -= N * float(3.0 / (4.0 * M_PI));
 			dh = -f / dfdh;
 			sgn = copysignf(1.f,dh);

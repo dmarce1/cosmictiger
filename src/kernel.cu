@@ -65,9 +65,9 @@ void kernel_adjust_options(options& opts) {
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
 	opts.cfl = 0.13;
-	opts.eta = 0.14;
-	opts.gneighbor_number = 203;
-	opts.sneighbor_number = 203;
+	opts.eta = 0.1;
+	opts.gneighbor_number = 128;
+	opts.sneighbor_number = 128;
 #endif
 	PRINT("Setting:\n");
 	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);

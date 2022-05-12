@@ -319,7 +319,7 @@ int particles_apply_updates(int minrung, float t0, float a) {
 			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
 				auto& rung = particles_rung(i);
-				if( particles_rung(i) >= minrung && particles_type(i) == DARK_MATTER_TYPE) {
+				if( particles_rung(i) >= minrung ) {
 					auto& vx = particles_vel(XDIM,i);
 					auto& vy = particles_vel(YDIM,i);
 					auto& vz = particles_vel(ZDIM,i);
@@ -328,15 +328,18 @@ int particles_apply_updates(int minrung, float t0, float a) {
 					auto& gz = particles_gforce(ZDIM,i);
 					const auto& divv = particles_divv(i);
 					const auto h = particles_softlen(i);
-					const float dt_divv = cfl * (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax)) * a / (fabs(divv) + 1e-37f);
+					const float dt_divv = cfl * 3.f / (fabs(divv) + 1e-37f);
 					float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
+					float dt = (float)(rung_dt[rung] * t0);
 					auto new_rung = (int) ceilf(log2f(t0/dt));
 					rung = new_rung;
 					max_rung = std::max(max_rung, (int) rung);
 					dt = 0.5f * rung_dt[rung] * t0;
-					vx += dt * gx;
-					vy += dt * gy;
-					vz += dt * gz;
+					if( particles_type(i) != SPH_TYPE ) {
+						vx += dt * gx;
+						vy += dt * gy;
+						vz += dt * gz;
+					}
 				}
 			}
 			return max_rung;

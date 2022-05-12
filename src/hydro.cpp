@@ -127,7 +127,8 @@ void hydro_driver(double tmax, int nsteps = 64) {
 	int step = 0;
 	int main_step = 0;
 	float e0, ent0;
-	const double m = get_options().sph_mass;
+	const double sph_mass = get_options().sph_mass;
+	const double dm_mass = get_options().dm_mass;
 	domains_rebound();
 	do {
 		int minrung = min_rung(itime);
@@ -149,9 +150,10 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			double ekin = 0.0;
 			double eint = 0.0;
 			double rho_max = 0.0;
-			double epot = kr.pot / 2.0;
+			double epot = kr.pot;
 			double xmom = 0.0, ymom = 0.0, zmom = 0.0;
 			for (part_int i = 0; i < particles_size(); i++) {
+				const float m = particles_type(i) == DARK_MATTER_TYPE ? dm_mass : sph_mass;
 				const double vx = particles_vel(XDIM, i);
 				const double vy = particles_vel(YDIM, i);
 				const double vz = particles_vel(ZDIM, i);
@@ -176,7 +178,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			if (t == 0.0) {
 				etot0 = etot;
 			}
-			fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot, (etot - etot0) / etot);
+			fprintf(fp, "%e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, epot, (etot - etot0) / (ekin + eint + fabs(epot)));
 			fclose(fp);
 			fp = fopen("rho.dat", "at");
 			fprintf(fp, "%e %e\n", t, rho_max);
@@ -204,30 +206,29 @@ void hydro_plummer() {
 	part_int N = pow(get_options().parts_dim, 3);
 	const double a = 0.01;
 	auto opts = get_options();
-	opts.sph_mass = 1.;
-	opts.dm_mass = 1.;
-	const double m = opts.sph_mass;
+	opts.sph_mass = 0.5;
+	opts.dm_mass = 1.5;
 	set_options(opts);
 	const double G = opts.GM;
-	const double M0 = N * m;
-	const double rho0 = 3.0 * M0 / (4.0 * M_PI) / (a * a * a);
+	double M0 = N * opts.dm_mass;
+	double rho0 = 3.0 * M0 / (4.0 * M_PI) / (a * a * a);
 	PRINT("Central density = %e\n", rho0);
 	double pot = 0.0;
 	double ekin = 0.0;
 	double maxr = 5.0 * a;
-	while (particles_size() < N) {
+	while (particles_size() < N/2) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
 		double r = sqrt(sqr(x, y, z));
 		double dist = powf(1.0 + sqr(r / a), -2.5);
 		if (rand1() < dist) {
-			double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+			double h = pow(opts.dm_mass * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
 			part_int k = particles_size();
 			particles_resize(k + 1);
 			double phi = -G * M0 / sqrt(r * r + a * a);
 			double v = sqrt(-phi / 2.0);
-			particles_pos(XDIM, k) = x - 0.5;
+			particles_pos(XDIM, k) = x - 0.55;
 			particles_pos(YDIM, k) = y - 0.5;
 			particles_pos(ZDIM, k) = z - 0.5;
 			x = rand1();
@@ -240,28 +241,32 @@ void hydro_plummer() {
 			x *= norminv;
 			y *= norminv;
 			z *= norminv;
-			particles_vel(XDIM, k) = x * v;
+			particles_vel(XDIM, k) = x * v + .0001;
 			particles_vel(YDIM, k) = y * v;
 			particles_vel(ZDIM, k) = z * v;
 			particles_rung(k) = 0;
-			particles_softlen(k) = h;
+			if( get_options().vsoft ) {
+				particles_softlen(k) = h;
+			}
 		}
 	}
-	sph_particles_resize(0);
+	M0 = N * opts.sph_mass;
+	rho0 = 3.0 * M0 / (4.0 * M_PI) / (a * a * a);
+	sph_particles_resize(N/2);
 	int k = 0;
-	while (k < 0) {
+	while (k < N/2) {
 		double x = maxr * (2.0 * rand1() - 1.0);
 		double y = maxr * (2.0 * rand1() - 1.0);
 		double z = maxr * (2.0 * rand1() - 1.0);
 		double r = sqrt(sqr(x, y, z));
 		double dist = powf(1.0 + sqr(r / a), -2.5);
 		if (rand1() < dist) {
-			double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+			double h = pow(opts.sph_mass * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
 //			part_int k = sph_particles_size();
 //			sph_particles_resize(k + 1);
 			double phi = -G * M0 / sqrt(r * r + a * a);
 			double v = sqrt(-phi / 2.0);
-			sph_particles_pos(XDIM, k) = x - 0.5;
+			sph_particles_pos(XDIM, k) = x - 0.45;
 			sph_particles_pos(YDIM, k) = y - 0.5;
 			sph_particles_pos(ZDIM, k) = z - 0.5;
 			x = rand1();
@@ -274,7 +279,7 @@ void hydro_plummer() {
 			x *= norminv;
 			y *= norminv;
 			z *= norminv;
-			sph_particles_vel(XDIM, k) = x * v;
+			sph_particles_vel(XDIM, k) = x * v - .0001;
 			sph_particles_vel(YDIM, k) = y * v;
 			sph_particles_vel(ZDIM, k) = z * v;
 			const float eint = 1e-3 * (v * v * 0.5);
@@ -285,9 +290,12 @@ void hydro_plummer() {
 #endif
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
-			particles_softlen(sph_particles_dm_index(k)) = h;
-			ekin += 0.5 * m * sqr(v);
-			pot += 0.5 * m * phi;
+			if( get_options().vsoft ) {
+				particles_softlen(sph_particles_dm_index(k)) = h;
+			}
+		//	particles_cat_index(sph_particles_dm_index(k)) = DARK_MATTER_TYPE;
+			ekin += 0.5 * opts.sph_mass * sqr(v);
+			pot += 0.5 * opts.sph_mass * phi;
 			k++;
 		}
 	}

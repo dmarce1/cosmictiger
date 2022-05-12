@@ -20,7 +20,7 @@
 #include <cosmictiger/sph_cuda.hpp>
 
 struct prehydro1_workspace {
-	device_vector<softlens_record> rec1;
+	device_vector<smoothlens_record> rec1;
 };
 
 __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {
@@ -66,7 +66,6 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
-					ws.rec1[k].type = SPH_TYPE;
 				}
 			}
 		}
@@ -87,7 +86,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens < PREHYDRO1_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
+				if (!compute_smoothlens < PREHYDRO1_BLOCK_SIZE > (h, data.N, ws.rec1, x, self.outer_box)) {
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
 						if (tid == 0) {
@@ -133,7 +132,7 @@ struct prehydro2_record2 {
 };
 
 struct prehydro2_workspace {
-	device_vector<softlens_record> rec1;
+	device_vector<smoothlens_record> rec1;
 	device_vector<prehydro2_record2> rec2;
 	device_vector<int> neighbors;
 };
@@ -198,7 +197,6 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 					ws.rec1[k].x = x[XDIM];
 					ws.rec1[k].y = x[YDIM];
 					ws.rec1[k].z = x[ZDIM];
-					ws.rec1[k].type = SPH_TYPE;
 					ws.rec2[k].h = data.h[pi];
 					if (params.stars) {
 						ws.rec2[k].star = data.stars[pi];
@@ -285,7 +283,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				x[ZDIM] = data.z[i];
 				float& h = data.rec2_snk[snki].h;
 				float wcount;
-				if (!compute_softlens < PREHYDRO2_BLOCK_SIZE > (h, params.hmin, params.hmax, data.N, ws.rec1, x, self.outer_box, SPH_TYPE, wcount)) {
+				if (!compute_smoothlens < PREHYDRO2_BLOCK_SIZE > (h, data.N, ws.rec1, x, self.outer_box)) {
 					box_xceeded = true;
 					if (tid == 0) {
 						atomicAdd(&reduce->flag, 1);
@@ -399,14 +397,10 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 				data.rho_snk[snki] = rho_i;
 				const auto one = w_sum / (3.0 / 4.0 / M_PI * data.N);
 				//	ALWAYS_ASSERT(fabs(one - 1.0) < .001);
-				const float A = 0.33333333333f * dw_sum / w_sum;
-				float f, dfdh;
-				dsmoothX_dh(h_i, params.hmin, params.hmax, f, dfdh);
-				const float B = 0.33333333333f * h_i / f * dfdh;
-				const float omega_i = (A + B) / (1.0f + B);
+				const float omega_i = 0.33333333333f * dw_sum / w_sum;
 				data.omega_snk[snki] = omega_i;
 #ifdef HOPKINS
-				data.omegaP_snk[snki] = 1.f / ((-pre + 0.33333333333333f * dpredh) / (f * w_sum)) * omega_i;
+				data.omegaP_snk[snki] = 1.f / ((-pre + 0.33333333333333f * dpredh) / (w_sum)) * omega_i;
 #ifdef ENTROPY
 				data.pre_snk[snki] = powf(data.m * pre * h3inv_i, data.def_gamma);
 #else
@@ -420,7 +414,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 #endif
 				//	PRINT( "%e\n", 	data.omegaP_snk[snki] );
 				if (!(omega_i > 0.0)) {
-					PRINT("%e %e %e %e %e %e\n", omega_i, A, B, h_i, w_sum, dw_sum);
+					PRINT("%e %e %e %e\n", omega_i,  h_i, w_sum, dw_sum);
 				}
 				ALWAYS_ASSERT(omega_i > 0.f);
 				__syncthreads();

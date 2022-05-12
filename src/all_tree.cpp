@@ -689,6 +689,7 @@ hpx::future<all_tree_range_return> all_tree_find_ranges(tree_id self_id, int min
 			double r2 = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
+				ALWAYS_ASSERT(isfinite(x));
 				r2 += sqr(x - self.pos[dim].to_double());
 				myrange.first.begin[dim] = std::min(myrange.first.begin[dim].to_double(), x - tiny);
 				myrange.second.begin[dim] = std::min(myrange.second.begin[dim].to_double(), x - h_wt * h);

@@ -225,52 +225,22 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	sparams.phase = 0;
 	int doneiters = 0;
-	if (!vsoft) {
-		sph_particles_reset_converged();
-		do {
-			sparams.set = SPH_SET_ACTIVE;
-			sparams.run_type = SPH_RUN_PREHYDRO1;
-			timer tm;
-			tm.start();
-			kr = sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-			tm.reset();
-			cont = kr.rc;
-			tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-			tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-			tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-			tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-//			tnparams.set = SPH_SET_ACTIVE;
-			tm.start();
-			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-			sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-			profiler_exit();
-			tm.stop();
-			PRINT("%e\n", tm.read());
-			tm.reset();
-			tm.start();
-			tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
-			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-			sph_tree_neighbor(tnparams, root_id, checklist).get();
-			profiler_exit();
-			tm.stop();
-			PRINT("%e\n", tm.read());
-			tm.reset();
-
-			kr = sph_run_return();
-		} while (cont);
-	} else {
-
-		sph_particles_softlens2smoothlens(minrung);
-
+	sph_particles_reset_converged();
+	do {
+		sparams.set = SPH_SET_ACTIVE;
+		sparams.run_type = SPH_RUN_PREHYDRO1;
 		timer tm;
-		tnparams.h_wt = 1.01;
+		tm.start();
+		kr = sph_run(sparams, true);
+		tm.stop();
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_PREHYDRO1): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
+		tm.reset();
+		cont = kr.rc;
+		tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.seto = SPH_SET_ALL;
-		tnparams.seti = SPH_SET_ALL;
+		tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
+		tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
 //			tnparams.set = SPH_SET_ACTIVE;
 		tm.start();
 		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
@@ -280,7 +250,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("%e\n", tm.read());
 		tm.reset();
 		tm.start();
-		tnparams.seti = SPH_INTERACTIONS_IJ;
+		tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
 		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
 		sph_tree_neighbor(tnparams, root_id, checklist).get();
@@ -288,7 +258,9 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.stop();
 		PRINT("%e\n", tm.read());
 		tm.reset();
-	}
+
+		kr = sph_run_return();
+	} while (cont);
 	sph_particles_reset_converged();
 	do {
 		sparams.set = SPH_SET_ACTIVE;
@@ -334,7 +306,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 	tm.start();
 	kr = sph_run(sparams, true);
-	PRINT( "VISC = %e\n", kr.visc);
+	PRINT("VISC = %e\n", kr.visc);
 	energies->visc -= kr.visc / sqr(scale);
 	tm.stop();
 	max_rung = 0;
@@ -422,7 +394,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 
 	bool found_stars = false;
-	if (stars && minrung <= 1 ) {
+	if (stars && minrung <= 1) {
 		//	sph_particles_entropy_to_energy();
 		double eloss = 0.0;
 		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
@@ -1059,20 +1031,21 @@ void driver() {
 					const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
 					energies.cosmic += 0.5 * cosmos_dadt(a) * t0 * ene;
 				}
-				double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic + energies.visc;;
+				double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic + energies.visc;
+				;
 				if (tau == 0) {
 					energy0 = 0.0;
 					energies.cosmic = -energy;
 					energy = 0.0;
 				}
-				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + fabsf(energies.cosmic)+ fabsf(energies.visc);
-				PRINT( "%e\n", norm);
+				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + fabsf(energies.cosmic) + fabsf(energies.visc);
+				PRINT("%e\n", norm);
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
 				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom, energies.ymom, energies.zmom, energies.nmom, energies.pot,
 						energies.kin, energies.therm, energies.heating, energies.visc, energies.cosmic, err);
 				fclose(fp);
-				const double ene = 2.0 * (energies.kin + energies.therm ) + energies.pot;
+				const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
 				energies.cosmic += 0.5 * cosmos_dadt(a) * t0 * ene;
 			}
 			if (full_eval) {
