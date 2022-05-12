@@ -396,12 +396,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						sph_particles_gforce(XDIM, k) = forces.gx[j];
 						sph_particles_gforce(YDIM, k) = forces.gy[j];
 						sph_particles_gforce(ZDIM, k) = forces.gz[j];
-					} else {
-						if (!params.first_call) {
-							vx = fmaf(forces.gx[j], dt, vx);
-							vy = fmaf(forces.gy[j], dt, vy);
-							vz = fmaf(forces.gz[j], dt, vz);
-						}
+					}
+					if (!params.first_call) {
+						vx = fmaf(forces.gx[j], dt, vx);
+						vy = fmaf(forces.gy[j], dt, vy);
+						vz = fmaf(forces.gz[j], dt, vz);
 					}
 					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
 					kr.kin += 0.5 * m * sqr(vx, vy, vz);

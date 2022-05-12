@@ -843,7 +843,8 @@ sph_run_return sph_run_workspace::to_gpu() {
 	CUDA_CHECK(cudaMemcpyAsync(cuda_data.neighbors, host_neighbors.data(), sizeof(int) * host_neighbors.size(), cudaMemcpyHostToDevice, stream));
 	cuda_data.dm_index_snk = &sph_particles_dm_index(0);
 	cuda_data.sa_snk = &sph_particles_semiactive(0);
-	cuda_data.rungs_snk = &particles_rung(0);
+	cuda_data.part_rungs_snk = &particles_rung(0);
+	cuda_data.sph_rungs_snk = &sph_particles_rung(0);
 	cuda_data.omega_snk = &sph_particles_omega(0);
 	cuda_data.omegaP_snk = &sph_particles_omegaP(0);
 	cuda_data.pre_snk = &sph_particles_pressure(0);

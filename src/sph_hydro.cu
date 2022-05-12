@@ -170,7 +170,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			int rung_i = data.rungs_snk[data.dm_index_snk[snki]];
+			int rung_i = data.sph_rungs_snk[snki];
 			bool use = rung_i >= params.min_rung;
 			const float& m = data.m;
 			const float minv = 1.f / m;
@@ -504,21 +504,6 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				shared_reduce_add<float, HYDRO_BLOCK_SIZE>(visc);
 				if (tid == 0) {
 					atomicAdd(&reduce->visc, visc);
-					float gx_i;
-					float gy_i;
-					float gz_i;
-					if (data.gravity) {
-						gx_i = data.gx_snk[snki];
-						gy_i = data.gy_snk[snki];
-						gz_i = data.gz_snk[snki];
-					} else {
-						gx_i = 0.f;
-						gy_i = 0.f;
-						gz_i = 0.f;
-					}
-					ax += gx_i;																			// 1
-					ay += gy_i;																			// 1
-					az += gz_i;																			// 1
 					data.rec6_snk[snki].dvel[XDIM] = ax;
 					data.rec6_snk[snki].dvel[YDIM] = ay;
 					data.rec6_snk[snki].dvel[ZDIM] = az;
@@ -541,7 +526,7 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						curl_vx = dvz_dy - dvy_dz;										   // 1
 						curl_vy = -dvz_dx + dvx_dz;                              // 2
 						curl_vz = dvy_dx - dvx_dy;
-						char& rung = data.rungs_snk[data.dm_index_snk[snki]];
+						char& rung = data.sph_rungs_snk[snki];
 						const float dt1 = params.t0 * rung_dt[rung];
 						const float curlv = sqrtf(sqr(curl_vx, curl_vy, curl_vz));                             // 9
 						const float div_v0 = data.divv_snk[snki];
@@ -585,16 +570,12 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_diff);							// 1
 						dtinv_hydro = fmaxf(dtinv_hydro, dtinv_acc);							// 1
 						float dthydro = params.cfl * params.a / dtinv_hydro;	// 6
-						const float g2 = sqr(gx_i, gy_i, gz_i);									// 5
-						const float dtinv_grav = sqrtf(sqrtf(g2));								// 8
-						float dtgrav = data.eta * sqrtf(params.a * (params.vsoft ? h_i : data.gsoft)) / (dtinv_grav + 1e-30f); // 11
 						dthydro = fminf(dthydro, params.max_dt);									// 1
-						dtgrav = fminf(dtgrav, params.max_dt);										// 1
 						total_vsig_max = fmaxf(total_vsig_max, dtinv_hydro * h_i);			// 2
-						char& rung = data.rungs_snk[data.dm_index_snk[snki]];
+						char& rung = data.sph_rungs_snk[snki];
+						const char& rung_grav = data.part_rungs_snk[snki];
 						const float last_dt = rung_dt[rung] * params.t0;						// 1
 						const int rung_hydro = ceilf(log2fparamst0 - log2f(dthydro));     // 10
-						const int rung_grav = rung;       // 10
 						max_rung_hydro = max(max_rung_hydro, rung_hydro);
 						max_rung_grav = rung;
 						if (data.gravity) {

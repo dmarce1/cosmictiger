@@ -330,16 +330,13 @@ int particles_apply_updates(int minrung, float t0, float a) {
 					const auto h = particles_softlen(i);
 					const float dt_divv = cfl * 3.f / (fabs(divv) + 1e-37f);
 					float dt = std::min(dt_divv,(float)(rung_dt[rung] * t0));
-					float dt = (float)(rung_dt[rung] * t0);
 					auto new_rung = (int) ceilf(log2f(t0/dt));
 					rung = new_rung;
 					max_rung = std::max(max_rung, (int) rung);
 					dt = 0.5f * rung_dt[rung] * t0;
-					if( particles_type(i) != SPH_TYPE ) {
-						vx += dt * gx;
-						vy += dt * gy;
-						vz += dt * gz;
-					}
+					vx += dt * gx;
+					vy += dt * gy;
+					vz += dt * gz;
 				}
 			}
 			return max_rung;

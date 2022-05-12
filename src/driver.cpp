@@ -131,13 +131,12 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
+sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, energies_t* energies,
 		bool verbose) {
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
 	verbose = true;
-	*eheat = 0.0;
 	if (verbose)
 		PRINT("Doing SPH step with minrung = %i\n", minrung);
 	sph_tree_create_params tparams;
@@ -158,6 +157,7 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
 
+
 	tm.start();
 	if (verbose)
 		PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -168,29 +168,6 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	if (verbose)
 		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
 	tm.reset();
-	return sr;
-
-}
-
-sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, energies_t* energies,
-		bool verbose) {
-	const bool stars = get_options().stars;
-	const bool diff = get_options().diffusion;
-	const bool chem = get_options().chem;
-	const bool conduction = get_options().conduction;
-	const bool vsoft = get_options().vsoft;
-	float dtinv_cfl;
-	float dtinv_visc;
-	float dtinv_diff;
-	float dtinv_cond;
-	float dtinv_acc;
-	float dtinv_divv;
-	float dtinv_omega;
-	verbose = true;
-	double flops;
-	if (verbose)
-		PRINT("Doing SPH step with minrung = %i\n", minrung);
-	sph_particles_apply_updates(minrung, 0, t0, tau);
 
 	sph_run_params sparams;
 	if (adot != 0.0) {
@@ -203,19 +180,16 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	sparams.a = scale;
 	sparams.t0 = t0;
 	sparams.min_rung = minrung;
+
+	sph_particles_apply_updates(minrung, 0, t0, tau);
+
 	bool cont;
 	sph_run_return kr;
 	sparams.set = SPH_SET_ACTIVE;
 	sparams.phase = phase;
 	const bool glass = get_options().glass;
-	sph_tree_neighbor_params tnparams;
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
 
 	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
 	tnparams.seti = SPH_INTERACTIONS_I;
@@ -272,9 +246,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		if (verbose)
 			PRINT("sph_run(SPH_RUN_PREHYDRO2): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
 		tm.reset();
-		if (vsoft) {
-			break;
-		}
 		cont = kr.rc;
 		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.01;
 		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
@@ -299,7 +270,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		tm.reset();
 		kr = sph_run_return();
 	} while (cont);
-	timer tm;
 
 	sparams.phase = 0;
 	sparams.run_type = SPH_RUN_HYDRO;
@@ -316,6 +286,52 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 
 	sph_particles_apply_updates(minrung, 1, t0, tau);
 
+
+	return sr;
+
+}
+
+sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, energies_t* energies,
+		bool verbose) {
+	const bool stars = get_options().stars;
+	const bool diff = get_options().diffusion;
+	const bool chem = get_options().chem;
+	const bool conduction = get_options().conduction;
+	const bool vsoft = get_options().vsoft;
+	float dtinv_cfl;
+	float dtinv_visc;
+	float dtinv_diff;
+	float dtinv_cond;
+	float dtinv_acc;
+	float dtinv_divv;
+	float dtinv_omega;
+	verbose = true;
+	double flops;
+	if (verbose)
+		PRINT("Doing SPH step with minrung = %i\n", minrung);
+
+	sph_run_params sparams;
+	if (adot != 0.0) {
+		sparams.max_dt = SCALE_DT * scale / fabs(adot);
+	}
+	sparams.adot = adot;
+	sparams.tau = tau;
+	sparams.tzero = tau == 0.0;
+	sparams.max_rung = max_rung;
+	sparams.a = scale;
+	sparams.t0 = t0;
+	sparams.min_rung = minrung;
+	sph_tree_neighbor_params tnparams;
+
+	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
+	tnparams.min_rung = minrung;
+	tree_id root_id;
+	root_id.proc = 0;
+	root_id.index = 0;
+	vector<tree_id> checklist;
+	checklist.push_back(root_id);
+
+
 	if (chem && tau > 0.0) {
 		PRINT("Doing chemistry step\n");
 		timer tm;
@@ -331,7 +347,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		energies->pot = E.pot / scale;
 	}
 	energies->therm = E.therm / sqr(scale);
-
+	timer tm;
 #ifdef IMPLICIT_CONDUCTION
 	if (conduction) {
 
@@ -410,6 +426,8 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 #else
 	bool rerun2 = found_stars;
 #endif
+	sph_run_return kr;
+	bool cont;
 	if (rerun2) {
 		sparams.phase = 0;
 		int doneiters = 0;
@@ -492,7 +510,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 
 	bool rc = true;
-	while (rc) {
+	while (rc ) {
 		sparams.run_type = SPH_RUN_RUNGS;
 		tm.start();
 		rc = sph_run(sparams, true).rc;
@@ -1011,7 +1029,7 @@ void driver() {
 			const bool chem = get_options().chem;
 			if (sph && !glass) {
 				double dummy;
-				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &dummy);
+				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &energies);
 			}
 			std::pair<kick_return, tree_create_return> tmp;
 			if (get_options().htime) {

@@ -209,12 +209,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 				sph_gx[j] = gx[i];
 				sph_gy[j] = gy[i];
 				sph_gz[j] = gz[i];
-			} else {
-				if (!params.first_call) {
-					vx = fmaf(gx[i], dt, vx);
-					vy = fmaf(gy[i], dt, vy);
-					vz = fmaf(gz[i], dt, vz);
-				}
+			}
+			if (!params.first_call) {
+				vx = fmaf(gx[i], dt, vx);
+				vy = fmaf(gy[i], dt, vy);
+				vz = fmaf(gz[i], dt, vz);
 			}
 			g2 = sqr(gx[i], gy[i], gz[i]);
 			kin_tot += 0.5f * mass * sqr(vx, vy, vz);

@@ -76,7 +76,7 @@ __global__ void sph_cuda_prehydro1(sph_run_params params, sph_run_cuda_data data
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			const auto rung = data.rungs_snk[data.dm_index_snk[snki]];
+			const auto rung = data.sph_rungs_snk[snki];
 			const bool active = rung >= params.min_rung;
 			auto& converged = data.converged_snk[snki];
 			const bool use = active && !converged;
@@ -223,7 +223,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
 			const int snki = self.sink_part_range.first - self.part_range.first + i;
-			const auto rung = data.rungs_snk[data.dm_index_snk[snki]];
+			const auto rung = data.sph_rungs_snk[snki];
 			const bool active = rung >= params.min_rung;
 			int semiactive = 0;
 			x[XDIM] = data.x[i];

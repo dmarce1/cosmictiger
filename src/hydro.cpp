@@ -144,7 +144,7 @@ void hydro_driver(double tmax, int nsteps = 64) {
 			kr = tmp.first;
 		}
 		double dumm1;
-		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dumm1, true);
+		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		if (minrung == 0) {
 			double ekin = 0.0;

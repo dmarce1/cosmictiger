@@ -172,6 +172,7 @@ SPH_PARTICLES_EXTERN float* sph_particles_fc;
 SPH_PARTICLES_EXTERN float* sph_particles_rh;
 SPH_PARTICLES_EXTERN float* sph_particles_tc;
 SPH_PARTICLES_EXTERN char* sph_particles_or;
+SPH_PARTICLES_EXTERN char* sph_particles_hr;
 SPH_PARTICLES_EXTERN char* sph_particles_sa;
 SPH_PARTICLES_EXTERN char* sph_particles_st;
 
@@ -405,7 +406,7 @@ inline float& sph_particles_vel(int dim, int index) {
 }
 
 inline char& sph_particles_rung(int index) {
-	return particles_rung(sph_particles_dm_index(index));
+	return sph_particles_hr[index];
 }
 
 #ifdef ENTROPY

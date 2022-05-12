@@ -155,7 +155,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 			const part_int b = (size_t) proc * sph_particles_size() / nthreads;
 			const part_int e = (size_t) (proc+1) * sph_particles_size() / nthreads;
 			for( int i = b; i < e; i++) {
-				continue;
+
 				const part_int k = sph_particles_dm_index(i);
 				const auto rung2 = sph_particles_rung(i);
 				const float dt2 = 0.5f * t0 / (1<<rung2);
@@ -371,6 +371,7 @@ void sph_particles_swap(part_int i, part_int j) {
 	std::swap(sph_particles_st[i], sph_particles_st[j]);
 	std::swap(sph_particles_rh[i], sph_particles_rh[j]);
 	std::swap(sph_particles_pre[i], sph_particles_pre[j]);
+	std::swap(sph_particles_hr[i], sph_particles_hr[j]);
 #ifdef ENTROPY
 	std::swap(sph_particles_dentr2(i), sph_particles_dentr2(j));
 #else
@@ -451,6 +452,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
 		//	PRINT("Resizing sph_particles to %li from %li\n", new_capacity, capacity);
+		sph_particles_array_resize(sph_particles_hr, new_capacity, true);
 		sph_particles_array_resize(sph_particles_rh, new_capacity, true);
 		sph_particles_array_resize(sph_particles_st, new_capacity, true);
 		sph_particles_array_resize(sph_particles_fc, new_capacity, true);
@@ -509,6 +511,7 @@ void sph_particles_resize(part_int sz, bool parts2) {
 			sph_particles_dvel0(dim, oldsz + i) = 0.0f;
 			sph_particles_gforce(dim, oldsz + i) = 0.0f;
 		}
+		sph_particles_rung(oldsz + i) = 0;
 	}
 }
 
@@ -1221,6 +1224,7 @@ void sph_particles_load(FILE* fp) {
 	FREAD(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
 	FREAD(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
+	FREAD(sph_particles_hr, sizeof(float), sph_particles_size(), fp);
 	FREAD(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		FREAD(&sph_particles_isstar(0), sizeof(char), sph_particles_size(), fp);
@@ -1241,6 +1245,7 @@ void sph_particles_save(FILE* fp) {
 	fwrite(sph_particles_fc, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_dv, sizeof(float), sph_particles_size(), fp);
 	fwrite(sph_particles_de3, sizeof(float), sph_particles_size(), fp);
+	fwrite(sph_particles_hr, sizeof(float), sph_particles_size(), fp);
 	fwrite(&sph_particles_dm_index(0), sizeof(part_int), sph_particles_size(), fp);
 	if (stars) {
 		fwrite(&sph_particles_isstar(0), sizeof(char), sph_particles_size(), fp);
