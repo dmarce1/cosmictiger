@@ -90,7 +90,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 		}
 		float hmin_all = 1e+20f;
 		float hmax_all = 0.0;
-		const float w0 = kernelW(0.f);
+		const float w0 = kernelG(0.f);
 		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
@@ -140,6 +140,7 @@ __global__ void cuda_softlens(all_tree_data params, all_tree_reduction* reduce) 
 struct derivatives_record2 {
 	float h;
 	char rung;
+	char type;
 };
 
 struct derivatives_workspace {
@@ -210,6 +211,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 					ws.rec1[k].z = x[ZDIM];
 					ws.rec1[k].m = params.sph ? (params.types[pi] == DARK_MATTER_TYPE ? params.dm_mass : params.sph_mass) : 1.f;
 					ws.rec2[k].h = params.h[pi];
+					ws.rec2[k].type = params.types[pi];
 					ws.rec2[k].rung = params.rungs[pi];
 				}
 			}
@@ -217,7 +219,7 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 		__syncthreads();
 		float hmin_all = 1e+20;
 		float hmax_all = 0.0;
-		const float w0 = kernelW(0.f);
+		const float w0 = kernelG(0.f);
 		__syncthreads();
 		for (int i = self.part_range.first; i < self.part_range.second; i++) {
 			__syncthreads();
@@ -317,17 +319,20 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				float w_sum = 0.f;
 				float dw_sum = 0.f;
 				float dpot_dh = 0.f;
-				float rho_i = 0.f;
+				float rhoc_i = 0.f;
+				float rhob_i = 0.f;
 				__syncthreads();
 				flops += 10;
 				const int jmax = round_up(ws.rec1.size(), DERIVATIVES_BLOCK_SIZE);
 				for (int j = tid; j < jmax; j += block_size) {
 					if (j < ws.rec1.size()) {
 						const auto& rec1 = ws.rec1[j];
+						const auto& rec2 = ws.rec2[j];
 						const fixed32& x_j = rec1.x;
 						const fixed32& y_j = rec1.y;
 						const fixed32& z_j = rec1.z;
 						const float m_j = rec1.m;
+						const auto type_j = rec2.type;
 						const float x_ij = distance(x_i, x_j); // 1
 						const float y_ij = distance(y_i, y_j); // 1
 						const float z_ij = distance(z_i, z_j); // 1
@@ -336,11 +341,15 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i; // 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
+							const float w = kernelG(q);
+							const float dwdq = dkernelG_dq(q);
 							dw_sum -= m_j * q * dwdq;							// 2
 							w_sum += m_j * w;
-							rho_i += m_j * w * h3inv_i;
+							if (type_j == DARK_MATTER_TYPE || type_j == STAR_TYPE) {
+								rhoc_i += m_j * w * h3inv_i;
+							} else {
+								rhob_i += m_j * w * h3inv_i;
+							}
 							const float pot = -kernelPot(q);
 							const float force = kernelFqinv(q) * q;
 							dpot_dh += m_j * (pot + q * force);
@@ -352,13 +361,15 @@ __global__ void cuda_derivatives(all_tree_data params, all_tree_reduction* reduc
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(w_sum);
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dw_sum);
 				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(dpot_dh);
-				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(rho_i);
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(rhoc_i);
+				shared_reduce_add<float, DERIVATIVES_BLOCK_SIZE>(rhob_i);
 				const float omega = 0.33333333333f * dw_sum / w_sum;
 				const float zeta_i = 0.33333333333f * dpot_dh / (w_sum * omega);
 				__syncthreads();
 				if (tid == 0) {
 					params.zeta_snk[snki] = zeta_i;
-					params.rho_snk[snki] = rho_i;
+					params.rhoc_snk[snki] = rhoc_i;
+					params.rhob_snk[snki] = rhob_i;
 				}
 			}
 		}
@@ -491,8 +502,8 @@ __global__ void cuda_divv(all_tree_data params, all_tree_reduction* reduce) {
 						const float rinv = 1.0f / (r + 1e-37f);
 						const float q = r * hinv_i;							// 1
 						if (q < 1.f) {                               // 1
-							const float w = kernelW(q);
-							const float dwdq = dkernelW_dq(q);
+							const float w = kernelG(q);
+							const float dwdq = dkernelG_dq(q);
 							dw_sum -= m_j * q * dwdq;                               // 2
 							divv += m_j * (vx_ij * x_ij + vy_ij * y_ij + vz_ij * z_ij) * rinv * dwdq;
 						}

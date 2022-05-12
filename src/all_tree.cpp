@@ -362,7 +362,8 @@ softlens_return all_tree_derivatives_execute(int minrung, float a, int pass) {
 	params.pass = pass;
 	params.sa_snk = &particles_semiactive(0);
 	params.sph_h_snk = &sph_particles_smooth_len(0);
-	params.rho_snk = &particles_rho(0);
+	params.rhob_snk = &particles_rhob(0);
+	params.rhoc_snk = &particles_rhoc(0);
 	params.a = a;
 
 	CUDA_CHECK(cudaMalloc(&params.selfs, sizeof(int) * host_selflist.size()));

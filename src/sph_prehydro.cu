@@ -358,6 +358,7 @@ __global__ void sph_cuda_prehydro2(sph_run_params params, sph_run_cuda_data data
 							const float dwdq = dkernelW_dq(q);
 							dw_sum -= q * dwdq;                      // 2
 							w_sum += w;
+							ALWAYS_ASSERT(!star_j);
 							if (!star_j) {
 #ifdef HOPKINS
 #ifdef ENTROPY

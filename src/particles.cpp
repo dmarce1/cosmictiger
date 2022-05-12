@@ -911,7 +911,8 @@ void particles_resize(part_int sz) {
 		if (get_options().sph) {
 			particles_array_resize(particles_sph, new_capacity, true);
 			particles_array_resize(particles_ty, new_capacity, true);
-			particles_array_resize(particles_rh, new_capacity, true);
+			particles_array_resize(particles_rh1, new_capacity, true);
+			particles_array_resize(particles_rh2, new_capacity, true);
 		}
 		capacity = new_capacity;
 	}
@@ -1282,7 +1283,9 @@ void particles_load(FILE* fp) {
 		FREAD(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
 		FREAD(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
 	}
-
+	if( get_options().stars ) {
+		stars_load(fp);
+	}
 }
 
 void particles_save(FILE* fp) {
@@ -1322,6 +1325,9 @@ void particles_save(FILE* fp) {
 		fwrite(&rung_end, sizeof(int), 1, fp);
 		fwrite(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
 		fwrite(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
+	}
+	if( get_options().stars ) {
+		stars_save(fp);
 	}
 
 }

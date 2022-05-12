@@ -294,6 +294,8 @@ __global__ void sph_cuda_hydro(sph_run_params params, sph_run_cuda_data data, sp
 				if (!star_i) {
 					for (int j = tid; j < ws.neighbors.size(); j += block_size) {
 
+
+
 						const int kk = ws.neighbors[j];
 						const auto& rec1 = ws.rec1[kk];
 						const auto& rec2 = ws.rec2[kk];

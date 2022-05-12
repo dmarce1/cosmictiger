@@ -138,13 +138,13 @@ void hydro_driver(double tmax, int nsteps = 64) {
 //			output_line(main_step);
 			main_step++;
 		}
+		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		kick_return kr;
 		if (get_options().gravity) {
 			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.5, t0 == 0.0, minrung == 0);
 			kr = tmp.first;
 		}
 		double dumm1;
-		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
 		if (minrung == 0) {
 			double ekin = 0.0;
@@ -288,6 +288,7 @@ void hydro_plummer() {
 #else
 			sph_particles_rec2(k).eint = eint;
 #endif
+			particles_rung(sph_particles_dm_index(k)) = 0;
 			sph_particles_rung(k) = 0;
 			sph_particles_smooth_len(k) = h;
 			if( get_options().vsoft ) {

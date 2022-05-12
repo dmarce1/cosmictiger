@@ -534,8 +534,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r3inv = kernelFqinv(q_i) * h3inv_i;
 #ifndef DM_CON_H_ONLY
 						r3inv += kernelFqinv(q_j) * h3inv_j;
-						float fc = (q_i < 1.f) * zeta_i * dkernelW_dq(q_i) * h2inv_i * r1inv;
-						fc += (q_j < 1.f) * zeta_j * dkernelW_dq(q_j) * h2inv_j * r1inv;
+						float fc = (q_i < 1.f) * zeta_i * dkernelG_dq(q_i) * h2inv_i * r1inv;
+						fc += (q_j < 1.f) * zeta_j * dkernelG_dq(q_j) * h2inv_j * r1inv;
 						r3inv = 0.5f * (r3inv + fc);
 #endif
 						if (do_phi) {

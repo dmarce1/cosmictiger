@@ -131,8 +131,8 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, energies_t* energies,
-		bool verbose) {
+sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt,
+		energies_t* energies, bool verbose, bool nohydro) {
 	const bool stars = get_options().stars;
 	const bool diff = get_options().diffusion;
 	const bool chem = get_options().chem;
@@ -157,7 +157,6 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
 	tnparams.min_rung = minrung;
 
-
 	tm.start();
 	if (verbose)
 		PRINT("starting sph_tree_create = %e\n", tm.read());
@@ -181,7 +180,9 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 	sparams.t0 = t0;
 	sparams.min_rung = minrung;
 
-	sph_particles_apply_updates(minrung, 0, t0, tau);
+	if (!nohydro) {
+		sph_particles_apply_updates(minrung, 0, t0, tau);
+	}
 
 	bool cont;
 	sph_run_return kr;
@@ -271,22 +272,23 @@ sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t
 		kr = sph_run_return();
 	} while (cont);
 
-	sparams.phase = 0;
-	sparams.run_type = SPH_RUN_HYDRO;
-	tm.reset();
-	tm.start();
-	kr = sph_run(sparams, true);
-	PRINT("VISC = %e\n", kr.visc);
-	energies->visc -= kr.visc / sqr(scale);
-	tm.stop();
-	max_rung = 0;
-	if (verbose)
-		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
-	tm.reset();
+	if (!nohydro) {
 
-	sph_particles_apply_updates(minrung, 1, t0, tau);
+		sparams.phase = 0;
+		sparams.run_type = SPH_RUN_HYDRO;
+		tm.reset();
+		tm.start();
+		kr = sph_run(sparams, true);
+		PRINT("VISC = %e\n", kr.visc);
+		energies->visc -= kr.visc / sqr(scale);
+		tm.stop();
+		max_rung = 0;
+		if (verbose)
+			PRINT("sph_run(SPH_RUN_HYDRO): tm = %e\n", tm.read());
+		tm.reset();
 
-
+		sph_particles_apply_updates(minrung, 1, t0, tau);
+	}
 	return sr;
 
 }
@@ -331,7 +333,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-
 
 	if (chem && tau > 0.0) {
 		PRINT("Doing chemistry step\n");
@@ -400,19 +401,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	}
 	energies->therm = E.therm / sqr(scale);
 
-
 	bool found_stars = false;
-	if (stars && minrung <= 1) {
-		//	sph_particles_entropy_to_energy();
-		double eloss = 0.0;
-		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
-			energies->heating += eloss;
-		}
-		PRINT("%e-----------------------------------------------------------------------------------------------------------------------\n", eloss);
-		stars_statistics(scale);
-		found_stars = true;
-	}
-
 
 	if (vsoft) {
 		tm.reset();
@@ -423,13 +412,24 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		max_rung = particles_apply_updates(minrung, t0, scale);
 	}
 
+	if (stars && minrung <= 1) {
+		//	sph_particles_entropy_to_energy();
+		double eloss = 0.0;
+		if (eloss = stars_find(scale, dt, minrung, iter, t0)) {
+			energies->heating += eloss;
+			found_stars = true;
+		}
+		PRINT("%e-----------------------------------------------------------------------------------------------------------------------\n", eloss);
+		stars_statistics(scale);
 
+		if (found_stars) {
 
-#ifdef HOPKINS
-	bool rerun2 = true;
-#else
-	bool rerun2 = found_stars;
-#endif
+			sph_step1(minrung, scale, tau, t0, phase, adot, max_rung, iter, dt, energies, true, true);
+
+		}
+	}
+
+	bool rerun2 = get_options().chem && !found_stars;
 	sph_run_return kr;
 	bool cont;
 	if (rerun2) {
@@ -514,7 +514,7 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 	tm.reset();
 
 	bool rc = true;
-	while (rc ) {
+	while (rc) {
 		sparams.run_type = SPH_RUN_RUNGS;
 		tm.start();
 		rc = sph_run(sparams, true).rc;

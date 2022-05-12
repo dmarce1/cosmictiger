@@ -214,8 +214,8 @@ inline __device__ bool compute_softlens(float & h,float N, const device_vector<s
 			const float r = sqrt(r2);// 4
 			const float q = r * hinv;// 1
 			if (q < 1.f) {                               // 1
-				const float w = kernelW(q);// 4
-				const float dwdh = -q * dkernelW_dq(q) * hinv;// 3
+				const float w = kernelG(q);// 4
+				const float dwdh = -q * dkernelG_dq(q) * hinv;// 3
 				f += m_j * w;// 1
 				dfdh += m_j * dwdh;// 1
 				count++;

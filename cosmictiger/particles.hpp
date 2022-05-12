@@ -144,7 +144,8 @@ PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_s;
 PARTICLES_EXTERN float* particles_z;
-PARTICLES_EXTERN float* particles_rh;
+PARTICLES_EXTERN float* particles_rh1;
+PARTICLES_EXTERN float* particles_rh2;
 PARTICLES_EXTERN char* particles_c;
 PARTICLES_EXTERN char* particles_sa;
 PARTICLES_EXTERN float* particles_p;
@@ -217,10 +218,10 @@ inline char& particles_type(part_int index) {
 inline float particles_mass(part_int index) {
 	const float sph_mass = get_options().sph_mass;
 	const float dm_mass = get_options().dm_mass;
-	if( particles_type(index) == SPH_TYPE) {
-		return sph_mass;
-	} else {
+	if( particles_type(index) == DARK_MATTER_TYPE) {
 		return dm_mass;
+	} else {
+		return sph_mass;
 	}
 }
 
@@ -234,9 +235,14 @@ inline float& particles_pot(part_int index) {
 	return particles_p[index];
 }
 
-inline float& particles_rho(part_int index) {
+inline float& particles_rhoc(part_int index) {
 	CHECK_PART_BOUNDS(index);
-	return particles_rh[index];
+	return particles_rh1[index];
+}
+
+inline float& particles_rhob(part_int index) {
+	CHECK_PART_BOUNDS(index);
+	return particles_rh2[index];
 }
 
 inline char& particles_converged(part_int index) {
