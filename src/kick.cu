@@ -144,7 +144,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		ymom_tot += vy;
 		zmom_tot += vz;
 		nmom_tot += sqrtf(sqr(vx, vy, vz));
-		if( params.save_force) {
+		if (params.save_force) {
 			all_gx[snki] = gx[i];
 			all_gy[snki] = gy[i];
 			all_gz[snki] = gz[i];
@@ -308,7 +308,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							bool pc = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								float other_hsoft;
 								const float hsoft = my_hsoft;
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
@@ -342,19 +341,21 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							if (cc) {
 								cclist[l + start] = checks[i];
 							}
-							l = cp;
-							compute_indices(l, total);
-							start = cplist.size();
-							cplist.resize(start + total);
-							if (cp) {
-								cplist[l + start] = checks[i];
-							}
-							l = pc;
-							compute_indices(l, total);
-							start = pclist.size();
-							pclist.resize(start + total);
-							if (pc) {
-								pclist[l + start] = checks[i];
+							if (self.leaf) {
+								l = cp;
+								compute_indices(l, total);
+								start = cplist.size();
+								cplist.resize(start + total);
+								if (cp) {
+									cplist[l + start] = checks[i];
+								}
+								l = pc;
+								compute_indices(l, total);
+								start = pclist.size();
+								pclist.resize(start + total);
+								if (pc) {
+									pclist[l + start] = checks[i];
+								}
 							}
 							l = next;
 							compute_indices(l, total);

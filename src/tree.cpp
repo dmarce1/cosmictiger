@@ -326,24 +326,24 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double xmid;
 			double parts_above;
 			double parts_below;
-			size_t dif = 1;
-			size_t last_dif;
-			for (int iters = 0; iters < 10 && dif > 0; iters++) {
-				last_dif = dif;
+//			size_t dif = 1;
+//			size_t last_dif;
+//			for (int iters = 0; iters < 10 && dif > 0; iters++) {
+//				last_dif = dif;
 				xmid = 0.5 * (xmax + xmin);
 				mid = particles_sort(part_range, xmid, xdim);
 				parts_above = part_range.second - mid;
 				parts_below = mid - part_range.first;
-				dif = parts_above - parts_below;
-				if (parts_above > parts_below) {
-					xmin = xmid;
-				} else {
-					xmax = xmid;
-				}
-				if (nparts > 1024 * bucket_size) {
-					break;
-				}
-			}
+//				dif = parts_above - parts_below;
+//				if (parts_above > parts_below) {
+//					xmin = xmid;
+//				} else {
+//					xmax = xmid;
+//				}
+//				if (nparts > 8 * bucket_size) {
+//					break;
+//				}
+//			}
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;

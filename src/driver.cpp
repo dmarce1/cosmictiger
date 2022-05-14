@@ -725,11 +725,16 @@ void driver() {
 //			profiler_exit();
 //			profiler_enter("main driver");
 			profiler_output();
+			jiter++;
+			PRINT( "JITER = %i\n", jiter);
+			if (jiter > 50) {
+				break;
+			}
 		} while (itime != 0);
-		if (1.0 / a < get_options().z1 + 1.0) {
+		if (jiter > 50) {
 			break;
 		}
-		if (jiter > 50) {
+		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
 		}
 	}
