@@ -195,6 +195,8 @@ vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
 void particles_global_read_vels(particle_global_range range, float* vx, float* vy, float* z, part_int offset);
 void particles_memadvise_gpu();
+vector<size_t> particles_rung_counts();
+void particles_set_minrung(int minrung);
 void particles_free();
 void particles_save_glass(const char* filename);
 void particles_sort_by_rung(int minrung);

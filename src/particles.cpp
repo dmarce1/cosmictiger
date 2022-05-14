@@ -599,6 +599,75 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 	return fut.get().data();
 }
 
+HPX_PLAIN_ACTION (particles_rung_counts);
+
+vector<size_t> particles_rung_counts() {
+	vector<hpx::future<vector<size_t>>>futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_rung_counts_action>(c));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads]() {
+							vector<size_t> counts;
+							const part_int b = (size_t) proc * particles_size() / nthreads;
+							const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+							for( part_int i = b; i < e; i++) {
+								const auto rung = particles_rung(i);
+								if( counts.size() <= rung ) {
+									counts.resize(rung + 1,0);
+								}
+								counts[rung]++;
+							}
+							return counts;
+						}));
+	}
+	vector<size_t> counts;
+	for (auto& f : futs) {
+		auto these_counts = f.get();
+		if( counts.size() < these_counts.size()) {
+			counts.resize(these_counts.size(), 0);
+		}
+		for (int i = 0; i < these_counts.size(); i++) {
+			counts[i] += these_counts[i];
+		}
+	}
+	if( hpx_rank() == 0 ) {
+		const size_t parts_dim = get_options().parts_dim;
+		const size_t nparts = sqr(parts_dim)*parts_dim;
+		size_t tot = 0;
+		for( int i = 0; i < counts.size(); i++) {
+			tot += counts[i];
+		}
+		PRINT( "%i\n", tot);
+		ALWAYS_ASSERT(tot == nparts);
+	}
+	return counts;
+}
+
+HPX_PLAIN_ACTION (particles_set_minrung);
+
+void particles_set_minrung(int minrung) {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_set_minrung_action>(c, minrung));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([proc,nthreads,minrung]() {
+			const part_int b = (size_t) proc *particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+			for( part_int i = b; i < e; i++) {
+				auto& rung = particles_rung(i);
+				rung = std::max((int)rung, minrung);
+			}
+		}));
+	}
+	for (auto& f : futs) {
+		f.get();
+	}
+}
+
 void particles_global_read_softlens(particle_global_range range, float* h, part_int offset) {
 	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;

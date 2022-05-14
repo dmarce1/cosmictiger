@@ -33,6 +33,7 @@ struct driver_params {
 	energies_t energies;
 	int max_rung;
 	int iter;
+	int minrung0;
 	int step;
 	size_t total_processed;
 	double flops;
@@ -41,6 +42,7 @@ struct driver_params {
 	time_type itime;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & minrung0;
 		arc & step;
 		arc & a;
 		arc & tau;

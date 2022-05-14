@@ -126,8 +126,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
-		flops += 537 + (params.min_rung == 0) * 178;
-		L2 = L2P(L, dx, params.min_rung == 0);
+		flops += 537 + (true) * 178;
+		L2 = L2P(L, dx, true);
 		int j = NO_INDEX;
 		char my_type = DARK_MATTER_TYPE;
 #ifndef DM_CON_H_ONLY
@@ -165,7 +165,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		if (params.htime) {
 			ALWAYS_ASSERT(!sph);
 			float sgn = params.top ? 1.f : -1.f;
-			if (params.ascending || params.top) {
+			if (params.ascending ) {
 				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 				if (!params.first_call) {
 					vx = fmaf(sgn * gx[i], dt, vx);
@@ -178,7 +178,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			ymom_tot += mass * vy;
 			zmom_tot += mass * vz;
 			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
-			if (params.descending || params.top) {
+			if (params.descending ) {
 				g2 = sqr(gx[i], gy[i], gz[i]);
 				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
 				rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
@@ -359,7 +359,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
-				auto this_L = L2L_cuda(L.back(), dx, global_params.min_rung == 0);
+				auto this_L = L2L_cuda(L.back(), dx, true);
 				if (tid == 0) {
 					L.back() = this_L;
 				}
@@ -515,21 +515,21 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 					} while (checks.size() && self.leaf);
 					if (gtype == GRAVITY_DIRECT) {
-						cuda_gravity_cc_direct(data, L.back(), self, cclist, min_rung == 0);
-						cuda_gravity_cp_direct(data, L.back(), self, cplist, dm_mass, sph_mass, min_rung == 0);
+						cuda_gravity_cc_direct(data, L.back(), self, cclist, true);
+						cuda_gravity_cp_direct(data, L.back(), self, cplist, dm_mass, sph_mass, true);
 					} else {
-						cuda_gravity_cc_ewald(data, L.back(), self, cclist, min_rung == 0);
-						cuda_gravity_cp_ewald(data, L.back(), self, cplist, dm_mass, sph_mass, min_rung == 0);
+						cuda_gravity_cc_ewald(data, L.back(), self, cclist, true);
+						cuda_gravity_cp_ewald(data, L.back(), self, cplist, dm_mass, sph_mass, true);
 					}
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
 						if (gtype == GRAVITY_DIRECT) {
-							cuda_gravity_pc_direct(data, self, pclist, nactive, min_rung == 0);
-							cuda_gravity_pp_direct(data, self, leaflist, nactive, h, dm_mass, sph_mass, min_rung == 0);
+							cuda_gravity_pc_direct(data, self, pclist, nactive, true);
+							cuda_gravity_pp_direct(data, self, leaflist, nactive, h, dm_mass, sph_mass, true);
 						} else {
-							cuda_gravity_pc_ewald(data, self, pclist, nactive, min_rung == 0);
-							cuda_gravity_pp_ewald(data, self, leaflist, nactive, h, dm_mass, sph_mass, min_rung == 0);
+							cuda_gravity_pc_ewald(data, self, pclist, nactive, true);
+							cuda_gravity_pp_ewald(data, self, leaflist, nactive, h, dm_mass, sph_mass, true);
 						}
 					} else {
 						const int start = checks.size();

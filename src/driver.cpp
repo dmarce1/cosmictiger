@@ -674,8 +674,8 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	return std::make_pair(kr, sr);
 }
 
-std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, int max_rung, double scale, double tau, double t0, double theta,
-		energies_t* energies) {
+std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double tau, double t0, double theta,
+		energies_t* energies, int minrung0) {
 	timer tm;
 	tm.start();
 	PRINT("domains_begin\n");
@@ -698,6 +698,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 	}
 	bool ascending = true;
 	bool top;
+	bool clip_top = false;
 	PRINT("climbing kick ladder\n");
 	for (int li = 0; li < levels.size(); li++) {
 
@@ -714,6 +715,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		} else if (!ascending) {
 			PRINT("DESCENDING rung %i\n", levels[li]);
 		}
+
 		if (!ascending && !top) {
 			particles_push_rungs();
 		}
@@ -721,6 +723,25 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		if (!ascending) {
 			particles_sort_by_rung(levels[li]);
 		}
+		if (top && minrung == minrung0) {
+			auto counts = particles_rung_counts();
+			PRINT( "Rungs\n");
+			for( int i = 0; i < counts.size(); i++) {
+				PRINT( "%i %li\n", i, counts[i]);
+			}
+			size_t fast = 0;
+			size_t slow = counts[minrung0];
+			for (int i = minrung0 + 1; i < counts.size(); i++) {
+				fast += counts[i];
+			}
+			if (3 * fast > slow) {
+				clip_top = true;
+				PRINT("------------------------------------\n");
+				PRINT("Setting minimum level to %i\n", minrung);
+				PRINT("------------------------------------\n");
+			}
+		}
+
 		if (ascending || top) {
 			tm.reset();
 			tm.start();
@@ -745,9 +766,17 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 			all_tree_softlens(levels[li], scale);
 		}
 		kick_params kparams;
-		kparams.top = top;
-		kparams.ascending = ascending && !top;
-		kparams.descending = !ascending && !top;
+		if (clip_top && levels[li] == minrung0 + 1) {
+			kparams.top = true;
+		} else {
+			kparams.top = top;
+		}
+		kparams.ascending = ascending || top;
+		if (clip_top && top) {
+			kparams.descending = false;
+		} else {
+			kparams.descending = !ascending || top;
+		}
 		kparams.htime = true;
 		kparams.glass = get_options().glass;
 		kparams.node_load = flops_per_node / flops_per_particle;
@@ -780,6 +809,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 		tm.stop();
 		PRINT("kick = %e\n", tm.read());
+		if (clip_top && top) {
+			particles_set_minrung(minrung0 + 1);
+		}
 		if (top) {
 			kr = this_kr;
 			energies->pot = kr.pot / scale;
@@ -789,7 +821,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 			energies->zmom = kr.zmom / scale;
 			energies->nmom = kr.nmom / scale;
 		}
-		if (!ascending || top) {
+		if (clip_top && top) {
+			levels.push_back(minrung0 + 1);
+		} else if (!ascending || top) {
 			max_rung = this_kr.max_rung;
 			kr.max_rung = max_rung;
 			if (max_rung > levels[li]) {
@@ -797,7 +831,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 			}
 		}
 		tm.stop();
-		if (!ascending || top) {
+		if ((!ascending || top) && !(clip_top && top)) {
 			tm.reset();
 			tm.start();
 			const float dt = 0.5 * rung_dt[levels[li]] * t0;
@@ -811,7 +845,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int minrung, i
 		}
 	}
 	PRINT("done climbing kick ladder\n");
-
+	if( clip_top) {
+		minrung++;
+	}
 	return std::make_pair(kr, sr);
 
 }
@@ -907,6 +943,7 @@ void driver() {
 		params.max_rung = 0;
 		params.itime = 0;
 		params.iter = 0;
+		params.minrung0 = 0;
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
@@ -922,6 +959,7 @@ void driver() {
 	auto& energies = params.energies;
 	auto& energy0 = params.energy0;
 	auto& itime = params.itime;
+	auto& minrung0 = params.minrung0;
 	auto& iter = params.iter;
 	int& step = params.step;
 	auto& total_processed = params.total_processed;
@@ -1040,7 +1078,13 @@ void driver() {
 			}
 			std::pair<kick_return, tree_create_return> tmp;
 			if (get_options().htime) {
-				tmp = kick_step_hierarchical(minrung, max_rung, a, tau, t0, theta, &energies);
+				int this_minrung = std::max(minrung,minrung0);
+				int om = this_minrung;
+				PRINT( "MINRUNG0 = %i\n", minrung0);
+				tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0);
+				if (om != this_minrung) {
+					minrung0++;
+				}
 			} else {
 				tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			}
@@ -1065,7 +1109,7 @@ void driver() {
 				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
-				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau/t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
 						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
 				fclose(fp);
 				const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;

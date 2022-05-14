@@ -193,7 +193,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const simd_float thetainv(1.0 / params.theta);
 	static const simd_float sink_bias(SINK_BIAS);
 	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
-	const bool do_phi = params.min_rung == 0;
+	const bool do_phi = true;
 	array<float, NDIM> Ldx;
 	simd_float self_radius = self_ptr->radius;
 	array<simd_int, NDIM> self_pos;
@@ -300,12 +300,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			std::swap(checklist, nextlist);
 			nextlist.resize(0);
 		} while (checklist.size() && self_ptr->leaf);
-		these_flops += cpu_gravity_cc(gtype, L, cclist, self, params.min_rung == 0);
+		these_flops += cpu_gravity_cc(gtype, L, cclist, self, true);
 		if (self_ptr->leaf) {
 			if (cuda_workspace != nullptr && gtype == GRAVITY_EWALD) {
 				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 			}
-			these_flops += cpu_gravity_cp(gtype, L, cplist, self, params.min_rung == 0);
+			these_flops += cpu_gravity_cp(gtype, L, cplist, self, true);
 			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, pclist);
 			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, leaflist, params.h);
 		} else {
@@ -323,7 +323,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				for (part_int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
-				const auto L2 = L2P(L, dx, params.min_rung == 0);
+				const auto L2 = L2P(L, dx, true);
 				float m = 1.f;
 				int type = DARK_MATTER_TYPE;
 				if (sph) {
@@ -356,7 +356,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					const float sgn = params.top ? 1 : -1;
 					ALWAYS_ASSERT(!sph);
 					ALWAYS_ASSERT(!vsoft);
-					if (params.ascending || params.top) {
+					if (params.ascending ) {
 						const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 						if (!params.first_call) {
 							vx = fmaf(sgn * forces.gx[j], dt, vx);
@@ -369,7 +369,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.ymom += m * vy;
 					kr.zmom += m * vz;
 					kr.nmom += m * sqrt(sqr(vx, vy, vz));
-					if (params.descending || params.top) {
+					if (params.descending ) {
 						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
 						const float factor = eta * sqrtf(params.a);
 						float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
