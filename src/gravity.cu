@@ -384,8 +384,8 @@ int cuda_gravity_pc_ewald(const cuda_kick_data& data, const tree_node& self, con
 }
 
 __device__
-int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, float h, float dm_mass,
-		float sph_mass, bool do_phi) {
+int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, float h, float dm_mass, float sph_mass,
+		bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
@@ -482,12 +482,10 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float r = sqrtf(r2);
-						r1inv = 1.f / (r + 1e-30f);
-						const float q_i = r * hinv_i;
-						r3inv = kernelFqinv(q_i) * h3inv_i;
+						const float q2 = r2 * h2inv_i;
+						r3inv = (2.5f - 1.5f * q2) * h3inv_i;
 						if (do_phi) {
-							r1inv = kernelPot(q_i) * hinv_i;
+							r1inv = (float(15.0f / 8.0f) - float(5.0f / 4.0f) * q2 + float(3.0f / 8.0f) * sqr(q2)) * hinv_i;
 						}
 					}
 					r3inv *= m_j;
@@ -514,8 +512,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 }
 
 __device__
-int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist,  float h, float dm_mass,
-		float sph_mass, bool do_phi) {
+int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, float h, float dm_mass, float sph_mass,
+		bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
