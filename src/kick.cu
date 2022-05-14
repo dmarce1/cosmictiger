@@ -65,8 +65,8 @@ struct cuda_kick_params {
 	kick_return* kreturn;
 };
 
-__device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, int nactive,
-		const tree_node& self, float dm_mass, float sph_mass) {
+__device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self,
+		float dm_mass, float sph_mass) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -78,17 +78,11 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
 	auto* all_gz = data.gz;
-	auto* write_rungs = data.rungs;
+	auto* rungs = data.rungs;
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
-#ifndef DM_CON_H_ONLY
-	auto* softlens = data.h_snk;
-#endif
 	auto* sph_index = data.cat_index;
-#ifndef DM_CON_H_ONLY
-	auto* type = data.type_snk;
-#endif
 	auto* sph_gx = data.sph_gx;
 	auto* sph_gy = data.sph_gy;
 	auto* sph_gz = data.sph_gz;
@@ -96,11 +90,10 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
-	auto& active_indexes = shmem.active;
-	const auto& sink_x = shmem.sink_x;
-	const auto& sink_y = shmem.sink_y;
-	const auto& sink_z = shmem.sink_z;
-	const auto& read_rungs = shmem.rungs;
+	const int nsink = self.part_range.second - self.part_range.first;
+	const auto& sink_x = data.x + self.part_range.first;
+	const auto& sink_y = data.y + self.part_range.first;
+	const auto& sink_z = data.z + self.part_range.first;
 	const float log2ft0 = log2f(params.t0);
 	const float tfactor = params.eta * sqrtf(params.a);
 	int max_rung = 0;
@@ -119,8 +112,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	int rung;
 	array<float, NDIM> dx;
 	part_int snki;
-	for (int i = tid; i < nactive; i += WARP_SIZE) {
-		snki = active_indexes[i];
+	for (int i = tid; i < nsink; i += WARP_SIZE) {
+		snki = self.sink_part_range.first + i;
 		ASSERT(snki >= 0);
 		ASSERT(snki < data.sink_size);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
@@ -130,15 +123,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		L2 = L2P(L, dx, true);
 		int j = NO_INDEX;
 		char my_type = DARK_MATTER_TYPE;
-#ifndef DM_CON_H_ONLY
-		if (sph) {
-			j = sph_index[snki];
-			my_type = type[snki];
-		}
-		const float mass = sph ? (my_type == DARK_MATTER_TYPE ? dm_mass : sph_mass) : 1.0f;
-#else
-		constexpr float mass = 1.f;
-#endif
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
@@ -165,7 +149,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		if (params.htime) {
 			ALWAYS_ASSERT(!sph);
 			float sgn = params.top ? 1.f : -1.f;
-			if (params.ascending ) {
+			if (params.ascending) {
 				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 				if (!params.first_call) {
 					vx = fmaf(sgn * gx[i], dt, vx);
@@ -173,20 +157,20 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 					vz = fmaf(sgn * gz[i], dt, vz);
 				}
 			}
-			kin_tot += 0.5f * mass * sqr(vx, vy, vz);
-			xmom_tot += mass * vx;
-			ymom_tot += mass * vy;
-			zmom_tot += mass * vz;
-			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
-			if (params.descending ) {
+			kin_tot += 0.5f * sqr(vx, vy, vz);
+			xmom_tot += vx;
+			ymom_tot += vy;
+			zmom_tot += vz;
+			nmom_tot += sqrtf(sqr(vx, vy, vz));
+			if (params.descending) {
 				g2 = sqr(gx[i], gy[i], gz[i]);
 				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
 				rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
-				if( rung > 4 ) {
+				if (rung > 4) {
 //					PRINT( "%i\n", rung);
 				}
 				max_rung = max(rung, max_rung);
-				write_rungs[snki] = rung;
+				rungs[snki] = rung;
 				ALWAYS_ASSERT(rung >= 0);
 				ALWAYS_ASSERT(rung < MAX_RUNG);
 				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
@@ -202,7 +186,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 				all_gz[snki] = gz[i];
 				all_phi[snki] = phi[i];
 			}
-			rung = read_rungs[i];
+			rung = rungs[snki];
 			dt = 0.5f * rung_dt[rung] * params.t0;
 			if (my_type == SPH_TYPE && !params.glass) {
 				sph_gx[j] = gx[i];
@@ -216,13 +200,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 				}
 			}
 			g2 = sqr(gx[i], gy[i], gz[i]);
-			kin_tot += 0.5f * mass * sqr(vx, vy, vz);
-			xmom_tot += mass * vx;
-			ymom_tot += mass * vy;
-			zmom_tot += mass * vz;
-			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
+			kin_tot += 0.5f * sqr(vx, vy, vz);
+			xmom_tot += vx;
+			ymom_tot += vy;
+			zmom_tot += vz;
+			nmom_tot += sqrtf(sqr(vx, vy, vz));
 			if (my_type != SPH_TYPE || params.glass) {
-				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2+1e-35f)), params.t0), params.max_dt);
+				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
 				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
 				max_rung = max(rung, max_rung);
 				if (rung < 0 || rung >= MAX_RUNG) {
@@ -236,13 +220,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 					vy = fmaf(gy[i], dt, vy);
 					vz = fmaf(gz[i], dt, vz);
 				}
-				write_rungs[snki] = rung;
+				rungs[snki] = rung;
 			}
 		}
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
-		phi_tot += 0.5f * mass * phi[i];
+		phi_tot += 0.5f * phi[i];
 		flops += 52;
 	}
 	shared_reduce_add(phi_tot);
@@ -290,16 +274,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& cplist = lists[bid].cplist;
 	auto& pclist = lists[bid].pclist;
 	auto& leaflist = lists[bid].leaflist;
-	auto& activei = shmem.active;
-	auto& sink_x = shmem.sink_x;
-	auto& sink_y = shmem.sink_y;
-	auto& sink_z = shmem.sink_z;
-#ifndef DM_CON_H_ONLY
-	auto& sink_h = shmem.sink_h;
-	auto& sink_zeta = shmem.sink_zeta;
-	auto& sink_type = shmem.sink_type;
-#endif
-	auto& rungs = shmem.rungs;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
@@ -312,16 +286,18 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto* src_x = data.x;
 	auto* src_y = data.y;
 	auto* src_z = data.z;
-#ifndef DM_CON_H_ONLY
-	auto* src_h = data.h;
-	auto* src_zeta = data.zeta;
-	auto* src_type = data.type;
-#endif
 	int index;
+
+	new (&gx) device_vector<float>();
+	new (&gy) device_vector<float>();
+	new (&gz) device_vector<float>();
+	new (&phi) device_vector<float>();
+
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
+	__syncthreads();
 	while (index < item_count) {
 		L.resize(0);
 		dchecks.resize(0);
@@ -363,53 +339,15 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (tid == 0) {
 					L.back() = this_L;
 				}
-				int nactive = 0;
-				if (self.leaf) {
-					const part_int begin = self.sink_part_range.first;
-					const part_int end = self.sink_part_range.second;
-					const part_int src_begin = self.part_range.first;
-					maxi = round_up(end - begin, (part_int) WARP_SIZE);
-					for (int i = tid; i < maxi; i += WARP_SIZE) {
-						bool active = false;
-						char rung;
-						if (i < end - begin) {
-							ASSERT(begin + i < data.sink_size);
-							rung = all_rungs[begin + i];
-							active = rung >= min_rung;
-						}
-						int l;
-						int total;
-						l = active;
-						compute_indices(l, total);
-						l += nactive;
-						if (active) {
-							const part_int srci = src_begin + i;
-							ASSERT(begin + i < data.sink_size);
-							activei[l] = begin + i;
-							rungs[l] = rung;
-							sink_x[l] = src_x[srci];
-							sink_y[l] = src_y[srci];
-							sink_z[l] = src_z[srci];
-#ifndef DM_CON_H_ONLY
-							if (vsoft) {
-								sink_h[l] = src_h[srci];
-								sink_zeta[l] = src_zeta[srci];
-							} else {
-								sink_h[l] = global_params.h;
-								sink_zeta[l] = 0.f;
-							}
-							sink_type[l] = src_type[srci];
-#endif
-						}
-						nactive += total;
-						__syncwarp();
-					}
-					for (int i = tid; i < nactive; i += WARP_SIZE) {
-						phi[i] = 0.0;
-						gx[i] = gy[i] = gz[i] = 0.f;
-					}
-					__syncwarp();
+				const int nsinks = self.part_range.second - self.part_range.first;
+				gx.resize(nsinks);
+				gy.resize(nsinks);
+				gz.resize(nsinks);
+				phi.resize(nsinks);
+				for (int l = 0; l < nsinks; l++) {
+					gx[l] = gy[l] = gz[l] = phi[l] = 0.f;
 				}
+
 				__syncwarp();
 				for (int gtype = GRAVITY_DIRECT; gtype <= GRAVITY_EWALD; gtype++) {
 					nextlist.resize(0);
@@ -446,7 +384,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius),0.f)));
+									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
 								}
 								const float mind = self.radius + other.radius + hsoft;
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
@@ -525,11 +463,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						__syncwarp();
 						const float h = global_params.h;
 						if (gtype == GRAVITY_DIRECT) {
-							cuda_gravity_pc_direct(data, self, pclist, nactive, true);
-							cuda_gravity_pp_direct(data, self, leaflist, nactive, h, dm_mass, sph_mass, true);
+							cuda_gravity_pc_direct(data, self, pclist, true);
+							cuda_gravity_pp_direct(data, self, leaflist, h, dm_mass, sph_mass, true);
 						} else {
-							cuda_gravity_pc_ewald(data, self, pclist, nactive, true);
-							cuda_gravity_pp_ewald(data, self, leaflist, nactive, h, dm_mass, sph_mass, true);
+							cuda_gravity_pc_ewald(data, self, pclist, true);
+							cuda_gravity_pp_ewald(data, self, leaflist, h, dm_mass, sph_mass, true);
 						}
 					} else {
 						const int start = checks.size();
@@ -543,7 +481,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (self.leaf) {
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					do_kick(returns.back(), global_params, data, L.back(), nactive, self, dm_mass, sph_mass);
+					do_kick(returns.back(), global_params, data, L.back(), self, dm_mass, sph_mass);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
@@ -630,6 +568,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		ASSERT(self_index.size() == 0);
 	}
 	(&lists[bid])->~cuda_lists_type();
+	(&gx)->~device_vector<float>();
+	(&gy)->~device_vector<float>();
+	(&gz)->~device_vector<float>();
+	(&phi)->~device_vector<float>();
+
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 

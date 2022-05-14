@@ -56,18 +56,16 @@ int cuda_gravity_cc_direct( const cuda_kick_data&, expansion<float>&, const tree
 __device__
 int cuda_gravity_cp_direct( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, float dm_mass, float sph_mass, bool do_phi);
 __device__
-int cuda_gravity_pc_direct( const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, bool);
+int cuda_gravity_pc_direct( const cuda_kick_data& data, const tree_node&, const device_vector<int>&,bool);
 __device__
 int cuda_gravity_cc_ewald( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, bool do_phi);
 __device__
 int cuda_gravity_cp_ewald( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, float dm_mass, float sph_mass, bool do_phi);
 __device__
-int cuda_gravity_pc_ewald( const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, bool);
+int cuda_gravity_pc_ewald( const cuda_kick_data& data, const tree_node&, const device_vector<int>&, bool);
 __device__
-int cuda_gravity_pp_close(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, float h, float dm_mass, float sph_mass, bool);
 __device__
-int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
-__device__
-int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, int, float h, float dm_mass, float sph_mass, bool);
+int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, float h, float dm_mass, float sph_mass, bool);
 #endif
 #endif /* GRAVITY_HPP_ */

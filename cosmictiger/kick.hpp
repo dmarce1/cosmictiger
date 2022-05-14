@@ -31,14 +31,6 @@ struct cuda_kick_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
-#ifndef DM_CON_H_ONLY
-	char* type_snk;
-	part_int* cat_index_snk;
-	float* h;
-	float* zeta;
-	float* divv_snk;
-	float* h_snk;
-#endif
 	float* vx;
 	float* vy;
 	float* vz;
@@ -70,30 +62,15 @@ struct kick_return;
 
 #ifdef __CUDACC__
 struct cuda_kick_shmem {
-	array<fixed32, BUCKET_SIZE> sink_x;
-	array<fixed32, BUCKET_SIZE> sink_y;
-	array<fixed32, BUCKET_SIZE> sink_z;
-#ifndef DM_CON_H_ONLY
-	array<float, BUCKET_SIZE> sink_h;
-	array<float, BUCKET_SIZE> sink_zeta;
-	array<char, BUCKET_SIZE> sink_type;
-#endif
 	struct {
 		array<fixed32, KICK_PP_MAX> x;
 		array<fixed32, KICK_PP_MAX> y;
 		array<fixed32, KICK_PP_MAX> z;
-#ifndef DM_CON_H_ONLY
-		array<char, KICK_PP_MAX> type;
-		array<float, KICK_PP_MAX> h;
-		array<float, KICK_PP_MAX> zeta;
-#endif
 	}src;
-	array<float, BUCKET_SIZE> gx;
-	array<float, BUCKET_SIZE> gy;
-	array<float, BUCKET_SIZE> gz;
-	array<float, BUCKET_SIZE> phi;
-	array<part_int,BUCKET_SIZE> active;
-	array<char,BUCKET_SIZE> rungs;
+	device_vector<float> gx;
+	device_vector<float> gy;
+	device_vector<float> gz;
+	device_vector<float> phi;
 };
 #endif
 
