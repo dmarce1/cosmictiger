@@ -20,7 +20,6 @@
 #define  SMOOTHLEN_BUFFER 0.21
 #define SCALE_DT 0.05
 
-#include <cosmictiger/all_tree.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/drift.hpp>
@@ -409,16 +408,6 @@ sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int p
 		PRINT("Conduction took %e seconds total\n", dtm.read());
 	}
 #endif
-
-	if (vsoft) {
-		tm.reset();
-		tm.start();
-		all_tree_divv(minrung, scale);
-		tm.stop();
-		PRINT("divv = %e\n", tm.read());
-		max_rung = particles_apply_updates(minrung, t0, scale);
-	}
-
 	bool found_stars = false;
 	if (stars && minrung <= 1) {
 		//	sph_particles_entropy_to_energy();
@@ -603,13 +592,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	profiler_exit();
 	PRINT("Done with tree\n");
 	const bool vsoft = get_options().vsoft;
-	if (vsoft) {
-		all_tree_softlens(minrung, scale);
-	}
 
-	PRINT("gravity nactive = %i\n", sr.nactive);
-	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
-	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
 	tm.stop();
 	sort_time += tm.read();
 	tm.reset();
@@ -653,24 +636,10 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.stop();
 	kick_time += tm.read();
 
-	if (vsoft && !sph) {
-		timer tm;
-		tm.start();
-		all_tree_divv(minrung, scale);
-		tm.stop();
-		PRINT("divv = %e\n", tm.read());
-		kr.max_rung = std::max((int) kr.max_rung, (int) particles_apply_updates(minrung, t0, scale));
-	}
 
 	tree_destroy();
 	particles_cache_free();
-	kr.nactive = sr.nactive;
 	PRINT("kick done\n");
-	if (min_rung == 0) {
-		flops_per_node = kr.node_flops / sr.active_nodes;
-		flops_per_particle = kr.part_flops / kr.nactive;
-	}
-	kr.load = load;
 	return std::make_pair(kr, sr);
 }
 
@@ -763,10 +732,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			sr = this_sr;
 		}
 		const bool vsoft = get_options().vsoft;
-		if (vsoft) {
-			ALWAYS_ASSERT(false);
-			all_tree_softlens(levels[li], scale);
-		}
 		kick_params kparams;
 		if (clip_top && levels[li] == minrung0 + 1) {
 			kparams.top = true;

@@ -75,12 +75,6 @@ void kick_workspace::to_gpu() {
 	if( workitems.size() == 0 ) {
 		return;
 	}
-	auto sort_fut = hpx::parallel::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
-				const auto* aptr = tree_get_node(a.self);
-				const auto* bptr = tree_get_node(b.self);
-				return 10 * aptr->active_nodes + aptr->nactive > 10 * bptr->active_nodes + bptr->nactive;
-			}
-	);
 
 //	PRINT("To vector\n");
 	PRINT("%i tree ids\n", tree_ids.size());
@@ -94,11 +88,6 @@ void kick_workspace::to_gpu() {
 	fixed32* dev_x;
 	fixed32* dev_y;
 	fixed32* dev_z;
-#ifndef DM_CON_H_ONLY
-	float* dev_h;
-	float* dev_zeta;
-	char* dev_type;
-#endif
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 	std::atomic<part_int> next_index(0);
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_bases;
@@ -138,7 +127,6 @@ void kick_workspace::to_gpu() {
 						}));
 	}
 
-	sort_fut.get();
 	hpx::wait_all(futs.begin(), futs.end());
 	futs.resize(0);
 

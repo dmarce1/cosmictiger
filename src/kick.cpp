@@ -131,13 +131,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	bool thread_left = true;
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
-		if (self_ptr->local_root) {
-			const double max_load = self_ptr->node_count * params.node_load + (self_ptr->part_range.second - self_ptr->part_range.first);
-			const double load = self_ptr->active_nodes * params.node_load + self_ptr->nactive;
-			if (!get_options().htime && load / max_load < GPU_MIN_LOAD) {
-				params.gpu = false;
-			}
-		}
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
 			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
@@ -149,15 +142,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const auto rng = particles_current_range();
 		max_parts = std::min((size_t) max_parts, (size_t) std::max((rng.second - rng.first) / kick_block_count(), BUCKET_SIZE));
 		eligible = params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local();
-		if (eligible) {
-			if (self_ptr->children[LEFT].index != -1) {
-				const part_int active_left = tree_get_node(self_ptr->children[LEFT])->nactive;
-				const part_int active_right = tree_get_node(self_ptr->children[RIGHT])->nactive;
-				if (active_left == 0 || active_right == 0) {
-					eligible = false;
-				}
-			}
-		}
 		if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			const auto all_local = [](const vector<tree_id>& list) {
 				bool all = true;
@@ -201,7 +185,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		self_pos[dim] = self_ptr->pos[dim].raw();
 	}
 	array<simd_int, NDIM> other_pos;
-	simd_float other_hsoft;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
 	simd_float other_leaf;
@@ -211,11 +194,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	L = L2L(L, Ldx, do_phi);
 	const bool vsoft = get_options().vsoft;
 	simd_float my_hsoft;
-	if (vsoft) {
-		my_hsoft = self_ptr->hsoft_max;
-	} else {
-		my_hsoft = get_options().hsoft;
-	}
+	my_hsoft = get_options().hsoft;
 	force_vectors forces;
 	const part_int mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
@@ -246,11 +225,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
-					if (vsoft) {
-						other_hsoft[i] = other_ptrs[i]->hsoft_max;
-					} else {
-						other_hsoft[i] = get_options().hsoft;
-					}
 				}
 				for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
@@ -258,7 +232,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					}
 					other_radius[i] = 0.f;
 					other_leaf[i] = 0;
-					other_hsoft[i] = 1.f;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
@@ -267,7 +240,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (gtype == GRAVITY_EWALD) {
 					R2 = max(R2, max(sqr(simd_float(0.5) - (self_radius + other_radius)), simd_float(0)));
 				}
-				const auto hsoft = max(other_hsoft, my_hsoft);
+				const auto hsoft = my_hsoft;
 				const auto mind = self_radius + other_radius + hsoft;
 				const simd_float dcc = max((self_radius + other_radius) * thetainv, mind);
 				const simd_float dcp = max((thetainv * self_radius + other_radius), mind);
@@ -356,7 +329,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					const float sgn = params.top ? 1 : -1;
 					ALWAYS_ASSERT(!sph);
 					ALWAYS_ASSERT(!vsoft);
-					if (params.ascending ) {
+					if (params.ascending) {
 						const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 						if (!params.first_call) {
 							vx = fmaf(sgn * forces.gx[j], dt, vx);
@@ -369,7 +342,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					kr.ymom += m * vy;
 					kr.zmom += m * vz;
 					kr.nmom += m * sqrt(sqr(vx, vy, vz));
-					if (params.descending ) {
+					if (params.descending) {
 						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
 						const float factor = eta * sqrtf(params.a);
 						float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
@@ -433,29 +406,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		cleanup_workspace(std::move(workspace));
 		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);
 		const tree_node* cr = tree_get_node(self_ptr->children[RIGHT]);
-		const bool exec_left = cl->nactive > 0 || !cl->is_local();
-		const bool exec_right = cr->nactive > 0 || !cr->is_local();
 		std::array<hpx::future<kick_return>, NCHILD> futs;
-		if (exec_left && exec_right) {
-			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
-			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
-		} else if (exec_left) {
-#ifdef USE_CUDA
-			if (cuda_workspace != nullptr) {
-				cuda_workspace->add_parts(cuda_workspace, cr->nparts());
-			}
-#endif
-			futs[RIGHT] = hpx::make_ready_future(kick_return());
-			futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
-		} else {
-#ifdef USE_CUDA
-			if (cuda_workspace != nullptr) {
-				cuda_workspace->add_parts(cuda_workspace, cl->nparts());
-			}
-#endif
-			futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
-			futs[LEFT] = hpx::make_ready_future(kick_return());
-		}
+		futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
+		futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
 			const auto rcl = futs[LEFT].get();
 			const auto rcr = futs[RIGHT].get();

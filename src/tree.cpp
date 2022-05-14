@@ -73,17 +73,6 @@ static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, 
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
 
-void tree_set_neighbor_range(tree_id id, pair<int, int> rng) {
-	nodes[id.index].neighbor_range = rng;
-}
-
-void tree_clear_neighbor_ranges() {
-	for (int i = 0; i < leaflist.size(); i++) {
-		nodes[leaflist[i]].neighbor_range.first = -1;
-		nodes[leaflist[i]].neighbor_range.second = -1;
-	}
-}
-
 int tree_leaflist_size() {
 	return leaflist.size();
 }
@@ -292,7 +281,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	array<fixed32, NDIM> x;
 	array<double, NDIM> Xc;
 	multipole<float> multi;
-	size_t nactive;
 	int flops = 0;
 	double total_flops = 0.0;
 	float radius;
@@ -304,9 +292,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		allocator.ready = true;
 	}
 	size_t node_count;
-	size_t active_nodes = 0;
 	size_t leaf_nodes = 0;
-	size_t active_leaf_nodes = 0;
 	const int index = allocator.allocate();
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
@@ -368,7 +354,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		min_depth = std::min(rcl.min_depth, rcr.min_depth);
 		max_depth = std::max(rcl.max_depth, rcr.max_depth);
 		total_flops += rcl.flops + rcr.flops;
-		nactive = rcl.nactive + rcr.nactive;
 		double rr;
 		double rl;
 		array<double, NDIM> Xl;
@@ -460,10 +445,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
 		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
-		active_leaf_nodes = rcl.active_leaf_nodes + rcr.active_leaf_nodes;
-		if (rcl.nactive || rcr.nactive) {
-			active_nodes += 1 + rcl.active_nodes + rcr.active_nodes;
-		}
 	} else {
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
@@ -476,7 +457,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			Xmax[dim] = box.begin[dim];
 			Xmin[dim] = box.end[dim];
 		}
-		nactive = 0;
 		array<double, NDIM> dx;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -485,9 +465,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				Xmin[dim] = std::min(Xmin[dim], x - h);
 			}
 			flops += 3 * NDIM;
-			if (particles_rung(i) >= params.min_rung) {
-				nactive++;
-			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
@@ -557,10 +534,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		node_count = 1;
 		leaf_nodes = 1;
-		if (nactive) {
-			active_leaf_nodes++;
-			active_nodes++;
-		}
 		static const auto vsoft = get_options().vsoft;
 		if (vsoft) {
 			std::lock_guard<mutex_type> lock(leaflist_mutex);
@@ -577,8 +550,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
-	node.nactive = nactive;
-	node.active_nodes = active_nodes;
 	node.depth = depth;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;
@@ -592,16 +563,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
 	nodes[index] = node;
-	rc.active_nodes = active_nodes;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
 	rc.leaf_nodes = leaf_nodes;
-	rc.active_leaf_nodes = active_leaf_nodes;
 	rc.node_count = node.node_count;
-	rc.nactive = nactive;
 	total_flops += flops;
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
@@ -648,12 +616,6 @@ void tree_destroy(bool free_tree) {
 	reset_last_cache_entries();
 	hpx::wait_all(futs.begin(), futs.end());
 	profiler_exit();
-}
-
-void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float h) {
-	nodes[id.index].obox = obox;
-	nodes[id.index].ibox = ibox;
-	nodes[id.index].hsoft_max = h;
 }
 
 const tree_node* tree_get_node(tree_id id) {

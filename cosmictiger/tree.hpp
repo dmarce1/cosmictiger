@@ -72,21 +72,15 @@ struct tree_id_hash_hi {
 
 struct tree_node {
 	multipole<float> multi;
-	fixed32_range ibox;
-	fixed32_range obox;
 	array<fixed32, NDIM> pos;
 	array<tree_id, NCHILD> children;
-	pair<int, int> neighbor_range;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
 	pair<part_int> sink_part_range;
-	size_t nactive;
 	float radius;
-	float hsoft_max;
 	bool local_root;
 	bool leaf;
 	size_t node_count;
-	size_t active_nodes;
 	int depth;
 
 	CUDA_EXPORT
@@ -110,15 +104,11 @@ struct tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
-		arc & hsoft_max;
 		arc & multi;
-		arc & ibox;
-		arc & obox;
 		arc & children;
 		arc & pos;
 		arc & proc_range;
 		arc & part_range;
-		arc & nactive;
 		arc & radius;
 		arc & local_root;
 		arc & leaf;

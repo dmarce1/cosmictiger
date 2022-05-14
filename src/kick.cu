@@ -357,11 +357,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					pclist.resize(0);
 					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
 					float my_hsoft;
-					if (vsoft) {
-						my_hsoft = self.hsoft_max;
-					} else {
-						my_hsoft = global_params.h;
-					}
+					my_hsoft = global_params.h;
 					do {
 						maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -373,12 +369,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
 								float other_hsoft;
-								if (vsoft) {
-									other_hsoft = other.hsoft_max;
-								} else {
-									other_hsoft = global_params.h;
-								}
-								const float hsoft = fmaxf(other_hsoft, my_hsoft);
+								const float hsoft = my_hsoft;
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
@@ -489,31 +480,21 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				} else {
 					ALWAYS_ASSERT(self.children[LEFT].index!=-1);
 					ALWAYS_ASSERT(self.children[RIGHT].index!=-1);
-					const int active_left = tree_nodes[self.children[LEFT].index].nactive;
-					const int active_right = tree_nodes[self.children[RIGHT].index].nactive;
 					Lpos.push_back(self.pos);
 					returns.push_back(kick_return());
-					if (active_left && active_right) {
-						const tree_id child = self.children[LEFT];
-						const int i1 = L.size() - 1;
-						const int i2 = L.size();
-						L.resize(i2 + 1);
-						for (int l = tid; l < EXPANSION_SIZE; l += WARP_SIZE) {
-							L[i2][l] = L[i1][l];
-						}
-						__syncwarp();
-						dchecks.push_top();
-						echecks.push_top();
-						phase.back() += 1;
-						phase.push_back(0);
-						self_index.push_back(child.index);
-					} else {
-						ALWAYS_ASSERT(active_left || active_right);
-						const tree_id child = active_left ? self.children[LEFT] : self.children[RIGHT];
-						phase.back() += 2;
-						phase.push_back(0);
-						self_index.push_back(child.index);
+					const tree_id child = self.children[LEFT];
+					const int i1 = L.size() - 1;
+					const int i2 = L.size();
+					L.resize(i2 + 1);
+					for (int l = tid; l < EXPANSION_SIZE; l += WARP_SIZE) {
+						L[i2][l] = L[i1][l];
 					}
+					__syncwarp();
+					dchecks.push_top();
+					echecks.push_top();
+					phase.back() += 1;
+					phase.push_back(0);
+					self_index.push_back(child.index);
 					depth++;
 				}
 
