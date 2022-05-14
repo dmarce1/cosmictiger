@@ -69,13 +69,13 @@ void kick_workspace::to_gpu() {
 	const static bool sph = get_options().sph;
 	const static bool vsoft = get_options().vsoft;
 	timer tm;
-	lock1.wait();
-	cuda_set_device();
-	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 	if( workitems.size() == 0 ) {
 		return;
 	}
 
+	lock1.wait();
+	cuda_set_device();
+	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 //	PRINT("To vector\n");
 	PRINT("%i tree ids\n", tree_ids.size());
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
@@ -160,13 +160,6 @@ void kick_workspace::to_gpu() {
 	host_x.resize(part_count);
 	host_y.resize(part_count);
 	host_z.resize(part_count);
-#ifndef DM_CON_H_ONLY
-	if( vsoft ) {
-		host_h.resize(part_count);
-		host_zeta.resize(part_count);
-	}
-	host_type.resize(part_count);
-#endif
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -176,14 +169,7 @@ void kick_workspace::to_gpu() {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 									const int local_index = tree_map[tree_ids_vector[i]];
 									part_int part_index = (next_index += ptr->nparts()) - ptr->nparts();
-#ifdef DM_CON_H_ONLY
 									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, part_index);
-#else
-									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), host_type.data(), vsoft ? host_zeta.data() : nullptr, part_index);
-									if( vsoft ) {
-										particles_global_read_softlens(ptr->global_part_range(), host_h.data(), part_index);
-									}
-#endif
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
 							}
@@ -199,30 +185,14 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_z, sizeof(fixed32) * part_count));
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
-#ifndef DM_CON_H_ONLY
-	CUDA_CHECK(cudaMalloc(&dev_type, sizeof(char) * part_count));
-	if( vsoft ) {
-		CUDA_CHECK(cudaMalloc(&dev_h, sizeof(float) * part_count));
-		CUDA_CHECK(cudaMalloc(&dev_zeta, sizeof(float) * part_count));
-		CUDA_CHECK(cudaMemcpyAsync(dev_zeta, host_zeta.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
-		CUDA_CHECK(cudaMemcpyAsync(dev_h, host_h.data(), sizeof(float) * part_count, cudaMemcpyHostToDevice, stream));
-	}
-#endif
 	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_x, host_x.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_y, host_y.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_z, host_z.data(), sizeof(fixed32) * part_count, cudaMemcpyHostToDevice, stream));
-#ifndef DM_CON_H_ONLY
-	CUDA_CHECK(cudaMemcpyAsync(dev_type, host_type.data(), sizeof(char) * part_count, cudaMemcpyHostToDevice, stream));
-#endif
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.reset();
 	tm.start();
-#ifdef DM_CON_H_ONLY
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, nullptr, nullptr, nullptr, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
-#else
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_type, dev_h, dev_zeta, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
-#endif
 	tm.stop();
 	cuda_end_stream(stream);
 
@@ -230,13 +200,6 @@ void kick_workspace::to_gpu() {
 	CUDA_CHECK(cudaFree(dev_y));
 	CUDA_CHECK(cudaFree(dev_z));
 	CUDA_CHECK(cudaFree(dev_trees));
-#ifndef DM_CON_H_ONLY
-	CUDA_CHECK(cudaFree(dev_type));
-	if( vsoft ) {
-		CUDA_CHECK(cudaFree(dev_h));
-		CUDA_CHECK(cudaFree(dev_zeta));
-	}
-#endif
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}

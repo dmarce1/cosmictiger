@@ -583,6 +583,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	kick_return* dev_returns;
 	cuda_kick_params* dev_kick_params;
 	int nblocks = kick_block_count();
+	ALWAYS_ASSERT(workitems.size());
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_lists_type* dev_lists;
 	(CUDA_MALLOC(&dev_lists, sizeof(cuda_lists_type) * nblocks));
@@ -625,20 +626,10 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	cuda_kick_data data;
 	data.source_size = part_count;
 	data.tree_size = ntrees;
-#ifndef DM_CON_H_ONLY
-	data.cat_index_snk = &particles_cat_index(0);
-#endif
 	data.sink_size = particles_size();
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
-#ifndef DM_CON_H_ONLY
-	data.h = dev_h;
-	data.divv_snk = &particles_divv(0);
-	data.h_snk = &particles_softlen(0);
-	data.zeta = dev_zeta;
-	data.type = dev_type;
-#endif
 	data.sph = do_sph;
 	data.vsoft = get_options().vsoft;
 	data.x_snk = &particles_pos(XDIM, 0);
@@ -646,9 +637,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.z_snk = &particles_pos(ZDIM, 0);
 	if (do_sph) {
 		data.cat_index = &particles_cat_index(0);
-#ifndef DM_CON_H_ONLY
-		data.type_snk = &particles_type(0);
-#endif
 		data.sph_gx = &sph_particles_gforce(XDIM, 0);
 		data.sph_gy = &sph_particles_gforce(YDIM, 0);
 		data.sph_gz = &sph_particles_gforce(ZDIM, 0);

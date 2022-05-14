@@ -155,7 +155,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			};
 			eligible = all_local(dchecklist) && all_local(echecklist);
 		}
-		if (eligible) {
+		if (eligible && self_ptr->nparts() > 0) {
 			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 		}
 		thread_left = cuda_workspace != nullptr;
@@ -275,12 +275,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		} while (checklist.size() && self_ptr->leaf);
 		these_flops += cpu_gravity_cc(gtype, L, cclist, self, true);
 		if (self_ptr->leaf) {
-			if (cuda_workspace != nullptr && gtype == GRAVITY_EWALD) {
-				cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
+			if (self_ptr->nparts() > 0) {
+				if (cuda_workspace != nullptr && gtype == GRAVITY_EWALD) {
+					cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
+				}
+				these_flops += cpu_gravity_cp(gtype, L, cplist, self, true);
+				kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, pclist);
+				kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, leaflist, params.h);
 			}
-			these_flops += cpu_gravity_cp(gtype, L, cplist, self, true);
-			kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, pclist);
-			kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, leaflist, params.h);
 		} else {
 			ALWAYS_ASSERT(cplist.size() == 0);
 			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
