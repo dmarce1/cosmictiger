@@ -297,8 +297,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
 	float max_span = 0.0f;
-	for( int dim = 0; dim < NDIM; dim++) {
-		max_span = std::max((float)(box.end[dim]-box.begin[dim]), max_span);
+	for (int dim = 0; dim < NDIM; dim++) {
+		max_span = std::max((float) (box.end[dim] - box.begin[dim]), max_span);
 	}
 	static const float minspan0 = 0.25 / sqrtf(3);
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (max_span > minspan0 && nparts > 0)) {
@@ -329,7 +329,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double parts_below;
 			size_t dif = 1;
 			size_t last_dif;
-//			for( int iters = 0; iters < 10 && dif > 0; iters) {
+			for (int iters = 0; iters < 10 && dif > 0; iters++) {
 				last_dif = dif;
 				xmid = 0.5 * (xmax + xmin);
 				mid = particles_sort(part_range, xmid, xdim);
@@ -341,7 +341,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				} else {
 					xmax = xmid;
 				}
-			//}
+				if (nparts > 1024 * bucket_size) {
+					break;
+				}
+			}
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
