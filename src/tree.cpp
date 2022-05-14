@@ -296,7 +296,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const int index = allocator.allocate();
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
-	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (depth < params.min_level && nparts > 0)) {
+	float max_span = 0.0f;
+	for( int dim = 0; dim < NDIM; dim++) {
+		max_span = std::max((float)(box.end[dim]-box.begin[dim]), max_span);
+	}
+	static const float minspan0 = 0.25 / sqrtf(3);
+	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (max_span > minspan0 && nparts > 0)) {
 		isleaf = false;
 		auto left_box = box;
 		auto right_box = box;
@@ -322,9 +327,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double xmid;
 			double parts_above;
 			double parts_below;
-			size_t dif = 0;
+			size_t dif = 1;
 			size_t last_dif;
-	//		do {
+//			for( int iters = 0; iters < 10 && dif > 0; iters) {
 				last_dif = dif;
 				xmid = 0.5 * (xmax + xmin);
 				mid = particles_sort(part_range, xmid, xdim);
@@ -336,7 +341,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				} else {
 					xmax = xmid;
 				}
-	//		} while ((dif > 1 || dif < -1) && dif != last_dif);
+			//}
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
