@@ -362,6 +362,9 @@ static void force_test() {
 	PRINT("domains_end: %e s\n", tm.read());
 	tm.reset();
 
+
+	particles_sort_by_rung(0);
+
 	tm.start();
 	tree_create_params tparams(0, get_options().theta, get_options().hsoft);
 	tree_create(tparams);
@@ -373,6 +376,7 @@ static void force_test() {
 	kick_params kparams;
 	kparams.node_load = 10;
 	kparams.gpu = true;
+	kparams.htime = true;
 	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
 	kparams.GM = get_options().GM;
