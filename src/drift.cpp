@@ -24,9 +24,6 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/cosmology.hpp>
-#include <cosmictiger/sph.hpp>
-#include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/kernel.hpp>
 
 HPX_PLAIN_ACTION (drift);
 
@@ -78,94 +75,40 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 			float vx = particles_vel(XDIM,i);
 			float vy = particles_vel(YDIM,i);
 			float vz = particles_vel(ZDIM,i);
-			int type = DARK_MATTER_TYPE;
-			float mass = 1.0f;
-			if( sph ) {
-				type = particles_type(i);
-				if( type == DARK_MATTER_TYPE) {
-					mass = dm_mass;
-				} else {
-					mass = sph_mass;
-				}
+			this_dr.kin += 0.5 * sqr(vx,vy,vz) * a2inv;
+			this_dr.momx += vx;
+			this_dr.momy += vy;
+			this_dr.momz += vz;
+			vx *= ainv;
+			vy *= ainv;
+			vz *= ainv;
+			double x0, y0, z0;
+			x0 = x;
+			y0 = y;
+			z0 = z;
+			x += double(vx*dt);
+			if( std::isnan(vy)) {
+				PRINT( "vy is nan\n");
+				abort();
 			}
-			this_dr.kin += mass * 0.5 * sqr(vx,vy,vz) * a2inv;
-			this_dr.momx += mass * vx;
-			this_dr.momy += mass * vy;
-			this_dr.momz += mass * vz;
-			if(get_options().vsoft ) {
-				float& h = particles_softlen(i);
-				const float divv = particles_divv(i);
-				float dloghdt = divv / (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax));
-				float c0 = expf(dloghdt*dt);
-				h *= c0;
+			y += double(vy*dt);
+			z += double(vz*dt);
+			if( do_lc) {
+				this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
 			}
-			if( type == SPH_TYPE ) {
-				part_int j = particles_cat_index(i);
-				float& h = sph_particles_smooth_len(j);
-				char rung = particles_rung(i);
-#ifdef HOPKINS
-			float eint;
-			if( sph_particles_isstar(j) || sph_particles_pressure(j) <= 0.0) {
-				eint = 0.0;
-			} else {
-				eint = sph_particles_eint_rho(j);
-			}
-			float rho = sph_particles_rho_rho(j);
-#else
-			const float eint = sph_particles_eint(j);
-			const float rho = sph_particles_rho(j);
-#endif
-			if( !get_options().vsoft ) {
-				const float divv = sph_particles_divv(j);
-				float dloghdt = (1.f/3.f)*(divv - 3.0f * adot / scale) / (3.f + dlogsmoothX_dlogh(h,get_options().hmin,get_options().hmax));
-				float c0 = expf(dloghdt*dt);
-				h *= c0;
-			}
-			if( h > 0.5 ) {
-				PRINT( "BIG H! %e %e %e %e\n", h, x, y, z);
-			}
-			const float h3 = sqr(h)*h;
-			const float vol = (4.0*M_PI/3.0) * h3 / get_options().sneighbor_number;
-			const float p = eint * rho * (get_options().gamma-1.0f);
-			const float e = eint * sph_mass;
-			if( !sph_particles_isstar(j)) {
-				this_dr.therm += e * a2inv;
-			}
-			this_dr.vol += vol;
-			if( stars ) {
-				this_dr.cold_mass += sph_mass * sph_particles_cold_mass(j);
-			}
+			constrain_range(x);
+			constrain_range(y);
+			constrain_range(z);
+			particles_pos(XDIM,i) = x;
+			particles_pos(YDIM,i) = y;
+			particles_pos(ZDIM,i) = z;
+			this_dr.flops += 34;
 		}
-		vx *= ainv;
-		vy *= ainv;
-		vz *= ainv;
-		double x0, y0, z0;
-		x0 = x;
-		y0 = y;
-		z0 = z;
-		x += double(vx*dt);
-		if( std::isnan(vy)) {
-			PRINT( "vy is nan\n");
-			abort();
+		if (do_lc) {
+			lc_add_parts(std::move(this_part_buffer));
 		}
-		y += double(vy*dt);
-		z += double(vz*dt);
-		if( do_lc) {
-			this_dr.nmapped += lc_add_particle(x0, y0, z0, x, y, z, vx, vy, vz, tau0, tau1, this_part_buffer);
-		}
-		constrain_range(x);
-		constrain_range(y);
-		constrain_range(z);
-		particles_pos(XDIM,i) = x;
-		particles_pos(YDIM,i) = y;
-		particles_pos(ZDIM,i) = z;
-		this_dr.flops += 34;
-	}
-	if (do_lc) {
-		lc_add_parts(std::move(this_part_buffer));
-	}
-	return this_dr;
-}	;
+		return this_dr;
+	};
 	timer tm;
 	tm.start();
 	for (int proc = 1; proc < nthreads; proc++) {

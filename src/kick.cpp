@@ -25,8 +25,6 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
-#include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/stars.hpp>
 
 #include <unistd.h>
 #include <stack>
@@ -299,16 +297,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
 				const auto L2 = L2P(L, dx, true);
-				float m = 1.f;
-				int type = DARK_MATTER_TYPE;
-				if (sph) {
-					type = particles_type(i);
-					m = type == DARK_MATTER_TYPE ? dm_mass : sph_mass;
-				}
 				float hsoft = get_options().hsoft;
-				if (vsoft) {
-					hsoft = particles_softlen(i);
-				}
 				forces.phi[j] += L2(0, 0, 0);
 				forces.gx[j] -= L2(1, 0, 0);
 				forces.gy[j] -= L2(0, 1, 0);
@@ -327,80 +316,36 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
 				float g2;
-				if (params.htime) {
-					const float sgn = params.top ? 1 : -1;
-					ALWAYS_ASSERT(!sph);
-					ALWAYS_ASSERT(!vsoft);
-					if (params.ascending) {
-						const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-						if (!params.first_call) {
-							vx = fmaf(sgn * forces.gx[j], dt, vx);
-							vy = fmaf(sgn * forces.gy[j], dt, vy);
-							vz = fmaf(sgn * forces.gz[j], dt, vz);
-						}
-					}
-					kr.kin += 0.5 * m * sqr(vx, vy, vz);
-					kr.xmom += m * vx;
-					kr.ymom += m * vy;
-					kr.zmom += m * vz;
-					kr.nmom += m * sqrt(sqr(vx, vy, vz));
-					if (params.descending) {
-						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
-						const float factor = eta * sqrtf(params.a);
-						float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
-						rung = params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung);
-						kr.max_rung = std::max(rung, kr.max_rung);
-						ALWAYS_ASSERT(rung >= 0);
-						ALWAYS_ASSERT(rung < MAX_RUNG);
-						dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+				const float sgn = params.top ? 1 : -1;
+				ALWAYS_ASSERT(!sph);
+				ALWAYS_ASSERT(!vsoft);
+				if (params.ascending) {
+					const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+					if (!params.first_call) {
 						vx = fmaf(sgn * forces.gx[j], dt, vx);
 						vy = fmaf(sgn * forces.gy[j], dt, vy);
 						vz = fmaf(sgn * forces.gz[j], dt, vz);
 					}
-				} else {
-					if (save_force || vsoft) {
-						particles_gforce(XDIM, i) = forces.gx[j];
-						particles_gforce(YDIM, i) = forces.gy[j];
-						particles_gforce(ZDIM, i) = forces.gz[j];
-						particles_pot(i) = forces.phi[j];
-					}
-					auto dt = 0.5f * rung_dt[rung] * params.t0;
-					if (type == SPH_TYPE && !glass) {
-						const int k = particles_cat_index(i);
-						sph_particles_gforce(XDIM, k) = forces.gx[j];
-						sph_particles_gforce(YDIM, k) = forces.gy[j];
-						sph_particles_gforce(ZDIM, k) = forces.gz[j];
-					} else {
-						if (!params.first_call) {
-							vx = fmaf(forces.gx[j], dt, vx);
-							vy = fmaf(forces.gy[j], dt, vy);
-							vz = fmaf(forces.gz[j], dt, vz);
-						}
-					}
-					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]);
-					kr.kin += 0.5 * m * sqr(vx, vy, vz);
-					kr.xmom += m * vx;
-					kr.ymom += m * vy;
-					kr.zmom += m * vz;
-					kr.nmom += m * sqrt(sqr(vx, vy, vz));
-					if (type != SPH_TYPE || glass) {
-						const float factor = eta * sqrtf(params.a);
-						dt = std::min(std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0), params.max_dt);
-						rung = std::max(std::max((int) ceilf(log2f(params.t0) - log2f(dt)), std::max(rung - 1, params.min_rung)), 1);
-						kr.max_rung = std::max(rung, kr.max_rung);
-						if (rung < 0 || rung >= 10) {
-							PRINT("Rung out of range %i %e\n", rung, sqrtf(g2));
-						} else {
-							dt = 0.5f * rung_dt[rung] * params.t0;
-						}
-						if (!vsoft) {
-							vx = fmaf(forces.gx[j], dt, vx);
-							vy = fmaf(forces.gy[j], dt, vy);
-							vz = fmaf(forces.gz[j], dt, vz);
-						}
-					}
 				}
-				kr.pot += 0.5 * m * forces.phi[j];
+				kr.kin += 0.5 * sqr(vx, vy, vz);
+				kr.xmom += vx;
+				kr.ymom += vy;
+				kr.zmom += vz;
+				kr.nmom += sqrt(sqr(vx, vy, vz));
+				if (params.descending) {
+					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
+					const float factor = eta * sqrtf(params.a);
+					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
+					rung = params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung);
+					kr.max_rung = std::max(rung, kr.max_rung);
+					ALWAYS_ASSERT(rung >= 0);
+					ALWAYS_ASSERT(rung < MAX_RUNG);
+					dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+					vx = fmaf(sgn * forces.gx[j], dt, vx);
+					vy = fmaf(sgn * forces.gy[j], dt, vy);
+					vz = fmaf(sgn * forces.gz[j], dt, vz);
+				}
+				kr.pot += 0.5 * forces.phi[j];
 			}
 		}
 		return hpx::make_ready_future(kr);

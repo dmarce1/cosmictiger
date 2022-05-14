@@ -23,7 +23,6 @@ constexpr bool verbose = true;
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/tree.hpp>
@@ -495,11 +494,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, j).raw();
 				}
-				if (sph) {
-					mask[j - i] = particles_type(j) == DARK_MATTER_TYPE ? dm_mass : sph_mass;
-				} else {
-					mask[j - i] = 1.0f;
-				}
+				mask[j - i] = 1.0f;
 			}
 			for (part_int j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
 				mask[j - i] = 0.f;
@@ -582,11 +577,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
-	if (local_root) {
-		if (sph) {
-			particles_resolve_with_sph_particles();
-		}
-	}
 	if (depth == 0) {
 		PRINT("total nodes = %i\n", rc.node_count);
 	}

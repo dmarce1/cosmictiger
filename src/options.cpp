@@ -25,7 +25,6 @@ constexpr bool verbose = true;
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/safe_io.hpp>
-#include <cosmictiger/kernel.hpp>
 #include <cosmictiger/view.hpp>
 
 #ifdef HPX_LITE
@@ -333,12 +332,7 @@ bool process_options(int argc, char *argv[]) {
 		THROW_ERROR("This executable was compiled without CUDA support\n");
 	}
 #endif
-	kernel_set_type(opts.kernel);
 	set_options(opts);
-	kernel_adjust_options(opts);
-	set_options(opts);
-
-	kernel_output();
 	view_read_view_file();
 	return rc;
 }

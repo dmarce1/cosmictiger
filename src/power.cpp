@@ -78,10 +78,6 @@ static void compute_density() {
 				const double x = particles_pos(XDIM,i).to_double();
 				const double y = particles_pos(YDIM,i).to_double();
 				const double z = particles_pos(ZDIM,i).to_double();
-				float mass = 1.0f;
-				if( sph ) {
-					mass = particles_type(i) == DARK_MATTER_TYPE ? dm_mass : sph_mass;
-				}
 				const part_int i0 = std::min(std::max((int64_t) (x * N), intbox.begin[XDIM]), intbox.end[XDIM] - 2);
 				const part_int j0 = std::min(std::max((int64_t) (y * N), intbox.begin[YDIM]), intbox.end[YDIM] - 2);
 				const part_int k0 = std::min(std::max((int64_t) (z * N), intbox.begin[ZDIM]), intbox.end[ZDIM] - 2);
@@ -94,14 +90,14 @@ static void compute_density() {
 				const float wx0 = 1.0 - wx1;
 				const float wy0 = 1.0 - wy1;
 				const float wz0 = 1.0 - wz1;
-				const float w000 = wx0 * wy0 * wz0 * mass;
-				const float w001 = wx0 * wy0 * wz1 * mass;
-				const float w010 = wx0 * wy1 * wz0 * mass;
-				const float w011 = wx0 * wy1 * wz1 * mass;
-				const float w100 = wx1 * wy0 * wz0 * mass;
-				const float w101 = wx1 * wy0 * wz1 * mass;
-				const float w110 = wx1 * wy1 * wz0 * mass;
-				const float w111 = wx1 * wy1 * wz1 * mass;
+				const float w000 = wx0 * wy0 * wz0;
+				const float w001 = wx0 * wy0 * wz1;
+				const float w010 = wx0 * wy1 * wz0;
+				const float w011 = wx0 * wy1 * wz1;
+				const float w100 = wx1 * wy0 * wz0;
+				const float w101 = wx1 * wy0 * wz1;
+				const float w110 = wx1 * wy1 * wz0;
+				const float w111 = wx1 * wy1 * wz1;
 				const part_int i000 = intbox.index(i0,j0,k0);
 				const part_int i001 = intbox.index(i0,j0,k1);
 				const part_int i010 = intbox.index(i0,j1,k0);

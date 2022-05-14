@@ -169,7 +169,7 @@ void kick_workspace::to_gpu() {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 									const int local_index = tree_map[tree_ids_vector[i]];
 									part_int part_index = (next_index += ptr->nparts()) - ptr->nparts();
-									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(), nullptr, nullptr, part_index);
+									particles_global_read_pos(ptr->global_part_range(), host_x.data(), host_y.data(), host_z.data(),  part_index);
 									adjust_part_references(tree_nodes, local_index, part_index - ptr->part_range.first);
 								}
 							}

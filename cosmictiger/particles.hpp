@@ -43,10 +43,6 @@ static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 
 
 #define NO_INDEX ((part_int) 0xFFFFFFFFU)
 
-#define DARK_MATTER_TYPE 0
-#define SPH_TYPE 1
-#define STAR_TYPE 2
-
 #ifdef LONG_LONG_PART_INT
 using part_int = long long;
 #else
@@ -87,7 +83,6 @@ struct particle {
 	array<fixed32, NDIM> x;
 	array<float, NDIM> v;
 	group_int lg;
-	part_int cat_index;
 	char r;
 	char t;
 	char type;
@@ -106,10 +101,6 @@ struct particle {
 		}
 		if (do_tracers) {
 			a & t;
-		}
-		if (sph) {
-			a & cat_index;
-			a & type;
 		}
 	}
 };
@@ -142,22 +133,14 @@ PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
 PARTICLES_EXTERN array<float*, NDIM> particles_v;
 PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
-PARTICLES_EXTERN float* particles_s;
-PARTICLES_EXTERN float* particles_z;
-PARTICLES_EXTERN float* particles_rh;
-PARTICLES_EXTERN char* particles_c;
-PARTICLES_EXTERN char* particles_sa;
 PARTICLES_EXTERN float* particles_p;
-PARTICLES_EXTERN float* particles_dv;
 PARTICLES_EXTERN std::atomic<group_int>* particles_grp
 #ifdef PARTICLES_CPP
 = nullptr
 #endif
 ;
-PARTICLES_EXTERN part_int* particles_sph;
 PARTICLES_EXTERN group_int* particles_lgrp;
 PARTICLES_EXTERN char* particles_tr;
-PARTICLES_EXTERN char* particles_ty;
 PARTICLES_EXTERN size_t particles_global_offset;
 
 struct particle_global_range {
@@ -169,16 +152,12 @@ part_int particles_size();
 std::unordered_map<int, part_int> particles_groups_init();
 void particles_groups_destroy();
 void particles_resize(part_int);
-void particles_reset_converged();
 void particles_random_init();
-void particles_resolve_with_sph_particles();
-int particles_apply_updates(int minrung, float t0, float a );
 void particles_pop_rungs();
 void particles_push_rungs();
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
-void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, float* zeta, part_int offset);
-void particles_global_read_softlens(particle_global_range range, float* h, part_int offset);
+void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, part_int offset);
 void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
@@ -204,52 +183,12 @@ double particles_active_pct();
 pair<part_int,part_int> particles_current_range();
 
 
-inline char& particles_type(part_int index) {
-	static const bool sph = get_options().sph;
-	if (sph) {
-		CHECK_PART_BOUNDS(index);
-		return particles_ty[index];
-	} else {
-		static char dm = DARK_MATTER_TYPE;
-		return dm;
-	}
-}
-
-
-inline float particles_mass(part_int index) {
-	const float sph_mass = get_options().sph_mass;
-	const float dm_mass = get_options().dm_mass;
-	if( particles_type(index) == SPH_TYPE) {
-		return sph_mass;
-	} else {
-		return dm_mass;
-	}
-}
-
-inline float& particles_divv(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_dv[index];
-}
 
 inline float& particles_pot(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_p[index];
 }
 
-inline float& particles_rho(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_rh[index];
-}
-
-inline char& particles_converged(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_c[index];
-}
-
-inline char& particles_semiactive(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_sa[index];
-}
 
 inline fixed32& particles_pos(int dim, part_int index) {
 	CHECK_PART_BOUNDS(index);
@@ -264,16 +203,6 @@ inline float& particles_vel(int dim, part_int index) {
 inline char& particles_rung(part_int index) {
 	CHECK_PART_BOUNDS(index);
 	return particles_r[index];
-}
-
-inline float& particles_softlen(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_s[index];
-}
-
-inline float& particles_zeta(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_z[index];
 }
 
 inline float& particles_gforce(int dim, part_int index) {
@@ -303,10 +232,6 @@ inline char& particles_tracer(part_int index) {
 	return particles_tr[index];
 }
 
-inline part_int& particles_cat_index(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_sph[index];
-}
 
 inline particle particles_get_particle(part_int index) {
 	static bool do_groups = get_options().do_groups;
@@ -324,10 +249,6 @@ inline particle particles_get_particle(part_int index) {
 	}
 	if (do_tracers) {
 		p.t = particles_tracer(index);
-	}
-	if (sph) {
-		p.type = particles_type(index);
-		p.cat_index = particles_cat_index(index);
 	}
 	return p;
 }
@@ -348,14 +269,6 @@ inline void particles_set_particle(particle p, part_int index) {
 	if (do_tracers) {
 		particles_tracer(index) = p.t;
 	}
-	if (sph) {
-		particles_type(index) = p.type;
-		particles_cat_index(index) = p.cat_index;
-	}
-}
-
-inline bool particles_is_sph(int index) {
-	return particles_type(index) == SPH_TYPE;
 }
 
 struct energies_t {

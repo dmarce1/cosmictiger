@@ -25,10 +25,8 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/zero_order.hpp>
 #include <cosmictiger/boltzmann.hpp>
-#include <cosmictiger/kernel.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -317,10 +315,6 @@ void load_glass(const char* filename) {
 	}
 	particles_resize(nparts);
 	part_int max_parts = nparts;
-	if (get_options().sph && get_options().glass != 2) {
-		sph_particles_resize(nparts);
-		max_parts *= 2;
-	}
 	x.resize(max_parts);
 	y.resize(max_parts);
 	z.resize(max_parts);
@@ -354,26 +348,6 @@ void load_glass(const char* filename) {
 			fixed32 X;
 			FREAD(&X, sizeof(fixed32), 1, fp);
 			z[i] = X.to_double();
-		}
-	}
-	if (get_options().glass == 2) {
-		sph_particles_resize(nparts);
-		x.resize(2 * nparts);
-		y.resize(2 * nparts);
-		z.resize(2 * nparts);
-		for (part_int i = nparts; i < 2 * nparts; i++) {
-			x[i] = x[i - nparts] + 0.5;
-			y[i] = y[i - nparts] + 0.5;
-			z[i] = z[i - nparts] + 0.5;
-			if (x[i] > 1.0) {
-				x[i] -= 1.0;
-			}
-			if (y[i] > 1.0) {
-				y[i] -= 1.0;
-			}
-			if (z[i] > 1.0) {
-				z[i] -= 1.0;
-			}
 		}
 	}
 	fclose(fp);
@@ -428,26 +402,6 @@ void load_glass(const char* filename) {
 								particles_pos(dim, index) = X[dim];
 								particles_vel(dim, index) = 0.0;
 								particles_rung(index) = 0;
-							}
-							if (l >= nparts) {
-								const part_int m = particles_cat_index(index);
-#ifdef ENTROPY
-								sph_particles_rec2(m).A = K0;
-#else
-								sph_particles_rec2(m).eint = eps  * sqr(a);
-#endif
-								sph_particles_smooth_len(m) = hs;
-								sph_particles_alpha(m) = get_options().alpha0;
-								if (chem) {
-									sph_particles_H(m) = 1.0 - get_options().Y0;
-									sph_particles_He0(m) = get_options().Y0;
-									sph_particles_Hn(m) = 1.e-30;
-									sph_particles_Hp(m) = 1.e-30;
-									sph_particles_H2(m) = 1.e-30;
-									sph_particles_Hep(m) = 1.e-30;
-									sph_particles_Hepp(m) = 1.e-30;
-									sph_particles_Z(m) = 1.e-30;
-								}
 							}
 						}
 					}
@@ -919,66 +873,11 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 								particles_vel(dim1, index) = 0.0;
 							}
 							particles_rung(index) = 0;
-							if( vsoft ) {
-								particles_softlen(index) = hg;
-							}
 						}
 					}
 				}, I));
 			}
 			hpx::wait_all(local_futs.begin(), local_futs.end());
-			if (sph) {
-				const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
-				const float n0 = 1.0 - 0.75 * get_options().Y0;
-				const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
-				const float T0 = 1000.0;
-				const float eps_cgs = cv_cgs * T0;
-				const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
-				const float a = 1.0 / (1.0 + get_options().z0);
-				const float eps = eps_cgs / code_to_ene;
-				const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
-				sph_particles_resize(box.volume());
-				const part_int offset = box.volume();
-				vector<hpx::future<void>> local_futs;
-				for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-					local_futs.push_back(hpx::async([K0,offset,a,chem,box,hs,hg,eps,Ninv,vsoft,parts_dim](array<int64_t,NDIM> I) {
-						for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-							for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-								const int64_t index = box.index(I) + offset;
-								for (int dim1 = 0; dim1 < NDIM; dim1++) {
-									float x = (I[dim1]) * Ninv;
-									particles_pos(dim1, index) = x;
-									particles_vel(dim1, index) = 0.0;
-								}
-								if( vsoft ) {
-									particles_softlen(index) = hg;
-								}
-								particles_rung(index) = 0;
-								const part_int m = particles_cat_index(index);
-#ifdef ENTROPY
-								sph_particles_rec2(m).A = K0;
-#else
-								sph_particles_rec2(m).eint = eps * sqr(a);
-#endif
-								sph_particles_smooth_len(m) = hs;
-								sph_particles_alpha(m) = get_options().alpha0;
-								if (chem) {
-									sph_particles_H(m) = 1.0 - get_options().Y0;
-									sph_particles_He0(m) = get_options().Y0;
-									sph_particles_Hn(m) = 1.e-30;
-									sph_particles_Hp(m) = 1.e-30;
-									sph_particles_H2(m) = 1.e-30;
-									sph_particles_Hep(m) = 1.e-30;
-									sph_particles_Hepp(m) = 1.e-30;
-									sph_particles_Z(m) = 1.e-30;
-								}
-
-							}
-						}
-					}, I));
-				}
-				hpx::wait_all(local_futs.begin(), local_futs.end());
-			}
 		}
 	}
 	const int nthreads = hpx_hardware_concurrency();

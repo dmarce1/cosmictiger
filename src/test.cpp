@@ -36,10 +36,6 @@ constexpr bool verbose = true;
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/bh.hpp>
-#include <cosmictiger/hydro.hpp>
-#include <cosmictiger/chemistry.hpp>
-#include <cosmictiger/stars.hpp>
-#include <cosmictiger/sphere.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
@@ -474,29 +470,8 @@ void test(std::string test) {
 		kick_test();
 	} else if (test == "tree") {
 		tree_test();
-	} else if (test == "rt") {
-		hydro_rt_test();
-	} else if (test == "sod") {
-		hydro_sod_test();
-	} else if (test == "blast") {
-		hydro_blast_test();
-	} else if (test == "helmholtz") {
-		hydro_helmholtz_test();
 	} else if (test == "bh") {
 		bh_test();
-	} else if (test == "stars") {
-		stars_test_mass();
-	} else if (test == "star") {
-		hydro_star_test();
-	} else if (test == "disc") {
-		hydro_disc_test();
-	} else if (test == "sphere") {
-		sphere_surface_test();
-	} else if (test == "plummer") {
-		hydro_plummer();
-	} else if (test == "chemistry") {
-		test_cuda_chemistry_kernel();
-	//	chemistry_test();
 	} else {
 		THROW_ERROR("test %s is not known\n", test.c_str());
 	}

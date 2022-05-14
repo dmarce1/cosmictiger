@@ -25,9 +25,7 @@
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/timer.hpp>
-#include <cosmictiger/stars.hpp>
 #include <cosmictiger/cuda_mem.hpp>
 
 #include <atomic>
@@ -65,15 +63,12 @@ struct cuda_kick_params {
 	kick_return* kreturn;
 };
 
-__device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self,
-		float dm_mass, float sph_mass) {
+__device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
-	const bool sph = data.sph;
-	const bool vsoft = data.vsoft;
 	auto* all_phi = data.pot;
 	auto* all_gx = data.gx;
 	auto* all_gy = data.gy;
@@ -82,10 +77,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	auto* vel_x = data.vx;
 	auto* vel_y = data.vy;
 	auto* vel_z = data.vz;
-	auto* sph_index = data.cat_index;
-	auto* sph_gx = data.sph_gx;
-	auto* sph_gy = data.sph_gy;
-	auto* sph_gz = data.sph_gz;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
@@ -121,8 +112,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		flops += 537 + (true) * 178;
 		L2 = L2P(L, dx, true);
-		int j = NO_INDEX;
-		char my_type = DARK_MATTER_TYPE;
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
@@ -141,88 +130,37 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vy = vel_y[snki];
 		vz = vel_z[snki];
 		float hsoft = params.h;
-#ifndef DM_CON_H_ONLY
-		if (vsoft) {
-			hsoft = softlens[snki];
-		}
-#endif
-		if (params.htime) {
-			ALWAYS_ASSERT(!sph);
-			float sgn = params.top ? 1.f : -1.f;
-			if (params.ascending) {
-				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-				if (!params.first_call) {
-					vx = fmaf(sgn * gx[i], dt, vx);
-					vy = fmaf(sgn * gy[i], dt, vy);
-					vz = fmaf(sgn * gz[i], dt, vz);
-				}
-			}
-			kin_tot += 0.5f * sqr(vx, vy, vz);
-			xmom_tot += vx;
-			ymom_tot += vy;
-			zmom_tot += vz;
-			nmom_tot += sqrtf(sqr(vx, vy, vz));
-			if (params.descending) {
-				g2 = sqr(gx[i], gy[i], gz[i]);
-				dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
-				rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
-				if (rung > 4) {
-//					PRINT( "%i\n", rung);
-				}
-				max_rung = max(rung, max_rung);
-				rungs[snki] = rung;
-				ALWAYS_ASSERT(rung >= 0);
-				ALWAYS_ASSERT(rung < MAX_RUNG);
-				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-				ALWAYS_ASSERT(!vsoft);
+		float sgn = params.top ? 1.f : -1.f;
+		if (params.ascending) {
+			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+			if (!params.first_call) {
 				vx = fmaf(sgn * gx[i], dt, vx);
 				vy = fmaf(sgn * gy[i], dt, vy);
 				vz = fmaf(sgn * gz[i], dt, vz);
 			}
-		} else {
-			if (params.save_force || vsoft) {
-				all_gx[snki] = gx[i];
-				all_gy[snki] = gy[i];
-				all_gz[snki] = gz[i];
-				all_phi[snki] = phi[i];
-			}
-			rung = rungs[snki];
-			dt = 0.5f * rung_dt[rung] * params.t0;
-			if (my_type == SPH_TYPE && !params.glass) {
-				sph_gx[j] = gx[i];
-				sph_gy[j] = gy[i];
-				sph_gz[j] = gz[i];
-			} else {
-				if (!params.first_call) {
-					vx = fmaf(gx[i], dt, vx);
-					vy = fmaf(gy[i], dt, vy);
-					vz = fmaf(gz[i], dt, vz);
-				}
-			}
-			g2 = sqr(gx[i], gy[i], gz[i]);
-			kin_tot += 0.5f * sqr(vx, vy, vz);
-			xmom_tot += vx;
-			ymom_tot += vy;
-			zmom_tot += vz;
-			nmom_tot += sqrtf(sqr(vx, vy, vz));
-			if (my_type != SPH_TYPE || params.glass) {
-				dt = fminf(fminf(tfactor * sqrt(hsoft / sqrtf(g2 + 1e-35f)), params.t0), params.max_dt);
-				rung = max(max((int) ceilf(log2ft0 - log2f(dt)), max(rung - 1, params.min_rung)), 1);
-				max_rung = max(rung, max_rung);
-				if (rung < 0 || rung >= MAX_RUNG) {
-					PRINT("Rung out of range %i\n", rung);
-				}
-				ASSERT(rung >= 0);
-				ASSERT(rung < MAX_RUNG);
-				dt = 0.5f * rung_dt[rung] * params.t0;
-				if (!vsoft) {
-					vx = fmaf(gx[i], dt, vx);
-					vy = fmaf(gy[i], dt, vy);
-					vz = fmaf(gz[i], dt, vz);
-				}
-				rungs[snki] = rung;
-			}
 		}
+		kin_tot += 0.5f * sqr(vx, vy, vz);
+		xmom_tot += vx;
+		ymom_tot += vy;
+		zmom_tot += vz;
+		nmom_tot += sqrtf(sqr(vx, vy, vz));
+		if (params.descending) {
+			g2 = sqr(gx[i], gy[i], gz[i]);
+			dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
+			rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
+			if (rung > 4) {
+//					PRINT( "%i\n", rung);
+			}
+			max_rung = max(rung, max_rung);
+			rungs[snki] = rung;
+			ALWAYS_ASSERT(rung >= 0);
+			ALWAYS_ASSERT(rung < MAX_RUNG);
+			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+			vx = fmaf(sgn * gx[i], dt, vx);
+			vy = fmaf(sgn * gy[i], dt, vy);
+			vz = fmaf(sgn * gz[i], dt, vz);
+		}
+
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
@@ -253,10 +191,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count,
 		int* next_item, int ntrees) {
 //	auto tm1 = clock64();
-	const bool sph = data.sph;
-	const bool vsoft = data.vsoft;
-	const float dm_mass = !sph ? 1.0f : global_params.dm_mass;
-	const float sph_mass = global_params.sph_mass;
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -445,20 +379,20 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					} while (checks.size() && self.leaf);
 					if (gtype == GRAVITY_DIRECT) {
 						cuda_gravity_cc_direct(data, L.back(), self, cclist, true);
-						cuda_gravity_cp_direct(data, L.back(), self, cplist, dm_mass, sph_mass, true);
+						cuda_gravity_cp_direct(data, L.back(), self, cplist, true);
 					} else {
 						cuda_gravity_cc_ewald(data, L.back(), self, cclist, true);
-						cuda_gravity_cp_ewald(data, L.back(), self, cplist, dm_mass, sph_mass, true);
+						cuda_gravity_cp_ewald(data, L.back(), self, cplist, true);
 					}
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
 						if (gtype == GRAVITY_DIRECT) {
 							cuda_gravity_pc_direct(data, self, pclist, true);
-							cuda_gravity_pp_direct(data, self, leaflist, h, dm_mass, sph_mass, true);
+							cuda_gravity_pp_direct(data, self, leaflist, h, true);
 						} else {
 							cuda_gravity_pc_ewald(data, self, pclist, true);
-							cuda_gravity_pp_ewald(data, self, leaflist, h, dm_mass, sph_mass, true);
+							cuda_gravity_pp_ewald(data, self, leaflist, h, true);
 						}
 					} else {
 						const int start = checks.size();
@@ -472,7 +406,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (self.leaf) {
 //					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
-					do_kick(returns.back(), global_params, data, L.back(), self, dm_mass, sph_mass);
+					do_kick(returns.back(), global_params, data, L.back(), self);
 					phase.pop_back();
 					self_index.pop_back();
 					Lpos.pop_back();
@@ -630,17 +564,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
-	data.sph = do_sph;
-	data.vsoft = get_options().vsoft;
 	data.x_snk = &particles_pos(XDIM, 0);
 	data.y_snk = &particles_pos(YDIM, 0);
 	data.z_snk = &particles_pos(ZDIM, 0);
-	if (do_sph) {
-		data.cat_index = &particles_cat_index(0);
-		data.sph_gx = &sph_particles_gforce(XDIM, 0);
-		data.sph_gy = &sph_particles_gforce(YDIM, 0);
-		data.sph_gz = &sph_particles_gforce(ZDIM, 0);
-	}
 	data.tree_nodes = dev_tree_nodes;
 	data.vx = &particles_vel(XDIM, 0);
 	data.vy = &particles_vel(YDIM, 0);

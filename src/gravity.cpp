@@ -23,8 +23,6 @@
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
-#include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/kernel.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 
@@ -135,7 +133,7 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 #ifndef DM_CON_H_ONLY
 				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), nullptr, count);
 #else
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, nullptr, count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(),  count);
 #endif
 				count += tree_ptrs[i]->nparts();
 			}
@@ -301,9 +299,6 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
 			simd_int src_type;
-			simd_int sink_type;
-			simd_float sink_hsoft;
-			simd_float sink_zeta;
 			array<const tree_node*, chunk_size> tree_ptrs;
 			int nsource = 0;
 			const int maxi = std::min((int) list.size(), li + chunk_size) - li;
@@ -325,10 +320,7 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			masses.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), nullptr, nullptr, count);
-				if (vsoft) {
-					particles_global_read_softlens(tree_ptrs[i]->global_part_range(), hs.data(), count);
-				}
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(),  count);
 				count += tree_ptrs[i]->nparts();
 			}
 			for (int i = 0; i < count; i++) {
@@ -344,14 +336,10 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			feenableexcept (FE_DIVBYZERO);
 			feenableexcept (FE_INVALID);
 			feenableexcept (FE_OVERFLOW);
+			simd_float sink_hsoft;
 			if (gtype == GRAVITY_DIRECT) {
 				for (part_int i = range.first; i < range.second; i++) {
 					bool active = particles_rung(i) >= min_rung;
-					const int this_type = particles_type(i);
-					part_int kk;
-					if (this_type == SPH_TYPE) {
-						kk = particles_cat_index(i);
-					}
 					if (active) {
 						sink_hsoft = get_options().hsoft;
 						simd_float gx(0.0);
@@ -415,13 +403,6 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 
 				for (part_int i = range.first; i < range.second; i++) {
 					if (particles_rung(i) >= min_rung) {
-						const int type = particles_type(i);
-						if (type == SPH_TYPE) {
-							const auto kk = particles_cat_index(i);
-							sink_type = SPH_TYPE;
-						} else {
-							sink_type = DARK_MATTER_TYPE;
-						}
 						for (int dim = 0; dim < NDIM; dim++) {
 							X[dim] = particles_pos(dim, i).raw();
 						}

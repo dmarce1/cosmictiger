@@ -48,8 +48,6 @@ set(cosmictiger_source_files
     src/bh.cpp
     src/bh.cu
     src/boltzmann.cpp
-    src/chemistry.cpp
-    src/chemistry.cu
  	src/cosmology.cpp
     src/cuda.cpp
     src/cuda_mem.cu
@@ -65,10 +63,8 @@ set(cosmictiger_source_files
     src/groups.cpp
     src/group_entry.cpp
     src/groups_find.cpp
-    src/hydro.cpp
     src/initialize.cpp
     src/hpx.cpp
-    src/kernel.cu
     src/kick.cpp
     src/kick.cu
     src/exact_sod.cpp
@@ -84,19 +80,7 @@ set(cosmictiger_source_files
     src/rockstar.cpp
     src/rockstar.cu
     src/sedov.cpp
-    src/sph_particles.cpp
-    src/sph.cpp
-    src/sph.cu
-    src/sph_aux.cu
-    src/sph_cond_init.cu
-    src/sph_prehydro.cu
-    src/sph_conduction.cu
-    src/sph_hydro.cu
-    src/sph_rungs.cu
-    src/sphere.cu
-    src/sph_tree.cpp
     src/stack_trace.cpp
-    src/stars.cpp
     src/test.cpp
     src/tree.cpp
     src/view.cpp
@@ -110,7 +94,6 @@ set(cosmictiger_header_files
     cosmictiger/assert.hpp
     cosmictiger/bh.hpp
     cosmictiger/boltzmann.hpp
-    cosmictiger/chemistry.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
     cosmictiger/cosmology.hpp
@@ -133,8 +116,6 @@ set(cosmictiger_header_files
     cosmictiger/group_entry.hpp
     cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
-    cosmictiger/hydro.hpp
-    cosmictiger/kernel.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lc_group_archive.hpp
@@ -153,13 +134,8 @@ set(cosmictiger_header_files
     cosmictiger/safe_io.hpp
     cosmictiger/sedov.hpp
     cosmictiger/simd.hpp
-    cosmictiger/sph.hpp
-    cosmictiger/sph_cuda.hpp
-    cosmictiger/sph_particles.hpp
-    cosmictiger/sph_tree.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
-    cosmictiger/stars.hpp
     cosmictiger/test.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
@@ -191,17 +167,8 @@ set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregco
 set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
 
 set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
-set_source_files_properties(./src/chemistry.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
 
 
-set_source_files_properties(./src/sph.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_smoothlen.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_prehydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_aux.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_cond_init.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_hydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_conduction.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_rungs.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)

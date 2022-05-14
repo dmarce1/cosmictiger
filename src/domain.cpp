@@ -23,7 +23,6 @@ constexpr bool verbose = true;
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/options.hpp>
 
@@ -31,7 +30,6 @@ constexpr bool verbose = true;
 #include <shared_mutex>
 
 void domains_transmit_particles(vector<particle>);
-void domains_transmit_sph_particles(vector<sph_particle>);
 void domains_init_rebounds();
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes);
 void domains_rebound_sort(vector<double> bounds, int depth);
