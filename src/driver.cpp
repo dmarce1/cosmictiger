@@ -725,20 +725,22 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		}
 		if (top && minrung == minrung0) {
 			auto counts = particles_rung_counts();
-			PRINT( "Rungs\n");
-			for( int i = 0; i < counts.size(); i++) {
-				PRINT( "%i %li\n", i, counts[i]);
-			}
-			size_t fast = 0;
-			size_t slow = counts[minrung0];
-			for (int i = minrung0 + 1; i < counts.size(); i++) {
-				fast += counts[i];
-			}
-			if (3 * fast > slow) {
-				clip_top = true;
-				PRINT("------------------------------------\n");
-				PRINT("Setting minimum level to %i\n", minrung);
-				PRINT("------------------------------------\n");
+			if (counts.size() > minrung0 + 1) {
+				PRINT("Rungs\n");
+				for (int i = 0; i < counts.size(); i++) {
+					PRINT("%i %li\n", i, counts[i]);
+				}
+				size_t fast = 0;
+				size_t slow = counts[minrung0];
+				for (int i = minrung0 + 1; i < counts.size(); i++) {
+					fast += counts[i];
+				}
+				if (3 * fast > slow) {
+					clip_top = true;
+					PRINT("------------------------------------\n");
+					PRINT("Setting minimum level to %i\n", minrung+1);
+					PRINT("------------------------------------\n");
+				}
 			}
 		}
 
@@ -845,7 +847,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		}
 	}
 	PRINT("done climbing kick ladder\n");
-	if( clip_top) {
+	if (clip_top) {
 		minrung++;
 	}
 	return std::make_pair(kr, sr);
@@ -1064,7 +1066,7 @@ void driver() {
 			} else {
 				theta = 0.4;
 			}
-			theta = 0.55;
+//			theta = 0.55;
 
 			///		if (last_theta != theta) {
 			set_options(opts);
@@ -1078,9 +1080,9 @@ void driver() {
 			}
 			std::pair<kick_return, tree_create_return> tmp;
 			if (get_options().htime) {
-				int this_minrung = std::max(minrung,minrung0);
+				int this_minrung = std::max(minrung, minrung0);
 				int om = this_minrung;
-				PRINT( "MINRUNG0 = %i\n", minrung0);
+				PRINT("MINRUNG0 = %i\n", minrung0);
 				tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0);
 				if (om != this_minrung) {
 					minrung0++;
