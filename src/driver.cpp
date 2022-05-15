@@ -141,7 +141,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tree_create_params tparams(minrung, theta, 0.f);
 	PRINT("Create tree %i %e\n", minrung, theta);
 	profiler_enter("tree_create");
-	auto sr = tree_create(tparams);
+	auto sr = tree_create(tparams).get();
 	profiler_exit();
 	PRINT("Done with tree\n");
 	const bool vsoft = get_options().vsoft;
@@ -278,7 +278,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tparams.htime = true;
 		tm.reset();
 		tm.start();
-		auto this_sr = tree_create(tparams);
+		auto this_sr = tree_create(tparams).get();
 		tm.stop();
 		PRINT("tree create = %e\n", tm.read());
 		if (top) {

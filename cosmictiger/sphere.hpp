@@ -18,31 +18,14 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
 
-#ifndef SEMAPHORE_HPP_
-#define SEMAPHORE_HPP_
 
-
+#include <cosmictiger/tree.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cosmictiger/containers.hpp>
 
-class semaphore {
-	std::atomic<int> available;
-public:
-	semaphore(int cnt) {
-		available = cnt;
-	}
-	semaphore() {
-		available = 0;
-	}
-	void wait() {
-		while( --available < 0 ) {
-			available++;
-			hpx_yield();
-		}
-	}
-	void signal() {
-		available++;
-	}
-};
-
-
-#endif /* SEMAPHORE_HPP_ */
+void sphere_to_gpu(const vector<tree_node*>& tree_nodes);
+#ifndef __CUDACC__
+hpx::future<void> sphere_find_bounding(tree_node* self);
+#endif
+void sphere_start_daemon();
+void sphere_stop_daemon();

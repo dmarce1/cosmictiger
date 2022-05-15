@@ -17,7 +17,7 @@ if( COSMICTIGER_WITH_CUDA )
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math ")
+set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math -g ")
 
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -80,6 +80,8 @@ set(cosmictiger_source_files
     src/rockstar.cpp
     src/rockstar.cu
     src/sedov.cpp
+    src/sphere.cpp
+    src/sphere.cu
     src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp
@@ -134,6 +136,7 @@ set(cosmictiger_header_files
     cosmictiger/safe_io.hpp
     cosmictiger/sedov.hpp
     cosmictiger/simd.hpp
+    cosmictiger/sphere.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp
