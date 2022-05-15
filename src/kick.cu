@@ -289,13 +289,90 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				}
 
 				__syncwarp();
-				for (int gtype = GRAVITY_DIRECT; gtype <= GRAVITY_EWALD; gtype++) {
+				{
+					nextlist.resize(0);
+					cclist.resize(0);
+					leaflist.resize(0);
+					auto& checks = echecks;
+					float my_hsoft;
+					my_hsoft = global_params.h;
+					do {
+						maxi = round_up(checks.size(), WARP_SIZE);
+						for (int i = tid; i < maxi; i += WARP_SIZE) {
+							bool cc = false;
+							bool next = false;
+							bool leaf = false;
+							if (i < checks.size()) {
+								const tree_node& other = tree_nodes[checks[i]];
+								const float hsoft = my_hsoft;
+								for (int dim = 0; dim < NDIM; dim++) {
+									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+								}
+								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
+								const float mind = self.radius + other.radius + hsoft;
+								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
+								cc = R2 > sqr(dcc);
+								if (!cc) {
+									leaf = other.leaf;
+									next = !leaf;
+									ALWAYS_ASSERT(!(leaf && self.leaf));
+								}
+							}
+							int l;
+							int total;
+							int start;
+							l = cc;
+							compute_indices(l, total);
+							start = cclist.size();
+							cclist.resize(start + total);
+							if (cc) {
+								cclist[l + start] = checks[i];
+							}
+							l = next;
+							compute_indices(l, total);
+							start = nextlist.size();
+							nextlist.resize(start + total);
+							if (next) {
+								nextlist[l + start] = checks[i];
+							}
+							l = leaf;
+							compute_indices(l, total);
+							start = leaflist.size();
+							leaflist.resize(start + total);
+							if (leaf) {
+								leaflist[l + start] = checks[i];
+							}
+						}
+						__syncwarp();
+						checks.resize(NCHILD * nextlist.size());
+						for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+							const auto& node = tree_nodes[nextlist[i]];
+							const auto& children = node.children;
+							checks[NCHILD * i + LEFT] = children[LEFT].index;
+							checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+						}
+						nextlist.resize(0);
+						__syncwarp();
+
+					} while (checks.size() && self.leaf);
+					cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
+					if (!self.leaf) {
+						const int start = checks.size();
+						checks.resize(start + leaflist.size());
+						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
+							checks[start + i] = leaflist[i];
+						}
+						__syncwarp();
+					}
+				}
+				{
 					nextlist.resize(0);
 					leaflist.resize(0);
 					cclist.resize(0);
 					cplist.resize(0);
 					pclist.resize(0);
-					auto& checks = gtype == GRAVITY_DIRECT ? dchecks : echecks;
+					auto& checks = dchecks;
 					float my_hsoft;
 					my_hsoft = global_params.h;
 					do {
@@ -313,10 +390,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								float R20 = R2;
-								if (gtype == GRAVITY_EWALD) {
-									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-								}
 								const float mind = self.radius + other.radius + hsoft;
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
@@ -330,9 +403,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (!cc && !cp && !pc) {
 									leaf = other.leaf;
 									next = !leaf;
-								}
-								if( gtype == GRAVITY_EWALD && leaf && self.leaf) {
-									PRINT( "%e %e %e %e\n", sqrtf(R2), sqrtf(R20), self.radius, other.radius);
 								}
 							}
 							int l;
@@ -388,23 +458,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						__syncwarp();
 
 					} while (checks.size() && self.leaf);
-					if (gtype == GRAVITY_DIRECT) {
-						cuda_gravity_cc_direct(data, L.back(), self, cclist, global_params.do_phi);
-						cuda_gravity_cp_direct(data, L.back(), self, cplist, global_params.do_phi);
-					} else {
-						cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
-						cuda_gravity_cp_ewald(data, L.back(), self, cplist, global_params.do_phi);
-					}
+					cuda_gravity_cc_direct(data, L.back(), self, cclist, global_params.do_phi);
+					cuda_gravity_cp_direct(data, L.back(), self, cplist, global_params.do_phi);
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
-						if (gtype == GRAVITY_DIRECT) {
-							cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
-							cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
-						} else {
-							cuda_gravity_pc_ewald(data, self, pclist, global_params.do_phi);
-							cuda_gravity_pp_ewald(data, self, leaflist, h, global_params.do_phi);
-						}
+						cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
+						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
 					} else {
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
