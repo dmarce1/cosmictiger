@@ -237,6 +237,7 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
+		PRINT( "CP\n");
 		int part_index;
 		expansion<float> L;
 		for (int j = 0; j < EXPANSION_SIZE; j++) {
@@ -325,6 +326,7 @@ int cuda_gravity_pc_ewald(const cuda_kick_data& data, const tree_node& self, con
 	const auto& sink_z = data.z + self.part_range.first;
 	const auto* tree_nodes = data.tree_nodes;
 	if (multlist.size()) {
+		PRINT( "PC\n");
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
 			expansion2<float> L;
@@ -378,12 +380,13 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	auto& src_z = shmem.src.z;
 	const auto* tree_nodes = data.tree_nodes;
 	float h2 = sqr(h);
-	float hinv = 1.f / (h);
-	float h3inv = hinv * hinv * hinv;
 	int part_index;
 	int nnear = 0;
 	int nfar = 0;
 	int flops = 0;
+	const float hinv = 1.f / h;
+	const float h2inv = sqr(hinv);
+	const float h3inv = h2inv * hinv;
 	if (partlist.size()) {
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
@@ -437,11 +440,6 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 				fy = 0.f;
 				fz = 0.f;
 				pot = 0.f;
-				const float h_i = h;
-				const float hinv_i = 1.f / h_i;
-				const float h2inv_i = sqr(hinv_i);
-				const float h3inv_i = h2inv_i * hinv_i;
-				const float h2 = sqr(h_i);
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
 					dx1 = distance(sink_y[k], src_y[j]); // 1
@@ -451,13 +449,12 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r1inv = rsqrt(r2);
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
-						const float q2 = r2 * h2inv_i;
-						r3inv = (2.5f - 1.5f * q2) * h3inv_i;
+						const float q2 = r2 * h2inv;
+						r3inv = (2.5f - 1.5f * q2) * h3inv;
 						if (do_phi) {
-							r1inv = (float(15.0f / 8.0f) - float(5.0f / 4.0f) * q2 + float(3.0f / 8.0f) * sqr(q2)) * hinv_i;
+							r1inv = (float(15.0f / 8.0f) - float(5.0f / 4.0f) * q2 + float(3.0f / 8.0f) * sqr(q2)) * hinv;
 						}
 					}
-					flops += 2;
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2
 					fz = fmaf(dx2, r3inv, fz);                     // 2
@@ -505,6 +502,7 @@ int cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, con
 	int nfar = 0;
 	int flops = 0;
 	if (partlist.size()) {
+		PRINT( "PP\n");
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
 		const auto partsz = partlist.size();

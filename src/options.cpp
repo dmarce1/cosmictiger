@@ -137,7 +137,7 @@ bool process_options(int argc, char *argv[]) {
 	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(128), "SPH neighbor number") //
 	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(128), "gravity neighbor number") //
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.25), "time-step criterion (default=0.2)") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.20), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -148,7 +148,7 @@ bool process_options(int argc, char *argv[]) {
 	("sigma8_c", po::value<double>(&(opts.sigma8_c))->default_value(0.8613), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
-	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9), "mass resolution") //
+	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9/.6732), "mass resolution") //
 
 			;
 

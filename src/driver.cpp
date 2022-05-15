@@ -125,7 +125,6 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double dadt, double t0, double theta, bool first_call, bool full_eval) {
 	timer tm;
 	tm.start();
@@ -190,7 +189,6 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	tm.stop();
 	kick_time += tm.read();
 
-
 	tree_destroy();
 	particles_cache_free();
 	PRINT("kick done\n");
@@ -198,7 +196,7 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 }
 
 std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double tau, double t0, double theta,
-		energies_t* energies, int minrung0) {
+		energies_t* energies, int minrung0, bool do_phi) {
 	timer tm;
 	tm.start();
 	PRINT("domains_begin\n");
@@ -249,9 +247,10 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if (top && minrung == minrung0) {
 			auto counts = particles_rung_counts();
 			if (counts.size() > minrung0 + 1) {
+				const auto total = powf(get_options().parts_dim, NDIM);
 				PRINT("Rungs\n");
 				for (int i = 0; i < counts.size(); i++) {
-					PRINT("%i %li\n", i, counts[i]);
+					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
 				}
 				size_t fast = 0;
 				size_t slow = counts[minrung0];
@@ -261,7 +260,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				if (3 * fast > slow) {
 					clip_top = true;
 					PRINT("------------------------------------\n");
-					PRINT("Setting minimum level to %i\n", minrung+1);
+					PRINT("Setting minimum level to %i\n", minrung + 1);
 					PRINT("------------------------------------\n");
 				}
 			}
@@ -310,6 +309,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		kparams.a = scale;
 		kparams.first_call = tau == 0.0;
 		kparams.min_rung = levels[li];
+		kparams.do_phi = do_phi && top;
 		kparams.t0 = t0;
 		kparams.theta = theta;
 		expansion<float> L;
@@ -598,7 +598,7 @@ void driver() {
 				int this_minrung = std::max(minrung, minrung0);
 				int om = this_minrung;
 				PRINT("MINRUNG0 = %i\n", minrung0);
-				tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0);
+				tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval);
 				if (om != this_minrung) {
 					minrung0++;
 				}
@@ -725,16 +725,11 @@ void driver() {
 //			profiler_exit();
 //			profiler_enter("main driver");
 			profiler_output();
-			jiter++;
-			PRINT( "JITER = %i\n", jiter);
-			if (jiter > 50) {
-				break;
-			}
 		} while (itime != 0);
-		if (jiter > 50) {
+		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
 		}
-		if (1.0 / a < get_options().z1 + 1.0) {
+		if (jiter > 50) {
 			break;
 		}
 	}

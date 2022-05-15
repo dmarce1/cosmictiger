@@ -139,6 +139,7 @@ struct kick_params {
 	bool ascending;
 	bool descending;
 	bool top;
+	bool do_phi;
 	kick_params() {
 		cfl = get_options().cfl;
 		dm_mass = get_options().dm_mass;
@@ -146,6 +147,7 @@ struct kick_params {
 		glass = 0;
 		max_dt = 1e30;
 		htime = false;
+		do_phi = true;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {

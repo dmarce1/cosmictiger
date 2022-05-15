@@ -26,6 +26,8 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/options.hpp>
 
+#include <cosmictiger/math.hpp>
+
 #include <unordered_map>
 #include <shared_mutex>
 
@@ -494,6 +496,79 @@ static void domains_check() {
 		THROW_ERROR("particle out of range!\n");
 	}
 }
+
+/*
+pair<int, double> domains_find_ewald_level(double theta, size_t key, range<double> box, int depth, double rb) {
+	pair<int, double> rc;
+	double rmax = 0.0;
+	bool root = key == 1;
+	double xc = 0.5 * (box.begin[XDIM] + box.end[XDIM]);
+	double yc = 0.5 * (box.begin[YDIM] + box.end[YDIM]);
+	double zc = 0.5 * (box.begin[ZDIM] + box.end[ZDIM]);
+	const double r = sqrtf(sqr(0.5 * (box.end[XDIM] - box.begin[XDIM]), 0.5 * (box.end[YDIM] - box.begin[YDIM]), 0.5 * (box.end[ZDIM] - box.begin[ZDIM])));
+	const double h = get_options().hsoft;
+	bool ewald_satisfied = false;
+	if (rb <= 0.0) {
+		ewald_satisfied = (r < 0.25 * (theta / (theta + 1)) && r < 0.125 - 0.5 * h);
+	} else {
+		ewald_satisfied = (r < 0.5 * (theta / (1.0 + theta)) - rb && r < 0.5 - rb - h);
+	}
+	if (ewald_satisfied) {
+		rc.first = depth;
+		rc.second = r;
+	} else {
+		const auto& entry = boxes_by_key[key];
+		key <<= 1;
+		pair<int, double> rcl, rcr;
+		if (entry.rank == -1) {
+			const int xdim = depth % NDIM;
+			range<double> cboxr = box;
+			range<double> cboxl = box;
+			double midx = (box.begin[xdim] + box.end[xdim]) * 0.5;
+			cboxl.end[xdim] = cboxr.begin[xdim] = midx;
+			rcl = domains_find_ewald_level(theta, key, cboxl, depth + 1, rb);
+			rcr = domains_find_ewald_level(theta, key | 1, cboxl, depth + 1, rb);
+		} else {
+			double max_span = 0.0;
+			int xdim;
+			for (int dim = 0; dim < NDIM; dim++) {
+				double span = box.end[dim] - box.begin[dim];
+				if (span > max_span) {
+					max_span = span;
+					xdim = dim;
+				}
+			}
+			range<double> cboxr = box;
+			range<double> cboxl = box;
+			double midx = (box.begin[xdim] + box.end[xdim]) * 0.5;
+			cboxl.end[xdim] = cboxr.begin[xdim] = midx;
+			rcl = domains_find_ewald_level(theta, key, cboxl, depth + 1, rb);
+			rcr = domains_find_ewald_level(theta, key | 1, cboxl, depth + 1, rb);
+		}
+		if (rb <= 0.0) {
+			if (rcr.second > rcl.first) {
+				rc = rcr;
+			} else {
+				rc = rcl;
+			}
+		} else {
+			if (rcl.first > rcr.first) {
+				rc = rcl;
+			} else {
+				rc = rcr;
+			}
+		}
+	}
+	if (root && rb <= 0.0) {
+		auto rcb = domains_find_ewald_level(theta, key, box, depth, rc.second);
+		if (rcb.first > rc.first) {
+			rc = rcb;
+		}
+	}
+	return rc;
+}
+
+*/
 
 static int find_particle_domain(const array<double, NDIM>& x, size_t key, int depth) {
 	const auto& entry = boxes_by_key[key];

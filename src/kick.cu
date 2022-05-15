@@ -111,7 +111,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		flops += 537 + (true) * 178;
-		L2 = L2P(L, dx, true);
+		L2 = L2P(L, dx, params.do_phi);
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
@@ -275,7 +275,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
-				auto this_L = L2L_cuda(L.back(), dx, true);
+				auto this_L = L2L_cuda(L.back(), dx, global_params.do_phi);
 				if (tid == 0) {
 					L.back() = this_L;
 				}
@@ -313,6 +313,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+								float R20 = R2;
 								if (gtype == GRAVITY_EWALD) {
 									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
 								}
@@ -329,6 +330,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (!cc && !cp && !pc) {
 									leaf = other.leaf;
 									next = !leaf;
+								}
+								if( gtype == GRAVITY_EWALD && leaf && self.leaf) {
+									PRINT( "%e %e %e %e\n", sqrtf(R2), sqrtf(R20), self.radius, other.radius);
 								}
 							}
 							int l;
@@ -385,21 +389,21 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 					} while (checks.size() && self.leaf);
 					if (gtype == GRAVITY_DIRECT) {
-						cuda_gravity_cc_direct(data, L.back(), self, cclist, true);
-						cuda_gravity_cp_direct(data, L.back(), self, cplist, true);
+						cuda_gravity_cc_direct(data, L.back(), self, cclist, global_params.do_phi);
+						cuda_gravity_cp_direct(data, L.back(), self, cplist, global_params.do_phi);
 					} else {
-						cuda_gravity_cc_ewald(data, L.back(), self, cclist, true);
-						cuda_gravity_cp_ewald(data, L.back(), self, cplist, true);
+						cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
+						cuda_gravity_cp_ewald(data, L.back(), self, cplist, global_params.do_phi);
 					}
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
 						if (gtype == GRAVITY_DIRECT) {
-							cuda_gravity_pc_direct(data, self, pclist, true);
-							cuda_gravity_pp_direct(data, self, leaflist, h, true);
+							cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
+							cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
 						} else {
-							cuda_gravity_pc_ewald(data, self, pclist, true);
-							cuda_gravity_pp_ewald(data, self, leaflist, h, true);
+							cuda_gravity_pc_ewald(data, self, pclist, global_params.do_phi);
+							cuda_gravity_pp_ewald(data, self, leaflist, h, global_params.do_phi);
 						}
 					} else {
 						const int start = checks.size();

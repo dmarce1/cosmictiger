@@ -175,7 +175,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	const simd_float thetainv(1.0 / params.theta);
 	static const simd_float sink_bias(SINK_BIAS);
 	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
-	const bool do_phi = true;
 	array<float, NDIM> Ldx;
 	simd_float self_radius = self_ptr->radius;
 	array<simd_int, NDIM> self_pos;
@@ -189,7 +188,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	for (int dim = 0; dim < NDIM; dim++) {
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
-	L = L2L(L, Ldx, do_phi);
+	L = L2L(L, Ldx, params.do_phi);
 	const bool vsoft = get_options().vsoft;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
@@ -271,15 +270,15 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			std::swap(checklist, nextlist);
 			nextlist.resize(0);
 		} while (checklist.size() && self_ptr->leaf);
-		these_flops += cpu_gravity_cc(gtype, L, cclist, self, true);
+		these_flops += cpu_gravity_cc(gtype, L, cclist, self, params.do_phi);
 		if (self_ptr->leaf) {
 			if (self_ptr->nparts() > 0) {
 				if (cuda_workspace != nullptr && gtype == GRAVITY_EWALD) {
 					cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 				}
-				these_flops += cpu_gravity_cp(gtype, L, cplist, self, true);
-				kr.part_flops += cpu_gravity_pc(gtype, forces, params.min_rung, self, pclist);
-				kr.part_flops += cpu_gravity_pp(gtype, forces, params.min_rung, self, leaflist, params.h);
+				these_flops += cpu_gravity_cp(gtype, L, cplist, self, params.do_phi);
+				kr.part_flops += cpu_gravity_pc(gtype, forces, params.do_phi, self, pclist);
+				kr.part_flops += cpu_gravity_pp(gtype, forces, params.do_phi, self, leaflist, params.h);
 			}
 		} else {
 			ALWAYS_ASSERT(cplist.size() == 0);
