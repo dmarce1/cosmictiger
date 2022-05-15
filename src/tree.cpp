@@ -300,7 +300,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		box_r += sqr(0.5 * (box.end[dim] - box.begin[dim]));
 	}
 	box_r = sqrt(box_r);
-	bool ewald_satisfied = box_r < 0.25 * (params.theta / (1.0 + params.theta));
+	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h);
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
 		auto left_box = box;
@@ -332,7 +332,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 //			for (int iters = 0; iters < 10 && dif > 0; iters++) {
 //				last_dif = dif;
 			xmid = 0.5 * (xmax + xmin);
-			xmid = xmin + rand1()*(xmax - xmin);
 			mid = particles_sort(part_range, xmid, xdim);
 			parts_above = part_range.second - mid;
 			parts_below = mid - part_range.first;
