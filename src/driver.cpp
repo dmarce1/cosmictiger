@@ -581,11 +581,11 @@ void driver() {
 				theta = 0.4;
 			}
 			if (theta < 0.5) {
-				opts.bucket_size = 90;
+				opts.bucket_size = 96;
 			} else if (theta < 0.6) {
-				opts.bucket_size = 100;
+				opts.bucket_size = 128;
 			} else {
-				opts.bucket_size = 110;
+				opts.bucket_size = 160;
 			}
 //			theta = 0.55;
 

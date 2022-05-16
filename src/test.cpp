@@ -334,7 +334,7 @@ static void kick_test() {
 static void force_test() {
 	timer tm;
 	timer tm_main;
-	constexpr int NITER = 10;
+	constexpr int NITER = 1;
 	tm_main.start();
 	for (int iter = 0; iter < NITER; iter++) {
 		tm_main.stop();
@@ -422,6 +422,69 @@ static void force_test() {
 
 }
 
+static void bucket_test() {
+	timer tm;
+	timer tm_main;
+	constexpr int NITER = 10;
+	constexpr int bmin = 64;
+	constexpr int bmax = 256;
+	for (int bucket_size = bmin; bucket_size < bmax; bucket_size++) {
+		auto opts = get_options();
+		opts.bucket_size = bucket_size;
+		set_options(opts);
+		tm_main.start();
+		for (int iter = 0; iter < NITER; iter++) {
+			tm_main.stop();
+			particles_random_init();
+			domains_rebound();
+			tm_main.start();
+			domains_begin();
+			domains_end();
+			particles_sort_by_rung(0);
+			tree_create_params tparams(0, get_options().theta, get_options().hsoft);
+			tree_create(tparams);
+			kick_params kparams;
+			kparams.node_load = 10;
+			kparams.gpu = true;
+			kparams.min_level = tparams.min_level;
+			kparams.save_force = get_options().save_force;
+			kparams.GM = get_options().GM;
+			kparams.h = get_options().hsoft;
+			kparams.eta = get_options().eta;
+			kparams.a = 1.0;
+			kparams.first_call = true;
+			kparams.min_rung = 0;
+			kparams.t0 = 1.0;
+			kparams.theta = get_options().theta;
+			expansion<float> L;
+			for (int i = 0; i < EXPANSION_SIZE; i++) {
+				L[i] = 0.0f;
+			}
+			array<fixed32, NDIM> pos;
+			for (int dim = 0; dim < NDIM; dim++) {
+				pos[dim] = 0.f;
+			}
+			tree_id root_id;
+			root_id.proc = 0;
+			root_id.index = 0;
+			vector<tree_id> checklist;
+			checklist.push_back(root_id);
+			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+			tree_destroy();
+		}
+		tm_main.stop();
+
+		PRINT("BUCKETS = %i TIME = %e\n", bucket_size, tm_main.read());
+		FILE* fp;
+		fp = fopen("buckets.txt", "at");
+		fprintf(fp, "%i %e\n", bucket_size, tm_main.read());
+		fclose(fp);
+		tm_main.reset();
+	}
+	kick_workspace::clear_buffers();
+
+}
+
 void bh_test() {
 	int N = 100000;
 	int M = 10;
@@ -467,6 +530,8 @@ void test(std::string test) {
 		fft1_test();
 	} else if (test == "fft2") {
 		fft2_test();
+	} else if (test == "bucket") {
+		bucket_test();
 	} else if (test == "force") {
 		force_test();
 	} else if (test == "rockstar") {

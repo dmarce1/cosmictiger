@@ -246,7 +246,6 @@ static int group_cache_epoch = 0;
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<char>>, line_id_hash_hi>, PART_CACHE_SIZE> part_cache_rungs;
 static array<spinlock_type, PART_CACHE_SIZE> mutexes_rungs;
 
-
 static array<std::unordered_map<line_id_type, hpx::shared_future<vector<array<float, NDIM>>> , line_id_hash_hi>, PART_CACHE_SIZE> vels_part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> vels_mutexes;
 
@@ -679,7 +678,6 @@ static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) 
 	return line;
 }
 
-
 static vector<group_particle> particles_group_fetch_cache_line(part_int index) {
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<group_particle> line(line_size);
@@ -865,6 +863,27 @@ void particles_random_init() {
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+}
+
+range<double> particles_enclosing_box(pair<part_int> rng) {
+	range<double> box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = 1.0;
+		box.end[dim] = 0.0;
+	}
+	for (part_int i = rng.first; i < rng.second; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			const auto x = particles_pos(dim, i).to_double();
+			box.begin[dim] = std::min(box.begin[dim], x);
+			box.end[dim] = std::max(box.end[dim], x);
+		}
+	}
+	const double h = get_options().hsoft;
+	for (int dim = 0; dim < NDIM; dim++) {
+		box.begin[dim] = std::max(0.0, box.begin[dim] - h);
+		box.end[dim] = std::min(1.0, box.end[dim] + h);
+	}
+	return box;
 }
 
 part_int particles_sort(pair<part_int> rng, double xm, int xdim) {

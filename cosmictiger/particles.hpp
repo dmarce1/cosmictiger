@@ -161,6 +161,7 @@ void particles_global_read_pos_and_group(particle_global_range range, fixed32* x
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 void particles_cache_free();
 void particles_group_cache_free();
+range<double> particles_enclosing_box(pair<part_int> rng);
 vector<output_particle> particles_get_sample(const range<double>& box);
 vector<particle_sample> particles_sample(int cnt);
 void particles_load(FILE* fp);

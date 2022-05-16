@@ -40,7 +40,6 @@ HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
 
-
 class tree_allocator {
 	int next;
 	int last;
@@ -67,7 +66,6 @@ static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
-
 
 long long tree_nodes_size() {
 	return nodes.size();
@@ -279,6 +277,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			right_local_root = right_range.second - right_range.first == 1;
 			flops += 7;
 		} else {
+			if (nparts < 8 * bucket_size) {
+		//		box = left_box = right_box = particles_enclosing_box(part_range);
+			}
 			double xmax = box.end[xdim];
 			double xmin = box.begin[xdim];
 			part_int mid;
@@ -509,9 +510,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
-	if (depth == 0) {
-		PRINT("total nodes = %i\n", rc.node_count);
-	}
 	return rc;
 }
 
