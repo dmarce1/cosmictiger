@@ -219,13 +219,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
 	const float thetainv = 1.f / global_params.theta;
-	const int min_rung = global_params.min_rung;
-	const float sink_bias = 1.5;
 	auto* tree_nodes = data.tree_nodes;
-	auto* all_rungs = data.rungs;
-	auto* src_x = data.x;
-	auto* src_y = data.y;
-	auto* src_z = data.z;
 	int index;
 
 	new (&gx) device_vector<float>();

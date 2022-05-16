@@ -258,7 +258,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		bool local_root) {
 	stack_trace_activate();
 	const double h = get_options().hsoft;
-	static const int bucket_size = get_options().bucket_size;
+	int bucket_size = get_options().bucket_size;
 	tree_create_return rc;
 	const static bool sph = get_options().sph;
 	if (depth >= MAX_DEPTH) {
@@ -301,6 +301,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	}
 	box_r = sqrt(box_r);
 	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h);
+	const int xdim = box.longest_dim();
+	double max_ratio = 1.0;
+	for (int dim = 0; dim < NDIM; dim++) {
+		max_ratio = std::max(max_ratio, (box.end[dim] - box.begin[dim]) / (box.end[xdim] - box.begin[xdim]));
+	}
+	bucket_size /= max_ratio;
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
 		auto left_box = box;
@@ -320,7 +326,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			right_local_root = right_range.second - right_range.first == 1;
 			flops += 7;
 		} else {
-			const int xdim = box.longest_dim();
 			double xmax = box.end[xdim];
 			double xmin = box.begin[xdim];
 			part_int mid;
@@ -424,19 +429,16 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			mdx[dim][LEFT] = Xl[dim] - Xc[dim];
 			mdx[dim][RIGHT] = Xr[dim] - Xc[dim];
 		}
-		flops += 2 * NDIM;
 		simdM = M2M<simd_double>(simdM, mdx);
-		flops += 1203 * NCHILD;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
 		}
-		flops += MULTIPOLE_SIZE;
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
 		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
 	}
-	if (nparts < get_options().bucket_size * 8) {
+	if (isleaf) {
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
 		for (int dim = 0; dim < NDIM; dim++) {

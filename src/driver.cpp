@@ -257,7 +257,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				for (int i = minrung0 + 1; i < counts.size(); i++) {
 					fast += counts[i];
 				}
-				if (2 * fast > slow) {
+				if (3 * fast > slow) {
 					clip_top = true;
 					PRINT("------------------------------------\n");
 					PRINT("Setting minimum level to %i\n", minrung + 1);
