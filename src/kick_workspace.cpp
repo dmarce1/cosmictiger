@@ -75,7 +75,7 @@ void kick_workspace::to_gpu() {
 	cuda_set_device();
 	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
 //	PRINT("To vector\n");
-	PRINT("%i tree ids\n", tree_ids.size());
+//	PRINT("%i tree ids\n", tree_ids.size());
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
 	part_int part_count = 0;

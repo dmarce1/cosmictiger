@@ -24,6 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 
+void cosmos_update(double& adotdot, double& adot, double& a, double dt);
 double cosmos_growth_factor(double omega_m, float a);
 double cosmos_dadtau(double a);
 double cosmos_dadt(double a);

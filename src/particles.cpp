@@ -581,7 +581,6 @@ vector<size_t> particles_rung_counts() {
 		for( int i = 0; i < counts.size(); i++) {
 			tot += counts[i];
 		}
-		PRINT( "%i\n", tot);
 		ALWAYS_ASSERT(tot == nparts);
 	}
 	return counts;

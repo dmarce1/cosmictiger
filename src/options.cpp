@@ -139,6 +139,8 @@ bool process_options(int argc, char *argv[]) {
 	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
 	("eta", po::value<double>(&(opts.eta))->default_value(0.20), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
+	("omega_k", po::value<double>(&(opts.omega_k))->default_value(0.0), "") //
+	("omega_lam", po::value<double>(&(opts.omega_lam))->default_value(-1.0), "") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
@@ -202,6 +204,12 @@ bool process_options(int argc, char *argv[]) {
 	opts.omega_nu = omega_r * opts.Neff / (8.0 / 7.0 * std::pow(11.0 / 4.0, 4.0 / 3.0) + opts.Neff);
 	opts.omega_gam = omega_r - opts.omega_nu;
 	opts.omega_r = omega_r;
+	if( opts.omega_lam < 0.0 ) {
+		opts.omega_lam = 1.0 - opts.omega_m - opts.omega_r;
+		opts.omega_k = 0.0;
+	} else {
+		opts.omega_k = 1.0  - opts.omega_m - opts.omega_r - opts.omega_lam;
+	}
 	opts.link_len = 1.0 / opts.parts_dim * 0.28;
 	opts.min_group = 20;
 	opts.lc_min_group = 20;

@@ -85,6 +85,7 @@ struct options {
 	double sigma8;
 	double theta;
 	double omega_b;
+	double omega_lam;
 	double omega_c;
 	double omega_gam;
 	double omega_nu;
@@ -100,11 +101,14 @@ struct options {
 	double gy;
 	double gcentral;
 	double hcentral;
+	double omega_k;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & omega_k;
+		arc & omega_lam;
 		arc & htime;
 		arc & vsoft;
 		arc & damping;
