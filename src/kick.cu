@@ -103,6 +103,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	int rung;
 	array<float, NDIM> dx;
 	part_int snki;
+	const float& hsoft = params.h;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
 		snki = self.sink_part_range.first + i;
 		ASSERT(snki >= 0);
@@ -129,7 +130,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vx = vel_x[snki];
 		vy = vel_y[snki];
 		vz = vel_z[snki];
-		float hsoft = params.h;
 		float sgn = params.top ? 1.f : -1.f;
 		if (params.ascending) {
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
@@ -216,9 +216,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& leaflist = lists[bid].leaflist;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
+	const float& h = global_params.h;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
-	const float thetainv = 1.f / global_params.theta;
 	auto* tree_nodes = data.tree_nodes;
 	int index;
 
@@ -288,9 +288,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					cclist.resize(0);
 					leaflist.resize(0);
 					auto& checks = echecks;
-					float my_hsoft;
-					my_hsoft = global_params.h;
 					do {
+						const float thetainv = 1.f / global_params.theta;
 						maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
 							bool cc = false;
@@ -298,13 +297,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							bool leaf = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								const float hsoft = my_hsoft;
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-								const float mind = self.radius + other.radius + hsoft;
+								const float mind = self.radius + other.radius + h;
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 								cc = R2 > sqr(dcc);
 								if (!cc) {
@@ -319,6 +317,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							l = cc;
 							compute_indices(l, total);
 							start = cclist.size();
+							__syncwarp();
 							cclist.resize(start + total);
 							if (cc) {
 								cclist[l + start] = checks[i];
@@ -326,6 +325,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							l = next;
 							compute_indices(l, total);
 							start = nextlist.size();
+							__syncwarp();
 							nextlist.resize(start + total);
 							if (next) {
 								nextlist[l + start] = checks[i];
@@ -333,6 +333,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							l = leaf;
 							compute_indices(l, total);
 							start = leaflist.size();
+							__syncwarp();
 							leaflist.resize(start + total);
 							if (leaf) {
 								leaflist[l + start] = checks[i];
@@ -367,8 +368,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					cplist.resize(0);
 					pclist.resize(0);
 					auto& checks = dchecks;
-					float my_hsoft;
-					my_hsoft = global_params.h;
+					const float thetainv = 1.f / global_params.theta;
 					do {
 						maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
@@ -379,12 +379,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							bool pc = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								const float hsoft = my_hsoft;
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								const float mind = self.radius + other.radius + hsoft;
+								const float mind = self.radius + other.radius + h;
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
 								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
@@ -405,6 +404,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							l = cc;
 							compute_indices(l, total);
 							start = cclist.size();
+							__syncwarp();
 							cclist.resize(start + total);
 							if (cc) {
 								cclist[l + start] = checks[i];
@@ -413,6 +413,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								l = cp;
 								compute_indices(l, total);
 								start = cplist.size();
+								__syncwarp();
 								cplist.resize(start + total);
 								if (cp) {
 									cplist[l + start] = checks[i];
@@ -420,6 +421,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								l = pc;
 								compute_indices(l, total);
 								start = pclist.size();
+								__syncwarp();
 								pclist.resize(start + total);
 								if (pc) {
 									pclist[l + start] = checks[i];
@@ -428,6 +430,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							l = next;
 							compute_indices(l, total);
 							start = nextlist.size();
+							__syncwarp();
 							nextlist.resize(start + total);
 							if (next) {
 								nextlist[l + start] = checks[i];
@@ -435,6 +438,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							l = leaf;
 							compute_indices(l, total);
 							start = leaflist.size();
+							__syncwarp();
 							leaflist.resize(start + total);
 							if (leaf) {
 								leaflist[l + start] = checks[i];
@@ -469,7 +473,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					}
 				}
 				if (self.leaf) {
-//					atomicAdd(&gravity_time, (double) clock64() - tm);
 					__syncwarp();
 					do_kick(returns.back(), global_params, data, L.back(), self);
 					phase.pop_back();

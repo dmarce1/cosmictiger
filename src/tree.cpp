@@ -40,10 +40,6 @@ HPX_PLAIN_ACTION (tree_create);
 HPX_PLAIN_ACTION (tree_destroy);
 HPX_PLAIN_ACTION (tree_fetch_cache_line);
 
-static vector<tree_id> neighbor_list;
-static vector<int> leaflist;
-static mutex_type leaflist_mutex;
-static mutex_type neighbor_list_mutex;
 
 class tree_allocator {
 	int next;
@@ -72,38 +68,6 @@ static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, 
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
 
-int tree_leaflist_size() {
-	return leaflist.size();
-}
-
-const tree_id tree_get_leaf(int i) {
-	tree_id id;
-	ALWAYS_ASSERT(i < leaflist.size());
-	id.index = leaflist[i];
-	id.proc = hpx_rank();
-	return id;
-}
-
-void tree_free_neighbor_list() {
-//	PRINT("leaflist size = %i\n", leaflist.size());
-	neighbor_list.resize(0);
-}
-
-int tree_allocate_neighbor_list(const vector<tree_id>& values) {
-	std::lock_guard<mutex_type> lock(neighbor_list_mutex);
-	if (values.size()) {
-		int i = neighbor_list.size();
-		neighbor_list.resize(i + values.size());
-		memcpy(&neighbor_list[i], values.data(), sizeof(tree_id) * values.size());
-		return i;
-	} else {
-		return 0;
-	}
-}
-
-tree_id& tree_get_neighbor(int i) {
-	return neighbor_list[i];
-}
 
 long long tree_nodes_size() {
 	return nodes.size();
@@ -267,13 +231,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		tree_allocate_nodes();
 	}
 	if (local_root) {
-		leaflist.resize(0);
-		if (params.htime) {
-			part_range = particles_current_range();
-		} else {
-			part_range.first = 0;
-			part_range.second = particles_size();
-		}
+		part_range = particles_current_range();
 	}
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM> x;
@@ -516,11 +474,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		node_count = 1;
 		leaf_nodes = 1;
-		static const auto vsoft = get_options().vsoft;
-		if (vsoft) {
-			std::lock_guard<mutex_type> lock(leaflist_mutex);
-			leaflist.push_back(index);
-		}
 	}
 	tree_node node;
 	node.node_count = node_count;

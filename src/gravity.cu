@@ -55,8 +55,7 @@ int cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 }
 
 __device__
-int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& partlist,
-		bool do_phi) {
+int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& partlist, bool do_phi) {
 	int flops = 0;
 	__shared__
 	extern int shmem_ptr[];
@@ -223,8 +222,7 @@ int cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 }
 
 __device__
-int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, float h,
-		bool do_phi) {
+int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, float h, bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__
 	extern int shmem_ptr[];
@@ -244,11 +242,10 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
 	const auto* tree_nodes = data.tree_nodes;
-	float h2 = sqr(h);
 	int part_index;
-	int nnear = 0;
-	int nfar = 0;
-	int flops = 0;
+	int near = 0;
+	int far = 0;
+	const float h2 = sqr(h);
 	const float hinv = 1.f / h;
 	const float h2inv = sqr(hinv);
 	const float h3inv = h2inv * hinv;
@@ -315,9 +312,12 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 						r3inv = sqr(r1inv) * r1inv;
 					} else {
 						const float q2 = r2 * h2inv;
-						r3inv = (2.5f - 1.5f * q2) * h3inv;
+						r3inv = fmaf(q2, -1.5f, 2.5f) * h3inv;
 						if (do_phi) {
-							r1inv = (float(15.0f / 8.0f) - float(5.0f / 4.0f) * q2 + float(3.0f / 8.0f) * sqr(q2)) * hinv;
+							r1inv = float(3.0f / 8.0f);
+							r1inv = fmaf(q2, r1inv, -float(5.f / 4.f));
+							r1inv = fmaf(q2, r1inv, float(15.0f / 8.0f));
+							r1inv *= hinv;
 						}
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
@@ -333,9 +333,8 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 		}
 		__syncwarp();
 	}
-	shared_reduce_add(nnear);
-	shared_reduce_add(nfar);
-	shared_reduce_add(flops);
+	shared_reduce_add(near);
+	shared_reduce_add(far);
 	__syncwarp();
-	return nfar * 22 + 37 * nnear + flops;
+	return 27 * near + 37 * far;
 }

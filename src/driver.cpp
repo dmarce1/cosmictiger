@@ -273,7 +273,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			PRINT("drift = %e\n", tm.read());
 		}
 		tree_create_params tparams(levels[li], theta, 0.f);
-		tparams.htime = true;
 		tm.reset();
 		tm.start();
 		auto this_sr = tree_create(tparams);
