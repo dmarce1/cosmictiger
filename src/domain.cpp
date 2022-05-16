@@ -486,6 +486,7 @@ static void domains_check() {
 				if (!my_domain.contains(x)) {
 					PRINT("particle out of range %li of %li %e %e %e\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2]);
 					PRINT("%s\n", domains_find_my_box().to_string().c_str());
+					ALWAYS_ASSERT(false);
 					fail++;
 				}
 			}

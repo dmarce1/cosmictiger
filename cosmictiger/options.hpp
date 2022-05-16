@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <string>
 
 struct options {
+	int bucket_size;
 	bool htime;
 	bool sph;
 	bool yreflect;
@@ -119,6 +120,7 @@ struct options {
 		arc & gcentral;
 		arc & hcentral;
 		arc & gy;
+		arc & bucket_size;
 		arc & yreflect;
 		arc & gamma;
 		arc & conduction;

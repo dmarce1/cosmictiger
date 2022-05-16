@@ -713,7 +713,7 @@ size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
 	size_t innerblocks = nparts / CUDA_KICK_PARTS_MAX;
 	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);
 	size_t total_parts = CUDA_KICK_PARTS_MAX * nblocks;
-	size_t ntrees = 3 * total_parts / BUCKET_SIZE;
+	size_t ntrees = 3 * total_parts / get_options().bucket_size;
 	size_t nchecks = 2 * innerblocks * check_count;
 	mem += total_parts * NDIM * sizeof(fixed32);
 	mem += ntrees * sizeof(tree_node);

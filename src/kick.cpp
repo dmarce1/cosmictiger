@@ -138,7 +138,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		bool eligible;
 		size_t max_parts = CUDA_KICK_PARTS_MAX;
 		const auto rng = particles_current_range();
-		max_parts = std::min((size_t) max_parts, (size_t) std::max((rng.second - rng.first) / kick_block_count(), BUCKET_SIZE));
+		max_parts = std::min((size_t) max_parts, (size_t) std::max((rng.second - rng.first) / kick_block_count(), get_options().bucket_size));
 		eligible = params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local();
 		if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			const auto all_local = [](const vector<tree_id>& list) {

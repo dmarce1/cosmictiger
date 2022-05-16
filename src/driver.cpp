@@ -585,6 +585,13 @@ void driver() {
 			} else {
 				theta = 0.4;
 			}
+			if (theta < 0.5) {
+				opts.bucket_size = 90;
+			} else if (theta < 0.6) {
+				opts.bucket_size = 100;
+			} else {
+				opts.bucket_size = 110;
+			}
 //			theta = 0.55;
 
 			///		if (last_theta != theta) {

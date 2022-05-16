@@ -41,13 +41,13 @@ constexpr bool verbose = true;
 //0.55, 0.65
 //0.4, 0.5
 /*
-float rand_normal() {
-	float x = 2.0 * rand1() - 1.0;
-	float y = 2.0 * rand1() - 1.0;
-	auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
-	return normal.real();
-}
-*/
+ float rand_normal() {
+ float x = 2.0 * rand1() - 1.0;
+ float y = 2.0 * rand1() - 1.0;
+ auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
+ return normal.real();
+ }
+ */
 static void rockstar_test() {
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
@@ -333,84 +333,90 @@ static void kick_test() {
 
 static void force_test() {
 	timer tm;
-	if( get_options().sph == true ) {
-		PRINT( "FORCE_TEST should be run without sph !\n");
+	timer tm_main;
+	if (get_options().sph == true) {
+		PRINT("FORCE_TEST should be run without sph !\n");
 		abort();
 	}
-	tm.start();
-//	particles_random_init();
-	initialize(get_options().z0);
-	tm.stop();
-	PRINT("particles_random_init: %e s\n", tm.read());
-	tm.reset();
+//	initialize(get_options().z0);
+	constexpr int NITER = 10;
+	tm_main.start();
+	for (int iter = 0; iter < NITER; iter++) {
+		tm_main.stop();
+		tm.start();
+		particles_random_init();
+		tm.stop();
+		tm_main.start();
+		PRINT("particles_random_init: %e s\n", tm.read());
+		tm.reset();
 
-	tm.start();
-	domains_rebound();
-	tm.stop();
-	PRINT("domains_rebound: %e s\n", tm.read());
-	tm.reset();
+		tm.start();
+		domains_rebound();
+		tm.stop();
+		PRINT("domains_rebound: %e s\n", tm.read());
+		tm.reset();
 
-	tm.start();
-	domains_begin();
-	tm.stop();
-	PRINT("domains_begin: %e s\n", tm.read());
-	tm.reset();
+		tm.start();
+		domains_begin();
+		tm.stop();
+		PRINT("domains_begin: %e s\n", tm.read());
+		tm.reset();
 
-	tm.start();
-	domains_end();
-	tm.stop();
-	PRINT("domains_end: %e s\n", tm.read());
-	tm.reset();
+		tm.start();
+		domains_end();
+		tm.stop();
+		PRINT("domains_end: %e s\n", tm.read());
+		tm.reset();
 
+		particles_sort_by_rung(0);
 
-	particles_sort_by_rung(0);
+		tm.start();
+		tree_create_params tparams(0, get_options().theta, get_options().hsoft);
+		tree_create(tparams);
+		tm.stop();
+		PRINT("tree_create: %e s\n", tm.read());
+		tm.reset();
 
-	tm.start();
-	tree_create_params tparams(0, get_options().theta, get_options().hsoft);
-	tree_create(tparams);
-	tm.stop();
-	PRINT("tree_create: %e s\n", tm.read());
-	tm.reset();
+		tm.start();
+		kick_params kparams;
+		kparams.node_load = 10;
+		kparams.gpu = true;
+		kparams.htime = true;
+		kparams.min_level = tparams.min_level;
+		kparams.save_force = get_options().save_force;
+		kparams.GM = get_options().GM;
+		kparams.h = get_options().hsoft;
+		kparams.eta = get_options().eta;
+		kparams.a = 1.0;
+		kparams.first_call = true;
+		kparams.min_rung = 0;
+		kparams.t0 = 1.0;
+		kparams.theta = get_options().theta;
+		expansion<float> L;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		array<fixed32, NDIM> pos;
+		for (int dim = 0; dim < NDIM; dim++) {
+			pos[dim] = 0.f;
+		}
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		tm.stop();
+		PRINT("tree_kick: %e s\n", tm.read());
+		tm.reset();
 
-	tm.start();
-	kick_params kparams;
-	kparams.node_load = 10;
-	kparams.gpu = true;
-	kparams.htime = true;
-	kparams.min_level = tparams.min_level;
-	kparams.save_force = get_options().save_force;
-	kparams.GM = get_options().GM;
-	kparams.h = get_options().hsoft;
-	kparams.eta = get_options().eta;
-	kparams.a = 1.0;
-	kparams.first_call = true;
-	kparams.min_rung = 0;
-	kparams.t0 = 1.0;
-	kparams.theta = get_options().theta;
-	expansion<float> L;
-	for (int i = 0; i < EXPANSION_SIZE; i++) {
-		L[i] = 0.0f;
+		tm.start();
+		tree_destroy();
+		tm.stop();
+		PRINT("tree_destroy: %e s\n", tm.read());
+		tm.reset();
 	}
-	array<fixed32, NDIM> pos;
-	for (int dim = 0; dim < NDIM; dim++) {
-		pos[dim] = 0.f;
-	}
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	tm.stop();
-	PRINT("tree_kick: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	tree_destroy();
-	tm.stop();
-	PRINT("tree_destroy: %e s\n", tm.read());
-	tm.reset();
-
+	tm_main.stop();
 	tm.start();
 	analytic_compare(100);
 	tm.stop();
@@ -418,6 +424,7 @@ static void force_test() {
 	tm.reset();
 
 	kick_workspace::clear_buffers();
+	PRINT("AVERAGE TIME = %e\n", tm_main.read() / NITER);
 
 }
 
@@ -445,17 +452,17 @@ void bh_test() {
 	tm1.stop();
 	x0 = x;
 	tm2.start();
-	PRINT( "Doing gpu\n");
+	PRINT("Doing gpu\n");
 	auto phi2 = bh_evaluate_points(y, x0, true);
 	tm2.stop();
-	PRINT( "%e %e\n", tm1.read(), tm2.read());
+	PRINT("%e %e\n", tm1.read(), tm2.read());
 	double err_tot = 0.0;
 	for (int i = 0; i < phi1.size(); i++) {
 		double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
 		PRINT("%e %e %e\n", phi1[i], phi2[i], err);
 		err_tot += err;
 	}
-	PRINT( "%e\n", err_tot / phi1.size());
+	PRINT("%e\n", err_tot / phi1.size());
 
 }
 

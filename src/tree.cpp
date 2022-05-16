@@ -237,7 +237,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 
 static void tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	static const int bucket_size = BUCKET_SIZE;
+	static const int bucket_size = get_options().bucket_size;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
@@ -258,7 +258,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		bool local_root) {
 	stack_trace_activate();
 	const double h = get_options().hsoft;
-	static const int bucket_size = BUCKET_SIZE;
+	static const int bucket_size = get_options().bucket_size;
 	tree_create_return rc;
 	const static bool sph = get_options().sph;
 	if (depth >= MAX_DEPTH) {
@@ -325,26 +325,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double xmin = box.begin[xdim];
 			part_int mid;
 			double xmid;
-			double parts_above;
-			double parts_below;
-//			size_t dif = 1;
-//			size_t last_dif;
-//			for (int iters = 0; iters < 10 && dif > 0; iters++) {
-//				last_dif = dif;
 			xmid = 0.5 * (xmax + xmin);
 			mid = particles_sort(part_range, xmid, xdim);
-			parts_above = part_range.second - mid;
-			parts_below = mid - part_range.first;
-//				dif = parts_above - parts_below;
-//				if (parts_above > parts_below) {
-//					xmin = xmid;
-//				} else {
-//					xmax = xmid;
-//				}
-//				if (nparts > 8 * bucket_size) {
-//					break;
-//				}
-//			}
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
@@ -453,31 +435,43 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
 		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
-	} else {
-		children[LEFT].index = children[RIGHT].index = -1;
-		multipole<double> M;
+	}
+	if (nparts < get_options().bucket_size * 8) {
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
-		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
-			M[i] = 0.0;
-		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xmax[dim] = box.begin[dim];
 			Xmin[dim] = box.end[dim];
 		}
-		array<double, NDIM> dx;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
 				Xmax[dim] = std::max(Xmax[dim], x + h);
 				Xmin[dim] = std::min(Xmin[dim], x - h);
 			}
-			flops += 3 * NDIM;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
-		flops += 2 * NDIM;
+		r = 0.0;
+		for (part_int i = part_range.first; i < part_range.second; i++) {
+			double this_radius = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				const double x = particles_pos(dim, i).to_double();
+				this_radius += sqr(x - Xc[dim]);
+			}
+			r = std::max(r, this_radius);
+			flops += 3 * NDIM + 1;
+		}
+		radius = std::sqrt(r);
+	}
+	if (isleaf) {
+		children[LEFT].index = children[RIGHT].index = -1;
+		multipole<double> M;
+		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+			M[i] = 0.0;
+		}
+		array<double, NDIM> dx;
 		const part_int maxi = round_up(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
 		array<simd_int, NDIM> Y;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -519,17 +513,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			}
 			flops += MULTIPOLE_SIZE * (1 + 3);
 		}
-		r = 0.0;
-		for (part_int i = part_range.first; i < part_range.second; i++) {
-			double this_radius = 0.0;
-			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = particles_pos(dim, i).to_double();
-				this_radius += sqr(x - Xc[dim]);
-			}
-			r = std::max(r, this_radius);
-			flops += 3 * NDIM + 1;
-		}
-		radius = std::sqrt(r);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
 		}
@@ -557,7 +540,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.depth = depth;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;
-	/*	if (sph && SPH_BUCKET_SIZE < BUCKET_SIZE) {
+	/*	if (sph && SPH_get_options().bucket_size < get_options().bucket_size) {
 	 if (node.leaf) {
 	 std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
 	 leaf_part_ranges.push_back(part_range);
@@ -581,7 +564,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (depth == 0) {
 		PRINT("total nodes = %i\n", rc.node_count);
 	}
-//		PRINT("%i %e\n", index, nodes[index].radius);
 	return rc;
 }
 
