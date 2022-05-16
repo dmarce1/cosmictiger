@@ -333,23 +333,6 @@ void load_glass(const char* filename) {
 		FREAD(&X, sizeof(fixed32), 1, fp);
 		z[i] = X.to_double();
 	}
-	if (get_options().sph && get_options().glass != 2) {
-		for (part_int i = nparts; i < 2 * nparts; i++) {
-			fixed32 X;
-			FREAD(&X, sizeof(fixed32), 1, fp);
-			x[i] = X.to_double();
-		}
-		for (part_int i = nparts; i < 2 * nparts; i++) {
-			fixed32 X;
-			FREAD(&X, sizeof(fixed32), 1, fp);
-			y[i] = X.to_double();
-		}
-		for (part_int i = nparts; i < 2 * nparts; i++) {
-			fixed32 X;
-			FREAD(&X, sizeof(fixed32), 1, fp);
-			z[i] = X.to_double();
-		}
-	}
 	fclose(fp);
 	const auto optsdim = get_options().parts_dim;
 	auto ibox = find_my_box();
@@ -360,21 +343,6 @@ void load_glass(const char* filename) {
 	}
 	double minv = 1.0 / multiplicity;
 	int dm_index = 0;
-	int sph_index = nparts;
-	const float h3s = get_options().sneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float h3g = get_options().gneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float code_to_ene = sqr(get_options().code_to_cm / get_options().code_to_s);
-	const float n0 = 1.0 - 0.75 * get_options().Y0;
-	const float cv_cgs = 1.5f * constants::kb * constants::avo * n0;
-	const float T0 = 1000.0;
-	const float eps_cgs = cv_cgs * T0;
-	const float a = 1.0 / (1.0 + get_options().z0);
-	const float rho = get_options().sph_mass * std::pow(get_options().parts_dim, 3) * pow(1 + get_options().z0, 3);
-	const float eps = eps_cgs / code_to_ene;
-	const float K0 = eps * (get_options().gamma - 1.0) / pow(rho, get_options().gamma - 1.0);
-	const float hs = std::pow(h3s, 1.0 / 3.0);
-	const float hg = std::pow(h3g, 1.0 / 3.0);
-	const bool chem = get_options().chem;
 	for (int i = 0; i < multiplicity; i++) {
 		for (int j = 0; j < multiplicity; j++) {
 			for (int k = 0; k < multiplicity; k++) {
@@ -393,11 +361,7 @@ void load_glass(const char* filename) {
 						X[ZDIM] = z[l] * minv + this_box.begin[ZDIM];
 						if (mybox.contains(X)) {
 							int index;
-							if (l < nparts) {
-								index = dm_index++;
-							} else {
-								index = sph_index++;
-							}
+							index = dm_index++;
 							for (int dim = 0; dim < NDIM; dim++) {
 								particles_pos(dim, index) = X[dim];
 								particles_vel(dim, index) = 0.0;
@@ -541,12 +505,7 @@ void initialize(double z0) {
 		return dxmax;
 	};
 
-	if (get_options().sph) {
-		PRINT("cdm dxmax = %e\n", do_phase(CDM_POWER));
-		PRINT("baryon dxmax = %e\n", do_phase(BARYON_POWER));
-	} else {
-		PRINT("dxmax = %e\n", do_phase(ALL_POWER));
-	}
+	PRINT("dxmax = %e\n", do_phase(ALL_POWER));
 //	PRINT("%e\n", dxmax);
 	if (get_options().twolpt) {
 	}
@@ -832,9 +791,6 @@ static void zeldovich_begin(int dim1, int dim2, int phase) {
 }
 
 static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int phase) {
-	const bool sph = get_options().sph;
-	const bool chem = get_options().chem;
-	const bool vsoft = get_options().vsoft;
 	const int parts_dim = get_options().parts_dim;
 	const float Y0 = get_options().Y0;
 	float dxmax = 0.0;
@@ -851,7 +807,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	const float box_size_inv = 1.0 / box_size;
 	vector<hpx::future<void>> local_futs;
 	float entropy;
-	std::string filename = sph ? "glass_sph.bin" : "glass_dm.bin";
+	std::string filename = "glass_dm.bin";
 	const float h3s = get_options().sneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 	const float h3g = get_options().gneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
 	const float hs = std::pow(h3s, 1.0 / 3.0);
@@ -863,7 +819,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 			particles_resize(box.volume());
 			vector<hpx::future<void>> local_futs;
 			for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-				local_futs.push_back(hpx::async([box,Ninv,hg,parts_dim,vsoft](array<int64_t,NDIM> I) {
+				local_futs.push_back(hpx::async([box,Ninv,parts_dim](array<int64_t,NDIM> I) {
 					for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 						for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 							const int64_t index = box.index(I);

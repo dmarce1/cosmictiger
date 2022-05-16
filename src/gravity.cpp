@@ -95,10 +95,7 @@ size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tr
 
 size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
-	const static bool do_sph = get_options().sph;
 	size_t flops = 0;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -274,10 +271,6 @@ size_t cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<t
 	constexpr int chunk_size = 32;
 	size_t near_count = 0;
 	size_t far_count = 0;
-	const static bool do_sph = get_options().sph;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
-	const static bool vsoft = get_options().vsoft;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);

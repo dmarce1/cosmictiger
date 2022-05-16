@@ -40,12 +40,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
-	const float sph_mass = get_options().sph_mass;
-	const auto func = [sph_mass,dt, scale, tau0, rung, tau1, tau_max, &next](int proc, int nthreads) {
-		const bool sph = get_options().sph;
-		const bool chem = get_options().chem;
-		const bool stars = get_options().stars;
-		const float dm_mass = get_options().dm_mass;
+	const auto func = [dt, scale, tau0, rung, tau1, tau_max, &next](int proc, int nthreads) {
 		vector<lc_particle> this_part_buffer;
 		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);
@@ -129,12 +124,5 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	}
 	tm.stop();
 	profiler_exit();
-	if (hpx_rank() == 0 && get_options().stars && dr.cold_mass) {
-		const double baryon_mass = sph_mass * pow(get_options().parts_dim, NDIM);
-		FILE* fp = fopen("coldmass.txt", "at");
-		fprintf(fp, "%e %e\n", 1.0 / scale - 1.0, dr.cold_mass / baryon_mass);
-		fclose(fp);
-	}
-//	PRINT("Drift on %i took %e s\n", hpx_rank(), tm.read());
 	return dr;
 }

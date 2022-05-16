@@ -66,8 +66,6 @@ static void adjust_part_references(vector<tree_node, pinned_allocator<tree_node>
 }
 
 void kick_workspace::to_gpu() {
-	const static bool sph = get_options().sph;
-	const static bool vsoft = get_options().vsoft;
 	timer tm;
 	if( workitems.size() == 0 ) {
 		return;

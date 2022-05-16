@@ -220,6 +220,19 @@ struct range {
 		return max_dim;
 	}
 
+	inline int shortest_dim() const {
+		int min_dim;
+		T min_span = T(1);
+		for (int dim = 0; dim < N; dim++) {
+			const T span = end[dim] - begin[dim];
+			if (span <= min_span) {
+				min_span = span;
+				min_dim = dim;
+			}
+		}
+		return min_dim;
+	}
+
 	inline std::pair<range<T, N>, range<T, N>> split() const {
 		auto left = *this;
 		auto right = *this;

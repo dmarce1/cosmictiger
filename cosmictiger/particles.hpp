@@ -90,7 +90,6 @@ struct particle {
 	void serialize(A && a, unsigned) {
 		static bool do_groups = get_options().do_groups;
 		static bool do_tracers = get_options().do_tracers;
-		static bool sph = get_options().sph;
 		for (int dim = 0; dim < NDIM; dim++) {
 			a & x[dim];
 			a & v[dim];
@@ -236,7 +235,6 @@ inline char& particles_tracer(part_int index) {
 inline particle particles_get_particle(part_int index) {
 	static bool do_groups = get_options().do_groups;
 	static bool do_tracers = get_options().do_tracers;
-	static bool sph = get_options().sph;
 	CHECK_PART_BOUNDS(index);
 	particle p;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -256,7 +254,6 @@ inline particle particles_get_particle(part_int index) {
 inline void particles_set_particle(particle p, part_int index) {
 	static bool do_groups = get_options().do_groups;
 	static bool do_tracers = get_options().do_tracers;
-	static bool sph = get_options().sph;
 	CHECK_PART_BOUNDS(index);
 	for (int dim = 0; dim < NDIM; dim++) {
 		particles_pos(dim, index) = p.x[dim];

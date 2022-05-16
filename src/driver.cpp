@@ -136,7 +136,6 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	domain_time += tm.read();
 	tm.reset();
 	tm.start();
-	const bool sph = get_options().sph;
 //ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
 	tree_create_params tparams(minrung, theta, 0.f);
 	PRINT("Create tree %i %e\n", minrung, theta);
@@ -207,7 +206,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 	domain_time += tm.read();
 	tm.reset();
 	tm.start();
-	const bool sph = get_options().sph;
 	kick_return kr;
 	tree_create_return sr;
 //	minrung = std::max(minrung, 1);
@@ -297,7 +295,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		} else {
 			kparams.descending = !ascending || top;
 		}
-		kparams.htime = true;
 		kparams.glass = get_options().glass;
 		kparams.node_load = flops_per_node / flops_per_particle;
 		kparams.gpu = true;
@@ -431,7 +428,6 @@ void output_time_file() {
 }
 
 void driver() {
-	const bool static sph = get_options().sph;
 	timer total_time;
 	total_time.start();
 	timer tmr;

@@ -334,11 +334,6 @@ static void kick_test() {
 static void force_test() {
 	timer tm;
 	timer tm_main;
-	if (get_options().sph == true) {
-		PRINT("FORCE_TEST should be run without sph !\n");
-		abort();
-	}
-//	initialize(get_options().z0);
 	constexpr int NITER = 10;
 	tm_main.start();
 	for (int iter = 0; iter < NITER; iter++) {
@@ -381,7 +376,6 @@ static void force_test() {
 		kick_params kparams;
 		kparams.node_load = 10;
 		kparams.gpu = true;
-		kparams.htime = true;
 		kparams.min_level = tparams.min_level;
 		kparams.save_force = get_options().save_force;
 		kparams.GM = get_options().GM;

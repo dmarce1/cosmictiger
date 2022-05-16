@@ -92,7 +92,6 @@ bool process_options(int argc, char *argv[]) {
 			"time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
 	("glass", po::value<int>(&(opts.glass))->default_value(0), "maximum number of time-steps (default=1000000)") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
-	("sph", po::value<bool>(&(opts.sph))->default_value(true), "use SPH") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
 	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "variable softening") //
@@ -223,29 +222,8 @@ bool process_options(int argc, char *argv[]) {
 		opts.stars = false;
 	}
 	if (opts.glass == 1) {
-		if (opts.sph) {
-			PRINT("TURNING SPH OFF FOR GLASS PHASE 1\n");
-		}
-		opts.sph = false;
-		opts.chem = false;
 	} else if (opts.glass == 2) {
-		if (!opts.sph) {
-			PRINT("TURNING SPH ON FOR GLASS PHASE 2\n");
-		}
-		opts.sph = true;
 		opts.chem = false;
-	}
-	if (opts.sph) {
-		const double omega_inv = 1.0 / (opts.omega_m);
-		if (opts.glass) {
-			opts.dm_mass = 0.5f;
-			opts.sph_mass = 0.5f;
-		} else {
-			opts.dm_mass = opts.omega_c * omega_inv;
-			opts.sph_mass = opts.omega_b * omega_inv;
-		}
-	}
-	if (!opts.sph) {
 	}
 	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt"
 			|| opts.test == "disc") {
@@ -254,16 +232,12 @@ bool process_options(int argc, char *argv[]) {
 		opts.gravity = opts.test == "star" || opts.test == "plummer";
 		opts.gamma = 5. / 3.;
 		if (opts.test == "disc") {
-			opts.sph_mass = 1.0;
 			opts.gcentral = 1.0;
 		}
 	}
 	if( opts.gravity == false) {
 		opts.vsoft = false;
 	}
-//	if (opts.sph) {
-//		opts.hsoft = pow(opts.neighbor_number / (4.0 * M_PI / 3.0), 1.0 / 3.0) / opts.parts_dim * (1.0 / (opts.z0 + 1.0));
-//	}
 	SHOW(alpha0);
 	SHOW(alpha1);
 	SHOW(alpha_decay);
@@ -310,8 +284,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(sigma8_c);
 	SHOW(slice_res);
 	SHOW(slice_size);
-	SHOW(sph);
-	SHOW(sph_mass);
 	SHOW(stars);
 	SHOW(Theta);
 	SHOW(theta);

@@ -260,7 +260,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const double h = get_options().hsoft;
 	int bucket_size = get_options().bucket_size;
 	tree_create_return rc;
-	const static bool sph = get_options().sph;
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
@@ -301,14 +300,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	}
 	box_r = sqrt(box_r);
 	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h);
-	const int xdim = box.longest_dim();
 	double max_ratio = 1.0;
-	for (int dim = 0; dim < NDIM; dim++) {
-		max_ratio = std::max(max_ratio, (box.end[dim] - box.begin[dim]) / (box.end[xdim] - box.begin[xdim]));
-	}
-	bucket_size /= max_ratio;
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
+		const int xdim = box.longest_dim();
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -480,8 +475,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			Y[dim] = fixed32(Xc[dim]).raw();
 		}
 		const simd_float _2float = fixed2float;
-		const double dm_mass = get_options().dm_mass;
-		const double sph_mass = get_options().sph_mass;
 
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;

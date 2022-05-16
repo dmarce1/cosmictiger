@@ -612,7 +612,6 @@ void particles_set_minrung(int minrung) {
 }
 
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset) {
-	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -667,8 +666,6 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 }
 
 static vector<particles_cache_entry> particles_fetch_cache_line(part_int index) {
-	static const bool sph = get_options().sph;
-	static const bool vsoft = get_options().vsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<particles_cache_entry> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
@@ -878,8 +875,6 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	fixed32 xmid(xm);
 	const bool do_groups = get_options().do_groups;
 	const bool do_tracers = get_options().do_tracers;
-	const bool vsoft = get_options().vsoft;
-	const bool sph = get_options().sph;
 	auto& xptr_dim = particles_x[xdim];
 	auto& x = particles_x[XDIM];
 	auto& y = particles_x[YDIM];
@@ -941,8 +936,6 @@ void particles_sort_by_rung(int minrung) {
 		part_int hi = end;
 		const bool do_groups = get_options().do_groups;
 		const bool do_tracers = get_options().do_tracers;
-		const bool vsoft = get_options().vsoft;
-		const bool sph = get_options().sph;
 		auto& x = particles_x[XDIM];
 		auto& y = particles_x[YDIM];
 		auto& z = particles_x[ZDIM];
@@ -982,7 +975,6 @@ void particles_sort_by_rung(int minrung) {
 }
 
 void particles_global_read_rungs(particle_global_range range, char* r, part_int offset) {
-	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -1032,7 +1024,6 @@ static const char* particles_cache_read_line_rungs(line_id_type line_id) {
 }
 
 static vector<char> particles_fetch_cache_line_rungs(part_int index) {
-	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<char> line(line_size);
 	const part_int begin = (index / line_size) * line_size;
@@ -1165,7 +1156,6 @@ void particles_save_glass(const char* filename) {
 }
 
 void particles_global_read_vels(particle_global_range range, float* vx, float* vy, float* vz, part_int offset) {
-	static const bool sph = get_options().sph;
 	const part_int line_size = get_options().part_cache_line_size;
 	if (range.range.first != range.range.second) {
 		if (range.proc == hpx_rank()) {
@@ -1220,8 +1210,6 @@ static const array<float, NDIM>* particles_cache_read_line_vels(line_id_type lin
 }
 
 static vector<array<float, NDIM>> particles_fetch_cache_line_vels(part_int index) {
-	static const bool sph = get_options().sph;
-	static const bool vsoft = get_options().vsoft;
 	const part_int line_size = get_options().part_cache_line_size;
 	vector<array<float, NDIM>> line(line_size);
 	const part_int begin = (index / line_size) * line_size;

@@ -24,7 +24,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 struct options {
 	int bucket_size;
 	bool htime;
-	bool sph;
 	bool yreflect;
 	bool cuda;
 	bool save_force;
@@ -59,7 +58,6 @@ struct options {
 	int slice_res;
 	bool diffusion;
 	int nsteps;
-	int sph_bucket_size;
 	double alpha0;
 	double alpha1;
 	double beta;
@@ -95,7 +93,6 @@ struct options {
 	double Y0;
 	double Neff;
 	double dm_mass;
-	double sph_mass;
 	double cfl;
 	double rho0_b;
 	double rho0_c;
@@ -135,7 +132,6 @@ struct options {
 		arc & sneighbor_number;
 		arc & kernel;
 		arc & cfl;
-		arc & sph;
 		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;
@@ -143,7 +139,6 @@ struct options {
 		arc & do_power;
 		arc & do_groups;
 		arc & do_tracers;
-		arc & sph_bucket_size;
 		arc & do_slice;
 		arc & do_views;
 		arc & twolpt;
@@ -188,7 +183,6 @@ struct options {
 		arc & config_file;
 		arc & test;
 		arc & dm_mass;
-		arc & sph_mass;
 	}
 };
 

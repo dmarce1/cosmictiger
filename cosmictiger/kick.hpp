@@ -126,39 +126,27 @@ struct kick_params {
 	float h;
 	float eta;
 	float GM;
-	float dm_mass;
-	float sph_mass;
 	bool save_force;
 	bool first_call;
 	bool gpu;
 	float node_load;
 	int glass;
 	float max_dt;
-	float cfl;
-	bool htime;
 	bool ascending;
 	bool descending;
 	bool top;
 	bool do_phi;
 	kick_params() {
-		cfl = get_options().cfl;
-		dm_mass = get_options().dm_mass;
-		sph_mass = get_options().sph_mass;
 		glass = 0;
 		max_dt = 1e30;
-		htime = false;
 		do_phi = true;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
-		arc & htime;
 		arc & ascending;
 		arc & descending;
 		arc & top;
-		arc & cfl;
 		arc & max_dt;
-		arc & dm_mass;
-		arc & sph_mass;
 		arc & min_rung;
 		arc & gpu;
 		arc & a;

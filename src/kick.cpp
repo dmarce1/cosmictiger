@@ -117,9 +117,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	//params.gpu = false;
 	stack_trace_activate();
-	const static bool sph = get_options().sph;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
 	const tree_node* self_ptr = tree_get_node(self);
 	timer tm;
 	if (self_ptr->local_root) {
@@ -372,8 +369,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				auto& rung = particles_rung(i);
 				float g2;
 				const float sgn = params.top ? 1 : -1;
-				ALWAYS_ASSERT(!sph);
-				ALWAYS_ASSERT(!vsoft);
 				if (params.ascending) {
 					const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 					if (!params.first_call) {

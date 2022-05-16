@@ -40,9 +40,6 @@ vector<float> power_spectrum_compute() {
 }
 
 static void compute_density() {
-	const bool sph = get_options().sph;
-	const float sph_mass = get_options().sph_mass;
-	const float dm_mass = sph ? get_options().dm_mass : 1.0f;
 	vector<float> rho0;
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
@@ -70,7 +67,7 @@ static void compute_density() {
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc,nthreads,N,intbox,&rho,dm_mass,sph_mass, sph]() {
+		futs2.push_back(hpx::async([proc,nthreads,N,intbox,&rho]() {
 			const part_int begin = (size_t) proc * particles_size() / nthreads;
 			const part_int end = (size_t) (proc+1) * particles_size() / nthreads;
 			const float Ninv = 1.0 / N;
