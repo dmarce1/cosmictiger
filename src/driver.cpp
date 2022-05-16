@@ -143,7 +143,6 @@ std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, 
 	auto sr = tree_create(tparams);
 	profiler_exit();
 	PRINT("Done with tree\n");
-	const bool vsoft = get_options().vsoft;
 
 	tm.stop();
 	sort_time += tm.read();
@@ -282,7 +281,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if (top) {
 			sr = this_sr;
 		}
-		const bool vsoft = get_options().vsoft;
 		kick_params kparams;
 		if (clip_top && levels[li] == minrung0 + 1) {
 			kparams.top = true;
@@ -433,7 +431,6 @@ void driver() {
 	timer tmr;
 	tmr.start();
 	driver_params params;
-	const bool stars = get_options().stars;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	const int glass = get_options().glass;
 	if (get_options().read_check) {
@@ -595,18 +592,13 @@ void driver() {
 ////			}
 			last_theta = theta;
 			PRINT("Kicking\n");
-			const bool chem = get_options().chem;
 			std::pair<kick_return, tree_create_return> tmp;
-			if (get_options().htime) {
-				int this_minrung = std::max(minrung, minrung0);
-				int om = this_minrung;
-				PRINT("MINRUNG0 = %i\n", minrung0);
-				tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval);
-				if (om != this_minrung) {
-					minrung0++;
-				}
-			} else {
-				tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
+			int this_minrung = std::max(minrung, minrung0);
+			int om = this_minrung;
+			PRINT("MINRUNG0 = %i\n", minrung0);
+			tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval);
+			if (om != this_minrung) {
+				minrung0++;
 			}
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
@@ -663,9 +655,6 @@ void driver() {
 			timer dtm;
 			dtm.start();
 			PRINT("Drift\n");
-			if (!get_options().htime) {
-				drift(a2, dt, tau, tau + dt, tau_max);
-			}
 			if (get_options().do_lc) {
 				check_lc(false);
 			}

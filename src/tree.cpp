@@ -192,13 +192,8 @@ tree_allocator::~tree_allocator() {
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
 	theta = theta_;
 	min_rung = min_rung_;
-	if (get_options().htime) {
-		min_level = 9;
-		htime = true;
-	} else {
-		min_level = 0;
-		htime = false;
-	}
+	min_level = 0;
+	htime = true;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
@@ -516,11 +511,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		node_count = 1;
 		leaf_nodes = 1;
-		static const auto vsoft = get_options().vsoft;
-		if (vsoft) {
-			std::lock_guard<mutex_type> lock(leaflist_mutex);
-			leaflist.push_back(index);
-		}
 	}
 	tree_node node;
 	node.node_count = node_count;

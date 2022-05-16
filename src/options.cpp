@@ -93,14 +93,8 @@ bool process_options(int argc, char *argv[]) {
 	("glass", po::value<int>(&(opts.glass))->default_value(0), "maximum number of time-steps (default=1000000)") //
 	("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
-	("chem", po::value<bool>(&(opts.chem))->default_value(true), "do chemistry (true)") //
-	("vsoft", po::value<bool>(&(opts.vsoft))->default_value(true), "variable softening") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
-	("conduction", po::value<bool>(&(opts.conduction))->default_value(true), "do conduction") //
-	("htime", po::value<bool>(&(opts.htime))->default_value(true), "use hierachical time integration") //
-	("gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity") //
 	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(true), "use glass") //
-	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(100), "bucket size") //
@@ -110,34 +104,17 @@ bool process_options(int argc, char *argv[]) {
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //
 	("use_power_file", po::value<bool>(&(opts.use_power_file))->default_value(true),
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
-	("yreflect", po::value<bool>(&(opts.yreflect))->default_value(false), "Reflecting y for SPH only") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
-	("gy", po::value<double>(&(opts.gy))->default_value(0.0), "gravitational acceleration in y direction (for SPH)") //
-	("alpha0", po::value<double>(&(opts.alpha0))->default_value(0.05), "alpha0 viscosity") //
-	("alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0), "alpha1 for viscosity") //
-	("alpha_decay", po::value<double>(&(opts.alpha_decay))->default_value(0.1), "alpha_decay time for viscosity") //
-	("beta", po::value<double>(&(opts.beta))->default_value(2.0), "beta for viscosity") //
-	("gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0), "gamma for when chemistry is off") //
-	("gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0), "magnitude of central force") //
-	("hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01), "softening length for central force") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.2), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
-	("visc_type", po::value<int>(&(opts.visc_type))->default_value(0), "AV type - 0 = Hu 1 = M&M 2 = constant") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("nsteps", po::value<int>(&(opts.nsteps))->default_value(100), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-	("hmin", po::value<double>(&(opts.hmin))->default_value(1.0e-6), "minimum smoothing length") //
-	("hmax", po::value<double>(&(opts.hmax))->default_value(1000.0), "maximum smoothing length") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
-	("kernel", po::value<double>(&(opts.kernel))->default_value(2), "kernel index") //
-	("sneighbor_number", po::value<double>(&(opts.sneighbor_number))->default_value(128), "SPH neighbor number") //
-	("gneighbor_number", po::value<double>(&(opts.gneighbor_number))->default_value(128), "gravity neighbor number") //
-	("cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.20), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
@@ -176,8 +153,6 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
-	opts.hmin /= opts.parts_dim;
-	opts.hmax /= opts.parts_dim;
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
@@ -193,8 +168,6 @@ bool process_options(int argc, char *argv[]) {
 	const double Neff = 3.086;
 	const double Theta = 1.0;
 	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
-	opts.rho0_b = nparts * opts.omega_b / opts.omega_m;
-	opts.rho0_c = nparts * opts.omega_c / opts.omega_m;
 
 
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
@@ -205,7 +178,6 @@ bool process_options(int argc, char *argv[]) {
 	opts.link_len = 1.0 / opts.parts_dim * 0.28;
 	opts.min_group = 20;
 	opts.lc_min_group = 20;
-	opts.damping = 0.0;
 
 	if (opts.parts_dim % 2 == 1) {
 		THROW_ERROR("parts_dim must be an even number\n");
@@ -216,41 +188,12 @@ bool process_options(int argc, char *argv[]) {
 #ifdef CHECK_MUTUAL_SORT
 	opts.do_groups = true;
 #endif
-
-	if (opts.chem == false && opts.stars == true) {
-		PRINT("Need chemistry for stars!!! Turning offs stars\n");
-		opts.stars = false;
-	}
-	if (opts.glass == 1) {
-	} else if (opts.glass == 2) {
-		opts.chem = false;
-	}
-	if (opts.test == "plummer" || opts.test == "star" || opts.test == "sod" || opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt"
-			|| opts.test == "disc") {
-		opts.chem = opts.conduction = false;
-		opts.stars = false;
-		opts.gravity = opts.test == "star" || opts.test == "plummer";
-		opts.gamma = 5. / 3.;
-		if (opts.test == "disc") {
-			opts.gcentral = 1.0;
-		}
-	}
-	if( opts.gravity == false) {
-		opts.vsoft = false;
-	}
-	SHOW(alpha0);
-	SHOW(alpha1);
-	SHOW(alpha_decay);
-	SHOW(beta);
 	SHOW(check_freq);
-	SHOW(chem);
 	SHOW(code_to_cm);
-	SHOW(cfl);
 	SHOW(code_to_g);
 	SHOW(code_to_s);
 	SHOW(cuda);
 	SHOW(diffusion);
-	SHOW(dm_mass);
 	SHOW(do_lc);
 	SHOW(do_groups);
 	SHOW(do_power);
@@ -261,15 +204,12 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(GM);
 	SHOW(hsoft);
 	SHOW(hubble);
-	SHOW(kernel);
 	SHOW(lc_b);
 	SHOW(lc_min_group);
 	SHOW(lc_map_size);
 	SHOW(link_len);
 	SHOW(max_iter);
 	SHOW(min_group);
-	SHOW(sneighbor_number);
-	SHOW(gneighbor_number);
 	SHOW(omega_b);
 	SHOW(omega_c);
 	SHOW(omega_gam);
@@ -284,7 +224,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(sigma8_c);
 	SHOW(slice_res);
 	SHOW(slice_size);
-	SHOW(stars);
 	SHOW(Theta);
 	SHOW(theta);
 	SHOW(tracer_count);

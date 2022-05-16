@@ -23,8 +23,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 struct options {
 	int bucket_size;
-	bool htime;
-	bool yreflect;
 	bool cuda;
 	bool save_force;
 	bool do_lc;
@@ -32,20 +30,13 @@ struct options {
 	bool do_groups;
 	bool do_tracers;
 	bool do_slice;
-	int visc_type;
 	bool do_views;
-	bool stars;
 	bool twolpt;
 	bool use_power_file;
 	bool read_check;
-	bool chem;
-	bool conduction;
-	bool vsoft;
-	bool gravity;
 	bool use_glass;
 	int glass;
 	int tracer_count;
-	double kernel;
 	int parts_dim;
 	int tree_cache_line_size;
 	int part_cache_line_size;
@@ -58,24 +49,15 @@ struct options {
 	int slice_res;
 	bool diffusion;
 	int nsteps;
-	double alpha0;
-	double alpha1;
-	double beta;
-	double alpha_decay;
 	double lc_b;
 	double slice_size;
-	double gneighbor_number;
-	double sneighbor_number;
 	double link_len;
 	double hsoft;
 	double GM;
 	double eta;
-	double hmin;
-	double hmax;
 	double code_to_s;
 	double code_to_cm;
 	double code_to_g;
-	double damping;
 	double sigma8_c;
 	double omega_m;
 	double omega_r;
@@ -92,46 +74,15 @@ struct options {
 	double ns;
 	double Y0;
 	double Neff;
-	double dm_mass;
-	double cfl;
-	double rho0_b;
-	double rho0_c;
-	double gamma;
-	double gy;
-	double gcentral;
-	double hcentral;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & htime;
-		arc & vsoft;
-		arc & damping;
-		arc & hmin;
-		arc & alpha0;
-		arc & alpha1;
-		arc & beta;
-		arc & alpha_decay;
 		arc & use_glass;
-		arc & gcentral;
-		arc & hcentral;
-		arc & gy;
 		arc & bucket_size;
-		arc & yreflect;
-		arc & gamma;
-		arc & conduction;
-		arc & gravity;
 		arc & glass;
-		arc & rho0_b;
-		arc & rho0_c;
-		arc & stars;
-		arc & chem;
 		arc & diffusion;
-		arc & gneighbor_number;
-		arc & sneighbor_number;
-		arc & kernel;
-		arc & cfl;
 		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;
@@ -182,7 +133,6 @@ struct options {
 		arc & Neff;
 		arc & config_file;
 		arc & test;
-		arc & dm_mass;
 	}
 };
 

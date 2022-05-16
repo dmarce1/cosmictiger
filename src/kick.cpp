@@ -186,7 +186,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, params.do_phi);
-	const bool vsoft = get_options().vsoft;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
 	force_vectors forces;

@@ -808,10 +808,6 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	vector<hpx::future<void>> local_futs;
 	float entropy;
 	std::string filename = "glass_dm.bin";
-	const float h3s = get_options().sneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float h3g = get_options().gneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float hs = std::pow(h3s, 1.0 / 3.0);
-	const float hg = std::pow(h3g, 1.0 / 3.0);
 	if (phase != BARYON_POWER) {
 		if (get_options().use_glass) {
 			load_glass(filename.c_str());
