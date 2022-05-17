@@ -781,7 +781,7 @@ void particles_resize(part_int sz) {
 				particles_lgrp[i] = NO_GROUP;
 			}
 		}
-		if (get_options().save_force || get_options().vsoft) {
+		if (get_options().save_force) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				particles_array_resize(particles_g[dim], new_capacity, true);
 			}
@@ -1097,10 +1097,9 @@ vector<particle_sample> particles_sample(int cnt) {
 }
 
 void particles_load(FILE* fp) {
-	const bool vsoft = get_options().vsoft;
-	part_int size, sph_size, stars_size0;
+	part_int size;
 	FREAD(&size, sizeof(part_int), 1, fp);
-	PRINT("Reading %i total particles %i stars %i sph\n", size, stars_size0, sph_size);
+	PRINT("Reading %i total particles.\n", size);
 	particles_resize(size);
 	PRINT("particles_size  = %i\n", particles_size());
 	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
@@ -1116,21 +1115,17 @@ void particles_load(FILE* fp) {
 	if (get_options().do_tracers) {
 		FREAD(&particles_tracer(0), sizeof(char), particles_size(), fp);
 	}
-	if (get_options().htime) {
-		int size;
-		FREAD(&size, sizeof(int), 1, fp);
-		rung_begins.resize(size);
-		rung_ends.resize(size);
-		FREAD(&rung_begin, sizeof(int), 1, fp);
-		FREAD(&rung_end, sizeof(int), 1, fp);
-		FREAD(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
-		FREAD(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
-	}
+	FREAD(&size, sizeof(int), 1, fp);
+	rung_begins.resize(size);
+	rung_ends.resize(size);
+	FREAD(&rung_begin, sizeof(int), 1, fp);
+	FREAD(&rung_end, sizeof(int), 1, fp);
+	FREAD(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
+	FREAD(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
 
 }
 
 void particles_save(FILE* fp) {
-	const bool vsoft = get_options().vsoft;
 	part_int size = particles_size();
 	fwrite(&size, sizeof(part_int), 1, fp);
 	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
@@ -1146,14 +1141,12 @@ void particles_save(FILE* fp) {
 	if (get_options().do_tracers) {
 		fwrite(&particles_tracer(0), sizeof(char), particles_size(), fp);
 	}
-	if (get_options().htime) {
-		int size = rung_begins.size();
-		fwrite(&size, sizeof(int), 1, fp);
-		fwrite(&rung_begin, sizeof(int), 1, fp);
-		fwrite(&rung_end, sizeof(int), 1, fp);
-		fwrite(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
-		fwrite(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
-	}
+	size = rung_begins.size();
+	fwrite(&size, sizeof(int), 1, fp);
+	fwrite(&rung_begin, sizeof(int), 1, fp);
+	fwrite(&rung_end, sizeof(int), 1, fp);
+	fwrite(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
+	fwrite(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
 
 }
 

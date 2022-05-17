@@ -338,7 +338,7 @@ static void force_test() {
 	for (int iter = 0; iter < NITER; iter++) {
 		tm_main.stop();
 		tm.start();
-		particles_random_init();
+		initialize(get_options().z0);
 		tm.stop();
 		tm_main.start();
 		PRINT("particles_random_init: %e s\n", tm.read());

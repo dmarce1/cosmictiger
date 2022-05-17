@@ -808,10 +808,6 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	vector<hpx::future<void>> local_futs;
 	float entropy;
 	std::string filename = "glass_dm.bin";
-	const float h3s = get_options().sneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float h3g = get_options().gneighbor_number / (4.0 / 3.0 * M_PI) / std::pow(get_options().parts_dim, 3);
-	const float hs = std::pow(h3s, 1.0 / 3.0);
-	const float hg = std::pow(h3g, 1.0 / 3.0);
 	if (phase != BARYON_POWER) {
 		if (get_options().use_glass) {
 			load_glass(filename.c_str());
@@ -1042,7 +1038,7 @@ static power_spectrum_function read_power_spectrum(int phase) {
 	func.logkmax = std::log(kmax);
 	func.dlogk = (func.logkmax - func.logkmin) / (func.P.size() - 1);
 	fclose(fp);
-	float sigma8 = CDM_POWER ? get_options().sigma8_c : get_options().sigma8;
+	float sigma8 = get_options().sigma8;
 	PRINT("READING POWER SPECTRUM\n");
 	func.normalize(sigma8);
 	if (phase == BARYON_POWER) {

@@ -207,7 +207,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if (top) {
 			sr = this_sr;
 		}
-		const bool vsoft = get_options().vsoft;
 		kick_params kparams;
 		if (clip_top && levels[li] == minrung0 + 1) {
 			kparams.top = true;
@@ -526,7 +525,6 @@ void driver() {
 ////			}
 			last_theta = theta;
 //			PRINT("Kicking\n");
-			const bool chem = get_options().chem;
 			std::pair<kick_return, tree_create_return> tmp;
 			int this_minrung = std::max(minrung, minrung0);
 			int om = this_minrung;
