@@ -74,6 +74,8 @@ struct kick_return {
 	double ymom;
 	double zmom;
 	double nmom;
+	double total_time;
+	double parts_processed;
 	size_t nactive;CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;

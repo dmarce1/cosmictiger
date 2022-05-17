@@ -864,25 +864,70 @@ void particles_random_init() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-range<double> particles_enclosing_box(pair<part_int> rng) {
-	range<double> box;
-	for (int dim = 0; dim < NDIM; dim++) {
-		box.begin[dim] = 1.0;
-		box.end[dim] = 0.0;
-	}
-	for (part_int i = rng.first; i < rng.second; i++) {
+pair<array<double, NDIM>, double> particles_enclosing_sphere(pair<part_int> rng) {
+	auto tot_rng = particles_current_range();
+	auto nparts_tot = tot_rng.second - tot_rng.first;
+	const int nthreads = (rng.second - rng.first) * hpx_hardware_concurrency() / nparts_tot;
+
+	const auto func1 = [nthreads,rng](int proc) {
+		range<double> box;
 		for (int dim = 0; dim < NDIM; dim++) {
-			const auto x = particles_pos(dim, i).to_double();
-			box.begin[dim] = std::min(box.begin[dim], x);
-			box.end[dim] = std::max(box.end[dim], x);
+			box.begin[dim] = 1.0;
+			box.end[dim] = 0.0;
+		}
+		const auto begin = (size_t) (proc)* (rng.second-rng.first)*nthreads + rng.first;
+		const auto end = (size_t) (proc+1)* (rng.second-rng.first)*nthreads + rng.first;
+		for (part_int i = begin; i < end; i++) {
+			for (int dim = 0; dim < NDIM; dim++) {
+				const auto x = particles_pos(dim, i).to_double();
+				box.begin[dim] = std::min(box.begin[dim], x);
+				box.end[dim] = std::max(box.end[dim], x);
+			}
+		}
+		return box;
+	};
+	vector<hpx::future<range<double>>>futs1;
+	for (int proc = 1; proc < nthreads; proc++) {
+		futs1.push_back(hpx::async(func1, proc));
+	}
+	auto box = func1(0);
+	for (auto& fut : futs1) {
+		auto this_box = fut.get();
+		for (int dim = 0; dim < NDIM; dim++) {
+			box.begin[dim] = std::min(box.begin[dim], this_box.begin[dim]);
+			box.end[dim] = std::max(box.end[dim], this_box.end[dim]);
 		}
 	}
-	const double h = get_options().hsoft;
+	array<double, NDIM> xc;
 	for (int dim = 0; dim < NDIM; dim++) {
-		box.begin[dim] = std::max(0.0, box.begin[dim] - h);
-		box.end[dim] = std::min(1.0, box.end[dim] + h);
+		xc[dim] = 0.5 * (box.begin[dim] + box.end[dim]);
 	}
-	return box;
+	const auto func2 = [nthreads,rng,xc](int proc) {
+		double rmax = 0.0;
+		const auto begin = (size_t) (proc)* (rng.second-rng.first)*nthreads + rng.first;
+		const auto end = (size_t) (proc+1)* (rng.second-rng.first)*nthreads + rng.first;
+		for (part_int i = begin; i < end; i++) {
+			double r2 = 0.0;
+			for( int dim = 0; dim < NDIM; dim++) {
+				const double x = particles_pos(dim,i).to_double();
+				r2 += sqr(x-xc[dim]);
+			}
+			rmax = std::max(rmax, sqrt(r2));
+		}
+		return rmax;
+	};
+	vector<hpx::future<double>> futs2;
+	for (int proc = 1; proc < nthreads; proc++) {
+		futs2.push_back(hpx::async(func2, proc));
+	}
+	auto rmax = func2(0);
+	for (auto& fut : futs2) {
+		rmax = std::max(rmax, fut.get());
+	}
+	pair<array<double, NDIM>, double> rc;
+	rc.first = xc;
+	rc.second = rmax;
+	return rc;
 }
 
 part_int particles_sort(pair<part_int> rng, double xm, int xdim) {

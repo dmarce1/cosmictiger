@@ -33,6 +33,9 @@ constexpr bool verbose = true;
 #include <iostream>
 #include <fstream>
 
+
+
+
 #define SHOW( opt ) show(#opt, opts.opt)
 
 void show(const char* name, bool opt) {
@@ -115,7 +118,7 @@ bool process_options(int argc, char *argv[]) {
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
 	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
-	("eta", po::value<double>(&(opts.eta))->default_value(0.20), "time-step criterion (default=0.2)") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.141), "time-step criterion (default=0.2)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_k", po::value<double>(&(opts.omega_k))->default_value(0.0), "") //
 	("omega_lam", po::value<double>(&(opts.omega_lam))->default_value(-1.0), "") //

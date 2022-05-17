@@ -55,6 +55,40 @@ double flops_per_node = 1e6;
 double flops_per_particle = 1e5;
 bool used_gpu;
 
+struct timing {
+	double nparts;
+	double time;
+	timing() {
+		nparts = time = 0.0;
+	}
+};
+
+#define MIN_BUCKET 64
+#define MAX_BUCKET 192
+
+vector<timing> timings;
+
+static void flush_timings(bool reset) {
+	const auto theta = get_options().theta;
+	char* fname;
+	asprintf(&fname, "buckets.%.2f.txt", theta);
+	FILE* fp = fopen(fname, "wt");
+	free(fname);
+	for (int i = 0; i < timings.size(); i++) {
+		if (timings[i].nparts > 0.0) {
+			fprintf(fp, "%i %e\n", i, timings[i].nparts / timings[i].time);
+		}
+	}
+	if (reset) {
+		timings = decltype(timings)();
+	}
+	fclose(fp);
+}
+
+static int bucket_trial() {
+	return ((60 + (rand() % 141)) / 10)*10;
+}
+
 void do_groups(int number, double scale) {
 	profiler_enter("FUNCTION");
 
@@ -141,6 +175,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 	bool top;
 	bool clip_top = false;
 //	PRINT("climbing kick ladder\n");
+	timer total_time;
+	total_time.start();
+	double parts_processed = 0.0;
 	for (int li = 0; li < levels.size(); li++) {
 
 		if (levels[li] == minrung) {
@@ -168,6 +205,8 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if (!ascending) {
 			particles_sort_by_rung(levels[li]);
 		}
+		auto rng = particles_current_range();
+		parts_processed += rng.second - rng.first;
 		if (top && minrung == minrung0) {
 			auto counts = particles_rung_counts();
 			if (counts.size() > minrung0 + 1) {
@@ -290,6 +329,16 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 	if (clip_top) {
 		minrung++;
 	}
+	total_time.stop();
+	int bucket_size = get_options().bucket_size;
+	if (timings.size() <= bucket_size) {
+		timings.resize(bucket_size + 1);
+	}
+	timings[bucket_size].nparts += parts_processed;
+	timings[bucket_size].time += total_time.read();
+	kr.total_time = total_time.read();
+	kr.parts_processed = parts_processed;
+	//PRINT( "%e %e\n", parts_processed, total_time.read());
 	return std::make_pair(kr, sr);
 
 }
@@ -511,20 +560,14 @@ void driver() {
 			} else {
 				theta = 0.4;
 			}
-			if (theta < 0.5) {
-				opts.bucket_size = 96;
-			} else if (theta < 0.6) {
-				opts.bucket_size = 128;
+/*			if (last_theta != theta && tau > 0.0) {
+				flush_timings(true);
 			} else {
-				opts.bucket_size = 160;
-			}
-//			theta = 0.55;
-
-			///		if (last_theta != theta) {
+				flush_timings(false);
+			}*/
+			opts.theta = theta;
 			set_options(opts);
-////			}
 			last_theta = theta;
-//			PRINT("Kicking\n");
 			std::pair<kick_return, tree_create_return> tmp;
 			int this_minrung = std::max(minrung, minrung0);
 			int om = this_minrung;
@@ -563,7 +606,7 @@ void driver() {
 			tree_create_return sr = tmp.second;
 //			PRINT("Done kicking\n");
 			if (full_eval) {
-				kick_workspace::clear_buffers();
+//				kick_workspace::clear_buffers();
 //				tree_destroy(true);
 				pot = kr.pot * 0.5 / a;
 				if (get_options().do_power) {
@@ -609,9 +652,10 @@ void driver() {
 			//		const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
 			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
 			if (full_eval) {
-				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr");
+				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "pps");
 			}
-			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung, max_rung);
+			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
+					max_rung, kr.parts_processed / kr.total_time);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
