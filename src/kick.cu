@@ -569,7 +569,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int zero = 0;
 //	kick_time = total_time = tree_time = gravity_time = 0.0f;
 //	node_count = 0;
-	CUDA_MALLOC(&current_index, sizeof(int));
+	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
 	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
@@ -587,9 +587,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	ALWAYS_ASSERT(workitems.size());
 	nblocks = std::min(nblocks, (int) workitems.size());
 	cuda_lists_type* dev_lists;
-	(CUDA_MALLOC(&dev_lists, sizeof(cuda_lists_type) * nblocks));
-	(CUDA_MALLOC(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size()));
-	(CUDA_MALLOC(&dev_returns, sizeof(kick_return) * returns.size()));
+	CUDA_CHECK((cudaMalloc(&dev_lists, sizeof(cuda_lists_type) * nblocks)));
+	CUDA_CHECK((cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size())));
+	CUDA_CHECK((cudaMalloc(&dev_returns, sizeof(kick_return) * returns.size())));
 
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
@@ -619,8 +619,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	}
 	dindices[workitems.size()] = dcount;
 	eindices[workitems.size()] = ecount;
-	CUDA_MALLOC(&dev_dchecks, sizeof(int) * dchecks.size());
-	CUDA_MALLOC(&dev_echecks, sizeof(int) * echecks.size());
+	CUDA_CHECK(cudaMalloc(&dev_dchecks, sizeof(int) * dchecks.size()));
+	CUDA_CHECK(cudaMalloc(&dev_echecks, sizeof(int) * echecks.size()));
 	CUDA_CHECK(cudaMemcpyAsync(dev_dchecks, dchecks.data(), sizeof(int) * dchecks.size(), cudaMemcpyHostToDevice, stream));
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
@@ -706,7 +706,7 @@ int kick_block_count() {
 
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
 	size_t mem = 0;
-	size_t innerblocks = nparts / CUDA_KICK_PARTS_MAX;
+	size_t innerblocks = 2 * nparts / CUDA_KICK_PARTS_MAX;
 	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);
 	size_t total_parts = CUDA_KICK_PARTS_MAX * nblocks;
 	size_t ntrees = 3 * total_parts / get_options().bucket_size;

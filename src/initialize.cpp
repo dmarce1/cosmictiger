@@ -597,7 +597,7 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
-	auto power = get_options().use_power_file ? read_power_spectrum(phase) : compute_power_spectrum(phase);
+	static auto power = get_options().use_power_file ? read_power_spectrum(phase) : compute_power_spectrum(phase);
 	const auto box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int64_t, NDIM> I;
@@ -606,7 +606,7 @@ void twolpt_generate(int dim1, int dim2, int phase) {
 	const float z0 = get_options().z0;
 	const float a0 = 1.0f / (z0 + 1.0);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs2.push_back(hpx::async([a0,N,box,box_size,&Y,dim1,dim2,factor,power](array<int64_t,NDIM> I) {
+		futs2.push_back(hpx::async([a0,N,box,box_size,&Y,dim1,dim2,factor](array<int64_t,NDIM> I) {
 
 			const float h = get_options().hsoft * box_size / a0;
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);

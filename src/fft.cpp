@@ -127,37 +127,37 @@ void fft3d2silo(bool real) {
 }
 
 void fft3d_execute() {
-	PRINT("FFT z\n");
+//	PRINT("FFT z\n");
 	fft3d_phase1();
-	PRINT("Transpose y-z\n");
+//	PRINT("Transpose y-z\n");
 	transpose(1, 2);
-	PRINT("FFT y\n");
+//	PRINT("FFT y\n");
 	fft3d_phase2(1, false);
-	PRINT("Shifting\n");
+//	PRINT("Shifting\n");
 	shift(false);
-	PRINT("FFT x\n");
+//	PRINT("FFT x\n");
 	fft3d_phase2(0, false);
-	PRINT("Transpose z-x\n");
+//	PRINT("Transpose z-x\n");
 	transpose(2, 0);
 	update();
-	PRINT("done\n");
+//	PRINT("done\n");
 
 }
 
 void fft3d_inv_execute() {
-	PRINT("Transpose z-x\n");
+//	PRINT("Transpose z-x\n");
 	transpose(0, 2);
-	PRINT("inv FFT x\n");
+//	PRINT("inv FFT x\n");
 	fft3d_phase2(0, true);
-	PRINT("Shifting\n");
+//	PRINT("Shifting\n");
 	shift(true);
-	PRINT("inv FFT y\n");
+//	PRINT("inv FFT y\n");
 	fft3d_phase2(1, true);
-	PRINT("Transpose y-z\n");
+//	PRINT("Transpose y-z\n");
 	transpose(2, 1);
-	PRINT("inv FFT z\n");
+//	PRINT("inv FFT z\n");
 	fft3d_phase3();
-	PRINT("done\n");
+//	PRINT("done\n");
 
 }
 

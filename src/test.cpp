@@ -171,7 +171,7 @@ static void domain_test() {
 	tm.reset();
 
 	tm.start();
-	domains_begin();
+	domains_begin(0);
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
 	tm.reset();
@@ -200,7 +200,7 @@ static void tree_test() {
 	tm.reset();
 
 	tm.start();
-	domains_begin();
+	domains_begin(0);
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
 	tm.reset();
@@ -250,7 +250,7 @@ static void kick_test() {
 	tm.reset();
 
 	tm.start();
-	domains_begin();
+	domains_begin(0);
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
 	tm.reset();
@@ -317,8 +317,7 @@ static void kick_test() {
 	PRINT("tree_destroy: %e s\n", tm.read());
 	tm.reset();
 	tm.start();
-	auto dr = drift(1.0, 0.0, 0.0, 0.0, 0.0);
-	total_flops += dr.flops;
+	//drift(1.0, 0.0, 0.0, 0.0, 0.0);
 	tm.stop();
 	PRINT("drift: %e s\n", tm.read());
 	total_time.stop();
@@ -352,7 +351,7 @@ static void force_test() {
 		tm.reset();
 
 		tm.start();
-		domains_begin();
+		domains_begin(0);
 		tm.stop();
 		PRINT("domains_begin: %e s\n", tm.read());
 		tm.reset();
@@ -438,7 +437,7 @@ static void bucket_test() {
 			particles_random_init();
 			domains_rebound();
 			tm_main.start();
-			domains_begin();
+			domains_begin(0);
 			domains_end();
 			particles_sort_by_rung(0);
 			tree_create_params tparams(0, get_options().theta, get_options().hsoft);

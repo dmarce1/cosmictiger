@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
 
-void domains_begin();
+void domains_begin(int rung);
 void domains_end();
 void domains_rebound();
 range<double> domains_find_my_box();

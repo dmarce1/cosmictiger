@@ -73,7 +73,7 @@ void kick_workspace::to_gpu() {
 
 	lock1.wait();
 	cuda_set_device();
-	//PRINT("To GPU %i items on %i\n", workitems.size(), hpx_rank());
+//	PRINT("Preparing %i items on %i\n", workitems.size(), hpx_rank());
 //	PRINT("To vector\n");
 //	PRINT("%i tree ids\n", tree_ids.size());
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
@@ -190,9 +190,12 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs.begin(), futs.end());
 	tm.reset();
 	tm.start();
+	int nitems = workitems.size();
+//	PRINT("Sending %i items on %i\n", workitems.size(), hpx_rank());
 	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, nullptr, nullptr, nullptr, dev_trees, std::move(workitems), stream, part_count, tree_nodes.size(), [&]() {lock2.wait();}, [&]() {lock1.signal();});
 	tm.stop();
 	cuda_end_stream(stream);
+//PRINT("Done %i items on %i\n",nitems, hpx_rank());
 
 	CUDA_CHECK(cudaFree(dev_x));
 	CUDA_CHECK(cudaFree(dev_y));
