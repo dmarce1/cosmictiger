@@ -86,7 +86,7 @@ static void flush_timings(bool reset) {
 }
 
 static int bucket_trial() {
-	return ((60 + (rand() % 141)) / 10)*10;
+	return ((60 + (rand() % 141)) / 10) * 10;
 }
 
 void do_groups(int number, double scale) {
@@ -204,7 +204,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			domains_begin(levels[li]);
 			domains_end();
 			tm.stop();
-			PRINT( "Domains took %e\n", tm.read());
+			PRINT("Domains took %e\n", tm.read());
 		}
 
 		if (!ascending) {
@@ -212,7 +212,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			tm.start();
 			particles_sort_by_rung(levels[li]);
 			tm.stop();
-			PRINT( "Rung sort took %e\n", tm.read());
+			PRINT("Rung sort took %e\n", tm.read());
 		}
 		auto rng = particles_current_range();
 		parts_processed += rng.second - rng.first;
@@ -542,14 +542,17 @@ void driver() {
 //					PRINT("View %i took %e \n", number, tm.read());
 				}
 			}
-			if (minrung == 0 && tau > 0.0) {
+			bool rebound = false;
+			if (tau == 0.0) {
+				rebound = true;
+			} else if (minrung == 0) {
 				double imbalance = domains_get_load_imbalance();
-				if (imbalance > MAX_LOAD_IMBALANCE) {
-					domains_rebound();
-					domains_begin(0);
-					domains_end();
-					imbalance = domains_get_load_imbalance();
-				}
+				rebound = (imbalance > MAX_LOAD_IMBALANCE);
+			}
+			if (rebound) {
+				domains_rebound();
+				domains_begin(0);
+				domains_end();
 			}
 			double theta;
 			const double z = 1.0 / a - 1.0;
@@ -568,11 +571,11 @@ void driver() {
 			} else {
 				theta = 0.4;
 			}
-/*			if (last_theta != theta && tau > 0.0) {
-				flush_timings(true);
-			} else {
-				flush_timings(false);
-			}*/
+			/*			if (last_theta != theta && tau > 0.0) {
+			 flush_timings(true);
+			 } else {
+			 flush_timings(false);
+			 }*/
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
