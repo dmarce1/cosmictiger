@@ -150,7 +150,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 			g2 = sqr(gx[i], gy[i], gz[i]);
 			dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
 			rung = params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung);
-			PRINT( "%i %i %e %e %e %e\n", params.min_rung, rung, hsoft, params.a, g2, params.t0);
 			if (rung > 4) {
 //					PRINT( "%i\n", rung);
 			}

@@ -988,6 +988,7 @@ void particles_sort_by_rung(int minrung) {
 		part_int begin;
 		part_int end;
 		begin = rung_begin;
+		end = particles_size();
 		part_int lo = begin;
 		part_int hi = end;
 		const bool do_groups = get_options().do_groups;
