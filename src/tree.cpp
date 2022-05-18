@@ -181,7 +181,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
 //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
-		rc = hpx::async<tree_create_action>( hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
 			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
@@ -197,7 +197,7 @@ static void tree_allocate_nodes() {
 	static const int bucket_size = get_options().bucket_size;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<tree_allocate_nodes_action>( c));
+		futs.push_back(hpx::async<tree_allocate_nodes_action>(c));
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
@@ -387,8 +387,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
 		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
-	}
-	if (isleaf) {
+	} else {
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -398,8 +397,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
-				Xmax[dim] = std::max(Xmax[dim], x + h);
-				Xmin[dim] = std::min(Xmin[dim], x - h);
+				Xmax[dim] = std::max(Xmax[dim], x);
+				Xmin[dim] = std::min(Xmin[dim], x);
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -410,14 +409,14 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double this_radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();
+				ALWAYS_ASSERT(x >= box.begin[dim]);
+				ALWAYS_ASSERT(x <= box.end[dim]);
 				this_radius += sqr(x - Xc[dim]);
 			}
 			r = std::max(r, this_radius);
 			flops += 3 * NDIM + 1;
 		}
 		radius = std::sqrt(r);
-	}
-	if (isleaf) {
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
@@ -516,7 +515,7 @@ void tree_reset() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<tree_reset_action>( c));
+		futs.push_back(hpx::async<tree_reset_action>(c));
 	}
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
@@ -530,7 +529,7 @@ void tree_destroy(bool free_tree) {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<tree_destroy_action>( c, free_tree));
+		futs.push_back(hpx::async<tree_destroy_action>(c, free_tree));
 	}
 	if (free_tree) {
 		nodes = decltype(nodes)();

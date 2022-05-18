@@ -788,7 +788,7 @@ void particles_resize(part_int sz) {
 	}
 	int oldsz = size;
 	size = sz;
-	PRINT( "Resized particles to %i on %i\n", sz, hpx_rank());
+//	PRINT( "Resized particles to %i on %i\n", sz, hpx_rank());
 }
 
 void particles_free() {
