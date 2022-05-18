@@ -32,7 +32,7 @@ void einstein_boltzmann_init(cos_state* uptr, const zero_order_universe* uni_ptr
 	uni.compute_radiation_fractions(Ogam, Onu, a);
 	uni.compute_matter_fractions(Oc, Ob, a);
 	Or = Ogam + Onu;
-	double hubble = hubble_function(a, uni.params.hubble, uni.params.omega_b + uni.params.omega_c, uni.params.omega_gam + uni.params.omega_nu);
+	double hubble = hubble_function(a, uni.params.hubble, uni.params.omega_b + uni.params.omega_c, uni.params.omega_gam + uni.params.omega_nu, uni.params.omega_lam);
 	double eps = k / (a * hubble);
 	double C = normalization * pow(eps, -1.5f) * pow(eps, (ns - 1.f) * 0.5f);
 	double Rnu = Onu / Or;
@@ -72,10 +72,11 @@ void einstein_boltzmann(cos_state* uptr, const zero_order_universe *uni_ptr, dou
 	double logamax = log(amax);
 	double omega_m = uni.params.omega_b + uni.params.omega_c;
 	double omega_r = uni.params.omega_gam + uni.params.omega_nu;
+	double omega_l = uni.params.omega_lam;
 	while (loga < logamax) {
 		double Oc, Ob, Ogam, Onu, Or;
 		double a = exp(loga);
-		double hubble = hubble_function(a, uni.params.hubble, omega_m, omega_r);
+		double hubble = hubble_function(a, uni.params.hubble, omega_m, omega_r, omega_l);
 		double eps = k / (a * hubble);
 		uni.compute_radiation_fractions(Ogam, Onu, a);
 		uni.compute_matter_fractions(Oc, Ob, a);
@@ -99,7 +100,7 @@ void einstein_boltzmann(cos_state* uptr, const zero_order_universe *uni_ptr, dou
 						loga = loga0 + (double) 0.5 * (tm[i] + step) * dloga;
 						a = exp(loga);
 						hubble = hubble_function(a, uni.params.hubble, omega_m,
-								omega_r);
+								omega_r, omega_l);
 						eps = k / (a * hubble);
 						uni.compute_radiation_fractions(Ogam,Onu,a);
 						uni.compute_matter_fractions(Oc,Ob,a);
@@ -231,7 +232,7 @@ void einstein_boltzmann_interpolation_function(interp_functor<double>* dm_k_func
 	oc /= om;
 	ob /= om;
 	const auto hubble = [uni](double a) {
-		return hubble_function(a,uni->params.hubble, uni->params.omega_c + uni->params.omega_b, uni->params.omega_gam + uni->params.omega_nu);
+		return hubble_function(a,uni->params.hubble, uni->params.omega_c + uni->params.omega_b, uni->params.omega_gam + uni->params.omega_nu, uni->params.omega_lam);
 	};
 	double H = hubble(astop);
 	for (int i = 0; i < N; i++) {

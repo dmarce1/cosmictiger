@@ -128,6 +128,12 @@ struct power_spectrum_function {
 		if (hpx_rank() == 0) {
 			PRINT("Normalization = %e\n", sum);
 		}
+		FILE *fp = fopen("power.norm", "wt");
+		for (double logk = logkmin; logk < logkmax; logk += dlogk * 0.1) {
+			const float k = exp(logk);
+			fprintf(fp, "%e %e\n", k, (*this)(k));
+		}
+		fclose(fp);
 		return sum;
 	}
 
@@ -180,7 +186,7 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 		}
 	}
 	fprintf(fp, "%s\n", filename.c_str());
-	fprintf(fp, "%f %f %f\n", params.omega_b, params.omega_c, 1.0 - params.omega_b - params.omega_c);
+	fprintf(fp, "%f %f %f\n", params.omega_b, params.omega_c, params.omega_lam);
 	fprintf(fp, "%f %f %f\n", 100 * params.hubble, params.Theta * 2.73, params.Y);
 	fprintf(fp, "1\n");
 	fprintf(fp, "6\n");
@@ -246,6 +252,7 @@ power_spectrum_function compute_power_spectrum(int type) {
 
 	auto& uni = zeroverse;
 	cosmic_params params;
+	params.omega_lam = get_options().omega_lam;
 	params.omega_b = get_options().omega_b;
 	params.omega_c = get_options().omega_c;
 	params.omega_gam = get_options().omega_gam;
@@ -264,7 +271,7 @@ power_spectrum_function compute_power_spectrum(int type) {
 	double kmin;
 	double kmax;
 	kmin = 1e-5 * params.hubble;
-	kmax = 20.0 * params.hubble;
+	kmax = 50.0 * params.hubble;
 	einstein_boltzmann_interpolation_function(&dm_k, &bary_k, states.data(), &zeroverse, kmin, kmax, 1.0, Nk, zeroverse.amin, 1.0, false, ns);
 
 	auto m_k = type == BARYON_POWER ? bary_k : dm_k;
@@ -518,7 +525,7 @@ void initialize(double z0) {
 void twolpt_f2delta2_inv() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<twolpt_f2delta2_inv_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_f2delta2_inv_action>(c));
 	}
 	const auto box = fft3d_complex_range();
 	delta2_inv = fft3d_read_complex(box);
@@ -532,7 +539,7 @@ void twolpt_correction1() {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<twolpt_correction1_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_correction1_action>(c));
 	}
 	const auto box = fft3d_real_range();
 	fft3d_accumulate_real(box, delta2);
@@ -550,7 +557,7 @@ void twolpt_correction2(int dim) {
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<twolpt_correction2_action>(HPX_PRIORITY_HI, c, dim));
+		futs.push_back(hpx::async<twolpt_correction2_action>(c, dim));
 	}
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const float factor = std::pow(box_size, -1.5) * N * N * N;
@@ -718,7 +725,7 @@ void twolpt(int dim1, int dim2, int phase) {
 void twolpt_phase(int phase) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<twolpt_phase_action>(HPX_PRIORITY_HI, c, phase));
+		futs.push_back(hpx::async<twolpt_phase_action>(c, phase));
 	}
 	const auto box = fft3d_real_range();
 	const auto vol = box.volume();
@@ -744,7 +751,7 @@ void twolpt_phase(int phase) {
 void twolpt_init() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<twolpt_init_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_init_action>(c));
 	}
 	const auto box = fft3d_real_range();
 	delta2.resize(box.volume(), 0.0);
@@ -754,7 +761,7 @@ void twolpt_init() {
 void twolpt_destroy() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<twolpt_destroy_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<twolpt_destroy_action>(c));
 	}
 	delta2 = decltype(delta2)();
 	delta2_inv = decltype(delta2_inv)();
@@ -765,7 +772,7 @@ void twolpt_destroy() {
 static void zeldovich_save(int dim1, bool twolpt) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_save_action>(HPX_PRIORITY_HI, c, dim1, twolpt));
+		futs.push_back(hpx::async<zeldovich_save_action>(c, dim1, twolpt));
 	}
 	auto box = find_my_box();
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -783,7 +790,7 @@ static void zeldovich_save(int dim1, bool twolpt) {
 static void zeldovich_begin(int dim1, int dim2, int phase) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_begin_action>(HPX_PRIORITY_HI, c, dim1, dim2, phase));
+		futs.push_back(hpx::async<zeldovich_begin_action>(c, dim1, dim2, phase));
 	}
 	twolpt_generate(dim1, dim2, phase);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -800,7 +807,7 @@ static float zeldovich_end(float D1, float D2, float prefac1, float prefac2, int
 	const auto box = find_my_box();
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<zeldovich_end_action>(HPX_PRIORITY_HI, c, D1, D2, prefac1, prefac2, phase));
+		futs.push_back(hpx::async<zeldovich_end_action>(c, D1, D2, prefac1, prefac2, phase));
 	}
 	array<int64_t, NDIM> I;
 	const float Ninv = 1.0 / N;

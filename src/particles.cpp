@@ -269,7 +269,7 @@ vector<output_particle> particles_get_sample(const range<double>& box) {
 	vector<hpx::future<vector<output_particle>>>futs;
 	vector<output_particle> output;
 	for( const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_get_sample_action>(HPX_PRIORITY_HI, c, box));
+		futs.push_back(hpx::async<particles_get_sample_action>( c, box));
 	}
 	for( part_int i = 0; i < particles_size(); i++) {
 		array<double,NDIM> x;
@@ -296,7 +296,7 @@ vector<output_particle> particles_get_tracers() {
 	vector<hpx::future<vector<output_particle>>>futs;
 	vector<output_particle> output;
 	for( const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_get_tracers_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_get_tracers_action>( c));
 	}
 	for( part_int i = 0; i < particles_size(); i++) {
 		if( particles_tracer(i) ) {
@@ -343,7 +343,7 @@ void particles_set_tracers(size_t count) {
 std::unordered_map<int, part_int> particles_groups_init() {
 	vector<hpx::future<std::unordered_map<int, part_int>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < particles_groups_init_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async < particles_groups_init_action > ( c));
 	}
 
 	ALWAYS_ASSERT(!particles_grp);
@@ -390,7 +390,7 @@ static void particles_set_global_offset(vector<size_t> map) {
 	particles_global_offset = map[hpx_rank()];
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_set_global_offset_action>(HPX_PRIORITY_HI, c, map));
+		futs.push_back(hpx::async<particles_set_global_offset_action>( c, map));
 	}
 	particles_global_offset = map[hpx_rank()];
 	global_offsets = std::move(map);
@@ -400,7 +400,7 @@ static void particles_set_global_offset(vector<size_t> map) {
 void particles_groups_destroy() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_groups_destroy_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_groups_destroy_action>( c));
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	vector<hpx::future<void>> futs2;
@@ -425,7 +425,7 @@ void particles_cache_free() {
 	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<particles_cache_free_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_cache_free_action>( c));
 	}
 	part_cache = decltype(part_cache)();
 	hpx::wait_all(futs.begin(), futs.end());
@@ -510,8 +510,8 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		entry.data = prms->get_future();
 		entry.epoch = group_cache_epoch;
 		lock.unlock();
-		hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
-			auto fut = hpx::async<particles_group_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+		hpx::async( [prms,line_id]() {
+			auto fut = hpx::async<particles_group_fetch_cache_line_action>( hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(fut.get());
 			return 'a';
 		});
@@ -526,7 +526,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 		lock.unlock();
 		auto old_data = old_fut.get();
 		hpx::apply([prms,line_id](vector<group_particle> data) {
-			auto grp_fut = hpx::async<particles_group_refresh_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto grp_fut = hpx::async<particles_group_refresh_cache_line_action>( hpx_localities()[line_id.proc],line_id.index);
 			const auto grps = grp_fut.get();
 			for( int i = 0; i < grps.size(); i++) {
 				data[i].g = grps[i];
@@ -652,7 +652,7 @@ static const particles_cache_entry* particles_cache_read_line(line_id_type line_
 		part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<particles_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<particles_fetch_cache_line_action>( hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -696,7 +696,7 @@ void particles_inc_group_cache_epoch() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<particles_inc_group_cache_epoch_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_inc_group_cache_epoch_action>( c));
 	}
 	group_cache_epoch++;
 	hpx::wait_all(futs.begin(), futs.end());
@@ -717,7 +717,7 @@ void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<particles_destroy_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_destroy_action>( c));
 	}
 	particles_x = decltype(particles_x)();
 	particles_g = decltype(particles_g)();
@@ -836,7 +836,7 @@ void particles_random_init() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<particles_random_init_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<particles_random_init_action>( c));
 	}
 	const size_t total_num_parts = std::pow(get_options().parts_dim, NDIM);
 	const size_t begin = (size_t)(hpx_rank()) * total_num_parts / hpx_size();
@@ -1075,7 +1075,7 @@ static const char* particles_cache_read_line_rungs(line_id_type line_id) {
 		part_cache_rungs[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<particles_fetch_cache_line_rungs_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<particles_fetch_cache_line_rungs_action>( hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -1254,7 +1254,7 @@ static const array<float, NDIM>* particles_cache_read_line_vels(line_id_type lin
 		vels_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<particles_fetch_cache_line_vels_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<particles_fetch_cache_line_vels_action>( hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
