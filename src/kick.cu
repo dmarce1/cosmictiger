@@ -122,11 +122,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		gx[i] *= params.GM;
 		gy[i] *= params.GM;
 		gz[i] *= params.GM;
-		if (params.glass) {
-			gx[i] *= -1.f;
-			gy[i] *= -1.f;
-			gz[i] *= -1.f;
-		}
 		vx = vel_x[snki];
 		vy = vel_y[snki];
 		vz = vel_z[snki];

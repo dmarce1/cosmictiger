@@ -35,8 +35,6 @@ struct options {
 	bool twolpt;
 	bool use_power_file;
 	bool read_check;
-	bool use_glass;
-	int glass;
 	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
@@ -82,9 +80,7 @@ struct options {
 	void serialize(A&& arc, unsigned) {
 		arc & omega_k;
 		arc & omega_lam;
-		arc & use_glass;
 		arc & bucket_size;
-		arc & glass;
 		arc & stars;
 		arc & nsteps;
 		arc & cuda;

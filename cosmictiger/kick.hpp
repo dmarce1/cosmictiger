@@ -138,14 +138,12 @@ struct kick_params {
 	bool first_call;
 	bool gpu;
 	float node_load;
-	int glass;
 	float max_dt;
 	bool ascending;
 	bool descending;
 	bool top;
 	bool do_phi;
 	kick_params() {
-		glass = 0;
 		max_dt = 1e30;
 		do_phi = true;
 	}
@@ -167,7 +165,6 @@ struct kick_params {
 		arc & save_force;
 		arc & node_load;
 		arc & min_level;
-		arc & glass;
 		arc & do_phi;
 	}
 };

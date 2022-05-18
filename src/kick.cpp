@@ -155,7 +155,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		thread_left = cuda_workspace != nullptr;
 	}
 	kick_return kr;
-	const int glass = get_options().glass;
 //	const simd_float h = params.h;
 	const float hfloat = params.h;
 	const float GM = params.GM;
@@ -355,11 +354,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				forces.gy[j] *= GM;
 				forces.gz[j] *= GM;
 				forces.phi[j] *= GM;
-				if (glass) {
-					forces.gx[j] *= -1.f;
-					forces.gy[j] *= -1.f;
-					forces.gz[j] *= -1.f;
-				}
 				auto& vx = particles_vel(XDIM, i);
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);

@@ -758,13 +758,12 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 }
 
 void particles_resize(part_int sz) {
-//	PRINT( "Resizing particles to %i on %i\n", sz, hpx_rank());
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
 			new_capacity = size_t(101) * new_capacity / size_t(100);
 		}
-//		PRINT("Resizing particles to %li from %li\n", new_capacity, capacity);
+//		PRINT("%i: Resizing particles to %li from %li\n", hpx_rank(), new_capacity, capacity);
 		for (int dim = 0; dim < NDIM; dim++) {
 			particles_array_resize(particles_x[dim], new_capacity, true);
 			particles_array_resize(particles_v[dim], new_capacity, true);
@@ -789,6 +788,7 @@ void particles_resize(part_int sz) {
 	}
 	int oldsz = size;
 	size = sz;
+	PRINT( "Resized particles to %i on %i\n", sz, hpx_rank());
 }
 
 void particles_free() {

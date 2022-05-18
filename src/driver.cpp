@@ -267,7 +267,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		} else {
 			kparams.descending = !ascending || top;
 		}
-		kparams.glass = get_options().glass;
 		kparams.node_load = flops_per_node / flops_per_particle;
 		kparams.gpu = true;
 		kparams.min_level = tparams.min_level;
@@ -417,18 +416,11 @@ void driver() {
 	driver_params params;
 	const bool stars = get_options().stars;
 	double a0 = 1.0 / (1.0 + get_options().z0);
-	const int glass = get_options().glass;
 	if (get_options().read_check) {
 		params = read_checkpoint();
 	} else {
 		output_time_file();
-		if (glass) {
-//			PRINT("Glass not implemented\n");
-			//		abort();
-			initialize_glass();
-		} else {
-			initialize(get_options().z0);
-		}
+		initialize(get_options().z0);
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
@@ -511,6 +503,7 @@ void driver() {
 	};
 	const float hsoft0 = get_options().hsoft;
 	for (;; step++) {
+		PRINT("STEP  = %i\n", step);
 		double t0 = tau_max / get_options().nsteps;
 		do {
 //			profiler_enter("main driver");
@@ -546,36 +539,30 @@ void driver() {
 			if (tau == 0.0) {
 				rebound = true;
 			} else if (minrung == 0) {
+				PRINT("Checking imbalance\n");
 				double imbalance = domains_get_load_imbalance();
 				rebound = (imbalance > MAX_LOAD_IMBALANCE);
 			}
 			if (rebound) {
+				PRINT("Doing rebound\n");
 				domains_rebound();
 				domains_begin(0);
 				domains_end();
+				PRINT("Rebound done\n");
 			}
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
-			if (!glass) {
-				if (z > 50.0) {
-					theta = 0.3;
-				} else if (z > 20.0) {
-					theta = 0.4;
-				} else if (z > 2.0) {
-					theta = 0.55;
-				} else {
-					theta = 0.7;
-				}
-			} else {
+			if (z > 50.0) {
+				theta = 0.3;
+			} else if (z > 20.0) {
 				theta = 0.4;
+			} else if (z > 2.0) {
+				theta = 0.55;
+			} else {
+				theta = 0.7;
 			}
-			/*			if (last_theta != theta && tau > 0.0) {
-			 flush_timings(true);
-			 } else {
-			 flush_timings(false);
-			 }*/
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
@@ -699,13 +686,6 @@ void driver() {
 		}
 		if (jiter > 50) {
 			break;
-		}
-	}
-	if (glass) {
-		if (glass == 1) {
-			particles_save_glass("glass_dm.bin");
-		} else {
-			particles_save_glass("glass_sph.bin");
 		}
 	}
 	if (get_options().do_lc) {
