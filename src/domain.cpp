@@ -267,7 +267,7 @@ void domains_rebound() {
 				} else {
 					domains[i].midhi = midx;
 				}
-//				PRINT("%i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
+				PRINT("----- %i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
 			}
 		}
 		vector<double> bounds;
@@ -337,6 +337,9 @@ void domains_begin(int rung) {
 	mutex_type mutex;
 	const int nthreads = hpx::thread::hardware_concurrency();
 	const auto current_range = particles_current_range();
+	PRINT("Domains %i %i %i\n", hpx_rank(), current_range.first, current_range.second);
+	PRINT("Domain at %i = %e %e, %e %e, %e %e\n", hpx_rank(), my_domain.begin[XDIM], my_domain.end[XDIM], my_domain.begin[YDIM], my_domain.end[YDIM],
+			my_domain.begin[ZDIM], my_domain.end[ZDIM]);
 	std::atomic<part_int> next_begin(0);
 	constexpr int chunk_size = 1024;
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -358,6 +361,7 @@ void domains_begin(int rung) {
 							auto& send = sends[rank];
 							send.push_back(particles_get_particle(i));
 							if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
+								PRINT( "Sending %i from %i to %i\n", send.size(), hpx_rank(), rank);
 								futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
 							}
 							my_free_indices.push_back(i);
@@ -368,6 +372,7 @@ void domains_begin(int rung) {
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
+					PRINT( "Sending %i from %i to %i\n", i->second.size(), hpx_rank(),i->first);
 					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 				}
 			}

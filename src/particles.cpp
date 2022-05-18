@@ -67,9 +67,7 @@ static part_int size = 0;
 static part_int capacity = 0;
 static vector<size_t> global_offsets;
 static part_int rung_begin;
-static part_int rung_end;
 static std::vector<part_int> rung_begins;
-static std::vector<part_int> rung_ends;
 
 HPX_PLAIN_ACTION (particles_cache_free);
 HPX_PLAIN_ACTION (particles_inc_group_cache_epoch);
@@ -177,7 +175,7 @@ double particles_active_pct() {
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_active_pct_action>(c));
 	}
-	double num_active = rung_end - rung_begin;
+	double num_active = particles_size() - rung_begin;
 	for (auto& f : futs) {
 		num_active += f.get();
 	}
@@ -194,8 +192,6 @@ void particles_pop_rungs() {
 	}
 	rung_begin = rung_begins.back();
 	rung_begins.pop_back();
-	rung_end = rung_ends.back();
-	rung_ends.pop_back();
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -205,7 +201,6 @@ void particles_push_rungs() {
 		futs.push_back(hpx::async<particles_push_rungs_action>(c));
 	}
 	rung_begins.push_back(rung_begin);
-	rung_ends.push_back(rung_end);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -581,7 +576,7 @@ vector<size_t> particles_rung_counts() {
 		for( int i = 0; i < counts.size(); i++) {
 			tot += counts[i];
 		}
-		ALWAYS_ASSERT(tot == nparts);
+	//	ALWAYS_ASSERT(tot == nparts);
 	}
 	return counts;
 }
@@ -763,7 +758,7 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 }
 
 void particles_resize(part_int sz) {
-//	PRINT( "Resizing particles to %i\n", sz);
+//	PRINT( "Resizing particles to %i on %i\n", sz, hpx_rank());
 	if (sz > capacity) {
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
@@ -976,7 +971,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 pair<part_int, part_int> particles_current_range() {
 	pair<part_int, part_int> rc;
 	rc.first = rung_begin;
-	rc.second = rung_end;
+	rc.second = particles_size();
 	return rc;
 }
 
@@ -989,12 +984,10 @@ void particles_sort_by_rung(int minrung) {
 	}
 	if (minrung == 0) {
 		rung_begin = 0;
-		rung_end = particles_size();
 	} else {
 		part_int begin;
 		part_int end;
 		begin = rung_begin;
-		end = rung_end;
 		part_int lo = begin;
 		part_int hi = end;
 		const bool do_groups = get_options().do_groups;
@@ -1030,7 +1023,6 @@ void particles_sort_by_rung(int minrung) {
 			lo++;
 		}
 		rung_begin = hi;
-		rung_end = particles_size();
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
@@ -1162,11 +1154,8 @@ void particles_load(FILE* fp) {
 	}
 	FREAD(&size, sizeof(int), 1, fp);
 	rung_begins.resize(size);
-	rung_ends.resize(size);
 	FREAD(&rung_begin, sizeof(int), 1, fp);
-	FREAD(&rung_end, sizeof(int), 1, fp);
 	FREAD(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
-	FREAD(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
 
 }
 
@@ -1189,9 +1178,7 @@ void particles_save(FILE* fp) {
 	size = rung_begins.size();
 	fwrite(&size, sizeof(int), 1, fp);
 	fwrite(&rung_begin, sizeof(int), 1, fp);
-	fwrite(&rung_end, sizeof(int), 1, fp);
 	fwrite(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
-	fwrite(rung_ends.data(), sizeof(int), rung_ends.size(), fp);
 
 }
 

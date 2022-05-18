@@ -217,6 +217,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const double h = get_options().hsoft;
 	int bucket_size = get_options().bucket_size;
 	tree_create_return rc;
+//	PRINT( "%i %i %i\n", hpx_rank(), part_range.first, part_range.second);
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}

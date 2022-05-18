@@ -187,22 +187,24 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			top = false;
 		}
 		if (ascending) {
-//			PRINT("ASCENDING  rung %i\n", levels[li]);
+			PRINT("ASCENDING  rung %i\n", levels[li]);
 		} else if (top) {
-//			PRINT("AT TOP     rung %i\n", levels[li]);
+			PRINT("AT TOP     rung %i\n", levels[li]);
 		} else if (!ascending) {
-//			PRINT("DESCENDING rung %i\n", levels[li]);
+			PRINT("DESCENDING rung %i\n", levels[li]);
 		}
 
 		if (!ascending && !top) {
 			particles_push_rungs();
 		}
-		if (ascending) {
+		if (ascending || tau == 0.0) {
+			PRINT( "Domains\n");
 			domains_begin(levels[li]);
 			domains_end();
 		}
 
 		if (!ascending) {
+			PRINT( "Sorting by rung\n");
 			particles_sort_by_rung(levels[li]);
 		}
 		auto rng = particles_current_range();
@@ -240,6 +242,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tree_create_params tparams(levels[li], theta, 0.f);
 		tm.reset();
 		tm.start();
+		PRINT( "Creating tree\n");
 		auto this_sr = tree_create(tparams);
 		tm.stop();
 //		PRINT("tree create = %e\n", tm.read());
@@ -287,6 +290,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		checklist.push_back(root_id);
 		tm.reset();
 		tm.start();
+		PRINT( "Kicking\n");
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 		tm.stop();
 //		PRINT("kick = %e\n", tm.read());
@@ -313,6 +317,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		}
 		tm.stop();
 		if ((!ascending || top) && !(clip_top && top)) {
+			PRINT( "Drifting\n");
 			tm.reset();
 			tm.start();
 			const float dt = rung_dt[levels[li]] * t0;
@@ -423,9 +428,6 @@ void driver() {
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
-		domains_rebound();
-		domains_begin(0);
-		domains_end();
 		params.step = 0;
 		params.flops = 0;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
@@ -538,8 +540,10 @@ void driver() {
 			}
 			if (minrung == 0) {
 				double imbalance = domains_get_load_imbalance();
-				if (imbalance > MAX_LOAD_IMBALANCE) {
+				if (imbalance > MAX_LOAD_IMBALANCE || tau == 0.0) {
 					domains_rebound();
+					domains_begin(0);
+					domains_end();
 					imbalance = domains_get_load_imbalance();
 				}
 			}

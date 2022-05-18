@@ -341,7 +341,7 @@ static void force_test() {
 		initialize(get_options().z0);
 		tm.stop();
 		tm_main.start();
-		PRINT("particles_random_init: %e s\n", tm.read());
+//		PRINT("particles_random_init: %e s\n", tm.read());
 		tm.reset();
 
 		tm.start();
@@ -411,7 +411,7 @@ static void force_test() {
 	}
 	tm_main.stop();
 	tm.start();
-	analytic_compare(100);
+	analytic_compare(1000);
 	tm.stop();
 	PRINT("analytic_compare: %e s\n", tm.read());
 	tm.reset();
