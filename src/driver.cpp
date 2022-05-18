@@ -197,15 +197,22 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if (!ascending && !top) {
 			particles_push_rungs();
 		}
+
 		if (ascending || tau == 0.0) {
-			PRINT( "Domains\n");
+			tm.reset();
+			tm.start();
 			domains_begin(levels[li]);
 			domains_end();
+			tm.stop();
+			PRINT( "Domains took %e\n", tm.read());
 		}
 
 		if (!ascending) {
-			PRINT( "Sorting by rung\n");
+			tm.reset();
+			tm.start();
 			particles_sort_by_rung(levels[li]);
+			tm.stop();
+			PRINT( "Rung sort took %e\n", tm.read());
 		}
 		auto rng = particles_current_range();
 		parts_processed += rng.second - rng.first;
@@ -242,10 +249,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tree_create_params tparams(levels[li], theta, 0.f);
 		tm.reset();
 		tm.start();
-		PRINT( "Creating tree\n");
 		auto this_sr = tree_create(tparams);
 		tm.stop();
-//		PRINT("tree create = %e\n", tm.read());
+		PRINT("Tree create took %e\n", tm.read());
 		if (top) {
 			sr = this_sr;
 		}
@@ -290,10 +296,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		checklist.push_back(root_id);
 		tm.reset();
 		tm.start();
-		PRINT( "Kicking\n");
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
 		tm.stop();
-//		PRINT("kick = %e\n", tm.read());
+		PRINT("Kick took %e\n", tm.read());
 		if (clip_top && top) {
 			particles_set_minrung(minrung0 + 1);
 		}
@@ -317,13 +322,12 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		}
 		tm.stop();
 		if ((!ascending || top) && !(clip_top && top)) {
-			PRINT( "Drifting\n");
 			tm.reset();
 			tm.start();
 			const float dt = rung_dt[levels[li]] * t0;
 			drift(scale, dt, tau, tau + dt, t0, levels[li]);
 			tm.stop();
-//			PRINT("drift = %e\n", tm.read());
+			PRINT("Drift took %e\n", tm.read());
 		}
 		tree_reset();
 		if (ascending && !top) {
