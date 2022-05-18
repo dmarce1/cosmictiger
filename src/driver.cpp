@@ -198,7 +198,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			particles_push_rungs();
 		}
 
-		if (ascending || top) {
+		if (top) {
 			tm.reset();
 			tm.start();
 			domains_begin(levels[li]);
