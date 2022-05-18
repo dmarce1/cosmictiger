@@ -230,8 +230,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				R2 = max(R2, max(sqr(simd_float(0.5) - (self_radius + other_radius)), simd_float(0)));
 				const auto hsoft = my_hsoft;
-				const auto mind = self_radius + other_radius + hsoft;
-				const simd_float dcc = max((self_radius + other_radius) * thetainv, mind);
+				const simd_float dcc = (self_radius + other_radius) * thetainv;
 				const simd_float cc = R2 > sqr(dcc);
 				for (int i = 0; i < maxi; i++) {
 					if (cc[i]) {

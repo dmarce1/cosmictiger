@@ -67,7 +67,6 @@ set(cosmictiger_source_files
     src/hpx.cpp
     src/kick.cpp
     src/kick.cu
-    src/exact_sod.cpp
     src/kick_workspace.cpp
     src/lightcone.cpp
     src/main.cpp

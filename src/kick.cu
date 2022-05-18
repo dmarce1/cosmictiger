@@ -302,8 +302,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-								const float mind = self.radius + other.radius + h;
-								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
+								const float dcc = (self.radius + other.radius) * thetainv;
 								cc = R2 > sqr(dcc);
 								if (!cc) {
 									leaf = other.leaf;
