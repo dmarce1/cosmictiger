@@ -61,6 +61,7 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
+	PRINT( "STARTING MAIN\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
 	cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY
