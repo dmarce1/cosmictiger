@@ -76,7 +76,9 @@ struct kick_return {
 	double nmom;
 	double total_time;
 	double parts_processed;
-	size_t nactive;CUDA_EXPORT
+	size_t nactive;
+
+	CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
 		part_flops = 0.0;
@@ -116,6 +118,10 @@ struct kick_return {
 		arc & zmom;
 		arc & nmom;
 		arc & nactive;
+		arc &  total_time;
+		arc & parts_processed;
+
+
 	}
 };
 
@@ -160,6 +166,9 @@ struct kick_params {
 		arc & GM;
 		arc & save_force;
 		arc & node_load;
+		arc & min_level;
+		arc & glass;
+		arc & do_phi;
 	}
 };
 
