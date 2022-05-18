@@ -542,9 +542,9 @@ void driver() {
 //					PRINT("View %i took %e \n", number, tm.read());
 				}
 			}
-			if (minrung == 0) {
+			if (minrung == 0 && tau > 0.0) {
 				double imbalance = domains_get_load_imbalance();
-				if (imbalance > MAX_LOAD_IMBALANCE || tau == 0.0) {
+				if (imbalance > MAX_LOAD_IMBALANCE) {
 					domains_rebound();
 					domains_begin(0);
 					domains_end();
