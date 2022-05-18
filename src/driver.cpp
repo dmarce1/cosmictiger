@@ -542,7 +542,6 @@ void driver() {
 //					PRINT("View %i took %e \n", number, tm.read());
 				}
 			}
-			PRINT( "CHECKING LOAD IMBALANCE\n");
 			if (minrung == 0) {
 				double imbalance = domains_get_load_imbalance();
 				if (imbalance > MAX_LOAD_IMBALANCE || tau == 0.0) {
@@ -552,7 +551,6 @@ void driver() {
 					imbalance = domains_get_load_imbalance();
 				}
 			}
-			PRINT( "DONE CHECKING LOAD IMBALANCE\n");
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
