@@ -102,14 +102,14 @@ void analytic_compare(int Nsamples) {
 	int index = 99 * Nsamples / 100;
 	std::sort(phierrs.begin(), phierrs.end());
 	std::sort(gerrs.begin(), gerrs.end());
-	double phi100 = phierrs[index]/ sqrt(phi_norm);
-	double force100 = gerrs[index]/ sqrt(force_norm);
+	double phi100 = phierrs[index]/ sqrt(phi_norm/Nsamples);
+	double force100 = gerrs[index]/ sqrt(force_norm/Nsamples);
 	lerr_force =sqrt(lerr_force/force_norm);
 	lerr_phi = sqrt(lerr_phi/phi_norm);
 	PRINT("Force RMS Error     = %e\n", lerr_force);
-	PRINT("Force 100 Error     = %e\n", phi100);
+	PRINT("Force 100 Error     = %e\n", force100);
 	PRINT("Potential RMS Error = %e\n", lerr_phi);
-	PRINT("Potential 100 Error = %e\n", force100);
+	PRINT("Potential 100 Error = %e\n", phi100);
 #else
 	PRINT("analytic compare not available without CUDA\n");
 #endif

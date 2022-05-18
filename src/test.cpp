@@ -411,7 +411,7 @@ static void force_test() {
 	}
 	tm_main.stop();
 	tm.start();
-	analytic_compare(1000);
+	analytic_compare(200);
 	tm.stop();
 	PRINT("analytic_compare: %e s\n", tm.read());
 	tm.reset();

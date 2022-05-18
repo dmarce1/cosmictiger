@@ -191,6 +191,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 		if (R2 == 0.f) {
 			phi[tid] -= 2.837291f;
 		} else if (R2 < h2) {
+			PRINT( "SOFT\n");
 			const float q2 = R2 * h2inv;
 			const float R = sqrtf(R2);
 			float rinv3 = fmaf(q2, -1.5f, 2.5f) * h3inv - 1.f / (R2 * R);
