@@ -114,7 +114,7 @@ void kick_workspace::to_gpu() {
 	const int nthreads = hpx::thread::hardware_concurrency();
 	futs.reserve(nthreads);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&tree_map]() {
+		futs.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map]() {
 							for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
 								if (tree_nodes[i].children[LEFT].index != -1) {
 									tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
@@ -129,7 +129,7 @@ void kick_workspace::to_gpu() {
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([this,proc,nthreads,&tree_map]() {
+		futs.push_back(hpx::async(HPX_PRIORITY_HI, [this,proc,nthreads,&tree_map]() {
 							for (int i = proc; i < workitems.size(); i+=nthreads) {
 								for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 									auto iter = tree_map.find(workitems[i].dchecklist[j]);
@@ -161,7 +161,7 @@ void kick_workspace::to_gpu() {
 	futs.resize(0);
 
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases]() {
+		futs.push_back(hpx::async(HPX_PRIORITY_HI, [&next_index,&tree_ids_vector,&tree_map,proc,nthreads,&tree_bases]() {
 							for (int i = proc; i < tree_ids_vector.size(); i+=nthreads) {
 								if( tree_bases.find(tree_ids_vector[i]) != tree_bases.end()) {
 									const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
@@ -225,7 +225,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 void kick_workspace::clear_buffers() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<clear_buffers_action>(c));
+		futs.push_back(hpx::async<clear_buffers_action>( c));
 	}
 	host_x = decltype(host_x)();
 	host_y = decltype(host_y)();

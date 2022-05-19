@@ -36,7 +36,7 @@ static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed3
 #ifdef USE_CUDA
 	vector<hpx::future<return_type>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<do_analytic_action>(c, sinkx, sinky, sinkz));
+		futs.push_back(hpx::async<do_analytic_action>( c, sinkx, sinky, sinkz));
 	}
 
 	auto results = gravity_analytic_call_kernel(sinkx, sinky, sinkz);

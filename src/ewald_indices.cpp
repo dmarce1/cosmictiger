@@ -64,7 +64,7 @@ void ewald_const::init() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for( const auto& c : children ) {
-		futs.push_back(hpx::async<ewald_const_init_action>(c));
+		futs.push_back(hpx::async<ewald_const_init_action>( c));
 	}
 
 #ifdef USE_CUDA

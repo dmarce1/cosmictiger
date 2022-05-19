@@ -27,9 +27,7 @@
 void zero_order_universe::compute_matter_fractions(double& Oc, double& Ob, double a) const {
 	double omega_m = params.omega_b + params.omega_c;
 	double omega_r = params.omega_gam + params.omega_nu;
-	double omega_l = params.omega_lam;
-	double omega_k = 1.0 - omega_r - omega_m - omega_l;
-	double Om = omega_m / (omega_r / a + omega_m + (a * a * a) * omega_l + a * omega_k);
+	double Om = omega_m / (omega_r / a + omega_m + (a * a * a) * ((double) 1.0 - omega_m - omega_r));
 	Ob = params.omega_b * Om / omega_m;
 	Oc = params.omega_c * Om / omega_m;
 }
@@ -37,9 +35,7 @@ void zero_order_universe::compute_matter_fractions(double& Oc, double& Ob, doubl
 void zero_order_universe::compute_radiation_fractions(double& Ogam, double& Onu, double a) const {
 	double omega_m = params.omega_b + params.omega_c;
 	double omega_r = params.omega_gam + params.omega_nu;
-	double omega_l = params.omega_lam;
-	double omega_k = 1.0 - omega_r - omega_m - omega_l;
-	double Or = omega_r / (omega_r + a * omega_m + (a * a * a * a) * omega_l + a * a * omega_k);
+	double Or = omega_r / (omega_r + a * omega_m + (a * a * a * a) * ((double) 1.0 - omega_m - omega_r));
 	Ogam = params.omega_gam * Or / omega_r;
 	Onu = params.omega_nu * Or / omega_r;
 }
@@ -50,7 +46,7 @@ double zero_order_universe::conformal_time_to_scale_factor(double taumax) {
 	double a = amin;
 	double logtaumax = log(taumax);
 	const auto hubble = [this](double a) {
-		return hubble_function(a,params.hubble, params.omega_c + params.omega_b, params.omega_gam + params.omega_nu, params.omega_lam);
+		return hubble_function(a,params.hubble, params.omega_c + params.omega_b, params.omega_gam + params.omega_nu);
 	};
 	double logtaumin = log(1.f / (a * hubble(a)));
 	int N = (logtaumax - logtaumin) / dlogtau + 1;
@@ -74,9 +70,8 @@ double zero_order_universe::redshift_to_density(double z) const {
 	const double a = 1.0 / (1.0 + z);
 	double omega_m = params.omega_b + params.omega_c;
 	double omega_r = params.omega_gam + params.omega_nu;
-	double omega_l = params.omega_lam;
-	double omega_k = 1.0 - omega_r - omega_m - omega_l;
-	const double H2 = sqr(params.hubble * constants::H0) * (omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_l + omega_k / (a * a));
+	const double omega_l = 1.0 - omega_m - omega_r;
+	const double H2 = sqr(params.hubble * constants::H0) * (omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_l);
 	return omega_m * 3.0 * H2 / (8.0 * M_PI * constants::G);
 }
 
@@ -88,7 +83,7 @@ double zero_order_universe::scale_factor_to_conformal_time(double a) {
 	int N = (logamax - logamin) / dloga + 1;
 	dloga = (logamax - logamin) / (double) N;
 	const auto hubble = [this](double a) {
-		return hubble_function(a,params.hubble, params.omega_c + params.omega_b, params.omega_gam + params.omega_nu, params.omega_lam);
+		return hubble_function(a,params.hubble, params.omega_c + params.omega_b, params.omega_gam + params.omega_nu);
 	};
 	double tau = 1.f / (amin * hubble(amin));
 	for (int i = 0; i < N; i++) {
@@ -116,7 +111,7 @@ double zero_order_universe::redshift_to_time(double z) const {
 	dloga = (logamax - logamin) / (double) N;
 	double t = 0.0;
 	const auto hubble = [this](double a) {
-		return hubble_function(a,params.hubble, params.omega_c + params.omega_b, params.omega_gam + params.omega_nu, params.omega_lam);
+		return hubble_function(a,params.hubble, params.omega_c + params.omega_b, params.omega_gam + params.omega_nu);
 	};
 	for (int i = 0; i < N; i++) {
 		double loga = logamin + (double) i * dloga;
@@ -143,15 +138,13 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	double omega_c = cpars.omega_c;
 	double omega_gam = cpars.omega_gam;
 	double omega_nu = cpars.omega_nu;
-	double omega_lam = cpars.omega_lam;
 	double omega_m = cpars.omega_b + omega_c;
 	double omega_r = omega_gam + omega_nu;
 	double Theta = cpars.Theta;
 	double littleh = cpars.hubble;
 	double Neff = cpars.Neff;
 	double Y = cpars.Y;
-	double amin = 1e-9;
-	PRINT("Z0 = %e\n", 1.0 / amin - 1.0);
+	double amin = Theta * Tcmb / (0.07 * 1e6 * evtoK);
 	double logamin = log(amin);
 	double logamax = log(amax);
 	int N = 4 * 1024;
@@ -164,7 +157,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	PRINT("\t\t\t h                 = %f\n", littleh);
 	PRINT("\t\t\t omega_m           = %f\n", omega_m);
 	PRINT("\t\t\t omega_r           = %f\n", omega_r);
-	PRINT("\t\t\t omega_lambda      = %f\n", omega_lam);
+	PRINT("\t\t\t omega_lambda      = %f\n", 1 - omega_r - omega_m);
 	PRINT("\t\t\t omega_b           = %f\n", omega_b);
 	PRINT("\t\t\t omega_c           = %f\n", omega_c);
 	PRINT("\t\t\t omega_gam         = %f\n", omega_gam);
@@ -175,7 +168,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	dloga = (logamax - logamin) / N;
 	const auto cosmic_hubble = [=](double a) {
 		using namespace cosmic_constants;
-		return littleh * cosmic_constants::H0 * sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_lam + (1-omega_m-omega_r-omega_lam) / (a*a));
+		return littleh * cosmic_constants::H0 * sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + (1 - omega_r - omega_m));
 	};
 	auto cgs_hubble = [=](double a) {
 		return constants::H0 / cosmic_constants::H0 * cosmic_hubble(a);
@@ -184,8 +177,8 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	const auto rho_baryon = [=](double a) {
 		using namespace constants;
 //		PRINT( "%e\n", omega_b);
-			return 3.0 * pow(littleh * H0, 2) / (8.0 * M_PI * G) * omega_b / (a * a * a);
-		};
+		return 3.0 * pow(littleh * H0, 2) / (8.0 * M_PI * G) * omega_b / (a * a * a);
+	};
 
 	const auto T_radiation = [=](double a) {
 		using namespace constants;
@@ -199,7 +192,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 	double hubble = cgs_hubble(amin);
 
 	rho_b = rho_baryon(amin);
-	double nnuc = rho_b / (1.0 / avo);
+	double nnuc = rho_b / mh;
 	nHe = Y * nnuc / 4;
 	nH = (1 - Y) * nnuc;
 	ne = fxe(amin) * nH;
@@ -221,7 +214,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 //			", redshift %.0f: Big Bang nucleosynthesis has ended. The Universe is dominated by radiation at a temperature of %8.2e K."
 //					" \n   Its total matter density is %.1f \% times the density of air at sea level.\n", 1 / a - 1,
 //			Trad, 100 * rho_b * omega_m / omega_b / 1.274e-3);
-	double mu = (nH + 4 * nHe) * (1.0 / avo) / (nH + nHe + ne);
+	double mu = (nH + 4 * nHe) * mh / (nH + nHe + ne);
 	double sigmaC = mu / me * c * (8.0 / 3.0) * omega_gam / (a * omega_m) * sigma_T * ne / hubble;
 	double sigmaT = c * sigma_T * ne / hubble;
 	thomson[0] = sigmaT;
@@ -253,7 +246,7 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 		double dt = dloga / hubble;
 		const double gamma = 1.0 - 1.0 / sqrt(2.0);
 		ne = fxe(a) * nH;
-		mu = (nH + 4 * nHe) * (1.0 / avo) / (nH + nHe + ne);
+		mu = (nH + 4 * nHe) * mh / (nH + nHe + ne);
 		sigmaC = mu / me * c * (8.0 / 3.0) * omega_gam / (a * omega_m) * sigma_T * ne / hubble;
 		const double dTgasdT1 = ((Tgas + gamma * dloga * sigmaC * Trad) / (1 + gamma * dloga * (2 + sigmaC)) - Tgas) / (gamma * dloga);
 		const double T1 = Tgas + (1 - 2 * gamma) * dTgasdT1 * dloga;
@@ -271,11 +264,11 @@ void create_zero_order_universe(zero_order_universe* uni_ptr, std::function<doub
 		}
 		sound_speed2[i - 1] = cs2 / (c * c);
 		thomson[i] = sigmaT;
-		K[i] = P / std::pow(rho_b, 5.0 / 3.0);
+		K[i] = P / std::pow(rho_b,5.0/3.0);
 
-		//	printf("%e %e %e %e\n", n, nH, nHe, ne);
-		if (1.0 / a - 1.0 < 50.0) {
-			//		break;
+	//	printf("%e %e %e %e\n", n, nH, nHe, ne);
+		if( 1.0/a-1.0 < 50.0 ) {
+	//		break;
 		}
 	}
 	cs2 = (P - P1) / (rho_b - rho1);

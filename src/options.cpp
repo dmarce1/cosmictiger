@@ -65,7 +65,7 @@ const options& get_options() {
 void set_options(const options& opts) {
 	std::vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<set_options_action>(c, opts));
+		futs.push_back(hpx::async<set_options_action>( c, opts));
 	}
 	global_opts = opts;
 	hpx::wait_all(futs.begin(), futs.end());
@@ -120,14 +120,14 @@ bool process_options(int argc, char *argv[]) {
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_k", po::value<double>(&(opts.omega_k))->default_value(0.0), "") //
 	("omega_lam", po::value<double>(&(opts.omega_lam))->default_value(-1.0), "") //
-	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049), "") //
-	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.265), "") //
+	("omega_b", po::value<double>(&(opts.omega_b))->default_value(0.049389), "") //
+	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
 	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255 / 2.73), "") //
-	("Y0", po::value<double>(&(opts.Y0))->default_value(0.245), "") //
+	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "") //
-	("hubble", po::value<double>(&(opts.hubble))->default_value(0.673), "") //
-	("ns", po::value<double>(&(opts.ns))->default_value(1.0), "spectral index") //
+	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
+	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9/.6732), "mass resolution") //
 
 			;
