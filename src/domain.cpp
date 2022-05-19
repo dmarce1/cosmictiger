@@ -356,7 +356,7 @@ void domains_begin(int rung) {
 			while( begin < current_range.second) {
 				const part_int end = std::min(begin + chunk_size, current_range.second);
 				for( part_int i = begin; i < end; i++) {
-					if( particles_rung(i) >= rung) {
+					if( particles_rung(i) == rung) {
 						array<double, NDIM> x;
 						for( part_int dim = 0; dim < NDIM; dim++) {
 							x[dim] = particles_pos(dim,i).to_double();
@@ -373,7 +373,7 @@ void domains_begin(int rung) {
 						}
 					}
 				}
-				begin = next_begin++ * chunk_size;
+				begin = next_begin++ * chunk_size + current_range.first;
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
