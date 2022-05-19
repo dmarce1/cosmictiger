@@ -411,7 +411,7 @@ void domains_end() {
 	hpx::future<void> fut1;
 	hpx::future<void> fut2;
 	if (free_indices.size()) {
-		fut1 = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
+		fut1 = hpx::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
 	} else {
 		fut1 = hpx::make_ready_future();
 	}
@@ -439,7 +439,7 @@ void domains_end() {
 	hpx::wait_all(futs1.begin(), futs1.end());
 	trans_particles = decltype(trans_particles)();
 	if (all_trans_particles.size()) {
-		fut2 = hpx::parallel::sort(PAR_EXECUTION_POLICY, all_trans_particles.begin(), all_trans_particles.end(), particle_compare);
+		fut2 = hpx::sort(PAR_EXECUTION_POLICY, all_trans_particles.begin(), all_trans_particles.end(), particle_compare);
 	} else {
 		fut2 = hpx::make_ready_future();
 	}

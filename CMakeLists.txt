@@ -78,7 +78,6 @@ set(cosmictiger_source_files
     src/profiler.cpp
     src/rockstar.cpp
     src/rockstar.cu
-    src/sedov.cpp
     src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp
@@ -118,7 +117,6 @@ set(cosmictiger_header_files
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lc_group_archive.hpp
-    cosmictiger/exact_sod.hpp
     cosmictiger/lightcone.hpp
     cosmictiger/math.hpp
     cosmictiger/memused.hpp

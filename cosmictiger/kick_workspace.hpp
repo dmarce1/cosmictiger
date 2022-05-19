@@ -42,7 +42,7 @@ struct kick_workspace_tree_id_hash {
 class kick_workspace {
 	mutex_type mutex;
 	vector<kick_workitem> workitems;
-	vector<hpx::lcos::local::promise<kick_return>> promises;
+	vector<hpx::promise<kick_return>> promises;
 	part_int total_parts;
 	part_int nparts;
 	kick_params params;
