@@ -414,9 +414,8 @@ void driver() {
 	timer tmr;
 	tmr.start();
 	driver_params params;
-	const bool stars = get_options().stars;
 	double a0 = 1.0 / (1.0 + get_options().z0);
-	if (get_options().read_check) {
+	if (get_options().read_check != -1 ) {
 		params = read_checkpoint();
 	} else {
 		output_time_file();
@@ -554,15 +553,19 @@ void driver() {
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
+			int bucket_size = 80;
 			if (z > 50.0) {
 				theta = 0.3;
 			} else if (z > 20.0) {
 				theta = 0.4;
 			} else if (z > 2.0) {
+				bucket_size = 96;
 				theta = 0.55;
 			} else {
+				bucket_size = 128;
 				theta = 0.7;
 			}
+			opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
@@ -712,42 +715,25 @@ void write_checkpoint(driver_params params) {
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
 		std::string command;
-		if (dir_exists("checkpoint.hello")) {
-			if (dir_exists("checkpoint.goodbye")) {
-				command = "rm -r checkpoint.goodbye\n";
-				if (system(command.c_str()) != 0) {
-					THROW_ERROR("Unable to execute %s\n", command.c_str());
-				}
-			}
-			command = "mv checkpoint.hello checkpoint.goodbye\n";
-			if (system(command.c_str()) != 0) {
-				THROW_ERROR("Unable to execute %s\n", command.c_str());
-			}
-		}
-		command = std::string("mkdir -p checkpoint.hello\n");
+		command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter);
 		if (system(command.c_str()) != 0) {
 			THROW_ERROR("Unable to execute : %s\n", command.c_str());
 		}
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<write_checkpoint_action>( c, params));
+		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
 	}
-//	futs.push_back(hpx::threads::run_as_os_thread([&]() {
-	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
+	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(hpx_rank())
+			+ std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "wb");
 	fwrite(&params, sizeof(driver_params), 1, fp);
 	particles_save(fp);
-//	PRINT( "parts saved\n");
 	domains_save(fp);
-//PRINT( "domains saved\n");
 	if (get_options().do_lc) {
 		lc_save(fp);
 	}
-//PRINT( "lc_saved\n");
 	fclose(fp);
-//	PRINT("closed\n");
-//	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");
@@ -762,9 +748,10 @@ driver_params read_checkpoint() {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<read_checkpoint_action>( c));
+		futs.push_back(hpx::async<read_checkpoint_action>(c));
 	}
-	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
+	const int iter = get_options().read_check;
+	const std::string fname = std::string("checkpoint.") + std::to_string(iter) + std::string("/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "rb");
 	if (fp == nullptr) {
 		THROW_ERROR("Unable to open %s for reading.\n", fname.c_str());

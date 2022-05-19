@@ -84,7 +84,7 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                       //
 	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file")                                                  //
-	("read_check", po::value<bool>(&(opts.read_check))->default_value(false),
+	("read_check", po::value<int>(&(opts.read_check))->default_value(-1),
 			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)")                                      //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
@@ -96,7 +96,6 @@ bool process_options(int argc, char *argv[]) {
 		("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
-	("stars", po::value<bool>(&(opts.stars))->default_value(true), "do stars") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(128), "bucket size") //
@@ -111,7 +110,7 @@ bool process_options(int argc, char *argv[]) {
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
-	("nsteps", po::value<int>(&(opts.nsteps))->default_value(100), "Number of super-timesteps") //
+	("nsteps", po::value<int>(&(opts.nsteps))->default_value(64), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
@@ -232,7 +231,6 @@ bool process_options(int argc, char *argv[]) {
 	SHOW(sigma8);
 	SHOW(slice_res);
 	SHOW(slice_size);
-	SHOW(stars);
 	SHOW(Theta);
 	SHOW(theta);
 	SHOW(tracer_count);

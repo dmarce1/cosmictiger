@@ -115,39 +115,18 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
 			vector<float> masses;
-#ifndef DM_CON_H_ONLY
-			vector<char> type;
-#endif
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masses.resize(nsource);
-#ifndef DM_CON_H_ONLY
-			type.resize(nsource);
-#endif
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-#ifndef DM_CON_H_ONLY
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), nullptr, count);
-#else
 				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
-#endif
 				count += tree_ptrs[i]->nparts();
 			}
-#ifndef DM_CON_H_ONLY
-			if (do_sph) {
-				for (int i = 0; i < count; i++) {
-					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
-					;
-				}
-			} else {
-#endif
 			for (int i = 0; i < count; i++) {
 				masses[i] = 1.0;
 			}
-#ifndef DM_CON_H_ONLY
-		}
-#endif
 			for (int i = count; i < nsource; i++) {
 				masses[i] = 0.0;
 			}

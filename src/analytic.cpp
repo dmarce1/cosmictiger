@@ -56,7 +56,7 @@ static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed3
 #endif
 }
 
-void analytic_compare(int Nsamples) {
+pair<double> analytic_compare(int Nsamples) {
 #ifdef USE_CUDA
 	timer tm;
 	tm.start();
@@ -73,10 +73,6 @@ void analytic_compare(int Nsamples) {
 	}
 	const double gm = get_options().GM;
 	auto results = do_analytic(sinkx, sinky, sinkz);
-	double lerr_phi = 0.0;
-	double lerr_force = 0.0;
-	double phi_norm = 0.0;
-	double force_norm = 0.0;
 	vector<double> gerrs, phierrs;
 	for (int i = 0; i < Nsamples; i++) {
 		double f1 = 0.0, f2 = 0.0;
@@ -89,27 +85,29 @@ void analytic_compare(int Nsamples) {
 		g2 = sqrt(g2);
 		f1 = samples[i].p;
 		f2 = gm * results.first[i];
-		phi_norm +=sqr(f1);
-		force_norm += sqr(g1);
-		const double gerr = sqr(g1-g2);
-		const double ferr = sqr(f1-f2);
-		lerr_phi += ferr;
-		lerr_force += gerr;
-		gerrs.push_back(sqrt(gerr));
-		phierrs.push_back(sqrt(ferr));
+		const double gerr = fabs(g1-g2)/g2;
+		const double phierr = fabs(f1-f2)/fabs(f2);
+		gerrs.push_back(gerr);
+		phierrs.push_back(phierr);
 		printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1, f1, f2, f1/f2);
 	}
 	int index = 99 * Nsamples / 100;
 	std::sort(phierrs.begin(), phierrs.end());
 	std::sort(gerrs.begin(), gerrs.end());
-	double phi100 = phierrs[index]/ sqrt(phi_norm/Nsamples);
-	double force100 = gerrs[index]/ sqrt(force_norm/Nsamples);
-	lerr_force =sqrt(lerr_force/force_norm);
-	lerr_phi = sqrt(lerr_phi/phi_norm);
-	PRINT("Force RMS Error     = %e\n", lerr_force);
-	PRINT("Force 100 Error     = %e\n", force100);
-	PRINT("Potential RMS Error = %e\n", lerr_phi);
-	PRINT("Potential 100 Error = %e\n", phi100);
+	double phi100 = phierrs[index];
+	double force100 = gerrs[index];
+	double phi50 = phierrs[Nsamples/2] + phierrs[Nsamples/2+1];
+	double force50 = gerrs[Nsamples/2] +  gerrs[Nsamples/2+1];
+	phi50 *= 0.5;
+	force50 *= 0.5;
+	PRINT("Force 50  Error     = %e\n", force50);
+	PRINT("Force 99  Error     = %e\n", force100);
+	PRINT("Potential 50  Error = %e\n", phi50);
+	PRINT("Potential 99  Error = %e\n", phi100);
+	pair<double> rc;
+	rc.first = force50;
+	rc.second = force100;
+	return rc;
 #else
 	PRINT("analytic compare not available without CUDA\n");
 #endif

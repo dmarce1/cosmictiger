@@ -31,10 +31,9 @@ struct options {
 	bool do_tracers;
 	bool do_slice;
 	bool do_views;
-	bool stars;
 	bool twolpt;
 	bool use_power_file;
-	bool read_check;
+	int read_check;
 	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
@@ -81,7 +80,6 @@ struct options {
 		arc & omega_k;
 		arc & omega_lam;
 		arc & bucket_size;
-		arc & stars;
 		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;

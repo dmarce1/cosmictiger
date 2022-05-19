@@ -24,6 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/analytic.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/drift.hpp>
+#include <cosmictiger/driver.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/initialize.hpp>
@@ -330,48 +331,29 @@ static void kick_test() {
 	kick_workspace::clear_buffers();
 }
 
+driver_params read_checkpoint();
+
 static void force_test() {
 	timer tm;
 	timer tm_main;
 	constexpr int NITER = 1;
 	tm_main.start();
-	for (int iter = 0; iter < NITER; iter++) {
-		tm_main.stop();
-		tm.start();
+	const auto read_check = get_options().read_check;
+	if (read_check != -1) {
+		read_checkpoint();
+	} else {
 		initialize(get_options().z0);
-		tm.stop();
+	}
+	constexpr int nthetas = 19;
+	const double thetas[nthetas] = { 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.00 };
+	for (int iter = 2; iter < nthetas; iter++) {
 		tm_main.start();
-//		PRINT("particles_random_init: %e s\n", tm.read());
-		tm.reset();
-
-		tm.start();
 		domains_rebound();
-		tm.stop();
-		PRINT("domains_rebound: %e s\n", tm.read());
-		tm.reset();
-
-		tm.start();
 		domains_begin(0);
-		tm.stop();
-		PRINT("domains_begin: %e s\n", tm.read());
-		tm.reset();
-
-		tm.start();
 		domains_end();
-		tm.stop();
-		PRINT("domains_end: %e s\n", tm.read());
-		tm.reset();
-
 		particles_sort_by_rung(0);
-
-		tm.start();
-		tree_create_params tparams(0, get_options().theta, get_options().hsoft);
+		tree_create_params tparams(0, thetas[iter], get_options().hsoft);
 		tree_create(tparams);
-		tm.stop();
-		PRINT("tree_create: %e s\n", tm.read());
-		tm.reset();
-
-		tm.start();
 		kick_params kparams;
 		kparams.node_load = 10;
 		kparams.gpu = true;
@@ -384,7 +366,7 @@ static void force_test() {
 		kparams.first_call = true;
 		kparams.min_rung = 0;
 		kparams.t0 = 1.0;
-		kparams.theta = get_options().theta;
+		kparams.theta = thetas[iter];
 		expansion<float> L;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] = 0.0f;
@@ -399,22 +381,19 @@ static void force_test() {
 		vector<tree_id> checklist;
 		checklist.push_back(root_id);
 		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-		tm.stop();
-		PRINT("tree_kick: %e s\n", tm.read());
+		tree_destroy(false);
+		tm_main.stop();
 		tm.reset();
-
 		tm.start();
-		tree_destroy();
+		auto rc = analytic_compare(1000);
 		tm.stop();
-		PRINT("tree_destroy: %e s\n", tm.read());
-		tm.reset();
+		PRINT( "Analytic compare took %e s\n", tm.read());
+		PRINT("%e %e %e\n", thetas[iter], rc.first, rc.second);
+		FILE* fp = fopen("force_accuracy.txt", "at");
+		fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
+		fclose(fp);
+
 	}
-	tm_main.stop();
-	tm.start();
-	analytic_compare(200);
-	tm.stop();
-	PRINT("analytic_compare: %e s\n", tm.read());
-	tm.reset();
 
 	kick_workspace::clear_buffers();
 	PRINT("AVERAGE TIME = %e\n", tm_main.read() / NITER);

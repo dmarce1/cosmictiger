@@ -210,11 +210,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& cplist = lists[bid].cplist;
 	auto& pclist = lists[bid].pclist;
 	auto& leaflist = lists[bid].leaflist;
+	const float& h = global_params.h;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
-	const float& h = global_params.h;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
+//	auto& rmin = shmem.rmin;
 	auto* tree_nodes = data.tree_nodes;
 	int index;
 
@@ -269,13 +270,15 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (tid == 0) {
 					L.back() = this_L;
 				}
-				const int nsinks = self.part_range.second - self.part_range.first;
-				gx.resize(nsinks);
-				gy.resize(nsinks);
-				gz.resize(nsinks);
-				phi.resize(nsinks);
-				for (int l = 0; l < nsinks; l++) {
-					gx[l] = gy[l] = gz[l] = phi[l] = 0.f;
+				if (self.leaf) {
+					const int nsinks = self.part_range.second - self.part_range.first;
+					gx.resize(nsinks);
+					gy.resize(nsinks);
+					gz.resize(nsinks);
+					phi.resize(nsinks);
+					for (int l = tid; l < nsinks; l += WARP_SIZE) {
+						gx[l] = gy[l] = gz[l] = phi[l] = 0.f;
+					}
 				}
 
 				__syncwarp();
@@ -635,7 +638,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.vz = &particles_vel(ZDIM, 0);
 	data.rungs = &particles_rung(0);
 	data.rank = hpx_rank();
-	if (kparams.save_force ) {
+	if (kparams.save_force) {
 		data.gx = &particles_gforce(XDIM, 0);
 		data.gy = &particles_gforce(YDIM, 0);
 		data.gz = &particles_gforce(ZDIM, 0);
