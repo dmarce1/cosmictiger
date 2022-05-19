@@ -498,7 +498,7 @@ static void domains_check() {
 					x[dim] = particles_pos(dim, i).to_double();
 				}
 				if (!my_domain.contains(x)) {
-					PRINT("particle out of range %li of %li %e %e %e\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2]);
+					PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2], particles_rung(i));
 					PRINT("%s\n", domains_find_my_box().to_string().c_str());
 					ALWAYS_ASSERT(false);
 					fail++;
