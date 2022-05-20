@@ -539,6 +539,7 @@ static const group_particle* particles_group_cache_read_line(line_id_type line_i
 HPX_PLAIN_ACTION (particles_rung_counts);
 
 vector<size_t> particles_rung_counts() {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<vector<size_t>>>futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_rung_counts_action>(c));
@@ -578,12 +579,14 @@ vector<size_t> particles_rung_counts() {
 		}
 	//	ALWAYS_ASSERT(tot == nparts);
 	}
+	profiler_exit();
 	return counts;
 }
 
 HPX_PLAIN_ACTION (particles_set_minrung);
 
 void particles_set_minrung(int minrung) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_set_minrung_action>(c, minrung));
@@ -602,6 +605,7 @@ void particles_set_minrung(int minrung) {
 	for (auto& f : futs) {
 		f.get();
 	}
+	profiler_exit();
 }
 
 void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset) {
@@ -978,6 +982,7 @@ pair<part_int, part_int> particles_current_range() {
 HPX_PLAIN_ACTION (particles_sort_by_rung);
 
 void particles_sort_by_rung(int minrung) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_sort_by_rung_action>(c, minrung));
@@ -1027,7 +1032,7 @@ void particles_sort_by_rung(int minrung) {
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
-
+	profiler_exit();
 }
 
 void particles_global_read_rungs(particle_global_range range, char* r, part_int offset) {
@@ -1268,7 +1273,10 @@ static vector<array<float, NDIM>> particles_fetch_cache_line_vels(part_int index
 }
 
 HPX_PLAIN_ACTION (particles_sum_energies);
+
+
 energies_t particles_sum_energies() {
+	profiler_enter(__FUNCTION__);
 	std::vector<hpx::future<energies_t>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_sum_energies_action>(c));
@@ -1284,7 +1292,9 @@ energies_t particles_sum_energies() {
 				const float vx = particles_vel(XDIM,i);
 				const float vy = particles_vel(YDIM,i);
 				const float vz = particles_vel(ZDIM,i);
-				energies.pot += 0.5 * particles_pot(i);
+				if( get_options().save_force ) {
+					energies.pot += 0.5 * particles_pot(i);
+				}
 				energies.kin += 0.5 * (sqr(vx)+sqr(vy)+sqr(vz));
 
 			}
@@ -1295,6 +1305,7 @@ energies_t particles_sum_energies() {
 	for (auto& f : futs) {
 		energies += f.get();
 	}
+	profiler_exit();
 	return energies;
 
 }

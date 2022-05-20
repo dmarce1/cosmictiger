@@ -103,7 +103,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 	} else if (remote) {
 		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
-		if( all_local ) {
+		if (all_local) {
 			rc = hpx::async([params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
 				auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace);
 				nthreads--;
@@ -123,6 +123,9 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	//params.gpu = false;
+	if( self.proc == 0 && self.index == 0 ) {
+		profiler_enter(__FUNCTION__);
+	}
 	stack_trace_activate();
 	const tree_node* self_ptr = tree_get_node(self);
 	timer tm;
@@ -385,7 +388,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
 					const float factor = eta * sqrtf(params.a);
 					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
-					rung = params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung);
+					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung), (int) (rung - 1));
 					kr.max_rung = std::max(rung, kr.max_rung);
 					ALWAYS_ASSERT(rung >= 0);
 					ALWAYS_ASSERT(rung < MAX_RUNG);
@@ -416,9 +419,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				gethostname(hostname, 32);
 //				PRINT("Kick took %e s on %s\n", tm.read(), hostname);
 			}
+			if( self.proc == 0 && self.index == 0 ) {
+				profiler_exit();
+			}
 			return hpx::make_ready_future(kr);
 		} else {
-			return hpx::when_all(futs.begin(), futs.end()).then([tm,self_ptr](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
+			return hpx::when_all(futs.begin(), futs.end()).then([tm,self_ptr,self](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
 				auto futs = futsfut.get();
 				kick_return kr;
 				const auto rcl = futs[LEFT].get();
@@ -431,6 +437,9 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					char hostname[33];
 					gethostname(hostname,32);
 //					PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
+				}
+				if( self.proc == 0 && self.index == 0 ) {
+					profiler_exit();
 				}
 				return kr;
 			});

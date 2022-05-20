@@ -213,6 +213,9 @@ static void tree_allocate_nodes() {
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
+	if( key == 1 ) {
+		profiler_enter(__FUNCTION__);
+	}
 	stack_trace_activate();
 	const double h = get_options().hsoft;
 	int bucket_size = get_options().bucket_size;
@@ -507,6 +510,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
+	if( key == 1 ) {
+		profiler_exit();
+	}
 	return rc;
 }
 

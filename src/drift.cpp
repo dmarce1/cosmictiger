@@ -30,7 +30,7 @@ HPX_PLAIN_ACTION (drift);
 #define CHUNK_SIZE (1024*1024)
 
 void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung) {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 
 	particles_memadvise_cpu();
 	vector<hpx::future<void>> rfuts;
@@ -40,7 +40,9 @@ void drift(double scale, double dt, double tau0, double tau1, double tau_max, in
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
-	const auto func = [dt, scale, tau0, rung, tau1, tau_max, &next](int proc, int nthreads) {
+	mutex_type mutex;
+	double lc_time = 0.0;
+	const auto func = [dt, scale, tau0, rung, tau1, tau_max, &next, &mutex, &lc_time](int proc, int nthreads) {
 		vector<lc_particle> this_part_buffer;
 		const double ainv = 1.0 / scale;
 		const double a2inv = 1.0 / sqr(scale);

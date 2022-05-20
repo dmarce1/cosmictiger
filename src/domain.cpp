@@ -335,6 +335,7 @@ void domains_transmit_particles(vector<particle> parts) {
 }
 
 void domains_begin(int rung) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
@@ -390,9 +391,12 @@ void domains_begin(int rung) {
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
+
 }
 
 void domains_end() {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
@@ -476,6 +480,7 @@ void domains_end() {
 #ifdef DOMAINS_CHECK
 	domains_check();
 #endif
+	profiler_exit();
 }
 
 range<double> domains_find_my_box() {

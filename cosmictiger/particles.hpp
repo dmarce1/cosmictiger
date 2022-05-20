@@ -272,22 +272,19 @@ inline void particles_set_particle(particle p, part_int index) {
 struct energies_t {
 	double pot;
 	double kin;
-	double therm;
-	double heating;
-	double cosmic;
 	double xmom;
 	double ymom;
+	double cosmic;
 	double zmom;
 	double nmom;
 	energies_t() {
-		cosmic = heating = pot = kin = therm = 0.f;
+		pot = kin =0.f;
 		xmom = ymom = zmom = nmom = 0.0;
+		cosmic = 0.0;
 	}
 	energies_t& operator+=(const energies_t& other) {
 		pot += other.pot;
 		kin += other.kin;
-		therm += other.therm;
-		heating += other.heating;
 		cosmic += other.cosmic;
 		xmom += other.xmom;
 		ymom += other.ymom;
@@ -299,13 +296,11 @@ struct energies_t {
 	void serialize(A&& arc, unsigned ) {
 		arc & xmom;
 		arc & ymom;
+		arc & cosmic;
 		arc & zmom;
 		arc & nmom;
 		arc & pot;
 		arc & kin;
-		arc & therm;
-		arc & heating;
-		arc & cosmic;
 	}
 };
 

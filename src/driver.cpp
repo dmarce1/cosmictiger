@@ -68,6 +68,22 @@ struct timing {
 
 vector<timing> timings;
 
+vector<double> read_checkpoint_list() {
+	vector<double> chkpts;
+	FILE* fp = fopen("checkpoint.txt", "rt");
+	if (fp != nullptr) {
+		float z;
+		PRINT("Checkpoints will be written at z = \n");
+		while (fscanf(fp, "%f\n", &z) == 1) {
+			PRINT("%f\n", z);
+			chkpts.push_back(z);
+		}
+
+		fclose(fp);
+	}
+	return chkpts;
+}
+
 static void flush_timings(bool reset) {
 	const auto theta = get_options().theta;
 	char* fname;
@@ -90,7 +106,7 @@ static int bucket_trial() {
 }
 
 void do_groups(int number, double scale) {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 
 	timer total;
 	total.start();
@@ -161,16 +177,19 @@ void do_groups(int number, double scale) {
 
 std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double tau, double t0, double theta,
 		energies_t* energies, int minrung0, bool do_phi) {
+	profiler_enter(__FUNCTION__);
 	timer tm;
 	kick_return kr;
 	tree_create_return sr;
 //	minrung = std::max(minrung, 1);
 //	max_rung = std::max(max_rung,minrung);
-	vector<int> levels(max_rung - minrung + 1);
+	//PRINT( "%i %i %i\n", minrung, max_rung, minrung0);
+	vector<int> levels(std::max(max_rung - minrung, 0) + 1);
 	int k = 0;
-	for (int i = max_rung; i >= minrung; i--) {
+	for (int i = max_rung; i > minrung; i--) {
 		levels[k++] = i;
 	}
+	levels[k++] = minrung;
 	bool ascending = true;
 	bool top;
 	bool clip_top = false;
@@ -347,12 +366,13 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 	kr.total_time = total_time.read();
 	kr.parts_processed = parts_processed;
 	//PRINT( "%e %e\n", parts_processed, total_time.read());
+	profiler_exit();
 	return std::make_pair(kr, sr);
 
 }
 
 void do_power_spectrum(int num, double a) {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 	PRINT("Computing power spectrum\n");
 	const float h = get_options().hubble;
 	const float omega_m = get_options().omega_m;
@@ -377,7 +397,7 @@ void do_power_spectrum(int num, double a) {
 }
 
 void output_time_file() {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 	const double a0 = 1.0 / (1.0 + get_options().z0);
 	const double tau_max = cosmos_conformal_time(a0, 1.0);
 	double a = a0;
@@ -415,7 +435,7 @@ void driver() {
 	tmr.start();
 	driver_params params;
 	double a0 = 1.0 / (1.0 + get_options().z0);
-	if (get_options().read_check != -1 ) {
+	if (get_options().read_check != -1) {
 		params = read_checkpoint();
 	} else {
 		output_time_file();
@@ -451,6 +471,7 @@ void driver() {
 	auto& energy0 = params.energy0;
 	auto& itime = params.itime;
 	auto& minrung0 = params.minrung0;
+	minrung0 = std::max(minrung0, get_options().minrung);
 	auto& iter = params.iter;
 	int& step = params.step;
 	auto& total_processed = params.total_processed;
@@ -468,7 +489,11 @@ void driver() {
 	}
 	double dt;
 	int jiter = 0;
+	if (tau == 0.0) {
+		particles_set_minrung(minrung0);
+	}
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
+		profiler_enter("light cone");
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
 			timer tm;
 			tm.start();
@@ -499,21 +524,34 @@ void driver() {
 			tm.stop();
 			PRINT( "Light cone flush took %e seconds\n", tm.read());
 		}
+		profiler_exit();
 	};
+	auto checkpointlist = read_checkpoint_list();
 	const float hsoft0 = get_options().hsoft;
+	bool do_check = false;
+	double checkz;
 	for (;; step++) {
-		PRINT("STEP  = %i\n", step);
+
+//		PRINT("STEP  = %i\n", step);
 		double t0 = tau_max / get_options().nsteps;
 		do {
-//			profiler_enter("main driver");
+			profiler_enter(__FUNCTION__);
 			tmr.stop();
-			if (tmr.read() > get_options().check_freq) {
+			if (tmr.read() > get_options().check_freq || do_check) {
 				total_time.stop();
 				runtime += total_time.read();
 				total_time.reset();
 				total_time.start();
+				PRINT("WRITING CHECKPOINT FOR Z = %e\n", checkz);
 				write_checkpoint(params);
 				tmr.reset();
+				if (do_check) {
+					char* cmd;
+					asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz);
+					system(cmd);
+					free(cmd);
+				}
+				do_check = false;
 			}
 			tmr.start();
 			int minrung = min_rung(itime);
@@ -573,6 +611,7 @@ void driver() {
 			int this_minrung = std::max(minrung, minrung0);
 			int om = this_minrung;
 //				PRINT("MINRUNG0 = %i\n", minrung0);
+//			PRINT( "Doing kick\n");
 			tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval);
 			if (om != this_minrung) {
 				minrung0++;
@@ -582,25 +621,21 @@ void driver() {
 			max_rung = kr.max_rung;
 //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (minrung <= 0) {
-				if (tau > 0.0) {
-					const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
-					energies.cosmic += 0.5 * adot * t0 * ene;
-				}
-				double energy = (energies.kin + energies.pot + energies.therm) + energies.heating + energies.cosmic;
+				double energy = a * (energies.kin + energies.pot) + energies.cosmic;
 				if (tau == 0) {
 					energy0 = 0.0;
 					energies.cosmic = -energy;
 					energy = 0.0;
 				}
-				const double norm = (energies.kin + fabs(energies.pot) + energies.therm) + fabsf(energies.heating) + energies.cosmic;
+				const double norm = a * (energies.kin + fabs(energies.pot)) + fabs(energies.cosmic);
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
-				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
-						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.therm, energies.heating, energies.cosmic, err);
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
+						energies.zmom / energies.nmom, a * energies.pot, a * energies.kin, energies.cosmic, err);
 				fclose(fp);
-				const double ene = 2.0 * (energies.kin + energies.therm) + energies.pot;
-				energies.cosmic += 0.5 * adot * t0 * ene;
+//				energies.cosmic += a * adot * t0 * energies.kin;
 			}
+			dt = t0 / (1 << max_rung);
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
 			}
@@ -609,7 +644,6 @@ void driver() {
 			if (full_eval) {
 //				kick_workspace::clear_buffers();
 //				tree_destroy(true);
-				pot = kr.pot * 0.5 / a;
 				if (get_options().do_power) {
 					do_power_spectrum(step, a);
 				}
@@ -619,11 +653,20 @@ void driver() {
 				}
 #endif
 			}
-			dt = t0 / (1 << max_rung);
 			double adotdot;
 			double a0 = a;
+//			auto tmp1 = particles_sum_energies();
+			energies.cosmic += adot * dt * energies.kin / a;
 			cosmos_update(adotdot, adot, a, a * dt);
 			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
+			const auto z0 = 1.0 / a0 - 1.0;
+			const auto z1 = 1.0 / a - 1.0;
+			for (auto& z : checkpointlist) {
+				if ((z - z0) * (z - z1) < 0.0) {
+					do_check = true;
+					checkz = z;
+				}
+			}
 
 //			PRINT("%e %e\n", a1, a);
 			timer dtm;
@@ -680,9 +723,9 @@ void driver() {
 				PRINT("Reached maximum iteration, exiting...\n");
 				break;
 			}
-//			profiler_exit();
-//			profiler_enter("main driver");
+			profiler_exit();
 			profiler_output();
+			profiler_enter(__FUNCTION__);
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
@@ -710,7 +753,7 @@ bool dir_exists(const char *path) {
 }
 
 void write_checkpoint(driver_params params) {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 //	params.step--;
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");

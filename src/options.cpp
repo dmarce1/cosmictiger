@@ -91,7 +91,7 @@ bool process_options(int argc, char *argv[]) {
 #else
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(false), "use CUDA (not enabled for this build)") //
 #endif
-	("check_freq", po::value<int>(&(opts.check_freq))->default_value(3600),
+	("check_freq", po::value<int>(&(opts.check_freq))->default_value(1000000000),
 			"time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit (default=3600)") //
 		("max_iter", po::value<int>(&(opts.max_iter))->default_value(1000000), "maximum number of time-steps (default=1000000)") //
 	("do_lc", po::value<bool>(&(opts.do_lc))->default_value(false), "do lightcone analysis (default=false)") //
@@ -99,6 +99,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(128), "bucket size") //
+	("minrung", po::value<int>(&(opts.minrung))->default_value(0), "minimum starting rung") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
 	("do_views", po::value<bool>(&(opts.do_views))->default_value(false), "output instantaneous healpix maps (default=false)") //

@@ -40,6 +40,7 @@ struct options {
 	int part_cache_line_size;
 	int check_freq;
 	int max_iter;
+	int minrung;
 	int view_size;
 	int lc_min_group;
 	int lc_map_size;
@@ -77,6 +78,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & minrung;
 		arc & omega_k;
 		arc & omega_lam;
 		arc & bucket_size;
