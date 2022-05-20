@@ -242,7 +242,6 @@ void kick_workspace::to_gpu() {
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
-	PRINT("Kick done\n");
 	particles_resize(opartsize);
 	lock2.signal();
 }
