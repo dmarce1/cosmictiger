@@ -137,10 +137,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
-			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
-			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
+//			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
+//			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
 				cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
-			}
+//			}
 		}
 		bool eligible;
 		size_t max_parts = CUDA_KICK_PARTS_MAX;

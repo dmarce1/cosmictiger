@@ -198,6 +198,29 @@ void kick_workspace::to_gpu() {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	futs2.resize(0);
+	std::sort(workitems.begin(), workitems.end(), [](kick_workitem a, kick_workitem b) {
+		array<unsigned, NDIM> abits;
+		array<unsigned, NDIM> bbits;
+		for(int dim = 0; dim < NDIM; dim++) {
+			abits[dim] = a.pos[dim].raw();
+			bbits[dim] = b.pos[dim].raw();
+		}
+		for( int i = 0; i < 64; i++) {
+			for( int dim = 0; dim < NDIM; dim++) {
+				const int abit = abits[dim] & (unsigned) 0x80000000;
+				const int bbit = bbits[dim] & (unsigned) 0x80000000;
+				if( bbit && !abit) {
+					return true;
+				} else if( !bbit && abit ) {
+					return false;
+				}
+				abits[dim] <<=1;
+				bbits[dim] <<=1;
+			}
+		}
+		return false;
+	});
+
 	next_index = 0;
 	auto stream = cuda_get_stream();
 	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
@@ -219,7 +242,7 @@ void kick_workspace::to_gpu() {
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
-	PRINT( "Kick done\n");
+	PRINT("Kick done\n");
 	particles_resize(opartsize);
 	lock2.signal();
 }
