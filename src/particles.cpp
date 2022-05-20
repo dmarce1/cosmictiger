@@ -547,37 +547,37 @@ vector<size_t> particles_rung_counts() {
 	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads]() {
-							vector<size_t> counts;
-							const part_int b = (size_t) proc * particles_size() / nthreads;
-							const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
-							for( part_int i = b; i < e; i++) {
-								const auto rung = particles_rung(i);
-								if( counts.size() <= rung ) {
-									counts.resize(rung + 1,0);
-								}
-								counts[rung]++;
-							}
-							return counts;
-						}));
+			vector<size_t> counts;
+			const part_int b = (size_t) proc * particles_size() / nthreads;
+			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
+			for( part_int i = b; i < e; i++) {
+				const auto rung = particles_rung(i);
+				if( counts.size() <= rung ) {
+					counts.resize(rung + 1,0);
+				}
+				counts[rung]++;
+			}
+			return counts;
+		}));
 	}
 	vector<size_t> counts;
 	for (auto& f : futs) {
 		auto these_counts = f.get();
-		if( counts.size() < these_counts.size()) {
+		if (counts.size() < these_counts.size()) {
 			counts.resize(these_counts.size(), 0);
 		}
 		for (int i = 0; i < these_counts.size(); i++) {
 			counts[i] += these_counts[i];
 		}
 	}
-	if( hpx_rank() == 0 ) {
+	if (hpx_rank() == 0) {
 		const size_t parts_dim = get_options().parts_dim;
-		const size_t nparts = sqr(parts_dim)*parts_dim;
+		const size_t nparts = sqr(parts_dim) * parts_dim;
 		size_t tot = 0;
-		for( int i = 0; i < counts.size(); i++) {
+		for (int i = 0; i < counts.size(); i++) {
 			tot += counts[i];
 		}
-	//	ALWAYS_ASSERT(tot == nparts);
+		//	ALWAYS_ASSERT(tot == nparts);
 	}
 	profiler_exit();
 	return counts;
@@ -733,8 +733,6 @@ part_int particles_size() {
 template<class T>
 void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 	T* new_ptr;
-	if (capacity > 0) {
-	}
 #ifdef USE_CUDA
 	if( reg ) {
 		cudaMallocManaged(&new_ptr,sizeof(T) * new_capacity);
@@ -746,7 +744,6 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 #endif
 	if (capacity > 0) {
 		hpx_copy(PAR_EXECUTION_POLICY, ptr, ptr + size, new_ptr).get();
-		memcpy(new_ptr, ptr, size);
 #ifdef USE_CUDA
 		if( reg ) {
 			cudaFree(ptr);
@@ -1274,7 +1271,6 @@ static vector<array<float, NDIM>> particles_fetch_cache_line_vels(part_int index
 
 HPX_PLAIN_ACTION (particles_sum_energies);
 
-
 energies_t particles_sum_energies() {
 	profiler_enter(__FUNCTION__);
 	std::vector<hpx::future<energies_t>> futs;
@@ -1308,4 +1304,29 @@ energies_t particles_sum_energies() {
 	profiler_exit();
 	return energies;
 
+}
+
+array<vector<fixed32>, NDIM> particles_get_local(const vector<pair<part_int>>& ranges) {
+	array<vector<fixed32>, NDIM> rc;
+	size_t sz = 0;
+	for (auto& r : ranges) {
+		sz += r.second - r.first;
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		rc[dim].resize(sz);
+	}
+	part_int i = 0;
+	for (auto& r : ranges) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			std::memcpy(&rc[dim][i], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+		}
+		i += r.second - r.first;
+	}
+	return rc;
+}
+
+HPX_PLAIN_ACTION (particles_get_local);
+
+hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, const vector<pair<part_int>>& ranges) {
+	return hpx::async<particles_get_local_action>(hpx_localities()[rank], ranges);
 }

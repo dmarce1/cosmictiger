@@ -591,7 +591,7 @@ void driver() {
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
-			int bucket_size = 80;
+			int bucket_size = 88;
 			if (z > 50.0) {
 				theta = 0.3;
 			} else if (z > 20.0) {

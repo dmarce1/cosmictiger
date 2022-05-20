@@ -164,6 +164,9 @@ struct pair {
 	pair(T a, V b) :
 			first(a), second(b) {
 	}
+	inline bool operator==(pair<T> other) const {
+		return other.first == first && second == other.second;
+	}
 	template<class A>
 	void serialize(A&& a, unsigned) {
 		a & first;

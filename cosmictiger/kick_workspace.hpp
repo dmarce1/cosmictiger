@@ -47,15 +47,6 @@ class kick_workspace {
 	part_int nparts;
 	kick_params params;
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
-	static vector<fixed32, pinned_allocator<fixed32>> host_x;
-	static vector<fixed32, pinned_allocator<fixed32>> host_y;
-	static vector<fixed32, pinned_allocator<fixed32>> host_z;
-#ifndef DM_CON_H_ONLY
-	static vector<float, pinned_allocator<float>> host_h;
-	static vector<float, pinned_allocator<float>> host_zeta;
-	static vector<char> host_type;
-#endif
-	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
 	static semaphore lock1;
 	static semaphore lock2;
 public:
@@ -75,16 +66,6 @@ public:
 	void add_parts(std::shared_ptr<kick_workspace> ptr, part_int n);
 	void to_gpu();
 };
-
-#ifdef HPX_LITE
-namespace hpx {
-	namespace serialization {
-		template<class A>
-		void serialize(A&&, std::shared_ptr<kick_workspace>&, unsigned) {
-		}
-	}
-}
-#endif
 
 #endif
 #endif /* KICK_WORKSPACE_HPP_ */

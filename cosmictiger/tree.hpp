@@ -38,6 +38,17 @@ struct tree_id {
 	inline bool operator==(tree_id other) const {
 		return proc == other.proc && index == other.index;
 	}
+	inline bool operator<(tree_id other) const {
+		if (proc < other.proc) {
+			return true;
+		} else if (proc > other.proc) {
+			return false;
+		} else if (index < other.index) {
+			return true;
+		} else {
+			return false;
+		}
+	}
 	inline bool operator!=(tree_id other) const {
 		return proc != other.proc || index != other.index;
 	}

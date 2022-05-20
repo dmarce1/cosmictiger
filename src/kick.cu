@@ -557,8 +557,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, char* dev_type, float* dev_h, float* dev_zeta,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int part_count, int ntrees, std::function<void()> acquire_inner,
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int ntrees, std::function<void()> acquire_inner,
 		std::function<void()> release_outer) {
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
@@ -623,7 +623,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
 	cuda_kick_data data;
-	data.source_size = part_count;
 	data.tree_size = ntrees;
 	data.sink_size = particles_size();
 	data.x = dev_x;
