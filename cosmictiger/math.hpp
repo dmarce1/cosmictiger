@@ -55,9 +55,11 @@ CUDA_EXPORT void constrain_range(T& x) {
 	}
 	if (x > T(1)) {
 		PRINT("Print particle out of range %e\n", x);
+		ALWAYS_ASSERT(false);
 	}
 	if (x < T(0)) {
 		PRINT("Print particle out of range %e\n", x);
+		ALWAYS_ASSERT(false);
 	}
 }
 
