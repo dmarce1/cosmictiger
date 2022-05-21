@@ -251,6 +251,7 @@ struct group_cache_entry {
 
 static array<std::unordered_map<line_id_type, group_cache_entry, line_id_hash_hi>, PART_CACHE_SIZE> group_part_cache;
 static array<spinlock_type, PART_CACHE_SIZE> group_mutexes;
+static shared_mutex_type particles_mutex;
 
 /*void particles_sort_by_sph(pair<part_int> rng) {
  particle_iterator b;
@@ -730,6 +731,7 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 void particles_resize(part_int sz) {
 	if (sz > capacity) {
+		std::unique_lock<shared_mutex_type> lock(particles_mutex);
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
 			new_capacity = size_t(107) * new_capacity / size_t(100);
@@ -1286,6 +1288,7 @@ array<vector<fixed32>, NDIM> particles_get_local(const vector<pair<part_int>>& r
 		rc[dim].resize(sz);
 	}
 	part_int i = 0;
+	std::shared_lock<shared_mutex_type> lock(particles_mutex);
 	for (auto& r : ranges) {
 		for (int dim = 0; dim < NDIM; dim++) {
 			std::memcpy(&rc[dim][i], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
