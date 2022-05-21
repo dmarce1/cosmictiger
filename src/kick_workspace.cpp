@@ -140,10 +140,12 @@ void kick_workspace::to_gpu() {
 				}
 			}));
 		}
+		hpx::wait_all(futs1.begin(), futs1.end());
 	}
 	tm2.stop();
 	PRINT( "%e to load tree nodes\n", tm2.read());
 	tm2.reset();
+	futs1.resize(0);
 	nthreads = hpx::thread::hardware_concurrency();
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
 		const int rank = i->first;
