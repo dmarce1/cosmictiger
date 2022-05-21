@@ -221,27 +221,61 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs1.begin(), futs1.end());
 	sfut.get();
 #ifdef MULTI_GPU
-	CUDA_CHECK(cudaMemAdvise(tree_nodes, sizeof(tree_node)*tree_nodes_size, cudaMemAdviseSetReadMostly, 0));
-	for( int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32)*particles_size(), cudaMemAdviseSetReadMostly, 0));
+	CUDA_CHECK(cudaMemAdvise(tree_nodes, sizeof(tree_node) * tree_nodes_size, cudaMemAdviseSetReadMostly, 0));
+	for (int dim = 0; dim < NDIM; dim++) {
+		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32) * particles_size(), cudaMemAdviseSetReadMostly, 0));
 	}
 	const int device_count = cuda_device_count();
 	vector<hpx::future<vector<kick_return>>>futs;
+	vector<vector<kick_workitem>> gpu_workitems(device_count);
 	for (int gpu = 0; gpu < device_count; gpu++) {
 		const int b = gpu * workitems.size() / device_count;
 		const int e = (gpu + 1) * workitems.size() / device_count;
-		if (e - b > 0) {
+		for (int i = b; i < e; i++) {
+			gpu_workitems[gpu].push_back(std::move(workitems[i]));
+		}
+	}
+	constexpr int nregions = 1024;
+	constexpr int unused = -1;
+	const int overused = device_count;
+	vector<int> regions(nregions, unused);
+	for (int gpu = 0; gpu < device_count; gpu++) {
+		for (int i = 0; i < gpu_workitems[gpu].size(); i++) {
+			const auto& item = gpu_workitems[gpu][i];
+			for (int j = 0; j < item.dchecklist.size(); j++) {
+				const auto& this_range = tree_nodes[item.dchecklist[j].index].part_range;
+				const auto part_range = particles_current_range();
+				const int first_region = (size_t) nregions * (this_range.first - part_range.first) / (part_range.second - part_range.first);
+				const int last_region = (size_t) nregions * (this_range.second - part_range.first) / (part_range.second - part_range.first);
+				for (int k = first_region; k <= last_region; k++) {
+					if (regions[k] == unused) {
+						regions[k] = gpu;
+					} else {
+						regions[k] = overused;
+					}
+				}
+			}
+		}
+	}
+	for (int i = 0; i < regions.size(); i++) {
+		ALWAYS_ASSERT(regions[i] != unused);
+		if (regions[i] != overused) {
+			const auto part_range = particles_current_range();
+			const part_int b = (size_t) i * (part_range.second - part_range.first) / nregions + part_range.first;
+			const part_int e = (size_t)(i + 1) * (part_range.second - part_range.first) / nregions + part_range.first;
+			for (int dim = 0; dim < NDIM; dim++) {
+				CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0) + b, (e - b) * sizeof(fixed32), cudaMemAdviseSetPreferredLocation, regions[i]));
+			}
+		}
+	}
+	for (int gpu = 0; gpu < device_count; gpu++) {
+		if (gpu_workitems[gpu].size() > 0) {
 			futs.push_back(
 					hpx::async(
-							[tree_nodes, gpu, device_count,this, b, e]() {
+							[tree_nodes, gpu, &gpu_workitems, device_count,this]() {
 								cuda_set_device(gpu);
-								vector<kick_workitem> myworkitems;
-								myworkitems.reserve(e - b);
-								for( int i = b; i < e; i++) {
-									myworkitems.push_back(std::move(workitems[i]));
-								}
 								auto stream = cuda_get_stream();
-								const auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(myworkitems), stream);
+								const auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(gpu_workitems[gpu]), stream);
 								cuda_end_stream(stream);
 								return rc;
 							}));
@@ -258,10 +292,24 @@ void kick_workspace::to_gpu() {
 			}
 		}
 	}
-	for( int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32)*particles_size(), cudaMemAdviseUnsetReadMostly, 0));
+	int nexclusive = 0;
+	for (int i = 0; i < regions.size(); i++) {
+		ALWAYS_ASSERT(regions[i] != unused);
+		if (regions[i] != overused) {
+			const auto part_range = particles_current_range();
+			const part_int b = (size_t) i * (part_range.second - part_range.first) / nregions + part_range.first;
+			const part_int e = (size_t)(i + 1) * (part_range.second - part_range.first) / nregions + part_range.first;
+			nexclusive++;
+			for (int dim = 0; dim < NDIM; dim++) {
+				CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0) + b, (e - b) * sizeof(fixed32), cudaMemAdviseUnsetPreferredLocation, regions[i]));
+			}
+		}
 	}
-	CUDA_CHECK(cudaMemAdvise(tree_nodes, sizeof(tree_node)*tree_nodes_size, cudaMemAdviseUnsetReadMostly, 0));
+	PRINT("%i exclusive regions out of %i\n", nexclusive, nregions);
+	for (int dim = 0; dim < NDIM; dim++) {
+		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32) * particles_size(), cudaMemAdviseUnsetReadMostly, 0));
+	}
+	CUDA_CHECK(cudaMemAdvise(tree_nodes, sizeof(tree_node) * tree_nodes_size, cudaMemAdviseUnsetReadMostly, 0));
 #else
 	auto stream = cuda_get_stream();
 	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems), stream);

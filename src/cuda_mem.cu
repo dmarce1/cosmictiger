@@ -162,6 +162,9 @@ void cuda_mem_init(size_t heap_size) {
 	cuda_mem* ptr;
 	CUDA_CHECK(cudaMallocManaged(&ptr, sizeof(cuda_mem)));
 	new (ptr) cuda_mem(heap_size);
+	int device;
+	CUDA_CHECK(cudaGetDevice(&device));
+	CUDA_CHECK(cudaMemAdvise(ptr, sizeof(cuda_mem), cudaMemAdviseSetPreferredLocation, device));
 	cuda_mem_init_kernel<<<1,1>>>(ptr);
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
