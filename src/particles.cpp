@@ -1334,7 +1334,7 @@ hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, const vector<p
 	auto ranges = ranges_;
 	vector<pair<part_int>> other_ranges;
 	constexpr int max_parts = 128 * 1024 * 1024;
-	size_t sz;
+	size_t sz = 0;
 	int i = 0;
 	while (i < ranges.size()) {
 		const auto this_sz = ranges[i].second - ranges[i].first;
