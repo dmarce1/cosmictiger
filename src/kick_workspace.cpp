@@ -33,19 +33,19 @@ kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
 kick_workspace::~kick_workspace() {
 }
 
-static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_id_hash>& tree_map, tree_id id, int& index) {
-	tree_map.insert(std::make_pair(id, index));
+static void add_tree_node(std::vector<pair<tree_id, int>>& tree_pairs, tree_id id, int& index) {
+	tree_pairs.push_back(pair<tree_id, int>(id, index));
 	const tree_node* node = tree_get_node(id);
 	index++;
 	if (node->children[LEFT].index != -1) {
-		add_tree_node(tree_map, node->children[LEFT], index);
-		add_tree_node(tree_map, node->children[RIGHT], index);
+		add_tree_node(tree_pairs, node->children[LEFT], index);
+		add_tree_node(tree_pairs, node->children[RIGHT], index);
 	}
 }
 
 void kick_workspace::to_gpu() {
 	cuda_set_device();
-	PRINT( "Preparing gpu send on %i\n", hpx_rank());
+	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
 	timer tm;
 	tm.start();
@@ -74,7 +74,6 @@ void kick_workspace::to_gpu() {
 		const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
 		ids_by_depth[ptr->depth].push_back(tree_ids_vector[i]);
 	}
-	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 
 	struct part_request {
 		vector<vector<pair<part_int>>> data;
@@ -84,46 +83,48 @@ void kick_workspace::to_gpu() {
 			data.resize(1);
 		}
 	};
+	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
+	std::vector<pair<tree_id, int>> tree_pairs;
 	std::unordered_map<int, part_request> part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
 	mutex_type mutex;
 	std::set<tree_id> remote_roots;
-	part_int next_index = 0;
+	std::atomic<part_int> next_index = 0;
 	part_int part_index = particles_size();
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	vector<hpx::future<void>> futs3;
-	int nthreads = hpx_size() == 1 ? 1 : hpx::thread::hardware_concurrency();
+	int nthreads = hpx_size() == 1 ? 1 : 2 * hpx::thread::hardware_concurrency();
 	const size_t opartsize = particles_size();
 	const size_t max_parts = 8 * 1024 * 1024;
 	timer tm2;
 	tm2.start();
+	vector < hpx::future < vector<pair<tree_id, int>>> > futs0;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int proc = 0; proc < nthreads; proc++) {
-			futs1.push_back(hpx::async([proc,nthreads,&ids,&tree_map, &mutex,&next_index,&part_requests,&part_map,&part_index,&remote_roots]() {
+			futs0.push_back(hpx::async([proc,nthreads,&ids,&tree_map, &mutex,&next_index,&part_requests,&part_map,&part_index,&remote_roots]() {
+				vector<pair<tree_id,int>> tree_pairs;
 				const int b = (size_t) proc * ids.size() / nthreads;
 				const int e = (size_t)(proc + 1) * ids.size() / nthreads;
 				for (int i = b; i < e; i++) {
-					std::unique_lock<mutex_type> lock(mutex);
 					if (tree_map.find(ids[i]) == tree_map.end()) {
-						lock.unlock();
 						const tree_node* node = tree_get_node(ids[i]);
-						lock.lock();
-						int index = next_index;
-						next_index += node->node_count;
-						add_tree_node(tree_map, ids[i], index);
+						int index = next_index += node->node_count;
+						index -= node->node_count;
+						add_tree_node(tree_pairs, ids[i], index);
 						const int rank = node->proc_range.first;
 						if (rank != hpx_rank()) {
 							const auto range = node->part_range;
 							const auto this_count = range.second - range.first;
-							auto& entry = part_requests[rank];
-							entry.data.back().push_back(range);
-							entry.count += this_count;
 							global_part_range gpr;
 							gpr.rank = rank;
 							gpr.range = range;
 							const size_t nparts = node->nparts();
+							std::unique_lock<shared_mutex_type> lock(particles_shared_mutex());
+							auto& entry = part_requests[rank];
+							entry.data.back().push_back(range);
+							entry.count += this_count;
 							part_map[gpr].first = part_index;
 							part_map[gpr].second = part_index + nparts;
 							part_index += nparts;
@@ -138,21 +139,27 @@ void kick_workspace::to_gpu() {
 						}
 					}
 				}
+				return tree_pairs;
 			}));
 		}
-		hpx::wait_all(futs1.begin(), futs1.end());
+		for (auto& f : futs0) {
+			auto tmp = f.get();
+			for (auto & entry : tmp) {
+				tree_map[entry.first] = entry.second;
+			}
+		}
 	}
 	tm2.stop();
-	PRINT( "%e to load tree nodes\n", tm2.read());
+	PRINT("%e to load tree nodes\n", tm2.read());
 	tm2.reset();
 	futs1.resize(0);
 	nthreads = hpx::thread::hardware_concurrency();
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
 		const int rank = i->first;
 		hpx::future<void> fut = hpx::make_ready_future();
-		for( int j = 0; j < i->second.data.size(); j++) {
+		for (int j = 0; j < i->second.data.size(); j++) {
 			const size_t count = i->second.data[j].size();
-			if( count) {
+			if (count) {
 				fut = fut.then([rank,count,&part_map,i,j](hpx::future<void> fut) {
 					fut.get();
 					const auto& ranges = i->second.data[j];

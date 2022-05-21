@@ -760,9 +760,11 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 }
 
-void particles_resize(part_int sz) {
+void particles_resize(part_int sz, bool lock) {
 	if (sz > capacity) {
-		std::unique_lock<shared_mutex_type> lock(shared_mutex);
+		if (lock) {
+			shared_mutex.lock();
+		}
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
 			new_capacity = size_t(107) * new_capacity / size_t(100);
@@ -789,6 +791,9 @@ void particles_resize(part_int sz) {
 			particles_array_resize(particles_tr, new_capacity, false);
 		}
 		capacity = new_capacity;
+		if (lock) {
+			shared_mutex.unlock();
+		}
 	}
 	int oldsz = size;
 	size = sz;

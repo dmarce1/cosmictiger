@@ -150,7 +150,7 @@ struct particle_global_range {
 part_int particles_size();
 std::unordered_map<int, part_int> particles_groups_init();
 void particles_groups_destroy();
-void particles_resize(part_int);
+void particles_resize(part_int, bool lock=true);
 void particles_random_init();
 void particles_pop_rungs();
 void particles_push_rungs();
