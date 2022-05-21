@@ -100,7 +100,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	float ymom_tot = 0.0f;
 	float zmom_tot = 0.0f;
 	float nmom_tot = 0.0f;
-	int rung;
 	array<float, NDIM> dx;
 	part_int snki;
 	const float& hsoft = params.h;
@@ -149,12 +148,9 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		if (params.descending) {
 			g2 = sqr(gx[i], gy[i], gz[i]);
 			dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
+			auto& rung = rungs[snki];
 			rung = max(params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung), rung - 1);
-			if (rung > 4) {
-//					PRINT( "%i\n", rung);
-			}
 			max_rung = max(rung, max_rung);
-			rungs[snki] = rung;
 			ALWAYS_ASSERT(rung >= 0);
 			ALWAYS_ASSERT(rung < MAX_RUNG);
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
