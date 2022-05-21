@@ -660,14 +660,13 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
 	tm.reset();
 	tm.start();
-	cuda_stream_synchronize(stream);
 //	PRINT( "Invoking kernel\n");
 	tm.reset();
 	tm.start();
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
-	cuda_stream_synchronize(stream);
+	cudaStreamSynchronize(stream);
 	tm.stop();
 //	PRINT("GPU took %e with %i blocks\n", tm.read(), nblocks);
 //	PRINT( "%i %e\n", nblocks, tm.read());
