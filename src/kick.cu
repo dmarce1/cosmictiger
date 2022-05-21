@@ -191,7 +191,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 }
 
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count,
-		int* next_item, int ntrees) {
+		int* next_item) {
 //	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
@@ -558,8 +558,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 }
 
 vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream, int ntrees, std::function<void()> acquire_inner,
-		std::function<void()> release_outer) {
+		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream) {
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -623,8 +622,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMemcpyAsync(dev_echecks, echecks.data(), sizeof(int) * echecks.size(), cudaMemcpyHostToDevice, stream));
 	tm.stop();
 	cuda_kick_data data;
-	data.tree_size = ntrees;
-	data.sink_size = particles_size();
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
@@ -636,7 +633,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.vy = &particles_vel(YDIM, 0);
 	data.vz = &particles_vel(ZDIM, 0);
 	data.rungs = &particles_rung(0);
-	data.rank = hpx_rank();
 	if (kparams.save_force) {
 		data.gx = &particles_gforce(XDIM, 0);
 		data.gy = &particles_gforce(YDIM, 0);
@@ -661,15 +657,13 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
 	tm.reset();
 	tm.start();
-	acquire_inner();
 	cuda_set_device();
 	cuda_stream_synchronize(stream);
-	release_outer();
 	cuda_set_device();
 //	PRINT( "Invoking kernel\n");
 	tm.reset();
 	tm.start();
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index, ntrees);
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
 	cuda_stream_synchronize(stream);

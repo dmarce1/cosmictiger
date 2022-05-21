@@ -47,8 +47,6 @@ class kick_workspace {
 	part_int nparts;
 	kick_params params;
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
-	static semaphore lock1;
-	static semaphore lock2;
 public:
 	static void clear_buffers();
 	kick_workspace() = default;

@@ -22,8 +22,6 @@
 #include <cosmictiger/timer.hpp>
 #include <set>
 
-semaphore kick_workspace::lock1(1);
-semaphore kick_workspace::lock2(1);
 
 HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
 
@@ -69,7 +67,6 @@ void kick_workspace::to_gpu() {
 		}
 	};
 
-	lock1.wait();
 	cuda_set_device();
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
@@ -131,16 +128,17 @@ void kick_workspace::to_gpu() {
 			}
 		}));
 	}
-	tree_node* dev_trees;
-	vector<tree_node, pinned_allocator<tree_node>> tree_nodes(next_index);
+	tree_node* tree_nodes;
+	size_t tree_nodes_size = next_index;
+	CUDA_CHECK(cudaMallocManaged(&tree_nodes, sizeof(tree_node) * tree_nodes_size));
 	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
 		auto& node = tree_nodes[i->second];
 		node = *tree_get_node(i->first);
 	}
 	const int nthreads = hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes]() {
-			for (int i = proc; i < tree_nodes.size(); i+=nthreads) {
+		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_size]() {
+			for (int i = proc; i < tree_nodes_size; i+=nthreads) {
 				if (tree_nodes[i].children[LEFT].index != -1) {
 					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
 					tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
@@ -198,7 +196,7 @@ void kick_workspace::to_gpu() {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	futs2.resize(0);
-	std::sort(workitems.begin(), workitems.end(), [](kick_workitem a, kick_workitem b) {
+	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](kick_workitem a, kick_workitem b) {
 		array<unsigned, NDIM> abits;
 		array<unsigned, NDIM> bbits;
 		for(int dim = 0; dim < NDIM; dim++) {
@@ -222,28 +220,18 @@ void kick_workspace::to_gpu() {
 	});
 
 	next_index = 0;
-	auto stream = cuda_get_stream();
-	CUDA_CHECK(cudaMalloc(&dev_trees, tree_nodes.size() * sizeof(tree_node)));
 	hpx::wait_all(futs3.begin(), futs3.end());
-	futs3.resize(0);
-	CUDA_CHECK(cudaMemcpyAsync(dev_trees, tree_nodes.data(), tree_nodes.size() * sizeof(tree_node), cudaMemcpyHostToDevice, stream));
-	int nitems = workitems.size();
-	fixed32* dev_x = &particles_pos(XDIM, 0);
-	fixed32* dev_y = &particles_pos(YDIM, 0);
-	fixed32* dev_z = &particles_pos(ZDIM, 0);
 	hpx::wait_all(futs1.begin(), futs1.end());
-	futs1.resize(0);
-	const auto kick_returns = cuda_execute_kicks(params, dev_x, dev_y, dev_z, dev_trees, std::move(workitems), stream, tree_nodes.size(), [&]() {lock2.wait();},
-			[&]() {lock1.signal();});
-	tm.stop();
+	sfut.get();
+	auto stream = cuda_get_stream();
+	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems), stream);
 	cuda_end_stream(stream);
 
-	CUDA_CHECK(cudaFree(dev_trees));
+	CUDA_CHECK(cudaFree(tree_nodes));
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
 	particles_resize(opartsize);
-	lock2.signal();
 }
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) {

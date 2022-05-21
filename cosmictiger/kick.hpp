@@ -41,10 +41,6 @@ struct cuda_kick_data {
 	float* gy;
 	float* gz;
 	float* pot;
-	int source_size;
-	int sink_size;
-	int tree_size;
-	int rank;
 };
 
 struct kick_return;
@@ -185,8 +181,7 @@ hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, ND
 #endif
 void kick_show_timings();
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
-		int ntrees, std::function<void()>, std::function<void()>);
+vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream);
 #endif
 int kick_block_count();
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);

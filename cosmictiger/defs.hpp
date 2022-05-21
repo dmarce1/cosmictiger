@@ -65,7 +65,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define CUDA_MAX_MEM 0.3
 #define GPU_MIN_LOAD (1.0/32.0)
 #define CUDA_KICK_OVERSUBSCRIPTION 2
-#define CUDA_KICK_PARTS_MAX (8*1024)
+#define CUDA_KICK_PARTS_MAX (16*1024)
 #define HEAP_SIZE (4ULL*1024ULL*1024ULL*1024ULL)
 #define L2FETCH 64
 #define STACK_SIZE (16*1024)
