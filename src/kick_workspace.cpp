@@ -76,12 +76,11 @@ void kick_workspace::to_gpu() {
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 
 	struct part_request {
-		vector<pair<part_int>> data;
-		hpx::future<void> fut;
+		vector<vector<pair<part_int>>> data;
 		size_t count;
 		part_request() {
 			count = 0;
-			fut = hpx::make_ready_future();
+			data.resize(1);
 		}
 	};
 	std::unordered_map<int, part_request> part_requests;
@@ -96,6 +95,8 @@ void kick_workspace::to_gpu() {
 	int nthreads = hpx_size() == 1 ? 1 : hpx::thread::hardware_concurrency();
 	const size_t opartsize = particles_size();
 	const size_t max_parts = 8 * 1024 * 1024;
+	timer tm2;
+	tm2.start();
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int proc = 0; proc < nthreads; proc++) {
@@ -116,7 +117,7 @@ void kick_workspace::to_gpu() {
 							const auto range = node->part_range;
 							const auto this_count = range.second - range.first;
 							auto& entry = part_requests[rank];
-							entry.data.push_back(range);
+							entry.data.back().push_back(range);
 							entry.count += this_count;
 							global_part_range gpr;
 							gpr.rank = rank;
@@ -128,61 +129,47 @@ void kick_workspace::to_gpu() {
 							particles_resize(part_index);
 							remote_roots.insert(ids[i]);
 							if (entry.count > max_parts) {
-								auto ptr = std::make_shared < vector<pair<part_int>>>(std::move(entry.data));
 								size_t count = entry.count;
-								entry.fut = entry.fut.then([ptr,rank,count,&part_map,&mutex](hpx::future<void> fut) {
-											fut.get();
-											auto data = particles_get(rank,*ptr).get();
-											part_int index = 0;
-											std::unique_lock<shared_mutex_type> lock(particles_shared_mutex());
-											for( int k = 0; k < ptr->size(); k++) {
-												global_part_range gpr;
-												gpr.rank = rank;
-												gpr.range = (*ptr)[k];
-												std::unique_lock<mutex_type> lock(mutex);
-												auto local_range = part_map[gpr];
-												lock.unlock();
-												const auto nparts = local_range.second - local_range.first;
-												for( int dim = 0; dim < NDIM; dim++) {
-													std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
-												}
-												index += nparts;
-											}
-										});
+								part_int index = 0;
 								entry.count = 0;
-								entry.data.resize(0);
+								entry.data.resize(entry.data.size() + 1);
 							}
 						}
 					}
 				}
 			}));
 		}
-		hpx::wait_all(futs1.begin(),futs1.end());
 	}
-	futs1.resize(0);
+	tm2.stop();
+	PRINT( "%e to load tree nodes\n", tm2.read());
+	tm2.reset();
 	nthreads = hpx::thread::hardware_concurrency();
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
-		auto ptr = std::make_shared < vector<pair<part_int>>>(std::move(i->second.data));
 		const int rank = i->first;
-		size_t count = i->second.count;
-		if (count > 0) {
-			futs1.push_back(i->second.fut.then([ptr,rank,count,&part_map](hpx::future<void> fut) {
-				fut.get();
-				auto data = particles_get(rank,*ptr).get();
-				part_int index = 0;
-				for( int k = 0; k < ptr->size(); k++) {
-					global_part_range gpr;
-					gpr.rank = rank;
-					gpr.range = (*ptr)[k];
-					auto local_range = part_map[gpr];
-					const auto nparts = local_range.second - local_range.first;
-					for( int dim = 0; dim < NDIM; dim++) {
-						std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
+		hpx::future<void> fut = hpx::make_ready_future();
+		for( int j = 0; j < i->second.data.size(); j++) {
+			const size_t count = i->second.data[j].size();
+			if( count) {
+				fut = fut.then([rank,count,&part_map,i,j](hpx::future<void> fut) {
+					fut.get();
+					const auto& ranges = i->second.data[j];
+					const auto data = particles_get(rank,ranges).get();
+					part_int index = 0;
+					for( int k = 0; k < ranges.size(); k++) {
+						global_part_range gpr;
+						gpr.rank = rank;
+						gpr.range = ranges[k];
+						auto local_range = part_map[gpr];
+						const auto nparts = local_range.second - local_range.first;
+						for( int dim = 0; dim < NDIM; dim++) {
+							std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
+						}
+						index += nparts;
 					}
-					index += nparts;
-				}
-			}));
+				});
+			}
 		}
+		futs1.push_back(std::move(fut));
 	}
 
 	tree_node* tree_nodes;
