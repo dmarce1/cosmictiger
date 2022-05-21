@@ -221,6 +221,7 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs1.begin(), futs1.end());
 	sfut.get();
 #ifdef MULTI_GPU
+	CUDA_CHECK(cudaMemAdvise(tree_nodes, sizeof(tree_node)*tree_nodes_size, cudaMemAdviseSetReadMostly, 0));
 	for( int dim = 0; dim < NDIM; dim++) {
 		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32)*particles_size(), cudaMemAdviseSetReadMostly, 0));
 	}
@@ -260,6 +261,7 @@ void kick_workspace::to_gpu() {
 	for( int dim = 0; dim < NDIM; dim++) {
 		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32)*particles_size(), cudaMemAdviseUnsetReadMostly, 0));
 	}
+	CUDA_CHECK(cudaMemAdvise(tree_nodes, sizeof(tree_node)*tree_nodes_size, cudaMemAdviseUnsetReadMostly, 0));
 #else
 	auto stream = cuda_get_stream();
 	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems), stream);

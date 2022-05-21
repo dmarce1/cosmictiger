@@ -30,12 +30,6 @@
 
 #include <atomic>
 
-/*__managed__ int node_count;
- __managed__ double total_time;
- __managed__ double tree_time;
- __managed__ double gravity_time;
- static __managed__ double kick_time;*/
-
 struct cuda_lists_type {
 	stack_vector<int> echecks;
 	stack_vector<int> dchecks;
