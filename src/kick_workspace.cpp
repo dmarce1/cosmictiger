@@ -22,7 +22,6 @@
 #include <cosmictiger/timer.hpp>
 #include <set>
 
-
 HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
 
 kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
@@ -76,13 +75,23 @@ void kick_workspace::to_gpu() {
 	}
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 
-	std::unordered_map<int, vector<pair<part_int>>> part_requests;
+	struct part_request {
+		vector<pair<part_int>> data;
+		size_t count;
+		part_request() {
+			count = 0;
+		}
+	};
+	std::unordered_map<int, part_request> part_request_map;
+	vector<pair<int, vector<pair<part_int>>> > part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
 
 	std::set<tree_id> remote_roots;
 	part_int next_index = 0;
 	part_int part_index = particles_size();
+	vector<hpx::future<void>> futs1;
 	const size_t opartsize = particles_size();
+	const size_t max_parts = 64*1024*1024 - get_options().bucket_size;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int i = 0; i < ids.size(); i++) {
@@ -93,7 +102,10 @@ void kick_workspace::to_gpu() {
 				const int rank = node->proc_range.first;
 				if (rank != hpx_rank()) {
 					const auto range = node->part_range;
-					part_requests[rank].push_back(range);
+					const auto this_count = range.second - range.first;
+					auto& entry = part_request_map[rank];
+					entry.data.push_back(range);
+					entry.count += this_count;
 					global_part_range gpr;
 					gpr.rank = rank;
 					gpr.range = range;
@@ -103,12 +115,24 @@ void kick_workspace::to_gpu() {
 					part_index += nparts;
 					particles_resize(part_index);
 					remote_roots.insert(ids[i]);
+					if (entry.count > max_parts) {
+						pair<int, vector<pair<part_int>>> req;
+						req.first = rank;
+						req.second = std::move(entry.data);
+						part_requests.push_back(std::move(req));
+						part_request_map.erase(rank);
+					}
 				}
 			}
 		}
 	}
+	for (auto i = part_request_map.begin(); i != part_request_map.end(); i++) {
+		pair<int, vector<pair<part_int>>> req;
+		req.first = i->first;
+		req.second = std::move(i->second.data);
+		part_requests.push_back(std::move(req));
+	}
 
-	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	vector<hpx::future<void>> futs3;
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
@@ -225,13 +249,14 @@ void kick_workspace::to_gpu() {
 	sfut.get();
 	auto stream = cuda_get_stream();
 	tm.stop();
-	PRINT( "Took %e seconds to prepare gpu send\n", tm.read());
+	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
 	tm.reset();
 	tm.start();
-	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems), stream);
+	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes,
+			std::move(workitems), stream);
 	cuda_end_stream(stream);
 	tm.stop();
-	PRINT( "GPU took %e seconds\n", tm.read());
+	PRINT("GPU took %e seconds\n", tm.read());
 
 	CUDA_CHECK(cudaFree(tree_nodes));
 	for (int i = 0; i < kick_returns.size(); i++) {
