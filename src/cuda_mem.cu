@@ -19,7 +19,6 @@
 #define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
 
-
 __device__
 char* cuda_mem::allocate_blocks(int nblocks) {
 	size_t base = atomicAdd(&next_block, nblocks);
@@ -149,14 +148,21 @@ cuda_mem::~cuda_mem() {
 	CUDA_CHECK(cudaFree(heap));
 }
 
-__managed__ cuda_mem* memory;
+__device__ cuda_mem* memory;
 
 __device__ cuda_mem* get_cuda_heap() {
 	return memory;
 }
 
+__global__ void cuda_mem_init_kernel(cuda_mem* ptr) {
+	memory = ptr;
+}
+
 void cuda_mem_init(size_t heap_size) {
-	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
+	cuda_mem* ptr;
+	CUDA_CHECK(cudaMallocManaged(&ptr, sizeof(cuda_mem)));
 	new (memory) cuda_mem(heap_size);
+	cuda_mem_init_kernel<<<1,1>>>(ptr);
+	CUDA_CHECK(cudaDeviceSynchronize());
 }
 

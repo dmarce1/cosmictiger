@@ -81,7 +81,13 @@ inline void _cuda_fft_check(cufftResult err, const char *file, const int line) {
 
 #define CUDA_FFT_CHECK(a) _cuda_fft_check(a,__FILE__,__LINE__)
 
+#ifdef MULTI_GPU
+void cuda_set_device(int);
+int cuda_device_count();
+#else
 void cuda_set_device();
+int cuda_get_device();
+#endif
 
 #ifdef __CUDA_ARCH__
 #if __CUDA_ARCH__ < 600
@@ -114,8 +120,6 @@ inline __device__ double atomicAdd(double* address, double val)
 template<class T>
 using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
 
-void cuda_set_device();
-size_t cuda_free_mem();
 int cuda_smp_count();
 size_t cuda_free_mem();
 size_t cuda_total_mem();
@@ -123,15 +127,9 @@ int cuda_smp_count();
 void cuda_init();
 cudaStream_t cuda_get_stream();
 void cuda_end_stream(cudaStream_t stream);
-int cuda_get_device();
 void cuda_stream_synchronize(cudaStream_t stream);
 
-void cuda_malloc(void** ptr, size_t size, const char* file, int line );
 
-template<class T>
-void cuda_malloc2(T** ptr, size_t size, const char* file, int line ) {
-	cuda_malloc((void**)ptr,size,file,line);
-}
 
 /*********************************************************************************/
 //From https://localcoder.org/how-do-i-use-atomicmax-on-floating-point-values-in-cuda

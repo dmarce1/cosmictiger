@@ -559,6 +559,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
 		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream) {
+#ifndef MULTI_GPU
+	cuda_set_device();
+#endif
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -657,9 +660,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMemcpyAsync(dev_kick_params, kick_params.data(), sizeof(cuda_kick_params) * kick_params.size(), cudaMemcpyHostToDevice, stream));
 	tm.reset();
 	tm.start();
-	cuda_set_device();
 	cuda_stream_synchronize(stream);
-	cuda_set_device();
 //	PRINT( "Invoking kernel\n");
 	tm.reset();
 	tm.start();

@@ -39,8 +39,17 @@ static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed3
 		futs.push_back(hpx::async<do_analytic_action>( c, sinkx, sinky, sinkz));
 	}
 
+#ifdef MULTI_GPU
+	for( int i = 0; i < cuda_device_count(); i++) {
+		futs.push_back(hpx::async([&sinkx, &sinky, &sinkz, i]() {
+							return gravity_analytic_call_kernel(sinkx, sinky, sinkz, i);
+						}));
+	}
+	auto results = futs.back().get();
+#else
 	auto results = gravity_analytic_call_kernel(sinkx, sinky, sinkz);
-
+#endif
+	futs.pop_back();
 	for (auto& f : futs) {
 		auto other = f.get();
 		for (int i = 0; i < sinkx.size(); i++) {
@@ -97,7 +106,7 @@ pair<double> analytic_compare(int Nsamples) {
 	double phi100 = phierrs[index];
 	double force100 = gerrs[index];
 	double phi50 = phierrs[Nsamples/2] + phierrs[Nsamples/2+1];
-	double force50 = gerrs[Nsamples/2] +  gerrs[Nsamples/2+1];
+	double force50 = gerrs[Nsamples/2] + gerrs[Nsamples/2+1];
 	phi50 *= 0.5;
 	force50 *= 0.5;
 	PRINT("Force 50  Error     = %e\n", force50);

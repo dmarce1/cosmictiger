@@ -22,7 +22,6 @@
 #include <cosmictiger/timer.hpp>
 #include <set>
 
-
 HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
 
 kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
@@ -45,7 +44,6 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 }
 
 void kick_workspace::to_gpu() {
-	cuda_set_device();
 
 	timer tm;
 	tm.start();
@@ -67,7 +65,6 @@ void kick_workspace::to_gpu() {
 		}
 	};
 
-	cuda_set_device();
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
 	for (int i = 0; i < tree_ids_vector.size(); i++) {
@@ -223,14 +220,38 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs3.begin(), futs3.end());
 	hpx::wait_all(futs1.begin(), futs1.end());
 	sfut.get();
+#ifdef MULTI_GPU
+	const int device_count = cuda_device_count();
+	vector<hpx::future<vector<kick_return>>>futs;
+	for (int gpu = 0; gpu < device_count; gpu++) {
+		futs.push_back(
+				hpx::async(
+						[tree_nodes, gpu, device_count,this]() {
+							cuda_set_device(gpu);
+							const int b = gpu * workitems.size() / device_count;
+							const int e = (gpu + 1) * workitems.size() / device_count;
+							vector<kick_workitem> myworkitems(workitems.begin() + b, workitems.begin() + e);
+							auto stream = cuda_get_stream();
+							const auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(myworkitems), stream);
+							cuda_end_stream(stream);
+							return rc;
+						}));
+	}
+	for (auto& f : futs) {
+		auto kick_returns = f.get();
+		for (int i = 0; i < kick_returns.size(); i++) {
+			promises[i].set_value(std::move(kick_returns[i]));
+		}
+	}
+#else
 	auto stream = cuda_get_stream();
 	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems), stream);
 	cuda_end_stream(stream);
-
-	CUDA_CHECK(cudaFree(tree_nodes));
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}
+#endif
+	CUDA_CHECK(cudaFree(tree_nodes));
 	particles_resize(opartsize);
 }
 

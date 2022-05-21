@@ -25,24 +25,18 @@
 
 #ifdef USE_CUDA
 
-void cuda_malloc(void** ptr, size_t size, const char* file, int line ) {
-	static mutex_type mutex;
-	std::lock_guard<mutex_type> lock(mutex);
-	double free_mem = cuda_free_mem();
-	double total_mem = cuda_total_mem();
-	if( (free_mem - (double) size) / total_mem < 0.15 ) {
-		PRINT( "Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% memory\n", size, hpx_rank(), file, line);
-		abort();
-	}
-	CUDA_CHECK(cudaMalloc(ptr,size));
+#ifdef MULTI_GPU
+void cuda_set_device(int i) {
+	CUDA_CHECK(cudaSetDevice(i));
 }
 
-void cuda_set_device() {
+int cuda_device_count() {
 	int count;
 	CUDA_CHECK(cudaGetDeviceCount(&count));
-	const int device_num = hpx_rank() % count;
-	CUDA_CHECK(cudaSetDevice(device_num));
+	return count;
 }
+#else
+
 
 int cuda_get_device() {
 	int count;
@@ -51,10 +45,20 @@ int cuda_get_device() {
 	return device_num;
 }
 
+void cuda_set_device() {
+	int count;
+	CUDA_CHECK(cudaGetDeviceCount(&count));
+	const int device_num = hpx_rank() % count;
+	CUDA_CHECK(cudaSetDevice(device_num));
+}
+#endif
+
 size_t cuda_total_mem() {
 	size_t total;
 	size_t free;
+#ifndef MULTI_GPU
 	cuda_set_device();
+#endif
 	CUDA_CHECK(cudaMemGetInfo(&free, &total));
 	return total;
 }
@@ -62,22 +66,28 @@ size_t cuda_total_mem() {
 size_t cuda_free_mem() {
 	size_t total;
 	size_t free;
+#ifndef MULTI_GPU
 	cuda_set_device();
+#endif
 	CUDA_CHECK(cudaMemGetInfo(&free, &total));
 	return free;
 }
 
 int cuda_smp_count() {
 	int count;
+#ifndef MULTI_GPU
 	cuda_set_device();
-	CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, cuda_get_device()));
+#endif
+	CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, 0));
 	return count;
 
 }
 
 cudaStream_t cuda_get_stream() {
 	cudaStream_t stream;
+#ifndef MULTI_GPU
 	cuda_set_device();
+#endif
 	CUDA_CHECK(cudaStreamCreate(&stream));
 	return stream;
 }
@@ -97,6 +107,19 @@ void cuda_end_stream(cudaStream_t stream) {
 }
 
 void cuda_init() {
+#ifdef MULTI_GPU
+	for( int i = 0; i < cuda_device_count(); i++) {
+		cuda_set_device(i);
+		CUDA_CHECK(cudaDeviceReset());
+		size_t value = STACK_SIZE;
+		CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
+		CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
+		if (value != STACK_SIZE) {
+			THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
+		}
+		cuda_mem_init(HEAP_SIZE);
+	}
+#else
 	cuda_set_device();
 	CUDA_CHECK(cudaDeviceReset());
 	size_t value = STACK_SIZE;
@@ -106,6 +129,7 @@ void cuda_init() {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}
 	cuda_mem_init(HEAP_SIZE);
+#endif
 }
 
 #endif

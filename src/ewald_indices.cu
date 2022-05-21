@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/math.hpp>
@@ -31,7 +31,6 @@ struct ewald_constants {
 	array<array<float, NDIM>, NFOUR> four_indices;
 	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
 };
-
 
 ewald_constants ec;
 __device__ ewald_constants* ec_dev;
@@ -103,12 +102,20 @@ void ewald_const::init_gpu() {
 		}
 		ec.four_expanse[count++] = D0.detraceD();
 	}
-	cuda_set_device();
-	ewald_constants* dev;
-	(CUDA_MALLOC(&dev, sizeof(ewald_constants)));
-	CUDA_CHECK(cudaMemcpy(dev, &ec, sizeof(ewald_constants), cudaMemcpyHostToDevice));
-	set_ewald_constants<<<1,1>>>(dev);
-	CUDA_CHECK(cudaDeviceSynchronize());
+#ifdef MULTI_GPU
+	for (int di = 0; di < cuda_device_count(); di++) {
+		cuda_set_device(di);
+#else
+		cuda_set_device();
+#endif
+		ewald_constants* dev;
+		CUDA_CHECK(cudaMalloc(&dev, sizeof(ewald_constants)));
+		CUDA_CHECK(cudaMemcpy(dev, &ec, sizeof(ewald_constants), cudaMemcpyHostToDevice));
+		set_ewald_constants<<<1,1>>>(dev);
+		CUDA_CHECK(cudaDeviceSynchronize());
+#ifdef MULTI_GPU
+	}
+#endif
 }
 
 CUDA_EXPORT int ewald_const::nfour() {

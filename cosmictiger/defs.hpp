@@ -25,8 +25,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/profiler.hpp>
 
 
-#ifndef NDEBUG
+#define MULTI_GPU
 
+#ifndef NDEBUG
 #define CHECK_BOUNDS
 #define DOMAINS_CHECK
 #endif
