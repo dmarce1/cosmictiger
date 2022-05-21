@@ -1333,8 +1333,8 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 		for (int j = 0; j < ranges.size() / 2; j++) {
 			const auto& r = ranges[j];
 			for (int dim = 0; dim < NDIM; dim++) {
-				for( int l = dim * sz; l < dim * sz + r.second - r.first; l++) {
-					const auto m = l - dim*sz + r.first;
+				for( int l = i + dim * sz; l < i + dim * sz + r.second - r.first; l++) {
+					const auto m = l - i - dim*sz + r.first;
 					ALWAYS_ASSERT(m >= 0 );
 					ALWAYS_ASSERT(m < particles_size());
 					ALWAYS_ASSERT(l>=0);
@@ -1352,8 +1352,8 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 			const auto& r = ranges[j];
 			i -= r.second - r.first;
 			for (int dim = 0; dim < NDIM; dim++) {
-				for( int l = dim * sz; l < dim * sz + r.second - r.first; l++) {
-					const auto m = l - dim*sz + r.first;
+				for( int l = i + dim * sz; l < i + dim * sz + r.second - r.first; l++) {
+					const auto m = l - i - dim*sz + r.first;
 					ALWAYS_ASSERT(m >= 0 );
 					ALWAYS_ASSERT(m < particles_size());
 					ALWAYS_ASSERT(l>=0);
