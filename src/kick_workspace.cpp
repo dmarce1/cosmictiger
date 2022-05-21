@@ -142,6 +142,7 @@ void kick_workspace::to_gpu() {
 				return tree_pairs;
 			}));
 		}
+		hpx::wait_all(futs0.begin(), futs0.end());
 		for (auto& f : futs0) {
 			auto tmp = f.get();
 			for (const auto & entry : tmp) {
