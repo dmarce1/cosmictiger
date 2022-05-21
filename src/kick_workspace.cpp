@@ -128,7 +128,7 @@ void kick_workspace::to_gpu() {
 							part_map[gpr].first = part_index;
 							part_map[gpr].second = part_index + nparts;
 							part_index += nparts;
-							particles_resize(part_index);
+							particles_resize(part_index,false);
 							remote_roots.insert(ids[i]);
 							if (entry.count > max_parts) {
 								size_t count = entry.count;
@@ -144,10 +144,11 @@ void kick_workspace::to_gpu() {
 		}
 		for (auto& f : futs0) {
 			auto tmp = f.get();
-			for (auto & entry : tmp) {
+			for (const auto & entry : tmp) {
 				tree_map[entry.first] = entry.second;
 			}
 		}
+		futs0.resize(0);
 	}
 	tm2.stop();
 	PRINT("%e to load tree nodes\n", tm2.read());
