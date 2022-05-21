@@ -119,8 +119,8 @@ void kick_workspace::to_gpu() {
 						pair<int, vector<pair<part_int>>> req;
 						req.first = rank;
 						req.second = std::move(entry.data);
+						entry.count = 0;
 						part_requests.push_back(std::move(req));
-						part_request_map.erase(rank);
 					}
 				}
 			}

@@ -1317,6 +1317,8 @@ array<vector<fixed32>, NDIM> particles_get_local(const vector<pair<part_int>>& r
 	}
 	part_int i = 0;
 	for (auto& r : ranges) {
+		ALWAYS_ASSERT(r.second <= particles_size());
+		ALWAYS_ASSERT(r.first >= rung_begin);
 		for (int dim = 0; dim < NDIM; dim++) {
 			std::memcpy(&rc[dim][i], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
 		}
