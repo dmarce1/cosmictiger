@@ -95,7 +95,7 @@ void kick_workspace::to_gpu() {
 	vector<hpx::future<void>> futs3;
 
 	const size_t opartsize = particles_size();
-	const size_t max_parts = 64 * 1024 * 1024 - get_options().bucket_size;
+	const size_t max_parts = 8 * 1024 * 1024 - get_options().bucket_size;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int i = 0; i < ids.size(); i++) {

@@ -1313,7 +1313,6 @@ shared_mutex_type& particles_shared_mutex() {
 	return shared_mutex;
 }
 
-
 vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 	vector<int> rc;
 	size_t sz = 0;
@@ -1323,16 +1322,31 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		rc.resize(NDIM * sz);
 	}
-	part_int i = 0;
-	std::shared_lock<shared_mutex_type> lock(shared_mutex);
-	for (auto& r : ranges) {
-		ALWAYS_ASSERT(r.second <= particles_size());
-		ALWAYS_ASSERT(r.first >= rung_begin);
-		for (int dim = 0; dim < NDIM; dim++) {
-			std::memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+	const auto func1 = [&ranges,&rc,sz]() {
+		std::shared_lock<shared_mutex_type> lock(shared_mutex);
+		part_int i = 0;
+		for (int i = 0; i < ranges.size() / 2; i++) {
+			const auto& r = ranges[i];
+			for (int dim = 0; dim < NDIM; dim++) {
+				std::memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+			}
+			i += r.second - r.first;
 		}
-		i += r.second - r.first;
-	}
+	};
+	const auto func2 = [&ranges,sz,&rc]() {
+		part_int i = sz;
+		std::shared_lock<shared_mutex_type> lock(shared_mutex);
+		for (int i = ranges.size() - 1; i >= ranges.size() / 2; i--) {
+			const auto& r = ranges[i];
+			i -= r.second - r.first;
+			for (int dim = 0; dim < NDIM; dim++) {
+				std::memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+			}
+		}
+	};
+	auto fut = hpx::async(func1);
+	func2();
+	fut.get();
 	return rc;
 }
 
