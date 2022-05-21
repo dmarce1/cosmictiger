@@ -77,19 +77,23 @@ void kick_workspace::to_gpu() {
 
 	struct part_request {
 		vector<pair<part_int>> data;
+		hpx::future<void> fut;
 		size_t count;
 		part_request() {
 			count = 0;
+			fut = hpx::make_ready_future();
 		}
 	};
-	std::unordered_map<int, part_request> part_request_map;
-	vector<pair<int, vector<pair<part_int>>> > part_requests;
+	std::unordered_map<int, part_request> part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
 
 	std::set<tree_id> remote_roots;
 	part_int next_index = 0;
 	part_int part_index = particles_size();
 	vector<hpx::future<void>> futs1;
+	vector<hpx::future<void>> futs2;
+	vector<hpx::future<void>> futs3;
+
 	const size_t opartsize = particles_size();
 	const size_t max_parts = 64 * 1024 * 1024 - get_options().bucket_size;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
@@ -103,7 +107,7 @@ void kick_workspace::to_gpu() {
 				if (rank != hpx_rank()) {
 					const auto range = node->part_range;
 					const auto this_count = range.second - range.first;
-					auto& entry = part_request_map[rank];
+					auto& entry = part_requests[rank];
 					entry.data.push_back(range);
 					entry.count += this_count;
 					global_part_range gpr;
@@ -116,36 +120,43 @@ void kick_workspace::to_gpu() {
 					particles_resize(part_index);
 					remote_roots.insert(ids[i]);
 					if (entry.count > max_parts) {
-						pair<int, vector<pair<part_int>>> req;
-						req.first = rank;
-						req.second = std::move(entry.data);
+						auto ptr = std::make_shared < vector<pair<part_int>>>(std::move(entry.data));
+						size_t count = entry.count;
+						entry.fut = entry.fut.then([ptr,rank,count,&part_map](hpx::future<void> fut) {
+							fut.get();
+							auto data = particles_get(rank,*ptr).get();
+							part_int index = 0;
+							for( int k = 0; k < ptr->size(); k++) {
+								global_part_range gpr;
+								gpr.rank = rank;
+								gpr.range = (*ptr)[k];
+								auto local_range = part_map[gpr];
+								const auto nparts = local_range.second - local_range.first;
+								for( int dim = 0; dim < NDIM; dim++) {
+									std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
+								}
+								index += nparts;
+							}
+						});
 						entry.count = 0;
-						part_requests.push_back(std::move(req));
+						entry.data.resize(0);
 					}
 				}
 			}
 		}
 	}
-	for (auto i = part_request_map.begin(); i != part_request_map.end(); i++) {
-		pair<int, vector<pair<part_int>>> req;
-		req.first = i->first;
-		req.second = std::move(i->second.data);
-		if( req.second.size() ) {
-			part_requests.push_back(std::move(req));
-		}
-	}
-
-	vector<hpx::future<void>> futs2;
-	vector<hpx::future<void>> futs3;
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
-		futs1.push_back(particles_get(i->first, i->second).then([i,&part_map](hpx::future<vector<int>> fut) {
-			auto data = fut.get();
-			size_t count = data.size() / NDIM;
+		auto ptr = std::make_shared < vector<pair<part_int>>>(std::move(i->second.data));
+		const int rank = i->first;
+		size_t count = i->second.count;
+		futs1.push_back(i->second.fut.then([ptr,rank,count,&part_map](hpx::future<void> fut) {
+			fut.get();
+			auto data = particles_get(rank,*ptr).get();
 			part_int index = 0;
-			for( int k = 0; k < i->second.size(); k++) {
+			for( int k = 0; k < ptr->size(); k++) {
 				global_part_range gpr;
-				gpr.rank = i->first;
-				gpr.range = i->second[k];
+				gpr.rank = rank;
+				gpr.range = (*ptr)[k];
 				auto local_range = part_map[gpr];
 				const auto nparts = local_range.second - local_range.first;
 				for( int dim = 0; dim < NDIM; dim++) {
@@ -155,6 +166,7 @@ void kick_workspace::to_gpu() {
 			}
 		}));
 	}
+
 	tree_node* tree_nodes;
 	size_t tree_nodes_size = next_index;
 	CUDA_CHECK(cudaMallocManaged(&tree_nodes, sizeof(tree_node) * tree_nodes_size));
