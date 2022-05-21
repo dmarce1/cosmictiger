@@ -63,6 +63,8 @@ static const char* particles_cache_read_line_rungs(line_id_type line_id);
 
 static void particles_set_global_offset(vector<size_t>);
 
+static shared_mutex_type shared_mutex;
+
 static part_int size = 0;
 static part_int capacity = 0;
 static vector<size_t> global_offsets;
@@ -760,6 +762,7 @@ void particles_array_resize(T*& ptr, part_int new_capacity, bool reg) {
 
 void particles_resize(part_int sz) {
 	if (sz > capacity) {
+		std::unique_lock<shared_mutex_type> lock(shared_mutex);
 		part_int new_capacity = std::max(capacity, (part_int) 100);
 		while (new_capacity < sz) {
 			new_capacity = size_t(107) * new_capacity / size_t(100);
@@ -1306,6 +1309,11 @@ energies_t particles_sum_energies() {
 
 }
 
+shared_mutex_type& particles_shared_mutex() {
+	return shared_mutex;
+}
+
+
 vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 	vector<int> rc;
 	size_t sz = 0;
@@ -1316,6 +1324,7 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 		rc.resize(NDIM * sz);
 	}
 	part_int i = 0;
+	std::shared_lock<shared_mutex_type> lock(shared_mutex);
 	for (auto& r : ranges) {
 		ALWAYS_ASSERT(r.second <= particles_size());
 		ALWAYS_ASSERT(r.first >= rung_begin);

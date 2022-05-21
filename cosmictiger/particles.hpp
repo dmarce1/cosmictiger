@@ -172,6 +172,9 @@ void particles_save(FILE* fp);
 void particles_inc_group_cache_epoch();
 void particles_global_read_rungs(particle_global_range range, char* r, part_int offset);
 int particles_group_home(group_int);
+#ifndef __CUDACC__
+shared_mutex_type& particles_shared_mutex();
+#endif
 void particles_set_tracers(size_t count = 0);
 vector<output_particle> particles_get_tracers();
 void particles_memadvise_cpu();
