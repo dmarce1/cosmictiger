@@ -222,7 +222,7 @@ void kick_workspace::to_gpu() {
 	sfut.get();
 #ifdef MULTI_GPU
 	for( int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), particles_size(), cudaMemAdviseSetReadMostly, 0));
+		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32)*particles_size(), cudaMemAdviseSetReadMostly, 0));
 	}
 	const int device_count = cuda_device_count();
 	vector<hpx::future<vector<kick_return>>>futs;
@@ -258,7 +258,7 @@ void kick_workspace::to_gpu() {
 		}
 	}
 	for( int dim = 0; dim < NDIM; dim++) {
-		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), particles_size(), cudaMemAdviseUnsetReadMostly, 0));
+		CUDA_CHECK(cudaMemAdvise(&particles_pos(dim, 0), sizeof(fixed32)*particles_size(), cudaMemAdviseUnsetReadMostly, 0));
 	}
 #else
 	auto stream = cuda_get_stream();
