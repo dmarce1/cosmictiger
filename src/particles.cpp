@@ -1333,7 +1333,14 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 		for (int j = 0; j < ranges.size() / 2; j++) {
 			const auto& r = ranges[j];
 			for (int dim = 0; dim < NDIM; dim++) {
-				std::memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+				for( int l = dim * sz; l < dim * sz + r.second - r.first; l++) {
+					const auto m = l - dim*sz + r.first;
+					ALWAYS_ASSERT(m >= 0 );
+					ALWAYS_ASSERT(m < particles_size());
+					ALWAYS_ASSERT(l>=0);
+					ALWAYS_ASSERT(l < rc.size());
+					rc[l] = particles_pos(dim, m).raw();
+				}
 			}
 			i += r.second - r.first;
 		}
@@ -1345,7 +1352,14 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 			const auto& r = ranges[j];
 			i -= r.second - r.first;
 			for (int dim = 0; dim < NDIM; dim++) {
-				std::memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+				for( int l = dim * sz; l < dim * sz + r.second - r.first; l++) {
+					const auto m = l - dim*sz + r.first;
+					ALWAYS_ASSERT(m >= 0 );
+					ALWAYS_ASSERT(m < particles_size());
+					ALWAYS_ASSERT(l>=0);
+					ALWAYS_ASSERT(l < rc.size());
+					rc[l] = particles_pos(dim, m).raw();
+				}
 			}
 		}
 	};
