@@ -224,18 +224,20 @@ void kick_workspace::to_gpu() {
 	const int device_count = cuda_device_count();
 	vector<hpx::future<vector<kick_return>>>futs;
 	for (int gpu = 0; gpu < device_count; gpu++) {
-		futs.push_back(
-				hpx::async(
-						[tree_nodes, gpu, device_count,this]() {
-							cuda_set_device(gpu);
-							const int b = gpu * workitems.size() / device_count;
-							const int e = (gpu + 1) * workitems.size() / device_count;
-							vector<kick_workitem> myworkitems(workitems.begin() + b, workitems.begin() + e);
-							auto stream = cuda_get_stream();
-							const auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(myworkitems), stream);
-							cuda_end_stream(stream);
-							return rc;
-						}));
+		const int b = gpu * workitems.size() / device_count;
+		const int e = (gpu + 1) * workitems.size() / device_count;
+		if (e - b > 0) {
+			futs.push_back(
+					hpx::async(
+							[tree_nodes, gpu, device_count,this, b, e]() {
+								cuda_set_device(gpu);
+								vector<kick_workitem> myworkitems(workitems.begin() + b, workitems.begin() + e);
+								auto stream = cuda_get_stream();
+								const auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(myworkitems), stream);
+								cuda_end_stream(stream);
+								return rc;
+							}));
+		}
 	}
 	for (auto& f : futs) {
 		auto kick_returns = f.get();

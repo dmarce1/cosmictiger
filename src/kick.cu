@@ -572,9 +572,9 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaMalloc(&current_index, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(current_index, &zero, sizeof(int), cudaMemcpyHostToDevice, stream));
 	vector<kick_return> returns;
-	static vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
-	static vector<int, pinned_allocator<int>> dchecks;
-	static vector<int, pinned_allocator<int>> echecks;
+	vector<cuda_kick_params, pinned_allocator<cuda_kick_params>> kick_params;
+	vector<int, pinned_allocator<int>> dchecks;
+	vector<int, pinned_allocator<int>> echecks;
 	dchecks.resize(0);
 	echecks.resize(0);
 	returns.resize(workitems.size());
