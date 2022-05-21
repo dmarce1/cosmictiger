@@ -91,7 +91,7 @@ void kick_workspace::to_gpu() {
 	part_int part_index = particles_size();
 	vector<hpx::future<void>> futs1;
 	const size_t opartsize = particles_size();
-	const size_t max_parts = 64*1024*1024 - get_options().bucket_size;
+	const size_t max_parts = 64 * 1024 * 1024 - get_options().bucket_size;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int i = 0; i < ids.size(); i++) {
@@ -130,14 +130,17 @@ void kick_workspace::to_gpu() {
 		pair<int, vector<pair<part_int>>> req;
 		req.first = i->first;
 		req.second = std::move(i->second.data);
-		part_requests.push_back(std::move(req));
+		if( req.second.size() ) {
+			part_requests.push_back(std::move(req));
+		}
 	}
 
 	vector<hpx::future<void>> futs2;
 	vector<hpx::future<void>> futs3;
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
-		futs1.push_back(particles_get(i->first, i->second).then([i,&part_map](hpx::future<array<vector<fixed32>, NDIM>> fut) {
+		futs1.push_back(particles_get(i->first, i->second).then([i,&part_map](hpx::future<vector<int>> fut) {
 			auto data = fut.get();
+			size_t count = data.size() / NDIM;
 			part_int index = 0;
 			for( int k = 0; k < i->second.size(); k++) {
 				global_part_range gpr;
@@ -146,7 +149,7 @@ void kick_workspace::to_gpu() {
 				auto local_range = part_map[gpr];
 				const auto nparts = local_range.second - local_range.first;
 				for( int dim = 0; dim < NDIM; dim++) {
-					std::memcpy(&particles_pos(dim,local_range.first), &data[dim][index], sizeof(fixed32)*nparts);
+					std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
 				}
 				index += nparts;
 			}

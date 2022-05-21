@@ -1306,21 +1306,21 @@ energies_t particles_sum_energies() {
 
 }
 
-array<vector<fixed32>, NDIM> particles_get_local(const vector<pair<part_int>>& ranges) {
-	array<vector<fixed32>, NDIM> rc;
+vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
+	vector<int> rc;
 	size_t sz = 0;
 	for (auto& r : ranges) {
 		sz += r.second - r.first;
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
-		rc[dim].resize(sz);
+		rc.resize(NDIM * sz);
 	}
 	part_int i = 0;
 	for (auto& r : ranges) {
 		ALWAYS_ASSERT(r.second <= particles_size());
 		ALWAYS_ASSERT(r.first >= rung_begin);
 		for (int dim = 0; dim < NDIM; dim++) {
-			std::memcpy(&rc[dim][i], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
+			std::memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), sizeof(fixed32) * (r.second - r.first));
 		}
 		i += r.second - r.first;
 	}
@@ -1329,6 +1329,6 @@ array<vector<fixed32>, NDIM> particles_get_local(const vector<pair<part_int>>& r
 
 HPX_PLAIN_ACTION (particles_get_local);
 
-hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, const vector<pair<part_int>>& ranges) {
+hpx::future<vector<int>> particles_get(int rank, const vector<pair<part_int>>& ranges) {
 	return hpx::async<particles_get_local_action>(hpx_localities()[rank], ranges);
 }
