@@ -160,7 +160,7 @@ void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fi
 void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
 part_int particles_sort(pair<part_int> rng, double xm, int xdim);
 #ifndef __CUDACC__
-hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, vector<pair<part_int>>& ranges);
+hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, const vector<pair<part_int>>& ranges);
 #endif
 void particles_cache_free();
 void particles_group_cache_free();
