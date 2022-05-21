@@ -86,7 +86,7 @@ void kick_workspace::to_gpu() {
 	};
 	std::unordered_map<int, part_request> part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
-
+	mutex_type part_map_mutex;
 	std::set<tree_id> remote_roots;
 	part_int next_index = 0;
 	part_int part_index = particles_size();
@@ -95,7 +95,7 @@ void kick_workspace::to_gpu() {
 	vector<hpx::future<void>> futs3;
 
 	const size_t opartsize = particles_size();
-	const size_t max_parts = 8 * 1024 * 1024 - get_options().bucket_size;
+	const size_t max_parts = 8 * 1024 * 1024;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int i = 0; i < ids.size(); i++) {
@@ -114,15 +114,17 @@ void kick_workspace::to_gpu() {
 					gpr.rank = rank;
 					gpr.range = range;
 					const size_t nparts = node->nparts();
+					std::unique_lock<mutex_type> lock(part_map_mutex);
 					part_map[gpr].first = part_index;
 					part_map[gpr].second = part_index + nparts;
+					lock.unlock();
 					part_index += nparts;
 					particles_resize(part_index);
 					remote_roots.insert(ids[i]);
 					if (entry.count > max_parts) {
 						auto ptr = std::make_shared < vector<pair<part_int>>>(std::move(entry.data));
 						size_t count = entry.count;
-						entry.fut = entry.fut.then([ptr,rank,count,&part_map](hpx::future<void> fut) {
+						entry.fut = entry.fut.then([ptr,rank,count,&part_map,&part_map_mutex](hpx::future<void> fut) {
 							fut.get();
 							auto data = particles_get(rank,*ptr).get();
 							part_int index = 0;
@@ -131,7 +133,9 @@ void kick_workspace::to_gpu() {
 								global_part_range gpr;
 								gpr.rank = rank;
 								gpr.range = (*ptr)[k];
+								std::unique_lock<mutex_type> lock(part_map_mutex);
 								auto local_range = part_map[gpr];
+								lock.unlock();
 								const auto nparts = local_range.second - local_range.first;
 								for( int dim = 0; dim < NDIM; dim++) {
 									std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
