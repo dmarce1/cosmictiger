@@ -231,7 +231,11 @@ void kick_workspace::to_gpu() {
 					hpx::async(
 							[tree_nodes, gpu, device_count,this, b, e]() {
 								cuda_set_device(gpu);
-								vector<kick_workitem> myworkitems(workitems.begin() + b, workitems.begin() + e);
+								vector<kick_workitem> myworkitems;
+								myworkitems.reserve(e - b);
+								for( int i = b; i < e; i++) {
+									myworkitems.push_back(std::move(workitems[i]));
+								}
 								auto stream = cuda_get_stream();
 								const auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(myworkitems), stream);
 								cuda_end_stream(stream);
@@ -239,10 +243,14 @@ void kick_workspace::to_gpu() {
 							}));
 		}
 	}
-	for (auto& f : futs) {
-		auto kick_returns = f.get();
-		for (int i = 0; i < kick_returns.size(); i++) {
-			promises[i].set_value(std::move(kick_returns[i]));
+	int k = 0;
+	for (int gpu = 0; gpu < device_count; gpu++) {
+		const int b = gpu * workitems.size() / device_count;
+		if (e - b > 0) {
+			auto kick_returns = futs[k++].get();
+			for (int i = 0; i < kick_returns.size(); i++) {
+				promises[b + i].set_value(std::move(kick_returns[i]));
+			}
 		}
 	}
 #else
