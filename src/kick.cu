@@ -106,7 +106,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
 		snki = self.sink_part_range.first + i;
 		ASSERT(snki >= 0);
-		ASSERT(snki < data.sink_size);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
@@ -348,6 +347,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
 					if (!self.leaf) {
 						const int start = checks.size();
+						__syncwarp();
 						checks.resize(start + leaflist.size());
 						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
 							checks[start + i] = leaflist[i];
@@ -459,6 +459,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
 					} else {
 						const int start = checks.size();
+						__syncwarp();
 						checks.resize(start + leaflist.size());
 						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
 							checks[start + i] = leaflist[i];
@@ -504,7 +505,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				phase.back() += 1;
 				phase.push_back(0);
 				const tree_id child = self.children[RIGHT];
-				ASSERT(child.proc == data.rank);
 				self_index.push_back(child.index);
 				const auto this_return = returns.back();
 				returns.pop_back();
