@@ -246,6 +246,7 @@ void kick_workspace::to_gpu() {
 	int k = 0;
 	for (int gpu = 0; gpu < device_count; gpu++) {
 		const int b = gpu * workitems.size() / device_count;
+		const int e = (gpu + 1) * workitems.size() / device_count;
 		if (e - b > 0) {
 			auto kick_returns = futs[k++].get();
 			for (int i = 0; i < kick_returns.size(); i++) {
