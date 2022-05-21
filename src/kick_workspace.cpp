@@ -224,8 +224,14 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs1.begin(), futs1.end());
 	sfut.get();
 	auto stream = cuda_get_stream();
+	tm.stop();
+	PRINT( "Took %e seconds to prepare gpu send\n", tm.read());
+	tm.reset();
+	tm.start();
 	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0),&particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems), stream);
 	cuda_end_stream(stream);
+	tm.stop();
+	PRINT( "GPU took %e seconds\n", tm.read());
 
 	CUDA_CHECK(cudaFree(tree_nodes));
 	for (int i = 0; i < kick_returns.size(); i++) {
