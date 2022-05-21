@@ -102,7 +102,6 @@ void kick_workspace::to_gpu() {
 			if (tree_map.find(ids[i]) == tree_map.end()) {
 				const tree_node* node = tree_get_node(ids[i]);
 				add_tree_node(tree_map, ids[i], next_index);
-				next_index += node->node_count;
 				const int rank = node->proc_range.first;
 				if (rank != hpx_rank()) {
 					const auto range = node->part_range;
@@ -186,6 +185,8 @@ void kick_workspace::to_gpu() {
 		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_size]() {
 			for (int i = proc; i < tree_nodes_size; i+=nthreads) {
 				if (tree_nodes[i].children[LEFT].index != -1) {
+					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
+					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
 					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
 					tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
 				}
@@ -207,6 +208,7 @@ void kick_workspace::to_gpu() {
 	for (auto i = remote_roots.begin(); i != remote_roots.end(); i++) {
 		futs3.push_back(hpx::async(HPX_PRIORITY_HI,[i,&tree_map,&part_map,adjust_part_refs,&tree_nodes]() {
 			global_part_range gpr;
+			ALWAYS_ASSERT(tree_map.find(*i) != tree_map.end());
 			int index = tree_map[*i];
 			auto& node = tree_nodes[index];
 			gpr.rank = node.proc_range.first;
@@ -235,6 +237,7 @@ void kick_workspace::to_gpu() {
 					}
 					workitems[i].echecklist[j].index = iter->second;
 				}
+				ALWAYS_ASSERT(tree_map.find(workitems[i].self) != tree_map.end());
 				workitems[i].self.index = tree_map[workitems[i].self];
 				ASSERT(workitems[i].self.proc == hpx_rank());
 			}
