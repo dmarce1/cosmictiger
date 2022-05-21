@@ -83,16 +83,16 @@ struct tree_id_hash_hi {
 
 struct tree_node {
 	multipole<float> multi;
-	array<fixed32, NDIM> pos;
 	array<tree_id, NCHILD> children;
+	array<fixed32, NDIM> pos;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
-	pair<part_int> sink_part_range;
 	float radius;
-	bool local_root;
-	bool leaf;
-	size_t node_count;
-	int depth;
+	unsigned char depth;
+	struct {
+		unsigned char local_root : 1;
+		unsigned char leaf : 1;
+	};
 
 	CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
@@ -115,17 +115,19 @@ struct tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & depth;
 		arc & multi;
 		arc & children;
 		arc & pos;
 		arc & proc_range;
 		arc & part_range;
 		arc & radius;
-		arc & local_root;
-		arc & leaf;
-		arc & node_count;
-		arc & sink_part_range;
-		arc & depth;
+		bool lroot = local_root;
+		bool lf = leaf;
+		arc & lroot;
+		arc & lf;
+		local_root = lroot;
+		leaf = lf;
 	}
 };
 
@@ -133,29 +135,13 @@ struct tree_create_return {
 	multipole<float> multi;
 	array<fixed32, NDIM> pos;
 	tree_id id;
-	size_t nactive;
-	size_t active_nodes;
 	float radius;
-	size_t node_count;
-	size_t active_leaf_nodes;
-	size_t leaf_nodes;
-	int max_depth;
-	int min_depth;
-	double flops;
 	template<class A>
 	void serialize(A&& a, unsigned) {
-		a & active_leaf_nodes;
-		a & leaf_nodes;
-		a & active_nodes;
 		a & multi;
 		a & id;
 		a & pos;
-		a & nactive;
 		a & radius;
-		a & node_count;
-		a & flops;
-		a & max_depth;
-		a & min_depth;
 	}
 };
 
