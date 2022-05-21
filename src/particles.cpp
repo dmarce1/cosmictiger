@@ -1327,6 +1327,36 @@ array<vector<fixed32>, NDIM> particles_get_local(const vector<pair<part_int>>& r
 
 HPX_PLAIN_ACTION (particles_get_local);
 
-hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, const vector<pair<part_int>>& ranges) {
-	return hpx::async<particles_get_local_action>(hpx_localities()[rank], ranges);
+hpx::future<array<vector<fixed32>, NDIM>> particles_get(int rank, const vector<pair<part_int>>& ranges_) {
+	if (ranges_.size() == 0) {
+		return hpx::make_ready_future(array<vector<fixed32>, NDIM>());
+	}
+	auto ranges = ranges_;
+	vector<pair<part_int>> other_ranges;
+	constexpr int max_parts = 128 * 1024 * 1024;
+	size_t sz;
+	int i = 0;
+	while (i < ranges.size()) {
+		const auto this_sz = ranges[i].second - ranges[i].first;
+		if (sz + this_sz > max_parts) {
+			other_ranges.push_back(ranges[i]);
+			ranges[i] = ranges.back();
+			ranges.pop_back();
+		} else {
+			i++;
+			sz += this_sz;
+		}
+	}
+	array<hpx::future<array<vector<fixed32>, NDIM>>, 2> futs;
+	futs[0] = hpx::async<particles_get_local_action>(hpx_localities()[rank], ranges);
+	futs[1] = particles_get(rank, other_ranges);
+	return hpx::when_all(futs.begin(), futs.end()).then([](hpx::future<std::vector<hpx::future<array<vector<fixed32>, NDIM>>>> fut) {
+		auto futs = fut.get();
+		auto v1 = futs[0].get();
+		auto v2 = futs[1].get();
+		for (int dim = 0; dim < NDIM; dim++) {
+			v1[dim].insert(v1[dim].end(), v2[dim].begin(), v2[dim].end());
+		}
+		return v1;
+	});
 }
