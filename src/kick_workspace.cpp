@@ -45,6 +45,7 @@ static void add_tree_node(std::unordered_map<tree_id, int, kick_workspace_tree_i
 
 void kick_workspace::to_gpu() {
 	cuda_set_device();
+	PRINT( "Preparing gpu send on %i\n", hpx_rank());
 
 	timer tm;
 	tm.start();
