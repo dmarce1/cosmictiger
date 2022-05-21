@@ -161,7 +161,7 @@ __global__ void cuda_mem_init_kernel(cuda_mem* ptr) {
 void cuda_mem_init(size_t heap_size) {
 	cuda_mem* ptr;
 	CUDA_CHECK(cudaMallocManaged(&ptr, sizeof(cuda_mem)));
-	new (memory) cuda_mem(heap_size);
+	new (ptr) cuda_mem(heap_size);
 	cuda_mem_init_kernel<<<1,1>>>(ptr);
 	CUDA_CHECK(cudaDeviceSynchronize());
 }

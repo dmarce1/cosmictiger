@@ -547,8 +547,11 @@ void driver() {
 				tmr.reset();
 				if (do_check) {
 					char* cmd;
-					asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz);
-					system(cmd);
+					int rc = asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz);
+					if( system(cmd) != 0 ) {
+						PRINT( "Unable to move checkpoint!\n");
+						abort();
+					}
 					free(cmd);
 				}
 				do_check = false;
