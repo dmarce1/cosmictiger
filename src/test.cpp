@@ -265,6 +265,7 @@ static void kick_test() {
 	tm.start();
 	tree_create_params tparams(0, get_options().theta, get_options().hsoft);
 	auto sr = tree_create(tparams);
+	total_flops += sr.flops;
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();

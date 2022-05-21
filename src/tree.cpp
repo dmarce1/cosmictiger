@@ -299,6 +299,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
+		min_depth = std::min(rcl.min_depth, rcr.min_depth);
+		max_depth = std::max(rcl.max_depth, rcr.max_depth);
+		total_flops += rcl.flops + rcr.flops;
 		double rr;
 		double rl;
 		array<double, NDIM> Xl;
@@ -385,6 +388,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
+		node_count = 1 + rcl.node_count + rcr.node_count;
+		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
 	} else {
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
@@ -472,10 +477,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		leaf_nodes = 1;
 	}
 	tree_node node;
+	node.node_count = node_count;
 	node.radius = radius;
 	node.children = children;
 	node.local_root = local_root;
 	node.part_range = part_range;
+	node.sink_part_range = part_range;
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
@@ -497,7 +504,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
+	rc.leaf_nodes = leaf_nodes;
+	rc.node_count = node.node_count;
 	total_flops += flops;
+	rc.flops = total_flops;
+	rc.min_depth = min_depth;
+	rc.max_depth = max_depth;
 	if( key == 1 ) {
 		profiler_exit();
 	}

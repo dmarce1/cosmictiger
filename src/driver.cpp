@@ -603,7 +603,7 @@ void driver() {
 				bucket_size = 128;
 				theta = 0.7;
 			}
-//			opts.bucket_size = bucket_size;
+			opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
@@ -687,8 +687,14 @@ void driver() {
 			remaining_time.start();
 			runtime += total_time.read();
 			double pps = total_processed / runtime;
+			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops;
+			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
+			params.flops += total_flops;
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			double act_pct = kr.nactive / nparts;
+			const double parts_per_node = nparts / sr.leaf_nodes;
+			//		const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
+			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
 			if (full_eval) {
 				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "pps");
 			}
