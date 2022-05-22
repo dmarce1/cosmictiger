@@ -183,6 +183,8 @@ void kick_workspace::to_gpu() {
 		 return morton_compare(tree_get_node(a)->pos, tree_get_node(b)->pos);
 		 });
 		 sfut.get();*/
+		timer tm3;
+		tm3.start();
 		for (int i = start; i < trees.size(); i++) {
 			if (trees[i].proc == hpx_rank()) {
 				tree_map[trees[i]] = trees[i].index;
@@ -191,6 +193,8 @@ void kick_workspace::to_gpu() {
 
 			}
 		}
+		tm3.stop();
+		PRINT( "!!!!!!!!!!! %e\n", tm3.read());
 		futs0.resize(0);
 	}
 
