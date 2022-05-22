@@ -1346,7 +1346,7 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 	const auto func2 = [&ranges,sz,&rc]() {
 		part_int i = sz;
 		std::shared_lock<shared_mutex_type> lock(shared_mutex);
-		for (int j = ranges.size() - 1; j >= ranges.size() / 2; j--) {
+		for (int j = ranges.size() - 1; j >= (int) ranges.size() / 2; j--) {
 			const auto& r = ranges[j];
 			i -= r.second - r.first;
 			for (int dim = 0; dim < NDIM; dim++) {
