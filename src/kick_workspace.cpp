@@ -71,7 +71,7 @@ void kick_workspace::to_gpu() {
 	vector<hpx::future<void>> futs1;
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	int nthreads = hpx_size() == 1 ? 1 : 2 * hpx::thread::hardware_concurrency();
+	int nthreads = hpx_size() == 1 ? 1 : SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs1.push_back(hpx::async([proc,nthreads,&tree_ids_vector,&ids_by_depth,&mutex]() {
 			std::unique_lock<mutex_type> lock(mutex);
