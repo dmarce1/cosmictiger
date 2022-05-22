@@ -1321,12 +1321,10 @@ shared_mutex_type& particles_shared_mutex() {
 vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 	vector<int> rc;
 	size_t sz = 0;
-	for (auto& r : ranges) {
+	for (const auto& r : ranges) {
 		sz += r.second - r.first;
 	}
-	for (int dim = 0; dim < NDIM; dim++) {
-		rc.resize(NDIM * sz);
-	}
+	rc.resize(NDIM * sz);
 	const auto func1 = [&ranges,&rc,sz]() {
 		std::shared_lock<shared_mutex_type> lock(shared_mutex);
 		part_int i = 0;

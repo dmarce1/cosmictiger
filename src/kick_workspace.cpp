@@ -181,7 +181,7 @@ void kick_workspace::to_gpu() {
 								ALWAYS_ASSERT(n>=0);
 								ALWAYS_ASSERT(m<particles_size());
 								ALWAYS_ASSERT(n<data.size());
-								particles_pos(dim,m) = data[n];
+								particles_pos(dim,m) = ((const fixed32&)data[n]);
 							}
 						}
 						index += nparts;
