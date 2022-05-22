@@ -58,7 +58,7 @@ public:
 
 static vector<tree_allocator*> allocator_list;
 static thread_local tree_allocator allocator;
-static vector<tree_node> nodes;
+static tree_node* nodes;
 static vector<pair<part_int>> leaf_part_ranges;
 static mutex_type leaf_part_range_mutex;
 static std::atomic<int> num_threads(0);
@@ -66,9 +66,10 @@ static std::atomic<int> next_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
+static size_t nodes_size;
 
 long long tree_nodes_size() {
-	return nodes.size();
+	return nodes_size;
 }
 
 struct last_cache_entry_t;
@@ -114,8 +115,8 @@ static const tree_node* tree_cache_read(tree_id id);
 void tree_allocator::reset() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	next = (next_id += tree_cache_line_size);
-	last = std::min(next + tree_cache_line_size, (int) nodes.size());
-	if (next >= nodes.size()) {
+	last = std::min(next + tree_cache_line_size, (int) nodes_size);
+	if (next >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full");
 	}
 }
@@ -133,7 +134,7 @@ int tree_allocator::allocate() {
 	if (next == last) {
 		reset();
 	}
-	ASSERT(next < nodes.size());
+	ASSERT(next < nodes_size);
 	return next++;
 }
 
@@ -192,6 +193,23 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	return rc;
 }
 
+
+
+size_t tree_add_remote(const tree_node& remote) {
+	if( next_id >= nodes_size ) {
+		PRINT( "TREE ALLOCATION EXCEEDED\n");
+		abort();
+	}
+	size_t index = ++next_id;
+	nodes[index] = remote;
+	return index;
+}
+
+tree_node* tree_data() {
+	return nodes;
+}
+
+
 static void tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = get_options().bucket_size;
@@ -200,7 +218,13 @@ static void tree_allocate_nodes() {
 		futs.push_back(hpx::async<tree_allocate_nodes_action>(c));
 	}
 	next_id = -tree_cache_line_size;
-	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
+	const size_t sz = std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN);
+#ifdef USE_CUDA
+	CUDA_CHECK(cudaMallocManaged(&nodes, sz * sizeof(tree_node)));
+#else
+	nodes = malloc(sz * sizeof(tree_node));
+#endif
+	nodes_size = sz;
 	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
@@ -287,7 +311,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
-			flops += 2;
 		}
 		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
 		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
@@ -495,7 +518,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	 leaf_part_ranges.push_back(part_range);
 	 }
 	 }*/
-	if (index >= nodes.size()) {
+	if (index >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
 	nodes[index] = node;
@@ -552,8 +575,8 @@ const tree_node* tree_get_node(tree_id id) {
 	if (id.proc == hpx_rank()) {
 		ASSERT(id.index >= 0);
 #ifndef NDEBUG
-		if (id.index >= nodes.size()) {
-			THROW_ERROR("id.index is %li but nodes.size() is %li\n", id.index, nodes.size());
+		if (id.index >= nodes_size) {
+			THROW_ERROR("id.index is %li but nodes.size() is %li\n", id.index, nodes_size);
 		}
 #endif
 		return &nodes[id.index];

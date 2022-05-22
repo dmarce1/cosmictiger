@@ -71,6 +71,7 @@ void kick_workspace::to_gpu() {
 
 	timer tm;
 	tm.start();
+	const auto tree_nodes_remote_begin = tree_nodes_size();
 	if (workitems.size() == 0) {
 		return;
 	}
@@ -179,21 +180,18 @@ void kick_workspace::to_gpu() {
 				trees.push_back(entry);
 			}
 		}
-	/*	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, trees.begin() + start,trees.end(), [](const tree_id& a,const tree_id& b) {
-			return morton_compare(tree_get_node(a)->pos, tree_get_node(b)->pos);
-		});
-		sfut.get();*/
+		/*	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, trees.begin() + start,trees.end(), [](const tree_id& a,const tree_id& b) {
+		 return morton_compare(tree_get_node(a)->pos, tree_get_node(b)->pos);
+		 });
+		 sfut.get();*/
 		for (int i = start; i < trees.size(); i++) {
-			tree_map[trees[i]] = i;
+			if (trees[i].proc == hpx_rank()) {
+				tree_map[trees[i]] = trees[i].index;
+			} else {
+				tree_map[trees[i]] = tree_add_remote(*tree_get_node(trees[i]));
+			}
 		}
 		futs0.resize(0);
-	}
-
-	tree_node* tree_nodes;
-	size_t tree_nodes_size = trees.size();
-	CUDA_CHECK(cudaMallocManaged(&tree_nodes, sizeof(tree_node) * tree_nodes_size));
-	for (int i = 0; i < trees.size(); i++) {
-		tree_nodes[i] = *tree_get_node(trees[i]);
 	}
 
 	tm2.stop();
@@ -241,10 +239,10 @@ void kick_workspace::to_gpu() {
 		}
 		futs1.push_back(std::move(fut));
 	}
-
+	auto* tree_nodes = tree_data();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_size]() {
-			for (int i = proc; i < tree_nodes_size; i+=nthreads) {
+		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_remote_begin]() {
+			for (int i = tree_nodes_remote_begin + proc; i < tree_nodes_size(); i+=nthreads) {
 				if (tree_nodes[i].children[LEFT].index != -1) {
 					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
 					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
@@ -323,7 +321,6 @@ void kick_workspace::to_gpu() {
 	tm.stop();
 	PRINT("GPU took %e seconds\n", tm.read());
 
-	CUDA_CHECK(cudaFree(tree_nodes));
 	for (int i = 0; i < kick_returns.size(); i++) {
 		promises[i].set_value(std::move(kick_returns[i]));
 	}

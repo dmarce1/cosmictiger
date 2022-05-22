@@ -187,11 +187,14 @@ int tree_min_level(double theta, double hsoft);
 const tree_node* tree_get_node(tree_id);
 void tree_sort_particles_by_sph_particles();
 void tree_free_neighbor_list();
+long long tree_nodes_size() ;
 void tree_clear_neighbor_ranges();
 int tree_allocate_neighbor_list(const vector<tree_id>& values);
 void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
 void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float hmax);
 int tree_leaflist_size();
 const tree_id tree_get_leaf(int i);
+size_t tree_add_remote(const tree_node& remote);
+tree_node* tree_data();
 tree_id& tree_get_neighbor(int i);
 #endif /* TREE_HPP_ */
