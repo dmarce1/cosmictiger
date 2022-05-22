@@ -265,18 +265,20 @@ void kick_workspace::to_gpu() {
 		}
 	};
 	for (auto i = remote_roots.begin(); i != remote_roots.end(); i++) {
-		futs3.push_back(hpx::async(HPX_PRIORITY_HI,[i,&tree_map,&part_map,adjust_part_refs,&tree_nodes]() {
+		futs3.push_back(hpx::async(HPX_PRIORITY_HI,[i,&tree_map,&part_map,adjust_part_refs,&tree_nodes,tree_nodes_remote_begin]() {
 			global_part_range gpr;
 			ALWAYS_ASSERT(tree_map.find(*i) != tree_map.end());
 			int index = tree_map[*i];
-			auto& node = tree_nodes[index];
-			gpr.rank = node.proc_range.first;
-			gpr.range = node.part_range;
-			ALWAYS_ASSERT(part_map.find(gpr) != part_map.end());
-			auto local_range = part_map[gpr];
-			part_int offset = local_range.first - gpr.range.first;
-			ALWAYS_ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
-			adjust_part_refs(index, offset);
+			if( index >= tree_nodes_remote_begin) {
+				auto& node = tree_nodes[index];
+				gpr.rank = node.proc_range.first;
+				gpr.range = node.part_range;
+				ALWAYS_ASSERT(part_map.find(gpr) != part_map.end());
+				auto local_range = part_map[gpr];
+				part_int offset = local_range.first - gpr.range.first;
+				ALWAYS_ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
+				adjust_part_refs(index, offset);
+			}
 		}));
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
