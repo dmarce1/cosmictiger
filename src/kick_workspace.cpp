@@ -177,6 +177,11 @@ void kick_workspace::to_gpu() {
 					const auto data = particles_get(rank,ranges).get();
 					part_int index = 0;
 					for( int k = 0; k < ranges.size(); k++) {
+						index += ranges[k].second - ranges[k].first;
+					}
+					size_t sz = index;
+					index = 0;
+					for( int k = 0; k < ranges.size(); k++) {
 						global_part_range gpr;
 						gpr.rank = rank;
 						gpr.range = ranges[k];
@@ -185,12 +190,12 @@ void kick_workspace::to_gpu() {
 						for( int dim = 0; dim < NDIM; dim++) {
 							for( int l = 0; l < nparts; l++) {
 								const int m = local_range.first + l;
-								const int n = count * dim + index + nparts;
+								const int n = sz * dim + index + l;
 								ALWAYS_ASSERT(m>=0);
 								ALWAYS_ASSERT(n>=0);
 								ALWAYS_ASSERT(m<particles_size());
 								ALWAYS_ASSERT(n<data.size());
-								particles_pos(dim,m) = ((const fixed32&)data[n]);
+								particles_pos(dim,m).set_integer(data[n]);
 							}
 						}
 						index += nparts;

@@ -49,6 +49,10 @@ class fixed {
 public:
 	friend class simd_fixed32;
 
+	inline void set_integer(T j) {
+		i = j;
+	}
+
 	template<int M>
 	CUDA_EXPORT
 	inline fixed operator=(const fixed<T, M>& other) {
