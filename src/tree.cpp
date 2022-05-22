@@ -58,7 +58,7 @@ public:
 
 static vector<tree_allocator*> allocator_list;
 static thread_local tree_allocator allocator;
-static tree_node* nodes;
+static tree_node* nodes = nullptr;
 static vector<pair<part_int>> leaf_part_ranges;
 static mutex_type leaf_part_range_mutex;
 static std::atomic<int> num_threads(0);
@@ -193,11 +193,9 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	return rc;
 }
 
-
-
 size_t tree_add_remote(const tree_node& remote) {
-	if( next_id >= nodes_size ) {
-		PRINT( "TREE ALLOCATION EXCEEDED\n");
+	if (next_id >= nodes_size) {
+		PRINT("TREE ALLOCATION EXCEEDED\n");
 		abort();
 	}
 	size_t index = ++next_id;
@@ -209,7 +207,6 @@ tree_node* tree_data() {
 	return nodes;
 }
 
-
 static void tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = get_options().bucket_size;
@@ -219,11 +216,19 @@ static void tree_allocate_nodes() {
 	}
 	next_id = -tree_cache_line_size;
 	const size_t sz = std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN);
+	if (nodes_size < sz) {
 #ifdef USE_CUDA
-	CUDA_CHECK(cudaMallocManaged(&nodes, sz * sizeof(tree_node)));
+		if( nodes != nullptr) {
+			CUDA_CHECK(cudaFree(nodes));
+		}
+		CUDA_CHECK(cudaMallocManaged(&nodes, sz * sizeof(tree_node)));
 #else
-	nodes = malloc(sz * sizeof(tree_node));
+		if( nodes != nullptr) {
+			free(nodes);
+		}
+		nodes = malloc(sz * sizeof(tree_node));
 #endif
+	}
 	nodes_size = sz;
 	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
@@ -237,7 +242,7 @@ static void tree_allocate_nodes() {
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
-	if( key == 1 ) {
+	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}
 	stack_trace_activate();
@@ -533,7 +538,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
-	if( key == 1 ) {
+	if (key == 1) {
 		profiler_exit();
 	}
 	return rc;
