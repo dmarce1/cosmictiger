@@ -67,13 +67,25 @@ void kick_workspace::to_gpu() {
 		}
 	};
 
-	cuda_set_device();
+	mutex_type mutex;
+	vector<hpx::future<void>> futs1;
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	for (int i = 0; i < tree_ids_vector.size(); i++) {
-		const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
-		ids_by_depth[ptr->depth].push_back(tree_ids_vector[i]);
+	int nthreads = hpx_size() == 1 ? 1 : 2 * hpx::thread::hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs1.push_back(hpx::async([proc,nthreads,&tree_ids_vector,&ids_by_depth,&mutex]() {
+			std::unique_lock<mutex_type> lock(mutex);
+			const int b = (size_t) proc * tree_ids_vector.size() / nthreads;
+			const int e = (size_t) (proc+1) * tree_ids_vector.size() / nthreads;
+			for (int i = b; i < e; i++) {
+				lock.unlock();
+				const tree_node* ptr = tree_get_node(tree_ids_vector[i]);
+				lock.lock();
+				ids_by_depth[ptr->depth].push_back(tree_ids_vector[i]);
+			}
+		}));
 	}
+	hpx::wait_all(futs1.begin(), futs1.end());
 
 	struct part_request {
 		vector<vector<pair<part_int>>> data;
@@ -86,14 +98,11 @@ void kick_workspace::to_gpu() {
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
 	std::unordered_map<int, part_request> part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
-	mutex_type mutex;
 	std::set<tree_id> remote_roots;
 	std::atomic<part_int> next_index = 0;
 	part_int part_index = particles_size();
-	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	vector<hpx::future<void>> futs3;
-	int nthreads = hpx_size() == 1 ? 1 : 2 * hpx::thread::hardware_concurrency();
 	const size_t opartsize = particles_size();
 	const size_t max_parts = 8 * 1024 * 1024;
 	timer tm2;
