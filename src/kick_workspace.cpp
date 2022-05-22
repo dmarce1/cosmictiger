@@ -33,14 +33,36 @@ kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
 kick_workspace::~kick_workspace() {
 }
 
-static void add_tree_node(std::vector<pair<tree_id, int>>& tree_pairs, tree_id id, int& index) {
-	tree_pairs.push_back(pair<tree_id, int>(id, index));
+static void add_tree_node(std::vector<tree_id>& trees, tree_id id) {
 	const tree_node* node = tree_get_node(id);
-	index++;
+	trees.push_back(id);
 	if (node->children[LEFT].index != -1) {
-		add_tree_node(tree_pairs, node->children[LEFT], index);
-		add_tree_node(tree_pairs, node->children[RIGHT], index);
+		add_tree_node(trees, node->children[LEFT]);
+		add_tree_node(trees, node->children[RIGHT]);
 	}
+}
+
+bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
+	array<unsigned, NDIM> abits;
+	array<unsigned, NDIM> bbits;
+	for (int dim = 0; dim < NDIM; dim++) {
+		abits[dim] = a[dim].raw();
+		bbits[dim] = b[dim].raw();
+	}
+	for (int i = 0; i < 64; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			const int abit = abits[dim] & (unsigned) 0x80000000;
+			const int bbit = bbits[dim] & (unsigned) 0x80000000;
+			if (bbit && !abit) {
+				return true;
+			} else if (!bbit && abit) {
+				return false;
+			}
+			abits[dim] <<= 1;
+			bbits[dim] <<= 1;
+		}
+	}
+	return false;
 }
 
 void kick_workspace::to_gpu() {
@@ -99,7 +121,6 @@ void kick_workspace::to_gpu() {
 	std::unordered_map<int, part_request> part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
 	std::set<tree_id> remote_roots;
-	std::atomic<part_int> next_index = 0;
 	part_int part_index = particles_size();
 	vector<hpx::future<void>> futs2;
 	vector<hpx::future<void>> futs3;
@@ -107,20 +128,19 @@ void kick_workspace::to_gpu() {
 	const size_t max_parts = 64 * 1024 * 1024;
 	timer tm2;
 	tm2.start();
-	vector<hpx::future<vector<pair<tree_id, int>>> >futs0;
+	vector<hpx::future<vector<tree_id>> > futs0;
+	vector<tree_id> trees;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int proc = 0; proc < nthreads; proc++) {
-			futs0.push_back(hpx::async([proc,nthreads,&ids,&tree_map, &mutex,&next_index,&part_requests,&part_map,&part_index,&remote_roots]() {
-				vector<pair<tree_id,int>> tree_pairs;
+			futs0.push_back(hpx::async([proc,nthreads,&ids,&tree_map, &mutex,&part_requests,&part_map,&part_index,&remote_roots]() {
+				vector<tree_id> trees;
 				const int b = (size_t) proc * ids.size() / nthreads;
 				const int e = (size_t)(proc + 1) * ids.size() / nthreads;
 				for (int i = b; i < e; i++) {
 					if (tree_map.find(ids[i]) == tree_map.end()) {
 						const tree_node* node = tree_get_node(ids[i]);
-						int index = (next_index += node->node_count);
-						index -= node->node_count;
-						add_tree_node(tree_pairs, ids[i], index);
+						add_tree_node(trees, ids[i]);
 						const int rank = node->proc_range.first;
 						if (rank != hpx_rank()) {
 							const auto range = node->part_range;
@@ -147,19 +167,35 @@ void kick_workspace::to_gpu() {
 						}
 					}
 				}
-				return tree_pairs;
+				return trees;
 			}));
 		}
 		hpx::wait_all(futs0.begin(), futs0.end());
+		const auto start = trees.size();
 		for (auto& f : futs0) {
 			auto tmp = f.get();
+			trees.reserve(trees.size() + tmp.size());
 			for (const auto & entry : tmp) {
-				ALWAYS_ASSERT(tree_map.find(entry.first) == tree_map.end());
-				tree_map[entry.first] = entry.second;
+				trees.push_back(entry);
 			}
+		}
+	/*	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, trees.begin() + start,trees.end(), [](const tree_id& a,const tree_id& b) {
+			return morton_compare(tree_get_node(a)->pos, tree_get_node(b)->pos);
+		});
+		sfut.get();*/
+		for (int i = start; i < trees.size(); i++) {
+			tree_map[trees[i]] = i;
 		}
 		futs0.resize(0);
 	}
+
+	tree_node* tree_nodes;
+	size_t tree_nodes_size = trees.size();
+	CUDA_CHECK(cudaMallocManaged(&tree_nodes, sizeof(tree_node) * tree_nodes_size));
+	for (int i = 0; i < trees.size(); i++) {
+		tree_nodes[i] = *tree_get_node(trees[i]);
+	}
+
 	tm2.stop();
 	PRINT("%e to load tree nodes\n", tm2.read());
 	tm2.reset();
@@ -206,13 +242,6 @@ void kick_workspace::to_gpu() {
 		futs1.push_back(std::move(fut));
 	}
 
-	tree_node* tree_nodes;
-	size_t tree_nodes_size = next_index;
-	CUDA_CHECK(cudaMallocManaged(&tree_nodes, sizeof(tree_node) * tree_nodes_size));
-	for (auto i = tree_map.begin(); i != tree_map.end(); i++) {
-		auto& node = tree_nodes[i->second];
-		node = *tree_get_node(i->first);
-	}
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_size]() {
 			for (int i = proc; i < tree_nodes_size; i+=nthreads) {
@@ -278,29 +307,8 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs2.begin(), futs2.end());
 	futs2.resize(0);
 	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](kick_workitem a, kick_workitem b) {
-		array<unsigned, NDIM> abits;
-		array<unsigned, NDIM> bbits;
-		for(int dim = 0; dim < NDIM; dim++) {
-			abits[dim] = a.pos[dim].raw();
-			bbits[dim] = b.pos[dim].raw();
-		}
-		for( int i = 0; i < 64; i++) {
-			for( int dim = 0; dim < NDIM; dim++) {
-				const int abit = abits[dim] & (unsigned) 0x80000000;
-				const int bbit = bbits[dim] & (unsigned) 0x80000000;
-				if( bbit && !abit) {
-					return true;
-				} else if( !bbit && abit ) {
-					return false;
-				}
-				abits[dim] <<=1;
-				bbits[dim] <<=1;
-			}
-		}
-		return false;
+		return morton_compare(a.pos, b.pos);
 	});
-
-	next_index = 0;
 	hpx::wait_all(futs3.begin(), futs3.end());
 	hpx::wait_all(futs1.begin(), futs1.end());
 	sfut.get();

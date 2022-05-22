@@ -603,7 +603,7 @@ void driver() {
 				bucket_size = 128;
 				theta = 0.7;
 			}
-			opts.bucket_size = bucket_size;
+//			opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
