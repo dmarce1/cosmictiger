@@ -37,7 +37,7 @@ void drift(double scale, double dt, double tau0, double tau1, double tau_max, in
 	for (auto c : hpx_children()) {
 		rfuts.push_back(hpx::async<drift_action>( c, scale, dt, tau0, tau1, tau_max, rung));
 	}
-	const int nthreads = 2 * hpx::thread::hardware_concurrency();
+	const int nthreads = 2 * hpx_hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);
 	std::atomic<part_int> next(0);
 	mutex_type mutex;

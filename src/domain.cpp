@@ -145,7 +145,7 @@ vector<size_t> domains_count_below(vector<double> bounds, int depth) {
 					hpx::async([i, &bounds, depth, &counts]() {
 //							PRINT("???? %i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
 							const auto rng = local_domains[i].part_range;
-							const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
+							const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx_hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
 							vector<hpx::future<void>> futs;
 							const int xdim = depth % NDIM;
 							const fixed32 xmid = bounds[i];
@@ -344,7 +344,7 @@ void domains_begin(int rung) {
 	const auto my_domain = domains_find_my_box();
 	free_indices.resize(0);
 	mutex_type mutex;
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	const auto current_range = particles_current_range();
 	std::atomic<part_int> next_begin(0);
 	constexpr int chunk_size = 1024;

@@ -71,7 +71,7 @@ void groups_cull() {
 	}
 	std::unordered_set<group_int> final_existing;
 	mutex_type mutex;
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc,nthreads,&mutex,&final_existing]() {
 			std::unordered_map<int,vector<group_int>> map;
@@ -182,7 +182,7 @@ void groups_reduce(double scale_factor) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<groups_reduce_action>( c, scale_factor));
 	}
-	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::thread::hardware_concurrency();
+	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx_hardware_concurrency();
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale_factor;
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -379,7 +379,7 @@ void groups_reduce(double scale_factor) {
 
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries) {
 	vector<hpx::future<void>> futs;
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([nthreads,proc,&entries]() {
 					for( int i = proc; i < entries.size(); i+= nthreads) {
@@ -399,7 +399,7 @@ void groups_add_particles(int wave, double scale) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<groups_add_particles_action>( c, wave, scale));
 	}
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale;
 	for (int proc = 0; proc < nthreads; proc++) {

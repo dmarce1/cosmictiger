@@ -208,7 +208,7 @@ vector<float> output_view(int number, double time) {
 	for (const auto& c : hpx_children()) {
 		val_futs.push_back(hpx::async<output_view_action>( c, number, time));
 	}
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	const int Nside = get_options().view_size;
 	const int Npix = 12 * sqr(Nside);
 	vector<std::atomic<float>> values(Npix);

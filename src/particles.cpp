@@ -399,7 +399,7 @@ void particles_groups_destroy() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<particles_groups_destroy_action>(c));
 	}
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	vector<hpx::future<void>> futs2;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([nthreads,proc]() {
@@ -847,7 +847,7 @@ void particles_random_init() {
 	const size_t end = (size_t)(hpx_rank() + 1) * total_num_parts / hpx_size();
 	const size_t my_num_parts = end - begin;
 	particles_resize(my_num_parts);
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads]() {
 			const part_int begin = (size_t) proc * particles_size() / nthreads;

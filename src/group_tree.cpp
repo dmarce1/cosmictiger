@@ -114,7 +114,7 @@ fast_future<group_tree_return> group_tree_create_fork(size_t key, pair<int, int>
 	} else if (threadme) {
 		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || proc_range.second - proc_range.first > 1) {
+			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx_hardware_concurrency() || proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;

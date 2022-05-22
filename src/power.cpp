@@ -65,7 +65,7 @@ static void compute_density() {
 			}
 		}
 	}
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc,nthreads,N,intbox,&rho]() {
 			const part_int begin = (size_t) proc * particles_size() / nthreads;

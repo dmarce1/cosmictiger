@@ -169,7 +169,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	} else if (threadme) {
 		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || proc_range.second - proc_range.first > 1) {
+			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx_hardware_concurrency() || proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;
