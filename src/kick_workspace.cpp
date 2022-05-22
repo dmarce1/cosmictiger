@@ -207,7 +207,6 @@ void kick_workspace::to_gpu() {
 	tm4.stop();
 
 
-	tm2.stop();
 	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read()+tm3.read()+tm4.read(), tm2.read(), tm3.read(), tm4.read());
 	tm2.reset();
 	futs1.resize(0);
