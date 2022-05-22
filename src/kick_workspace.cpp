@@ -182,10 +182,6 @@ void kick_workspace::to_gpu() {
 				trees.push_back(entry);
 			}
 		}
-		/*	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, trees.begin() + start,trees.end(), [](const tree_id& a,const tree_id& b) {
-		 return morton_compare(tree_get_node(a)->pos, tree_get_node(b)->pos);
-		 });
-		 sfut.get();*/
 		for (int i = start; i < trees.size(); i++) {
 			if (trees[i].proc == hpx_rank()) {
 				tree_map[trees[i]] = trees[i].index;
@@ -329,9 +325,11 @@ void kick_workspace::to_gpu() {
 	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
 	tm.reset();
 	tm.start();
+	tree_2_gpu();
 	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes,
 			std::move(workitems), stream);
 	cuda_end_stream(stream);
+	tree_2_cpu();
 	tm.stop();
 	PRINT("GPU took %e seconds\n", tm.read());
 

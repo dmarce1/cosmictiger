@@ -198,4 +198,7 @@ const tree_id tree_get_leaf(int i);
 size_t tree_add_remote(const tree_node& remote);
 tree_node* tree_data();
 tree_id& tree_get_neighbor(int i);
+void tree_2_cpu();
+void tree_2_gpu();
+
 #endif /* TREE_HPP_ */
