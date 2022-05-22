@@ -71,7 +71,6 @@ static size_t nodes_size;
 long long tree_nodes_size() {
 	return nodes_size;
 }
-
 struct last_cache_entry_t;
 
 static std::unordered_set<last_cache_entry_t*> last_cache_entries;
@@ -194,11 +193,12 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 }
 
 size_t tree_add_remote(const tree_node& remote) {
-	if (next_id >= nodes_size) {
+	const int tree_cache_line_size = get_options().tree_cache_line_size;
+	if (next_id + tree_cache_line_size >= nodes_size) {
 		PRINT("TREE ALLOCATION EXCEEDED\n");
 		abort();
 	}
-	size_t index = ++next_id;
+	size_t index = next_id++ + tree_cache_line_size;
 	nodes[index] = remote;
 	return index;
 }
@@ -238,6 +238,12 @@ static void tree_allocate_nodes() {
 	}
 	allocator_mtx--;
 	hpx::wait_all(futs.begin(), futs.end());
+}
+
+
+long long tree_nodes_next_index() {
+	const int tree_cache_line_size = get_options().tree_cache_line_size;
+	return next_id + tree_cache_line_size;
 }
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,

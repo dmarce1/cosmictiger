@@ -71,7 +71,7 @@ void kick_workspace::to_gpu() {
 
 	timer tm;
 	tm.start();
-	const auto tree_nodes_remote_begin = tree_nodes_size();
+	const auto tree_nodes_remote_begin = tree_nodes_next_index();
 	if (workitems.size() == 0) {
 		return;
 	}
@@ -185,9 +185,7 @@ void kick_workspace::to_gpu() {
 		 });
 		 sfut.get();*/
 		for (int i = start; i < trees.size(); i++) {
-			if (trees[i].proc == hpx_rank()) {
-				tree_map[trees[i]] = trees[i].index;
-			} else {
+			if (trees[i].proc != hpx_rank()) {
 				tree_map[trees[i]] = tree_add_remote(*tree_get_node(trees[i]));
 			}
 		}
@@ -242,7 +240,7 @@ void kick_workspace::to_gpu() {
 	auto* tree_nodes = tree_data();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_remote_begin]() {
-			for (int i = tree_nodes_remote_begin + proc; i < tree_nodes_size(); i+=nthreads) {
+			for (int i = tree_nodes_remote_begin + proc; i < tree_nodes_next_index(); i+=nthreads) {
 				if (tree_nodes[i].children[LEFT].index != -1) {
 					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
 					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
@@ -269,38 +267,38 @@ void kick_workspace::to_gpu() {
 			global_part_range gpr;
 			ALWAYS_ASSERT(tree_map.find(*i) != tree_map.end());
 			int index = tree_map[*i];
-			if( index >= tree_nodes_remote_begin) {
-				auto& node = tree_nodes[index];
-				gpr.rank = node.proc_range.first;
-				gpr.range = node.part_range;
-				ALWAYS_ASSERT(part_map.find(gpr) != part_map.end());
-				auto local_range = part_map[gpr];
-				part_int offset = local_range.first - gpr.range.first;
-				ALWAYS_ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
-				adjust_part_refs(index, offset);
-			}
+			ALWAYS_ASSERT( index >= tree_nodes_remote_begin);
+			auto& node = tree_nodes[index];
+			gpr.rank = node.proc_range.first;
+			gpr.range = node.part_range;
+			ALWAYS_ASSERT(part_map.find(gpr) != part_map.end());
+			auto local_range = part_map[gpr];
+			part_int offset = local_range.first - gpr.range.first;
+			ALWAYS_ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
+			adjust_part_refs(index, offset);
 		}));
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [this,proc,nthreads,&tree_map]() {
 			for (int i = proc; i < workitems.size(); i+=nthreads) {
 				for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-					auto iter = tree_map.find(workitems[i].dchecklist[j]);
-					if( iter == tree_map.end()) {
-						THROW_ERROR( "Tree map error %i\n", tree_map.size());
+					if( workitems[i].dchecklist[j].proc != hpx_rank()) {
+						auto iter = tree_map.find(workitems[i].dchecklist[j]);
+						if( iter == tree_map.end()) {
+							THROW_ERROR( "Tree map error %i\n", tree_map.size());
+						}
+						workitems[i].dchecklist[j].index = iter->second;
 					}
-					workitems[i].dchecklist[j].index = iter->second;
 				}
 				for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-					auto iter = tree_map.find(workitems[i].echecklist[j]);
-					if( iter == tree_map.end()) {
-						THROW_ERROR( "Tree map error\n");
+					if( workitems[i].echecklist[j].proc != hpx_rank()) {
+						auto iter = tree_map.find(workitems[i].echecklist[j]);
+						if( iter == tree_map.end()) {
+							THROW_ERROR( "Tree map error\n");
+						}
+						workitems[i].echecklist[j].index = iter->second;
 					}
-					workitems[i].echecklist[j].index = iter->second;
 				}
-				ALWAYS_ASSERT(tree_map.find(workitems[i].self) != tree_map.end());
-				workitems[i].self.index = tree_map[workitems[i].self];
-				ASSERT(workitems[i].self.proc == hpx_rank());
 			}
 		}));
 	}
