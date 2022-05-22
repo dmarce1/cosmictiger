@@ -104,7 +104,7 @@ void kick_workspace::to_gpu() {
 	vector<hpx::future<void>> futs2;
 	vector<hpx::future<void>> futs3;
 	const size_t opartsize = particles_size();
-	const size_t max_parts = 8 * 1024 * 1024;
+	const size_t max_parts = 64 * 1024 * 1024;
 	timer tm2;
 	tm2.start();
 	vector<hpx::future<vector<pair<tree_id, int>>> >futs0;
