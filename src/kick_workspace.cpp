@@ -109,9 +109,6 @@ void kick_workspace::to_gpu() {
 		}));
 	}
 	hpx::wait_all(futs1.begin(), futs1.end());
-	tm.stop();
-	PRINT( "Took %e to make ids_by_depth\n", tm.read());
-	tm.reset();
 	struct part_request {
 		vector<vector<pair<part_int>>> data;
 		size_t count;
@@ -187,8 +184,11 @@ void kick_workspace::to_gpu() {
 		 });
 		 sfut.get();*/
 		for (int i = start; i < trees.size(); i++) {
-			if (trees[i].proc != hpx_rank()) {
+			if (trees[i].proc == hpx_rank()) {
+				tree_map[trees[i]] = trees[i].index;
+			} else {
 				tree_map[trees[i]] = tree_add_remote(*tree_get_node(trees[i]));
+
 			}
 		}
 		futs0.resize(0);
