@@ -109,7 +109,9 @@ void kick_workspace::to_gpu() {
 		}));
 	}
 	hpx::wait_all(futs1.begin(), futs1.end());
-
+	tm.stop();
+	PRINT( "Took %e to make ids_by_depth\n", tm.read());
+	tm.reset();
 	struct part_request {
 		vector<vector<pair<part_int>>> data;
 		size_t count;
