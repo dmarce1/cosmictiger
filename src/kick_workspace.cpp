@@ -84,7 +84,6 @@ void kick_workspace::to_gpu() {
 		}
 	};
 	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
-	std::vector<pair<tree_id, int>> tree_pairs;
 	std::unordered_map<int, part_request> part_requests;
 	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
 	mutex_type mutex;
@@ -99,7 +98,7 @@ void kick_workspace::to_gpu() {
 	const size_t max_parts = 8 * 1024 * 1024;
 	timer tm2;
 	tm2.start();
-	vector < hpx::future < vector<pair<tree_id, int>>> > futs0;
+	vector<hpx::future<vector<pair<tree_id, int>>> >futs0;
 	for (int depth = 0; depth < MAX_DEPTH; depth++) {
 		const auto& ids = ids_by_depth[depth];
 		for (int proc = 0; proc < nthreads; proc++) {
@@ -110,7 +109,7 @@ void kick_workspace::to_gpu() {
 				for (int i = b; i < e; i++) {
 					if (tree_map.find(ids[i]) == tree_map.end()) {
 						const tree_node* node = tree_get_node(ids[i]);
-						int index = next_index += node->node_count;
+						int index = (next_index += node->node_count);
 						index -= node->node_count;
 						add_tree_node(tree_pairs, ids[i], index);
 						const int rank = node->proc_range.first;
@@ -146,6 +145,7 @@ void kick_workspace::to_gpu() {
 		for (auto& f : futs0) {
 			auto tmp = f.get();
 			for (const auto & entry : tmp) {
+				ALWAYS_ASSERT(tree_map.find(entry.first) == tree_map.end());
 				tree_map[entry.first] = entry.second;
 			}
 		}
@@ -174,7 +174,15 @@ void kick_workspace::to_gpu() {
 						auto local_range = part_map[gpr];
 						const auto nparts = local_range.second - local_range.first;
 						for( int dim = 0; dim < NDIM; dim++) {
-							std::memcpy(&particles_pos(dim,local_range.first), &data[count * dim + index], sizeof(fixed32)*nparts);
+							for( int l = 0; l < nparts; l++) {
+								const int m = local_range.first + l;
+								const int n = count * dim + index + nparts;
+								ALWAYS_ASSERT(m>=0);
+								ALWAYS_ASSERT(n>=0);
+								ALWAYS_ASSERT(m<particles_size());
+								ALWAYS_ASSERT(n<data.size());
+								particles_pos(dim,m) = data[n];
+							}
 						}
 						index += nparts;
 					}
