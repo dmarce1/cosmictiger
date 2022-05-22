@@ -212,12 +212,11 @@ static bool set_cpu = false;
 
 void tree_2_cpu() {
 	if (!set_cpu) {
+		PRINT("tree2cpu\n");
 		if (set_gpu) {
 			cuda_set_device();
-			CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseUnsetPreferredLocation, cuda_get_device()));
 			CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseUnsetReadMostly, cuda_get_device()));
 		}
-		CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
 		set_gpu = false;
 		set_cpu = true;
 	}
@@ -225,11 +224,8 @@ void tree_2_cpu() {
 
 void tree_2_gpu() {
 	if (!set_gpu) {
-		if (set_cpu) {
-			CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
-		}
+		PRINT("tree2GPU\n");
 		cuda_set_device();
-		CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseSetPreferredLocation, cuda_get_device()));
 		CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseSetReadMostly, cuda_get_device()));
 		set_gpu = true;
 		set_cpu = false;
