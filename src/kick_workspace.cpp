@@ -189,13 +189,18 @@ void kick_workspace::to_gpu() {
 			if (trees[i].proc == hpx_rank()) {
 				tree_map[trees[i]] = trees[i].index;
 			} else {
-				tree_map[trees[i]] = tree_add_remote(*tree_get_node(trees[i]));
+				tree_map[trees[i]] = -1;
 
 			}
 		}
 		tm3.stop();
-		PRINT( "!!!!!!!!!!! %e\n", tm3.read());
 		futs0.resize(0);
+	}
+	for (int i = 0; i < trees.size(); i++) {
+		if (trees[i].proc != hpx_rank()) {
+			tree_map[trees[i]] = tree_add_remote(*tree_get_node(trees[i]));
+
+		}
 	}
 
 	tm2.stop();
