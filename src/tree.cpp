@@ -57,7 +57,7 @@ public:
 };
 
 static vector<tree_allocator*> allocator_list;
-static thread_local tree_allocator allocator;
+static thread_local array<tree_allocator, MAX_DEPTH> allocator;
 static tree_node* nodes = nullptr;
 static vector<pair<part_int>> leaf_part_ranges;
 static mutex_type leaf_part_range_mutex;
@@ -300,13 +300,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	double r;
 	int min_depth = depth;
 	int max_depth = depth;
-	if (!allocator.ready) {
-		allocator.reset();
-		allocator.ready = true;
+	if (!allocator[depth].ready) {
+		allocator[depth].reset();
+		allocator[depth].ready = true;
 	}
 	size_t node_count;
 	size_t leaf_nodes = 0;
-	const int index = allocator.allocate();
+	const int index = allocator[depth].allocate();
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
 	float box_r = 0.0f;
