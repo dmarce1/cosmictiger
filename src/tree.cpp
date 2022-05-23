@@ -160,7 +160,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
-	static std::atomic<int> nthreads(0);
+	static std::atomic<int> nthreads(1);
 	fast_future<tree_create_return> rc;
 	bool remote = false;
 	if (proc_range.first != hpx_rank()) {

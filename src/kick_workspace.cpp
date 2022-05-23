@@ -97,7 +97,7 @@ void kick_workspace::to_gpu() {
 	vector<hpx::future<void>> futs1;
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	int nthreads = hpx_size() == 1 ? 1 : hpx_hardware_concurrency();
+	int nthreads = hpx_size() == 1 ? 1 : std::max(1,(int)hpx_hardware_concurrency()/2);
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs1.push_back(hpx::async([proc,nthreads,&tree_ids_vector,&ids_by_depth,&mutex]() {
 			std::unique_lock<mutex_type> lock(mutex);
@@ -206,7 +206,7 @@ void kick_workspace::to_gpu() {
 	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read()+tm3.read()+tm4.read(), tm2.read(), tm3.read(), tm4.read());
 	tm2.reset();
 	futs1.resize(0);
-	nthreads = hpx_hardware_concurrency();
+	nthreads = std::max(1,(int) hpx_hardware_concurrency());
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
 		const int rank = i->first;
 		hpx::future<void> fut = hpx::make_ready_future();

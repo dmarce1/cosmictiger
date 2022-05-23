@@ -70,7 +70,7 @@ static void cleanup_workspace(workspace&& workspace) {
 
 hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, bool threadme) {
-	static std::atomic<int> nthreads(0);
+	static std::atomic<int> nthreads(1);
 	hpx::future<kick_return> rc;
 	const tree_node* self_ptr = tree_get_node(self);
 	bool remote = false;
@@ -87,7 +87,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 	} else if (threadme) {
 		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx_hardware_concurrency() || !self_ptr->is_local()) {
+			if (nthreads++ < std::max(1,(int)hpx_hardware_concurrency()/2) || !self_ptr->is_local()) {
 				threadme = true;
 			} else {
 				threadme = false;

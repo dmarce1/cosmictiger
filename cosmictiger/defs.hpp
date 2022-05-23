@@ -104,7 +104,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define NSPH_TREES_MIN (2*1024*1024)
 #define PART_CACHE_SIZE 1024
 #define SINK_BIAS float(1.5)
-#define SORT_OVERSUBSCRIPTION 8
+#define SORT_OVERSUBSCRIPTION 2
 #define TREE_CACHE_SIZE 1024
 #define SPH_TREE_CACHE_SIZE 1024
 #define TREE_NODE_ALLOCATION_SIZE 8
