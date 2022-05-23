@@ -233,10 +233,10 @@ void kick_workspace::to_gpu() {
 							for( int l = 0; l < nparts; l++) {
 								const int m = local_range.first + l;
 								const int n = sz * dim + index + l;
-								ALWAYS_ASSERT(m>=0);
-								ALWAYS_ASSERT(n>=0);
-								ALWAYS_ASSERT(m<particles_size());
-								ALWAYS_ASSERT(n<data.size());
+								ASSERT(m>=0);
+								ASSERT(n>=0);
+								ASSERT(m<particles_size());
+								ASSERT(n<data.size());
 								particles_pos(dim,m).set_integer(data[n]);
 							}
 						}
@@ -252,8 +252,8 @@ void kick_workspace::to_gpu() {
 		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc,nthreads,&tree_map,&tree_nodes, tree_nodes_remote_begin]() {
 			for (int i = tree_nodes_remote_begin + proc; i < tree_nodes_next_index(); i+=nthreads) {
 				if (tree_nodes[i].children[LEFT].index != -1) {
-					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
-					ALWAYS_ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
+					ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
+					ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
 					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
 					tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
 				}
@@ -265,8 +265,8 @@ void kick_workspace::to_gpu() {
 	const std::function<void(int, part_int)> adjust_part_refs = [&adjust_part_refs,&tree_nodes](int index, part_int offset) -> void {
 		tree_nodes[index].part_range.first += offset;
 		tree_nodes[index].part_range.second += offset;
-		ALWAYS_ASSERT(tree_nodes[index].part_range.first >= 0);
-		ALWAYS_ASSERT(tree_nodes[index].part_range.second <= particles_size());
+		ASSERT(tree_nodes[index].part_range.first >= 0);
+		ASSERT(tree_nodes[index].part_range.second <= particles_size());
 		if( tree_nodes[index].children[LEFT].index != -1) {
 			adjust_part_refs(tree_nodes[index].children[LEFT].index, offset);
 			adjust_part_refs(tree_nodes[index].children[RIGHT].index, offset);
@@ -275,16 +275,16 @@ void kick_workspace::to_gpu() {
 	for (auto i = remote_roots.begin(); i != remote_roots.end(); i++) {
 		futs3.push_back(hpx::async(HPX_PRIORITY_HI,[i,&tree_map,&part_map,adjust_part_refs,&tree_nodes,tree_nodes_remote_begin]() {
 			global_part_range gpr;
-			ALWAYS_ASSERT(tree_map.find(*i) != tree_map.end());
+			ASSERT(tree_map.find(*i) != tree_map.end());
 			int index = tree_map[*i];
-			ALWAYS_ASSERT( index >= tree_nodes_remote_begin);
+			ASSERT( index >= tree_nodes_remote_begin);
 			auto& node = tree_nodes[index];
 			gpr.rank = node.proc_range.first;
 			gpr.range = node.part_range;
-			ALWAYS_ASSERT(part_map.find(gpr) != part_map.end());
+			ASSERT(part_map.find(gpr) != part_map.end());
 			auto local_range = part_map[gpr];
 			part_int offset = local_range.first - gpr.range.first;
-			ALWAYS_ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
+			ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
 			adjust_part_refs(index, offset);
 		}));
 	}
