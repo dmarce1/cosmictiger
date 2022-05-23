@@ -37,6 +37,7 @@ struct options {
 	int tracer_count;
 	int parts_dim;
 	int tree_cache_line_size;
+	int tree_alloc_line_size;
 	int part_cache_line_size;
 	int check_freq;
 	int max_iter;
@@ -96,6 +97,7 @@ struct options {
 		arc & tracer_count;
 		arc & parts_dim;
 		arc & tree_cache_line_size;
+		arc & tree_alloc_line_size;
 		arc & part_cache_line_size;
 		arc & read_check;
 		arc & check_freq;

@@ -112,9 +112,12 @@ static void reset_last_cache_entries() {
 static const tree_node* tree_cache_read(tree_id id);
 
 void tree_allocator::reset() {
-	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	next = (next_id += tree_cache_line_size);
-	last = std::min(next + tree_cache_line_size, (int) nodes_size);
+	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
+	next = (next_id += tree_alloc_line_size);
+	last = std::min(next + tree_alloc_line_size, (int) nodes_size);
+	for (int i = next; i < last; i++) {
+		nodes[i].valid = false;
+	}
 	if (next >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full");
 	}
@@ -158,6 +161,82 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	htime = true;
 }
 
+/*static void tree_sort_nodes() {
+	timer tm;
+	tm.start();
+	const int line_size = get_options().tree_alloc_line_size;
+	vector<hpx::future<void>> futs;
+	vector<int> tree_map(nodes_size);
+	const int stride = std::max((int) (nodes_size / line_size) / (8 * hpx_hardware_concurrency()), 1);
+	for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
+		futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
+			const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
+			for( int begin = begin0; begin < end0; begin+= line_size) {
+				vector<pair<int>> sort_ranges;
+				pair<int> current;
+				int end = std::min(begin + line_size, (int) nodes_size);
+				current.first = begin;
+				for (int i = begin; i < end; i++) {
+					const bool pinned = (nodes[i].proc_range.second - nodes[i].proc_range.first > 1) || nodes[i].local_root;
+					if (pinned) {
+						current.second = i;
+						if (current.second - current.first > 0) {
+							sort_ranges.push_back(current);
+						}
+						current.first = i + 1;
+					}
+				}
+				current.second = end;
+				if (current.second - current.first > 0) {
+					sort_ranges.push_back(current);
+				}
+				for (const auto& range : sort_ranges) {
+					std::sort(nodes + range.first, nodes + range.second, [](const tree_node& a, const tree_node& b) {
+								if( a.valid && !b.valid ) {
+									return true;
+								} else if( !a.valid ) {
+									return false;
+								} else if( a.depth < b.depth ) {
+									return true;
+								} else if( a.depth > b.depth ) {
+									return false;
+								} else {
+									return a.part_range.first < b.part_range.first;
+								}
+							});
+				}
+				for (int i = begin; i < end; i++) {
+					if (nodes[i].valid) {
+						tree_map[nodes[i].index] = i;
+					}
+				}
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	PRINT("%i Sorts done\n", futs.size());
+	futs.resize(0);
+	for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
+		futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
+			const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
+			for( int begin = begin0; begin < end0; begin+= line_size) {
+				int end = std::min(begin + line_size, (int) nodes_size);
+				for( int i = begin; i < end; i++) {
+					if (nodes[i].valid) {
+						auto& left = nodes[i].children[LEFT];
+						auto& right = nodes[i].children[RIGHT];
+						if (left.index != -1 && left.proc == hpx_rank()) {
+							left.index = tree_map[left.index];
+							right.index = tree_map[right.index];
+						}
+					}
+				}
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+}*/
+
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(1);
@@ -193,12 +272,12 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 }
 
 size_t tree_add_remote(const tree_node& remote) {
-	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	if (next_id + tree_cache_line_size >= nodes_size) {
+	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
+	if (next_id + tree_alloc_line_size >= nodes_size) {
 		PRINT("TREE ALLOCATION EXCEEDED\n");
 		abort();
 	}
-	size_t index = next_id++ + tree_cache_line_size;
+	size_t index = next_id++ + tree_alloc_line_size;
 	nodes[index] = remote;
 	return index;
 }
@@ -233,13 +312,13 @@ void tree_2_gpu() {
 }
 
 static void tree_allocate_nodes() {
-	const int tree_cache_line_size = get_options().tree_cache_line_size;
+	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
 	static const int bucket_size = get_options().bucket_size;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<tree_allocate_nodes_action>(c));
 	}
-	next_id = -tree_cache_line_size;
+	next_id = -tree_alloc_line_size;
 	const size_t sz = std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN);
 	if (nodes_size < sz) {
 #ifdef USE_CUDA
@@ -267,8 +346,8 @@ static void tree_allocate_nodes() {
 }
 
 long long tree_nodes_next_index() {
-	const int tree_cache_line_size = get_options().tree_cache_line_size;
-	return next_id + tree_cache_line_size;
+	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
+	return next_id + tree_alloc_line_size;
 }
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
@@ -536,6 +615,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		leaf_nodes = 1;
 	}
 	tree_node node;
+	node.valid = true;
+	node.index = index;
 	node.node_count = node_count;
 	node.radius = radius;
 	node.children = children;
@@ -569,6 +650,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.flops = total_flops;
 	rc.min_depth = min_depth;
 	rc.max_depth = max_depth;
+	if (local_root) {
+	//	tree_sort_nodes();
+	}
 	if (key == 1) {
 		profiler_exit();
 	}

@@ -93,6 +93,8 @@ struct tree_node {
 	bool leaf;
 	size_t node_count;
 	int depth;
+	bool valid;
+	int index;
 
 	CUDA_EXPORT
 	inline const multipole_pos* get_multipole_ptr() const {
@@ -123,6 +125,8 @@ struct tree_node {
 		arc & radius;
 		arc & local_root;
 		arc & leaf;
+		arc & valid;
+		arc & index;
 		arc & node_count;
 		arc & sink_part_range;
 		arc & depth;

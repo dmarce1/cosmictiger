@@ -157,6 +157,7 @@ bool process_options(int argc, char *argv[]) {
 		po::notify(vm);
 	}
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
+	opts.tree_alloc_line_size = 16 * opts.tree_cache_line_size;
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
 	opts.hsoft *= 1.0 / opts.parts_dim;
