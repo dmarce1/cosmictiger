@@ -86,8 +86,9 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		remote = true;
 	} else if (threadme) {
 		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
+		const int maxthreads = std::max(1, hpx_size() == 1 ? (int) hpx_hardware_concurrency() * 2 : (int) hpx_hardware_concurrency() / 2);
 		if (threadme) {
-			if (nthreads++ < std::max(1,(int)hpx_hardware_concurrency()/2) || !self_ptr->is_local()) {
+			if (nthreads++ < maxthreads || !self_ptr->is_local()) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -123,7 +124,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
 	//params.gpu = false;
-	if( self.proc == 0 && self.index == 0 ) {
+	if (self.proc == 0 && self.index == 0) {
 		profiler_enter(__FUNCTION__);
 	}
 	stack_trace_activate();
@@ -139,7 +140,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 //			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
 //			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
-				cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
+			cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
 //			}
 		}
 		bool eligible;
@@ -419,7 +420,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				gethostname(hostname, 32);
 //				PRINT("Kick took %e s on %s\n", tm.read(), hostname);
 			}
-			if( self.proc == 0 && self.index == 0 ) {
+			if (self.proc == 0 && self.index == 0) {
 				profiler_exit();
 			}
 			return hpx::make_ready_future(kr);

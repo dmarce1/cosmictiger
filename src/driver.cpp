@@ -101,10 +101,6 @@ static void flush_timings(bool reset) {
 	fclose(fp);
 }
 
-static int bucket_trial() {
-	return ((60 + (rand() % 141)) / 10) * 10;
-}
-
 void do_groups(int number, double scale) {
 	profiler_enter(__FUNCTION__);
 
@@ -434,6 +430,9 @@ void driver() {
 	timer tmr;
 	tmr.start();
 	driver_params params;
+	timer buckets50;
+	timer buckets20;
+	timer buckets2;
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().read_check != -1) {
 		params = read_checkpoint();
@@ -530,6 +529,7 @@ void driver() {
 	const float hsoft0 = get_options().hsoft;
 	bool do_check = false;
 	double checkz;
+	buckets50.start();
 	for (;; step++) {
 
 //		PRINT("STEP  = %i\n", step);
@@ -603,7 +603,16 @@ void driver() {
 				bucket_size = 128;
 				theta = 0.7;
 			}
-	//		opts.bucket_size = bucket_size;
+			if (theta != last_theta) {
+				if (theta == 0.55) {
+					buckets50.stop();
+					buckets20.start();
+				} else if (theta == 0.7) {
+					buckets20.stop();
+					buckets2.start();
+				}
+			}
+			//		opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
@@ -734,6 +743,10 @@ void driver() {
 			break;
 		}
 	}
+	buckets2.stop();
+	FILE* fp = fopen("buckets.txt", "at");
+	fprintf(fp, "%i %e %e %e\n", get_options().bucket_size, buckets50.read(), buckets20.read(), buckets2.read());
+	fclose(fp);
 	if (get_options().do_lc) {
 		check_lc(true);
 		particles_free();
