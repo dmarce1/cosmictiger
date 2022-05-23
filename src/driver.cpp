@@ -597,10 +597,10 @@ void driver() {
 			} else if (z > 20.0) {
 				theta = 0.4;
 			} else if (z > 2.0) {
-				bucket_size = 96;
+				bucket_size = 120;
 				theta = 0.55;
 			} else {
-				bucket_size = 128;
+				bucket_size = 160;
 				theta = 0.7;
 			}
 			if (theta != last_theta) {
@@ -612,7 +612,7 @@ void driver() {
 					buckets2.start();
 				}
 			}
-			//		opts.bucket_size = bucket_size;
+			opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
 			last_theta = theta;
