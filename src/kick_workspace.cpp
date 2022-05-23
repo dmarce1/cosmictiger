@@ -97,7 +97,7 @@ void kick_workspace::to_gpu() {
 	vector<hpx::future<void>> futs1;
 	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
 	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	int nthreads = hpx_size() == 1 ? 1 : std::max(1,(int)hpx_hardware_concurrency()/2);
+	int nthreads = hpx_size() == 1 ? 1 : std::max(1, (int) hpx_hardware_concurrency() / 2);
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs1.push_back(hpx::async([proc,nthreads,&tree_ids_vector,&ids_by_depth,&mutex]() {
 			std::unique_lock<mutex_type> lock(mutex);
@@ -202,11 +202,10 @@ void kick_workspace::to_gpu() {
 	}
 	tm4.stop();
 
-
-	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read()+tm3.read()+tm4.read(), tm2.read(), tm3.read(), tm4.read());
+	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read() + tm3.read() + tm4.read(), tm2.read(), tm3.read(), tm4.read());
 	tm2.reset();
 	futs1.resize(0);
-	nthreads = std::max(1,(int) hpx_hardware_concurrency());
+	nthreads = std::max(1, (int) hpx_hardware_concurrency());
 	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
 		const int rank = i->first;
 		hpx::future<void> fut = hpx::make_ready_future();
@@ -230,15 +229,7 @@ void kick_workspace::to_gpu() {
 						auto local_range = part_map[gpr];
 						const auto nparts = local_range.second - local_range.first;
 						for( int dim = 0; dim < NDIM; dim++) {
-							for( int l = 0; l < nparts; l++) {
-								const int m = local_range.first + l;
-								const int n = sz * dim + index + l;
-								ASSERT(m>=0);
-								ASSERT(n>=0);
-								ASSERT(m<particles_size());
-								ASSERT(n<data.size());
-								particles_pos(dim,m).set_integer(data[n]);
-							}
+							memcpy(&particles_pos(dim,local_range.first), &data[sz*dim + index], nparts * sizeof(fixed32));
 						}
 						index += nparts;
 					}
@@ -254,8 +245,10 @@ void kick_workspace::to_gpu() {
 				if (tree_nodes[i].children[LEFT].index != -1) {
 					ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
 					ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
-					tree_nodes[i].children[LEFT].index = tree_map[tree_nodes[i].children[LEFT]];
-					tree_nodes[i].children[RIGHT].index = tree_map[tree_nodes[i].children[RIGHT]];
+					auto& left = tree_nodes[i].children[LEFT];
+					auto& right = tree_nodes[i].children[RIGHT];
+					left.index = tree_map[left];
+					right.index = tree_map[right];
 				}
 			}
 		}));
@@ -293,19 +286,15 @@ void kick_workspace::to_gpu() {
 			for (int i = proc; i < workitems.size(); i+=nthreads) {
 				for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 					if( workitems[i].dchecklist[j].proc != hpx_rank()) {
-						auto iter = tree_map.find(workitems[i].dchecklist[j]);
-						if( iter == tree_map.end()) {
-							THROW_ERROR( "Tree map error %i\n", tree_map.size());
-						}
+						const auto iter = tree_map.find(workitems[i].dchecklist[j]);
+						ASSERT( iter != tree_map.end());
 						workitems[i].dchecklist[j].index = iter->second;
 					}
 				}
 				for (int j = 0; j < workitems[i].echecklist.size(); j++) {
 					if( workitems[i].echecklist[j].proc != hpx_rank()) {
-						auto iter = tree_map.find(workitems[i].echecklist[j]);
-						if( iter == tree_map.end()) {
-							THROW_ERROR( "Tree map error\n");
-						}
+						const auto iter = tree_map.find(workitems[i].echecklist[j]);
+						ASSERT( iter != tree_map.end());
 						workitems[i].echecklist[j].index = iter->second;
 					}
 				}

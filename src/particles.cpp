@@ -1324,23 +1324,36 @@ vector<int> particles_get_local(const vector<pair<part_int>>& ranges) {
 	for (const auto& r : ranges) {
 		sz += r.second - r.first;
 	}
+
 	rc.resize(NDIM * sz);
-	std::shared_lock<shared_mutex_type> lock(shared_mutex);
-	part_int i = 0;
-	for (int j = 0; j < ranges.size(); j++) {
-		const auto& r = ranges[j];
-		for (int dim = 0; dim < NDIM; dim++) {
-			for (int l = i + dim * sz; l < i + dim * sz + r.second - r.first; l++) {
-				const auto m = l - i - dim * sz + r.first;
-				ALWAYS_ASSERT(m >= 0);
-				ALWAYS_ASSERT(m < particles_size());
-				ALWAYS_ASSERT(l >= 0);
-				ALWAYS_ASSERT(l < rc.size());
-				rc[l] = particles_pos(dim, m).raw();
+
+	const auto func1 = [&ranges,&rc,sz]() {
+		std::shared_lock<shared_mutex_type> lock(shared_mutex);
+		part_int i = 0;
+		for (int j = 0; j < ranges.size() / 2; j++) {
+			const auto& r = ranges[j];
+			const auto count = r.second - r.first;
+			for (int dim = 0; dim < NDIM; dim++) {
+				memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), count * sizeof(fixed32));
+			}
+			i += count;
+		}
+	};
+	const auto func2 = [&ranges,&rc,sz]() {
+		std::shared_lock<shared_mutex_type> lock(shared_mutex);
+		part_int i = sz;
+		for (int j = ranges.size() - 1; j >= (int) ranges.size() / 2; j--) {
+			const auto& r = ranges[j];
+			const auto count = r.second - r.first;
+			i -= count;
+			for (int dim = 0; dim < NDIM; dim++) {
+				memcpy(&rc[i + dim * sz], &particles_pos(dim, r.first), count * sizeof(fixed32));
 			}
 		}
-		i += r.second - r.first;
-	}
+	};
+	auto fut1 = hpx::async(func1);
+	func2();
+	fut1.get();
 	return rc;
 }
 
