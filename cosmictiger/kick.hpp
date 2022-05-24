@@ -47,6 +47,12 @@ struct kick_return;
 
 #ifdef __CUDACC__
 
+struct kick_stack_type {
+	array<fixed32, NDIM> Lpos;
+	int phase;
+	int self;
+};
+
 struct cuda_kick_shmem {
 	array<fixed32, KICK_PP_MAX> x;
 	array<fixed32, KICK_PP_MAX> y;
@@ -64,9 +70,7 @@ struct cuda_kick_shmem {
 	device_vector<expansion<float>> L;
 	device_vector<int> nextlist;
 	device_vector<kick_return> returns;
-	device_vector<array<fixed32, NDIM>> Lpos;
-	device_vector<int> phase;
-	device_vector<int> self;
+	device_vector<kick_stack_type> stack;
 
 };
 #endif

@@ -175,9 +175,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	new (shmem_ptr) cuda_kick_shmem;
 	auto& L = shmem.L;
-	auto& phase = shmem.phase;
-	auto& Lpos = shmem.Lpos;
-	auto& self_index = shmem.self;
+	auto& stack = shmem.stack;
 	auto& returns = shmem.returns;
 	auto& dchecks = shmem.dchecks;
 	auto& echecks = shmem.echecks;
@@ -199,13 +197,16 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
 	__syncthreads();
+	kick_stack_type stack_entry;
 	while (index < item_count) {
 		L.resize(0);
 		dchecks.resize(0);
 		echecks.resize(0);
-		phase.resize(0);
-		self_index.resize(0);
-		Lpos.resize(0);
+		stack.resize(0);
+		stack_entry.phase = 0;
+		stack_entry.Lpos = params[index].Lpos;
+		stack_entry.self = params[index].self;
+		stack.push_back(stack_entry);
 		returns.push_back(kick_return());
 		L.push_back(params[index].L);
 		dchecks.resize(params[index].dcount);
@@ -216,24 +217,18 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
 			echecks[i] = params[index].echecks[i];
 		}
-		phase.push_back(0);
-		self_index.push_back(params[index].self);
-		Lpos.push_back(params[index].Lpos);
 		__syncwarp();
 		int depth = 0;
 		while (depth >= 0) {
 //			auto tm2 = clock64();
 //			node_count++;
-			ASSERT(Lpos.size() == depth + 1);
-			ASSERT(self_index.size() == depth + 1);
-			ASSERT(phase.size() == depth + 1);
-			const auto& self = tree_nodes[self_index.back()];
-			switch (phase.back()) {
+			const auto& self = tree_nodes[stack.back().self];
+			switch (stack.back().phase) {
 
 			case 0: {
 				array<float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
+					dx[dim] = distance(self.pos[dim], stack.back().Lpos[dim]);
 				}
 				{
 					const auto this_L = L2L_cuda(L.back(), dx, global_params.do_phi);
@@ -309,7 +304,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						__syncwarp();
 					} else {
 						cclist.resize(checks.size());
-						for( int i = tid; i < checks.size(); i+= WARP_SIZE) {
+						for (int i = tid; i < checks.size(); i += WARP_SIZE) {
 							cclist[i] = checks[i];
 						}
 					}
@@ -431,12 +426,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (self.leaf) {
 					__syncwarp();
 					do_kick(returns.back(), global_params, data, L.back(), self);
-					phase.pop_back();
-					self_index.pop_back();
-					Lpos.pop_back();
+					stack.pop_back();
 					depth--;
 				} else {
-					Lpos.push_back(self.pos);
 					returns.push_back(kick_return());
 					const tree_id child = self.children[LEFT];
 					const int i1 = L.size() - 1;
@@ -448,9 +440,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 					dchecks.push_top();
 					echecks.push_top();
-					phase.back() += 1;
-					phase.push_back(0);
-					self_index.push_back(child.index);
+					stack.back().phase += 1;
+					stack_entry.Lpos = self.pos;
+					stack_entry.phase = 0;
+					stack_entry.self = child.index;
+					stack.push_back(stack_entry);
 					depth++;
 				}
 
@@ -458,13 +452,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				break;
 			case 1: {
 				L.pop_back();
-				Lpos.push_back(self.pos);
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back() += 1;
-				phase.push_back(0);
 				const tree_id child = self.children[RIGHT];
-				self_index.push_back(child.index);
+				stack.back().phase += 1;
+				stack_entry.Lpos = self.pos;
+				stack_entry.phase = 0;
+				stack_entry.self = child.index;
+				stack.push_back(stack_entry);
 				const auto this_return = returns.back();
 				returns.pop_back();
 				if (tid == 0) {
@@ -475,9 +470,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			}
 				break;
 			case 2: {
-				self_index.pop_back();
-				phase.pop_back();
-				Lpos.pop_back();
+				stack.pop_back();
 				const auto this_return = returns.back();
 				returns.pop_back();
 				if (tid == 0) {
@@ -499,9 +492,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		returns.pop_back();
 		ASSERT(returns.size() == 0);
 		ASSERT(L.size() == 1);
-		ASSERT(Lpos.size() == 0);
-		ASSERT(phase.size() == 0);
-		ASSERT(self_index.size() == 0);
 	}
 	((cuda_kick_shmem*) shmem_ptr)->~cuda_kick_shmem();
 
