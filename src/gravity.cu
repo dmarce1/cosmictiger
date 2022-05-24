@@ -63,9 +63,9 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	auto& src_x = shmem.x;
-	auto& src_y = shmem.y;
-	auto& src_z = shmem.z;
+	auto& src_x = shmem.src_x;
+	auto& src_y = shmem.src_y;
+	auto& src_z = shmem.src_z;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -151,9 +151,10 @@ int cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, co
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
 	const int nsink = self.part_range.second - self.part_range.first;
-	const auto& sink_x = data.x + self.part_range.first;
-	const auto& sink_y = data.y + self.part_range.first;
-	const auto& sink_z = data.z + self.part_range.first;
+	auto& sink_x = shmem.sink_x;
+	auto& sink_y = shmem.sink_y;
+	auto& sink_z = shmem.sink_z;
+
 	const auto* tree_nodes = data.tree_nodes;
 	if (multlist.size()) {
 		__syncwarp();
@@ -231,15 +232,15 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	auto &gz = shmem.gz;
 	auto &phi = shmem.phi;
 	const int nsink = self.part_range.second - self.part_range.first;
-	const auto& sink_x = data.x + self.part_range.first;
-	const auto& sink_y = data.y + self.part_range.first;
-	const auto& sink_z = data.z + self.part_range.first;
+	auto& sink_x = shmem.sink_x;
+	auto& sink_y = shmem.sink_y;
+	auto& sink_z = shmem.sink_z;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	auto& src_x = shmem.x;
-	auto& src_y = shmem.y;
-	auto& src_z = shmem.z;
+	auto& src_x = shmem.src_x;
+	auto& src_y = shmem.src_y;
+	auto& src_z = shmem.src_z;
 	const auto* tree_nodes = data.tree_nodes;
 	int part_index;
 	int near = 0;

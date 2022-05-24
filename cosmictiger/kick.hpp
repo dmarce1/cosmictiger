@@ -48,9 +48,12 @@ struct kick_return;
 #ifdef __CUDACC__
 
 struct cuda_kick_shmem {
-	array<fixed32, KICK_PP_MAX> x;
-	array<fixed32, KICK_PP_MAX> y;
-	array<fixed32, KICK_PP_MAX> z;
+	array<fixed32, KICK_PP_MAX> src_x;
+	array<fixed32, KICK_PP_MAX> src_y;
+	array<fixed32, KICK_PP_MAX> src_z;
+	array<fixed32, MAX_BUCKET_SIZE> sink_x;
+	array<fixed32, MAX_BUCKET_SIZE> sink_y;
+	array<fixed32, MAX_BUCKET_SIZE> sink_z;
 	device_vector<float> gx;
 	device_vector<float> gy;
 	device_vector<float> gz;

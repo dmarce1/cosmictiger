@@ -190,7 +190,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
+	auto& sink_x = shmem.sink_x;
+	auto& sink_y = shmem.sink_y;
+	auto& sink_z = shmem.sink_z;
 	auto& tree_nodes = data.tree_nodes;
+	auto& sink_x_main = data.x;
+	auto& sink_y_main = data.y;
+	auto& sink_z_main = data.z;
 	const float& h = global_params.h;
 	int index;
 
@@ -317,7 +323,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						}
 						nextlist.resize(0);
 						__syncwarp();
-
 					} while (checks.size() && self.leaf);
 					cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
 					if (!self.leaf) {
@@ -430,6 +435,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
+						const int nsinks = self.part_range.second - self.part_range.first;
+						for (int si = tid; si < nsinks; si += WARP_SIZE) {
+							const part_int j = si + self.part_range.first;
+							sink_x[si] = sink_x_main[j];
+							sink_y[si] = sink_y_main[j];
+							sink_z[si] = sink_z_main[j];
+						}
 						cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
 						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
 					} else {

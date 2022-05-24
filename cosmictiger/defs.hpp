@@ -34,7 +34,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define DOMAINS_CHECK
 #endif
 
-
+#define MAX_BUCKET_SIZE 160
 
 
 
@@ -73,7 +73,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define L2FETCH 64
 #define STACK_SIZE (16*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
-#define KICK_PP_MAX (32*18)
+#define KICK_PP_MAX (32*13)
 #define MIN_KICK_PC_WARP 8
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024
