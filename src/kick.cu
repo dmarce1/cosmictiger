@@ -254,17 +254,15 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 
 				__syncwarp();
 				{
-					nextlist.resize(0);
 					cclist.resize(0);
-					leaflist.resize(0);
 					auto& checks = echecks;
-					do {
+					if (!self.leaf) {
+						nextlist.resize(0);
 						const float thetainv = 1.f / global_params.theta;
 						const int maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
 							bool cc = false;
 							bool next = false;
-							bool leaf = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
 								for (int dim = 0; dim < NDIM; dim++) {
@@ -275,10 +273,9 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								const float dcc = (self.radius + other.radius) * thetainv;
 								cc = R2 > sqr(dcc);
 								if (!cc) {
-									leaf = other.leaf;
-									next = !leaf;
-									ALWAYS_ASSERT(!(leaf && self.leaf));
+									ALWAYS_ASSERT(!other.leaf);
 								}
+								next = !cc;
 							}
 							{
 								int l;
@@ -298,13 +295,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								if (next) {
 									nextlist[l + start] = checks[i];
 								}
-								l = leaf;
-								compute_indices(l, total);
-								start = leaflist.size();
-								leaflist.resize(start + total);
-								if (leaf) {
-									leaflist[l + start] = checks[i];
-								}
 							}
 						}
 						__syncwarp();
@@ -317,17 +307,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						}
 						nextlist.resize(0);
 						__syncwarp();
-
-					} while (checks.size() && self.leaf);
-					cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
-					if (!self.leaf) {
-						const int start = checks.size();
-						checks.resize(start + leaflist.size());
-						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
-							checks[start + i] = leaflist[i];
+					} else {
+						cclist.resize(checks.size());
+						for( int i = tid; i < checks.size(); i+= WARP_SIZE) {
+							cclist[i] = checks[i];
 						}
-						__syncwarp();
 					}
+
+					cuda_gravity_cc_ewald(data, L.back(), self, cclist, global_params.do_phi);
 				}
 				{
 					nextlist.resize(0);
