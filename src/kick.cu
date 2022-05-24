@@ -53,31 +53,23 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	int flops = 0;
-	auto* all_phi = data.pot;
-	auto* all_gx = data.gx;
-	auto* all_gy = data.gy;
-	auto* all_gz = data.gz;
-	auto* rungs = data.rungs;
-	auto* vel_x = data.vx;
-	auto* vel_y = data.vy;
-	auto* vel_z = data.vz;
+	auto& all_phi = data.pot;
+	auto& all_gx = data.gx;
+	auto& all_gy = data.gy;
+	auto& all_gz = data.gz;
+	auto& rungs = data.rungs;
+	auto& vel_x = data.vx;
+	auto& vel_y = data.vy;
+	auto& vel_z = data.vz;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
+	const auto* sink_x = data.x + self.part_range.first;
+	const auto* sink_y = data.y + self.part_range.first;
+	const auto* sink_z = data.z + self.part_range.first;
 	const int nsink = self.part_range.second - self.part_range.first;
-	const auto& sink_x = data.x + self.part_range.first;
-	const auto& sink_y = data.y + self.part_range.first;
-	const auto& sink_z = data.z + self.part_range.first;
-	const float log2ft0 = log2f(params.t0);
-	const float tfactor = params.eta * sqrtf(params.a);
 	int max_rung = 0;
-	expansion2<float> L2;
-	float vx;
-	float vy;
-	float vz;
-	float dt;
-	float g2;
 	float phi_tot = 0.0f;
 	float kin_tot = 0.f;
 	float xmom_tot = 0.0f;
@@ -88,6 +80,13 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	part_int snki;
 	const float& hsoft = params.h;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
+		expansion2<float> L2;
+		float vx;
+		float vy;
+		float vz;
+		float dt;
+		float g2;
+		int rung;
 		snki = self.sink_part_range.first + i;
 		ASSERT(snki >= 0);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
@@ -99,7 +98,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		gx[i] -= L2(1, 0, 0);
 		gy[i] -= L2(0, 1, 0);
 		gz[i] -= L2(0, 0, 1);
-//		PRINT( "%e %e %e\n", gx[i], gy[i], gz[i]);
 		phi[i] *= params.GM;
 		gx[i] *= params.GM;
 		gy[i] *= params.GM;
@@ -107,7 +105,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vx = vel_x[snki];
 		vy = vel_y[snki];
 		vz = vel_z[snki];
-		float sgn = params.top ? 1.f : -1.f;
+		const float sgn = params.top ? 1.f : -1.f;
 		if (params.ascending) {
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 			if (!params.first_call) {
@@ -130,9 +128,10 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 
 		if (params.descending) {
 			g2 = sqr(gx[i], gy[i], gz[i]);
-			dt = fminf(tfactor * sqrt(hsoft / sqrtf(g2)), params.t0);
-			auto& rung = rungs[snki];
-			rung = max(params.min_rung + int((int) ceilf(log2ft0 - log2f(dt)) > params.min_rung), rung - 1);
+			dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0);
+			rung = rungs[snki];
+			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1);
+			rungs[snki] = rung;
 			max_rung = max(rung, max_rung);
 			ALWAYS_ASSERT(rung >= 0);
 			ALWAYS_ASSERT(rung < MAX_RUNG);
@@ -175,26 +174,24 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	new (shmem_ptr) cuda_kick_shmem;
-	auto& lists = shmem.lists;
-	auto& L = lists.L;
-	auto& phase = lists.phase;
-	auto& Lpos = lists.Lpos;
-	auto& self_index = lists.self;
-	auto& returns = lists.returns;
-	auto& dchecks = lists.dchecks;
-	auto& echecks = lists.echecks;
-	auto& nextlist = lists.nextlist;
-	auto& cclist = lists.cclist;
-	auto& cplist = lists.cplist;
-	auto& pclist = lists.pclist;
-	auto& leaflist = lists.leaflist;
-	const float& h = global_params.h;
+	auto& L = shmem.L;
+	auto& phase = shmem.phase;
+	auto& Lpos = shmem.Lpos;
+	auto& self_index = shmem.self;
+	auto& returns = shmem.returns;
+	auto& dchecks = shmem.dchecks;
+	auto& echecks = shmem.echecks;
+	auto& nextlist = shmem.nextlist;
+	auto& cclist = shmem.cclist;
+	auto& cplist = shmem.cplist;
+	auto& pclist = shmem.pclist;
+	auto& leaflist = shmem.leaflist;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
 	auto& gy = shmem.gy;
 	auto& gz = shmem.gz;
-//	auto& rmin = shmem.rmin;
-	auto* tree_nodes = data.tree_nodes;
+	auto& tree_nodes = data.tree_nodes;
+	const float& h = global_params.h;
 	int index;
 
 	if (tid == 0) {
@@ -660,20 +657,4 @@ int kick_block_count() {
 	nblocks *= cuda_smp_count();
 	return nblocks;
 
-}
-
-size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count) {
-	size_t mem = 0;
-	size_t innerblocks = 2 * nparts / CUDA_KICK_PARTS_MAX;
-	size_t nblocks = std::pow(std::pow(innerblocks, 1.0 / 3.0) + 1 + 1.0 / theta, 3);
-	size_t total_parts = CUDA_KICK_PARTS_MAX * nblocks;
-	size_t ntrees = 3 * total_parts / get_options().bucket_size;
-	size_t nchecks = 2 * innerblocks * check_count;
-	mem += total_parts * NDIM * sizeof(fixed32);
-	mem += ntrees * sizeof(tree_node);
-	mem += nchecks * sizeof(int);
-	mem += sizeof(cuda_lists_type) * kick_block_count();
-	mem += sizeof(kick_return) * 2 * innerblocks;
-	mem += sizeof(cuda_kick_params) * 2 * innerblocks;
-	return mem;
 }

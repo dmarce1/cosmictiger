@@ -46,7 +46,15 @@ struct cuda_kick_data {
 struct kick_return;
 
 #ifdef __CUDACC__
-struct cuda_lists_type {
+
+struct cuda_kick_shmem {
+	array<fixed32, KICK_PP_MAX> x;
+	array<fixed32, KICK_PP_MAX> y;
+	array<fixed32, KICK_PP_MAX> z;
+	device_vector<float> gx;
+	device_vector<float> gy;
+	device_vector<float> gz;
+	device_vector<float> phi;
 	stack_vector<int> echecks;
 	stack_vector<int> dchecks;
 	device_vector<int> leaflist;
@@ -60,20 +68,6 @@ struct cuda_lists_type {
 	device_vector<int> phase;
 	device_vector<int> self;
 
-};
-
-
-struct cuda_kick_shmem {
-	struct {
-		array<fixed32, KICK_PP_MAX> x;
-		array<fixed32, KICK_PP_MAX> y;
-		array<fixed32, KICK_PP_MAX> z;
-	}src;
-	device_vector<float> gx;
-	device_vector<float> gy;
-	device_vector<float> gz;
-	device_vector<float> phi;
-	cuda_lists_type lists;
 };
 #endif
 
@@ -132,9 +126,8 @@ struct kick_return {
 		arc & zmom;
 		arc & nmom;
 		arc & nactive;
-		arc &  total_time;
+		arc & total_time;
 		arc & parts_processed;
-
 
 	}
 };

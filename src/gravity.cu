@@ -63,9 +63,9 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	auto& src_x = shmem.src.x;
-	auto& src_y = shmem.src.y;
-	auto& src_z = shmem.src.z;
+	auto& src_x = shmem.x;
+	auto& src_y = shmem.y;
+	auto& src_z = shmem.z;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -237,9 +237,9 @@ int cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, co
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	auto& src_x = shmem.src.x;
-	auto& src_y = shmem.src.y;
-	auto& src_z = shmem.src.z;
+	auto& src_x = shmem.x;
+	auto& src_y = shmem.y;
+	auto& src_z = shmem.z;
 	const auto* tree_nodes = data.tree_nodes;
 	int part_index;
 	int near = 0;
