@@ -36,22 +36,6 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
-struct cuda_lists_type {
-	stack_vector<int> echecks;
-	stack_vector<int> dchecks;
-	device_vector<int> leaflist;
-	device_vector<int> cplist;
-	device_vector<int> cclist;
-	device_vector<int> pclist;
-	device_vector<expansion<float>> L;
-	device_vector<int> nextlist;
-	device_vector<kick_return> returns;
-	device_vector<array<fixed32, NDIM>> Lpos;
-	device_vector<int> phase;
-	device_vector<int> self;
-
-};
-
 struct cuda_kick_params {
 	array<fixed32, NDIM> Lpos;
 	expansion<float> L;
@@ -185,26 +169,25 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	return flops;
 }
 
-__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_lists_type* lists, cuda_kick_params* params, int item_count,
-		int* next_item) {
+__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
 //	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
-	const int& bid = blockIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	new (&lists[bid]) cuda_lists_type;
-	auto& L = lists[bid].L;
-	auto& phase = lists[bid].phase;
-	auto& Lpos = lists[bid].Lpos;
-	auto& self_index = lists[bid].self;
-	auto& returns = lists[bid].returns;
-	auto& dchecks = lists[bid].dchecks;
-	auto& echecks = lists[bid].echecks;
-	auto& nextlist = lists[bid].nextlist;
-	auto& cclist = lists[bid].cclist;
-	auto& cplist = lists[bid].cplist;
-	auto& pclist = lists[bid].pclist;
-	auto& leaflist = lists[bid].leaflist;
+	new (shmem_ptr) cuda_kick_shmem;
+	auto& lists = shmem.lists;
+	auto& L = lists.L;
+	auto& phase = lists.phase;
+	auto& Lpos = lists.Lpos;
+	auto& self_index = lists.self;
+	auto& returns = lists.returns;
+	auto& dchecks = lists.dchecks;
+	auto& echecks = lists.echecks;
+	auto& nextlist = lists.nextlist;
+	auto& cclist = lists.cclist;
+	auto& cplist = lists.cplist;
+	auto& pclist = lists.pclist;
+	auto& leaflist = lists.leaflist;
 	const float& h = global_params.h;
 	auto& phi = shmem.phi;
 	auto& gx = shmem.gx;
@@ -213,11 +196,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	auto& rmin = shmem.rmin;
 	auto* tree_nodes = data.tree_nodes;
 	int index;
-
-	new (&gx) device_vector<float>();
-	new (&gy) device_vector<float>();
-	new (&gz) device_vector<float>();
-	new (&phi) device_vector<float>();
 
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
@@ -544,17 +522,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		ASSERT(phase.size() == 0);
 		ASSERT(self_index.size() == 0);
 	}
-	(&lists[bid])->~cuda_lists_type();
-	(&gx)->~device_vector<float>();
-	(&gy)->~device_vector<float>();
-	(&gz)->~device_vector<float>();
-	(&phi)->~device_vector<float>();
+	((cuda_kick_shmem*) shmem_ptr)->~cuda_kick_shmem();
 
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z,
-		tree_node* dev_tree_nodes, vector<kick_workitem> workitems, cudaStream_t stream) {
+vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+		vector<kick_workitem> workitems, cudaStream_t stream) {
 	timer tm;
 //	PRINT("shmem size = %i\n", sizeof(cuda_kick_shmem));
 	tm.start();
@@ -579,8 +553,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int nblocks = kick_block_count();
 	ALWAYS_ASSERT(workitems.size());
 	nblocks = std::min(nblocks, (int) workitems.size());
-	cuda_lists_type* dev_lists;
-	CUDA_CHECK((cudaMalloc(&dev_lists, sizeof(cuda_lists_type) * nblocks)));
 	CUDA_CHECK((cudaMalloc(&dev_kick_params, sizeof(cuda_kick_params) * kick_params.size())));
 	CUDA_CHECK((cudaMalloc(&dev_returns, sizeof(kick_return) * returns.size())));
 
@@ -659,7 +631,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 //	PRINT( "Invoking kernel\n");
 	tm.reset();
 	tm.start();
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams, data,dev_lists, dev_kick_params, kick_params.size(), current_index);
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams,data, dev_kick_params, kick_params.size(), current_index);
 //	PRINT("One done\n");
 	CUDA_CHECK(cudaMemcpyAsync(returns.data(), dev_returns, sizeof(kick_return) * returns.size(), cudaMemcpyDeviceToHost, stream));
 	cuda_stream_synchronize(stream);
@@ -670,7 +642,6 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	CUDA_CHECK(cudaFree(dev_dchecks));
 	CUDA_CHECK(cudaFree(dev_echecks));
 	CUDA_CHECK(cudaFree(dev_returns));
-	CUDA_CHECK(cudaFree(dev_lists));
 	CUDA_CHECK(cudaFree(dev_kick_params));
 	CUDA_CHECK(cudaFree(current_index));
 //	PRINT("%i %i %i %i %i %i %i\n", max_depth, max_dchecks, max_echecks, max_nextlist, max_leaflist, max_partlist, max_multlist);
