@@ -11,7 +11,7 @@ option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particl
 set(COSMICTIGER_WITH_ORDER "7" )
 if( COSMICTIGER_WITH_CUDA ) 
 	enable_language(CUDA)
-	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
+	set(CUDA_PROPAGATE_HOST_FLAGS TRUE)
 	execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
 	execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
@@ -170,7 +170,7 @@ set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregc
 
 
 if( COSMICTIGER_WITH_CUDA )
-	target_link_libraries(cosmictiger PUBLIC cudart)
+	target_link_libraries(cosmictiger PUBLIC cudart cudadevrt)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
                        -DUSE_CUDA --use_fast_math;
                         >)

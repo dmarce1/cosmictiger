@@ -102,6 +102,10 @@ void cuda_init() {
 	size_t value = STACK_SIZE;
 	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
+	value = 11;
+	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, value));
+	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitDevRuntimeSyncDepth));
+
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
 	}

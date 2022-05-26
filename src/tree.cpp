@@ -363,7 +363,9 @@ long long tree_nodes_next_index() {
 hpx::future<tree_create_return> tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box,
 		int depth, bool local_root) {
 
-	if (proc_range.second - proc_range.first <= 1 && !local_root && part_range.second - part_range.first < 64 * get_options().bucket_size) {
+	if (local_root) {
+		cuda_sort_counter = 0;
+		cuda_next_alloc = nodes_size;
 		tree_sort_local_params local_params;
 		local_params.box = box;
 		local_params.depth = depth;
