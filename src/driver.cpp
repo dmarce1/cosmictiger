@@ -264,7 +264,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tree_create_params tparams(levels[li], theta, 0.f);
 		tm.reset();
 		tm.start();
-		auto this_sr = tree_create(tparams);
+		auto this_sr = tree_create(tparams).get();
 		tm.stop();
 		PRINT("Tree create took %e\n", tm.read());
 		if (top) {

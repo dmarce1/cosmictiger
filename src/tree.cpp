@@ -162,7 +162,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	htime = true;
 }
 
-static bool cuda_sort_running = false;
+static part_int cuda_sort_counter;
 static int cuda_next_alloc;
 
 struct tree_sort_work {
@@ -173,20 +173,16 @@ struct tree_sort_work {
 static std::queue<tree_sort_work> tree_sort_q;
 static mutex_type tree_sort_mutex;
 
-static hpx::future<tree_sort_return> tree_sort_add_work(tree_sort_local_params params) {
+static hpx::future<tree_sort_return> tree_sort_add_work(tree_sort_local_params params, float theta) {
 	tree_sort_work wk;
 	wk.params = params;
 	wk.return_promise = std::make_shared<hpx::promise<tree_sort_return>>();
 	std::unique_lock<mutex_type> lock(tree_sort_mutex);
 	tree_sort_q.push(wk);
-	return wk.return_promise->get_future();
-}
-
-static void tree_sort_daemon(float theta) {
-	cuda_sort_running = true;
-	while (cuda_sort_running) {
-		hpx::this_thread::yield();
-		std::unique_lock<mutex_type> lock(tree_sort_mutex);
+	const auto rng = particles_current_range();
+	cuda_sort_counter += params.part_range.second - params.part_range.first;
+	const part_int nparts = rng.second - rng.first;
+	if (cuda_sort_counter >= nparts) {
 		vector<tree_sort_work> work;
 		while (tree_sort_q.size()) {
 			work.push_back(tree_sort_q.front());
@@ -194,6 +190,9 @@ static void tree_sort_daemon(float theta) {
 		}
 		lock.unlock();
 		if (work.size()) {
+			std::sort(work.begin(), work.end(), [](const tree_sort_work& a, const tree_sort_work& b) {
+				return a.params.part_range.first < b.params.part_range.first;
+			});
 			PRINT("Sending %i\n", work.size());
 			tree_sort_global_params global_params;
 			tree_sort_local_params* local_params;
@@ -233,7 +232,7 @@ static void tree_sort_daemon(float theta) {
 			for (int i = 0; i < work.size(); i++) {
 				work[i].return_promise->set_value(returns[i]);
 			}
-			PRINT( "%i %i\n",cuda_next_alloc, *next_alloc);
+			PRINT("%i %i\n", cuda_next_alloc, *next_alloc);
 			cuda_next_alloc = *next_alloc;
 			CUDA_CHECK(cudaFree(local_params));
 			CUDA_CHECK(cudaFree(index));
@@ -242,6 +241,7 @@ static void tree_sort_daemon(float theta) {
 			PRINT("%i done\n", work.size());
 		}
 	}
+	return wk.return_promise->get_future();
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
@@ -253,9 +253,9 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 		threadme = true;
 		remote = true;
 	} else if (threadme) {
-		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
+		threadme = part_range.second - part_range.first >= 32 * get_options().bucket_size;
 		if (threadme) {
-			if (nthreads++ < 1024 || proc_range.second - proc_range.first > 1) {
+			if (nthreads++ < 100000 || proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -264,7 +264,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 		}
 	}
 	if (!threadme) {
-		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
+		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root).get());
 	} else if (remote) {
 //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
 		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
@@ -341,7 +341,7 @@ static void tree_allocate_nodes() {
 #endif
 	}
 	nodes_size = sz;
-	for( int i = 0; i < sz; i++) {
+	for (int i = 0; i < sz; i++) {
 		nodes[i].valid = false;
 	}
 	while (allocator_mtx++ != 0) {
@@ -360,25 +360,25 @@ long long tree_nodes_next_index() {
 	return next_id + tree_alloc_line_size;
 }
 
-tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
-		bool local_root) {
+hpx::future<tree_create_return> tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box,
+		int depth, bool local_root) {
 
-	if (proc_range.second - proc_range.first <= 1 && !local_root && part_range.second - part_range.first < CUDA_SORT_PARTS_MIN) {
-		tree_sort_local_params params;
-		params.box = box;
-		params.depth = depth;
-		params.part_range = part_range;
-		auto fut = tree_sort_add_work(params);
-		const auto ret = fut.get();
-		tree_create_return rc;
-		rc.id.index = ret.index;
-		rc.id.proc = hpx_rank();
-		rc.multi = ret.M;
-		rc.node_count = ret.node_count;
-		rc.pos = ret.pos;
-		rc.radius = ret.r;
-	//	PRINT( "%e %e  %e  %e \n", rc.pos[0].to_double(), rc.pos[1].to_double(), rc.pos[2].to_double(), rc.radius);
-		return rc;
+	if (proc_range.second - proc_range.first <= 1 && !local_root && part_range.second - part_range.first < 64 * get_options().bucket_size) {
+		tree_sort_local_params local_params;
+		local_params.box = box;
+		local_params.depth = depth;
+		local_params.part_range = part_range;
+		return hpx::async(tree_sort_add_work, local_params, params.theta).then([](hpx::future<tree_sort_return> fut) {
+			const auto ret = fut.get();
+			tree_create_return rc;
+			rc.id.index = ret.index;
+			rc.id.proc = hpx_rank();
+			rc.multi = ret.M;
+			rc.node_count = ret.node_count;
+			rc.pos = ret.pos;
+			rc.radius = ret.r;
+			return rc;
+		});
 	}
 
 	if (key == 1) {
@@ -393,10 +393,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
 	if (depth == 0) {
-		hpx::apply(tree_sort_daemon, params.theta);
 		tree_allocate_nodes();
 	}
 	if (local_root) {
+		cuda_sort_counter = 0;
 		cuda_next_alloc = nodes_size;
 		part_range = particles_current_range();
 	}
@@ -670,10 +670,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		profiler_exit();
 	}
 	if (local_root) {
-		cuda_sort_running = false;
-		ALWAYS_ASSERT(cuda_next_alloc > (int) next_id);
+		ALWAYS_ASSERT(cuda_next_alloc > (int ) next_id);
 	}
-	return rc;
+	return hpx::make_ready_future(rc);
 }
 
 HPX_PLAIN_ACTION (tree_reset);

@@ -264,7 +264,7 @@ static void kick_test() {
 	tm.reset();
 	tm.start();
 	tree_create_params tparams(0, get_options().theta, get_options().hsoft);
-	auto sr = tree_create(tparams);
+	auto sr = tree_create(tparams).get();
 	total_flops += sr.flops;
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
@@ -353,7 +353,7 @@ static void force_test() {
 		domains_end();
 		particles_sort_by_rung(0);
 		tree_create_params tparams(0, thetas[iter], get_options().hsoft);
-		tree_create(tparams);
+		tree_create(tparams).get();
 		kick_params kparams;
 		kparams.node_load = 10;
 		kparams.gpu = true;

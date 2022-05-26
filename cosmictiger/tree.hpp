@@ -202,9 +202,10 @@ struct tree_sort_return {
 };
 
 cudaStream_t cuda_tree_sort(tree_sort_local_params* local_params, tree_sort_return* returns, tree_sort_global_params global_params);
-
-tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
+#ifndef __CUDACC__
+hpx::future<tree_create_return> tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
 		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
+#endif
 void tree_reset();
 void tree_destroy(bool free_tree = false);
 int tree_min_level(double theta, double hsoft);

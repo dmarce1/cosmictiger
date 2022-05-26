@@ -90,7 +90,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define MIN_CP_PARTS 25
 #define MIN_KICK_THREAD_PARTS (1024)
 #define MIN_PC_PARTS 47
-#define MIN_SORT_THREAD_PARTS (64*1024)
+#define MIN_SORT_THREAD_PARTS (8*1024)
 
 
 #define CUDA_MAX_DEPTH 64
