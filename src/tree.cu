@@ -43,8 +43,6 @@ struct tree_sort_shmem {
 	int last_alloc;
 	device_vector<int> losnhi;
 	device_vector<int> hisnlo;
-	array<tree_sort_local_params, NCHILD> local_params;
-	array<tree_sort_return, NCHILD> returns;
 	__device__ tree_sort_shmem() {
 		if (threadIdx.x == 0) {
 			next_alloc = last_alloc = 0;
@@ -223,23 +221,8 @@ __device__ tree_sort_return cuda_tree_sort_node(const tree_sort_local_params& pa
 		left_params.depth = right_params.depth = params.depth + 1;
 		tree_sort_return rc_left;
 		tree_sort_return rc_right;
-		if (params.depth < 10) {
-			tree_sort_global_params these_global_params = global_params;
-			these_global_params.N = 2;
-			if (tid == 0) {
-				shmem.local_params[LEFT] = left_params;
-				shmem.local_params[RIGHT] = right_params;
-				cuda_tree_sort_kernel<<<NCHILD,BLOCK_SIZE>>>(&shmem.local_params[0], &shmem.returns[0], these_global_params);
-				cudaDeviceSynchronize();
-			}
-			__syncthreads();
-			rc_left = shmem.returns[LEFT];
-			rc_right = shmem.returns[RIGHT];
-
-		} else {
-			rc_left = cuda_tree_sort_node(left_params, global_params, shmem);
-			rc_right = cuda_tree_sort_node(right_params, global_params, shmem);
-		}
+		rc_left = cuda_tree_sort_node(left_params, global_params, shmem);
+		rc_right = cuda_tree_sort_node(right_params, global_params, shmem);
 		for (int dim = 0; dim < NDIM; dim++) {
 			dx[dim] = distance(rc_left.pos[dim], x_center[dim]);
 		}
