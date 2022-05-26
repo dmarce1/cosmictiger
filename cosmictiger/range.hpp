@@ -207,7 +207,7 @@ struct range {
 		return str;
 	}
 
-	inline int longest_dim() const {
+	__device__ inline int longest_dim() const {
 		int max_dim;
 		T max_span = T(-1);
 		for (int dim = 0; dim < N; dim++) {

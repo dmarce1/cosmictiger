@@ -17,7 +17,7 @@ if( COSMICTIGER_WITH_CUDA )
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math  ")
+set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math ")
 
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -80,6 +80,7 @@ set(cosmictiger_source_files
     src/rockstar.cu
     src/stack_trace.cpp
     src/test.cpp
+    src/tree.cu
     src/tree.cpp
     src/view.cpp
     src/zero_order.cpp

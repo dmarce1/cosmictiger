@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 
-#define LONG_LONG_PART_INT
+//#define LONG_LONG_PART_INT
 
 #ifndef NDEBUG
 
@@ -36,7 +36,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 
-
+#define CUDA_SORT_PARTS_MIN (65536)
 
 #define NDIM 3
 #define XDIM 0
@@ -71,7 +71,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define CUDA_KICK_PARTS_MAX (16*1024)
 #define HEAP_SIZE (4ULL*1024ULL*1024ULL*1024ULL)
 #define L2FETCH 64
-#define STACK_SIZE (16*1024)
+#define STACK_SIZE (64*1024)
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
 #define KICK_PP_MAX (32*18)
 #define MIN_KICK_PC_WARP 8

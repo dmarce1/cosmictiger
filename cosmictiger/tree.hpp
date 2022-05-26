@@ -137,29 +137,17 @@ struct tree_create_return {
 	multipole<float> multi;
 	array<fixed32, NDIM> pos;
 	tree_id id;
-	size_t nactive;
-	size_t active_nodes;
 	float radius;
 	size_t node_count;
-	size_t active_leaf_nodes;
-	size_t leaf_nodes;
-	int max_depth;
-	int min_depth;
 	double flops;
 	template<class A>
 	void serialize(A&& a, unsigned) {
-		a & active_leaf_nodes;
-		a & leaf_nodes;
-		a & active_nodes;
 		a & multi;
 		a & id;
 		a & pos;
-		a & nactive;
 		a & radius;
 		a & node_count;
 		a & flops;
-		a & max_depth;
-		a & min_depth;
 	}
 };
 
@@ -182,6 +170,38 @@ struct tree_create_params {
 		arc & min_level;
 	}
 };
+
+
+struct tree_sort_global_params {
+	int *index;
+	int N;
+	float theta;
+	int* next_alloc;
+	tree_node* tree_nodes;
+	float h;
+	int alloc_line_size;
+	array<fixed32*, NDIM> X;
+	array<float*, NDIM> V;
+	char* rungs;
+	int bucket_size;
+	int rank;
+};
+
+struct tree_sort_local_params {
+	pair<part_int> part_range;
+	range<double> box;
+	int depth;
+};
+
+struct tree_sort_return {
+	multipole<float> M;
+	array<fixed32, NDIM> pos;
+	float r;
+	int node_count;
+	int index;
+};
+
+cudaStream_t cuda_tree_sort(tree_sort_local_params* local_params, tree_sort_return* returns, tree_sort_global_params global_params);
 
 tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
 		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));

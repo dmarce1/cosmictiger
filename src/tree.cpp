@@ -31,6 +31,7 @@ constexpr bool verbose = true;
 #include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 
 static vector<tree_node> tree_fetch_cache_line(int);
 static void tree_allocate_nodes();
@@ -161,81 +162,87 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	htime = true;
 }
 
-/*static void tree_sort_nodes() {
-	timer tm;
-	tm.start();
-	const int line_size = get_options().tree_alloc_line_size;
-	vector<hpx::future<void>> futs;
-	vector<int> tree_map(nodes_size);
-	const int stride = std::max((int) (nodes_size / line_size) / (8 * hpx_hardware_concurrency()), 1);
-	for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
-		futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
-			const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
-			for( int begin = begin0; begin < end0; begin+= line_size) {
-				vector<pair<int>> sort_ranges;
-				pair<int> current;
-				int end = std::min(begin + line_size, (int) nodes_size);
-				current.first = begin;
-				for (int i = begin; i < end; i++) {
-					const bool pinned = (nodes[i].proc_range.second - nodes[i].proc_range.first > 1) || nodes[i].local_root;
-					if (pinned) {
-						current.second = i;
-						if (current.second - current.first > 0) {
-							sort_ranges.push_back(current);
-						}
-						current.first = i + 1;
-					}
-				}
-				current.second = end;
-				if (current.second - current.first > 0) {
-					sort_ranges.push_back(current);
-				}
-				for (const auto& range : sort_ranges) {
-					std::sort(nodes + range.first, nodes + range.second, [](const tree_node& a, const tree_node& b) {
-								if( a.valid && !b.valid ) {
-									return true;
-								} else if( !a.valid ) {
-									return false;
-								} else if( a.depth < b.depth ) {
-									return true;
-								} else if( a.depth > b.depth ) {
-									return false;
-								} else {
-									return a.part_range.first < b.part_range.first;
-								}
-							});
-				}
-				for (int i = begin; i < end; i++) {
-					if (nodes[i].valid) {
-						tree_map[nodes[i].index] = i;
-					}
-				}
+static bool cuda_sort_running = false;
+static int cuda_next_alloc;
+
+struct tree_sort_work {
+	tree_sort_local_params params;
+	std::shared_ptr<hpx::promise<tree_sort_return>> return_promise;
+};
+
+static std::queue<tree_sort_work> tree_sort_q;
+static mutex_type tree_sort_mutex;
+
+static hpx::future<tree_sort_return> tree_sort_add_work(tree_sort_local_params params) {
+	tree_sort_work wk;
+	wk.params = params;
+	wk.return_promise = std::make_shared<hpx::promise<tree_sort_return>>();
+	std::unique_lock<mutex_type> lock(tree_sort_mutex);
+	tree_sort_q.push(wk);
+	return wk.return_promise->get_future();
+}
+
+static void tree_sort_daemon(float theta) {
+	cuda_sort_running = true;
+	while (cuda_sort_running) {
+		hpx::this_thread::yield();
+		std::unique_lock<mutex_type> lock(tree_sort_mutex);
+		vector<tree_sort_work> work;
+		while (tree_sort_q.size()) {
+			work.push_back(tree_sort_q.front());
+			tree_sort_q.pop();
+		}
+		lock.unlock();
+		if (work.size()) {
+			PRINT("Sending %i\n", work.size());
+			tree_sort_global_params global_params;
+			tree_sort_local_params* local_params;
+			tree_sort_return* returns;
+			int* next_alloc;
+			int* index;
+			CUDA_CHECK(cudaMallocManaged(&index, sizeof(int)));
+			CUDA_CHECK(cudaMallocManaged(&next_alloc, sizeof(int)));
+			CUDA_CHECK(cudaMallocManaged(&local_params, sizeof(tree_sort_local_params) * work.size()));
+			CUDA_CHECK(cudaMallocManaged(&returns, sizeof(tree_sort_return) * work.size()));
+			*next_alloc = cuda_next_alloc;
+			*index = 0;
+			ALWAYS_ASSERT(next_alloc);
+			global_params.N = work.size();
+			global_params.h = get_options().hsoft;
+			for (int dim = 0; dim < NDIM; dim++) {
+				global_params.V[dim] = &particles_vel(dim, 0);
+				global_params.X[dim] = &particles_pos(dim, 0);
 			}
-		}));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	PRINT("%i Sorts done\n", futs.size());
-	futs.resize(0);
-	for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
-		futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
-			const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
-			for( int begin = begin0; begin < end0; begin+= line_size) {
-				int end = std::min(begin + line_size, (int) nodes_size);
-				for( int i = begin; i < end; i++) {
-					if (nodes[i].valid) {
-						auto& left = nodes[i].children[LEFT];
-						auto& right = nodes[i].children[RIGHT];
-						if (left.index != -1 && left.proc == hpx_rank()) {
-							left.index = tree_map[left.index];
-							right.index = tree_map[right.index];
-						}
-					}
-				}
+			global_params.rungs = &particles_rung(0);
+			global_params.alloc_line_size = get_options().tree_alloc_line_size;
+			global_params.next_alloc = next_alloc;
+			global_params.rank = hpx_rank();
+			global_params.index = index;
+			global_params.bucket_size = get_options().bucket_size;
+			global_params.theta = theta;
+			global_params.tree_nodes = nodes;
+			for (int i = 0; i < work.size(); i++) {
+				local_params[i] = work[i].params;
 			}
-		}));
+			cuda_set_device();
+			auto stream = cuda_tree_sort(local_params, returns, global_params);
+			CUDA_CHECK(cudaStreamSynchronize(stream));
+			while (cudaStreamQuery(stream) != cudaSuccess) {
+				hpx::this_thread::yield();
+			}
+			for (int i = 0; i < work.size(); i++) {
+				work[i].return_promise->set_value(returns[i]);
+			}
+			PRINT( "%i %i\n",cuda_next_alloc, *next_alloc);
+			cuda_next_alloc = *next_alloc;
+			CUDA_CHECK(cudaFree(local_params));
+			CUDA_CHECK(cudaFree(index));
+			CUDA_CHECK(cudaFree(returns));
+			CUDA_CHECK(cudaFree(next_alloc));
+			PRINT("%i done\n", work.size());
+		}
 	}
-	hpx::wait_all(futs.begin(), futs.end());
-}*/
+}
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
@@ -248,7 +255,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	} else if (threadme) {
 		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx_hardware_concurrency() || proc_range.second - proc_range.first > 1) {
+			if (nthreads++ < 1024 || proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -334,6 +341,9 @@ static void tree_allocate_nodes() {
 #endif
 	}
 	nodes_size = sz;
+	for( int i = 0; i < sz; i++) {
+		nodes[i].valid = false;
+	}
 	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
@@ -352,6 +362,25 @@ long long tree_nodes_next_index() {
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
+
+	if (proc_range.second - proc_range.first <= 1 && !local_root && part_range.second - part_range.first < CUDA_SORT_PARTS_MIN) {
+		tree_sort_local_params params;
+		params.box = box;
+		params.depth = depth;
+		params.part_range = part_range;
+		auto fut = tree_sort_add_work(params);
+		const auto ret = fut.get();
+		tree_create_return rc;
+		rc.id.index = ret.index;
+		rc.id.proc = hpx_rank();
+		rc.multi = ret.M;
+		rc.node_count = ret.node_count;
+		rc.pos = ret.pos;
+		rc.radius = ret.r;
+	//	PRINT( "%e %e  %e  %e \n", rc.pos[0].to_double(), rc.pos[1].to_double(), rc.pos[2].to_double(), rc.radius);
+		return rc;
+	}
+
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}
@@ -364,9 +393,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
 	if (depth == 0) {
+		hpx::apply(tree_sort_daemon, params.theta);
 		tree_allocate_nodes();
 	}
 	if (local_root) {
+		cuda_next_alloc = nodes_size;
 		part_range = particles_current_range();
 	}
 	array<tree_id, NCHILD> children;
@@ -415,9 +446,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			right_local_root = right_range.second - right_range.first == 1;
 			flops += 7;
 		} else {
-			if (nparts < 8 * bucket_size) {
-				//		box = left_box = right_box = particles_enclosing_box(part_range);
-			}
 			double xmax = box.end[xdim];
 			double xmin = box.begin[xdim];
 			part_int mid;
@@ -437,8 +465,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
-		min_depth = std::min(rcl.min_depth, rcr.min_depth);
-		max_depth = std::max(rcl.max_depth, rcr.max_depth);
 		total_flops += rcl.flops + rcr.flops;
 		double rr;
 		double rl;
@@ -527,7 +553,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 		node_count = 1 + rcl.node_count + rcr.node_count;
-		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
 	} else {
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
@@ -629,12 +654,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.depth = depth;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;
-	/*	if (sph && SPH_get_options().bucket_size < get_options().bucket_size) {
-	 if (node.leaf) {
-	 std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
-	 leaf_part_ranges.push_back(part_range);
-	 }
-	 }*/
 	if (index >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
@@ -644,17 +663,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	rc.multi = node.multi;
 	rc.pos = node.pos;
 	rc.radius = node.radius;
-	rc.leaf_nodes = leaf_nodes;
 	rc.node_count = node.node_count;
 	total_flops += flops;
 	rc.flops = total_flops;
-	rc.min_depth = min_depth;
-	rc.max_depth = max_depth;
-	if (local_root) {
-	//	tree_sort_nodes();
-	}
 	if (key == 1) {
 		profiler_exit();
+	}
+	if (local_root) {
+		cuda_sort_running = false;
+		ALWAYS_ASSERT(cuda_next_alloc > (int) next_id);
 	}
 	return rc;
 }

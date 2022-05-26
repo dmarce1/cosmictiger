@@ -77,6 +77,21 @@ class device_vector {
 		__syncthreads();
 	}
 public:
+	__device__ void swap(device_vector<T>& other) {
+		__syncthreads();
+		if( threadIdx.x == 0 ) {
+			const auto sz0 = sz;
+			const auto cap0 = cap;
+			auto* const ptr0 = ptr;
+			sz = other.sz;
+			cap = other.cap;
+			ptr = other.ptr;
+			other.sz = sz0;
+			other.cap = cap0;
+			other.ptr = ptr0;
+		}
+		__syncthreads();
+	}
 	__device__ device_vector() {
 		init();
 	}
