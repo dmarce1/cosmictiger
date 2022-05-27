@@ -180,6 +180,7 @@ struct tree_sort_local_params {
 	pair<part_int> part_range;
 	range<double> box;
 	int depth;
+	int* parent_index;
 };
 
 struct tree_sort_return {
@@ -192,6 +193,7 @@ struct tree_sort_return {
 
 struct tree_sort_global_params {
 	int *index;
+	int count;
 	int N;
 	float theta;
 	int* next_alloc;

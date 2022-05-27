@@ -69,7 +69,7 @@ public:
 			if (out >= in) {
 				return nullptr;
 			}
-			while ((ptr = (char*) atomicExch((itype*) &Q[out % N], (itype) 0)) == nullptr) {
+			while ((ptr = (T*) atomicExch((itype*) &Q[out % N], (itype) 0)) == nullptr) {
 				if (out >= in) {
 					return nullptr;
 				}
