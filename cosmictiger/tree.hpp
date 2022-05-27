@@ -26,6 +26,9 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/lockfree_queue.hpp>
+
+#define TREE_Q_SIZE (64*1024*1024)
 
 struct multipole_pos {
 	multipole<float> m;
@@ -172,20 +175,6 @@ struct tree_create_params {
 };
 
 
-struct tree_sort_global_params {
-	int *index;
-	int N;
-	float theta;
-	int* next_alloc;
-	tree_node* tree_nodes;
-	float h;
-	int alloc_line_size;
-	array<fixed32*, NDIM> X;
-	array<float*, NDIM> V;
-	char* rungs;
-	int bucket_size;
-	int rank;
-};
 
 struct tree_sort_local_params {
 	pair<part_int> part_range;
@@ -199,6 +188,21 @@ struct tree_sort_return {
 	float r;
 	int node_count;
 	int index;
+};
+
+struct tree_sort_global_params {
+	int *index;
+	int N;
+	float theta;
+	int* next_alloc;
+	tree_node* tree_nodes;
+	float h;
+	int alloc_line_size;
+	array<fixed32*, NDIM> X;
+	array<float*, NDIM> V;
+	char* rungs;
+	int bucket_size;
+	int rank;
 };
 
 cudaStream_t cuda_tree_sort(tree_sort_local_params* local_params, tree_sort_return* returns, tree_sort_global_params global_params);

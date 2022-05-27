@@ -19,55 +19,7 @@
 #define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
 
-template<int N>
-class cuda_lockfree_queue {
-	int in;
-	int out;
-	int Q[N];
-	__device__ cuda_lockfree_queue() {
-		in = out = 0;
-	}
-	__device__
-	void push(const int data ) {
-		using itype = unsigned long long int;
-		auto this_in = in;
-		const auto& this_out = out;
-		if (this_in - this_out >= N) {
-			PRINT("general Q full! %li %li\n", this_out, this_in);
-			__trap();
-		}
-		while (atomicCAS((itype*) &Q[this_in % N], (itype) -1, (itype) data) != 0) {
-			this_in++;
-			if (this_in - this_out >= N) {
-				PRINT("general Q full! %li %li\n", out, in);
-				__trap();
-			}
-		}
-		in++;
-		atomicMax((itype*) &in, (itype) in);
-	}
 
-
-	__device__
-	int pop() {
-		using itype = unsigned long long int;
-		const auto& this_in = in;
-		auto this_out = out;
-		if (out >= in) {
-			return -1;
-		}
-		int data;
-		while ((data =  atomicExch((itype*) &Q[this_out % N], (itype) -1)) == -1) {
-			if (this_out >= this_in) {
-				return -1;
-			}
-			this_out++;
-		}
-		this_out++;
-		atomicMax((itype*) &out, (itype) this_out);
-		return data;
-	}
-};
 
 __device__
 char* cuda_mem::allocate_blocks(int nblocks) {

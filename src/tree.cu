@@ -26,15 +26,39 @@
 
 #define BLOCK_SIZE 32
 
-__global__ void cuda_tree_sort_kernel(tree_sort_local_params* local_params, tree_sort_return* returns, tree_sort_global_params global_params);
+__global__ void cuda_tree_sort_kernel2(tree_sort_local_params root_params, tree_sort_return* return_,
+		tree_sort_global_params global_params, lockfree_queue<tree_sort_local_params, TREE_Q_SIZE>* workq_ptr) {
+	const int& bid = blockIdx.x;
+	device_vector<tree_sort_local_params> root;
+	if (bid == 0) {
+		auto& workq = *workq_ptr;
+		new (&root) tree_sort_local_params();
+		root.push_back(root_params);
+		workq.push(&root[0]);
+	}
 
-cudaStream_t cuda_tree_sort(tree_sort_local_params* local_params, tree_sort_return* returns, tree_sort_global_params global_params) {
+
+
+
+	if (bid == 0) {
+		(&root)->~device_vector<tree_sort_local_params>();
+	}
+}
+
+__global__ void cuda_tree_sort_kernel(tree_sort_local_params* local_params, tree_sort_return* returns,
+		tree_sort_global_params global_params);
+
+cudaStream_t cuda_tree_sort(tree_sort_local_params* local_params, tree_sort_return* returns,
+		tree_sort_global_params global_params) {
 	auto stream = cuda_get_stream();
 	int nblocks;
-	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_tree_sort_kernel, BLOCK_SIZE, 0));
+	CUDA_CHECK(
+			cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_tree_sort_kernel, BLOCK_SIZE,
+					0));
 	nblocks *= cuda_smp_count();
 	nblocks = std::min(nblocks, global_params.N);
-	cuda_tree_sort_kernel<<<nblocks,BLOCK_SIZE,0,stream>>>(local_params, returns, global_params);
+	cuda_tree_sort_kernel<<<nblocks, BLOCK_SIZE, 0, stream>>>(local_params,
+			returns, global_params);
 	return stream;
 }
 
@@ -77,7 +101,8 @@ __device__ inline void cswap(T& a, T& b) {
 	b = c;
 }
 
-__device__ tree_sort_return cuda_tree_sort_node(const tree_sort_local_params& params, const tree_sort_global_params& global_params, tree_sort_shmem& shmem) {
+__device__ tree_sort_return cuda_tree_sort_node(const tree_sort_local_params& params,
+		const tree_sort_global_params& global_params, tree_sort_shmem& shmem) {
 	tree_sort_return rc;
 	const int& tid = threadIdx.x;
 	const auto& X = global_params.X;
@@ -136,7 +161,8 @@ __device__ tree_sort_return cuda_tree_sort_node(const tree_sort_local_params& pa
 		box_r += sqr(0.5 * (params.box.end[dim] - params.box.begin[dim]));
 	}
 	box_r = sqrt(box_r);
-	const bool ewald_satisfied = (box_r < 0.25 * (global_params.theta / (1.0 + global_params.theta)) && box_r < 0.125 - 0.25 * global_params.h);
+	const bool ewald_satisfied = (box_r < 0.25 * (global_params.theta / (1.0 + global_params.theta))
+			&& box_r < 0.125 - 0.25 * global_params.h);
 	if (nparts > global_params.bucket_size || (!ewald_satisfied && nparts > 0)) {
 		leaf = false;
 		part_int mid;
@@ -293,7 +319,8 @@ __device__ tree_sort_return cuda_tree_sort_node(const tree_sort_local_params& pa
 	return rc;
 }
 
-__global__ void cuda_tree_sort_kernel(tree_sort_local_params* local_params, tree_sort_return* returns, tree_sort_global_params global_params) {
+__global__ void cuda_tree_sort_kernel(tree_sort_local_params* local_params, tree_sort_return* returns,
+		tree_sort_global_params global_params) {
 	const int& tid = threadIdx.x;
 	__shared__ int i;
 	__shared__ tree_sort_shmem allocator;
