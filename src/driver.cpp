@@ -588,17 +588,22 @@ void driver() {
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
-			int bucket_size = 88;
 			if (z > 50.0) {
 				theta = 0.3;
 			} else if (z > 20.0) {
 				theta = 0.4;
 			} else if (z > 2.0) {
-				bucket_size = 120;
 				theta = 0.55;
 			} else {
-				bucket_size = 160;
 				theta = 0.7;
+			}
+			int bucket_size;
+			if (z > 20.0) {
+				bucket_size = 88;
+			} else if (z < 2.0) {
+				bucket_size = 168;
+			} else {
+				bucket_size = 88 + 80.0 * sqr((20.0 - z) / 18.0) * (20.0 - z) / 18.0;
 			}
 			if (theta != last_theta) {
 				if (theta == 0.55) {
@@ -695,10 +700,10 @@ void driver() {
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			if (full_eval) {
-				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "pps");
+				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "bs");
 			}
-			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
-					max_rung, 0.0);
+			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
+					max_rung, bucket_size);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
