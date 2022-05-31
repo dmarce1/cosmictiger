@@ -307,7 +307,6 @@ static void kick_test() {
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
 	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	total_flops += kr.part_flops + kr.node_flops;
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	tm.reset();

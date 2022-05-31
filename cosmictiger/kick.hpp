@@ -73,37 +73,25 @@ struct cuda_kick_shmem {
 
 struct kick_return {
 	char max_rung;
-	double part_flops;
-	double node_flops;
 	double pot;
 	double kin;
-	double load;
 	double xmom;
 	double ymom;
 	double zmom;
 	double nmom;
-	double total_time;
-	double parts_processed;
-	size_t nactive;
 
 	CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
-		part_flops = 0.0;
-		node_flops = 0.0;
 		pot = 0.0;
 		kin = 0.0;
 		xmom = ymom = zmom = nmom = 0.0;
-		nactive = 0;
-		load = 0.0;
 	}
 	CUDA_EXPORT
 	kick_return& operator+=(const kick_return& other) {
 		if (other.max_rung > max_rung) {
 			max_rung = other.max_rung;
 		}
-		part_flops += other.part_flops;
-		node_flops += other.node_flops;
 		pot += other.pot;
 		kin += other.kin;
 		xmom += other.xmom;
@@ -115,20 +103,13 @@ struct kick_return {
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & load;
 		arc & max_rung;
-		arc & part_flops;
-		arc & node_flops;
 		arc & pot;
 		arc & kin;
 		arc & xmom;
 		arc & ymom;
 		arc & zmom;
 		arc & nmom;
-		arc & nactive;
-		arc & total_time;
-		arc & parts_processed;
-
 	}
 };
 

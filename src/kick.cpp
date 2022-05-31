@@ -211,7 +211,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		nextlist.resize(0);
 		cclist.resize(0);
 		leaflist.resize(0);
-		auto& these_flops = kr.node_flops;
 		auto& checklist = echecklist;
 		do {
 			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
@@ -253,12 +252,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						nextlist.push_back(child_checks[RIGHT]);
 					}
 				}
-				these_flops += maxi * 22;
 			}
 			std::swap(checklist, nextlist);
 			nextlist.resize(0);
 		} while (checklist.size() && self_ptr->leaf);
-		these_flops += cpu_gravity_cc(GRAVITY_EWALD, L, cclist, self, params.do_phi);
+		cpu_gravity_cc(GRAVITY_EWALD, L, cclist, self, params.do_phi);
 		if (!self_ptr->leaf) {
 			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		}
@@ -270,7 +268,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		pclist.resize(0);
 		cplist.resize(0);
 		leaflist.resize(0);
-		auto& these_flops = kr.node_flops;
 		auto& checklist = dchecklist;
 		do {
 			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
@@ -325,20 +322,19 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						nextlist.push_back(child_checks[RIGHT]);
 					}
 				}
-				these_flops += maxi * 22;
 			}
 			std::swap(checklist, nextlist);
 			nextlist.resize(0);
 		} while (checklist.size() && self_ptr->leaf);
-		these_flops += cpu_gravity_cc(GRAVITY_DIRECT, L, cclist, self, params.do_phi);
+		cpu_gravity_cc(GRAVITY_DIRECT, L, cclist, self, params.do_phi);
 		if (self_ptr->leaf) {
 			if (self_ptr->nparts() > 0) {
 				if (cuda_workspace != nullptr) {
 					cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
 				}
-				these_flops += cpu_gravity_cp(L, cplist, self, params.do_phi);
-				kr.part_flops += cpu_gravity_pc(forces, params.do_phi, self, pclist);
-				kr.part_flops += cpu_gravity_pp(forces, params.do_phi, self, leaflist, params.h);
+				cpu_gravity_cp(L, cplist, self, params.do_phi);
+				cpu_gravity_pc(forces, params.do_phi, self, pclist);
+				cpu_gravity_pp(forces, params.do_phi, self, leaflist, params.h);
 			}
 		} else {
 			ALWAYS_ASSERT(cplist.size() == 0);

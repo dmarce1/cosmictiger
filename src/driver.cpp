@@ -359,9 +359,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 	}
 	timings[bucket_size].nparts += parts_processed;
 	timings[bucket_size].time += total_time.read();
-	kr.total_time = total_time.read();
-	kr.parts_processed = parts_processed;
-	//PRINT( "%e %e\n", parts_processed, total_time.read());
 	profiler_exit();
 	return std::make_pair(kr, sr);
 
@@ -690,7 +687,6 @@ void driver() {
 				THROW_ERROR("unable to open progress.txt for writing\n");
 			}
 			iter++;
-			total_processed += kr.nactive;
 			timer remaining_time;
 			total_time.stop();
 			remaining_time.start();
@@ -698,12 +694,11 @@ void driver() {
 			double pps = total_processed / runtime;
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
-			double act_pct = kr.nactive / nparts;
 			if (full_eval) {
 				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "pps");
 			}
 			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
-					max_rung, kr.parts_processed / kr.total_time);
+					max_rung, 0.0);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();

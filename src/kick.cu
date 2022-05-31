@@ -47,12 +47,11 @@ struct cuda_kick_params {
 	kick_return* kreturn;
 };
 
-__device__ int __noinline__ do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
+__device__ void do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
-	int flops = 0;
 	auto& all_phi = data.pot;
 	auto& all_gx = data.gx;
 	auto& all_gy = data.gy;
@@ -92,7 +91,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
-		flops += 537 + (true) * 178;
 		L2 = L2P(L, dx, params.do_phi);
 		phi[i] += L2(0, 0, 0);
 		gx[i] -= L2(1, 0, 0);
@@ -145,7 +143,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
 		phi_tot += 0.5f * phi[i];
-		flops += 52;
 	}
 	shared_reduce_add(phi_tot);
 	shared_reduce_add(xmom_tot);
@@ -154,7 +151,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	shared_reduce_add(nmom_tot);
 	shared_reduce_add(kin_tot);
 	shared_reduce_max(max_rung);
-	shared_reduce_add(flops);
 	if (tid == 0) {
 		return_.max_rung = max(return_.max_rung, max_rung);
 		return_.pot += phi_tot;
@@ -165,7 +161,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		return_.kin += kin_tot;
 	}
 //	atomicAdd(&kick_time, (double) clock64() - tm);
-	return flops;
 }
 
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
