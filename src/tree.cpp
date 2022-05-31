@@ -115,9 +115,6 @@ void tree_allocator::reset() {
 	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
 	next = (next_id += tree_alloc_line_size);
 	last = std::min(next + tree_alloc_line_size, (int) nodes_size);
-	for (int i = next; i < last; i++) {
-		nodes[i].valid = false;
-	}
 	if (next >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full");
 	}
@@ -359,7 +356,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const double h = get_options().hsoft;
 	int bucket_size = get_options().bucket_size;
 	tree_create_return rc;
-//	PRINT( "%i %i %i\n", hpx_rank(), part_range.first, part_range.second);
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
@@ -370,21 +366,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		part_range = particles_current_range();
 	}
 	array<tree_id, NCHILD> children;
-	array<fixed32, NDIM> x;
+	array<fixed32, NDIM>& x = rc.pos;
+	multipole<float>& multi = rc.multi;
+	float& radius = rc.radius;
 	array<double, NDIM> Xc;
-	multipole<float> multi;
-	int flops = 0;
-	double total_flops = 0.0;
-	float radius;
 	double r;
-	int min_depth = depth;
-	int max_depth = depth;
 	if (!allocator.ready) {
 		allocator.reset();
 		allocator.ready = true;
 	}
-	size_t node_count;
-	size_t leaf_nodes = 0;
 	const int index = allocator.allocate();
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
@@ -413,7 +403,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_range.second = right_range.first = mid;
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
-			flops += 7;
 		} else {
 			if (nparts < 8 * bucket_size) {
 				//		box = left_box = right_box = particles_enclosing_box(part_range);
@@ -437,9 +426,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto mr = rcr.multi;
 		const double Rl = rcl.radius;
 		const double Rr = rcr.radius;
-		min_depth = std::min(rcl.min_depth, rcr.min_depth);
-		max_depth = std::max(rcl.max_depth, rcr.max_depth);
-		total_flops += rcl.flops + rcr.flops;
 		double rr;
 		double rl;
 		array<double, NDIM> Xl;
@@ -453,20 +439,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			Xr[dim] = xr[dim].to_double();
 			N[dim] = Xl[dim] - Xr[dim];
 			norminv += sqr(N[dim]);
-			flops += 5;
 		}
 		norminv = 1.0 / std::sqrt(norminv);
-		flops += 8;
 		for (int dim = 0; dim < NDIM; dim++) {
 			N[dim] *= norminv;
-			flops += 1;
 		}
 		r = 0.0;
-		flops += 2;
 		if (mr[0] != 0.0 && ml[0.0] != 0.0) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				double xmin, xmax;
-				flops += 1;
 				if (N[dim] > 0.0) {
 					xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
 					xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
@@ -476,20 +457,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				}
 				Xc[dim] = (xmax + xmin) * 0.5;
 				r += sqr((xmax - xmin) * 0.5);
-				flops += 14;
 			}
 		} else if (mr[0] == 0.0 && ml[0.0] == 0) {
-			flops += 2;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
-				flops == 2;
 			}
 		} else if (mr[0] != 0.0) {
-			flops += 4;
 			Xc = Xr;
 			r = Rr * Rr;
 		} else {
-			flops += 4;
 			Xc = Xl;
 			r = Rl * Rl;
 		}
@@ -499,13 +475,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);
 		}
 		r = std::sqrt(r);
-		flops += 8 + 3 * NDIM;
 		if (r < radius) {
 			radius = r;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
 			}
-			flops += 2 * NDIM;
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
@@ -526,8 +500,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
-		node_count = 1 + rcl.node_count + rcr.node_count;
-		leaf_nodes = rcl.leaf_nodes + rcr.leaf_nodes;
 	} else {
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
@@ -557,7 +529,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				this_radius += sqr(x - Xc[dim]);
 			}
 			r = std::max(r, this_radius);
-			flops += 3 * NDIM + 1;
 		}
 		radius = std::sqrt(r);
 		children[LEFT].index = children[RIGHT].index = -1;
@@ -593,17 +564,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 			}
-			flops += SIMD_FLOAT_SIZE * NDIM * 3;
 			auto m = P2M(dx);
-			flops += 211 * SIMD_FLOAT_SIZE;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				m[j] *= mask;
 			}
-			flops += SIMD_FLOAT_SIZE * MULTIPOLE_SIZE;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[j] += m[j].sum();
 			}
-			flops += MULTIPOLE_SIZE * (1 + 3);
 		}
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = M[i];
@@ -611,48 +578,24 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
 		}
-		node_count = 1;
-		leaf_nodes = 1;
 	}
 	tree_node node;
-	node.valid = true;
-	node.index = index;
-	node.node_count = node_count;
 	node.radius = radius;
 	node.children = children;
 	node.local_root = local_root;
 	node.part_range = part_range;
-	node.sink_part_range = part_range;
 	node.proc_range = proc_range;
 	node.pos = x;
 	node.multi = multi;
 	node.depth = depth;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;
-	/*	if (sph && SPH_get_options().bucket_size < get_options().bucket_size) {
-	 if (node.leaf) {
-	 std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
-	 leaf_part_ranges.push_back(part_range);
-	 }
-	 }*/
 	if (index >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full\n");
 	}
 	nodes[index] = node;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
-	rc.multi = node.multi;
-	rc.pos = node.pos;
-	rc.radius = node.radius;
-	rc.leaf_nodes = leaf_nodes;
-	rc.node_count = node.node_count;
-	total_flops += flops;
-	rc.flops = total_flops;
-	rc.min_depth = min_depth;
-	rc.max_depth = max_depth;
-	if (local_root) {
-	//	tree_sort_nodes();
-	}
 	if (key == 1) {
 		profiler_exit();
 	}

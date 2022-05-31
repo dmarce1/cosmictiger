@@ -696,14 +696,9 @@ void driver() {
 			remaining_time.start();
 			runtime += total_time.read();
 			double pps = total_processed / runtime;
-			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops;
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
-			params.flops += total_flops;
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			double act_pct = kr.nactive / nparts;
-			const double parts_per_node = nparts / sr.leaf_nodes;
-			//		const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
-			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
 			if (full_eval) {
 				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "pps");
 			}
@@ -714,9 +709,6 @@ void driver() {
 			remaining_time.stop();
 			runtime += remaining_time.read();
 			total_time.start();
-			//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
-//			PRINT("%llx\n", itime);
-//			PRINT("itime inc %i\n", max_rung);
 			itime = inc(itime, max_rung);
 			domain_time = 0.0;
 			sort_time = 0.0;

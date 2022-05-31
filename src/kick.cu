@@ -87,7 +87,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		float dt;
 		float g2;
 		int rung;
-		snki = self.sink_part_range.first + i;
+		snki = self.part_range.first + i;
 		ASSERT(snki >= 0);
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
