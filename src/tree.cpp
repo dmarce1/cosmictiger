@@ -159,80 +159,80 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 }
 
 /*static void tree_sort_nodes() {
-	timer tm;
-	tm.start();
-	const int line_size = get_options().tree_alloc_line_size;
-	vector<hpx::future<void>> futs;
-	vector<int> tree_map(nodes_size);
-	const int stride = std::max((int) (nodes_size / line_size) / (8 * hpx_hardware_concurrency()), 1);
-	for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
-		futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
-			const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
-			for( int begin = begin0; begin < end0; begin+= line_size) {
-				vector<pair<int>> sort_ranges;
-				pair<int> current;
-				int end = std::min(begin + line_size, (int) nodes_size);
-				current.first = begin;
-				for (int i = begin; i < end; i++) {
-					const bool pinned = (nodes[i].proc_range.second - nodes[i].proc_range.first > 1) || nodes[i].local_root;
-					if (pinned) {
-						current.second = i;
-						if (current.second - current.first > 0) {
-							sort_ranges.push_back(current);
-						}
-						current.first = i + 1;
-					}
-				}
-				current.second = end;
-				if (current.second - current.first > 0) {
-					sort_ranges.push_back(current);
-				}
-				for (const auto& range : sort_ranges) {
-					std::sort(nodes + range.first, nodes + range.second, [](const tree_node& a, const tree_node& b) {
-								if( a.valid && !b.valid ) {
-									return true;
-								} else if( !a.valid ) {
-									return false;
-								} else if( a.depth < b.depth ) {
-									return true;
-								} else if( a.depth > b.depth ) {
-									return false;
-								} else {
-									return a.part_range.first < b.part_range.first;
-								}
-							});
-				}
-				for (int i = begin; i < end; i++) {
-					if (nodes[i].valid) {
-						tree_map[nodes[i].index] = i;
-					}
-				}
-			}
-		}));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	PRINT("%i Sorts done\n", futs.size());
-	futs.resize(0);
-	for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
-		futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
-			const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
-			for( int begin = begin0; begin < end0; begin+= line_size) {
-				int end = std::min(begin + line_size, (int) nodes_size);
-				for( int i = begin; i < end; i++) {
-					if (nodes[i].valid) {
-						auto& left = nodes[i].children[LEFT];
-						auto& right = nodes[i].children[RIGHT];
-						if (left.index != -1 && left.proc == hpx_rank()) {
-							left.index = tree_map[left.index];
-							right.index = tree_map[right.index];
-						}
-					}
-				}
-			}
-		}));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-}*/
+ timer tm;
+ tm.start();
+ const int line_size = get_options().tree_alloc_line_size;
+ vector<hpx::future<void>> futs;
+ vector<int> tree_map(nodes_size);
+ const int stride = std::max((int) (nodes_size / line_size) / (8 * hpx_hardware_concurrency()), 1);
+ for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
+ futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
+ const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
+ for( int begin = begin0; begin < end0; begin+= line_size) {
+ vector<pair<int>> sort_ranges;
+ pair<int> current;
+ int end = std::min(begin + line_size, (int) nodes_size);
+ current.first = begin;
+ for (int i = begin; i < end; i++) {
+ const bool pinned = (nodes[i].proc_range.second - nodes[i].proc_range.first > 1) || nodes[i].local_root;
+ if (pinned) {
+ current.second = i;
+ if (current.second - current.first > 0) {
+ sort_ranges.push_back(current);
+ }
+ current.first = i + 1;
+ }
+ }
+ current.second = end;
+ if (current.second - current.first > 0) {
+ sort_ranges.push_back(current);
+ }
+ for (const auto& range : sort_ranges) {
+ std::sort(nodes + range.first, nodes + range.second, [](const tree_node& a, const tree_node& b) {
+ if( a.valid && !b.valid ) {
+ return true;
+ } else if( !a.valid ) {
+ return false;
+ } else if( a.depth < b.depth ) {
+ return true;
+ } else if( a.depth > b.depth ) {
+ return false;
+ } else {
+ return a.part_range.first < b.part_range.first;
+ }
+ });
+ }
+ for (int i = begin; i < end; i++) {
+ if (nodes[i].valid) {
+ tree_map[nodes[i].index] = i;
+ }
+ }
+ }
+ }));
+ }
+ hpx::wait_all(futs.begin(), futs.end());
+ PRINT("%i Sorts done\n", futs.size());
+ futs.resize(0);
+ for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
+ futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
+ const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
+ for( int begin = begin0; begin < end0; begin+= line_size) {
+ int end = std::min(begin + line_size, (int) nodes_size);
+ for( int i = begin; i < end; i++) {
+ if (nodes[i].valid) {
+ auto& left = nodes[i].children[LEFT];
+ auto& right = nodes[i].children[RIGHT];
+ if (left.index != -1 && left.proc == hpx_rank()) {
+ left.index = tree_map[left.index];
+ right.index = tree_map[right.index];
+ }
+ }
+ }
+ }
+ }));
+ }
+ hpx::wait_all(futs.begin(), futs.end());
+ }*/
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
@@ -404,15 +404,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
-			if (nparts < 8 * bucket_size) {
-				//		box = left_box = right_box = particles_enclosing_box(part_range);
-			}
-			double xmax = box.end[xdim];
-			double xmin = box.begin[xdim];
-			part_int mid;
-			double xmid;
-			xmid = 0.5 * (xmax + xmin);
-			mid = particles_sort(part_range, xmid, xdim);
+			const double xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
+			const part_int mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
@@ -443,31 +436,30 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		norminv = 1.0 / std::sqrt(norminv);
 		for (int dim = 0; dim < NDIM; dim++) {
 			N[dim] *= norminv;
+			N[dim] = std::abs(N[dim]);
 		}
 		r = 0.0;
-		if (mr[0] != 0.0 && ml[0.0] != 0.0) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				double xmin, xmax;
-				if (N[dim] > 0.0) {
-					xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
-					xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
-				} else {
-					xmax = std::max(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
-					xmin = std::min(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+		if( mr[0] != 0.0 ) {
+			if( ml[0] != 0.0 ) {
+				for (int dim = 0; dim < NDIM; dim++) {
+					const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+					const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
+					Xc[dim] = (xmax + xmin) * 0.5;
+					r += sqr((xmax - xmin) * 0.5);
 				}
-				Xc[dim] = (xmax + xmin) * 0.5;
-				r += sqr((xmax - xmin) * 0.5);
+			} else {
+				Xc = Xr;
+				r = Rr * Rr;
 			}
-		} else if (mr[0] == 0.0 && ml[0.0] == 0) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
-			}
-		} else if (mr[0] != 0.0) {
-			Xc = Xr;
-			r = Rr * Rr;
 		} else {
-			Xc = Xl;
-			r = Rl * Rl;
+			if( ml[0] != 0.0 ) {
+				Xc = Xl;
+				r = Rl * Rl;
+			} else {
+				for (int dim = 0; dim < NDIM; dim++) {
+					Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
+				}
+			}
 		}
 		radius = std::sqrt(r);
 		r = 0.0;
@@ -567,8 +559,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			auto m = P2M(dx);
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				m[j] *= mask;
-			}
-			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[j] += m[j].sum();
 			}
 		}
