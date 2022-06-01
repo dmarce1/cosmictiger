@@ -158,82 +158,6 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	htime = true;
 }
 
-/*static void tree_sort_nodes() {
- timer tm;
- tm.start();
- const int line_size = get_options().tree_alloc_line_size;
- vector<hpx::future<void>> futs;
- vector<int> tree_map(nodes_size);
- const int stride = std::max((int) (nodes_size / line_size) / (8 * hpx_hardware_concurrency()), 1);
- for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
- futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
- const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
- for( int begin = begin0; begin < end0; begin+= line_size) {
- vector<pair<int>> sort_ranges;
- pair<int> current;
- int end = std::min(begin + line_size, (int) nodes_size);
- current.first = begin;
- for (int i = begin; i < end; i++) {
- const bool pinned = (nodes[i].proc_range.second - nodes[i].proc_range.first > 1) || nodes[i].local_root;
- if (pinned) {
- current.second = i;
- if (current.second - current.first > 0) {
- sort_ranges.push_back(current);
- }
- current.first = i + 1;
- }
- }
- current.second = end;
- if (current.second - current.first > 0) {
- sort_ranges.push_back(current);
- }
- for (const auto& range : sort_ranges) {
- std::sort(nodes + range.first, nodes + range.second, [](const tree_node& a, const tree_node& b) {
- if( a.valid && !b.valid ) {
- return true;
- } else if( !a.valid ) {
- return false;
- } else if( a.depth < b.depth ) {
- return true;
- } else if( a.depth > b.depth ) {
- return false;
- } else {
- return a.part_range.first < b.part_range.first;
- }
- });
- }
- for (int i = begin; i < end; i++) {
- if (nodes[i].valid) {
- tree_map[nodes[i].index] = i;
- }
- }
- }
- }));
- }
- hpx::wait_all(futs.begin(), futs.end());
- PRINT("%i Sorts done\n", futs.size());
- futs.resize(0);
- for (int begin0 = 0; begin0 <= next_id; begin0 += line_size * stride) {
- futs.push_back(hpx::async([begin0,line_size, stride, &tree_map]() {
- const int end0 = std::min(begin0 + stride * line_size, (int) nodes_size);
- for( int begin = begin0; begin < end0; begin+= line_size) {
- int end = std::min(begin + line_size, (int) nodes_size);
- for( int i = begin; i < end; i++) {
- if (nodes[i].valid) {
- auto& left = nodes[i].children[LEFT];
- auto& right = nodes[i].children[RIGHT];
- if (left.index != -1 && left.proc == hpx_rank()) {
- left.index = tree_map[left.index];
- right.index = tree_map[right.index];
- }
- }
- }
- }
- }));
- }
- hpx::wait_all(futs.begin(), futs.end());
- }*/
-
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(1);
@@ -352,6 +276,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}
+	size_t node_count = 1;
+	size_t leaf_count = 0;
 	stack_trace_activate();
 	const double h = get_options().hsoft;
 	int bucket_size = get_options().bucket_size;
@@ -413,6 +339,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
+		node_count += rcl.node_count + rcr.node_count;
+		leaf_count += rcl.leaf_count + rcr.leaf_count;
 		const auto xl = rcl.pos;
 		const auto xr = rcr.pos;
 		const auto ml = rcl.multi;
@@ -493,6 +421,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 	} else {
+		leaf_count = 1;
 		array<double, NDIM> Xmax;
 		array<double, NDIM> Xmin;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -586,6 +515,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	nodes[index] = node;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
+	rc.leaf_count = leaf_count;
+	rc.node_count = node_count;
 	if (key == 1) {
 		profiler_exit();
 	}

@@ -23,11 +23,12 @@
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 
-size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
-	size_t flops = 0;
+void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -89,13 +90,14 @@ size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tr
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] += L0[i].sum();
 		}
+		flops += 7 * EXPANSION_SIZE;
 	}
-	return flops;
+	add_cpu_flops(flops);
 }
 
-size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
-	size_t flops = 0;
+	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -164,13 +166,14 @@ size_t cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id 
 			for (int i = 0; i < EXPANSION_SIZE; i++) {
 				L[i] += L0[i].sum();
 			}
+			flops += 7 * EXPANSION_SIZE;
 		}
 	}
-	return flops;
+	add_cpu_flops(flops);
 }
 
-size_t cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list) {
-	size_t flops = 0;
+void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list) {
+	int flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -236,21 +239,27 @@ size_t cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<t
 			f.gy[j] -= L(0, 1, 0).sum();
 			f.gz[j] -= L(0, 0, 1).sum();
 			f.phi[j] += L(0, 0, 0).sum();
+			flops += 28;
 		}
 	}
-	return flops;
+	add_cpu_flops(flops);
 }
 
-#include <fenv.h>
-
-size_t cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
-	size_t flops = 0;
+void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
+	int flops = 0;
 	timer tm;
 	tm.start();
 	constexpr int chunk_size = 32;
 	size_t near_count = 0;
 	size_t far_count = 0;
 	if (list.size()) {
+		simd_float sink_hsoft;
+		sink_hsoft = get_options().hsoft;
+		const simd_float hinv_i = simd_float(1.f) / sink_hsoft;										// 4
+		const simd_float h2inv_i = sqr(hinv_i);															// 1
+		const simd_float h3inv_i = (hinv_i) * h2inv_i;													// 1
+		const simd_float h2 = sqr(sink_hsoft); // 1;
+		flops += 7;
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);
@@ -295,12 +304,10 @@ size_t cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<t
 				masses[i] = 0.0f;
 			}
 			const simd_float tiny = 1.0e-15;
-			feenableexcept (FE_DIVBYZERO);
-			feenableexcept (FE_INVALID);
-			feenableexcept (FE_OVERFLOW);
-			simd_float sink_hsoft;
+//			feenableexcept (FE_DIVBYZERO);
+//			feenableexcept (FE_INVALID);
+//			feenableexcept (FE_OVERFLOW);
 			for (part_int i = range.first; i < range.second; i++) {
-				sink_hsoft = get_options().hsoft;
 				simd_float gx(0.0);
 				simd_float gy(0.0);
 				simd_float gz(0.0);
@@ -323,36 +330,41 @@ size_t cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<t
 					for (int dim = 0; dim < NDIM; dim++) {
 						dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
 					}
-					simd_float rinv1 = 0.f, rinv3 = 0.f;
-					const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);
-					const simd_float near_flags = r2 < sqr(sink_hsoft);
-					const simd_float hinv_i = simd_float(1.f) / sink_hsoft;
-					const simd_float h2inv_i = sqr(hinv_i);
-					const simd_float h3inv_i = (hinv_i) * h2inv_i;
-//							self_flags += simd_float(1) - (r2 > simd_float(0));
-					if (near_flags.sum() == 0) {
-						rinv1 = simd_float(1) / sqrt(r2);
-						rinv3 = rinv1 * sqr(rinv1);
-					} else {
-						const auto q2 = r2 * h2inv_i;
-						rinv3 = (simd_float(2.5f) - simd_float(1.5f) * q2) * h3inv_i;
-						rinv1 = (simd_float(15.0f / 8.0f) - simd_float(5.0f / 4.0f) * q2 + simd_float(3.0f / 8.0f) * sqr(q2)) * hinv_i;
+					const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);						// 6
+					const simd_float q2 = r2 * h2inv_i;																	// 1
+					const simd_float rinv1_far = simd_float(1) / sqrt(r2);										// 8
+					const simd_float rinv3_far = rinv1_far * sqr(rinv1_far);									// 3
+					const simd_float rinv3_near = (simd_float(2.5f) - simd_float(1.5f) * q2) * h3inv_i;	// 3
+					simd_float rinv1_near, rinv1;
+					if (do_phi) {
+						rinv1_near = simd_float(3.0 / 8.0);
+						rinv1_near = fmaf(rinv1_far, q2, simd_float(-5.0 / 4.0));									// 2
+						rinv1_near = fmaf(rinv1_far, q2, simd_float(15.0 / 8.0));									// 2
 					}
-					rinv3 *= mass;
-					rinv1 *= mass;
+					const simd_float sw_far = r2 > h2;																		// 1
+					const simd_float sw_near = simd_float(1) - sw_far;													// 1
+					simd_float rinv3 = rinv3_near * sw_near + rinv3_far * sw_far;									// 3
+					if (do_phi) {
+						rinv1 = rinv1_near * sw_near + rinv1_far * sw_far;												// 3
+						flops += 7;
+					}
+					rinv3 *= mass;																								 	// 1
+					rinv1 *= mass;																									// 1
 					gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
 					gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
 					gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
-					phi -= rinv1;																			// 1
+					phi -= rinv1;																									// 1
+					flops += 38;
 				}
 				const int j = i - range.first;
 				f.gx[j] -= gx.sum();
 				f.gy[j] -= gy.sum();
 				f.gz[j] -= gz.sum();
 				f.phi[j] += phi.sum();
+				flops += 28;
 
 			}
 		}
 	}
-	return 24 * far_count + 52 * near_count;
+	add_cpu_flops(flops);
 }

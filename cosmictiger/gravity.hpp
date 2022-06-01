@@ -45,10 +45,10 @@ using gravity_cc_type = int;
 constexpr gravity_cc_type GRAVITY_DIRECT = 0;
 constexpr gravity_cc_type GRAVITY_EWALD = 1;
 
-size_t cpu_gravity_cc(gravity_cc_type, expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
-size_t cpu_gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
-size_t cpu_gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
-size_t cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
+void cpu_gravity_cc(gravity_cc_type, expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
+void cpu_gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_phi);
+void cpu_gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
+void cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
 
 #ifdef __CUDACC__
 __device__

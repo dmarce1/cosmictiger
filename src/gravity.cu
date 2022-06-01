@@ -18,12 +18,14 @@
  */
 
 #include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
 
 __device__
 void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
 	const auto& tree_nodes = data.tree_nodes;
+	int flops = 0;
 	if (multlist.size()) {
 		expansion<float> L;
 		expansion<float> D;
@@ -37,8 +39,8 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
-			greens_function(D, dx);
-			M2L(L, M, D, do_phi);
+			flops += 3 + greens_function(D, dx);
+			flops += M2L(L, M, D, do_phi);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			shared_reduce_add(L[i]);
@@ -46,8 +48,10 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];
 		}
+		flops += 6 * EXPANSION_SIZE;
 		__syncwarp();
 	}
+	add_gpu_flops(flops);
 }
 
 __device__
@@ -63,6 +67,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	auto& src_z = shmem.z;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
+	int flops = 0;
 	if (partlist.size()) {
 		int part_index;
 		expansion<float> L;
@@ -112,7 +117,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
 				expansion<float> D;
-				greens_function(D, dx);
+				flops += EXPANSION_SIZE + 3 + greens_function(D, dx);
 				for (int k = 0; k < EXPANSION_SIZE; k++) {
 					L[k] += D[k];
 				}
@@ -124,10 +129,11 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];
 		}
+		flops += 6 * EXPANSION_SIZE;
 
 		__syncwarp();
 	}
-
+	add_gpu_flops(flops);
 }
 
 __device__
@@ -145,6 +151,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	const auto& sink_y = data.y + self.part_range.first;
 	const auto& sink_z = data.z + self.part_range.first;
 	const auto* tree_nodes = data.tree_nodes;
+	int flops = 0;
 	if (multlist.size()) {
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
@@ -158,23 +165,26 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 				expansion<float> D;
-				greens_function(D, dx);
-				M2L(L, M, D, do_phi);
+				flops += 3 + greens_function(D, dx);
+				flops += M2L(L, M, D, do_phi);
 			}
 			gx[k] -= L(1, 0, 0);
 			gy[k] -= L(0, 1, 0);
 			gz[k] -= L(0, 0, 1);
 			phi[k] += L(0, 0, 0);
+			flops += 4;
 		}
 		__syncwarp();
 	}
 	__syncwarp();
+	add_gpu_flops(flops);
 }
 
 __device__
 void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
 	const auto& tree_nodes = data.tree_nodes;
+	int flops = 0;
 	if (multlist.size()) {
 		expansion<float> L;
 		expansion<float> D;
@@ -188,8 +198,8 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
-			ewald_greens_function(D, dx);
-			M2L(L, M, D, do_phi);
+			flops += 3 + ewald_greens_function(D, dx);
+			flops += M2L(L, M, D, do_phi);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			shared_reduce_add(L[i]);
@@ -197,8 +207,10 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];
 		}
+		flops += 6 * EXPANSION_SIZE;
 		__syncwarp();
 	}
+	add_gpu_flops(flops);
 }
 
 __device__
@@ -227,6 +239,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	const float hinv = 1.f / h;
 	const float h2inv = sqr(hinv);
 	const float h3inv = h2inv * hinv;
+	int flops = 7;
 	if (partlist.size()) {
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
@@ -285,30 +298,38 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					if (r2 > h2) {
-						r1inv = rsqrt(r2);
-						r3inv = sqr(r1inv) * r1inv;
+						r1inv = rsqrt(r2);					// 4
+						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
-						const float q2 = r2 * h2inv;
-						r3inv = fmaf(q2, -1.5f, 2.5f) * h3inv;
+						const float q2 = r2 * h2inv;		// 1
+						r3inv = fmaf(q2, -1.5f, 2.5f) * h3inv;	// 3
+						flops -= 2;
 						if (do_phi) {
 							r1inv = float(3.0f / 8.0f);
-							r1inv = fmaf(q2, r1inv, -float(5.f / 4.f));
-							r1inv = fmaf(q2, r1inv, float(15.0f / 8.0f));
-							r1inv *= hinv;
+							r1inv = fmaf(q2, r1inv, -float(5.f / 4.f)); // 2
+							r1inv = fmaf(q2, r1inv, float(15.0f / 8.0f)); // 2
+							r1inv *= hinv;                    // 1
+							flops += 5;
 						}
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2
 					fz = fmaf(dx2, r3inv, fz);                     // 2
 					pot -= r1inv;                                  // 1
+					flops += 21;
 				}
 				gx[k] -= fx;
 				gy[k] -= fy;
 				gz[k] -= fz;
-				phi[k] += pot;
+				flops += 3;
+				if (do_phi) {
+					phi[k] += pot;
+					flops++;
+				}
 			}
 		}
 		__syncwarp();
 	}
 	__syncwarp();
+	add_gpu_flops(flops);
 }

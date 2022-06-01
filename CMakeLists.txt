@@ -56,6 +56,8 @@ set(cosmictiger_source_files
     src/domain.cpp
     src/ewald_indices.cpp
     src/ewald_indices.cu
+    src/flops.cpp
+    src/flops.cu
     src/fft.cpp
     src/gravity.cpp
     src/gravity.cu
@@ -109,6 +111,7 @@ set(cosmictiger_header_files
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
     cosmictiger/interp.hpp
+    cosmictiger/flops.hpp
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
     cosmictiger/group_entry.hpp

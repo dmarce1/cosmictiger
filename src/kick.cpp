@@ -146,7 +146,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		bool eligible;
 		size_t max_parts = CUDA_KICK_PARTS_MAX;
 		const auto rng = particles_current_range();
-		max_parts = std::min((size_t) max_parts, (size_t) std::max((part_int)(rng.second - rng.first) / kick_block_count(),(part_int) get_options().bucket_size));
+		max_parts = std::min((size_t) max_parts,
+				(size_t) std::max((part_int) (rng.second - rng.first) / kick_block_count(), (part_int) get_options().bucket_size));
 		eligible = params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local();
 		if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			const auto all_local = [](const vector<tree_id>& list) {
@@ -362,6 +363,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				forces.gy[j] *= GM;
 				forces.gz[j] *= GM;
 				forces.phi[j] *= GM;
+				if (save_force) {
+					particles_gforce(XDIM, i) = forces.gx[j];
+					particles_gforce(YDIM, i) = forces.gy[j];
+					particles_gforce(ZDIM, i) = forces.gz[j];
+					particles_pot(i) = forces.phi[j];
+				}
 				auto& vx = particles_vel(XDIM, i);
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);
@@ -414,7 +421,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				tm.stop();
 				char hostname[33];
 				gethostname(hostname, 32);
-//				PRINT("Kick took %e s on %s\n", tm.read(), hostname);
 			}
 			if (self.proc == 0 && self.index == 0) {
 				profiler_exit();
@@ -433,7 +439,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					tm1.stop();
 					char hostname[33];
 					gethostname(hostname,32);
-//					PRINT( "Kick took %e s on %s\n", tm1.read(), hostname);
 				}
 				if( self.proc == 0 && self.index == 0 ) {
 					profiler_exit();

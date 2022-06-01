@@ -27,6 +27,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <atomic>
 
@@ -76,6 +77,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	float zmom_tot = 0.0f;
 	float nmom_tot = 0.0f;
 	const float& hsoft = params.h;
+	int flops = 0;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
 		expansion2<float> L2;
 		array<float, NDIM> dx;
@@ -106,10 +108,12 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		const float sgn = params.top ? 1.f : -1.f;
 		if (params.ascending) {
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+			flops += 2;
 			if (!params.first_call) {
 				vx = fmaf(sgn * gx[i], dt, vx);
 				vy = fmaf(sgn * gy[i], dt, vy);
 				vz = fmaf(sgn * gz[i], dt, vz);
+				flops += 6;
 			}
 		}
 		kin_tot += 0.5f * sqr(vx, vy, vz);
@@ -126,23 +130,26 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 
 		if (params.descending) {
 			g2 = sqr(gx[i], gy[i], gz[i]);
-			dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0);
+			dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0); // 12
 			rung = rungs[snki];
-			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1);
+			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1); // 13
 			rungs[snki] = rung;
 			max_rung = max(rung, max_rung);
 			ALWAYS_ASSERT(rung >= 0);
 			ALWAYS_ASSERT(rung < MAX_RUNG);
-			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-			vx = fmaf(sgn * gx[i], dt, vx);
-			vy = fmaf(sgn * gy[i], dt, vy);
-			vz = fmaf(sgn * gz[i], dt, vz);
+			dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
+			vx = fmaf(sgn * gx[i], dt, vx); // 3
+			vy = fmaf(sgn * gy[i], dt, vy); // 3
+			vz = fmaf(sgn * gz[i], dt, vz); // 3
+			flops += 36;
 		}
 
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
 		phi_tot += 0.5f * phi[i];
+		flops += 557 + params.do_phi * 178;
+
 	}
 	shared_reduce_add(phi_tot);
 	shared_reduce_add(xmom_tot);
@@ -150,6 +157,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	shared_reduce_add(zmom_tot);
 	shared_reduce_add(nmom_tot);
 	shared_reduce_add(kin_tot);
+	flops += 30;
 	shared_reduce_max(max_rung);
 	if (tid == 0) {
 		return_.max_rung = max(return_.max_rung, max_rung);
@@ -159,8 +167,9 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		return_.zmom += zmom_tot;
 		return_.nmom += nmom_tot;
 		return_.kin += kin_tot;
+		flops += 6;
 	}
-//	atomicAdd(&kick_time, (double) clock64() - tm);
+	add_gpu_flops(flops);
 }
 
 __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
@@ -188,13 +197,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& tree_nodes = data.tree_nodes;
 	const float& h = global_params.h;
 	int index;
-
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
 	__syncthreads();
 	while (index < item_count) {
+		int flops = 0;
 		L.resize(0);
 		dchecks.resize(0);
 		echecks.resize(0);
@@ -230,11 +239,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
+				flops += 3;
 				{
 					const auto this_L = L2L_cuda(L.back(), dx, global_params.do_phi);
 					if (tid == 0) {
 						L.back() = this_L;
 					}
+					flops += 2650 + global_params.do_phi * 332;
 				}
 				if (self.leaf) {
 					const int nsinks = self.part_range.second - self.part_range.first;
@@ -269,6 +280,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
 								const float dcc = (self.radius + other.radius) * thetainv;
 								cc = R2 > sqr(dcc);
+								flops += 24;
 								if (!cc) {
 									leaf = other.leaf;
 									next = !leaf;
@@ -351,9 +363,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
 								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
 								cc = R2 > sqr(dcc);
+								flops += 20;
 								if (!cc && other.leaf && self.leaf) {
 									pc = R2 > sqr(dpc) && dpc > dcp;
 									cp = R2 > sqr(dcp) && dcp > dpc;
+									flops += 4;
 								}
 								if (!cc && !cp && !pc) {
 									leaf = other.leaf;
@@ -510,6 +524,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		ASSERT(Lpos.size() == 0);
 		ASSERT(phase.size() == 0);
 		ASSERT(self_index.size() == 0);
+		add_gpu_flops(flops);
 	}
 	((cuda_kick_shmem*) shmem_ptr)->~cuda_kick_shmem();
 

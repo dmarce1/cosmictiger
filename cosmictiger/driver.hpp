@@ -35,6 +35,7 @@ struct driver_params {
 	int iter;
 	int minrung0;
 	int step;
+	int bucket_size;
 	size_t total_processed;
 	double flops;
 	double runtime;
@@ -42,6 +43,7 @@ struct driver_params {
 	time_type itime;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & bucket_size;
 		arc & adot;
 		arc & minrung0;
 		arc & step;
