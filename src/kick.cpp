@@ -25,6 +25,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <unistd.h>
 #include <stack>
@@ -123,7 +124,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
 		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
-	//params.gpu = false;
+	int flops = 0;
 	if (self.proc == 0 && self.index == 0) {
 		profiler_enter(__FUNCTION__);
 	}
@@ -138,10 +139,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
-//			cuda_mem_usage = kick_estimate_cuda_mem_usage(params.theta, self_ptr->nparts(), dchecklist.size() + echecklist.size());
-//			if (cuda_total_mem() * CUDA_MAX_MEM > cuda_mem_usage) {
 			cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
-//			}
 		}
 		bool eligible;
 		size_t max_parts = CUDA_KICK_PARTS_MAX;
@@ -168,7 +166,6 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		thread_left = cuda_workspace != nullptr;
 	}
 	kick_return kr;
-//	const simd_float h = params.h;
 	const float hfloat = params.h;
 	const float GM = params.GM;
 	const float eta = params.eta;
@@ -197,6 +194,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, params.do_phi);
+	flops += 1511 + params.do_phi * 178;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
 	force_vectors forces;
@@ -242,6 +240,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const auto hsoft = my_hsoft;
 				const simd_float dcc = (self_radius + other_radius) * thetainv;
 				const simd_float cc = R2 > sqr(dcc);
+				flops += maxi * 15;
 				for (int i = 0; i < maxi; i++) {
 					if (cc[i]) {
 						cclist.push_back(checklist[ci + i]);
@@ -301,12 +300,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const simd_float dcp = max((thetainv * self_radius + other_radius), mind);
 				const simd_float dpc = max((self_radius + other_radius * thetainv), mind);
 				const simd_float cc = R2 > sqr(dcc);
+				flops += maxi * 20;
 				simd_float pc, cp;
 				cp = simd_float(0);
 				pc = simd_float(0);
 				if (self_ptr->leaf) {
 					pc = (simd_float(1) - cc) * other_leaf * (R2 > sqr(dpc)) * (dpc > dcp);
 					cp = (simd_float(1) - cc) * other_leaf * (R2 > sqr(dcp)) * (dcp > dpc);
+					flops += maxi * 30;
 				}
 				for (int i = 0; i < maxi; i++) {
 					if (cc[i]) {
@@ -381,6 +382,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 						vx = fmaf(sgn * forces.gx[j], dt, vx);
 						vy = fmaf(sgn * forces.gy[j], dt, vy);
 						vz = fmaf(sgn * forces.gz[j], dt, vz);
+						flops += 9;
 					}
 				}
 				kr.kin += 0.5 * sqr(vx, vy, vz);
@@ -389,21 +391,24 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				kr.zmom += vz;
 				kr.nmom += sqrt(sqr(vx, vy, vz));
 				if (params.descending) {
-					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
-					const float factor = eta * sqrtf(params.a);
-					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);
-					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0) - log2f(dt)) > params.min_rung), (int) (rung - 1));
+					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f; // 6
+					const float factor = eta * sqrtf(params.a);                  // 5
+					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
+					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
 					kr.max_rung = std::max(rung, kr.max_rung);
 					ALWAYS_ASSERT(rung >= 0);
 					ALWAYS_ASSERT(rung < MAX_RUNG);
-					dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-					vx = fmaf(sgn * forces.gx[j], dt, vx);
-					vy = fmaf(sgn * forces.gy[j], dt, vy);
-					vz = fmaf(sgn * forces.gz[j], dt, vz);
+					dt = 0.5f * rung_dt[params.min_rung] * params.t0;                                                            // 2
+					vx = fmaf(sgn * forces.gx[j], dt, vx);                              // 3
+					vy = fmaf(sgn * forces.gy[j], dt, vy);                              // 3
+					vz = fmaf(sgn * forces.gz[j], dt, vz);                              // 3
+					flops += 49;
 				}
 				kr.pot += 0.5 * forces.phi[j];
+				flops += 570 + params.do_phi * 178;
 			}
 		}
+		add_cpu_flops(flops);
 		return hpx::make_ready_future(kr);
 	} else {
 		cleanup_workspace(std::move(workspace));
@@ -417,6 +422,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			const auto rcr = futs[RIGHT].get();
 			kr += rcl;
 			kr += rcr;
+			flops += 12;
 			if (self_ptr->local_root) {
 				tm.stop();
 				char hostname[33];
@@ -425,15 +431,18 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			if (self.proc == 0 && self.index == 0) {
 				profiler_exit();
 			}
+			flops += 12;
+			add_cpu_flops(flops);
 			return hpx::make_ready_future(kr);
 		} else {
-			return hpx::when_all(futs.begin(), futs.end()).then([tm,self_ptr,self](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
+			return hpx::when_all(futs.begin(), futs.end()).then([flops,tm,self_ptr,self](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
 				auto futs = futsfut.get();
 				kick_return kr;
 				const auto rcl = futs[LEFT].get();
 				const auto rcr = futs[RIGHT].get();
 				kr += rcl;
 				kr += rcr;
+				add_cpu_flops(flops+12);
 				if( self_ptr->local_root) {
 					timer tm1 = tm;
 					tm1.stop();
