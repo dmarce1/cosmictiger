@@ -30,6 +30,7 @@
 #include <cosmictiger/flops.hpp>
 
 #define MIN_PARTS_PCCP 25
+#define MIN_PARTS2_CC 84
 
 #include <atomic>
 
@@ -187,10 +188,16 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& cplist = shmem.cplist;
 	auto& pclist = shmem.pclist;
 	auto& leaflist = shmem.leaflist;
+	auto& barrier = shmem.barrier;
 	auto& force = shmem.f;
 	auto& tree_nodes = data.tree_nodes;
 	const float& h = global_params.h;
 	int index;
+	auto group = cooperative_groups::this_thread_block();
+	if (group.thread_rank() == 0) {
+		init(&barrier, group.size());
+	}
+	group.sync();
 	if (tid == 0) {
 		index = atomicAdd(next_item, 1);
 	}
@@ -256,7 +263,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 						f.gx = f.gy = f.gz = f.phi = 0.f;
 					}
 				}
-
 				__syncwarp();
 				{
 					nextlist.resize(0);
@@ -329,10 +335,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					if (!self.leaf) {
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
-						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
-							checks[start + i] = leaflist[i];
-						}
-						__syncwarp();
+						cuda::memcpy_async(group, &checks[start], &leaflist[0], leaflist.size() * sizeof(int), barrier);
+						barrier.arrive_and_wait();
 					}
 				}
 				{
@@ -361,11 +365,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
 								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
-								cc = R2 > sqr(dcc);
+								const auto self_parts = self.nparts();
+								const auto other_parts = other.nparts();
+								cc = (R2 > sqr(dcc)) && min(self_parts, (part_int) MIN_PARTS2_CC) * min(other_parts, (part_int) MIN_PARTS2_CC) >= MIN_PARTS2_CC;
 								flops += 20;
 								if (!cc && other.leaf && self.leaf) {
-									const auto self_parts = self.nparts();
-									const auto other_parts = other.nparts();
 									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
 									cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
 									if (pc && cp) {
@@ -458,10 +462,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					} else {
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
-						for (int i = tid; i < leaflist.size(); i += WARP_SIZE) {
-							checks[start + i] = leaflist[i];
-						}
-						__syncwarp();
+						cuda::memcpy_async(group, &checks[start], &leaflist[0], leaflist.size() * sizeof(int), barrier);
+						barrier.arrive_and_wait();
 					}
 				}
 				if (self.leaf) {

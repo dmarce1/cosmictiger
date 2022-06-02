@@ -246,10 +246,6 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 		const auto partsz = partlist.size();
 		while (i < partsz) {
 			auto group = cooperative_groups::this_thread_block();
-			if (group.thread_rank() == 0) {
-				init(&barrier, group.size());
-			}
-			group.sync();
 			part_index = 0;
 			while (part_index < KICK_PP_MAX && i < partsz) {
 				while (i + 1 < partsz) {

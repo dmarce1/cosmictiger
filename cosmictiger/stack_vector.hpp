@@ -1,25 +1,30 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #pragma once
 
 #include <cosmictiger/cuda_mem.hpp>
+
+#include <cooperative_groups.h>
+#include <cuda/barrier>
+
+using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 #ifdef __CUDACC__
 
@@ -27,6 +32,7 @@ template<class T>
 class stack_vector {
 	device_vector<T> data;
 	device_vector<int> bounds;
+	barrier_type barrier;
 	__device__ inline int begin() const {
 		ASSERT(bounds.size() >= 2);
 		return bounds[bounds.size() - 2];
@@ -45,6 +51,10 @@ public:
 		if (tid == 0) {
 			bounds[0] = 0;
 			bounds[1] = 0;
+		}
+		auto group = cooperative_groups::this_thread_block();
+		if (group.thread_rank() == 0) {
+			init(&barrier, group.size());
 		}
 		__syncthreads();
 	}
@@ -81,15 +91,12 @@ public:
 	}
 
 	__device__ inline void push_top() {
-		const int& tid = threadIdx.x;
-
 		const auto sz = size();
 		bounds.push_back(end() + sz);
 		data.resize(data.size() + sz);
-		for (int i = begin() + tid; i < end(); i += blockDim.x) {
-			data[i] = data[i - sz];
-		}
-		__syncthreads();
+		auto group = cooperative_groups::this_thread_block();
+		cuda::memcpy_async(group, &data[begin()], &data[begin()-sz], sizeof(T)*sz, barrier);
+		barrier.arrive_and_wait();
 	}
 	__device__ inline void pop_top() {
 		ASSERT(bounds.size() >= 2);

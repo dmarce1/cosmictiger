@@ -51,8 +51,6 @@ struct kick_return;
 #define KICK_PP_MAX (32*18)
 
 
-#include <cooperative_groups.h>
-#include <cuda/barrier>
 
 struct expansion_type {
 	array<fixed32, NDIM> pos;
@@ -71,6 +69,7 @@ struct force_type {
 	float phi;
 };
 
+
 struct cuda_kick_shmem {
 	array<fixed32, KICK_PP_MAX> x;
 	array<fixed32, KICK_PP_MAX> y;
@@ -85,7 +84,7 @@ struct cuda_kick_shmem {
 	device_vector<int> nextlist;
 	device_vector<expansion_type> L;
 	device_vector<search_params> params;
-	cuda::barrier<cuda::thread_scope::thread_scope_block> barrier;
+	barrier_type barrier;
 
 };
 #endif
