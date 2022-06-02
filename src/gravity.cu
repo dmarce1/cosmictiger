@@ -146,10 +146,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	auto &gx = shmem.gx;
-	auto &gy = shmem.gy;
-	auto &gz = shmem.gz;
-	auto &phi = shmem.phi;
+	auto &force = shmem.f;
 	const int nsink = self.part_range.second - self.part_range.first;
 	const auto& sink_x = data.x + self.part_range.first;
 	const auto& sink_y = data.y + self.part_range.first;
@@ -159,6 +156,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	if (multlist.size()) {
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
+			auto& F = force[k];
 			expansion2<float> L;
 			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
 			for (int j = 0; j < multlist.size(); j++) {
@@ -172,10 +170,10 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 				flops += 3 + greens_function(D, dx);
 				flops += M2L(L, M, D, do_phi);
 			}
-			gx[k] -= L(1, 0, 0);
-			gy[k] -= L(0, 1, 0);
-			gz[k] -= L(0, 0, 1);
-			phi[k] += L(0, 0, 0);
+			F.gx -= L(1, 0, 0);
+			F.gy -= L(0, 1, 0);
+			F.gz -= L(0, 0, 1);
+			F.phi += L(0, 0, 0);
 			flops += 4;
 		}
 		__syncwarp();
@@ -223,10 +221,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	__shared__
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
-	auto &gx = shmem.gx;
-	auto &gy = shmem.gy;
-	auto &gz = shmem.gz;
-	auto &phi = shmem.phi;
+	auto &force = shmem.f;
 	const int nsink = self.part_range.second - self.part_range.first;
 	const auto& sink_x = data.x + self.part_range.first;
 	const auto& sink_y = data.y + self.part_range.first;
@@ -328,14 +323,12 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					pot -= r1inv;                                  // 1
 					flops += 21;
 				}
-				gx[k] -= fx;
-				gy[k] -= fy;
-				gz[k] -= fz;
-				flops += 3;
-				if (do_phi) {
-					phi[k] += pot;
-					flops++;
-				}
+				auto& F = force[k];
+				F.gx -= fx;
+				F.gy -= fy;
+				F.gz -= fz;
+				flops += 4;
+				F.phi += pot;
 			}
 			for (int k = kmid; k < nsink; k++) {
 				fx = 0.f;
@@ -375,14 +368,12 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					shared_reduce_add(pot);
 				}
 				if (tid == 0) {
-					gx[k] -= fx;
-					gy[k] -= fy;
-					gz[k] -= fz;
-					flops += 3;
-					if (do_phi) {
-						phi[k] += pot;
-						flops++;
-					}
+					auto& F = force[k];
+					F.gx -= fx;
+					F.gy -= fy;
+					F.gz -= fz;
+					flops += 4;
+					F.phi += pot;
 				}
 			}
 		}

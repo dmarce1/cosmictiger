@@ -61,10 +61,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	auto& vel_x = data.vx;
 	auto& vel_y = data.vy;
 	auto& vel_z = data.vz;
-	auto& phi = shmem.phi;
-	auto& gx = shmem.gx;
-	auto& gy = shmem.gy;
-	auto& gz = shmem.gz;
+	auto& force = shmem.f;
 	const auto* sink_x = data.x + self.part_range.first;
 	const auto* sink_y = data.y + self.part_range.first;
 	const auto* sink_z = data.z + self.part_range.first;
@@ -94,14 +91,15 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		L2 = L2P(L, dx, params.do_phi);
-		phi[i] += L2(0, 0, 0);
-		gx[i] -= L2(1, 0, 0);
-		gy[i] -= L2(0, 1, 0);
-		gz[i] -= L2(0, 0, 1);
-		phi[i] *= params.GM;
-		gx[i] *= params.GM;
-		gy[i] *= params.GM;
-		gz[i] *= params.GM;
+		auto& F = force[i];
+		F.phi += L2(0, 0, 0);
+		F.gx -= L2(1, 0, 0);
+		F.gy -= L2(0, 1, 0);
+		F.gz -= L2(0, 0, 1);
+		F.gz *= params.GM;
+		F.gy *= params.GM;
+		F.gx *= params.GM;
+		F.phi *= params.GM;
 		vx = vel_x[snki];
 		vy = vel_y[snki];
 		vz = vel_z[snki];
@@ -110,9 +108,9 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 			flops += 2;
 			if (!params.first_call) {
-				vx = fmaf(sgn * gx[i], dt, vx);
-				vy = fmaf(sgn * gy[i], dt, vy);
-				vz = fmaf(sgn * gz[i], dt, vz);
+				vx = fmaf(sgn * F.gx, dt, vx);
+				vy = fmaf(sgn * F.gy, dt, vy);
+				vz = fmaf(sgn * F.gz, dt, vz);
 				flops += 6;
 			}
 		}
@@ -122,14 +120,14 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		zmom_tot += vz;
 		nmom_tot += sqrtf(sqr(vx, vy, vz));
 		if (params.save_force) {
-			all_gx[snki] = gx[i];
-			all_gy[snki] = gy[i];
-			all_gz[snki] = gz[i];
-			all_phi[snki] = phi[i];
+			all_gx[snki] = F.gx;
+			all_gy[snki] = F.gy;
+			all_gz[snki] = F.gz;
+			all_phi[snki] = F.phi;
 		}
 
 		if (params.descending) {
-			g2 = sqr(gx[i], gy[i], gz[i]);
+			g2 = sqr(F.gx, F.gy, F.gz);
 			dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0); // 12
 			rung = rungs[snki];
 			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1); // 13
@@ -138,16 +136,16 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 			ALWAYS_ASSERT(rung >= 0);
 			ALWAYS_ASSERT(rung < MAX_RUNG);
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
-			vx = fmaf(sgn * gx[i], dt, vx); // 3
-			vy = fmaf(sgn * gy[i], dt, vy); // 3
-			vz = fmaf(sgn * gz[i], dt, vz); // 3
+			vx = fmaf(sgn * F.gx, dt, vx); // 3
+			vy = fmaf(sgn * F.gy, dt, vy); // 3
+			vz = fmaf(sgn * F.gz, dt, vz); // 3
 			flops += 36;
 		}
 
 		vel_x[snki] = vx;
 		vel_y[snki] = vy;
 		vel_z[snki] = vz;
-		phi_tot += 0.5f * phi[i];
+		phi_tot += 0.5f * force[i].phi;
 		flops += 557 + params.do_phi * 178;
 
 	}
@@ -178,9 +176,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
 	new (shmem_ptr) cuda_kick_shmem;
-	auto& phase = shmem.phase;
+	auto& sparams = shmem.params;
 	auto& L = shmem.L;
-	auto& self_index = shmem.self;
 	auto& dchecks = shmem.dchecks;
 	auto& echecks = shmem.echecks;
 	auto& nextlist = shmem.nextlist;
@@ -188,10 +185,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& cplist = shmem.cplist;
 	auto& pclist = shmem.pclist;
 	auto& leaflist = shmem.leaflist;
-	auto& phi = shmem.phi;
-	auto& gx = shmem.gx;
-	auto& gy = shmem.gy;
-	auto& gz = shmem.gz;
+	auto& force = shmem.f;
 	auto& tree_nodes = data.tree_nodes;
 	const float& h = global_params.h;
 	int index;
@@ -205,8 +199,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		L.resize(0);
 		dchecks.resize(0);
 		echecks.resize(0);
-		phase.resize(0);
-		self_index.resize(0);
+		sparams.resize(0);
 		kick_return kr;
 		{
 			expansion_type this_L;
@@ -222,8 +215,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
 			echecks[i] = params[index].echecks[i];
 		}
-		phase.push_back(0);
-		self_index.push_back(params[index].self);
+		{
+			search_params sparam;
+			sparam.phase = 0;
+			sparam.self = params[index].self;
+			sparams.push_back(sparam);
+		}
 		__syncwarp();
 		int depth = 0;
 		while (depth >= 0) {
@@ -232,8 +229,8 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			ASSERT(Lpos.size() == depth + 1);
 			ASSERT(self_index.size() == depth + 1);
 			ASSERT(phase.size() == depth + 1);
-			const auto& self = tree_nodes[self_index.back()];
-			switch (phase.back()) {
+			const auto& self = tree_nodes[sparams.back().self];
+			switch (sparams.back().phase) {
 
 			case 0: {
 				array<float, NDIM> dx;
@@ -251,12 +248,10 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				}
 				if (self.leaf) {
 					const int nsinks = self.part_range.second - self.part_range.first;
-					gx.resize(nsinks);
-					gy.resize(nsinks);
-					gz.resize(nsinks);
-					phi.resize(nsinks);
+					force.resize(nsinks);
 					for (int l = tid; l < nsinks; l += WARP_SIZE) {
-						gx[l] = gy[l] = gz[l] = phi[l] = 0.f;
+						auto& f = force[l];
+						f.gx = f.gy = f.gz = f.phi = 0.f;
 					}
 				}
 
@@ -455,8 +450,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				if (self.leaf) {
 					__syncwarp();
 					do_kick(kr, global_params, data, L.back().expansion, self);
-					phase.pop_back();
-					self_index.pop_back();
+					sparams.pop_back();
 					depth--;
 				} else {
 					const tree_id child = self.children[LEFT];
@@ -472,9 +466,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 					__syncwarp();
 					dchecks.push_top();
 					echecks.push_top();
-					phase.back() += 1;
-					phase.push_back(0);
-					self_index.push_back(child.index);
+					sparams.back().phase += 1;
+					{
+						search_params sparam;
+						sparam.phase = 0;
+						sparam.self = child.index;
+						sparams.push_back(sparam);
+					}
 					depth++;
 				}
 
@@ -484,16 +482,18 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				L.pop_back();
 				dchecks.pop_top();
 				echecks.pop_top();
-				phase.back() += 1;
-				phase.push_back(0);
-				const tree_id child = self.children[RIGHT];
-				self_index.push_back(child.index);
+				sparams.back().phase += 1;
+				{
+					search_params sparam;
+					sparam.phase = 0;
+					sparam.self = self.children[RIGHT].index;
+					sparams.push_back(sparam);
+				}
 				depth++;
 			}
 				break;
 			case 2: {
-				self_index.pop_back();
-				phase.pop_back();
+				sparams.pop_back();
 				depth--;
 			}
 				break;

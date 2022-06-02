@@ -59,24 +59,32 @@ struct expansion_type {
 	expansion<float> expansion;
 };
 
+struct search_params {
+	int self;
+	int phase;
+};
+
+struct force_type {
+	float gx;
+	float gy;
+	float gz;
+	float phi;
+};
+
 struct cuda_kick_shmem {
 	array<fixed32, KICK_PP_MAX> x;
 	array<fixed32, KICK_PP_MAX> y;
 	array<fixed32, KICK_PP_MAX> z;
-	device_vector<float> gx;
-	device_vector<float> gy;
-	device_vector<float> gz;
-	device_vector<float> phi;
+	device_vector<force_type> f;
 	stack_vector<int> echecks;
 	stack_vector<int> dchecks;
 	device_vector<int> leaflist;
 	device_vector<int> cplist;
 	device_vector<int> cclist;
 	device_vector<int> pclist;
-	device_vector<expansion_type> L;
 	device_vector<int> nextlist;
-	device_vector<int> phase;
-	device_vector<int> self;
+	device_vector<expansion_type> L;
+	device_vector<search_params> params;
 	cuda::barrier<cuda::thread_scope::thread_scope_block> barrier;
 
 };
