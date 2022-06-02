@@ -67,6 +67,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	auto& src_x = shmem.x;
 	auto& src_y = shmem.y;
 	auto& src_z = shmem.z;
+	auto& barrier = shmem.barrier;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	int flops = 0;
@@ -80,6 +81,11 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 		auto these_parts = tree_nodes[partlist[0]].part_range;
 		const auto partsz = partlist.size();
 		while (i < partsz) {
+			auto group = cooperative_groups::this_thread_block();
+			if (group.thread_rank() == 0) {
+				init(&barrier, group.size());
+			}
+			group.sync();
 			part_index = 0;
 			while (part_index < KICK_PP_MAX && i < partsz) {
 				while (i + 1 < partsz) {
@@ -94,14 +100,9 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 				const part_int imin = these_parts.first;
 				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
-				for (int j = tid; j < sz; j += WARP_SIZE) {
-					const int i1 = part_index + j;
-					const part_int i2 = j + imin;
-					ASSERT(i2 >= 0);
-					src_x[i1] = main_src_x[i2];
-					src_y[i1] = main_src_y[i2];
-					src_z[i1] = main_src_z[i2];
-				}
+				cuda::memcpy_async(group, src_x.data() + part_index, main_src_x + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_y.data() + part_index, main_src_y + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_z.data() + part_index, main_src_z + imin, sizeof(fixed32) * sz, barrier);
 				__syncwarp();
 				these_parts.first += sz;
 				part_index += sz;
@@ -112,6 +113,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 					}
 				}
 			}
+			barrier.arrive_and_wait();
 			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
