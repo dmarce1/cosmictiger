@@ -69,6 +69,9 @@ static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
 static size_t nodes_size;
 
+static vector<short> leaf_sizes;
+static spinlock_type leaf_sizes_mutex;
+
 long long tree_nodes_size() {
 	return nodes_size;
 }
@@ -156,7 +159,8 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	theta = theta_;
 	min_rung = min_rung_;
 	min_level = 9;
-	htime = true;
+	leaf_pushed = false;
+	do_leaf_sizes = false;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
@@ -291,6 +295,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		tree_allocate_nodes();
 	}
 	if (local_root) {
+		if (params.do_leaf_sizes) {
+			leaf_sizes.resize(0);
+		}
 		part_range = particles_current_range();
 	}
 	array<tree_id, NCHILD> children;
@@ -314,6 +321,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h); // 10
 	double max_ratio = 1.0;
 	flops += 26;
+	if (params.do_leaf_sizes && !params.leaf_pushed && nparts <= bucket_size) {
+		params.leaf_pushed = true;
+		std::lock_guard<spinlock_type> lock(leaf_sizes_mutex);
+		leaf_sizes.push_back(nparts);
+	}
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
 		const int xdim = box.longest_dim();
@@ -454,10 +466,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double this_radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();              // 3
-						/*				if (x < box.begin[dim] || x > box.end[dim]) {
-						 PRINT("particles out of range in dim %i (%e, %e, %e) rung %i rank %i\n", dim, box.begin[dim], x, box.end[dim], particles_rung(i), hpx_rank());
-						 ALWAYS_ASSERT(false);
-						 }*/
+				/*				if (x < box.begin[dim] || x > box.end[dim]) {
+				 PRINT("particles out of range in dim %i (%e, %e, %e) rung %i rank %i\n", dim, box.begin[dim], x, box.end[dim], particles_rung(i), hpx_rank());
+				 ALWAYS_ASSERT(false);
+				 }*/
 				this_radius += sqr(x - Xc[dim]);                                 // 9
 			}
 			r = std::max(r, this_radius);                                       // 2
@@ -551,6 +563,40 @@ void tree_reset() {
 	hpx::wait_all(futs.begin(), futs.end());
 
 }
+vector<double> tree_get_leaf_sizes();
+HPX_PLAIN_ACTION (tree_get_leaf_sizes);
+
+vector<double> tree_get_leaf_sizes() {
+	vector<hpx::future<vector<double>>>futs;
+	for( auto& c : hpx_children()) {
+		futs.push_back(hpx::async<tree_get_leaf_sizes_action>(c));
+	}
+	double my_avg = 0.0;
+	for( int i = 0; i < leaf_sizes.size(); i++) {
+		my_avg += leaf_sizes[i];
+	}
+	my_avg /= leaf_sizes.size();
+	vector<double> avgs;
+	avgs.push_back(my_avg);
+	for( auto& f : futs) {
+		auto tmp = f.get();
+		for( const auto& m : tmp) {
+			avgs.push_back(m);
+		}
+	}
+	return avgs;
+}
+
+int tree_avg_leaf_size() {
+	auto sizes = tree_get_leaf_sizes();
+	double avg = 0.0;
+	for (int i = 0; i < sizes.size(); i++) {
+		avg += sizes[i];
+	}
+	avg /= sizes.size();
+	return avg;
+
+}
 
 void tree_destroy(bool free_tree) {
 	profiler_enter(__FUNCTION__);
@@ -630,22 +676,3 @@ static vector<tree_node> tree_fetch_cache_line(int index) {
 	return std::move(line);
 
 }
-
-/*void tree_sort_particles_by_sph_particles() {
- const int nthreads = hpx_hardware_concurrency();
- vector<hpx::future<void>> futs;
- for (auto c : hpx_children()) {
- futs.push_back(hpx::async<tree_sort_particles_by_sph_particles_action>(c));
- }
- for (int proc = 0; proc < nthreads; proc++) {
- futs.push_back(hpx::async([proc, nthreads]() {
- const int b = (size_t) proc * leaf_part_ranges.size() / nthreads;
- const int e = (size_t) (proc + 1) * leaf_part_ranges.size() / nthreads;
- for( int i = b; i < e; i++) {
- particles_sort_by_sph(leaf_part_ranges[i]);
- }
- }));
- }
- hpx::wait_all(futs.begin(), futs.end());
- leaf_part_ranges.resize(0);
- }*/

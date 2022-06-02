@@ -343,7 +343,7 @@ static void force_test() {
 		initialize(get_options().z0);
 	}
 	constexpr int nthetas = 17;
-	const double thetas[nthetas] = {  0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.00 };
+	const double thetas[nthetas] = { 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.00 };
 	for (int iter = 2; iter < nthetas; iter++) {
 		tm_main.start();
 		domains_rebound();
@@ -385,7 +385,7 @@ static void force_test() {
 		tm.start();
 		auto rc = analytic_compare(1000);
 		tm.stop();
-		PRINT( "Analytic compare took %e s\n", tm.read());
+		PRINT("Analytic compare took %e s\n", tm.read());
 		PRINT("%e %e %e\n", thetas[iter], rc.first, rc.second);
 		FILE* fp = fopen("force_accuracy.txt", "at");
 		fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
@@ -399,66 +399,72 @@ static void force_test() {
 }
 
 static void bucket_test() {
-	timer tm;
-	timer tm_main;
-	constexpr int NITER = 10;
-	constexpr int bmin = 64;
-	constexpr int bmax = 256;
-	for (int bucket_size = bmin; bucket_size < bmax; bucket_size++) {
-		auto opts = get_options();
-		opts.bucket_size = bucket_size;
-		set_options(opts);
-		tm_main.start();
-		for (int iter = 0; iter < NITER; iter++) {
-			tm_main.stop();
-			particles_random_init();
-			domains_rebound();
-			tm_main.start();
-			domains_begin(0);
-			domains_end();
-			particles_sort_by_rung(0);
-			tree_create_params tparams(0, get_options().theta, get_options().hsoft);
-			tree_create(tparams);
-			kick_params kparams;
-			kparams.node_load = 10;
-			kparams.gpu = true;
-			kparams.min_level = tparams.min_level;
-			kparams.save_force = get_options().save_force;
-			kparams.GM = get_options().GM;
-			kparams.h = get_options().hsoft;
-			kparams.eta = get_options().eta;
-			kparams.a = 1.0;
-			kparams.first_call = true;
-			kparams.min_rung = 0;
-			kparams.t0 = 1.0;
-			kparams.theta = get_options().theta;
-			expansion<float> L;
-			for (int i = 0; i < EXPANSION_SIZE; i++) {
-				L[i] = 0.0f;
+	int nchecks = 11;
+	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
+	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
+	for (int ci = 0; ci < nchecks; ci++) {
+		char* buffer;
+		system("rm -r checkpoint.999999\n");
+		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
+		system(buffer);
+		free(buffer);
+		for (int bucket_size = 64; bucket_size < 200; bucket_size += 8) {
+			auto opts = get_options();
+			opts.bucket_size = bucket_size;
+			opts.read_check = 999999;
+			opts.theta = thetas[ci];
+			set_options(opts);
+			read_checkpoint();
+			timer tm;
+			tm.start();
+			for (int trial = 0; trial < 5; trial++) {
+				domains_rebound();
+				domains_begin(0);
+				domains_end();
+				particles_sort_by_rung(0);
+				tree_create_params tparams(0, thetas[ci], get_options().hsoft);
+				tree_create(tparams);
+				kick_params kparams;
+				kparams.node_load = 10;
+				kparams.gpu = true;
+				kparams.min_level = tparams.min_level;
+				kparams.save_force = get_options().save_force;
+				kparams.GM = get_options().GM;
+				kparams.h = get_options().hsoft;
+				kparams.eta = get_options().eta;
+				kparams.a = 1.0;
+				kparams.first_call = true;
+				kparams.min_rung = 0;
+				kparams.t0 = 1.0;
+				kparams.theta = thetas[ci];
+				expansion<float> L;
+				for (int i = 0; i < EXPANSION_SIZE; i++) {
+					L[i] = 0.0f;
+				}
+				array<fixed32, NDIM> pos;
+				for (int dim = 0; dim < NDIM; dim++) {
+					pos[dim] = 0.f;
+				}
+				tree_id root_id;
+				root_id.proc = 0;
+				root_id.index = 0;
+				vector<tree_id> checklist;
+				checklist.push_back(root_id);
+				auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+				tree_destroy(false);
 			}
-			array<fixed32, NDIM> pos;
-			for (int dim = 0; dim < NDIM; dim++) {
-				pos[dim] = 0.f;
-			}
-			tree_id root_id;
-			root_id.proc = 0;
-			root_id.index = 0;
-			vector<tree_id> checklist;
-			checklist.push_back(root_id);
-			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-			tree_destroy();
+			tm.stop();
+			asprintf(&buffer, "buckets.%i.txt", ci);
+			FILE* fp = fopen(buffer, "at");
+			free(buffer);
+			fprintf(fp, "%i %e\n", bucket_size, tm.read());
+			fclose(fp);
 		}
-		tm_main.stop();
-
-		PRINT("BUCKETS = %i TIME = %e\n", bucket_size, tm_main.read());
-		FILE* fp;
-		fp = fopen("buckets.txt", "at");
-		fprintf(fp, "%i %e\n", bucket_size, tm_main.read());
-		fclose(fp);
-		tm_main.reset();
+		asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]);
+		system(buffer);
+		free(buffer);
 	}
-	kick_workspace::clear_buffers();
-
 }
 
 void bh_test() {
@@ -506,7 +512,7 @@ void test(std::string test) {
 		fft1_test();
 	} else if (test == "fft2") {
 		fft2_test();
-	} else if (test == "bucket") {
+	} else if (test == "buckets") {
 		bucket_test();
 	} else if (test == "force") {
 		force_test();

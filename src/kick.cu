@@ -29,6 +29,8 @@
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/flops.hpp>
 
+#define MIN_PARTS_PCCP 25
+
 #include <atomic>
 
 /*__managed__ int node_count;
@@ -362,8 +364,23 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								cc = R2 > sqr(dcc);
 								flops += 20;
 								if (!cc && other.leaf && self.leaf) {
-									pc = R2 > sqr(dpc) && dpc > dcp;
-									cp = R2 > sqr(dcp) && dcp > dpc;
+									const auto self_parts = self.nparts();
+									const auto other_parts = other.nparts();
+									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
+									cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
+									if (pc && cp) {
+										if (self_parts < other_parts) {
+											cp = false;
+										} else if (self_parts > other_parts) {
+											pc = false;
+										} else if (dcp > dpc) {
+											pc = false;
+										} else if (dcp < dpc) {
+											cp = false;
+										} else {
+											cp = pc = false;
+										}
+									}
 									flops += 4;
 								}
 								if (!cc && !cp && !pc) {

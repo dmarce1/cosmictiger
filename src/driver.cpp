@@ -604,18 +604,9 @@ void driver() {
 			if (ts <= 10.0) {
 				bucket_size = 88;
 			} else if (ts < 55.0) {
-				bucket_size = 88 + (ts - 10.0) / 45.0 * 80;
+				bucket_size = 80 + (ts - 10.0) / 45.0 * 88;
 			} else {
 				bucket_size = 168;
-			}
-			if (theta != last_theta) {
-				if (theta == 0.55) {
-					buckets50.stop();
-					buckets20.start();
-				} else if (theta == 0.7) {
-					buckets20.stop();
-					buckets2.start();
-				}
 			}
 			opts.bucket_size = bucket_size;
 			opts.theta = theta;

@@ -96,6 +96,7 @@ struct tree_node {
 	inline const multipole_pos* get_multipole_ptr() const {
 		return (multipole_pos*) &multi;
 	}
+	CUDA_EXPORT
 	inline part_int nparts() const {
 		return part_range.second - part_range.first;
 	}
@@ -146,17 +147,20 @@ struct tree_create_return {
 struct tree_create_params {
 	int min_rung;
 	double theta;
-	bool htime;
 //	double hmax;
 	int min_level;
+	bool leaf_pushed;
+	bool do_leaf_sizes;
 	tree_create_params() {
-		htime = false;
+		leaf_pushed = false;
+		do_leaf_sizes = false;
 	}
 	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 //		arc & hmax;
-		arc & htime;
+		arc & do_leaf_sizes;
+		arc & leaf_pushed;
 		arc & min_rung;
 		arc & theta;
 		arc & min_level;
@@ -174,10 +178,10 @@ void tree_free_neighbor_list();
 long long tree_nodes_size() ;
 long long tree_nodes_next_index();
 void tree_clear_neighbor_ranges();
+int tree_avg_leaf_size();
 int tree_allocate_neighbor_list(const vector<tree_id>& values);
 void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
 void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float hmax);
-int tree_leaflist_size();
 const tree_id tree_get_leaf(int i);
 size_t tree_add_remote(const tree_node& remote);
 tree_node* tree_data();
