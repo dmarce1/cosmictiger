@@ -25,6 +25,8 @@
 
 #include <atomic>
 
+#define KICK_PP_MAX (256)
+
 struct cuda_kick_data {
 	tree_node* tree_nodes;
 	fixed32* x;
