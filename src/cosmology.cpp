@@ -21,6 +21,7 @@
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <cmath>
 
@@ -58,6 +59,7 @@ double cosmos_dadt(double a) {
 	const auto omega_r = get_options().omega_r;
 	const auto omega_k = get_options().omega_k;
 	const auto omega_lam = get_options().omega_lam;
+	add_cpu_flops(27);
 	return H * a * std::sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_k / (a * a) + omega_lam);
 }
 

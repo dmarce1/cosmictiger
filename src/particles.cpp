@@ -24,6 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <gsl/gsl_rng.h>
 
@@ -949,10 +950,13 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	auto& ux = particles_v[XDIM];
 	auto& uy = particles_v[YDIM];
 	auto& uz = particles_v[ZDIM];
+	int flops = 0;
 	while (lo < hi) {
+		flops++;
 		if (xptr_dim[lo] >= xmid) {
 			while (lo != hi) {
 				hi--;
+				flops++;
 				if (xptr_dim[hi] < xmid) {
 					std::swap(x[hi], x[lo]);
 					std::swap(y[hi], y[lo]);
@@ -974,7 +978,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 		lo++;
 	}
 	return hi;
-
+	add_cpu_flops(flops);
 }
 
 pair<part_int, part_int> particles_current_range() {

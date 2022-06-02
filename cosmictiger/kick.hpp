@@ -43,9 +43,13 @@ struct cuda_kick_data {
 	float* pot;
 };
 
+
 struct kick_return;
 
 #ifdef __CUDACC__
+
+#include <cooperative_groups.h>
+#include <cuda/barrier>
 
 struct cuda_kick_shmem {
 	array<fixed32, KICK_PP_MAX> x;
@@ -67,6 +71,7 @@ struct cuda_kick_shmem {
 	device_vector<array<fixed32, NDIM>> Lpos;
 	device_vector<int> phase;
 	device_vector<int> self;
+	cuda::barrier<cuda::thread_scope::thread_scope_block> barrier;
 
 };
 #endif

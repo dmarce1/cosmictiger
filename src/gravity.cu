@@ -20,6 +20,8 @@
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cooperative_groups.h>
+#include <cuda/barrier>
 
 __device__
 void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
@@ -227,6 +229,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	const auto& sink_x = data.x + self.part_range.first;
 	const auto& sink_y = data.y + self.part_range.first;
 	const auto& sink_z = data.z + self.part_range.first;
+	auto& barrier = shmem.barrier;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
@@ -245,6 +248,11 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 		auto these_parts = tree_nodes[partlist[0]].part_range;
 		const auto partsz = partlist.size();
 		while (i < partsz) {
+			auto group = cooperative_groups::this_thread_block();
+			if (group.thread_rank() == 0) {
+				init(&barrier, group.size());
+			}
+			group.sync();
 			part_index = 0;
 			while (part_index < KICK_PP_MAX && i < partsz) {
 				while (i + 1 < partsz) {
@@ -259,14 +267,9 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 				const part_int imin = these_parts.first;
 				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
-				for (int j = tid; j < sz; j += WARP_SIZE) {
-					const int i1 = part_index + j;
-					const part_int i2 = j + imin;
-					ASSERT(i2 >= 0);
-					src_x[i1] = main_src_x[i2];
-					src_y[i1] = main_src_y[i2];
-					src_z[i1] = main_src_z[i2];
-				}
+				cuda::memcpy_async(group, src_x.data() + part_index, main_src_x + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_y.data() + part_index, main_src_y + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_z.data() + part_index, main_src_z + imin, sizeof(fixed32) * sz, barrier);
 				__syncwarp();
 				these_parts.first += sz;
 				part_index += sz;
@@ -277,6 +280,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					}
 				}
 			}
+			barrier.arrive_and_wait();
 			float fx;
 			float fy;
 			float fz;

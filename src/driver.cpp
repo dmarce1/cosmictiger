@@ -442,7 +442,7 @@ void driver() {
 		}
 		params.step = 0;
 		params.flops = 0;
-		params.bucket_size = 85;
+		params.bucket_size = 80;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		PRINT("TAU_MAX = %e\n", params.tau_max);
 		params.tau = 0.0;
@@ -600,6 +600,14 @@ void driver() {
 			} else {
 				theta = 0.7;
 			}
+			const auto ts = 100 * tau / t0 / get_options().nsteps;
+			if (ts <= 10.0) {
+				bucket_size = 88;
+			} else if (ts < 55.0) {
+				bucket_size = 88 + (ts - 10.0) / 45.0 * 80;
+			} else {
+				bucket_size = 168;
+			}
 			if (theta != last_theta) {
 				if (theta == 0.55) {
 					buckets50.stop();
@@ -623,18 +631,17 @@ void driver() {
 			const double flops = flops_per_second();
 			reset_flops();
 
-			bucket_size = 80 + .8 * tau / t0;
 			/*if (om == minrung0) {
-				PRINT("-------------------------------------------------------------------------------\n");
-				constexpr int target = 70;
-				const double parts_per_node = pow(get_options().parts_dim, NDIM) / (tmp.second.leaf_count);
-				PRINT("Changing bucket size from %i to ", bucket_size);
-				bucket_size *= target / parts_per_node;
-				PRINT(" %i\n", bucket_size);
-				PRINT( "leafcount %i nodecount %i\n", tmp.second.leaf_count, tmp.second.node_count);
-				PRINT("-------------------------------------------------------------------------------\n");
+			 PRINT("-------------------------------------------------------------------------------\n");
+			 constexpr int target = 70;
+			 const double parts_per_node = pow(get_options().parts_dim, NDIM) / (tmp.second.leaf_count);
+			 PRINT("Changing bucket size from %i to ", bucket_size);
+			 bucket_size *= target / parts_per_node;
+			 PRINT(" %i\n", bucket_size);
+			 PRINT( "leafcount %i nodecount %i\n", tmp.second.leaf_count, tmp.second.node_count);
+			 PRINT("-------------------------------------------------------------------------------\n");
 
-			}*/
+			 }*/
 			if (om != this_minrung) {
 				minrung0++;
 			}
@@ -711,10 +718,11 @@ void driver() {
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			if (full_eval) {
-				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr", "mxr", "bs", "Tflops");
+				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr",
+						"mxr", "bs", "Tflops");
 			}
 			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
-					max_rung, bucket_size, flops*1e-12);
+					max_rung, bucket_size, flops * 1e-12);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
