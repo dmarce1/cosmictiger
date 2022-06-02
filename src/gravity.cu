@@ -293,7 +293,11 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 			float r3inv;
 			float r1inv;
 			__syncwarp();
-			for (int k = tid; k < nsink; k += WARP_SIZE) {
+			int kmid = (nsink / WARP_SIZE) * WARP_SIZE;
+			if (nsink - kmid >= WARP_SIZE / 2) {
+				kmid = nsink;
+			}
+			for (int k = tid; k < kmid; k += WARP_SIZE) {
 				fx = 0.f;
 				fy = 0.f;
 				fz = 0.f;
@@ -331,6 +335,54 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 				if (do_phi) {
 					phi[k] += pot;
 					flops++;
+				}
+			}
+			for (int k = kmid; k < nsink; k++) {
+				fx = 0.f;
+				fy = 0.f;
+				fz = 0.f;
+				pot = 0.f;
+				for (int j = tid; j < part_index; j += WARP_SIZE) {
+					dx0 = distance(sink_x[k], src_x[j]); // 1
+					dx1 = distance(sink_y[k], src_y[j]); // 1
+					dx2 = distance(sink_z[k], src_z[j]); // 1
+					const auto r2 = sqr(dx0, dx1, dx2);  // 5
+					if (r2 > h2) {
+						r1inv = rsqrt(r2);					// 4
+						r3inv = sqr(r1inv) * r1inv;		// 2
+					} else {
+						const float q2 = r2 * h2inv;		// 1
+						r3inv = fmaf(q2, -1.5f, 2.5f) * h3inv;	// 3
+						flops -= 2;
+						if (do_phi) {
+							r1inv = float(3.0f / 8.0f);
+							r1inv = fmaf(q2, r1inv, -float(5.f / 4.f)); // 2
+							r1inv = fmaf(q2, r1inv, float(15.0f / 8.0f)); // 2
+							r1inv *= hinv;                    // 1
+							flops += 5;
+						}
+					}
+					fx = fmaf(dx0, r3inv, fx);                     // 2
+					fy = fmaf(dx1, r3inv, fy);                     // 2
+					fz = fmaf(dx2, r3inv, fz);                     // 2
+					pot -= r1inv;                                  // 1
+					flops += 21;
+				}
+				shared_reduce_add(fx);
+				shared_reduce_add(fy);
+				shared_reduce_add(fz);
+				if (do_phi) {
+					shared_reduce_add(pot);
+				}
+				if (tid == 0) {
+					gx[k] -= fx;
+					gy[k] -= fy;
+					gz[k] -= fz;
+					flops += 3;
+					if (do_phi) {
+						phi[k] += pot;
+						flops++;
+					}
 				}
 			}
 		}
