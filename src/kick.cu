@@ -181,7 +181,6 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 	auto& phase = shmem.phase;
 	auto& L = shmem.L;
 	auto& self_index = shmem.self;
-	auto& returns = shmem.returns;
 	auto& dchecks = shmem.dchecks;
 	auto& echecks = shmem.echecks;
 	auto& nextlist = shmem.nextlist;
@@ -208,7 +207,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		echecks.resize(0);
 		phase.resize(0);
 		self_index.resize(0);
-		returns.push_back(kick_return());
+		kick_return kr;
 		{
 			expansion_type this_L;
 			this_L.pos = params[index].Lpos;
@@ -455,12 +454,11 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				}
 				if (self.leaf) {
 					__syncwarp();
-					do_kick(returns.back(), global_params, data, L.back().expansion, self);
+					do_kick(kr, global_params, data, L.back().expansion, self);
 					phase.pop_back();
 					self_index.pop_back();
 					depth--;
 				} else {
-					returns.push_back(kick_return());
 					const tree_id child = self.children[LEFT];
 					const int i1 = L.size() - 1;
 					const int i2 = L.size();
@@ -490,23 +488,12 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 				phase.push_back(0);
 				const tree_id child = self.children[RIGHT];
 				self_index.push_back(child.index);
-				const auto this_return = returns.back();
-				returns.pop_back();
-				if (tid == 0) {
-					returns.back() += this_return;
-				}
-				returns.push_back(kick_return());
 				depth++;
 			}
 				break;
 			case 2: {
 				self_index.pop_back();
 				phase.pop_back();
-				const auto this_return = returns.back();
-				returns.pop_back();
-				if (tid == 0) {
-					returns.back() += this_return;
-				}
 				depth--;
 			}
 				break;
@@ -514,16 +501,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		}
 
 		if (tid == 0) {
-			*(params[index].kreturn) = returns.back();
+			*(params[index].kreturn) = kr;
 		}
 		if (tid == 0) {
 			index = atomicAdd(next_item, 1);
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
-		returns.pop_back();
-		ASSERT(returns.size() == 0);
 		ASSERT(L.size() == 1);
-		ASSERT(Lpos.size() == 0);
 		ASSERT(phase.size() == 0);
 		ASSERT(self_index.size() == 0);
 		add_gpu_flops(flops);

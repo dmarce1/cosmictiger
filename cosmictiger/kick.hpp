@@ -48,6 +48,9 @@ struct kick_return;
 
 #ifdef __CUDACC__
 
+#define KICK_PP_MAX (32*18)
+
+
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
@@ -72,7 +75,6 @@ struct cuda_kick_shmem {
 	device_vector<int> pclist;
 	device_vector<expansion_type> L;
 	device_vector<int> nextlist;
-	device_vector<kick_return> returns;
 	device_vector<int> phase;
 	device_vector<int> self;
 	cuda::barrier<cuda::thread_scope::thread_scope_block> barrier;
