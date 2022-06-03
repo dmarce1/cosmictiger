@@ -61,9 +61,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	auto& all_gy = data.gy;
 	auto& all_gz = data.gz;
 	auto* __restrict__ rungs = data.rungs;
-	auto* __restrict__ vel_x = data.vx;
-	auto* __restrict__ vel_y = data.vy;
-	auto* __restrict__ vel_z = data.vz;
+	auto* __restrict__ vels = data.vel;
 	auto& force = shmem.f;
 	const auto* sink_x = data.x + self.part_range.first;
 	const auto* sink_y = data.y + self.part_range.first;
@@ -103,9 +101,9 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		F.gy *= params.GM;
 		F.gx *= params.GM;
 		F.phi *= params.GM;
-		vx = vel_x[snki];
-		vy = vel_y[snki];
-		vz = vel_z[snki];
+		vx = vels[snki][XDIM];
+		vy = vels[snki][YDIM];
+		vz = vels[snki][ZDIM];
 		const float sgn = params.top ? 1.f : -1.f;
 		if (params.ascending) {
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
@@ -145,9 +143,9 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 			flops += 36;
 		}
 
-		vel_x[snki] = vx;
-		vel_y[snki] = vy;
-		vel_z[snki] = vz;
+		vels[snki][XDIM] = vx;
+		vels[snki][YDIM] = vy;
+		vels[snki][ZDIM] = vz;
 		phi_tot += 0.5f * force[i].phi;
 		flops += 557 + params.do_phi * 178;
 
@@ -606,9 +604,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	data.y_snk = &particles_pos(YDIM, 0);
 	data.z_snk = &particles_pos(ZDIM, 0);
 	data.tree_nodes = dev_tree_nodes;
-	data.vx = &particles_vel(XDIM, 0);
-	data.vy = &particles_vel(YDIM, 0);
-	data.vz = &particles_vel(ZDIM, 0);
+	data.vel = particles_vel_data();
 	data.rungs = &particles_rung(0);
 	if (kparams.save_force) {
 		data.gx = &particles_gforce(XDIM, 0);

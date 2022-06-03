@@ -773,7 +773,7 @@ void particles_resize(part_int sz, bool lock) {
 //		PRINT("%i: Resizing particles to %li from %li\n", hpx_rank(), new_capacity, capacity);
 		for (int dim = 0; dim < NDIM; dim++) {
 			particles_array_resize(particles_x[dim], new_capacity, true);
-			particles_array_resize(particles_v[dim], new_capacity, true);
+			particles_array_resize(particles_v, new_capacity, true);
 		}
 		particles_array_resize(particles_r, new_capacity, true);
 		if (get_options().do_groups) {
@@ -805,7 +805,7 @@ void particles_free() {
 	for (int dim = 0; dim < NDIM; dim++) {
 		free(particles_x[dim]);
 #ifdef USE_CUDA
-		cudaFree(particles_v[dim]);
+		cudaFree(particles_v);
 #else
 		free(particles_v[dim]);
 #endif
@@ -947,9 +947,6 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	auto& x = particles_x[XDIM];
 	auto& y = particles_x[YDIM];
 	auto& z = particles_x[ZDIM];
-	auto& ux = particles_v[XDIM];
-	auto& uy = particles_v[YDIM];
-	auto& uz = particles_v[ZDIM];
 	int flops = 0;
 	while (lo < hi) {
 		flops++;
@@ -961,9 +958,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 					std::swap(x[hi], x[lo]);
 					std::swap(y[hi], y[lo]);
 					std::swap(z[hi], z[lo]);
-					std::swap(ux[hi], ux[lo]);
-					std::swap(uy[hi], uy[lo]);
-					std::swap(uz[hi], uz[lo]);
+					std::swap(particles_v[hi], particles_v[lo]);
 					std::swap(particles_r[hi], particles_r[lo]);
 					if (do_groups) {
 						std::swap(particles_lgrp[hi], particles_lgrp[lo]);
@@ -1010,9 +1005,6 @@ void particles_sort_by_rung(int minrung) {
 		auto& x = particles_x[XDIM];
 		auto& y = particles_x[YDIM];
 		auto& z = particles_x[ZDIM];
-		auto& ux = particles_v[XDIM];
-		auto& uy = particles_v[YDIM];
-		auto& uz = particles_v[ZDIM];
 		while (lo < hi) {
 			if (particles_rung(lo) >= minrung) {
 				while (lo != hi) {
@@ -1021,9 +1013,7 @@ void particles_sort_by_rung(int minrung) {
 						std::swap(x[hi], x[lo]);
 						std::swap(y[hi], y[lo]);
 						std::swap(z[hi], z[lo]);
-						std::swap(ux[hi], ux[lo]);
-						std::swap(uy[hi], uy[lo]);
-						std::swap(uz[hi], uz[lo]);
+						std::swap(particles_v[hi], particles_v[lo]);
 						std::swap(particles_r[hi], particles_r[lo]);
 						if (do_groups) {
 							std::swap(particles_lgrp[hi], particles_lgrp[lo]);
@@ -1157,9 +1147,7 @@ void particles_load(FILE* fp) {
 	FREAD(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	FREAD(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
-	FREAD(&particles_vel(XDIM, 0), sizeof(float), particles_size(), fp);
-	FREAD(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
-	FREAD(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
+	FREAD(particles_vel_data(), sizeof(array<float,NDIM>), particles_size(), fp);
 	FREAD(&particles_rung(0), sizeof(char), particles_size(), fp);
 	if (get_options().do_groups) {
 		FREAD(&particles_lastgroup(0), sizeof(group_int), particles_size(), fp);
@@ -1180,9 +1168,7 @@ void particles_save(FILE* fp) {
 	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
 	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
 	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
-	fwrite(&particles_vel(XDIM, 0), sizeof(float), particles_size(), fp);
-	fwrite(&particles_vel(YDIM, 0), sizeof(float), particles_size(), fp);
-	fwrite(&particles_vel(ZDIM, 0), sizeof(float), particles_size(), fp);
+	fwrite(particles_vel_data(), sizeof(array<float, NDIM> ), particles_size(), fp);
 	fwrite(&particles_rung(0), sizeof(char), particles_size(), fp);
 	if (get_options().do_groups) {
 		fwrite(&particles_lastgroup(0), sizeof(group_int), particles_size(), fp);

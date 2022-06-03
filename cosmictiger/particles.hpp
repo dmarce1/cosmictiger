@@ -129,7 +129,7 @@ struct particle_sample {
 #endif
 
 PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
-PARTICLES_EXTERN array<float*, NDIM> particles_v;
+PARTICLES_EXTERN array<float, NDIM>* particles_v;
 PARTICLES_EXTERN char* particles_r;
 PARTICLES_EXTERN array<float*, NDIM> particles_g;
 PARTICLES_EXTERN float* particles_p;
@@ -203,7 +203,12 @@ inline fixed32& particles_pos(int dim, part_int index) {
 
 inline float& particles_vel(int dim, part_int index) {
 	CHECK_PART_BOUNDS(index);
-	return particles_v[dim][index];
+	return particles_v[index][dim];
+}
+
+inline array<float,NDIM>* particles_vel_data() {
+	CHECK_PART_BOUNDS(index);
+	return particles_v;
 }
 
 inline char& particles_rung(part_int index) {

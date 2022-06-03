@@ -32,9 +32,7 @@ struct cuda_kick_data {
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
-	float* vx;
-	float* vy;
-	float* vz;
+	array<float, NDIM>* vel;
 	fixed32* x_snk;
 	fixed32* y_snk;
 	fixed32* z_snk;
@@ -74,7 +72,7 @@ struct cuda_kick_shmem {
 			array<fixed32, KICK_PP_MAX> x;
 			array<fixed32, KICK_PP_MAX> y;
 			array<fixed32, KICK_PP_MAX> z;
-		} X;
+		}X;
 		array<multi_pos, KICK_C_MAX> mpos;
 	};
 	device_vector<force_type> f;
