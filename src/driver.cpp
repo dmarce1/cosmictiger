@@ -676,7 +676,7 @@ void driver() {
 			double adotdot;
 			double a0 = a;
 //			auto tmp1 = particles_sum_energies();
-			energies.cosmic += adot * dt * energies.kin / a;
+			energies.cosmic += adot * dt * energies.kin * a;
 			cosmos_update(adotdot, adot, a, a * dt);
 			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
 			const auto z0 = 1.0 / a0 - 1.0;
