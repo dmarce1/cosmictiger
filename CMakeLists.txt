@@ -101,6 +101,7 @@ set(cosmictiger_header_files
     cosmictiger/cuda_reduce.hpp
     cosmictiger/cuda_vector.hpp
     cosmictiger/defs.hpp
+    cosmictiger/device_vector.hpp
     cosmictiger/domain.hpp
     cosmictiger/drift.hpp
     cosmictiger/driver.hpp

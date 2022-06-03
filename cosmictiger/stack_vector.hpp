@@ -24,9 +24,13 @@
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
+
 using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 #ifdef __CUDACC__
+
+
+#include <cosmictiger/device_vector.hpp>
 
 template<class T>
 class stack_vector {

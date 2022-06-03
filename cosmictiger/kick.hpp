@@ -20,7 +20,6 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
-#include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/tree.hpp>
 
 #include <atomic>
@@ -46,6 +45,8 @@ struct cuda_kick_data {
 struct kick_return;
 
 #ifdef __CUDACC__
+
+#include <cosmictiger/stack_vector.hpp>
 
 #define KICK_PP_MAX (32*18)
 
