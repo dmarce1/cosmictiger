@@ -367,7 +367,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
 								const auto self_parts = self.nparts();
 								const auto other_parts = other.nparts();
-								cc = (R2 > sqr(dcc)) && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
+								cc = (R2 > sqr(dcc));// && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
 								flops += 20;
 								if (!cc && other.leaf && self.leaf) {
 									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
