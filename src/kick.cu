@@ -29,8 +29,8 @@
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/flops.hpp>
 
-#define MIN_PARTS_PCCP 25
-#define MIN_PARTS2_CC 84
+#define MIN_PARTS_PCCP 24
+#define MIN_PARTS2_CC 78
 
 #include <atomic>
 

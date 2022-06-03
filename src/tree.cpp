@@ -367,12 +367,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		if (nparts <= 512 * get_options().bucket_size && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
+				Xc[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);    // 6
 			}
 			array<simd_int, NDIM> xc;
 			for (int dim = 0; dim < NDIM; dim++) {
 				xc[dim] = fixed32(Xc[dim]).raw();
 			}
+			flops += 6;
 			simd_float r2_max(0.0);
 			for (part_int i = part_range.first; i < part_range.second; i += SIMD_FLOAT_SIZE) {
 				simd_int x;
@@ -385,9 +386,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 					for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
 						x[j] = xc[dim][0];
 					}
-					dx[dim] = simd_float(x - xc[dim]) * _2float;
-					//		PRINT( "%e %e %e \n", dx[dim][0], x[0]*_2float[0], xc[dim][0]*_2float[0]);
+					dx[dim] = simd_float(x - xc[dim]) * _2float;                // 6
 				}
+				flops += 18 + maxj * 6;
 				const auto r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 				r2_max = max(r2_max, r2);
 			}
@@ -395,6 +396,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			for (int i = 0; i < SIMD_FLOAT_SIZE; i++) {
 				r2 = std::max(r2, r2_max[i]);
 			}
+			flops += 4 + SIMD_FLOAT_SIZE;
 			radius = sqrt(r2);
 			//	PRINT("%e\n", radius);
 		} else {
@@ -470,7 +472,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
 		}
-		flops += 2442 + MULTIPOLE_SIZE * 2;
+		flops += 2421 + MULTIPOLE_SIZE * 2;
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 	} else {

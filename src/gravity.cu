@@ -41,7 +41,7 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
-			flops += 3 + greens_function(D, dx);
+			flops += 6 + greens_function(D, dx);
 			flops += M2L(L, M, D, do_phi);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
@@ -121,7 +121,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
 				expansion<float> D;
-				flops += EXPANSION_SIZE + 3 + greens_function(D, dx);
+				flops += EXPANSION_SIZE + 6 + greens_function(D, dx);
 				for (int k = 0; k < EXPANSION_SIZE; k++) {
 					L[k] += D[k];
 				}
@@ -167,7 +167,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 				expansion<float> D;
-				flops += 3 + greens_function(D, dx);
+				flops += 6 + greens_function(D, dx);
 				flops += M2L(L, M, D, do_phi);
 			}
 			F.gx -= L(1, 0, 0);
@@ -332,9 +332,9 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 				fz = 0.f;
 				pot = 0.f;
 				for (int j = tid; j < part_index; j += WARP_SIZE) {
-					dx0 = distance(sink_x[k], src_x[j]); // 1
-					dx1 = distance(sink_y[k], src_y[j]); // 1
-					dx2 = distance(sink_z[k], src_z[j]); // 1
+					dx0 = distance(sink_x[k], src_x[j]); // 2
+					dx1 = distance(sink_y[k], src_y[j]); // 2
+					dx2 = distance(sink_z[k], src_z[j]); // 2
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 					if (r2 > h2) {
 						r1inv = rsqrt(r2);					// 4
@@ -355,7 +355,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					fy = fmaf(dx1, r3inv, fy);                     // 2
 					fz = fmaf(dx2, r3inv, fz);                     // 2
 					pot -= r1inv;                                  // 1
-					flops += 21;
+					flops += 23;
 				}
 				shared_reduce_add(fx);
 				shared_reduce_add(fy);
