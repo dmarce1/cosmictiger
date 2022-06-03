@@ -1288,6 +1288,10 @@ int main() {
 		for (auto& e : entries) {
 			std::sort(e.begin(), e.end(), sort_func);
 		}
+		const int nL = Pmax <= 2 ? Pmax * Pmax : Pmax * Pmax + 1;
+		for( int i = 0; i < nL; i++) {
+			tprint("auto& L%i = L[%i];\n", i, i);
+		}
 		for (int i = 0; i < 1; i++) {
 			double last_coeff = 1.0;
 			const auto n = entries[i][0].n;
@@ -1300,17 +1304,17 @@ int main() {
 				const auto m = entries[i][j].m;
 				if (!close21(last_coeff / coeff)) {
 					double factor = last_coeff / coeff;
-					tprint("L[%i] *= T(%.9e);\n", nindex, factor);
+					tprint("L%i *= T(%.9e);\n", nindex, factor);
 					last_coeff = coeff;
 					fl++;
 				}
-				tprint("L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				tprint("L%i = fmaf(M%i%i%i, D%i%i%i, L%i);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				fl += 2;
 			}
 			if (!close21(last_coeff)) {
 				fl++;
-				tprint("L[%i] *= T(%.9e);\n", nindex, last_coeff);
+				tprint("L%i *= T(%.9e);\n", nindex, last_coeff);
 			}
 			if (nindex == 0) {
 				deindent();
@@ -1343,13 +1347,13 @@ int main() {
 				const auto m = entries[i][j].m;
 				if (!close21(last_coeff / coeff)) {
 					double factor = last_coeff / coeff;
-					ASPRINTF(&str, "L[%i] *= T(%.9e);\n", nindex, factor);
+					ASPRINTF(&str, "L%i *= T(%.9e);\n", nindex, factor);
 					cmds.push_back(str);
 					free(str);
 					last_coeff = coeff;
 					fl++;
 				}
-				ASPRINTF(&str, "L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				ASPRINTF(&str, "L%i = fmaf(M%i%i%i, D%i%i%i, L%i);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				cmds.push_back(str);
 				free(str);
@@ -1357,7 +1361,7 @@ int main() {
 			}
 			if (!close21(last_coeff)) {
 				fl++;
-				ASPRINTF(&str, "L[%i] *= T(%.9e);\n", nindex, last_coeff);
+				ASPRINTF(&str, "L%i *= T(%.9e);\n", nindex, last_coeff);
 				cmds.push_back(str);
 			}
 		}
@@ -1411,13 +1415,16 @@ int main() {
 	reference_sym("Mb", P - 1);
 	reference_trless("Mc", P - 1);
 	flops += compute_dx(P - 1);
+	for(int i = 0; i < (P - 1) * P * (P + 1) / 6; i++) {
+		tprint( "auto& Mb%i = Mb[%i];\n", i, i);
+	}
 
 	for (int i = 0; i < (P - 1) * P * (P + 1) / 6; i++) {
 		for (n[0] = 0; n[0] < P - 1; n[0]++) {
 			for (n[1] = 0; n[1] < P - n[0] - 1; n[1]++) {
 				for (n[2] = 0; n[2] < P - n[0] - n[1] - 1; n[2]++) {
 					if (i == sym_index(n[0], n[1], n[2])) {
-						tprint("Mb[%i] = Ma%i%i%i;\n", i, n[0], n[1], n[2]);
+						tprint("Mb%i = Ma%i%i%i;\n", i, n[0], n[1], n[2]);
 					}
 				}
 			}
@@ -1481,20 +1488,20 @@ int main() {
 				const auto k = mentries[i][j].k;
 				const auto factor = mentries[i][j].factor;
 				if (!close21(last_factor / factor)) {
-					ASPRINTF(&str, "Mb[%i] *= T(%.9e);\n", nindex, last_factor / factor);
+					ASPRINTF(&str, "Mb%i *= T(%.9e);\n", nindex, last_factor / factor);
 					cmds.push_back(str);
 					flops++;
 					free(str);
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Mb[%i] = fmaf( x%i%i%i, Ma%i%i%i, Mb[%i]);\n", nindex, n[0] - k[0], n[1] - k[1], n[2] - k[2], k[0], k[1], k[2],
+				ASPRINTF(&str, "Mb%i = fmaf( x%i%i%i, Ma%i%i%i, Mb%i);\n", nindex, n[0] - k[0], n[1] - k[1], n[2] - k[2], k[0], k[1], k[2],
 						sym_index(n[0], n[1], n[2]));
 				cmds.push_back(str);
 				free(str);
 				flops += 2;
 			}
 			if (!close21(last_factor)) {
-				ASPRINTF(&str, "Mb[%i] *= T(%.9e);\n", nindex, last_factor);
+				ASPRINTF(&str, "Mb%i *= T(%.9e);\n", nindex, last_factor);
 				cmds.push_back(str);
 				flops++;
 				free(str);
