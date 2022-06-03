@@ -60,10 +60,10 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	auto& all_gx = data.gx;
 	auto& all_gy = data.gy;
 	auto& all_gz = data.gz;
-	auto& rungs = data.rungs;
-	auto& vel_x = data.vx;
-	auto& vel_y = data.vy;
-	auto& vel_z = data.vz;
+	auto* __restrict__ rungs = data.rungs;
+	auto* __restrict__ vel_x = data.vx;
+	auto* __restrict__ vel_y = data.vy;
+	auto* __restrict__ vel_z = data.vz;
 	auto& force = shmem.f;
 	const auto* sink_x = data.x + self.part_range.first;
 	const auto* sink_y = data.y + self.part_range.first;
@@ -367,7 +367,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
 								const auto self_parts = self.nparts();
 								const auto other_parts = other.nparts();
-								cc = (R2 > sqr(dcc));// && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
+								cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
 								flops += 20;
 								if (!cc && other.leaf && self.leaf) {
 									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
@@ -660,10 +660,12 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 
 int kick_block_count() {
 	int nblocks;
+	cudaFuncAttributes attr;
+	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_kick_kernel));
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
 	static bool shown = false;
 	if (!shown) {
-		PRINT("Occupancy is %i shmem size = %li\n", nblocks, sizeof(cuda_kick_shmem));
+		PRINT("Occupancy is %i shmem size = %li numregs = %i\n", nblocks, sizeof(cuda_kick_shmem), attr.numRegs);
 		shown = true;
 	}
 	nblocks *= cuda_smp_count();

@@ -303,8 +303,8 @@ void kick_workspace::to_gpu() {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	futs2.resize(0);
-	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](kick_workitem a, kick_workitem b) {
-		return morton_compare(a.pos, b.pos);
+	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](const kick_workitem& a, const kick_workitem& b) {
+		return tree_get_node(a.self)->part_range.first < tree_get_node(b.self)->part_range.first;
 	});
 	hpx::wait_all(futs3.begin(), futs3.end());
 	hpx::wait_all(futs1.begin(), futs1.end());
