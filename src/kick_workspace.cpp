@@ -256,13 +256,14 @@ void kick_workspace::to_gpu() {
 	hpx::wait_all(futs2.begin(), futs2.end());
 	futs2.resize(0);
 	const std::function<void(int, part_int)> adjust_part_refs = [&adjust_part_refs,&tree_nodes](int index, part_int offset) -> void {
-		tree_nodes[index].part_range.first += offset;
-		tree_nodes[index].part_range.second += offset;
-		ASSERT(tree_nodes[index].part_range.first >= 0);
-		ASSERT(tree_nodes[index].part_range.second <= particles_size());
-		if( tree_nodes[index].children[LEFT].index != -1) {
-			adjust_part_refs(tree_nodes[index].children[LEFT].index, offset);
-			adjust_part_refs(tree_nodes[index].children[RIGHT].index, offset);
+		auto& node = tree_nodes[index];
+		node.part_range.first += offset;
+		node.part_range.second += offset;
+		ASSERT(node.part_range.first >= 0);
+		ASSERT(node.part_range.second <= particles_size());
+		if( node.children[LEFT].index != -1) {
+			adjust_part_refs(node.children[LEFT].index, offset);
+			adjust_part_refs(node.children[RIGHT].index, offset);
 		}
 	};
 	for (auto i = remote_roots.begin(); i != remote_roots.end(); i++) {
