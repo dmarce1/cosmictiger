@@ -282,8 +282,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		profiler_enter(__FUNCTION__);
 	}
 	int flops = 0;
-	size_t node_count = 1;
-	size_t leaf_count = 0;
 	stack_trace_activate();
 	const double h = get_options().hsoft;
 	int bucket_size = get_options().bucket_size;
@@ -295,14 +293,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		tree_allocate_nodes();
 	}
 	if (local_root) {
-		if (params.do_leaf_sizes) {
-			leaf_sizes.resize(0);
-		}
 		part_range = particles_current_range();
 	}
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM>& x = rc.pos;
 	multipole<float>& multi = rc.multi;
+	auto& rbox = rc.box;
 	float& radius = rc.radius;
 	array<double, NDIM> Xc;
 	double r;
@@ -321,11 +317,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h); // 10
 	double max_ratio = 1.0;
 	flops += 26;
-	if (params.do_leaf_sizes && !params.leaf_pushed && nparts <= bucket_size) {
-		params.leaf_pushed = true;
-		std::lock_guard<spinlock_type> lock(leaf_sizes_mutex);
-		leaf_sizes.push_back(nparts);
-	}
+	static const simd_float _2float = fixed2float;
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
 		const int xdim = box.longest_dim();
@@ -355,71 +347,110 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
-		node_count += rcl.node_count + rcr.node_count;
-		leaf_count += rcl.leaf_count + rcr.leaf_count;
-		const auto xl = rcl.pos;
-		const auto xr = rcr.pos;
-		const auto ml = rcl.multi;
-		const auto mr = rcr.multi;
-		const double Rl = rcl.radius;
-		const double Rr = rcr.radius;
-		double rr;
-		double rl;
+		const auto& xl = rcl.pos;
+		const auto& xr = rcr.pos;
+		const auto& ml = rcl.multi;
+		const auto& mr = rcr.multi;
+		const double& Rl = rcl.radius;
+		const double& Rr = rcr.radius;
+		const auto& boxl = rcl.box;
+		const auto& boxr = rcr.box;
+		for (int dim = 0; dim < NDIM; dim++) {
+			rbox.begin[dim] = std::min(boxl.begin[dim], boxr.begin[dim]);
+			rbox.end[dim] = std::max(boxl.end[dim], boxr.end[dim]);
+		}
 		array<double, NDIM> Xl;
 		array<double, NDIM> Xr;
-		array<double, NDIM> Xc;
-		array<double, NDIM> N;
-		float R;
-		double norminv = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			Xl[dim] = xl[dim].to_double();                      // 3
 			Xr[dim] = xr[dim].to_double();                      // 3
-			N[dim] = Xl[dim] - Xr[dim];                         // 3
-			norminv += sqr(N[dim]);                             // 6
 		}
-		norminv = 1.0 / std::sqrt(norminv);                    // 8
-		for (int dim = 0; dim < NDIM; dim++) {
-			N[dim] *= norminv;                                  // 3
-			N[dim] = std::abs(N[dim]);                          // 3
-		}
-		flops += 29;
-		r = 0.0;
-		if (mr[0] != 0.0) {
-			if (ml[0] != 0.0) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
-					const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
-					Xc[dim] = (xmax + xmin) * 0.5;
-					r += sqr((xmax - xmin) * 0.5);
-				}
-				flops += 45;
-			} else {
-				Xc = Xr;
-				r = Rr * Rr;
-				flops++;
-			}
-		} else {
-			if (ml[0] != 0.0) {
-				Xc = Xl;
-				r = Rl * Rl;
-				flops++;
-			} else {
-				for (int dim = 0; dim < NDIM; dim++) {
-					Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
-				}
-				flops += 6;
-			}
-		}
-		radius = std::sqrt(r);                                         // 4
-		r = 0.0;
-		for (int dim = 0; dim < NDIM; dim++) {
-			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);            // 12
-		}
-		r = std::sqrt(r);                                              // 4
-		if (r < radius) {                                              // 1
-			radius = r;
+		if (nparts <= 512 * get_options().bucket_size && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;         // 6
+				Xc[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);
+			}
+			array<simd_int, NDIM> xc;
+			for (int dim = 0; dim < NDIM; dim++) {
+				xc[dim] = fixed32(Xc[dim]).raw();
+			}
+			simd_float r2_max(0.0);
+			for (part_int i = part_range.first; i < part_range.second; i += SIMD_FLOAT_SIZE) {
+				simd_int x;
+				array<simd_float, NDIM> dx;
+				const int maxj = std::min(part_range.second - i, SIMD_FLOAT_SIZE);
+				for (int dim = 0; dim < NDIM; dim++) {
+					for (int j = 0; j < maxj; j++) {
+						x[j] = particles_pos(dim, i + j).raw();
+					}
+					for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
+						x[j] = xc[dim][0];
+					}
+					dx[dim] = simd_float(x - xc[dim]) * _2float;
+					//		PRINT( "%e %e %e \n", dx[dim][0], x[0]*_2float[0], xc[dim][0]*_2float[0]);
+				}
+				const auto r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+				r2_max = max(r2_max, r2);
+			}
+			float r2 = 0.0f;
+			for (int i = 0; i < SIMD_FLOAT_SIZE; i++) {
+				r2 = std::max(r2, r2_max[i]);
+			}
+			radius = sqrt(r2);
+			//	PRINT("%e\n", radius);
+		} else {
+			double rr;
+			double rl;
+			array<double, NDIM> N;
+			float R;
+			double norminv = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				N[dim] = Xl[dim] - Xr[dim];                         // 3
+				norminv += sqr(N[dim]);                         // 6
+			}
+			norminv = 1.0 / std::sqrt(norminv);                    // 8
+			for (int dim = 0; dim < NDIM; dim++) {
+				N[dim] *= norminv;                                  // 3
+				N[dim] = std::abs(N[dim]);                                  // 3
+			}
+			flops += 29;
+			r = 0.0;
+			if (mr[0] != 0.0) {
+				if (ml[0] != 0.0) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+						const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
+						Xc[dim] = (xmax + xmin) * 0.5;
+						r += sqr((xmax - xmin) * 0.5);
+					}
+					flops += 45;
+				} else {
+					Xc = Xr;
+					r = Rr * Rr;
+					flops++;
+				}
+			} else {
+				if (ml[0] != 0.0) {
+					Xc = Xl;
+					r = Rl * Rl;
+					flops++;
+				} else {
+					for (int dim = 0; dim < NDIM; dim++) {
+						Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
+					}
+					flops += 6;
+				}
+			}
+			radius = std::sqrt(r);                                         // 4
+			r = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				r += sqr((box.begin[dim] - box.end[dim]) * 0.5);            // 12
+			}
+			r = std::sqrt(r);                                              // 4
+			if (r < radius) {                                              // 1
+				radius = r;
+				for (int dim = 0; dim < NDIM; dim++) {
+					Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;         // 6
+				}
 			}
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -443,13 +474,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 	} else {
-		leaf_count = 1;
-		array<double, NDIM> Xmax;
-		array<double, NDIM> Xmin;
-		for (int dim = 0; dim < NDIM; dim++) {
-			Xmax[dim] = box.begin[dim];
-			Xmin[dim] = box.end[dim];
-		}
+		rbox = box;
+		array<double, NDIM>& Xmax = rbox.begin;
+		array<double, NDIM>& Xmin = rbox.end;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();							// 3
@@ -466,10 +493,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double this_radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();              // 3
-				/*				if (x < box.begin[dim] || x > box.end[dim]) {
-				 PRINT("particles out of range in dim %i (%e, %e, %e) rung %i rank %i\n", dim, box.begin[dim], x, box.end[dim], particles_rung(i), hpx_rank());
-				 ALWAYS_ASSERT(false);
-				 }*/
 				this_radius += sqr(x - Xc[dim]);                                 // 9
 			}
 			r = std::max(r, this_radius);                                       // 2
@@ -487,7 +510,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (int dim = 0; dim < NDIM; dim++) {
 			Y[dim] = fixed32(Xc[dim]).raw();
 		}
-		const simd_float _2float = fixed2float;
 
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
@@ -540,8 +562,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	nodes[index] = node;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
-	rc.leaf_count = leaf_count;
-	rc.node_count = node_count;
 	if (key == 1) {
 		profiler_exit();
 	}
