@@ -21,18 +21,6 @@
 
 
 __device__
-char* cuda_mem::allocate_blocks(int nblocks) {
-	size_t base = atomicAdd(&next_block, nblocks);
-//	PRINT( "%lli %i\n", base, heap_max);
-	if (base + nblocks >= heap_max) {
-		return nullptr;
-	} else {
-		char* ptr = heap + base * CUDA_MEM_BLOCK_SIZE;
-		return ptr;
-	}
-}
-
-__device__
 void cuda_mem::push(int bin, char* ptr) {
 	using itype = unsigned long long int;
 	auto& this_q = q[bin];
@@ -76,24 +64,15 @@ char* cuda_mem::pop(int bin) {
 }
 
 __device__
-bool cuda_mem::create_new_allocations(int bin) {
-	size_t alloc_size = (1 << bin) + sizeof(size_t);
-	int nallocs, nblocks;
-	nblocks = 1;
-	do {
-		nallocs = nblocks * CUDA_MEM_BLOCK_SIZE / alloc_size;
-		nblocks = max(3 * nblocks / 2, 2);
-	} while (nallocs == 0);
-	char* base = allocate_blocks(nblocks);
-	if (base == nullptr) {
+bool cuda_mem::create_new_allocation(int bin) {
+	size_t size = (1 << bin) + sizeof(size_t);
+	auto* ptr = (char*) atomicAdd((unsigned long long*)&next, (unsigned long long) size);
+	if (next >= heap_end) {
 		return false;
 	} else {
-		for (int i = 0; i < nallocs; i++) {
-			char* ptr = base + i * alloc_size;
-			*((size_t*) ptr) = bin;
-			__threadfence();
-			push(bin, ptr + sizeof(size_t));
-		}
+		push(bin, ptr + sizeof(size_t));
+		*((size_t*) ptr) = bin;
+		__threadfence();
 		return true;
 	}
 }
@@ -112,7 +91,7 @@ void* cuda_mem::allocate(size_t sz) {
 	}
 	char* ptr;
 	while ((ptr = pop(bin)) == nullptr) {
-		if (!create_new_allocations(bin)) {
+		if (!create_new_allocation(bin)) {
 			return nullptr;
 		}
 	}
@@ -129,13 +108,13 @@ __device__ void cuda_mem::free(void* ptr) {
 }
 
 cuda_mem::cuda_mem(size_t heap_size) {
-	CUDA_CHECK(cudaMalloc(&heap, heap_size));
-	heap_max = heap_size / CUDA_MEM_BLOCK_SIZE;
+	CUDA_CHECK(cudaMalloc(&heap_begin, heap_size));
+	heap_end = heap_begin + heap_size;
 	reset();
 }
 
 void cuda_mem::reset() {
-	next_block = 0;
+	next = heap_begin;
 	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
 		for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
 			q[i][j] = nullptr;
@@ -146,7 +125,7 @@ void cuda_mem::reset() {
 }
 
 cuda_mem::~cuda_mem() {
-	CUDA_CHECK(cudaFree(heap));
+	CUDA_CHECK(cudaFree(heap_begin));
 }
 
 __managed__ cuda_mem* memory;
