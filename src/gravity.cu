@@ -64,9 +64,9 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	auto& src_x = shmem.x;
-	auto& src_y = shmem.y;
-	auto& src_z = shmem.z;
+	auto& src_x = shmem.X.x;
+	auto& src_y = shmem.X.y;
+	auto& src_z = shmem.X.z;
 	auto& barrier = shmem.barrier;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
@@ -147,36 +147,50 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	extern int shmem_ptr[];
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
 	auto &force = shmem.f;
+	auto& multis = shmem.mpos;
 	const int nsink = self.part_range.second - self.part_range.first;
 	const auto& sink_x = data.x + self.part_range.first;
 	const auto& sink_y = data.y + self.part_range.first;
 	const auto& sink_z = data.z + self.part_range.first;
+	auto& barrier = shmem.barrier;
 	const auto* tree_nodes = data.tree_nodes;
 	int flops = 0;
+	auto group = cooperative_groups::this_thread_block();
 	if (multlist.size()) {
 		__syncwarp();
-		for (int k = tid; k < nsink; k += WARP_SIZE) {
-			auto& F = force[k];
-			expansion2<float> L;
-			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
-			for (int j = 0; j < multlist.size(); j++) {
-				array<float, NDIM> dx;
-				const auto& pos = tree_nodes[multlist[j]].mpos.pos;
-				const auto& M = tree_nodes[multlist[j]].mpos.multi;
-				dx[XDIM] = distance(sink_x[k], pos[XDIM]);
-				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
-				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
-				expansion<float> D;
-				flops += 6 + greens_function(D, dx);
-				flops += M2L(L, M, D, do_phi);
+		int mi = 0;
+		const int cnt = multlist.size();
+		while (mi < cnt) {
+			int mend = min(cnt, mi + KICK_C_MAX);
+			for (int this_mi = mi; this_mi < mend; this_mi++) {
+				cuda::memcpy_async(group, &multis[this_mi - mi], &tree_nodes[multlist[this_mi]].mpos, sizeof(multi_pos), barrier);
 			}
-			F.gx -= L(1, 0, 0);
-			F.gy -= L(0, 1, 0);
-			F.gz -= L(0, 0, 1);
-			F.phi += L(0, 0, 0);
-			flops += 4;
+			mend -= mi;
+			mi += mend;
+			barrier.arrive_and_wait();
+			for (int k = tid; k < nsink; k += WARP_SIZE) {
+				auto& F = force[k];
+				expansion2<float> L;
+				L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
+				for (int j = 0; j < mend; j++) {
+					array<float, NDIM> dx;
+					const auto& pos = multis[j].pos;
+					const auto& M = multis[j].multi;
+					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
+					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
+					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
+					expansion<float> D;
+					flops += 6 + greens_function(D, dx);
+					flops += M2L(L, M, D, do_phi);
+				}
+				F.gx -= L(1, 0, 0);
+				F.gy -= L(0, 1, 0);
+				F.gz -= L(0, 0, 1);
+				F.phi += L(0, 0, 0);
+				flops += 4;
+			}
+			__syncwarp();
 		}
-		__syncwarp();
 	}
 	__syncwarp();
 	add_gpu_flops(flops);
@@ -230,9 +244,9 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;
 	const auto* main_src_z = data.z;
-	auto& src_x = shmem.x;
-	auto& src_y = shmem.y;
-	auto& src_z = shmem.z;
+	auto& src_x = shmem.X.x;
+	auto& src_y = shmem.X.y;
+	auto& src_z = shmem.X.z;
 	const auto* tree_nodes = data.tree_nodes;
 	int part_index;
 	const float h2 = sqr(h);

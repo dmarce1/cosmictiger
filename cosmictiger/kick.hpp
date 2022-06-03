@@ -25,6 +25,8 @@
 
 #include <atomic>
 
+#define KICK_C_MAX 32
+
 struct cuda_kick_data {
 	tree_node* tree_nodes;
 	fixed32* x;
@@ -43,14 +45,11 @@ struct cuda_kick_data {
 	float* pot;
 };
 
-
 struct kick_return;
 
 #ifdef __CUDACC__
 
 #define KICK_PP_MAX (32*18)
-
-
 
 struct expansion_type {
 	array<fixed32, NDIM> pos;
@@ -69,11 +68,15 @@ struct force_type {
 	float phi;
 };
 
-
 struct cuda_kick_shmem {
-	array<fixed32, KICK_PP_MAX> x;
-	array<fixed32, KICK_PP_MAX> y;
-	array<fixed32, KICK_PP_MAX> z;
+	union {
+		struct {
+			array<fixed32, KICK_PP_MAX> x;
+			array<fixed32, KICK_PP_MAX> y;
+			array<fixed32, KICK_PP_MAX> z;
+		} X;
+		array<multi_pos, KICK_C_MAX> mpos;
+	};
 	device_vector<force_type> f;
 	stack_vector<int> echecks;
 	stack_vector<int> dchecks;
