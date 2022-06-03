@@ -45,8 +45,8 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 		for (int i = 0; i < tree_ptrs.size(); i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
-			const auto& m = tree_ptrs[i]->multi;
-			const auto& y = tree_ptrs[i]->pos;
+			const auto& m = tree_ptrs[i]->mpos.multi;
+			const auto& y = tree_ptrs[i]->mpos.pos;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[k][j][l] = m[j];
 			}
@@ -68,7 +68,7 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 		}
 		array<simd_int, NDIM> X;
 		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = self_ptr->pos[dim].raw();
+			X[dim] = self_ptr->mpos.pos[dim].raw();
 		}
 		expansion<simd_float> L0;
 		L0 = simd_float(0.0f);
@@ -136,7 +136,7 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
 			for (int dim = 0; dim < NDIM; dim++) {
-				X[dim] = self_ptr->pos[dim].raw();
+				X[dim] = self_ptr->mpos.pos[dim].raw();
 			}
 			expansion<simd_float> L0;
 			L0 = simd_float(0.0f);
@@ -191,8 +191,8 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 		for (int i = 0; i < tree_ptrs.size(); i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
-			const auto& m = tree_ptrs[i]->multi;
-			const auto& y = tree_ptrs[i]->pos;
+			const auto& m = tree_ptrs[i]->mpos.multi;
+			const auto& y = tree_ptrs[i]->mpos.pos;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[k][j][l] = m[j];
 			}

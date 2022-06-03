@@ -81,21 +81,28 @@ struct tree_id_hash_hi {
 	}
 };
 
-struct tree_node {
+struct multi_pos {
 	multipole<float> multi;
 	array<fixed32, NDIM> pos;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & multi;
+		arc & pos;
+	}
+};
+
+struct tree_node {
+	multi_pos mpos;
 	array<tree_id, NCHILD> children;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
 	float radius;
-	bool local_root;
-	bool leaf;
-	int depth;
+	struct {
+		unsigned short depth :14;
+		unsigned short local_root :1;
+		unsigned short leaf :1;
+	};CUDA_EXPORT
 
-	CUDA_EXPORT
-	inline const multipole_pos* get_multipole_ptr() const {
-		return (multipole_pos*) &multi;
-	}
 	CUDA_EXPORT
 	inline part_int nparts() const {
 		return part_range.second - part_range.first;
@@ -114,15 +121,23 @@ struct tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
-		arc & multi;
+		arc & mpos;
 		arc & children;
-		arc & pos;
 		arc & proc_range;
 		arc & part_range;
 		arc & radius;
-		arc & local_root;
-		arc & leaf;
-		arc & depth;
+		int local_root0;
+		int leaf0;
+		int depth0;
+		local_root0 = local_root;
+		leaf0 = leaf;
+		depth0 = depth;
+		arc & local_root0;
+		arc & leaf0;
+		arc & depth0;
+		local_root = local_root0;
+		depth = depth0;
+		leaf = leaf0;
 	}
 };
 
@@ -172,7 +187,7 @@ int tree_min_level(double theta, double hsoft);
 const tree_node* tree_get_node(tree_id);
 void tree_sort_particles_by_sph_particles();
 void tree_free_neighbor_list();
-long long tree_nodes_size() ;
+long long tree_nodes_size();
 long long tree_nodes_next_index();
 void tree_clear_neighbor_ranges();
 int tree_avg_leaf_size();

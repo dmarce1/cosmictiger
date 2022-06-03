@@ -564,8 +564,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.local_root = local_root;
 	node.part_range = part_range;
 	node.proc_range = proc_range;
-	node.pos = x;
-	node.multi = multi;
+	node.mpos.pos = x;
+	node.mpos.multi = multi;
 	node.depth = depth;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;

@@ -90,9 +90,9 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		int rung;
 		snki = self.part_range.first + i;
 		ASSERT(snki >= 0);
-		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
-		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
-		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
+		dx[XDIM] = distance(sink_x[i], self.mpos.pos[XDIM]); // 1
+		dx[YDIM] = distance(sink_y[i], self.mpos.pos[YDIM]); // 1
+		dx[ZDIM] = distance(sink_z[i], self.mpos.pos[ZDIM]); // 1
 		L2 = L2P(L, dx, params.do_phi);
 		auto& F = force[i];
 		F.phi += L2(0, 0, 0);
@@ -244,14 +244,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			case 0: {
 				array<float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(self.pos[dim], L.back().pos[dim]);
+					dx[dim] = distance(self.mpos.pos[dim], L.back().pos[dim]);
 				}
 				flops += 3;
 				{
 					const auto this_L = L2L_cuda(L.back().expansion, dx, global_params.do_phi);
 					if (tid == 0) {
 						L.back().expansion = this_L;
-						L.back().pos = self.pos;
+						L.back().pos = self.mpos.pos;
 					}
 					flops += 2650 + global_params.do_phi * 332;
 				}
@@ -279,7 +279,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
 								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+									dx[dim] = distance(self.mpos.pos[dim], other.mpos.pos[dim]); // 3
 								}
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
@@ -358,7 +358,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
 								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+									dx[dim] = distance(self.mpos.pos[dim], other.mpos.pos[dim]); // 3
 								}
 								const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								const float mind = self.radius + other.radius + h;

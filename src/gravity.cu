@@ -36,10 +36,10 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 		}
 		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
 			const tree_node& other = tree_nodes[multlist[i]];
-			const multipole<float>& M = other.multi;
+			const multipole<float>& M = other.mpos.multi;
 			array<float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.pos[dim], other.pos[dim]);
+				dx[dim] = distance(self.mpos.pos[dim], other.mpos.pos[dim]);
 			}
 			flops += 6 + greens_function(D, dx);
 			flops += M2L(L, M, D, do_phi);
@@ -117,9 +117,9 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
 				array<float, NDIM> dx;
-				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
-				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
-				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
+				dx[XDIM] = distance(self.mpos.pos[XDIM], src_x[j]);
+				dx[YDIM] = distance(self.mpos.pos[YDIM], src_y[j]);
+				dx[ZDIM] = distance(self.mpos.pos[ZDIM], src_z[j]);
 				expansion<float> D;
 				flops += EXPANSION_SIZE + 6 + greens_function(D, dx);
 				for (int k = 0; k < EXPANSION_SIZE; k++) {
@@ -161,8 +161,8 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
 			for (int j = 0; j < multlist.size(); j++) {
 				array<float, NDIM> dx;
-				const auto& pos = tree_nodes[multlist[j]].pos;
-				const auto& M = tree_nodes[multlist[j]].multi;
+				const auto& pos = tree_nodes[multlist[j]].mpos.pos;
+				const auto& M = tree_nodes[multlist[j]].mpos.multi;
 				dx[XDIM] = distance(sink_x[k], pos[XDIM]);
 				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
@@ -195,10 +195,10 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 		}
 		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
 			const tree_node& other = tree_nodes[multlist[i]];
-			const multipole<float>& M = other.multi;
+			const multipole<float>& M = other.mpos.multi;
 			array<float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.pos[dim], other.pos[dim]);
+				dx[dim] = distance(self.mpos.pos[dim], other.mpos.pos[dim]);
 			}
 			flops += 3 + ewald_greens_function(D, dx);
 			flops += M2L(L, M, D, do_phi);
