@@ -49,6 +49,7 @@ class fixed {
 public:
 	friend class simd_fixed32;
 
+	CUDA_EXPORT
 	inline void set_integer(T j) {
 		i = j;
 	}
@@ -66,6 +67,11 @@ public:
 
 	CUDA_EXPORT
 	inline T raw() const {
+		return i;
+	}
+
+	CUDA_EXPORT
+	inline T& raw() {
 		return i;
 	}
 
