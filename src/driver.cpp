@@ -602,9 +602,9 @@ void driver() {
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
 			if (ts <= 10.0) {
-				bucket_size = 88;
+				bucket_size = 96;
 			} else if (ts < 55.0) {
-				bucket_size = 80 + (ts - 10.0) / 45.0 * 88;
+				bucket_size = 96 + (ts - 10.0) / 45.0 * 72;
 			} else {
 				bucket_size = 168;
 			}

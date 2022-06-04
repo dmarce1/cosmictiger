@@ -33,7 +33,6 @@ HPX_PLAIN_ACTION (drift);
 void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung) {
 	profiler_enter(__FUNCTION__);
 
-	particles_memadvise_cpu();
 	vector<hpx::future<void>> rfuts;
 	for (auto c : hpx_children()) {
 		rfuts.push_back(hpx::async<drift_action>(c, scale, dt, tau0, tau1, tau_max, rung));

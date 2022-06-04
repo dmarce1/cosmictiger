@@ -430,18 +430,24 @@ void particles_cache_free() {
 	profiler_exit();
 }
 
+static std::function<void()> undo_last_memadvise = nullptr;
+
 void particles_memadvise_gpu() {
 #ifdef USE_CUDA
 	cuda_set_device();
+	if( undo_last_memadvise ) {
+		undo_last_memadvise();
+	}
 	int deviceid = cuda_get_device();
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(XDIM, 0), particles_size() * sizeof(float), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(YDIM, 0), particles_size() * sizeof(float), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(ZDIM, 0), particles_size() * sizeof(float), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_rung(0), particles_size() * sizeof(char), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(XDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(YDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(ZDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_rung(0), particles_size() * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
+	const auto rng = particles_current_range();
+	const auto begin = rng.first;
+	const auto count = rng.second - begin;
+	CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseSetAccessedBy, deviceid));
+	CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, deviceid));
+	undo_last_memadvise = [begin, count, deviceid]() {
+		CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseUnsetAccessedBy, deviceid));
+		CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseUnsetAccessedBy, deviceid));
+	};
 #endif
 }
 
@@ -449,14 +455,18 @@ void particles_memadvise_cpu() {
 #ifdef USE_CUDA
 	cuda_set_device();
 	int deviceid = cuda_get_device();
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(XDIM, 0), particles_size() * sizeof(float), cudaMemAdviseUnsetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(YDIM, 0), particles_size() * sizeof(float), cudaMemAdviseUnsetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(ZDIM, 0), particles_size() * sizeof(float), cudaMemAdviseUnsetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_rung(0), particles_size() * sizeof(char), cudaMemAdviseUnsetAccessedBy, deviceid));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(XDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(YDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_vel(ZDIM, 0), particles_size() * sizeof(float), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_rung(0), particles_size() * sizeof(char), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
+	if( undo_last_memadvise ) {
+		undo_last_memadvise();
+	}
+	const auto rng = particles_current_range();
+	const auto begin = rng.first;
+	const auto count = rng.second - begin;
+	CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
+	CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
+	undo_last_memadvise = [begin, count]() {
+		CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
+		CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
+	};
 #endif
 }
 

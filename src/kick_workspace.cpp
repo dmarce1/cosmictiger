@@ -316,9 +316,11 @@ void kick_workspace::to_gpu() {
 	tm.reset();
 	tm.start();
 	tree_2_gpu();
+	particles_memadvise_gpu();
 	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes,
 			std::move(workitems), stream);
 	cuda_end_stream(stream);
+	particles_memadvise_cpu();
 	tree_2_cpu();
 	tm.stop();
 	PRINT("GPU took %e seconds\n", tm.read());
