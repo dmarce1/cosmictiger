@@ -48,7 +48,6 @@ struct cuda_kick_params {
 	int* echecks;
 	int dcount;
 	int ecount;
-	kick_return* kreturn;
 };
 
 __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
@@ -171,7 +170,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	add_gpu_flops(flops);
 }
 
-__global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
+__global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
 //	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -518,7 +517,13 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 		}
 
 		if (tid == 0) {
-			*(params[index].kreturn) = kr;
+			atomicAdd(&rc->kin, kr.kin);
+			atomicAdd(&rc->pot, kr.pot);
+			atomicAdd(&rc->xmom, kr.xmom);
+			atomicAdd(&rc->ymom, kr.ymom);
+			atomicAdd(&rc->zmom, kr.zmom);
+			atomicAdd(&rc->nmom, kr.nmom);
+			atomicMax(&rc->max_rung, kr.max_rung);
 		}
 		if (tid == 0) {
 			index = atomicAdd(next_item, 1);
@@ -534,7 +539,7 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
 		vector<kick_workitem> workitems, cudaStream_t stream) {
 	timer tm;
 	tm.start();
@@ -549,7 +554,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 		dcount += workitems[i].dchecklist.size();
 		ecount += workitems[i].echecklist.size();
 	}
-	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) * workitems.size() + sizeof(int) * dcount
+	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount
 			+ sizeof(int) * ecount;
 	if (data_size < alloc_size) {
 		if (data_ptr) {
@@ -561,8 +566,8 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int offset = 0;
 	cuda_kick_params* dev_kick_params = (cuda_kick_params*) (data_ptr + offset);
 	offset += sizeof(cuda_kick_params) * workitems.size();
-	kick_return* returns = (kick_return*) (data_ptr + offset);
-	offset += sizeof(kick_return) * workitems.size();
+	kick_return* return_ = (kick_return*) (data_ptr + offset);
+	offset += sizeof(kick_return);
 	int* dchecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * dcount;
 	int* echecks = (int*) (data_ptr + offset);
@@ -570,6 +575,7 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 	int* current_index = (int*) (data_ptr + offset);
 	offset += sizeof(int);
 	*current_index = 0;
+	*return_ = kick_return();
 	vector<int> dindices(workitems.size() + 1);
 	vector<int> eindices(workitems.size() + 1);
 	dcount = 0;
@@ -617,19 +623,13 @@ vector<kick_return> cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixe
 		params.echecks = echecks + eindices[i];
 		params.dcount = dindices[i + 1] - dindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
-		params.kreturn = returns + i;
 		dev_kick_params[i] = std::move(params);
 	}
 	cuda_set_device();
 
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(kparams,data, dev_kick_params, workitems.size(), current_index);
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(return_, kparams,data, dev_kick_params, workitems.size(), current_index);
 	cuda_stream_synchronize(stream);
-	vector<kick_return> rc;
-	rc.reserve(workitems.size());
-	for (int i = 0; i < workitems.size(); i++) {
-		rc.push_back(returns[i]);
-	}
-	return rc;
+	return *return_;
 }
 
 int kick_block_count() {

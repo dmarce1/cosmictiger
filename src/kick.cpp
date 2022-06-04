@@ -48,8 +48,10 @@ struct workspace {
 };
 
 static thread_local std::stack<workspace> local_workspaces;
-static part_int cuda_workspace_max_parts;
-static part_int cuda_branch_max_parts;
+static std::atomic<size_t> parts_covered;
+static hpx::promise<kick_return> local_return_promise;
+static hpx::future<kick_return> local_return_future;
+static kick_return local_return;
 
 static workspace get_workspace() {
 	if (local_workspaces.empty()) {
@@ -101,7 +103,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		if (all_local) {
 			hpx_yield();
 		}
-		rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace));
+		rc = hpx::make_ready_future(kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace)));
 	} else if (remote) {
 		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
@@ -122,8 +124,8 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 	return rc;
 }
 
-hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
-		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace) {
+kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
+		std::shared_ptr<kick_workspace> cuda_workspace) {
 	int flops = 0;
 	if (self.proc == 0 && self.index == 0) {
 		profiler_enter(__FUNCTION__);
@@ -133,6 +135,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	timer tm;
 	if (self_ptr->local_root) {
 		tm.start();
+		parts_covered = 0;
+		local_return = kick_return();
+		local_return_promise = decltype(local_return_promise)();
+		local_return_future = local_return_promise.get_future();
 	}
 	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
@@ -161,7 +167,11 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 			eligible = all_local(dchecklist) && all_local(echecklist);
 		}
 		if (eligible && self_ptr->nparts() > 0) {
-			return cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
+
+			cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
+			const auto rng = particles_current_range();
+			parts_covered += rng.second - rng.first;
+			return kick_return();
 		}
 		thread_left = cuda_workspace != nullptr;
 	}
@@ -395,7 +405,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					const float factor = eta * sqrtf(params.a);                  // 5
 					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
 					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
-					kr.max_rung = std::max(rung, kr.max_rung);
+					kr.max_rung = std::max((int) rung, kr.max_rung);
 					ALWAYS_ASSERT(rung >= 0);
 					ALWAYS_ASSERT(rung < MAX_RUNG);
 					dt = 0.5f * rung_dt[params.min_rung] * params.t0;                                                            // 2
@@ -408,8 +418,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				flops += 570 + params.do_phi * 178;
 			}
 		}
+		parts_covered += self_ptr->nparts();
+		local_return += kr;
+		const auto goal = rng.second - rng.first;
+		if (goal == parts_covered) {
+			local_return_promise.set_value(local_return);
+		}
 		add_cpu_flops(flops);
-		return hpx::make_ready_future(kr);
+		return kick_return();
 	} else {
 		cleanup_workspace(std::move(workspace));
 		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);
@@ -417,44 +433,28 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		std::array<hpx::future<kick_return>, NCHILD> futs;
 		futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
 		futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
-		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
+		if (self_ptr->proc_range.second - self_ptr->proc_range.first > 1) {
 			const auto rcl = futs[LEFT].get();
 			const auto rcr = futs[RIGHT].get();
 			kr += rcl;
 			kr += rcr;
 			flops += 12;
-			if (self_ptr->local_root) {
-				tm.stop();
-				char hostname[33];
-				gethostname(hostname, 32);
-			}
-			if (self.proc == 0 && self.index == 0) {
-				profiler_exit();
-			}
-			flops += 12;
-			add_cpu_flops(flops);
-			return hpx::make_ready_future(kr);
 		} else {
-			return hpx::when_all(futs.begin(), futs.end()).then([flops,tm,self_ptr,self](hpx::future<std::vector<hpx::future<kick_return>>> futsfut) {
-				auto futs = futsfut.get();
-				kick_return kr;
-				const auto rcl = futs[LEFT].get();
-				const auto rcr = futs[RIGHT].get();
-				kr += rcl;
-				kr += rcr;
-				add_cpu_flops(flops+12);
-				if( self_ptr->local_root) {
-					timer tm1 = tm;
-					tm1.stop();
-					char hostname[33];
-					gethostname(hostname,32);
-				}
-				if( self.proc == 0 && self.index == 0 ) {
-					profiler_exit();
-				}
-				return kr;
-			});
+			if (self_ptr->local_root) {
+				kr = local_return_future.get();
+			}
 		}
+		if (self.proc == 0 && self.index == 0) {
+			profiler_exit();
+		}
+		flops += 12;
+
+		add_cpu_flops(flops);
+		return kr;
 	}
 }
 
+void kick_set_rc(kick_return kr) {
+	local_return += kr;
+	local_return_promise.set_value(local_return);
+}

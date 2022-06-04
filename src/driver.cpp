@@ -311,7 +311,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		checklist.push_back(root_id);
 		tm.reset();
 		tm.start();
-		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 		tm.stop();
 		PRINT("Kick took %e\n", tm.read());
 		if (clip_top && top) {

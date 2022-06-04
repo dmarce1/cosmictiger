@@ -66,6 +66,7 @@ bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
 }
 
 void kick_workspace::to_gpu() {
+
 	cuda_set_device();
 	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
@@ -317,18 +318,16 @@ void kick_workspace::to_gpu() {
 	tm.start();
 	tree_2_gpu();
 	particles_memadvise_gpu();
-	const auto kick_returns = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes,
+	const auto kr = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes,
 			std::move(workitems), stream);
 	cuda_end_stream(stream);
 	particles_memadvise_cpu();
 	tree_2_cpu();
 	tm.stop();
 	PRINT("GPU took %e seconds\n", tm.read());
-
-	for (int i = 0; i < kick_returns.size(); i++) {
-		promises[i].set_value(std::move(kick_returns[i]));
-	}
 	particles_resize(opartsize);
+	kick_set_rc(kr);
+
 }
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) {
@@ -354,7 +353,7 @@ void kick_workspace::clear_buffers() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
+void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
 		vector<tree_id> && dchecks, vector<tree_id> && echecks) {
 	kick_workitem item;
 	item.L = L;
@@ -378,8 +377,6 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 	item.dchecklist = std::move(dchecks);
 	item.echecklist = std::move(echecks);
 	std::unique_lock<mutex_type> lock(mutex);
-	promises.resize(promises.size() + 1);
-	auto fut = promises.back().get_future();
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
@@ -387,5 +384,4 @@ hpx::future<kick_return> kick_workspace::add_work(std::shared_ptr<kick_workspace
 			ptr->to_gpu();
 		});
 	}
-	return fut;
 }

@@ -92,7 +92,7 @@ struct cuda_kick_shmem {
 #endif
 
 struct kick_return {
-	char max_rung;
+	int max_rung;
 	double pot;
 	double kin;
 	double xmom;
@@ -188,12 +188,13 @@ struct kick_workitem {
 struct kick_workspace;
 
 #ifndef __CUDACC__
-hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
+kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
 		std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
+void kick_set_rc(kick_return kr);
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream);
+kick_return cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream);
 #endif
 int kick_block_count();
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);

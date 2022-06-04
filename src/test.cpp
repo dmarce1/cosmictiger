@@ -306,7 +306,7 @@ static void kick_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	tm.reset();
@@ -378,7 +378,7 @@ static void force_test() {
 		root_id.index = 0;
 		vector<tree_id> checklist;
 		checklist.push_back(root_id);
-		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 		tree_destroy(false);
 		tm_main.stop();
 		tm.reset();
@@ -451,7 +451,7 @@ static void bucket_test() {
 				root_id.index = 0;
 				vector<tree_id> checklist;
 				checklist.push_back(root_id);
-				auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+				auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 				tree_destroy(false);
 			}
 			tm.stop();
@@ -524,7 +524,7 @@ static void speed_test() {
 			root_id.index = 0;
 			vector<tree_id> checklist;
 			checklist.push_back(root_id);
-			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 			tree_destroy(false);
 			tm.stop();
 		}
