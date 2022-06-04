@@ -467,6 +467,71 @@ static void bucket_test() {
 	}
 }
 
+static void speed_test() {
+	int nchecks = 11;
+	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
+	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
+	const double counts[] = { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4 };
+	const double buckets[] = { 96, 104, 112, 120, 136, 152, 168, 168, 168, 168, 168 };
+	timer tm;
+	for (int ci = 0; ci < nchecks; ci++) {
+		PRINT( "-------------------------------------------------------------------------------------\n");
+		PRINT( "Test %i\n", ci);
+		PRINT( "-------------------------------------------------------------------------------------\n");
+		char* buffer;
+		system("rm -r checkpoint.999999\n");
+		asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);
+		system(buffer);
+		free(buffer);
+		for (int iter = 0; iter < counts[ci]; iter++) {
+			auto opts = get_options();
+			opts.bucket_size = buckets[ci];
+			opts.read_check = 999999;
+			opts.theta = thetas[ci];
+			set_options(opts);
+			read_checkpoint();
+			tm.start();
+			domains_rebound();
+			domains_begin(0);
+			domains_end();
+			particles_sort_by_rung(0);
+			tree_create_params tparams(0, thetas[ci], get_options().hsoft);
+			tree_create(tparams);
+			kick_params kparams;
+			kparams.node_load = 10;
+			kparams.gpu = true;
+			kparams.min_level = tparams.min_level;
+			kparams.save_force = get_options().save_force;
+			kparams.GM = get_options().GM;
+			kparams.h = get_options().hsoft;
+			kparams.eta = get_options().eta;
+			kparams.a = 1.0;
+			kparams.first_call = true;
+			kparams.min_rung = 0;
+			kparams.t0 = 1.0;
+			kparams.theta = thetas[ci];
+			expansion<float> L;
+			for (int i = 0; i < EXPANSION_SIZE; i++) {
+				L[i] = 0.0f;
+			}
+			array<fixed32, NDIM> pos;
+			for (int dim = 0; dim < NDIM; dim++) {
+				pos[dim] = 0.f;
+			}
+			tree_id root_id;
+			root_id.proc = 0;
+			root_id.index = 0;
+			vector<tree_id> checklist;
+			checklist.push_back(root_id);
+			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
+			tree_destroy(false);
+			tm.stop();
+		}
+	}
+	PRINT("TOTAL TIME = %e\n", tm.read());
+}
+
 void bh_test() {
 	int N = 100000;
 	int M = 10;
@@ -512,6 +577,8 @@ void test(std::string test) {
 		fft1_test();
 	} else if (test == "fft2") {
 		fft2_test();
+	} else if (test == "speed") {
+		speed_test();
 	} else if (test == "buckets") {
 		bucket_test();
 	} else if (test == "force") {
