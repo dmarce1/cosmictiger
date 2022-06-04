@@ -92,11 +92,11 @@ struct multi_pos {
 };
 
 struct tree_node {
-	multi_pos* mpos;
-	array<fixed32,NDIM> pos;
 	array<tree_id, NCHILD> children;
-	pair<int, int> proc_range;
 	pair<part_int> part_range;
+	pair<int, int> proc_range;
+	array<fixed32,NDIM> pos;
+	multi_pos* mpos;
 	float radius;
 	struct {
 		unsigned short depth :14;
@@ -161,7 +161,7 @@ struct tree_create_return {
 struct tree_create_params {
 	int min_rung;
 	double theta;
-//	double hmax;
+	part_int par_parts;
 	int min_level;
 	bool leaf_pushed;
 	bool do_leaf_sizes;
@@ -172,7 +172,7 @@ struct tree_create_params {
 	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-//		arc & hmax;
+		arc & par_parts;
 		arc & do_leaf_sizes;
 		arc & leaf_pushed;
 		arc & min_rung;

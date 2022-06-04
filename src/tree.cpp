@@ -69,7 +69,6 @@ static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, 
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
 static size_t nodes_size;
-static std::atomic<int> next_multi;
 
 static vector<short> leaf_sizes;
 static spinlock_type leaf_sizes_mutex;
@@ -163,36 +162,26 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	min_level = 9;
 	leaf_pushed = false;
 	do_leaf_sizes = false;
+	par_parts = 0;
 }
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
-	static std::atomic<int> nthreads(1);
 	fast_future<tree_create_return> rc;
 	bool remote = false;
 	if (proc_range.first != hpx_rank()) {
 		threadme = true;
 		remote = true;
 	} else if (threadme) {
-		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
-		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx_hardware_concurrency() || proc_range.second - proc_range.first > 1) {
-				threadme = true;
-			} else {
-				threadme = false;
-				nthreads--;
-			}
-		}
+		threadme = part_range.second - part_range.first >= params.par_parts;
 	}
 	if (!threadme) {
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
-//		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
 		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
 			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
-			nthreads--;
 			return rc;
 		});
 	}
@@ -257,7 +246,6 @@ static void tree_allocate_nodes() {
 		CUDA_CHECK(cudaMallocManaged(&multis, sz * sizeof(multi_pos)));
 	}
 	nodes_size = sz;
-	next_multi = 0;
 	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
@@ -292,6 +280,13 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	}
 	if (local_root) {
 		part_range = particles_current_range();
+		size_t cnt = part_range.second - part_range.first;
+		int nthreads = 1;
+		while (nthreads < 4 * hpx_hardware_concurrency()) {
+			nthreads *= 2;
+			cnt /= 2;
+		}
+		params.par_parts = cnt;
 	}
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM>& x = rc.pos;
@@ -563,7 +558,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.part_range = part_range;
 	node.proc_range = proc_range;
 	node.pos = x;
-	node.mpos = multis + next_multi++;
+	node.mpos = multis + index;
 	node.mpos->pos = x;
 	node.mpos->multi = multi;
 	node.depth = depth;

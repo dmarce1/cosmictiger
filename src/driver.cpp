@@ -739,7 +739,7 @@ void driver() {
 			profiler_enter(__FUNCTION__);
 			jiter++;
 			if (jiter > 100) {
-				abort();
+	//			abort();
 			}
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
