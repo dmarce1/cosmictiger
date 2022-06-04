@@ -168,49 +168,20 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 			mend -= mi;
 			mi += mend;
 			barrier.arrive_and_wait();
-			int kmid = (nsink / WARP_SIZE) * WARP_SIZE;
-			if (nsink - kmid >= WARP_SIZE / 4) {
-				kmid = nsink;
-			}
 			expansion2<float> L;
 			array<float, NDIM> dx;
 			expansion<float> D;
-			for (int k = tid; k < kmid; k += WARP_SIZE) {
-				auto& F = force[k];
-				L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
-				for (int j = 0; j < mend; j++) {
-					const auto& pos = multis[j].pos;
-					const auto& M = multis[j].multi;
+			for (int j = 0; j < mend; j++) {
+				const auto& pos = multis[j].pos;
+				const auto& M = multis[j].multi;
+				for (int k = tid; k < nsink; k += WARP_SIZE) {
+					auto& F = force[k];
+					L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
 					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
 					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 					flops += 6 + greens_function(D, dx);
 					flops += M2L(L, M, D, do_phi);
-				}
-				F.gx -= L(1, 0, 0);
-				F.gy -= L(0, 1, 0);
-				F.gz -= L(0, 0, 1);
-				F.phi += L(0, 0, 0);
-				flops += 4;
-			}
-			for (int k = kmid; k < nsink; k++) {
-				auto& F = force[k];
-				L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
-				for (int j = tid; j < mend; j += WARP_SIZE) {
-					const auto& pos = multis[j].pos;
-					const auto& M = multis[j].multi;
-					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
-					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
-					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
-					flops += 6 + greens_function(D, dx);
-					flops += M2L(L, M, D, do_phi);
-				}
-				shared_reduce_add(L(0, 0, 0));
-				shared_reduce_add(L(1, 0, 0));
-				shared_reduce_add(L(0, 1, 0));
-				shared_reduce_add(L(0, 0, 1));
-				flops += 20;
-				if (tid == 0) {
 					F.gx -= L(1, 0, 0);
 					F.gy -= L(0, 1, 0);
 					F.gz -= L(0, 0, 1);

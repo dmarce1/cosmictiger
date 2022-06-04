@@ -737,11 +737,12 @@ void driver() {
 			profiler_exit();
 			profiler_output();
 			profiler_enter(__FUNCTION__);
+			jiter++;
+			if (jiter > 100) {
+				abort();
+			}
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
-			break;
-		}
-		if (jiter > 50) {
 			break;
 		}
 	}

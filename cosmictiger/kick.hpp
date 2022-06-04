@@ -24,7 +24,7 @@
 
 #include <atomic>
 
-#define KICK_C_MAX 32
+#define KICK_C_MAX 42
 
 struct cuda_kick_data {
 	tree_node* tree_nodes;
