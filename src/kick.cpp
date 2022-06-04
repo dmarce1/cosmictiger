@@ -147,31 +147,33 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
 			cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
 		}
-		bool eligible;
 		size_t max_parts = CUDA_KICK_PARTS_MAX;
 		const auto rng = particles_current_range();
 		max_parts = std::min((size_t) max_parts,
 				(size_t) std::max((part_int) (rng.second - rng.first) / kick_block_count(), (part_int) get_options().bucket_size));
-		eligible = params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local();
-		if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
-			const auto all_local = [](const vector<tree_id>& list) {
-				bool all = true;
-				for( int i = 0; i < list.size(); i++) {
-					if( !tree_get_node(list[i])->is_local_here() ) {
-						all = false;
-						break;
-					}
-				}
-				return all;
-			};
-			eligible = all_local(dchecklist) && all_local(echecklist);
-		}
-		if (eligible && self_ptr->nparts() > 0) {
-
+		if (params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local() && self_ptr->nparts()) {
+			/*	if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
+			 const auto all_local = [](const vector<tree_id>& list) {
+			 bool all = true;
+			 for( int i = 0; i < list.size(); i++) {
+			 if( !tree_get_node(list[i])->is_local_here() ) {
+			 all = false;
+			 break;
+			 }
+			 }
+			 return all;
+			 };
+			 eligible = all_local(dchecklist) && all_local(echecklist);
+			 }*/
 			cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
-			const auto rng = particles_current_range();
-			parts_covered += rng.second - rng.first;
-			return kick_return();
+			parts_covered += self_ptr->nparts();
+			if (self_ptr->local_root) {
+				auto kr = local_return_future.get();
+				PRINT("----------------------- %e\n", kr.max_rung);
+				return kr;
+			} else {
+				return kick_return();
+			}
 		}
 		thread_left = cuda_workspace != nullptr;
 	}
@@ -425,7 +427,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			local_return_promise.set_value(local_return);
 		}
 		add_cpu_flops(flops);
-		return kick_return();
+		if (self_ptr->local_root) {
+			return local_return;
+		} else {
+			return kick_return();
+		}
 	} else {
 		cleanup_workspace(std::move(workspace));
 		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);

@@ -200,13 +200,13 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	}
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
 	__syncthreads();
+	kick_return kr;
 	while (index < item_count) {
 		int flops = 0;
 		L.resize(0);
 		dchecks.resize(0);
 		echecks.resize(0);
 		sparams.resize(0);
-		kick_return kr;
 		{
 			expansion_type this_L;
 			this_L.pos = params[index].Lpos;
@@ -517,15 +517,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		}
 
 		if (tid == 0) {
-			atomicAdd(&rc->kin, kr.kin);
-			atomicAdd(&rc->pot, kr.pot);
-			atomicAdd(&rc->xmom, kr.xmom);
-			atomicAdd(&rc->ymom, kr.ymom);
-			atomicAdd(&rc->zmom, kr.zmom);
-			atomicAdd(&rc->nmom, kr.nmom);
-			atomicMax(&rc->max_rung, kr.max_rung);
-		}
-		if (tid == 0) {
 			index = atomicAdd(next_item, 1);
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
@@ -533,6 +524,15 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		ASSERT(phase.size() == 0);
 		ASSERT(self_index.size() == 0);
 		add_gpu_flops(flops);
+	}
+	if (tid == 0) {
+		atomicAdd(&rc->kin, kr.kin);
+		atomicAdd(&rc->pot, kr.pot);
+		atomicAdd(&rc->xmom, kr.xmom);
+		atomicAdd(&rc->ymom, kr.ymom);
+		atomicAdd(&rc->zmom, kr.zmom);
+		atomicAdd(&rc->nmom, kr.nmom);
+		atomicMax(&rc->max_rung, kr.max_rung);
 	}
 	((cuda_kick_shmem*) shmem_ptr)->~cuda_kick_shmem();
 
@@ -633,16 +633,16 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 }
 
 int kick_block_count() {
-	int nblocks;
-	cudaFuncAttributes attr;
-	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_kick_kernel));
-	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
+	static int nblocks;
 	static bool shown = false;
 	if (!shown) {
+		cudaFuncAttributes attr;
+		CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_kick_kernel));
+		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
 		PRINT("Occupancy is %i shmem size = %li numregs = %i\n", nblocks, sizeof(cuda_kick_shmem), attr.numRegs);
+		nblocks *= cuda_smp_count();
 		shown = true;
 	}
-	nblocks *= cuda_smp_count();
 	return nblocks;
 
 }
