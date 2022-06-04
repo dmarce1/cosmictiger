@@ -184,14 +184,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	simd_float self_radius = self_ptr->radius;
 	array<simd_int, NDIM> self_pos;
 	for (int dim = 0; dim < NDIM; dim++) {
-		self_pos[dim] = self_ptr->mpos.pos[dim].raw();
+		self_pos[dim] = self_ptr->pos[dim].raw();
 	}
 	array<simd_int, NDIM> other_pos;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
 	simd_float other_leaf;
 	for (int dim = 0; dim < NDIM; dim++) {
-		Ldx[dim] = distance(self_ptr->mpos.pos[dim], pos[dim]);
+		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
 	L = L2L(L, Ldx, params.do_phi);
 	flops += 1511 + params.do_phi * 178;
@@ -220,7 +220,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				for (int i = 0; i < maxi; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = other_ptrs[i]->mpos.pos[dim].raw();
+						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 					}
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
@@ -278,7 +278,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				}
 				for (int i = 0; i < maxi; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = other_ptrs[i]->mpos.pos[dim].raw();
+						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
 					}
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
@@ -352,7 +352,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				const part_int j = i - rng.first;
 				array<float, NDIM> dx;
 				for (part_int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(particles_pos(dim, i), self_ptr->mpos.pos[dim]);
+					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
 				const auto L2 = L2P(L, dx, true);
 				float hsoft = get_options().hsoft;
@@ -415,8 +415,8 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);
 		const tree_node* cr = tree_get_node(self_ptr->children[RIGHT]);
 		std::array<hpx::future<kick_return>, NCHILD> futs;
-		futs[RIGHT] = kick_fork(params, L, self_ptr->mpos.pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
-		futs[LEFT] = kick_fork(params, L, self_ptr->mpos.pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
+		futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
+		futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		if (futs[LEFT].is_ready() && futs[RIGHT].is_ready()) {
 			const auto rcl = futs[LEFT].get();
 			const auto rcr = futs[RIGHT].get();

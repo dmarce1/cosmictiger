@@ -60,6 +60,7 @@ public:
 static vector<tree_allocator*> allocator_list;
 static thread_local tree_allocator allocator;
 static tree_node* nodes = nullptr;
+static multi_pos* multis = nullptr;
 static vector<pair<part_int>> leaf_part_ranges;
 static mutex_type leaf_part_range_mutex;
 static std::atomic<int> num_threads(0);
@@ -68,6 +69,7 @@ static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, 
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
 static size_t nodes_size;
+static std::atomic<int> next_multi;
 
 static vector<short> leaf_sizes;
 static spinlock_type leaf_sizes_mutex;
@@ -247,19 +249,15 @@ static void tree_allocate_nodes() {
 	next_id = -tree_alloc_line_size;
 	const size_t sz = std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN);
 	if (nodes_size < sz) {
-#ifdef USE_CUDA
-		if( nodes != nullptr) {
+		if (nodes != nullptr) {
 			CUDA_CHECK(cudaFree(nodes));
+			CUDA_CHECK(cudaFree(multis));
 		}
 		CUDA_CHECK(cudaMallocManaged(&nodes, sz * sizeof(tree_node)));
-#else
-		if (nodes != nullptr) {
-			free(nodes);
-		}
-		nodes = malloc(sz * sizeof(tree_node));
-#endif
+		CUDA_CHECK(cudaMallocManaged(&multis, sz * sizeof(multi_pos)));
 	}
 	nodes_size = sz;
+	next_multi = 0;
 	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
@@ -564,8 +562,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.local_root = local_root;
 	node.part_range = part_range;
 	node.proc_range = proc_range;
-	node.mpos.pos = x;
-	node.mpos.multi = multi;
+	node.pos = x;
+	node.mpos = multis + next_multi++;
+	node.mpos->pos = x;
+	node.mpos->multi = multi;
 	node.depth = depth;
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;
@@ -638,9 +638,6 @@ void tree_destroy(bool free_tree) {
 	const auto children = hpx_children();
 	for (const auto& c : children) {
 		futs.push_back(hpx::async<tree_destroy_action>(c, free_tree));
-	}
-	if (free_tree) {
-		nodes = decltype(nodes)();
 	}
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();

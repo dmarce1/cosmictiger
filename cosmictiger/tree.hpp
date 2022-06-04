@@ -92,7 +92,8 @@ struct multi_pos {
 };
 
 struct tree_node {
-	multi_pos mpos;
+	multi_pos* mpos;
+	array<fixed32,NDIM> pos;
 	array<tree_id, NCHILD> children;
 	pair<int, int> proc_range;
 	pair<part_int> part_range;
@@ -121,7 +122,8 @@ struct tree_node {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
-		arc & mpos;
+	//	arc & mpos;
+		arc & pos;
 		arc & children;
 		arc & proc_range;
 		arc & part_range;
