@@ -232,9 +232,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		while (depth >= 0) {
 //			auto tm2 = clock64();
 //			node_count++;
-			ASSERT(Lpos.size() == depth + 1);
-			ASSERT(self_index.size() == depth + 1);
-			ASSERT(phase.size() == depth + 1);
 			const auto& self = tree_nodes[sparams.back().self];
 			switch (sparams.back().phase) {
 
@@ -521,8 +518,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		}
 		index = __shfl_sync(0xFFFFFFFF, index, 0);
 		ASSERT(L.size() == 1);
-		ASSERT(phase.size() == 0);
-		ASSERT(self_index.size() == 0);
 		add_gpu_flops(flops);
 	}
 	if (tid == 0) {

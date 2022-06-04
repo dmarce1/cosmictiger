@@ -207,7 +207,6 @@ inline float& particles_vel(int dim, part_int index) {
 }
 
 inline array<float,NDIM>* particles_vel_data() {
-	CHECK_PART_BOUNDS(index);
 	return particles_v;
 }
 

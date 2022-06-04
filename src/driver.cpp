@@ -641,19 +641,24 @@ void driver() {
 			max_rung = kr.max_rung;
 //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (minrung <= 0) {
-				double energy = a * (energies.kin + energies.pot) + energies.cosmic;
+				if (tau > 0.0) {
+					const double ene = 2.0 * (energies.kin) + energies.pot;
+					energies.cosmic += 0.5 * adot * t0 * ene;
+				}
+				double energy = (energies.kin + energies.pot) + energies.cosmic;
 				if (tau == 0) {
 					energy0 = 0.0;
 					energies.cosmic = -energy;
 					energy = 0.0;
 				}
-				const double norm = a * (energies.kin + fabs(energies.pot)) + fabs(energies.cosmic);
+				const double norm = (energies.kin + fabs(energies.pot)) + energies.cosmic;
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
 				fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
-						energies.zmom / energies.nmom, a * energies.pot, a * energies.kin, energies.cosmic, err);
+						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.cosmic, err);
 				fclose(fp);
-//				energies.cosmic += a * adot * t0 * energies.kin;
+				const double ene = 2.0 * (energies.kin) + energies.pot;
+				energies.cosmic += 0.5 * adot * t0 * ene;
 			}
 			dt = t0 / (1 << max_rung);
 			if (full_eval) {
@@ -676,7 +681,7 @@ void driver() {
 			double adotdot;
 			double a0 = a;
 //			auto tmp1 = particles_sum_energies();
-			energies.cosmic += adot * dt * energies.kin * a;
+//			energies.cosmic += adot * dt * energies.kin * a;
 			cosmos_update(adotdot, adot, a, a * dt);
 			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
 			const auto z0 = 1.0 / a0 - 1.0;
