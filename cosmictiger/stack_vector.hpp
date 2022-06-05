@@ -34,7 +34,7 @@ using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 template<class T>
 class stack_vector {
-	device_vector<T> data;
+	device_vector<T> dat;
 	device_vector<int> bounds;
 	barrier_type barrier;
 	__device__ inline int begin() const {
@@ -65,7 +65,7 @@ public:
 	__device__ inline void push(const T &a) {
 		const int& tid = threadIdx.x;
 		ASSERT(bounds.size() >= 2);
-		data.push_back(a);
+		dat.push_back(a);
 		if (tid == 0) {
 			bounds.back()++;
 		}
@@ -79,33 +79,34 @@ public:
 	__device__ inline void resize(int sz) {
 		const int& tid = threadIdx.x;
 		ASSERT(bounds.size() >= 2);
-		data.resize(begin() + sz);
-		__syncthreads();
+		dat.resize(begin() + sz);
 		if (tid == 0) {
-			bounds.back() = data.size();
+			bounds.back() = dat.size();
 		}
 		__syncthreads();
 	}
 	__device__ inline T operator[](int i) const {
 		ASSERT(i < size());
-		return data[begin() + i];
+		return dat[begin() + i];
 	}
 	__device__ inline T& operator[](int i) {
 		ASSERT(i < size());
-		return data[begin() + i];
+		return dat[begin() + i];
 	}
-
+	__device__ inline T* data() {
+		return dat.data() + begin();
+	}
 	__device__ inline void push_top() {
 		const auto sz = size();
 		bounds.push_back(end() + sz);
-		data.resize(data.size() + sz);
+		dat.resize(dat.size() + sz);
 		auto group = cooperative_groups::this_thread_block();
-		cuda::memcpy_async(group, &data[begin()], &data[begin()-sz], sizeof(T)*sz, barrier);
+		cuda::memcpy_async(group, &dat[begin()], &dat[begin()-sz], sizeof(T)*sz, barrier);
 		barrier.arrive_and_wait();
 	}
 	__device__ inline void pop_top() {
 		ASSERT(bounds.size() >= 2);
-		data.resize(begin());
+		dat.resize(begin());
 		bounds.pop_back();
 	}
 };

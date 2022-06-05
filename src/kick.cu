@@ -327,10 +327,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					} while (checks.size() && self.leaf);
 					cuda_gravity_cc_ewald(data, L.back().expansion, self, cclist, global_params.do_phi);
 					if (!self.leaf) {
-						__syncthreads();
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
-						cuda::memcpy_async(group, &checks[start], &leaflist[0], leaflist.size() * sizeof(int), barrier);
+						cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
 						barrier.arrive_and_wait();
 					}
 				}
@@ -457,7 +456,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					} else {
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
-						cuda::memcpy_async(group, &checks[start], &leaflist[0], leaflist.size() * sizeof(int), barrier);
+						cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
 						barrier.arrive_and_wait();
 					}
 				}
@@ -535,8 +534,8 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
-		vector<kick_workitem> workitems, cudaStream_t stream) {
+kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes, vector<kick_workitem> workitems,
+		cudaStream_t stream) {
 	timer tm;
 	tm.start();
 	int nblocks = kick_block_count();
@@ -550,8 +549,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		dcount += workitems[i].dchecklist.size();
 		ecount += workitems[i].echecklist.size();
 	}
-	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount
-			+ sizeof(int) * ecount;
+	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount + sizeof(int) * ecount;
 	if (data_size < alloc_size) {
 		if (data_ptr) {
 			CUDA_CHECK(cudaFree(data_ptr));

@@ -57,6 +57,9 @@ public:
 		}
 		__syncthreads();
 	}
+	__device__ inline T* data() {
+		return ptr;
+	}
 	__device__ void shrink_to_fit() {
 		const int& tid = threadIdx.x;
 		const int& block_size = blockDim.x;
