@@ -1,4 +1,3 @@
-
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
@@ -21,29 +20,39 @@
 #ifndef DEVICE_VECTOR_HPP_
 #define DEVICE_VECTOR_HPP_
 
+#include <cooperative_groups.h>
+#include <cuda/barrier>
+
+using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 template<class T>
 class device_vector {
-	int sz;
-	int cap;
+	barrier_type barrier;
 	T* ptr;
 	T* new_ptr;
-	__device__ void init() {
+	int sz;
+	int cap;
+	__device__ void initialize() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
 			sz = 0;
 			cap = 0;
 			ptr = nullptr;
+
 		}
 		__syncthreads();
+		auto group = cooperative_groups::this_thread_block();
+		if (group.thread_rank() == 0) {
+			init(&barrier, group.size());
+		}
 	}
 public:
 	__device__ device_vector() {
-		init();
+		initialize();
 	}
 	__device__ device_vector(int sz0) {
-		init();
+		initialize();
 		resize(sz0);
 	}
 	__device__ ~device_vector() {
@@ -57,7 +66,7 @@ public:
 		}
 		__syncthreads();
 	}
-	__device__ inline T* data() {
+	__device__  inline T* data() {
 		return ptr;
 	}
 	__device__ void shrink_to_fit() {
@@ -99,7 +108,6 @@ public:
 	__device__
 	void resize(int new_sz) {
 		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
 		if (new_sz <= cap) {
 			__syncthreads();
 			if (tid == 0) {
@@ -123,9 +131,9 @@ public:
 			}
 			__syncthreads();
 			if (ptr) {
-				for (int i = tid; i < sz; i += block_size) {
-					new_ptr[i] = ptr[i];
-				}
+				auto group = cooperative_groups::this_thread_block();
+				cuda::memcpy_async(group, new_ptr, ptr, sz * sizeof(T), barrier);
+				barrier.arrive_and_wait();
 			}
 			__syncthreads();
 			if (tid == 0) {
@@ -141,20 +149,20 @@ public:
 		}
 	}
 	__device__ T& back() {
-		return ptr[sz-1];
+		return ptr[sz - 1];
 	}
-	__device__ const T& back() const {
-		return ptr[sz-1];
+	__device__  const T& back() const {
+		return ptr[sz - 1];
 	}
 	__device__ void pop_back() {
-		if( threadIdx.x == 0 ) {
+		if (threadIdx.x == 0) {
 			sz--;
 		}
 		__syncthreads();
 	}
 	__device__ void push_back(const T& item) {
-		resize(size()+1);
-		if( threadIdx.x == 0 ) {
+		resize(size() + 1);
+		if (threadIdx.x == 0) {
 			back() = item;
 		}
 		__syncthreads();
@@ -173,7 +181,7 @@ public:
 		return ptr[i];
 	}
 	__device__
-	const T& operator[](int i) const {
+	 const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -184,9 +192,6 @@ public:
 	}
 };
 
-
-
 #include <cosmictiger/cuda_mem.hpp>
-
 
 #endif /* DEVICE_VECTOR_HPP_ */

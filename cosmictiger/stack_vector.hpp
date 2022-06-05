@@ -21,14 +21,9 @@
 
 #include <cosmictiger/cuda_mem.hpp>
 
-#include <cooperative_groups.h>
-#include <cuda/barrier>
 
-
-using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 #ifdef __CUDACC__
-
 
 #include <cosmictiger/device_vector.hpp>
 
@@ -99,10 +94,12 @@ public:
 	__device__ inline void push_top() {
 		const auto sz = size();
 		bounds.push_back(end() + sz);
-		dat.resize(dat.size() + sz);
-		auto group = cooperative_groups::this_thread_block();
-		cuda::memcpy_async(group, &dat[begin()], &dat[begin()-sz], sizeof(T)*sz, barrier);
-		barrier.arrive_and_wait();
+		if( sz ) {
+			dat.resize(dat.size() + sz);
+			auto group = cooperative_groups::this_thread_block();
+			cuda::memcpy_async(group, &dat[begin()], &dat[begin()-sz], sizeof(T)*sz, barrier);
+			barrier.arrive_and_wait();
+		}
 	}
 	__device__ inline void pop_top() {
 		ASSERT(bounds.size() >= 2);
