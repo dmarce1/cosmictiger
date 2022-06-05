@@ -327,6 +327,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					} while (checks.size() && self.leaf);
 					cuda_gravity_cc_ewald(data, L.back().expansion, self, cclist, global_params.do_phi);
 					if (!self.leaf) {
+						__syncthreads();
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
 						cuda::memcpy_async(group, &checks[start], &leaflist[0], leaflist.size() * sizeof(int), barrier);

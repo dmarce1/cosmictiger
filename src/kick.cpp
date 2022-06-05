@@ -151,7 +151,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		const auto rng = particles_current_range();
 		max_parts = std::min((size_t) max_parts,
 				(size_t) std::max((part_int) (rng.second - rng.first) / kick_block_count(), (part_int) get_options().bucket_size));
-		if (params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local() && self_ptr->nparts()) {
+		if (params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local()) {
 			/*	if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
 			 const auto all_local = [](const vector<tree_id>& list) {
 			 bool all = true;
@@ -165,8 +165,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			 };
 			 eligible = all_local(dchecklist) && all_local(echecklist);
 			 }*/
-			cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
-			parts_covered += self_ptr->nparts();
+			if (self_ptr->nparts()) {
+				cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
+				parts_covered += self_ptr->nparts();
+			}
 			if (self_ptr->local_root) {
 				auto kr = local_return_future.get();
 				PRINT("----------------------- %e\n", kr.max_rung);

@@ -80,6 +80,7 @@ public:
 		const int& tid = threadIdx.x;
 		ASSERT(bounds.size() >= 2);
 		data.resize(begin() + sz);
+		__syncthreads();
 		if (tid == 0) {
 			bounds.back() = data.size();
 		}
