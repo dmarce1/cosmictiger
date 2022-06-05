@@ -468,17 +468,26 @@ static void bucket_test() {
 }
 
 static void speed_test() {
-	int nchecks = 11;
+	constexpr int nchecks = 11;
 	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
 			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
 	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
 	const double counts[] = { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4 };
-	const double buckets[] = { 96, 104, 112, 120, 136, 152, 168, 168, 168, 168, 168 };
+	int buckets[nchecks];
+	int bbegin = 96;
+	int bend = 168;
+	buckets[0] = bbegin;
+	for (int i = 6; i < 11; i++) {
+		buckets[i] = bend;
+	}
+	for (int i = 1; i < 6; i++) {
+		buckets[i] = (i - 1.0) / 5.0 * (bend - bbegin) + bbegin;
+	}
 	timer tm;
 	for (int ci = 0; ci < nchecks; ci++) {
-		PRINT( "-------------------------------------------------------------------------------------\n");
-		PRINT( "Test %i\n", ci);
-		PRINT( "-------------------------------------------------------------------------------------\n");
+		PRINT("-------------------------------------------------------------------------------------\n");
+		PRINT("Test %i with bucket = %i\n", ci, buckets[ci]);
+		PRINT("-------------------------------------------------------------------------------------\n");
 		char* buffer;
 		system("rm -r checkpoint.999999\n");
 		asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);

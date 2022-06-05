@@ -34,7 +34,7 @@ public:
 	}
 	simd_float4(simd_int4 a);
 	simd_float4(float a) {
-		v = _mm_set_ps(a, a, a, a);
+		v =  _mm_broadcast_ss(&a);
 	}
 	float& operator[](int i) {
 		return v[i];
@@ -258,9 +258,9 @@ public:
 		v[0] = _mm_set_ps(a4, a3, a2, a1);
 		v[1] = _mm_set_ps(a8, a7, a6, a5);
 	}
-	simd_float8(float a) {
-		v[0] = _mm_set_ps(a, a, a, a);
-		v[1] = _mm_set_ps(a, a, a, a);
+	inline simd_float8(float a) {
+		v[0] =  _mm_broadcast_ss(&a);
+		v[1] =  _mm_broadcast_ss(&a);
 	}
 	float& operator[](int i) {
 		return v[i/4][i%4];
@@ -439,16 +439,16 @@ class alignas(sizeof(__m256)) simd_float8 {
 public:
 	simd_float8() = default;
 	simd_float8(simd_int8 a);
-	simd_float8(float a1, float a2, float a3, float a4, float a5, float a6, float a7, float a8) {
+	inline simd_float8(float a1, float a2, float a3, float a4, float a5, float a6, float a7, float a8) {
 		v = _mm256_set_ps(a8, a7, a6, a5, a4, a3, a2, a1);
 	}
-	simd_float8(float a) {
-		v = _mm256_set_ps(a, a, a, a, a, a, a, a);
+	inline simd_float8(float a) {
+		v = _mm256_broadcast_ss(&a);
 	}
-	float& operator[](int i) {
+	inline float& operator[](int i) {
 		return v[i];
 	}
-	float operator[](int i) const {
+	inline float operator[](int i) const {
 		return v[i];
 	}
 	inline simd_float8 operator+(const simd_float8& other) const {
@@ -501,42 +501,42 @@ public:
 		const simd_float8 other = 1.0 / d;
 		return *this * other;
 	}
-	float sum() const {
+	inline float sum() const {
 		__m128 vsum;
 		__m128& a = *(((__m128*) &v) + 0);
 		__m128& b = *(((__m128*) &v) + 1);
 		vsum = _mm_add_ps(a, b);
 		return vsum[0] + vsum[1] + vsum[2] + vsum[3];
 	}
-	simd_float8 operator<=(const simd_float8& other) const {
+	inline simd_float8 operator<=(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_LE_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	simd_float8 operator<(const simd_float8& other) const {
+	inline simd_float8 operator<(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_LT_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	simd_float8 operator>(const simd_float8& other) const {
+	inline simd_float8 operator>(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_GT_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	simd_float8 operator>=(const simd_float8& other) const {
+	inline simd_float8 operator>=(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_GE_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	float max() const {
+	inline float max() const {
 		float mx = v[0];
 		for( int i = 1; i < SIMD_FLOAT8_SIZE; i++) {
 			mx = std::max(mx, v[i]);

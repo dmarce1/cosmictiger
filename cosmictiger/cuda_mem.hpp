@@ -54,4 +54,6 @@ public:
 
 void cuda_mem_init(size_t heap_size);
 __device__ cuda_mem* get_cuda_heap();
+__device__ void* cuda_malloc(size_t sz);
+__device__ void cuda_free(void* ptr);
 

@@ -19,7 +19,6 @@
 #define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
 
-
 __device__
 void cuda_mem::push(int bin, char* ptr) {
 	using itype = unsigned long long int;
@@ -66,7 +65,7 @@ char* cuda_mem::pop(int bin) {
 __device__
 bool cuda_mem::create_new_allocation(int bin) {
 	size_t size = (1 << bin) + sizeof(size_t);
-	auto* ptr = (char*) atomicAdd((unsigned long long*)&next, (unsigned long long) size);
+	auto* ptr = (char*) atomicAdd((unsigned long long*) &next, (unsigned long long) size);
 	if (next >= heap_end) {
 		return false;
 	} else {
@@ -132,6 +131,15 @@ __managed__ cuda_mem* memory;
 
 __device__ cuda_mem* get_cuda_heap() {
 	return memory;
+}
+
+
+__device__ void* cuda_malloc(size_t sz) {
+	return memory->allocate(sz);
+}
+
+__device__ void cuda_free(void* ptr) {
+	memory->free(ptr);
 }
 
 void cuda_mem_init(size_t heap_size) {

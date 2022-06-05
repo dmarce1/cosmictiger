@@ -604,7 +604,7 @@ void driver() {
 			if (ts <= 10.0) {
 				bucket_size = 96;
 			} else if (ts < 55.0) {
-				bucket_size = 96 + (ts - 10.0) / 45.0 * 72;
+				bucket_size = 96 + (ts - 10.0) / 45.0 * (168 - 96);
 			} else {
 				bucket_size = 168;
 			}
@@ -744,7 +744,7 @@ void driver() {
 			profiler_enter(__FUNCTION__);
 			jiter++;
 			if (jiter > 100) {
-	//			abort();
+				//			abort();
 			}
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
