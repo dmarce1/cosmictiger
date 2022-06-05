@@ -203,25 +203,29 @@ tree_node* tree_data() {
 	return nodes;
 }
 
-static std::function<void(void)> undo_last_memadvise = nullptr;
+static bool set_gpu = false;
+static bool set_cpu = false;
 
 void tree_2_cpu() {
-/*	if (undo_last_memadvise) {
-		undo_last_memadvise();
+	if (!set_cpu) {
+		PRINT("tree2cpu\n");
+		if (set_gpu) {
+			cuda_set_device();
+			CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseUnsetReadMostly, cuda_get_device()));
+		}
+		set_gpu = false;
+		set_cpu = true;
 	}
-	const int sz = nodes_size;*/
 }
 
 void tree_2_gpu() {
-/*	if (undo_last_memadvise) {
-		undo_last_memadvise();
-	}*/
-	const int sz = next_id + get_options().tree_alloc_line_size;
-	cuda_set_device();
-	CUDA_CHECK(cudaMemPrefetchAsync(nodes, sz * sizeof(tree_node), cuda_get_device(), 0));
-	CUDA_CHECK(cudaMemPrefetchAsync(multis, sz * sizeof(multi_pos), cuda_get_device(), 0));
-/*	undo_last_memadvise = [=]() {
-	};*/
+	if (!set_gpu) {
+		PRINT("tree2GPU\n");
+		cuda_set_device();
+		CUDA_CHECK(cudaMemAdvise(nodes, nodes_size * sizeof(tree_node), cudaMemAdviseSetReadMostly, cuda_get_device()));
+		set_gpu = true;
+		set_cpu = false;
+	}
 }
 
 static void tree_allocate_nodes() {
@@ -250,6 +254,7 @@ static void tree_allocate_nodes() {
 	}
 	allocator_mtx--;
 	hpx::wait_all(futs.begin(), futs.end());
+	tree_2_cpu();
 }
 
 long long tree_nodes_next_index() {

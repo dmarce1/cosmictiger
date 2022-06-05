@@ -1062,7 +1062,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> 
 	D = D + Dfour;
 	expansion<T> D1;
 	greens_function(D1,X);
-	D(0, 0, 0) = T(7.853981634e-01) + D(0, 0, 0);
+	D(0, 0, 0) = T(7.853981634e-01) + D(0, 0, 0); 
 	for (int i = 0; i < EXPANSION_SIZE; i++) {
 	D[i] -= D1[i];
 		D[i] *= zero_mask;
