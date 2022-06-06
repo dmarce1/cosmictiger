@@ -187,7 +187,8 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	auto& leaflist = shmem.leaflist;
 	auto& barrier = shmem.barrier;
 	auto& force = shmem.f;
-	auto& tree_nodes = data.tree_nodes;
+	auto& main_tree_nodes = data.tree_nodes;
+	auto& tree_nodes = shmem.tree_nodes;
 	const float& h = global_params.h;
 	int index;
 	auto group = cooperative_groups::this_thread_block();
@@ -232,7 +233,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		while (depth >= 0) {
 //			auto tm2 = clock64();
 //			node_count++;
-			const auto& self = tree_nodes[sparams.back().self];
+			const auto& self = main_tree_nodes[sparams.back().self];
 			switch (sparams.back().phase) {
 
 			case 0: {
@@ -271,7 +272,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 							bool next = false;
 							bool leaf = false;
 							if (i < checks.size()) {
-								const tree_node& other = tree_nodes[checks[i]];
+								const tree_node& other = main_tree_nodes[checks[i]];
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
@@ -316,7 +317,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						__syncwarp();
 						checks.resize(NCHILD * nextlist.size());
 						for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-							const auto& node = tree_nodes[nextlist[i]];
+							const auto& node = main_tree_nodes[nextlist[i]];
 							const auto& children = node.children;
 							checks[NCHILD * i + LEFT] = children[LEFT].index;
 							checks[NCHILD * i + RIGHT] = children[RIGHT].index;
@@ -342,102 +343,117 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					auto& checks = dchecks;
 					const float thetainv = 1.f / global_params.theta;
 					do {
-						const int maxi = round_up(checks.size(), WARP_SIZE);
-						for (int i = tid; i < maxi; i += WARP_SIZE) {
-							bool cc = false;
-							bool next = false;
-							bool leaf = false;
-							bool cp = false;
-							bool pc = false;
-							if (i < checks.size()) {
-								const tree_node& other = tree_nodes[checks[i]];
-								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+
+						int checki = 0;
+						while (checki < checks.size()) {
+							int checksz = 0;
+							while (checksz < KICK_TREE_MAX && checki + checksz < checks.size()) {
+								const auto maxsz = min(KICK_TREE_MAX, checks.size() - (checki + checksz));
+								for (int l = tid; l < maxsz; l += WARP_SIZE) {
+									tree_nodes[checksz + l] = main_tree_nodes[checks[checki + checksz + l]];
 								}
-								const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								const float mind = self.radius + other.radius + h;
-								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
-								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
-								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
-								const auto self_parts = self.nparts();
-								const auto other_parts = other.nparts();
-								cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
-								flops += 20;
-								if (!cc && other.leaf && self.leaf) {
-									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
-									cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
-									if (pc && cp) {
-										if (self_parts < other_parts) {
-											cp = false;
-										} else if (self_parts > other_parts) {
-											pc = false;
-										} else if (dcp > dpc) {
-											pc = false;
-										} else if (dcp < dpc) {
-											cp = false;
-										} else {
-											cp = pc = false;
+								checksz += maxsz;
+							}
+							__syncwarp();
+							const int maxi = round_up(checksz, WARP_SIZE);
+							for (int i = tid; i < maxi; i += WARP_SIZE) {
+								bool cc = false;
+								bool next = false;
+								bool leaf = false;
+								bool cp = false;
+								bool pc = false;
+								if (i < checksz) {
+									const tree_node& other = tree_nodes[i];
+									for (int dim = 0; dim < NDIM; dim++) {
+										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+									}
+									const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+									const float mind = self.radius + other.radius + h;
+									const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
+									const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
+									const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
+									const auto self_parts = self.nparts();
+									const auto other_parts = other.nparts();
+									cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
+									flops += 20;
+									if (!cc && other.leaf && self.leaf) {
+										pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
+										cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
+										if (pc && cp) {
+											if (self_parts < other_parts) {
+												cp = false;
+											} else if (self_parts > other_parts) {
+												pc = false;
+											} else if (dcp > dpc) {
+												pc = false;
+											} else if (dcp < dpc) {
+												cp = false;
+											} else {
+												cp = pc = false;
+											}
+										}
+										flops += 4;
+									}
+									if (!cc && !cp && !pc) {
+										leaf = other.leaf;
+										next = !leaf;
+									}
+								}
+								{
+									int l;
+									int total;
+									int start;
+									l = cc;
+									compute_indices(l, total);
+									start = cclist.size();
+									__syncwarp();
+									cclist.resize(start + total);
+									if (cc) {
+										cclist[l + start] = checks[checki + i];
+									}
+									if (self.leaf) {
+										l = cp;
+										compute_indices(l, total);
+										start = cplist.size();
+										__syncwarp();
+										cplist.resize(start + total);
+										if (cp) {
+											cplist[l + start] = checks[checki + i];
+										}
+										l = pc;
+										compute_indices(l, total);
+										start = pclist.size();
+										__syncwarp();
+										pclist.resize(start + total);
+										if (pc) {
+											pclist[l + start] = checks[checki + i];
 										}
 									}
-									flops += 4;
-								}
-								if (!cc && !cp && !pc) {
-									leaf = other.leaf;
-									next = !leaf;
-								}
-							}
-							{
-								int l;
-								int total;
-								int start;
-								l = cc;
-								compute_indices(l, total);
-								start = cclist.size();
-								__syncwarp();
-								cclist.resize(start + total);
-								if (cc) {
-									cclist[l + start] = checks[i];
-								}
-								if (self.leaf) {
-									l = cp;
+									l = next;
 									compute_indices(l, total);
-									start = cplist.size();
+									start = nextlist.size();
 									__syncwarp();
-									cplist.resize(start + total);
-									if (cp) {
-										cplist[l + start] = checks[i];
+									nextlist.resize(start + total);
+									if (next) {
+										nextlist[l + start] = checks[checki + i];
 									}
-									l = pc;
+									l = leaf;
 									compute_indices(l, total);
-									start = pclist.size();
+									start = leaflist.size();
 									__syncwarp();
-									pclist.resize(start + total);
-									if (pc) {
-										pclist[l + start] = checks[i];
+									leaflist.resize(start + total);
+									if (leaf) {
+										leaflist[l + start] = checks[checki + i];
 									}
 								}
-								l = next;
-								compute_indices(l, total);
-								start = nextlist.size();
-								__syncwarp();
-								nextlist.resize(start + total);
-								if (next) {
-									nextlist[l + start] = checks[i];
-								}
-								l = leaf;
-								compute_indices(l, total);
-								start = leaflist.size();
-								__syncwarp();
-								leaflist.resize(start + total);
-								if (leaf) {
-									leaflist[l + start] = checks[i];
-								}
 							}
+							checki += checksz;
 						}
+
 						__syncwarp();
 						checks.resize(NCHILD * nextlist.size());
 						for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-							const auto& node = tree_nodes[nextlist[i]];
+							const auto& node = main_tree_nodes[nextlist[i]];
 							const auto& children = node.children;
 							checks[NCHILD * i + LEFT] = children[LEFT].index;
 							checks[NCHILD * i + RIGHT] = children[RIGHT].index;
