@@ -311,9 +311,20 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	double max_ratio = 1.0;
 	flops += 26;
 	static const simd_float _2float = fixed2float;
-	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
+	const int xdim = box.longest_dim();
+	part_int mid;
+	const double xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
+	if (proc_range.second - proc_range.first > 1 || nparts >= 184 || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
-		const int xdim = box.longest_dim();
+		if (proc_range.second - proc_range.first == 1) {
+			mid = particles_sort(part_range, xmid, xdim);
+		}
+	} else {
+		mid = particles_sort(part_range, xmid, xdim);
+		const size_t smallest = std::min(mid - part_range.first, part_range.second - mid);
+		isleaf = smallest < 48;
+	}
+	if (!isleaf) {
 		auto left_box = box;
 		auto right_box = box;
 		auto left_range = proc_range;
@@ -330,9 +341,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
-			const double xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
 			flops += 2;
-			const part_int mid = particles_sort(part_range, xmid, xdim);
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
@@ -377,11 +386,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				array<simd_float, NDIM> dx;
 				const int maxj = std::min(part_range.second - i, SIMD_FLOAT_SIZE);
 				for (int dim = 0; dim < NDIM; dim++) {
-					for (int j = 0; j < maxj; j++) {
-						x[j] = particles_pos(dim, i + j).raw();
-					}
-					for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
-						x[j] = xc[dim][0];
+					if (maxj == SIMD_FLOAT_SIZE) {
+						x.load((const int*) &particles_pos(dim, i));
+					} else {
+						for (int j = 0; j < maxj; j++) {
+							x[j] = particles_pos(dim, i + j).raw();
+						}
+						for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
+							x[j] = xc[dim][0];
+						}
 					}
 					dx[dim] = simd_float(x - xc[dim]) * _2float;                // 6
 				}

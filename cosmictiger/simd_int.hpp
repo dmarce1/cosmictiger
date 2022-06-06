@@ -171,6 +171,9 @@ private:
 		int ints[8];
 	};
 public:
+	inline void load(const int* data) {
+		 v =  _mm256_loadu_si256 ((const __m256i*) data);
+	}
 	simd_int8() = default;
 	simd_int8(const simd_int8&) = default;
 	simd_int8(simd_float8 r) {
