@@ -271,7 +271,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						break;
 					}
 				}
-				const part_int& imin = these_parts.first;
+				const part_int imin = these_parts.first;
 				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
 				const int sz = imax - imin;
 				cuda::memcpy_async(group, src_x.data() + part_index, main_src_x + imin, sizeof(fixed32) * sz, barrier);

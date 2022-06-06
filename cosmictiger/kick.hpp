@@ -49,7 +49,6 @@ struct kick_return;
 #include <cosmictiger/stack_vector.hpp>
 
 #define KICK_PP_MAX (32*18)
-#define KICK_TREE_MAX 96
 
 struct expansion_type {
 	array<fixed32, NDIM> pos;
@@ -76,7 +75,6 @@ struct cuda_kick_shmem {
 			array<fixed32, KICK_PP_MAX> z;
 		}X;
 		array<multi_pos, KICK_C_MAX> mpos;
-		array<tree_node, KICK_TREE_MAX> tree_nodes;
 	};
 	device_vector<force_type> f;
 	stack_vector<int> echecks;
