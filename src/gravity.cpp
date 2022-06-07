@@ -28,7 +28,7 @@
 #include <boost/align/aligned_allocator.hpp>
 
 void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -97,7 +97,7 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 
 void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -173,7 +173,7 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 }
 
 void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list) {
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -246,7 +246,7 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 }
 
 void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	timer tm;
 	tm.start();
 	constexpr int chunk_size = 32;

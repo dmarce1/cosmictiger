@@ -32,10 +32,12 @@ double get_gpu_flops() {
 
 __device__
 void add_gpu_flops(int count) {
+#ifdef COUNT_FLOPS
 	const int& tid = threadIdx.x;
 	int total = count;
 	shared_reduce_add(count);
 	if (tid == 0) {
 		atomicAdd(&gpu_flops, (double) count);
 	}
+#endif
 }

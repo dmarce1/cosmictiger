@@ -8,6 +8,43 @@
 #ifndef FLOPS_HPP_
 #define FLOPS_HPP_
 
+#include <cosmictiger/cuda.hpp>
+
+template<class T>
+class flop_counter {
+	T cnt;
+public:
+	CUDA_EXPORT
+	inline flop_counter& operator=(T i) {
+#ifdef COUNT_FLOPS
+		cnt = i;
+#endif
+	}
+	CUDA_EXPORT
+	inline flop_counter(T i) {
+#ifdef COUNT_FLOPS
+		cnt = i;
+#endif
+	}
+	CUDA_EXPORT
+	inline flop_counter& operator+=(T i) {
+#ifdef COUNT_FLOPS
+		cnt += i;
+#endif
+		return *this;
+	}
+	CUDA_EXPORT
+	inline flop_counter& operator-=(T i) {
+#ifdef COUNT_FLOPS
+		cnt -= i;
+#endif
+		return *this;
+	}
+	CUDA_EXPORT
+	inline operator T() const {
+		return cnt;
+	}
+};
 
 void reset_flops();
 void reset_gpu_flops();

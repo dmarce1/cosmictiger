@@ -27,7 +27,7 @@ __device__
 void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
 	const auto& tree_nodes = data.tree_nodes;
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	if (multlist.size()) {
 		expansion<float> L;
 		expansion<float> D;
@@ -70,7 +70,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	auto& barrier = shmem.barrier;
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	if (partlist.size()) {
 		int part_index;
 		expansion<float> L;
@@ -154,7 +154,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	const auto& sink_z = data.z + self.part_range.first;
 	auto& barrier = shmem.barrier;
 	const auto* tree_nodes = data.tree_nodes;
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	auto group = cooperative_groups::this_thread_block();
 	if (multlist.size()) {
 		__syncwarp();
@@ -200,7 +200,7 @@ __device__
 void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
 	const auto& tree_nodes = data.tree_nodes;
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	if (multlist.size()) {
 		expansion<float> L;
 		expansion<float> D;
@@ -253,7 +253,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	const float hinv = 1.f / h;
 	const float h2inv = sqr(hinv);
 	const float h3inv = h2inv * hinv;
-	int flops = 7;
+	flop_counter<int> flops = 7;
 	if (partlist.size()) {
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;

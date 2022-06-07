@@ -74,7 +74,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	float zmom_tot = 0.0f;
 	float nmom_tot = 0.0f;
 	const float& hsoft = params.h;
-	int flops = 0;
+	flop_counter<int> flops = 0;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
 		expansion2<float> L2;
 		array<float, NDIM> dx;
@@ -202,7 +202,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	__syncthreads();
 	kick_return kr;
 	while (index < item_count) {
-		int flops = 0;
+		flop_counter<int> flops = 0;
 		L.resize(0);
 		dchecks.resize(0);
 		echecks.resize(0);

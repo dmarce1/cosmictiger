@@ -60,6 +60,8 @@ double flops_per_second() {
 }
 
 void add_cpu_flops(int count) {
+#ifdef COUNT_FLOPS
 	std::lock_guard<spinlock_type> lock(mutex);
 	cpu_flops += count;
+#endif
 }
