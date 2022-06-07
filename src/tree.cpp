@@ -367,7 +367,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		array<double, NDIM> Xc1, Xc2;
 		double radius1 = 0.0, radius2;
 		bool tried1 = false;
-		if (nparts <= 64 * get_options().bucket_size && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
+		if (nparts <= 512 * get_options().bucket_size && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
 			tried1 = true;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);    // 6
