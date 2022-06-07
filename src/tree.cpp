@@ -349,8 +349,14 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		const auto& boxl = rcl.box;
 		const auto& boxr = rcr.box;
 		for (int dim = 0; dim < NDIM; dim++) {
-			rbox.begin[dim] = std::min(boxl.begin[dim], boxr.begin[dim]);
-			rbox.end[dim] = std::max(boxl.end[dim], boxr.end[dim]);
+			if (ml[0] != 0.0 && mr[0] != 0.0) {
+				rbox.begin[dim] = std::min(boxl.begin[dim], boxr.begin[dim]);
+				rbox.end[dim] = std::max(boxl.end[dim], boxr.end[dim]);
+			} else if (ml[0] != 0.0) {
+				rbox = boxl;
+			} else {
+				rbox = boxr;
+			}
 		}
 		array<double, NDIM> Xl;
 		array<double, NDIM> Xr;
@@ -433,9 +439,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				r = Rl * Rl;
 				flops++;
 			} else {
-				for (int dim = 0; dim < NDIM; dim++) {
-					Xc2[dim] = (box.begin[dim] + box.end[dim]) * 0.5;
-				}
+				ALWAYS_ASSERT(false);
 				flops += 6;
 			}
 		}
@@ -449,13 +453,15 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		r = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
-			r += sqr((box.begin[dim] - box.end[dim]) * 0.5);            // 12
+			const double span = (rbox.end[dim] - rbox.begin[dim]);
+			ALWAYS_ASSERT(span>=0.0);
+			r += sqr(span * 0.5);            // 12
 		}
 		r = std::sqrt(r);                                              // 4
 		if (r < radius) {                                              // 1
 			radius = r;
 			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;         // 6
+				Xc[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;         // 6
 			}
 		}
 
@@ -481,8 +487,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[RIGHT] = rcr.id;
 	} else {
 		rbox = box;
-		array<double, NDIM>& Xmax = rbox.begin;
-		array<double, NDIM>& Xmin = rbox.end;
+		array<double, NDIM>& Xmin = rbox.begin;
+		array<double, NDIM>& Xmax = rbox.end;
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();							// 3

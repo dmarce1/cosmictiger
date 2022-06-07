@@ -265,6 +265,9 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 						nextlist.push_back(child_checks[LEFT]);
 						nextlist.push_back(child_checks[RIGHT]);
 					}
+					if (!cc[i]) {
+						ALWAYS_ASSERT(!other_leaf[i] || !self_ptr->leaf);
+					}
 				}
 			}
 			std::swap(checklist, nextlist);
