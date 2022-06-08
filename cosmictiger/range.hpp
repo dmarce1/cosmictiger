@@ -461,25 +461,9 @@ __device__
 inline bool box_intersects_sphere(const fixed32_range& box, const array<fixed32, NDIM>& x, float r) {
 	float d2 = 0.0f;
 	for (int dim = 0; dim < NDIM; dim++) {
-		float d2m = 0.0f;
-		float d2p = 0.0f;
-		float d20 = 0.0f;
-		if (range_fixed(x[dim]) < box.begin[dim] - range_fixed(1)) {
-			d2m += sqr(distance(x[dim], box.begin[dim]));
-		} else if (range_fixed(x[dim]) > box.end[dim] - range_fixed(1)) {
-			d2m += sqr(distance(x[dim], box.end[dim]));
-		}
-		if (range_fixed(x[dim]) < box.begin[dim]) {
-			d20 += sqr(distance(x[dim], box.begin[dim]));
-		} else if (range_fixed(x[dim]) > box.end[dim]) {
-			d20 += sqr(distance(x[dim], box.end[dim]));
-		}
-		if (range_fixed(x[dim]) < box.begin[dim] + range_fixed(1)) {
-			d2p += sqr(distance(x[dim], box.begin[dim]));
-		} else if (range_fixed(x[dim]) > box.end[dim] + range_fixed(1)) {
-			d2p += sqr(distance(x[dim], box.end[dim]));
-		}
-		d2 += fminf(d20, fminf(d2p, d2m));
+		const float d2begin = sqr(distance(x[dim], box.begin[dim]));
+		const float d2end = sqr(distance(x[dim], box.end[dim]));
+		d2 += ((range_fixed(x[dim]) < box.begin[dim]) + (range_fixed(x[dim]) > box.end[dim])) * fminf(d2begin, d2end);
 	}
 	return d2 < sqr(r);
 }
