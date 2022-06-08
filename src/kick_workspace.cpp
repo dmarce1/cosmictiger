@@ -340,6 +340,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 	lock.unlock();
 	if (do_work) {
 		hpx::apply([ptr]() {
+			PRINT( "TO GPU\n");
 			ptr->to_gpu();
 		});
 	}
@@ -380,6 +381,7 @@ void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<flo
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
+		PRINT( "TO GPU\n");
 		hpx::apply([ptr]() {
 			ptr->to_gpu();
 		});

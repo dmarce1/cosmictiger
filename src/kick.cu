@@ -236,54 +236,51 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			switch (sparams.back().phase) {
 
 			case 0: {
-				array<float, NDIM> dx;
-				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(self.pos[dim], L.back().pos[dim]);
-				}
-				flops += 3;
-				{
-					const auto this_L = L2L_cuda(L.back().expansion, dx, global_params.do_phi);
-					if (tid == 0) {
-						L.back().expansion = this_L;
-						L.back().pos = self.pos;
+				const part_int nsinks = self.nparts();
+				if (nsinks) {
+					array<float, NDIM> dx;
+					for (int dim = 0; dim < NDIM; dim++) {
+						dx[dim] = distance(self.pos[dim], L.back().pos[dim]);
 					}
-					flops += 2650 + global_params.do_phi * 332;
-				}
-				if (self.leaf) {
-					const int nsinks = self.part_range.second - self.part_range.first;
-					force.resize(nsinks);
-					for (int l = tid; l < nsinks; l += WARP_SIZE) {
-						auto& f = force[l];
-						f.gx = f.gy = f.gz = f.phi = 0.f;
+					flops += 3;
+					{
+						const auto this_L = L2L_cuda(L.back().expansion, dx, global_params.do_phi);
+						if (tid == 0) {
+							L.back().expansion = this_L;
+							L.back().pos = self.pos;
+						}
+						flops += 2650 + global_params.do_phi * 332;
 					}
-				}
-				__syncwarp();
-				{
-					nextlist.resize(0);
-					cclist.resize(0);
-					leaflist.resize(0);
-					auto& checks = echecks;
-					do {
+					if (self.leaf) {
+						force.resize(nsinks);
+						for (int l = tid; l < nsinks; l += WARP_SIZE) {
+							auto& f = force[l];
+							f.gx = f.gy = f.gz = f.phi = 0.f;
+						}
+					}
+					__syncwarp();
+					{
+						nextlist.resize(0);
+						cclist.resize(0);
+						auto& checks = echecks;
 						const float thetainv = 1.f / global_params.theta;
 						const int maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
 							bool cc = false;
 							bool next = false;
-							bool leaf = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-								}
-								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-								const float dcc = (self.radius + other.radius) * thetainv;
-								cc = R2 > sqr(dcc);
-								flops += 24;
-								if (!cc) {
-									leaf = other.leaf;
-									next = !leaf;
-									ALWAYS_ASSERT(!(leaf && self.leaf));
+								if (other.nparts()) {
+									for (int dim = 0; dim < NDIM; dim++) {
+										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+									}
+									float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
+									const float dcc = (self.radius + other.radius) * thetainv;
+									cc = R2 > sqr(dcc);
+									flops += 24;
+									next = !cc;
+									ALWAYS_ASSERT(!self.leaf || cc);
 								}
 							}
 							{
@@ -304,13 +301,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 								if (next) {
 									nextlist[l + start] = checks[i];
 								}
-								l = leaf;
-								compute_indices(l, total);
-								start = leaflist.size();
-								leaflist.resize(start + total);
-								if (leaf) {
-									leaflist[l + start] = checks[i];
-								}
 							}
 						}
 						__syncwarp();
@@ -324,145 +314,142 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						nextlist.resize(0);
 						__syncwarp();
 
-					} while (checks.size() && self.leaf);
-					cuda_gravity_cc_ewald(data, L.back().expansion, self, cclist, global_params.do_phi);
-					if (!self.leaf) {
-						const int start = checks.size();
-						checks.resize(start + leaflist.size());
-						cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
-						barrier.arrive_and_wait();
+						cuda_gravity_cc_ewald(data, L.back().expansion, self, cclist, global_params.do_phi);
 					}
-				}
-				{
-					nextlist.resize(0);
-					leaflist.resize(0);
-					cclist.resize(0);
-					cplist.resize(0);
-					pclist.resize(0);
-					auto& checks = dchecks;
-					const float thetainv = 1.f / global_params.theta;
-					do {
-						const int maxi = round_up(checks.size(), WARP_SIZE);
-						for (int i = tid; i < maxi; i += WARP_SIZE) {
-							bool cc = false;
-							bool next = false;
-							bool leaf = false;
-							bool cp = false;
-							bool pc = false;
-							if (i < checks.size()) {
-								const tree_node& other = tree_nodes[checks[i]];
-								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+					{
+						nextlist.resize(0);
+						leaflist.resize(0);
+						cclist.resize(0);
+						cplist.resize(0);
+						pclist.resize(0);
+						auto& checks = dchecks;
+						const float thetainv = 1.f / global_params.theta;
+						do {
+							const int maxi = round_up(checks.size(), WARP_SIZE);
+							for (int i = tid; i < maxi; i += WARP_SIZE) {
+								bool cc = false;
+								bool next = false;
+								bool leaf = false;
+								bool cp = false;
+								bool pc = false;
+								if (i < checks.size()) {
+									const tree_node& other = tree_nodes[checks[i]];
+									for (int dim = 0; dim < NDIM; dim++) {
+										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+									}
+									const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+									const float mind = self.radius + other.radius + h;
+									const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
+									const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
+									const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
+									const auto self_parts = self.nparts();
+									const auto other_parts = other.nparts();
+									cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
+									flops += 20;
+									if (!cc && other.leaf && self.leaf) {
+										pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
+										cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
+										if (pc && cp) {
+											if (self_parts < other_parts) {
+												cp = false;
+											} else if (self_parts > other_parts) {
+												pc = false;
+											} else if (dcp > dpc) {
+												pc = false;
+											} else if (dcp < dpc) {
+												cp = false;
+											} else {
+												cp = pc = false;
+											}
+										}
+										flops += 4;
+									}
+									if (!cc && !cp && !pc) {
+										leaf = other.leaf;
+										next = !leaf;
+									}
 								}
-								const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								const float mind = self.radius + other.radius + h;
-								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
-								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
-								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
-								const auto self_parts = self.nparts();
-								const auto other_parts = other.nparts();
-								cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
-								flops += 20;
-								if (!cc && other.leaf && self.leaf) {
-									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
-									cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
-									if (pc && cp) {
-										if (self_parts < other_parts) {
-											cp = false;
-										} else if (self_parts > other_parts) {
-											pc = false;
-										} else if (dcp > dpc) {
-											pc = false;
-										} else if (dcp < dpc) {
-											cp = false;
-										} else {
-											cp = pc = false;
+								{
+									int l;
+									int total;
+									int start;
+									l = cc;
+									compute_indices(l, total);
+									start = cclist.size();
+									__syncwarp();
+									cclist.resize(start + total);
+									if (cc) {
+										cclist[l + start] = checks[i];
+									}
+									if (self.leaf) {
+										l = cp;
+										compute_indices(l, total);
+										start = cplist.size();
+										__syncwarp();
+										cplist.resize(start + total);
+										if (cp) {
+											cplist[l + start] = checks[i];
+										}
+										l = pc;
+										compute_indices(l, total);
+										start = pclist.size();
+										__syncwarp();
+										pclist.resize(start + total);
+										if (pc) {
+											pclist[l + start] = checks[i];
 										}
 									}
-									flops += 4;
-								}
-								if (!cc && !cp && !pc) {
-									leaf = other.leaf;
-									next = !leaf;
-								}
-							}
-							{
-								int l;
-								int total;
-								int start;
-								l = cc;
-								compute_indices(l, total);
-								start = cclist.size();
-								__syncwarp();
-								cclist.resize(start + total);
-								if (cc) {
-									cclist[l + start] = checks[i];
-								}
-								if (self.leaf) {
-									l = cp;
+									l = next;
 									compute_indices(l, total);
-									start = cplist.size();
+									start = nextlist.size();
 									__syncwarp();
-									cplist.resize(start + total);
-									if (cp) {
-										cplist[l + start] = checks[i];
+									nextlist.resize(start + total);
+									if (next) {
+										nextlist[l + start] = checks[i];
 									}
-									l = pc;
+									l = leaf;
 									compute_indices(l, total);
-									start = pclist.size();
+									start = leaflist.size();
 									__syncwarp();
-									pclist.resize(start + total);
-									if (pc) {
-										pclist[l + start] = checks[i];
+									leaflist.resize(start + total);
+									if (leaf) {
+										leaflist[l + start] = checks[i];
 									}
 								}
-								l = next;
-								compute_indices(l, total);
-								start = nextlist.size();
-								__syncwarp();
-								nextlist.resize(start + total);
-								if (next) {
-									nextlist[l + start] = checks[i];
-								}
-								l = leaf;
-								compute_indices(l, total);
-								start = leaflist.size();
-								__syncwarp();
-								leaflist.resize(start + total);
-								if (leaf) {
-									leaflist[l + start] = checks[i];
-								}
 							}
-						}
-						__syncwarp();
-						checks.resize(NCHILD * nextlist.size());
-						for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-							const auto& node = tree_nodes[nextlist[i]];
-							const auto& children = node.children;
-							checks[NCHILD * i + LEFT] = children[LEFT].index;
-							checks[NCHILD * i + RIGHT] = children[RIGHT].index;
-						}
-						nextlist.resize(0);
-						__syncwarp();
+							__syncwarp();
+							checks.resize(NCHILD * nextlist.size());
+							for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+								const auto& node = tree_nodes[nextlist[i]];
+								const auto& children = node.children;
+								checks[NCHILD * i + LEFT] = children[LEFT].index;
+								checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+							}
+							nextlist.resize(0);
+							__syncwarp();
 
-					} while (checks.size() && self.leaf);
-					cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
-					cuda_gravity_cp_direct(data, L.back().expansion, self, cplist, global_params.do_phi);
-					if (self.leaf) {
-						__syncwarp();
-						const float h = global_params.h;
-						cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
-						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
-					} else {
-						const int start = checks.size();
-						checks.resize(start + leaflist.size());
-						cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
-						barrier.arrive_and_wait();
+						} while (checks.size() && self.leaf);
+						cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
+						cuda_gravity_cp_direct(data, L.back().expansion, self, cplist, global_params.do_phi);
+						if (self.leaf) {
+							__syncwarp();
+							const float h = global_params.h;
+							cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
+							cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
+						} else {
+							const int start = checks.size();
+							checks.resize(start + leaflist.size());
+							cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
+							barrier.arrive_and_wait();
+						}
 					}
 				}
+				ALWAYS_ASSERT(!(nsinks == 0 && !self.leaf));
 				if (self.leaf) {
 					__syncwarp();
-					do_kick(kr, global_params, data, L.back().expansion, self);
+					if (nsinks) {
+						do_kick(kr, global_params, data, L.back().expansion, self);
+					}
 					sparams.pop_back();
 					depth--;
 				} else {
