@@ -367,7 +367,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		array<double, NDIM> Xc1, Xc2;
 		double radius1 = 0.0, radius2;
 		bool tried1 = false;
-		if (nparts <= 64 * get_options().bucket_size && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5) && ewald_satisfied) {
+		if (nparts <= 64 * get_options().bucket_size && (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
 			tried1 = true;
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc1[dim] = 0.5 * (rbox.begin[dim] + rbox.end[dim]);    // 6
@@ -403,83 +403,68 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			radius1 = sqrt(r2);
 			//	PRINT("%e\n", radius);
 		}
-		if (ewald_satisfied) {
-			double rr;
-			double rl;
-			array<double, NDIM> N;
-			float R;
-			double norminv = 0.0;
-			for (int dim = 0; dim < NDIM; dim++) {
-				N[dim] = Xl[dim] - Xr[dim];                         // 3
-				norminv += sqr(N[dim]);                         // 6
-			}
-			norminv = 1.0 / std::sqrt(norminv);                    // 8
-			for (int dim = 0; dim < NDIM; dim++) {
-				N[dim] *= norminv;                                  // 3
-				N[dim] = std::abs(N[dim]);                                  // 3
-			}
-			flops += 29;
-			r = 0.0;
-			if (mr[0] != 0.0) {
-				if (ml[0] != 0.0) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
-						const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
-						Xc2[dim] = (xmax + xmin) * 0.5;
-						r += sqr((xmax - xmin) * 0.5);
-					}
-					flops += 45;
-				} else {
-					Xc2 = Xr;
-					r = Rr * Rr;
-					flops++;
-				}
-			} else {
-				if (ml[0] != 0.0) {
-					Xc2 = Xl;
-					r = Rl * Rl;
-					flops++;
-				} else {
-					ALWAYS_ASSERT(false);
-					flops += 6;
-				}
-			}
-			radius2 = std::sqrt(r);                                         // 4
-			if (tried1 && radius1 < radius2) {
-				Xc = Xc1;
-				radius = radius1;
-			} else {
-				Xc = Xc2;
-				radius = radius2;
-			}
-			r = 0.0;
-			for (int dim = 0; dim < NDIM; dim++) {
-				const double span = (rbox.end[dim] - rbox.begin[dim]);
-				ALWAYS_ASSERT(span >= 0.0);
-				r += sqr(span * 0.5);            // 12
-			}
-			r = std::sqrt(r);                                              // 4
-			if (r < radius) {                                              // 1
-				radius = r;
+		double rr;
+		double rl;
+		array<double, NDIM> N;
+		float R;
+		double norminv = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			N[dim] = Xl[dim] - Xr[dim];                         // 3
+			norminv += sqr(N[dim]);                         // 6
+		}
+		norminv = 1.0 / std::sqrt(norminv);                    // 8
+		for (int dim = 0; dim < NDIM; dim++) {
+			N[dim] *= norminv;                                  // 3
+			N[dim] = std::abs(N[dim]);                                  // 3
+		}
+		flops += 29;
+		r = 0.0;
+		if (mr[0] != 0.0) {
+			if (ml[0] != 0.0) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					Xc[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;         // 6
+					const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+					const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
+					Xc2[dim] = (xmax + xmin) * 0.5;
+					r += sqr((xmax - xmin) * 0.5);
 				}
+				flops += 45;
+			} else {
+				Xc2 = Xr;
+				r = Rr * Rr;
+				flops++;
 			}
 		} else {
-			r = 0.0;
-			if (nparts) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					const double span = (box.end[dim] - box.begin[dim]);
-					ALWAYS_ASSERT(span >= 0.0);
-					r += sqr(span * 0.5);            // 12
-				}
-				r = std::sqrt(r);                                              // 4
-			}
-			radius = r;
-			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = (box.begin[dim] + box.end[dim]) * 0.5;         // 6
+			if (ml[0] != 0.0) {
+				Xc2 = Xl;
+				r = Rl * Rl;
+				flops++;
+			} else {
+				ALWAYS_ASSERT(false);
+				flops += 6;
 			}
 		}
+		radius2 = std::sqrt(r);                                         // 4
+		if (tried1 && radius1 < radius2) {
+			Xc = Xc1;
+			radius = radius1;
+		} else {
+			Xc = Xc2;
+			radius = radius2;
+		}
+		r = 0.0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			const double span = (rbox.end[dim] - rbox.begin[dim]);
+			ALWAYS_ASSERT(span>=0.0);
+			r += sqr(span * 0.5);            // 12
+		}
+		r = std::sqrt(r);                                              // 4
+		if (r < radius) {                                              // 1
+			radius = r;
+			for (int dim = 0; dim < NDIM; dim++) {
+				Xc[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;         // 6
+			}
+		}
+
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];															// 3
 		}
@@ -501,9 +486,12 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 	} else {
-		rbox = box;
 		array<double, NDIM>& Xmin = rbox.begin;
 		array<double, NDIM>& Xmax = rbox.end;
+		for( int dim = 0; dim < NDIM; dim++) {
+			Xmin[dim] = box.end[dim];
+			Xmax[dim] = box.begin[dim];
+		}
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = particles_pos(dim, i).to_double();							// 3
