@@ -571,6 +571,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.mpos->pos = x;
 	node.mpos->multi = multi;
 	node.depth = depth;
+	for( int dim = 0; dim < NDIM; dim++) {
+		node.box.begin[dim] = rbox.begin[dim];
+		node.box.end[dim] = rbox.end[dim];
+	}
 	const bool global = proc_range.second - proc_range.first > 1;
 	node.leaf = isleaf;
 	if (index >= nodes_size) {

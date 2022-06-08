@@ -92,6 +92,7 @@ struct multi_pos {
 };
 
 struct tree_node {
+	fixed32_range box;
 	array<tree_id, NCHILD> children;
 	pair<part_int> part_range;
 	pair<int, int> proc_range;

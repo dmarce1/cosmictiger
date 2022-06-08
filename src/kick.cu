@@ -351,6 +351,12 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 							bool pc = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
+								auto obox = other.box;
+								for (int dim = 0; dim < NDIM; dim++) {
+									obox.begin[dim] = obox.begin[dim] - range_fixed(h);
+									obox.end[dim] = obox.end[dim] + range_fixed(h);
+								}
+								const auto close = self.box.periodic_intersects(obox);
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
@@ -364,17 +370,15 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 								cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
 								flops += 20;
 								if (!cc && other.leaf && self.leaf) {
-									pc = R2 > sqr(dpc) && self_parts >= MIN_PARTS_PCCP;
-									cp = R2 > sqr(dcp) && other_parts >= MIN_PARTS_PCCP;
+									pc = (R2 > sqr(dpc) || !box_intersects_sphere(self.box, other.pos, fmaxf(thetainv * other.radius, h)))
+											&& self_parts >= MIN_PARTS_PCCP;
+									cp = (R2 > sqr(dcp) || !box_intersects_sphere(other.box, self.pos, fmaxf(thetainv * self.radius, h)))
+											&& other_parts >= MIN_PARTS_PCCP;
 									if (pc && cp) {
 										if (self_parts < other_parts) {
 											cp = false;
 										} else if (self_parts > other_parts) {
 											pc = false;
-										} else if (dcp > dpc) {
-											pc = false;
-										} else if (dcp < dpc) {
-											cp = false;
 										} else {
 											cp = pc = false;
 										}
@@ -447,10 +451,10 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 
 					} while (checks.size() && self.leaf);
 					cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
-					cuda_gravity_cp_direct(data, L.back().expansion, self, cplist, global_params.do_phi);
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
+						cuda_gravity_cp_direct(data, L.back().expansion, self, cplist, global_params.do_phi);
 						cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
 						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
 					} else {

@@ -24,6 +24,7 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/math.hpp>
 
 template<class T>
 inline array<T, NDIM> shift_up(array<T, NDIM> i) {
@@ -455,4 +456,32 @@ inline float distance(fixed32 b, range_fixed a) {
 	return -distance(a, b);
 
 }
+
+__device__
+inline bool box_intersects_sphere(const fixed32_range& box, const array<fixed32, NDIM>& x, float r) {
+	float d2 = 0.0f;
+	for (int dim = 0; dim < NDIM; dim++) {
+		float d2m = 0.0f;
+		float d2p = 0.0f;
+		float d20 = 0.0f;
+		if (range_fixed(x[dim]) < box.begin[dim] - range_fixed(1)) {
+			d2m += sqr(distance(x[dim], box.begin[dim]));
+		} else if (range_fixed(x[dim]) > box.end[dim] - range_fixed(1)) {
+			d2m += sqr(distance(x[dim], box.end[dim]));
+		}
+		if (range_fixed(x[dim]) < box.begin[dim]) {
+			d20 += sqr(distance(x[dim], box.begin[dim]));
+		} else if (range_fixed(x[dim]) > box.end[dim]) {
+			d20 += sqr(distance(x[dim], box.end[dim]));
+		}
+		if (range_fixed(x[dim]) < box.begin[dim] + range_fixed(1)) {
+			d2p += sqr(distance(x[dim], box.begin[dim]));
+		} else if (range_fixed(x[dim]) > box.end[dim] + range_fixed(1)) {
+			d2p += sqr(distance(x[dim], box.end[dim]));
+		}
+		d2 += fminf(d20, fminf(d2p, d2m));
+	}
+	return d2 < sqr(r);
+}
+
 #endif /* RANGE_HPP_ */
