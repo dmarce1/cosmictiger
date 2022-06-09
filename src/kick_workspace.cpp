@@ -68,7 +68,7 @@ bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
 void kick_workspace::to_gpu() {
 
 	cuda_set_device();
-	PRINT("Preparing gpu send on %i\n", hpx_rank());
+//	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
 	timer tm;
 	tm.start();
@@ -203,7 +203,7 @@ void kick_workspace::to_gpu() {
 	}
 	tm4.stop();
 
-	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read() + tm3.read() + tm4.read(), tm2.read(), tm3.read(), tm4.read());
+//	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read() + tm3.read() + tm4.read(), tm2.read(), tm3.read(), tm4.read());
 	tm2.reset();
 	futs1.resize(0);
 	nthreads = std::max(1, (int) hpx_hardware_concurrency());
@@ -313,7 +313,7 @@ void kick_workspace::to_gpu() {
 	sfut.get();
 	auto stream = cuda_get_stream();
 	tm.stop();
-	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
+//	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
 	tm.reset();
 	tm.start();
 	tree_2_gpu();
@@ -324,7 +324,7 @@ void kick_workspace::to_gpu() {
 	particles_memadvise_cpu();
 	tree_2_cpu();
 	tm.stop();
-	PRINT("GPU took %e seconds\n", tm.read());
+//	PRINT("GPU took %e seconds\n", tm.read());
 	particles_resize(opartsize);
 	kick_set_rc(kr);
 

@@ -203,11 +203,11 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			top = false;
 		}
 		if (ascending) {
-			PRINT("ASCENDING  rung %i\n", levels[li]);
+//			PRINT("ASCENDING  rung %i\n", levels[li]);
 		} else if (top) {
-			PRINT("AT TOP     rung %i\n", levels[li]);
+//			PRINT("AT TOP     rung %i\n", levels[li]);
 		} else if (!ascending) {
-			PRINT("DESCENDING rung %i\n", levels[li]);
+//			PRINT("DESCENDING rung %i\n", levels[li]);
 		}
 
 		if (!ascending && !top) {
@@ -220,7 +220,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			domains_begin(levels[li]);
 			domains_end();
 			tm.stop();
-			PRINT("Domains took %e\n", tm.read());
+//			PRINT("Domains took %e\n", tm.read());
 		}
 
 		if (!ascending) {
@@ -228,7 +228,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			tm.start();
 			particles_sort_by_rung(levels[li]);
 			tm.stop();
-			PRINT("Rung sort took %e\n", tm.read());
+//			PRINT("Rung sort took %e\n", tm.read());
 		}
 		auto rng = particles_current_range();
 		parts_processed += rng.second - rng.first;
@@ -236,9 +236,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			auto counts = particles_rung_counts();
 			if (counts.size() > minrung0 + 1) {
 				const auto total = powf(get_options().parts_dim, NDIM);
-				PRINT("Rungs\n");
+//				PRINT("Rungs\n");
 				for (int i = 0; i < counts.size(); i++) {
-					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
+//					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
 				}
 				size_t fast = 0;
 				size_t slow = counts[minrung0];
@@ -247,9 +247,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				}
 				if (3 * fast > slow) {
 					clip_top = true;
-					PRINT("------------------------------------\n");
-					PRINT("Setting minimum level to %i\n", minrung + 1);
-					PRINT("------------------------------------\n");
+//					PRINT("------------------------------------\n");
+//					PRINT("Setting minimum level to %i\n", minrung + 1);
+//					PRINT("------------------------------------\n");
 				}
 			}
 		}
@@ -267,7 +267,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tm.start();
 		auto this_sr = tree_create(tparams);
 		tm.stop();
-		PRINT("Tree create took %e\n", tm.read());
+//		PRINT("Tree create took %e\n", tm.read());
 		if (top) {
 			sr = this_sr;
 		}
@@ -313,7 +313,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tm.start();
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 		tm.stop();
-		PRINT("Kick took %e\n", tm.read());
+//		PRINT("Kick took %e\n", tm.read());
 		if (clip_top && top) {
 			particles_set_minrung(minrung0 + 1);
 		}
@@ -342,7 +342,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			const float dt = rung_dt[levels[li]] * t0;
 			drift(scale, dt, tau, tau + dt, t0, levels[li]);
 			tm.stop();
-			PRINT("Drift took %e\n", tm.read());
+			//PRINT("Drift took %e\n", tm.read());
 		}
 		tree_reset();
 		if (ascending && !top) {
@@ -431,6 +431,7 @@ void driver() {
 	timer buckets50;
 	timer buckets20;
 	timer buckets2;
+	int buckets[11] = {80,  112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().read_check != -1) {
 		params = read_checkpoint();
@@ -535,6 +536,8 @@ void driver() {
 //		PRINT("STEP  = %i\n", step);
 		double t0 = tau_max / get_options().nsteps;
 		do {
+			timer step_tm;
+			step_tm.start();
 			profiler_enter(__FUNCTION__);
 			tmr.stop();
 			if (tmr.read() > get_options().check_freq || do_check) {
@@ -576,7 +579,7 @@ void driver() {
 			if (tau == 0.0) {
 				rebound = true;
 			} else if (minrung == 0) {
-				PRINT("Checking imbalance\n");
+//				PRINT("Checking imbalance\n");
 				double imbalance = domains_get_load_imbalance();
 				rebound = (imbalance > MAX_LOAD_IMBALANCE);
 			}
@@ -714,11 +717,12 @@ void driver() {
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
 			if (full_eval) {
-				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr",
-						"mxr", "bs", "Tflops");
+				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr",
+						"mxr", "bs", "Tflops", "time");
 			}
-			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
-					max_rung, bucket_size, flops * 1e-12);
+			step_tm.stop();
+			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
+					max_rung, bucket_size, flops * 1e-12, step_tm.read());
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();

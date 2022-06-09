@@ -171,7 +171,6 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 			}
 			if (self_ptr->local_root) {
 				auto kr = local_return_future.get();
-				PRINT("----------------------- %e\n", kr.max_rung);
 				return kr;
 			} else {
 				return kick_return();

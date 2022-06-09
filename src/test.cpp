@@ -409,7 +409,7 @@ static void bucket_test() {
 		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
 		system(buffer);
 		free(buffer);
-		for (int bucket_size = 64; bucket_size < 200; bucket_size += 8) {
+		for (int bucket_size = 64; bucket_size <= 256; bucket_size += 8) {
 			auto opts = get_options();
 			opts.bucket_size = bucket_size;
 			opts.read_check = 999999;
@@ -418,7 +418,7 @@ static void bucket_test() {
 			read_checkpoint();
 			timer tm;
 			tm.start();
-			for (int trial = 0; trial < 5; trial++) {
+			for (int trial = 0; trial < 10; trial++) {
 				domains_rebound();
 				domains_begin(0);
 				domains_end();
