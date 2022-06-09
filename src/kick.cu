@@ -249,8 +249,8 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					}
 					flops += 2650 + global_params.do_phi * 332;
 				}
+				const part_int nsinks = self.part_range.second - self.part_range.first;
 				if (self.leaf) {
-					const int nsinks = self.part_range.second - self.part_range.first;
 					force.resize(nsinks);
 					for (int l = tid; l < nsinks; l += WARP_SIZE) {
 						auto& f = force[l];
@@ -258,7 +258,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					}
 				}
 				__syncwarp();
-				{
+				if (nsinks) {
 					nextlist.resize(0);
 					cclist.resize(0);
 					leaflist.resize(0);
@@ -272,18 +272,20 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 							bool leaf = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-								}
-								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-								const float dcc = (self.radius + other.radius) * thetainv;
-								cc = R2 > sqr(dcc);
-								flops += 24;
-								if (!cc) {
-									leaf = other.leaf;
-									next = !leaf;
-									ALWAYS_ASSERT(!(leaf && self.leaf));
+								if (other.nparts()) {
+									for (int dim = 0; dim < NDIM; dim++) {
+										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
+									}
+									float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+									R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
+									const float dcc = (self.radius + other.radius) * thetainv;
+									cc = R2 > sqr(dcc);
+									flops += 24;
+									if (!cc) {
+										leaf = other.leaf;
+										next = !leaf;
+										ALWAYS_ASSERT(!(leaf && self.leaf));
+									}
 								}
 							}
 							{
@@ -333,7 +335,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						barrier.arrive_and_wait();
 					}
 				}
-				{
+				if (nsinks) {
 					nextlist.resize(0);
 					leaflist.resize(0);
 					cclist.resize(0);
@@ -351,37 +353,39 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 							bool pc = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-								}
-								const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								const float mind = self.radius + other.radius + h;
-								const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
-								const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
-								const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
-								const auto self_parts = self.nparts();
-								const auto other_parts = other.nparts();
-								cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
-								flops += 20;
-								if (!cc && other.leaf && self.leaf) {
-									pc = (R2 > sqr(dpc) || !box_intersects_sphere(self.box, other.pos, fmaxf(thetainv * other.radius, h)))
-											&& self_parts >= MIN_PARTS_PCCP;
-									cp = (R2 > sqr(dcp) || !box_intersects_sphere(other.box, self.pos, fmaxf(thetainv * self.radius, h)))
-											&& other_parts >= MIN_PARTS_PCCP;
-									if (pc && cp) {
-										if (self_parts < other_parts) {
-											cp = false;
-										} else if (self_parts > other_parts) {
-											pc = false;
-										} else {
-											cp = pc = false;
-										}
+								if (other.nparts()) {
+									for (int dim = 0; dim < NDIM; dim++) {
+										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 									}
-									flops += 4;
-								}
-								if (!cc && !cp && !pc) {
-									leaf = other.leaf;
-									next = !leaf;
+									const float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+									const float mind = self.radius + other.radius + h;
+									const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
+									const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
+									const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
+									const auto self_parts = self.nparts();
+									const auto other_parts = other.nparts();
+									cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
+									flops += 20;
+									if (!cc && other.leaf && self.leaf) {
+										pc = (R2 > sqr(dpc) || !box_intersects_sphere(self.box, other.pos, fmaxf(thetainv * other.radius, h)))
+												&& self_parts >= MIN_PARTS_PCCP;
+										cp = (R2 > sqr(dcp) || !box_intersects_sphere(other.box, self.pos, fmaxf(thetainv * self.radius, h)))
+												&& other_parts >= MIN_PARTS_PCCP;
+										if (pc && cp) {
+											if (self_parts < other_parts) {
+												cp = false;
+											} else if (self_parts > other_parts) {
+												pc = false;
+											} else {
+												cp = pc = false;
+											}
+										}
+										flops += 4;
+									}
+									if (!cc && !cp && !pc) {
+										leaf = other.leaf;
+										next = !leaf;
+									}
 								}
 							}
 							{
@@ -460,7 +464,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 				}
 				if (self.leaf) {
 					__syncwarp();
-					do_kick(kr, global_params, data, L.back().expansion, self);
+					if (nsinks) {
+						do_kick(kr, global_params, data, L.back().expansion, self);
+					}
 					sparams.pop_back();
 					depth--;
 				} else {
