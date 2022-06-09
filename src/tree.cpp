@@ -328,6 +328,23 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
+			for (part_int i = part_range.first; i < part_range.second; i += SIMD_FLOAT_SIZE) {
+				simd_int x;
+				array<simd_float, NDIM> dx;
+				const int maxj = std::min(part_range.second - i, SIMD_FLOAT_SIZE);
+				for (int dim = 0; dim < NDIM; dim++) {
+					for (int j = 0; j < maxj; j++) {
+						x[j] = particles_pos(dim, i + j).raw();
+					}
+					for (int j = maxj; j < SIMD_FLOAT_SIZE; j++) {
+						x[j] = xc[dim][0];
+					}
+					dx[dim] = simd_float(x - xc[dim]) * _2float;                // 6
+				}
+				flops += 18 + maxj * 6;
+				const auto r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+				r2_max = max(r2_max, r2);
+			}
 			const double xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
 			flops += 2;
 			const part_int mid = particles_sort(part_range, xmid, xdim);
