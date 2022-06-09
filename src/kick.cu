@@ -351,12 +351,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 							bool pc = false;
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
-								auto obox = other.box;
-								for (int dim = 0; dim < NDIM; dim++) {
-									obox.begin[dim] = obox.begin[dim] - range_fixed(h);
-									obox.end[dim] = obox.end[dim] + range_fixed(h);
-								}
-								const auto close = self.box.periodic_intersects(obox);
 								for (int dim = 0; dim < NDIM; dim++) {
 									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 								}
@@ -597,9 +591,6 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	data.x = dev_x;
 	data.y = dev_y;
 	data.z = dev_z;
-	data.x_snk = &particles_pos(XDIM, 0);
-	data.y_snk = &particles_pos(YDIM, 0);
-	data.z_snk = &particles_pos(ZDIM, 0);
 	data.tree_nodes = dev_tree_nodes;
 	data.vel = particles_vel_data();
 	data.rungs = &particles_rung(0);

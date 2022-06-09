@@ -130,6 +130,9 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 				masses[i] = 1.0;
 			}
 			for (int i = count; i < nsource; i++) {
+				srcx[i] = 0.0;
+				srcy[i] = 0.0;
+				srcz[i] = 0.0;
 				masses[i] = 0.0;
 			}
 			const auto range = self_ptr->part_range;

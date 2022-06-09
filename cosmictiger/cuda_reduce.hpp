@@ -21,6 +21,7 @@
 #define CUDA_REDUCE_HPP_
 
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/containers.hpp>
 
 #ifdef __CUDACC__
 
@@ -48,6 +49,15 @@ __device__ inline void shared_reduce_add(T& number) {
 	}
 }
 
+template<class T, int N>
+__device__ inline void shared_reduce_add_array(array<T, N>& number) {
+	for (int P = warpSize / 2; P >= 1; P /= 2) {
+		for( int n = 0; n < N; n++ ) {
+			number[n] += __shfl_xor_sync(0xffffffff, number[n], P);
+		}
+	}
+}
+
 template<class T, int BLOCK_SIZE>
 __device__ inline void shared_reduce_add(T& number) {
 	int P = WARP_SIZE;
@@ -64,7 +74,7 @@ __device__ inline void shared_reduce_add(T& number) {
 		if (inbr < BLOCK_SIZE) {
 			t = sum[tid] + sum[inbr];
 		} else {
-			t = sum[tid] ;
+			t = sum[tid];
 		}
 		__syncthreads();
 		sum[tid] = t;

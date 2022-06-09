@@ -32,9 +32,6 @@ struct cuda_kick_data {
 	fixed32* y;
 	fixed32* z;
 	array<float, NDIM>* vel;
-	fixed32* x_snk;
-	fixed32* y_snk;
-	fixed32* z_snk;
 	char* rungs;
 	float* gx;
 	float* gy;
@@ -80,6 +77,7 @@ struct cuda_kick_shmem {
 	stack_vector<int> echecks;
 	stack_vector<int> dchecks;
 	device_vector<int> leaflist;
+	device_vector<int> closelist;
 	device_vector<int> cplist;
 	device_vector<int> cclist;
 	device_vector<int> pclist;
