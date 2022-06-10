@@ -32,7 +32,7 @@ class device_vector {
 	T* new_ptr;
 	int sz;
 	int cap;
-	__device__ void initialize() {
+	__device__ inline  void initialize() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
@@ -48,14 +48,14 @@ class device_vector {
 		}
 	}
 public:
-	__device__ device_vector() {
+	__device__ inline  device_vector() {
 		initialize();
 	}
-	__device__ device_vector(int sz0) {
+	__device__ inline  device_vector(int sz0) {
 		initialize();
 		resize(sz0);
 	}
-	__device__ ~device_vector() {
+	__device__ inline  ~device_vector() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
@@ -69,7 +69,7 @@ public:
 	__device__  inline T* data() {
 		return ptr;
 	}
-	__device__ void shrink_to_fit() {
+	__device__ inline  void shrink_to_fit() {
 		const int& tid = threadIdx.x;
 		const int& block_size = blockDim.x;
 		__syncthreads();
@@ -105,7 +105,7 @@ public:
 		}
 		__syncthreads();
 	}
-	__device__
+	__device__ inline
 	void resize(int new_sz) {
 		const int& tid = threadIdx.x;
 		if (new_sz <= cap) {
@@ -148,30 +148,30 @@ public:
 			__syncthreads();
 		}
 	}
-	__device__ T& back() {
+	__device__ inline  T& back() {
 		return ptr[sz - 1];
 	}
-	__device__  const T& back() const {
+	__device__ inline   const T& back() const {
 		return ptr[sz - 1];
 	}
-	__device__ void pop_back() {
+	__device__ inline  void pop_back() {
 		if (threadIdx.x == 0) {
 			sz--;
 		}
 		__syncthreads();
 	}
-	__device__ void push_back(const T& item) {
+	__device__ inline  void push_back(const T& item) {
 		resize(size() + 1);
 		if (threadIdx.x == 0) {
 			back() = item;
 		}
 		__syncthreads();
 	}
-	__device__
+	__device__ inline
 	int size() const {
 		return sz;
 	}
-	__device__ T& operator[](int i) {
+	__device__ inline  T& operator[](int i) {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
@@ -180,7 +180,7 @@ public:
 #endif
 		return ptr[i];
 	}
-	__device__
+	__device__ inline
 	 const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {

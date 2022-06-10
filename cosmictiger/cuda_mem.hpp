@@ -76,7 +76,7 @@ public:
 		const auto stop = round_up((std::uintptr_t)(ptr + size), line_size);
 		for (std::uintptr_t i = start; i < stop; i += line_size) {
 			char* p = (char*) i;
-			asm volatile ("prefetch.global.L2::evict_last [%0];" : "=l"(p));
+			asm volatile ("prefetch.global.L2::evict_normal [%0];" : "=l"(p));
 		}
 #endif
 	}

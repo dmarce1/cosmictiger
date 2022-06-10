@@ -335,7 +335,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					device_vector<int>* lists[NLISTS] = { &cclist, &leaflist, &cplist, &pclist, &nextlist };
 					auto& checks = dchecks;
 					const float thetainv = 1.f / global_params.theta;
-					do {
+						do {
 						const int maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
 							for (int n = 0; n < NLISTS; n++) {
