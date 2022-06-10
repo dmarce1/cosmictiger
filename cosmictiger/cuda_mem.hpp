@@ -41,8 +41,45 @@ class cuda_mem {
 	char* pop(int bin);
 	__device__
 	bool create_new_allocation(int bin);
+	__device__
+	static inline void discard_memory_one(volatile void* __ptr, std::size_t nbytes) noexcept {
+#if __CUDA_ARCH__ >= 800
+		char* p = reinterpret_cast<char*>(const_cast<void*>(__ptr));
+		static constexpr std::size_t line_size = 128;
+		std::size_t start = round_up(reinterpret_cast<std::uintptr_t>(p), line_size);
+		std::size_t end = round_down(reinterpret_cast<std::uintptr_t>(p) + nbytes, line_size);
+		for (std::size_t i = start; i < end; i += line_size) {
+			asm volatile ("discard.global.L2 [%0], 128;" ::"l"(p + (i * line_size)) :);
+		}
+#endif
+	}
 public:
-
+	__device__
+	static inline void discard_memory(volatile void* __ptr, std::size_t nbytes) noexcept {
+#if __CUDA_ARCH__ >= 800
+		const int& tid = threadIdx.x;
+		const int& block_size = blockDim.x;
+		char* p = reinterpret_cast<char*>(const_cast<void*>(__ptr));
+		static constexpr std::size_t line_size = 128;
+		std::size_t start = round_up(reinterpret_cast<std::uintptr_t>(p), line_size);
+		std::size_t end = round_down(reinterpret_cast<std::uintptr_t>(p) + nbytes, line_size);
+		for (std::size_t i = start + tid * line_size; i < end; i += block_size * line_size) {
+			asm volatile ("discard.global.L2 [%0], 128;" ::"l"(p + (i * line_size)) :);
+		}
+#endif
+	}
+	__device__
+	static inline void prefetch(volatile void* ptr, std::size_t size) {
+#if __CUDA_ARCH__
+		constexpr std::uintptr_t line_size = 128;
+		const auto start = round_down((std::uintptr_t)(ptr), line_size);
+		const auto stop = round_up((std::uintptr_t)(ptr + size), line_size);
+		for (std::uintptr_t i = start; i < stop; i += line_size) {
+			char* p = (char*) i;
+			asm volatile ("prefetch.global.L2::evict_last [%0];" : "=l"(p));
+		}
+#endif
+	}
 	__device__
 	void* allocate(size_t sz);
 	__device__
