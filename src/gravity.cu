@@ -145,9 +145,9 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	auto &force = shmem.f;
 	auto& multis = shmem.mpos;
 	const int nsink = self.part_range.second - self.part_range.first;
-	const auto& sink_x = data.x + self.part_range.first;
-	const auto& sink_y = data.y + self.part_range.first;
-	const auto& sink_z = data.z + self.part_range.first;
+	const auto* sink_x = data.x + self.part_range.first;
+	const auto* sink_y = data.y + self.part_range.first;
+	const auto* sink_z = data.z + self.part_range.first;
 	auto& barrier = shmem.barrier;
 	const auto* tree_nodes = data.tree_nodes;
 	flop_counter<int> flops = 0;
@@ -231,9 +231,9 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
 	auto &force = shmem.f;
 	const int nsink = self.part_range.second - self.part_range.first;
-	const auto& sink_x = data.x + self.part_range.first;
-	const auto& sink_y = data.y + self.part_range.first;
-	const auto& sink_z = data.z + self.part_range.first;
+	const auto* sink_x = data.x + self.part_range.first;
+	const auto* sink_y = data.y + self.part_range.first;
+	const auto* sink_z = data.z + self.part_range.first;
 	auto& barrier = shmem.barrier;
 	const auto* main_src_x = data.x;
 	const auto* main_src_y = data.y;

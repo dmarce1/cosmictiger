@@ -496,8 +496,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes, vector<kick_workitem> workitems,
-		cudaStream_t stream) {
+kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes, vector<kick_workitem> workitems) {
 	timer tm;
 	tm.start();
 	int nblocks = kick_block_count();
@@ -593,10 +592,10 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		ikick_params[i] = std::move(params);
 	}
 	cuda_set_device();
-	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, stream));
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
-	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, stream));
-	cuda_stream_synchronize(stream);
+	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, 0));
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
+	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, 0));
+	CUDA_CHECK(cudaDeviceSynchronize());
 	return *return_;
 }
 
