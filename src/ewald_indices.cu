@@ -34,11 +34,7 @@ struct ewald_constants {
 
 
 ewald_constants ec;
-__device__ ewald_constants* ec_dev;
-
-__global__ void set_ewald_constants(ewald_constants* consts) {
-	ec_dev = consts;
-}
+__constant__ ewald_constants ec_dev;
 
 void ewald_const::init_gpu() {
 	int n2max = 10;
@@ -104,11 +100,7 @@ void ewald_const::init_gpu() {
 		ec.four_expanse[count++] = D0.detraceD();
 	}
 	cuda_set_device();
-	ewald_constants* dev;
-	(CUDA_MALLOC(&dev, sizeof(ewald_constants)));
-	CUDA_CHECK(cudaMemcpy(dev, &ec, sizeof(ewald_constants), cudaMemcpyHostToDevice));
-	set_ewald_constants<<<1,1>>>(dev);
-	CUDA_CHECK(cudaDeviceSynchronize());
+	CUDA_CHECK(cudaMemcpyToSymbol(ec_dev, &ec, sizeof(ewald_constants)));
 }
 
 CUDA_EXPORT int ewald_const::nfour() {
@@ -121,7 +113,7 @@ CUDA_EXPORT int ewald_const::nreal() {
 
 CUDA_EXPORT const array<float, NDIM>& ewald_const::real_index(int i) {
 #ifdef __CUDA_ARCH__
-	return ec_dev->real_indices[i];
+	return ec_dev.real_indices[i];
 #else
 	return ec.real_indices[i];
 #endif
@@ -129,7 +121,7 @@ CUDA_EXPORT const array<float, NDIM>& ewald_const::real_index(int i) {
 
 CUDA_EXPORT const array<float, NDIM>& ewald_const::four_index(int i) {
 #ifdef __CUDA_ARCH__
-	return ec_dev->four_indices[i];
+	return ec_dev.four_indices[i];
 #else
 	return ec.four_indices[i];
 #endif
@@ -137,7 +129,7 @@ CUDA_EXPORT const array<float, NDIM>& ewald_const::four_index(int i) {
 
 CUDA_EXPORT const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
 #ifdef __CUDA_ARCH__
-	return ec_dev->four_expanse[i];
+	return ec_dev.four_expanse[i];
 #else
 	return ec.four_expanse[i];
 #endif
