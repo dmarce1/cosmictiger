@@ -525,6 +525,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	ALWAYS_ASSERT(workitems.size());
 	nblocks = std::min(nblocks, (int) workitems.size());
 	static char* data_ptr = nullptr;
+	static char* dev_data_ptr = nullptr;
 	static int data_size = 0;
 	int dcount = 0;
 	int ecount = 0;
@@ -535,21 +536,34 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount + sizeof(int) * ecount;
 	if (data_size < alloc_size) {
 		if (data_ptr) {
-			CUDA_CHECK(cudaFree(data_ptr));
+			CUDA_CHECK(cudaFree(dev_data_ptr));
+			free(data_ptr);
 		}
 		data_size = alloc_size;
-		CUDA_CHECK(cudaMallocManaged(&data_ptr, alloc_size));
+		data_ptr = (char*) malloc(alloc_size);
+		CUDA_CHECK(cudaMallocManaged(&dev_data_ptr, alloc_size));
 	}
 	int offset = 0;
-	cuda_kick_params* dev_kick_params = (cuda_kick_params*) (data_ptr + offset);
-	offset += sizeof(cuda_kick_params) * workitems.size();
 	kick_return* return_ = (kick_return*) (data_ptr + offset);
 	offset += sizeof(kick_return);
+	cuda_kick_params* ikick_params = (cuda_kick_params*) (data_ptr + offset);
+	offset += sizeof(cuda_kick_params) * workitems.size();
 	int* dchecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * dcount;
 	int* echecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * ecount;
 	int* current_index = (int*) (data_ptr + offset);
+	offset += sizeof(int);
+	offset = 0;
+	kick_return* dev_return_ = (kick_return*) (dev_data_ptr + offset);
+	offset += sizeof(kick_return);
+	cuda_kick_params* dev_ikick_params = (cuda_kick_params*) (dev_data_ptr + offset);
+	offset += sizeof(cuda_kick_params) * workitems.size();
+	int* dev_dchecks = (int*) (dev_data_ptr + offset);
+	offset += sizeof(int) * dcount;
+	int* dev_echecks = (int*) (dev_data_ptr + offset);
+	offset += sizeof(int) * ecount;
+	int* dev_current_index = (int*) (dev_data_ptr + offset);
 	offset += sizeof(int);
 	*current_index = 0;
 	*return_ = kick_return();
@@ -593,15 +607,16 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		params.Lpos = workitems[i].pos;
 		params.L = workitems[i].L;
 		params.self = workitems[i].self.index;
-		params.dchecks = dchecks + dindices[i];
-		params.echecks = echecks + eindices[i];
+		params.dchecks = dev_dchecks + dindices[i];
+		params.echecks = dev_echecks + eindices[i];
 		params.dcount = dindices[i + 1] - dindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
-		dev_kick_params[i] = std::move(params);
+		ikick_params[i] = std::move(params);
 	}
 	cuda_set_device();
-
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(return_, kparams,data, dev_kick_params, workitems.size(), current_index);
+	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, stream));
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem), stream>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
+	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, stream));
 	cuda_stream_synchronize(stream);
 	return *return_;
 }
