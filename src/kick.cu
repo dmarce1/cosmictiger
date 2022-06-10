@@ -261,12 +261,19 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 				if (nsinks) {
 					nextlist.resize(0);
 					cclist.resize(0);
+					constexpr int CC = 0;
+					constexpr int NEXT = 1;
+					constexpr int NLISTS = 2;
+					array<bool, NLISTS> sw;
+					device_vector<int>* lists[NLISTS] = { &cclist, &nextlist };
+
 					auto& checks = echecks;
 					const float thetainv = 1.f / global_params.theta;
 					const int maxi = round_up(checks.size(), WARP_SIZE);
 					for (int i = tid; i < maxi; i += WARP_SIZE) {
-						bool cc = false;
-						bool next = false;
+						for (int n = 0; n < NLISTS; n++) {
+							sw[n] = false;
+						}
 						if (i < checks.size()) {
 							const tree_node& other = tree_nodes[checks[i]];
 							if (other.nparts()) {
@@ -276,29 +283,27 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
 								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
 								const float dcc = (self.radius + other.radius) * thetainv;
-								cc = R2 > sqr(dcc);
+								sw[CC] = R2 > sqr(dcc);
 								flops += 24;
-								next = !cc;
-								ALWAYS_ASSERT(cc || (!other.leaf && !self.leaf));
+								if (!sw[CC]) {
+									sw[NEXT] = true;
+									ALWAYS_ASSERT(!other.leaf);
+								}
 							}
 						}
 						{
-							int l;
-							int total;
-							int start;
-							l = cc;
-							compute_indices(l, total);
-							start = cclist.size();
-							cclist.resize(start + total);
-							if (cc) {
-								cclist[l + start] = checks[i];
+							array<int, NLISTS> l, total;
+							for (int n = 0; n < NLISTS; n++) {
+								l[n] = sw[n];
 							}
-							l = next;
-							compute_indices(l, total);
-							start = nextlist.size();
-							nextlist.resize(start + total);
-							if (next) {
-								nextlist[l + start] = checks[i];
+							compute_indices_array(l, total);
+							for (int n = 0; n < NLISTS; n++) {
+								const int start = lists[n]->size();
+								__syncwarp();
+								lists[n]->resize(start + total[n]);
+								if (sw[n]) {
+									(*lists[n])[l[n] + start] = checks[i];
+								}
 							}
 						}
 					}
@@ -312,7 +317,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					}
 					nextlist.resize(0);
 					__syncwarp();
-
 					cuda_gravity_cc_ewald(data, L.back().expansion, self, cclist, global_params.do_phi);
 				}
 				if (nsinks) {
@@ -321,16 +325,22 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					cclist.resize(0);
 					cplist.resize(0);
 					pclist.resize(0);
+					constexpr int CC = 0;
+					constexpr int LEAF = 1;
+					constexpr int CP = 2;
+					constexpr int PC = 3;
+					constexpr int NEXT = 4;
+					constexpr int NLISTS = 5;
+					array<bool, NLISTS> sw;
+					device_vector<int>* lists[NLISTS] = { &cclist, &leaflist, &cplist, &pclist, &nextlist };
 					auto& checks = dchecks;
 					const float thetainv = 1.f / global_params.theta;
 					do {
 						const int maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
-							bool cc = false;
-							bool next = false;
-							bool leaf = false;
-							bool cp = false;
-							bool pc = false;
+							for (int n = 0; n < NLISTS; n++) {
+								sw[n] = false;
+							}
 							if (i < checks.size()) {
 								const tree_node& other = tree_nodes[checks[i]];
 								if (other.nparts()) {
@@ -342,77 +352,45 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 									const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 									const auto self_parts = self.nparts();
 									const auto other_parts = other.nparts();
-									cc = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
+									sw[CC] = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int) (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
 									flops += 20;
-									if (!cc && other.leaf && self.leaf) {
+									if (!sw[CC] && other.leaf && self.leaf) {
 										const float dcp = fmaxf((self.radius * thetainv + other.radius), mind);
 										const float dpc = fmaxf((self.radius + other.radius * thetainv), mind);
-										pc = (R2 > sqr(dpc) || !box_intersects_sphere(self.box, other.pos, fmaxf(thetainv * other.radius, h)))
+										sw[PC] = (R2 > sqr(dpc) || !box_intersects_sphere(self.box, other.pos, fmaxf(thetainv * other.radius, h)))
 												&& self_parts >= MIN_PARTS_PCCP;
-										cp = (R2 > sqr(dcp) || !box_intersects_sphere(other.box, self.pos, fmaxf(thetainv * self.radius, h)))
+										sw[CP] = (R2 > sqr(dcp) || !box_intersects_sphere(other.box, self.pos, fmaxf(thetainv * self.radius, h)))
 												&& other_parts >= MIN_PARTS_PCCP;
-										if (pc && cp) {
+										if (sw[PC] && sw[CP]) {
 											if (self_parts < other_parts) {
-												cp = false;
+												sw[CP] = false;
 											} else if (self_parts > other_parts) {
-												pc = false;
+												sw[PC] = false;
 											} else {
-												cp = pc = false;
+												sw[CP] = sw[PC] = false;
 											}
 										}
 										flops += 4;
 									}
-									if (!cc && !cp && !pc) {
-										leaf = other.leaf;
-										next = !leaf;
+									if (!sw[CC] && !sw[CP] && !sw[PC]) {
+										sw[LEAF] = other.leaf;
+										sw[NEXT] = !sw[LEAF];
 									}
 								}
 							}
 							{
-								int l;
-								int total;
-								int start;
-								l = cc;
-								compute_indices(l, total);
-								start = cclist.size();
-								__syncwarp();
-								cclist.resize(start + total);
-								if (cc) {
-									cclist[l + start] = checks[i];
+								array<int, NLISTS> l, total;
+								for (int n = 0; n < NLISTS; n++) {
+									l[n] = sw[n];
 								}
-								if (self.leaf) {
-									l = cp;
-									compute_indices(l, total);
-									start = cplist.size();
+								compute_indices_array(l, total);
+								for (int n = 0; n < NLISTS; n++) {
+									const int start = lists[n]->size();
 									__syncwarp();
-									cplist.resize(start + total);
-									if (cp) {
-										cplist[l + start] = checks[i];
+									lists[n]->resize(start + total[n]);
+									if (sw[n]) {
+										(*lists[n])[l[n] + start] = checks[i];
 									}
-									l = pc;
-									compute_indices(l, total);
-									start = pclist.size();
-									__syncwarp();
-									pclist.resize(start + total);
-									if (pc) {
-										pclist[l + start] = checks[i];
-									}
-								}
-								l = next;
-								compute_indices(l, total);
-								start = nextlist.size();
-								__syncwarp();
-								nextlist.resize(start + total);
-								if (next) {
-									nextlist[l + start] = checks[i];
-								}
-								l = leaf;
-								compute_indices(l, total);
-								start = leaflist.size();
-								__syncwarp();
-								leaflist.resize(start + total);
-								if (leaf) {
-									leaflist[l + start] = checks[i];
 								}
 							}
 						}
@@ -428,10 +406,10 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						__syncwarp();
 
 					} while (checks.size() && self.leaf);
-					cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
 					if (self.leaf) {
 						__syncwarp();
 						const float h = global_params.h;
+						cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
 						cuda_gravity_cp_direct(data, L.back().expansion, self, cplist, global_params.do_phi);
 						cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
 						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
@@ -439,6 +417,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						const int start = checks.size();
 						checks.resize(start + leaflist.size());
 						cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
+						cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
 						barrier.arrive_and_wait();
 					}
 				}
