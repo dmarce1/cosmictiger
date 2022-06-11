@@ -69,6 +69,12 @@ public:
 		return i;
 	}
 
+
+	CUDA_EXPORT
+	inline T& raw() {
+		return i;
+	}
+
 	CUDA_EXPORT
 	inline static fixed<T, SIGBITS> max() {
 		fixed<T, SIGBITS> num;

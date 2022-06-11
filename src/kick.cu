@@ -519,7 +519,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		}
 		data_size = alloc_size;
 		data_ptr = (char*) malloc(alloc_size);
-		CUDA_CHECK(cudaMallocManaged(&dev_data_ptr, alloc_size));
+		CUDA_CHECK(cudaMalloc(&dev_data_ptr, alloc_size));
 	}
 	int offset = 0;
 	kick_return* return_ = (kick_return*) (data_ptr + offset);

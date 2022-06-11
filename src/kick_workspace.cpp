@@ -318,7 +318,6 @@ void kick_workspace::to_gpu() {
 	tree_2_gpu();
 	particles_memadvise_gpu();
 	const auto kr = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems));
-	particles_memadvise_cpu();
 	tree_2_cpu();
 	tm.stop();
 //	PRINT("GPU took %e seconds\n", tm.read());

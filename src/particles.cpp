@@ -461,12 +461,17 @@ void particles_memadvise_cpu() {
 	const auto rng = particles_current_range();
 	const auto begin = rng.first;
 	const auto count = rng.second - begin;
-	CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
-	CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseSetAccessedBy, cudaCpuDeviceId));
+	CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
+	CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseSetPreferredLocation, cudaCpuDeviceId));
 	undo_last_memadvise = [begin, count]() {
-		CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
-		CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseUnsetAccessedBy, cudaCpuDeviceId));
+		CUDA_CHECK(cudaMemAdvise(particles_vel_data() + begin, count * sizeof(array<float, NDIM>), cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
+		CUDA_CHECK(cudaMemAdvise(&particles_rung(0) + begin, count * sizeof(char), cudaMemAdviseUnsetPreferredLocation, cudaCpuDeviceId));
 	};
+	for( int dim = 0; dim < NDIM; dim++) {
+		CUDA_CHECK(cudaMemPrefetchAsync(&particles_pos(dim,begin), count * sizeof(fixed32), cudaCpuDeviceId, 0));
+	}
+	CUDA_CHECK(cudaMemPrefetchAsync(&particles_vel(XDIM,begin), count * sizeof(array<float,NDIM>), cudaCpuDeviceId, 0));
+	CUDA_CHECK(cudaMemPrefetchAsync(&particles_rung(begin), count * sizeof(char), cudaCpuDeviceId, 0));
 #endif
 }
 

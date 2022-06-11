@@ -535,6 +535,7 @@ static void speed_test() {
 			checklist.push_back(root_id);
 			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 			tree_destroy(false);
+			drift(1.0, 0.0, 0.0, 0.0, 0.0, 0);
 			tm.stop();
 		}
 	}

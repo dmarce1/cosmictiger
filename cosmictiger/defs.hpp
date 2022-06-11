@@ -60,8 +60,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 #define USE_CONFORMAL_TIME
-//#define SPH_TOTAL_ENERGY
-#define SPH_MAX_SOFT (EWALD_DIST*0.5f)
 
 
 #define GROUP_WAVES 8

@@ -52,6 +52,7 @@ set(cosmictiger_source_files
     src/cuda.cpp
     src/cuda_mem.cu
     src/drift.cpp
+    src/drift.cu
     src/driver.cpp
     src/domain.cpp
     src/ewald_indices.cpp

@@ -69,7 +69,7 @@ public:
 #endif
 	}
 	__device__
-	static inline void prefetch(volatile void* ptr, std::size_t size) {
+	static inline void prefetch(const void* ptr, std::size_t size) {
 #if __CUDA_ARCH__
 		constexpr std::uintptr_t line_size = 128;
 		const auto start = round_down((std::uintptr_t)(ptr), line_size);
