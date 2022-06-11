@@ -50,6 +50,9 @@ void cpu_gravity_cp(expansion<float>&, const vector<tree_id>&, tree_id, bool do_
 void cpu_gravity_pc(force_vectors&, int, tree_id, const vector<tree_id>&);
 void cpu_gravity_pp(force_vectors&, int, tree_id, const vector<tree_id>&, float h);
 
+void show_timings();
+
+
 #ifdef __CUDACC__
 __device__
 void cuda_gravity_cc_direct( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, bool do_phi);
