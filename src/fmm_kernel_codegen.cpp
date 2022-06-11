@@ -35,7 +35,6 @@ void deindent() {
 	ntab--;
 }
 
-
 int sym_index(int l, int m, int n) {
 	return (l + m + n) * (l + m + n + 1) * ((l + m + n) + 2) / 6 + (m + n) * ((m + n) + 1) / 2 + n;
 }
@@ -389,7 +388,8 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "%s[%i] = -%s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 									flops++;
 								}
 								asn.push_back(str);
@@ -403,8 +403,8 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "%s[%i] -= %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops += 1;
 								} else {
-									ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(), sym_index(p[0], p[1],
-											p[2]), oname.c_str(), trless_index(n[0], n[1], n[2], P));
+									ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+											sym_index(p[0], p[1], p[2]), oname.c_str(), trless_index(n[0], n[1], n[2], P));
 									flops += 1;
 								}
 								op.push_back(str);
@@ -463,12 +463,12 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 							const auto p = n - m * 2;
 							char* str;
 							if (close21(factor)) {
-								ASPRINTF(&str, "%s[%i] = fmaf(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(), sym_index(p[0],
-										p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
+								ASPRINTF(&str, "%s[%i] = fmaf(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
+										sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 								flops += 2;
 							} else if (close21(-factor)) {
-								ASPRINTF(&str, "%s[%i] -= %s[%i] * Drinvpow_%i_%i;\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(), sym_index(p[0], p[1], p[2]),
-										n0 - m0, m0);
+								ASPRINTF(&str, "%s[%i] -= %s[%i] * Drinvpow_%i_%i;\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
+										sym_index(p[0], p[1], p[2]), n0 - m0, m0);
 								flops += 2;
 							} else {
 								ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i]*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
@@ -487,12 +487,9 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 	std::sort(op.begin(), op.end(), [](std::string a, std::string b) {
 		return atoi(a.c_str()+6) < atoi(b.c_str()+6);
 	});
-	int maxop = (op.size() + 1) / 2;
+	int maxop = op.size();
 	for (int i = 0; i < maxop; i++) {
 		tprint("%s", op[i].c_str());
-		if (i + maxop < op.size()) {
-			tprint("%s", op[i + maxop].c_str());
-		}
 	}
 
 	return flops;
@@ -594,7 +591,7 @@ int const_reference_trless(std::string name) {
 		for (n[1] = 0; n[1] < Q - n[0]; n[1]++) {
 			for (n[2] = 0; n[2] < Q - n[0] - n[1]; n[2]++) {
 				if (!(n[2] >= 2 && !(n[0] == 0 && n[1] == 0 && n[2] == 2))) {
-					tprint("const T& %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
+					tprint("const T %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
 				} else {
 					tprint("const T %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
 				}
@@ -661,7 +658,7 @@ void reference_sym(std::string name, int Q) {
 		for (int m = 0; m < Q - l; m++) {
 			for (int n = 0; n < Q - l - m; n++) {
 				const int index = sym_index(l, m, n);
-				tprint("const T& %s%i%i%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
+				tprint("const T %s%i%i%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
 			}
 		}
 	}
@@ -800,17 +797,16 @@ void do_expansion(bool two) {
 			}
 		}
 	}
+
 	int i = 0;
 	int j = 0;
-	while (i < cmds1.size() || j < cmds2.size()) {
-		if (i < cmds1.size()) {
-			tprint("%s", cmds1[i].c_str());
-			i++;
-		}
-		if (j < cmds2.size()) {
-			tprint("%s", cmds2[j].c_str());
-			j++;
-		}
+	while (i < cmds1.size()) {
+		tprint("%s", cmds1[i].c_str());
+		i++;
+	}
+	while (j < cmds2.size()) {
+		tprint("%s", cmds2[j].c_str());
+		j++;
 	}
 	tprint("return Lb;\n");
 	printf("/* FLOPS = %i + do_phi * %i*/\n", flops, phi_flops);
@@ -873,11 +869,11 @@ void do_expansion_cuda() {
 	});
 	vector<entry> entries1, entries2;
 	for (int i = 0; i < entries.size(); i++) {
-		if (i < (entries.size() + 1) / 2) {
-			entries1.push_back(entries[i]);
-		} else {
-			entries2.push_back(entries[i]);
-		}
+		//	if (i < (entries.size() + 1) / 2) {
+		entries1.push_back(entries[i]);
+		//	} else {
+		//		entries2.push_back(entries[i]);
+		//	}
 	}
 
 	tprint("static __constant__ char Ldest1[%i] = { ", entries1.size());
@@ -908,39 +904,6 @@ void do_expansion_cuda() {
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].Lsource);
 		if (i != entries1.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-
-	tprint("static __constant__ char Ldest2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("%i", entries2[i].Ldest);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-	tprint("static __constant__ float factor2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("float(%.9e)", entries2[i].factor);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-	tprint("static __constant__ char xsrc2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("%i", entries2[i].xsource);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-	tprint("static __constant__ char Lsrc2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("%i", entries2[i].Lsource);
-		if (i != entries2.size() - 1) {
 			printf(",");
 		}
 	}
@@ -988,17 +951,8 @@ void do_expansion_cuda() {
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size() - 1 + (entries1.size() == entries2.size() ? 1 : 0));
 	indent();
 	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], Lc[Lsrc1[i]], Lb[Ldest1[i]]);\n");
-	tprint("Lb[Ldest2[i]] = fmaf(factor2[i] * dx[xsrc2[i]], Lc[Lsrc2[i]], Lb[Ldest2[i]]);\n");
 	deindent();
 	tprint("}\n");
-	if (entries1.size() != entries2.size()) {
-		tprint("if( tid == 0 ) {\n");
-		indent();
-		tprint("Lb[Ldest1[%i]] = fmaf(factor1[%i] * dx[xsrc1[%i]], Lc[Lsrc1[%i]], Lb[Ldest1[%i]]);\n", entries2.size(), entries2.size(), entries2.size(),
-				entries2.size(), entries2.size());
-		deindent();
-		tprint("}\n");
-	}
 	tprint("if( do_phi ) {\n");
 	indent();
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", phi_entries.size());
@@ -1027,11 +981,12 @@ void do_expansion_cuda() {
 }
 
 void ewald(int direct_flops) {
+	tprint("#include <cosmictiger/flops.hpp>\n");
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,%i> &D, array<T, NDIM> X) {\n", P);
 	indent();
 	tprint("ewald_const econst;\n");
-	tprint("int flops = %i;\n", 7);
+	tprint("flop_counter<int> flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
 	tprint("const T fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
 	tprint("tensor_sym<T, %i> Dreal;\n", P);
@@ -1124,15 +1079,11 @@ void ewald(int direct_flops) {
 			}
 		}
 	}
-	int maxi = (P * P + 2) / 2;
+	int maxi = (P * P + 1);
 	for (int i = 0; i < maxi; i++) {
 		int j = i + maxi;
 		tprint("Dfour[%i] = fmaf(%cn, D0[%i], Dfour[%i]);\n", i, iscos[i] ? 'c' : 's', i, i);
 		these_flops += 2;
-		if (j < P * P + 1) {
-			tprint("Dfour[%i] = fmaf(%cn, D0[%i], Dfour[%i]);\n", j, iscos[j] ? 'c' : 's', j, j);
-			these_flops += 2;
-		}
 
 	}
 
@@ -1514,15 +1465,13 @@ int main() {
 	}
 	int i = 0;
 	int j = 0;
-	while (i < cmds1.size() || j < cmds2.size()) {
-		if (i < cmds1.size()) {
-			tprint("%s", cmds1[i].c_str());
-			i++;
-		}
-		if (j < cmds2.size()) {
-			tprint("%s", cmds2[j].c_str());
-			j++;
-		}
+	while (i < cmds1.size()) {
+		tprint("%s", cmds1[i].c_str());
+		i++;
+	}
+	while (j < cmds2.size()) {
+		tprint("%s", cmds2[j].c_str());
+		j++;
 	}
 
 	flops += compute_detrace<P - 1>("Mb", "Mc", 'd');
