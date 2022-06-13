@@ -28,7 +28,7 @@ struct two_float {
 class floatfloat {
 	two_float A;
 
-	const double SPLITTER = (1 << 29) + 1;
+	static constexpr double SPLITTER = (1 << 29) + 1;
 
 	CUDA_EXPORT
 	inline void split(double a, float* a_hi, float* a_lo) {
@@ -43,9 +43,8 @@ class floatfloat {
 	CUDA_EXPORT
 	inline two_float quickTwoSum(float a, float b) {  // 3
 		const volatile float s = a + b;
-		const float e0 = s - a;
-		const volatile float e = b - e0;
-		return two_float(s, e);
+		const volatile float e = s - a;
+		return two_float(s, b - e);
 	}
 
 	CUDA_EXPORT
@@ -76,20 +75,18 @@ class floatfloat {
 	}
 	CUDA_EXPORT
 	inline two_float split(float a) {
-		const float split = 4097;
+		constexpr float split = 4097;
 		const float t = a * split;
-		const float a0 = t - a;
-		const float a_hi = t - a0;
-		const float a_lo = a - a_hi;
-		return two_float(a_hi, a_lo);
+		const volatile float a_hi = t - (t - a);
+		return two_float(a_hi, a - a_hi);
 	}
 
 	CUDA_EXPORT
 	inline two_float twoProd(float a, float b) {
 		const volatile float p = a * b;
 		const two_float aS = split(a);
-		const volatile two_float bS = split(b);
-		const float err1 = (aS.x * bS.x - p);
+		const two_float bS = split(b);
+		const volatile float err1 = (aS.x * bS.x - p);
 		const volatile float err = (err1 + aS.x * bS.y + aS.y * bS.x + aS.y * bS.y);
 		return two_float(p, err);
 	}
@@ -103,6 +100,14 @@ class floatfloat {
 		p = quickTwoSum(p.x, p.y);
 		return p;
 	}
+	CUDA_EXPORT
+	inline floatfloat inv(floatfloat a) {
+		floatfloat b;
+		b.A.x = 1.f / a.A.x;
+		b.A.y = 0.f;
+		b *= (floatfloat(2.0) - a * b);
+		return b;
+	}
 
 public:
 	inline floatfloat() = default;
@@ -110,7 +115,7 @@ public:
 	inline floatfloat& operator=(floatfloat&&) = default;
 	inline floatfloat& operator=(const floatfloat&) = default;
 	CUDA_EXPORT
-	operator double() {
+	double to_double() {
 		return (double) A.x + (double) A.y;
 	}
 	CUDA_EXPORT
@@ -148,6 +153,11 @@ public:
 		return *this;
 	}
 	CUDA_EXPORT
+	inline floatfloat& operator/=(const floatfloat& other) {
+		*this = *this * inv(other);
+		return *this;
+	}
+	CUDA_EXPORT
 	inline floatfloat operator+(const floatfloat& other) const {
 		auto B = *this;
 		B += other;
@@ -166,13 +176,28 @@ public:
 		return B;
 	}
 	CUDA_EXPORT
+	inline floatfloat operator/(const floatfloat& other) const {
+		auto B = *this;
+		B /= other;
+		return B;
+	}
+	CUDA_EXPORT
 	inline floatfloat operator-() const {
 		auto B = *this;
 		B.A.x = -B.A.x;
 		B.A.y = -B.A.y;
 		return B;
 	}
-
+	friend floatfloat sqrt(floatfloat x);
 };
+
+CUDA_EXPORT inline floatfloat sqrt(floatfloat x) {
+	floatfloat y;
+	y.A.x = sqrtf(x.A.x);
+	y.A.y = 0.f;
+	y = floatfloat(0.5) * (y + x / y);
+	return y;
+}
+
 #endif /* FLOATFLOAT_HPP_ */
 

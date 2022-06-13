@@ -38,8 +38,12 @@ int hpx_main(int argc, char *argv[]) {
 		double C = A + B;
 		floatfloat c = a + b;
 		double C1 = A * B;
+		double C2 = A / B;
+		double C3 = sqrt(B);
 		floatfloat c1 = a * b;
-		print("%e %e \n", abs((double) c - C)/C, abs((double) c1 - C1)/C1 );
+		floatfloat c2 = a / b;
+		floatfloat c3 = sqrt(b);
+		print("%e %e %e %e\n",  abs(c.to_double() - C) / C,  abs(c1.to_double() - C1) / C1,  abs(c2.to_double() - C2) / C2,  abs(c3.to_double() - C3) / C3);
 	}
 
 	sleep(1000);
