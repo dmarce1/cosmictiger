@@ -28,8 +28,21 @@
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
 
+#include <cosmictiger/floatfloat.hpp>
 
 int hpx_main(int argc, char *argv[]) {
+	double A = 1.8492165982659821;
+	for (double B = 0.012424; B < 2.0; B += .112488) {
+		floatfloat a = A;
+		floatfloat b = B;
+		double C = A + B;
+		floatfloat c = a + b;
+		double C1 = A * B;
+		floatfloat c1 = a * b;
+		print("%e %e \n", abs((double) c - C)/C, abs((double) c1 - C1)/C1 );
+	}
+
+	sleep(1000);
 	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
 	std::atomic<int> i;
 	for (double q = 0.0; q < 1.0; q += 0.01) {
@@ -61,7 +74,7 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
-	PRINT( "STARTING MAIN\n");
+	PRINT("STARTING MAIN\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
 	cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY
