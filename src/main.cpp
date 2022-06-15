@@ -31,22 +31,6 @@
 #include <cosmictiger/floatfloat.hpp>
 
 int hpx_main(int argc, char *argv[]) {
-	double A = 1.8492165982659821;
-	for (double B = 0.012424; B < 2.0; B += .112488) {
-		floatfloat a = A;
-		floatfloat b = B;
-		double C = A + B;
-		floatfloat c = a + b;
-		double C1 = A * B;
-		double C2 = A / B;
-		double C3 = sqrt(B);
-		floatfloat c1 = a * b;
-		floatfloat c2 = a / b;
-		floatfloat c3 = sqrt(b);
-		print("%e %e %e %e\n",  abs(c.to_double() - C) / C,  abs(c1.to_double() - C1) / C1,  abs(c2.to_double() - C2) / C2,  abs(c3.to_double() - C3) / C3);
-	}
-
-	sleep(1000);
 	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
 	std::atomic<int> i;
 	for (double q = 0.0; q < 1.0; q += 0.01) {

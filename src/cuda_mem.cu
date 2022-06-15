@@ -21,45 +21,15 @@
 
 __device__
 void cuda_mem::push(int bin, char* ptr) {
-	using itype = unsigned long long int;
-	auto& this_q = q[bin];
-	auto in = qin[bin];
-	const auto& out = qout[bin];
-	if (in - out >= CUDA_MEM_STACK_SIZE) {
-		PRINT("Q full! %li %li\n", out, in);
+	if( !q[bin].push(ptr) ) {
+		PRINT("cuda mem Q full!\n");
 		__trap();
 	}
-	while (atomicCAS((itype*) &this_q[in % CUDA_MEM_STACK_SIZE], (itype) 0, (itype) ptr) != 0) {
-		in++;
-		if (in - out >= CUDA_MEM_STACK_SIZE) {
-			PRINT("cuda mem Q full! %li %li\n", out, in);
-			__trap();
-		}
-	}
-	in++;
-	atomicMax((itype*) &qin[bin], (itype) in);
 }
 
 __device__
 char* cuda_mem::pop(int bin) {
-	using itype = unsigned long long int;
-	auto& this_q = q[bin];
-	const auto& in = qin[bin];
-	auto out = qout[bin];
-	if (out >= in) {
-		return nullptr;
-	}
-	char* ptr;
-	while ((ptr = (char*) atomicExch((itype*) &this_q[out % CUDA_MEM_STACK_SIZE], (itype) 0)) == nullptr) {
-		if (out >= in) {
-			return nullptr;
-		}
-		out++;
-	}
-	out++;
-	atomicMax((itype*) &qout[bin], (itype) out);
-	return ptr;
-
+	return q[bin].pop();
 }
 
 __device__
@@ -107,20 +77,13 @@ __device__ void cuda_mem::free(void* ptr) {
 }
 
 cuda_mem::cuda_mem(size_t heap_size) {
-	CUDA_CHECK(cudaMalloc(&heap_begin, heap_size));
+	CUDA_CHECK(cudaMallocManaged(&heap_begin, heap_size));
 	heap_end = heap_begin + heap_size;
 	reset();
 }
 
 void cuda_mem::reset() {
 	next = heap_begin;
-	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
-		for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
-			q[i][j] = nullptr;
-		}
-		qin[i] = 0;
-		qout[i] = 0;
-	}
 }
 
 cuda_mem::~cuda_mem() {

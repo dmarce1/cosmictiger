@@ -22,16 +22,15 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/lockfree_queue.hpp>
 
-#define CUDA_MEM_STACK_SIZE (128*1024)
+#define CUDA_MEM_STACK_SIZE (16*1024 - 2 * sizeof(size_t))
 #define CUDA_MEM_NBIN 32
 
 using cuda_mem_int = uint64_t;
 
 class cuda_mem {
-	array<array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
-	array<long long, CUDA_MEM_NBIN> qin;
-	array<long long, CUDA_MEM_NBIN> qout;
+	array<lockfree_queue<CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
 	char* heap_begin;
 	char* next;
 	char* heap_end;
