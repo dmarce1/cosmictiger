@@ -45,7 +45,7 @@ int hpx_main(int argc, char *argv[]) {
 		}
 		PRINT( "\n");
 	}
-	sleep(1000);
+	//sleep(1000);
 	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
 	std::atomic<int> i;
 	for (double q = 0.0; q < 1.0; q += 0.01) {

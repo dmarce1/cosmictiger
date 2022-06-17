@@ -24,8 +24,8 @@
 #include <cosmictiger/cuda_mutex.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/device_vector.hpp>
-#include <cosmictiger/floatfloat.hpp>
 #include <cosmictiger/float40.hpp>
+#include <cosmictiger/timer.hpp>
 
 struct lc_entry {
 	fixed32 x, y, z;
@@ -44,22 +44,23 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 		bool do_lc) {
 	const auto& tid = threadIdx.x;
 	const auto& bid = blockIdx.x;
-	const float one(1.0);
-	const float zero(0.0);
-	const float c0(1.0 / tau_max);
-	const float t0(tau0);
+	const double one(1.0);
+	const double two(2.0);
+	const double four(4.0);
+	const double zero(0.0);
+	const double c0(1.0 / tau_max);
+	const double t0(tau0);
 	const auto& nblocks = gridDim.x;
 	const part_int begin = (size_t) bid * count / nblocks;
 	const part_int end = (size_t)(bid + 1) * count / nblocks;
 	const part_int end0 = round_up(end - begin, BLOCK_SIZE) + begin;
 	const float c1 = dt / a;
-	__shared__ int lc_index;
 	for (part_int i = begin + tid; i < end0; i += BLOCK_SIZE) {
 		int this_rung;
-		float x0, y0, z0, x1, y1, z1;
-		array<float, NDIM> X0;
-		array<float, NDIM> X1;
-		float vx, vy, vz;
+		double x0, y0, z0, x1, y1, z1;
+		array<double, NDIM> X0;
+		array<double, NDIM> X1;
+		double vx, vy, vz;
 		const float* vel;
 		if (i < end) {
 			this_rung = rungs[i];
@@ -68,9 +69,9 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 				x0 = x[i].to_double();
 				y0 = y[i].to_double();
 				z0 = z[i].to_double();
-				x1 = x0 + float(vel[XDIM] * c1);
-				y1 = y0 + float(vel[YDIM] * c1);
-				z1 = z0 + float(vel[ZDIM] * c1);
+				x1 = x0 + double((float) (vel[XDIM] * c1));
+				y1 = y0 + double((float) (vel[YDIM] * c1));
+				z1 = z0 + double((float) (vel[ZDIM] * c1));
 			}
 		}
 		if (do_lc) {
@@ -102,33 +103,33 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 								X0[ZDIM] -= one;
 								X1[ZDIM] -= one;
 							}
-							const float dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
-							const float dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
-							const float tau0_ = float(tau0) + dist0;
-							const float tau1_ = float(tau1) + dist1;
-							const int i0 = (tau0_ * c0);
-							const int i1 = (tau1_ * c0);
+							const double dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
+							const double dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
+							const double tau0_ = double(tau0) + dist0;
+							const double tau1_ = double(tau1) + dist1;
+							const int i0 = (double) (tau0_ * c0);
+							const int i1 = (double) (tau1_ * c0);
 							if (dist1 <= one || dist0 <= one) {
 								if (i0 != i1) {
 									vx = (vel[XDIM]);
 									vy = (vel[YDIM]);
 									vz = (vel[ZDIM]);
-									const float& x0 = X0[XDIM];
-									const float& y0 = X0[YDIM];
-									const float& z0 = X0[ZDIM];
-									const float ti = float((double) (i0 + 1)) * tau_max;
-									const float sqrtauimtau0 = sqr(ti - t0);
-									const float tau0mtaui = t0 - ti;
-									const float u2 = sqr(vx, vy, vz);                                    // 5
-									const float x2 = sqr(x0, y0, z0);                                       // 5
-									const float udotx = vx * x0 + vy * y0 + vz * z0;               // 5
-									const float A = one - u2;                                                     // 1
-									const float B = float(2.0) * (tau0mtaui - udotx);                                    // 2
-									const float C = sqrtauimtau0 - x2;                                            // 1
-									const float t = -(B + sqrt(B * B - float(4.0) * A * C)) / (float(2.0) * A);                // 15
-									const float x1 = x0 + vx * t;                                            // 2
-									const float y1 = y0 + vy * t;                                            // 2
-									const float z1 = z0 + vz * t;                                            // 2
+									const double& x0 = X0[XDIM];
+									const double& y0 = X0[YDIM];
+									const double& z0 = X0[ZDIM];
+									const double ti = double((double) (i0 + 1)) * double(tau_max);
+									const double sqrtauimtau0 = sqr(ti - t0);
+									const double tau0mtaui = t0 - ti;
+									const double u2 = sqr(vx, vy, vz);                                    // 5
+									const double x2 = sqr(x0, y0, z0);                                       // 5
+									const double udotx = vx * x0 + vy * y0 + vz * z0;               // 5
+									const double A = one - u2;                                                     // 1
+									const double B = two * (tau0mtaui - udotx);                                    // 2
+									const double C = sqrtauimtau0 - x2;                                            // 1
+									const double t = -(B + sqrt(B * B - four * A * C)) / (two * A);                // 15
+									const double x1 = x0 + vx * t;                                            // 2
+									const double y1 = y0 + vy * t;                                            // 2
+									const double z1 = z0 + vz * t;                                            // 2
 									if (sqr(x1, y1, z1) <= one) {                                                 // 6
 										entry.x = x1;
 										entry.y = y1;
@@ -143,7 +144,7 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 						}
 						int index = test;
 						int total;
-						compute_indices < BLOCK_SIZE > (index, total);
+						compute_indices<BLOCK_SIZE>(index, total);
 						if (total) {
 							auto& list = (*list_ptr)[bid];
 							const auto start = list.size();
@@ -198,12 +199,18 @@ static __global__ void list_free() {
 
 void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_max) {
 	int nblocks;
+	timer tm;
+	tm.start();
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_drift_kernel, BLOCK_SIZE, 0));
+	cudaFuncAttributes attr;
+	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_drift_kernel));
+	PRINT( "%i %i\n", nblocks, BLOCK_SIZE);
+	nblocks *= cuda_smp_count();
 	const auto rng = particles_current_range();
 	nblocks = std::min(nblocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
 	const auto cnt = rng.second - rng.first;
 	if (get_options().do_lc) {
-		PRINT( "!\n");
+		PRINT("!\n");
 		const int list_size = round_up(cnt, BLOCK_SIZE) / BLOCK_SIZE;
 		CUDA_CHECK(cudaMallocManaged(&list_ptr, sizeof(list_type)));
 		next_list_entry = 0;
@@ -230,5 +237,6 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 		CUDA_CHECK(cudaDeviceSynchronize());
 		CUDA_CHECK(cudaFree(list_ptr));
 	}
-
+	tm.stop();
+	PRINT( "Drift time = %e\n", tm.read());
 }
