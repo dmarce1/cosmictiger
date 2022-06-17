@@ -115,7 +115,7 @@ public:
 	inline floatfloat& operator=(floatfloat&&) = default;
 	inline floatfloat& operator=(const floatfloat&) = default;
 	CUDA_EXPORT
-	double to_double() {
+	double to_double() const {
 		return (double) A.x + (double) A.y;
 	}
 	CUDA_EXPORT
@@ -188,6 +188,37 @@ public:
 		B.A.y = -B.A.y;
 		return B;
 	}
+	CUDA_EXPORT
+	inline bool operator<(const floatfloat& other) const {
+		if (A.x < other.A.x) {
+			return true;
+		} else if (A.x > other.A.x) {
+			return false;
+		} else {
+			return A.y < other.A.y;
+		}
+	}
+	CUDA_EXPORT
+	inline bool operator<=(const floatfloat& other) const {
+		return operator<(other) || operator==(other);
+	}
+	CUDA_EXPORT
+	inline bool operator>(const floatfloat& other) const {
+		return !operator<=(other);
+	}
+	CUDA_EXPORT
+	inline bool operator>=(const floatfloat& other) const {
+		return !operator<(other);
+	}
+	CUDA_EXPORT
+	inline bool operator==(const floatfloat& other) const {
+		return A.x == other.A.x && A.y == other.A.y;
+	}
+	CUDA_EXPORT
+	inline bool operator!=(const floatfloat& other) const {
+		return !operator==(other);
+	}
+	CUDA_EXPORT
 	friend floatfloat sqrt(floatfloat x);
 };
 

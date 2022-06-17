@@ -32,7 +32,7 @@ HPX_PLAIN_ACTION (drift);
 
 void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung) {
 	profiler_enter(__FUNCTION__);
-	cuda_drift(rung, scale, dt);
+	cuda_drift(rung, scale, dt, tau0, tau1, tau_max);
 	particles_memadvise_cpu();
 	profiler_exit();
 

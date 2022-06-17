@@ -51,6 +51,6 @@ struct drift_return {
 void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung );
 
 
-void cuda_drift(char rung, float a, float dt);
+void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_max);
 
 #endif /* DRIFT_HPP_ */

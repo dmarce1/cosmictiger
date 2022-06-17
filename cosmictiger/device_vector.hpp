@@ -22,6 +22,7 @@
 
 #include <cooperative_groups.h>
 #include <cuda/barrier>
+#include <cosmictiger/cuda_mem.hpp>
 
 using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
@@ -32,7 +33,7 @@ class device_vector {
 	T* new_ptr;
 	int sz;
 	int cap;
-	__device__ inline  void initialize() {
+	__device__ inline void initialize() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
@@ -42,20 +43,16 @@ class device_vector {
 
 		}
 		__syncthreads();
-		auto group = cooperative_groups::this_thread_block();
-		if (group.thread_rank() == 0) {
-			init(&barrier, group.size());
-		}
 	}
 public:
-	__device__ inline  device_vector() {
+	__device__ inline device_vector() {
 		initialize();
 	}
-	__device__ inline  device_vector(int sz0) {
+	__device__ inline device_vector(int sz0) {
 		initialize();
 		resize(sz0);
 	}
-	__device__ inline  ~device_vector() {
+	__device__ inline ~device_vector() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
@@ -66,10 +63,10 @@ public:
 		}
 		__syncthreads();
 	}
-	__device__  inline T* data() {
+	__device__    inline T* data() {
 		return ptr;
 	}
-	__device__ inline  void shrink_to_fit() {
+	__device__ inline void shrink_to_fit() {
 		const int& tid = threadIdx.x;
 		const int& block_size = blockDim.x;
 		__syncthreads();
@@ -82,7 +79,7 @@ public:
 				auto* memory = get_cuda_heap();
 				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
 				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
+					PRINT("OOM in device_vector while requesting %i elements and %i bytes! \n", new_cap, new_cap * sizeof(T));
 					__trap();
 
 				}
@@ -124,7 +121,7 @@ public:
 				auto* memory = get_cuda_heap();
 				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
 				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
+					PRINT("OOM in device_vector while requesting %i elements and %lli bytes! \n", new_cap, (long long ) new_cap * sizeof(T));
 					__trap();
 
 				}
@@ -132,7 +129,10 @@ public:
 			__syncthreads();
 			if (ptr) {
 				auto group = cooperative_groups::this_thread_block();
-				cuda::memcpy_async(group, new_ptr, ptr, sz * sizeof(T), barrier);
+				if (group.thread_rank() == 0) {
+					init(&barrier, group.size());
+				}
+				cuda::memcpy_async(group, (void*) new_ptr, (void*)  ptr, sz * sizeof(T), barrier);
 				barrier.arrive_and_wait();
 			}
 			__syncthreads();
@@ -148,44 +148,45 @@ public:
 			__syncthreads();
 		}
 	}
-	__device__ inline  T& back() {
+	__device__   inline T& back() {
 		return ptr[sz - 1];
 	}
-	__device__ inline   const T& back() const {
+	__device__   inline const T& back() const {
 		return ptr[sz - 1];
 	}
-	__device__ inline  void pop_back() {
+	__device__ inline void pop_back() {
 		if (threadIdx.x == 0) {
 			sz--;
 		}
 		__syncthreads();
 	}
-	__device__ inline  void push_back(const T& item) {
+	__device__ inline void push_back(const T& item) {
 		resize(size() + 1);
 		if (threadIdx.x == 0) {
 			back() = item;
 		}
 		__syncthreads();
 	}
-	__device__ inline
-	int size() const {
+	CUDA_EXPORT
+	inline int size() const {
 		return sz;
 	}
-	__device__ inline  T& operator[](int i) {
+	CUDA_EXPORT
+	inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
-			__trap();
+			ALWAYS_ASSERT(false);
 		}
 #endif
 		return ptr[i];
 	}
-	__device__ inline
-	 const T& operator[](int i) const {
+	CUDA_EXPORT
+	inline const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
 			PRINT("Bound exceeded in device_vector\n");
-			__trap();
+			ALWAYS_ASSERT(false);
 		}
 #endif
 		return ptr[i];

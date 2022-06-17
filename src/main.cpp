@@ -28,9 +28,24 @@
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
 
-#include <cosmictiger/floatfloat.hpp>
+#include <cosmictiger/float40.hpp>
 
 int hpx_main(int argc, char *argv[]) {
+	PRINT( "%7s ", "");
+	for( double B = -5.0; B <= 5.0; B += 0.5) {
+		PRINT( "%7.3e ", B);
+	}
+	PRINT( "\n");
+	for( double A = -5.0; A <= 5.0; A += 0.3497704) {
+		PRINT( "%7.3e ", A);
+		for( double B = -5.0; B <= 5.0; B += 0.5) {
+			float40 a = A;
+			float40 b = B;
+			PRINT( "%7.3e ", (double) sqrt(a / b) - sqrt(A/B));
+		}
+		PRINT( "\n");
+	}
+	sleep(1000);
 	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
 	std::atomic<int> i;
 	for (double q = 0.0; q < 1.0; q += 0.01) {

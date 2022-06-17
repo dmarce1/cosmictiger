@@ -53,8 +53,8 @@ public:
 		if (a == 0.0) {
 			s = 0;
 		} else {
-			e = log2(a);
-			const double b = a * pow(2.0, -e);
+			e = floor(log2(abs(a)));
+			const double b = abs(a) * pow(2.0, -e);
 			m = (b - 1.0) * dfactor;
 			s = copysign(1.0, a);
 		}
@@ -64,15 +64,15 @@ public:
 		if (a == 0.f) {
 			s = 0;
 		} else {
-			e = log2f(a);
-			const float b = a * powf(2.0f, -e);
+			e = floorf(log2f(fabs(a)));
+			const float b = fabs(a) * powf(2.0f, -e);
 			m = (b - 1.0f) * sfactor;
 			s = copysignf(1.0f, a);
 		}
 		return *this;
 	}
 	inline float40& operator=(const float40&) = default;
-	inline bool operator<(const float40& B) const {
+	inline bool abslt(const float40& B) const {
 		const float40& A = *this;
 		if (A.e < B.e) {
 			return true;
@@ -88,64 +88,46 @@ public:
 		return A;
 	}
 	inline float40 operator-(const float40& other) {
-		float40 A = *this;
-		float40 B = other;
-		float40 C;
-		if (A.s == 0) {
-			C = -B;
-		} else if (B.s == 0) {
-			C = A;
-		} else {
-			if (A.s * B.s > 0) {
-				if (A.s > 0) {
-					if (A < B) {
-						C = -(B - A);
-					} else {
-						const signed dif = A.e - B.e;
-						C.m = (A.m - (B.m >> dif));
-						const int lshft = 32 - __builtin_clz(C.m);
-						C.m <<= lshft;
-						C.e = A.m - lshft;
-					}
-				} else {
-					C = -(-A - -B);
-				}
-			} else {
-				if (A.s > 0) {
-					C = A + -B;
-				} else {
-					C = B + -A;
-				}
-			}
-		}
-		return C;
+		return (*this) + -other;
 	}
 	inline float40 operator+(const float40& other) {
 		float40 A = *this;
 		float40 B = other;
 		float40 C;
+		if (A.abslt(B)) {
+			C = A;
+			A = B;
+			B = C;
+		}
 		if (A.s == 0) {
 			C = B;
 		} else if (B.s == 0) {
 			C = A;
 		} else {
-			if (A.s * B.s > 0) {
-				const signed dif = A.e - B.e;
-				const unsigned sha = (1 + std::max(-dif, 0));
-				const unsigned shb = (1 + std::max(+dif, 0));
-				unsigned ma = (A.m >> sha) | ((unsigned) 1 << (32 - sha));
-				unsigned mb = (B.m >> shb) | ((unsigned) 1 << (32 - shb));
-				unsigned maxe = std::max(A.e, B.e);
-				if (__builtin_add_overflow(ma, mb, &C.m)) {
-					C.e = maxe + 1;
-				} else {
-					C.m <<= 1;
-					C.e = maxe;
-				}
-				C.s = A.s;
+			const signed dif = A.e - B.e;
+			const unsigned sha = (1 + std::max(-dif, 0));
+			const unsigned shb = (1 + std::max(+dif, 0));
+			unsigned ma = (A.m >> sha) | ((unsigned) 1 << (32 - sha));
+			unsigned mb = (B.m >> shb) | ((unsigned) 1 << (32 - shb));
+			unsigned maxe = std::max(A.e, B.e);
+			bool of;
+			bool chngsgn = false;
+			const signed sgn = (2 * signed(A.s * B.s > 0) - 1);
+			if (__builtin_add_overflow(ma, sgn * mb, &C.m)) {
+				C.e = maxe + 1;
 			} else {
-				B.s = -B.s;
-				C = A - B;
+				C.m <<= 1;
+				C.e = maxe;
+			}
+			C.s = A.s;
+			if (sgn == -1) {
+				if (C.m != 0) {
+					const unsigned shf = 1 + __builtin_clz(C.m);
+					C.m <<= shf;
+					C.e -= shf;
+				} else {
+					C.s = 0;
+				}
 			}
 		}
 		return C;
@@ -166,15 +148,37 @@ public:
 			const unsigned s1 = A.m + B.m;
 			const unsigned s2 = half + (((size_t) A.m * (size_t) B.m) >> 31);
 			if (__builtin_add_overflow(s1, s2, &C.m)) {
-				PRINT( "!\n");
 				C.e++;
 			} else {
-				PRINT( "?\n");
 				C.m <<= 1;
 			}
 			C.s = A.s * B.s;
 		}
 		return C;
+	}
+	inline float40 operator/(const float40& other) const {
+		float40 A = *this;
+		float40 B = other;
+		float40 C;
+		float40 invB = B;
+		float40 two;
+		two.m = 0;
+		two.s = 1;
+		two.e = 1;
+		invB = 1.f / (float) B;
+		invB = invB * (two - invB * B);
+		C = A * invB;
+		return C;
+	}
+	friend inline float40 sqrt(const float40& A) {
+		float40 B;
+		float40 half;
+		half.m = 0;
+		half.s = 1;
+		half.e = -1;
+		B = sqrtf((float) A);
+		B = half * (B + A / B);
+		return B;
 	}
 }
 ;
