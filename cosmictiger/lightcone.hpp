@@ -20,8 +20,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #pragma once
 
 
-using lc_real = double;
+using lc_real = fixed32;
 
+struct lc_entry {
+	fixed32 x, y, z;
+	float vx, vy, vz;
+};
 
 class lc_group: public std::atomic<long long> {
 public:
@@ -68,6 +72,7 @@ struct lc_particle {
 void lc_init(double, double);
 int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);
+void lc_add_parts(const lc_entry* entries, int count);
 void lc_buffer2homes();
 size_t lc_time_to_flush(double, double);
 void lc_particle_boundaries1();

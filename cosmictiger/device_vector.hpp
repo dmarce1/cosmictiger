@@ -63,7 +63,12 @@ public:
 		}
 		__syncthreads();
 	}
-	__device__    inline T* data() {
+	CUDA_EXPORT
+	inline T* data() {
+		return ptr;
+	}
+	CUDA_EXPORT
+	inline const T* data() const {
 		return ptr;
 	}
 	__device__ inline void shrink_to_fit() {

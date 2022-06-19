@@ -27,8 +27,8 @@
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
-
 #include <cosmictiger/float40.hpp>
+#include <cosmictiger/host_vector.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	PRINT( "%7s ", "");

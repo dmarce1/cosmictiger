@@ -29,6 +29,8 @@
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/group_entry.hpp>
+#include <cosmictiger/host_vector.hpp>
+#include <cosmictiger/cuda_unordered_map.hpp>
 
 #include <atomic>
 #include <memory>
@@ -95,8 +97,8 @@ struct pixel {
 static std::shared_ptr<healpix_type> healpix;
 static pair<int> my_pix_range;
 static std::unordered_set<int> bnd_pix;
-static std::unordered_map<int, vector<lc_particle>> part_map;
-static std::unordered_map<int, vector<lc_tree_node>> tree_map;
+static cuda_unordered_map<host_vector<lc_particle>> part_map;
+static cuda_unordered_map<host_vector<lc_tree_node>> tree_map;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
 static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
@@ -107,7 +109,7 @@ static double tau_max;
 static int Nside;
 static int Npix;
 
-static vector<lc_particle> lc_get_particles1(int pix);
+static host_vector<lc_particle> lc_get_particles1(int pix);
 static pair<vector<long long>, vector<char>> lc_get_particles2(int pix);
 static void lc_send_particles(vector<lc_particle>);
 static void lc_send_buffer_particles(vector<lc_particle>);
@@ -131,6 +133,20 @@ HPX_PLAIN_ACTION (lc_particle_boundaries1);
 HPX_PLAIN_ACTION (lc_particle_boundaries2);
 HPX_PLAIN_ACTION (lc_flush_final);
 
+void lc_add_parts(const lc_entry* entries, int count) {
+	const int start = part_buffer.size();
+	part_buffer.resize(start + count);
+	for( int i = start; i < part_buffer.size(); i++) {
+		const int j = i - start;
+		part_buffer[i].pos[XDIM] = entries[j].x;
+		part_buffer[i].pos[YDIM] = entries[j].y;
+		part_buffer[i].pos[ZDIM] = entries[j].z;
+		part_buffer[i].vel[XDIM] = entries[j].vx;
+		part_buffer[i].vel[YDIM] = entries[j].vy;
+		part_buffer[i].vel[ZDIM] = entries[j].vz;
+	}
+}
+
 vector<float> lc_flush_final() {
 	if (hpx_rank() == 0) {
 		if (system("mkdir -p lc") != 0) {
@@ -139,7 +155,7 @@ vector<float> lc_flush_final() {
 	}
 	vector<hpx::future<vector<float>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_flush_final_action>( c));
+		futs.push_back(hpx::async<lc_flush_final_action>(c));
 	}
 
 	std::string filename = "./lc/lc." + std::to_string(hpx_rank()) + ".dat";
@@ -228,7 +244,7 @@ void lc_load(FILE* fp) {
 size_t lc_time_to_flush(double tau, double tau_max_) {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_time_to_flush_action>( c, tau, tau_max_));
+		futs.push_back(hpx::async<lc_time_to_flush_action>(c, tau, tau_max_));
 	}
 	size_t nparts = part_buffer.size();
 	for (auto& f : futs) {
@@ -258,7 +274,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 void lc_parts2groups(double a, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_parts2groups_action>( c, a, link_len));
+		futs.push_back(hpx::async<lc_parts2groups_action>(c, a, link_len));
 	}
 	std::unordered_map<long long, lc_group_data> groups_map;
 	int i = 0;
@@ -293,9 +309,9 @@ void lc_parts2groups(double a, double link_len) {
 				auto& parts = groups[i].parts;
 				bool incomplete = false;
 				for( int i = 0; i < parts.size(); i++) {
-					const double x = parts[i].pos[XDIM];
-					const double y = parts[i].pos[YDIM];
-					const double z = parts[i].pos[ZDIM];
+					const double x = parts[i].pos[XDIM].to_double();
+					const double y = parts[i].pos[YDIM].to_double();
+					const double z = parts[i].pos[ZDIM].to_double();
 					const double r = sqrt(sqr(x,y,z));
 					if( r + link_len > 1.0 ) {
 						incomplete = true;
@@ -305,7 +321,7 @@ void lc_parts2groups(double a, double link_len) {
 				vector<array<fixed32, NDIM>> bh_x(parts.size());
 				for( int j = 0; j < parts.size(); j++) {
 					for( int dim = 0; dim < NDIM; dim++) {
-						bh_x[j][dim] = 0.5 + parts[j].pos[dim] - parts[0].pos[dim];
+						bh_x[j][dim] = 0.5 + parts[j].pos[dim].to_double() - parts[0].pos[dim].to_double();
 					}
 				}
 				auto pot = bh_evaluate_potential_fixed(bh_x);
@@ -322,7 +338,7 @@ void lc_parts2groups(double a, double link_len) {
 				}
 				for( int i = 0; i < parts.size(); i++) {
 					for( int dim = 0; dim < NDIM; dim++) {
-						xcom[dim] += parts[i].pos[dim];
+						xcom[dim] += parts[i].pos[dim].to_double();
 						vcom[dim] += parts[i].vel[dim];
 					}
 				}
@@ -354,9 +370,9 @@ void lc_parts2groups(double a, double link_len) {
 					const double vx = parts[i].vel[XDIM];
 					const double vy = parts[i].vel[YDIM];
 					const double vz = parts[i].vel[ZDIM];
-					const double x = parts[i].pos[XDIM];
-					const double y = parts[i].pos[YDIM];
-					const double z = parts[i].pos[ZDIM];
+					const double x = parts[i].pos[XDIM].to_double();
+					const double y = parts[i].pos[YDIM].to_double();
+					const double z = parts[i].pos[ZDIM].to_double();
 					const double r = sqrt(sqr(x, y, z));
 					J[XDIM] += y * vz - z * vy;
 					J[YDIM] -= x * vz - z * vx;
@@ -455,7 +471,7 @@ static int rank_from_group_id(long long id) {
 
 static void lc_send_particles(vector<lc_particle> parts) {
 	for (const auto& part : parts) {
-		const int pix = vec2pix(part.pos[XDIM], part.pos[YDIM], part.pos[ZDIM]);
+		const int pix = vec2pix(part.pos[XDIM].to_double(), part.pos[YDIM].to_double(), part.pos[ZDIM].to_double());
 		std::lock_guard<spinlock_type> lock(*mutex_map[pix]);
 		part_map[pix].push_back(part);
 	}
@@ -482,7 +498,7 @@ void lc_buffer2homes() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async<lc_buffer2homes_action>( c));
+		futs1.push_back(hpx::async<lc_buffer2homes_action>(c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	static mutex_type map_mutex;
@@ -494,13 +510,13 @@ void lc_buffer2homes() {
 			std::unordered_map<int,float> my_healpix;
 			for( int i = begin; i < end; i++) {
 				const auto& part = part_buffer[i];
-				const int pix = vec2pix(part.pos[XDIM],part.pos[YDIM],part.pos[ZDIM]);
+				const int pix = vec2pix(part.pos[XDIM].to_double(),part.pos[YDIM].to_double(),part.pos[ZDIM].to_double());
 				const int rank = pix2rank(pix);
 				sends[rank].push_back(part);
 				double vec[NDIM];
-				vec[XDIM] = part.pos[XDIM];
-				vec[YDIM] = part.pos[YDIM];
-				vec[ZDIM] = part.pos[ZDIM];
+				vec[XDIM] = part.pos[XDIM].to_double();
+				vec[YDIM] = part.pos[YDIM].to_double();
+				vec[ZDIM] = part.pos[ZDIM].to_double();
 				long int ipix;
 				vec2pix_ring(get_options().lc_map_size, vec, &ipix);
 				auto iter = my_healpix.find(ipix);
@@ -529,7 +545,7 @@ void lc_buffer2homes() {
 void lc_groups2homes() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_groups2homes_action>( c));
+		futs.push_back(hpx::async<lc_groups2homes_action>(c));
 	}
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix]() {
@@ -546,7 +562,7 @@ void lc_groups2homes() {
 					sends[rank].push_back(parts[i]);
 				}
 			}
-			parts = vector<lc_particle>();
+			parts = host_vector<lc_particle>();
 			vector<hpx::future<void>> futs;
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				futs.push_back(hpx::async<lc_send_buffer_particles_action>(hpx_localities()[i->first],std::move(i->second)));
@@ -583,8 +599,8 @@ static int lc_particles_sort(int pix, pair<int> rng, double xmid, int xdim) {
 
 std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<int> part_range) {
 	lc_tree_node this_node;
-	vector<lc_tree_node>& nodes = tree_map[pix];
-	vector<lc_particle>& parts = part_map[pix];
+	auto& nodes = tree_map[pix];
+	auto& parts = part_map[pix];
 	range<double> part_box;
 	if (part_range.second - part_range.first > GROUP_BUCKET_SIZE) {
 		const int xdim = box.longest_dim();
@@ -613,7 +629,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		for (int i = part_range.first; i < part_range.second; i++) {
 			parts[i].group = LC_NO_GROUP;
 			for (int dim = 0; dim < NDIM; dim++) {
-				const lc_real x = parts[i].pos[dim];
+				const double x = parts[i].pos[dim].to_double();
 				part_box.begin[dim] = std::min(part_box.begin[dim], x);
 				part_box.end[dim] = std::max(part_box.end[dim], x);
 			}
@@ -622,7 +638,9 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		this_node.children[LEFT].pix = this_node.children[RIGHT].pix = -1;
 	}
 	this_node.part_range = part_range;
-	this_node.box = part_box;
+	for( int dim = 0; dim < NDIM; dim++) {
+		this_node.box.begin[dim] = part_box.end[dim];
+	}
 	this_node.pix = pix;
 	this_node.active = true;
 	this_node.last_active = true;
@@ -670,9 +688,9 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 					if (mybox.contains(part.pos)) {
 						for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 							auto& mypart = part_map[self.pix][pj];
-							const double dx = mypart.pos[XDIM] - part.pos[XDIM];
-							const double dy = mypart.pos[YDIM] - part.pos[YDIM];
-							const double dz = mypart.pos[ZDIM] - part.pos[ZDIM];
+							const double dx = mypart.pos[XDIM].to_double() - part.pos[XDIM].to_double();
+							const double dy = mypart.pos[YDIM].to_double() - part.pos[YDIM].to_double();
+							const double dz = mypart.pos[ZDIM].to_double() - part.pos[ZDIM].to_double();
 							const double R2 = sqr(dx, dy, dz);
 							if (R2 <= link_len2) {
 								if (mypart.group == LC_NO_GROUP) {
@@ -697,9 +715,9 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 				for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 					if (pi != pj) {
 						auto& B = part_map[self.pix][pj];
-						const double dx = A.pos[XDIM] - B.pos[XDIM];
-						const double dy = A.pos[YDIM] - B.pos[YDIM];
-						const double dz = A.pos[ZDIM] - B.pos[ZDIM];
+						const double dx = A.pos[XDIM].to_double() - B.pos[XDIM].to_double();
+						const double dy = A.pos[YDIM].to_double() - B.pos[YDIM].to_double();
+						const double dz = A.pos[ZDIM].to_double() - B.pos[ZDIM].to_double();
 						const double R2 = sqr(dx, dy, dz);
 						if (R2 <= link_len2) {
 							if (A.group == LC_NO_GROUP) {
@@ -746,7 +764,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 size_t lc_find_groups() {
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_find_groups_action>( c));
+		futs.push_back(hpx::async<lc_find_groups_action>(c));
 	}
 	size_t rc = 0;
 	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
@@ -778,7 +796,7 @@ size_t lc_find_groups() {
 	return rc;
 }
 
-static vector<lc_particle> lc_get_particles1(int pix) {
+static host_vector<lc_particle> lc_get_particles1(int pix) {
 	return part_map[pix];
 }
 
@@ -821,9 +839,9 @@ static int pix2rank(int pix) {
 void lc_particle_boundaries1() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_particle_boundaries1_action>( c));
+		futs.push_back(hpx::async<lc_particle_boundaries1_action>(c));
 	}
-	vector<hpx::future<vector<lc_particle>>>pfuts;
+	vector<hpx::future<host_vector<lc_particle>>>pfuts;
 	pfuts.reserve(bnd_pix.size());
 	for (auto pix : bnd_pix) {
 		const int rank = pix2rank(pix);
@@ -840,7 +858,7 @@ void lc_particle_boundaries1() {
 void lc_particle_boundaries2() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_particle_boundaries2_action>( c));
+		futs.push_back(hpx::async<lc_particle_boundaries2_action>(c));
 	}
 	vector<hpx::future<pair<vector<long long>, vector<char>>> >pfuts;
 	pfuts.reserve(bnd_pix.size());
@@ -885,12 +903,12 @@ void lc_particle_boundaries2() {
 void lc_form_trees(double tau, double link_len) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_form_trees_action>( c, tau, link_len));
+		futs.push_back(hpx::async<lc_form_trees_action>(c, tau, link_len));
 	}
 	for (auto iter = part_map.begin(); iter != part_map.end(); iter++) {
 		const int pix = iter->first;
 		auto& parts = part_map[pix];
-		futs.push_back(hpx::async([pix,link_len,tau](vector<lc_particle>* parts_ptr) {
+		futs.push_back(hpx::async([pix,link_len,tau](host_vector<lc_particle>* parts_ptr) {
 			auto& parts = *parts_ptr;
 			range<double> box;
 			pair<int> part_range;
@@ -902,16 +920,16 @@ void lc_form_trees(double tau, double link_len) {
 			}
 			for (int i = 0; i < parts.size(); i++) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					const auto x = parts[i].pos[dim];
+					const auto x = parts[i].pos[dim].to_double();
 					box.begin[dim] = std::min(box.begin[dim], x);
 					box.end[dim] = std::max(box.end[dim], x);
 				}
 			}
 			lc_tree_create(pix, box, part_range);
 			for( int i = 0; i < parts.size(); i++) {
-				const double x = parts[i].pos[XDIM];
-				const double y = parts[i].pos[YDIM];
-				const double z = parts[i].pos[ZDIM];
+				const double x = parts[i].pos[XDIM].to_double();
+				const double y = parts[i].pos[YDIM].to_double();
+				const double z = parts[i].pos[ZDIM].to_double();
 				const double R2 = sqr(x, y, z);
 				const double R = sqrt(R2);
 				if( R < (tau_max - tau) + link_len * 1.0001 && tau < tau_max) {
@@ -951,14 +969,14 @@ static int compute_nside(double tau) {
 		Nside *= 2;
 	}
 	Nside /= 2;
-	PRINT( "compute_nside = %i\n", Nside);
+	PRINT("compute_nside = %i\n", Nside);
 	return Nside;
 }
 
 void lc_init(double tau, double tau_max_) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_init_action>( c, tau, tau_max_));
+		futs.push_back(hpx::async<lc_init_action>(c, tau, tau_max_));
 	}
 	tree_map = decltype(tree_map)();
 	part_map = decltype(part_map)();
@@ -993,7 +1011,8 @@ void lc_init(double tau, double tau_max_) {
 
 int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t0, float t1,
 		vector<lc_particle>& this_part_buffer) {
-	static simd_float8 images[NDIM] =
+	int rc = 0;
+	/*static simd_float8 images[NDIM] =
 			{ simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
 	const float tau_max_inv = 1.0 / tau_max;
 	const simd_float8 simd_c0 = simd_float8(tau_max_inv);
@@ -1003,7 +1022,6 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 	const simd_float8 simd_tau1 = simd_float8(t1);
 	simd_float8 dist0;
 	simd_float8 dist1;
-	int rc = 0;
 	X0[XDIM] = simd_float8(x0) + images[XDIM];
 	X0[YDIM] = simd_float8(y0) + images[YDIM];
 	X0[ZDIM] = simd_float8(z0) + images[ZDIM];
@@ -1053,7 +1071,7 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 				}
 			}
 		}
-	}
+	}*/
 	return rc;
 }
 
