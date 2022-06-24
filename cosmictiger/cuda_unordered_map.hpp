@@ -29,7 +29,6 @@ class cuda_unordered_map {
 	int sz;
 	void initialize() {
 		sz = 0;
-		buckets.resize(1);
 	}
 	CUDA_EXPORT
 	bool find( int key, pair<int,T>*& entry ) {
@@ -45,7 +44,7 @@ class cuda_unordered_map {
 	}
 	CUDA_EXPORT
 	void rehash() {
-		int new_mod = buckets.size();
+		int new_mod = std::max(buckets.size(),8);
 		while( size() / buckets.size() > 2 ) {
 			new_mod *= 2;
 		}

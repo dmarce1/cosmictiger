@@ -167,12 +167,6 @@ __global__ void cuda_lightcone_kernel(unsigned long long* rc_ptr, const lc_tree_
 
 }
 
-__global__ void test1();
-
-__global__ void test1() {
-	test1<<<1,1>>>();
-}
-
 size_t cuda_lightcone(const host_vector<lc_tree_id>& leaves) {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_lightcone_kernel, BLOCK_SIZE, 0));

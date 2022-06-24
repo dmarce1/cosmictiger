@@ -113,7 +113,7 @@ void cuda_init() {
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set recursion depth to %li\n", RECURSION);
 	}
-	cuda_mem_init(HEAP_SIZE);
+	cuda_mem_init();
 }
 
 #endif

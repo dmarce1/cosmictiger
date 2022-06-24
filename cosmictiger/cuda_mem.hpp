@@ -30,15 +30,9 @@
 using cuda_mem_int = uint64_t;
 
 class cuda_mem {
-	array<lockfree_queue<CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
-	char* heap_begin;
-	char* next;
-	char* heap_end;
 	CUDA_EXPORT
-	void push(int bin, char* ptr);
-	CUDA_EXPORT
-	char* pop(int bin);
-	CUDA_EXPORT
+	void push(int bin, char* ptr);CUDA_EXPORT
+	char* pop(int bin);CUDA_EXPORT
 	bool create_new_allocation(int bin);
 	__device__
 	static inline void discard_memory_one(volatile void* __ptr, std::size_t nbytes) noexcept {
@@ -68,16 +62,14 @@ public:
 #endif
 	}
 	CUDA_EXPORT
-	void* allocate(size_t sz);
-	CUDA_EXPORT
+	void* allocate(size_t sz);CUDA_EXPORT
 	void free(void* ptr);
 	cuda_mem(size_t heap_size);
 	~cuda_mem();
 	void reset();
 };
 
-void cuda_mem_init(size_t heap_size);
-CUDA_EXPORT cuda_mem* get_cuda_heap();
 CUDA_EXPORT void* cuda_malloc(size_t sz);
 CUDA_EXPORT void cuda_free(void* ptr);
+void cuda_mem_init();
 

@@ -31,7 +31,7 @@
 #include <cosmictiger/host_vector.hpp>
 
 int hpx_main(int argc, char *argv[]) {
-	PRINT( "%7s ", "");
+	PRINT( "STARTING hpx_main\n");
 	for( double B = -5.0; B <= 5.0; B += 0.5) {
 		PRINT( "%7.3e ", B);
 	}
@@ -77,7 +77,7 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
-	PRINT("STARTING MAIN\n");
+	PRINT("STARTING main\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
 	cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY

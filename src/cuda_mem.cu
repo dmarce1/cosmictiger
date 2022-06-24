@@ -19,53 +19,81 @@
 #define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
 
+static __managed__ array<lockfree_queue<CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN>* qptr;
+static __managed__ char* heap_begin;
+static __managed__ char* next;
+static __managed__ char* heap_end;
+
+struct init_type {
+	init_type() {
+		PRINT("IN\n");
+		CUDA_CHECK(cudaMallocManaged(&qptr, sizeof(array<lockfree_queue<CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> )));
+		CUDA_CHECK(cudaMallocManaged(&heap_begin, HEAP_SIZE));
+		heap_end = heap_begin + HEAP_SIZE;
+		next = heap_begin;
+		PRINT("OUT\n");
+	}
+};
+
+static init_type& init_func() {
+	static init_type a;
+	return a;
+}
+
+void cuda_mem_init() {
+	init_func();
+}
+
 CUDA_EXPORT
-void cuda_mem::push(int bin, char* ptr) {
-	if (!q[bin].push(ptr)) {
-		PRINT("cuda mem Q full!\n");
+static void cuda_mem_push(int bin, char* ptr) {
+	if (!(*qptr)[bin].push(ptr)) {
+		PRINT("cuda mem Q full!\n");ALWAYS_ASSERT(false);
+	}
+}
+
+CUDA_EXPORT
+static char* cuda_mem_pop(int bin) {
+	return (*qptr)[bin].pop();
+}
+
+CUDA_EXPORT char* atomic_add(unsigned long long* ptr, unsigned long long size) {
+#ifdef __CUDA_ARCH__
+	return (char*) atomicAdd(ptr, size);
+#else
+	return (char*) __sync_fetch_and_add(ptr, size);
+#endif
+}
+
+CUDA_EXPORT void fence() {
+#ifdef __CUDA_ARCH__
+	__threadfence();
+#endif
+}
+
+CUDA_EXPORT static bool create_new_allocation(int bin) {
+	size_t size = (1 << bin) + sizeof(size_t);
+	auto* ptr = atomic_add((unsigned long long*) &next, (unsigned long long) size);
+	if (next >= heap_end) {
+		return false;
+	} else {
+		cuda_mem_push(bin, ptr + sizeof(size_t));
+		*((size_t*) ptr) = bin;
+		fence();
+		return true;
+	}
+}
+
+CUDA_EXPORT static void cuda_mem_free(void* ptr) {
+	size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
+	if (*binptr >= CUDA_MEM_NBIN) {
+		printf("Corrupt free! %li\n", *binptr);
 		ALWAYS_ASSERT(false);
 	}
+	cuda_mem_push(*binptr, (char*) ptr);
 }
 
-CUDA_EXPORT
-char* cuda_mem::pop(int bin) {
-	return q[bin].pop();
-}
+static CUDA_EXPORT void* cuda_mem_allocate(size_t sz) {
 
-
-#ifndef __CUDA_ARCH__
-__device__
-bool cuda_mem::create_new_allocation(int bin) {
-	size_t size = (1 << bin) + sizeof(size_t);
-	auto* ptr = (char*) __sync_fetch_and_add((unsigned long long*) &next, (unsigned long long) size);
-	if (next >= heap_end) {
-		return false;
-	} else {
-		push(bin, ptr + sizeof(size_t));
-		*((size_t*) ptr) = bin;
-#ifdef __CUDA_ARCH__
-		__threadfence();
-#endif
-		return true;
-	}
-}
-#else
-bool cuda_mem::create_new_allocation(int bin) {
-	size_t size = (1 << bin) + sizeof(size_t);
-	auto* ptr = (char*) atomicAdd((unsigned long long*) &next, (unsigned long long) size);
-	if (next >= heap_end) {
-		return false;
-	} else {
-		push(bin, ptr + sizeof(size_t));
-		*((size_t*) ptr) = bin;
-		__threadfence();
-		return true;
-	}
-}
-#endif
-
-CUDA_EXPORT
-void* cuda_mem::allocate(size_t sz) {
 	int alloc_size = 8;
 	int bin = 3;
 	while (alloc_size < sz) {
@@ -77,7 +105,7 @@ void* cuda_mem::allocate(size_t sz) {
 		ALWAYS_ASSERT(false);
 	}
 	char* ptr;
-	while ((ptr = pop(bin)) == nullptr) {
+	while ((ptr = cuda_mem_pop(bin)) == nullptr) {
 		if (!create_new_allocation(bin)) {
 			return nullptr;
 		}
@@ -85,45 +113,12 @@ void* cuda_mem::allocate(size_t sz) {
 	return ptr;
 }
 
-CUDA_EXPORT void cuda_mem::free(void* ptr) {
-	size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
-	if (*binptr >= CUDA_MEM_NBIN) {
-		printf("Corrupt free! %li\n", *binptr);
-		ALWAYS_ASSERT(false);
-	}
-	push(*binptr, (char*) ptr);
-}
-
-cuda_mem::cuda_mem(size_t heap_size) {
-	CUDA_CHECK(cudaMallocManaged(&heap_begin, heap_size));
-	heap_end = heap_begin + heap_size;
-	reset();
-}
-
-void cuda_mem::reset() {
-	next = heap_begin;
-}
-
-cuda_mem::~cuda_mem() {
-	CUDA_CHECK(cudaFree(heap_begin));
-}
-
-__managed__ cuda_mem* memory;
-
-CUDA_EXPORT cuda_mem* get_cuda_heap() {
-	return memory;
-}
-
-CUDA_EXPORT void* cuda_malloc(size_t sz) {
-	return memory->allocate(sz);
+CUDA_EXPORT
+void* cuda_malloc(size_t sz) {
+	return cuda_mem_allocate(sz);
 }
 
 CUDA_EXPORT void cuda_free(void* ptr) {
-	memory->free(ptr);
-}
-
-void cuda_mem_init(size_t heap_size) {
-	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-	new (memory) cuda_mem(heap_size);
+	cuda_mem_free(ptr);
 }
 
