@@ -207,7 +207,7 @@ struct range {
 		}
 		return str;
 	}
-
+	CUDA_EXPORT
 	inline int longest_dim() const {
 		int max_dim;
 		T max_span = T(-1);

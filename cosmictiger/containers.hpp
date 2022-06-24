@@ -161,6 +161,8 @@ struct pair {
 	pair() = default;
 	pair(const pair&) = default;
 	pair& operator=(const pair&) = default;
+	pair& operator=(pair&&) = default;
+	pair(pair&&) = default;
 	pair(T a, V b) :
 			first(a), second(b) {
 	}

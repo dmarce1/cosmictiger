@@ -31,6 +31,7 @@ class cuda_unordered_map {
 		sz = 0;
 		buckets.resize(1);
 	}
+	CUDA_EXPORT
 	bool find( int key, pair<int,T>*& entry ) {
 		int bucket_index = key % buckets.size();
 		auto& bucket = buckets[bucket_index];
@@ -42,6 +43,7 @@ class cuda_unordered_map {
 		}
 		return false;
 	}
+	CUDA_EXPORT
 	void rehash() {
 		int new_mod = buckets.size();
 		while( size() / buckets.size() > 2 ) {
@@ -53,7 +55,7 @@ class cuda_unordered_map {
 				new_buckets[buckets[i][j].first % new_mod].push_back(std::move(buckets[i][j]));
 			}
 		}
-		buckets.swap(std::move(new_buckets));
+		buckets.swap(new_buckets);
 	}
 public:
 	class iterator {
@@ -110,13 +112,19 @@ public:
 			buckets[i].resize(0);
 		}
 	}
+	CUDA_EXPORT
 	pair<int,T>* insert(const pair<int,T>& entry ) {
+#ifdef __CUDA_ARCH__
+		ALWAYS_ASSERT(false);
+		return nullptr;
+#else
 		rehash();
 		int bucket_index = entry.first % buckets.size();
 		auto& bucket = buckets[bucket_index];
 		bucket.push_back(entry);
 		sz++;
 		return &bucket.back();
+#endif
 	}
 	void erase(int key) {
 		int bucket_index = key % buckets.size();
@@ -129,6 +137,7 @@ public:
 		}
 		sz--;
 	}
+	CUDA_EXPORT
 	int size() const {
 		return sz;
 	}

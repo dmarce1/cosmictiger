@@ -96,6 +96,8 @@ void cuda_end_stream(cudaStream_t stream) {
 	CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
+
+
 void cuda_init() {
 	cuda_set_device();
 	CUDA_CHECK(cudaDeviceReset());
@@ -104,6 +106,12 @@ void cuda_init() {
 	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
 	if (value != STACK_SIZE) {
 		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
+	}
+	value = RECURSION;
+	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth , value));
+	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitDevRuntimeSyncDepth ));
+	if (value != STACK_SIZE) {
+		THROW_ERROR("Unable to set recursion depth to %li\n", RECURSION);
 	}
 	cuda_mem_init(HEAP_SIZE);
 }

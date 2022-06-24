@@ -161,11 +161,12 @@ struct tree_create_return {
 
 struct tree_create_params {
 	int min_rung;
-	double theta;
+	float theta;
 	part_int par_parts;
 	int min_level;
 	bool leaf_pushed;
 	bool do_leaf_sizes;
+	CUDA_EXPORT
 	tree_create_params() {
 		leaf_pushed = false;
 		do_leaf_sizes = false;
@@ -203,5 +204,6 @@ tree_node* tree_data();
 tree_id& tree_get_neighbor(int i);
 void tree_2_cpu();
 void tree_2_gpu();
+tree_create_return cuda_tree_sort(tree_node* nodes, multi_pos* multis, int next_node, const tree_create_params params, range<double> box, int depth);
 
 #endif /* TREE_HPP_ */

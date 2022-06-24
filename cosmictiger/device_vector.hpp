@@ -28,13 +28,38 @@ using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 template<class T>
 class device_vector {
-	barrier_type barrier;
 	T* ptr;
 	T* new_ptr;
 	int sz;
 	int cap;
-	__device__ inline void initialize() {
-		const int& tid = threadIdx.x;
+
+#ifndef __CUDA_ARCH__
+	struct threadIdx_t {
+		int x;
+		threadIdx_t() {
+			x = 0;
+		}
+	} threadIdx;
+	inline void __syncthreads() {
+	}
+	inline void this_memcpy(void* dest, void* src, int size) {
+		memcpy(dest, src, size);
+	}
+#else
+	__device__
+	inline void this_memcpy( void* dest, void* src, int size ) {
+		__shared__ barrier_type barrier;
+		auto group = cooperative_groups::this_thread_block();
+		if (group.thread_rank() == 0) {
+			init(&barrier, group.size());
+		}
+		cuda::memcpy_async(group, dest, src, size, barrier);
+		barrier.arrive_and_wait();
+	}
+#endif
+	CUDA_EXPORT
+	inline void initialize() {
+		const int tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
 			sz = 0;
@@ -44,21 +69,72 @@ class device_vector {
 		}
 		__syncthreads();
 	}
+	CUDA_EXPORT
+	inline void construct(int b, int e) {
+		for (int i = b; i < e; i++) {
+			new (ptr + i) T;
+		}
+	}
+	CUDA_EXPORT
+	inline void destruct(int b, int e) {
+		for (int i = b; i < e; i++) {
+			(ptr + i)->~T();
+		}
+	}
 public:
-	__device__ inline device_vector() {
+	CUDA_EXPORT
+	inline device_vector() {
 		initialize();
 	}
-	__device__ inline device_vector(int sz0) {
+	CUDA_EXPORT
+	inline device_vector(int sz0) {
 		initialize();
 		resize(sz0);
 	}
-	__device__ inline ~device_vector() {
+	CUDA_EXPORT
+	inline device_vector(device_vector<T> && other) {
+		initialize();
+		swap(other);
+	}
+	CUDA_EXPORT
+	inline device_vector(const device_vector<T> & other) {
+		initialize();
+		resize(other.size());
+		this_memcpy(ptr, other.ptr, sizeof(T) * other.size());
+	}
+	CUDA_EXPORT
+	inline device_vector& operator=(device_vector<T> && other) {
+		this->~device_vector();
+		initialize();
+		swap(other);
+		return *this;
+	}
+	CUDA_EXPORT
+	inline device_vector& operator=(const device_vector<T> & other) {
+		resize(other.size());
+		this_memcpy(ptr, other.ptr, sizeof(T) * other.size());
+		return *this;
+	}
+	CUDA_EXPORT
+	void swap(device_vector& other) {
+		auto* a = other.ptr;
+		auto b = other.sz;
+		auto c = other.cap;
+		other.ptr = ptr;
+		other.sz = sz;
+		other.cap = cap;
+		ptr = a;
+		sz = b;
+		cap = c;
+	}
+
+	CUDA_EXPORT
+	inline ~device_vector() {
 		const int& tid = threadIdx.x;
 		__syncthreads();
 		if (tid == 0) {
 			if (ptr) {
-				auto* memory = get_cuda_heap();
-				memory->free(ptr);
+				cuda_free(ptr);
 			}
 		}
 		__syncthreads();
@@ -71,44 +147,9 @@ public:
 	inline const T* data() const {
 		return ptr;
 	}
-	__device__ inline void shrink_to_fit() {
-		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
-		__syncthreads();
-		int new_cap = max(1024 / sizeof(T), (size_t) 1);
-		while (new_cap < sz) {
-			new_cap *= 2;
-		}
-		if (tid == 0) {
-			if (new_cap < cap) {
-				auto* memory = get_cuda_heap();
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
-				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i elements and %i bytes! \n", new_cap, new_cap * sizeof(T));
-					__trap();
-
-				}
-			}
-		}
-		__syncthreads();
-		if (ptr && new_cap < cap) {
-			for (int i = tid; i < sz; i += block_size) {
-				new_ptr[i] = ptr[i];
-			}
-		}
-		__syncthreads();
-		if (tid == 0 && new_cap < cap) {
-			if (ptr) {
-				auto* memory = get_cuda_heap();
-				memory->free(ptr);
-			}
-			ptr = new_ptr;
-			cap = new_cap;
-		}
-		__syncthreads();
-	}
-	__device__ inline
-	void resize(int new_sz) {
+	CUDA_EXPORT
+	inline
+	CUDA_EXPORT void resize(int new_sz) {
 		const int& tid = threadIdx.x;
 		if (new_sz <= cap) {
 			__syncthreads();
@@ -118,33 +159,27 @@ public:
 			__syncthreads();
 		} else {
 			__syncthreads();
-			int new_cap = max(1024 / sizeof(T), (size_t) 1);
+			int new_cap = 1024 / sizeof(T);
+			if (new_cap < 1) {
+				new_cap = 1;
+			}
 			if (tid == 0) {
 				while (new_cap < new_sz) {
 					new_cap *= 2;
 				}
-				auto* memory = get_cuda_heap();
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				new_ptr = (T*) cuda_malloc(sizeof(T) * new_cap);
 				if (new_ptr == nullptr) {
-					PRINT("OOM in device_vector while requesting %i elements and %lli bytes! \n", new_cap, (long long ) new_cap * sizeof(T));
-					__trap();
-
+					PRINT("OOM in device_vector while requesting %i elements and %lli bytes! \n", new_cap, (long long ) new_cap * sizeof(T));ALWAYS_ASSERT(false);
 				}
 			}
 			__syncthreads();
 			if (ptr) {
-				auto group = cooperative_groups::this_thread_block();
-				if (group.thread_rank() == 0) {
-					init(&barrier, group.size());
-				}
-				cuda::memcpy_async(group, (void*) new_ptr, (void*)  ptr, sz * sizeof(T), barrier);
-				barrier.arrive_and_wait();
+				this_memcpy((void*) new_ptr, (void*) ptr, sz * sizeof(T));
 			}
 			__syncthreads();
 			if (tid == 0) {
 				if (ptr) {
-					auto* memory = get_cuda_heap();
-					memory->free(ptr);
+					cuda_free(ptr);
 				}
 				ptr = new_ptr;
 				sz = new_sz;
@@ -153,22 +188,34 @@ public:
 			__syncthreads();
 		}
 	}
-	__device__   inline T& back() {
+	CUDA_EXPORT
+	inline T& back() {
 		return ptr[sz - 1];
 	}
-	__device__   inline const T& back() const {
+	CUDA_EXPORT
+	inline const T& back() const {
 		return ptr[sz - 1];
 	}
-	__device__ inline void pop_back() {
+	CUDA_EXPORT
+	inline void pop_back() {
 		if (threadIdx.x == 0) {
 			sz--;
 		}
 		__syncthreads();
 	}
-	__device__ inline void push_back(const T& item) {
+	CUDA_EXPORT
+	inline void push_back(const T& item) {
 		resize(size() + 1);
 		if (threadIdx.x == 0) {
 			back() = item;
+		}
+		__syncthreads();
+	}
+	CUDA_EXPORT
+	inline void push_back(T&& item) {
+		resize(size() + 1);
+		if (threadIdx.x == 0) {
+			back() = std::move(item);
 		}
 		__syncthreads();
 	}
@@ -180,8 +227,7 @@ public:
 	inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
-			PRINT("Bound exceeded in device_vector\n");
-			ALWAYS_ASSERT(false);
+			PRINT("Bound exceeded in device_vector\n");ALWAYS_ASSERT(false);
 		}
 #endif
 		return ptr[i];
@@ -190,12 +236,21 @@ public:
 	inline const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
-			PRINT("Bound exceeded in device_vector\n");
-			ALWAYS_ASSERT(false);
+			PRINT("Bound exceeded in device_vector\n");ALWAYS_ASSERT(false);
 		}
 #endif
 		return ptr[i];
 	}
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		int this_size;
+		arc & this_size;
+		resize(this_size);
+		for (int i = 0; i < this_size; i++) {
+			arc & (*this)[i];
+		}
+	}
+
 };
 
 #include <cosmictiger/cuda_mem.hpp>

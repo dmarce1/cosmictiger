@@ -72,7 +72,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define CUDA_KICK_PARTS_MAX (16*1024)
 #define HEAP_SIZE (1024ULL*1024ULL*1024ULL)
 #define L2FETCH 64
-#define STACK_SIZE (16*1024)
+#define STACK_SIZE (64*1024)
+#define RECURSION 9
 #define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
 #define MIN_KICK_PC_WARP 8
 #define MIN_KICK_WARP 16

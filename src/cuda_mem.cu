@@ -19,20 +19,37 @@
 #define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
 
-__device__
+CUDA_EXPORT
 void cuda_mem::push(int bin, char* ptr) {
-	if( !q[bin].push(ptr) ) {
+	if (!q[bin].push(ptr)) {
 		PRINT("cuda mem Q full!\n");
-		__trap();
+		ALWAYS_ASSERT(false);
 	}
 }
 
-__device__
+CUDA_EXPORT
 char* cuda_mem::pop(int bin) {
 	return q[bin].pop();
 }
 
+
+#ifndef __CUDA_ARCH__
 __device__
+bool cuda_mem::create_new_allocation(int bin) {
+	size_t size = (1 << bin) + sizeof(size_t);
+	auto* ptr = (char*) __sync_fetch_and_add((unsigned long long*) &next, (unsigned long long) size);
+	if (next >= heap_end) {
+		return false;
+	} else {
+		push(bin, ptr + sizeof(size_t));
+		*((size_t*) ptr) = bin;
+#ifdef __CUDA_ARCH__
+		__threadfence();
+#endif
+		return true;
+	}
+}
+#else
 bool cuda_mem::create_new_allocation(int bin) {
 	size_t size = (1 << bin) + sizeof(size_t);
 	auto* ptr = (char*) atomicAdd((unsigned long long*) &next, (unsigned long long) size);
@@ -45,8 +62,9 @@ bool cuda_mem::create_new_allocation(int bin) {
 		return true;
 	}
 }
+#endif
 
-__device__
+CUDA_EXPORT
 void* cuda_mem::allocate(size_t sz) {
 	int alloc_size = 8;
 	int bin = 3;
@@ -56,7 +74,7 @@ void* cuda_mem::allocate(size_t sz) {
 	}
 	if (bin >= CUDA_MEM_NBIN) {
 		printf("Allocation request for %li too large\n", sz);
-		__trap();
+		ALWAYS_ASSERT(false);
 	}
 	char* ptr;
 	while ((ptr = pop(bin)) == nullptr) {
@@ -67,11 +85,11 @@ void* cuda_mem::allocate(size_t sz) {
 	return ptr;
 }
 
-__device__ void cuda_mem::free(void* ptr) {
+CUDA_EXPORT void cuda_mem::free(void* ptr) {
 	size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
 	if (*binptr >= CUDA_MEM_NBIN) {
 		printf("Corrupt free! %li\n", *binptr);
-		__trap();
+		ALWAYS_ASSERT(false);
 	}
 	push(*binptr, (char*) ptr);
 }
@@ -92,16 +110,15 @@ cuda_mem::~cuda_mem() {
 
 __managed__ cuda_mem* memory;
 
-__device__ cuda_mem* get_cuda_heap() {
+CUDA_EXPORT cuda_mem* get_cuda_heap() {
 	return memory;
 }
 
-
-__device__ void* cuda_malloc(size_t sz) {
+CUDA_EXPORT void* cuda_malloc(size_t sz) {
 	return memory->allocate(sz);
 }
 
-__device__ void cuda_free(void* ptr) {
+CUDA_EXPORT void cuda_free(void* ptr) {
 	memory->free(ptr);
 }
 

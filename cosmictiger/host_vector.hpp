@@ -8,8 +8,11 @@
 #ifndef HOST_VECTOR_HPP_
 #define HOST_VECTOR_HPP_
 
-#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/device_vector.hpp>
 
+template<class T>
+using host_vector = device_vector<T>;
+/*
 template<class T>
 class host_vector {
 	T* ptr;
@@ -149,6 +152,6 @@ public:
 			arc & (*this)[i];
 		}
 	}
-};
+};*/
 
 #endif /* HOST_VECTOR_HPP_ */

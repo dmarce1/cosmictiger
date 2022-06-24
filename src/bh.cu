@@ -151,7 +151,6 @@ __global__ void bh_tree_evaluate_kernel(bh_workspace* workspaces, bh_tree_node* 
 
 		const float h = hsoft;
 		const float hinv = 1.0 / (2.f * h);
-		const float h2inv = 1.0 / (4.f * h * h);
 		const float h2 = 4.f * h * h;
 		for (int i = tid; i < sink_size; i += WARP_SIZE) {
 			phi[i + self.parts.first] = -SELF_PHI * hinv;
@@ -298,7 +297,6 @@ __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree
 
 		const float h = hsoft;
 		const float hinv = 1.0 / (2.f * h);
-		const float h2inv = 1.0 / (4.f * h * h);
 		const float h2 = 4.f * h * h;
 		if (tid == 0) {
 			phi[si] = 0.f;

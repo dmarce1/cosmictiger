@@ -400,14 +400,14 @@ static void force_test() {
 
 static void bucket_test() {
 	int nchecks = 11;
-	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+	static const char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
 			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
 	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
 	for (int ci = 0; ci < nchecks; ci++) {
 		char* buffer;
-		system("rm -r checkpoint.999999\n");
-		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
-		system(buffer);
+		ALWAYS_ASSERT(system("rm -r checkpoint.999999\n")!=0);
+		ALWAYS_ASSERT(asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]));
+		ALWAYS_ASSERT(system(buffer)!=0);
 		free(buffer);
 		for (int bucket_size = 64; bucket_size <= 256; bucket_size += 8) {
 			auto opts = get_options();
@@ -455,21 +455,21 @@ static void bucket_test() {
 				tree_destroy(false);
 			}
 			tm.stop();
-			asprintf(&buffer, "buckets.%i.txt", ci);
+			ALWAYS_ASSERT(asprintf(&buffer, "buckets.%i.txt", ci));
 			FILE* fp = fopen(buffer, "at");
 			free(buffer);
 			fprintf(fp, "%i %e\n", bucket_size, tm.read());
 			fclose(fp);
 		}
-		asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]);
-		system(buffer);
+		ALWAYS_ASSERT(asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]));
+		ALWAYS_ASSERT(system(buffer)!=0);
 		free(buffer);
 	}
 }
 
 static void speed_test() {
 	constexpr int nchecks = 11;
-	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+	static const char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
 			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
 	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
 	const double counts[] = { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4 };
@@ -489,9 +489,9 @@ static void speed_test() {
 		PRINT("Test %i with bucket = %i\n", ci, buckets[ci]);
 		PRINT("-------------------------------------------------------------------------------------\n");
 		char* buffer;
-		system("rm -r checkpoint.999999\n");
-		asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);
-		system(buffer);
+		ALWAYS_ASSERT(system("rm -r checkpoint.999999\n")!=0);
+		ALWAYS_ASSERT(asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]));
+		ALWAYS_ASSERT(system(buffer)!=0);
 		free(buffer);
 		for (int iter = 0; iter < counts[ci]; iter++) {
 			auto opts = get_options();

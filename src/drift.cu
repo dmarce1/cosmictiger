@@ -24,16 +24,10 @@
 #include <cosmictiger/cuda_mutex.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/device_vector.hpp>
-#include <cosmictiger/float40.hpp>
+#include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/timer.hpp>
 
-struct lc_entry {
-	fixed32 x, y, z;
-	float vx, vy, vz;
-};
-
 #define BLOCK_SIZE 32
-
 using list_type = device_vector<device_vector<lc_entry>>;
 
 __managed__ list_type* list_ptr;
@@ -44,6 +38,7 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 		bool do_lc) {
 	const auto& tid = threadIdx.x;
 	const auto& bid = blockIdx.x;
+	auto& list = (*list_ptr)[bid];
 	const double one(1.0);
 	const double two(2.0);
 	const double four(4.0);
@@ -144,9 +139,8 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 						}
 						int index = test;
 						int total;
-						compute_indices<BLOCK_SIZE>(index, total);
+						compute_indices < BLOCK_SIZE > (index, total);
 						if (total) {
-							auto& list = (*list_ptr)[bid];
 							const auto start = list.size();
 							list.resize(start + total);
 							if (test) {
@@ -204,7 +198,7 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_drift_kernel, BLOCK_SIZE, 0));
 	cudaFuncAttributes attr;
 	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_drift_kernel));
-	PRINT( "%i %i\n", nblocks, BLOCK_SIZE);
+	PRINT("%i %i\n", nblocks, BLOCK_SIZE);
 	nblocks *= cuda_smp_count();
 	const auto rng = particles_current_range();
 	nblocks = std::min(nblocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
@@ -228,15 +222,19 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	if (get_options().do_lc) {
 		int cnt = 0;
 		for (int li = 0; li < list_ptr->size(); li++) {
-			cnt += (*list_ptr)[li].size();
+			const auto& list = (*list_ptr)[li];
+			lc_add_parts(list.data(), list.size());
+			const auto sz = list.size();
+			cnt += sz;
 		}
+
 		static long long total_count = 0;
 		total_count += cnt;
-		PRINT("%i mapped %i total\n", cnt, total_count);
+		PRINT("%i %i\n", cnt, total_count);
 		list_free<<<1,1>>>();
 		CUDA_CHECK(cudaDeviceSynchronize());
 		CUDA_CHECK(cudaFree(list_ptr));
 	}
 	tm.stop();
-	PRINT( "Drift time = %e\n", tm.read());
+	PRINT("Drift time = %e\n", tm.read());
 }

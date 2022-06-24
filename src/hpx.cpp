@@ -104,7 +104,7 @@ static bool detect_hyperthreading() {
 	FILE* fp = fopen("/sys/devices/system/cpu/smt/active", "rt");
 	if (fp != nullptr) {
 		char c;
-		fread(&c, sizeof(char), 1, fp);
+		FREAD(&c, sizeof(char), 1, fp);
 		auto rc = c == '1';
 		if (rc) {
 			PRINT("Hyperthreading detected\n");

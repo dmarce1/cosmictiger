@@ -550,8 +550,8 @@ void driver() {
 				tmr.reset();
 				if (do_check) {
 					char* cmd;
-					asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz);
-					system(cmd);
+					ALWAYS_ASSERT(asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz));
+					ALWAYS_ASSERT(system(cmd)!=0);
 					free(cmd);
 				}
 				do_check = false;

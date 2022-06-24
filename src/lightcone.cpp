@@ -30,7 +30,6 @@
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/group_entry.hpp>
 #include <cosmictiger/host_vector.hpp>
-#include <cosmictiger/cuda_unordered_map.hpp>
 
 #include <atomic>
 #include <memory>
@@ -43,30 +42,12 @@
 
 using healpix_type = T_Healpix_Base< int >;
 
-#define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFLL)
-#define LC_EDGE_GROUP (0x0LL)
 
 struct lc_group_data {
 	vector<lc_particle> parts;
 	group_entry arc;
 };
 
-struct lc_tree_id {
-	int pix;
-	int index;
-	bool operator!=(const lc_tree_id& other) const {
-		return pix != other.pix || index != other.index;
-	}
-};
-
-struct lc_tree_node {
-	range<lc_real> box;
-	array<lc_tree_id, NCHILD> children;
-	pair<int> part_range;
-	bool active;
-	bool last_active;
-	int pix;
-};
 
 struct pixel {
 	float pix;
@@ -97,14 +78,16 @@ struct pixel {
 static std::shared_ptr<healpix_type> healpix;
 static pair<int> my_pix_range;
 static std::unordered_set<int> bnd_pix;
-static cuda_unordered_map<host_vector<lc_particle>> part_map;
-static cuda_unordered_map<host_vector<lc_tree_node>> tree_map;
+static auto& part_map = get_part_map();
+static auto& tree_map = get_tree_map();
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
 static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
 static vector<group_entry> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type mutex;
+static mutex_type leaf_mutex;
+static host_vector<lc_tree_id> leaf_nodes;
 static double tau_max;
 static int Nside;
 static int Npix;
@@ -136,7 +119,7 @@ HPX_PLAIN_ACTION (lc_flush_final);
 void lc_add_parts(const lc_entry* entries, int count) {
 	const int start = part_buffer.size();
 	part_buffer.resize(start + count);
-	for( int i = start; i < part_buffer.size(); i++) {
+	for (int i = start; i < part_buffer.size(); i++) {
 		const int j = i - start;
 		part_buffer[i].pos[XDIM] = entries[j].x;
 		part_buffer[i].pos[YDIM] = entries[j].y;
@@ -602,7 +585,9 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	auto& nodes = tree_map[pix];
 	auto& parts = part_map[pix];
 	range<double> part_box;
+	bool leaf;
 	if (part_range.second - part_range.first > GROUP_BUCKET_SIZE) {
+		leaf = false;
 		const int xdim = box.longest_dim();
 		const double xmid = 0.5 * (box.begin[xdim] + box.end[xdim]);
 		const int mid = lc_particles_sort(pix, part_range, xmid, xdim);
@@ -622,6 +607,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		this_node.children[LEFT].index = rcl.first;
 		this_node.children[RIGHT].index = rcr.first;
 	} else {
+		leaf = true;
 		for (int dim = 0; dim < NDIM; dim++) {
 			part_box.begin[dim] = std::numeric_limits<double>::max();
 			part_box.end[dim] = -std::numeric_limits<double>::max();
@@ -638,7 +624,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		this_node.children[LEFT].pix = this_node.children[RIGHT].pix = -1;
 	}
 	this_node.part_range = part_range;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		this_node.box.begin[dim] = part_box.end[dim];
 	}
 	this_node.pix = pix;
@@ -646,6 +632,13 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	this_node.last_active = true;
 	int index = nodes.size();
 	nodes.push_back(this_node);
+	if (leaf) {
+		lc_tree_id selfid;
+		selfid.index = index;
+		selfid.pix = pix;
+		std::lock_guard<mutex_type> lock(leaf_mutex);
+		leaf_nodes.push_back(selfid);
+	}
 	std::pair<int, range<double>> rc;
 	rc.first = index;
 	rc.second = part_box;
@@ -758,7 +751,42 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 		self.active = nactive;
 		return nactive;
 	}
+}
 
+void lc_find_neighbors(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
+	vector<lc_tree_id> nextlist;
+	vector<lc_tree_id> leaflist;
+	auto& self = tree_map[self_id.pix][self_id.index];
+	const bool iamleaf = self.children[LEFT].index == -1;
+	auto mybox = self.box.pad(link_len * 1.0001);
+	do {
+		for (int ci = 0; ci < checklist.size(); ci++) {
+			const auto check = checklist[ci];
+			const auto& other = tree_map[check.pix][check.index];
+			if (other.last_active) {
+				if (mybox.intersection(other.box).volume() > 0) {
+					if (other.children[LEFT].index == -1) {
+						leaflist.push_back(check);
+					} else {
+						nextlist.push_back(other.children[LEFT]);
+						nextlist.push_back(other.children[RIGHT]);
+					}
+				}
+			}
+		}
+		std::swap(nextlist, checklist);
+		nextlist.resize(0);
+	} while (iamleaf && checklist.size());
+	if (iamleaf) {
+		self.neighbors.resize(leaflist.size());
+		memcpy(self.neighbors.data(), leaflist.data(), leaflist.size());
+	} else {
+		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+		if (checklist.size()) {
+			lc_find_neighbors(self.children[LEFT], checklist, link_len);
+			lc_find_neighbors(self.children[RIGHT], std::move(checklist), link_len);
+		}
+	}
 }
 
 size_t lc_find_groups() {
@@ -787,7 +815,8 @@ size_t lc_find_groups() {
 				checklist[i].pix = check_pix[i];
 				checklist[i].index = tree_map[check_pix[i]].size() - 1;
 			}
-			return lc_find_groups_local(checklist.back(), checklist, link_len);
+			return cuda_lightcone(leaf_nodes);
+//			return lc_find_groups_local(checklist.back(), checklist, link_len);
 		}));
 	}
 	for (auto& f : futs) {
@@ -978,8 +1007,6 @@ void lc_init(double tau, double tau_max_) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_init_action>(c, tau, tau_max_));
 	}
-	tree_map = decltype(tree_map)();
-	part_map = decltype(part_map)();
 	mutex_map = decltype(mutex_map)();
 	bnd_pix = decltype(bnd_pix)();
 	tau_max = tau_max_;
@@ -1013,65 +1040,65 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 		vector<lc_particle>& this_part_buffer) {
 	int rc = 0;
 	/*static simd_float8 images[NDIM] =
-			{ simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
-	const float tau_max_inv = 1.0 / tau_max;
-	const simd_float8 simd_c0 = simd_float8(tau_max_inv);
-	array<simd_float8, NDIM> X0;
-	array<simd_float8, NDIM> X1;
-	const simd_float8 simd_tau0 = simd_float8(t0);
-	const simd_float8 simd_tau1 = simd_float8(t1);
-	simd_float8 dist0;
-	simd_float8 dist1;
-	X0[XDIM] = simd_float8(x0) + images[XDIM];
-	X0[YDIM] = simd_float8(y0) + images[YDIM];
-	X0[ZDIM] = simd_float8(z0) + images[ZDIM];
-	X1[XDIM] = simd_float8(x1) + images[XDIM];
-	X1[YDIM] = simd_float8(y1) + images[YDIM];
-	X1[ZDIM] = simd_float8(z1) + images[ZDIM];
-	dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
-	dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
-	simd_float8 tau0 = simd_tau0 + dist0;
-	simd_float8 tau1 = simd_tau1 + dist1;
-	simd_int8 I0 = tau0 * simd_c0;
-	simd_int8 I1 = tau1 * simd_c0;
-	for (int ci = 0; ci < SIMD_FLOAT8_SIZE; ci++) {
-		if (dist1[ci] <= 1.0 || dist0[ci] <= 1.0) {
-			static const int map_nside = get_options().lc_map_size;
-			const int i0 = I0[ci];
-			const int i1 = I1[ci];
-			if (i0 != i1) {
-				x0 = X0[XDIM][ci];
-				y0 = X0[YDIM][ci];
-				z0 = X0[ZDIM][ci];
-				const double ti = (i0 + 1) * tau_max;
-				const double sqrtauimtau0 = sqr(ti - t0);
-				const double tau0mtaui = t0 - ti;
-				const double u2 = sqr(vx, vy, vz);                                    // 5
-				const double x2 = sqr(x0, y0, z0);                                       // 5
-				const double udotx = vx * x0 + vy * y0 + vz * z0;               // 5
-				const double A = 1.f - u2;                                                     // 1
-				const double B = 2.0 * (tau0mtaui - udotx);                                    // 2
-				const double C = sqrtauimtau0 - x2;                                            // 1
-				const double t = -(B + sqrt(B * B - 4.f * A * C)) / (2.f * A);                // 15
-				const double x1 = x0 + vx * t;                                            // 2
-				const double y1 = y0 + vy * t;                                            // 2
-				const double z1 = z0 + vz * t;                                            // 2
-				long int ipix;
-				if (sqr(x1, y1, z1) <= 1.f) {                                                 // 6
-					rc++;
-					const auto pix = vec2pix(x1, y1, z1);
-					lc_particle part;
-					part.pos[XDIM] = x1;
-					part.pos[YDIM] = y1;
-					part.pos[ZDIM] = z1;
-					part.vel[XDIM] = vx;
-					part.vel[YDIM] = vy;
-					part.vel[ZDIM] = vz;
-					this_part_buffer.push_back(part);
-				}
-			}
-		}
-	}*/
+	 { simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1), simd_float8(0, 0, 0, 0, -1, -1, -1, -1) };
+	 const float tau_max_inv = 1.0 / tau_max;
+	 const simd_float8 simd_c0 = simd_float8(tau_max_inv);
+	 array<simd_float8, NDIM> X0;
+	 array<simd_float8, NDIM> X1;
+	 const simd_float8 simd_tau0 = simd_float8(t0);
+	 const simd_float8 simd_tau1 = simd_float8(t1);
+	 simd_float8 dist0;
+	 simd_float8 dist1;
+	 X0[XDIM] = simd_float8(x0) + images[XDIM];
+	 X0[YDIM] = simd_float8(y0) + images[YDIM];
+	 X0[ZDIM] = simd_float8(z0) + images[ZDIM];
+	 X1[XDIM] = simd_float8(x1) + images[XDIM];
+	 X1[YDIM] = simd_float8(y1) + images[YDIM];
+	 X1[ZDIM] = simd_float8(z1) + images[ZDIM];
+	 dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
+	 dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
+	 simd_float8 tau0 = simd_tau0 + dist0;
+	 simd_float8 tau1 = simd_tau1 + dist1;
+	 simd_int8 I0 = tau0 * simd_c0;
+	 simd_int8 I1 = tau1 * simd_c0;
+	 for (int ci = 0; ci < SIMD_FLOAT8_SIZE; ci++) {
+	 if (dist1[ci] <= 1.0 || dist0[ci] <= 1.0) {
+	 static const int map_nside = get_options().lc_map_size;
+	 const int i0 = I0[ci];
+	 const int i1 = I1[ci];
+	 if (i0 != i1) {
+	 x0 = X0[XDIM][ci];
+	 y0 = X0[YDIM][ci];
+	 z0 = X0[ZDIM][ci];
+	 const double ti = (i0 + 1) * tau_max;
+	 const double sqrtauimtau0 = sqr(ti - t0);
+	 const double tau0mtaui = t0 - ti;
+	 const double u2 = sqr(vx, vy, vz);                                    // 5
+	 const double x2 = sqr(x0, y0, z0);                                       // 5
+	 const double udotx = vx * x0 + vy * y0 + vz * z0;               // 5
+	 const double A = 1.f - u2;                                                     // 1
+	 const double B = 2.0 * (tau0mtaui - udotx);                                    // 2
+	 const double C = sqrtauimtau0 - x2;                                            // 1
+	 const double t = -(B + sqrt(B * B - 4.f * A * C)) / (2.f * A);                // 15
+	 const double x1 = x0 + vx * t;                                            // 2
+	 const double y1 = y0 + vy * t;                                            // 2
+	 const double z1 = z0 + vz * t;                                            // 2
+	 long int ipix;
+	 if (sqr(x1, y1, z1) <= 1.f) {                                                 // 6
+	 rc++;
+	 const auto pix = vec2pix(x1, y1, z1);
+	 lc_particle part;
+	 part.pos[XDIM] = x1;
+	 part.pos[YDIM] = y1;
+	 part.pos[ZDIM] = z1;
+	 part.vel[XDIM] = vx;
+	 part.vel[YDIM] = vy;
+	 part.vel[ZDIM] = vz;
+	 this_part_buffer.push_back(part);
+	 }
+	 }
+	 }
+	 }*/
 	return rc;
 }
 

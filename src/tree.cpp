@@ -276,6 +276,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (depth == 0) {
 		tree_allocate_nodes();
 	}
+
+	if (local_root) {
+		return cuda_tree_sort(nodes, multis, (next_id += get_options().tree_alloc_line_size), params, box, depth);
+	}
+
 	if (local_root) {
 		part_range = particles_current_range();
 		size_t cnt = part_range.second - part_range.first;
@@ -486,7 +491,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	} else {
 		array<double, NDIM>& Xmin = rbox.begin;
 		array<double, NDIM>& Xmax = rbox.end;
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			Xmin[dim] = box.end[dim];
 			Xmax[dim] = box.begin[dim];
 		}
@@ -569,7 +574,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.mpos->pos = x;
 	node.mpos->multi = multi;
 	node.depth = depth;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = rbox.begin[dim];
 		node.box.end[dim] = rbox.end[dim];
 	}

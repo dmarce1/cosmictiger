@@ -72,6 +72,7 @@ set(cosmictiger_source_files
     src/kick.cu
     src/kick_workspace.cpp
     src/lightcone.cpp
+    src/lightcone.cu
     src/main.cpp
     src/memused.cpp
     src/options.cpp
@@ -84,6 +85,7 @@ set(cosmictiger_source_files
     src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp
+    src/tree.cu
     src/view.cpp
     src/zero_order.cpp
 )      
@@ -177,7 +179,7 @@ set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregc
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       -DUSE_CUDA --use_fast_math ;
+                       -DUSE_CUDA --use_fast_math -Xcudafe "--diag_suppress 20054";
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
