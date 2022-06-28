@@ -1,22 +1,3 @@
-/*
- CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
-
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU General Public License
- as published by the Free Software Foundation; either version 2
- of the License, or (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
- */
-
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/defs.hpp>
@@ -40,19 +21,9 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
-struct cuda_kick_params {
-	array<fixed32, NDIM> Lpos;
-	expansion<float> L;
-	int self;
-	int* dchecks;
-	int* echecks;
-	int dcount;
-	int ecount;
-};
 
 __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
 //	auto tm = clock64();
-
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
 	cuda_kick_shmem& shmem = *(cuda_kick_shmem*) shmem_ptr;
@@ -134,8 +105,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1); // 13
 			rungs[snki] = rung;
 			max_rung = max(rung, max_rung);
-			ALWAYS_ASSERT(rung >= 0);
-			ALWAYS_ASSERT(rung < MAX_RUNG);
+			ALWAYS_ASSERT(rung >= 0);ALWAYS_ASSERT(rung < MAX_RUNG);
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
 			vx = fmaf(sgn * F.gx, dt, vx); // 3
 			vy = fmaf(sgn * F.gy, dt, vy); // 3
@@ -274,6 +244,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					for (int i = tid; i < maxi; i += WARP_SIZE) {
 						for (int n = 0; n < NLISTS; n++) {
 							sw[n] = false;
+
 						}
 						if (i < checks.size()) {
 							const tree_node& other = tree_nodes[checks[i]];
@@ -336,7 +307,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					device_vector<int>* lists[NLISTS] = { &cclist, &leaflist, &cplist, &pclist, &nextlist };
 					auto& checks = dchecks;
 					const float thetainv = 1.f / global_params.theta;
-						do {
+					do {
 						const int maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
 							for (int n = 0; n < NLISTS; n++) {
@@ -495,122 +466,4 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	((cuda_kick_shmem*) shmem_ptr)->~cuda_kick_shmem();
 
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
-}
-
-kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes, vector<kick_workitem> workitems) {
-	timer tm;
-	tm.start();
-	int nblocks = kick_block_count();
-	ALWAYS_ASSERT(workitems.size());
-	nblocks = std::min(nblocks, (int) workitems.size());
-	static char* data_ptr = nullptr;
-	static char* dev_data_ptr = nullptr;
-	static int data_size = 0;
-	int dcount = 0;
-	int ecount = 0;
-	for (int i = 0; i < workitems.size(); i++) {
-		dcount += workitems[i].dchecklist.size();
-		ecount += workitems[i].echecklist.size();
-	}
-	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount + sizeof(int) * ecount;
-	if (data_size < alloc_size) {
-		if (data_ptr) {
-			CUDA_CHECK(cudaFree(dev_data_ptr));
-			free(data_ptr);
-		}
-		data_size = alloc_size;
-		data_ptr = (char*) malloc(alloc_size);
-		CUDA_CHECK(cudaMalloc(&dev_data_ptr, alloc_size));
-	}
-	int offset = 0;
-	kick_return* return_ = (kick_return*) (data_ptr + offset);
-	offset += sizeof(kick_return);
-	cuda_kick_params* ikick_params = (cuda_kick_params*) (data_ptr + offset);
-	offset += sizeof(cuda_kick_params) * workitems.size();
-	int* dchecks = (int*) (data_ptr + offset);
-	offset += sizeof(int) * dcount;
-	int* echecks = (int*) (data_ptr + offset);
-	offset += sizeof(int) * ecount;
-	int* current_index = (int*) (data_ptr + offset);
-	offset += sizeof(int);
-	offset = 0;
-	kick_return* dev_return_ = (kick_return*) (dev_data_ptr + offset);
-	offset += sizeof(kick_return);
-	cuda_kick_params* dev_ikick_params = (cuda_kick_params*) (dev_data_ptr + offset);
-	offset += sizeof(cuda_kick_params) * workitems.size();
-	int* dev_dchecks = (int*) (dev_data_ptr + offset);
-	offset += sizeof(int) * dcount;
-	int* dev_echecks = (int*) (dev_data_ptr + offset);
-	offset += sizeof(int) * ecount;
-	int* dev_current_index = (int*) (dev_data_ptr + offset);
-	offset += sizeof(int);
-	*current_index = 0;
-	*return_ = kick_return();
-	vector<int> dindices(workitems.size() + 1);
-	vector<int> eindices(workitems.size() + 1);
-	dcount = 0;
-	ecount = 0;
-	for (int i = 0; i < workitems.size(); i++) {
-		dindices[i] = dcount;
-		eindices[i] = ecount;
-		for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-			dchecks[dcount] = workitems[i].dchecklist[j].index;
-			dcount++;
-		}
-		for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-			echecks[ecount] = workitems[i].echecklist[j].index;
-			ecount++;
-		}
-	}
-
-	dindices[workitems.size()] = dcount;
-	eindices[workitems.size()] = ecount;
-	cuda_kick_data data;
-	data.x = dev_x;
-	data.y = dev_y;
-	data.z = dev_z;
-	data.tree_nodes = dev_tree_nodes;
-	data.vel = particles_vel_data();
-	data.rungs = &particles_rung(0);
-	if (kparams.save_force) {
-		data.gx = &particles_gforce(XDIM, 0);
-		data.gy = &particles_gforce(YDIM, 0);
-		data.gz = &particles_gforce(ZDIM, 0);
-		data.pot = &particles_pot(0);
-	} else {
-		data.gx = data.gy = data.gz = data.pot = nullptr;
-	}
-
-	for (int i = 0; i < workitems.size(); i++) {
-		cuda_kick_params params;
-		params.Lpos = workitems[i].pos;
-		params.L = workitems[i].L;
-		params.self = workitems[i].self.index;
-		params.dchecks = dev_dchecks + dindices[i];
-		params.echecks = dev_echecks + eindices[i];
-		params.dcount = dindices[i + 1] - dindices[i];
-		params.ecount = eindices[i + 1] - eindices[i];
-		ikick_params[i] = std::move(params);
-	}
-	cuda_set_device();
-	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, 0));
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
-	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, 0));
-	CUDA_CHECK(cudaDeviceSynchronize());
-	return *return_;
-}
-
-int kick_block_count() {
-	static int nblocks;
-	static bool shown = false;
-	if (!shown) {
-		cudaFuncAttributes attr;
-		CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_kick_kernel));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-		PRINT("Occupancy is %i shmem size = %li numregs = %i\n", nblocks, sizeof(cuda_kick_shmem), attr.numRegs);
-		nblocks *= cuda_smp_count();
-		shown = true;
-	}
-	return nblocks;
-
 }

@@ -82,8 +82,8 @@ struct tree_id_hash_hi {
 };
 
 struct multi_pos {
-	multipole<float> multi;
 	array<fixed32, NDIM> pos;
+	multipole<float> multi;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & multi;
@@ -92,12 +92,12 @@ struct multi_pos {
 };
 
 struct tree_node {
+	multi_pos* mpos;
 	fixed32_range box;
 	array<tree_id, NCHILD> children;
 	pair<part_int> part_range;
 	pair<int, int> proc_range;
 	array<fixed32,NDIM> pos;
-	multi_pos* mpos;
 	float radius;
 	struct {
 		unsigned short depth :14;

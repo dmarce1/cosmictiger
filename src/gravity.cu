@@ -20,6 +20,7 @@
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/fmm_kernel_ptx.hpp>
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
@@ -30,20 +31,21 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	flop_counter<int> flops = 0;
 	if (multlist.size()) {
 		expansion<float> L;
-		expansion<float> D;
-		for (int i = 0; i < EXPANSION_SIZE; i++) {
-			L[i] = 0.0f;
-		}
-		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
-			const tree_node& other = tree_nodes[multlist[i]];
-			const multipole<float>& M = other.mpos->multi;
-			array<float, NDIM> dx;
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
-			}
-			flops += 6 + greens_function(D, dx);
-			flops += M2L(L, M, D, do_phi);
-		}
+//		expansion<float> D;
+		M2L_cuda(multlist.data(), multlist.size(), tree_nodes, do_phi, self.mpos->pos.data(), L.data());
+		/*for (int i = 0; i < EXPANSION_SIZE; i++) {
+		 L[i] = 0.0f;
+		 }
+		 for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
+		 const tree_node& other = tree_nodes[multlist[i]];
+		 const multipole<float>& M = other.mpos->multi;
+		 array<float, NDIM> dx;
+		 for (int dim = 0; dim < NDIM; dim++) {
+		 dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
+		 }
+		 flops += 6 + greens_function(D, dx);
+		 flops += M2L(L, M, D, do_phi);
+		 }*/
 		shared_reduce_add_array(L);
 		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];
