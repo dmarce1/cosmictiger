@@ -68,7 +68,7 @@ bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
 void kick_workspace::to_gpu() {
 
 	cuda_set_device();
-//	PRINT("Preparing gpu send on %i\n", hpx_rank());
+	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
 	timer tm;
 	tm.start();
@@ -320,9 +320,9 @@ void kick_workspace::to_gpu() {
 	const auto kr = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems));
 	tree_2_cpu();
 	tm.stop();
-//	PRINT("GPU took %e seconds\n", tm.read());
 	particles_resize(opartsize);
 	kick_set_rc(kr);
+	PRINT("GPU took %e seconds\n", tm.read());
 
 }
 
@@ -335,9 +335,7 @@ void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) 
 	}
 	lock.unlock();
 	if (do_work) {
-		hpx::apply([ptr]() {
-			ptr->to_gpu();
-		});
+		ptr->to_gpu();
 	}
 }
 
@@ -376,8 +374,6 @@ void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<flo
 	workitems.push_back(std::move(item));
 	lock.unlock();
 	if (do_work) {
-		hpx::apply([ptr]() {
-			ptr->to_gpu();
-		});
+		ptr->to_gpu();
 	}
 }

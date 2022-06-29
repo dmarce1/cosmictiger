@@ -29,6 +29,7 @@ static std::unordered_map<std::string, timer> timers;
 static std::stack<std::string> stack;
 
 void profiler_enter(const char* name) {
+	PRINT( "Entering %s\n", name);
 	if (!stack.empty()) {
 		timers[stack.top()].stop();
 	}
@@ -37,6 +38,7 @@ void profiler_enter(const char* name) {
 }
 
 void profiler_exit() {
+	PRINT( "Leaving %s\n", stack.top().c_str());
 	timers[stack.top()].stop();
 	stack.pop();
 	if (!stack.empty()) {
