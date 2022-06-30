@@ -597,19 +597,19 @@ void driver() {
 			if (z > 50.0) {
 				theta = 0.3;
 			} else if (z > 20.0) {
-				theta = 0.4;
+				theta = 0.5;
 			} else if (z > 2.0) {
-				theta = 0.55;
+				theta = 0.65;
 			} else {
-				theta = 0.7;
+				theta = 0.8;
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
 			if (ts <= 10.0) {
-				bucket_size = 96;
+				bucket_size = 112;
 			} else if (ts < 55.0) {
-				bucket_size = 96 + (ts - 10.0) / 45.0 * (168 - 96);
+				bucket_size = 112 + (ts - 10.0) / 45.0 * (184 - 112);
 			} else {
-				bucket_size = 168;
+				bucket_size = 184;
 			}
 			opts.bucket_size = bucket_size;
 			opts.theta = theta;

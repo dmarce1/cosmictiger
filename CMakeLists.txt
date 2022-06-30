@@ -8,7 +8,7 @@ find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
-set(COSMICTIGER_WITH_ORDER "7" )
+set(COSMICTIGER_WITH_ORDER "8" )
 if( COSMICTIGER_WITH_CUDA ) 
 	enable_language(CUDA)
 	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
@@ -165,11 +165,11 @@ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tenso
 target_link_libraries( fmm_kernel_codegen PUBLIC dl )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
-set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
-set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
-set_source_files_properties(./src/analytic.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+#set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+#set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+#set_source_files_properties(./src/analytic.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
-set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+#set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 
 

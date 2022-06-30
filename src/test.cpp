@@ -402,7 +402,7 @@ static void bucket_test() {
 	int nchecks = 11;
 	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
 			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
-	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
+	const double thetas[] = { 0.5, 0.65, 0.65, 0.65, 0.65, 0.65, 0.8, 0.8, 0.8, 0.8, 0.8 };
 	for (int ci = 0; ci < nchecks; ci++) {
 		char* buffer;
 		system("rm -r checkpoint.999999\n");

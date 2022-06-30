@@ -24,7 +24,7 @@
 
 #include <atomic>
 
-#define KICK_C_MAX 42
+#define KICK_C_MAX 32
 
 struct cuda_kick_data {
 	tree_node* tree_nodes;
@@ -45,7 +45,7 @@ struct kick_return;
 
 #include <cosmictiger/stack_vector.hpp>
 
-#define KICK_PP_MAX (32*18)
+#define KICK_PP_MAX (32*29)
 
 struct expansion_type {
 	array<fixed32, NDIM> pos;

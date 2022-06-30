@@ -68,7 +68,7 @@ bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
 void kick_workspace::to_gpu() {
 
 	cuda_set_device();
-	PRINT("Preparing gpu send on %i\n", hpx_rank());
+//	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
 	timer tm;
 	tm.start();
@@ -322,7 +322,7 @@ void kick_workspace::to_gpu() {
 	tm.stop();
 	particles_resize(opartsize);
 	kick_set_rc(kr);
-	PRINT("GPU took %e seconds\n", tm.read());
+//	PRINT("GPU took %e seconds\n", tm.read());
 
 }
 
