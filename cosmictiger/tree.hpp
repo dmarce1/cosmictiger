@@ -26,6 +26,8 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/range.hpp>
+#include <hpx/serialization/serialization_fwd.hpp>
 
 struct multipole_pos {
 	multipole<float> m;
@@ -91,12 +93,14 @@ struct multi_pos {
 	}
 };
 
+multi_pos* tree_add_multipole(const multi_pos& mpos);
+
 struct tree_node {
 	fixed32_range box;
 	array<tree_id, NCHILD> children;
 	pair<part_int> part_range;
 	pair<int, int> proc_range;
-	array<fixed32,NDIM> pos;
+	array<fixed32, NDIM> pos;
 	multi_pos* mpos;
 	float radius;
 	struct {
@@ -121,9 +125,32 @@ struct tree_node {
 	inline bool is_local_here() const {
 		return is_local() && proc_range.first == hpx_rank();
 	}
+	HPX_SERIALIZATION_SPLIT_MEMBER();
 	template<class A>
-	void serialize(A && arc, unsigned) {
-	//	arc & mpos;
+	void load(A && arc, unsigned) {
+		multi_pos this_mpos;
+		arc & this_mpos;
+		mpos = tree_add_multipole(this_mpos);
+		arc & box;
+		arc & pos;
+		arc & children;
+		arc & proc_range;
+		arc & part_range;
+		arc & radius;
+		int local_root0;
+		int leaf0;
+		int depth0;
+		arc & local_root0;
+		arc & leaf0;
+		arc & depth0;
+		local_root = local_root0;
+		depth = depth0;
+		leaf = leaf0;
+	}
+	template<class A>
+	void save(A && arc, unsigned) const {
+		arc & *mpos;
+		arc & box;
 		arc & pos;
 		arc & children;
 		arc & proc_range;
@@ -138,9 +165,6 @@ struct tree_node {
 		arc & local_root0;
 		arc & leaf0;
 		arc & depth0;
-		local_root = local_root0;
-		depth = depth0;
-		leaf = leaf0;
 	}
 };
 

@@ -65,6 +65,7 @@ static vector<pair<part_int>> leaf_part_ranges;
 static mutex_type leaf_part_range_mutex;
 static std::atomic<int> num_threads(0);
 static std::atomic<int> next_id;
+static std::atomic<int> next_mult_id;
 static array<std::unordered_map<tree_id, hpx::shared_future<vector<tree_node>>, tree_id_hash_hi>, TREE_CACHE_SIZE> tree_cache;
 static array<spinlock_type, TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocator_mtx(0);
@@ -116,9 +117,17 @@ static void reset_last_cache_entries() {
 
 static const tree_node* tree_cache_read(tree_id id);
 
+multi_pos* tree_add_multipole(const multi_pos& mpos) {
+	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
+	auto* ptr = &multis[next_mult_id++ + tree_alloc_line_size];
+	*ptr = mpos;
+	return ptr;
+}
+
 void tree_allocator::reset() {
 	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
 	next = (next_id += tree_alloc_line_size);
+	next_mult_id += tree_alloc_line_size;
 	last = std::min(next + tree_alloc_line_size, (int) nodes_size);
 	if (next >= nodes_size) {
 		THROW_ERROR("%s\n", "Tree arena full");
@@ -234,6 +243,7 @@ static void tree_allocate_nodes() {
 		futs.push_back(hpx::async<tree_allocate_nodes_action>(c));
 	}
 	next_id = -tree_alloc_line_size;
+	next_mult_id = -tree_alloc_line_size;
 	const size_t sz = std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN);
 	if (nodes_size < sz) {
 		if (nodes != nullptr) {
