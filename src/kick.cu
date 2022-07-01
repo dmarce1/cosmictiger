@@ -92,10 +92,10 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		L2 = L2P(L, dx, params.do_phi);
 		auto& F = force[i];
-		F.phi += L2(0, 0, 0);
-		F.gx -= L2(1, 0, 0);
-		F.gy -= L2(0, 1, 0);
-		F.gz -= L2(0, 0, 1);
+		F.phi += SCALE_FACTOR1 * L2(0, 0, 0);
+		F.gx -= SCALE_FACTOR2 * L2(1, 0, 0);
+		F.gy -= SCALE_FACTOR2 * L2(0, 1, 0);
+		F.gz -= SCALE_FACTOR2 * L2(0, 0, 1);
 		F.gz *= params.GM;
 		F.gy *= params.GM;
 		F.gx *= params.GM;

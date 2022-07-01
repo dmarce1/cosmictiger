@@ -178,10 +178,10 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 					flops += 6 + greens_function(D, dx);
 					flops += M2L(L, M, D, do_phi);
-					F.gx -= L(1, 0, 0);
-					F.gy -= L(0, 1, 0);
-					F.gz -= L(0, 0, 1);
-					F.phi += L(0, 0, 0);
+					F.gx -= SCALE_FACTOR2 * L(1, 0, 0);
+					F.gy -= SCALE_FACTOR2 *  L(0, 1, 0);
+					F.gz -= SCALE_FACTOR2 * L(0, 0, 1);
+					F.phi += SCALE_FACTOR1 * L(0, 0, 0);
 					flops += 4;
 				}
 			}
@@ -205,7 +205,8 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 		}
 		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
 			const tree_node& other = tree_nodes[multlist[i]];
-			const multipole<float>& M = other.mpos->multi;
+			multipole<float> M = other.mpos->multi;
+			flops += apply_scale_factor(M);
 			array<float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
@@ -213,6 +214,7 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 			flops += 3 + ewald_greens_function(D, dx);
 			flops += M2L(L, M, D, do_phi);
 		}
+		flops += apply_scale_factor_inv(L);
 		shared_reduce_add_array(L);
 		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];

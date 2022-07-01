@@ -84,8 +84,12 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 				flops += count * greens_function(D, dx);
 			} else {
 				flops += count * ewald_greens_function(D, dx);
+				flops += count * apply_scale_factor(M[j]);
 			}
 			M2L(L0, M[j], D, do_phi);
+		}
+		if (type == GRAVITY_EWALD) {
+			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] += L0[i].sum();
@@ -238,10 +242,10 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 				flops += count * M2L(L, M[j], D, do_phi);
 			}
 			const int j = i - range.first;
-			f.gx[j] -= L(1, 0, 0).sum();
-			f.gy[j] -= L(0, 1, 0).sum();
-			f.gz[j] -= L(0, 0, 1).sum();
-			f.phi[j] += L(0, 0, 0).sum();
+			f.gx[j] -= SCALE_FACTOR2 * L(1, 0, 0).sum();
+			f.gy[j] -= SCALE_FACTOR2 * L(0, 1, 0).sum();
+			f.gz[j] -= SCALE_FACTOR2 * L(0, 0, 1).sum();
+			f.phi[j] += SCALE_FACTOR1 * L(0, 0, 0).sum();
 			flops += 28;
 		}
 	}

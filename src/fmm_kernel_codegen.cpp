@@ -673,14 +673,17 @@ void do_expansion(bool two) {
 	tprint("__noinline__\n");
 	tprint("#endif\n");
 	if (two) {
-		tprint("tensor_trless_sym<T, %i> L2P(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+		tprint("tensor_trless_sym<T, %i> L2P(const tensor_trless_sym<T, %i>& La, array<T,NDIM> X, bool do_phi) {\n", Q, P);
 	} else {
-		tprint("tensor_trless_sym<T, %i> L2L(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+		tprint("tensor_trless_sym<T, %i> L2L(const tensor_trless_sym<T, %i>& La, array<T,NDIM> X, bool do_phi) {\n", Q, P);
 
 	}
 	indent();
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
 	tprint("tensor_trless_sym<T, %i> Lb;\n", Q);
-	flops += compute_dx(P);
+	flops += 3 + compute_dx(P);
 	array<int, NDIM> n;
 	array<int, NDIM> k;
 	int phi_flops = 0;
@@ -815,6 +818,36 @@ void do_expansion(bool two) {
 }
 
 template<int Q>
+void apply_scale_factorM(const char* name) {
+	array<int, NDIM> n;
+	for (int n0 = 0; n0 < Q; n0++) {
+		for (n[0] = 0; n[0] <= n0; n[0]++) {
+			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
+				n[2] = n0 - n[1] - n[0];
+				if (n[2] <= 1 || (n[0] == 0 && n[1] == 0 && n[2] == 2)) {
+					tprint("%s[%i] *= SCALE_FACTOR_INV%i;\n", name, trless_index(n[0], n[1], n[2], Q), n0);
+				}
+			}
+		}
+	}
+}
+
+template<int Q>
+void apply_scale_factorL(const char* name) {
+	array<int, NDIM> n;
+	for (int n0 = 0; n0 < Q; n0++) {
+		for (n[0] = 0; n[0] <= n0; n[0]++) {
+			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
+				n[2] = n0 - n[1] - n[0];
+				if (n[2] <= 1 || (n[0] == 0 && n[1] == 0 && n[2] == 2)) {
+					tprint("%s[%i] *= SCALE_FACTOR_INV%i;\n", name, trless_index(n[0], n[1], n[2], Q), n0 + 1);
+				}
+			}
+		}
+	}
+}
+
+template<int Q>
 void do_expansion_cuda() {
 	int flops = 0;
 	struct entry {
@@ -929,10 +962,14 @@ void do_expansion_cuda() {
 	tprint("#ifdef __CUDACC__\n");
 	tprint("template<class T>\n");
 	tprint("__device__\n");
-	tprint("tensor_trless_sym<T, %i> L2L_cuda(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+	tprint("tensor_trless_sym<T, %i> L2L_cuda(const tensor_trless_sym<T, %i>& La, array<T,NDIM> X, bool do_phi) {\n", Q, P);
 
 	indent();
+
 	tprint("const int tid = threadIdx.x;\n");
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
 	tprint("tensor_trless_sym<T, %i> Lb;\n", Q);
 	tprint("tensor_sym<T, %i> Lc;\n", Q);
 	tprint("for( int i = 0; i < EXPANSION_SIZE; i ++ ) {\n");
@@ -948,6 +985,7 @@ void do_expansion_cuda() {
 	flops += compute_dx_tensor(P);
 	flops += const_reference_trless_tensor<P>("La", "Lc");
 	flops += 4 * entries.size();
+	flops += 3;
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size() - 1 + (entries1.size() == entries2.size() ? 1 : 0));
 	indent();
 	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], Lc[Lsrc1[i]], Lb[Ldest1[i]]);\n");
@@ -1096,7 +1134,7 @@ void ewald(int direct_flops) {
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
 	tprint("D = D + Dfour;\n");                                    // P*P+1
 	tprint("expansion<T> D1;\n");
-	tprint("greens_function(D1,X);\n");
+	tprint("greens_function(D1, X, false);\n");
 	tprint("D(0, 0, 0) = T(%.9e) + D(0, 0, 0); \n", M_PI / 4.0);                                    // 1
 	tprint("for (int i = 0; i < EXPANSION_SIZE; i++) {\n");
 	tprint("D[i] -= D1[i];\n");                                    // 2*(P*P+1)
@@ -1156,12 +1194,25 @@ int main() {
 	tprint("using multipole = tensor_trless_sym<T,%i>;\n", P - 1);
 	tprint("#define EXPANSION_SIZE %i\n", P * P + 1);
 	tprint("#define MULTIPOLE_SIZE %i\n", (P - 1) * (P - 1) + 1);
+	const auto maxval = 1000.0;
+	tprint("#define SCALE_FACTOR %ef\n", maxval);
+	for (int n = 0; n <= P; n++) {
+		tprint("#define SCALE_FACTOR%i %ef\n", n, pow(maxval,n));
+		tprint("#define SCALE_FACTOR_INV%i %ef\n", n, 1.0 / pow(maxval,n));
+	}
 
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
-	tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X) {\n", P);
+	tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X, bool scale = true) {\n", P);
 	flops = 0;
 	indent();
+	tprint("if( scale ) {\n");
+	indent();
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
+	deindent();
+	tprint("}\n");
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("const T r = sqrt(r2);\n");
@@ -1190,7 +1241,7 @@ int main() {
 			}
 		}
 	}
-	tprint("return %i;\n", flops);
+	tprint("return %i + scale * NDIM;\n", flops);
 	deindent();
 	tprint("}\n");
 
@@ -1346,11 +1397,11 @@ int main() {
 	flops = 0;
 	indent();
 	tprint("tensor_trless_sym<T, %i> M;\n", P - 1);
-	tprint("X[0] = -X[0];\n");
-	tprint("X[1] = -X[1];\n");
-	tprint("X[2] = -X[2];\n");
+	tprint("X[0] *= -T(SCALE_FACTOR);\n");
+	tprint("X[1] *= -T(SCALE_FACTOR);\n");
+	tprint("X[2] *= -T(SCALE_FACTOR);\n");
 //	reference_trless("M", P - 1);
-	flops += 3;
+	flops += 6;
 	flops += compute_dx(P - 1);
 	flops += compute_detrace<P - 1>("x", "M", 'd');
 	tprint("return M;\n");
@@ -1366,9 +1417,10 @@ int main() {
 	indent();
 	tprint("tensor_sym<T, %i> Mb;\n", P - 1);
 	tprint("tensor_trless_sym<T, %i> Mc;\n", P - 1);
-	tprint("X[0] = -X[0];\n");
-	tprint("X[1] = -X[1];\n");
-	tprint("X[2] = -X[2];\n");
+	tprint("X[0] *= -T(SCALE_FACTOR);\n");
+	tprint("X[1] *= -T(SCALE_FACTOR);\n");
+	tprint("X[2] *= -T(SCALE_FACTOR);\n");
+	flops += 6;
 	flops += const_reference_trless<P - 1>("Ma");
 //	reference_sym("Mb", P - 1);
 //	reference_trless("Mc", P - 1);
@@ -1488,5 +1540,22 @@ int main() {
 #ifdef USE_CUDA
 	do_expansion_cuda<P>();
 #endif
+
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT int apply_scale_factor_inv(tensor_trless_sym<T,%i> &L) {\n", P);
+	indent();
+	apply_scale_factorL<P>("L");
+	tprint("return %i;\n", P * P + 1);
+	deindent();
+	tprint("}\n");
+
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT int apply_scale_factor(tensor_trless_sym<T,%i> &M) {\n", P - 1);
+	indent();
+	apply_scale_factorM<P - 1>("M");
+	tprint("return %i;\n", (P - 1) * (P - 1) + 1);
+
+	deindent();
+	tprint("}\n");
 
 }

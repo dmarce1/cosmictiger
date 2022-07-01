@@ -372,10 +372,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				}
 				const auto L2 = L2P(L, dx, true);
 				float hsoft = get_options().hsoft;
-				forces.phi[j] += L2(0, 0, 0);
-				forces.gx[j] -= L2(1, 0, 0);
-				forces.gy[j] -= L2(0, 1, 0);
-				forces.gz[j] -= L2(0, 0, 1);
+				forces.phi[j] += SCALE_FACTOR1 * L2(0, 0, 0);
+				forces.gx[j] -= SCALE_FACTOR2 * L2(1, 0, 0);
+				forces.gy[j] -= SCALE_FACTOR2 * L2(0, 1, 0);
+				forces.gz[j] -= SCALE_FACTOR2 * L2(0, 0, 1);
 				forces.gx[j] *= GM;
 				forces.gy[j] *= GM;
 				forces.gz[j] *= GM;
