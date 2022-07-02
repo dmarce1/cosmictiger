@@ -25,7 +25,7 @@ HPX_PLAIN_ACTION(ewald_const::init, ewald_const_init_action);
 
 #ifndef USE_CUDA
 
-#define NREAL 147
+#define NREAL 179
 #define NFOUR 92
 
 struct ewald_constants {
