@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/math.hpp>
@@ -32,12 +32,11 @@ struct ewald_constants {
 	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
 };
 
-
 ewald_constants ec;
 __constant__ ewald_constants ec_dev;
 
 void ewald_const::init_gpu() {
-	int n2max = 10;
+	int n2max = 12;
 	int nmax = std::sqrt(n2max) + 1;
 	array<float, NDIM> this_h;
 	int count = 0;
@@ -45,7 +44,11 @@ void ewald_const::init_gpu() {
 		for (int j = -nmax; j <= nmax; j++) {
 			for (int k = -nmax; k <= nmax; k++) {
 				const int i2 = i * i + j * j + k * k;
-				if (i2 <= n2max) {
+				const double x = std::max(abs(i) - 0.5, 0.0);
+				const double y = std::max(abs(j) - 0.5, 0.0);
+				const double z = std::max(abs(k) - 0.5, 0.0);
+				const double d = sqrt(sqr(x, y, z));
+				if (d < EWALD_REAL_CUTOFF) {
 					this_h[0] = i;
 					this_h[1] = j;
 					this_h[2] = k;
@@ -54,6 +57,7 @@ void ewald_const::init_gpu() {
 			}
 		}
 	}
+	PRINT("EWALD REAL COUNT = %i\n", count);
 	const auto sort_func = [](const array<float,NDIM>& a, const array<float,NDIM>& b) {
 		const auto a2 = sqr(a[0],a[1],a[2]);
 		const auto b2 = sqr(b[0],b[1],b[2]);

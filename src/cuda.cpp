@@ -99,12 +99,13 @@ void cuda_end_stream(cudaStream_t stream) {
 void cuda_init() {
 	cuda_set_device();
 	CUDA_CHECK(cudaDeviceReset());
-	size_t value = STACK_SIZE;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitStackSize, value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitStackSize));
-	if (value != STACK_SIZE) {
-		THROW_ERROR("Unable to set stack size to %li\n", STACK_SIZE);
-	}
+/*	size_t value = 64;
+	size_t oval = value;
+	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity , value));
+	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity ));
+	if (value != oval) {
+		THROW_ERROR("Unable to set stack size to %li\n", oval);
+	}*/
 	cuda_mem_init(HEAP_SIZE);
 }
 
