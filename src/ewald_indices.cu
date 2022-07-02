@@ -23,7 +23,7 @@
 
 #include <algorithm>
 
-#define NREAL 147
+#define NREAL 179
 #define NFOUR 92
 
 struct ewald_constants {
