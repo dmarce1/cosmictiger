@@ -370,7 +370,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 												sw[CP] = sw[PC] = false;
 											}
 										}
-										flops += 4;
+										flops += 33;
 									}
 									if (!sw[CC] && !sw[CP] && !sw[PC]) {
 										sw[LEAF] = other.leaf;

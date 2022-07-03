@@ -443,12 +443,8 @@ struct fixed32_range: public range<range_fixed> {
 CUDA_EXPORT
 inline float distance(range_fixed a, fixed32 b) {
 	float f = a.to_double() - b.to_double();
-	while (f > 0.5) {
-		f -= 1.0;
-	}
-	while (f < -0.5) {
-		f += 1.0;
-	}
+	f -= double(f > 0.5);
+	f += double(f < -0.5);
 	return f;
 }
 

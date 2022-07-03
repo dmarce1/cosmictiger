@@ -370,9 +370,10 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 							other_box.begin[dim][i] = other_box.end[dim][i] = 0.0;
 						}
 					}
-					pc = (simd_float(1) - cc) * other_leaf * ((R2 > sqr(dpc)) + box_intersects_sphere(self_box, other_pos, other_radius)) * (dpc > dcp);
-					cp = (simd_float(1) - cc) * other_leaf * ((R2 > sqr(dcp)) + box_intersects_sphere(other_box, self_pos, self_radius)) * (dcp > dpc);
-					flops += maxi * 30;
+					const auto nocc = (simd_float(1) - cc) * other_leaf;
+					pc = nocc * ((R2 > sqr(dpc)) + box_intersects_sphere(self_box, other_pos, other_radius)) * (dpc > dcp);
+					cp = nocc * ((R2 > sqr(dcp)) + box_intersects_sphere(other_box, self_pos, self_radius)) * (dcp > dpc);
+					flops += maxi * 34;
 				}
 				for (int i = 0; i < maxi; i++) {
 					if (cc[i]) {
