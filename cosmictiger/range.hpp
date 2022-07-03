@@ -25,6 +25,7 @@
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/simd.hpp>
 
 template<class T>
 inline array<T, NDIM> shift_up(array<T, NDIM> i) {
@@ -467,5 +468,4 @@ inline bool box_intersects_sphere(const fixed32_range& box, const array<fixed32,
 	}
 	return d2 < sqr(r);
 }
-
 #endif /* RANGE_HPP_ */

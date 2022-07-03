@@ -32,6 +32,29 @@ constexpr bool verbose = true;
 
 HPX_PLAIN_ACTION (kick);
 
+simd_float box_intersects_sphere(const range<simd_double8>& box, const array<simd_int, NDIM>& x, simd_float r) {
+	simd_float d2 = 0.0f;
+	for (int dim = 0; dim < NDIM; dim++) {
+		const simd_double8 X = simd_double8(x[dim]) * simd_double8(fixed32::to_float_factor);
+		simd_double8 d2begin = X - box.begin[dim];
+		simd_double8 d2beginp1 = d2begin + simd_double8(1.0);
+		simd_double8 d2beginm1 = d2begin + simd_double8(-1.0);
+		d2begin = sqr(d2begin);
+		d2beginp1 = sqr(d2beginp1);
+		d2beginm1 = sqr(d2beginm1);
+		d2begin = min(d2begin, min(d2beginp1, d2beginm1));
+		simd_double8 d2end = X - box.end[dim];
+		simd_double8 d2endp1 = d2end + simd_double8(1.0);
+		simd_double8 d2endm1 = d2end + simd_double8(-1.0);
+		d2end = sqr(d2end);
+		d2endp1 = sqr(d2endp1);
+		d2endm1 = sqr(d2endm1);
+		d2end = min(d2end, min(d2endp1, d2endm1));
+		d2 += simd_float(((X < box.begin[dim]) + (X > box.end[dim])) * min(d2begin, d2end));
+	}
+	return d2 < sqr(r);
+}
+
 #define MAX_ACTIVE_WORKSPACES 1
 
 struct workspace {
@@ -196,13 +219,21 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	array<float, NDIM> Ldx;
 	simd_float self_radius = self_ptr->radius;
 	array<simd_int, NDIM> self_pos;
-	for (int dim = 0; dim < NDIM; dim++) {
-		self_pos[dim] = self_ptr->pos[dim].raw();
-	}
+	range<simd_double8> self_box;
 	array<simd_int, NDIM> other_pos;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
 	simd_float other_leaf;
+	range<simd_double8> other_box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		self_pos[dim] = self_ptr->pos[dim].raw();
+		self_box.begin[dim] = (double) self_ptr->box.begin[dim].raw();
+		self_box.end[dim] = (double) self_ptr->box.end[dim].raw();
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		self_box.begin[dim] *= range_fixed::to_float_factor;
+		self_box.end[dim] *= range_fixed::to_float_factor;
+	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
@@ -244,6 +275,9 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					}
 					other_radius[i] = 0.f;
 					other_leaf[i] = 0;
+					for (int dim = 0; dim < NDIM; dim++) {
+						other_box.begin[dim][i] = other_box.end[dim][i] = 0.0;
+					}
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
@@ -321,8 +355,23 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				cp = simd_float(0);
 				pc = simd_float(0);
 				if (self_ptr->leaf) {
-					pc = (simd_float(1) - cc) * other_leaf * (R2 > sqr(dpc)) * (dpc > dcp);
-					cp = (simd_float(1) - cc) * other_leaf * (R2 > sqr(dcp)) * (dcp > dpc);
+					for (int i = 0; i < maxi; i++) {
+						for (int dim = 0; dim < NDIM; dim++) {
+							other_box.begin[dim][i] = other_ptrs[i]->box.begin[dim].raw();
+							other_box.end[dim][i] = other_ptrs[i]->box.end[dim].raw();
+						}
+					}
+					for (int dim = 0; dim < NDIM; dim++) {
+						other_box.begin[dim] *= range_fixed::to_float_factor;
+						other_box.end[dim] *= range_fixed::to_float_factor;
+					}
+					for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
+						for (int dim = 0; dim < NDIM; dim++) {
+							other_box.begin[dim][i] = other_box.end[dim][i] = 0.0;
+						}
+					}
+					pc = (simd_float(1) - cc) * other_leaf * ((R2 > sqr(dpc)) + box_intersects_sphere(self_box, other_pos, other_radius)) * (dpc > dcp);
+					cp = (simd_float(1) - cc) * other_leaf * ((R2 > sqr(dcp)) + box_intersects_sphere(other_box, self_pos, self_radius)) * (dcp > dpc);
 					flops += maxi * 30;
 				}
 				for (int i = 0; i < maxi; i++) {
@@ -412,8 +461,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
 					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
 					kr.max_rung = std::max((int) rung, kr.max_rung);
-					ALWAYS_ASSERT(rung >= 0);
-					ALWAYS_ASSERT(rung < MAX_RUNG);
+					ALWAYS_ASSERT(rung >= 0);ALWAYS_ASSERT(rung < MAX_RUNG);
 					dt = 0.5f * rung_dt[params.min_rung] * params.t0;                                                            // 2
 					vx = fmaf(sgn * forces.gx[j], dt, vx);                              // 3
 					vy = fmaf(sgn * forces.gy[j], dt, vy);                              // 3

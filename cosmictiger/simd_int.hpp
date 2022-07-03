@@ -218,6 +218,7 @@ public:
 		rc.v = -rc.v;
 		return rc;
 	}
+	friend class simd_double8;
 
 	friend class simd_float8;
 };

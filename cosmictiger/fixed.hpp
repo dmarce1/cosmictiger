@@ -47,6 +47,7 @@ class fixed {
 	static constexpr double dblecinv = 1.f / c0dbl;
 	static constexpr T width = (SIGBITS);
 public:
+	static constexpr double to_float_factor = 1.f / c0dbl;
 	friend class simd_fixed32;
 
 	inline void set_integer(T j) {
