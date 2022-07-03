@@ -60,8 +60,7 @@ public:
 		__syncthreads();
 		if (tid == 0) {
 			if (ptr) {
-				auto* memory = get_cuda_heap();
-				memory->free(ptr);
+				cuda_free(ptr);
 			}
 		}
 		__syncthreads();
@@ -79,8 +78,7 @@ public:
 		}
 		if (tid == 0) {
 			if (new_cap < cap) {
-				auto* memory = get_cuda_heap();
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				new_ptr = (T*) cuda_malloc(sizeof(T) * new_cap);
 				if (new_ptr == nullptr) {
 					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
 					__trap();
@@ -97,8 +95,7 @@ public:
 		__syncthreads();
 		if (tid == 0 && new_cap < cap) {
 			if (ptr) {
-				auto* memory = get_cuda_heap();
-				memory->free(ptr);
+				cuda_free(ptr);
 			}
 			ptr = new_ptr;
 			cap = new_cap;
@@ -121,8 +118,7 @@ public:
 				while (new_cap < new_sz) {
 					new_cap *= 2;
 				}
-				auto* memory = get_cuda_heap();
-				new_ptr = (T*) memory->allocate(sizeof(T) * new_cap);
+				new_ptr = (T*) cuda_malloc(sizeof(T) * new_cap);
 				if (new_ptr == nullptr) {
 					PRINT("OOM in device_vector while requesting %i! \n", new_cap);
 					__trap();
@@ -138,8 +134,7 @@ public:
 			__syncthreads();
 			if (tid == 0) {
 				if (ptr) {
-					auto* memory = get_cuda_heap();
-					memory->free(ptr);
+					cuda_free(ptr);
 				}
 				ptr = new_ptr;
 				sz = new_sz;

@@ -35,54 +35,16 @@ class cuda_mem {
 	char* heap_begin;
 	char* next;
 	char* heap_end;
-	__device__
+	CUDA_EXPORT
 	void push(int bin, char* ptr);
-	__device__
+	CUDA_EXPORT
 	char* pop(int bin);
-	__device__
+	CUDA_EXPORT
 	bool create_new_allocation(int bin);
-	__device__
-	static inline void discard_memory_one(volatile void* __ptr, std::size_t nbytes) noexcept {
-#if __CUDA_ARCH__ >= 800
-		char* p = reinterpret_cast<char*>(const_cast<void*>(__ptr));
-		static constexpr std::size_t line_size = 128;
-		std::size_t start = round_up(reinterpret_cast<std::uintptr_t>(p), line_size);
-		std::size_t end = round_down(reinterpret_cast<std::uintptr_t>(p) + nbytes, line_size);
-		for (std::size_t i = start; i < end; i += line_size) {
-			asm volatile ("discard.global.L2 [%0], 128;" ::"l"(p + (i * line_size)) :);
-		}
-#endif
-	}
 public:
-	__device__
-	static inline void discard_memory(volatile void* __ptr, std::size_t nbytes) noexcept {
-#if __CUDA_ARCH__ >= 800
-		const int& tid = threadIdx.x;
-		const int& block_size = blockDim.x;
-		char* p = reinterpret_cast<char*>(const_cast<void*>(__ptr));
-		static constexpr std::size_t line_size = 128;
-		std::size_t start = round_up(reinterpret_cast<std::uintptr_t>(p), line_size);
-		std::size_t end = round_down(reinterpret_cast<std::uintptr_t>(p) + nbytes, line_size);
-		for (std::size_t i = start + tid * line_size; i < end; i += block_size * line_size) {
-			asm volatile ("discard.global.L2 [%0], 128;" ::"l"(p + (i * line_size)) :);
-		}
-#endif
-	}
-	__device__
-	static inline void prefetch(const void* ptr, std::size_t size) {
-#if __CUDA_ARCH__
-		constexpr std::uintptr_t line_size = 128;
-		const auto start = round_down((std::uintptr_t)(ptr), line_size);
-		const auto stop = round_up((std::uintptr_t)(ptr + size), line_size);
-		for (std::uintptr_t i = start; i < stop; i += line_size) {
-			char* p = (char*) i;
-			asm volatile ("prefetch.global.L2::evict_normal [%0];" : "=l"(p));
-		}
-#endif
-	}
-	__device__
+	CUDA_EXPORT
 	void* allocate(size_t sz);
-	__device__
+	CUDA_EXPORT
 	void free(void* ptr);
 	cuda_mem(size_t heap_size);
 	~cuda_mem();
@@ -90,7 +52,6 @@ public:
 };
 
 void cuda_mem_init(size_t heap_size);
-__device__ cuda_mem* get_cuda_heap();
-__device__ void* cuda_malloc(size_t sz);
-__device__ void cuda_free(void* ptr);
+CUDA_EXPORT void* cuda_malloc(size_t sz);
+CUDA_EXPORT void cuda_free(void* ptr);
 

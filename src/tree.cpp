@@ -28,7 +28,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/flops.hpp>
-
+#include <cosmictiger/cuda_mem.hpp>
 #include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -272,6 +272,8 @@ long long tree_nodes_next_index() {
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
+
+
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}

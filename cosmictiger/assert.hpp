@@ -34,7 +34,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifdef __CUDA_ARCH__
 #define ALWAYS_ASSERT(a) cosmictiger_cuda_assert( #a, a, __FILE__, __LINE__)
 #else
-#define ALWAYS_ASSERT(a) /*cosmictiger_assert( #a, a, __FILE__, __LINE__)*/
+#define ALWAYS_ASSERT(a) cosmictiger_assert( #a, a, __FILE__, __LINE__)
 #endif
 
 #ifdef __CUDA_ARCH__
