@@ -23,6 +23,13 @@
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
 
+CUDA_EXPORT
+inline void syncthreads() {
+#ifdef __CUDA_ARCH__
+	__syncthreads();
+#endif
+}
+
 #define CUDA_MEM_STACK_SIZE (128*1024)
 #define CUDA_MEM_NBIN 32
 
@@ -34,17 +41,13 @@ class cuda_mem {
 	array<long long, CUDA_MEM_NBIN> qout;
 	char* heap_begin;
 	char* next;
-	char* heap_end;
-	CUDA_EXPORT
-	void push(int bin, char* ptr);
-	CUDA_EXPORT
-	char* pop(int bin);
-	CUDA_EXPORT
+	char* heap_end;CUDA_EXPORT
+	void push(int bin, char* ptr);CUDA_EXPORT
+	char* pop(int bin);CUDA_EXPORT
 	bool create_new_allocation(int bin);
 public:
 	CUDA_EXPORT
-	void* allocate(size_t sz);
-	CUDA_EXPORT
+	void* allocate(size_t sz);CUDA_EXPORT
 	void free(void* ptr);
 	cuda_mem(size_t heap_size);
 	~cuda_mem();
@@ -54,4 +57,5 @@ public:
 void cuda_mem_init(size_t heap_size);
 CUDA_EXPORT void* cuda_malloc(size_t sz);
 CUDA_EXPORT void cuda_free(void* ptr);
+CUDA_EXPORT void cuda_memcpy(void* d, void* s, int sz);
 

@@ -18,6 +18,10 @@
  */
 #define CUDA_MEM_CU
 #include <cosmictiger/cuda_mem.hpp>
+#include <cooperative_groups.h>
+#include <cuda/barrier>
+
+using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 template<class T>
 CUDA_EXPORT T atomic_cas(T* this_, T expected, T value) {
@@ -27,7 +31,6 @@ CUDA_EXPORT T atomic_cas(T* this_, T expected, T value) {
 	return __sync_val_compare_and_swap(this_, expected, value);
 #endif
 }
-
 
 template<class T>
 CUDA_EXPORT T atomic_add(T* this_, T value) {
@@ -51,7 +54,6 @@ CUDA_EXPORT void fence() {
 	__sync_synchronize();
 #endif
 }
-
 
 template<class T>
 CUDA_EXPORT T atomic_max(T* this_, T value) {
@@ -81,8 +83,6 @@ CUDA_EXPORT T atomic_exch(T* this_, T value) {
 	return expected;
 #endif
 }
-
-
 
 CUDA_EXPORT
 void cuda_mem::push(int bin, char* ptr) {
@@ -194,7 +194,6 @@ cuda_mem::~cuda_mem() {
 
 __managed__ cuda_mem* memory;
 
-
 CUDA_EXPORT void* cuda_malloc(size_t sz) {
 	return memory->allocate(sz);
 }
@@ -208,3 +207,18 @@ void cuda_mem_init(size_t heap_size) {
 	new (memory) cuda_mem(heap_size);
 }
 
+void cuda_memcpy(void* dest, void* src, int size) {
+#ifdef __CUDA_ARCH__
+	__shared__ barrier_type barrier;
+	auto group = cooperative_groups::this_thread_block();
+	if (group.thread_rank() == 0) {
+		init(&barrier, group.size());
+	}
+	syncthreads();
+	cuda::memcpy_async(group, dest, src, size, barrier);
+	barrier.arrive_and_wait();
+#else
+	memcpy(dest, src, size);
+#endif
+
+}

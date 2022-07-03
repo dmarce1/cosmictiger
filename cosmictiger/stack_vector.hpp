@@ -21,6 +21,10 @@
 
 #include <cosmictiger/cuda_mem.hpp>
 
+#include <cooperative_groups.h>
+#include <cuda/barrier>
+
+using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
 
 
 #ifdef __CUDACC__
