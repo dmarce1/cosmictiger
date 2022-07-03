@@ -22,6 +22,8 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/lockfree_queue.hpp>
+
 
 CUDA_EXPORT
 inline void syncthreads() {
@@ -36,9 +38,8 @@ inline void syncthreads() {
 using cuda_mem_int = uint64_t;
 
 class cuda_mem {
-	array<array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
-	array<long long, CUDA_MEM_NBIN> qin;
-	array<long long, CUDA_MEM_NBIN> qout;
+	array<lockfree_queue<char, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
+	char* heap_begin0;
 	char* heap_begin;
 	char* next;
 	char* heap_end;CUDA_EXPORT
@@ -51,7 +52,6 @@ public:
 	void free(void* ptr);
 	cuda_mem(size_t heap_size);
 	~cuda_mem();
-	void reset();
 };
 
 void cuda_mem_init(size_t heap_size);
