@@ -20,41 +20,44 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #pragma once
 
 #include <cosmictiger/time.hpp>
+#include <cosmictiger/particles.hpp>
 #include <cstdio>
-#include <cosmictiger/sph.hpp>
-#include <cosmictiger/sph_tree.hpp>
 
 struct driver_params {
 	double a;
+	double adot;
 	double dummy;
 	double tau;
 	double tau_max;
-	double cosmicK;
-	double esum0;
+	double energy0;
+	energies_t energies;
 	int max_rung;
 	int iter;
+	int minrung0;
 	int step;
+	int bucket_size;
 	size_t total_processed;
 	double flops;
 	double runtime;
 	double years;
-	double eheat;
 	time_type itime;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & bucket_size;
+		arc & adot;
+		arc & minrung0;
 		arc & step;
 		arc & a;
 		arc & tau;
 		arc & tau_max;
-		arc & cosmicK;
-		arc & esum0;
+		arc & energies;
+		arc & energy0;
 		arc & iter;
 		arc & total_processed;
 		arc & flops;
 		arc & runtime;
 		arc & itime;
 		arc & years;
-		arc & eheat;
 	}
 };
 
@@ -62,8 +65,6 @@ struct driver_params {
 
 void write_checkpoint(driver_params params);
 driver_params read_checkpoint();
-sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat, bool verbose = true);
-sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat, bool verbose = true);
 std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double, double t0, double theta, bool first_call, bool full_eval);
 
 

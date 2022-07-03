@@ -42,18 +42,10 @@ struct kick_workspace_tree_id_hash {
 class kick_workspace {
 	mutex_type mutex;
 	vector<kick_workitem> workitems;
-	vector<hpx::lcos::local::promise<kick_return>> promises;
 	part_int total_parts;
 	part_int nparts;
 	kick_params params;
 	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
-	static vector<fixed32, pinned_allocator<fixed32>> host_x;
-	static vector<fixed32, pinned_allocator<fixed32>> host_y;
-	static vector<fixed32, pinned_allocator<fixed32>> host_z;
-	static vector<char> host_type;
-	static vector<tree_node, pinned_allocator<tree_node>> tree_nodes;
-	static semaphore lock1;
-	static semaphore lock2;
 public:
 	static void clear_buffers();
 	kick_workspace() = default;
@@ -66,21 +58,11 @@ public:
 	template<class A>
 	void serialize(A&&, unsigned) {
 	}
-	hpx::future<kick_return> add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
+	void add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self,
 			vector<tree_id> && dchecklist, vector<tree_id> && echecklist);
 	void add_parts(std::shared_ptr<kick_workspace> ptr, part_int n);
 	void to_gpu();
 };
-
-#ifdef HPX_LITE
-namespace hpx {
-	namespace serialization {
-		template<class A>
-		void serialize(A&&, std::shared_ptr<kick_workspace>&, unsigned) {
-		}
-	}
-}
-#endif
 
 #endif
 #endif /* KICK_WORKSPACE_HPP_ */

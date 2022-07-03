@@ -26,6 +26,8 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/range.hpp>
+#include <hpx/serialization/serialization_fwd.hpp>
 
 struct multipole_pos {
 	multipole<float> m;
@@ -37,6 +39,17 @@ struct tree_id {
 	int index;
 	inline bool operator==(tree_id other) const {
 		return proc == other.proc && index == other.index;
+	}
+	inline bool operator<(tree_id other) const {
+		if (proc < other.proc) {
+			return true;
+		} else if (proc > other.proc) {
+			return false;
+		} else if (index < other.index) {
+			return true;
+		} else {
+			return false;
+		}
 	}
 	inline bool operator!=(tree_id other) const {
 		return proc != other.proc || index != other.index;
@@ -70,24 +83,33 @@ struct tree_id_hash_hi {
 	}
 };
 
-struct tree_node {
+struct multi_pos {
 	multipole<float> multi;
 	array<fixed32, NDIM> pos;
-	array<tree_id, NCHILD> children;
-	pair<int, int> proc_range;
-	pair<part_int> part_range;
-	pair<part_int> sink_part_range;
-	size_t nactive;
-	float radius;
-//	float hsoft_max;
-	bool local_root;
-	bool leaf;
-	size_t node_count;
-	size_t active_nodes;
-	int depth;CUDA_EXPORT
-	inline const multipole_pos* get_multipole_ptr() const {
-		return (multipole_pos*) &multi;
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		arc & multi;
+		arc & pos;
 	}
+};
+
+multi_pos* tree_add_multipole(const multi_pos& mpos);
+
+struct tree_node {
+	fixed32_range box;
+	array<tree_id, NCHILD> children;
+	pair<part_int> part_range;
+	pair<int, int> proc_range;
+	array<fixed32, NDIM> pos;
+	multi_pos* mpos;
+	float radius;
+	struct {
+		unsigned short depth :14;
+		unsigned short local_root :1;
+		unsigned short leaf :1;
+	};CUDA_EXPORT
+
+	CUDA_EXPORT
 	inline part_int nparts() const {
 		return part_range.second - part_range.first;
 	}
@@ -103,21 +125,46 @@ struct tree_node {
 	inline bool is_local_here() const {
 		return is_local() && proc_range.first == hpx_rank();
 	}
+	HPX_SERIALIZATION_SPLIT_MEMBER();
 	template<class A>
-	void serialize(A && arc, unsigned) {
-	//	arc & hsoft_max;
-		arc & multi;
-		arc & children;
+	void load(A && arc, unsigned) {
+		multi_pos this_mpos;
+		arc & this_mpos;
+		mpos = tree_add_multipole(this_mpos);
+		arc & box;
 		arc & pos;
+		arc & children;
 		arc & proc_range;
 		arc & part_range;
-		arc & nactive;
 		arc & radius;
-		arc & local_root;
-		arc & leaf;
-		arc & node_count;
-		arc & sink_part_range;
-		arc & depth;
+		int local_root0;
+		int leaf0;
+		int depth0;
+		arc & local_root0;
+		arc & leaf0;
+		arc & depth0;
+		local_root = local_root0;
+		depth = depth0;
+		leaf = leaf0;
+	}
+	template<class A>
+	void save(A && arc, unsigned) const {
+		arc & *mpos;
+		arc & box;
+		arc & pos;
+		arc & children;
+		arc & proc_range;
+		arc & part_range;
+		arc & radius;
+		int local_root0;
+		int leaf0;
+		int depth0;
+		local_root0 = local_root;
+		leaf0 = leaf;
+		depth0 = depth;
+		arc & local_root0;
+		arc & leaf0;
+		arc & depth0;
 	}
 };
 
@@ -125,42 +172,34 @@ struct tree_create_return {
 	multipole<float> multi;
 	array<fixed32, NDIM> pos;
 	tree_id id;
-	size_t nactive;
-	size_t active_nodes;
 	float radius;
-	size_t node_count;
-	size_t active_leaf_nodes;
-	size_t leaf_nodes;
-	int max_depth;
-	int min_depth;
-	double flops;
+	range<double> box;
 	template<class A>
 	void serialize(A&& a, unsigned) {
-		a & active_leaf_nodes;
-		a & leaf_nodes;
-		a & active_nodes;
 		a & multi;
 		a & id;
 		a & pos;
-		a & nactive;
 		a & radius;
-		a & node_count;
-		a & flops;
-		a & max_depth;
-		a & min_depth;
 	}
 };
 
 struct tree_create_params {
 	int min_rung;
 	double theta;
-//	double hmax;
+	part_int par_parts;
 	int min_level;
-	tree_create_params() = default;
+	bool leaf_pushed;
+	bool do_leaf_sizes;
+	tree_create_params() {
+		leaf_pushed = false;
+		do_leaf_sizes = false;
+	}
 	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-//		arc & hmax;
+		arc & par_parts;
+		arc & do_leaf_sizes;
+		arc & leaf_pushed;
 		arc & min_rung;
 		arc & theta;
 		arc & min_level;
@@ -169,9 +208,24 @@ struct tree_create_params {
 
 tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
 		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
+void tree_reset();
 void tree_destroy(bool free_tree = false);
 int tree_min_level(double theta, double hsoft);
 const tree_node* tree_get_node(tree_id);
 void tree_sort_particles_by_sph_particles();
+void tree_free_neighbor_list();
+long long tree_nodes_size();
+long long tree_nodes_next_index();
+void tree_clear_neighbor_ranges();
+int tree_avg_leaf_size();
+int tree_allocate_neighbor_list(const vector<tree_id>& values);
+void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
+void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float hmax);
+const tree_id tree_get_leaf(int i);
+size_t tree_add_remote(const tree_node& remote);
+tree_node* tree_data();
+tree_id& tree_get_neighbor(int i);
+void tree_2_cpu();
+void tree_2_gpu();
 
 #endif /* TREE_HPP_ */

@@ -24,6 +24,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/analytic.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/drift.hpp>
+#include <cosmictiger/driver.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/initialize.hpp>
@@ -36,22 +37,18 @@ constexpr bool verbose = true;
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/bh.hpp>
-#include <cosmictiger/hydro.hpp>
-#include <cosmictiger/chemistry.hpp>
-#include <cosmictiger/stars.hpp>
-#include <cosmictiger/sphere.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
 //0.4, 0.5
 /*
-float rand_normal() {
-	float x = 2.0 * rand1() - 1.0;
-	float y = 2.0 * rand1() - 1.0;
-	auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
-	return normal.real();
-}
-*/
+ float rand_normal() {
+ float x = 2.0 * rand1() - 1.0;
+ float y = 2.0 * rand1() - 1.0;
+ auto normal = expc(cmplx(0, 1) * float(M_PI) * y) * sqrtf(-2.0 * logf(fabsf(x)));
+ return normal.real();
+ }
+ */
 static void rockstar_test() {
 	feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
@@ -175,7 +172,7 @@ static void domain_test() {
 	tm.reset();
 
 	tm.start();
-	domains_begin();
+	domains_begin(0);
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
 	tm.reset();
@@ -204,7 +201,7 @@ static void tree_test() {
 	tm.reset();
 
 	tm.start();
-	domains_begin();
+	domains_begin(0);
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
 	tm.reset();
@@ -254,7 +251,7 @@ static void kick_test() {
 	tm.reset();
 
 	tm.start();
-	domains_begin();
+	domains_begin(0);
 	tm.stop();
 	PRINT("domains_begin: %e s\n", tm.read());
 	tm.reset();
@@ -268,7 +265,6 @@ static void kick_test() {
 	tm.start();
 	tree_create_params tparams(0, get_options().theta, get_options().hsoft);
 	auto sr = tree_create(tparams);
-	total_flops += sr.flops;
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
@@ -310,8 +306,7 @@ static void kick_test() {
 	root_id.index = 0;
 	vector<tree_id> checklist;
 	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	total_flops += kr.part_flops + kr.node_flops;
+	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 	tm.stop();
 	PRINT("tree_kick: %e s\n", tm.read());
 	tm.reset();
@@ -321,8 +316,7 @@ static void kick_test() {
 	PRINT("tree_destroy: %e s\n", tm.read());
 	tm.reset();
 	tm.start();
-	auto dr = drift(1.0, 0.0, 0.0, 0.0, 0.0);
-	total_flops += dr.flops;
+	//drift(1.0, 0.0, 0.0, 0.0, 0.0);
 	tm.stop();
 	PRINT("drift: %e s\n", tm.read());
 	total_time.stop();
@@ -335,91 +329,217 @@ static void kick_test() {
 	kick_workspace::clear_buffers();
 }
 
+driver_params read_checkpoint();
+
 static void force_test() {
 	timer tm;
-	if( get_options().sph == true ) {
-		PRINT( "FORCE_TEST should be run without sph !\n");
-		abort();
+	timer tm_main;
+	constexpr int NITER = 1;
+	tm_main.start();
+	const auto read_check = get_options().read_check;
+	if (read_check != -1) {
+		read_checkpoint();
+	} else {
+		initialize(get_options().z0);
 	}
-	tm.start();
-//	particles_random_init();
-	initialize(get_options().z0);
-	tm.stop();
-	PRINT("particles_random_init: %e s\n", tm.read());
-	tm.reset();
+	constexpr int nthetas = 17;
+	const double thetas[nthetas] = { 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.00 };
+	for (int iter = 2; iter < nthetas; iter++) {
+		tm_main.start();
+		domains_rebound();
+		domains_begin(0);
+		domains_end();
+		particles_sort_by_rung(0);
+		tree_create_params tparams(0, thetas[iter], get_options().hsoft);
+		tree_create(tparams);
+		kick_params kparams;
+		kparams.node_load = 10;
+		kparams.gpu = true;
+		kparams.min_level = tparams.min_level;
+		kparams.save_force = get_options().save_force;
+		kparams.GM = get_options().GM;
+		kparams.h = get_options().hsoft;
+		kparams.eta = get_options().eta;
+		kparams.a = 1.0;
+		kparams.first_call = true;
+		kparams.min_rung = 0;
+		kparams.t0 = 1.0;
+		kparams.theta = thetas[iter];
+		expansion<float> L;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		array<fixed32, NDIM> pos;
+		for (int dim = 0; dim < NDIM; dim++) {
+			pos[dim] = 0.f;
+		}
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+		tree_destroy(false);
+		tm_main.stop();
+		tm.reset();
+		tm.start();
+		auto rc = analytic_compare(1000);
+		tm.stop();
+		PRINT("Analytic compare took %e s\n", tm.read());
+		PRINT("%e %e %e\n", thetas[iter], rc.first, rc.second);
+		FILE* fp = fopen("force_accuracy.txt", "at");
+		fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
+		fclose(fp);
 
-	tm.start();
-	domains_rebound();
-	tm.stop();
-	PRINT("domains_rebound: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	domains_begin();
-	tm.stop();
-	PRINT("domains_begin: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	domains_end();
-	tm.stop();
-	PRINT("domains_end: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	tree_create_params tparams(0, get_options().theta, get_options().hsoft);
-	tree_create(tparams);
-	tm.stop();
-	PRINT("tree_create: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	kick_params kparams;
-	kparams.node_load = 10;
-	kparams.gpu = true;
-	kparams.min_level = tparams.min_level;
-	kparams.save_force = get_options().save_force;
-	kparams.GM = get_options().GM;
-	kparams.h = get_options().hsoft;
-	kparams.eta = get_options().eta;
-	kparams.a = 1.0;
-	kparams.first_call = true;
-	kparams.min_rung = 0;
-	kparams.t0 = 1.0;
-	kparams.theta = get_options().theta;
-	PRINT( "theta = %e\n", kparams.theta);
-	expansion<float> L;
-	for (int i = 0; i < EXPANSION_SIZE; i++) {
-		L[i] = 0.0f;
 	}
-	array<fixed32, NDIM> pos;
-	for (int dim = 0; dim < NDIM; dim++) {
-		pos[dim] = 0.f;
-	}
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	tm.stop();
-	PRINT("tree_kick: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	tree_destroy();
-	tm.stop();
-	PRINT("tree_destroy: %e s\n", tm.read());
-	tm.reset();
-
-	tm.start();
-	analytic_compare(100);
-	tm.stop();
-	PRINT("analytic_compare: %e s\n", tm.read());
-	tm.reset();
 
 	kick_workspace::clear_buffers();
+	PRINT("AVERAGE TIME = %e\n", tm_main.read() / NITER);
 
+}
+
+static void bucket_test() {
+	int nchecks = 11;
+	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
+	const double thetas[] = { 0.5, 0.65, 0.65, 0.65, 0.65, 0.65, 0.8, 0.8, 0.8, 0.8, 0.8 };
+	for (int ci = 0; ci < nchecks; ci++) {
+		char* buffer;
+		system("rm -r checkpoint.999999\n");
+		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
+		system(buffer);
+		free(buffer);
+		for (int bucket_size = 64; bucket_size <= 256; bucket_size += 8) {
+			auto opts = get_options();
+			opts.bucket_size = bucket_size;
+			opts.read_check = 999999;
+			opts.theta = thetas[ci];
+			set_options(opts);
+			read_checkpoint();
+			timer tm;
+			tm.start();
+			for (int trial = 0; trial < 10; trial++) {
+				domains_rebound();
+				domains_begin(0);
+				domains_end();
+				particles_sort_by_rung(0);
+				tree_create_params tparams(0, thetas[ci], get_options().hsoft);
+				tree_create(tparams);
+				kick_params kparams;
+				kparams.node_load = 10;
+				kparams.gpu = true;
+				kparams.min_level = tparams.min_level;
+				kparams.save_force = get_options().save_force;
+				kparams.GM = get_options().GM;
+				kparams.h = get_options().hsoft;
+				kparams.eta = get_options().eta;
+				kparams.a = 1.0;
+				kparams.first_call = true;
+				kparams.min_rung = 0;
+				kparams.t0 = 1.0;
+				kparams.theta = thetas[ci];
+				expansion<float> L;
+				for (int i = 0; i < EXPANSION_SIZE; i++) {
+					L[i] = 0.0f;
+				}
+				array<fixed32, NDIM> pos;
+				for (int dim = 0; dim < NDIM; dim++) {
+					pos[dim] = 0.f;
+				}
+				tree_id root_id;
+				root_id.proc = 0;
+				root_id.index = 0;
+				vector<tree_id> checklist;
+				checklist.push_back(root_id);
+				auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+				tree_destroy(false);
+			}
+			tm.stop();
+			asprintf(&buffer, "buckets.%i.txt", ci);
+			FILE* fp = fopen(buffer, "at");
+			free(buffer);
+			fprintf(fp, "%i %e\n", bucket_size, tm.read());
+			fclose(fp);
+		}
+		asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]);
+		system(buffer);
+		free(buffer);
+	}
+}
+
+static void speed_test() {
+	constexpr int nchecks = 11;
+	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
+	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
+	const double counts[] = { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4 };
+	int buckets[nchecks];
+	int bbegin = 96;
+	int bend = 168;
+	buckets[0] = bbegin;
+	for (int i = 6; i < 11; i++) {
+		buckets[i] = bend;
+	}
+	for (int i = 1; i < 6; i++) {
+		buckets[i] = (i - 1.0) / 5.0 * (bend - bbegin) + bbegin;
+	}
+	timer tm;
+	for (int ci = 0; ci < nchecks; ci++) {
+		PRINT("-------------------------------------------------------------------------------------\n");
+		PRINT("Test %i with bucket = %i\n", ci, buckets[ci]);
+		PRINT("-------------------------------------------------------------------------------------\n");
+		char* buffer;
+		system("rm -r checkpoint.999999\n");
+		asprintf(&buffer, "cp -r %s checkpoint.999999\n", checkpoints[ci]);
+		system(buffer);
+		free(buffer);
+		for (int iter = 0; iter < counts[ci]; iter++) {
+			auto opts = get_options();
+			opts.bucket_size = buckets[ci];
+			opts.read_check = 999999;
+			opts.theta = thetas[ci];
+			set_options(opts);
+			read_checkpoint();
+			tm.start();
+			domains_rebound();
+			domains_begin(0);
+			domains_end();
+			particles_sort_by_rung(0);
+			tree_create_params tparams(0, thetas[ci], get_options().hsoft);
+			tree_create(tparams);
+			kick_params kparams;
+			kparams.node_load = 10;
+			kparams.gpu = true;
+			kparams.min_level = tparams.min_level;
+			kparams.save_force = get_options().save_force;
+			kparams.GM = get_options().GM;
+			kparams.h = get_options().hsoft;
+			kparams.eta = get_options().eta;
+			kparams.a = 1.0;
+			kparams.first_call = true;
+			kparams.min_rung = 0;
+			kparams.t0 = 1.0;
+			kparams.theta = thetas[ci];
+			expansion<float> L;
+			for (int i = 0; i < EXPANSION_SIZE; i++) {
+				L[i] = 0.0f;
+			}
+			array<fixed32, NDIM> pos;
+			for (int dim = 0; dim < NDIM; dim++) {
+				pos[dim] = 0.f;
+			}
+			tree_id root_id;
+			root_id.proc = 0;
+			root_id.index = 0;
+			vector<tree_id> checklist;
+			checklist.push_back(root_id);
+			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+			tree_destroy(false);
+			drift(1.0, 0.0, 0.0, 0.0, 0.0, 0);
+			tm.stop();
+		}
+	}
+	PRINT("TOTAL TIME = %e\n", tm.read());
 }
 
 void bh_test() {
@@ -446,17 +566,17 @@ void bh_test() {
 	tm1.stop();
 	x0 = x;
 	tm2.start();
-	PRINT( "Doing gpu\n");
+	PRINT("Doing gpu\n");
 	auto phi2 = bh_evaluate_points(y, x0, true);
 	tm2.stop();
-	PRINT( "%e %e\n", tm1.read(), tm2.read());
+	PRINT("%e %e\n", tm1.read(), tm2.read());
 	double err_tot = 0.0;
 	for (int i = 0; i < phi1.size(); i++) {
 		double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
 		PRINT("%e %e %e\n", phi1[i], phi2[i], err);
 		err_tot += err;
 	}
-	PRINT( "%e\n", err_tot / phi1.size());
+	PRINT("%e\n", err_tot / phi1.size());
 
 }
 
@@ -467,6 +587,10 @@ void test(std::string test) {
 		fft1_test();
 	} else if (test == "fft2") {
 		fft2_test();
+	} else if (test == "speed") {
+		speed_test();
+	} else if (test == "buckets") {
+		bucket_test();
 	} else if (test == "force") {
 		force_test();
 	} else if (test == "rockstar") {
@@ -475,29 +599,8 @@ void test(std::string test) {
 		kick_test();
 	} else if (test == "tree") {
 		tree_test();
-	} else if (test == "rt") {
-		hydro_rt_test();
-	} else if (test == "sod") {
-		hydro_sod_test();
-	} else if (test == "blast") {
-		hydro_blast_test();
-	} else if (test == "helmholtz") {
-		hydro_helmholtz_test();
 	} else if (test == "bh") {
 		bh_test();
-	} else if (test == "stars") {
-		stars_test_mass();
-	} else if (test == "star") {
-		hydro_star_test();
-	} else if (test == "disc") {
-		hydro_disc_test();
-	} else if (test == "sphere") {
-		sphere_surface_test();
-	} else if (test == "plummer") {
-		hydro_plummer();
-	} else if (test == "chemistry") {
-		test_cuda_chemistry_kernel();
-	//	chemistry_test();
 	} else {
 		THROW_ERROR("test %s is not known\n", test.c_str());
 	}

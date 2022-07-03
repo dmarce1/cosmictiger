@@ -28,7 +28,6 @@
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
 
-#include <cosmictiger/sph.hpp>
 
 int hpx_main(int argc, char *argv[]) {
 	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
@@ -62,6 +61,7 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
+	PRINT( "STARTING MAIN\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
 	cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY

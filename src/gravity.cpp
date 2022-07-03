@@ -23,13 +23,12 @@
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
-#include <cosmictiger/sph_particles.hpp>
-#include <cosmictiger/kernel.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 
-size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
-	size_t flops = 0;
+void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -46,8 +45,8 @@ size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tr
 		for (int i = 0; i < tree_ptrs.size(); i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
-			const auto& m = tree_ptrs[i]->multi;
-			const auto& y = tree_ptrs[i]->pos;
+			const auto& m = tree_ptrs[i]->mpos->multi;
+			const auto& y = tree_ptrs[i]->mpos->pos;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[k][j][l] = m[j];
 			}
@@ -69,7 +68,7 @@ size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tr
 		}
 		array<simd_int, NDIM> X;
 		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = self_ptr->pos[dim].raw();
+			X[dim] = self_ptr->mpos->pos[dim].raw();
 		}
 		expansion<simd_float> L0;
 		L0 = simd_float(0.0f);
@@ -85,22 +84,24 @@ size_t cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tr
 				flops += count * greens_function(D, dx);
 			} else {
 				flops += count * ewald_greens_function(D, dx);
+				flops += count * apply_scale_factor(M[j]);
 			}
 			M2L(L0, M[j], D, do_phi);
+		}
+		if (type == GRAVITY_EWALD) {
+			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] += L0[i].sum();
 		}
+		flops += 7 * EXPANSION_SIZE;
 	}
-	return flops;
+	add_cpu_flops(flops);
 }
 
-size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
 	constexpr int chunk_size = 32;
-	const static bool do_sph = get_options().sph;
-	size_t flops = 0;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
+	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		const simd_float one(1.0);
@@ -119,36 +120,30 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
-			vector<char> type;
 			vector<float> masses;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masses.resize(nsource);
-			type.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
-			if (do_sph) {
-				for (int i = 0; i < count; i++) {
-					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
-					;
-				}
-			} else {
-				for (int i = 0; i < count; i++) {
-					masses[i] = 1.0;
-				}
+			for (int i = 0; i < count; i++) {
+				masses[i] = 1.0;
 			}
 			for (int i = count; i < nsource; i++) {
+				srcx[i] = 0.0;
+				srcy[i] = 0.0;
+				srcz[i] = 0.0;
 				masses[i] = 0.0;
 			}
 			const auto range = self_ptr->part_range;
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
 			for (int dim = 0; dim < NDIM; dim++) {
-				X[dim] = self_ptr->pos[dim].raw();
+				X[dim] = self_ptr->mpos->pos[dim].raw();
 			}
 			expansion<simd_float> L0;
 			L0 = simd_float(0.0f);
@@ -168,26 +163,24 @@ size_t cpu_gravity_cp(gravity_cc_type gtype, expansion<float>& L, const vector<t
 				}
 				flops += cnt * 3;
 				expansion<simd_float> D;
-				if (gtype == GRAVITY_DIRECT) {
-					flops += count * greens_function(D, dx);
-				} else {
-					flops += count * ewald_greens_function(D, dx);
-				}
+				flops += count * greens_function(D, dx);
 				for (int l = 0; l < EXPANSION_SIZE; l++) {
 					L0[l] += mass * D[l];
+
 				}
 				flops += cnt * EXPANSION_SIZE;
 			}
 			for (int i = 0; i < EXPANSION_SIZE; i++) {
 				L[i] += L0[i].sum();
 			}
+			flops += 7 * EXPANSION_SIZE;
 		}
 	}
-	return flops;
+	add_cpu_flops(flops);
 }
 
-size_t cpu_gravity_pc(gravity_cc_type type, force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list) {
-	size_t flops = 0;
+void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list) {
+	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
 		vector<const tree_node*> tree_ptrs(list.size());
@@ -205,8 +198,8 @@ size_t cpu_gravity_pc(gravity_cc_type type, force_vectors& f, int min_rung, tree
 		for (int i = 0; i < tree_ptrs.size(); i++) {
 			const int k = i / SIMD_FLOAT_SIZE;
 			const int l = i % SIMD_FLOAT_SIZE;
-			const auto& m = tree_ptrs[i]->multi;
-			const auto& y = tree_ptrs[i]->pos;
+			const auto& m = tree_ptrs[i]->mpos->multi;
+			const auto& y = tree_ptrs[i]->mpos->pos;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
 				M[k][j][l] = m[j];
 			}
@@ -229,70 +222,61 @@ size_t cpu_gravity_pc(gravity_cc_type type, force_vectors& f, int min_rung, tree
 		const auto range = self_ptr->part_range;
 		array<simd_int, NDIM> X;
 		for (part_int i = range.first; i < range.second; i++) {
-			if (particles_rung(i) >= min_rung) {
-				expansion2<simd_float> L;
-				L(0, 0, 0) = simd_float(0.0f);
-				L(1, 0, 0) = simd_float(0.0f);
-				L(0, 1, 0) = simd_float(0.0f);
-				L(0, 0, 1) = simd_float(0.0f);
-				for (int dim = 0; dim < NDIM; dim++) {
-					X[dim] = particles_pos(dim, i).raw();
-				}
-				for (int j = 0; j < nsource; j++) {
-					const int count = std::min(SIMD_FLOAT_SIZE, (int) (tree_ptrs.size() - j * SIMD_FLOAT_SIZE));
-					array<simd_float, NDIM> dx;
-					for (int dim = 0; dim < NDIM; dim++) {
-						dx[dim] = simd_float(X[dim] - Y[j][dim]) * _2float;
-					}
-					flops += 3 * count;
-					expansion<simd_float> D;
-					if (type == GRAVITY_DIRECT) {
-						flops += count * greens_function(D, dx);
-					} else {
-						flops += count * ewald_greens_function(D, dx);
-					}
-					flops += count * M2L(L, M[j], D, min_rung == 0);
-				}
-				const int j = i - range.first;
-				f.gx[j] -= L(1, 0, 0).sum();
-				f.gy[j] -= L(0, 1, 0).sum();
-				f.gz[j] -= L(0, 0, 1).sum();
-				f.phi[j] += L(0, 0, 0).sum();
+			expansion2<simd_float> L;
+			L(0, 0, 0) = simd_float(0.0f);
+			L(1, 0, 0) = simd_float(0.0f);
+			L(0, 1, 0) = simd_float(0.0f);
+			L(0, 0, 1) = simd_float(0.0f);
+			for (int dim = 0; dim < NDIM; dim++) {
+				X[dim] = particles_pos(dim, i).raw();
 			}
+			for (int j = 0; j < nsource; j++) {
+				const int count = std::min(SIMD_FLOAT_SIZE, (int) (tree_ptrs.size() - j * SIMD_FLOAT_SIZE));
+				array<simd_float, NDIM> dx;
+				for (int dim = 0; dim < NDIM; dim++) {
+					dx[dim] = simd_float(X[dim] - Y[j][dim]) * _2float;
+				}
+				flops += 3 * count;
+				expansion<simd_float> D;
+				flops += count * greens_function(D, dx);
+				flops += count * M2L(L, M[j], D, do_phi);
+			}
+			const int j = i - range.first;
+			f.gx[j] -= SCALE_FACTOR2 * L(1, 0, 0).sum();
+			f.gy[j] -= SCALE_FACTOR2 * L(0, 1, 0).sum();
+			f.gz[j] -= SCALE_FACTOR2 * L(0, 0, 1).sum();
+			f.phi[j] += SCALE_FACTOR1 * L(0, 0, 0).sum();
+			flops += 28;
 		}
 	}
-	return flops;
+	add_cpu_flops(flops);
 }
 
-#include <fenv.h>
-
-size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tree_id self, const vector<tree_id>& list, float hfloat) {
-	size_t flops = 0;
+void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
+	flop_counter<int> flops = 0;
 	timer tm;
 	tm.start();
 	constexpr int chunk_size = 32;
 	size_t near_count = 0;
 	size_t far_count = 0;
-	const static bool do_sph = get_options().sph;
-	const static float dm_mass = get_options().dm_mass;
-	const static float sph_mass = get_options().sph_mass;
 	if (list.size()) {
+		simd_float sink_hsoft;
+		sink_hsoft = get_options().hsoft;
+		const simd_float hinv_i = simd_float(1.f) / sink_hsoft;										// 4
+		const simd_float h2inv_i = sqr(hinv_i);															// 1
+		const simd_float h3inv_i = (hinv_i) * h2inv_i;													// 1
+		const simd_float h2 = sqr(sink_hsoft); // 1;
+		flops += 7;
 		static const simd_float _2float(fixed2float);
-		simd_float h = hfloat;
-		simd_float h2 = h * h;
 		const simd_float one(1.0);
 		const simd_float tiny(1.0e-20);
-		simd_float hinv = simd_float(1) / h;
-		simd_float hinv3 = hinv * hinv * hinv;
 		const tree_node* self_ptr = tree_get_node(self);
 		const int nsink = self_ptr->nparts();
 		const auto range = self_ptr->part_range;
 		for (int li = 0; li < list.size(); li += chunk_size) {
 			array<simd_int, NDIM> X;
 			array<simd_int, NDIM> Y;
-			simd_float src_type;
-			simd_float sink_type;
-			simd_float hsoft = get_options().hsoft;
+			simd_int src_type;
 			array<const tree_node*, chunk_size> tree_ptrs;
 			int nsource = 0;
 			const int maxi = std::min((int) list.size(), li + chunk_size) - li;
@@ -304,221 +288,90 @@ size_t cpu_gravity_pp(gravity_cc_type gtype, force_vectors& f, int min_rung, tre
 			vector<fixed32> srcx;
 			vector<fixed32> srcy;
 			vector<fixed32> srcz;
+			vector<float> zetas;
+			vector<float> hs;
 			vector<char> type;
 			vector<float> masses;
 			srcx.resize(nsource);
 			srcy.resize(nsource);
 			srcz.resize(nsource);
 			masses.resize(nsource);
-			type.resize(nsource);
 			int count = 0;
 			for (int i = 0; i < maxi; i++) {
-				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), type.data(), count);
+				particles_global_read_pos(tree_ptrs[i]->global_part_range(), srcx.data(), srcy.data(), srcz.data(), count);
 				count += tree_ptrs[i]->nparts();
 			}
-			if (do_sph) {
-				for (int i = 0; i < count; i++) {
-					masses[i] = type[i] != DARK_MATTER_TYPE ? sph_mass : dm_mass;
-					;
-				}
-			} else {
-				for (int i = 0; i < count; i++) {
-					masses[i] = 1.0;
-				}
+			for (int i = 0; i < count; i++) {
+				masses[i] = 1.0;
 			}
 			for (int i = count; i < nsource; i++) {
 				srcx[i] = 0.f;
 				srcy[i] = 0.f;
 				srcz[i] = 0.f;
 				masses[i] = 0.0f;
-				type[i] = 0;
 			}
 			const simd_float tiny = 1.0e-15;
-			feenableexcept (FE_DIVBYZERO);
-			feenableexcept (FE_INVALID);
-			feenableexcept (FE_OVERFLOW);
-			const auto hinv = simd_float(1.f) / hsoft;
-			const auto h3inv = sqr(hinv) * hinv;
-			if (gtype == GRAVITY_DIRECT) {
-				for (part_int i = range.first; i < range.second; i++) {
-					bool active = particles_rung(i) >= min_rung;
-					const int this_type = particles_type(i);
-					part_int kk;
-					if (this_type == SPH_TYPE) {
-						kk = particles_cat_index(i);
-					}
-					if (active) {
-						if (this_type == SPH_TYPE) {
-							sink_type = SPH_TYPE;
-						} else {
-							sink_type = DARK_MATTER_TYPE;
-						}
-						simd_float gx(0.0);
-						simd_float gy(0.0);
-						simd_float gz(0.0);
-						simd_float phi(0.0);
-						for (int dim = 0; dim < NDIM; dim++) {
-							X[dim] = particles_pos(dim, i).raw();
-						}
-						//					simd_float self_flags(0);
-						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
-							const int& count = maxi;
-							const int k = j / SIMD_FLOAT_SIZE;
-							simd_float mass;
-							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-								Y[XDIM][l] = srcx[j + l].raw();
-								Y[YDIM][l] = srcy[j + l].raw();
-								Y[ZDIM][l] = srcz[j + l].raw();
-								mass[l] = masses[j + l];
-								src_type[l] = type[j + l];
-							}
-							array<simd_float, NDIM> dx;
-							for (int dim = 0; dim < NDIM; dim++) {
-								dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
-							}
-							simd_float rinv1 = 0.f, rinv3 = 0.f;
-							const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
-							const simd_float near_flags = r2 < h2;
-							const auto type_i = sink_type;
-//							self_flags += simd_float(1) - (r2 > simd_float(0));
-							if (active) {
-								if (near_flags.sum() == 0) {
-									rinv1 = simd_float(1) / sqrt(r2);
-									rinv3 = rinv1 * sqr(rinv1);
-								} else {
-									const auto type_j = src_type;
-									const simd_float r = sqrt(r2);                                                    // 4
-									rinv1 = simd_float(1) / (r + tiny);                                                    // 5
-									const auto q = r * hinv;
-									rinv3 = kernelFqinv(q) * h3inv;
-									if (min_rung == 0) {
-										rinv1 = kernelPot(q) * hinv;
-									}
-								}
-								rinv3 *= mass;
-								rinv1 *= mass;
-								gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
-								gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
-								gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
-								phi -= rinv1;																			// 1
-							}
-						}
-//						PRINT( "%e\n", self_flags.sum());
-//						ALWAYS_ASSERT(self_flags.sum() > 0.0);
-						const int j = i - range.first;
-						if (active) {
-							f.gx[j] -= gx.sum();
-							f.gy[j] -= gy.sum();
-							f.gz[j] -= gz.sum();
-							f.phi[j] += phi.sum();
-						}
-					}
+//			feenableexcept (FE_DIVBYZERO);
+//			feenableexcept (FE_INVALID);
+//			feenableexcept (FE_OVERFLOW);
+			for (part_int i = range.first; i < range.second; i++) {
+				simd_float gx(0.0);
+				simd_float gy(0.0);
+				simd_float gz(0.0);
+				simd_float phi(0.0);
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim] = particles_pos(dim, i).raw();
 				}
-			} else if (gtype == GRAVITY_EWALD) {
+				//					simd_float self_flags(0);
+				for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
+					const int& count = maxi;
+					const int k = j / SIMD_FLOAT_SIZE;
+					simd_float mass;
+					for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
+						Y[XDIM][l] = srcx[j + l].raw();
+						Y[YDIM][l] = srcy[j + l].raw();
+						Y[ZDIM][l] = srcz[j + l].raw();
+						mass[l] = masses[j + l];
+					}
+					array<simd_float, NDIM> dx;
+					for (int dim = 0; dim < NDIM; dim++) {
+						dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
+					}
+					const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);						// 6
+					const simd_float q2 = r2 * h2inv_i;																	// 1
+					const simd_float rinv1_far = simd_float(1) / sqrt(r2);										// 8
+					const simd_float rinv3_far = rinv1_far * sqr(rinv1_far);									// 3
+					const simd_float rinv3_near = (simd_float(2.5f) - simd_float(1.5f) * q2) * h3inv_i;	// 3
+					simd_float rinv1_near, rinv1;
+					if (do_phi) {
+						rinv1_near = simd_float(3.0 / 8.0);
+						rinv1_near = fmaf(rinv1_far, q2, simd_float(-5.0 / 4.0));									// 2
+						rinv1_near = fmaf(rinv1_far, q2, simd_float(15.0 / 8.0));									// 2
+					}
+					const simd_float sw_far = r2 > h2;																		// 1
+					const simd_float sw_near = simd_float(1) - sw_far;													// 1
+					simd_float rinv3 = rinv3_near * sw_near + rinv3_far * sw_far;									// 3
+					if (do_phi) {
+						rinv1 = rinv1_near * sw_near + rinv1_far * sw_far;												// 3
+						flops += 7;
+					}
+					rinv3 *= mass;																								 	// 1
+					rinv1 *= mass;																									// 1
+					gx = fmaf(rinv3, dx[XDIM], gx);																			// 2
+					gy = fmaf(rinv3, dx[YDIM], gy);																			// 2
+					gz = fmaf(rinv3, dx[ZDIM], gz);																			// 2
+					phi -= rinv1;																									// 1
+					flops += 38;
+				}
+				const int j = i - range.first;
+				f.gx[j] -= gx.sum();
+				f.gy[j] -= gy.sum();
+				f.gz[j] -= gz.sum();
+				f.phi[j] += phi.sum();
+				flops += 28;
 
-				for (part_int i = range.first; i < range.second; i++) {
-					if (particles_rung(i) >= min_rung) {
-						const int type = particles_type(i);
-						if (type == SPH_TYPE) {
-							const auto kk = particles_cat_index(i);
-							sink_type = SPH_TYPE;
-						} else {
-							sink_type = DARK_MATTER_TYPE;
-						}
-						for (int dim = 0; dim < NDIM; dim++) {
-							X[dim] = particles_pos(dim, i).raw();
-						}
-						simd_float fx(0.f);
-						simd_float fy(0.f);
-						simd_float fz(0.f);
-						simd_float pot(0.f);
-						for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
-							const int& count = maxi;
-							const int k = j / SIMD_FLOAT_SIZE;
-							simd_float mass;
-							for (int l = 0; l < SIMD_FLOAT_SIZE; l++) {
-								Y[XDIM][l] = srcx[j + l].raw();
-								Y[YDIM][l] = srcy[j + l].raw();
-								Y[ZDIM][l] = srcz[j + l].raw();
-								mass[l] = masses[j + l];
-							}
-							array<simd_float, NDIM> dx0;
-							for (int dim = 0; dim < NDIM; dim++) {
-								dx0[dim] = simd_float(X[dim] - Y[dim]) * _2float;                                 // 3
-							}
-							const simd_float R2 = sqr(dx0[XDIM], dx0[YDIM], dx0[ZDIM]);
-							const auto m_j = mass;
-							const auto r0mask = simd_float(1) - (R2 > 0.0f);
-							const auto r1mask = simd_float(1) - r0mask;
-							for (int xi = -4; xi <= +4; xi++) {
-								for (int yi = -4; yi <= +4; yi++) {
-									for (int zi = -4; zi <= +4; zi++) {
-										const auto dx = dx0[XDIM] - simd_float(xi);
-										const auto dy = dx0[YDIM] - simd_float(yi);
-										const auto dz = dx0[ZDIM] - simd_float(zi);
-										const auto r2 = sqr(dx, dy, dz);
-										const auto mask = r2 < simd_float(2.6f * 2.6f);
-										if (mask.sum()) {
-											const auto r = sqrt(r2);
-											const auto rinv = simd_float(1.f) / (r + r0mask);
-											const auto r2inv = rinv * rinv;
-											const auto r3inv = r2inv * rinv;
-											const auto exp0 = expf(-4.f * r2);
-											const auto erfc0 = erfc(2.f * r);
-											const auto expfactor = simd_float(4.0f / sqrt(M_PI)) * r * exp0;
-											const auto d0 = -erfc0 * rinv;
-											const auto d1 = (expfactor + erfc0) * r3inv;
-											pot += r1mask * d0;
-											fx -= r1mask * mask * dx * d1;
-											fy -= r1mask * mask * dy * d1;
-											fz -= r1mask * mask * dz * d1;
-										}
-									}
-								}
-							}
-							pot += simd_float(M_PI / 4.f);
-							for (int xi = -2; xi <= +2; xi++) {
-								for (int yi = -2; yi <= +2; yi++) {
-									for (int zi = -2; zi <= +2; zi++) {
-										const auto hx = xi;
-										const auto hy = yi;
-										const auto hz = zi;
-										const auto h2 = simd_float(sqr(hx, hy, hz));
-										const auto hmask = (h2 > 0.f) * (h2 < simd_float(8.001f));
-										const auto hdotx = dx0[XDIM] * hx + dx0[YDIM] * hy + dx0[ZDIM] * hz;
-										const auto omega = simd_float(2.0 * M_PI) * hdotx;
-										const auto c = cos(omega);
-										const auto s = sin(omega);
-										const auto c0 = -hmask / (h2 + (simd_float(1) - hmask)) * expf(simd_float(-M_PI * M_PI * 0.25f) * h2) * simd_float(1.f / M_PI);
-										const auto c1 = -hmask * s * 2.0 * M_PI * c0;
-										pot += r1mask * c0 * c;
-										fx -= r1mask * c1 * hx;
-										fy -= r1mask * c1 * hy;
-										fz -= r1mask * c1 * hz;
-									}
-								}
-							}
-							pot = pot * r1mask + r0mask * simd_float(2.8372975);
-							const simd_float r1inv = rsqrt(R2 + r0mask);
-							const simd_float r3inv = sqr(r1inv) * r1inv;
-							pot += r1inv * r1mask;
-							fx += dx0[XDIM] * r3inv * r1mask;
-							fy += dx0[YDIM] * r3inv * r1mask;
-							fz += dx0[ZDIM] * r3inv * r1mask;
-							pot *= m_j;
-							fx *= m_j;
-							fy *= m_j;
-							fz *= m_j;
-						}
-						const int l = i - range.first;
-						f.gx[l] += fx.sum();
-						f.gy[l] += fy.sum();
-						f.gz[l] += fz.sum();
-						f.phi[l] += pot.sum();
-					}
-				}
 			}
 		}
 	}
-	return 24 * far_count + 52 * near_count;
+	add_cpu_flops(flops);
 }

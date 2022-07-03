@@ -21,8 +21,28 @@
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <cmath>
+
+void cosmos_update(double& adotdot, double& adot, double& a, double dt) {
+	const double omega_m = get_options().omega_m;
+	const double omega_r = get_options().omega_r;
+	const double omega_lam = get_options().omega_lam;
+	const double omega_k = get_options().omega_k;
+	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
+	const double adot0 = adot;
+	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
+	const double adotdot0 = adotdot;
+	a += 0.5 * adot0 * dt;
+	adot += 0.5 * adotdot0 * dt;
+	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
+	a += adot * dt;
+	adot += adotdot * dt;
+	a -= 0.5 * adot0 * dt;
+	adot -= 0.5 * adotdot0 * dt;
+
+}
 
 double cosmos_growth_factor(double omega_m, float a) {
 	const double omega_l = 1.f - omega_m;
@@ -37,8 +57,10 @@ double cosmos_dadt(double a) {
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const auto omega_m = get_options().omega_m;
 	const auto omega_r = get_options().omega_r;
-	const auto omega_lambda = 1.0 - omega_m - omega_r;
-	return H * a * std::sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_lambda);
+	const auto omega_k = get_options().omega_k;
+	const auto omega_lam = get_options().omega_lam;
+	add_cpu_flops(27);
+	return H * a * std::sqrt(omega_r / (a * a * a * a) + omega_m / (a * a * a) + omega_k / (a * a) + omega_lam);
 }
 
 double cosmos_dadtau(double a) {

@@ -23,15 +23,15 @@ constexpr bool verbose = true;
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/options.hpp>
+
+#include <cosmictiger/math.hpp>
 
 #include <unordered_map>
 #include <shared_mutex>
 
 void domains_transmit_particles(vector<particle>);
-void domains_transmit_sph_particles(vector<sph_particle>);
 void domains_init_rebounds();
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes);
 void domains_rebound_sort(vector<double> bounds, int depth);
@@ -73,7 +73,7 @@ double domains_get_load_imbalance() {
 vector<size_t> domains_get_loads() {
 	vector<hpx::future<vector<size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < domains_get_loads_action > (HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async < domains_get_loads_action >( c));
 	}
 	vector<size_t> loads;
 	loads.push_back(particles_size());
@@ -113,7 +113,7 @@ range<double> domains_range(size_t key) {
 void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<domains_transmit_boxes_action>(HPX_PRIORITY_HI, c, boxes));
+		futs.push_back(hpx::async<domains_transmit_boxes_action>( c, boxes));
 	}
 	boxes_by_key = std::move(boxes);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -122,7 +122,7 @@ void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes) {
 void domains_init_rebounds() {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<domains_init_rebounds_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<domains_init_rebounds_action>( c));
 	}
 	local_domains.resize(1);
 	local_domains[0].box = unit_box<double>();
@@ -131,6 +131,7 @@ void domains_init_rebounds() {
 	local_domains[0].part_range.first = 0;
 	local_domains[0].part_range.second = particles_size();
 	local_domains[0].depth = 0;
+//	PRINT( "Setting init rebound on %i %i %i\n", hpx_rank(), 0, particles_size());
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -142,9 +143,9 @@ vector<size_t> domains_count_below(vector<double> bounds, int depth) {
 		if (local_domains[i].depth == depth) {
 			futs.push_back(
 					hpx::async([i, &bounds, depth, &counts]() {
-						//	PRINT("----%i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
+//							PRINT("???? %i %i %i %i \n", hpx_rank(), i, local_domains[i].part_range.first, local_domains[i].part_range.second);
 							const auto rng = local_domains[i].part_range;
-							const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx::thread::hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
+							const int nthreads = std::max(2 * (size_t) (rng.second - rng.first) * hpx_hardware_concurrency() / (size_t) particles_size(), (size_t) 1);
 							vector<hpx::future<void>> futs;
 							const int xdim = depth % NDIM;
 							const fixed32 xmid = bounds[i];
@@ -210,6 +211,7 @@ void domains_rebound_sort(vector<double> bounds, int depth) {
 void domains_rebound() {
 	profiler_enter(__FUNCTION__);
 	domains_init_rebounds();
+//	PRINT( "Starting rebound\n");
 	vector<domain_global> domains(1);
 	boxes_by_key = decltype(boxes_by_key)();
 	domains[0].box = unit_box<double>();
@@ -234,7 +236,9 @@ void domains_rebound() {
 		}
 		return all;
 	};
+//	PRINT( "Cycling rebound\n");
 	while (!all_leaves(new_domains)) {
+//		PRINT( "Cycle\n");
 		domains = std::move(new_domains);
 		vector<size_t> counts(domains.size());
 		for (int iter = 0; iter < DOMAIN_REBOUND_ITERS; iter++) {
@@ -246,6 +250,7 @@ void domains_rebound() {
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
 				bounds.push_back(midx);
 			}
+//			PRINT( "Counting\n");
 			vector<hpx::future<vector<size_t>>>count_futs;
 			for (int i = 0; i < hpx_size(); i++) {
 				count_futs.push_back(hpx::async<domains_count_below_action>(hpx_localities()[i], bounds, depth));
@@ -256,10 +261,13 @@ void domains_rebound() {
 					counts[i] += count[i];
 				}
 			}
+//			PRINT( "Done counting\n");
 			for (int i = 0; i < domains.size(); i++) {
+//				PRINT( "%i\n", i);
 				const int first_proc = domains[i].proc_range.first;
 				const int last_proc = domains[i].proc_range.second;
 				const int mid_proc = (first_proc + last_proc) / 2;
+				ALWAYS_ASSERT(last_proc - first_proc >= 1);
 				const size_t target_count = (size_t)(mid_proc - first_proc) * domains[i].total_count / (last_proc - first_proc);
 				const double midx = (domains[i].midhi + domains[i].midlo) * 0.5;
 				if (counts[i] < target_count) {
@@ -267,7 +275,7 @@ void domains_rebound() {
 				} else {
 					domains[i].midhi = midx;
 				}
-//				PRINT("%i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
+//				PRINT("----- %i %li %e %e\n", i, counts[i], domains[i].midlo, domains[i].midhi);
 			}
 		}
 		vector<double> bounds;
@@ -326,45 +334,51 @@ void domains_transmit_particles(vector<particle> parts) {
 	trans_particles.push_back(parts);
 }
 
-void domains_begin() {
+void domains_begin(int rung) {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
-		futs.push_back(hpx::async<domains_begin_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<domains_begin_action>( c, rung));
 	}
 	const auto my_domain = domains_find_my_box();
 	free_indices.resize(0);
 	mutex_type mutex;
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
+	const auto current_range = particles_current_range();
 	std::atomic<part_int> next_begin(0);
 	constexpr int chunk_size = 1024;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads,&mutex,&next_begin,my_domain]() {
+		futs.push_back(hpx::async([proc,nthreads,&mutex,&next_begin,my_domain,current_range, rung]() {
 			std::unordered_map<int,vector<particle>> sends;
 			vector<hpx::future<void>> futs;
 			vector<part_int> my_free_indices;
-			part_int begin = next_begin++ * chunk_size;
-			while( begin < particles_size()) {
-				const part_int end = std::min(begin + chunk_size, particles_size());
+			part_int begin = next_begin++ * chunk_size + current_range.first;
+			while( begin < current_range.second) {
+				const part_int end = std::min(begin + chunk_size, current_range.second);
 				for( part_int i = begin; i < end; i++) {
-					array<double, NDIM> x;
-					for( part_int dim = 0; dim < NDIM; dim++) {
-						x[dim] = particles_pos(dim,i).to_double();
-					}
-					if( !my_domain.contains(x)) {
-						const part_int rank = find_particle_domain(x);
-						auto& send = sends[rank];
-						send.push_back(particles_get_particle(i));
-						if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-							futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+					if( particles_rung(i) == rung) {
+						array<double, NDIM> x;
+						for( part_int dim = 0; dim < NDIM; dim++) {
+							x[dim] = particles_pos(dim,i).to_double();
 						}
-						my_free_indices.push_back(i);
+						if( !my_domain.contains(x)) {
+							const part_int rank = find_particle_domain(x);
+							auto& send = sends[rank];
+							send.push_back(particles_get_particle(i));
+							if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
+				//				PRINT( "Sending %i from %i to %i\n", send.size(), hpx_rank(), rank);
+								futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+							}
+							my_free_indices.push_back(i);
+						}
 					}
 				}
-				begin = next_begin++ * chunk_size;
+				begin = next_begin++ * chunk_size + current_range.first;
 			}
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				if( i->second.size()) {
+		//			PRINT( "Sending %i from %i to %i\n", i->second.size(), hpx_rank(),i->first);
 					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 				}
 			}
@@ -377,13 +391,16 @@ void domains_begin() {
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
+	profiler_exit();
+
 }
 
 void domains_end() {
+	profiler_enter(__FUNCTION__);
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for (auto& c : children) {
-		futs.push_back(hpx::async<domains_end_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<domains_end_action>( c));
 	}
 	const auto particle_compare = [](particle a, particle b) {
 		for( part_int dim = 0; dim < NDIM; dim++) {
@@ -398,7 +415,7 @@ void domains_end() {
 	hpx::future<void> fut1;
 	hpx::future<void> fut2;
 	if (free_indices.size()) {
-		fut1 = hpx::parallel::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
+		fut1 = hpx::sort(PAR_EXECUTION_POLICY, free_indices.begin(), free_indices.end());
 	} else {
 		fut1 = hpx::make_ready_future();
 	}
@@ -426,7 +443,7 @@ void domains_end() {
 	hpx::wait_all(futs1.begin(), futs1.end());
 	trans_particles = decltype(trans_particles)();
 	if (all_trans_particles.size()) {
-		fut2 = hpx::parallel::sort(PAR_EXECUTION_POLICY, all_trans_particles.begin(), all_trans_particles.end(), particle_compare);
+		fut2 = hpx::sort(PAR_EXECUTION_POLICY, all_trans_particles.begin(), all_trans_particles.end(), particle_compare);
 	} else {
 		fut2 = hpx::make_ready_future();
 	}
@@ -463,6 +480,7 @@ void domains_end() {
 #ifdef DOMAINS_CHECK
 	domains_check();
 #endif
+	profiler_exit();
 }
 
 range<double> domains_find_my_box() {
@@ -476,16 +494,18 @@ static void domains_check() {
 	vector<hpx::future<void>> futs;
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([proc,nthreads,&fail,my_domain]() {
-			const part_int begin = size_t(proc) * particles_size() / nthreads;
-			const part_int end = size_t(proc + 1) * particles_size() / nthreads;
+			const auto rng = particles_current_range();
+			const part_int begin = size_t(proc) * (rng.second - rng.first) / nthreads + rng.first;
+			const part_int end = size_t(proc + 1) * (rng.second - rng.first) / nthreads + rng.first;
 			for (part_int i = begin; i < end; i++) {
 				array<double, NDIM> x;
 				for (int dim = 0; dim < NDIM; dim++) {
 					x[dim] = particles_pos(dim, i).to_double();
 				}
 				if (!my_domain.contains(x)) {
-					PRINT("particle out of range %li of %li %e %e %e\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2]);
+					PRINT("particle out of range %li of %li %e %e %e rung %i\n", (long long ) i, (long long ) particles_size(), x[0], x[1], x[2], particles_rung(i));
 					PRINT("%s\n", domains_find_my_box().to_string().c_str());
+					ALWAYS_ASSERT(false);
 					fail++;
 				}
 			}
@@ -496,6 +516,79 @@ static void domains_check() {
 		THROW_ERROR("particle out of range!\n");
 	}
 }
+
+/*
+ pair<int, double> domains_find_ewald_level(double theta, size_t key, range<double> box, int depth, double rb) {
+ pair<int, double> rc;
+ double rmax = 0.0;
+ bool root = key == 1;
+ double xc = 0.5 * (box.begin[XDIM] + box.end[XDIM]);
+ double yc = 0.5 * (box.begin[YDIM] + box.end[YDIM]);
+ double zc = 0.5 * (box.begin[ZDIM] + box.end[ZDIM]);
+ const double r = sqrtf(sqr(0.5 * (box.end[XDIM] - box.begin[XDIM]), 0.5 * (box.end[YDIM] - box.begin[YDIM]), 0.5 * (box.end[ZDIM] - box.begin[ZDIM])));
+ const double h = get_options().hsoft;
+ bool ewald_satisfied = false;
+ if (rb <= 0.0) {
+ ewald_satisfied = (r < 0.25 * (theta / (theta + 1)) && r < 0.125 - 0.5 * h);
+ } else {
+ ewald_satisfied = (r < 0.5 * (theta / (1.0 + theta)) - rb && r < 0.5 - rb - h);
+ }
+ if (ewald_satisfied) {
+ rc.first = depth;
+ rc.second = r;
+ } else {
+ const auto& entry = boxes_by_key[key];
+ key <<= 1;
+ pair<int, double> rcl, rcr;
+ if (entry.rank == -1) {
+ const int xdim = depth % NDIM;
+ range<double> cboxr = box;
+ range<double> cboxl = box;
+ double midx = (box.begin[xdim] + box.end[xdim]) * 0.5;
+ cboxl.end[xdim] = cboxr.begin[xdim] = midx;
+ rcl = domains_find_ewald_level(theta, key, cboxl, depth + 1, rb);
+ rcr = domains_find_ewald_level(theta, key | 1, cboxl, depth + 1, rb);
+ } else {
+ double max_span = 0.0;
+ int xdim;
+ for (int dim = 0; dim < NDIM; dim++) {
+ double span = box.end[dim] - box.begin[dim];
+ if (span > max_span) {
+ max_span = span;
+ xdim = dim;
+ }
+ }
+ range<double> cboxr = box;
+ range<double> cboxl = box;
+ double midx = (box.begin[xdim] + box.end[xdim]) * 0.5;
+ cboxl.end[xdim] = cboxr.begin[xdim] = midx;
+ rcl = domains_find_ewald_level(theta, key, cboxl, depth + 1, rb);
+ rcr = domains_find_ewald_level(theta, key | 1, cboxl, depth + 1, rb);
+ }
+ if (rb <= 0.0) {
+ if (rcr.second > rcl.first) {
+ rc = rcr;
+ } else {
+ rc = rcl;
+ }
+ } else {
+ if (rcl.first > rcr.first) {
+ rc = rcl;
+ } else {
+ rc = rcr;
+ }
+ }
+ }
+ if (root && rb <= 0.0) {
+ auto rcb = domains_find_ewald_level(theta, key, box, depth, rc.second);
+ if (rcb.first > rc.first) {
+ rc = rcb;
+ }
+ }
+ return rc;
+ }
+
+ */
 
 static int find_particle_domain(const array<double, NDIM>& x, size_t key, int depth) {
 	const auto& entry = boxes_by_key[key];

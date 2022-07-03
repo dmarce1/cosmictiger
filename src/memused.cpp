@@ -42,7 +42,7 @@ static bool daemon_stopped = false;
 size_t max_cpu_mem_use() {
 	vector < hpx::future < size_t >> futs;
 	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<max_cpu_mem_use_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<max_cpu_mem_use_action>( c));
 	}
 	size_t max_use = cpu_mem_use();
 	for (auto& f : futs) {

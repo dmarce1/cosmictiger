@@ -114,7 +114,7 @@ fast_future<group_tree_return> group_tree_create_fork(size_t key, pair<int, int>
 	} else if (threadme) {
 		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || proc_range.second - proc_range.first > 1) {
+			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx_hardware_concurrency() || proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -276,7 +276,7 @@ void group_tree_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<group_tree_destroy_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<group_tree_destroy_action>( c));
 	}
 	nodes = decltype(nodes)();
 	tree_cache = decltype(tree_cache)();
@@ -307,20 +307,20 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 		std::unique_lock<spinlock_type> lock(mutex[bin]);
 		auto iter = tree_cache[bin].find(line_id);
 		if (iter == tree_cache[bin].end()) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_tree_node>>>();
+			auto prms = std::make_shared<hpx::promise<vector<group_tree_node>>>();
 			auto& entry = tree_cache[bin][line_id];
 			entry.data = prms->get_future();
 			entry.epoch = tree_cache_epoch;
 			lock.unlock();
 			hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
-				auto line_fut = hpx::async<group_tree_fetch_cache_line_action>(HPX_PRIORITY_HI,hpx_localities()[line_id.proc],line_id.index);
+				auto line_fut = hpx::async<group_tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 				prms->set_value(line_fut.get());
 				return 'a';
 			});
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);
 		} else if (iter->second.epoch < tree_cache_epoch) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_tree_node>>>();
+			auto prms = std::make_shared<hpx::promise<vector<group_tree_node>>>();
 			auto old_fut = std::move(iter->second.data);
 			auto& entry = tree_cache[bin][line_id];
 			entry.data = prms->get_future();
@@ -328,7 +328,7 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 			lock.unlock();
 			auto old_data = old_fut.get();
 			hpx::async(HPX_PRIORITY_HI, [prms,line_id](vector<group_tree_node> data) {
-				auto line_fut = hpx::async<group_tree_refresh_cache_line_action>(HPX_PRIORITY_HI,hpx_localities()[line_id.proc],line_id.index);
+				auto line_fut = hpx::async<group_tree_refresh_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 				auto new_data = line_fut.get();
 				for( int i = 0; i < new_data.size(); i++) {
 					data[i].last_active = new_data[i];
@@ -381,7 +381,7 @@ void group_tree_inc_cache_epoch() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<group_tree_inc_cache_epoch_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<group_tree_inc_cache_epoch_action>( c));
 	}
 	for (auto& node : nodes) {
 		node.last_active = node.active;

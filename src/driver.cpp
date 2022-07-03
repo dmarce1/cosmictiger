@@ -18,7 +18,7 @@
  */
 
 #define  SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.02
+#define SCALE_DT 0.05
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -35,16 +35,12 @@
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/output.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/view.hpp>
-#include <cosmictiger/sph_tree.hpp>
-#include <cosmictiger/sph.hpp>
-#include <cosmictiger/chemistry.hpp>
-#include <cosmictiger/stars.hpp>
 #include <cosmictiger/profiler.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <sys/types.h>
 #include <dirent.h>
@@ -60,8 +56,54 @@ double flops_per_node = 1e6;
 double flops_per_particle = 1e5;
 bool used_gpu;
 
+struct timing {
+	double nparts;
+	double time;
+	timing() {
+		nparts = time = 0.0;
+	}
+};
+
+#define MIN_BUCKET 64
+#define MAX_BUCKET 192
+
+vector<timing> timings;
+
+vector<double> read_checkpoint_list() {
+	vector<double> chkpts;
+	FILE* fp = fopen("checkpoint.txt", "rt");
+	if (fp != nullptr) {
+		float z;
+		PRINT("Checkpoints will be written at z = \n");
+		while (fscanf(fp, "%f\n", &z) == 1) {
+			PRINT("%f\n", z);
+			chkpts.push_back(z);
+		}
+
+		fclose(fp);
+	}
+	return chkpts;
+}
+
+static void flush_timings(bool reset) {
+	const auto theta = get_options().theta;
+	char* fname;
+	asprintf(&fname, "buckets.%.2f.txt", theta);
+	FILE* fp = fopen(fname, "wt");
+	free(fname);
+	for (int i = 0; i < timings.size(); i++) {
+		if (timings[i].nparts > 0.0) {
+			fprintf(fp, "%i %e\n", i, timings[i].nparts / timings[i].time);
+		}
+	}
+	if (reset) {
+		timings = decltype(timings)();
+	}
+	fclose(fp);
+}
+
 void do_groups(int number, double scale) {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 
 	timer total;
 	total.start();
@@ -130,430 +172,201 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
-		bool verbose) {
-	const bool stars = get_options().stars;
-	const bool diff = get_options().diffusion;
-	const bool chem = get_options().chem;
-	verbose = true;
-	*eheat = 0.0;
-	if (verbose)
-		PRINT("Doing SPH step with minrung = %i\n", minrung);
-	sph_tree_create_params tparams;
-
+std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double tau, double t0, double theta,
+		energies_t* energies, int minrung0, bool do_phi) {
+	profiler_enter(__FUNCTION__);
 	timer tm;
-	timer total_tm;
-	total_tm.start();
-	tparams.min_rung = minrung;
-	tparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	sph_tree_create_return sr;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	sph_tree_neighbor_params tnparams;
-
-
-	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-	tnparams.min_rung = minrung;
-
-	tm.start();
-	if (verbose)
-		PRINT("starting sph_tree_create = %e\n", tm.read());
-	profiler_enter("sph_tree_create");
-	sr = sph_tree_create(tparams);
-	profiler_exit();
-	tm.stop();
-	if (verbose)
-		PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
-	tm.reset();
-	return sr;
-
-}
-
-sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
-		bool verbose) {
-	const bool stars = get_options().stars;
-	const bool diff = get_options().diffusion;
-	const bool chem = get_options().chem;
-	const bool conduction = get_options().conduction;
-	verbose = true;
-	double flops;
-	*eheat = 0.0;
-	if (verbose)
-		PRINT("Doing SPH step with minrung = %i\n", minrung);
-	sph_particles_apply_updates(minrung, 0, t0, tau);
-
-	sph_run_params sparams;
-	if (adot != 0.0) {
-		sparams.max_dt = SCALE_DT * scale / fabs(adot);
+	kick_return kr;
+	tree_create_return sr;
+//	minrung = std::max(minrung, 1);
+//	max_rung = std::max(max_rung,minrung);
+	//PRINT( "%i %i %i\n", minrung, max_rung, minrung0);
+	vector<int> levels(std::max(max_rung - minrung, 0) + 1);
+	int k = 0;
+	for (int i = max_rung; i > minrung; i--) {
+		levels[k++] = i;
 	}
-	sparams.adot = adot;
-	sparams.tau = tau;
-	sparams.tzero = tau == 0.0;
-	sparams.max_rung = max_rung;
-	sparams.a = scale;
-	sparams.t0 = t0;
-	sparams.min_rung = minrung;
-	bool cont;
-	sph_run_return kr;
-	sparams.set = SPH_SET_ACTIVE;
-	sparams.phase = phase;
-	const bool glass = get_options().glass;
-	sph_tree_neighbor_params tnparams;
-	tnparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-	tnparams.min_rung = minrung;
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
+	levels[k++] = minrung;
+	bool ascending = true;
+	bool top;
+	bool clip_top = false;
+//	PRINT("climbing kick ladder\n");
+	timer total_time;
+	total_time.start();
+	double parts_processed = 0.0;
+	for (int li = 0; li < levels.size(); li++) {
 
-	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-	tnparams.seti = SPH_INTERACTIONS_I;
-	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-	sph_tree_neighbor(tnparams, root_id, checklist).get();
-	profiler_exit();
-
-	sparams.phase = 0;
-	int doneiters = 0;
-	sph_particles_reset_converged();
-	do {
-		sparams.set = SPH_SET_ACTIVE;
-		sparams.run_type = SPH_RUN_SMOOTHLEN;
-		timer tm;
-		tm.start();
-		kr = sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-		tm.reset();
-		cont = kr.rc;
-		tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-		tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-//			tnparams.set = SPH_SET_ACTIVE;
-		tm.start();
-		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-		profiler_exit();
-		tm.stop();
-		tm.reset();
-		tm.start();
-		tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		profiler_exit();
-		tm.stop();
-		tm.reset();
-		kr = sph_run_return();
-	} while (cont);
-	timer tm;
-
-	sparams.run_type = SPH_RUN_PREHYDRO;
-	tm.reset();
-	tm.start();
-	sph_run(sparams, true);
-	tm.stop();
-	if (verbose)
-		PRINT("sph_run(SPH_RUN_PREHYDRO): tm = %e\n", tm.read());
-	tm.reset();
-
-	sparams.run_type = SPH_RUN_HYDRO;
-	tm.reset();
-	tm.start();
-	kr = sph_run(sparams, true);
-	tm.stop();
-	max_rung = kr.max_rung;
-	if (verbose)
-		PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-	tm.reset();
-
-
-	sph_particles_apply_updates(minrung, 1, t0, tau);
-
-	if (stars && minrung <= 1) {
-		if (stars_find(scale, dt, minrung, iter, t0)) {
-			stars_statistics(scale);
-
-			tm.start();
-			if (verbose)
-				PRINT("starting sph_tree_create = %e\n", tm.read());
-			profiler_enter("sph_tree_create");
-			sph_tree_create_params tparams;
-			tparams.min_rung = minrung;
-			tparams.h_wt = (1.0 + SMOOTHLEN_BUFFER);
-			tree_id root_id;
-			root_id.proc = 0;
-			root_id.index = 0;
-			sph_tree_create_return sr;
-			vector<tree_id> checklist;
-			checklist.push_back(root_id);
-			sr = sph_tree_create(tparams);
-			profiler_exit();
-			tm.stop();
-			if (verbose)
-				PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.nactive);
-			tm.reset();
-
-			profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-			tnparams.seti = SPH_INTERACTIONS_I;
-			tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-			sph_tree_neighbor(tnparams, root_id, checklist).get();
-			profiler_exit();
-
-			sparams.phase = 0;
-			int doneiters = 0;
-			sph_particles_reset_converged();
-			do {
-				sparams.set = SPH_SET_ACTIVE;
-				sparams.run_type = SPH_RUN_SMOOTHLEN;
-				timer tm;
-				tm.start();
-				kr = sph_run(sparams, true);
-				tm.stop();
-				if (verbose)
-					PRINT("sph_run(SPH_RUN_SMOOTHLEN (active)): tm = %e min_h = %e max_h = %e\n", tm.read(), kr.hmin, kr.hmax);
-				tm.reset();
-				cont = kr.rc;
-				tnparams.h_wt = cont ? (1.0 + SMOOTHLEN_BUFFER) : 1.001;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-				tnparams.seto = cont ? SPH_SET_ACTIVE : SPH_SET_ALL;
-				tnparams.seti = cont ? SPH_SET_ALL : SPH_SET_ALL;
-				//			tnparams.set = SPH_SET_ACTIVE;
-				tm.start();
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-				sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				tm.start();
-				tnparams.seti = cont ? SPH_INTERACTIONS_I : SPH_INTERACTIONS_IJ;
-				tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-				profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-				sph_tree_neighbor(tnparams, root_id, checklist).get();
-				profiler_exit();
-				tm.stop();
-				tm.reset();
-				kr = sph_run_return();
-			} while (cont);
-
-			sparams.run_type = SPH_RUN_PREHYDRO;
-			tm.reset();
-			tm.start();
-			sph_run(sparams, true);
-			tm.stop();
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_PREHYDRO): tm = %e\n", tm.read());
-			tm.reset();
-
-
-			sparams.run_type = SPH_RUN_HYDRO;
-			tm.reset();
-			tm.start();
-			kr = sph_run(sparams, true);
-			tm.stop();
-			max_rung = kr.max_rung;
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_HYDRO): tm = %e max_vsig = %e max_rung = %i, %i\n", tm.read(), kr.max_vsig, kr.max_rung_hydro, kr.max_rung_grav);
-			tm.reset();
+		if (levels[li] == minrung) {
+			ascending = false;
+			top = true;
+		} else {
+			top = false;
 		}
-		PRINT("-----------------------------------------------------------------------------------------------------------------------\n");
-	}
+		if (ascending) {
+//			PRINT("ASCENDING  rung %i\n", levels[li]);
+		} else if (top) {
+//			PRINT("AT TOP     rung %i\n", levels[li]);
+		} else if (!ascending) {
+//			PRINT("DESCENDING rung %i\n", levels[li]);
+		}
 
-	sparams.run_type = SPH_RUN_AUX;
-	tm.reset();
-	tm.start();
-	kr = sph_run(sparams, true);
-	max_rung = kr.max_rung;
-	tm.stop();
-	if (verbose)
-		PRINT("sph_run(SPH_RUN_AUX): tm = %e \n", tm.read());
-	tm.reset();
-	tnparams.h_wt = 1.001;
-	tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-	tnparams.seti = SPH_SET_ALL;
-	tnparams.seto = SPH_SET_ACTIVE;
-	tm.start();
-	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-	sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-	profiler_exit();
-	tm.stop();
-	tm.reset();
-	tm.start();
-	tnparams.seti = SPH_INTERACTIONS_I;
-	tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-	profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-	sph_tree_neighbor(tnparams, root_id, checklist).get();
-	profiler_exit();
-	tm.stop();
-	tm.reset();
+		if (!ascending && !top) {
+			particles_push_rungs();
+		}
 
-	bool rc = true;
-	while (rc) {
-		sparams.run_type = SPH_RUN_RUNGS;
-		tm.start();
-		rc = sph_run(sparams, true).rc;
-		//	max_rung = kr.max_rung;
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_RUNGS): tm = %e \n", tm.read());
-		tm.reset();
-	}
-	sph_particles_apply_updates(minrung, 2, t0, tau);
-	if (verbose)
-		PRINT("Completing SPH step with max_rungs = %i, %i\n", kr.max_rung_hydro, kr.max_rung_grav);
-	sph_particles_cache_free1();
-
-	if (chem) {
-		PRINT("Doing chemistry step\n");
-		timer tm;
-		tm.start();
-		*eheat = chemistry_do_step(scale, minrung, t0, cosmos_dadt(scale), -1).first;
-		tm.stop();
-		PRINT("Took %e s\n", tm.read());
-	}
-
-	if (conduction) {
-
-		tnparams.h_wt = 1.001;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_BOXES;
-		tnparams.seti = SPH_SET_ALL;
-		tnparams.seto = SPH_SET_ALL;
-		tm.start();
-		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_NEIGHBORS");
-		sph_tree_neighbor(tnparams, root_id, vector<tree_id>()).get();
-		profiler_exit();
-		tm.stop();
-		tm.reset();
-		tm.start();
-		tnparams.seti = SPH_INTERACTIONS_IJ;
-		tnparams.run_type = SPH_TREE_NEIGHBOR_NEIGHBORS;
-		profiler_enter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
-		sph_tree_neighbor(tnparams, root_id, checklist).get();
-		profiler_exit();
-		tm.stop();
-		tm.reset();
-
-		timer dtm;
-		dtm.start();
-
-		sph_particles_reset_converged();
-
-		sparams.run_type = SPH_RUN_COND_INIT;
-		tm.reset();
-		tm.start();
-		sph_run(sparams, true);
-		tm.stop();
-		if (verbose)
-			PRINT("sph_run(SPH_RUN_COND_INIT): tm = %e \n", tm.read());
-		tm.reset();
-		cond_update_return err;
-		do {
-			sparams.run_type = SPH_RUN_CONDUCTION;
+		if (ascending || top) {
 			tm.reset();
 			tm.start();
-			sph_run(sparams, true);
+			domains_begin(levels[li]);
+			domains_end();
 			tm.stop();
-			err = sph_apply_conduction_update(minrung);
-			if (verbose)
-				PRINT("sph_run(SPH_RUN_CONDUCTION): tm = %e err_max = %e err_rms = %e\n", tm.read(), err.err_max, err.err_rms);
+//			PRINT("Domains took %e\n", tm.read());
+		}
+
+		if (!ascending) {
 			tm.reset();
-			sph_particles_cache_free_entr();
-		} while (err.err_max > SPH_DIFFUSION_TOLER1 || err.err_rms > SPH_DIFFUSION_TOLER2);
-		dtm.stop();
-		PRINT("Conduction took %e seconds total\n", dtm.read());
+			tm.start();
+			particles_sort_by_rung(levels[li]);
+			tm.stop();
+//			PRINT("Rung sort took %e\n", tm.read());
+		}
+		auto rng = particles_current_range();
+		parts_processed += rng.second - rng.first;
+		if (top && minrung == minrung0) {
+			auto counts = particles_rung_counts();
+			if (counts.size() > minrung0 + 1) {
+				const auto total = powf(get_options().parts_dim, NDIM);
+//				PRINT("Rungs\n");
+				for (int i = 0; i < counts.size(); i++) {
+//					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
+				}
+				size_t fast = 0;
+				size_t slow = counts[minrung0];
+				for (int i = minrung0 + 1; i < counts.size(); i++) {
+					fast += counts[i];
+				}
+				if (3 * fast > slow) {
+					clip_top = true;
+//					PRINT("------------------------------------\n");
+//					PRINT("Setting minimum level to %i\n", minrung + 1);
+//					PRINT("------------------------------------\n");
+				}
+			}
+		}
+
+		/*		if (ascending || top) {
+		 tm.reset();
+		 tm.start();
+		 const float dt = 0.5 * rung_dt[levels[li]] * t0;
+		 drift(scale, dt, tau, tau + dt, t0, levels[li]);
+		 tm.stop();
+		 PRINT("drift = %e\n", tm.read());
+		 }*/
+		tree_create_params tparams(levels[li], theta, 0.f);
+		tm.reset();
+		tm.start();
+		auto this_sr = tree_create(tparams);
+		tm.stop();
+//		PRINT("Tree create took %e\n", tm.read());
+		if (top) {
+			sr = this_sr;
+		}
+		kick_params kparams;
+		if (clip_top && levels[li] == minrung0 + 1) {
+			kparams.top = true;
+		} else {
+			kparams.top = top;
+		}
+		kparams.ascending = ascending || top;
+		if (clip_top && top) {
+			kparams.descending = false;
+		} else {
+			kparams.descending = !ascending || top;
+		}
+		kparams.node_load = flops_per_node / flops_per_particle;
+		kparams.gpu = true;
+		kparams.min_level = tparams.min_level;
+		kparams.save_force = get_options().save_force;
+		kparams.GM = get_options().GM;
+		kparams.eta = get_options().eta;
+		kparams.h = get_options().hsoft;
+		kparams.a = scale;
+		kparams.first_call = tau == 0.0;
+		kparams.min_rung = levels[li];
+		kparams.do_phi = do_phi && top;
+		kparams.t0 = t0;
+		kparams.theta = theta;
+		expansion<float> L;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		array<fixed32, NDIM> pos;
+		for (int dim = 0; dim < NDIM; dim++) {
+			pos[dim] = 0.f;
+		}
+		tree_id root_id;
+		root_id.proc = 0;
+		root_id.index = 0;
+		vector<tree_id> checklist;
+		checklist.push_back(root_id);
+		tm.reset();
+		tm.start();
+		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+		tm.stop();
+//		PRINT("Kick took %e\n", tm.read());
+		if (clip_top && top) {
+			particles_set_minrung(minrung0 + 1);
+		}
+		if (top) {
+			kr = this_kr;
+			energies->pot = kr.pot / scale;
+			energies->kin = kr.kin / sqr(scale);
+			energies->xmom = kr.xmom / scale;
+			energies->ymom = kr.ymom / scale;
+			energies->zmom = kr.zmom / scale;
+			energies->nmom = kr.nmom / scale;
+		}
+		if (clip_top && top) {
+			levels.push_back(minrung0 + 1);
+		} else if (!ascending || top) {
+			max_rung = this_kr.max_rung;
+			kr.max_rung = max_rung;
+			if (max_rung > levels[li]) {
+				levels.push_back(levels[li] + 1);
+			}
+		}
+		tm.stop();
+		if ((!ascending || top) && !(clip_top && top)) {
+			tm.reset();
+			tm.start();
+			const float dt = rung_dt[levels[li]] * t0;
+			drift(scale, dt, tau, tau + dt, t0, levels[li]);
+			tm.stop();
+			//PRINT("Drift took %e\n", tm.read());
+		}
+		tree_reset();
+		if (ascending && !top) {
+			particles_pop_rungs();
+		}
 	}
-
-	sph_tree_destroy(true);
-	sph_particles_cache_free2();
-//	PRINT( "%i\n", max_rung);
-	return kr;
-
-}
-
-std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double dadt, double t0, double theta, bool first_call, bool full_eval) {
-	timer tm;
-	tm.start();
-	PRINT("domains_begin\n");
-	domains_begin();
-	PRINT("domains_end \n");
-	domains_end();
-	tm.stop();
-	domain_time += tm.read();
-	tm.reset();
-	tm.start();
-	const bool sph = get_options().sph;
-	PRINT("Finding max smoothlen");
-//	const float h = sph ? std::max((float) sph_particles_max_smooth_len(), (float) get_options().hsoft) : get_options().hsoft;
-//ALWAYS_ASSERT(sph_particles_max_smooth_len() != INFINITY);
-	tree_create_params tparams(minrung, theta, 0.f);
-	PRINT("Create tree %i %e\n", minrung, theta);
-	profiler_enter("tree_create");
-	auto sr = tree_create(tparams);
+//	PRINT("done climbing kick ladder\n");
+	if (clip_top) {
+		minrung++;
+	}
+	total_time.stop();
+	int bucket_size = get_options().bucket_size;
+	if (timings.size() <= bucket_size) {
+		timings.resize(bucket_size + 1);
+	}
+	timings[bucket_size].nparts += parts_processed;
+	timings[bucket_size].time += total_time.read();
 	profiler_exit();
-	PRINT("gravity nactive = %i\n", sr.nactive);
-	const double load_max = sr.node_count * flops_per_node + std::pow(get_options().parts_dim, 3) * flops_per_particle;
-	const double load = (sr.active_nodes * flops_per_node + sr.nactive * flops_per_particle) / load_max;
-	tm.stop();
-	sort_time += tm.read();
-	tm.reset();
-	tm.start();
-//	PRINT("nactive = %li\n", sr.nactive);
-	kick_params kparams;
-	if (dadt != 0.0) {
-		kparams.max_dt = SCALE_DT * scale / fabs(dadt);
-	}
-	kparams.glass = get_options().glass;
-	kparams.node_load = flops_per_node / flops_per_particle;
-	kparams.gpu = true;
-	used_gpu = kparams.gpu;
-	kparams.min_level = tparams.min_level;
-	kparams.save_force = get_options().save_force;
-	kparams.GM = get_options().GM;
-	kparams.eta = get_options().eta;
-	kparams.h = get_options().hsoft;
-	kparams.a = scale;
-	kparams.first_call = first_call;
-	kparams.min_rung = minrung;
-	kparams.t0 = t0;
-	kparams.theta = theta;
-	expansion<float> L;
-	for (int i = 0; i < EXPANSION_SIZE; i++) {
-		L[i] = 0.0f;
-	}
-	array<fixed32, NDIM> pos;
-	for (int dim = 0; dim < NDIM; dim++) {
-		pos[dim] = 0.f;
-	}
-	tree_id root_id;
-	root_id.proc = 0;
-	root_id.index = 0;
-	vector<tree_id> checklist;
-	checklist.push_back(root_id);
-	PRINT("Do kick\n");
-	profiler_enter("kick");
-	kick_return kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr).get();
-	profiler_exit();
-	tm.stop();
-	kick_time += tm.read();
-	tree_destroy();
-	particles_cache_free();
-	kr.nactive = sr.nactive;
-	PRINT("kick done\n");
-	if (min_rung == 0) {
-		flops_per_node = kr.node_flops / sr.active_nodes;
-		flops_per_particle = kr.part_flops / kr.nactive;
-	}
-	kr.load = load;
 	return std::make_pair(kr, sr);
+
 }
 
 void do_power_spectrum(int num, double a) {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 	PRINT("Computing power spectrum\n");
 	const float h = get_options().hubble;
 	const float omega_m = get_options().omega_m;
@@ -578,7 +391,7 @@ void do_power_spectrum(int num, double a) {
 }
 
 void output_time_file() {
-	profiler_enter("FUNCTION");
+	profiler_enter(__FUNCTION__);
 	const double a0 = 1.0 / (1.0 + get_options().z0);
 	const double tau_max = cosmos_conformal_time(a0, 1.0);
 	double a = a0;
@@ -610,62 +423,56 @@ void output_time_file() {
 }
 
 void driver() {
-	const bool static sph = get_options().sph;
 	timer total_time;
 	total_time.start();
 	timer tmr;
 	tmr.start();
 	driver_params params;
-	const bool stars = get_options().stars;
+	timer buckets50;
+	timer buckets20;
+	timer buckets2;
+	int buckets[11] = {80,  112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
 	double a0 = 1.0 / (1.0 + get_options().z0);
-	drift_return dr;
-	const int glass = get_options().glass;
-	if (get_options().read_check) {
+	if (get_options().read_check != -1) {
 		params = read_checkpoint();
 	} else {
 		output_time_file();
-		if (glass) {
-//			PRINT("Glass not implemented\n");
-			//		abort();
-			initialize_glass();
-		} else {
-			initialize(get_options().z0);
-		}
+		initialize(get_options().z0);
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
-		domains_rebound();
-		params.eheat = 0;
 		params.step = 0;
 		params.flops = 0;
+		params.bucket_size = 80;
 		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		PRINT("TAU_MAX = %e\n", params.tau_max);
 		params.tau = 0.0;
 		params.a = a0;
+		params.adot = cosmos_dadt(a0);
 		params.max_rung = 0;
-		params.cosmicK = 0.0;
 		params.itime = 0;
 		params.iter = 0;
+		params.minrung0 = 0;
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 //		write_checkpoint(params);
-		dr = drift(a0, 0.0, 0.0, 0.0, 0.0);
-		PRINT("Initial etherm = %e\n", dr.therm);
 
 	}
-	PRINT("ekin0 = %e\n", dr.kin);
 	PRINT("tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
 	int& max_rung = params.max_rung;
 	auto& a = params.a;
+	auto& adot = params.adot;
 	auto& tau = params.tau;
 	auto& tau_max = params.tau_max;
-	auto& cosmicK = params.cosmicK;
-	auto& esum0 = params.esum0;
+	auto& energies = params.energies;
+	auto& energy0 = params.energy0;
+	auto& bucket_size = params.bucket_size;
 	auto& itime = params.itime;
+	auto& minrung0 = params.minrung0;
+	minrung0 = std::max(minrung0, get_options().minrung);
 	auto& iter = params.iter;
-	auto& eheat = params.eheat;
 	int& step = params.step;
 	auto& total_processed = params.total_processed;
 	auto& runtime = params.runtime;
@@ -682,7 +489,11 @@ void driver() {
 	}
 	double dt;
 	int jiter = 0;
+	if (tau == 0.0) {
+		particles_set_minrung(minrung0);
+	}
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
+		profiler_enter("light cone");
 		if (force || lc_time_to_flush(tau + dt, tau_max)) {
 			timer tm;
 			tm.start();
@@ -713,20 +524,37 @@ void driver() {
 			tm.stop();
 			PRINT( "Light cone flush took %e seconds\n", tm.read());
 		}
+		profiler_exit();
 	};
+	auto checkpointlist = read_checkpoint_list();
 	const float hsoft0 = get_options().hsoft;
+	bool do_check = false;
+	double checkz;
+	buckets50.start();
 	for (;; step++) {
+
+//		PRINT("STEP  = %i\n", step);
 		double t0 = tau_max / get_options().nsteps;
 		do {
-//			profiler_enter("main driver");
+			timer step_tm;
+			step_tm.start();
+			profiler_enter(__FUNCTION__);
 			tmr.stop();
-			if (tmr.read() > get_options().check_freq) {
+			if (tmr.read() > get_options().check_freq || do_check) {
 				total_time.stop();
 				runtime += total_time.read();
 				total_time.reset();
 				total_time.start();
+				PRINT("WRITING CHECKPOINT FOR Z = %e\n", checkz);
 				write_checkpoint(params);
 				tmr.reset();
+				if (do_check) {
+					char* cmd;
+					asprintf(&cmd, "mv checkpoint.%i checkpoint.z.%.1f\n", params.iter, checkz);
+					system(cmd);
+					free(cmd);
+				}
+				do_check = false;
 			}
 			tmr.start();
 			int minrung = min_rung(itime);
@@ -744,60 +572,106 @@ void driver() {
 					tm.start();
 					output_view(number, years);
 					tm.stop();
-					PRINT("View %i took %e \n", number, tm.read());
+//					PRINT("View %i took %e \n", number, tm.read());
 				}
 			}
-			double imbalance = domains_get_load_imbalance();
-			if (imbalance > MAX_LOAD_IMBALANCE) {
+			bool rebound = false;
+			if (tau == 0.0) {
+				rebound = true;
+			} else if (minrung == 0) {
+//				PRINT("Checking imbalance\n");
+				double imbalance = domains_get_load_imbalance();
+				rebound = (imbalance > MAX_LOAD_IMBALANCE);
+			}
+			if (rebound) {
+				PRINT("Doing rebound\n");
 				domains_rebound();
-				imbalance = domains_get_load_imbalance();
+				domains_begin(0);
+				domains_end();
+				PRINT("Rebound done\n");
 			}
 			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
-			if (!glass) {
-				if (z > 50.0) {
-					theta = 0.4;
-				} else if (z > 20.0) {
-					theta = 0.5;
-				} else if (z > 2.0) {
-					theta = 0.65;
-				} else {
-					theta = 0.8;
-				}
+			if (z > 50.0) {
+				theta = 0.3;
+			} else if (z > 20.0) {
+				theta = 0.5;
+			} else if (z > 2.0) {
+				theta = 0.65;
 			} else {
-				theta = 0.4;
+				theta = 0.8;
 			}
-
-			///		if (last_theta != theta) {
+			const auto ts = 100 * tau / t0 / get_options().nsteps;
+			if (ts <= 10.0) {
+				bucket_size = 112;
+			} else if (ts < 55.0) {
+				bucket_size = 112 + (ts - 10.0) / 45.0 * (184 - 112);
+			} else {
+				bucket_size = 184;
+			}
+			opts.bucket_size = bucket_size;
+			opts.theta = theta;
 			set_options(opts);
-////			}
 			last_theta = theta;
-			PRINT("Kicking\n");
-			const bool chem = get_options().chem;
-			double heating;
-			if (sph && !glass) {
-				sph_step1(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating);
+			std::pair<kick_return, tree_create_return> tmp;
+			int this_minrung = std::max(minrung, minrung0);
+			int om = this_minrung;
+//				PRINT("MINRUNG0 = %i\n", minrung0);
+//			PRINT( "Doing kick\n");
+			reset_flops();
+			tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval);
+			const double flops = flops_per_second();
+			reset_flops();
+
+			/*if (om == minrung0) {
+			 PRINT("-------------------------------------------------------------------------------\n");
+			 constexpr int target = 70;
+			 const double parts_per_node = pow(get_options().parts_dim, NDIM) / (tmp.second.leaf_count);
+			 PRINT("Changing bucket size from %i to ", bucket_size);
+			 bucket_size *= target / parts_per_node;
+			 PRINT(" %i\n", bucket_size);
+			 PRINT( "leafcount %i nodecount %i\n", tmp.second.leaf_count, tmp.second.node_count);
+			 PRINT("-------------------------------------------------------------------------------\n");
+
+			 }*/
+			if (om != this_minrung) {
+				minrung0++;
 			}
-			auto tmp = kick_step(minrung, a, a * cosmos_dadt(a), t0, theta, tau == 0.0, full_eval);
 			kick_return kr = tmp.first;
 			int max_rung0 = max_rung;
 			max_rung = kr.max_rung;
-			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
-			if (sph & !glass) {
-				max_rung = std::max(max_rung, sph_step2(minrung, a, tau, t0, 1, a * cosmos_dadt(a), max_rung, iter, dt, &heating).max_rung);
-				eheat -= a * heating;
+//			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
+			if (minrung <= 0) {
+				if (tau > 0.0) {
+					const double ene = 2.0 * (energies.kin) + energies.pot;
+					energies.cosmic += 0.5 * adot * t0 * ene;
+				}
+				double energy = (energies.kin + energies.pot) + energies.cosmic;
+				if (tau == 0) {
+					energy0 = 0.0;
+					energies.cosmic = -energy;
+					energy = 0.0;
+				}
+				const double norm = (energies.kin + fabs(energies.pot)) + energies.cosmic;
+				const double err = (energy - energy0) / norm;
+				FILE* fp = fopen("energy.txt", "at");
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
+						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.cosmic, err);
+				fclose(fp);
+				const double ene = 2.0 * (energies.kin) + energies.pot;
+				energies.cosmic += 0.5 * adot * t0 * ene;
 			}
+			dt = t0 / (1 << max_rung);
 			if (full_eval) {
 				view_output_views((tau + 1e-6 * t0) / t0, a);
 			}
 			tree_create_return sr = tmp.second;
-			PRINT("Done kicking\n");
+//			PRINT("Done kicking\n");
 			if (full_eval) {
-				kick_workspace::clear_buffers();
-				tree_destroy(true);
-				pot = kr.pot * 0.5 / a;
+//				kick_workspace::clear_buffers();
+//				tree_destroy(true);
 				if (get_options().do_power) {
 					do_power_spectrum(step, a);
 				}
@@ -807,80 +681,53 @@ void driver() {
 				}
 #endif
 			}
-			dt = t0 / (1 << max_rung);
-			const double dadt1 = a * cosmos_dadt(a);
-			const double a1 = a;
-			a += dadt1 * dt;
-			const double dadt2 = a * cosmos_dadt(a);
-			a += 0.5 * (dadt2 - dadt1) * dt;
-			const double dyears = 0.5 * (a1 + a) * dt * get_options().code_to_s / constants::spyr;
-			const double a2 = 2.0 / (1.0 / a + 1.0 / a1);
+			double adotdot;
+			double a0 = a;
+//			auto tmp1 = particles_sum_energies();
+//			energies.cosmic += adot * dt * energies.kin * a;
+			cosmos_update(adotdot, adot, a, a * dt);
+			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
+			const auto z0 = 1.0 / a0 - 1.0;
+			const auto z1 = 1.0 / a - 1.0;
+			for (auto& z : checkpointlist) {
+				if ((z - z0) * (z - z1) < 0.0) {
+					do_check = true;
+					checkz = z;
+				}
+			}
+
 //			PRINT("%e %e\n", a1, a);
 			timer dtm;
 			dtm.start();
-			PRINT("Drift\n");
-			dr = drift(a2, dt, tau, tau + dt, tau_max);
 			if (get_options().do_lc) {
 				check_lc(false);
 			}
-			PRINT("Drift done\n");
 			dtm.stop();
 			drift_time += dtm.read();
-			const double total_kinetic = dr.kin + dr.therm;
-			cosmicK += (total_kinetic) * (a - a1);
-			const double esum = (a * (pot + total_kinetic) + cosmicK + eheat);
-			if (tau == 0.0) {
-				esum0 = esum;
-			}
-			const double eerr = (esum - esum0) / (a * total_kinetic + a * std::abs(pot) + cosmicK + eheat);
 			FILE* textfp = fopen("progress.txt", "at");
 			if (textfp == nullptr) {
 				THROW_ERROR("unable to open progress.txt for writing\n");
 			}
-			if (full_eval) {
-				PRINT_BOTH(textfp,
-						"\n%10s %6s %10s %4s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %4s %4s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n",
-						"runtime", "i", "imbalance", "mind", "maxd", "ed", "ppnode", "appanode", "Z", "a", "timestep", "years", "vol", "pot", "kin", "therm",
-						"cosmicK", "pot err", "minr", "maxr", "active", "nmapped", "load", "dotime", "stime", "ktime", "drtime", "avg total", "pps", "GFLOPSins",
-						"GFLOPS");
-			}
 			iter++;
-			total_processed += kr.nactive;
 			timer remaining_time;
 			total_time.stop();
 			remaining_time.start();
 			runtime += total_time.read();
 			double pps = total_processed / runtime;
-			const auto total_flops = kr.node_flops + kr.part_flops + sr.flops + dr.flops;
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
-			params.flops += total_flops;
 			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
-			double act_pct = kr.nactive / nparts;
-			const double parts_per_node = nparts / sr.leaf_nodes;
-			const double active_parts_per_active_node = (double) kr.nactive / (double) sr.active_leaf_nodes;
-			const double effective_depth = std::log(sr.leaf_nodes) / std::log(2);
 			if (full_eval) {
-				FILE* fp = fopen("energy.txt", "at");
-				if (fp == NULL) {
-					THROW_ERROR("Unable to open energy.txt\n");
-				}
-				fprintf(fp, "%i %e %e %e %e %e %e %e %e %e\n", step, years, 1.0 / a - 1.0, a, a * pot, a * dr.kin, a * dr.therm, eheat, cosmicK, eerr);
-				fclose(fp);
+				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr",
+						"mxr", "bs", "Tflops", "time");
 			}
-			PRINT_BOTH(textfp,
-					"%10.3e %6li %10.3e %4i %4i %4.1f %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %4li %4li %9.2e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e %10.3e \n",
-					runtime, iter - 1, imbalance, sr.min_depth, sr.max_depth, effective_depth, parts_per_node, active_parts_per_active_node, z, a1, tau / t0, years,
-					dr.vol, a * pot, a * dr.kin, a * dr.therm, cosmicK, eerr, minrung, max_rung, act_pct, (double ) dr.nmapped, kr.load, domain_time, sort_time,
-					kick_time, drift_time, runtime / iter, (double ) kr.nactive / total_time.read(), total_flops / total_time.read() / (1024 * 1024 * 1024),
-					params.flops / 1024.0 / 1024.0 / 1024.0 / runtime);
+			step_tm.stop();
+			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
+					max_rung, bucket_size, flops * 1e-12, step_tm.read());
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
 			runtime += remaining_time.read();
 			total_time.start();
-			//	PRINT( "%e\n", total_time.read() - gravity_long_time - sort_time - kick_time - drift_time - domain_time);
-//			PRINT("%llx\n", itime);
-			PRINT("itime inc %i\n", max_rung);
 			itime = inc(itime, max_rung);
 			domain_time = 0.0;
 			sort_time = 0.0;
@@ -896,24 +743,22 @@ void driver() {
 				PRINT("Reached maximum iteration, exiting...\n");
 				break;
 			}
-//			profiler_exit();
-//			profiler_enter("main driver");
+			profiler_exit();
 			profiler_output();
+			profiler_enter(__FUNCTION__);
+			jiter++;
+			if (jiter > 100) {
+				//			abort();
+			}
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
 			break;
 		}
-		if (jiter > 50) {
-			break;
-		}
 	}
-	if (glass) {
-		if (glass == 1) {
-			particles_save_glass("glass_dm.bin");
-		} else {
-			particles_save_glass("glass_sph.bin");
-		}
-	}
+	buckets2.stop();
+	FILE* fp = fopen("buckets.txt", "at");
+	fprintf(fp, "%i %e %e %e\n", get_options().bucket_size, buckets50.read(), buckets20.read(), buckets2.read());
+	fclose(fp);
 	if (get_options().do_lc) {
 		check_lc(true);
 		particles_free();
@@ -933,47 +778,30 @@ bool dir_exists(const char *path) {
 }
 
 void write_checkpoint(driver_params params) {
-	profiler_enter("FUNCTION");
-	params.step--;
+	profiler_enter(__FUNCTION__);
+//	params.step--;
 	if (hpx_rank() == 0) {
 		PRINT("Writing checkpoint\n");
 		std::string command;
-		if (dir_exists("checkpoint.hello")) {
-			if (dir_exists("checkpoint.goodbye")) {
-				command = "rm -r checkpoint.goodbye\n";
-				if (system(command.c_str()) != 0) {
-					THROW_ERROR("Unable to execute %s\n", command.c_str());
-				}
-			}
-			command = "mv checkpoint.hello checkpoint.goodbye\n";
-			if (system(command.c_str()) != 0) {
-				THROW_ERROR("Unable to execute %s\n", command.c_str());
-			}
-		}
-		command = std::string("mkdir -p checkpoint.hello\n");
+		command = std::string("mkdir -p checkpoint.") + std::to_string(params.iter);
 		if (system(command.c_str()) != 0) {
 			THROW_ERROR("Unable to execute : %s\n", command.c_str());
 		}
 	}
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<write_checkpoint_action>(HPX_PRIORITY_HI, c, params));
+		futs.push_back(hpx::async<write_checkpoint_action>(c, params));
 	}
-//	futs.push_back(hpx::threads::run_as_os_thread([&]() {
-	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
+	const std::string fname = std::string("checkpoint.") + std::to_string(params.iter) + std::string("/checkpoint.") + std::to_string(hpx_rank())
+			+ std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "wb");
 	fwrite(&params, sizeof(driver_params), 1, fp);
 	particles_save(fp);
-//	PRINT( "parts saved\n");
 	domains_save(fp);
-//PRINT( "domains saved\n");
 	if (get_options().do_lc) {
 		lc_save(fp);
 	}
-//PRINT( "lc_saved\n");
 	fclose(fp);
-//	PRINT("closed\n");
-//	}));
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		PRINT("Done writing checkpoint\n");
@@ -988,9 +816,10 @@ driver_params read_checkpoint() {
 	}
 	vector<hpx::future<driver_params>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<read_checkpoint_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<read_checkpoint_action>(c));
 	}
-	const std::string fname = std::string("checkpoint.hello/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
+	const int iter = get_options().read_check;
+	const std::string fname = std::string("checkpoint.") + std::to_string(iter) + std::string("/checkpoint.") + std::to_string(hpx_rank()) + std::string(".dat");
 	FILE* fp = fopen(fname.c_str(), "rb");
 	if (fp == nullptr) {
 		THROW_ERROR("Unable to open %s for reading.\n", fname.c_str());

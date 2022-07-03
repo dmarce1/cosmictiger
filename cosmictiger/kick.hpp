@@ -20,118 +20,114 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
-#include <cosmictiger/stack_vector.hpp>
 #include <cosmictiger/tree.hpp>
-#include <cosmictiger/sph_particles.hpp>
 
 #include <atomic>
+
+#define KICK_C_MAX 32
 
 struct cuda_kick_data {
 	tree_node* tree_nodes;
 	fixed32* x;
 	fixed32* y;
 	fixed32* z;
-	char* type_snk;
-	part_int* cat_index_snk;
-	float* h_snk;
-	float* vx;
-	float* vy;
-	float* vz;
-	float* sph_gx;
-	float* sph_gy;
-	float* sph_gz;
-	float* star_gx;
-	float* star_gy;
-	float* star_gz;
-	part_int* cat_index;
-	char* type;
-	bool sph;
-	fixed32* x_snk;
-	fixed32* y_snk;
-	fixed32* z_snk;
+	array<float, NDIM>* vel;
 	char* rungs;
 	float* gx;
 	float* gy;
 	float* gz;
 	float* pot;
-	int source_size;
-	int sink_size;
-	int tree_size;
-	int rank;
 };
 
 struct kick_return;
 
 #ifdef __CUDACC__
+
+#include <cosmictiger/stack_vector.hpp>
+
+#define KICK_PP_MAX (32*29)
+
+struct expansion_type {
+	array<fixed32, NDIM> pos;
+	expansion<float> expansion;
+};
+
+struct search_params {
+	int self;
+	int phase;
+};
+
+struct force_type {
+	float gx;
+	float gy;
+	float gz;
+	float phi;
+};
+
 struct cuda_kick_shmem {
-	array<fixed32, BUCKET_SIZE> sink_x;
-	array<fixed32, BUCKET_SIZE> sink_y;
-	array<fixed32, BUCKET_SIZE> sink_z;
-	struct {
-		array<fixed32, KICK_PP_MAX> x;
-		array<fixed32, KICK_PP_MAX> y;
-		array<fixed32, KICK_PP_MAX> z;
-		array<char, KICK_PP_MAX> type;
-	}src;
-	array<float, BUCKET_SIZE> gx;
-	array<float, BUCKET_SIZE> gy;
-	array<float, BUCKET_SIZE> gz;
-	array<float, BUCKET_SIZE> phi;
-	array<part_int,BUCKET_SIZE> active;
-	array<char,BUCKET_SIZE> rungs;
+	union {
+		struct {
+			array<fixed32, KICK_PP_MAX> x;
+			array<fixed32, KICK_PP_MAX> y;
+			array<fixed32, KICK_PP_MAX> z;
+		}X;
+		array<multi_pos, KICK_C_MAX> mpos;
+	};
+	device_vector<force_type> f;
+	stack_vector<int> echecks;
+	stack_vector<int> dchecks;
+	device_vector<int> leaflist;
+	device_vector<int> closelist;
+	device_vector<int> cplist;
+	device_vector<int> cclist;
+	device_vector<int> pclist;
+	device_vector<int> nextlist;
+	device_vector<expansion_type> L;
+	device_vector<search_params> params;
+	barrier_type barrier;
+
 };
 #endif
 
 struct kick_return {
-	char max_rung;
-	double part_flops;
-	double node_flops;
+	int max_rung;
 	double pot;
-	double fx;
-	double fy;
-	double fz;
-	double fnorm;
-	double load;
-	size_t nactive;CUDA_EXPORT
+	double kin;
+	double xmom;
+	double ymom;
+	double zmom;
+	double nmom;
+
+	CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
-		part_flops = 0.0;
-		node_flops = 0.0;
 		pot = 0.0;
-		fx = 0.0;
-		fy = 0.0;
-		fz = 0.0;
-		fnorm = 0.0;
-		nactive = 0;
-		load = 0.0;
+		kin = 0.0;
+		xmom = ymom = zmom = nmom = 0.0;
 	}
 	CUDA_EXPORT
 	kick_return& operator+=(const kick_return& other) {
 		if (other.max_rung > max_rung) {
 			max_rung = other.max_rung;
 		}
-		part_flops += other.part_flops;
-		node_flops += other.node_flops;
 		pot += other.pot;
-		fx += other.fx;
-		fy += other.fy;
-		fz += other.fz;
-		fnorm += other.fnorm;
+		kin += other.kin;
+		xmom += other.xmom;
+		ymom += other.ymom;
+		zmom += other.zmom;
+		nmom += other.nmom;
 		return *this;
 
 	}
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & load;
 		arc & max_rung;
-		arc & part_flops;
-		arc & node_flops;
 		arc & pot;
-		arc & fx;
-		arc & fy;
-		arc & fz;
-		arc & fnorm;
-		arc & nactive;
+		arc & kin;
+		arc & xmom;
+		arc & ymom;
+		arc & zmom;
+		arc & nmom;
 	}
 };
 
@@ -144,25 +140,25 @@ struct kick_params {
 	float h;
 	float eta;
 	float GM;
-	float dm_mass;
-	float sph_mass;
 	bool save_force;
 	bool first_call;
 	bool gpu;
 	float node_load;
-	int glass;
 	float max_dt;
+	bool ascending;
+	bool descending;
+	bool top;
+	bool do_phi;
 	kick_params() {
-		dm_mass = get_options().dm_mass;
-		sph_mass = get_options().sph_mass;
-		glass = 0;
 		max_dt = 1e30;
+		do_phi = true;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & ascending;
+		arc & descending;
+		arc & top;
 		arc & max_dt;
-		arc & dm_mass;
-		arc & sph_mass;
 		arc & min_rung;
 		arc & gpu;
 		arc & a;
@@ -174,6 +170,8 @@ struct kick_params {
 		arc & GM;
 		arc & save_force;
 		arc & node_load;
+		arc & min_level;
+		arc & do_phi;
 	}
 };
 
@@ -188,13 +186,13 @@ struct kick_workitem {
 struct kick_workspace;
 
 #ifndef __CUDACC__
-hpx::future<kick_return> kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
+kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
 		std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
+void kick_set_rc(kick_return kr);
 #ifdef USE_CUDA
-vector<kick_return> cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, char*, tree_node*, vector<kick_workitem> workitems, cudaStream_t stream,
-		int part_count, int ntrees, std::function<void()>, std::function<void()>);
+kick_return cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems);
 #endif
 int kick_block_count();
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);

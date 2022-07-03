@@ -22,6 +22,7 @@
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/simd.hpp>
+#include <cosmictiger/flops.hpp>
 
 #include <atomic>
 
@@ -46,19 +47,25 @@ inline float rand_normal() {
 }
 
 template<class T>
-CUDA_EXPORT void constrain_range(T& x) {
+CUDA_EXPORT int constrain_range(T& x) {
+	int flops = 2;
 	if (x > T(1)) {
 		x -= T(1);
+		flops++;
 	}
 	if (x < T(0)) {
 		x += T(1);
+		flops++;
 	}
 	if (x > T(1)) {
 		PRINT("Print particle out of range %e\n", x);
+		ALWAYS_ASSERT(false);
 	}
 	if (x < T(0)) {
 		PRINT("Print particle out of range %e\n", x);
+		ALWAYS_ASSERT(false);
 	}
+	return flops;
 }
 
 #ifdef USE_CUDA

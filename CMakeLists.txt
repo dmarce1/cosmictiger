@@ -8,7 +8,7 @@ find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
-set(COSMICTIGER_WITH_ORDER "7" )
+set(COSMICTIGER_WITH_ORDER "8" )
 if( COSMICTIGER_WITH_CUDA ) 
 	enable_language(CUDA)
 	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
@@ -17,7 +17,7 @@ if( COSMICTIGER_WITH_CUDA )
 	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
 endif()
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math")
+set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math ")
 
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -48,16 +48,17 @@ set(cosmictiger_source_files
     src/bh.cpp
     src/bh.cu
     src/boltzmann.cpp
-    src/chemistry.cpp
-    src/chemistry.cu
  	src/cosmology.cpp
     src/cuda.cpp
     src/cuda_mem.cu
     src/drift.cpp
+    src/drift.cu
     src/driver.cpp
     src/domain.cpp
     src/ewald_indices.cpp
     src/ewald_indices.cu
+    src/flops.cpp
+    src/flops.cu
     src/fft.cpp
     src/gravity.cpp
     src/gravity.cu
@@ -65,13 +66,10 @@ set(cosmictiger_source_files
     src/groups.cpp
     src/group_entry.cpp
     src/groups_find.cpp
-    src/hydro.cpp
     src/initialize.cpp
     src/hpx.cpp
-    src/kernel.cu
     src/kick.cpp
     src/kick.cu
-    src/exact_sod.cpp
     src/kick_workspace.cpp
     src/lightcone.cpp
     src/main.cpp
@@ -83,21 +81,7 @@ set(cosmictiger_source_files
     src/profiler.cpp
     src/rockstar.cpp
     src/rockstar.cu
-    src/sedov.cpp
-    src/sph_particles.cpp
-    src/sph.cpp
-    src/sph.cu
-    src/sph_aux.cu
-    src/sph_cond_init.cu
-    src/sph_smoothlen.cu
-    src/sph_prehydro.cu
-    src/sph_conduction.cu
-    src/sph_hydro.cu
-    src/sph_rungs.cu
-    src/sphere.cu
-    src/sph_tree.cpp
     src/stack_trace.cpp
-    src/stars.cpp
     src/test.cpp
     src/tree.cpp
     src/view.cpp
@@ -111,7 +95,6 @@ set(cosmictiger_header_files
     cosmictiger/assert.hpp
     cosmictiger/bh.hpp
     cosmictiger/boltzmann.hpp
-    cosmictiger/chemistry.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
     cosmictiger/cosmology.hpp
@@ -119,6 +102,7 @@ set(cosmictiger_header_files
     cosmictiger/cuda_reduce.hpp
     cosmictiger/cuda_vector.hpp
     cosmictiger/defs.hpp
+    cosmictiger/device_vector.hpp
     cosmictiger/domain.hpp
     cosmictiger/drift.hpp
     cosmictiger/driver.hpp
@@ -129,17 +113,15 @@ set(cosmictiger_header_files
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
     cosmictiger/interp.hpp
+    cosmictiger/flops.hpp
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
     cosmictiger/group_entry.hpp
     cosmictiger/groups_find.hpp
     cosmictiger/hpx.hpp
-    cosmictiger/hydro.hpp
-    cosmictiger/kernel.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
     cosmictiger/lc_group_archive.hpp
-    cosmictiger/exact_sod.hpp
     cosmictiger/lightcone.hpp
     cosmictiger/math.hpp
     cosmictiger/memused.hpp
@@ -154,13 +136,8 @@ set(cosmictiger_header_files
     cosmictiger/safe_io.hpp
     cosmictiger/sedov.hpp
     cosmictiger/simd.hpp
-    cosmictiger/sph.hpp
-    cosmictiger/sph_cuda.hpp
-    cosmictiger/sph_particles.hpp
-    cosmictiger/sph_tree.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
-    cosmictiger/stars.hpp
     cosmictiger/test.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
@@ -188,21 +165,13 @@ add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tenso
 target_link_libraries( fmm_kernel_codegen PUBLIC dl )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
-set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
-set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
+#set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+#set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+#set_source_files_properties(./src/analytic.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
-set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
-set_source_files_properties(./src/chemistry.cu PROPERTIES COMPILE_FLAGS -maxrregcount=40)
+#set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 
-set_source_files_properties(./src/sph.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_smoothlen.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_prehydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_aux.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_cond_init.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_hydro.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_conduction.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-set_source_files_properties(./src/sph_rungs.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)

@@ -114,7 +114,6 @@ inline simd_float sin(const simd_float &x0) {						// 17
 	return res;
 }
 
-
 inline simd_float sinf(const simd_float &x0) {
 	return sin(x0);
 }
@@ -179,6 +178,16 @@ inline simd_float8 pow(const simd_float8& a, const simd_float8& b) {
 	return exp(log(a) * b);
 }
 
+
+inline simd_double8::simd_double8(const simd_int8& a) {
+	__m128i& v0 = *((__m128i*) &a.v);
+	__m128i& v1 = *((__m128i*) (((float*) &a.v) + 4));
+	v[0] = _mm256_cvtepi32_pd(v0);
+	v[1] = _mm256_cvtepi32_pd(v1);
+}
+
+
 #endif /* SIMD_HPP_ */
+
 
 #endif

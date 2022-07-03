@@ -42,7 +42,7 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	} else if (threadme) {
 		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || (self_ptr->proc_range.second - self_ptr->proc_range.first > 1)) {
+			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx_hardware_concurrency() || (self_ptr->proc_range.second - self_ptr->proc_range.first > 1)) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -55,7 +55,7 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	} else if (remote) {
 		ASSERT(self_ptr->proc_range.first >= 0);
 		ASSERT(self_ptr->proc_range.first < hpx_size());
-		rc = hpx::async<groups_find_action>(HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
+		rc = hpx::async<groups_find_action>( hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
 	} else {
 		rc = hpx::async([self,link_len] (vector<tree_id> checklist) {
 			auto rc = groups_find(self,std::move(checklist), link_len);

@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/gravity.hpp>
@@ -24,6 +24,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
 		double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);
+
+#define ANALYTIC_BLOCK_SIZE 256
 
 std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
 		const vector<fixed32>& sinkz) {
@@ -64,7 +66,8 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	const size_t parts_per_loop = (size_t) cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
 	int occupancy;
 	CUDA_CHECK(
-			cudaOccupancyMaxActiveBlocksPerMultiprocessor ( &occupancy, analytic_gravity_kernel,ANALYTIC_BLOCK_SIZE, sizeof(double)*(NDIM+1)*ANALYTIC_BLOCK_SIZE ));
+			cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analytic_gravity_kernel, ANALYTIC_BLOCK_SIZE,
+					sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
 	int num_kernels = std::max((int) (occupancy * cuda_smp_count() / Nsinks), 1);
 	vector<cudaStream_t> streams(num_kernels);
 	for (int i = 0; i < num_kernels; i++) {
@@ -100,9 +103,9 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 		rc.second[dim].resize(Nsinks);
 	}
 	CUDA_CHECK(cudaMemcpy(rc.first.data(), dev_phi, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(rc.second[XDIM].data(),dev_gx,sizeof(double)*Nsinks,cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(rc.second[YDIM].data(),dev_gy,sizeof(double)*Nsinks,cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(rc.second[ZDIM].data(),dev_gz,sizeof(double)*Nsinks,cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(rc.second[XDIM].data(), dev_gx, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(rc.second[YDIM].data(), dev_gy, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(rc.second[ZDIM].data(), dev_gz, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
 	CUDA_CHECK(cudaFree(dev_phi));
 	CUDA_CHECK(cudaFree(dev_gx));
 	CUDA_CHECK(cudaFree(dev_gy));
@@ -127,8 +130,10 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-	float h2 = 4.f * h * h;
-	float hinv = 1.0 / (2.f * h);
+	const float cons1 = float(4.0f / sqrtf(M_PI));
+	float h2 = h * h;
+	float hinv = 1.0 / (h);
+	float h2inv = 1.0 / h2;
 	float h3inv = hinv * hinv * hinv;
 	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
 	for (int sourcei = tid; sourcei < Nsource; sourcei += ANALYTIC_BLOCK_SIZE) {
@@ -136,7 +141,11 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 		const float Y = distance(y, sourcey[sourcei]);
 		const float Z = distance(z, sourcez[sourcei]);
 		const float R2 = sqr(X, Y, Z);
-		if (R2 > h2) {
+		float fx = 0.f;
+		float fy = 0.f;
+		float fz = 0.f;
+		float pot = 0.f;
+		if (R2 > 0.f) {
 			for (int xi = -4; xi <= +4; xi++) {
 				for (int yi = -4; yi <= +4; yi++) {
 					for (int zi = -4; zi <= +4; zi++) {
@@ -149,15 +158,16 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 							const float rinv = 1.f / r;
 							const float r2inv = rinv * rinv;
 							const float r3inv = r2inv * rinv;
-							const float exp0 = expf(-4.f * r2);
-							const float erfc0 = erfcf(2.f * r);
-							const float expfactor = float(4.0f / sqrt(M_PI)) * r * exp0;
+							float exp0;
+							float erfc0;
+							erfcexp(2.f * r, &erfc0, &exp0);
+							const float expfactor = cons1 * r * exp0;
 							const float d0 = -erfc0 * rinv;
 							const float d1 = (expfactor + erfc0) * r3inv;
-							phi[tid] += d0;
-							gx[tid] -= dx * d1;
-							gy[tid] -= dy * d1;
-							gz[tid] -= dz * d1;
+							pot += d0;
+							fx -= dx * d1;
+							fy -= dy * d1;
+							fz -= dz * d1;
 						}
 					}
 				}
@@ -173,36 +183,39 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 						if (h2 > 0.0f && h2 <= 8) {
 							const float hdotx = X * hx + Y * hy + Z * hz;
 							const float omega = float(2.0 * M_PI) * hdotx;
-							const float c = cosf(omega);
-							const float s = sinf(omega);
+							float c, s;
+							sincosf(omega, &s, &c);
 							const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
 							const float c1 = -s * 2.0 * M_PI * c0;
-							phi[tid] += c0 * c;
-							gx[tid] -= c1 * hx;
-							gy[tid] -= c1 * hy;
-							gz[tid] -= c1 * hz;
+							pot += c0 * c;
+							fx -= c1 * hx;
+							fy -= c1 * hy;
+							fz -= c1 * hz;
 						}
 					}
 				}
 			}
-		} else {
-			float rinv, rinv3;
-			const float q = sqrtf(R2) * hinv;
-			const float q2 = q * q;
-			rinv3 = +15.0f / 8.0f;
-			rinv3 = fmaf(rinv3, q2, -21.0f / 4.0f);
-			rinv3 = fmaf(rinv3, q2, +35.0f / 8.0f);
-			rinv3 *= h3inv;
-			rinv = -5.0f / 16.0f;
-			rinv = fmaf(rinv, q2, 21.0f / 16.0f);
-			rinv = fmaf(rinv, q2, -35.0f / 16.0f);
-			rinv = fmaf(rinv, q2, 35.0f / 16.0f);
-			rinv *= hinv;
-			gx[tid] -= X * rinv3;
-			gy[tid] -= Y * rinv3;
-			gz[tid] -= Z * rinv3;
-			phi[tid] -= rinv;
 		}
+		if (R2 == 0.f) {
+			phi[tid] += 2.837291f;
+			phi[tid] -= 15.0f / 8.0f * hinv;
+		} else if (R2 < h2) {
+			const float q2 = R2 * h2inv;
+			const float R = sqrtf(R2);
+			float rinv3 = fmaf(q2, -1.5f, 2.5f) * h3inv - 1.f / (R2 * R);
+			float rinv1 = fmaf(q2, float(3.0f / 8.0f), -float(5.f / 4.f));
+			rinv1 = fmaf(q2, rinv1, float(15.0f / 8.0f));
+			rinv1 *= hinv;
+			rinv1 -= 1.f / R;
+			fx -= X * rinv3;
+			fy -= Y * rinv3;
+			fz -= Z * rinv3;
+			pot -= rinv1;
+		}
+		phi[tid] += pot;
+		gx[tid] += fx;
+		gy[tid] += fy;
+		gz[tid] += fz;
 	}
 	__syncthreads();
 	for (int P = ANALYTIC_BLOCK_SIZE / 2; P >= 1; P /= 2) {

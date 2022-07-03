@@ -67,11 +67,11 @@ void groups_cull() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async<groups_cull_action>(HPX_PRIORITY_HI, c));
+		futs1.push_back(hpx::async<groups_cull_action>( c));
 	}
 	std::unordered_set<group_int> final_existing;
 	mutex_type mutex;
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs2.push_back(hpx::async([proc,nthreads,&mutex,&final_existing]() {
 			std::unordered_map<int,vector<group_int>> map;
@@ -146,7 +146,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 
 	vector<hpx::future<std::pair<size_t, size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_save_action>(HPX_PRIORITY_HI, c, number, scale, time));
+		futs.push_back(hpx::async<groups_save_action>( c, number, scale, time));
 	}
 
 	const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."
@@ -156,7 +156,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 		THROW_ERROR("Unable to open %s\n", fname.c_str());
 	}
 	if (groups.size()) {
-		hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
+		hpx::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
 			return a.id < b.id;
 		}).get();
 	}
@@ -180,9 +180,9 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 void groups_reduce(double scale_factor) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_reduce_action>(HPX_PRIORITY_HI, c, scale_factor));
+		futs.push_back(hpx::async<groups_reduce_action>( c, scale_factor));
 	}
-	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx::thread::hardware_concurrency();
+	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx_hardware_concurrency();
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale_factor;
 	for (int proc = 0; proc < nthreads; proc++) {
@@ -379,7 +379,7 @@ void groups_reduce(double scale_factor) {
 
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries) {
 	vector<hpx::future<void>> futs;
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([nthreads,proc,&entries]() {
 					for( int i = proc; i < entries.size(); i+= nthreads) {
@@ -397,9 +397,9 @@ void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>
 void groups_add_particles(int wave, double scale) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_add_particles_action>(HPX_PRIORITY_HI, c, wave, scale));
+		futs.push_back(hpx::async<groups_add_particles_action>( c, wave, scale));
 	}
-	const int nthreads = hpx::thread::hardware_concurrency();
+	const int nthreads = hpx_hardware_concurrency();
 	spinlock_type mutex;
 	const float ainv = 1.0 / scale;
 	for (int proc = 0; proc < nthreads; proc++) {

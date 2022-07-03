@@ -21,6 +21,7 @@
 #define CUDA_REDUCE_HPP_
 
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/containers.hpp>
 
 #ifdef __CUDACC__
 
@@ -41,10 +42,39 @@ __device__ inline void compute_indices(int& index, int& total) {
 	}
 }
 
+template<int N>
+__device__ inline void compute_indices_array(array<int,N>& indices, array<int,N>& total) {
+	const int& tid = threadIdx.x;
+	for( int n = 0; n < N; n++) {
+		for (int P = 1; P < WARP_SIZE; P *= 2) {
+			auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], P);
+			if (tid >= P) {
+				indices[n] += tmp;
+			}
+		}
+		total[n] = __shfl_sync(0xFFFFFFFF, indices[n], WARP_SIZE - 1);
+		auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], 1);
+		if (tid >= 1) {
+			indices[n] = tmp;
+		} else {
+			indices[n] = 0;
+		}
+	}
+}
+
 template<class T>
 __device__ inline void shared_reduce_add(T& number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		number += __shfl_xor_sync(0xffffffff, number, P);
+	}
+}
+
+template<class T, int N>
+__device__ inline void shared_reduce_add_array(array<T, N>& number) {
+	for (int P = warpSize / 2; P >= 1; P /= 2) {
+		for( int n = 0; n < N; n++ ) {
+			number[n] += __shfl_xor_sync(0xffffffff, number[n], P);
+		}
 	}
 }
 
@@ -64,7 +94,7 @@ __device__ inline void shared_reduce_add(T& number) {
 		if (inbr < BLOCK_SIZE) {
 			t = sum[tid] + sum[inbr];
 		} else {
-			t = sum[tid] ;
+			t = sum[tid];
 		}
 		__syncthreads();
 		sum[tid] = t;

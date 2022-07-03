@@ -1,22 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef SIMD_FLOAT_HPP_
 #define SIMD_FLOAT_HPP_
@@ -34,7 +33,7 @@ public:
 	}
 	simd_float4(simd_int4 a);
 	simd_float4(float a) {
-		v = _mm_set_ps(a, a, a, a);
+		v = _mm_broadcast_ss(&a);
 	}
 	float& operator[](int i) {
 		return v[i];
@@ -170,7 +169,7 @@ inline simd_float4 fmaf(const simd_float4& a, const simd_float4& b, const simd_f
 	simd_float4 d;
 #ifdef USE_AVX
 	return a * b + c;
-	#else
+#else
 	d.v = _mm_fmadd_ps(a.v, b.v, c.v);
 #endif
 	return d;
@@ -258,9 +257,9 @@ public:
 		v[0] = _mm_set_ps(a4, a3, a2, a1);
 		v[1] = _mm_set_ps(a8, a7, a6, a5);
 	}
-	simd_float8(float a) {
-		v[0] = _mm_set_ps(a, a, a, a);
-		v[1] = _mm_set_ps(a, a, a, a);
+	inline simd_float8(float a) {
+		v[0] = _mm_broadcast_ss(&a);
+		v[1] = _mm_broadcast_ss(&a);
 	}
 	float& operator[](int i) {
 		return v[i/4][i%4];
@@ -401,6 +400,10 @@ inline simd_float8 max(const simd_float8& a, const simd_float8& b) {
 	return c;
 }
 
+inline simd_float8 fmaxf(const simd_float8& a, const simd_float8& b) {
+	return max(a,b);
+}
+
 inline simd_float8 min(const simd_float8& a, const simd_float8& b) {
 	simd_float8 c;
 	c.v[0] = _mm_min_ps(a.v[0], b.v[0]);
@@ -424,7 +427,112 @@ inline simd_float8 fmaf(const simd_float8& a, const simd_float8& b, const simd_f
 
 #endif
 
+class simd_int8;
+
 #if defined(USE_AVX2) || defined(USE_AVX512)
+
+class alignas(sizeof(__m256d)) simd_double8 {
+	__m256d v[2];
+public:
+	friend class simd_int8;
+	inline simd_double8(const simd_int8&);
+	simd_double8() = default;
+	inline double& operator[](int i) {
+		return v[i/4][i%4];
+	}
+	inline double operator[](int i) const {
+		return v[i/4][i%4];
+	}
+	inline simd_double8(double a) {
+		v[0] = _mm256_set_pd(a, a, a, a);
+		v[1] = _mm256_set_pd(a, a, a, a);
+	}
+	inline simd_double8 operator+(const simd_double8& other) const {
+		simd_double8 c;
+		c.v[0] = _mm256_add_pd(v[0], other.v[0]);
+		c.v[1] = _mm256_add_pd(v[1], other.v[1]);
+		return c;
+	}
+	inline simd_double8 operator-(const simd_double8& other) const {
+		simd_double8 c;
+		c.v[0] = _mm256_sub_pd(v[0], other.v[0]);
+		c.v[1] = _mm256_sub_pd(v[1], other.v[1]);
+		return c;
+	}
+	inline simd_double8 operator*(const simd_double8& other) const {
+		simd_double8 c;
+		c.v[0] = _mm256_mul_pd(v[0], other.v[0]);
+		c.v[1] = _mm256_mul_pd(v[1], other.v[1]);
+		return c;
+	}
+	inline simd_double8 operator/(const simd_double8& other) const {
+		simd_double8 c;
+		c.v[0] = _mm256_div_pd(v[0], other.v[0]);
+		c.v[1] = _mm256_div_pd(v[1], other.v[1]);
+		return c;
+	}
+	inline simd_double8 operator-() const {
+		simd_double8 c(0.0);
+		c.v[0] = _mm256_sub_pd(c.v[0], v[0]);
+		c.v[1] = _mm256_sub_pd(c.v[1], v[1]);
+		return c;
+	}
+	inline simd_double8 operator+=(const simd_double8& other) {
+		v[0] = _mm256_add_pd(v[0], other.v[0]);
+		v[1] = _mm256_add_pd(v[1], other.v[1]);
+		return *this;
+	}
+	inline simd_double8 operator-=(const simd_double8& other) {
+		v[0] = _mm256_sub_pd(v[0], other.v[0]);
+		v[1] = _mm256_sub_pd(v[1], other.v[1]);
+		return *this;
+	}
+	inline simd_double8 operator*=(const simd_double8& other) {
+		v[0] = _mm256_mul_pd(v[0], other.v[0]);
+		v[1] = _mm256_mul_pd(v[1], other.v[1]);
+		return *this;
+	}
+	inline simd_double8 operator/=(const simd_double8& other) {
+		v[0] = _mm256_div_pd(v[0], other.v[0]);
+		v[1] = _mm256_div_pd(v[1], other.v[1]);
+		return *this;
+	}
+	friend inline simd_double8 max(const simd_double8& a, const simd_double8& b) {
+		simd_double8 c;
+		c.v[0] = _mm256_max_pd(a.v[0], b.v[0]);
+		c.v[1] = _mm256_max_pd(a.v[1], b.v[1]);
+		return c;
+	}
+
+	friend inline simd_double8 min(const simd_double8& a, const simd_double8& b) {
+		simd_double8 c;
+		c.v[0] = _mm256_min_pd(a.v[0], b.v[0]);
+		c.v[1] = _mm256_min_pd(a.v[1], b.v[1]);
+		return c;
+	}
+
+	inline simd_double8 operator<(const simd_double8& other) const {
+		simd_double8 rc;
+		static const simd_double8 one(1.0);
+		auto mask0 = _mm256_cmp_pd(v[0], other.v[0], _CMP_LT_OQ);
+		auto mask1 = _mm256_cmp_pd(v[1], other.v[1], _CMP_LT_OQ);
+		rc.v[0] = _mm256_and_pd(mask0, one.v[0]);
+		rc.v[1] = _mm256_and_pd(mask1, one.v[1]);
+		return rc;
+	}
+
+	inline simd_double8 operator>(const simd_double8& other) const {
+		simd_double8 rc;
+		static const simd_double8 one(1.0);
+		auto mask0 = _mm256_cmp_pd(v[0], other.v[0], _CMP_GT_OQ);
+		auto mask1 = _mm256_cmp_pd(v[1], other.v[1], _CMP_GT_OQ);
+		rc.v[0] = _mm256_and_pd(mask0, one.v[0]);
+		rc.v[1] = _mm256_and_pd(mask1, one.v[1]);
+		return rc;
+	}
+
+	friend class simd_float8;
+};
 
 #define SIMD_FLOAT8_SIZE 8
 
@@ -435,16 +543,22 @@ class alignas(sizeof(__m256)) simd_float8 {
 public:
 	simd_float8() = default;
 	simd_float8(simd_int8 a);
-	simd_float8(float a1, float a2, float a3, float a4, float a5, float a6, float a7, float a8) {
+	inline simd_float8(float a1, float a2, float a3, float a4, float a5, float a6, float a7, float a8) {
 		v = _mm256_set_ps(a8, a7, a6, a5, a4, a3, a2, a1);
 	}
-	simd_float8(float a) {
-		v = _mm256_set_ps(a, a, a, a, a, a, a, a);
+	inline simd_float8(float a) {
+		v = _mm256_broadcast_ss(&a);
 	}
-	float& operator[](int i) {
+	inline simd_float8(simd_double8 a) {
+		__m128& v0 = (__m128&) v;
+		__m128& v1 = *((__m128*)((float*)(&v)+4));
+		v0 = _mm256_cvtpd_ps(a.v[0]);
+		v1 = _mm256_cvtpd_ps(a.v[1]);
+	}
+	inline float& operator[](int i) {
 		return v[i];
 	}
-	float operator[](int i) const {
+	inline float operator[](int i) const {
 		return v[i];
 	}
 	inline simd_float8 operator+(const simd_float8& other) const {
@@ -497,42 +611,42 @@ public:
 		const simd_float8 other = 1.0 / d;
 		return *this * other;
 	}
-	float sum() const {
+	inline float sum() const {
 		__m128 vsum;
 		__m128& a = *(((__m128*) &v) + 0);
 		__m128& b = *(((__m128*) &v) + 1);
 		vsum = _mm_add_ps(a, b);
 		return vsum[0] + vsum[1] + vsum[2] + vsum[3];
 	}
-	simd_float8 operator<=(const simd_float8& other) const {
+	inline simd_float8 operator<=(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_LE_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	simd_float8 operator<(const simd_float8& other) const {
+	inline simd_float8 operator<(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_LT_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	simd_float8 operator>(const simd_float8& other) const {
+	inline simd_float8 operator>(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_GT_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	simd_float8 operator>=(const simd_float8& other) const {
+	inline simd_float8 operator>=(const simd_float8& other) const {
 		simd_float8 rc;
 		static const simd_float8 one(1);
 		auto mask0 = _mm256_cmp_ps(v, other.v, _CMP_GE_OQ);
 		rc.v = _mm256_and_ps(mask0, one.v);
 		return rc;
 	}
-	float max() const {
+	inline float max() const {
 		float mx = v[0];
 		for( int i = 1; i < SIMD_FLOAT8_SIZE; i++) {
 			mx = std::max(mx, v[i]);
@@ -547,7 +661,6 @@ public:
 	friend inline simd_float8 fmaf(const simd_float8&, const simd_float8&, const simd_float8&);
 	friend class simd_int8;
 	friend simd_float8 log2(const simd_float8& a);
-
 
 };
 
@@ -798,4 +911,7 @@ inline simd_float16 fmaf(const simd_float16& a, const simd_float16& b, const sim
 
 #endif
 
+inline simd_float8 fmaxf(simd_float8 a, simd_float8 b) {
+	return max(a, b);
+}
 #endif /* SIMD_FLOAT_HPP_ */

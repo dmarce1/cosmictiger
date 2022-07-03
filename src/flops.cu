@@ -17,28 +17,27 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#ifndef TIME_HPP_
-#define TIME_HPP_
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/cuda_reduce.hpp>
 
-#include <cstdint>
+static __managed__ double gpu_flops = 0.0;
 
-using rung_type = std::int8_t;
-using time_type = std::uint64_t;
-
-inline time_type inc(time_type t, rung_type max_rung) {
-	if (max_rung > 0) {
-		t += (time_type(1) << time_type(64 - max_rung));
-	}
-	return t;
+void reset_gpu_flops() {
+	gpu_flops = 0.0;
 }
 
-inline rung_type min_rung(time_type t) {
-	rung_type min_rung = 64;
-	while (((t & 1) == 0) && (min_rung != 0)) {
-		min_rung--;
-		t >>= 1;
-	}
-	return min_rung;
+double get_gpu_flops() {
+	return gpu_flops;
 }
 
-#endif /* TIME_HPP_ */
+__device__
+void add_gpu_flops(int count) {
+#ifdef COUNT_FLOPS
+	const int& tid = threadIdx.x;
+	int total = count;
+	shared_reduce_add(count);
+	if (tid == 0) {
+		atomicAdd(&gpu_flops, (double) count);
+	}
+#endif
+}

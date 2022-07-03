@@ -22,8 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <string>
 
 struct options {
-	bool sph;
-	bool yreflect;
+	int bucket_size;
 	bool cuda;
 	bool save_force;
 	bool do_lc;
@@ -31,39 +30,26 @@ struct options {
 	bool do_groups;
 	bool do_tracers;
 	bool do_slice;
-	int visc_type;
 	bool do_views;
-	bool stars;
 	bool twolpt;
 	bool use_power_file;
-	bool read_check;
-	bool chem;
-	bool conduction;
-	bool gravity;
-	bool use_glass;
-	int glass;
+	int read_check;
 	int tracer_count;
-	double kernel;
 	int parts_dim;
 	int tree_cache_line_size;
+	int tree_alloc_line_size;
 	int part_cache_line_size;
 	int check_freq;
 	int max_iter;
+	int minrung;
 	int view_size;
 	int lc_min_group;
 	int lc_map_size;
 	int min_group;
 	int slice_res;
-	bool diffusion;
 	int nsteps;
-	int sph_bucket_size;
-	double alpha0;
-	double alpha1;
-	double beta;
-	double alpha_decay;
 	double lc_b;
 	double slice_size;
-	double neighbor_number;
 	double link_len;
 	double hsoft;
 	double GM;
@@ -71,8 +57,6 @@ struct options {
 	double code_to_s;
 	double code_to_cm;
 	double code_to_g;
-	double damping;
-	double sigma8_c;
 	double omega_m;
 	double omega_r;
 	double z0;
@@ -81,6 +65,7 @@ struct options {
 	double sigma8;
 	double theta;
 	double omega_b;
+	double omega_lam;
 	double omega_c;
 	double omega_gam;
 	double omega_nu;
@@ -88,43 +73,16 @@ struct options {
 	double ns;
 	double Y0;
 	double Neff;
-	double dm_mass;
-	double sph_mass;
-	double cfl;
-	double rho0_b;
-	double rho0_c;
-	double gamma;
-	double gy;
-	double gcentral;
-	double hcentral;
+	double omega_k;
 	std::string config_file;
 	std::string test;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
-		arc & damping;
-		arc & alpha0;
-		arc & alpha1;
-		arc & beta;
-		arc & alpha_decay;
-		arc & use_glass;
-		arc & gcentral;
-		arc & hcentral;
-		arc & gy;
-		arc & yreflect;
-		arc & gamma;
-		arc & conduction;
-		arc & gravity;
-		arc & glass;
-		arc & rho0_b;
-		arc & rho0_c;
-		arc & stars;
-		arc & chem;
-		arc & diffusion;
-		arc & neighbor_number;
-		arc & kernel;
-		arc & cfl;
-		arc & sph;
+		arc & minrung;
+		arc & omega_k;
+		arc & omega_lam;
+		arc & bucket_size;
 		arc & nsteps;
 		arc & cuda;
 		arc & do_lc;
@@ -132,7 +90,6 @@ struct options {
 		arc & do_power;
 		arc & do_groups;
 		arc & do_tracers;
-		arc & sph_bucket_size;
 		arc & do_slice;
 		arc & do_views;
 		arc & twolpt;
@@ -140,6 +97,7 @@ struct options {
 		arc & tracer_count;
 		arc & parts_dim;
 		arc & tree_cache_line_size;
+		arc & tree_alloc_line_size;
 		arc & part_cache_line_size;
 		arc & read_check;
 		arc & check_freq;
@@ -165,7 +123,6 @@ struct options {
 		arc & z1;
 		arc & hubble;
 		arc & sigma8;
-		arc & sigma8_c;
 		arc & omega_b;
 		arc & omega_c;
 		arc & omega_gam;
@@ -176,8 +133,6 @@ struct options {
 		arc & Neff;
 		arc & config_file;
 		arc & test;
-		arc & dm_mass;
-		arc & sph_mass;
 	}
 };
 

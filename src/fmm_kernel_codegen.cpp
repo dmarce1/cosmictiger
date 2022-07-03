@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #define CODE_GEN_CPP
 #include <cosmictiger/defs.hpp>
@@ -35,6 +35,10 @@ void deindent() {
 	ntab--;
 }
 
+int sym_index(int l, int m, int n) {
+	return (l + m + n) * (l + m + n + 1) * ((l + m + n) + 2) / 6 + (m + n) * ((m + n) + 1) / 2 + n;
+}
+
 template<class ...Args>
 void tprint(const char* str, Args&&...args) {
 	for (int i = 0; i < ntab; i++) {
@@ -52,10 +56,11 @@ void tprint(const char* str) {
 
 int compute_dx(int P, const char* name = "X", bool trless = false) {
 	array<int, NDIM> n;
-	tprint("const T x000 = T(1);\n");
-	tprint("const T& x100 = %s[0];\n", name);
-	tprint("const T& x010 = %s[1];\n", name);
-	tprint("const T& x001 = %s[2];\n", name);
+	tprint("T x[%i];\n", (P + 1) * P * (P + 2) / 6);
+	tprint("x[%i] = T(1);\n", sym_index(0, 0, 0));
+	tprint("x[%i] = %s[0];\n", sym_index(1, 0, 0), name);
+	tprint("x[%i] = %s[1];\n", sym_index(0, 1, 0), name);
+	tprint("x[%i] = %s[2];\n", sym_index(0, 0, 1), name);
 	int flops = 0;
 	for (int n0 = 2; n0 < P; n0++) {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
@@ -77,7 +82,7 @@ int compute_dx(int P, const char* name = "X", bool trless = false) {
 				}
 				array<int, NDIM> k;
 				k = n - j;
-				tprint("const T x%i%i%i = x%i%i%i * x%i%i%i;\n", n[0], n[1], n[2], k[0], k[1], k[2], j[0], j[1], j[2]);
+				tprint("x[%i] = x[%i] * x[%i];\n", sym_index(n[0], n[1], n[2]), sym_index(k[0], k[1], k[2]), sym_index(j[0], j[1], j[2]));
 				flops++;
 			}
 		}
@@ -87,10 +92,6 @@ int compute_dx(int P, const char* name = "X", bool trless = false) {
 
 int trless_index(int l, int m, int n, int Q) {
 	return (l + m) * ((l + m) + 1) / 2 + (m) + (Q * (Q + 1) / 2) * (n == 1) + (Q * Q) * (n == 2);
-}
-
-int sym_index(int l, int m, int n) {
-	return (l + m + n) * (l + m + n + 1) * ((l + m + n) + 2) / 6 + (m + n) * ((m + n) + 1) / 2 + n;
 }
 
 int compute_dx_tensor(int P, const char* name = "X") {
@@ -195,13 +196,14 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							char* str;
 							if (first) {
 								if (close21(factor)) {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = -%s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = -%s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = T(%.9e) * %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor, iname.c_str(), p[0],
-											p[1], p[2]);
+									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = T(%.9e) * %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor, iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 									flops++;
 								}
 								asn.push_back(str);
@@ -209,14 +211,14 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 								free(str);
 							} else {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i += %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s_%i_%i_%i%i%i += %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i -= %s%i%i%i;\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s_%i_%i_%i%i%i -= %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
-											iname.c_str(), p[0], p[1], p[2], iname.c_str(), n0, m0, j[0], j[1], j[2]);
+									ASPRINTF(&str, "%s_%i_%i_%i%i%i = fmaf(T(%.9e), %s[%i], %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
+											iname.c_str(), sym_index(p[0], p[1], p[2]), iname.c_str(), n0, m0, j[0], j[1], j[2]);
 									flops += 2;
 								}
 								op.push_back(str);
@@ -264,23 +266,28 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							if (first) {
 								if (m0 > 0) {
 									if (close21(factor)) {
-										ASPRINTF(&str, "%s%i%i%i = %s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), n0, m0, p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0], p[1],
+												p[2]);
 									} else if (close21(-factor)) {
-										ASPRINTF(&str, "%s%i%i%i = -%s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), n0, m0, p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = -%s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+												p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i = T(%.9e) * %s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), n0, m0, p[0],
-												p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = T(%.9e) * %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+												n0, m0, p[0], p[1], p[2]);
 										flops++;
 									}
 								} else {
 									if (close21(factor)) {
-										ASPRINTF(&str, "%s%i%i%i = %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+												sym_index(p[0], p[1], p[2]));
 									} else if (close21(-factor)) {
-										ASPRINTF(&str, "%s%i%i%i = -%s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = -%s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+												sym_index(p[0], p[1], p[2]));
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i = T(%.9e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+												sym_index(p[0], p[1], p[2]));;
 										flops++;
 									}
 								}
@@ -290,28 +297,32 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							} else {
 								if (close21(factor)) {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s%i%i%i += %s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), n0, m0, p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] += %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+												p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i += %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] += %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+												sym_index(p[0], p[1], p[2]));
 										flops++;
 									}
 								} else if (close21(-factor)) {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s%i%i%i -= %s_%i_%i_%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), n0, m0, p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] -= %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+												p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i -= %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] -= %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+												sym_index(p[0], p[1], p[2]));
 										flops++;
 									}
 								} else {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.9e), %s_%i_%i_%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(),
-												n0, m0, p[0], p[1], p[2], oname.c_str(), n[0], n[1], n[2]);
+										ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s_%i_%i_%i%i%i, %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
+												iname.c_str(), n0, m0, p[0], p[1], p[2], oname.c_str(), trless_index(n[0], n[1], n[2], P));
 										flops += 2;
 									} else {
-										ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0],
-												p[1], p[2], oname.c_str(), n[0], n[1], n[2]);
+										ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
+												iname.c_str(), sym_index(p[0], p[1], p[2]), oname.c_str(), trless_index(n[0], n[1], n[2], P));
 										flops += 2;
 									}
 								}
@@ -372,12 +383,13 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 							char* str;
 							if (first) {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s%i%i%i = %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s[%i] = %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s%i%i%i = -%s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s[%i] = -%s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s%i%i%i = T(%.9e) * %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 									flops++;
 								}
 								asn.push_back(str);
@@ -385,14 +397,14 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 								first = false;
 							} else {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s%i%i%i += %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s[%i] += %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops += 1;
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s%i%i%i -= %s%i%i%i;\n", oname.c_str(), n[0], n[1], n[2], iname.c_str(), p[0], p[1], p[2]);
+									ASPRINTF(&str, "%s[%i] -= %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops += 1;
 								} else {
-									ASPRINTF(&str, "%s%i%i%i = fmaf(T(%.9e), %s%i%i%i, %s%i%i%i);\n", oname.c_str(), n[0], n[1], n[2], factor, iname.c_str(), p[0], p[1],
-											p[2], oname.c_str(), n[0], n[1], n[2]);
+									ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+											sym_index(p[0], p[1], p[2]), oname.c_str(), trless_index(n[0], n[1], n[2], P));
 									flops += 1;
 								}
 								op.push_back(str);
@@ -451,16 +463,16 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 							const auto p = n - m * 2;
 							char* str;
 							if (close21(factor)) {
-								ASPRINTF(&str, "%s[%i] = fmaf(%s%i%i%i, Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(), p[0],
-										p[1], p[2], n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
+								ASPRINTF(&str, "%s[%i] = fmaf(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
+										sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 								flops += 2;
 							} else if (close21(-factor)) {
-								ASPRINTF(&str, "%s[%i] -= %s%i%i%i * Drinvpow_%i_%i;\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(), p[0], p[1], p[2],
-										n0 - m0, m0);
+								ASPRINTF(&str, "%s[%i] -= %s[%i] * Drinvpow_%i_%i;\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
+										sym_index(p[0], p[1], p[2]), n0 - m0, m0);
 								flops += 2;
 							} else {
-								ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s%i%i%i*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
-										iname.c_str(), p[0], p[1], p[2], n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
+								ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i]*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
+										iname.c_str(), sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 
 								flops += 3;
 							}
@@ -475,12 +487,9 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 	std::sort(op.begin(), op.end(), [](std::string a, std::string b) {
 		return atoi(a.c_str()+6) < atoi(b.c_str()+6);
 	});
-	int maxop = (op.size() + 1) / 2;
+	int maxop = op.size();
 	for (int i = 0; i < maxop; i++) {
 		tprint("%s", op[i].c_str());
-		if (i + maxop < op.size()) {
-			tprint("%s", op[i + maxop].c_str());
-		}
 	}
 
 	return flops;
@@ -582,7 +591,7 @@ int const_reference_trless(std::string name) {
 		for (n[1] = 0; n[1] < Q - n[0]; n[1]++) {
 			for (n[2] = 0; n[2] < Q - n[0] - n[1]; n[2]++) {
 				if (!(n[2] >= 2 && !(n[0] == 0 && n[1] == 0 && n[2] == 2))) {
-					tprint("const T& %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
+					tprint("const T %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
 				} else {
 					tprint("const T %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
 				}
@@ -649,7 +658,7 @@ void reference_sym(std::string name, int Q) {
 		for (int m = 0; m < Q - l; m++) {
 			for (int n = 0; n < Q - l - m; n++) {
 				const int index = sym_index(l, m, n);
-				tprint("const T& %s%i%i%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
+				tprint("const T %s%i%i%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
 			}
 		}
 	}
@@ -664,14 +673,17 @@ void do_expansion(bool two) {
 	tprint("__noinline__\n");
 	tprint("#endif\n");
 	if (two) {
-		tprint("tensor_trless_sym<T, %i> L2P(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+		tprint("tensor_trless_sym<T, %i> L2P(const tensor_trless_sym<T, %i>& La, array<T,NDIM> X, bool do_phi) {\n", Q, P);
 	} else {
-		tprint("tensor_trless_sym<T, %i> L2L(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+		tprint("tensor_trless_sym<T, %i> L2L(const tensor_trless_sym<T, %i>& La, array<T,NDIM> X, bool do_phi) {\n", Q, P);
 
 	}
 	indent();
-	tprint("tensor_trless_sym<T, %i> Lb;\n//", Q);
-	flops += compute_dx(P);
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
+	tprint("tensor_trless_sym<T, %i> Lb;\n", Q);
+	flops += 3 + compute_dx(P);
 	array<int, NDIM> n;
 	array<int, NDIM> k;
 	int phi_flops = 0;
@@ -736,7 +748,7 @@ void do_expansion(bool two) {
 			last_factor = factor;
 			phi_flops++;
 		}
-		tprint("Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", index, k[0], k[1], k[2], p[0], p[1], p[2], index);
+		tprint("Lb[%i] = fmaf( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
 		phi_flops += 2;
 	}
 	if (!close21(last_factor)) {
@@ -776,7 +788,7 @@ void do_expansion(bool two) {
 					flops++;
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Lb[%i] = fmaf( x%i%i%i, La%i%i%i, Lb[%i]);\n", index, k[0], k[1], k[2], p[0], p[1], p[2], index);
+				ASPRINTF(&str, "Lb[%i] = fmaf( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
 				cmds.push_back(str);
 				free(str);
 				flops += 2;
@@ -788,22 +800,51 @@ void do_expansion(bool two) {
 			}
 		}
 	}
+
 	int i = 0;
 	int j = 0;
-	while (i < cmds1.size() || j < cmds2.size()) {
-		if (i < cmds1.size()) {
-			tprint("%s", cmds1[i].c_str());
-			i++;
-		}
-		if (j < cmds2.size()) {
-			tprint("%s", cmds2[j].c_str());
-			j++;
-		}
+	while (i < cmds1.size()) {
+		tprint("%s", cmds1[i].c_str());
+		i++;
+	}
+	while (j < cmds2.size()) {
+		tprint("%s", cmds2[j].c_str());
+		j++;
 	}
 	tprint("return Lb;\n");
 	printf("/* FLOPS = %i + do_phi * %i*/\n", flops, phi_flops);
 	deindent();
 	tprint("}\n");
+}
+
+template<int Q>
+void apply_scale_factorM(const char* name) {
+	array<int, NDIM> n;
+	for (int n0 = 0; n0 < Q; n0++) {
+		for (n[0] = 0; n[0] <= n0; n[0]++) {
+			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
+				n[2] = n0 - n[1] - n[0];
+				if (n[2] <= 1 || (n[0] == 0 && n[1] == 0 && n[2] == 2)) {
+					tprint("%s[%i] *= SCALE_FACTOR_INV%i;\n", name, trless_index(n[0], n[1], n[2], Q), n0);
+				}
+			}
+		}
+	}
+}
+
+template<int Q>
+void apply_scale_factorL(const char* name) {
+	array<int, NDIM> n;
+	for (int n0 = 0; n0 < Q; n0++) {
+		for (n[0] = 0; n[0] <= n0; n[0]++) {
+			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
+				n[2] = n0 - n[1] - n[0];
+				if (n[2] <= 1 || (n[0] == 0 && n[1] == 0 && n[2] == 2)) {
+					tprint("%s[%i] *= SCALE_FACTOR_INV%i;\n", name, trless_index(n[0], n[1], n[2], Q), n0 + 1);
+				}
+			}
+		}
+	}
 }
 
 template<int Q>
@@ -861,11 +902,11 @@ void do_expansion_cuda() {
 	});
 	vector<entry> entries1, entries2;
 	for (int i = 0; i < entries.size(); i++) {
-		if (i < (entries.size() + 1) / 2) {
-			entries1.push_back(entries[i]);
-		} else {
-			entries2.push_back(entries[i]);
-		}
+		//	if (i < (entries.size() + 1) / 2) {
+		entries1.push_back(entries[i]);
+		//	} else {
+		//		entries2.push_back(entries[i]);
+		//	}
 	}
 
 	tprint("static __constant__ char Ldest1[%i] = { ", entries1.size());
@@ -901,39 +942,6 @@ void do_expansion_cuda() {
 	}
 	tprint("};\n");
 
-	tprint("static __constant__ char Ldest2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("%i", entries2[i].Ldest);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-	tprint("static __constant__ float factor2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("float(%.9e)", entries2[i].factor);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-	tprint("static __constant__ char xsrc2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("%i", entries2[i].xsource);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-	tprint("static __constant__ char Lsrc2[%i] = { ", entries2.size());
-	for (int i = 0; i < entries2.size(); i++) {
-		printf("%i", entries2[i].Lsource);
-		if (i != entries2.size() - 1) {
-			printf(",");
-		}
-	}
-	tprint("};\n");
-
 	tprint("static __constant__ float phi_factor[%i] = { ", phi_entries.size());
 	for (int i = 0; i < phi_entries.size(); i++) {
 		printf("float(%.9e)", phi_entries[i].factor);
@@ -954,10 +962,14 @@ void do_expansion_cuda() {
 	tprint("#ifdef __CUDACC__\n");
 	tprint("template<class T>\n");
 	tprint("__device__\n");
-	tprint("tensor_trless_sym<T, %i> L2L_cuda(const tensor_trless_sym<T, %i>& La, const array<T, NDIM>& X, bool do_phi) {\n", Q, P);
+	tprint("tensor_trless_sym<T, %i> L2L_cuda(const tensor_trless_sym<T, %i>& La, array<T,NDIM> X, bool do_phi) {\n", Q, P);
 
 	indent();
+
 	tprint("const int tid = threadIdx.x;\n");
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
 	tprint("tensor_trless_sym<T, %i> Lb;\n", Q);
 	tprint("tensor_sym<T, %i> Lc;\n", Q);
 	tprint("for( int i = 0; i < EXPANSION_SIZE; i ++ ) {\n");
@@ -973,20 +985,12 @@ void do_expansion_cuda() {
 	flops += compute_dx_tensor(P);
 	flops += const_reference_trless_tensor<P>("La", "Lc");
 	flops += 4 * entries.size();
+	flops += 3;
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size() - 1 + (entries1.size() == entries2.size() ? 1 : 0));
 	indent();
 	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], Lc[Lsrc1[i]], Lb[Ldest1[i]]);\n");
-	tprint("Lb[Ldest2[i]] = fmaf(factor2[i] * dx[xsrc2[i]], Lc[Lsrc2[i]], Lb[Ldest2[i]]);\n");
 	deindent();
 	tprint("}\n");
-	if (entries1.size() != entries2.size()) {
-		tprint("if( tid == 0 ) {\n");
-		indent();
-		tprint("Lb[Ldest1[%i]] = fmaf(factor1[%i] * dx[xsrc1[%i]], Lc[Lsrc1[%i]], Lb[Ldest1[%i]]);\n", entries2.size(), entries2.size(), entries2.size(),
-				entries2.size(), entries2.size());
-		deindent();
-		tprint("}\n");
-	}
 	tprint("if( do_phi ) {\n");
 	indent();
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", phi_entries.size());
@@ -1015,11 +1019,12 @@ void do_expansion_cuda() {
 }
 
 void ewald(int direct_flops) {
+	tprint("#include <cosmictiger/flops.hpp>\n");
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,%i> &D, array<T, NDIM> X) {\n", P);
 	indent();
 	tprint("ewald_const econst;\n");
-	tprint("int flops = %i;\n", 7);
+	tprint("flop_counter<int> flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
 	tprint("const T fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
 	tprint("tensor_sym<T, %i> Dreal;\n", P);
@@ -1028,7 +1033,7 @@ void ewald(int direct_flops) {
 	tprint("Dfour = 0.0f;\n");
 	tprint("D = 0.0f;\n");
 	tprint("const auto realsz = econst.nreal();\n");
-	tprint("const T zero_mask = r > T(0);\n");                            // 1
+	tprint("const T zero_mask = r > T(%e);\n", 10.f * powf(std::numeric_limits<float>::min(), 1.0 / (2 * ORDER - 3)));                            // 1
 	tprint("int icnt = 0;\n");
 	tprint("for (int i = 0; i < realsz; i++) {\n");
 	indent();
@@ -1112,28 +1117,24 @@ void ewald(int direct_flops) {
 			}
 		}
 	}
-	int maxi = (P * P + 2) / 2;
+	int maxi = (P * P + 1);
 	for (int i = 0; i < maxi; i++) {
 		int j = i + maxi;
 		tprint("Dfour[%i] = fmaf(%cn, D0[%i], Dfour[%i]);\n", i, iscos[i] ? 'c' : 's', i, i);
 		these_flops += 2;
-		if (j < P * P + 1) {
-			tprint("Dfour[%i] = fmaf(%cn, D0[%i], Dfour[%i]);\n", j, iscos[j] ? 'c' : 's', j, j);
-			these_flops += 2;
-		}
 
 	}
 
 	deindent();
 	tprint("}\n");
-	reference_sym("Dreal", P);
-	reference_trless("D", P);
+//	reference_sym("Dreal", P);
+//	reference_trless("D", P);
 	int those_flops = compute_detrace<P>("Dreal", "D", 'd');
 	those_flops += 16 + 3 * (P * P + 1);
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
 	tprint("D = D + Dfour;\n");                                    // P*P+1
 	tprint("expansion<T> D1;\n");
-	tprint("greens_function(D1,X);\n");
+	tprint("greens_function(D1, X, false);\n");
 	tprint("D(0, 0, 0) = T(%.9e) + D(0, 0, 0); \n", M_PI / 4.0);                                    // 1
 	tprint("for (int i = 0; i < EXPANSION_SIZE; i++) {\n");
 	tprint("D[i] -= D1[i];\n");                                    // 2*(P*P+1)
@@ -1161,25 +1162,24 @@ int main() {
 
 	int flops = 0;
 
-	tprint( "/*\n"
-	"CosmicTiger - A cosmological N-Body code\n"
-	"Copyright (C) 2021  Dominic C. Marcello\n"
-	"\n"
-	"This program is free software; you can redistribute it and/or\n"
-	"modify it under the terms of the GNU General Public License\n"
-	"as published by the Free Software Foundation; either version 2\n"
-	"of the License, or (at your option) any later version.\n"
-	"\n"
-	"This program is distributed in the hope that it will be useful,\n"
-	"but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-	"MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
-	"GNU General Public License for more details.\n"
-	"\n"
-	"You should have received a copy of the GNU General Public License\n"
-	"along with this program; if not, write to the Free Software\n"
-	"Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n"
-	"*/\n");
-
+	tprint("/*\n"
+			"CosmicTiger - A cosmological N-Body code\n"
+			"Copyright (C) 2021  Dominic C. Marcello\n"
+			"\n"
+			"This program is free software; you can redistribute it and/or\n"
+			"modify it under the terms of the GNU General Public License\n"
+			"as published by the Free Software Foundation; either version 2\n"
+			"of the License, or (at your option) any later version.\n"
+			"\n"
+			"This program is distributed in the hope that it will be useful,\n"
+			"but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+			"MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+			"GNU General Public License for more details.\n"
+			"\n"
+			"You should have received a copy of the GNU General Public License\n"
+			"along with this program; if not, write to the Free Software\n"
+			"Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n"
+			"*/\n");
 
 	tprint("#pragma once\n");
 	tprint("#include <cosmictiger/tensor.hpp>\n");
@@ -1194,12 +1194,25 @@ int main() {
 	tprint("using multipole = tensor_trless_sym<T,%i>;\n", P - 1);
 	tprint("#define EXPANSION_SIZE %i\n", P * P + 1);
 	tprint("#define MULTIPOLE_SIZE %i\n", (P - 1) * (P - 1) + 1);
+	const auto maxval = 1000.0;
+	tprint("#define SCALE_FACTOR %ef\n", maxval);
+	for (int n = 0; n <= P; n++) {
+		tprint("#define SCALE_FACTOR%i %ef\n", n, pow(maxval,n));
+		tprint("#define SCALE_FACTOR_INV%i %ef\n", n, 1.0 / pow(maxval,n));
+	}
 
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
-	tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X) {\n", P);
+	tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X, bool scale = true) {\n", P);
 	flops = 0;
 	indent();
+	tprint("if( scale ) {\n");
+	indent();
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
+	deindent();
+	tprint("}\n");
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("const T r = sqrt(r2);\n");
@@ -1214,7 +1227,7 @@ int main() {
 	tprint("X[2] *= rinv1;\n");
 	flops += 12;
 	flops += compute_dx(P, "X", true);
-	reference_trless("D", P);
+//	reference_trless("D", P);
 	flops += compute_detraceD<P>("x", "D");
 	flops += 11 + (P - 1) * 2;
 	array<int, NDIM> k;
@@ -1223,12 +1236,12 @@ int main() {
 			const int zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, P) : intmin(P - k[0] - k[1], 2);
 			for (k[2] = 0; k[2] < zmax; k[2]++) {
 				const int k0 = k[0] + k[1] + k[2];
-				tprint("D%i%i%i *= rinv%i;\n", k[0], k[1], k[2], k0 + 1);
+				tprint("D[%i] *= rinv%i;\n", trless_index(k[0], k[1], k[2], P), k0 + 1);
 				flops++;
 			}
 		}
 	}
-	tprint("return %i;\n", flops);
+	tprint("return %i + scale * NDIM;\n", flops);
 	deindent();
 	tprint("}\n");
 
@@ -1384,11 +1397,11 @@ int main() {
 	flops = 0;
 	indent();
 	tprint("tensor_trless_sym<T, %i> M;\n", P - 1);
-	tprint("X[0] = -X[0];\n");
-	tprint("X[1] = -X[1];\n");
-	tprint("X[2] = -X[2];\n");
-	reference_trless("M", P - 1);
-	flops += 3;
+	tprint("X[0] *= -T(SCALE_FACTOR);\n");
+	tprint("X[1] *= -T(SCALE_FACTOR);\n");
+	tprint("X[2] *= -T(SCALE_FACTOR);\n");
+//	reference_trless("M", P - 1);
+	flops += 6;
 	flops += compute_dx(P - 1);
 	flops += compute_detrace<P - 1>("x", "M", 'd');
 	tprint("return M;\n");
@@ -1404,12 +1417,13 @@ int main() {
 	indent();
 	tprint("tensor_sym<T, %i> Mb;\n", P - 1);
 	tprint("tensor_trless_sym<T, %i> Mc;\n", P - 1);
-	tprint("X[0] = -X[0];\n");
-	tprint("X[1] = -X[1];\n");
-	tprint("X[2] = -X[2];\n");
+	tprint("X[0] *= -T(SCALE_FACTOR);\n");
+	tprint("X[1] *= -T(SCALE_FACTOR);\n");
+	tprint("X[2] *= -T(SCALE_FACTOR);\n");
+	flops += 6;
 	flops += const_reference_trless<P - 1>("Ma");
-	reference_sym("Mb", P - 1);
-	reference_trless("Mc", P - 1);
+//	reference_sym("Mb", P - 1);
+//	reference_trless("Mc", P - 1);
 	flops += compute_dx(P - 1);
 
 	for (int i = 0; i < (P - 1) * P * (P + 1) / 6; i++) {
@@ -1487,7 +1501,7 @@ int main() {
 					free(str);
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Mb[%i] = fmaf( x%i%i%i, Ma%i%i%i, Mb[%i]);\n", nindex, n[0] - k[0], n[1] - k[1], n[2] - k[2], k[0], k[1], k[2],
+				ASPRINTF(&str, "Mb[%i] = fmaf( x[%i], Ma%i%i%i, Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), k[0], k[1], k[2],
 						sym_index(n[0], n[1], n[2]));
 				cmds.push_back(str);
 				free(str);
@@ -1503,15 +1517,13 @@ int main() {
 	}
 	int i = 0;
 	int j = 0;
-	while (i < cmds1.size() || j < cmds2.size()) {
-		if (i < cmds1.size()) {
-			tprint("%s", cmds1[i].c_str());
-			i++;
-		}
-		if (j < cmds2.size()) {
-			tprint("%s", cmds2[j].c_str());
-			j++;
-		}
+	while (i < cmds1.size()) {
+		tprint("%s", cmds1[i].c_str());
+		i++;
+	}
+	while (j < cmds2.size()) {
+		tprint("%s", cmds2[j].c_str());
+		j++;
 	}
 
 	flops += compute_detrace<P - 1>("Mb", "Mc", 'd');
@@ -1528,5 +1540,22 @@ int main() {
 #ifdef USE_CUDA
 	do_expansion_cuda<P>();
 #endif
+
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT int apply_scale_factor_inv(tensor_trless_sym<T,%i> &L) {\n", P);
+	indent();
+	apply_scale_factorL<P>("L");
+	tprint("return %i;\n", P * P + 1);
+	deindent();
+	tprint("}\n");
+
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT int apply_scale_factor(tensor_trless_sym<T,%i> &M) {\n", P - 1);
+	indent();
+	apply_scale_factorM<P - 1>("M");
+	tprint("return %i;\n", (P - 1) * (P - 1) + 1);
+
+	deindent();
+	tprint("}\n");
 
 }

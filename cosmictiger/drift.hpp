@@ -48,7 +48,9 @@ struct drift_return {
 	}
 };
 
-drift_return drift(double scale, double dt, double tau0, double tau1, double tau_max);
+void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung );
 
+
+void cuda_drift(char rung, float a, float dt);
 
 #endif /* DRIFT_HPP_ */

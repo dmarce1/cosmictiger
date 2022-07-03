@@ -25,7 +25,7 @@ HPX_PLAIN_ACTION(ewald_const::init, ewald_const_init_action);
 
 #ifndef USE_CUDA
 
-#define NREAL 147
+#define NREAL 179
 #define NFOUR 92
 
 struct ewald_constants {
@@ -64,7 +64,7 @@ void ewald_const::init() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
 	for( const auto& c : children ) {
-		futs.push_back(hpx::async<ewald_const_init_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<ewald_const_init_action>( c));
 	}
 
 #ifdef USE_CUDA

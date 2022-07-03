@@ -22,7 +22,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #ifndef __CUDACC__
 
-#ifndef HPX_LITE
 #include <hpx/hpx.hpp>
 #include <hpx/parallel/algorithms/copy.hpp>
 #include <hpx/parallel/algorithms/fill.hpp>
@@ -30,50 +29,22 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <hpx/serialization/unordered_map.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/hpx_finalize.hpp>
-#if (HPX_VERSION_FULL < ((1<<16) | (6<<8)))
-#define HPX_EARLY
-#include <hpx/runtime/threads/run_as_os_thread.hpp>
-#else
-#define HPX_LATE
 #include <hpx/include/run_as.hpp>
-#endif
-#else
-#define HPX_EARLY
-#include <hpx_lite/hpx_lite.hpp>
-#endif
+#include <hpx/modules/executors.hpp>
 
-#ifndef HPX_LITE
-#ifdef HPX_EARLY
-#define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
-#define hpx_copy hpx::parallel::copy
-#define hpx_fill hpx::parallel::fill
-#define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority_critical)
-#define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority_normal)
-#define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority_low)
-#else
+#define HPX_PRIORITY_HI hpx::execution::parallel_executor(hpx::threads::thread_priority::high)
 #define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
 #define hpx_copy hpx::copy
 #define hpx_fill hpx::fill
-#define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority::critical)
-#define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority::normal)
-#define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority::low)
-#endif
-#else
-#define HPX_PRIORITY_HI hpx::launch::async
-#define HPX_PRIORITY_NORMAL hpx::launch::async
-#define HPX_PRIORITY_LO hpx::launch::async
-#define PAR_EXECUTION_POLICY hpx::execution::par
-#define hpx_copy hpx::parallel::copy
-#define hpx_fill hpx::parallel::fill
-#endif
+
 
 const vector<hpx::id_type>& hpx_localities();
 const vector<hpx::id_type>& hpx_children();
 void hpx_init();
 
-using mutex_type = hpx::lcos::local::mutex;
-using spinlock_type = hpx::lcos::local::spinlock;
-using shared_mutex_type = hpx::lcos::local::shared_mutex;
+using mutex_type = hpx::mutex;
+using spinlock_type = hpx::spinlock;
+using shared_mutex_type = hpx::shared_mutex;
 
 #endif
 

@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
 
-void domains_begin();
+void domains_begin(int rung);
 void domains_end();
 void domains_rebound();
 range<double> domains_find_my_box();
@@ -33,6 +33,8 @@ range<double> domains_range(size_t key);
 void domains_save(FILE* fp);
 void domains_load(FILE *fp);
 double domains_get_load_imbalance();
+pair<int, double> domains_find_ewald_level(double theta, size_t key = 1, range<double> box = unit_box<double>(), int depth = 0, double rb = -1.0);
+
 
 struct domain_t {
 	range<double> box;

@@ -1,26 +1,24 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef SIMD_INT_HPP_
 #define SIMD_INT_HPP_
-
 
 class alignas(sizeof(__m128i)) simd_int4 {
 private:
@@ -214,6 +212,14 @@ public:
 		v = _mm256_slli_epi32(v, shft);
 		return *this;
 	}
+	simd_int8 operator==(const simd_int8& other) const {
+		simd_int8 rc;
+		rc.v = _mm256_cmpeq_epi32(v, other.v);
+		rc.v = -rc.v;
+		return rc;
+	}
+	friend class simd_double8;
+
 	friend class simd_float8;
 };
 
@@ -281,6 +287,5 @@ inline simd_float16::simd_float16(simd_int16 a) {
 }
 
 #endif
-
 
 #endif /* SIMD_INT_HPP_ */

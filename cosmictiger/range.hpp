@@ -24,6 +24,8 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/simd.hpp>
 
 template<class T>
 inline array<T, NDIM> shift_up(array<T, NDIM> i) {
@@ -218,6 +220,19 @@ struct range {
 			}
 		}
 		return max_dim;
+	}
+
+	inline int shortest_dim() const {
+		int min_dim;
+		T min_span = T(1);
+		for (int dim = 0; dim < N; dim++) {
+			const T span = end[dim] - begin[dim];
+			if (span <= min_span) {
+				min_span = span;
+				min_dim = dim;
+			}
+		}
+		return min_dim;
 	}
 
 	inline std::pair<range<T, N>, range<T, N>> split() const {
@@ -428,12 +443,8 @@ struct fixed32_range: public range<range_fixed> {
 CUDA_EXPORT
 inline float distance(range_fixed a, fixed32 b) {
 	float f = a.to_double() - b.to_double();
-	while (f > 0.5) {
-		f -= 1.0;
-	}
-	while (f < -0.5) {
-		f += 1.0;
-	}
+	f -= double(f > 0.5);
+	f += double(f < -0.5);
 	return f;
 }
 
@@ -441,5 +452,16 @@ CUDA_EXPORT
 inline float distance(fixed32 b, range_fixed a) {
 	return -distance(a, b);
 
+}
+
+__device__
+inline bool box_intersects_sphere(const fixed32_range& box, const array<fixed32, NDIM>& x, float r) {
+	float d2 = 0.0f;
+	for (int dim = 0; dim < NDIM; dim++) {
+		const float d2begin = sqr(distance(x[dim], box.begin[dim]));
+		const float d2end = sqr(distance(x[dim], box.end[dim]));
+		d2 += ((range_fixed(x[dim]) < box.begin[dim]) + (range_fixed(x[dim]) > box.end[dim])) * fminf(d2begin, d2end);
+	}
+	return d2 < sqr(r);
 }
 #endif /* RANGE_HPP_ */
