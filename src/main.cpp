@@ -27,6 +27,7 @@
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
+#include <cosmictiger/persistent.hpp>
 
 
 int hpx_main(int argc, char *argv[]) {
@@ -47,6 +48,7 @@ int hpx_main(int argc, char *argv[]) {
 	hpx_init();
 	ewald_const::init();
 	start_memuse_daemon();
+	persistent_init();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
 			test(get_options().test);

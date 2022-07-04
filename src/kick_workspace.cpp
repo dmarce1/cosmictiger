@@ -20,6 +20,7 @@
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/persistent.hpp>
 #include <set>
 
 HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
@@ -327,16 +328,23 @@ void kick_workspace::to_gpu() {
 }
 
 void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) {
+
+	return;
+
 	bool do_work = false;
 	std::unique_lock<mutex_type> lock(mutex);
 	nparts += n;
+	bool all_sent = false;
 	if (nparts == total_parts) {
-		do_work = true;
+		all_sent = true;
 	}
 	lock.unlock();
-	if (do_work) {
-		ptr->to_gpu();
+	if (all_sent) {
+		persistent_kernel_terminate();
 	}
+	/*if (do_work) {
+	 ptr->to_gpu();
+	 }*/
 }
 
 void kick_workspace::clear_buffers() {
@@ -349,31 +357,51 @@ void kick_workspace::clear_buffers() {
 
 void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecks,
 		vector<tree_id> && echecks) {
-	kick_workitem item;
-	item.L = L;
-	item.pos = pos;
-	item.self = self;
-	bool do_work = false;
+
+	persistent_do_kick(pos, L, self.index, dchecks, echecks);
+	bool all_sent = false;
 	{
 		const part_int these_nparts = tree_get_node(self)->nparts();
 		std::lock_guard<mutex_type> lock(mutex);
 		nparts += these_nparts;
 		if (nparts == total_parts) {
-			do_work = true;
-		}
-		for (int i = 0; i < dchecks.size(); i++) {
-			tree_ids.insert(dchecks[i]);
-		}
-		for (int i = 0; i < echecks.size(); i++) {
-			tree_ids.insert(echecks[i]);
+			all_sent = true;
 		}
 	}
-	item.dchecklist = std::move(dchecks);
-	item.echecklist = std::move(echecks);
-	std::unique_lock<mutex_type> lock(mutex);
-	workitems.push_back(std::move(item));
-	lock.unlock();
-	if (do_work) {
-		ptr->to_gpu();
+	if (all_sent) {
+		persistent_kernel_terminate();
 	}
+	return;
+
+	/*
+
+
+
+	 kick_workitem item;
+	 item.L = L;
+	 item.pos = pos;
+	 item.self = self;
+	 bool do_work = false;
+	 {
+	 const part_int these_nparts = tree_get_node(self)->nparts();
+	 std::lock_guard<mutex_type> lock(mutex);
+	 nparts += these_nparts;
+	 if (nparts == total_parts) {
+	 do_work = true;
+	 }
+	 for (int i = 0; i < dchecks.size(); i++) {
+	 tree_ids.insert(dchecks[i]);
+	 }
+	 for (int i = 0; i < echecks.size(); i++) {
+	 tree_ids.insert(echecks[i]);
+	 }
+	 }
+	 item.dchecklist = std::move(dchecks);
+	 item.echecklist = std::move(echecks);
+	 std::unique_lock<mutex_type> lock(mutex);
+	 workitems.push_back(std::move(item));
+	 lock.unlock();
+	 if (do_work) {
+	 ptr->to_gpu();
+	 }*/
 }

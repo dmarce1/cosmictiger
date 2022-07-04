@@ -28,7 +28,6 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/flops.hpp>
-#include <cosmictiger/persistent.hpp>
 
 #define MIN_PARTS_PCCP 38
 #define MIN_PARTS2_CC 78
@@ -234,7 +233,9 @@ __device__ kick_return cuda_kick(const persistent_kick_params& params) {
 		case 0: {
 			array<float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.pos[dim], L.back().pos[dim]);
+				const auto a = self.pos[dim];
+				const auto b = L.back().pos[dim];
+				dx[dim] = distance(a, b);
 			}
 			flops += 3;
 			{
@@ -515,8 +516,29 @@ __global__ void cuda_kick_kernel(kick_return* rc, persistent_kick_params* params
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
+void kick_set_params(kick_params kparams) {
+	cuda_kick_data data;
+	data.x = &particles_pos(XDIM,0);
+	data.y = &particles_pos(YDIM,0);
+	data.z = &particles_pos(ZDIM,0);
+	data.tree_nodes = tree_data();
+	data.vel = particles_vel_data();
+	data.rungs = &particles_rung(0);
+	if (kparams.save_force) {
+		data.gx = &particles_gforce(XDIM, 0);
+		data.gy = &particles_gforce(YDIM, 0);
+		data.gz = &particles_gforce(ZDIM, 0);
+		data.pot = &particles_pot(0);
+	} else {
+		data.gx = data.gy = data.gz = data.pot = nullptr;
+	}
+	set_kick_params_and_data(kparams, data);
+
+}
+
 kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
 		vector<kick_workitem> workitems) {
+	abort();
 	timer tm;
 	tm.start();
 	int nblocks = kick_block_count();

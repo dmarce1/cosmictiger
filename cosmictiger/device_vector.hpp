@@ -54,7 +54,8 @@ class device_vector {
 		syncthreads();
 	}
 public:
-	CUDA_EXPORT void swap(device_vector& other) {
+	CUDA_EXPORT
+	void swap(device_vector& other) {
 		const auto a = ptr;
 		const auto b = sz;
 		const auto c = cap;
@@ -65,14 +66,17 @@ public:
 		other.sz = b;
 		other.cap = c;
 	}
-	CUDA_EXPORT inline device_vector() {
+	CUDA_EXPORT
+	inline device_vector() {
 		initialize();
 	}
-	CUDA_EXPORT inline device_vector(device_vector& other) {
+	CUDA_EXPORT
+	inline device_vector(device_vector& other) {
 		initialize();
 		swap(other);
 	}
-	CUDA_EXPORT inline device_vector& operator=(device_vector&& other) {
+	CUDA_EXPORT
+	inline device_vector& operator=(device_vector&& other) {
 		threadid tid;
 		syncthreads();
 		if (tid == 0) {
@@ -86,11 +90,13 @@ public:
 		swap(other);
 		return *this;
 	}
-	CUDA_EXPORT inline device_vector(int sz0) {
+	CUDA_EXPORT
+	inline device_vector(int sz0) {
 		initialize();
 		resize(sz0);
 	}
-	CUDA_EXPORT inline ~device_vector() {
+	CUDA_EXPORT
+	inline ~device_vector() {
 		threadid tid;
 		syncthreads();
 		if (tid == 0) {
@@ -117,7 +123,10 @@ public:
 			syncthreads();
 		} else {
 			syncthreads();
-			int new_cap = max(1024 / sizeof(T), (size_t) 1);
+			int new_cap = 1024 / sizeof(T);
+			if (new_cap < 1) {
+				new_cap = 1;
+			}
 			if (tid == 0) {
 				while (new_cap < new_sz) {
 					new_cap *= 2;

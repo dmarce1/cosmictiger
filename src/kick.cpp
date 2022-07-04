@@ -26,6 +26,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/persistent.hpp>
 
 #include <unistd.h>
 #include <stack>
@@ -162,6 +163,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		local_return = kick_return();
 		local_return_promise = decltype(local_return_promise)();
 		local_return_future = local_return_promise.get_future();
+		kick_set_params(params);
+		persistent_kernel_launch();
 	}
 	ASSERT(self.proc == hpx_rank());
 	bool thread_left = true;
@@ -462,7 +465,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
 					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
 					kr.max_rung = std::max((int) rung, kr.max_rung);
-					ALWAYS_ASSERT(rung >= 0);ALWAYS_ASSERT(rung < MAX_RUNG);
+					ALWAYS_ASSERT(rung >= 0);
+					ALWAYS_ASSERT(rung < MAX_RUNG);
 					dt = 0.5f * rung_dt[params.min_rung] * params.t0;                                                            // 2
 					vx = fmaf(sgn * forces.gx[j], dt, vx);                              // 3
 					vy = fmaf(sgn * forces.gy[j], dt, vy);                              // 3

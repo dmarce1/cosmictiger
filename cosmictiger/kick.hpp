@@ -21,6 +21,7 @@
 #define KICK_HPP_
 
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/persistent.hpp>
 
 #include <atomic>
 
@@ -182,6 +183,9 @@ struct kick_workitem {
 
 struct kick_workspace;
 
+
+__device__ kick_return cuda_kick(const persistent_kick_params& params);
+
 #ifndef __CUDACC__
 kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
 		std::shared_ptr<kick_workspace>);
@@ -193,5 +197,5 @@ kick_return cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*,
 #endif
 int kick_block_count();
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);
-
+void kick_set_params(kick_params kparams);
 #endif /* KICK_HPP_ */

@@ -20,11 +20,12 @@
 
 #define PERSISTENT_KILL 0
 #define PERSISTENT_DO_KICK 1
-#define PERSISTENT_KICK_RC 2
+#define PERSISTENT_KICK_DONE 2
 
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/device_vector.hpp>
+#include <cosmictiger/tree.hpp>
 
 struct persistent_msg {
 	int type;
@@ -39,5 +40,7 @@ struct persistent_kick_params {
 	device_vector<int> dchecks;
 	device_vector<int> echecks;
 };
-
-void persistent_do_kick(array<fixed32, NDIM> Lpos, expansion<float> L, int self, device_vector<int> dchecks, device_vector<int> echecks);
+void persistent_do_kick(array<fixed32, NDIM> Lpos, expansion<float> L, int self, const vector<tree_id>& dchecks,const vector<tree_id>& echecks);
+void persistent_kernel_launch();
+void persistent_kernel_terminate();
+void persistent_init();
