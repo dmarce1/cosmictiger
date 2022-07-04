@@ -54,8 +54,37 @@ class device_vector {
 		syncthreads();
 	}
 public:
+	CUDA_EXPORT void swap(device_vector& other) {
+		const auto a = ptr;
+		const auto b = sz;
+		const auto c = cap;
+		ptr = other.ptr;
+		sz = other.sz;
+		cap = other.cap;
+		other.ptr = a;
+		other.sz = b;
+		other.cap = c;
+	}
 	CUDA_EXPORT inline device_vector() {
 		initialize();
+	}
+	CUDA_EXPORT inline device_vector(device_vector& other) {
+		initialize();
+		swap(other);
+	}
+	CUDA_EXPORT inline device_vector& operator=(device_vector&& other) {
+		threadid tid;
+		syncthreads();
+		if (tid == 0) {
+			if (ptr) {
+				cuda_free(ptr);
+				fence();
+			}
+		}
+		syncthreads();
+		initialize();
+		swap(other);
+		return *this;
 	}
 	CUDA_EXPORT inline device_vector(int sz0) {
 		initialize();
@@ -67,6 +96,7 @@ public:
 		if (tid == 0) {
 			if (ptr) {
 				cuda_free(ptr);
+				fence();
 			}
 		}
 		syncthreads();
@@ -107,11 +137,13 @@ public:
 			if (tid == 0) {
 				if (ptr) {
 					cuda_free(ptr);
+					fence();
 				}
 				ptr = new_ptr;
 				sz = new_sz;
 				cap = new_cap;
 			}
+			fence();
 			syncthreads();
 		}
 	}
