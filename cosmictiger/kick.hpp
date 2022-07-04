@@ -149,10 +149,7 @@ struct kick_params {
 	bool descending;
 	bool top;
 	bool do_phi;
-	kick_params() {
-		max_dt = 1e30;
-		do_phi = true;
-	}
+
 	template<class A>
 	void serialize(A && arc, unsigned) {
 		arc & ascending;

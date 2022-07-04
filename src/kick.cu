@@ -50,7 +50,15 @@ struct cuda_kick_params {
 	int ecount;
 };
 
-__device__ void do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
+static __managed__ kick_params global_params;
+static __managed__ cuda_kick_data data;
+
+void set_kick_params_and_data(kick_params params_, cuda_kick_data data_) {
+	global_params = params_;
+	data = data_;
+}
+
+__device__ void do_kick(kick_return& return_, const expansion<float>& L, const tree_node& self) {
 //	auto tm = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -73,7 +81,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	float ymom_tot = 0.0f;
 	float zmom_tot = 0.0f;
 	float nmom_tot = 0.0f;
-	const float& hsoft = params.h;
+	const float& hsoft = global_params.h;
 	flop_counter<int> flops = 0;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
 		expansion2<float> L2;
@@ -90,24 +98,24 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
-		L2 = L2P(L, dx, params.do_phi);
+		L2 = L2P(L, dx, global_params.do_phi);
 		auto& F = force[i];
 		F.phi += SCALE_FACTOR1 * L2(0, 0, 0);
 		F.gx -= SCALE_FACTOR2 * L2(1, 0, 0);
 		F.gy -= SCALE_FACTOR2 * L2(0, 1, 0);
 		F.gz -= SCALE_FACTOR2 * L2(0, 0, 1);
-		F.gz *= params.GM;
-		F.gy *= params.GM;
-		F.gx *= params.GM;
-		F.phi *= params.GM;
+		F.gz *= global_params.GM;
+		F.gy *= global_params.GM;
+		F.gx *= global_params.GM;
+		F.phi *= global_params.GM;
 		vx = vels[snki][XDIM];
 		vy = vels[snki][YDIM];
 		vz = vels[snki][ZDIM];
-		const float sgn = params.top ? 1.f : -1.f;
-		if (params.ascending) {
-			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+		const float sgn = global_params.top ? 1.f : -1.f;
+		if (global_params.ascending) {
+			dt = 0.5f * rung_dt[global_params.min_rung] * global_params.t0;
 			flops += 2;
-			if (!params.first_call) {
+			if (!global_params.first_call) {
 				vx = fmaf(sgn * F.gx, dt, vx);
 				vy = fmaf(sgn * F.gy, dt, vy);
 				vz = fmaf(sgn * F.gz, dt, vz);
@@ -119,23 +127,23 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		ymom_tot += vy;
 		zmom_tot += vz;
 		nmom_tot += sqrtf(sqr(vx, vy, vz));
-		if (params.save_force) {
+		if (global_params.save_force) {
 			all_gx[snki] = F.gx;
 			all_gy[snki] = F.gy;
 			all_gz[snki] = F.gz;
 			all_phi[snki] = F.phi;
 		}
 
-		if (params.descending) {
+		if (global_params.descending) {
 			g2 = sqr(F.gx, F.gy, F.gz);
-			dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0); // 12
+			dt = fminf(global_params.eta * sqrt(global_params.a * hsoft * rsqrtf(g2)), global_params.t0); // 12
 			rung = rungs[snki];
-			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1); // 13
+			rung = max(global_params.min_rung + int((int) ceilf(log2f(global_params.t0 / dt)) > global_params.min_rung), rung - 1); // 13
 			rungs[snki] = rung;
 			max_rung = max(rung, max_rung);
 			ALWAYS_ASSERT(rung >= 0);
 			ALWAYS_ASSERT(rung < MAX_RUNG);
-			dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
+			dt = 0.5f * rung_dt[global_params.min_rung] * global_params.t0; // 2
 			vx = fmaf(sgn * F.gx, dt, vx); // 3
 			vy = fmaf(sgn * F.gy, dt, vy); // 3
 			vz = fmaf(sgn * F.gz, dt, vz); // 3
@@ -146,7 +154,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		vels[snki][YDIM] = vy;
 		vels[snki][ZDIM] = vz;
 		phi_tot += 0.5f * force[i].phi;
-		flops += 557 + params.do_phi * 178;
+		flops += 557 + global_params.do_phi * 178;
 
 	}
 	shared_reduce_add(phi_tot);
@@ -170,7 +178,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	add_gpu_flops(flops);
 }
 
-__global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
+__global__ void cuda_kick_kernel(kick_return* rc, cuda_kick_params* params, int item_count, int* next_item) {
 //	auto tm1 = clock64();
 	const int& tid = threadIdx.x;
 	extern __shared__ int shmem_ptr[];
@@ -335,7 +343,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					device_vector<int>* lists[NLISTS] = { &cclist, &leaflist, &cplist, &pclist, &nextlist };
 					auto& checks = dchecks;
 					const float thetainv = 1.f / global_params.theta;
-						do {
+					do {
 						const int maxi = round_up(checks.size(), WARP_SIZE);
 						for (int i = tid; i < maxi; i += WARP_SIZE) {
 							for (int n = 0; n < NLISTS; n++) {
@@ -424,7 +432,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 				if (self.leaf) {
 					__syncwarp();
 					if (nsinks) {
-						do_kick(kr, global_params, data, L.back().expansion, self);
+						do_kick(kr, L.back().expansion, self);
 					}
 					sparams.pop_back();
 					depth--;
@@ -496,7 +504,8 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes, vector<kick_workitem> workitems) {
+kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
+		vector<kick_workitem> workitems) {
 	timer tm;
 	tm.start();
 	int nblocks = kick_block_count();
@@ -593,7 +602,8 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	}
 	cuda_set_device();
 	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, 0));
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
+	set_kick_params_and_data(kparams, data);
+	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, dev_ikick_params, workitems.size(), dev_current_index);
 	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, 0));
 	CUDA_CHECK(cudaDeviceSynchronize());
 	return *return_;

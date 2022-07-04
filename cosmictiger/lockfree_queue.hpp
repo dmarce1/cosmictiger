@@ -44,8 +44,8 @@ public:
 		if (out >= in) {
 			return nullptr;
 		}
-		char* ptr;
-		while ((ptr = (char*) atomic_exch((itype*) &q[out % N], (itype) 0)) == nullptr) {
+		T* ptr;
+		while ((ptr = (T*) atomic_exch((itype*) &q[out % N], (itype) 0)) == nullptr) {
 			if (out >= in) {
 				return nullptr;
 			}

@@ -77,6 +77,7 @@ set(cosmictiger_source_files
     src/options.cpp
     src/output.cpp
     src/particles.cpp
+    src/persistent.cu
     src/power.cpp
     src/profiler.cpp
     src/rockstar.cpp
@@ -128,6 +129,7 @@ set(cosmictiger_header_files
     cosmictiger/options.hpp
     cosmictiger/output.hpp
     cosmictiger/particles.hpp
+    cosmictiger/persistent.hpp
     cosmictiger/power.hpp
     cosmictiger/profiler.hpp
     cosmictiger/rand.hpp

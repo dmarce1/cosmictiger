@@ -20,7 +20,8 @@
 #ifndef DEVICE_VECTOR_HPP_
 #define DEVICE_VECTOR_HPP_
 
-
+#include <cosmictiger/atomic.hpp>
+#include <cosmictiger/cuda_mem.hpp>
 
 struct threadid {
 	CUDA_EXPORT
