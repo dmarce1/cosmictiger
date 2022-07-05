@@ -25,23 +25,40 @@
 
 #include <cmath>
 
-void cosmos_update(double& adotdot, double& adot, double& a, double dt) {
+void cosmos_update0(double& adotdot, double& adot, double& a, double dt) {
 	const double omega_m = get_options().omega_m;
 	const double omega_r = get_options().omega_r;
 	const double omega_lam = get_options().omega_lam;
 	const double omega_k = get_options().omega_k;
 	const auto H = constants::H0 * get_options().code_to_s * get_options().hubble;
 	const double adot0 = adot;
-	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
-	const double adotdot0 = adotdot;
-	a += 0.5 * adot0 * dt;
-	adot += 0.5 * adotdot0 * dt;
-	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
-	a += adot * dt;
-	adot += adotdot * dt;
-	a -= 0.5 * adot0 * dt;
-	adot -= 0.5 * adotdot0 * dt;
 
+	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
+	const double da1 = adot * dt;
+	const double dadot1 = adotdot * dt;
+	a += da1;
+	adot += dadot1;
+
+	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
+	const double da2 = adot * dt;
+	const double dadot2 = adotdot * dt;
+	a += -da1 + 0.25 * (da1 + da2);
+	adot += -dadot1 + 0.25 * (dadot1 + dadot2);
+
+	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
+	const double da3 = adot * dt;
+	const double dadot3 = adotdot * dt;
+	a += -0.25 * (da1 + da2) + (1.0 / 6.0) * (da1 + da2 + 4.0 * da3);
+	adot += -0.25 * (dadot1 + dadot2) + (1.0 / 6.0) * (dadot1 + dadot2 + 4.0 * dadot3);
+
+}
+
+void cosmos_update(double& adotdot, double& adot, double& a, double dt0) {
+	constexpr int N = 8;
+	const double dt = dt0 / N;
+	for (int i = 0; i < N; i++) {
+		cosmos_update0(adotdot, adot, a, dt);
+	}
 }
 
 double cosmos_growth_factor(double omega_m, float a) {
