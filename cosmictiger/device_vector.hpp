@@ -20,6 +20,8 @@
 #ifndef DEVICE_VECTOR_HPP_
 #define DEVICE_VECTOR_HPP_
 
+#include <cosmictiger/cuda_mem.hpp>
+
 struct threadid {
 	CUDA_EXPORT
 	inline bool operator==(const int tid) const {
@@ -73,10 +75,12 @@ public:
 		cap = ocap;
 		sz = osz;
 	}
-	CUDA_EXPORT inline device_vector() {
+	CUDA_EXPORT
+	inline device_vector() {
 		initialize();
 	}
-	CUDA_EXPORT inline device_vector(const device_vector& other) {
+	CUDA_EXPORT
+	inline device_vector(const device_vector& other) {
 		initialize();
 		*this = other;
 	}
@@ -93,19 +97,26 @@ public:
 		swap(other);
 		return *this;
 	}
-	CUDA_EXPORT inline device_vector(device_vector&& other) {
+	CUDA_EXPORT
+	inline device_vector(device_vector&& other) {
 		initialize();
 		swap(other);
 	}
-	CUDA_EXPORT inline device_vector(int sz0) {
+	CUDA_EXPORT
+	inline device_vector(int sz0) {
 		initialize();
 		resize(sz0);
 	}
-	CUDA_EXPORT inline ~device_vector() {
+	CUDA_EXPORT
+	inline ~device_vector() {
 		destroy();
 	}
 	CUDA_EXPORT
 	inline T* data() {
+		return ptr;
+	}
+	CUDA_EXPORT
+	inline const T* data() const {
 		return ptr;
 	}
 	CUDA_EXPORT
@@ -120,7 +131,10 @@ public:
 			syncthreads();
 		} else {
 			syncthreads();
-			int new_cap = max(1024 / sizeof(T), (size_t) 1);
+			int new_cap = 1024 / sizeof(T);
+			if (new_cap < 1) {
+				new_cap = 1;
+			}
 			if (tid == 0) {
 				while (new_cap < new_sz) {
 					new_cap *= 2;
@@ -195,6 +209,15 @@ public:
 		}
 #endif
 		return ptr[i];
+	}
+	template<class A>
+	void serialize(A&& arc, unsigned) {
+		int size = sz;
+		arc & size;
+		resize(size);
+		for (int i = 0; i < size; i++) {
+			arc & (*this)[i];
+		}
 	}
 };
 

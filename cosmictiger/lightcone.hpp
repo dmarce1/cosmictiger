@@ -19,39 +19,45 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #pragma once
 
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/fixed.hpp>
+#include <cosmictiger/cuda_unordered_map.hpp>
+#include <cosmictiger/range.hpp>
 
-using lc_real = double;
+using lc_real = fixed32;
 
 
-class lc_group: public std::atomic<long long> {
-public:
-	lc_group() {
-	}
-	lc_group(const lc_group& other) {
-		std::atomic<long long>::operator=((long long) other);
-	}
-	lc_group(lc_group&& other) {
-		std::atomic<long long>::operator=((long long) other);
-	}
-	lc_group& operator=(const lc_group& other) {
-		std::atomic<long long>::operator=((long long) other);
-		return *this;
-	}
-	lc_group& operator=(lc_group&& other) {
-		std::atomic<long long>::operator=((long long) other);
-		return *this;
-	}
-	lc_group& operator=(long long other) {
-		std::atomic<long long>::operator=(other);
-		return *this;
-	}
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		long long number = (long long) *((std::atomic<long long>*) (this));
-		arc & number;
-		*((std::atomic<long long>*) (this)) = number;
+#define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFLL)
+#define LC_EDGE_GROUP (0x0LL)
+
+struct lc_tree_id {
+	int pix;
+	int index;
+	CUDA_EXPORT
+	bool operator!=(const lc_tree_id& other) const {
+		return pix != other.pix || index != other.index;
 	}
 };
+
+
+struct lc_tree_node {
+	range<lc_real> box;
+	array<lc_tree_id, NCHILD> children;
+	pair<int> part_range;
+	bool active;
+	bool last_active;
+	device_vector<lc_tree_id> neighbors;
+	int pix;
+};
+
+struct lc_entry {
+	fixed32 x, y, z;
+	float vx, vy, vz;
+};
+
+using lc_group = long long;
+
+
 
 struct lc_particle {
 	array<lc_real, NDIM> pos;
@@ -65,9 +71,13 @@ struct lc_particle {
 	}
 };
 
+
+cuda_unordered_map<device_vector<lc_particle>>& get_part_map();
+cuda_unordered_map<device_vector<lc_tree_node>>& get_tree_map();
 void lc_init(double, double);
 int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);
+void lc_add_parts(const lc_entry* entries, int count);
 void lc_buffer2homes();
 size_t lc_time_to_flush(double, double);
 void lc_particle_boundaries1();
@@ -79,6 +89,7 @@ void lc_parts2groups(double a, double link_len);
 void lc_save(FILE* fp);
 void lc_load(FILE* fp);
 vector<float> lc_flush_final();
+size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves);
 
 
 

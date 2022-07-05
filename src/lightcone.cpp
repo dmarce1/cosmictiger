@@ -48,7 +48,7 @@ struct lc_group_data {
 	vector<lc_particle> parts;
 	group_entry arc;
 };
-
+/*
 struct lc_tree_id {
 	int pix;
 	int index;
@@ -65,7 +65,7 @@ struct lc_tree_node {
 	bool last_active;
 	int pix;
 };
-
+*/
 struct pixel {
 	float pix;
 	pixel() {
@@ -256,7 +256,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 }
 
 void lc_parts2groups(double a, double link_len) {
-	vector<hpx::future<void>> futs;
+/*	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_parts2groups_action>( c, a, link_len));
 	}
@@ -438,7 +438,7 @@ void lc_parts2groups(double a, double link_len) {
 	for (int i = 0; i < groups.size(); i++) {
 		saved_groups.push_back(std::move(groups[i].arc));
 	}
-	hpx::wait_all(futs.begin(), futs.end());
+	hpx::wait_all(futs.begin(), futs.end());*/
 }
 
 static long long next_group_id() {
@@ -454,11 +454,13 @@ static int rank_from_group_id(long long id) {
 }
 
 static void lc_send_particles(vector<lc_particle> parts) {
+	/*
 	for (const auto& part : parts) {
 		const int pix = vec2pix(part.pos[XDIM], part.pos[YDIM], part.pos[ZDIM]);
 		std::lock_guard<spinlock_type> lock(*mutex_map[pix]);
 		part_map[pix].push_back(part);
 	}
+	*/
 }
 
 static void lc_send_buffer_particles(vector<lc_particle> parts) {
@@ -479,7 +481,7 @@ static void lc_send_buffer_particles(vector<lc_particle> parts) {
 }
 
 void lc_buffer2homes() {
-	vector<hpx::future<void>> futs1;
+/*	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
 		futs1.push_back(hpx::async<lc_buffer2homes_action>( c));
@@ -523,7 +525,7 @@ void lc_buffer2homes() {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	part_buffer = decltype(part_buffer)();
-	hpx::wait_all(futs1.begin(), futs1.end());
+	hpx::wait_all(futs1.begin(), futs1.end());*/
 }
 
 void lc_groups2homes() {
@@ -582,7 +584,7 @@ static int lc_particles_sort(int pix, pair<int> rng, double xmid, int xdim) {
 }
 
 std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<int> part_range) {
-	lc_tree_node this_node;
+/*	lc_tree_node this_node;
 	vector<lc_tree_node>& nodes = tree_map[pix];
 	vector<lc_particle>& parts = part_map[pix];
 	range<double> part_box;
@@ -627,15 +629,15 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	this_node.active = true;
 	this_node.last_active = true;
 	int index = nodes.size();
-	nodes.push_back(this_node);
+	nodes.push_back(this_node);*/
 	std::pair<int, range<double>> rc;
-	rc.first = index;
-	rc.second = part_box;
+//	rc.first = index;
+//	rc.second = part_box;
 	return rc;
 }
 
 size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
-	vector<lc_tree_id> nextlist;
+/*	vector<lc_tree_id> nextlist;
 	vector<lc_tree_id> leaflist;
 	auto& self = tree_map[self_id.pix][self_id.index];
 	const bool iamleaf = self.children[LEFT].index == -1;
@@ -740,7 +742,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 		self.active = nactive;
 		return nactive;
 	}
-
+*/
 }
 
 size_t lc_find_groups() {
@@ -883,6 +885,8 @@ void lc_particle_boundaries2() {
 }
 
 void lc_form_trees(double tau, double link_len) {
+
+	/*
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_form_trees_action>( c, tau, link_len));
@@ -924,7 +928,7 @@ void lc_form_trees(double tau, double link_len) {
 		}, &parts));
 	}
 
-	hpx::wait_all(futs.begin(), futs.end());
+	hpx::wait_all(futs.begin(), futs.end());*/
 }
 
 static vector<int> pix_neighbors(int pix) {
@@ -1004,7 +1008,7 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 	simd_float8 dist0;
 	simd_float8 dist1;
 	int rc = 0;
-	X0[XDIM] = simd_float8(x0) + images[XDIM];
+	/*	X0[XDIM] = simd_float8(x0) + images[XDIM];
 	X0[YDIM] = simd_float8(y0) + images[YDIM];
 	X0[ZDIM] = simd_float8(z0) + images[ZDIM];
 	X1[XDIM] = simd_float8(x1) + images[XDIM];
@@ -1053,7 +1057,7 @@ int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, 
 				}
 			}
 		}
-	}
+	}*/
 	return rc;
 }
 
