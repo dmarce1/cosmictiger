@@ -33,8 +33,9 @@ __managed__ list_type* list_ptr;
 __managed__ int next_list_entry;
 
 __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const __restrict__ y, fixed32* const __restrict__ z,
-		const array<float, NDIM>* const vels, const char* const rungs, part_int count, char rung, float a, float dt, float tau0, float tau1, float tau_max,
+		const array<float, NDIM>* const vels, const char* const rungs, part_int count, char rung, double a, double dt, double tau0, double tau1, double tau_max,
 		bool do_lc) {
+	do_lc = do_lc && (tau_max - tau1 < 1.0f);
 	const auto& tid = threadIdx.x;
 	const auto& bid = blockIdx.x;
 	auto& list = (*list_ptr)[bid];
@@ -69,7 +70,6 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 			}
 		}
 		if (do_lc) {
-			ALWAYS_ASSERT(false);
 			for (int xi = -1; xi <= 0; xi++) {
 				if (i < end && this_rung == rung) {
 					X0[XDIM] = x0;

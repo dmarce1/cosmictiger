@@ -24,42 +24,14 @@
 
 #define BLOCK_SIZE 32
 
-static cuda_unordered_map<device_vector<lc_particle>>*& part_map_ptr() {
-	static cuda_unordered_map<device_vector<lc_particle>>* a = nullptr;
-	return a;
-}
 
-static cuda_unordered_map<device_vector<lc_tree_node>>*& tree_map_ptr() {
-	static cuda_unordered_map<device_vector<lc_tree_node>>* a = nullptr;
-	return a;
-}
-
-static __managed__ cuda_unordered_map<device_vector<lc_particle>>* dev_part_map_ptr;
-static __managed__ cuda_unordered_map<device_vector<lc_tree_node>>* dev_tree_map_ptr;
-
-cuda_unordered_map<device_vector<lc_particle>>& get_part_map() {
-	if (part_map_ptr() == nullptr) {
-		CUDA_CHECK(cudaMallocManaged(&part_map_ptr(), sizeof(cuda_unordered_map<device_vector<lc_particle>> )));
-		new (part_map_ptr()) cuda_unordered_map<device_vector<lc_particle>>;
-	}
-	return *part_map_ptr();
-}
-
-cuda_unordered_map<device_vector<lc_tree_node>>& get_tree_map() {
-	if (tree_map_ptr == nullptr) {
-		CUDA_CHECK(cudaMallocManaged(&tree_map_ptr(), sizeof(cuda_unordered_map<device_vector<lc_tree_node>> )));
-		new (tree_map_ptr()) cuda_unordered_map<device_vector<lc_tree_node>>;
-	}
-	return *tree_map_ptr();
-}
-
-__global__ void cuda_lightcone_kernel(unsigned long long* rc_ptr, const lc_tree_id* leaves, int N, int* index_ptr, unsigned long long* next_id_ptr,
-		double link_len, int hpx_size, int hpx_rank) {
+__global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, unsigned long long* rc_ptr, const lc_tree_id* leaves,
+		int N, int* index_ptr, unsigned long long* next_id_ptr, double link_len, int hpx_size, int hpx_rank) {
 	const int& tid = threadIdx.x;
 	__shared__ int index;
 	const float link_len2 = sqr(link_len);
-	auto& part_map = *dev_part_map_ptr;
-	auto& tree_map = *dev_tree_map_ptr;
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	if (tid == 0) {
 		index = atomicAdd(index_ptr, 1);
 	}
@@ -167,7 +139,7 @@ __global__ void cuda_lightcone_kernel(unsigned long long* rc_ptr, const lc_tree_
 
 }
 
-size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves) {
+size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr) {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_lightcone_kernel, BLOCK_SIZE, 0));
 	nblocks *= cuda_smp_count();
@@ -182,9 +154,7 @@ size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves) {
 	const auto b = get_options().lc_b;
 	const auto N = get_options().parts_dim;
 	const double link_len = b / N;
-	dev_part_map_ptr = part_map_ptr();
-	dev_tree_map_ptr = tree_map_ptr();
-	cuda_lightcone_kernel<<<nblocks,BLOCK_SIZE>>>(rc_ptr, leaves.data(), leaves.size(), index_ptr, next_id_ptr, link_len, hpx_size(),hpx_rank());
+	cuda_lightcone_kernel<<<nblocks,BLOCK_SIZE>>>(part_map_ptr, tree_map_ptr, rc_ptr, leaves.data(), leaves.size(), index_ptr, next_id_ptr, link_len, hpx_size(),hpx_rank());
 	CUDA_CHECK(cudaDeviceSynchronize());
 	size_t rc = *rc_ptr;
 	cuda_free(rc_ptr);

@@ -339,8 +339,8 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if ((!ascending || top) && !(clip_top && top)) {
 			tm.reset();
 			tm.start();
-			const float dt = rung_dt[levels[li]] * t0;
-			drift(scale, dt, tau, tau + dt, t0, levels[li]);
+			const double dt = rung_dt[levels[li]] * t0;
+			drift(scale, dt, tau, tau + dt, get_options().nsteps * t0, levels[li]);
 			tm.stop();
 			//PRINT("Drift took %e\n", tm.read());
 		}
@@ -368,12 +368,12 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 void do_power_spectrum(int num, double a) {
 	profiler_enter(__FUNCTION__);
 	PRINT("Computing power spectrum\n");
-	const float h = get_options().hubble;
-	const float omega_m = get_options().omega_m;
+	const double h = get_options().hubble;
+	const double omega_m = get_options().omega_m;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const int N = get_options().parts_dim;
 	const double D1 = cosmos_growth_factor(omega_m, a) / cosmos_growth_factor(omega_m, 1.0);
-	const float factor = pow(box_size, 3) / pow(N, 6) / sqr(D1);
+	const double factor = pow(box_size, 3) / pow(N, 6) / sqr(D1);
 	auto power = power_spectrum_compute();
 	std::string filename = "power." + std::to_string(num) + ".txt";
 	FILE* fp = fopen(filename.c_str(), "wt");
@@ -527,7 +527,7 @@ void driver() {
 		profiler_exit();
 	};
 	auto checkpointlist = read_checkpoint_list();
-	const float hsoft0 = get_options().hsoft;
+	const double hsoft0 = get_options().hsoft;
 	bool do_check = false;
 	double checkz;
 	buckets50.start();

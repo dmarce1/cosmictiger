@@ -42,12 +42,10 @@
 
 using healpix_type = T_Healpix_Base< int >;
 
-
 struct lc_group_data {
 	vector<lc_particle> parts;
 	group_entry arc;
 };
-
 
 struct pixel {
 	float pix;
@@ -78,8 +76,8 @@ struct pixel {
 static std::shared_ptr<healpix_type> healpix;
 static pair<int> my_pix_range;
 static std::unordered_set<int> bnd_pix;
-static auto& part_map = get_part_map();
-static auto& tree_map = get_tree_map();
+static lc_part_map_type* part_map_ptr = nullptr;
+static lc_tree_map_type* tree_map_ptr = nullptr;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
 static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
@@ -453,6 +451,7 @@ static int rank_from_group_id(long long id) {
 }
 
 static void lc_send_particles(vector<lc_particle> parts) {
+	auto& part_map = *part_map_ptr;
 	for (const auto& part : parts) {
 		const int pix = vec2pix(part.pos[XDIM].to_double(), part.pos[YDIM].to_double(), part.pos[ZDIM].to_double());
 		std::lock_guard<spinlock_type> lock(*mutex_map[pix]);
@@ -526,12 +525,13 @@ void lc_buffer2homes() {
 }
 
 void lc_groups2homes() {
+	auto& part_map = *part_map_ptr;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_groups2homes_action>(c));
 	}
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
-		futs.push_back(hpx::async([pix]() {
+		futs.push_back(hpx::async([pix,&part_map]() {
 			auto& parts = part_map[pix];
 			std::unordered_map<int,vector<lc_particle>> sends;
 			for( int i = 0; i < parts.size(); i++) {
@@ -561,6 +561,7 @@ static int lc_particles_sort(int pix, pair<int> rng, double xmid, int xdim) {
 	int end = rng.second;
 	int lo = begin;
 	int hi = end;
+	auto& part_map = *part_map_ptr;
 	auto& parts = part_map[pix];
 	while (lo < hi) {
 		if (parts[lo].pos[xdim] >= xmid) {
@@ -582,6 +583,8 @@ static int lc_particles_sort(int pix, pair<int> rng, double xmid, int xdim) {
 
 std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<int> part_range) {
 	lc_tree_node this_node;
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	auto& nodes = tree_map[pix];
 	auto& parts = part_map[pix];
 	range<double> part_box;
@@ -646,6 +649,8 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 }
 
 size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	vector<lc_tree_id> nextlist;
 	vector<lc_tree_id> leaflist;
 	auto& self = tree_map[self_id.pix][self_id.index];
@@ -756,6 +761,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 void lc_find_neighbors(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
 	vector<lc_tree_id> nextlist;
 	vector<lc_tree_id> leaflist;
+	auto& tree_map = *tree_map_ptr;
 	auto& self = tree_map[self_id.pix][self_id.index];
 	const bool iamleaf = self.children[LEFT].index == -1;
 	auto mybox = self.box.pad(link_len * 1.0001);
@@ -790,6 +796,7 @@ void lc_find_neighbors(lc_tree_id self_id, vector<lc_tree_id> checklist, double 
 }
 
 size_t lc_find_groups() {
+	auto& tree_map = *tree_map_ptr;
 	vector < hpx::future < size_t >> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_find_groups_action>(c));
@@ -798,7 +805,7 @@ size_t lc_find_groups() {
 	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
 	vector<hpx::future<void>> futs2;
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
-		futs2.push_back(hpx::async([pix]() {
+		futs2.push_back(hpx::async([pix, &tree_map]() {
 			auto& nodes = tree_map[pix];
 			for( int i = 0; i < nodes.size(); i++) {
 				nodes[i].last_active = nodes[i].active;
@@ -806,8 +813,11 @@ size_t lc_find_groups() {
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
+
+	return cuda_lightcone(leaf_nodes, part_map_ptr, tree_map_ptr);
+/*
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
-		futs.push_back(hpx::async([pix, link_len]() {
+		futs.push_back(hpx::async([pix, link_len, &tree_map]() {
 			auto check_pix = pix_neighbors(pix);
 			check_pix.push_back(pix);
 			vector<lc_tree_id> checklist(check_pix.size());
@@ -815,21 +825,23 @@ size_t lc_find_groups() {
 				checklist[i].pix = check_pix[i];
 				checklist[i].index = tree_map[check_pix[i]].size() - 1;
 			}
-			return cuda_lightcone(leaf_nodes);
-//			return lc_find_groups_local(checklist.back(), checklist, link_len);
-		}));
+			return lc_find_groups_local(checklist.back(), checklist, link_len);
+			}));
 	}
 	for (auto& f : futs) {
 		rc += f.get();
 	}
-	return rc;
+	return rc;*/
 }
 
 static device_vector<lc_particle> lc_get_particles1(int pix) {
+	auto& part_map = *part_map_ptr;
 	return part_map[pix];
 }
 
 static pair<vector<long long>, vector<char>> lc_get_particles2(int pix) {
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	pair<vector<long long>, vector<char>> rc;
 	const auto& parts = part_map[pix];
 	for (int i = 0; i < parts.size(); i++) {
@@ -866,6 +878,8 @@ static int pix2rank(int pix) {
 }
 
 void lc_particle_boundaries1() {
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_particle_boundaries1_action>(c));
@@ -885,6 +899,8 @@ void lc_particle_boundaries1() {
 }
 
 void lc_particle_boundaries2() {
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_particle_boundaries2_action>(c));
@@ -930,6 +946,8 @@ void lc_particle_boundaries2() {
 }
 
 void lc_form_trees(double tau, double link_len) {
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_form_trees_action>(c, tau, link_len));
@@ -998,7 +1016,7 @@ static int compute_nside(double tau) {
 		Nside *= 2;
 	}
 	Nside /= 2;
-	PRINT("compute_nside = %i\n", Nside);
+//	PRINT("compute_nside = %i\n", Nside);
 	return Nside;
 }
 
@@ -1007,6 +1025,14 @@ void lc_init(double tau, double tau_max_) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_init_action>(c, tau, tau_max_));
 	}
+	if (part_map_ptr == nullptr) {
+		CUDA_CHECK(cudaMallocManaged(&part_map_ptr, sizeof(lc_part_map_type)));
+		CUDA_CHECK(cudaMallocManaged(&tree_map_ptr, sizeof(lc_tree_map_type)));
+		new (part_map_ptr) lc_part_map_type;
+		new (tree_map_ptr) lc_tree_map_type;
+	}
+	auto& part_map = *part_map_ptr;
+	auto& tree_map = *tree_map_ptr;
 	mutex_map = decltype(mutex_map)();
 	bnd_pix = decltype(bnd_pix)();
 	tau_max = tau_max_;

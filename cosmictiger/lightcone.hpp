@@ -71,9 +71,9 @@ struct lc_particle {
 	}
 };
 
+using lc_part_map_type = cuda_unordered_map<device_vector<lc_particle>>;
+using lc_tree_map_type = cuda_unordered_map<device_vector<lc_tree_node>>;
 
-cuda_unordered_map<device_vector<lc_particle>>& get_part_map();
-cuda_unordered_map<device_vector<lc_tree_node>>& get_tree_map();
 void lc_init(double, double);
 int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);
@@ -89,7 +89,7 @@ void lc_parts2groups(double a, double link_len);
 void lc_save(FILE* fp);
 void lc_load(FILE* fp);
 vector<float> lc_flush_final();
-size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves);
+size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr);
 
 
 
