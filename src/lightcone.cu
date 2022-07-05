@@ -108,6 +108,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 					if (this_found_link && A.group > min_group) {
 						__syncthreads();
 						found_link = true;
+						found_any_link = true;
 						if (tid == 0) {
 							A.group = min_group;
 							if (A.group == LC_NO_GROUP) {
@@ -132,16 +133,16 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 		}
 		if (tid == 0) {
 			index = atomicAdd(index_ptr, 1);
+		//	PRINT( "%i %i\n", index, N);
 		}
 		__syncthreads();
 	}
-
+//	PRINT( "! %lli\n", *rc_ptr);
 }
 
 size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr) {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_lightcone_kernel, BLOCK_SIZE, 0));
-	PRINT("lc blocks = %i\n", nblocks);
 	nblocks *= cuda_smp_count();
 	int* index_ptr;
 	unsigned long long* next_id_ptr;
@@ -156,6 +157,7 @@ size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type*
 	const double link_len = b / N;
 	cuda_lightcone_kernel<<<nblocks,BLOCK_SIZE>>>(part_map_ptr, tree_map_ptr, rc_ptr, leaves.data(), leaves.size(), index_ptr, next_id_ptr, link_len, hpx_size(),hpx_rank());
 	CUDA_CHECK(cudaDeviceSynchronize());
+	PRINT("lc blocks = %i\n", nblocks);
 	size_t rc = *rc_ptr;
 	cuda_free(rc_ptr);
 	cuda_free(index_ptr);

@@ -507,6 +507,8 @@ void driver() {
 			lc_form_trees(tau, link_len);
 			PRINT( "Trees formed\n");
 			size_t cnt;
+			lc_find_neighbors();
+			PRINT( "neighbors found\n");
 			do {
 				timer tm;
 				tm.start();

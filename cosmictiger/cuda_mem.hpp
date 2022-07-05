@@ -30,7 +30,7 @@ inline void syncthreads() {
 #endif
 }
 
-#define CUDA_MEM_STACK_SIZE (128*1024)
+#define CUDA_MEM_STACK_SIZE (1024*1024)
 #define CUDA_MEM_NBIN 32
 
 using cuda_mem_int = uint64_t;

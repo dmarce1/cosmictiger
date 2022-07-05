@@ -111,6 +111,7 @@ HPX_PLAIN_ACTION (lc_groups2homes);
 HPX_PLAIN_ACTION (lc_send_buffer_particles);
 HPX_PLAIN_ACTION (lc_send_particles);
 HPX_PLAIN_ACTION (lc_find_groups);
+HPX_PLAIN_ACTION (lc_find_neighbors);
 HPX_PLAIN_ACTION (lc_particle_boundaries1);
 HPX_PLAIN_ACTION (lc_particle_boundaries2);
 HPX_PLAIN_ACTION (lc_flush_final);
@@ -613,8 +614,8 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	} else {
 		leaf = true;
 		for (int dim = 0; dim < NDIM; dim++) {
-			part_box.begin[dim] = std::numeric_limits<double>::max();
-			part_box.end[dim] = -std::numeric_limits<double>::max();
+			part_box.begin[dim] = 1.0;
+			part_box.end[dim] = -1.0;
 		}
 		for (int i = part_range.first; i < part_range.second; i++) {
 			parts[i].group = LC_NO_GROUP;
@@ -628,9 +629,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		this_node.children[LEFT].pix = this_node.children[RIGHT].pix = -1;
 	}
 	this_node.part_range = part_range;
-	for (int dim = 0; dim < NDIM; dim++) {
-		this_node.box.begin[dim] = part_box.end[dim];
-	}
+	this_node.box = part_box;
 	this_node.pix = pix;
 	this_node.active = true;
 	this_node.last_active = true;
@@ -759,7 +758,7 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 	}
 }
 
-void lc_find_neighbors(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
+void lc_find_neighbors_local(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
 	vector<lc_tree_id> nextlist;
 	vector<lc_tree_id> leaflist;
 	auto& tree_map = *tree_map_ptr;
@@ -786,14 +785,40 @@ void lc_find_neighbors(lc_tree_id self_id, vector<lc_tree_id> checklist, double 
 	} while (iamleaf && checklist.size());
 	if (iamleaf) {
 		self.neighbors.resize(leaflist.size());
-		memcpy(self.neighbors.data(), leaflist.data(), leaflist.size());
+		memcpy(self.neighbors.data(), leaflist.data(), sizeof(lc_tree_id) * leaflist.size());
 	} else {
 		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
 		if (checklist.size()) {
-			lc_find_neighbors(self.children[LEFT], checklist, link_len);
-			lc_find_neighbors(self.children[RIGHT], std::move(checklist), link_len);
+			lc_find_neighbors_local(self.children[LEFT], checklist, link_len);
+			lc_find_neighbors_local(self.children[RIGHT], std::move(checklist), link_len);
 		}
 	}
+}
+
+size_t lc_find_neighbors() {
+	auto& tree_map = *tree_map_ptr;
+	vector<hpx::future<void>> futs;
+	for (const auto& c : hpx_children()) {
+		futs.push_back(hpx::async<lc_find_neighbors_action>(c));
+	}
+	size_t rc = 0;
+	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
+	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
+		futs.push_back(hpx::async([pix, link_len, &tree_map]() {
+			auto check_pix = pix_neighbors(pix);
+			check_pix.push_back(pix);
+			vector<lc_tree_id> checklist(check_pix.size());
+			for (int i = 0; i < check_pix.size(); i++) {
+				checklist[i].pix = check_pix[i];
+				checklist[i].index = tree_map[check_pix[i]].size() - 1;
+			}
+			lc_find_neighbors_local(checklist.back(), checklist, link_len);
+		}));
+	}
+	for (auto& f : futs) {
+		f.get();
+	}
+	return rc;
 }
 
 size_t lc_find_groups() {
@@ -810,29 +835,13 @@ size_t lc_find_groups() {
 			auto& nodes = tree_map[pix];
 			for( int i = 0; i < nodes.size(); i++) {
 				nodes[i].last_active = nodes[i].active;
+				nodes[i].active = 0;
 			}
 		}));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 
 	return cuda_lightcone(leaf_nodes, part_map_ptr, tree_map_ptr);
-/*
-	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
-		futs.push_back(hpx::async([pix, link_len, &tree_map]() {
-			auto check_pix = pix_neighbors(pix);
-			check_pix.push_back(pix);
-			vector<lc_tree_id> checklist(check_pix.size());
-			for (int i = 0; i < check_pix.size(); i++) {
-				checklist[i].pix = check_pix[i];
-				checklist[i].index = tree_map[check_pix[i]].size() - 1;
-			}
-			return lc_find_groups_local(checklist.back(), checklist, link_len);
-			}));
-	}
-	for (auto& f : futs) {
-		rc += f.get();
-	}
-	return rc;*/
 }
 
 static device_vector<lc_particle> lc_get_particles1(int pix) {
@@ -987,6 +996,7 @@ void lc_form_trees(double tau, double link_len) {
 				}
 				ASSERT(R >= tau_max - tau);
 			}
+
 		}, &parts));
 	}
 
@@ -1036,6 +1046,7 @@ void lc_init(double tau, double tau_max_) {
 	auto& tree_map = *tree_map_ptr;
 	mutex_map = decltype(mutex_map)();
 	bnd_pix = decltype(bnd_pix)();
+	leaf_nodes = decltype(leaf_nodes)();
 	tau_max = tau_max_;
 	Nside = compute_nside(tau);
 	Npix = Nside == 0 ? 1 : 12 * sqr(Nside);
