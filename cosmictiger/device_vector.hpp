@@ -20,8 +20,6 @@
 #ifndef DEVICE_VECTOR_HPP_
 #define DEVICE_VECTOR_HPP_
 
-
-
 struct threadid {
 	CUDA_EXPORT
 	inline bool operator==(const int tid) const {
@@ -48,19 +46,11 @@ class device_vector {
 			sz = 0;
 			cap = 0;
 			ptr = nullptr;
-
 		}
 		syncthreads();
 	}
-public:
-	CUDA_EXPORT inline device_vector() {
-		initialize();
-	}
-	CUDA_EXPORT inline device_vector(int sz0) {
-		initialize();
-		resize(sz0);
-	}
-	CUDA_EXPORT inline ~device_vector() {
+	CUDA_EXPORT
+	inline void destroy() {
 		threadid tid;
 		syncthreads();
 		if (tid == 0) {
@@ -69,6 +59,50 @@ public:
 			}
 		}
 		syncthreads();
+	}
+public:
+	CUDA_EXPORT
+	inline void swap(device_vector& other) {
+		const auto optr = other.ptr;
+		const auto ocap = other.cap;
+		const auto osz = other.sz;
+		other.ptr = ptr;
+		other.cap = cap;
+		other.sz = sz;
+		ptr = optr;
+		cap = ocap;
+		sz = osz;
+	}
+	CUDA_EXPORT inline device_vector() {
+		initialize();
+	}
+	CUDA_EXPORT inline device_vector(const device_vector& other) {
+		initialize();
+		*this = other;
+	}
+	CUDA_EXPORT
+	inline device_vector& operator=(const device_vector& other) {
+		resize(other.size());
+		cuda_memcpy(ptr, other.ptr, size() * sizeof(T));
+		return *this;
+	}
+	CUDA_EXPORT
+	inline device_vector& operator=(device_vector&& other) {
+		destroy();
+		initialize();
+		swap(other);
+		return *this;
+	}
+	CUDA_EXPORT inline device_vector(device_vector&& other) {
+		initialize();
+		swap(other);
+	}
+	CUDA_EXPORT inline device_vector(int sz0) {
+		initialize();
+		resize(sz0);
+	}
+	CUDA_EXPORT inline ~device_vector() {
+		destroy();
 	}
 	CUDA_EXPORT
 	inline T* data() {
@@ -103,10 +137,8 @@ public:
 				cuda_memcpy(new_ptr, ptr, sizeof(T) * sz);
 			}
 			syncthreads();
+			destroy();
 			if (tid == 0) {
-				if (ptr) {
-					cuda_free(ptr);
-				}
 				ptr = new_ptr;
 				sz = new_sz;
 				cap = new_cap;
