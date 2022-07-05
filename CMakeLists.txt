@@ -72,6 +72,7 @@ set(cosmictiger_source_files
     src/kick.cu
     src/kick_workspace.cpp
     src/lightcone.cpp
+    src/lightcone.cu
     src/main.cpp
     src/memused.cpp
     src/options.cpp

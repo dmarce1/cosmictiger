@@ -133,6 +133,33 @@ __device__ inline void shared_reduce_max(float& number) {
 }
 
 template<int BLOCK_SIZE>
+__device__ inline void shared_reduce_min(unsigned long long & number) {
+	int P = WARP_SIZE;
+	while (P < BLOCK_SIZE) {
+		P *= 2;
+	}
+	const int tid = threadIdx.x;
+	__shared__ unsigned long long mx[BLOCK_SIZE];
+	mx[tid] = number;
+	__syncthreads();
+	for (int bit = P / 2; bit > 0; bit /= 2) {
+		const int inbr = (tid + bit) % P;
+		unsigned long long t;
+		if( inbr < BLOCK_SIZE ) {
+			t = min(mx[tid], mx[inbr]);
+		} else {
+			t = mx[tid];
+		}
+		__syncthreads();
+		mx[tid] = t;
+		__syncthreads();
+	}
+	__syncthreads();
+	number = mx[0];
+	__syncthreads();
+}
+
+template<int BLOCK_SIZE>
 __device__ inline void shared_reduce_max(int& number) {
 	int P = WARP_SIZE;
 	while (P < BLOCK_SIZE) {

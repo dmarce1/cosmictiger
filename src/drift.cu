@@ -198,7 +198,6 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_drift_kernel, BLOCK_SIZE, 0));
 	cudaFuncAttributes attr;
 	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_drift_kernel));
-	PRINT("%i %i\n", nblocks, BLOCK_SIZE);
 	nblocks *= cuda_smp_count();
 	const auto rng = particles_current_range();
 	nblocks = std::min(nblocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
@@ -218,17 +217,18 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	cnt = 0;
 	for (int li = 0; li < list_ptr->size(); li++) {
 		const auto& list = (*list_ptr)[li];
-		//		lc_add_parts(list.data(), list.size());
+		lc_add_parts(list.data(), list.size());
 		const auto sz = list.size();
 		cnt += sz;
+	}
+	if (cnt != 0) {
+		PRINT("%i flushed\n", cnt);
 	}
 
 	static long long total_count = 0;
 	total_count += cnt;
-	PRINT("%i %i\n", cnt, total_count);
 	list_free<<<1,1>>>();
 	CUDA_CHECK(cudaDeviceSynchronize());
 	CUDA_CHECK(cudaFree(list_ptr));
 	tm.stop();
-	PRINT("Drift time = %e\n", tm.read());
 }
