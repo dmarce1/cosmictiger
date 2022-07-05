@@ -84,6 +84,7 @@ static std::atomic<long long> group_id_counter(0);
 static vector<group_entry> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type mutex;
+static spinlock_type unique_mutex;
 static mutex_type leaf_mutex;
 static device_vector<lc_tree_id> leaf_nodes;
 static double tau_max;
@@ -290,9 +291,9 @@ void lc_parts2groups(double a, double link_len) {
 				auto& parts = groups[i].parts;
 				bool incomplete = false;
 				for( int i = 0; i < parts.size(); i++) {
-					const double x = parts[i].pos[XDIM].to_double();
-					const double y = parts[i].pos[YDIM].to_double();
-					const double z = parts[i].pos[ZDIM].to_double();
+					const double x = parts[i].pos[XDIM];
+					const double y = parts[i].pos[YDIM];
+					const double z = parts[i].pos[ZDIM];
 					const double r = sqrt(sqr(x,y,z));
 					if( r + link_len > 1.0 ) {
 						incomplete = true;
@@ -302,7 +303,7 @@ void lc_parts2groups(double a, double link_len) {
 				vector<array<fixed32, NDIM>> bh_x(parts.size());
 				for( int j = 0; j < parts.size(); j++) {
 					for( int dim = 0; dim < NDIM; dim++) {
-						bh_x[j][dim] = 0.5 + parts[j].pos[dim].to_double() - parts[0].pos[dim].to_double();
+						bh_x[j][dim] = 0.5 + parts[j].pos[dim] - parts[0].pos[dim];
 					}
 				}
 				auto pot = bh_evaluate_potential_fixed(bh_x);
@@ -319,7 +320,7 @@ void lc_parts2groups(double a, double link_len) {
 				}
 				for( int i = 0; i < parts.size(); i++) {
 					for( int dim = 0; dim < NDIM; dim++) {
-						xcom[dim] += parts[i].pos[dim].to_double();
+						xcom[dim] += parts[i].pos[dim];
 						vcom[dim] += parts[i].vel[dim];
 					}
 				}
@@ -351,9 +352,9 @@ void lc_parts2groups(double a, double link_len) {
 					const double vx = parts[i].vel[XDIM];
 					const double vy = parts[i].vel[YDIM];
 					const double vz = parts[i].vel[ZDIM];
-					const double x = parts[i].pos[XDIM].to_double();
-					const double y = parts[i].pos[YDIM].to_double();
-					const double z = parts[i].pos[ZDIM].to_double();
+					const double x = parts[i].pos[XDIM];
+					const double y = parts[i].pos[YDIM];
+					const double z = parts[i].pos[ZDIM];
 					const double r = sqrt(sqr(x, y, z));
 					J[XDIM] += y * vz - z * vy;
 					J[YDIM] -= x * vz - z * vx;
@@ -453,8 +454,8 @@ static int rank_from_group_id(long long id) {
 static void lc_send_particles(vector<lc_particle> parts) {
 	auto& part_map = *part_map_ptr;
 	for (const auto& part : parts) {
-		const int pix = vec2pix(part.pos[XDIM].to_double(), part.pos[YDIM].to_double(), part.pos[ZDIM].to_double());
-		std::lock_guard<spinlock_type> lock(*mutex_map[pix]);
+		const int pix = vec2pix(part.pos[XDIM], part.pos[YDIM], part.pos[ZDIM]);
+		std::lock_guard<spinlock_type> lock(unique_mutex);
 		part_map[pix].push_back(part);
 	}
 }
@@ -492,13 +493,13 @@ void lc_buffer2homes() {
 			std::unordered_map<int,float> my_healpix;
 			for( int i = begin; i < end; i++) {
 				const auto& part = part_buffer[i];
-				const int pix = vec2pix(part.pos[XDIM].to_double(),part.pos[YDIM].to_double(),part.pos[ZDIM].to_double());
+				const int pix = vec2pix(part.pos[XDIM],part.pos[YDIM],part.pos[ZDIM]);
 				const int rank = pix2rank(pix);
 				sends[rank].push_back(part);
 				double vec[NDIM];
-				vec[XDIM] = part.pos[XDIM].to_double();
-				vec[YDIM] = part.pos[YDIM].to_double();
-				vec[ZDIM] = part.pos[ZDIM].to_double();
+				vec[XDIM] = part.pos[XDIM];
+				vec[YDIM] = part.pos[YDIM];
+				vec[ZDIM] = part.pos[ZDIM];
 				long int ipix;
 				vec2pix_ring(get_options().lc_map_size, vec, &ipix);
 				auto iter = my_healpix.find(ipix);
@@ -618,7 +619,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		for (int i = part_range.first; i < part_range.second; i++) {
 			parts[i].group = LC_NO_GROUP;
 			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = parts[i].pos[dim].to_double();
+				const double x = parts[i].pos[dim];
 				part_box.begin[dim] = std::min(part_box.begin[dim], x);
 				part_box.end[dim] = std::max(part_box.end[dim], x);
 			}
@@ -686,9 +687,9 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 					if (mybox.contains(part.pos)) {
 						for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 							auto& mypart = part_map[self.pix][pj];
-							const double dx = mypart.pos[XDIM].to_double() - part.pos[XDIM].to_double();
-							const double dy = mypart.pos[YDIM].to_double() - part.pos[YDIM].to_double();
-							const double dz = mypart.pos[ZDIM].to_double() - part.pos[ZDIM].to_double();
+							const double dx = mypart.pos[XDIM] - part.pos[XDIM];
+							const double dy = mypart.pos[YDIM] - part.pos[YDIM];
+							const double dz = mypart.pos[ZDIM] - part.pos[ZDIM];
 							const double R2 = sqr(dx, dy, dz);
 							if (R2 <= link_len2) {
 								if (mypart.group == LC_NO_GROUP) {
@@ -713,9 +714,9 @@ size_t lc_find_groups_local(lc_tree_id self_id, vector<lc_tree_id> checklist, do
 				for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 					if (pi != pj) {
 						auto& B = part_map[self.pix][pj];
-						const double dx = A.pos[XDIM].to_double() - B.pos[XDIM].to_double();
-						const double dy = A.pos[YDIM].to_double() - B.pos[YDIM].to_double();
-						const double dz = A.pos[ZDIM].to_double() - B.pos[ZDIM].to_double();
+						const double dx = A.pos[XDIM] - B.pos[XDIM];
+						const double dy = A.pos[YDIM] - B.pos[YDIM];
+						const double dz = A.pos[ZDIM] - B.pos[ZDIM];
 						const double R2 = sqr(dx, dy, dz);
 						if (R2 <= link_len2) {
 							if (A.group == LC_NO_GROUP) {
@@ -967,16 +968,16 @@ void lc_form_trees(double tau, double link_len) {
 			}
 			for (int i = 0; i < parts.size(); i++) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					const auto x = parts[i].pos[dim].to_double();
+					const auto x = parts[i].pos[dim];
 					box.begin[dim] = std::min(box.begin[dim], x);
 					box.end[dim] = std::max(box.end[dim], x);
 				}
 			}
 			lc_tree_create(pix, box, part_range);
 			for( int i = 0; i < parts.size(); i++) {
-				const double x = parts[i].pos[XDIM].to_double();
-				const double y = parts[i].pos[YDIM].to_double();
-				const double z = parts[i].pos[ZDIM].to_double();
+				const double x = parts[i].pos[XDIM];
+				const double y = parts[i].pos[YDIM];
+				const double z = parts[i].pos[ZDIM];
 				const double R2 = sqr(x, y, z);
 				const double R = sqrt(R2);
 				if( R < (tau_max - tau) + link_len * 1.0001 && tau < tau_max) {
@@ -984,7 +985,7 @@ void lc_form_trees(double tau, double link_len) {
 				} else {
 					parts[i].group = LC_NO_GROUP;
 				}
-				ASSERT(R2 >= tau_max - tau);
+				ASSERT(R >= tau_max - tau);
 			}
 		}, &parts));
 	}
@@ -1062,7 +1063,7 @@ void lc_init(double tau, double tau_max_) {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t0, float t1,
+int lc_add_particle(double x0, double y0, double z0, double x1, double y1, double z1, float vx, float vy, float vz, float t0, float t1,
 		vector<lc_particle>& this_part_buffer) {
 	int rc = 0;
 	/*static simd_float8 images[NDIM] =

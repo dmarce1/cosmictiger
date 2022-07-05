@@ -31,6 +31,25 @@ struct threadid {
 		return true;
 #endif
 	}
+	CUDA_EXPORT
+	inline operator int() const {
+#ifdef __CUDA_ARCH__
+		return threadIdx.x;
+#else
+		return 0;
+#endif
+	}
+};
+
+struct blocksz {
+	CUDA_EXPORT
+	inline operator int() const {
+#ifdef __CUDA_ARCH__
+		return blockDim.x;
+#else
+		return 1;
+#endif
+	}
 };
 
 template<class T>
@@ -39,6 +58,28 @@ class device_vector {
 	T* new_ptr;
 	int sz;
 	int cap;
+
+	CUDA_EXPORT
+	inline void construct(int a, int b) {
+		threadid tid;
+		blocksz bsz;
+		syncthreads();
+		for (int i = a + tid; i < b; i += (int) bsz) {
+			new (ptr + i) T;
+		}
+		syncthreads();
+	}
+
+	CUDA_EXPORT
+	inline void destruct(int a, int b) {
+		threadid tid;
+		blocksz bsz;
+		syncthreads();
+		for (int i = a + tid; i < b; i += (int) bsz) {
+			(ptr + i)->~T();
+		}
+		syncthreads();
+	}
 
 	CUDA_EXPORT
 	inline void initialize() {
@@ -123,6 +164,8 @@ public:
 	inline
 	void resize(int new_sz) {
 		threadid tid;
+		destruct(new_sz, sz);
+		const auto osz = sz;
 		if (new_sz <= cap) {
 			syncthreads();
 			if (tid == 0) {
@@ -154,11 +197,12 @@ public:
 			destroy();
 			if (tid == 0) {
 				ptr = new_ptr;
-				sz = new_sz;
 				cap = new_cap;
+				sz = new_sz;
 			}
 			syncthreads();
 		}
+		construct(osz, sz);
 	}
 	CUDA_EXPORT
 	inline T& back() {
@@ -182,6 +226,15 @@ public:
 		resize(size() + 1);
 		if (tid == 0) {
 			back() = item;
+		}
+		syncthreads();
+	}
+	CUDA_EXPORT
+	inline void push_back(T&& item) {
+		threadid tid;
+		resize(size() + 1);
+		if (tid == 0) {
+			back() = std::move(item);
 		}
 		syncthreads();
 	}

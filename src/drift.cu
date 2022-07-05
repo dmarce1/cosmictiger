@@ -45,11 +45,12 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 	const double zero(0.0);
 	const double c0(1.0 / tau_max);
 	const double t0(tau0);
+	const double ainv = 1.0 / a;
 	const auto& nblocks = gridDim.x;
 	const part_int begin = (size_t) bid * count / nblocks;
 	const part_int end = (size_t)(bid + 1) * count / nblocks;
 	const part_int end0 = round_up(end - begin, BLOCK_SIZE) + begin;
-	const float c1 = dt / a;
+	const double c1 = dt / a;
 	for (part_int i = begin + tid; i < end0; i += BLOCK_SIZE) {
 		int this_rung;
 		double x0, y0, z0, x1, y1, z1;
@@ -106,9 +107,9 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 							const int i1 = (double) (tau1_ * c0);
 							if (dist1 <= one || dist0 <= one) {
 								if (i0 != i1) {
-									vx = (vel[XDIM]);
-									vy = (vel[YDIM]);
-									vz = (vel[ZDIM]);
+									vx = vel[XDIM] * ainv;
+									vy = vel[YDIM] * ainv;
+									vz = vel[ZDIM] * ainv;
 									const double& x0 = X0[XDIM];
 									const double& y0 = X0[YDIM];
 									const double& z0 = X0[ZDIM];
@@ -125,7 +126,8 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 									const double x1 = x0 + vx * t;                                            // 2
 									const double y1 = y0 + vy * t;                                            // 2
 									const double z1 = z0 + vz * t;                                            // 2
-									if (sqr(x1, y1, z1) <= one) {                                                 // 6
+									const double R = sqrt(sqr(x1, y1, z1));
+									if (R <= one) {                                                 // 6
 										entry.x = x1;
 										entry.y = y1;
 										entry.z = z1;
@@ -133,6 +135,7 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 										entry.vy = vel[YDIM];
 										entry.vz = vel[ZDIM];
 										test = true;
+										const auto r = sqrt(sqr(entry.x, entry.y, entry.z));
 									}
 								}
 							}
@@ -215,6 +218,7 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	cuda_drift_kernel<<<nblocks,BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0, tau1, tau_max, get_options().do_lc);
 	CUDA_CHECK(cudaDeviceSynchronize());
 	cnt = 0;
+	static size_t total_cnt = 0;
 	for (int li = 0; li < list_ptr->size(); li++) {
 		const auto& list = (*list_ptr)[li];
 		lc_add_parts(list.data(), list.size());
@@ -222,11 +226,10 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 		cnt += sz;
 	}
 	if (cnt != 0) {
-		PRINT("%i flushed\n", cnt);
+		total_cnt += cnt;
+		PRINT("%i flushed\n", total_cnt);
 	}
 
-	static long long total_count = 0;
-	total_count += cnt;
 	list_free<<<1,1>>>();
 	CUDA_CHECK(cudaDeviceSynchronize());
 	CUDA_CHECK(cudaFree(list_ptr));

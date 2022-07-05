@@ -24,11 +24,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/cuda_unordered_map.hpp>
 #include <cosmictiger/range.hpp>
 
-using lc_real = fixed32;
 
 
-#define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFLL)
-#define LC_EDGE_GROUP (0x0LL)
+#define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFULL)
+#define LC_EDGE_GROUP (0x0ULL)
 
 struct lc_tree_id {
 	int pix;
@@ -41,7 +40,7 @@ struct lc_tree_id {
 
 
 struct lc_tree_node {
-	range<lc_real> box;
+	range<double> box;
 	array<lc_tree_id, NCHILD> children;
 	pair<int> part_range;
 	bool active;
@@ -51,16 +50,16 @@ struct lc_tree_node {
 };
 
 struct lc_entry {
-	fixed32 x, y, z;
+	double x, y, z;
 	float vx, vy, vz;
 };
 
-using lc_group = long long;
+using lc_group = unsigned long long;
 
 
 
 struct lc_particle {
-	array<lc_real, NDIM> pos;
+	array<double, NDIM> pos;
 	array<float, NDIM> vel;
 	lc_group group;
 	template<class A>
@@ -75,7 +74,7 @@ using lc_part_map_type = cuda_unordered_map<device_vector<lc_particle>>;
 using lc_tree_map_type = cuda_unordered_map<device_vector<lc_tree_node>>;
 
 void lc_init(double, double);
-int lc_add_particle(lc_real x0, lc_real y0, lc_real z0, lc_real x1, lc_real y1, lc_real z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
+int lc_add_particle(double x0, double y0, double z0, double x1, double y1, double z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);
 void lc_add_parts(const lc_entry* entries, int count);
 void lc_buffer2homes();

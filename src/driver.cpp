@@ -431,7 +431,7 @@ void driver() {
 	timer buckets50;
 	timer buckets20;
 	timer buckets2;
-	int buckets[11] = {80,  112, 112, 128, 128, 160, 176, 184, 184, 184, 192};
+	int buckets[11] = { 80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192 };
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().read_check != -1) {
 		params = read_checkpoint();
@@ -494,17 +494,17 @@ void driver() {
 	}
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
 		profiler_enter("light cone");
-		if (force || lc_time_to_flush(tau + dt, tau_max)) {
+		if (force || lc_time_to_flush(tau, tau_max)) {
 			timer tm;
 			tm.start();
 			PRINT("Flushing light cone\n");
 			kick_workspace::clear_buffers();
 			tree_destroy(true);
-			lc_init(tau + dt, tau_max);
+			lc_init(tau, tau_max);
 			lc_buffer2homes();
 			lc_particle_boundaries1();
 			const double link_len = get_options().lc_b / get_options().parts_dim;
-			lc_form_trees(tau + dt, link_len);
+			lc_form_trees(tau, link_len);
 			PRINT( "Trees formed\n");
 			size_t cnt;
 			do {
@@ -699,9 +699,6 @@ void driver() {
 //			PRINT("%e %e\n", a1, a);
 			timer dtm;
 			dtm.start();
-			if (get_options().do_lc) {
-				check_lc(false);
-			}
 			dtm.stop();
 			drift_time += dtm.read();
 			FILE* textfp = fopen("progress.txt", "at");
@@ -721,8 +718,8 @@ void driver() {
 						"mxr", "bs", "Tflops", "time");
 			}
 			step_tm.stop();
-			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years, minrung,
-					max_rung, bucket_size, flops * 1e-12, step_tm.read());
+			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years,
+					minrung, max_rung, bucket_size, flops * 1e-12, step_tm.read());
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
@@ -750,6 +747,10 @@ void driver() {
 			if (jiter > 100) {
 				//			abort();
 			}
+			if (get_options().do_lc && min_rung(itime) <= minrung0) {
+				check_lc(false);
+			}
+
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
 			break;

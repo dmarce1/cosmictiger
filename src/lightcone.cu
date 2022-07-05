@@ -24,7 +24,6 @@
 
 #define BLOCK_SIZE 32
 
-
 __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, unsigned long long* rc_ptr, const lc_tree_id* leaves,
 		int N, int* index_ptr, unsigned long long* next_id_ptr, double link_len, int hpx_size, int hpx_rank) {
 	const int& tid = threadIdx.x;
@@ -79,16 +78,17 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 					}
 				}
 			}
+
 			__syncthreads();
-			int found_link;
+			bool found_link;
 			do {
 				found_link = false;
 				for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 					auto& A = part_map[self.pix][pj];
 					unsigned long long min_group = LC_NO_GROUP;
-					int this_found_link = false;
-					const auto maxpi = round_up(self.part_range.second, BLOCK_SIZE);
-					for (int pi = self.part_range.first + tid; pi < self.part_range.second; pi += maxpi) {
+					int this_found_link = 0;
+					const auto maxpi = round_up(self.part_range.second - self.part_range.first, BLOCK_SIZE) + self.part_range.first;
+					for (int pi = self.part_range.first + tid; pi < maxpi; pi += BLOCK_SIZE) {
 						unsigned long long this_min_group = LC_NO_GROUP;
 						if (pi != pj && pi < self.part_range.second) {
 							auto& B = part_map[self.pix][pi];
@@ -97,27 +97,26 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 							const float dz = distance(A.pos[ZDIM], B.pos[ZDIM]);
 							const float R2 = sqr(dx, dy, dz);
 							if (R2 < link_len2) {
-								min_group = B.group;
-								this_found_link = true;
+								this_min_group = B.group;
+								this_found_link++;
 							}
 						}
 						shared_reduce_min < BLOCK_SIZE > (this_min_group);
 						min_group = min(min_group, this_min_group);
 					}
 					shared_reduce_add<int, BLOCK_SIZE>(this_found_link);
-					if (this_found_link) {
+					if (this_found_link && A.group > min_group) {
+						__syncthreads();
 						found_link = true;
-						shared_reduce_min < BLOCK_SIZE > (min_group);
 						if (tid == 0) {
 							A.group = min_group;
-							if (A.group == LC_NO_GROUP && this_found_link) {
+							if (A.group == LC_NO_GROUP) {
 								A.group = generate_id();
 							}
 						}
 						__syncthreads();
 					}
 				}
-				shared_reduce_add<int, BLOCK_SIZE>(found_link);
 			} while (found_link);
 			shared_reduce_add<int, BLOCK_SIZE>(found_any_link);
 			if (found_any_link) {
@@ -142,6 +141,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr) {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_lightcone_kernel, BLOCK_SIZE, 0));
+	PRINT("lc blocks = %i\n", nblocks);
 	nblocks *= cuda_smp_count();
 	int* index_ptr;
 	unsigned long long* next_id_ptr;

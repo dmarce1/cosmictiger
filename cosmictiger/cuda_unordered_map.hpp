@@ -53,7 +53,8 @@ class cuda_unordered_map {
 			new_mod *= 2;
 		}
 		if( new_mod > buckets.size()) {
-			device_vector<device_vector<pair<int, T>>> new_buckets(new_mod);
+			device_vector<device_vector<pair<int, T>>> new_buckets;
+			new_buckets.resize(new_mod);
 			for( int i = 0; i < buckets.size(); i++) {
 				for( int j = 0; j < buckets[i].size(); j++) {
 					new_buckets[buckets[i][j].first % new_mod].push_back(std::move(buckets[i][j]));
@@ -118,7 +119,7 @@ public:
 		}
 	}
 	CUDA_EXPORT
-	pair<int,T>* insert(const pair<int,T>& entry ) {
+	pair<int,T>* insert(pair<int,T>&& entry ) {
 #ifdef __CUDA_ARCH__
 		ALWAYS_ASSERT(false);
 		return nullptr;
@@ -126,7 +127,7 @@ public:
 		rehash();
 		int bucket_index = entry.first % buckets.size();
 		auto& bucket = buckets[bucket_index];
-		bucket.push_back(entry);
+		bucket.push_back(std::move(entry));
 		sz++;
 		return &bucket.back();
 #endif
@@ -151,7 +152,8 @@ public:
 		pair<int,T>* entry;
 		if(!find(key, entry) ) {
 			pair<int,T> I;
-			entry = insert(I);
+			I.first = key;
+			entry = insert(std::move(I));
 		}
 		return entry->second;
 	}
