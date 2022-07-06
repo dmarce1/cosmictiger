@@ -27,6 +27,7 @@
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
+#include <cosmictiger/healpix.hpp>
 
 
 int hpx_main(int argc, char *argv[]) {
@@ -45,6 +46,7 @@ int hpx_main(int argc, char *argv[]) {
 	}
 	PRINT("tree_node size = %i\n", sizeof(tree_node));
 	hpx_init();
+	healpix_init();
 	ewald_const::init();
 	start_memuse_daemon();
 	if (process_options(argc, argv)) {

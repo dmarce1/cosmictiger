@@ -68,6 +68,7 @@ set(cosmictiger_source_files
     src/groups_find.cpp
     src/initialize.cpp
     src/hpx.cpp
+    src/healpix.cu
     src/kick.cpp
     src/kick.cu
     src/kick_workspace.cpp
