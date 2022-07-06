@@ -45,7 +45,11 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 		const auto& this_leaf = leaves[index];
 		const auto& self = tree_map[this_leaf.pix][this_leaf.index];
 		if (self.last_active) {
-			const auto& mybox = self.box;
+			range<lc_real> mybox;
+			for (int dim = 0; dim < NDIM; dim++) {
+				mybox.begin[dim] = self.box.begin[dim];
+				mybox.end[dim] = self.box.end[dim];
+			}
 			int found_any_link = false;
 			const auto& neighbors = self.neighbors;
 			for (int li = 0; li < neighbors.size(); li++) {
@@ -133,7 +137,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 		}
 		if (tid == 0) {
 			index = atomicAdd(index_ptr, 1);
-		//	PRINT( "%i %i\n", index, N);
+			//	PRINT( "%i %i\n", index, N);
 		}
 		__syncthreads();
 	}

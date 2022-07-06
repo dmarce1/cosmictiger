@@ -34,27 +34,27 @@ void cosmos_update0(double& adotdot, double& adot, double& a, double dt) {
 	const double adot0 = adot;
 
 	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
-	const double da1 = adot * dt;
-	const double dadot1 = adotdot * dt;
+	const double da1 = adot * a * dt;
+	const double dadot1 = adotdot * a * dt;
 	a += da1;
 	adot += dadot1;
 
 	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
-	const double da2 = adot * dt;
-	const double dadot2 = adotdot * dt;
+	const double da2 = adot * a * dt;
+	const double dadot2 = adotdot * a * dt;
 	a += -da1 + 0.25 * (da1 + da2);
 	adot += -dadot1 + 0.25 * (dadot1 + dadot2);
 
 	adotdot = a * sqr(H) * (-omega_r / (sqr(sqr(a))) - 0.5 * omega_m / (sqr(a) * a) + omega_lam);
-	const double da3 = adot * dt;
-	const double dadot3 = adotdot * dt;
+	const double da3 = adot * a * dt;
+	const double dadot3 = adotdot * a * dt;
 	a += -0.25 * (da1 + da2) + (1.0 / 6.0) * (da1 + da2 + 4.0 * da3);
 	adot += -0.25 * (dadot1 + dadot2) + (1.0 / 6.0) * (dadot1 + dadot2 + 4.0 * dadot3);
 
 }
 
 void cosmos_update(double& adotdot, double& adot, double& a, double dt0) {
-	constexpr int N = 8;
+	constexpr int N = 128;
 	const double dt = dt0 / N;
 	for (int i = 0; i < N; i++) {
 		cosmos_update0(adotdot, adot, a, dt);
@@ -105,21 +105,27 @@ double cosmos_time(double a0, double a1) {
 }
 
 double cosmos_conformal_time(double a0, double a1) {
-	double a = a0;
+	int N = 2;
 	double t = 0.0;
-	const int N = 1024 * 1024;
-	const double loga0 = log(a0);
-	const double loga1 = log(a1);
-	const double dloga = (loga1 - loga0) / N;
-	double loga = loga0;
-	a = exp(loga);
-	double dadt = cosmos_dadtau(a);
-	for (int i = 0; i < N; i++) {
-		t += 0.5 * a / dadt * dloga;
-		loga = loga0 + dloga * (i + 1);
+	double tlast;
+	do {
+		tlast = t;
+		t = 0.0;
+		double a = a0;
+		const double loga0 = log(a0);
+		const double loga1 = log(a1);
+		const double dloga = (loga1 - loga0) / N;
+		double loga = loga0;
 		a = exp(loga);
-		dadt = cosmos_dadtau(a);
-		t += 0.5 * a / dadt * dloga;
-	}
+		double dadt = cosmos_dadtau(a);
+		for (int i = 0; i < N; i++) {
+			t += 0.5 * a / dadt * dloga;
+			loga = loga0 + dloga * (i + 1);
+			a = exp(loga);
+			dadt = cosmos_dadtau(a);
+			t += 0.5 * a / dadt * dloga;
+		}
+		N *= 2;
+	} while (fabs(tlast-t)>1e-9*t);
 	return t;
 }

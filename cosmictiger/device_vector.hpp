@@ -105,6 +105,10 @@ class device_vector {
 	}
 public:
 	CUDA_EXPORT
+	inline int capacity() const {
+		return cap;
+	}
+	CUDA_EXPORT
 	inline void swap(device_vector& other) {
 		const auto optr = other.ptr;
 		const auto ocap = other.cap;

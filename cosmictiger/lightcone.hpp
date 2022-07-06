@@ -24,7 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/cuda_unordered_map.hpp>
 #include <cosmictiger/range.hpp>
 
-
+using lc_real = fixed<int,31>;
 
 #define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFULL)
 #define LC_EDGE_GROUP (0x0ULL)
@@ -50,7 +50,7 @@ struct lc_tree_node {
 };
 
 struct lc_entry {
-	double x, y, z;
+	lc_real x, y, z;
 	float vx, vy, vz;
 };
 
@@ -59,7 +59,7 @@ using lc_group = unsigned long long;
 
 
 struct lc_particle {
-	array<double, NDIM> pos;
+	array<lc_real, NDIM> pos;
 	array<float, NDIM> vel;
 	lc_group group;
 	template<class A>

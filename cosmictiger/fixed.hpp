@@ -304,6 +304,11 @@ CUDA_EXPORT inline float distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_float();
 }
 
+template<int N>
+CUDA_EXPORT inline float distance(fixed<int,N> a, fixed<int,N> b) {
+	return (a - b).to_float();
+}
+
 CUDA_EXPORT inline float distance(double a, double b) {
 	double dif = a - b;
 	while (dif > 0.5) {

@@ -126,8 +126,8 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 									const double x1 = x0 + vx * t;                                            // 2
 									const double y1 = y0 + vy * t;                                            // 2
 									const double z1 = z0 + vz * t;                                            // 2
-									const double R = sqrt(sqr(x1, y1, z1));
-									if (R <= one) {                                                 // 6
+									const double R2 = sqr(x1, y1, z1);
+									if (R2 <= one) {                                                 // 6
 										entry.x = x1;
 										entry.y = y1;
 										entry.z = z1;
@@ -135,7 +135,6 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 										entry.vy = vel[YDIM];
 										entry.vz = vel[ZDIM];
 										test = true;
-										const auto r = sqrt(sqr(entry.x, entry.y, entry.z));
 									}
 								}
 							}
@@ -234,4 +233,5 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	CUDA_CHECK(cudaDeviceSynchronize());
 	CUDA_CHECK(cudaFree(list_ptr));
 	tm.stop();
+	PRINT( "Drift time = %e\n", tm.read());
 }
