@@ -25,6 +25,7 @@
 #include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/lightcone.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/healpix.hpp>
 
 #define BLOCK_SIZE 32
 using list_type = device_vector<device_vector<lc_entry>>;

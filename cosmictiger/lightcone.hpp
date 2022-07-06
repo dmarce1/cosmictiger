@@ -73,6 +73,7 @@ struct lc_particle {
 using lc_part_map_type = cuda_unordered_map<device_vector<lc_particle>>;
 using lc_tree_map_type = cuda_unordered_map<device_vector<lc_tree_node>>;
 
+int lc_nside();
 void lc_init(double, double);
 int lc_add_particle(double x0, double y0, double z0, double x1, double y1, double z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);

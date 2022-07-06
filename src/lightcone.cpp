@@ -130,6 +130,11 @@ void lc_add_parts(const lc_entry* entries, int count) {
 	}
 }
 
+
+int lc_nside() {
+	return Nside;
+}
+
 vector<float> lc_flush_final() {
 	if (hpx_rank() == 0) {
 		if (system("mkdir -p lc") != 0) {
@@ -475,23 +480,11 @@ void lc_buffer2homes() {
 			const int begin = (size_t) proc * part_buffer.size() / nthreads;
 			const int end = (size_t) (proc+1) * part_buffer.size() / nthreads;
 			std::unordered_map<int,vector<lc_particle>> sends;
-			std::unordered_map<int,float> my_healpix;
 			for( int i = begin; i < end; i++) {
 				const auto& part = part_buffer[i];
 				const int pix = vec2pix(part.pos[XDIM].to_double(),part.pos[YDIM].to_double(),part.pos[ZDIM].to_double());
 				const int rank = pix2rank(pix);
 				sends[rank].push_back(part);
-				double vec[NDIM];
-				vec[XDIM] = part.pos[XDIM].to_double();
-				vec[YDIM] = part.pos[YDIM].to_double();
-				vec[ZDIM] = part.pos[ZDIM].to_double();
-				long int ipix;
-				vec2pix_ring(get_options().lc_map_size, vec, &ipix);
-				auto iter = my_healpix.find(ipix);
-				if( iter == my_healpix.end()) {
-					iter = my_healpix.insert(std::make_pair(ipix,0.0)).first;
-				}
-				iter->second += 1.0 / sqr(vec[XDIM], vec[YDIM], vec[ZDIM]);
 			}
 			vector<hpx::future<void>> futs;
 			for( auto i = sends.begin(); i != sends.end(); i++) {
