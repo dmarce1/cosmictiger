@@ -218,6 +218,12 @@ __device__ inline void shared_reduce_min(int& number) {
 	}
 }
 
+__device__ inline void shared_reduce_min(unsigned long long& number) {
+	for (int P = warpSize / 2; P >= 1; P /= 2) {
+		number = min(number, __shfl_xor_sync(0xffffffff, number, P));
+	}
+}
+
 __device__ inline void shared_reduce_min(float& number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		number = fminf(number, __shfl_xor_sync(0xffffffff, number, P));

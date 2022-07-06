@@ -80,13 +80,12 @@ static std::unordered_set<int> bnd_pix;
 static lc_part_map_type* part_map_ptr = nullptr;
 static lc_tree_map_type* tree_map_ptr = nullptr;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
-static std::unordered_map<int, pixel> healpix_map;
 static std::atomic<long long> group_id_counter(0);
 static vector<group_entry> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type shared_mutex;
 static spinlock_type unique_mutex;
-static mutex_type leaf_mutex;
+static spinlock_type leaf_mutex;
 static device_vector<lc_tree_id> leaf_nodes;
 static double tau_max;
 static int Nside;
@@ -155,9 +154,6 @@ vector<float> lc_flush_final() {
 	const int nside = get_options().lc_map_size;
 	const int npix = 12 * nside * nside;
 	vector<float> pix(npix, 0.0f);
-	for (auto i = healpix_map.begin(); i != healpix_map.end(); i++) {
-		pix[i->first] += i->second.pix;
-	}
 	for (auto& f : futs) {
 		const auto v = f.get();
 		for (int i = 0; i < npix; i++) {
@@ -188,14 +184,7 @@ void lc_save(FILE* fp) {
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	fwrite(&dummy, sizeof(int), 1, fp);
-	sz = healpix_map.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
-	for (auto iter = healpix_map.begin(); iter != healpix_map.end(); iter++) {
-		int pix = iter->first;
-		float value = iter->second.pix;
-		fwrite(&pix, sizeof(int), 1, fp);
-		fwrite(&value, sizeof(float), 1, fp);
-	}
 	sz = saved_groups.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	for (int i = 0; i < sz; i++) {
@@ -211,13 +200,6 @@ void lc_load(FILE* fp) {
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	FREAD(&dummy, sizeof(int), 1, fp);
 	FREAD(&sz, sizeof(size_t), 1, fp);
-	for (int i = 0; i < sz; i++) {
-		int pix;
-		float value;
-		FREAD(&pix, sizeof(int), 1, fp);
-		FREAD(&value, sizeof(float), 1, fp);
-		healpix_map[pix].pix = value;
-	}
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	saved_groups.resize(sz);
 	for (int i = 0; i < sz; i++) {
@@ -458,9 +440,7 @@ static void lc_send_particles(vector<lc_particle> parts) {
 	auto& part_map = *part_map_ptr;
 	for (const auto& part : parts) {
 		const int pix = vec2pix(part.pos[XDIM].to_double(), part.pos[YDIM].to_double(), part.pos[ZDIM].to_double());
-		tm.start();
 		std::unique_lock<spinlock_type> lock(*mutex_map[pix]);
-		tm.stop();
 		part_map[pix].push_back(part);
 	}
 }
@@ -517,11 +497,6 @@ void lc_buffer2homes() {
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				futs.push_back(hpx::async<lc_send_particles_action>(hpx_localities()[i->first], std::move(i->second)));
 			}
-			std::unique_lock<mutex_type> lock(map_mutex);
-			for( auto i = my_healpix.begin(); i != my_healpix.end(); i++) {
-				healpix_map[i->first].pix += i->second;
-			}
-			lock.unlock();
 			hpx::wait_all(futs.begin(), futs.end());
 		}));
 	}
@@ -562,18 +537,19 @@ void lc_groups2homes() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-static int lc_particles_sort(int pix, pair<int> rng, double xmid, int xdim) {
+static int lc_particles_sort(int pix, pair<int> rng, double xm, int xdim) {
 	int begin = rng.first;
 	int end = rng.second;
 	int lo = begin;
 	int hi = end;
 	auto& part_map = *part_map_ptr;
 	auto& parts = part_map[pix];
+	lc_real xmid = xm;
 	while (lo < hi) {
-		if (parts[lo].pos[xdim].to_double() >= xmid) {
+		if (parts[lo].pos[xdim] >= xmid) {
 			while (lo != hi) {
 				hi--;
-				if (parts[hi].pos[xdim].to_double() < xmid) {
+				if (parts[hi].pos[xdim] < xmid) {
 					auto tmp = parts[hi];
 					parts[hi] = parts[lo];
 					parts[lo] = tmp;
@@ -643,7 +619,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		lc_tree_id selfid;
 		selfid.index = index;
 		selfid.pix = pix;
-		std::lock_guard<mutex_type> lock(leaf_mutex);
+		std::lock_guard<spinlock_type> lock(leaf_mutex);
 		leaf_nodes.push_back(selfid);
 	}
 	std::pair<int, range<double>> rc;
@@ -882,8 +858,7 @@ void lc_form_trees(double tau, double link_len) {
 				const double y = parts[i].pos[YDIM].to_double();
 				const double z = parts[i].pos[ZDIM].to_double();
 				const double R2 = sqr(x, y, z);
-				const double R = sqrt(R2);
-				if( R < (tau_max - tau) + link_len * 1.0001 && tau < tau_max) {
+				if( R2 < sqr((tau_max - tau) + link_len * 1.0001) && tau < tau_max) {
 					parts[i].group = LC_EDGE_GROUP;
 				} else {
 					parts[i].group = LC_NO_GROUP;
@@ -893,7 +868,6 @@ void lc_form_trees(double tau, double link_len) {
 
 		}, &parts));
 	}
-
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -964,7 +938,6 @@ void lc_init(double tau, double tau_max_) {
 			}
 		}
 	}
-	healpix_map.max_load_factor(1);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 

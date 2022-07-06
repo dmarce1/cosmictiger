@@ -105,10 +105,10 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 								this_found_link++;
 							}
 						}
-						shared_reduce_min < BLOCK_SIZE > (this_min_group);
+						shared_reduce_min(this_min_group);
 						min_group = min(min_group, this_min_group);
 					}
-					shared_reduce_add<int, BLOCK_SIZE>(this_found_link);
+					shared_reduce_add(this_found_link);
 					if (this_found_link && A.group > min_group) {
 						__syncthreads();
 						found_link = true;
@@ -123,7 +123,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 					}
 				}
 			} while (found_link);
-			shared_reduce_add<int, BLOCK_SIZE>(found_any_link);
+			shared_reduce_add(found_any_link);
 			if (found_any_link) {
 				for (int li = tid; li < neighbors.size(); li += BLOCK_SIZE) {
 					const auto ni = neighbors[li];
