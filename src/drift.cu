@@ -27,11 +27,11 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/healpix.hpp>
 
-#define BLOCK_SIZE 32
+#define BLOCK_SIZE 512
+
 using list_type = device_vector<device_vector<lc_entry>>;
 
 __managed__ list_type* list_ptr;
-__managed__ int next_list_entry;
 
 __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const __restrict__ y, fixed32* const __restrict__ z,
 		const array<float, NDIM>* const vels, const char* const rungs, part_int count, char rung, double a, double dt, double tau0, double tau1, double tau_max,
@@ -40,10 +40,6 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 	const auto& tid = threadIdx.x;
 	const auto& bid = blockIdx.x;
 	auto& list = (*list_ptr)[bid];
-	const double one(1.0);
-	const double two(2.0);
-	const double four(4.0);
-	const double zero(0.0);
 	const double c0(1.0 / tau_max);
 	const double t0(tau0);
 	const double ainv = 1.0 / a;
@@ -52,12 +48,13 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 	const part_int end = (size_t)(bid + 1) * count / nblocks;
 	const part_int end0 = round_up(end - begin, BLOCK_SIZE) + begin;
 	const double c1 = dt / a;
+	list.resize(0);
 	for (part_int i = begin + tid; i < end0; i += BLOCK_SIZE) {
 		int this_rung;
 		double x0, y0, z0, x1, y1, z1;
 		array<double, NDIM> X0;
 		array<double, NDIM> X1;
-		double vx, vy, vz;
+		float vx, vy, vz;
 		const float* vel;
 		if (i < end) {
 			this_rung = rungs[i];
@@ -66,77 +63,56 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 				x0 = x[i].to_double();
 				y0 = y[i].to_double();
 				z0 = z[i].to_double();
-				x1 = x0 + double((float) (vel[XDIM] * c1));
-				y1 = y0 + double((float) (vel[YDIM] * c1));
-				z1 = z0 + double((float) (vel[ZDIM] * c1));
+				x1 = x0 + double(vel[XDIM] * c1);
+				y1 = y0 + double(vel[YDIM] * c1);
+				z1 = z0 + double(vel[ZDIM] * c1);
 			}
 		}
 		if (do_lc) {
 			for (int xi = -1; xi <= 0; xi++) {
-				if (i < end && this_rung == rung) {
-					X0[XDIM] = x0;
-					X1[XDIM] = x1;
-					if (xi == -1) {
-						X0[XDIM] -= one;
-						X1[XDIM] -= one;
-					}
-				}
+				X0[XDIM] = x0 + (double) xi;
+				X1[XDIM] = x1 + (double) xi;
 				for (int yi = -1; yi <= 0; yi++) {
-					if (i < end && this_rung == rung) {
-						X0[YDIM] = y0;
-						X1[YDIM] = y1;
-						if (yi == -1) {
-							X0[YDIM] -= one;
-							X1[YDIM] -= one;
-						}
-					}
+					X0[YDIM] = y0 - (double) yi;
+					X1[YDIM] = y1 - (double) yi;
 					for (int zi = -1; zi <= 0; zi++) {
 						bool test = false;
 						lc_entry entry;
 						if (i < end && this_rung == rung) {
-							X0[ZDIM] = z0;
-							X1[ZDIM] = z1;
-							if (zi == -1) {
-								X0[ZDIM] -= one;
-								X1[ZDIM] -= one;
-							}
+							X0[ZDIM] = z0 - (double) zi;
+							X1[ZDIM] = z1 - (double) zi;
 							const double dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
 							const double dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
 							const double tau0_ = double(tau0) + dist0;
 							const double tau1_ = double(tau1) + dist1;
 							const int i0 = (double) (tau0_ * c0);
 							const int i1 = (double) (tau1_ * c0);
-							if (dist1 <= one || dist0 <= one) {
-								if (i0 != i1) {
-									vx = vel[XDIM] * ainv;
-									vy = vel[YDIM] * ainv;
-									vz = vel[ZDIM] * ainv;
-									const double& x0 = X0[XDIM];
-									const double& y0 = X0[YDIM];
-									const double& z0 = X0[ZDIM];
-									const double ti = double((double) (i0 + 1)) * double(tau_max);
-									const double sqrtauimtau0 = sqr(ti - t0);
-									const double tau0mtaui = t0 - ti;
-									const double u2 = sqr(vx, vy, vz);                                    // 5
-									const double x2 = sqr(x0, y0, z0);                                       // 5
-									const double udotx = vx * x0 + vy * y0 + vz * z0;               // 5
-									const double A = one - u2;                                                     // 1
-									const double B = two * (tau0mtaui - udotx);                                    // 2
-									const double C = sqrtauimtau0 - x2;                                            // 1
-									const double t = -(B + sqrt(B * B - four * A * C)) / (two * A);                // 15
-									const double x1 = x0 + vx * t;                                            // 2
-									const double y1 = y0 + vy * t;                                            // 2
-									const double z1 = z0 + vz * t;                                            // 2
-									const double R2 = sqr(x1, y1, z1);
-									if (R2 <= one) {                                                 // 6
-										entry.x = x1;
-										entry.y = y1;
-										entry.z = z1;
-										entry.vx = vel[XDIM];
-										entry.vy = vel[YDIM];
-										entry.vz = vel[ZDIM];
-										test = true;
-									}
+							if (i0 != i1 && ((dist1 <= 1.0 || dist0 <= 1.0))) {
+								vx = vel[XDIM] * ainv;
+								vy = vel[YDIM] * ainv;
+								vz = vel[ZDIM] * ainv;
+								const double& x0 = X0[XDIM];
+								const double& y0 = X0[YDIM];
+								const double& z0 = X0[ZDIM];
+								const double ti = double((double) (i0 + 1)) * double(tau_max);
+								const double sqrtauimtau0 = sqr(ti - t0);
+								const double tau0mtaui = t0 - ti;
+								const double A = 1.0 - sqr(vx, vy, vz);                                                     // 1
+								const double B = 2.0 * (tau0mtaui - (vx * x0 + vy * y0 + vz * z0));                                    // 2
+								const double C = sqrtauimtau0 - sqr(x0, y0, z0);                                            // 1
+								const double t = -(B + sqrt(B * B - 4.0 * A * C)) / (2.0 * A);                // 15
+								const double x1 = x0 + vx * t;                                            // 2
+								const double y1 = y0 + vy * t;                                            // 2
+								const double z1 = z0 + vz * t;                                            // 2
+								const double R2 = sqr(x1, y1, z1);
+								if (R2 <= 1.0) {                                                 // 6
+									entry.x = x1;
+									entry.y = y1;
+									entry.z = z1;
+									entry.vx = vel[XDIM];
+									entry.vy = vel[YDIM];
+									entry.vz = vel[ZDIM];
+									test = true;
 								}
 							}
 						}
@@ -155,21 +131,12 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 			}
 		}
 		if (i < end && this_rung == rung) {
-			if (x1 >= one) {
-				x1 -= one;
-			} else if (x1 < zero) {
-				x1 += one;
-			}
-			if (y1 >= one) {
-				y1 -= one;
-			} else if (y1 < zero) {
-				y1 += one;
-			}
-			if (z1 >= one) {
-				z1 -= one;
-			} else if (z1 < zero) {
-				z1 += one;
-			}
+			x1 -= double(x1 >= 1.0);
+			y1 -= double(y1 >= 1.0);
+			z1 -= double(z1 >= 1.0);
+			x1 += double(x1 < 0.0);
+			y1 += double(y1 < 0.0);
+			z1 += double(z1 < 0.0);
 			x[i] = x1;
 			y[i] = y1;
 			z[i] = z1;
@@ -177,39 +144,29 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 	}
 }
 
-static __global__ void list_init(int nvecs) {
-	new (list_ptr) list_type;
-	list_ptr->resize(nvecs);
-	for (int i = 0; i < nvecs; i++) {
-		new (list_ptr->data() + i) device_vector<lc_entry>;
-	}
-
-}
-
-static __global__ void list_free() {
-	const int nvecs = list_ptr->size();
-	for (int i = 0; i < nvecs; i++) {
-		(list_ptr->data() + i)->~device_vector<lc_entry>();
-	}
-	list_ptr->~list_type();
-}
-
 void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_max) {
+	static bool init = false;
 	int nblocks;
-	timer tm;
-	tm.start();
+	timer tm1;
+	tm1.start();
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_drift_kernel, BLOCK_SIZE, 0));
 	cudaFuncAttributes attr;
 	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_drift_kernel));
+	PRINT("CUDA_DRIFT %i\n", nblocks);
 	nblocks *= cuda_smp_count();
 	const auto rng = particles_current_range();
 	nblocks = std::min(nblocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
 	auto cnt = rng.second - rng.first;
 	const int list_size = round_up(cnt, BLOCK_SIZE) / BLOCK_SIZE;
-	CUDA_CHECK(cudaMallocManaged(&list_ptr, sizeof(list_type)));
-	next_list_entry = 0;
-	list_init<<<1,1>>>(nblocks);
-	CUDA_CHECK(cudaDeviceSynchronize());
+	if (!init) {
+		list_ptr = (list_type*) cuda_malloc(sizeof(list_type));
+		new (list_ptr) list_type;
+		list_ptr->resize(nblocks);
+		for (int i = 0; i < nblocks; i++) {
+			new (list_ptr->data() + i) device_vector<lc_entry>;
+		}
+		init = false;
+	}
 	fixed32* x = &particles_pos(XDIM, rng.first);
 	fixed32* y = &particles_pos(YDIM, rng.first);
 	fixed32* z = &particles_pos(ZDIM, rng.first);
@@ -219,20 +176,12 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	CUDA_CHECK(cudaDeviceSynchronize());
 	cnt = 0;
 	static size_t total_cnt = 0;
-	for (int li = 0; li < list_ptr->size(); li++) {
-		const auto& list = (*list_ptr)[li];
-		lc_add_parts(list.data(), list.size());
-		const auto sz = list.size();
-		cnt += sz;
-	}
+	cnt += lc_add_parts(*list_ptr);
 	if (cnt != 0) {
 		total_cnt += cnt;
-		PRINT("%i flushed\n", total_cnt);
+		PRINT("%i flushed now %i flushed total\n", cnt, total_cnt);
 	}
 
-	list_free<<<1,1>>>();
-	CUDA_CHECK(cudaDeviceSynchronize());
-	CUDA_CHECK(cudaFree(list_ptr));
-	tm.stop();
-	PRINT( "Drift time = %e\n", tm.read());
+	tm1.stop();
+	PRINT("Drift time = %e\n", tm1.read());
 }

@@ -173,7 +173,7 @@ void do_groups(int number, double scale) {
 }
 
 std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double tau, double t0, double theta,
-		energies_t* energies, int minrung0, bool do_phi) {
+		energies_t* energies, int minrung0, bool do_phi, hpx::future<void>* lc_fut) {
 	profiler_enter(__FUNCTION__);
 	timer tm;
 	kick_return kr;
@@ -340,6 +340,10 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			tm.reset();
 			tm.start();
 			const double dt = rung_dt[levels[li]] * t0;
+			if (lc_fut) {
+				lc_fut->get();
+				*lc_fut = hpx::make_ready_future();
+			}
 			drift(scale, dt, tau, tau + dt, get_options().nsteps * t0, levels[li]);
 			tm.stop();
 			//PRINT("Drift took %e\n", tm.read());
@@ -431,6 +435,7 @@ void driver() {
 	timer buckets50;
 	timer buckets20;
 	timer buckets2;
+	hpx::future<void> lc_fut = hpx::make_ready_future();
 	int buckets[11] = { 80, 112, 112, 128, 128, 160, 176, 184, 184, 184, 192 };
 	double a0 = 1.0 / (1.0 + get_options().z0);
 	if (get_options().read_check != -1) {
@@ -493,17 +498,10 @@ void driver() {
 		particles_set_minrung(minrung0);
 	}
 	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
-		profiler_enter("light cone");
+	//	profiler_enter("light cone");
 		if (force || lc_time_to_flush(tau, tau_max)) {
 			timer tm;
 			PRINT("Flushing light cone\n");
-			kick_workspace::clear_buffers();
-			tree_destroy(true);
-			tm.start();
-			lc_init(tau, tau_max);
-			tm.stop();
-			PRINT( "lc_init %e\n", tm.read());
-			tm.reset();
 			tm.start();
 			lc_buffer2homes();
 			tm.stop();
@@ -553,9 +551,13 @@ void driver() {
 			PRINT( "lc_parts2groups %e\n", tm.read());
 			tm.reset();
 			tm.start();
+			lc_init(tau, tau_max);
+			tm.stop();
+			PRINT( "lc_init %e\n", tm.read());
+			tm.reset();
 			PRINT( "Light cone flush took %e seconds\n", tm.read());
 		}
-		profiler_exit();
+	//	profiler_exit();
 	};
 	auto checkpointlist = read_checkpoint_list();
 	const double hsoft0 = get_options().hsoft;
@@ -652,7 +654,7 @@ void driver() {
 //				PRINT("MINRUNG0 = %i\n", minrung0);
 //			PRINT( "Doing kick\n");
 			reset_flops();
-			tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval);
+			tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval, &lc_fut);
 			const double flops = flops_per_second();
 			reset_flops();
 
@@ -779,7 +781,9 @@ void driver() {
 				//			abort();
 			}
 			if (get_options().do_lc && min_rung(itime) <= minrung0) {
-				check_lc(false);
+				lc_fut = hpx::async(HPX_PRIORITY_HI, check_lc, false);
+			} else {
+				lc_fut = hpx::make_ready_future();
 			}
 
 		} while (itime != 0);

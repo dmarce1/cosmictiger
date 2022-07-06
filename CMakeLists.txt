@@ -172,6 +172,7 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 #set_source_files_properties(./src/analytic.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 #set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+set_source_files_properties(./src/drift.cu PROPERTIES COMPILE_FLAGS -maxrregcount=64)
 
 
 

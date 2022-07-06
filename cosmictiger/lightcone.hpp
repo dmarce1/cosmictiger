@@ -77,7 +77,7 @@ int lc_nside();
 void lc_init(double, double);
 int lc_add_particle(double x0, double y0, double z0, double x1, double y1, double z1, float vx, float vy, float vz, float t, float dt, vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle>&&);
-void lc_add_parts(const lc_entry* entries, int count);
+size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries);
 void lc_buffer2homes();
 size_t lc_time_to_flush(double, double);
 void lc_particle_boundaries1();

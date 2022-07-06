@@ -116,20 +116,44 @@ HPX_PLAIN_ACTION (lc_particle_boundaries1);
 HPX_PLAIN_ACTION (lc_particle_boundaries2);
 HPX_PLAIN_ACTION (lc_flush_final);
 
-void lc_add_parts(const lc_entry* entries, int count) {
+size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries) {
 	const int start = part_buffer.size();
-	part_buffer.resize(start + count);
-	for (int i = start; i < part_buffer.size(); i++) {
-		const int j = i - start;
-		part_buffer[i].pos[XDIM] = entries[j].x;
-		part_buffer[i].pos[YDIM] = entries[j].y;
-		part_buffer[i].pos[ZDIM] = entries[j].z;
-		part_buffer[i].vel[XDIM] = entries[j].vx;
-		part_buffer[i].vel[YDIM] = entries[j].vy;
-		part_buffer[i].vel[ZDIM] = entries[j].vz;
+	vector<size_t> counts(entries.size() + 1);
+	size_t count = 0;
+	for (int i = 0; i < entries.size(); i++) {
+		counts[i] = count;
+		count += entries[i].size();
 	}
+	counts.back() = count;
+	part_buffer.resize(start + count);
+	const int nthreads = hpx_hardware_concurrency();
+	vector<hpx::future<void>> futs;
+	std::atomic<int> index(0);
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([&index,start,nthreads,proc,&entries,&counts]() {
+			int k = index++;
+			while( k < entries.size()) {
+				auto& entry = entries[k];
+				const int b = start + counts[k];
+				const int e = start + counts[k+1];
+				for (int i = b; i < e; i++) {
+					const int j = i - b;
+					auto& pi = part_buffer[i];
+					const auto& pj = entry[j];
+					pi.pos[XDIM] = pj.x;
+					pi.pos[YDIM] = pj.y;
+					pi.pos[ZDIM] = pj.z;
+					pi.vel[XDIM] = pj.vx;
+					pi.vel[YDIM] = pj.vy;
+					pi.vel[ZDIM] = pj.vz;
+				}
+				k = index++;
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	return count;
 }
-
 
 int lc_nside() {
 	return Nside;
@@ -622,8 +646,10 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 }
 
 void lc_find_neighbors_local(lc_tree_id self_id, vector<lc_tree_id> checklist, double link_len) {
-	vector<lc_tree_id> nextlist;
-	vector<lc_tree_id> leaflist;
+	static thread_local vector<lc_tree_id> nextlist;
+	static thread_local vector<lc_tree_id> leaflist;
+	nextlist.resize(0);
+	leaflist.resize(0);
 	auto& tree_map = *tree_map_ptr;
 	auto& self = tree_map[self_id.pix][self_id.index];
 	const bool iamleaf = self.children[LEFT].index == -1;
