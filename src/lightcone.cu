@@ -45,12 +45,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 		const auto& this_leaf = leaves[index];
 		const auto& self = tree_map[this_leaf.pix][this_leaf.index];
 		if (self.last_active) {
-			range<lc_real> mybox;
-			const auto padded_box = self.box.pad(1.0001 * link_len);
-			for (int dim = 0; dim < NDIM; dim++) {
-				mybox.begin[dim] = padded_box.begin[dim];
-				mybox.end[dim] = padded_box.end[dim];
-			}
+			range<double> mybox = self.box.pad(1.001 * link_len);
 			int found_any_link = false;
 			const auto& neighbors = self.neighbors;
 			auto& self_parts = part_map[self.pix];
@@ -58,10 +53,15 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 				if (this_leaf != neighbors[li]) {
 					const auto ni = neighbors[li];
 					const auto& other = tree_map[ni.pix][ni.index];
+					ALWAYS_ASSERT(ni.pix == other.pix);
 					const auto& other_parts = part_map[other.pix];
 					for (int pi = other.part_range.first; pi < other.part_range.second; pi++) {
-						const auto& B = other_parts[pi];
-						if (mybox.contains(B.pos)) {
+						const auto B = other_parts[pi];
+						array<double, NDIM> b;
+						b[XDIM] = B.pos[XDIM];
+						b[YDIM] = B.pos[YDIM];
+						b[ZDIM] = B.pos[ZDIM];
+						if (mybox.contains(b)) {
 							for (int pj = self.part_range.first + tid; pj < self.part_range.second; pj += BLOCK_SIZE) {
 								auto& A = self_parts[pj];
 								const float dx = distance(A.pos[XDIM], B.pos[XDIM]);
@@ -96,37 +96,36 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 				found_link = false;
 				for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 					auto& A = self_parts[pj];
-					lc_group min_group = LC_NO_GROUP;
 					int this_found_link = 0;
-					const auto maxpi = round_up(self.part_range.second - self.part_range.first, BLOCK_SIZE) + self.part_range.first;
+					const auto maxpi = round_up(pj - self.part_range.first, BLOCK_SIZE) + self.part_range.first;
 					for (int pi = self.part_range.first + tid; pi < maxpi; pi += BLOCK_SIZE) {
-						lc_group this_min_group = LC_NO_GROUP;
-						if (pi != pj && pi < self.part_range.second) {
+						if (pi < pj) {
 							auto& B = self_parts[pi];
 							const float dx = distance(A.pos[XDIM], B.pos[XDIM]);
 							const float dy = distance(A.pos[YDIM], B.pos[YDIM]);
 							const float dz = distance(A.pos[ZDIM], B.pos[ZDIM]);
 							const float R2 = sqr(dx, dy, dz);
 							if (R2 < link_len2) {
-								this_min_group = B.group;
-								this_found_link++;
+								if (A.group == LC_NO_GROUP) {
+									A.group = generate_id();
+									this_found_link++;
+								}
+								if (B.group == LC_NO_GROUP) {
+									B.group = generate_id();
+									this_found_link++;
+								}
+								if (A.group != B.group) {
+									atomicMin(&A.group, B.group);
+									atomicMin(&B.group, A.group);
+									this_found_link++;
+								}
 							}
 						}
-						shared_reduce_min(this_min_group);
-						min_group = min(min_group, this_min_group);
 					}
 					shared_reduce_add(this_found_link);
-					if (this_found_link && A.group > min_group) {
-						__syncthreads();
+					if (this_found_link) {
 						found_link = true;
 						found_any_link = true;
-						if (tid == 0) {
-							A.group = min_group;
-							if (A.group == LC_NO_GROUP) {
-								A.group = generate_id();
-							}
-						}
-						__syncthreads();
 					}
 				}
 			} while (found_link);

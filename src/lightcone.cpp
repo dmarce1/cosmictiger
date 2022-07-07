@@ -273,7 +273,7 @@ static void lc_send_particles(vector<lc_particle> parts) {
 	timer tm;
 	auto& part_map = *part_map_ptr;
 	for (const auto& part : parts) {
-		const int pix = vec2pix(part.pos[XDIM].to_double(), part.pos[YDIM].to_double(), part.pos[ZDIM].to_double());
+		const int pix = vec2pix(part.pos[XDIM], part.pos[YDIM], part.pos[ZDIM]);
 		std::unique_lock<spinlock_type> lock(*mutex_map[pix]);
 		part_map[pix].push_back(part);
 	}
@@ -311,7 +311,7 @@ void lc_buffer2homes() {
 			std::unordered_map<int,vector<lc_particle>> sends;
 			for( int i = begin; i < end; i++) {
 				const auto& part = part_buffer[i];
-				const int pix = vec2pix(part.pos[XDIM].to_double(),part.pos[YDIM].to_double(),part.pos[ZDIM].to_double());
+				const int pix = vec2pix(part.pos[XDIM],part.pos[YDIM],part.pos[ZDIM]);
 				const int rank = pix2rank(pix);
 				sends[rank].push_back(part);
 			}
@@ -386,6 +386,7 @@ static int lc_particles_sort(int pix, pair<int> rng, double xm, int xdim) {
 }
 
 std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<int> part_range) {
+	constexpr int bucket_size = 200;
 	lc_tree_node this_node;
 	auto& part_map = *part_map_ptr;
 	auto& tree_map = *tree_map_ptr;
@@ -393,7 +394,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	auto& parts = part_map[pix];
 	range<double> part_box;
 	bool leaf;
-	if (part_range.second - part_range.first > GROUP_BUCKET_SIZE) {
+	if (part_range.second - part_range.first > bucket_size) {
 		leaf = false;
 		const int xdim = box.longest_dim();
 		const double xmid = 0.5 * (box.begin[xdim] + box.end[xdim]);
@@ -422,7 +423,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 		for (int i = part_range.first; i < part_range.second; i++) {
 			parts[i].group = LC_NO_GROUP;
 			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = parts[i].pos[dim].to_double();
+				const double x = parts[i].pos[dim];
 				part_box.begin[dim] = std::min(part_box.begin[dim], x);
 				part_box.end[dim] = std::max(part_box.end[dim], x);
 			}
@@ -497,7 +498,8 @@ size_t lc_find_neighbors() {
 	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix, link_len, &tree_map]() {
-			auto check_pix = pix_neighbors(pix);
+			vector<int> check_pix;
+			check_pix = pix_neighbors(pix);
 			check_pix.push_back(pix);
 			vector<lc_tree_id> checklist(check_pix.size());
 			for (int i = 0; i < check_pix.size(); i++) {
@@ -664,21 +666,21 @@ void lc_form_trees(double tau, double link_len) {
 			part_range.first = 0;
 			part_range.second = parts.size();
 			for (int dim = 0; dim < NDIM; dim++) {
-				box.begin[dim] = std::numeric_limits<double>::max();
-				box.end[dim] = -std::numeric_limits<double>::max();
+				box.begin[dim] = 1.0;
+				box.end[dim] = -1.0;
 			}
 			for (int i = 0; i < parts.size(); i++) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					const auto x = parts[i].pos[dim].to_double();
+					const auto x = parts[i].pos[dim];
 					box.begin[dim] = std::min(box.begin[dim], x);
 					box.end[dim] = std::max(box.end[dim], x);
 				}
 			}
 			lc_tree_create(pix, box, part_range);
 			for( int i = 0; i < parts.size(); i++) {
-				const double x = parts[i].pos[XDIM].to_double();
-				const double y = parts[i].pos[YDIM].to_double();
-				const double z = parts[i].pos[ZDIM].to_double();
+				const double x = parts[i].pos[XDIM];
+				const double y = parts[i].pos[YDIM];
+				const double z = parts[i].pos[ZDIM];
 				const double R2 = sqr(x, y, z);
 				if( R2 < sqr((tau_max - tau) + link_len * 1.0001) && tau < tau_max) {
 					parts[i].group = LC_EDGE_GROUP;
