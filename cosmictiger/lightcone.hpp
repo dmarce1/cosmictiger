@@ -24,8 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/cuda_unordered_map.hpp>
 #include <cosmictiger/range.hpp>
 
-using lc_real = double;
-//using lc_real = fixed<int,31>;
+using lc_real = fixed<int,31>;
 
 #define LC_NO_GROUP (0xFFFFFFFFFFFFFFULL)
 #define LC_EDGE_GROUP (0x0ULL)
