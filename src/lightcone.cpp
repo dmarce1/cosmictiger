@@ -81,7 +81,7 @@ static lc_part_map_type* part_map_ptr = nullptr;
 static lc_tree_map_type* tree_map_ptr = nullptr;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
 static std::atomic<long long> group_id_counter(0);
-static vector<group_entry> saved_groups;
+//static vector<group_entry> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type shared_mutex;
 static spinlock_type unique_mutex;
@@ -114,7 +114,6 @@ HPX_PLAIN_ACTION (lc_find_groups);
 HPX_PLAIN_ACTION (lc_find_neighbors);
 HPX_PLAIN_ACTION (lc_particle_boundaries1);
 HPX_PLAIN_ACTION (lc_particle_boundaries2);
-HPX_PLAIN_ACTION (lc_flush_final);
 
 size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries) {
 	const int start = part_buffer.size();
@@ -159,53 +158,6 @@ int lc_nside() {
 	return Nside;
 }
 
-vector<float> lc_flush_final() {
-	if (hpx_rank() == 0) {
-		if (system("mkdir -p lc") != 0) {
-			THROW_ERROR("Unable to make directory lc\n");
-		}
-	}
-	vector<hpx::future<vector<float>>>futs;
-	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_flush_final_action>(c));
-	}
-
-	std::string filename = "./lc/lc." + std::to_string(hpx_rank()) + ".dat";
-	FILE* fp = fopen(filename.c_str(), "wb");
-	if (fp == NULL) {
-		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
-	}
-	for (int i = 0; i < saved_groups.size(); i++) {
-		saved_groups[i].write(fp);
-	}
-	fclose(fp);
-
-	const int nside = get_options().lc_map_size;
-	const int npix = 12 * nside * nside;
-	vector<float> pix(npix, 0.0f);
-	for (auto& f : futs) {
-		const auto v = f.get();
-		for (int i = 0; i < npix; i++) {
-			pix[i] += v[i];
-		}
-	}
-	if (hpx_rank() == 0) {
-		FILE* fp = fopen("lc_map.dat", "wb");
-		if (fp == NULL) {
-			THROW_ERROR("unable to open lc_map.dat for writing\n");
-		}
-		fwrite(&nside, sizeof(int), 1, fp);
-		fwrite(&npix, sizeof(int), 1, fp);
-		fwrite(pix.data(), sizeof(float), npix, fp);
-		int number = 0;
-		double time = cosmos_time(1.0e-6, 1.0) * get_options().code_to_s / constants::spyr;
-		fwrite(&number, sizeof(int), 1, fp);
-		fwrite(&time, sizeof(double), 1, fp);
-		fclose(fp);
-
-	}
-	return std::move(pix);
-}
 
 void lc_save(FILE* fp) {
 	int dummy;
@@ -214,11 +166,11 @@ void lc_save(FILE* fp) {
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	fwrite(&dummy, sizeof(int), 1, fp);
 	fwrite(&sz, sizeof(size_t), 1, fp);
-	sz = saved_groups.size();
+/*	sz = saved_groups.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	for (int i = 0; i < sz; i++) {
 		saved_groups[i].write(fp);
-	}
+	}*/
 }
 
 void lc_load(FILE* fp) {
@@ -229,11 +181,11 @@ void lc_load(FILE* fp) {
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	FREAD(&dummy, sizeof(int), 1, fp);
 	FREAD(&sz, sizeof(size_t), 1, fp);
-	FREAD(&sz, sizeof(size_t), 1, fp);
+/*	FREAD(&sz, sizeof(size_t), 1, fp);
 	saved_groups.resize(sz);
 	for (int i = 0; i < sz; i++) {
 		saved_groups[i].read(fp);
-	}
+	}*/
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -271,184 +223,29 @@ void lc_parts2groups(double a, double link_len) {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_parts2groups_action>(c, a, link_len));
 	}
-	std::unordered_map<long long, lc_group_data> groups_map;
+	std::unordered_map<lc_group, vector<lc_entry>> groups_map;
 	int i = 0;
 	while (i < part_buffer.size()) {
 		const auto grp = part_buffer[i].group;
 		if (grp != LC_EDGE_GROUP) {
-			groups_map[grp].parts.push_back(part_buffer[i]);
+			lc_entry entry;
+			const auto& p = part_buffer[i];
+			entry.x = p.pos[XDIM];
+			entry.y = p.pos[YDIM];
+			entry.z = p.pos[ZDIM];
+			entry.vx = p.vel[XDIM];
+			entry.vy = p.vel[YDIM];
+			entry.vz = p.vel[ZDIM];
+			groups_map[grp].push_back(entry);
 			part_buffer[i] = part_buffer.back();
 			part_buffer.pop_back();
 		} else {
 			i++;
 		}
 	}
-	PRINT("%li particles remaining in buffer\n", part_buffer.size());
-	vector<lc_group_data> groups;
-	for (auto i = groups_map.begin(); i != groups_map.end(); i++) {
-		auto tmp = std::move(i->second);
-		if (tmp.parts.size() >= get_options().lc_min_group) {
-			tmp.arc.id = i->first;
-			groups.push_back(std::move(tmp));
-		}
-	}
-	groups_map = decltype(groups_map)();
-	vector<hpx::future<void>> futs2;
-	const int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([proc,nthreads,&groups,a,link_len]() {
-			const double ainv = 1.0 / a;
-			const int begin = (size_t) (proc) * groups.size() / nthreads;
-			const int end = (size_t) (proc+1) * groups.size() / nthreads;
-			for( int i = begin; i < end; i++) {
-				auto& parts = groups[i].parts;
-				bool incomplete = false;
-				for( int i = 0; i < parts.size(); i++) {
-					const double x = parts[i].pos[XDIM].to_double();
-					const double y = parts[i].pos[YDIM].to_double();
-					const double z = parts[i].pos[ZDIM].to_double();
-					const double r = sqrt(sqr(x,y,z));
-					if( r + link_len > 1.0 ) {
-						incomplete = true;
-						break;
-					}
-				}
-				vector<array<fixed32, NDIM>> bh_x(parts.size());
-				for( int j = 0; j < parts.size(); j++) {
-					for( int dim = 0; dim < NDIM; dim++) {
-						bh_x[j][dim] = 0.5 + parts[j].pos[dim].to_double() - parts[0].pos[dim].to_double();
-					}
-				}
-				auto pot = bh_evaluate_potential_fixed(bh_x);
-				for( auto& phi : pot) {
-					phi *= ainv;
-				}
-				array<double, NDIM> xcom;
-				array<float, NDIM> vcom;
-				array<float, NDIM> J;
-				for( int dim = 0; dim < NDIM; dim++) {
-					xcom[dim] = 0.0;
-					vcom[dim] = 0.0;
-					J[dim] = 0.0;
-				}
-				for( int i = 0; i < parts.size(); i++) {
-					for( int dim = 0; dim < NDIM; dim++) {
-						xcom[dim] += parts[i].pos[dim].to_double();
-						vcom[dim] += parts[i].vel[dim];
-					}
-				}
-				for( int dim = 0; dim < NDIM; dim++) {
-					xcom[dim] /= parts.size();
-					vcom[dim] /= parts.size();
-				}
-				for( int i = 0; i < parts.size(); i++) {
-					for( int dim = 0; dim < NDIM; dim++) {
-						parts[i].pos[dim] -= xcom[dim];
-						parts[i].vel[dim] -= vcom[dim];
-					}
-				}
-				double ekin = 0.0;
-				double epot = 0.0;
-				double vxdisp = 0.0;
-				double vydisp = 0.0;
-				double vzdisp = 0.0;
-				double rmax = 0.0;
-				double ravg = 0.0;
-				double Ixx = 0.0;
-				double Iyy = 0.0;
-				double Izz = 0.0;
-				double Ixy = 0.0;
-				double Ixz = 0.0;
-				double Iyz = 0.0;
-				vector<double> radii;
-				for( int i = 0; i < parts.size(); i++) {
-					const double vx = parts[i].vel[XDIM];
-					const double vy = parts[i].vel[YDIM];
-					const double vz = parts[i].vel[ZDIM];
-					const double x = parts[i].pos[XDIM].to_double();
-					const double y = parts[i].pos[YDIM].to_double();
-					const double z = parts[i].pos[ZDIM].to_double();
-					const double r = sqrt(sqr(x, y, z));
-					J[XDIM] += y * vz - z * vy;
-					J[YDIM] -= x * vz - z * vx;
-					J[ZDIM] += x * vy - y * vx;
-					Ixx += sqr(y) + sqr(z);
-					Iyy += sqr(x) + sqr(z);
-					Izz += sqr(x) + sqr(y);
-					Ixy -= x * y;
-					Ixz -= x * z;
-					Iyz -= y * z;
-					rmax = std::max(r, rmax);
-					ravg += r;
-					radii.push_back(r);
-					vxdisp += sqr(vx);
-					vydisp += sqr(vy);
-					vzdisp += sqr(vz);
-					ekin += sqr(vx, vy, vz);
-					epot += pot[i];
-				}
-				std::sort(radii.begin(), radii.end());
-				const double countinv = 1.0 / parts.size();
-				ekin *= countinv;
-				epot *= countinv;
-				vxdisp *= countinv;
-				vydisp *= countinv;
-				vzdisp *= countinv;
-				vxdisp = sqrt(vxdisp);
-				vydisp = sqrt(vydisp);
-				vzdisp = sqrt(vzdisp);
-				ravg *= countinv;
-				Ixx *= countinv;
-				Iyy *= countinv;
-				Izz *= countinv;
-				Ixy *= countinv;
-				Iyz *= countinv;
-				Ixz *= countinv;
-				for( int dim = 0; dim < NDIM; dim++) {
-					J[dim] *= countinv;
-				}
-				const auto radial_percentile = [&radii](double r) {
-					const double dr = 1.0 / (radii.size() - 1);
-					double r0 = r / dr;
-					int n0 = r0;
-					int n1 = n0 + 1;
-					double w1 = r0 - n0;
-					double w0 = 1.0 - w1;
-					return w0*radii[n0] + w1*radii[n1];
-				};
-				const double code_to_mpc = get_options().code_to_cm / constants::mpc_to_cm;
-				const double code_to_mpc2 = sqr(code_to_mpc);
-				groups[i].arc.r25 = radial_percentile(0.25) * code_to_mpc;
-				groups[i].arc.r50 = radial_percentile(0.5) * code_to_mpc;
-				groups[i].arc.r75 = radial_percentile(0.75) * code_to_mpc;
-				groups[i].arc.r90 = radial_percentile(0.9) * code_to_mpc;
-				groups[i].arc.rmax = rmax * code_to_mpc;
-				groups[i].arc.ravg = ravg * code_to_mpc;
-				groups[i].arc.Ixx = Ixx * code_to_mpc2;
-				groups[i].arc.Iyy = Iyy * code_to_mpc2;
-				groups[i].arc.Izz = Izz * code_to_mpc2;
-				groups[i].arc.Ixy = Ixy * code_to_mpc2;
-				groups[i].arc.Iyz = Iyz * code_to_mpc2;
-				groups[i].arc.Ixz = Ixz * code_to_mpc2;
-				for( int dim = 0; dim < NDIM; dim++) {
-					groups[i].arc.lang[dim] = J[dim];
-					groups[i].arc.vel[dim] = vcom[dim];
-					groups[i].arc.com[dim] = xcom[dim] * code_to_mpc;
-				}
-				groups[i].arc.mass = parts.size() * get_options().code_to_g / constants::M0;
-				groups[i].arc.vxdisp = vxdisp;
-				groups[i].arc.vydisp = vydisp;
-				groups[i].arc.vzdisp = vzdisp;
-				groups[i].arc.incomplete = incomplete;
-				groups[i].arc.epot = epot;
-				groups[i].arc.ekin = ekin;
-			}
-		}));
-	}
-	hpx::wait_all(futs2.begin(), futs2.end());
-	for (int i = 0; i < groups.size(); i++) {
-		saved_groups.push_back(std::move(groups[i].arc));
-	}
+	static int total = 0;
+	total += groups_map.size();
+	PRINT("%li particles remaining in buffer, %i groups found\n", part_buffer.size(), total);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 

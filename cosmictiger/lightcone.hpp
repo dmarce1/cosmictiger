@@ -89,7 +89,6 @@ void lc_groups2homes();
 void lc_parts2groups(double a, double link_len);
 void lc_save(FILE* fp);
 void lc_load(FILE* fp);
-vector<float> lc_flush_final();
 size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr);
 
 

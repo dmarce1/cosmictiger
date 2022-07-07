@@ -73,14 +73,14 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 				X0[XDIM] = x0 + (double) xi;
 				X1[XDIM] = x1 + (double) xi;
 				for (int yi = -1; yi <= 0; yi++) {
-					X0[YDIM] = y0 - (double) yi;
-					X1[YDIM] = y1 - (double) yi;
+					X0[YDIM] = y0 + (double) yi;
+					X1[YDIM] = y1 + (double) yi;
 					for (int zi = -1; zi <= 0; zi++) {
 						bool test = false;
 						lc_entry entry;
 						if (i < end && this_rung == rung) {
-							X0[ZDIM] = z0 - (double) zi;
-							X1[ZDIM] = z1 - (double) zi;
+							X0[ZDIM] = z0 + (double) zi;
+							X1[ZDIM] = z1 + (double) zi;
 							const double dist0 = sqrt(sqr(X0[0], X0[1], X0[2]));
 							const double dist1 = sqrt(sqr(X1[0], X1[1], X1[2]));
 							const double tau0_ = double(tau0) + dist0;
@@ -152,7 +152,6 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_drift_kernel, BLOCK_SIZE, 0));
 	cudaFuncAttributes attr;
 	CUDA_CHECK(cudaFuncGetAttributes(&attr, (const void*) cuda_drift_kernel));
-	PRINT("CUDA_DRIFT %i\n", nblocks);
 	nblocks *= cuda_smp_count();
 	const auto rng = particles_current_range();
 	nblocks = std::min(nblocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
@@ -183,5 +182,4 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	}
 
 	tm1.stop();
-	PRINT("Drift time = %e\n", tm1.read());
 }

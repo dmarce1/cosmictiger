@@ -798,7 +798,6 @@ void driver() {
 	if (get_options().do_lc) {
 		check_lc(true);
 		particles_free();
-		lc_flush_final();
 	}
 	kick_workspace::clear_buffers();
 }
