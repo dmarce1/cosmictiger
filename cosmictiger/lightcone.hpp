@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using lc_real = fixed<int,31>;
 
-#define LC_NO_GROUP (0x7FFFFFFFFFFFFFFFULL)
+#define LC_NO_GROUP (0xFFFFFFFFFFFFFFULL)
 #define LC_EDGE_GROUP (0x0ULL)
 
 struct lc_tree_id {
@@ -89,7 +89,7 @@ void lc_groups2homes();
 void lc_parts2groups(double a, double link_len);
 void lc_save(FILE* fp);
 void lc_load(FILE* fp);
-size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr);
+size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, lc_group* next_group);
 
 
 

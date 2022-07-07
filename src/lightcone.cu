@@ -24,8 +24,8 @@
 
 #define BLOCK_SIZE 32
 
-__global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, unsigned long long* rc_ptr, const lc_tree_id* leaves,
-		int N, int* index_ptr, unsigned long long* next_id_ptr, double link_len, int hpx_size, int hpx_rank) {
+__global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, int* rc_ptr, const lc_tree_id* leaves, int N,
+		int* index_ptr, lc_group* next_id_ptr, double link_len, int hpx_size, int hpx_rank) {
 	const int& tid = threadIdx.x;
 	__shared__ int index;
 	const float link_len2 = sqr(link_len);
@@ -35,7 +35,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 		index = atomicAdd(index_ptr, 1);
 	}
 	const auto generate_id = [&next_id_ptr, hpx_rank, hpx_size]() {
-		long long id = atomicAdd(next_id_ptr, 1);
+		lc_group id = atomicAdd(next_id_ptr, 1);
 		id *= hpx_size;
 		id += hpx_rank + 1;
 		return id;
@@ -46,9 +46,10 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 		const auto& self = tree_map[this_leaf.pix][this_leaf.index];
 		if (self.last_active) {
 			range<lc_real> mybox;
+			const auto padded_box = self.box.pad(1.0001 * link_len);
 			for (int dim = 0; dim < NDIM; dim++) {
-				mybox.begin[dim] = self.box.begin[dim];
-				mybox.end[dim] = self.box.end[dim];
+				mybox.begin[dim] = padded_box.begin[dim];
+				mybox.end[dim] = padded_box.end[dim];
 			}
 			int found_any_link = false;
 			const auto& neighbors = self.neighbors;
@@ -69,7 +70,11 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 								const float R2 = sqr(dx, dy, dz);
 								if (R2 < link_len2) {
 									if (A.group == LC_NO_GROUP) {
-										A.group = generate_id();
+										if (B.group != LC_NO_GROUP) {
+											A.group = B.group;
+										} else {
+											A.group = generate_id();
+										}
 										__threadfence();
 										found_any_link = true;
 									}
@@ -91,11 +96,11 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 				found_link = false;
 				for (int pj = self.part_range.first; pj < self.part_range.second; pj++) {
 					auto& A = self_parts[pj];
-					unsigned long long min_group = LC_NO_GROUP;
+					lc_group min_group = LC_NO_GROUP;
 					int this_found_link = 0;
 					const auto maxpi = round_up(self.part_range.second - self.part_range.first, BLOCK_SIZE) + self.part_range.first;
 					for (int pi = self.part_range.first + tid; pi < maxpi; pi += BLOCK_SIZE) {
-						unsigned long long this_min_group = LC_NO_GROUP;
+						lc_group this_min_group = LC_NO_GROUP;
 						if (pi != pj && pi < self.part_range.second) {
 							auto& B = self_parts[pi];
 							const float dx = distance(A.pos[XDIM], B.pos[XDIM]);
@@ -146,25 +151,27 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 //	PRINT( "! %lli\n", *rc_ptr);
 }
 
-size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr) {
+size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, lc_group* next_id_value) {
 	int nblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) cuda_lightcone_kernel, BLOCK_SIZE, 0));
 	nblocks *= cuda_smp_count();
 	int* index_ptr;
-	unsigned long long* next_id_ptr;
-	unsigned long long* rc_ptr;
+	lc_group* next_id_ptr;
+	int* rc_ptr;
+	next_id_ptr = (lc_group*) cuda_malloc(sizeof(lc_group));
 	index_ptr = (int*) cuda_malloc(sizeof(int));
-	next_id_ptr = (unsigned long long*) cuda_malloc(sizeof(unsigned long long));
-	rc_ptr = (unsigned long long*) cuda_malloc(sizeof(unsigned long long));
+	rc_ptr = (int*) cuda_malloc(sizeof(int));
+	*rc_ptr = 0;
 	*index_ptr = 0;
-	*next_id_ptr = 0;
+	*next_id_ptr = *next_id_value;
 	const auto b = get_options().lc_b;
 	const auto N = get_options().parts_dim;
 	const double link_len = b / N;
 	cuda_lightcone_kernel<<<nblocks,BLOCK_SIZE>>>(part_map_ptr, tree_map_ptr, rc_ptr, leaves.data(), leaves.size(), index_ptr, next_id_ptr, link_len, hpx_size(),hpx_rank());
 	CUDA_CHECK(cudaDeviceSynchronize());
-	PRINT("lc blocks = %i\n", nblocks);
+	PRINT("lc blocks = %i next id = %lli\n", nblocks, *next_id_ptr);
 	size_t rc = *rc_ptr;
+	*next_id_value = *next_id_ptr;
 	cuda_free(rc_ptr);
 	cuda_free(index_ptr);
 	cuda_free(next_id_ptr);

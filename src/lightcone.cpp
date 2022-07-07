@@ -80,7 +80,7 @@ static std::unordered_set<int> bnd_pix;
 static lc_part_map_type* part_map_ptr = nullptr;
 static lc_tree_map_type* tree_map_ptr = nullptr;
 static std::unordered_map<int, std::shared_ptr<spinlock_type>> mutex_map;
-static std::atomic<long long> group_id_counter(0);
+static lc_group group_id_counter = 0;
 //static vector<group_entry> saved_groups;
 static vector<lc_particle> part_buffer;
 static shared_mutex_type shared_mutex;
@@ -158,7 +158,6 @@ int lc_nside() {
 	return Nside;
 }
 
-
 void lc_save(FILE* fp) {
 	int dummy;
 	size_t sz = part_buffer.size();
@@ -166,11 +165,13 @@ void lc_save(FILE* fp) {
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	fwrite(&dummy, sizeof(int), 1, fp);
 	fwrite(&sz, sizeof(size_t), 1, fp);
-/*	sz = saved_groups.size();
-	fwrite(&sz, sizeof(size_t), 1, fp);
-	for (int i = 0; i < sz; i++) {
-		saved_groups[i].write(fp);
-	}*/
+	fwrite(&group_id_counter, sizeof(lc_group), 1, fp);
+
+	/*	sz = saved_groups.size();
+	 fwrite(&sz, sizeof(size_t), 1, fp);
+	 for (int i = 0; i < sz; i++) {
+	 saved_groups[i].write(fp);
+	 }*/
 }
 
 void lc_load(FILE* fp) {
@@ -181,11 +182,12 @@ void lc_load(FILE* fp) {
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
 	FREAD(&dummy, sizeof(int), 1, fp);
 	FREAD(&sz, sizeof(size_t), 1, fp);
-/*	FREAD(&sz, sizeof(size_t), 1, fp);
-	saved_groups.resize(sz);
-	for (int i = 0; i < sz; i++) {
-		saved_groups[i].read(fp);
-	}*/
+	FREAD(&group_id_counter, sizeof(lc_group), 1, fp);
+	/*	FREAD(&sz, sizeof(size_t), 1, fp);
+	 saved_groups.resize(sz);
+	 for (int i = 0; i < sz; i++) {
+	 saved_groups[i].read(fp);
+	 }*/
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -244,13 +246,19 @@ void lc_parts2groups(double a, double link_len) {
 		}
 	}
 	static int total = 0;
+	const auto min_sz = get_options().lc_min_group;
+	auto j = groups_map.begin();
+	while (j != groups_map.end()) {
+		if (j->second.size() < min_sz && j->first != LC_NO_GROUP) {
+			groups_map[LC_NO_GROUP].insert(groups_map[LC_NO_GROUP].end(), j->second.begin(), j->second.end());
+			j = groups_map.erase(j);
+		} else {
+			j++;
+		}
+	}
 	total += groups_map.size();
 	PRINT("%li particles remaining in buffer, %i groups found\n", part_buffer.size(), total);
 	hpx::wait_all(futs.begin(), futs.end());
-}
-
-static long long next_group_id() {
-	return group_id_counter++ * hpx_size() + hpx_rank() + 1;
 }
 
 static int rank_from_group_id(long long id) {
@@ -455,14 +463,12 @@ void lc_find_neighbors_local(lc_tree_id self_id, vector<lc_tree_id> checklist, d
 		for (int ci = 0; ci < checklist.size(); ci++) {
 			const auto check = checklist[ci];
 			const auto& other = tree_map[check.pix][check.index];
-			if (other.last_active) {
-				if (mybox.intersection(other.box).volume() > 0) {
-					if (other.children[LEFT].index == -1) {
-						leaflist.push_back(check);
-					} else {
-						nextlist.push_back(other.children[LEFT]);
-						nextlist.push_back(other.children[RIGHT]);
-					}
+			if (mybox.intersection(other.box).volume() > 0) {
+				if (other.children[LEFT].index == -1) {
+					leaflist.push_back(check);
+				} else {
+					nextlist.push_back(other.children[LEFT]);
+					nextlist.push_back(other.children[RIGHT]);
 				}
 			}
 		}
@@ -527,7 +533,7 @@ size_t lc_find_groups() {
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 
-	return cuda_lightcone(leaf_nodes, part_map_ptr, tree_map_ptr);
+	return cuda_lightcone(leaf_nodes, part_map_ptr, tree_map_ptr, &group_id_counter);
 }
 
 static device_vector<lc_particle> lc_get_particles1(int pix) {
