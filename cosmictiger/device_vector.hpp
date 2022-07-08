@@ -121,6 +121,14 @@ public:
 		sz = osz;
 	}
 	CUDA_EXPORT
+	inline T* begin() {
+		return ptr;
+	}
+	CUDA_EXPORT
+	inline T* end() {
+		return ptr + sz;
+	}
+	CUDA_EXPORT
 	inline device_vector() {
 		initialize();
 	}

@@ -43,8 +43,8 @@ struct lc_tree_node {
 	range<double> box;
 	array<lc_tree_id, NCHILD> children;
 	pair<int> part_range;
-	bool active;
-	bool last_active;
+	int active;
+	int last_active;
 	device_vector<lc_tree_id> neighbors;
 	int pix;
 };
@@ -70,7 +70,13 @@ struct lc_particle {
 	}
 };
 
-using lc_part_map_type = cuda_unordered_map<device_vector<lc_particle>>;
+struct lc_particles {
+	array<device_vector<lc_real>, NDIM> pos;
+	array<device_vector<float>, NDIM> vel;
+	device_vector<lc_group> group;
+};
+
+using lc_part_map_type = cuda_unordered_map<lc_particles>;
 using lc_tree_map_type = cuda_unordered_map<device_vector<lc_tree_node>>;
 
 int lc_nside();

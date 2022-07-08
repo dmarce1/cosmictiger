@@ -91,7 +91,7 @@ static double tau_max;
 static int Nside;
 static int Npix;
 
-static device_vector<lc_particle> lc_get_particles1(int pix);
+static lc_particles lc_get_particles1(int pix);
 static pair<vector<long long>, vector<char>> lc_get_particles2(int pix);
 static void lc_send_particles(vector<lc_particle>);
 static void lc_send_buffer_particles(vector<lc_particle>);
@@ -205,12 +205,12 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 		const int npix = nside == 0 ? 1 : 12 * sqr(nside);
 		const size_t ranks = std::min(npix, hpx_size());
 		const size_t parts_per_rank = std::pow(get_options().parts_dim, NDIM) / hpx_size();
-		double factor = 1.0 / 8.0;
-		double tm = tau / tau_max * 64;
-		if (tm > 63.0) {
-			factor = (64.0 - tm) / 8.0;
-		}
-		if (nparts >= factor * parts_per_rank) {
+		/*		double factor = 1.0 / 8.0;
+		 double tm = tau / tau_max * 64;
+		 if (tm > 63.0) {
+		 factor = (64.0 - tm) / 8.0;
+		 }*/
+		if (nparts >= (M_PI / 16.0) * parts_per_rank) {
 			return 1;
 		} else {
 			return 0;
@@ -275,7 +275,11 @@ static void lc_send_particles(vector<lc_particle> parts) {
 	for (const auto& part : parts) {
 		const int pix = vec2pix(part.pos[XDIM].to_double(), part.pos[YDIM].to_double(), part.pos[ZDIM].to_double());
 		std::unique_lock<spinlock_type> lock(*mutex_map[pix]);
-		part_map[pix].push_back(part);
+		for (int dim = 0; dim < NDIM; dim++) {
+			part_map[pix].pos[dim].push_back(part.pos[dim]);
+			part_map[pix].vel[dim].push_back(part.vel[dim]);
+		}
+		part_map[pix].group.push_back(part.group);
 	}
 }
 
@@ -337,18 +341,24 @@ void lc_groups2homes() {
 		futs.push_back(hpx::async([pix,&part_map]() {
 			auto& parts = part_map[pix];
 			std::unordered_map<int,vector<lc_particle>> sends;
-			for( int i = 0; i < parts.size(); i++) {
-				int rank = rank_from_group_id(parts[i].group);
+			for( int i = 0; i < parts.group.size(); i++) {
+				int rank = rank_from_group_id(parts.group[i]);
 				if( rank == -1 ) {
-					if( parts[i].group == LC_EDGE_GROUP ) {
+					if( parts.group[i] == LC_EDGE_GROUP ) {
 						rank = hpx_rank();
 					}
 				}
 				if( rank != -1 ) {
-					sends[rank].push_back(parts[i]);
+					lc_particle part;
+					for( int dim = 0; dim < NDIM; dim++) {
+						part.pos[dim] = parts.pos[dim][i];
+						part.vel[dim] = parts.vel[dim][i];
+					}
+					part.group = parts.group[i];
+					sends[rank].push_back(part);
 				}
 			}
-			parts = device_vector<lc_particle>();
+			parts = lc_particles();
 			vector<hpx::future<void>> futs;
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				futs.push_back(hpx::async<lc_send_buffer_particles_action>(hpx_localities()[i->first],std::move(i->second)));
@@ -368,13 +378,15 @@ static int lc_particles_sort(int pix, pair<int> rng, double xm, int xdim) {
 	auto& parts = part_map[pix];
 	lc_real xmid = xm;
 	while (lo < hi) {
-		if (parts[lo].pos[xdim] >= xmid) {
+		if (parts.pos[xdim][lo] >= xmid) {
 			while (lo != hi) {
 				hi--;
-				if (parts[hi].pos[xdim] < xmid) {
-					auto tmp = parts[hi];
-					parts[hi] = parts[lo];
-					parts[lo] = tmp;
+				if (parts.pos[xdim][hi] < xmid) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						std::swap(parts.pos[dim][hi], parts.pos[dim][lo]);
+						std::swap(parts.vel[dim][hi], parts.vel[dim][lo]);
+					}
+					std::swap(parts.group[hi], parts.group[lo]);
 					break;
 				}
 			}
@@ -386,7 +398,7 @@ static int lc_particles_sort(int pix, pair<int> rng, double xm, int xdim) {
 }
 
 std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<int> part_range) {
-	constexpr int bucket_size = 150;
+	constexpr int bucket_size = GROUP_BUCKET_SIZE;
 	lc_tree_node this_node;
 	auto& part_map = *part_map_ptr;
 	auto& tree_map = *tree_map_ptr;
@@ -421,9 +433,9 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 			part_box.end[dim] = -1.0;
 		}
 		for (int i = part_range.first; i < part_range.second; i++) {
-			parts[i].group = LC_NO_GROUP;
+			parts.group[i] = LC_NO_GROUP;
 			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = parts[i].pos[dim].to_double();
+				const double x = parts.pos[dim][i].to_double();
 				part_box.begin[dim] = std::min(part_box.begin[dim], x);
 				part_box.end[dim] = std::max(part_box.end[dim], x);
 			}
@@ -434,8 +446,8 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	this_node.part_range = part_range;
 	this_node.box = part_box;
 	this_node.pix = pix;
-	this_node.active = true;
-	this_node.last_active = true;
+	this_node.active = 1;
+	this_node.last_active = 1;
 	int index = nodes.size();
 	nodes.push_back(this_node);
 	if (leaf) {
@@ -459,7 +471,7 @@ void lc_find_neighbors_local(lc_tree_id self_id, vector<lc_tree_id> checklist, d
 	auto& tree_map = *tree_map_ptr;
 	auto& self = tree_map[self_id.pix][self_id.index];
 	const bool iamleaf = self.children[LEFT].index == -1;
-	auto mybox = self.box.pad(link_len * 1.0001);
+	auto mybox = self.box.pad(link_len * 1.01);
 	do {
 		for (int ci = 0; ci < checklist.size(); ci++) {
 			const auto check = checklist[ci];
@@ -538,7 +550,7 @@ size_t lc_find_groups() {
 	return cuda_lightcone(leaf_nodes, part_map_ptr, tree_map_ptr, &group_id_counter);
 }
 
-static device_vector<lc_particle> lc_get_particles1(int pix) {
+static lc_particles lc_get_particles1(int pix) {
 	auto& part_map = *part_map_ptr;
 	return part_map[pix];
 }
@@ -548,8 +560,8 @@ static pair<vector<long long>, vector<char>> lc_get_particles2(int pix) {
 	auto& tree_map = *tree_map_ptr;
 	pair<vector<long long>, vector<char>> rc;
 	const auto& parts = part_map[pix];
-	for (int i = 0; i < parts.size(); i++) {
-		rc.first.push_back((long long) parts[i].group);
+	for (int i = 0; i < parts.group.size(); i++) {
+		rc.first.push_back((long long) parts.group[i]);
 	}
 	const auto& nodes = tree_map[pix];
 	for (int i = 0; i < nodes.size(); i++) {
@@ -588,7 +600,7 @@ void lc_particle_boundaries1() {
 	for (const auto& c : hpx_children()) {
 		futs.push_back(hpx::async<lc_particle_boundaries1_action>(c));
 	}
-	vector<hpx::future<device_vector<lc_particle>>>pfuts;
+	vector<hpx::future<lc_particles>> pfuts;
 	pfuts.reserve(bnd_pix.size());
 	for (auto pix : bnd_pix) {
 		const int rank = pix2rank(pix);
@@ -623,10 +635,10 @@ void lc_particle_boundaries2() {
 		auto& parts = part_map[pix];
 		for (int thread = 0; thread < nthreads; thread++) {
 			futs.push_back(hpx::async([thread,nthreads,&p,&parts]() {
-				const int jmin = thread * parts.size() / nthreads;
-				const int jmax = (thread+1) * parts.size() / nthreads;
+				const int jmin = thread * parts.group.size() / nthreads;
+				const int jmax = (thread+1) * parts.group.size() / nthreads;
 				for (int j = jmin; j < jmax; j++) {
-					parts[j].group = p.first[j];
+					parts.group[j] = p.first[j];
 				}
 			}));
 		}
@@ -659,39 +671,50 @@ void lc_form_trees(double tau, double link_len) {
 	for (auto iter = part_map.begin(); iter != part_map.end(); iter++) {
 		const int pix = iter->first;
 		auto& parts = part_map[pix];
-		futs.push_back(hpx::async([pix,link_len,tau](device_vector<lc_particle>* parts_ptr) {
+		futs.push_back(hpx::async([pix,link_len,tau](lc_particles* parts_ptr) {
 			auto& parts = *parts_ptr;
 			range<double> box;
 			pair<int> part_range;
 			part_range.first = 0;
-			part_range.second = parts.size();
+			part_range.second = parts.group.size();
 			for (int dim = 0; dim < NDIM; dim++) {
 				box.begin[dim] = 1.0;
 				box.end[dim] = -1.0;
 			}
-			for (int i = 0; i < parts.size(); i++) {
+			for (int i = 0; i < parts.group.size(); i++) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					const auto x = parts[i].pos[dim].to_double();
+					const auto x = parts.pos[dim][i].to_double();
 					box.begin[dim] = std::min(box.begin[dim], x);
 					box.end[dim] = std::max(box.end[dim], x);
 				}
 			}
 			lc_tree_create(pix, box, part_range);
-			for( int i = 0; i < parts.size(); i++) {
-				const double x = parts[i].pos[XDIM].to_double();
-				const double y = parts[i].pos[YDIM].to_double();
-				const double z = parts[i].pos[ZDIM].to_double();
+			for( int i = 0; i < parts.group.size(); i++) {
+				const double x = parts.pos[XDIM][i].to_double();
+				const double y = parts.pos[YDIM][i].to_double();
+				const double z = parts.pos[ZDIM][i].to_double();
 				const double R2 = sqr(x, y, z);
-				if( R2 < sqr((tau_max - tau) + link_len * 1.0001) && tau < tau_max) {
-					parts[i].group = LC_EDGE_GROUP;
+				if( R2 < sqr((tau_max - tau) + link_len) && tau < tau_max) {
+					parts.group[i] = LC_EDGE_GROUP;
 				} else {
-					parts[i].group = LC_NO_GROUP;
+					parts.group[i] = LC_NO_GROUP;
 				}
 				ASSERT(R >= tau_max - tau);
 			}
 
 		}, &parts));
 	}
+	std::sort(leaf_nodes.begin(), leaf_nodes.end(), [&tree_map](lc_tree_id a, lc_tree_id b) {
+		if( a.pix < b.pix ) {
+			return true;
+		} else if( a.pix > b.pix ) {
+			return false;
+		} else {
+			const auto A = tree_map[a.pix][a.index];
+			const auto B = tree_map[b.pix][b.index];
+			return A.part_range.first < B.part_range.first;
+		}
+	});
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
@@ -750,14 +773,14 @@ void lc_init(double tau, double tau_max_) {
 	my_pix_range.first = (size_t) hpx_rank() * Npix / hpx_size();
 	my_pix_range.second = (size_t)(hpx_rank() + 1) * Npix / hpx_size();
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
-		part_map[pix].resize(0);
+		part_map[pix].group.resize(0);
 		tree_map[pix].resize(0);
 		mutex_map[pix] = std::make_shared<spinlock_type>();
 		const auto neighbors = pix_neighbors(pix);
 		for (const auto& n : neighbors) {
 			if (n < my_pix_range.first || n >= my_pix_range.second) {
 				bnd_pix.insert(n);
-				part_map[n].resize(0);
+				part_map[n].group.resize(0);
 				tree_map[n].resize(0);
 			}
 		}
