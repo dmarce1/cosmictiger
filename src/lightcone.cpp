@@ -48,32 +48,6 @@ struct lc_group_data {
 	group_entry arc;
 };
 
-struct pixel {
-	float pix;
-	pixel() {
-		pix = 0.0;
-	}
-	pixel(const pixel& other) {
-		pix = (float) other.pix;
-	}
-	pixel(pixel&& other) {
-		pix = (float) other.pix;
-	}
-	pixel& operator=(const pixel& other) {
-		pix = (float) other.pix;
-		return *this;
-	}
-	pixel& operator=(pixel&& other) {
-		pix = (float) other.pix;
-		return *this;
-	}
-	pixel& operator=(float other) {
-		pix = other;
-		return *this;
-	}
-
-};
-
 static std::shared_ptr<healpix_type> healpix;
 static pair<int> my_pix_range;
 static std::unordered_set<int> bnd_pix;
@@ -131,6 +105,7 @@ size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries) {
 	for (int proc = 0; proc < nthreads; proc++) {
 		futs.push_back(hpx::async([&index,start,nthreads,proc,&entries,&counts]() {
 			int k = index++;
+			double m = 0.0;
 			while( k < entries.size()) {
 				auto& entry = entries[k];
 				const int b = start + counts[k];
@@ -145,6 +120,7 @@ size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries) {
 					pi.vel[XDIM] = pj.vx;
 					pi.vel[YDIM] = pj.vy;
 					pi.vel[ZDIM] = pj.vz;
+					m = std::max(pj.vx, (float) fabs(m));
 				}
 				k = index++;
 			}
@@ -255,6 +231,68 @@ void lc_parts2groups(double a, double link_len) {
 		} else {
 			j++;
 		}
+	}
+	vector<pair<lc_group, vector<lc_entry>>> groups;
+	for (auto i = groups_map.begin(); i != groups_map.end(); i++) {
+		pair<lc_group, vector<lc_entry>> entry;
+		entry.first = i->first;
+		entry.second = std::move(i->second);
+		groups.push_back(std::move(entry));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	std::atomic<int> next_index(0);
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([&next_index, &groups]() {
+			int index = next_index++;
+			while( index < groups.size()) {
+				compressed_group entry;
+				const auto& parts = groups[index].second;
+				array<double, NDIM> xc;
+				array<double, NDIM> vc;
+				for( int dim = 0; dim < NDIM; dim++) {
+					xc[dim] = 0.0;
+				}
+				for( int i = 0; i < parts.size(); i++) {
+					xc[XDIM] += parts[i].x.to_double();
+					xc[YDIM] += parts[i].y.to_double();
+					xc[ZDIM] += parts[i].z.to_double();
+					vc[XDIM] += parts[i].vx;
+					vc[YDIM] += parts[i].vy;
+					vc[ZDIM] += parts[i].vz;
+				}
+				ALWAYS_ASSERT(parts.size());
+				for( int dim = 0; dim < NDIM; dim++) {
+					xc[dim] /= parts.size();
+					vc[dim] /= parts.size();
+					entry.xc[dim] = xc[dim];
+					entry.vc[dim] = vc[dim];
+				}
+				ALWAYS_ASSERT(parts.size());
+				entry.nparts = parts.size();
+				entry.xmax = 0.0;
+				entry.vmax = 0.0;
+				for( int i = 0; i < parts.size(); i++) {
+					entry.xmax = std::max(entry.xmax, (float) fabs(parts[i].x.to_double() - entry.xc[XDIM].to_double()));
+					entry.xmax = std::max(entry.xmax, (float) fabs(parts[i].y.to_double() - entry.xc[YDIM].to_double()));
+					entry.xmax = std::max(entry.xmax, (float) fabs(parts[i].z.to_double() - entry.xc[ZDIM].to_double()));
+					entry.vmax = std::max(entry.vmax, (float) fabs(parts[i].vx - entry.vc[XDIM]));
+					entry.vmax = std::max(entry.vmax, (float) fabs(parts[i].vy - entry.vc[YDIM]));
+					entry.vmax = std::max(entry.vmax, (float) fabs(parts[i].vz - entry.vc[ZDIM]));
+				}
+				ALWAYS_ASSERT(entry.xmax > 0.0);
+				ALWAYS_ASSERT(entry.vmax > 0.0);
+				for( int i = 0; i < parts.size(); i++) {
+					fixed<short,15> xi, yi, zi;
+					xi = (parts[i].x - entry.xc[XDIM]).to_double() / entry.xmax;
+					yi = (parts[i].y - entry.xc[YDIM]).to_double() / entry.xmax;
+					zi = (parts[i].z - entry.xc[ZDIM]).to_double() / entry.xmax;
+					entry.x.push_back(xi);
+					entry.y.push_back(yi);
+					entry.z.push_back(zi);
+				}
+				index = next_index++;
+			}
+		}));
 	}
 	total += groups_map.size();
 	PRINT("%li particles remaining in buffer, %i groups found\n", part_buffer.size(), total);
@@ -670,9 +708,8 @@ void lc_form_trees(double tau, double link_len) {
 	}
 	for (auto iter = part_map.begin(); iter != part_map.end(); iter++) {
 		const int pix = iter->first;
-		auto& parts = part_map[pix];
-		futs.push_back(hpx::async([pix,link_len,tau](lc_particles* parts_ptr) {
-			auto& parts = *parts_ptr;
+		futs.push_back(hpx::async([pix,link_len,tau,&part_map]() {
+			auto& parts = part_map[pix];
 			range<double> box;
 			pair<int> part_range;
 			part_range.first = 0;
@@ -694,7 +731,8 @@ void lc_form_trees(double tau, double link_len) {
 				const double y = parts.pos[YDIM][i].to_double();
 				const double z = parts.pos[ZDIM][i].to_double();
 				const double R2 = sqr(x, y, z);
-				if( R2 < sqr((tau_max - tau) + link_len) && tau < tau_max) {
+				const double R = sqrt(R2);
+				if( sqr((float)(R - (tau_max - tau))) < (float)sqr(link_len) && tau < tau_max) {
 					parts.group[i] = LC_EDGE_GROUP;
 				} else {
 					parts.group[i] = LC_NO_GROUP;
@@ -702,7 +740,7 @@ void lc_form_trees(double tau, double link_len) {
 				ASSERT(R >= tau_max - tau);
 			}
 
-		}, &parts));
+		}));
 	}
 	std::sort(leaf_nodes.begin(), leaf_nodes.end(), [&tree_map](lc_tree_id a, lc_tree_id b) {
 		if( a.pix < b.pix ) {
@@ -774,6 +812,10 @@ void lc_init(double tau, double tau_max_) {
 	my_pix_range.second = (size_t)(hpx_rank() + 1) * Npix / hpx_size();
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		part_map[pix].group.resize(0);
+		for (int dim = 0; dim < NDIM; dim++) {
+			part_map[pix].pos[dim].resize(0);
+			part_map[pix].vel[dim].resize(0);
+		}
 		tree_map[pix].resize(0);
 		mutex_map[pix] = std::make_shared<spinlock_type>();
 		const auto neighbors = pix_neighbors(pix);
@@ -781,6 +823,10 @@ void lc_init(double tau, double tau_max_) {
 			if (n < my_pix_range.first || n >= my_pix_range.second) {
 				bnd_pix.insert(n);
 				part_map[n].group.resize(0);
+				for (int dim = 0; dim < NDIM; dim++) {
+					part_map[n].pos[dim].resize(0);
+					part_map[n].vel[dim].resize(0);
+				}
 				tree_map[n].resize(0);
 			}
 		}

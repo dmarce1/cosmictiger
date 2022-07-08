@@ -55,11 +55,11 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 					const auto& other = tree_map[ni.pix][ni.index];
 					const auto& other_parts = part_map[other.pix];
 					for (int pi = other.part_range.first; pi < other.part_range.second; pi++) {
-						const auto B = self_parts.group[pi];
+						const auto B = other_parts.group[pi];
 						array<double, NDIM> b;
-						b[XDIM] = self_parts.pos[XDIM][pi].to_double();
-						b[YDIM] = self_parts.pos[YDIM][pi].to_double();
-						b[ZDIM] = self_parts.pos[ZDIM][pi].to_double();
+						b[XDIM] = other_parts.pos[XDIM][pi].to_double();
+						b[YDIM] = other_parts.pos[YDIM][pi].to_double();
+						b[ZDIM] = other_parts.pos[ZDIM][pi].to_double();
 						if (mybox.contains(b)) {
 							for (int pj = self.part_range.first + tid; pj < self.part_range.second; pj += BLOCK_SIZE) {
 								auto& A = self_parts.group[pj];
@@ -133,7 +133,7 @@ __global__ void cuda_lightcone_kernel(lc_part_map_type* part_map_ptr, lc_tree_ma
 				for (int li = tid; li < neighbors.size(); li += BLOCK_SIZE) {
 					const auto ni = neighbors[li];
 					auto& other = tree_map[ni.pix][ni.index];
-					atomicAdd(&other.active, 1);
+					other.active = 1;
 				}
 				if (tid == 0) {
 					atomicAdd(rc_ptr, 1);

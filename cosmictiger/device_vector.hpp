@@ -259,7 +259,7 @@ public:
 	inline T& operator[](int i) {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
-			PRINT("Bound exceeded in device_vector\n");
+			PRINT("A) Bound exceeded in device_vector %i %i %i\n", i, sz, sizeof(T));
 			ALWAYS_ASSERT(false);
 		}
 #endif
@@ -269,7 +269,7 @@ public:
 	inline const T& operator[](int i) const {
 #ifdef CHECK_BOUNDS
 		if (i >= sz) {
-			PRINT("Bound exceeded in device_vector\n");
+			PRINT("B) Bound exceeded in device_vector %i %i %i\n", i, sz, sizeof(T));
 			ALWAYS_ASSERT(false);
 		}
 #endif
