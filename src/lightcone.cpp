@@ -245,52 +245,7 @@ void lc_parts2groups(double a, double link_len) {
 		futs.push_back(hpx::async([&next_index, &groups]() {
 			int index = next_index++;
 			while( index < groups.size()) {
-				compressed_group entry;
-				const auto& parts = groups[index].second;
-				array<double, NDIM> xc;
-				array<double, NDIM> vc;
-				for( int dim = 0; dim < NDIM; dim++) {
-					xc[dim] = 0.0;
-				}
-				for( int i = 0; i < parts.size(); i++) {
-					xc[XDIM] += parts[i].x.to_double();
-					xc[YDIM] += parts[i].y.to_double();
-					xc[ZDIM] += parts[i].z.to_double();
-					vc[XDIM] += parts[i].vx;
-					vc[YDIM] += parts[i].vy;
-					vc[ZDIM] += parts[i].vz;
-				}
-				ALWAYS_ASSERT(parts.size());
-				for( int dim = 0; dim < NDIM; dim++) {
-					xc[dim] /= parts.size();
-					vc[dim] /= parts.size();
-					entry.xc[dim] = xc[dim];
-					entry.vc[dim] = vc[dim];
-				}
-				ALWAYS_ASSERT(parts.size());
-				entry.nparts = parts.size();
-				entry.xmax = 0.0;
-				entry.vmax = 0.0;
-				for( int i = 0; i < parts.size(); i++) {
-					entry.xmax = std::max(entry.xmax, (float) fabs(parts[i].x.to_double() - entry.xc[XDIM].to_double()));
-					entry.xmax = std::max(entry.xmax, (float) fabs(parts[i].y.to_double() - entry.xc[YDIM].to_double()));
-					entry.xmax = std::max(entry.xmax, (float) fabs(parts[i].z.to_double() - entry.xc[ZDIM].to_double()));
-					entry.vmax = std::max(entry.vmax, (float) fabs(parts[i].vx - entry.vc[XDIM]));
-					entry.vmax = std::max(entry.vmax, (float) fabs(parts[i].vy - entry.vc[YDIM]));
-					entry.vmax = std::max(entry.vmax, (float) fabs(parts[i].vz - entry.vc[ZDIM]));
-				}
-				ALWAYS_ASSERT(entry.xmax > 0.0);
-				ALWAYS_ASSERT(entry.vmax > 0.0);
-				for( int i = 0; i < parts.size(); i++) {
-					fixed<short,15> xi, yi, zi;
-					xi = (parts[i].x - entry.xc[XDIM]).to_double() / entry.xmax;
-					yi = (parts[i].y - entry.xc[YDIM]).to_double() / entry.xmax;
-					zi = (parts[i].z - entry.xc[ZDIM]).to_double() / entry.xmax;
-					entry.x.push_back(xi);
-					entry.y.push_back(yi);
-					entry.z.push_back(zi);
-				}
-				index = next_index++;
+
 			}
 		}));
 	}

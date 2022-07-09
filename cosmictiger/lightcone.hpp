@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <cuda_fp16.h>
+
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/cuda_unordered_map.hpp>
@@ -54,19 +56,17 @@ struct lc_entry {
 	float vx, vy, vz;
 };
 
-struct compressed_group {
-	int nparts;
-	array<lc_real, NDIM> xc;
-	array<float, NDIM> vc;
-	float xmax;
-	float vmax;
-	vector<fixed<short,15> > x;
-	vector<fixed<short,15> > y;
-	vector<fixed<short,15> > z;
-	vector<short> vx;
-	vector<short> vy;
-	vector<short> vz;
-};
+using lc_velreal = __half;
+constexpr double lc_velreal_range = 100.0;
+
+inline lc_velreal float2velreal(float v, float vmax) {
+	return __double2half(v / vmax * 10000.0);
+}
+
+inline float velreal2float(lc_velreal i, float vmax) {
+	return __half2float(i) / 10000.0 * vmax;
+}
+
 
 using lc_group = unsigned long long;
 

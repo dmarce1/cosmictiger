@@ -48,6 +48,7 @@ set(cosmictiger_source_files
     src/bh.cpp
     src/bh.cu
     src/boltzmann.cpp
+    src/compress.cpp
  	src/cosmology.cpp
     src/cuda.cpp
     src/cuda_mem.cu
@@ -99,6 +100,7 @@ set(cosmictiger_header_files
     cosmictiger/boltzmann.hpp
     cosmictiger/complex.hpp
     cosmictiger/containers.hpp
+    cosmictiger/compress.hpp
     cosmictiger/cosmology.hpp
     cosmictiger/cuda.hpp
     cosmictiger/cuda_reduce.hpp
