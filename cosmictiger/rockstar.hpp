@@ -3,6 +3,7 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/groups.hpp>
+#include <cosmictiger/lightcone.hpp>
 
 #define ROCKSTAR_BUCKET_SIZE 32
 #define ROCKSTAR_NO_GROUP 0x7FFFFFFF
@@ -85,3 +86,5 @@ void rockstar_find_subgroups(vector<rockstar_particle>& parts, float scale = 1.0
 vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, float scale);
 vector<size_t> rockstar_find_subgroups_gpu(vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles parts, const vector<int>& selves,
 		const vector<vector<int>>& checklists, float link_len, int& next_index);
+
+vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts);

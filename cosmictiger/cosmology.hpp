@@ -30,6 +30,8 @@ double cosmos_dadtau(double a);
 double cosmos_dadt(double a);
 double cosmos_time(double a0, double a1);
 double cosmos_conformal_time(double a0, double a1);
+double cosmos_tau_to_scale(double a0, double t1);
+
 
 
 #endif /* COSMOLOGY_HPP_ */

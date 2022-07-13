@@ -166,6 +166,7 @@ add_hpx_executable(
  
 add_executable( recfast recfast/recfast.f )
 add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
+add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
 target_link_libraries( fmm_kernel_codegen PUBLIC dl )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
@@ -174,6 +175,7 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 #set_source_files_properties(./src/analytic.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 #set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
+    target_compile_options(lc2rockstar PRIVATE -DLC2GADGET2 )
 set_source_files_properties(./src/drift.cu PROPERTIES COMPILE_FLAGS -maxrregcount=64)
 
 
@@ -200,6 +202,7 @@ add_custom_command(
 add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
 #add_dependencies( cosmictiger generate_fmm_kernels )
  
+target_include_directories(lc2rockstar PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})

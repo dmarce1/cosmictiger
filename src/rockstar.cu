@@ -622,7 +622,7 @@ __global__ void rockstar_find_link_len_gpu(rockstar_tree* trees, int ntrees, arr
 
 vector<size_t> rockstar_find_subgroups_gpu(vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles part_ptrs, const vector<int>& selves,
 		const vector<vector<int>>& checklists, float link_len, int& next_index) {
-	PRINT("%i blocks\n", selves.size());
+//	PRINT("%i blocks\n", selves.size());
 	vector<int> active_cnts(selves.size());
 	vector<array<int, ROCKSTAR_MAX_LIST>, pinned_allocator<array<int, ROCKSTAR_MAX_LIST>>> dev_checklists(selves.size());
 	vector<int, pinned_allocator<int>> checklists_szs(selves.size());

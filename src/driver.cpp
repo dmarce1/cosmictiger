@@ -497,7 +497,7 @@ void driver() {
 	if (tau == 0.0) {
 		particles_set_minrung(minrung0);
 	}
-	const auto check_lc = [&tau,&dt,&tau_max,&a](bool force) {
+	const auto check_lc = [&tau,&dt,&tau_max,&a,&iter](bool force) {
 	//	profiler_enter("light cone");
 		if (force || lc_time_to_flush(tau, tau_max)) {
 			timer tm;
@@ -546,7 +546,7 @@ void driver() {
 			PRINT( "lc_groups2homes %e\n", tm.read());
 			tm.reset();
 			tm.start();
-			lc_parts2groups(a, link_len);
+			lc_parts2groups(a, link_len, iter);
 			tm.stop();
 			PRINT( "lc_parts2groups %e\n", tm.read());
 			tm.reset();

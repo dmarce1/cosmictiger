@@ -175,7 +175,7 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	CUDA_CHECK(cudaDeviceSynchronize());
 	cnt = 0;
 	static size_t total_cnt = 0;
-	cnt += lc_add_parts(*list_ptr);
+	cnt += lc_add_parts(*list_ptr, a, tau0);
 	if (cnt != 0) {
 		total_cnt += cnt;
 		PRINT("%i flushed now %i flushed total\n", cnt, total_cnt);

@@ -1,6 +1,8 @@
 #include <cosmictiger/compress.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/constants.hpp>
+#include <unordered_map>
+#include <fstream>
 
 struct gadget2_header {
 	std::uint32_t npart[6]; /*!< npart[1] gives the number of particles in the present file, other particle types are ignored */
@@ -39,14 +41,15 @@ void uncompress_particles(particles_set& parts, const compressed_particles& arc)
 		total += nparts;
 		for (int j = 0; j < nparts; j++) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				double x = (block.x[dim][j] + 0.5) / 128.0 - 1.0;
-				double v = (block.v[dim][j] + 0.5) / 128.0 - 1.0;
+				double x = (block.x[dim][j] + 0.5) / (1<<15) - 1.0;
+				double v = (block.v[dim][j] + 0.5) / (1<<15) - 1.0;
 				x *= block.xmax;
 				x += block.xc[dim].to_double();
 				x *= arc.xmax;
 				v *= block.vmax;
 				v += block.vc[dim];
 				v *= arc.vmax;
+				v += arc.vc[dim];
 				parts.x[dim].push_back(x);
 				parts.v[dim].push_back(v);
 			}
@@ -76,6 +79,56 @@ void particles_set::write(FILE* fp) const {
 	fwrite(&size, sizeof(int), 1, fp);
 }
 
+void read_ascii(FILE* fp, vector<std::string>& fields, std::unordered_map<std::string, vector<double>>& data) {
+	char line[10000];
+	fgets(line, 10000, fp);
+	char* ptr = line;
+	fields.push_back(std::string());
+	ptr++;
+	while (*ptr != '\0' && *ptr != '\n') {
+		if (*ptr == ' ') {
+			ptr++;
+			fields.push_back(std::string());
+		}
+		fields.back() += *ptr;
+		ptr++;
+	}
+	std::string field;
+	while (fgets(line, 10000, fp) != 0) {
+		ptr = line;
+		int fi = 0;
+		if (*ptr != '#') {
+			while (fi != fields.size()) {
+				if (isspace(*ptr) || *ptr == '\0') {
+					data[fields[fi]].push_back(atof(field.c_str()));
+					field = std::string();
+					fi++;
+					while (isspace(*ptr) || *ptr == '\0') {
+						ptr++;
+					}
+				} else {
+					field += *ptr;
+					ptr++;
+				}
+			}
+		}
+	}
+}
+
+size_t num_lines(std::string file) {
+	size_t numLines = 0;
+	std::ifstream in(file);
+	if (in) {
+		std::string unused;
+		while (std::getline(in, unused)) {
+			++numLines;
+		}
+	}
+	return numLines;
+}
+
+#define DATABASE_NAME "lightcone.txt"
+
 int main(int argc, char* argv[]) {
 	const char* infile = argv[1];
 	FILE* fpin = fopen(infile, "rb");
@@ -83,13 +136,18 @@ int main(int argc, char* argv[]) {
 		printf("Unable to open %s for reading\n", infile);
 		return -1;
 	}
+	size_t base_id = num_lines(DATABASE_NAME);
 	int num_groups;
 	fread(&num_groups, sizeof(int), 1, fpin);
-	printf("%i groups found.\n", num_groups);
-	printf("Reading group: \n");
+	printf("%i FoF groups found.\n", num_groups);
 	options* opts = (options*) malloc(sizeof(options));
 	fread(opts, sizeof(options), 1, fpin);
+	std::unordered_map<std::string, vector<double>> db;
+	size_t halo_cnt = 0;
+	size_t subhalo_cnt = 0;
 	for (int i = 0; i < num_groups; i++) {
+		printf("\r%i %li %li %li", i, halo_cnt, subhalo_cnt, halo_cnt + subhalo_cnt);
+		fflush (stdout);
 		FILE* fpout = fopen("gadget.tmp", "wb");
 		if (!fpout) {
 			printf("Unable to open gadget.tmp for writing\n");
@@ -101,7 +159,7 @@ int main(int argc, char* argv[]) {
 		arc.read(fpin);
 		uncompress_particles(parts, arc);
 		int nparts = arc.size();
-		const double xscale = opts->code_to_cm / opts->hubble / constants::mpc_to_cm;
+		const double xscale = opts->code_to_cm * opts->hubble / constants::mpc_to_cm;
 		const double vscale = opts->code_to_cm / opts->code_to_s / 100000.0;
 		array<double, NDIM> minx;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -127,7 +185,7 @@ int main(int argc, char* argv[]) {
 			header.npart[i] = header.npartTotal[i] = 0;
 			header.mass[i] = 0.0;
 		}
-		header.BoxSize = 2.0 * box_size;
+		header.BoxSize = box_size;
 		header.npart[0] = 0;
 		header.npart[1] = nparts;
 		header.npartTotal[1] = nparts;
@@ -135,7 +193,7 @@ int main(int argc, char* argv[]) {
 		header.mass[1] = opts->code_to_g * opts->hubble / constants::M0;
 		header.HubbleParam = opts->hubble;
 		header.redshift = 0.0;
-		header.time = 0.0;
+		header.time = 1.0;
 		header.flag_sfr = 0;
 		header.flag_cooling = 0;
 		header.flag_feedback = 0;
@@ -161,7 +219,7 @@ int main(int argc, char* argv[]) {
 			return -3;
 		}
 		const double h = opts->hsoft * opts->code_to_cm * opts->hubble / constants::mpc_to_cm / 2.0;
-		const double link_len = opts->lc_b / opts->parts_dim * opts->code_to_cm * opts->hubble / constants::mpc_to_cm / box_size * pow(nparts, 1.0 / 3.0);
+		const double link_len = opts->lc_b;/// opts->parts_dim * opts->code_to_cm * opts->hubble / constants::mpc_to_cm / box_size * pow(nparts, 1.0 / 3.0);
 		fprintf(fpout, "FILE_FORMAT = \"GADGET2\"\n");
 		fprintf(fpout, "h0 = %f\n", opts->hubble);
 		fprintf(fpout, "Om = %f\n", opts->omega_m);
@@ -169,17 +227,69 @@ int main(int argc, char* argv[]) {
 		fprintf(fpout, "GADGET_LENGTH_CONVERSION = 1\n");
 		fprintf(fpout, "GADGET_MASS_CONVERSION = 1\n");
 		fprintf(fpout, "FORCE_RES = %e\n", h);
-		fprintf(fpout, "LIGHTCONE = 1\n");
-		fprintf(fpout, "FOF_LINKING_LENGTH = %e\n", link_len);
+		//	fprintf(fpout, "LIGHTCONE = 1\n");
+			fprintf(fpout, "FOF_LINKING_LENGTH = %e\n", link_len);
+		//	fprintf(fpout, "STRICT_SO_MASSES = 1\n");
+//		fprintf(fpout, "UNBOUND_THRESHOLD = -10000000.0\n");
+//		fprintf(fpout, "AVG_PARTICLE_SPACING = %e\n", box_size / pow(nparts, 1.0 / 3.0));
 		fclose(fpout);
-		if (nparts > 1000) {
-			if (system("./rockstar -c config.cfg ./gadget.tmp\n") != 0) {
-				printf("Unable to execute rockstar\n");
-				return -4;
+		if (system("./rockstar -c config.cfg ./gadget.tmp\n") != 0) {
+			printf("Unable to execute rockstar\n");
+			return -4;
+		}
+		FILE* fp = fopen("halos_0.0.ascii", "rt");
+		if (!fp) {
+			printf("unable to open halos.txt\n");
+			return -10;
+		}
+		vector<std::string> fields;
+		std::unordered_map<std::string, vector<double>> data;
+		read_ascii(fp, fields, data);
+		const int sz = data["x"].size();
+		for (int i = 0; i < sz; i++) {
+			data["x"][i] += arc.xc[XDIM].to_double();
+			data["y"][i] += arc.xc[YDIM].to_double();
+			data["z"][i] += arc.xc[ZDIM].to_double();
+			data["id"][i] += base_id;
+		}
+		data["PID"].resize(sz);
+		for (int i = 0; i < sz; i++) {
+			int bigj = -1;
+			double mass = 0.0;
+			for (int j = 0; j < sz; j++) {
+				if (i != j) {
+					const auto rj = data["rvir"][j];
+					if (data["rvir"][i] < rj) {
+						const auto x = data["x"][i] - data["x"][j];
+						const auto y = data["y"][i] - data["y"][j];
+						const auto z = data["z"][i] - data["z"][j];
+						const auto r = 1000.0 * sqrtf(sqr(x, y, z));
+						if (r < rj) {
+							const double test_mass = data["mvir"][j];
+							if (mass < test_mass) {
+								mass = test_mass;
+								bigj = j;
+							}
+						}
+					}
+				}
 			}
-			return 0;
+			if (bigj != -1) {
+				data["PID"][i] = data["id"][bigj];
+				subhalo_cnt++;
+			} else {
+				halo_cnt++;
+				data["PID"][i] = -1;
+			}
+		}
+		base_id += sz;
+		fclose(fp);
+		for (int i = 0; i < fields.size(); i++) {
+			db[fields[i]].insert(db[fields[i]].begin(), data[fields[i]].begin(), data[fields[i]].end());
 		}
 	}
+	printf("\n%lli halos found\n", halo_cnt);
+	printf("%lli subhalos found\n", subhalo_cnt);
 	fclose(fpin);
 	return 0;
 }

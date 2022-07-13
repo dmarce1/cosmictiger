@@ -67,7 +67,6 @@ inline float velreal2float(lc_velreal i, float vmax) {
 	return __half2float(i) / 10000.0 * vmax;
 }
 
-
 using lc_group = unsigned long long;
 
 struct lc_particle {
@@ -96,7 +95,7 @@ void lc_init(double, double);
 int lc_add_particle(double x0, double y0, double z0, double x1, double y1, double z1, float vx, float vy, float vz, float t, float dt,
 		vector<lc_particle>& this_part_buffer);
 void lc_add_parts(vector<lc_particle> &&);
-size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries);
+size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries, double scale, double tau);
 void lc_buffer2homes();
 size_t lc_time_to_flush(double, double);
 void lc_particle_boundaries1();
@@ -105,7 +104,7 @@ void lc_form_trees(double tmax, double link_len);
 size_t lc_find_groups();
 size_t lc_find_neighbors();
 void lc_groups2homes();
-void lc_parts2groups(double a, double link_len);
+void lc_parts2groups(double a, double link_len, int index);
 void lc_save(FILE* fp);
 void lc_load(FILE* fp);
 size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, lc_group* next_group);

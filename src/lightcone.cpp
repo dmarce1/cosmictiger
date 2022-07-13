@@ -31,6 +31,8 @@
 #include <cosmictiger/group_entry.hpp>
 #include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/compress.hpp>
+#include <cosmictiger/rockstar.hpp>
 
 #include <atomic>
 #include <memory>
@@ -73,6 +75,7 @@ static int vec2pix(double x, double y, double z);
 static int pix2rank(int pix);
 static int compute_nside(double tau);
 static vector<int> pix_neighbors(int pix);
+static int epoch = 0;
 
 HPX_PLAIN_ACTION (lc_time_to_flush);
 HPX_PLAIN_ACTION (lc_parts2groups);
@@ -89,7 +92,24 @@ HPX_PLAIN_ACTION (lc_find_neighbors);
 HPX_PLAIN_ACTION (lc_particle_boundaries1);
 HPX_PLAIN_ACTION (lc_particle_boundaries2);
 
-size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries) {
+static std::atomic<int> next_filenum = 0;
+
+static int lc_next_filenum();
+
+HPX_PLAIN_ACTION (lc_next_filenum);
+
+static int lc_next_filenum() {
+	if (hpx_rank() == 0) {
+		return next_filenum++;
+	} else {
+		lc_next_filenum_action act;
+		static const auto root = hpx_localities()[0];
+		return act(root);
+	}
+}
+
+size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries, double scale, double tau) {
+
 	const int start = part_buffer.size();
 	vector<size_t> counts(entries.size() + 1);
 	size_t count = 0;
@@ -103,31 +123,34 @@ size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries) {
 	vector<hpx::future<void>> futs;
 	std::atomic<int> index(0);
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&index,start,nthreads,proc,&entries,&counts]() {
-			int k = index++;
-			double m = 0.0;
-			while( k < entries.size()) {
-				auto& entry = entries[k];
-				const int b = start + counts[k];
-				const int e = start + counts[k+1];
-				for (int i = b; i < e; i++) {
-					const int j = i - b;
-					auto& pi = part_buffer[i];
-					const auto& pj = entry[j];
-					pi.pos[XDIM] = pj.x;
-					pi.pos[YDIM] = pj.y;
-					pi.pos[ZDIM] = pj.z;
-					pi.vel[XDIM] = pj.vx;
-					pi.vel[YDIM] = pj.vy;
-					pi.vel[ZDIM] = pj.vz;
-					m = std::max(pj.vx, (float) fabs(m));
+		futs.push_back(hpx::async([scale, tau, &index,start,nthreads,proc,&entries,&counts]() {
+			//	const auto a0 = 1.0 / (get_options().z0 + 1.0);
+				int k = index++;
+				double m = 0.0;
+				while( k < entries.size()) {
+					auto& entry = entries[k];
+					const int b = start + counts[k];
+					const int e = start + counts[k+1];
+					for (int i = b; i < e; i++) {
+						const int j = i - b;
+						auto& pi = part_buffer[i];
+						const auto& pj = entry[j];
+						pi.pos[XDIM] = pj.x;
+						pi.pos[YDIM] = pj.y;
+						pi.pos[ZDIM] = pj.z;
+						const double tau1 = sqr(pj.x.to_double(), pj.y.to_double(), pj.z.to_double());
+						const auto a = scale + cosmos_dadtau(scale) * (tau1 - tau);
+						pi.vel[XDIM] = pj.vx / a;
+						pi.vel[YDIM] = pj.vy / a;
+						pi.vel[ZDIM] = pj.vz / a;
+						m = std::max(pj.vx, (float) fabs(m));
+					}
+					k = index++;
 				}
-				k = index++;
-			}
-		}));
+			}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	return count;
+	return 0;
 }
 
 int lc_nside() {
@@ -135,19 +158,14 @@ int lc_nside() {
 }
 
 void lc_save(FILE* fp) {
+
 	int dummy;
 	size_t sz = part_buffer.size();
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	fwrite(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
-	fwrite(&dummy, sizeof(int), 1, fp);
+	fwrite(&epoch, sizeof(int), 1, fp);
 	fwrite(&sz, sizeof(size_t), 1, fp);
 	fwrite(&group_id_counter, sizeof(lc_group), 1, fp);
-
-	/*	sz = saved_groups.size();
-	 fwrite(&sz, sizeof(size_t), 1, fp);
-	 for (int i = 0; i < sz; i++) {
-	 saved_groups[i].write(fp);
-	 }*/
 }
 
 void lc_load(FILE* fp) {
@@ -156,14 +174,9 @@ void lc_load(FILE* fp) {
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	part_buffer.resize(sz);
 	FREAD(part_buffer.data(), sizeof(lc_particle), part_buffer.size(), fp);
-	FREAD(&dummy, sizeof(int), 1, fp);
+	FREAD(&epoch, sizeof(int), 1, fp);
 	FREAD(&sz, sizeof(size_t), 1, fp);
 	FREAD(&group_id_counter, sizeof(lc_group), 1, fp);
-	/*	FREAD(&sz, sizeof(size_t), 1, fp);
-	 saved_groups.resize(sz);
-	 for (int i = 0; i < sz; i++) {
-	 saved_groups[i].read(fp);
-	 }*/
 }
 
 size_t lc_time_to_flush(double tau, double tau_max_) {
@@ -196,10 +209,10 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 	}
 }
 
-void lc_parts2groups(double a, double link_len) {
+void lc_parts2groups(double a, double link_len, int ti) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<lc_parts2groups_action>(c, a, link_len));
+		futs.push_back(hpx::async<lc_parts2groups_action>(c, a, link_len, ti));
 	}
 	std::unordered_map<lc_group, vector<lc_entry>> groups_map;
 	int i = 0;
@@ -233,25 +246,34 @@ void lc_parts2groups(double a, double link_len) {
 		}
 	}
 	vector<pair<lc_group, vector<lc_entry>>> groups;
+	vector<pair<lc_group, compressed_particles>> group_arcs;
 	for (auto i = groups_map.begin(); i != groups_map.end(); i++) {
 		pair<lc_group, vector<lc_entry>> entry;
 		entry.first = i->first;
+		total += i->second.size();
 		entry.second = std::move(i->second);
 		groups.push_back(std::move(entry));
 	}
-	const int nthreads = hpx_hardware_concurrency();
+	const int nthreads = 8 * hpx_hardware_concurrency();
 	std::atomic<int> next_index(0);
+	mutex_type mutex;
+	vector<hpx::future<void>> futs2;
+
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index, &groups]() {
+		futs2.push_back(hpx::async([&mutex, &group_arcs, &next_index, &groups]() {
 			int index = next_index++;
 			while( index < groups.size()) {
-
+				if( groups[index].first != LC_NO_GROUP) {
+					auto subgroups = rockstar_find_subgroups(groups[index].second);
+					//PRINT( "%i\n", subgroups.size()-1 );
+				}
+				index = next_index++;
 			}
 		}));
 	}
-	total += groups_map.size();
-	PRINT("%li particles remaining in buffer, %i groups found\n", part_buffer.size(), total);
+	hpx::wait_all(futs2.begin(), futs2.end());
 	hpx::wait_all(futs.begin(), futs.end());
+	epoch++;
 }
 
 static int rank_from_group_id(long long id) {
@@ -332,6 +354,7 @@ void lc_groups2homes() {
 	}
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix,&part_map]() {
+			vector<hpx::future<void>> futs;
 			auto& parts = part_map[pix];
 			std::unordered_map<int,vector<lc_particle>> sends;
 			for( int i = 0; i < parts.group.size(); i++) {
@@ -352,7 +375,6 @@ void lc_groups2homes() {
 				}
 			}
 			parts = lc_particles();
-			vector<hpx::future<void>> futs;
 			for( auto i = sends.begin(); i != sends.end(); i++) {
 				futs.push_back(hpx::async<lc_send_buffer_particles_action>(hpx_localities()[i->first],std::move(i->second)));
 			}
@@ -440,7 +462,7 @@ std::pair<int, range<double>> lc_tree_create(int pix, range<double> box, pair<in
 	this_node.box = part_box;
 	this_node.pix = pix;
 	this_node.active = 1;
-	this_node.last_active = 1;
+	this_node.last_active = 0;
 	int index = nodes.size();
 	nodes.push_back(this_node);
 	if (leaf) {
