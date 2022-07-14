@@ -555,7 +555,7 @@ void driver() {
 			tm.stop();
 			PRINT( "lc_init %e\n", tm.read());
 			tm.reset();
-			PRINT( "Light cone flush took %e seconds\n", tm.read());
+			exit(0);
 		}
 	//	profiler_exit();
 	};

@@ -5,13 +5,15 @@
 #include <cosmictiger/groups.hpp>
 #include <cosmictiger/lightcone.hpp>
 
-#define ROCKSTAR_BUCKET_SIZE 32
+#define ROCKSTAR_CPU_BUCKET_SIZE 32
+#define ROCKSTAR_GPU_BUCKET_SIZE 64
+#define ROCKSTAR_MIN_GPU (1024)
 #define ROCKSTAR_NO_GROUP 0x7FFFFFFF
 #define ROCKSTAR_HAS_GROUP -1
 #define ROCKSTAR_FF 0.7
 #define ROCKSTAR_MIN_GROUP 10
 #define ROCKSTAR_MIN_BOUND 0.5
-#define ROCKSTAR_TARGET_BLOCKS 1024
+#define ROCKSTAR_TARGET_BLOCKS (1024)
 
 
 struct rockstar_particles {
@@ -55,7 +57,7 @@ struct subgroup {
 	int id;
 	int parent;
 	vector<int> children;
-	vector<rockstar_particle> parts;
+	device_vector<rockstar_particle> parts;
 	union {
 		array<float, NDIM * 2> X;
 		struct {
@@ -82,9 +84,5 @@ struct subgroup {
 	}
 };
 
-void rockstar_find_subgroups(vector<rockstar_particle>& parts, float scale = 1.0);
 vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, float scale);
-vector<size_t> rockstar_find_subgroups_gpu(vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles parts, const vector<int>& selves,
-		const vector<vector<int>>& checklists, float link_len, int& next_index);
-
 vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts);

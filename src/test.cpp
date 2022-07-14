@@ -50,7 +50,7 @@ constexpr bool verbose = true;
  }
  */
 static void rockstar_test() {
-	feenableexcept (FE_DIVBYZERO);
+	/*feenableexcept (FE_DIVBYZERO);
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
 
@@ -97,7 +97,7 @@ static void rockstar_test() {
 		//	parts.push_back(part);
 
 	}
-	rockstar_find_subgroups(parts);
+	rockstar_find_subgroups(parts);*/
 }
 
 static void fft1_test() {
@@ -593,8 +593,8 @@ void test(std::string test) {
 		bucket_test();
 	} else if (test == "force") {
 		force_test();
-	} else if (test == "rockstar") {
-		rockstar_test();
+//	} else if (test == "rockstar") {
+//		rockstar_test();
 	} else if (test == "kick") {
 		kick_test();
 	} else if (test == "tree") {
