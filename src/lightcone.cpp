@@ -246,28 +246,44 @@ void lc_parts2groups(double a, double link_len, int ti) {
 		}
 	}
 	vector<pair<lc_group, vector<lc_entry>>> groups;
+	vector<pair<lc_group, vector<lc_entry>>> gpu_groups;
 	vector<pair<lc_group, compressed_particles>> group_arcs;
 	for (auto i = groups_map.begin(); i != groups_map.end(); i++) {
 		pair<lc_group, vector<lc_entry>> entry;
 		entry.first = i->first;
 		total += i->second.size();
 		entry.second = std::move(i->second);
-		groups.push_back(std::move(entry));
+		if( entry.second.size() < ROCKSTAR_MIN_GPU ) {
+			groups.push_back(std::move(entry));
+		} else {
+			gpu_groups.push_back(std::move(entry));
+		}
 	}
-	const int nthreads = 8 * hpx_hardware_concurrency();
-	std::atomic<int> next_index(0);
-	mutex_type mutex;
-	vector<hpx::future<void>> futs2;
 
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async([&mutex, &group_arcs, &next_index, &groups]() {
+	const int cpu_nthreads = 8 * hpx_hardware_concurrency();
+	const int gpu_nthreads = 8 * hpx_hardware_concurrency();
+	std::atomic<int> next_index(0);
+	std::atomic<int> gpu_next_index(0);
+	vector<hpx::future<void>> futs2;
+	for (int proc = 0; proc < cpu_nthreads; proc++) {
+		futs2.push_back(hpx::async([&next_index, &groups]() {
 			int index = next_index++;
 			while( index < groups.size()) {
 				if( groups[index].first != LC_NO_GROUP) {
-					auto subgroups = rockstar_find_subgroups(groups[index].second);
-					//PRINT( "%i\n", subgroups.size()-1 );
+					auto subgroups = rockstar_find_subgroups(groups[index].second, false);
 				}
 				index = next_index++;
+			}
+		}));
+	}
+	for (int proc = 0; proc < gpu_nthreads; proc++) {
+		futs2.push_back(hpx::async([&gpu_next_index, &gpu_groups]() {
+			int index = gpu_next_index++;
+			while( index < gpu_groups.size()) {
+				if( gpu_groups[index].first != LC_NO_GROUP) {
+					auto subgroups = rockstar_find_subgroups(gpu_groups[index].second, true);
+				}
+				index = gpu_next_index++;
 			}
 		}));
 	}

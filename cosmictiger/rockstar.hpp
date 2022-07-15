@@ -7,7 +7,7 @@
 
 #define ROCKSTAR_CPU_BUCKET_SIZE 32
 #define ROCKSTAR_GPU_BUCKET_SIZE 64
-#define ROCKSTAR_MIN_GPU (1024)
+#define ROCKSTAR_MIN_GPU (4*1024)
 #define ROCKSTAR_NO_GROUP 0x7FFFFFFF
 #define ROCKSTAR_HAS_GROUP -1
 #define ROCKSTAR_FF 0.7
@@ -51,6 +51,7 @@ struct rockstar_tree {
 	int active_count;
 	bool active;
 	bool last_active;
+	device_vector<int> neighbors;
 };
 
 struct subgroup {
@@ -85,4 +86,9 @@ struct subgroup {
 };
 
 vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, float scale);
-vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts);
+vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts, bool gpu);
+void rockstar_find_subgroups_cuda(device_vector<rockstar_tree>& nodes, const device_vector<int>& leaves, device_vector<rockstar_particle>& parts,
+		float link_len, int& next_id);
+void rockstar_assign_linklen_cuda(const device_vector<rockstar_tree>& nodes, const device_vector<int>& leaves, device_vector<rockstar_particle>& parts,
+		float link_len);
+bool rockstar_cuda_free();

@@ -11,8 +11,8 @@
 
 void rockstar_find_subgroups(device_vector<rockstar_particle>& parts, float scale = 1.0);
 
-
-void rockstar_assign_link_len(const device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, int self_id, vector<int> checklist, float link_len) {
+void rockstar_assign_link_len(const device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, int self_id, vector<int> checklist,
+		float link_len) {
 	static thread_local vector<int> nextlist;
 	static thread_local vector<int> leaflist;
 	nextlist.resize(0);
@@ -69,6 +69,45 @@ void rockstar_assign_link_len(const device_vector<rockstar_tree>& trees, device_
 	}
 }
 
+void rockstar_find_neighbors(device_vector<int>& leaves, device_vector<rockstar_tree>& trees, int self_id, vector<int> checklist, float link_len) {
+	static thread_local vector<int> nextlist;
+	static thread_local vector<int> leaflist;
+	nextlist.resize(0);
+	leaflist.resize(0);
+	auto& self = trees[self_id];
+	const bool iamleaf = self.children[LEFT] == -1;
+	auto mybox = self.box.pad(link_len * 1.0001);
+	do {
+		for (int ci = 0; ci < checklist.size(); ci++) {
+			const auto check = checklist[ci];
+			const auto& other = trees[check];
+			if (mybox.intersection(other.box).volume() > 0) {
+				if (other.children[LEFT] == -1) {
+					leaflist.push_back(check);
+				} else {
+					nextlist.push_back(other.children[LEFT]);
+					nextlist.push_back(other.children[RIGHT]);
+				}
+			}
+		}
+		std::swap(nextlist, checklist);
+		nextlist.resize(0);
+	} while (iamleaf && checklist.size());
+	if (iamleaf) {
+		self.neighbors.resize(leaflist.size());
+		for (int i = 0; i < leaflist.size(); i++) {
+			self.neighbors[i] = leaflist[i];
+		}
+		leaves.push_back(self_id);
+	} else {
+		checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+		if (checklist.size()) {
+			rockstar_find_neighbors(leaves, trees, self.children[LEFT], checklist, link_len);
+			rockstar_find_neighbors(leaves, trees, self.children[RIGHT], std::move(checklist), link_len);
+		}
+	}
+}
+
 int rockstar_particles_sort(device_vector<rockstar_particle>& parts, int begin, int end, float xmid, int xdim) {
 	int lo = begin;
 	int hi = end;
@@ -88,11 +127,12 @@ int rockstar_particles_sort(device_vector<rockstar_particle>& parts, int begin, 
 
 }
 
-int rockstar_form_tree(device_vector<rockstar_particle>& parts, device_vector<rockstar_tree>& trees, range<float, 2 * NDIM>& rng, int part_begin, int part_end) {
+int rockstar_form_tree(device_vector<rockstar_particle>& parts, device_vector<rockstar_tree>& trees, range<float, 2 * NDIM>& rng, int part_begin,
+		int part_end, bool gpu) {
 	array<int, NCHILD> children;
 	rockstar_tree node;
 	int active_count = 0;
-	const int bucket_size = parts.size() >= ROCKSTAR_MIN_GPU ? ROCKSTAR_GPU_BUCKET_SIZE : ROCKSTAR_CPU_BUCKET_SIZE;
+	const int bucket_size = gpu ? ROCKSTAR_GPU_BUCKET_SIZE : ROCKSTAR_CPU_BUCKET_SIZE;
 	if (part_end - part_begin <= bucket_size) {
 		children[LEFT] = children[RIGHT] = -1;
 		for (int dim = 0; dim < 2 * NDIM; dim++) {
@@ -125,8 +165,8 @@ int rockstar_form_tree(device_vector<rockstar_particle>& parts, device_vector<ro
 		range<float, 2 * NDIM> rng_right = rng;
 		rng_right.begin[max_dim] = midx;
 		rng_left.end[max_dim] = midx;
-		children[LEFT] = rockstar_form_tree(parts, trees, rng_left, part_begin, part_mid);
-		children[RIGHT] = rockstar_form_tree(parts, trees, rng_right, part_mid, part_end);
+		children[LEFT] = rockstar_form_tree(parts, trees, rng_left, part_begin, part_mid, gpu);
+		children[RIGHT] = rockstar_form_tree(parts, trees, rng_right, part_mid, part_end, gpu);
 		for (int dim = 0; dim < 2 * NDIM; dim++) {
 			rng.begin[dim] = std::min(rng_left.begin[dim], rng_right.begin[dim]);
 			rng.end[dim] = std::max(rng_left.end[dim], rng_right.end[dim]);
@@ -143,7 +183,7 @@ int rockstar_form_tree(device_vector<rockstar_particle>& parts, device_vector<ro
 	return trees.size() - 1;
 }
 
-int rockstar_form_tree(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts) {
+int rockstar_form_tree(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, bool gpu) {
 	range<float, 2 * NDIM> rng;
 	for (int dim = 0; dim < 2 * NDIM; dim++) {
 		rng.begin[dim] = std::numeric_limits<float>::max() / 10.0;
@@ -154,10 +194,10 @@ int rockstar_form_tree(device_vector<rockstar_tree>& trees, device_vector<rockst
 			rng.end[dim] = std::max(rng.end[dim], x);
 		}
 	}
-	return rockstar_form_tree(parts, trees, rng, 0, parts.size());
+	return rockstar_form_tree(parts, trees, rng, 0, parts.size(), gpu);
 }
 
-float rockstar_find_link_len(const device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, int tree_root, float ff) {
+float rockstar_find_link_len(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, int tree_root, float ff, bool gpu ) {
 	range<float, 2 * NDIM> rng = trees[tree_root].box;
 //	PRINT("V %e\n", rng.volume());
 	vector<pair<float, int>> seps;
@@ -189,7 +229,13 @@ float rockstar_find_link_len(const device_vector<rockstar_tree>& trees, device_v
 		for (auto& p : parts) {
 			p.min_dist2 = std::numeric_limits<float>::max();
 		}
-		rockstar_assign_link_len(trees, parts, tree_root, vector<int>(1, tree_root), max_link_len);
+		if (gpu) {
+			device_vector<int> leaves;
+			rockstar_find_neighbors(leaves, trees, trees.size() - 1, vector<int>(1, trees.size() - 1), max_link_len);
+			rockstar_assign_linklen_cuda(trees, leaves, parts, max_link_len);
+		} else {
+			rockstar_assign_link_len(trees, parts, tree_root, vector<int>(1, tree_root), max_link_len);
+		}
 		vector<float> dist2s(parts.size());
 		for (int i = 0; i < parts.size(); i++) {
 			dist2s[i] = parts[i].min_dist2;
@@ -330,7 +376,7 @@ size_t rockstar_find_subgroups(device_vector<rockstar_tree>& trees, device_vecto
 
 }
 
-void rockstar_find_subgroups(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, float link_len, int& next_id) {
+void rockstar_find_subgroups(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, float link_len, int& next_id, bool gpu) {
 	timer tm;
 	tm.start();
 	for (int i = 0; i < parts.size(); i++) {
@@ -340,19 +386,23 @@ void rockstar_find_subgroups(device_vector<rockstar_tree>& trees, device_vector<
 		trees[i].active = true;
 	}
 	int cnt;
-	bool gpu = parts.size() >= ROCKSTAR_MIN_GPU;
-	rockstar_particles part_ptrs;
-	do {
-		double pct_active = 0.0;
-		for (int i = 0; i < trees.size(); i++) {
-			trees[i].last_active = trees[i].active;
-			pct_active += int(trees[i].active) / (double) trees.size();
-		}
-		int root_id = trees.size() - 1;
-		cnt = rockstar_find_subgroups(trees, parts, root_id, vector<int>(1, root_id), link_len, next_id);
+	if (gpu) {
+		device_vector<int> leaves;
+		rockstar_find_neighbors(leaves, trees, trees.size() - 1, vector<int>(1, trees.size() - 1), link_len);
+		rockstar_find_subgroups_cuda(trees, leaves, parts, link_len, next_id);
+	} else {
+		do {
+			double pct_active = 0.0;
+			for (int i = 0; i < trees.size(); i++) {
+				trees[i].last_active = trees[i].active;
+				pct_active += int(trees[i].active) / (double) trees.size();
+			}
+			int root_id = trees.size() - 1;
+			cnt = rockstar_find_subgroups(trees, parts, root_id, vector<int>(1, root_id), link_len, next_id);
 //		PRINT("%i %i %e\n", root_id + 1, parts.size(), pct_active);
-	} while (cnt != 0);
-	tm.stop();
+		} while (cnt != 0);
+		tm.stop();
+	}
 //	PRINT( "find_subgroups = %e\n", tm.read());
 }
 
@@ -484,7 +534,7 @@ vector<rockstar_particle> rockstar_unbind(vector<subgroup>& subgroups, vector<in
 			auto my_parts = rockstar_unbind(subgroups, next_children, scale, depth + 1);
 			int offset = parts.size();
 			parts.resize(offset + my_parts.size());
-			for( int i = 0; i < my_parts.size(); i++) {
+			for (int i = 0; i < my_parts.size(); i++) {
 				parts[offset + i] = my_parts[i];
 			}
 		}
@@ -606,7 +656,7 @@ vector<rockstar_particle> rockstar_unbind(vector<subgroup>& subgroups, vector<in
 	return my_parts;
 }
 
-void rockstar_subgroup_statistics(subgroup& sg) {
+void rockstar_subgroup_statistics(subgroup& sg, bool gpu) {
 	device_vector<rockstar_tree> trees;
 	device_vector<rockstar_particle> parts;
 	for (int i = 0; i < sg.parts.size(); i++) {
@@ -661,9 +711,9 @@ void rockstar_subgroup_statistics(subgroup& sg) {
 		if (parts.size() < 2) {
 //			PRINT("PARTS.SIZE = %i %i \n", parts.size(), sg.parts.size());
 		}
-		const int root_id = rockstar_form_tree(trees, parts);
+		const int root_id = rockstar_form_tree(trees, parts, gpu);
 
-		const float link_len = rockstar_find_link_len(trees, parts, root_id, ROCKSTAR_FF);
+		const float link_len = rockstar_find_link_len(trees, parts, root_id, ROCKSTAR_FF, gpu);
 		std::sort(parts.begin(), parts.end(), [](rockstar_particle a, rockstar_particle b) {
 			return a.min_dist2 < b.min_dist2;
 		});
@@ -701,7 +751,7 @@ void rockstar_subgroup_statistics(subgroup& sg) {
 	sg.host_part_cnt = parts.size();
 }
 
-vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& next_id, float rfac, float vfac, float scale, int depth = 0) {
+vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& next_id, float rfac, float vfac, float scale, bool gpu, int depth = 0) {
 
 	float avg_x = 0.0;
 	float avg_y = 0.0;
@@ -761,19 +811,19 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 	timer tm;
 	tm.start();
 //	PRINT("forming trees = %e\n");
-	const int root_id = rockstar_form_tree(trees, parts);
+	const int root_id = rockstar_form_tree(trees, parts, gpu);
 	tm.stop();
 //	PRINT("form_trees = %e\n", tm.read());
 	tm.reset();
 	tm.start();
-	const float link_len = rockstar_find_link_len(trees, parts, root_id, ROCKSTAR_FF);
+	const float link_len = rockstar_find_link_len(trees, parts, root_id, ROCKSTAR_FF, gpu);
 	tm.stop();
 	//PRINT("find_link_len = %e\n", tm.read());
 	tm.reset();
 //	PRINT("link_len = %e\n", link_len / rfac);
 //	PRINT("Finding subgroups\n");
 	tm.start();
-	rockstar_find_subgroups(trees, parts, link_len, next_id);
+	rockstar_find_subgroups(trees, parts, link_len, next_id, gpu);
 	tm.stop();
 //	PRINT("find_subgroups = %e\n", tm.read());
 	tm.reset();
@@ -804,7 +854,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				j++;
 			}
 		}
-		auto these_groups = rockstar_seeds(these_parts, next_id, rfac, vfac, scale, depth + 1);
+		auto these_groups = rockstar_seeds(these_parts, next_id, rfac, vfac, scale, gpu, depth + 1);
 		subgroups.insert(subgroups.end(), these_groups.begin(), these_groups.end());
 	}
 
@@ -859,58 +909,37 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 		const double x = ((omega_m / (sqr(scale)*scale)) / (omega_m / (sqr(scale)*scale)) + (1.0 - omega_m)) - 1.0;
 		const double y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x))/(1.0+x);
 		double r_vir = pow(these_parts.size() / (4.0/3.0*M_PI*y), 1.0/3.0) / Ndim;
-		//	PRINT( "r_vir = %e\n", r_vir);
-			/*const double a = scale;
-			 const double Om = get_options().omega_m;
-			 const double Or = get_options().omega_r;
-			 const double Ol = 1.0 - Om - Or;
-			 double H = get_options().hubble * constants::H0 * sqrt((Or/(a*a*a*a) +Om/(a*a*a)+Ol));
-			 const double density_crit = 200.0 * 3.0 * H * H / constants::G / (8.0*M_PI) * a*a*a;
-			 double rmax = radii.back();
-			 const auto part_mass = get_options().code_to_g;
-			 for( int i = 0; i < radii.size(); i++) {
-			 mass += part_mass;
-			 const double r = radii[i] * get_options().code_to_cm / rfac;
-			 volume = std::pow(r,3) * (4.0/3.0*M_PI);
-			 double density = mass / volume;
-			 if( density > density_crit || i == 0) {
-			 r_vir = radii[i];
-			 }
-			 }
-			 if( r_vir == radii.back()) {
-			 r_vir = std::pow(mass / (4.0*M_PI/3.0*density_crit),1.0/3.0) / get_options().code_to_cm * rfac;
-			 }*/
-			sigma2_x /= these_parts.size();
-			sg.sigma2_x = sigma2_x;
-			sg.r_vir = r_vir;
-//		PRINT( "%e %e\n", r_vir, rmax);
-			int n;
-			float rfrac = 0.1;
-			do {
-				n = 0;
-				sg.vx = 0.0;
-				sg.vy = 0.0;
-				sg.vz = 0.0;
-				for (int j = 0; j < these_parts.size(); j++) {
-					const auto& p = these_parts[j];
-					const float dx = p.x - sg.x;
-					const float dy = p.y - sg.y;
-					const float dz = p.z - sg.z;
-					const float dx2 = sqr(dx, dy, dz);
-					if( dx2 < sqr(rfrac * sg.r_vir) ) {
-						sg.vx += these_parts[j].vx;
-						sg.vy += these_parts[j].vy;
-						sg.vz += these_parts[j].vz;
-						n++;
-					}
+
+		sigma2_x /= these_parts.size();
+		sg.sigma2_x = sigma2_x;
+		sg.r_vir = r_vir;
+		int n;
+		float rfrac = 0.1;
+		do {
+			n = 0;
+			sg.vx = 0.0;
+			sg.vy = 0.0;
+			sg.vz = 0.0;
+			for (int j = 0; j < these_parts.size(); j++) {
+				const auto& p = these_parts[j];
+				const float dx = p.x - sg.x;
+				const float dy = p.y - sg.y;
+				const float dz = p.z - sg.z;
+				const float dx2 = sqr(dx, dy, dz);
+				if( dx2 < sqr(rfrac * sg.r_vir) ) {
+					sg.vx += these_parts[j].vx;
+					sg.vy += these_parts[j].vy;
+					sg.vz += these_parts[j].vz;
+					n++;
 				}
-				if( n ) {
-					sg.vx /= n;
-					sg.vy /= n;
-					sg.vz /= n;
-				}
-				rfrac *= 1.1;
-			}while( n < ROCKSTAR_MIN_GROUP );
+			}
+			if( n ) {
+				sg.vx /= n;
+				sg.vy /= n;
+				sg.vz /= n;
+			}
+			rfrac *= 1.1;
+		}while( n < ROCKSTAR_MIN_GROUP );
 //		PRINT( "n = %i\n", n);
 			for (int j = 0; j < these_parts.size(); j++) {
 				const auto& p = these_parts[j];
@@ -985,9 +1014,6 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				k++;
 			}
 		}
-		for (int i = 0; i < subgroups.size(); i++) {
-//			PRINT("rdyn %e sigma_x %e\n", subgroups[i].r_dyn, sqrt(subgroups[i].sigma2_x));
-		}
 		for (int j = 0; j < parts.size(); j++) {
 
 			float min_dist = std::numeric_limits<float>::max();
@@ -1003,7 +1029,6 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				const float dvy = (parts[j].vy - subgroups[i].vy) * sigma_v_inv;
 				const float dvz = (parts[j].vz - subgroups[i].vz) * sigma_v_inv;
 				const float dist = sqrt(sqr(dx, dy, dz) + sqr(dvx, dvy, dvz));
-				//PRINT("dist = %e mindist = %e %e %e %e %e %e %e \n", dist, min_dist, dx, dy, dz, dvz, dvy, subgroups[i].sigma2_v);
 				if (dist < min_dist) {
 					min_dist = dist;
 					min_index = i;
@@ -1102,16 +1127,19 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				subhalo_cnt++;
 			}
 		}
+	//	PRINT( "%i %i %i\n", halo_cnt + subhalo_cnt, halo_cnt, subhalo_cnt );
 		auto all_parts = rockstar_unbind(subgroups, checklist, scale, 0);
 //		PRINT("%i\n", all_parts.size());
 		int k = 0;
 		while (k < subgroups.size()) {
 			if (subgroups[k].parts.size() == 0) {
 				for (int l = 0; l < subgroups.size(); l++) {
-					for (int m = 0; m < subgroups[l].children.size(); m++) {
+					for (int m = 0; m < subgroups[l].children.size();) {
 						if (subgroups[k].id == subgroups[l].children[m]) {
 							subgroups[l].children[m] = subgroups[l].children.back();
 							subgroups[l].children.pop_back();
+						} else {
+							m++;
 						}
 					}
 				}
@@ -1139,7 +1167,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			}
 		} while (change);
 		for (int k = 0; k < subgroups.size(); k++) {
-			rockstar_subgroup_statistics(subgroups[k]);
+			rockstar_subgroup_statistics(subgroups[k], gpu);
 		}
 		subgroup unbound;
 		unbound.id = ROCKSTAR_NO_GROUP;
@@ -1167,10 +1195,10 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 
 void rockstar_find_subgroups(device_vector<rockstar_particle>& parts, float scale) {
 	int next_id = 1;
-	rockstar_seeds(parts, next_id, 1.0, 1.0, scale);
+	rockstar_seeds(parts, next_id, 1.0, 1.0, scale, false);
 }
 
-vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts) {
+vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts, bool gpu) {
 	device_vector<rockstar_particle> rock_parts(parts.size());
 	double xc = 0.0;
 	double yc = 0.0;
@@ -1195,7 +1223,7 @@ vector<subgroup> rockstar_find_subgroups(const vector<lc_entry>& parts) {
 		pj.vz = pi.vz;
 	}
 	int next_id = 1;
-	return rockstar_seeds(rock_parts, next_id, 1.0, 1.0, 1.0);
+	return rockstar_seeds(rock_parts, next_id, 1.0, 1.0, 1.0, gpu);
 }
 
 vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, float scale) {
@@ -1220,5 +1248,5 @@ vector<subgroup> rockstar_find_subgroups(const vector<particle_data>& parts, flo
 		rock_parts.push_back(part);
 	}
 	int next_id = 1;
-	return rockstar_seeds(rock_parts, next_id, 1.0, 1.0, scale);
+	return rockstar_seeds(rock_parts, next_id, 1.0, 1.0, scale, false);
 }
