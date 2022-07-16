@@ -780,10 +780,9 @@ void driver() {
 				//			abort();
 			}
 			if (get_options().do_lc && min_rung(itime) <= minrung0) {
-				lc_fut = hpx::async(HPX_PRIORITY_HI, check_lc, false);
-			} else {
-				lc_fut = hpx::make_ready_future();
+				check_lc(false);
 			}
+			lc_fut = hpx::make_ready_future();
 
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {

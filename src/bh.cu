@@ -5,19 +5,23 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/device_vector.hpp>
+
 
 #define BH_LIST_SIZE 1024
-#define BH_SOURCE_LIST_SIZE (8*1024)
+#define BH_SOURCE_LIST_SIZE (16*1024)
 #define BH_STACK_SIZE 16384
 #define BH_MAX_DEPTH 32
+#define BH_WORKSIZE 1024
+
 
 struct bh_workspace {
-	fixedcapvec<int, BH_LIST_SIZE> nextlist;
-	fixedcapvec<int, BH_LIST_SIZE> leaflist;
-	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_x;
-	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_y;
-	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_z;
-	fixedcapvec<float, BH_SOURCE_LIST_SIZE> src_m;
+	device_vector<int> nextlist;
+	device_vector<int> leaflist;
+	device_vector<float> src_x;
+	device_vector<float> src_y;
+	device_vector<float> src_z;
+	device_vector<float> src_m;
 	stack_vector<int> checklist;
 };
 
@@ -42,7 +46,7 @@ __global__ void bh_tree_evaluate_kernel(bh_workspace* workspaces, bh_tree_node* 
 	}
 	__syncwarp();
 	bh_workspace& ws = workspaces[bid];
-	new(&ws) bh_workspace();
+	new (&ws) bh_workspace();
 	while (si < nsinks) {
 		int sink_index = sink_buckets[si];
 		auto& checklist = ws.checklist;
@@ -168,10 +172,9 @@ __global__ void bh_tree_evaluate_kernel(bh_workspace* workspaces, bh_tree_node* 
 				} else {
 					const float r1overh1 = r * hinv;                                                    // 1
 					const float r2oh2 = r1overh1 * r1overh1;                                                    // 1
-					rinv1 = -5.0f / 16.0f;
-					rinv1 = fmaf(rinv1, r2oh2, float(21.0f / 16.0f));                                                    // 2
-					rinv1 = fmaf(rinv1, r2oh2, float(-35.0f / 16.0f));                                                    // 2
-					rinv1 = fmaf(rinv1, r2oh2, float(35.0f / 16.0f));                                                    // 2
+					rinv1 = 3.0f / 8.0f;
+					rinv1 = fmaf(rinv1, r2oh2, float(-5.0f / 4.0f));                                                    // 2
+					rinv1 = fmaf(rinv1, r2oh2, float(15.0f / 8.0f));                                                    // 2
 					rinv1 *= hinv;                                                    // 1
 				}
 				float this_phi = -m * rinv1;
@@ -197,7 +200,7 @@ __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree
 	}
 	__syncwarp();
 	bh_workspace& ws = workspaces[bid];
-	new(&ws) bh_workspace();
+	new (&ws) bh_workspace();
 	while (si < nsinks) {
 		const array<float, NDIM>& sink = sinks[si];
 		auto& checklist = ws.checklist;
@@ -314,14 +317,15 @@ __global__ void bh_tree_evaluate_points_kernel(bh_workspace* workspaces, bh_tree
 			const float r = sqrt(r2);                                                    // 4
 			if (r2 > h2) {
 				rinv1 = float(1) / r;                                                    // 5
-			} else {
+			} else if (r2 > 0.f) {
 				const float r1overh1 = r * hinv;                                                    // 1
 				const float r2oh2 = r1overh1 * r1overh1;                                                    // 1
-				rinv1 = -5.0f / 16.0f;
-				rinv1 = fmaf(rinv1, r2oh2, float(21.0f / 16.0f));                                                    // 2
-				rinv1 = fmaf(rinv1, r2oh2, float(-35.0f / 16.0f));                                                    // 2
-				rinv1 = fmaf(rinv1, r2oh2, float(35.0f / 16.0f));                                                    // 2
+				rinv1 = 3.0f / 8.0f;
+				rinv1 = fmaf(rinv1, r2oh2, float(-5.0f / 4.0f));                                                    // 2
+				rinv1 = fmaf(rinv1, r2oh2, float(15.0f / 8.0f));                                                    // 2
 				rinv1 *= hinv;                                                    // 1
+			} else {
+				rinv1 = 0.0f;
 			}
 			this_phi -= m * rinv1;
 		}
@@ -349,8 +353,8 @@ vector<float> bh_evaluate_potential_gpu(const vector<bh_tree_node>& tree_nodes, 
 	int nblocks;
 	timer tm1;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) bh_tree_evaluate_kernel, WARP_SIZE, sizeof(bh_shmem)));
-	nblocks *= cuda_smp_count();
-	PRINT("%i blocks\n", nblocks);
+	nblocks *= std::max((int) std::min((int) x.size() / (BH_WORKSIZE), (int) cuda_smp_count()), 1);
+//	nblocks *= cuda_smp_count();
 	CUDA_CHECK(cudaMalloc(&workspaces, sizeof(bh_workspace) * nblocks));
 	CUDA_CHECK(cudaMalloc(&dev_tree_nodes, sizeof(bh_tree_node) * tree_nodes.size()));
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(array<float, NDIM> ) * x.size()));
@@ -367,7 +371,6 @@ vector<float> bh_evaluate_potential_gpu(const vector<bh_tree_node>& tree_nodes, 
 	vector<float> phi(x.size());
 	cuda_stream_synchronize(stream);
 	tm1.stop();
-	PRINT("2 %e %i\n", tm1.read(), sink_buckets.size());
 	CUDA_CHECK(cudaMemcpyAsync(phi.data(), dev_phi, sizeof(float) * x.size(), cudaMemcpyDeviceToHost));
 	cuda_end_stream(stream);
 	CUDA_CHECK(cudaFree(dev_tree_nodes));
@@ -393,13 +396,13 @@ vector<float> bh_evaluate_potential_points_gpu(const vector<bh_tree_node>& tree_
 	int nblocks;
 	timer tm1;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) bh_tree_evaluate_kernel, WARP_SIZE, sizeof(bh_shmem)));
-	nblocks *= cuda_smp_count();
-	PRINT("%i blocks\n", nblocks);
+	nblocks *= std::max(1,(int) std::min((int) sqrt(y.size() * x.size()) / (BH_WORKSIZE), cuda_smp_count()));
+//	nblocks *= cuda_smp_count();
 	CUDA_CHECK(cudaMalloc(&workspaces, sizeof(bh_workspace) * nblocks));
 	CUDA_CHECK(cudaMalloc(&dev_tree_nodes, sizeof(bh_tree_node) * tree_nodes.size()));
 	CUDA_CHECK(cudaMalloc(&dev_x, sizeof(array<float, NDIM> ) * x.size()));
 	CUDA_CHECK(cudaMalloc(&dev_y, sizeof(array<float, NDIM> ) * y.size()));
-	CUDA_CHECK(cudaMalloc(&dev_phi, sizeof(float) * x.size()));
+	CUDA_CHECK(cudaMalloc(&dev_phi, sizeof(float) * y.size()));
 	CUDA_CHECK(cudaMalloc(&next_sink, sizeof(int)));
 	CUDA_CHECK(cudaMemcpyAsync(next_sink, &zero, sizeof(int), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpyAsync(dev_tree_nodes, tree_nodes.data(), sizeof(bh_tree_node) * tree_nodes.size(), cudaMemcpyHostToDevice));
@@ -408,10 +411,10 @@ vector<float> bh_evaluate_potential_points_gpu(const vector<bh_tree_node>& tree_
 	tm1.start();
 	bh_tree_evaluate_points_kernel<<<nblocks, WARP_SIZE, 0, stream>>>(workspaces, dev_tree_nodes, dev_phi, dev_x, dev_y,
 			theta, hsoft, GM, next_sink, y.size());
-	vector<float> phi(x.size());
+	vector<float> phi(y.size());
 	cuda_stream_synchronize(stream);
 	tm1.stop();
-	PRINT("2 %e %i\n", tm1.read(), y.size());
+	ALWAYS_ASSERT(y.size());
 	CUDA_CHECK(cudaMemcpyAsync(phi.data(), dev_phi, sizeof(float) * y.size(), cudaMemcpyDeviceToHost));
 	cuda_end_stream(stream);
 	CUDA_CHECK(cudaFree(dev_tree_nodes));

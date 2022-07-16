@@ -70,6 +70,8 @@ struct subgroup {
 			float vz;
 		};
 	};
+	float T;
+	float W;
 	float min_xfactor;
 	float r_dyn;
 	float sigma2_v;

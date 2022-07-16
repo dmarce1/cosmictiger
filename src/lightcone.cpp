@@ -253,39 +253,39 @@ void lc_parts2groups(double a, double link_len, int ti) {
 		entry.first = i->first;
 		total += i->second.size();
 		entry.second = std::move(i->second);
-		if( entry.second.size() < ROCKSTAR_MIN_GPU ) {
+		if (entry.second.size() < ROCKSTAR_MIN_GPU) {
 			groups.push_back(std::move(entry));
 		} else {
 			gpu_groups.push_back(std::move(entry));
 		}
 	}
 
-	const int cpu_nthreads = 8 * hpx_hardware_concurrency();
-	const int gpu_nthreads = 8 * hpx_hardware_concurrency();
+	const int cpu_nthreads = hpx_hardware_concurrency();
+	const int gpu_nthreads = cuda_smp_count();
 	std::atomic<int> next_index(0);
 	std::atomic<int> gpu_next_index(0);
 	vector<hpx::future<void>> futs2;
-	for (int proc = 0; proc < cpu_nthreads; proc++) {
-		futs2.push_back(hpx::async([&next_index, &groups]() {
-			int index = next_index++;
-			while( index < groups.size()) {
+
+
+	int cindex = 0;
+	int gindex = 0;
+	while( cindex < groups.size() || gindex < gpu_groups.size()) {
+		if( cindex < groups.size()) {
+			int index = cindex++;
+			futs2.push_back(hpx::async([index, &groups]() {
 				if( groups[index].first != LC_NO_GROUP) {
 					auto subgroups = rockstar_find_subgroups(groups[index].second, false);
 				}
-				index = next_index++;
-			}
-		}));
-	}
-	for (int proc = 0; proc < gpu_nthreads; proc++) {
-		futs2.push_back(hpx::async([&gpu_next_index, &gpu_groups]() {
-			int index = gpu_next_index++;
-			while( index < gpu_groups.size()) {
+			}));
+		}
+		if( gindex < gpu_groups.size()) {
+			int index = gindex++;
+			futs2.push_back(hpx::async([index, &gpu_groups]() {
 				if( gpu_groups[index].first != LC_NO_GROUP) {
 					auto subgroups = rockstar_find_subgroups(gpu_groups[index].second, true);
 				}
-				index = gpu_next_index++;
-			}
-		}));
+			}));
+		}
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	hpx::wait_all(futs.begin(), futs.end());

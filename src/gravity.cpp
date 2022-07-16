@@ -345,8 +345,8 @@ void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tre
 					simd_float rinv1_near, rinv1;
 					if (do_phi) {
 						rinv1_near = simd_float(3.0 / 8.0);
-						rinv1_near = fmaf(rinv1_far, q2, simd_float(-5.0 / 4.0));									// 2
-						rinv1_near = fmaf(rinv1_far, q2, simd_float(15.0 / 8.0));									// 2
+						rinv1_near = fmaf(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
+						rinv1_near = fmaf(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
 					}
 					const simd_float sw_far = r2 > h2;																		// 1
 					const simd_float sw_near = simd_float(1) - sw_far;													// 1

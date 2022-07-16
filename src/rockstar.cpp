@@ -127,8 +127,8 @@ int rockstar_particles_sort(device_vector<rockstar_particle>& parts, int begin, 
 
 }
 
-int rockstar_form_tree(device_vector<rockstar_particle>& parts, device_vector<rockstar_tree>& trees, range<float, 2 * NDIM>& rng, int part_begin,
-		int part_end, bool gpu) {
+int rockstar_form_tree(device_vector<rockstar_particle>& parts, device_vector<rockstar_tree>& trees, range<float, 2 * NDIM>& rng, int part_begin, int part_end,
+		bool gpu) {
 	array<int, NCHILD> children;
 	rockstar_tree node;
 	int active_count = 0;
@@ -197,7 +197,7 @@ int rockstar_form_tree(device_vector<rockstar_tree>& trees, device_vector<rockst
 	return rockstar_form_tree(parts, trees, rng, 0, parts.size(), gpu);
 }
 
-float rockstar_find_link_len(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, int tree_root, float ff, bool gpu ) {
+float rockstar_find_link_len(device_vector<rockstar_tree>& trees, device_vector<rockstar_particle>& parts, int tree_root, float ff, bool gpu) {
 	range<float, 2 * NDIM> rng = trees[tree_root].box;
 //	PRINT("V %e\n", rng.volume());
 	vector<pair<float, int>> seps;
@@ -442,57 +442,61 @@ struct rockstar_seed {
 	array<float, 2 * NDIM> x;
 };
 
-bool rockstar_halo_bound(const subgroup& a, const subgroup& b, float scale) {
+bool rockstar_halo_bound(subgroup& halo, vector<rockstar_particle>& unbound_parts, float scale) {
 	vector<array<float, NDIM>> x;
-	vector<array<float, NDIM>> y;
-	for (int i = 0; i < a.parts.size(); i++) {
+	for (int i = 0; i < halo.parts.size(); i++) {
 		array<float, NDIM> X;
 		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = a.parts[i].X[dim];
+			X[dim] = halo.parts[i].X[dim];
 		}
 		x.push_back(X);
 	}
-	for (int i = 0; i < b.parts.size(); i++) {
-		array<float, NDIM> X;
-		for (int dim = 0; dim < NDIM; dim++) {
-			X[dim] = b.parts[i].X[dim];
-		}
-		y.push_back(X);
-	}
-	auto phi = bh_evaluate_points(y, x);
+	auto y = x;
+	auto phi = bh_evaluate_potential(x, x.size() > ROCKSTAR_MIN_GPU);
 	auto phi_tot = 0.0;
 	auto kin_tot = 0.0;
 	float vxa = 0.0;
 	float vya = 0.0;
 	float vza = 0.0;
-	for (int i = 0; i < a.parts.size(); i++) {
-		vxa += a.parts[i].vx;
-		vya += a.parts[i].vy;
-		vza += a.parts[i].vz;
+	for (int i = 0; i < halo.parts.size(); i++) {
+		vxa += halo.parts[i].vx;
+		vya += halo.parts[i].vy;
+		vza += halo.parts[i].vz;
 	}
-	for (int i = 0; i < b.parts.size(); i++) {
-		vxa += b.parts[i].vx;
-		vya += b.parts[i].vy;
-		vza += b.parts[i].vz;
-	}
-	vxa /= a.parts.size() + b.parts.size();
-	vya /= a.parts.size() + b.parts.size();
-	vza /= a.parts.size() + b.parts.size();
-	for (int i = 0; i < b.parts.size(); i++) {
-		const float dvx = b.parts[i].vx - vxa;
-		const float dvy = b.parts[i].vy - vya;
-		const float dvz = b.parts[i].vz - vza;
+	vxa /= halo.parts.size();
+	vya /= halo.parts.size();
+	vza /= halo.parts.size();
+	int nunbound = 0;
+	int onparts = halo.parts.size();
+	for (int i = 0; i < halo.parts.size(); i++) {
+		const float dvx = halo.parts[i].vx - vxa;
+		const float dvy = halo.parts[i].vy - vya;
+		const float dvz = halo.parts[i].vz - vza;
 		const float ekin = 0.5 * sqr(dvx, dvy, dvz);
 		kin_tot += ekin;
 		phi_tot += phi[i] / scale;
+		if (ekin + phi[i] / scale > 0.0) {
+			nunbound++;
+			unbound_parts.push_back(halo.parts[i]);
+			halo.parts[i] = halo.parts.back();
+			halo.parts.pop_back();
+			i--;
+		}
 	}
-//	PRINT( "%e %e\n", kin_tot, phi_tot);
-	if (kin_tot + phi_tot > 0.0) {
-		return false;
-	} else {
-		//	PRINT("BOUND\n");
-		return true;
+	halo.T = kin_tot;
+	halo.W = 0.5 * phi_tot;
+	//PRINT( "%e %e\n", halo.T, halo.W );
+	const bool rc = (nunbound * 2 < onparts) && (onparts - nunbound) >= ROCKSTAR_MIN_GROUP;
+	if (!rc) {
+		for (int i = 0; i < halo.parts.size(); i++) {
+			unbound_parts.push_back(halo.parts[i]);
+		}
+		halo.parts = decltype(halo.parts)();
 	}
+	//if( !rc ) {
+//		PRINT( "%e\n", halo.T / (halo.W));
+//	}
+	return rc;
 }
 
 vector<int> rockstar_all_subgroups(const subgroup& sg, vector<subgroup>& subgroups) {
@@ -513,147 +517,6 @@ vector<int> rockstar_all_subgroups(const subgroup& sg, vector<subgroup>& subgrou
 		}
 	}
 	return sgs;
-}
-
-vector<rockstar_particle> rockstar_unbind(vector<subgroup>& subgroups, vector<int> checklist, float scale, int depth) {
-	vector<rockstar_particle> my_parts;
-	for (int ci = 0; ci < checklist.size(); ci++) {
-//		PRINT("checklist = %i\n", ci);
-		auto& sg = subgroups[checklist[ci]];
-		auto& parts = sg.parts;
-		if (sg.children.size()) {
-			vector<int> next_children;
-			for (int k = 0; k < sg.children.size(); k++) {
-				for (int j = 0; j < subgroups.size(); j++) {
-					if (subgroups[j].id == sg.children[k]) {
-						next_children.push_back(j);
-						break;
-					}
-				}
-			}
-			auto my_parts = rockstar_unbind(subgroups, next_children, scale, depth + 1);
-			int offset = parts.size();
-			parts.resize(offset + my_parts.size());
-			for (int i = 0; i < my_parts.size(); i++) {
-				parts[offset + i] = my_parts[i];
-			}
-		}
-		float vx0, vy0, vz0;
-		float vx1, vy1, vz1;
-		int p1sz;
-		REDO: vx0 = vy0 = vz0 = 0.0;
-		vx1 = vy1 = vz1 = 0.0;
-		p1sz = 0;
-		for (int j = 0; j < parts.size(); j++) {
-			vx0 += parts[j].vx;
-			vy0 += parts[j].vy;
-			vz0 += parts[j].vz;
-			if (parts[j].subgroup == sg.id) {
-				vx1 += parts[j].vx;
-				vy1 += parts[j].vy;
-				vz1 += parts[j].vz;
-				p1sz++;
-			}
-		}
-		vx0 /= parts.size();
-		vy0 /= parts.size();
-		vz0 /= parts.size();
-		if (p1sz == 0) {
-			THROW_ERROR("err");
-		}
-		vx1 /= p1sz;
-		vy1 /= p1sz;
-		vz1 /= p1sz;
-		vector<array<float, NDIM>> x0(parts.size());
-		vector<array<float, NDIM>> x1;
-		vector<int> map(parts.size());
-		for (int i = 0; i < parts.size(); i++) {
-			for (int dim = 0; dim < NDIM; dim++) {
-				x0[i][dim] = parts[i].X[dim];
-			}
-			map[i] = x1.size();
-			if (parts[i].subgroup == sg.id) {
-				x1.push_back(x0[i]);
-			}
-		}
-		timer tm;
-		tm.start();
-//		PRINT("x0size = %i x1size = %i\n", x0.size(), x1.size());
-		auto phi0 = bh_evaluate_potential(x0);
-		auto phi1 = bh_evaluate_potential(x1);
-		float ainv = 1.0 / scale;
-		for (auto& p : phi0) {
-			p *= ainv;
-		}
-		for (auto& p : phi1) {
-			p *= ainv;
-		}
-		int cnt;
-		int cnt0;
-		cnt = cnt0 = 0;
-		for (int i = 0; i < parts.size(); i++) {
-			float v20 = sqr(parts[i].vx - vx0);
-			v20 += sqr(parts[i].vy - vy0);
-			v20 += sqr(parts[i].vz - vz0);
-			float kin0 = 0.5 * v20;
-			bool host_bound = false;
-			if (parts[i].subgroup == sg.id) {
-				float v21 = sqr(parts[i].vx - vx1);
-				v21 += sqr(parts[i].vy - vy1);
-				v21 += sqr(parts[i].vz - vz1);
-				float kin1 = 0.5 * v21;
-				host_bound = kin1 + phi1[map[i]] < 0.0;
-			}
-			if (parts[i].subgroup == sg.id) {
-				if (!(kin0 + phi0[i] < 0.0 || host_bound)) {
-					parts[i].subgroup = sg.parent;
-					my_parts.push_back(parts[i]);
-					parts[i] = parts.back();
-					phi0[i] = phi0.back();
-					map[i] = map.back();
-					map.pop_back();
-					parts.pop_back();
-					phi0.pop_back();
-					i--;
-					cnt++;
-				}
-				cnt0++;
-			}
-		}
-
-		if (parts.size() < ROCKSTAR_MIN_GROUP || cnt * 2 > cnt0) {
-			for (int i = 0; i < parts.size(); i++) {
-				if (parts[i].subgroup == sg.id) {
-					parts[i].subgroup = sg.parent;
-				}
-			}
-			for (int k = 0; k < subgroups.size(); k++) {
-				if (subgroups[k].parent == sg.id) {
-					subgroups[k].parent = sg.parent;
-				}
-			}
-			int l = 0;
-			while (l < parts.size()) {
-				if (parts[l].subgroup == sg.parent) {
-					my_parts.push_back(parts[l]);
-					parts[l] = parts.back();
-					parts.pop_back();
-				} else {
-					l++;
-				}
-			}
-		} else {
-			for (int i = 0; i < parts.size(); i++) {
-				my_parts.push_back(parts[i]);
-			}
-		}
-		assert(parts.size() >= ROCKSTAR_MIN_GROUP || parts.size() == 0);
-//		PRINT("%e unbound of %i\n", (float ) cnt / cnt0, cnt0);
-		tm.stop();
-		sg.depth = depth;
-
-	}
-	return my_parts;
 }
 
 void rockstar_subgroup_statistics(subgroup& sg, bool gpu) {
@@ -749,6 +612,18 @@ void rockstar_subgroup_statistics(subgroup& sg, bool gpu) {
 		}
 	}
 	sg.host_part_cnt = parts.size();
+}
+
+vector<rockstar_particle> rockstar_gather_halo_parts(const vector<subgroup>& subgroups, const subgroup& sg) {
+	vector<rockstar_particle> X;
+	for (int i = 0; i < sg.parts.size(); i++) {
+		X.push_back(sg.parts[i]);
+	}
+	for (int i = 0; i < sg.children.size(); i++) {
+		const auto tmp = rockstar_gather_halo_parts(subgroups, subgroups[sg.children[i]]);
+		X.insert(X.end(), tmp.begin(), tmp.end());
+	}
+	return X;
 }
 
 vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& next_id, float rfac, float vfac, float scale, bool gpu, int depth = 0) {
@@ -907,7 +782,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 		double volume = 0.0;
 		const double omega_m = get_options().omega_m;
 		const double x = ((omega_m / (sqr(scale)*scale)) / (omega_m / (sqr(scale)*scale)) + (1.0 - omega_m)) - 1.0;
-		const double y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x))/(1.0+x);
+		double y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x))/(1.0+x);
 		double r_vir = pow(these_parts.size() / (4.0/3.0*M_PI*y), 1.0/3.0) / Ndim;
 
 		sigma2_x /= these_parts.size();
@@ -954,12 +829,14 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			float vcirc_max = 0.0;
 			double H = get_options().hubble * constants::H0 * get_options().code_to_s;
 			const float nparts = pow(get_options().parts_dim,3);
-			for( int n = 0; n < radii.size(); n++) {
-				float vcirc = sqrt(3.0 * get_options().omega_m * sqr(H) * n / nparts / radii[n]);
+			for( int n = 1; n < radii.size(); n++) {
+				float vcirc = sqrt(3.0 * get_options().omega_m * sqr(H) * n / (8.0 * M_PI * nparts * radii[n] / rfac));
 				vcirc_max = std::max(vcirc_max,vcirc);
 			}
 			sg.vcirc_max = vcirc_max * vfac;
-			sg.r_dyn = vcirc_max / H / sqrt(180) * rfac;
+			y *= (1.0+x);
+			//	PRINT( "%e\n", vcirc_max);
+			sg.r_dyn = sqrt(2.0)* vcirc_max / H / sqrt(y) * rfac;
 		};
 	if (subgroups.size() == 0) {
 		const int subgrp = next_id++;
@@ -995,7 +872,6 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				const float dvx = (subgroups[k].vx - subgroups[l].vx) * sigma_v_inv;
 				const float dvy = (subgroups[k].vy - subgroups[l].vy) * sigma_v_inv;
 				const float dvz = (subgroups[k].vz - subgroups[l].vz) * sigma_v_inv;
-//						PRINT("%e %i\n", sqr(dx, dy, dz) + sqr(dvx, dvy, dvz), subgroups[k].parts.size());
 				if (sqr(dx, dy, dz) + sqr(dvx, dvy, dvz) < 200.0) {
 					for (int i = 0; i < subgroups[k].parts.size(); i++) {
 						subgroups[l].parts.push_back(subgroups[k].parts[i]);
@@ -1006,7 +882,6 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 					subgroups[k] = subgroups.back();
 					subgroups.pop_back();
 					found_merge = true;
-//							PRINT("Merging\n");
 					break;
 				}
 			}
@@ -1014,23 +889,48 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				k++;
 			}
 		}
+		vector<vector<float>> ene(subgroups.size());
+		vector<array<float, NDIM>> Y;
+		for (int k = 0; k < parts.size(); k++) {
+			array<float, NDIM> x;
+			for (int dim = 0; dim < NDIM; dim++) {
+				x[dim] = parts[k].X[dim];
+			}
+			Y.push_back(x);
+		}
+		for (int i = 0; i < subgroups.size(); i++) {
+			vector<array<float, NDIM>> X;
+			array<float, NDIM> vel;
+			for (int dim = 0; dim < NDIM; dim++) {
+				vel[dim] = 0.0;
+			}
+			auto& these_parts = subgroups[i].parts;
+			for (int k = 0; k < these_parts.size(); k++) {
+				array<float, NDIM> x;
+				for (int dim = 0; dim < NDIM; dim++) {
+					x[dim] = these_parts[k].X[dim];
+					vel[dim] += these_parts[k].X[dim + NDIM];
+				}
+				X.push_back(x);
+			}
+			for (int dim = 0; dim < NDIM; dim++) {
+				vel[dim] /= these_parts.size();
+			}
+			auto phi = bh_evaluate_points(Y, X);
+			ene[i].resize(phi.size());
+			for (int k = 0; k < parts.size(); k++) {
+				const double dvx = parts[k].vx - vel[XDIM];
+				const double dvy = parts[k].vy - vel[YDIM];
+				const double dvz = parts[k].vz - vel[ZDIM];
+				ene[i][k] = phi[k] / scale + 0.5 * sqr(dvx, dvy, dvz);
+			}
+		}
 		for (int j = 0; j < parts.size(); j++) {
-
-			float min_dist = std::numeric_limits<float>::max();
+			float min_ene = std::numeric_limits<float>::max();
 			int min_index = -1;
 			for (int i = 0; i < subgroups.size(); i++) {
-				assert(subgroups[i].parts.size());
-				const float rdyn_inv = 1.0 / subgroups[i].r_dyn;
-				const float sigma_v_inv = 1.0 / sqrt(subgroups[i].sigma2_v);
-				const float dx = (parts[j].x - subgroups[i].x) * rdyn_inv;
-				const float dy = (parts[j].y - subgroups[i].y) * rdyn_inv;
-				const float dz = (parts[j].z - subgroups[i].z) * rdyn_inv;
-				const float dvx = (parts[j].vx - subgroups[i].vx) * sigma_v_inv;
-				const float dvy = (parts[j].vy - subgroups[i].vy) * sigma_v_inv;
-				const float dvz = (parts[j].vz - subgroups[i].vz) * sigma_v_inv;
-				const float dist = sqrt(sqr(dx, dy, dz) + sqr(dvx, dvy, dvz));
-				if (dist < min_dist) {
-					min_dist = dist;
+				if (ene[i][j] < min_ene) {
+					min_ene = ene[i][j];
 					min_index = i;
 				}
 			}
@@ -1082,6 +982,21 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 		}
 	}
 	if (depth == 0) {
+		int bound = 0;
+		int unbound = 0;
+		int rebound = 0;
+		vector<rockstar_particle> unbounds;
+		for (int k = 0; k < subgroups.size(); k++) {
+			const int psize = subgroups[k].parts.size();
+			bound += psize;
+			if (!rockstar_halo_bound(subgroups[k], unbounds, scale)) {
+				subgroups[k] = subgroups.back();
+				subgroups.pop_back();
+				k--;
+			}
+		}
+		unbound += unbounds.size();
+		bound -= unbound;
 		for (int k = 0; k < subgroups.size(); k++) {
 			auto& sgA = subgroups[k];
 			float min_dist = std::numeric_limits<float>::max();
@@ -1094,101 +1009,113 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 					const float dz = sgA.z - sgB.z;
 					const float r = sqrt(sqr(dx, dy, dz));
 					if (r < sgB.r_vir) {
-						//			if (rockstar_halo_bound(sgB, sgA, scale)) {
-//							PRINT("Testing subhalo\n");
-						const float rdyn_inv = 1.0 / sgB.r_dyn;
-						const float dvx = sgA.vx - sgB.vx;
-						const float dvy = sgA.vy - sgB.vy;
-						const float dvz = sgA.vz - sgB.vz;
-						const float sigma2_v_inv = 1.0 / sqrt(sgB.sigma2_v);
-						const float dist = sqrt(sqr(dvx, dvy, dvz) * sigma2_v_inv + sqr(r * rdyn_inv));
-						if (dist < min_dist) {
-							min_dist = dist;
+						if (r < min_dist) {
+							min_dist = r;
 							min_index = l;
 						}
-						//		}
 					}
 				}
 			}
 			if (min_index != -1) {
 				auto& sgB = subgroups[min_index];
-				sgA.parent = sgB.id;
-				sgB.children.push_back(sgA.id);
+				sgA.parent = min_index;
+				sgB.children.push_back(k);
+			} else {
+				sgA.parent = -1;
 			}
 		}
+
+		if (unbounds.size()) {
+			vector<float> min_ene(unbounds.size(), std::numeric_limits<float>::max());
+			vector<int> min_index(unbounds.size(), -1);
+			vector<array<float, NDIM>> Y;
+			for (int k = 0; k < unbounds.size(); k++) {
+				array<float, NDIM> x;
+				for (int dim = 0; dim < NDIM; dim++) {
+					x[dim] = unbounds[k].X[dim];
+				}
+				Y.push_back(x);
+			}
+			for (int k = 0; k < subgroups.size(); k++) {
+				if (subgroups[k].parent == -1) {
+					auto tmp = rockstar_gather_halo_parts(subgroups, subgroups[k]);
+					vector<array<float, NDIM>> X;
+					array<float, NDIM> vel;
+					for (int dim = 0; dim < NDIM; dim++) {
+						vel[dim] = 0.0;
+					}
+					for (int l = 0; l < tmp.size(); l++) {
+						array<float, NDIM> x;
+						for (int dim = 0; dim < NDIM; dim++) {
+							x[dim] = tmp[l].X[dim];
+							vel[dim] += tmp[l].X[dim + NDIM];
+						}
+						X.push_back(x);
+					}
+					for (int dim = 0; dim < NDIM; dim++) {
+						vel[dim] /= X.size();
+					}
+					auto phi = bh_evaluate_points(Y, X, X.size() * Y.size() >=  sqr(ROCKSTAR_MIN_GPU));
+					for (int l = 0; l < unbounds.size(); l++) {
+						const float dvx = unbounds[l].vx - vel[XDIM];
+						const float dvy = unbounds[l].vy - vel[YDIM];
+						const float dvz = unbounds[l].vz - vel[ZDIM];
+						const float ekin = 0.5 * sqr(dvx, dvy, dvz);
+						const float ene = ekin + phi[l] / scale;
+						if (ene < 0.0f) {
+							if (ene < min_ene[l]) {
+								min_ene[l] = ene;
+								min_index[l] = k;
+							}
+						}
+					}
+				}
+			}
+			for (int k = 0; k < unbounds.size(); k++) {
+				if (min_index[k] != -1) {
+					subgroups[min_index[k]].parts.push_back(unbounds[k]);
+					unbound--;
+					bound++;
+					rebound++;
+				}
+			}
+		}
+		//PRINT("%e %e %i\n", (double ) unbound / (bound + unbound), (double ) rebound / (bound + unbound), (bound + unbound));
+
 		vector<int> checklist;
 		int halo_cnt = 0;
 		int subhalo_cnt = 0;
 		for (int k = 0; k < subgroups.size(); k++) {
-			if (subgroups[k].parent == ROCKSTAR_NO_GROUP) {
-				checklist.push_back(k);
+			if (subgroups[k].parent == -1) {
 				halo_cnt++;
 			} else {
 				subhalo_cnt++;
 			}
 		}
-	//	PRINT( "%i %i %i\n", halo_cnt + subhalo_cnt, halo_cnt, subhalo_cnt );
-		auto all_parts = rockstar_unbind(subgroups, checklist, scale, 0);
-//		PRINT("%i\n", all_parts.size());
-		int k = 0;
-		while (k < subgroups.size()) {
-			if (subgroups[k].parts.size() == 0) {
-				for (int l = 0; l < subgroups.size(); l++) {
-					for (int m = 0; m < subgroups[l].children.size();) {
-						if (subgroups[k].id == subgroups[l].children[m]) {
-							subgroups[l].children[m] = subgroups[l].children.back();
-							subgroups[l].children.pop_back();
-						} else {
-							m++;
-						}
-					}
-				}
-				subgroups[k] = std::move(subgroups.back());
-				subgroups.pop_back();
-			} else {
-				k++;
-			}
-		}
-		bool change;
-		do {
-			change = false;
-			for (int k = 0; k < subgroups.size(); k++) {
-				if (subgroups[k].parent != ROCKSTAR_NO_GROUP && subgroups[k].children.size()) {
-					int l;
-					for (l = 0; l < subgroups.size(); l++) {
-						if (subgroups[k].parent == subgroups[l].id) {
-							break;
-						}
-					}
-					change = true;
-					subgroups[l].children.insert(subgroups[l].children.end(), subgroups[k].children.begin(), subgroups[k].children.end());
-					subgroups[k].children.clear();
-				}
-			}
-		} while (change);
-		for (int k = 0; k < subgroups.size(); k++) {
-			rockstar_subgroup_statistics(subgroups[k], gpu);
-		}
-		subgroup unbound;
-		unbound.id = ROCKSTAR_NO_GROUP;
-		auto& parts = all_parts;
-		int l = 0;
-		while (l < parts.size()) {
-			if (parts[l].subgroup == ROCKSTAR_NO_GROUP) {
-				unbound.parts.push_back(parts[l]);
-				parts[l] = parts.back();
-				parts.pop_back();
-			} else {
-				l++;
-			}
-		}
-		subgroups.push_back(std::move(unbound));
-		//	PRINT("ALLPARTSSIZE = %i\n", all_parts.size());
-	}
-//	PRINT("%i II parts_size = %i group_cnt = %i\n", depth, parts.size(), subgroups.size());
-	for (int k = 0; k < subgroups.size(); k++) {
-//		PRINT("%i %i %i %i %i\n", subgroups[k].id, subgroups[k].parts.size(), subgroups[k].depth, subgroups[k].parent != ROCKSTAR_NO_GROUP,
-//				subgroups[k].children.size());
+		PRINT("%i %i\n", halo_cnt, subhalo_cnt);
+		/*		for (int k = 0; k < subgroups.size(); k++) {
+		 rockstar_subgroup_statistics(subgroups[k], gpu);
+		 }
+		 subgroup unbound;
+		 unbound.id = ROCKSTAR_NO_GROUP;
+		 auto& parts = all_parts;
+		 int l = 0;
+		 while (l < parts.size()) {
+		 if (parts[l].subgroup == ROCKSTAR_NO_GROUP) {
+		 unbound.parts.push_back(parts[l]);
+		 parts[l] = parts.back();
+		 parts.pop_back();
+		 } else {
+		 l++;
+		 }
+		 }
+		 subgroups.push_back(std::move(unbound));
+		 //	PRINT("ALLPARTSSIZE = %i\n", all_parts.size());
+		 }
+		 //	PRINT("%i II parts_size = %i group_cnt = %i\n", depth, parts.size(), subgroups.size());
+		 for (int k = 0; k < subgroups.size(); k++) {
+		 //		PRINT("%i %i %i %i %i\n", subgroups[k].id, subgroups[k].parts.size(), subgroups[k].depth, subgroups[k].parent != ROCKSTAR_NO_GROUP,
+		 //				subgroups[k].children.size());*/
 	}
 	return subgroups;
 }

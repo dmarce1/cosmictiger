@@ -147,9 +147,9 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_buckets, vector<float>& phi, vector<array<float, NDIM>>& parts, float theta) {
 	const float h = get_options().hsoft;
 	const float GM = get_options().GM;
-	const float hinv = 1.0 / (2.f * h);
-	const float h2inv = 1.0 / (4.f * h * h);
-	const float h2 = 4.f * h * h;
+	const float hinv = 1.0 /  h;
+	const float h2inv = 1.0 / (h * h);
+	const float h2 = h * h;
 	const simd_float tiny(1e-20);
 	const int nthreads = std::max(std::min((int) parts.size() / 512, 2 * (int) hpx_hardware_concurrency()), 1);
 	vector<hpx::future<void>> futs;
@@ -229,13 +229,12 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 				rinv1 = rsqrt(r2);// 5
 			} else {
 				const simd_float r = sqrt(r2);                                                    // 4
-				const simd_float rinv1_far = simd_float(1) / r;// 5
-				const simd_float r1overh1 = r * hinv;// 1
-				const simd_float r2oh2 = r1overh1 * r1overh1;// 1
-				simd_float rinv1_near = -5.0f / 16.0f;
-				rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));// 2
-				rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));// 2
-				rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));// 2
+				const simd_float rinv1_far = simd_float(1) / (r + simd_float(1e-30));// 5
+				const simd_float q = r * hinv;// 1
+				const simd_float q2 = sqr(q);// 1
+				simd_float  rinv1_near = simd_float(3.0 / 8.0);
+				rinv1_near = fmaf(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
+				rinv1_near = fmaf(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
 				rinv1_near *= hinv;// 1
 				const auto near_flag = (simd_float(1) - far_flag);// 1
 				rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;// 4
@@ -325,14 +324,14 @@ void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM
 			rinv1 = rsqrt(r2);                                            // 5
 		} else {
 			const simd_float r = sqrt(r2);                                                    // 4
-			const simd_float rinv1_far = simd_float(1) / r;                                                    // 5
-			const simd_float r1overh1 = r * hinv;                                                    // 1
-			const simd_float r2oh2 = r1overh1 * r1overh1;                                                    // 1
+			const simd_float rinv1_far = simd_float(1) / (r + simd_float(1e-30f));                                                    // 5
+			const simd_float q = r * hinv;                                                    // 1
+			const simd_float q2 = sqr(q);                                                    // 1
 			simd_float rinv1_near = -5.0f / 16.0f;
-			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                                                    // 2
-			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                                                    // 2
-			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                                                    // 2
-			rinv1_near *= hinv;                                                    // 1
+			rinv1_near = fmaf(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
+			rinv1_near = fmaf(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
+			rinv1_near *= hinv;//
+			rinv1_near *= r > simd_float(0);
 			const auto near_flag = (simd_float(1) - far_flag);                                                    // 1
 			rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;                                                    // 4
 		}
@@ -404,7 +403,7 @@ vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu) {
 		tm1.start();
 		pot = bh_evaluate_potential_gpu(nodes, x, sink_buckets, 0.85, get_options().hsoft, get_options().GM);
 		tm1.stop();
-		PRINT("1 %e\n", tm1.read());
+//		PRINT("1 %e\n", tm1.read());
 	}
 	rpot.resize(x.size());
 	for (int i = 0; i < sort_order.size(); i++) {
