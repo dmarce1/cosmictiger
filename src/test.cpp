@@ -543,7 +543,7 @@ static void speed_test() {
 }
 
 void bh_test() {
-	int N = 100000;
+/*	int N = 100000;
 	int M = 10;
 	vector<array<float, NDIM>> x(N);
 	vector<array<float, NDIM>> y(M);
@@ -576,7 +576,7 @@ void bh_test() {
 		PRINT("%e %e %e\n", phi1[i], phi2[i], err);
 		err_tot += err;
 	}
-	PRINT("%e\n", err_tot / phi1.size());
+	PRINT("%e\n", err_tot / phi1.size());*/
 
 }
 

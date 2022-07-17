@@ -66,8 +66,8 @@ static const char *_cudaGetErrorEnum(cufftResult error) {
 		case CUFFT_UNALIGNED_DATA:
 		return "CUFFT_UNALIGNED_DATA";
 	}
-
-	return "<unknown>";
+	ALWAYS_ASSERT(false);
+	return "->unknown<-";
 }
 
 inline void _cuda_fft_check(cufftResult err, const char *file, const int line) {

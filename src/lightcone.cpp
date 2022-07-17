@@ -199,7 +199,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 		 if (tm > 63.0) {
 		 factor = (64.0 - tm) / 8.0;
 		 }*/
-		if (nparts >= (M_PI / 16.0) * parts_per_rank) {
+		if (nparts >= (M_PI / 10.0) * parts_per_rank) {
 			return 1;
 		} else {
 			return 0;
@@ -246,48 +246,31 @@ void lc_parts2groups(double a, double link_len, int ti) {
 		}
 	}
 	vector<pair<lc_group, vector<lc_entry>>> groups;
-	vector<pair<lc_group, vector<lc_entry>>> gpu_groups;
 	vector<pair<lc_group, compressed_particles>> group_arcs;
 	for (auto i = groups_map.begin(); i != groups_map.end(); i++) {
 		pair<lc_group, vector<lc_entry>> entry;
 		entry.first = i->first;
 		total += i->second.size();
 		entry.second = std::move(i->second);
-		if (entry.second.size() < ROCKSTAR_MIN_GPU) {
-			groups.push_back(std::move(entry));
-		} else {
-			gpu_groups.push_back(std::move(entry));
-		}
+		groups.push_back(std::move(entry));
 	}
+	std::sort(groups.begin(), groups.end(), [](const pair<lc_group, vector<lc_entry>>& a, const pair<lc_group, vector<lc_entry>>& b){
+		return a.second.size() >= b.second.size();
 
-	const int cpu_nthreads = hpx_hardware_concurrency();
-	const int gpu_nthreads = cuda_smp_count();
+	});
 	std::atomic<int> next_index(0);
-	std::atomic<int> gpu_next_index(0);
-	vector<hpx::future<void>> futs2;
-
-
-	int cindex = 0;
-	int gindex = 0;
-	while( cindex < groups.size() || gindex < gpu_groups.size()) {
-		if( cindex < groups.size()) {
-			int index = cindex++;
-			futs2.push_back(hpx::async([index, &groups]() {
+	const int nthreads = 2 * hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([&next_index, &groups]() {
+			int index = next_index++;
+			while( index < groups.size()) {
 				if( groups[index].first != LC_NO_GROUP) {
 					auto subgroups = rockstar_find_subgroups(groups[index].second, false);
 				}
-			}));
-		}
-		if( gindex < gpu_groups.size()) {
-			int index = gindex++;
-			futs2.push_back(hpx::async([index, &gpu_groups]() {
-				if( gpu_groups[index].first != LC_NO_GROUP) {
-					auto subgroups = rockstar_find_subgroups(gpu_groups[index].second, true);
-				}
-			}));
-		}
+				index = next_index++;
+			}
+		}));
 	}
-	hpx::wait_all(futs2.begin(), futs2.end());
 	hpx::wait_all(futs.begin(), futs.end());
 	epoch++;
 }
@@ -730,7 +713,10 @@ void lc_form_trees(double tau, double link_len) {
 				} else {
 					parts.group[i] = LC_NO_GROUP;
 				}
-				ASSERT(R >= tau_max - tau);
+				if( R < tau_max - tau) {
+					PRINT( "-----> low R %e %e\n", R, tau_max - tau);
+			//		ASSERT(R >= tau_max - tau);
+				}
 			}
 
 		}));

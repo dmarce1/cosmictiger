@@ -27,7 +27,6 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/rockstar.hpp>
 
-
 #include <unordered_set>
 
 void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>>>entries);
@@ -67,7 +66,7 @@ void groups_cull() {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
 	for (const auto& c : hpx_children()) {
-		futs1.push_back(hpx::async<groups_cull_action>( c));
+		futs1.push_back(hpx::async<groups_cull_action>(c));
 	}
 	std::unordered_set<group_int> final_existing;
 	mutex_type mutex;
@@ -146,7 +145,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 
 	vector<hpx::future<std::pair<size_t, size_t>>>futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_save_action>( c, number, scale, time));
+		futs.push_back(hpx::async<groups_save_action>(c, number, scale, time));
 	}
 
 	const std::string fname = std::string("groups.") + std::to_string(number) + std::string("/groups.") + std::to_string(number) + "."
@@ -180,7 +179,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 void groups_reduce(double scale_factor) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_reduce_action>( c, scale_factor));
+		futs.push_back(hpx::async<groups_reduce_action>(c, scale_factor));
 	}
 	const int nthreads = GROUPS_REDUCE_OVERSUBSCRIBE * hpx_hardware_concurrency();
 	spinlock_type mutex;
@@ -206,172 +205,172 @@ void groups_reduce(double scale_factor) {
 							PRINT( "%i halos and %i subhalos found in group of %i\n", halo_cnt, rockstar_groups.size() - halo_cnt - 1, parts.size());
 						}
 						bool removed_one;
-						vector<array<fixed32,NDIM>> X(parts.size());
+						device_vector<array<fixed32,NDIM>> X(parts.size());
 						for( int i = 0; i < parts.size(); i++) {
 							for( int dim = 0; dim < NDIM; dim++) {
 								const double x = parts[i].x[dim].to_double();
 								X[i][dim] = x;
 							}
 						}
-						phi = bh_evaluate_potential_fixed(X);
-						for( auto& p : phi ) {
-							p *= ainv;
-						}
-						if( parts.size() < get_options().min_group) {
-							for( int i = 0; i < parts.size(); i++) {
-								remove_indexes[parts[i].rank].push_back(parts[i].index);
-							}
-						} else {
-							group_entry entry;
-							entry.id = iter->first;
-							int count = 0;
-							float ekin = 0.0;
-							array<double, NDIM> xcom;
-							array<float, NDIM> vel;
-							array<float, NDIM> lang;
-							for( int dim = 0; dim < NDIM; dim++) {
-								xcom[dim] = 0.0;
-								vel[dim] = 0.0;
-								lang[dim] = 0.0;
-							}
-							const auto constrain_range_half = [](double& x) {
-								if( x < -0.5 ) {
-									x += 1.0;
-								} else if( x > 0.5) {
-									x -= 1.0;
-								}
-							};
-							for( int i = 0; i < parts.size(); i++) {
-								for( int dim = 0; dim < NDIM; dim++) {
-									const double x = parts[i].x[dim].to_double();
-									const float v = parts[i].v[dim];
-									vel[dim] += v;
-									double this_dx = x - xcom[dim];
-									if( i > 0 ) {
-										constrain_range_half(this_dx);
-									}
-									const double xsum = (count + 1) * xcom[dim] + this_dx;
-									xcom[dim] = xsum / (count + 1);
-								}
-								count++;
-							}
-							float countinv = 1.0 / count;
-							for( int dim = 0; dim < NDIM; dim++) {
-								vel[dim] *= countinv;
-								constrain_range(xcom[dim]);
-							}
-							for( int i = 0; i < parts.size(); i++) {
-								double x = parts[i].x[XDIM].to_double() - xcom[XDIM];
-								double y = parts[i].x[YDIM].to_double() - xcom[YDIM];
-								double z = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
-								constrain_range_half(x);
-								constrain_range_half(y);
-								constrain_range_half(z);
-								const double vx = parts[i].v[XDIM] - vel[XDIM];
-								const double vy = parts[i].v[YDIM] - vel[YDIM];
-								const double vz = parts[i].v[ZDIM] - vel[ZDIM];
-								ekin += sqr(vx, vy, vz) * 0.5;
-								lang[XDIM] = (y * vz - z * vy)*countinv;
-								lang[YDIM] = (-x * vz + z * vx)*countinv;
-								lang[ZDIM] = (x * vy - y * vx)*countinv;
-							}
-							float pot = 0.0;
-							for( const auto& p : phi) {
-								pot += p;
-							}
-							pot *= countinv;
-							pot *= 0.5;
-							ekin *= countinv;
-							//		PRINT( "%i %e %e %e\n", parts.size(), ekin, pot, (2*ekin + pot) / (ekin - pot));
-				vector<float> radii;
-				float ravg = 0.0;
-				radii.reserve(parts.size());
-				float vxdisp = 0.0;
-				float vydisp = 0.0;
-				float vzdisp = 0.0;
-				float Ixx = 0.0, Ixy = 0.0, Ixz = 0.0, Iyy = 0.0, Iyz = 0.0, Izz = 0.0;
-				for( int i = 0; i < parts.size(); i++) {
-					double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
-					double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
-					double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
-					constrain_range_half(dx);
-					constrain_range_half(dy);
-					constrain_range_half(dz);
-					const double vx = parts[i].v[XDIM] - vel[XDIM];
-					const double vy = parts[i].v[YDIM] - vel[YDIM];
-					const double vz = parts[i].v[ZDIM] - vel[ZDIM];
-					Ixx += dy * dy + dz * dz;
-					Iyy += dx * dx + dz * dz;
-					Izz += dy * dy + dx * dx;
-					Ixy += dx * dy;
-					Iyz += dy * dz;
-					Ixz += dx * dz;
-					vxdisp += vx * vx;
-					vydisp += vy * vy;
-					vzdisp += vz * vz;
-					const double r = sqrt(sqr(dx,dy,dz));
-					radii.push_back(r);
-					ravg += r;
-				}
-				vxdisp = sqrt(vxdisp*countinv);
-				vydisp = sqrt(vydisp*countinv);
-				vzdisp = sqrt(vzdisp*countinv);
-				std::sort(radii.begin(),radii.end());
-				const double dr = 1.0 / (radii.size() - 1);
-				const auto radial_percentile = [&radii,dr](double r) {
-					double r0 = r / dr;
-					int n0 = r0;
-					int n1 = n0 + 1;
-					double w1 = r0 - n0;
-					double w0 = 1.0 - w1;
-					return w0*radii[n0] + w1*radii[n1];
-				};
-				ravg / count;
-				for( int i = 0; i <parts.size(); i++) {
-					const auto lgrp = parts[i].last_group;
-					if( lgrp != NO_GROUP) {
-						if( entry.parents.find(lgrp) == entry.parents.end()) {
-							entry.parents[lgrp] = 1;
-						} else {
-							entry.parents[lgrp]++;
-						}
+						/*	phi = bh_evaluate_potential_fixed(X);
+						 for( auto& p : phi ) {
+						 p *= ainv;
+						 }
+						 if( parts.size() < get_options().min_group) {
+						 for( int i = 0; i < parts.size(); i++) {
+						 remove_indexes[parts[i].rank].push_back(parts[i].index);
+						 }
+						 } else {
+						 group_entry entry;
+						 entry.id = iter->first;
+						 int count = 0;
+						 float ekin = 0.0;
+						 array<double, NDIM> xcom;
+						 array<float, NDIM> vel;
+						 array<float, NDIM> lang;
+						 for( int dim = 0; dim < NDIM; dim++) {
+						 xcom[dim] = 0.0;
+						 vel[dim] = 0.0;
+						 lang[dim] = 0.0;
+						 }
+						 const auto constrain_range_half = [](double& x) {
+						 if( x < -0.5 ) {
+						 x += 1.0;
+						 } else if( x > 0.5) {
+						 x -= 1.0;
+						 }
+						 };
+						 for( int i = 0; i < parts.size(); i++) {
+						 for( int dim = 0; dim < NDIM; dim++) {
+						 const double x = parts[i].x[dim].to_double();
+						 const float v = parts[i].v[dim];
+						 vel[dim] += v;
+						 double this_dx = x - xcom[dim];
+						 if( i > 0 ) {
+						 constrain_range_half(this_dx);
+						 }
+						 const double xsum = (count + 1) * xcom[dim] + this_dx;
+						 xcom[dim] = xsum / (count + 1);
+						 }
+						 count++;
+						 }
+						 float countinv = 1.0 / count;
+						 for( int dim = 0; dim < NDIM; dim++) {
+						 vel[dim] *= countinv;
+						 constrain_range(xcom[dim]);
+						 }
+						 for( int i = 0; i < parts.size(); i++) {
+						 double x = parts[i].x[XDIM].to_double() - xcom[XDIM];
+						 double y = parts[i].x[YDIM].to_double() - xcom[YDIM];
+						 double z = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+						 constrain_range_half(x);
+						 constrain_range_half(y);
+						 constrain_range_half(z);
+						 const double vx = parts[i].v[XDIM] - vel[XDIM];
+						 const double vy = parts[i].v[YDIM] - vel[YDIM];
+						 const double vz = parts[i].v[ZDIM] - vel[ZDIM];
+						 ekin += sqr(vx, vy, vz) * 0.5;
+						 lang[XDIM] = (y * vz - z * vy)*countinv;
+						 lang[YDIM] = (-x * vz + z * vx)*countinv;
+						 lang[ZDIM] = (x * vy - y * vx)*countinv;
+						 }
+						 float pot = 0.0;
+						 for( const auto& p : phi) {
+						 pot += p;
+						 }
+						 pot *= countinv;
+						 pot *= 0.5;
+						 ekin *= countinv;
+						 //		PRINT( "%i %e %e %e\n", parts.size(), ekin, pot, (2*ekin + pot) / (ekin - pot));
+						 vector<float> radii;
+						 float ravg = 0.0;
+						 radii.reserve(parts.size());
+						 float vxdisp = 0.0;
+						 float vydisp = 0.0;
+						 float vzdisp = 0.0;
+						 float Ixx = 0.0, Ixy = 0.0, Ixz = 0.0, Iyy = 0.0, Iyz = 0.0, Izz = 0.0;
+						 for( int i = 0; i < parts.size(); i++) {
+						 double dx = parts[i].x[XDIM].to_double() - xcom[XDIM];
+						 double dy = parts[i].x[YDIM].to_double() - xcom[YDIM];
+						 double dz = parts[i].x[ZDIM].to_double() - xcom[ZDIM];
+						 constrain_range_half(dx);
+						 constrain_range_half(dy);
+						 constrain_range_half(dz);
+						 const double vx = parts[i].v[XDIM] - vel[XDIM];
+						 const double vy = parts[i].v[YDIM] - vel[YDIM];
+						 const double vz = parts[i].v[ZDIM] - vel[ZDIM];
+						 Ixx += dy * dy + dz * dz;
+						 Iyy += dx * dx + dz * dz;
+						 Izz += dy * dy + dx * dx;
+						 Ixy += dx * dy;
+						 Iyz += dy * dz;
+						 Ixz += dx * dz;
+						 vxdisp += vx * vx;
+						 vydisp += vy * vy;
+						 vzdisp += vz * vz;
+						 const double r = sqrt(sqr(dx,dy,dz));
+						 radii.push_back(r);
+						 ravg += r;
+						 }
+						 vxdisp = sqrt(vxdisp*countinv);
+						 vydisp = sqrt(vydisp*countinv);
+						 vzdisp = sqrt(vzdisp*countinv);
+						 std::sort(radii.begin(),radii.end());
+						 const double dr = 1.0 / (radii.size() - 1);
+						 const auto radial_percentile = [&radii,dr](double r) {
+						 double r0 = r / dr;
+						 int n0 = r0;
+						 int n1 = n0 + 1;
+						 double w1 = r0 - n0;
+						 double w0 = 1.0 - w1;
+						 return w0*radii[n0] + w1*radii[n1];
+						 };
+						 ravg / count;
+						 for( int i = 0; i <parts.size(); i++) {
+						 const auto lgrp = parts[i].last_group;
+						 if( lgrp != NO_GROUP) {
+						 if( entry.parents.find(lgrp) == entry.parents.end()) {
+						 entry.parents[lgrp] = 1;
+						 } else {
+						 entry.parents[lgrp]++;
+						 }
+						 }
+						 }
+						 entry.lang = lang;
+						 entry.Ixx = Ixx;
+						 entry.Ixy = Ixy;
+						 entry.Ixz = Ixz;
+						 entry.Iyy = Iyy;
+						 entry.Iyz = Iyz;
+						 entry.Izz = Izz;
+						 entry.vxdisp = vxdisp;
+						 entry.vydisp = vydisp;
+						 entry.vzdisp = vzdisp;
+						 entry.incomplete = false;
+						 entry.ekin = ekin;
+						 entry.epot = pot;
+						 entry.r25 = radial_percentile(0.25);
+						 entry.r50 = radial_percentile(0.50);
+						 entry.r75 = radial_percentile(0.75);
+						 entry.r90 = radial_percentile(0.90);
+						 entry.rmax = radii.back();
+						 entry.ravg = ravg;
+						 entry.com = xcom;
+						 entry.mass = count * get_options().code_to_g / constants::M0;
+						 entry.vel = vel;
+						 std::lock_guard<spinlock_type> lock(mutex);
+						 groups.push_back(std::move(entry));
+						 existing_groups.insert(entry.id);
+						 }*/
 					}
 				}
-				entry.lang = lang;
-				entry.Ixx = Ixx;
-				entry.Ixy = Ixy;
-				entry.Ixz = Ixz;
-				entry.Iyy = Iyy;
-				entry.Iyz = Iyz;
-				entry.Izz = Izz;
-				entry.vxdisp = vxdisp;
-				entry.vydisp = vydisp;
-				entry.vzdisp = vzdisp;
-				entry.incomplete = false;
-				entry.ekin = ekin;
-				entry.epot = pot;
-				entry.r25 = radial_percentile(0.25);
-				entry.r50 = radial_percentile(0.50);
-				entry.r75 = radial_percentile(0.75);
-				entry.r90 = radial_percentile(0.90);
-				entry.rmax = radii.back();
-				entry.ravg = ravg;
-				entry.com = xcom;
-				entry.mass = count * get_options().code_to_g / constants::M0;
-				entry.vel = vel;
-				std::lock_guard<spinlock_type> lock(mutex);
-				groups.push_back(std::move(entry));
-				existing_groups.insert(entry.id);
+				vector<hpx::future<void>> futs;
+				for( auto iter = remove_indexes.begin(); iter != remove_indexes.end(); iter++) {
+					futs.push_back(hpx::async<groups_remove_indexes_action>(hpx_localities()[iter->first], std::move(iter->second)));
+				}
+				hpx::wait_all(futs.begin(),futs.end());
 			}
-		}
-	}
-	vector<hpx::future<void>> futs;
-	for( auto iter = remove_indexes.begin(); iter != remove_indexes.end(); iter++) {
-		futs.push_back(hpx::async<groups_remove_indexes_action>(hpx_localities()[iter->first], std::move(iter->second)));
-	}
-	hpx::wait_all(futs.begin(),futs.end());
-}
-}));
+		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	group_data = decltype(group_data)();
@@ -397,7 +396,7 @@ void groups_transmit_particles(vector<std::pair<group_int, vector<particle_data>
 void groups_add_particles(int wave, double scale) {
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<groups_add_particles_action>( c, wave, scale));
+		futs.push_back(hpx::async<groups_add_particles_action>(c, wave, scale));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	spinlock_type mutex;

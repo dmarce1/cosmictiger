@@ -8,7 +8,6 @@
 #ifndef SEMAPHORE_HPP_
 #define SEMAPHORE_HPP_
 
-
 #include <cosmictiger/hpx.hpp>
 
 class semaphore {
@@ -20,16 +19,23 @@ public:
 	semaphore() {
 		available = 0;
 	}
-	void wait() {
-		while( --available < 0 ) {
-			available++;
+	void wait(int count) {
+		while ((available -= count) < 0) {
+			available += count;
 			hpx_yield();
 		}
 	}
-	void signal() {
-		available++;
+	bool try_wait(int count) {
+		if ((available -= count) < 0) {
+			available += count;
+			return false;
+		} else {
+			return true;
+		}
+	}
+	void signal(int count) {
+		available += count;
 	}
 };
-
 
 #endif /* SEMAPHORE_HPP_ */

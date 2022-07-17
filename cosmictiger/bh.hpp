@@ -26,6 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/fixedcapvec.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/device_vector.hpp>
 
 struct bh_tree_node {
 	array<float, NDIM> pos;
@@ -46,13 +47,11 @@ struct bh_source {
 };
 
 
-vector<float> bh_evaluate_potential_fixed(const vector<array<fixed32, NDIM>>& x);
-vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu = false);
-vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x, bool gpu = false);
-vector<float> direct_evaluate(const vector<array<float, NDIM>>& x);
-vector<float> bh_evaluate_potential_gpu(const vector<bh_tree_node>& tree_nodes, const vector<array<float, NDIM>>& x, const vector<int> sink_buckets,
+device_vector<float> bh_evaluate_potential(device_vector<array<float, NDIM>>& x, bool gpu = false);
+device_vector<float> bh_evaluate_points(device_vector<array<float, NDIM>>& y, device_vector<array<float, NDIM>>& x, bool gpu = false);
+device_vector<float> bh_evaluate_potential_gpu(const device_vector<bh_tree_node>& tree_nodes, const device_vector<array<float, NDIM>>& x, const device_vector<int> sink_buckets,
 		float theta, float hsoft, float GM);
-vector<float> bh_evaluate_potential_points_gpu(const vector<bh_tree_node>& tree_nodes, const vector<array<float, NDIM>>& x, const vector<array<float, NDIM>>& y,
+device_vector<float> bh_evaluate_potential_points_gpu(const device_vector<bh_tree_node>& tree_nodes, const device_vector<array<float, NDIM>>& x, const device_vector<array<float, NDIM>>& y,
 		float theta, float hsoft, float GM);
 
 

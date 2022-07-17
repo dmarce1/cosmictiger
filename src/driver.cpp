@@ -555,6 +555,7 @@ void driver() {
 			tm.stop();
 			PRINT( "lc_init %e\n", tm.read());
 			tm.reset();
+			exit(0);
 		}
 	//	profiler_exit();
 	};

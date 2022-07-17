@@ -27,7 +27,7 @@
 
 #include <fenv.h>
 
-int bh_sort(vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begin, int end, float xm, int xdim) {
+int bh_sort(device_vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begin, int end, float xm, int xdim) {
 	int lo = begin;
 	int hi = end;
 	float xmid(xm);
@@ -50,7 +50,7 @@ int bh_sort(vector<array<float, NDIM>>& parts, vector<int>& sort_order, int begi
 
 }
 
-void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int self, vector<array<float, NDIM>>& parts, vector<int>& sort_order,
+void bh_create_tree(device_vector<bh_tree_node>& nodes, device_vector<int>& sink_buckets, int self, device_vector<array<float, NDIM>>& parts, vector<int>& sort_order,
 		range<float> box, int begin, int end, int bucket_size, int depth = 0) {
 	/*feenableexcept (FE_DIVBYZERO);
 	 feenableexcept (FE_INVALID);
@@ -144,7 +144,7 @@ void bh_create_tree(vector<bh_tree_node>& nodes, vector<int>& sink_buckets, int 
 	}
 }
 
-void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_buckets, vector<float>& phi, vector<array<float, NDIM>>& parts, float theta) {
+void bh_tree_evaluate(const device_vector<bh_tree_node>& nodes, device_vector<int>& sink_buckets, device_vector<float>& phi, device_vector<array<float, NDIM>>& parts, float theta) {
 	const float h = get_options().hsoft;
 	const float GM = get_options().GM;
 	const float hinv = 1.0 /  h;
@@ -249,7 +249,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM> pt, float& phi, vector<array<float, NDIM>>& parts, float theta) {
+void bh_tree_evaluate_point(const device_vector<bh_tree_node>& nodes, array<float, NDIM> pt, float& phi, device_vector<array<float, NDIM>>& parts, float theta) {
 	const float h = get_options().hsoft;
 	const float GM = get_options().GM;
 	const float hinv = 1.0 / (2.f * h);
@@ -341,40 +341,9 @@ void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM
 
 }
 
-vector<float> direct_evaluate(const vector<array<float, NDIM>>& x) {
-	const float h = get_options().hsoft;
-	const float GM = get_options().GM;
-	const float hinv = 1.0 / (2.f * h);
-	const float h2inv = 1.0 / (4.f * h * h);
-	const float h2 = 4.f * h * h;
-	vector<float> phi(x.size(), 0.0);
-	for (int i = 0; i < x.size(); i++) {
-		for (int j = i + 1; j < x.size(); j++) {
-			const float dx = x[i][XDIM] - x[j][XDIM];
-			const float dy = x[i][YDIM] - x[j][YDIM];
-			const float dz = x[i][ZDIM] - x[j][ZDIM];
-			const float r2 = sqr(dx, dy, dz);
-			float pot;
-			if (r2 > h2) {
-				pot = 1.0f / sqrtf(r2);
-			} else {
-				const float q2 = r2 * h2inv;
-				pot = -5.0f / 16.0f;
-				pot = fmaf(pot, q2, 21.0f / 16.0f);
-				pot = fmaf(pot, q2, -35.0f / 16.0f);
-				pot = fmaf(pot, q2, 35.0f / 16.0f);
-				pot *= hinv;
-			}
-			phi[i] -= GM * pot;
-			phi[j] -= GM * pot;
-		}
-	}
-	return phi;
-}
-
-vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu) {
+device_vector<float> bh_evaluate_potential(device_vector<array<float, NDIM>>& x, bool gpu) {
 	ALWAYS_ASSERT(x.size() > 1);
-	vector<bh_tree_node> nodes(1);
+	device_vector<bh_tree_node> nodes(1);
 	range<float> box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		box.begin[dim] = std::numeric_limits<float>::max();
@@ -387,14 +356,14 @@ vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu) {
 			box.end[dim] = std::max(box.end[dim], this_x);
 		}
 	}
-	vector<float> rpot;
-	vector<int> sink_buckets;
+	device_vector<float> rpot;
+	device_vector<int> sink_buckets;
 	vector<int> sort_order;
 	sort_order.reserve(x.size());
 	for (int i = 0; i < x.size(); i++) {
 		sort_order.push_back(i);
 	}
-	vector<float> pot(x.size());
+	device_vector<float> pot(x.size());
 	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
 	if (!gpu) {
 		bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.85);
@@ -412,9 +381,9 @@ vector<float> bh_evaluate_potential(vector<array<float, NDIM>>& x, bool gpu) {
 	return rpot;
 }
 
-vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<float, NDIM>>& x, bool gpu) {
+device_vector<float> bh_evaluate_points(device_vector<array<float, NDIM>>& y, device_vector<array<float, NDIM>>& x, bool gpu) {
 	ALWAYS_ASSERT(x.size() > 1);
-	vector<bh_tree_node> nodes(1);
+	device_vector<bh_tree_node> nodes(1);
 	range<float> box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		box.begin[dim] = std::numeric_limits<float>::max();
@@ -428,13 +397,13 @@ vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<flo
 		}
 	}
 	vector<float> rpot;
-	vector<int> sink_buckets;
+	device_vector<int> sink_buckets;
 	vector<int> sort_order;
 	sort_order.reserve(x.size());
 	for (int i = 0; i < x.size(); i++) {
 		sort_order.push_back(i);
 	}
-	vector<float> pot(y.size());
+	device_vector<float> pot(y.size());
 	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
 	if (gpu) {
 		pot = bh_evaluate_potential_points_gpu(nodes, x, y, 0.85, get_options().hsoft, get_options().GM);
@@ -444,45 +413,4 @@ vector<float> bh_evaluate_points(vector<array<float, NDIM>>& y, vector<array<flo
 		}
 	}
 	return pot;
-}
-
-vector<float> bh_evaluate_potential_fixed(const vector<array<fixed32, NDIM>>& x_fixed) {
-	ALWAYS_ASSERT(x_fixed.size() > 1);
-	vector<array<float, NDIM>> x(x_fixed.size());
-	array<fixed32, NDIM> x0 = x_fixed[0];
-	for (int i = 0; i < x_fixed.size(); i++) {
-		array<float, NDIM> this_x;
-		for (int dim = 0; dim < NDIM; dim++) {
-			this_x[dim] = distance(x_fixed[i][dim], x0[dim]);
-		}
-		x[i] = this_x;
-	}
-	vector<bh_tree_node> nodes(1);
-	range<float> box;
-	for (int dim = 0; dim < NDIM; dim++) {
-		box.begin[dim] = std::numeric_limits<float>::max();
-		box.end[dim] = -std::numeric_limits<float>::max();
-	}
-	for (const auto& pos : x) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			const auto this_x = pos[dim];
-			box.begin[dim] = std::min(box.begin[dim], this_x);
-			box.end[dim] = std::max(box.end[dim], this_x);
-		}
-	}
-	vector<float> rpot;
-	vector<int> sink_buckets;
-	vector<int> sort_order;
-	sort_order.reserve(x.size());
-	for (int i = 0; i < x.size(); i++) {
-		sort_order.push_back(i);
-	}
-	vector<float> pot(x.size());
-	bh_create_tree(nodes, sink_buckets, 0, x, sort_order, box, 0, x.size(), BH_BUCKET_SIZE);
-	bh_tree_evaluate(nodes, sink_buckets, pot, x, 0.85);
-	rpot.resize(x.size());
-	for (int i = 0; i < sort_order.size(); i++) {
-		rpot[sort_order[i]] = pot[i];
-	}
-	return rpot;
 }

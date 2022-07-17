@@ -229,6 +229,7 @@ float rockstar_find_link_len(device_vector<rockstar_tree>& trees, device_vector<
 		for (auto& p : parts) {
 			p.min_dist2 = std::numeric_limits<float>::max();
 		}
+		gpu = parts.size() > 4 * 1024;
 		if (gpu) {
 			device_vector<int> leaves;
 			rockstar_find_neighbors(leaves, trees, trees.size() - 1, vector<int>(1, trees.size() - 1), max_link_len);
@@ -386,6 +387,7 @@ void rockstar_find_subgroups(device_vector<rockstar_tree>& trees, device_vector<
 		trees[i].active = true;
 	}
 	int cnt;
+	gpu = parts.size() > 4 * 1024;
 	if (gpu) {
 		device_vector<int> leaves;
 		rockstar_find_neighbors(leaves, trees, trees.size() - 1, vector<int>(1, trees.size() - 1), link_len);
@@ -443,7 +445,7 @@ struct rockstar_seed {
 };
 
 bool rockstar_halo_bound(subgroup& halo, vector<rockstar_particle>& unbound_parts, float scale) {
-	vector<array<float, NDIM>> x;
+	device_vector<array<float, NDIM>> x;
 	for (int i = 0; i < halo.parts.size(); i++) {
 		array<float, NDIM> X;
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -452,7 +454,7 @@ bool rockstar_halo_bound(subgroup& halo, vector<rockstar_particle>& unbound_part
 		x.push_back(X);
 	}
 	auto y = x;
-	auto phi = bh_evaluate_potential(x, x.size() > ROCKSTAR_MIN_GPU);
+	auto phi = bh_evaluate_potential(x);
 	auto phi_tot = 0.0;
 	auto kin_tot = 0.0;
 	float vxa = 0.0;
@@ -627,6 +629,7 @@ vector<rockstar_particle> rockstar_gather_halo_parts(const vector<subgroup>& sub
 }
 
 vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& next_id, float rfac, float vfac, float scale, bool gpu, int depth = 0) {
+	vector<subgroup> subgroups;
 
 	float avg_x = 0.0;
 	float avg_y = 0.0;
@@ -710,12 +713,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 	tm.reset();
 //	PRINT("Found %i groups\n", group_cnts.size());
 
-	vector<subgroup> subgroups;
 
-//	PRINT("Doing children\n");
-	for (int i = 0; i < depth; i++) {
-//	/	PRINT("\t");
-	}
 //	PRINT("%i I parts_size = %i group_cnt = %i\n", depth, parts.size(), group_cnts.size());
 	for (auto i = group_cnts.begin(); i != group_cnts.end(); i++) {
 		device_vector<rockstar_particle> these_parts;
@@ -890,7 +888,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			}
 		}
 		vector<vector<float>> ene(subgroups.size());
-		vector<array<float, NDIM>> Y;
+		device_vector<array<float, NDIM>> Y;
 		for (int k = 0; k < parts.size(); k++) {
 			array<float, NDIM> x;
 			for (int dim = 0; dim < NDIM; dim++) {
@@ -899,7 +897,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			Y.push_back(x);
 		}
 		for (int i = 0; i < subgroups.size(); i++) {
-			vector<array<float, NDIM>> X;
+			device_vector<array<float, NDIM>> X;
 			array<float, NDIM> vel;
 			for (int dim = 0; dim < NDIM; dim++) {
 				vel[dim] = 0.0;
@@ -916,7 +914,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			for (int dim = 0; dim < NDIM; dim++) {
 				vel[dim] /= these_parts.size();
 			}
-			auto phi = bh_evaluate_points(Y, X);
+			auto phi = bh_evaluate_points(Y, X, (size_t) Y.size() * X.size() >= 4ULL * 1024 * 1024 * 1024);
 			ene[i].resize(phi.size());
 			for (int k = 0; k < parts.size(); k++) {
 				const double dvx = parts[k].vx - vel[XDIM];
@@ -981,7 +979,8 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			parts[i].vz += avg_vz;
 		}
 	}
-	if (depth == 0) {
+	if (depth == 0 ) {
+
 		int bound = 0;
 		int unbound = 0;
 		int rebound = 0;
@@ -1028,7 +1027,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 		if (unbounds.size()) {
 			vector<float> min_ene(unbounds.size(), std::numeric_limits<float>::max());
 			vector<int> min_index(unbounds.size(), -1);
-			vector<array<float, NDIM>> Y;
+			device_vector<array<float, NDIM>> Y;
 			for (int k = 0; k < unbounds.size(); k++) {
 				array<float, NDIM> x;
 				for (int dim = 0; dim < NDIM; dim++) {
@@ -1039,7 +1038,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 			for (int k = 0; k < subgroups.size(); k++) {
 				if (subgroups[k].parent == -1) {
 					auto tmp = rockstar_gather_halo_parts(subgroups, subgroups[k]);
-					vector<array<float, NDIM>> X;
+					device_vector<array<float, NDIM>> X;
 					array<float, NDIM> vel;
 					for (int dim = 0; dim < NDIM; dim++) {
 						vel[dim] = 0.0;
@@ -1055,7 +1054,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 					for (int dim = 0; dim < NDIM; dim++) {
 						vel[dim] /= X.size();
 					}
-					auto phi = bh_evaluate_points(Y, X, X.size() * Y.size() >=  sqr(ROCKSTAR_MIN_GPU));
+					auto phi = bh_evaluate_points(Y, X, (size_t) Y.size() * X.size() >= 16ULL * 1024 * 1024);
 					for (int l = 0; l < unbounds.size(); l++) {
 						const float dvx = unbounds[l].vx - vel[XDIM];
 						const float dvy = unbounds[l].vy - vel[YDIM];
@@ -1080,7 +1079,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				}
 			}
 		}
-		//PRINT("%e %e %i\n", (double ) unbound / (bound + unbound), (double ) rebound / (bound + unbound), (bound + unbound));
+		PRINT("%e %e %i\n", (double ) unbound / (bound + unbound), (double ) rebound / (bound + unbound), (bound + unbound));
 
 		vector<int> checklist;
 		int halo_cnt = 0;
@@ -1092,7 +1091,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				subhalo_cnt++;
 			}
 		}
-		PRINT("%i %i\n", halo_cnt, subhalo_cnt);
+		//PRINT("%i %i\n", halo_cnt, subhalo_cnt);
 		/*		for (int k = 0; k < subgroups.size(); k++) {
 		 rockstar_subgroup_statistics(subgroups[k], gpu);
 		 }
