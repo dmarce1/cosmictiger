@@ -50,73 +50,6 @@ constexpr bool verbose = true;
  }
  */
 
-#define Power(a,b) pow(a,b)
-
-static void NFWfit(vector<double> n, double rmax, double& m, double& b) {
-	double err;
-	double dr = rmax / n.size();
-	double N = 0;
-	for (int i = 0; i < n.size(); i++) {
-		N += n[i];
-	}
-	b = N / (4.0 / 3.0 * M_PI * sqr(rmax) * rmax);
-	m = 0.5 / rmax;
-	do {
-		double f = 0.0;
-		double g = 0.0;
-		double dfdm = 0.0;
-		double dfdb = 0.0;
-		double dgdm = 0.0;
-		double dgdb = 0.0;
-		double r = 0.5 * dr;
-		for (int i = 0; i < n.size(); i++) {
-			const double y = n[i] / (4.0 * M_PI * dr);
-			const double x = r;
-			f += (2 * b * x * (1 + 3 * m * x) * (-(b * x) + m * Power(1 + m * x, 2) * y)) / (Power(m,3) * Power(1 + m * x, 5));
-			g += (2 * x * (b * x - m * Power(1 + m * x, 2) * y)) / (Power(m,2) * Power(1 + m * x, 4));
-			dfdm += (2 * b * x * (b * x * (3 + 7 * m * x * (2 + 3 * m * x)) - 2 * m * Power(1 + m * x, 2) * (1 + 2 * m * x * (2 + 3 * m * x)) * y))
-					/ (Power(m,4) * Power(1 + m * x, 6));
-			dfdb += (2 * x * (1 + 3 * m * x) * (-2 * b * x + m * Power(1 + m * x, 2) * y)) / (Power(m,3) * Power(1 + m * x, 5));
-			dgdm += (2 * x * (1 + 3 * m * x) * (-2 * b * x + m * Power(1 + m * x, 2) * y)) / (Power(m,3) * Power(1 + m * x, 5));
-			dgdb += (2 * Power(x, 2)) / (Power(m,2) * Power(1 + m * x, 4));
-			r += dr;
-		}
-		double det = dfdm * dgdb - dfdb * dgdm;
-		double dm = (-dgdb * f + dfdb * g) / det;
-		double db = (dgdm * f - dfdm * g) / det;
-		/*		dm = std::max(dm, -0.1 * m);
-		 dm = std::min(dm, 0.1 * m);
-		 db = std::max(db, -0.1 * b);
-		 db = std::min(db, 0.1 * b);*/
-		m += dm;
-		b += db;
-		err = sqrt(sqr(f / (pow(m, 5) / sqr(b))) + sqr(g / (pow(m, 4) / b)));
-	} while (err > 1.0e-7);
-	m = 1.0f / m;
-}
-
-static void test_nfw() {
-	double Rs = 1.0;
-	double rho0 = 1.0;
-	double rmax = 2.0;
-	int N = 50;
-	vector<double> n(N);
-	double dr = rmax / N;
-	double r = 0.5 * dr;
-	for (int i = 0; i < N; i++) {
-		double rho = rho0 / ((r / Rs) * sqr(1 + r / Rs));
-		n[i] = 4.0 * M_PI * sqr(r) * rho * dr;
-		r += dr;
-		n[i] *= 1.0 + (2.0 * rand1() - 1.0);
-	}
-	NFWfit(n, rmax, Rs, rho0);
-	r = 0.5 * dr;
-	for (int i = 0; i < N; i++) {
-		PRINT("%e %e %e\n", r, n[i], rho0 / (r / Rs * sqr(1 + r / Rs)) * 4.0 * M_PI * sqr(r) * dr);
-		r += dr;
-	}
-}
-
 static void rockstar_test() {
 	/*feenableexcept (FE_DIVBYZERO);
 	 feenableexcept (FE_INVALID);
@@ -661,8 +594,6 @@ void test(std::string test) {
 		bucket_test();
 	} else if (test == "force") {
 		force_test();
-	} else if (test == "nfw") {
-		test_nfw();
 	} else if (test == "kick") {
 		kick_test();
 	} else if (test == "tree") {

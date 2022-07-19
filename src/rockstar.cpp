@@ -937,8 +937,45 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				sgA.parent = -1;
 			}
 		}
+
+		const std::function<vector<rockstar_particle>(const subgroup&)> gather_subparticles = [&gather_subparticles, &subgroups](const subgroup& grp) {
+			vector<rockstar_particle> parts;
+			for( int i = 0; i < grp.parts.size(); i++) {
+				parts.push_back(grp.parts[i]);
+			}
+			for( int ci = 0; ci < grp.children.size(); ci++) {
+				auto tmp = gather_subparticles(subgroups[grp.children[ci]]);
+				for( int i = 0; i < tmp.size(); i++) {
+					parts.push_back(tmp[i]);
+				}
+			}
+			return parts;
+		};
+		static mutex_type mutex;
 		if (subgroups.size()) {
-			PRINT("%e %i\n", (double ) unbound / (bound + unbound), (bound + unbound));
+			//PRINT("%e %i\n", (double ) unbound / (bound + unbound), (bound + unbound));
+			for (int k = 0; k < subgroups.size(); k++) {
+				auto& grp = subgroups[k];
+				const auto halo_parts = gather_subparticles(grp);
+				vector<double> radii;
+				const double x = grp.x;
+				const double y = grp.y;
+				const double z = grp.z;
+				for (int i = 0; i < halo_parts.size(); i++) {
+					const double r = sqrt(sqr(halo_parts[i].x - x, halo_parts[i].y - y, halo_parts[i].z - z));
+					radii.push_back(r);
+				}
+				double Rs, rho0;
+				cosmos_NFW_fit(radii, Rs, rho0);
+				Rs *= get_options().code_to_cm * get_options().hubble / constants::mpc_to_cm * 1000.00;
+				grp.r_vir *= get_options().code_to_cm * get_options().hubble / constants::mpc_to_cm * 1000.00;
+
+				PRINT( "%i %e %e\n", radii.size(), Rs, grp.r_vir / Rs);
+//				std::lock_guard<mutex_type> lock(mutex);
+//				double r = 0.5 * dr;
+	//			exit(0);
+			}
+
 		}
 	}
 	return subgroups;

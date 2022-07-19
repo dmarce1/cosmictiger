@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef COSMOLOGY_HPP_
 #define COSMOLOGY_HPP_
 
-
+#include <cosmictiger/containers.hpp>
 
 
 void cosmos_update(double& adotdot, double& adot, double& a, double dt);
@@ -31,7 +31,7 @@ double cosmos_dadt(double a);
 double cosmos_time(double a0, double a1);
 double cosmos_conformal_time(double a0, double a1);
 double cosmos_tau_to_scale(double a0, double t1);
-
+void cosmos_NFW_fit(vector<double> n, double& Rs, double& rho0);
 
 
 #endif /* COSMOLOGY_HPP_ */
