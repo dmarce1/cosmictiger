@@ -42,6 +42,7 @@
 
 #include <healpix/healpix_base.h>
 #include <chealpix.h>
+#include <silo.h>
 
 using healpix_type = T_Healpix_Base< int >;
 
@@ -76,6 +77,7 @@ static int pix2rank(int pix);
 static int compute_nside(double tau);
 static vector<int> pix_neighbors(int pix);
 static int epoch = 0;
+void lc_silo_out(const char* filename, const vector<subgroup>& subgroups);
 
 HPX_PLAIN_ACTION (lc_time_to_flush);
 HPX_PLAIN_ACTION (lc_parts2groups);
@@ -235,7 +237,7 @@ void lc_parts2groups(double a, double link_len, int ti) {
 		}
 	}
 	static int total = 0;
-	const auto min_sz = get_options().lc_min_group;
+	const auto min_sz = ROCKSTAR_MIN_GROUP;
 	auto j = groups_map.begin();
 	while (j != groups_map.end()) {
 		if (j->second.size() < min_sz && j->first != LC_NO_GROUP) {
@@ -254,18 +256,22 @@ void lc_parts2groups(double a, double link_len, int ti) {
 		entry.second = std::move(i->second);
 		groups.push_back(std::move(entry));
 	}
-	std::sort(groups.begin(), groups.end(), [](const pair<lc_group, vector<lc_entry>>& a, const pair<lc_group, vector<lc_entry>>& b){
-		return a.second.size() >= b.second.size();
+	std::sort(groups.begin(), groups.end(), [](const pair<lc_group, vector<lc_entry>>& a, const pair<lc_group, vector<lc_entry>>& b) {
+		return a.second.size() > b.second.size();
 
 	});
 	std::atomic<int> next_index(0);
 	const int nthreads = 2 * hpx_hardware_concurrency();
+	mutex_type mutex;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&next_index, &groups]() {
+		futs.push_back(hpx::async([&mutex, &next_index, &groups]() {
 			int index = next_index++;
 			while( index < groups.size()) {
 				if( groups[index].first != LC_NO_GROUP) {
-					auto subgroups = rockstar_find_subgroups(groups[index].second, false);
+					auto subgroups = rockstar_find_subgroups(groups[index].second, tau_max);
+					std::string filename = "lc." + std::to_string(groups[index].first) + ".silo";
+//					std::lock_guard<mutex_type> lock(mutex);
+//					lc_silo_out(filename.c_str(), subgroups);
 				}
 				index = next_index++;
 			}
@@ -713,13 +719,13 @@ void lc_form_trees(double tau, double link_len) {
 				} else {
 					parts.group[i] = LC_NO_GROUP;
 				}
-				if( R < tau_max - tau) {
+				if( R + 1e-4 < tau_max - tau) {
 					PRINT( "-----> low R %e %e\n", R, tau_max - tau);
-			//		ASSERT(R >= tau_max - tau);
-				}
+					//		ASSERT(R >= tau_max - tau);
 			}
+		}
 
-		}));
+	}));
 	}
 	std::sort(leaf_nodes.begin(), leaf_nodes.end(), [&tree_map](lc_tree_id a, lc_tree_id b) {
 		if( a.pix < b.pix ) {
@@ -893,5 +899,40 @@ void lc_add_parts(vector<lc_particle> && these_parts) {
 			part_buffer[j + start] = these_parts[j];
 		}
 	}
+}
 
+void lc_silo_out(const char* filename, const vector<subgroup>& subgroups) {
+	vector<float> x, y, z, vx, vy, vz;
+	vector<int> id;
+	vector<int> hostid;
+	for (int i = 0; i < subgroups.size(); i++) {
+		for (int j = 0; j < subgroups[i].parts.size(); j++) {
+			x.push_back(subgroups[i].parts[j].x);
+			y.push_back(subgroups[i].parts[j].y);
+			z.push_back(subgroups[i].parts[j].z);
+			vx.push_back(subgroups[i].parts[j].vx);
+			vy.push_back(subgroups[i].parts[j].vy);
+			vz.push_back(subgroups[i].parts[j].vz);
+			id.push_back(i);
+			int k = i;
+			int l;
+			while (k != -1) {
+				l = k;
+				k = subgroups[k].parent;
+			}
+
+			hostid.push_back(l);
+		}
+	}
+	if (x.size()) {
+		DBfile *db = DBCreateReal(filename, DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
+		float* coords[] = { x.data(), y.data(), z.data() };
+		DBPutPointmesh(db, "points", NDIM, coords, x.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "vx", "points", x.data(), vx.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "vy", "points", y.data(), vy.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "vz", "points", z.data(), vz.size(), DB_FLOAT, NULL);
+		DBPutPointvar1(db, "id", "points", id.data(), id.size(), DB_INT, NULL);
+		DBPutPointvar1(db, "hostid", "points", hostid.data(), hostid.size(), DB_INT, NULL);
+		DBClose(db);
+	}
 }

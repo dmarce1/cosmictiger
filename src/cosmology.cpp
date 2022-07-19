@@ -86,7 +86,7 @@ double cosmos_dadtau(double a) {
 
 
 double cosmos_tau_to_scale(double a0, double t1) {
-	constexpr int N = 1000000;
+	constexpr int N = 1024;
 	double a = a0;
 	double dt = t1 / N;
 	a += a * cosmos_dadt(a) * 0.5 * dt;

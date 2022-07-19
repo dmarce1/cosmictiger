@@ -49,55 +49,123 @@ constexpr bool verbose = true;
  return normal.real();
  }
  */
+
+#define Power(a,b) pow(a,b)
+
+static void NFWfit(vector<double> n, double rmax, double& m, double& b) {
+	double err;
+	double dr = rmax / n.size();
+	double N = 0;
+	for (int i = 0; i < n.size(); i++) {
+		N += n[i];
+	}
+	b = N / (4.0 / 3.0 * M_PI * sqr(rmax) * rmax);
+	m = 0.5 / rmax;
+	do {
+		double f = 0.0;
+		double g = 0.0;
+		double dfdm = 0.0;
+		double dfdb = 0.0;
+		double dgdm = 0.0;
+		double dgdb = 0.0;
+		double r = 0.5 * dr;
+		for (int i = 0; i < n.size(); i++) {
+			const double y = n[i] / (4.0 * M_PI * dr);
+			const double x = r;
+			f += (2 * b * x * (1 + 3 * m * x) * (-(b * x) + m * Power(1 + m * x, 2) * y)) / (Power(m,3) * Power(1 + m * x, 5));
+			g += (2 * x * (b * x - m * Power(1 + m * x, 2) * y)) / (Power(m,2) * Power(1 + m * x, 4));
+			dfdm += (2 * b * x * (b * x * (3 + 7 * m * x * (2 + 3 * m * x)) - 2 * m * Power(1 + m * x, 2) * (1 + 2 * m * x * (2 + 3 * m * x)) * y))
+					/ (Power(m,4) * Power(1 + m * x, 6));
+			dfdb += (2 * x * (1 + 3 * m * x) * (-2 * b * x + m * Power(1 + m * x, 2) * y)) / (Power(m,3) * Power(1 + m * x, 5));
+			dgdm += (2 * x * (1 + 3 * m * x) * (-2 * b * x + m * Power(1 + m * x, 2) * y)) / (Power(m,3) * Power(1 + m * x, 5));
+			dgdb += (2 * Power(x, 2)) / (Power(m,2) * Power(1 + m * x, 4));
+			r += dr;
+		}
+		double det = dfdm * dgdb - dfdb * dgdm;
+		double dm = (-dgdb * f + dfdb * g) / det;
+		double db = (dgdm * f - dfdm * g) / det;
+		/*		dm = std::max(dm, -0.1 * m);
+		 dm = std::min(dm, 0.1 * m);
+		 db = std::max(db, -0.1 * b);
+		 db = std::min(db, 0.1 * b);*/
+		m += dm;
+		b += db;
+		err = sqrt(sqr(f / (pow(m, 5) / sqr(b))) + sqr(g / (pow(m, 4) / b)));
+	} while (err > 1.0e-7);
+	m = 1.0f / m;
+}
+
+static void test_nfw() {
+	double Rs = 1.0;
+	double rho0 = 1.0;
+	double rmax = 2.0;
+	int N = 50;
+	vector<double> n(N);
+	double dr = rmax / N;
+	double r = 0.5 * dr;
+	for (int i = 0; i < N; i++) {
+		double rho = rho0 / ((r / Rs) * sqr(1 + r / Rs));
+		n[i] = 4.0 * M_PI * sqr(r) * rho * dr;
+		r += dr;
+		n[i] *= 1.0 + (2.0 * rand1() - 1.0);
+	}
+	NFWfit(n, rmax, Rs, rho0);
+	r = 0.5 * dr;
+	for (int i = 0; i < N; i++) {
+		PRINT("%e %e %e\n", r, n[i], rho0 / (r / Rs * sqr(1 + r / Rs)) * 4.0 * M_PI * sqr(r) * dr);
+		r += dr;
+	}
+}
+
 static void rockstar_test() {
 	/*feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
+	 feenableexcept (FE_INVALID);
+	 feenableexcept (FE_OVERFLOW);
 
-	const int N = 1000000;
-	const int M = 2;
-	vector<rockstar_particle> parts;
-	array<array<float, 2 * NDIM>, M> X;
-	for (int i = 0; i < M; i++) {
-		for (int dim = 0; dim < 2 * NDIM; dim++) {
-			X[i][dim] = 2.0 * rand1() - 1.0;
-		}
-	}
-	for (int dim = 0; dim < 2 * NDIM; dim++) {
-		X[0][dim] = 0.0;
-		X[1][dim] = 0.0;
-	}
-	X[1][0] = 0.5;
-	X[1][NDIM] = 0.0000005;
-	X[0][0] = -.5;
-	X[0][NDIM] = -0.0000005;
-	for (int n = 0; n < M; n++) {
-		for (int i = n * N / M; i < (n + 1) * N / M; i++) {
-			rockstar_particle part;
-			//		PRINT( "%e\n", r );
-			part.x = rand_normal() * 0.001 + X[n][XDIM];
-			part.y = rand_normal() * 0.001 + X[n][YDIM];
-			part.z = rand_normal() * 0.001 + X[n][ZDIM];
-			float r = sqrt(sqr(part.x - X[n][XDIM], part.y - X[n][YDIM], part.z - X[n][ZDIM]));
-			float v0 = 0.75 * sqrt(get_options().GM / r * N / M) / sqrt(3);
-			part.vx = rand_normal() * v0 + X[n][NDIM + XDIM];
-			part.vy = rand_normal() * v0 + X[n][NDIM + YDIM];
-			part.vz = rand_normal() * v0 + X[n][NDIM + ZDIM];
-			parts.push_back(part);
-		}
-	}
-	for (int i = (M - 1) * N / M; i < N; i++) {
-		rockstar_particle part;
-		part.x = 2.0 * rand1() - 1.0;
-		part.y = 2.0 * rand1() - 1.0;
-		part.z = 2.0 * rand1() - 1.0;
-		part.vx = 2.0 * rand1() - 1.0;
-		part.vy = 2.0 * rand1() - 1.0;
-		part.vz = 2.0 * rand1() - 1.0;
-		//	parts.push_back(part);
+	 const int N = 1000000;
+	 const int M = 2;
+	 vector<rockstar_particle> parts;
+	 array<array<float, 2 * NDIM>, M> X;
+	 for (int i = 0; i < M; i++) {
+	 for (int dim = 0; dim < 2 * NDIM; dim++) {
+	 X[i][dim] = 2.0 * rand1() - 1.0;
+	 }
+	 }
+	 for (int dim = 0; dim < 2 * NDIM; dim++) {
+	 X[0][dim] = 0.0;
+	 X[1][dim] = 0.0;
+	 }
+	 X[1][0] = 0.5;
+	 X[1][NDIM] = 0.0000005;
+	 X[0][0] = -.5;
+	 X[0][NDIM] = -0.0000005;
+	 for (int n = 0; n < M; n++) {
+	 for (int i = n * N / M; i < (n + 1) * N / M; i++) {
+	 rockstar_particle part;
+	 //		PRINT( "%e\n", r );
+	 part.x = rand_normal() * 0.001 + X[n][XDIM];
+	 part.y = rand_normal() * 0.001 + X[n][YDIM];
+	 part.z = rand_normal() * 0.001 + X[n][ZDIM];
+	 float r = sqrt(sqr(part.x - X[n][XDIM], part.y - X[n][YDIM], part.z - X[n][ZDIM]));
+	 float v0 = 0.75 * sqrt(get_options().GM / r * N / M) / sqrt(3);
+	 part.vx = rand_normal() * v0 + X[n][NDIM + XDIM];
+	 part.vy = rand_normal() * v0 + X[n][NDIM + YDIM];
+	 part.vz = rand_normal() * v0 + X[n][NDIM + ZDIM];
+	 parts.push_back(part);
+	 }
+	 }
+	 for (int i = (M - 1) * N / M; i < N; i++) {
+	 rockstar_particle part;
+	 part.x = 2.0 * rand1() - 1.0;
+	 part.y = 2.0 * rand1() - 1.0;
+	 part.z = 2.0 * rand1() - 1.0;
+	 part.vx = 2.0 * rand1() - 1.0;
+	 part.vy = 2.0 * rand1() - 1.0;
+	 part.vz = 2.0 * rand1() - 1.0;
+	 //	parts.push_back(part);
 
-	}
-	rockstar_find_subgroups(parts);*/
+	 }
+	 rockstar_find_subgroups(parts);*/
 }
 
 static void fft1_test() {
@@ -543,40 +611,40 @@ static void speed_test() {
 }
 
 void bh_test() {
-/*	int N = 100000;
-	int M = 10;
-	vector<array<float, NDIM>> x(N);
-	vector<array<float, NDIM>> y(M);
-	for (int i = 0; i < N; i++) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			x[i][dim] = rand1();
-		}
-	}
-	for (int i = 0; i < M; i++) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			y[i][dim] = rand1();
-		}
-	}
-	auto x0 = x;
-//	auto phi0 = direct_evaluate(x0);
-	x0 = x;
-	timer tm1, tm2;
-	tm1.start();
-	auto phi1 = bh_evaluate_points(y, x0, false);
-	tm1.stop();
-	x0 = x;
-	tm2.start();
-	PRINT("Doing gpu\n");
-	auto phi2 = bh_evaluate_points(y, x0, true);
-	tm2.stop();
-	PRINT("%e %e\n", tm1.read(), tm2.read());
-	double err_tot = 0.0;
-	for (int i = 0; i < phi1.size(); i++) {
-		double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
-		PRINT("%e %e %e\n", phi1[i], phi2[i], err);
-		err_tot += err;
-	}
-	PRINT("%e\n", err_tot / phi1.size());*/
+	/*	int N = 100000;
+	 int M = 10;
+	 vector<array<float, NDIM>> x(N);
+	 vector<array<float, NDIM>> y(M);
+	 for (int i = 0; i < N; i++) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 x[i][dim] = rand1();
+	 }
+	 }
+	 for (int i = 0; i < M; i++) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 y[i][dim] = rand1();
+	 }
+	 }
+	 auto x0 = x;
+	 //	auto phi0 = direct_evaluate(x0);
+	 x0 = x;
+	 timer tm1, tm2;
+	 tm1.start();
+	 auto phi1 = bh_evaluate_points(y, x0, false);
+	 tm1.stop();
+	 x0 = x;
+	 tm2.start();
+	 PRINT("Doing gpu\n");
+	 auto phi2 = bh_evaluate_points(y, x0, true);
+	 tm2.stop();
+	 PRINT("%e %e\n", tm1.read(), tm2.read());
+	 double err_tot = 0.0;
+	 for (int i = 0; i < phi1.size(); i++) {
+	 double err = fabs((phi1[i] - phi2[i]) / phi1[i]);
+	 PRINT("%e %e %e\n", phi1[i], phi2[i], err);
+	 err_tot += err;
+	 }
+	 PRINT("%e\n", err_tot / phi1.size());*/
 
 }
 
@@ -593,8 +661,8 @@ void test(std::string test) {
 		bucket_test();
 	} else if (test == "force") {
 		force_test();
-//	} else if (test == "rockstar") {
-//		rockstar_test();
+	} else if (test == "nfw") {
+		test_nfw();
 	} else if (test == "kick") {
 		kick_test();
 	} else if (test == "tree") {
