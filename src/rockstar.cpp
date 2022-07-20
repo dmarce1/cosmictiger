@@ -958,22 +958,28 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 				auto& grp = subgroups[k];
 				const auto halo_parts = gather_subparticles(grp);
 				vector<double> radii;
-				const double x = grp.x;
-				const double y = grp.y;
+				double x = grp.x;
+				double y = grp.y;
 				const double z = grp.z;
 				for (int i = 0; i < halo_parts.size(); i++) {
 					const double r = sqrt(sqr(halo_parts[i].x - x, halo_parts[i].y - y, halo_parts[i].z - z));
 					radii.push_back(r);
 				}
-				double Rs, rho0;
+				std::sort(radii.begin(), radii.end());
+				double Rs, rho0, mvir, rvir, RKlypin;
 				cosmos_NFW_fit(radii, Rs, rho0);
-				Rs *= get_options().code_to_cm * get_options().hubble / constants::mpc_to_cm * 1000.00;
-				grp.r_vir *= get_options().code_to_cm * get_options().hubble / constants::mpc_to_cm * 1000.00;
-
-				PRINT( "%i %e %e\n", radii.size(), Rs, grp.r_vir / Rs);
-//				std::lock_guard<mutex_type> lock(mutex);
-//				double r = 0.5 * dr;
-	//			exit(0);
+				double vcirc_max = 0.0;
+				for (int i = 0; i < radii.size(); i++) {
+					double menc = i + 1.0;
+					double vcirc = sqrt(get_options().GM / radii[i] * menc);
+					vcirc_max = std::max((double) vcirc_max, vcirc);
+				}
+				mvir = halo_parts.size();
+				const double omega_m = get_options().omega_m;
+				x = ((omega_m / (sqr(scale) * scale)) / (omega_m / (sqr(scale) * scale)) + (1.0 - omega_m)) - 1.0;
+				y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x)) / (1.0 + x);
+				rvir = pow(mvir / (4.0 / 3.0 * M_PI * y), 1.0 / 3.0) / get_options().parts_dim;
+				RKlypin = cosmos_Klypin_fit(vcirc_max, radii.back(), mvir);
 			}
 
 		}

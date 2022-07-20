@@ -32,6 +32,8 @@ double cosmos_time(double a0, double a1);
 double cosmos_conformal_time(double a0, double a1);
 double cosmos_tau_to_scale(double a0, double t1);
 void cosmos_NFW_fit(vector<double> n, double& Rs, double& rho0);
+double cosmos_Klypin_fit(double vmax, double rvir, double mvir);
+
 
 
 #endif /* COSMOLOGY_HPP_ */

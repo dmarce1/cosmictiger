@@ -145,9 +145,37 @@ double cosmos_conformal_time(double a0, double a1) {
 #define Power(a,b) pow(a,b)
 #define Log(a) log(a)
 
+double cosmos_Klypin_fit(double vmax, double rvir, double mvir) {
+	double f0 = vmax * vmax * rvir / mvir / get_options().GM;
+	double c;
+	if (fabs(f0 - 1.0) < 1e-5 ) {
+		c = 2.16258;
+	} else {
+		f0 *= 4.62499;
+		double err;
+		double cinv_max = 1.0 / 2.16258;
+		double cinv_min = 0.0;
+		const auto func = [f0](double c) {
+			return c / (log(1+c)-c/(1+c)) - f0;
+		};
+		do {
+			double cinv_mid = (cinv_max + cinv_min) * 0.5;
+			double f_mid = func(1.0 / cinv_mid);
+			double f_max = func(1.0 / cinv_max);
+			if (f_mid * f_max < 0.0) {
+				cinv_min = cinv_mid;
+			} else {
+				cinv_max = cinv_mid;
+			}
+			err = fabs(f_mid);
+			c = 1.0 / cinv_mid;
+		} while (err > 1.0e-6);
+	}
+	return rvir / c;
+}
+
 void cosmos_NFW_fit(vector<double> radii, double& Rs, double& rho_nfw) {
 	double err;
-	std::sort(radii.begin(), radii.end());
 	double rmax = radii.back();
 	double npart = radii.size();
 	int nbin = std::max(1, std::min(50, (int) npart / 15));
@@ -193,8 +221,8 @@ void cosmos_NFW_fit(vector<double> radii, double& Rs, double& rho_nfw) {
 		dc = std::min(dc, 0.1 * c);
 		dc = std::max(dc, -0.1 * c);
 		c += dc;
-		err = fabs(dc/c);
-	//	PRINT( "%i %e %e\n", npart, c, err);
+		err = fabs(dc / c);
+		//	PRINT( "%i %e %e\n", npart, c, err);
 	} while (err > 1.0e-3);
 	Rs = rmax / c;
 	rho_nfw = sqr(c) * c * rho0 / (3.0 * (log(1 + c) - c / (1 + c)));
