@@ -8,7 +8,7 @@
 
 __global__ void rockstar_find_subgroups_kernel(rockstar_tree* nodes, const int* leaves, rockstar_particle* parts, float link_len, int* next_index,
 		int* active_cnt);
-__global__ void rockstar_assign_linklen_kernel(const rockstar_tree* nodes, const int* leaves, rockstar_particle* parts, float link_len);
+__global__ void rockstar_assign_linklen_kernel(const rockstar_tree* nodes, const int* leaves, rockstar_particle* parts, float link_len, bool phase);
 
 static std::atomic<int> blocks_used(0);
 
@@ -17,10 +17,10 @@ bool rockstar_cuda_free() {
 }
 
 void rockstar_assign_linklen_cuda(const device_vector<rockstar_tree>& nodes, const device_vector<int>& leaves, device_vector<rockstar_particle>& parts,
-		float link_len) {
+		float link_len, bool phase) {
 	auto stream = cuda_get_stream();
 	blocks_used += leaves.size();
-	rockstar_assign_linklen_kernel<<<leaves.size(), BLOCK_SIZE,0,stream>>>(nodes.data(), leaves.data(), parts.data(), link_len);
+	rockstar_assign_linklen_kernel<<<leaves.size(), BLOCK_SIZE,0,stream>>>(nodes.data(), leaves.data(), parts.data(), link_len, phase);
 	cuda_end_stream(stream);
 	blocks_used -= leaves.size();
 }
@@ -153,7 +153,7 @@ __global__ void rockstar_find_subgroups_kernel(rockstar_tree* nodes, const int* 
 	}
 }
 
-__global__ void rockstar_assign_linklen_kernel(const rockstar_tree* nodes, const int* leaves, rockstar_particle* parts, float link_len) {
+__global__ void rockstar_assign_linklen_kernel(const rockstar_tree* nodes, const int* leaves, rockstar_particle* parts, float link_len, bool phase) {
 	const int& tid = threadIdx.x;
 	const int& index = blockIdx.x;
 	__syncthreads();
@@ -162,6 +162,7 @@ __global__ void rockstar_assign_linklen_kernel(const rockstar_tree* nodes, const
 	const auto selfbox = self.box.pad(1.0001 * link_len);
 	const auto& neighbors = self.neighbors;
 	const float link_len2 = sqr(link_len);
+	const int dimmax = phase ? 2 * NDIM : NDIM;
 	for (int ni = 0; ni < neighbors.size(); ni++) {
 		const int otheri = neighbors[ni];
 		const auto& other = nodes[otheri];
@@ -171,7 +172,7 @@ __global__ void rockstar_assign_linklen_kernel(const rockstar_tree* nodes, const
 				for (int j = self.part_begin + tid; j < self.part_end; j += BLOCK_SIZE) {
 					const auto& Xa = parts[j].X;
 					float dx2 = 0.0f;
-					for (int dim = 0; dim < 2 * NDIM; dim++) {
+					for (int dim = 0; dim < dimmax; dim++) {
 						dx2 += sqr(Xa[dim] - Xb[dim]);
 					}
 					if (dx2 < link_len2 && dx2 > 0.0f) {

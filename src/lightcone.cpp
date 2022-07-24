@@ -263,21 +263,33 @@ void lc_parts2groups(double a, double link_len, int ti) {
 	std::atomic<int> next_index(0);
 	const int nthreads = 2 * hpx_hardware_concurrency();
 	mutex_type mutex;
+	vector<rockstar_record> recs;
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([&mutex, &next_index, &groups]() {
+		futs.push_back(hpx::async([&recs,&mutex, &next_index, &groups]() {
 			int index = next_index++;
 			while( index < groups.size()) {
 				if( groups[index].first != LC_NO_GROUP) {
-					auto subgroups = rockstar_find_subgroups(groups[index].second, tau_max);
-					std::string filename = "lc." + std::to_string(groups[index].first) + ".silo";
-//					std::lock_guard<mutex_type> lock(mutex);
-//					lc_silo_out(filename.c_str(), subgroups);
+					auto these_recs = rockstar_find_subgroups(groups[index].second, tau_max);
+					for( auto & r: these_recs ) {
+						r.id.fof_id = groups[index].first;
+					}
+					std::lock_guard<mutex_type> lock(mutex);
+					recs.insert(recs.end(), these_recs.begin(), these_recs.end());
 				}
 				index = next_index++;
 			}
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
+	std::string filename = "./lightcone/lc.groups." + std::to_string(epoch) + "." + std::to_string(hpx_rank());
+	FILE* fp = fopen(filename.c_str(), "wb");
+	if (fp == nullptr) {
+		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+	}
+	if (fwrite(recs.data(), sizeof(rockstar_record), recs.size(), fp) != recs.size()) {
+		THROW_ERROR("Unable to write data for %s\n", filename.c_str());
+	}
+	fclose(fp);
 	epoch++;
 }
 

@@ -142,4 +142,8 @@ inline float tsc(float x) {
 	}
 }
 
+#include <cosmictiger/containers.hpp>
+
+
+pair<double, array<double, NDIM>> find_eigenpair(const array<array<double, NDIM>, NDIM>& A, double mu);
 #endif /* MATH_HPP_ */

@@ -148,7 +148,7 @@ double cosmos_conformal_time(double a0, double a1) {
 double cosmos_Klypin_fit(double vmax, double rvir, double mvir) {
 	double f0 = vmax * vmax * rvir / mvir / get_options().GM;
 	double c;
-	if (fabs(f0 - 1.0) < 1e-5 ) {
+	if (fabs(f0 - 1.0) < 1e-5) {
 		c = 2.16258;
 	} else {
 		f0 *= 4.62499;
@@ -189,41 +189,45 @@ void cosmos_NFW_fit(vector<double> radii, double& Rs, double& rho_nfw) {
 	}
 	rbnd[nbin] = rmax;
 	double rho0 = npart / (4.0 / 3.0 * M_PI * sqr(rmax) * rmax);
-	double c = 10.0;
+
+	double cinv_min = 0.0;
+	double cinv_max = 1.0;
+	double c;
+
 	do {
-		double f = 0.0;
-		double dfdc = 0.0;
+		double cinv_mid = 0.5 * (cinv_max + cinv_min);
+		double cmin = 1.0 / cinv_mid;
+		double cmax = 1.0 / cinv_max;
+		double fmin = 0.0;
+		double fmax = 0.0;
 		for (int i = 0; i < nbin; i++) {
 			double dr = (rbnd[i + 1] - rbnd[i]);
 			if (dr > 0.0) {
 				double vol = 4.0 / 3.0 * M_PI * (sqr(rbnd[i + 1]) * rbnd[i + 1] - sqr(rbnd[i]) * rbnd[i]);
 				double rho = npart / nbin / vol;
 				double x = 0.5 * (rbnd[i] + rbnd[i + 1]) / rmax;
-				f +=
+				c = cmin;
+				fmin +=
 						(-2 * c * rho0 * (c * (2 + c * (3 + c * x)) - 2 * Power(1 + c, 2) * Log(1 + c))
 								* (c * (c * (1 + c) * rho0 + 3 * rho * x + 3 * c * rho * Power(x, 2) * (2 + c * x))
 										- 3 * (1 + c) * rho * x * Power(1 + c * x, 2) * Log(1 + c)))
 								/ (9. * Power(x, 2) * Power(1 + c * x, 5) * Power(-c + (1 + c) * Log(1 + c), 3));
-				dfdc += (2
-						* (3 * Power(c, 6) * (1 + c) * Power(rho0 + c * rho0 * x, 2)
-								+
-								Power(c, 4) * rho0 * (1 + c * x) * (6 * rho * x * Power(1 + c * x, 3) + rho0 * (9 + c * (16 + x + c * (7 - c * x))))
-										* (c - (1 + c) * Log(1 + c))
-								+
-								Power(c, 2) * rho0
-										* (-2 * Power(1 + c, 3) * rho0 * (-3 + 2 * c * x) - 3 * rho * x * Power(1 + c * x, 3) * (-5 - 3 * c + (-1 + c) * c * x))
-										* Power(c - (1 + c) * Log(1 + c), 2)
-								+ 6 * Power(1 + c, 2) * rho * rho0 * x * Power(1 + c * x, 2) * (-1 + 2 * c * x) * Power(-c + (1 + c) * Log(1 + c), 3)))
-						/ (9. * (1 + c) * Power(x, 2) * Power(1 + c * x, 6) * Power(c - (1 + c) * Log(1 + c), 4));
+				c = cmax;
+				fmax +=
+						(-2 * c * rho0 * (c * (2 + c * (3 + c * x)) - 2 * Power(1 + c, 2) * Log(1 + c))
+								* (c * (c * (1 + c) * rho0 + 3 * rho * x + 3 * c * rho * Power(x, 2) * (2 + c * x))
+										- 3 * (1 + c) * rho * x * Power(1 + c * x, 2) * Log(1 + c)))
+								/ (9. * Power(x, 2) * Power(1 + c * x, 5) * Power(-c + (1 + c) * Log(1 + c), 3));
 			}
 		}
-		double dc = -f / dfdc;
-		dc = std::min(dc, 0.1 * c);
-		dc = std::max(dc, -0.1 * c);
-		c += dc;
-		err = fabs(dc / c);
-		//	PRINT( "%i %e %e\n", npart, c, err);
-	} while (err > 1.0e-3);
+		if (fmax * fmin < 0.0) {
+			cinv_min = cinv_mid;
+		} else {
+			cinv_max = cinv_mid;
+		}
+		c = 0.5 / cinv_min + 0.5 / cinv_max;
+		err = cinv_max / cinv_min - 1.0;
+	} while (err > 1.0e-6);
 	Rs = rmax / c;
 	rho_nfw = sqr(c) * c * rho0 / (3.0 * (log(1 + c) - c / (1 + c)));
 }

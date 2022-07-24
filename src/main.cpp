@@ -28,11 +28,12 @@
 #include <cosmictiger/unordered_set_ts.hpp>
 #include <cosmictiger/memused.hpp>
 #include <cosmictiger/healpix.hpp>
-
+#include <cosmictiger/fp16.hpp>
+#include <cosmictiger/rockstar.hpp>
 
 int hpx_main(int argc, char *argv[]) {
-	PRINT("%.8e\n", (27.0 / (M_PI * (-6. / exp(9.) + sqrt(M_PI) * erf(3.)))));
 	std::atomic<int> i;
+	PRINT( "%i\n", sizeof(rockstar_record));
 	for (double q = 0.0; q < 1.0; q += 0.01) {
 //		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
 	}
@@ -63,7 +64,7 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
-	PRINT( "STARTING MAIN\n");
+	PRINT("STARTING MAIN\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
 	cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY

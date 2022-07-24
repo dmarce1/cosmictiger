@@ -76,6 +76,7 @@ set(cosmictiger_source_files
     src/lightcone.cpp
     src/lightcone.cu
     src/main.cpp
+    src/math.cpp
     src/memused.cpp
     src/options.cpp
     src/output.cpp
@@ -118,6 +119,7 @@ set(cosmictiger_header_files
     cosmictiger/initialize.hpp
     cosmictiger/interp.hpp
     cosmictiger/flops.hpp
+    cosmictiger/fp16.hpp
     cosmictiger/group_tree.hpp
     cosmictiger/groups.hpp
     cosmictiger/group_entry.hpp
