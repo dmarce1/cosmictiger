@@ -124,11 +124,17 @@ size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries, doubl
 	const int nthreads = hpx_hardware_concurrency();
 	vector<hpx::future<void>> futs;
 	std::atomic<int> index(0);
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([scale, tau, &index,start,nthreads,proc,&entries,&counts]() {
-			//	const auto a0 = 1.0 / (get_options().z0 + 1.0);
+	const size_t npix = sqr((size_t) get_options().lc_map_size) * 12;
+	vector<float> pix(npix, 0.0);
+	int min_pix = npix;
+	int max_pix = 0;
+	mutex_type mutex;
+	if (counts.back()) {
+		for (int proc = 0; proc < nthreads; proc++) {
+			futs.push_back(hpx::async([&pix,npix,&mutex, &min_pix, &max_pix, scale, tau, &index,start,nthreads,proc,&entries,&counts]() {
 				int k = index++;
-				double m = 0.0;
+				int this_min_pix = npix;
+				int this_max_pix = 0;
 				while( k < entries.size()) {
 					auto& entry = entries[k];
 					const int b = start + counts[k];
@@ -140,18 +146,35 @@ size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries, doubl
 						pi.pos[XDIM] = pj.x;
 						pi.pos[YDIM] = pj.y;
 						pi.pos[ZDIM] = pj.z;
-						const double tau1 = sqr(pj.x.to_double(), pj.y.to_double(), pj.z.to_double());
+						const double tau1 = sqrtf(sqr(pj.x.to_double(), pj.y.to_double(), pj.z.to_double()));
+						pix[pj.pix] += 1.0 / sqr(tau1);
 						const auto a = scale + cosmos_dadtau(scale) * (tau1 - tau);
 						pi.vel[XDIM] = pj.vx / a;
 						pi.vel[YDIM] = pj.vy / a;
 						pi.vel[ZDIM] = pj.vz / a;
-						m = std::max(pj.vx, (float) fabs(m));
+						this_max_pix = std::max(this_max_pix, pj.pix);
+						this_min_pix = std::min(this_min_pix, pj.pix);
 					}
 					k = index++;
 				}
+				std::lock_guard<mutex_type> lock(mutex);
+				max_pix = std::max(max_pix, this_max_pix);
+				min_pix = std::min(min_pix, this_min_pix);
 			}));
+		}
+		hpx::wait_all(futs.begin(), futs.end());
+		std::string filename = get_options().lc_dir + "/lc.healpix." + std::to_string(epoch) + "." + std::to_string(hpx_rank());
+		FILE* fp = fopen(filename.c_str(), "wb");
+		if (fp == nullptr) {
+			THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+		}
+		int nside = get_options().lc_map_size;
+		FWRITE(&nside, sizeof(int), 1, fp);
+		FWRITE(&min_pix, sizeof(int), 1, fp);
+		FWRITE(&max_pix, sizeof(int), 1, fp);
+		FWRITE(pix.data() + min_pix, sizeof(float), max_pix - min_pix, fp);
+		fclose(fp);
 	}
-	hpx::wait_all(futs.begin(), futs.end());
 	return 0;
 }
 
@@ -281,7 +304,7 @@ void lc_parts2groups(double a, double link_len, int ti) {
 		}));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
-	std::string filename = "./lightcone/lc.groups." + std::to_string(epoch) + "." + std::to_string(hpx_rank());
+	std::string filename = get_options().lc_dir + "/lc.groups." + std::to_string(epoch) + "." + std::to_string(hpx_rank());
 	FILE* fp = fopen(filename.c_str(), "wb");
 	if (fp == nullptr) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());

@@ -35,7 +35,7 @@ __managed__ list_type* list_ptr;
 
 __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const __restrict__ y, fixed32* const __restrict__ z,
 		const array<float, NDIM>* const vels, const char* const rungs, part_int count, char rung, double a, double dt, double tau0, double tau1, double tau_max,
-		bool do_lc) {
+		bool do_lc, int nside) {
 	do_lc = do_lc && (tau_max - tau1 < 1.0f);
 	const auto& tid = threadIdx.x;
 	const auto& bid = blockIdx.x;
@@ -105,7 +105,11 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 								const double y1 = y0 + vy * t;                                            // 2
 								const double z1 = z0 + vz * t;                                            // 2
 								const double R2 = sqr(x1, y1, z1);
-								if (R2 <= 1.0) {                                                 // 6
+								if (R2 <= 1.0) {
+									long ipix;
+									double X[NDIM] = {x1, y1, z1};
+									vec2pix_nest(nside, X, &ipix);
+									entry.pix = ipix;
 									entry.x = x1;
 									entry.y = y1;
 									entry.z = z1;
@@ -171,7 +175,7 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	fixed32* z = &particles_pos(ZDIM, rng.first);
 	const auto* vels = particles_vel_data() + rng.first;
 	const auto* rungs = &particles_rung(rng.first);
-	cuda_drift_kernel<<<nblocks,BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0, tau1, tau_max, get_options().do_lc);
+	cuda_drift_kernel<<<nblocks,BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0, tau1, tau_max, get_options().do_lc, get_options().lc_map_size);
 	CUDA_CHECK(cudaDeviceSynchronize());
 	cnt = 0;
 	static size_t total_cnt = 0;

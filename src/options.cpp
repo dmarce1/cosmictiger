@@ -84,7 +84,8 @@ bool process_options(int argc, char *argv[]) {
 	command_opts.add_options()                                                                       //
 	("help", "produce help message")                                                                       //
 	("config_file", po::value < std::string > (&(opts.config_file))->default_value(""), "configuration file")                                                  //
-	("read_check", po::value<int>(&(opts.read_check))->default_value(-1),
+	("lc_dir", po::value < std::string > (&(opts.lc_dir))->default_value("./lightcone"), "directory for lightcone output")                                                  //
+		("read_check", po::value<int>(&(opts.read_check))->default_value(-1),
 			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)")                                      //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
@@ -107,7 +108,7 @@ bool process_options(int argc, char *argv[]) {
 			"read initial power spectrum from power.init - must be evenly spaced in log k (default=false)") //
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.28), "linking length for lightcone group finder") //
-	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(2048), "Nside for lightcone HEALPix map") //
+	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(-1), "Nside for lightcone HEALPix map") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
@@ -172,7 +173,13 @@ bool process_options(int argc, char *argv[]) {
 	const double Neff = 3.086;
 	const double Theta = 1.0;
 	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
-
+	const auto nside1 = pow(M_PI * nparts / 10000.0 / 12.0, 0.5);
+	int nside = 1;
+	while( nside < nside1 / 2.0 ) {
+		nside *= 2;
+	}
+	opts.lc_map_size = nside;
+	PRINT( "lc map size = %e\n", nside1);
 
 	double omega_r = 32.0 * M_PI / 3.0 * constants::G * constants::sigma * (1 + Neff * (7. / 8.0) * std::pow(4. / 11., 4. / 3.)) * std::pow(constants::H0, -2)
 			* std::pow(constants::c, -3) * std::pow(2.73 * Theta, 4) * std::pow(opts.hubble, -2);

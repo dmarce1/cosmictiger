@@ -76,6 +76,7 @@ struct options {
 	double omega_k;
 	std::string config_file;
 	std::string test;
+	std::string lc_dir;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
@@ -94,6 +95,7 @@ struct options {
 		arc & do_views;
 		arc & twolpt;
 		arc & use_power_file;
+		arc & lc_dir;
 		arc & tracer_count;
 		arc & parts_dim;
 		arc & tree_cache_line_size;

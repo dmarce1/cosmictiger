@@ -54,6 +54,7 @@ struct lc_tree_node {
 struct lc_entry {
 	lc_real x, y, z;
 	float vx, vy, vz;
+	int pix;
 };
 
 using lc_velreal = __half;
