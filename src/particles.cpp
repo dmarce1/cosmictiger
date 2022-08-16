@@ -1296,3 +1296,69 @@ HPX_PLAIN_ACTION (particles_get_local);
 hpx::future<vector<int>> particles_get(int rank, const vector<pair<part_int>>& ranges) {
 	return hpx::async<particles_get_local_action>(hpx_localities()[rank], ranges);
 }
+
+HPX_PLAIN_ACTION (particles_read_gadget4);
+
+gadget_io_header particles_read_gadget4(std::string fname_base) {
+	PRINT("Reading gadget4 file\n");
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_read_gadget4_action>(c, fname_base));
+	}
+	std::string fname = fname_base;
+	if (hpx_size() > 1) {
+		fname += std::string(".") + std::to_string(hpx_rank());
+	}
+	FILE* fp = fopen(fname.c_str(), "rb");
+	if (!fp) {
+		THROW_ERROR("Unable to open %s for writing.\n", fname.c_str());
+	}
+	int size;
+	gadget_io_header header;
+
+	FREAD(&size, sizeof(int), 1, fp);
+	PRINT("%i\n", size);
+	FREAD(&header, sizeof(gadget_io_header), 1, fp);
+	FREAD(&size, sizeof(int), 1, fp);
+	PRINT("%i\n", size);
+
+	PRINT("Print nparts = %lli\n", header.npart[1]);
+	const auto nparts = header.npart[1];
+	particles_resize(nparts);
+
+	FREAD(&size, sizeof(int), 1, fp);
+	PRINT("%i\n", size);
+	for (part_int i = 0; i < nparts; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			float pos;
+			FREAD(&pos, sizeof(float), 1, fp);
+			pos /= header.BoxSize;
+			particles_pos(dim, i) = pos;
+		}
+	}
+	FREAD(&size, sizeof(int), 1, fp);
+	PRINT("%i\n", size);
+
+	FREAD(&size, sizeof(int), 1, fp);
+	PRINT("%i\n", size);
+	for (part_int i = 0; i < nparts; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			float vel;
+			FREAD(&vel, sizeof(float), 1, fp);
+			particles_vel(dim, i) = vel;
+		}
+	}
+	const auto a = 1.0 / (header.redshift + 1.0);
+	for (int i = 0; i < nparts; i++) {
+		//	PRINT( "%e %e %e\n", particles_pos(XDIM,i).to_double(), particles_pos(YDIM,i).to_double(), particles_pos(ZDIM,i).to_double());
+		for (int dim = 0; dim < NDIM; dim++) {
+			particles_vel(dim, i) *= sqrt(a) * a * 1e5 * get_options().code_to_s / get_options().code_to_cm;
+		}
+	}
+	FREAD(&size, sizeof(int), 1, fp);
+	PRINT("%i\n", size);
+
+	fclose(fp);
+	hpx::wait_all(futs.begin(), futs.end());
+	return header;
+}

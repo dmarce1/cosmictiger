@@ -77,9 +77,11 @@ struct options {
 	std::string config_file;
 	std::string test;
 	std::string lc_dir;
+	std::string gadget4_restart;
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & gadget4_restart;
 		arc & minrung;
 		arc & omega_k;
 		arc & omega_lam;

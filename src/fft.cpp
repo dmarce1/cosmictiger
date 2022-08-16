@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/fft.hpp>
@@ -182,18 +182,24 @@ static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute() {
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int64_t,NDIM> I;
-	const float nmax = N / 2 + 1;
+	const float nmax = N / 2;
 	vector<float> power(nmax,0.0);
 	vector<int64_t> count(nmax,0);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
+		const double sx = sinc(M_PI * i / N);
 		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 			const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
+			const double sy = sinc(M_PI * j / N);
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-				const int64_t k = I[2];
+				const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
+				const double sz = sinc(M_PI * k / N);
+				const double c0 = pow(1.0 / (sx * sy * sz), 2);
+		//		PRINT( "%e\n", c0);
+				Y[box.index(I)] *= c0;
 				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5f;
 				const float pwr = Y[box.index(I)].norm();
-				if( n < N / 2 + 1 ) {
+				if( n < N / 2) {
 					count[n]++;
 					power[n] += pwr;
 				}
@@ -215,7 +221,7 @@ static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute() {
 void fft3d_force_real() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_force_real_action >( c));
+		futs.push_back(hpx::async<fft3d_force_real_action>(c));
 	}
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int64_t, NDIM> i;
@@ -265,7 +271,7 @@ vector<cmplx>& fft3d_complex_vector() {
 void finish_force_real() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < finish_force_real_action >( c));
+		futs.push_back(hpx::async<finish_force_real_action>(c));
 	}
 	const auto& box = cmplx_mybox[ZDIM];
 	array<int64_t, NDIM> i;
@@ -306,7 +312,7 @@ vector<float> fft3d_read_real(const range<int64_t>& this_box) {
 							vector < range < int64_t >> inters;
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
-								auto fut = hpx::async < fft3d_read_real_action > (hpx_localities()[ri], this_inter);
+								auto fut = hpx::async<fft3d_read_real_action>(hpx_localities()[ri], this_inter);
 								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<float>> fut) {
 									auto this_data = fut.get();
 									array<int64_t,NDIM> i;
@@ -358,7 +364,7 @@ vector<cmplx> fft3d_read_complex(const range<int64_t>& this_box) {
 							vector < range < int64_t >> inters;
 							split_box(inter, inters);
 							for (auto this_inter : inters) {
-								auto fut = hpx::async < fft3d_read_complex_action > (hpx_localities()[ri], this_inter);
+								auto fut = hpx::async<fft3d_read_complex_action>(hpx_localities()[ri], this_inter);
 								futs.push_back(fut.then([si,this_box,this_inter,&data](hpx::future<vector<cmplx>> fut) {
 									auto this_data = fut.get();
 									array<int64_t,NDIM> i;
@@ -429,7 +435,7 @@ void fft3d_accumulate_real(const range<int64_t>& this_box, const vector<float>& 
 										}
 									}
 								}
-								auto fut = hpx::async < fft3d_accumulate_real_action > (hpx_localities()[bi], this_inter, std::move(this_data));
+								auto fut = hpx::async<fft3d_accumulate_real_action>(hpx_localities()[bi], this_inter, std::move(this_data));
 								fut.get();
 //								futs.push_back(std::move(fut));
 							}
@@ -482,7 +488,7 @@ void fft3d_accumulate_complex(const range<int64_t>& this_box, const vector<cmplx
 										}
 									}
 								}
-								auto fut = hpx::async < fft3d_accumulate_complex_action > (hpx_localities()[bi], this_inter, std::move(this_data));
+								auto fut = hpx::async<fft3d_accumulate_complex_action>(hpx_localities()[bi], this_inter, std::move(this_data));
 								futs.push_back(std::move(fut));
 							}
 						}
@@ -498,7 +504,7 @@ void fft3d_accumulate_complex(const range<int64_t>& this_box, const vector<cmplx
 void fft3d_init(int64_t N_) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_init_action >( c, N_));
+		futs.push_back(hpx::async<fft3d_init_action>(c, N_));
 	}
 	N = N_;
 	range<int64_t> box;
@@ -531,7 +537,7 @@ void fft3d_init(int64_t N_) {
 void fft3d_destroy() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_destroy_action >( c));
+		futs.push_back(hpx::async<fft3d_destroy_action>(c));
 	}
 	R = decltype(R)();
 	Y = decltype(Y)();
@@ -545,7 +551,7 @@ void fft3d_destroy() {
 static void update() {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < update_action >( c));
+		futs.push_back(hpx::async<update_action>(c));
 	}
 	Y = std::move(Y1);
 	hpx::wait_all(futs.begin(), futs.end());
@@ -555,7 +561,7 @@ static void fft3d_phase1() {
 	static mutex_type mtx;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase1_action >( c));
+		futs.push_back(hpx::async<fft3d_phase1_action>(c));
 	}
 	array<int64_t, NDIM> i;
 	Y.resize(cmplx_mybox[ZDIM].volume());
@@ -592,7 +598,7 @@ static void fft3d_phase2(int dim, bool inv) {
 	static mutex_type mtx;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase2_action >( c, dim, inv));
+		futs.push_back(hpx::async<fft3d_phase2_action>(c, dim, inv));
 	}
 	Y = std::move(Y1);
 	array<int64_t, NDIM> i;
@@ -635,7 +641,7 @@ static void fft3d_phase3() {
 	static mutex_type mtx;
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < fft3d_phase3_action >( c));
+		futs.push_back(hpx::async<fft3d_phase3_action>(c));
 	}
 	array<int64_t, NDIM> i;
 	Y = std::move(Y1);
@@ -694,7 +700,7 @@ static void find_boxes(range<int64_t> box, vector<range<int64_t>>& boxes, int be
 static void transpose(int dim1, int dim2) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < transpose_action >( c, dim1, dim2));
+		futs.push_back(hpx::async<transpose_action>(c, dim1, dim2));
 	}
 	range<int64_t> tbox = cmplx_mybox[dim1].transpose(dim1, dim2);
 	Y1.resize(cmplx_mybox[dim1].volume());
@@ -706,7 +712,7 @@ static void transpose(int dim1, int dim2) {
 			split_box(tinter, tinters);
 			for (auto this_tinter : tinters) {
 				auto inter = this_tinter.transpose(dim1, dim2);
-				auto fut = hpx::async < transpose_read_action > (hpx_localities()[bi], this_tinter, dim1, dim2);
+				auto fut = hpx::async<transpose_read_action>(hpx_localities()[bi], this_tinter, dim1, dim2);
 				futs.push_back(fut.then([inter,dim1](hpx::future<vector<cmplx>> fut) {
 					auto data = fut.get();
 					array<int64_t,NDIM> i;
@@ -750,7 +756,7 @@ static vector<cmplx> transpose_read(const range<int64_t>& this_box, int dim1, in
 static void shift(bool inv) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < shift_action >( c, inv));
+		futs.push_back(hpx::async<shift_action>(c, inv));
 	}
 	const int dim2 = inv ? YDIM : XDIM;
 	const int dim1 = inv ? XDIM : YDIM;
@@ -764,7 +770,7 @@ static void shift(bool inv) {
 			split_box(tinter, tinters);
 			for (auto this_tinter : tinters) {
 				auto inter = inv ? this_tinter.shift_down() : this_tinter.shift_up();
-				auto fut = hpx::async < shift_read_action > (hpx_localities()[bi], this_tinter, inv);
+				auto fut = hpx::async<shift_read_action>(hpx_localities()[bi], this_tinter, inv);
 				futs.push_back(fut.then([inter,dim2](hpx::future<vector<cmplx>> fut) {
 					auto data = fut.get();
 					array<int64_t,NDIM> i;

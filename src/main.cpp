@@ -49,6 +49,7 @@ int hpx_main(int argc, char *argv[]) {
 	hpx_init();
 	healpix_init();
 	ewald_const::init();
+	PRINT( "Starting mem use daemon\n");
 	start_memuse_daemon();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {

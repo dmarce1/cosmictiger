@@ -18,7 +18,7 @@
  */
 
 #define  SMOOTHLEN_BUFFER 0.21
-#define SCALE_DT 0.05
+#define SCALE_DT 0.01
 
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
@@ -386,9 +386,7 @@ void do_power_spectrum(int num, double a) {
 	}
 	for (int i = 0; i < power.size(); i++) {
 		const double k = 2.0 * M_PI * i / box_size;
-		const double s = sinc(M_PI * i / N);
-		const double invs2 = 1.0 / sqr(s);
-		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h * factor * invs2);
+		fprintf(fp, "%e %e\n", k / h, power[i] * h * h * h * factor);
 	}
 	fclose(fp);
 	profiler_exit();
@@ -462,7 +460,27 @@ void driver() {
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
 //		write_checkpoint(params);
-
+	}
+	const auto gadget_file = get_options().gadget4_restart;
+	if (gadget_file != "") {
+		auto header = particles_read_gadget4(gadget_file);
+		const auto nparts = header.npartTotal[1];
+		auto opts = get_options();
+		opts.code_to_g = header.mass[1] * 1e10 / opts.hubble;
+		opts.code_to_g *= constants::M0;
+		opts.code_to_cm = pow(opts.code_to_g * (8.0 * M_PI) * nparts * constants::G / (3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble)), 1.0 / 3.0);
+		opts.code_to_s = opts.code_to_cm / constants::c;
+		double H = constants::H0 * opts.code_to_s;
+		opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
+		set_options(opts);
+		params.a = 1.0 / (header.redshift + 1.0);
+		params.adot = cosmos_dadt(a0);
+		params.tau_max = cosmos_conformal_time(params.a, 1.0);
+		params.years = cosmos_time(1e-6 * a0, params.a) * get_options().code_to_s / constants::spyr;
+		PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
+		PRINT("code_to_g = %e\n", opts.code_to_g);
+		PRINT("code_to_cm = %e\n", opts.code_to_cm);
+		PRINT("code_to_s = %e\n", opts.code_to_s);
 	}
 	PRINT("tau_max = %e\n", params.tau_max);
 	auto& years = params.years;
@@ -498,66 +516,66 @@ void driver() {
 		particles_set_minrung(minrung0);
 	}
 	const auto check_lc = [&tau,&dt,&tau_max,&a,&iter](bool force) {
-	//	profiler_enter("light cone");
-		if (force || lc_time_to_flush(tau, tau_max)) {
-			timer tm;
-			PRINT("Flushing light cone\n");
-			tm.start();
-			lc_buffer2homes();
-			tm.stop();
-			PRINT( "lc_buffer2homes %e\n", tm.read());
-			tm.reset();
-			tm.start();
-			lc_particle_boundaries1();
-			tm.stop();
-			PRINT( "lc_particles_boundaries1 %e\n", tm.read());
-			tm.reset();
-			tm.start();
-			const double link_len = get_options().lc_b / get_options().parts_dim;
-			lc_form_trees(tau, link_len);
-			tm.stop();
-			PRINT( "lc_form_trees %e\n", tm.read());
-			tm.reset();
-			tm.start();
-			size_t cnt;
-			lc_find_neighbors();
-			PRINT( "neighbors found\n");
-			tm.stop();
-			PRINT( "lc_neighbors_found %e\n", tm.read());
-			timer tm2;
-			tm2.start();
-			do {
+		//	profiler_enter("light cone");
+			if (force || lc_time_to_flush(tau, tau_max)) {
 				timer tm;
+				PRINT("Flushing light cone\n");
 				tm.start();
-				lc_particle_boundaries2();
+				lc_buffer2homes();
 				tm.stop();
-				PRINT( "%e ", tm.read());
+				PRINT( "lc_buffer2homes %e\n", tm.read());
 				tm.reset();
 				tm.start();
-				cnt = lc_find_groups();
+				lc_particle_boundaries1();
 				tm.stop();
-				PRINT( "%e %li\n", cnt, tm.read());
-			}while( cnt > 0);
-			tm2.stop();
-			PRINT( "loop time = %e\n", tm2.read());
-			tm.start();
-			lc_groups2homes();
-			tm.stop();
-			PRINT( "lc_groups2homes %e\n", tm.read());
-			tm.reset();
-			tm.start();
-			lc_parts2groups(a, link_len, iter);
-			tm.stop();
-			PRINT( "lc_parts2groups %e\n", tm.read());
-			tm.reset();
-			tm.start();
-			lc_init(tau, tau_max);
-			tm.stop();
-			PRINT( "lc_init %e\n", tm.read());
-			tm.reset();
-		}
-	//	profiler_exit();
-	};
+				PRINT( "lc_particles_boundaries1 %e\n", tm.read());
+				tm.reset();
+				tm.start();
+				const double link_len = get_options().lc_b / get_options().parts_dim;
+				lc_form_trees(tau, link_len);
+				tm.stop();
+				PRINT( "lc_form_trees %e\n", tm.read());
+				tm.reset();
+				tm.start();
+				size_t cnt;
+				lc_find_neighbors();
+				PRINT( "neighbors found\n");
+				tm.stop();
+				PRINT( "lc_neighbors_found %e\n", tm.read());
+				timer tm2;
+				tm2.start();
+				do {
+					timer tm;
+					tm.start();
+					lc_particle_boundaries2();
+					tm.stop();
+					PRINT( "%e ", tm.read());
+					tm.reset();
+					tm.start();
+					cnt = lc_find_groups();
+					tm.stop();
+					PRINT( "%e %li\n", cnt, tm.read());
+				}while( cnt > 0);
+				tm2.stop();
+				PRINT( "loop time = %e\n", tm2.read());
+				tm.start();
+				lc_groups2homes();
+				tm.stop();
+				PRINT( "lc_groups2homes %e\n", tm.read());
+				tm.reset();
+				tm.start();
+				lc_parts2groups(a, link_len, iter);
+				tm.stop();
+				PRINT( "lc_parts2groups %e\n", tm.read());
+				tm.reset();
+				tm.start();
+				lc_init(tau, tau_max);
+				tm.stop();
+				PRINT( "lc_init %e\n", tm.read());
+				tm.reset();
+			}
+			//	profiler_exit();
+		};
 	auto checkpointlist = read_checkpoint_list();
 	const double hsoft0 = get_options().hsoft;
 	bool do_check = false;
