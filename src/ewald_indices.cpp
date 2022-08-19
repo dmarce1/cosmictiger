@@ -1,25 +1,29 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <chealpix.h>
+
+#define NHEAL 256
 
 HPX_PLAIN_ACTION(ewald_const::init, ewald_const_init_action);
 
@@ -34,9 +38,7 @@ struct ewald_constants {
 	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
 };
 
-
 ewald_constants ec;
-
 
 int ewald_const::nfour() {
 	return NFOUR;
@@ -63,8 +65,8 @@ const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
 void ewald_const::init() {
 	vector<hpx::future<void>> futs;
 	auto children = hpx_children();
-	for( const auto& c : children ) {
-		futs.push_back(hpx::async<ewald_const_init_action>( c));
+	for (const auto& c : children) {
+		futs.push_back(hpx::async<ewald_const_init_action>(c));
 	}
 
 #ifdef USE_CUDA
@@ -131,10 +133,41 @@ void ewald_const::init() {
 		ec.four_expanse[count++] = D0.detraceD();
 	}
 #endif
+	expansion<double> D;
+	for (int i = 0; i < EXPANSION_SIZE; i++) {
+		D[i] = 0.0;
+	}
+	constexpr double delta = 0.02;
+	const int npix = NHEAL * NHEAL * 12;
+	vector<array<double, NDIM>> pos(npix);
+	for (int i = 0; i < npix; i++) {
+		double theta, phi;
+		double vec[NDIM];
+		pix2ang_ring(NHEAL, i, &theta, &phi);
+		ang2vec(theta, phi, vec);
+		//PRINT( "%e %e %e\n", vec[0], vec[1], vec[2]);
+		for( int dim = 0; dim < NDIM; dim++) {
+			pos[i][dim] = vec[dim] * delta;
+		}
+	}
+	for (int i = 0; i < npix; i++) {
+		expansion<double> D1;
+		ewald_greens_function(D1, pos[i]);
+		for (int j = 0; j < EXPANSION_SIZE; j++) {
+			D[j] += D1[j] / npix;
+		}
+	}
+	for (int n = 0; n < LORDER; n++) {
+		for (int m = 0; m < LORDER; m++) {
+			for (int l = 0; l < LORDER; l++) {
+				if (n + m + l < LORDER && ((l < 2) || (n == 0 && m == 0 && l == 2))) {
+					PRINT("%i %i %i %e\n", n, m, l, D(n, m, l));
+				}
+			}
+		}
+	}
 
 	hpx::wait_all(futs.begin(), futs.end());
 
 }
-
-
 

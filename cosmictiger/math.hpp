@@ -86,6 +86,21 @@ __device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_
 }
 #endif
 
+inline void erfcexp(double x, double* ec, double *ex) {				// 18 + FLOP_DIV + FLOP_EXP
+	*ex = exp(-x * x);// 2 + FLOP_EXP
+	*ec = erf(x);
+}
+
+namespace math {
+inline double max(double a, double b) {
+	if( a > b ) {
+		return a;
+	} else {
+		return b;
+	}
+}
+}
+
 template<class T>
 CUDA_EXPORT
 inline T round_up(T a, T b) {

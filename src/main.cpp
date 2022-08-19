@@ -30,10 +30,16 @@
 #include <cosmictiger/healpix.hpp>
 #include <cosmictiger/fp16.hpp>
 #include <cosmictiger/rockstar.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
+#include <cmath>
 
 int hpx_main(int argc, char *argv[]) {
+
+	expansion<simd_float> D;
+	array<simd_float, NDIM> X;
+	ewald_const::init();
 	std::atomic<int> i;
-	PRINT( "%i\n", sizeof(rockstar_record));
+	PRINT("%i\n", sizeof(rockstar_record));
 	for (double q = 0.0; q < 1.0; q += 0.01) {
 //		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
 	}
@@ -48,8 +54,7 @@ int hpx_main(int argc, char *argv[]) {
 	PRINT("tree_node size = %i\n", sizeof(tree_node));
 	hpx_init();
 	healpix_init();
-	ewald_const::init();
-	PRINT( "Starting mem use daemon\n");
+	PRINT("Starting mem use daemon\n");
 	start_memuse_daemon();
 	if (process_options(argc, argv)) {
 		if (get_options().test != "") {
