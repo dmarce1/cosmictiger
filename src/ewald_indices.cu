@@ -38,7 +38,11 @@ void ewald_const::init_gpu() {
 		for (int j = -nmax; j <= nmax; j++) {
 			for (int k = -nmax; k <= nmax; k++) {
 				const int i2 = i * i + j * j + k * k;
-				if (i2 <= n2max && i2 > 0) {
+				const double x = std::max(abs(i) - 0.5, 0.0);
+				const double y = std::max(abs(j) - 0.5, 0.0);
+				const double z = std::max(abs(k) - 0.5, 0.0);
+				const double d = sqrt(sqr(x, y, z));
+				if (d < EWALD_REAL_CUTOFF && i2 > 0) {
 					this_h[0] = i;
 					this_h[1] = j;
 					this_h[2] = k;
@@ -46,8 +50,7 @@ void ewald_const::init_gpu() {
 				}
 			}
 		}
-	}
-	PRINT( "count = %i %i\n", count, NREAL);
+	}	PRINT( "count = %i %i\n", count, NREAL);
 	const auto sort_func = [](const array<float,NDIM>& a, const array<float,NDIM>& b) {
 		const auto a2 = sqr(a[0],a[1],a[2]);
 		const auto b2 = sqr(b[0],b[1],b[2]);
