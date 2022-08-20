@@ -42,27 +42,6 @@ int hpx_main(int argc, char *argv[]) {
 
 	expansion<simd_float> D;
 	array<simd_float, NDIM> X;
-	ewald_const::init();
-	FILE* fp = fopen( "ewald.txt", "wt");
-	X[0] = X[1] = X[2] = 0.00;
-	for (double x = 0.00; x < 0.5; x += 0.001) {
-		X[0] = x;
-		D = 0.0;
-		ewald_greens_function(D, X);
-		fprintf(fp, "%e ", x);
-		for (int n = 0; n < LORDER; n++) {
-			for (int m = 0; m < LORDER - n; m++) {
-				for (int l = 0; l < 2 - n - m; l++) {
-					if (l == 2 && (n != 0 || m != 0)) {
-						continue;
-					}
-					fprintf(fp, "%e ", D(n, m, l)[0]);
-				}
-			}
-		}
-		fprintf(fp,  "\n");
-	}
-	fclose(fp);
 
 	std::atomic<int> i;
 	PRINT("%i\n", sizeof(rockstar_record));
@@ -83,6 +62,27 @@ int hpx_main(int argc, char *argv[]) {
 	PRINT("Starting mem use daemon\n");
 	start_memuse_daemon();
 	if (process_options(argc, argv)) {
+		ewald_const::init();
+		FILE* fp = fopen( "ewald.txt", "wt");
+		X[0] = X[1] = X[2] = 0.00;
+		for (double x = 0.00; x < 0.5; x += 0.001) {
+			X[0] = x;
+			D = 0.0;
+			ewald_greens_function(D, X);
+			fprintf(fp, "%e ", x);
+			for (int n = 0; n < LORDER; n++) {
+				for (int m = 0; m < LORDER - n; m++) {
+					for (int l = 0; l < 2 - n - m; l++) {
+						if (l == 2 && (n != 0 || m != 0)) {
+							continue;
+						}
+						fprintf(fp, "%e ", D(n, m, l)[0]);
+					}
+				}
+			}
+			fprintf(fp,  "\n");
+		}
+		fclose(fp);
 		if (get_options().test != "") {
 			test(get_options().test);
 		} else {
