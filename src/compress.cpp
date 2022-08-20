@@ -38,20 +38,20 @@ void compressed_block::write(FILE* fp) {
 
 void compressed_block::read(FILE* fp) {
 	unsigned char size;
-	fread(&size, sizeof(unsigned char), 1, fp);
+	FREAD(&size, sizeof(unsigned char), 1, fp);
 	for (int dim = 0; dim < NDIM; dim++) {
 		x[dim].resize(size);
 		v[dim].resize(size);
 	}
-	fread(&xc[0], NDIM * sizeof(lc_real ), 1, fp);
-	fread(&vc[0], NDIM * sizeof(float), 1, fp);
-	fread(&xmax, sizeof(float), 1, fp);
-	fread(&vmax, sizeof(float), 1, fp);
+	FREAD(&xc[0], NDIM * sizeof(lc_real ), 1, fp);
+	FREAD(&vc[0], NDIM * sizeof(float), 1, fp);
+	FREAD(&xmax, sizeof(float), 1, fp);
+	FREAD(&vmax, sizeof(float), 1, fp);
 	for (int dim = 0; dim < NDIM; dim++) {
-		fread(x[dim].data(), sizeof(unsigned short), size, fp);
+		FREAD(x[dim].data(), sizeof(unsigned short), size, fp);
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
-		fread(v[dim].data(), sizeof(unsigned short), size, fp);
+		FREAD(v[dim].data(), sizeof(unsigned short), size, fp);
 	}
 }
 
@@ -70,13 +70,13 @@ void compressed_particles::write(FILE* fp) {
 
 void compressed_particles::read(FILE* fp) {
 	int size;
-	fread(&group_id, sizeof(lc_group), 1, fp);
-	fread(&size, sizeof(int), 1, fp);
+	FREAD(&group_id, sizeof(lc_group), 1, fp);
+	FREAD(&size, sizeof(int), 1, fp);
 	blocks.resize(size);
-	fread(&xc[0], NDIM * sizeof(lc_real ), 1, fp);
-	fread(&vc[0], NDIM * sizeof(float), 1, fp);
-	fread(&xmax, sizeof(float), 1, fp);
-	fread(&vmax, sizeof(float), 1, fp);
+	FREAD(&xc[0], NDIM * sizeof(lc_real ), 1, fp);
+	FREAD(&vc[0], NDIM * sizeof(float), 1, fp);
+	FREAD(&xmax, sizeof(float), 1, fp);
+	FREAD(&vmax, sizeof(float), 1, fp);
 	for (int i = 0; i < blocks.size(); i++) {
 		blocks[i].read(fp);
 	}

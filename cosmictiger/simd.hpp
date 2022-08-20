@@ -136,6 +136,7 @@ inline simd_float exp(simd_float a) { 	// 24
 	return two_pow(a * c0);
 }
 
+
 inline simd_float expf(simd_float a) {
 	return exp(a);
 }
@@ -178,16 +179,69 @@ inline simd_float8 pow(const simd_float8& a, const simd_float8& b) {
 	return exp(log(a) * b);
 }
 
-
 inline simd_double8::simd_double8(const simd_int8& a) {
 	__m128i& v0 = *((__m128i*) &a.v);
 	__m128i& v1 = *((__m128i*) (((float*) &a.v) + 4));
 	v[0] = _mm256_cvtepi32_pd(v0);
 	v[1] = _mm256_cvtepi32_pd(v1);
 }
+/*
+inline simd_double8 two_pow(const simd_double8 &r) {											// 21
+	static const simd_double8 zero = simd_double8(0.0);
+	static const simd_double8 one = simd_double8(1.0);
+	static const simd_double8 c1 = simd_double8(std::log(2));
+	static const simd_double8 c2 = simd_double8((0.5) * std::pow(std::log(2), 2));
+	static const simd_double8 c3 = simd_double8((1.0 / 6.0) * std::pow(std::log(2), 3));
+	static const simd_double8 c4 = simd_double8((1.0 / 24.0) * std::pow(std::log(2), 4));
+	static const simd_double8 c5 = simd_double8((1.0 / 120.0) * std::pow(std::log(2), 5));
+	static const simd_double8 c6 = simd_double8((1.0 / 720.0) * std::pow(std::log(2), 6));
+	static const simd_double8 c7 = simd_double8((1.0 / 5040.0) * std::pow(std::log(2), 7));
+	static const simd_double8 c8 = simd_double8((1.0 / 40320.0) * std::pow(std::log(2), 8));
+	static const simd_double8 c9 = simd_double8((1.0 / 40320.0 / (9.0)) * std::pow(std::log(2), 9));
+	static const simd_double8 c10 = simd_double8((1.0 / 40320.0 / (9.0 * 10.0)) * std::pow(std::log(2), 10));
+	static const simd_double8 c11 = simd_double8((1.0 / 40320.0 / (9.0 * 10.0 * 11.0)) * std::pow(std::log(2), 11));
+	static const simd_double8 c12 = simd_double8((1.0 / 40320.0 / (9.0 * 10.0 * 11.0 * 12.0)) * std::pow(std::log(2), 12));
+	static const simd_double8 c13 = simd_double8((1.0 / 40320.0 / (9.0 * 10.0 * 11.0 * 12.0 * 13.0)) * std::pow(std::log(2), 13));
+	static const simd_double8 c14 = simd_double8((1.0 / 40320.0 / (9.0 * 10.0 * 11.0 * 12.0 * 13.0 * 14.0)) * std::pow(std::log(2), 14));
+	static const simd_double8 c15 = simd_double8((1.0 / 40320.0 / (9.0 * 10.0 * 11.0 * 12.0 * 13.0 * 14.0 * 15.0)) * std::pow(std::log(2), 15));
+	simd_double8 r0;
+	simd_int n;
+	r0 = round(r);							// 1
+	n = simd_int(r0);														// 1
+	auto x = r - r0;
+	auto y = c15;
+	y = fmaf(y, x, c14);																		// 2
+	y = fmaf(y, x, c13);																		// 2
+	y = fmaf(y, x, c12);																		// 2
+	y = fmaf(y, x, c11);																		// 2
+	y = fmaf(y, x, c10);																		// 2
+	y = fmaf(y, x, c9);																		// 2
+	y = fmaf(y, x, c8);																		// 2
+	y = fmaf(y, x, c7);																		// 2
+	y = fmaf(y, x, c6);																		// 2
+	y = fmaf(y, x, c5);																		// 2
+	y = fmaf(y, x, c4);																		// 2
+	y = fmaf(y, x, c3);																		// 2
+	y = fmaf(y, x, c2);																		// 2
+	y = fmaf(y, x, c1);																		// 2
+	y = fmaf(y, x, one);																		// 2
+	simd_int sevenf(0x1ff);
+	simd_int imm00 = n + sevenf;
+	imm00 <<= 52;
+	r0 = *((simd_double8*) &imm00);
+	auto res = y * r0;																			// 1
+	return res;
+}
+*/
 
+inline simd_double8 exp(simd_double8 a) { 	// 24
+	simd_double8 c;
+	for( int i = 0; i < 8; i++) {
+		c[i] = exp(a[i]);
+	}
+	return c;
+}
 
 #endif /* SIMD_HPP_ */
-
 
 #endif

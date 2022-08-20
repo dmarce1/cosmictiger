@@ -230,6 +230,7 @@ public:
 		return *this;
 	}
 	friend simd_double fmaf(const simd_double& a, const simd_double& b, const simd_double& c);
+
 };
 
 inline simd_double fmaf(const simd_double& a, const simd_double& b, const simd_double& c) {
@@ -530,9 +531,33 @@ public:
 		rc.v[1] = _mm256_and_pd(mask1, one.v[1]);
 		return rc;
 	}
+	friend inline simd_double8 fmaf(const simd_double8&, const simd_double8&, const simd_double8&);
 
 	friend class simd_float8;
+
+
+	friend inline simd_double8 round(const simd_double8& a) {
+		simd_double8 b;
+		b.v[0] = _mm256_round_pd(a.v[0], _MM_FROUND_TO_NEAREST_INT);
+		b.v[1] = _mm256_round_pd(a.v[1], _MM_FROUND_TO_NEAREST_INT);
+		return b;
+	}
+	friend inline simd_double8 sqrt(const simd_double8& a) {
+		simd_double8 b;
+		b.v[0] = _mm256_sqrt_pd(a.v[0]);
+		b.v[1] = _mm256_sqrt_pd(a.v[1]);
+		return b;
+	}
+
 };
+
+inline simd_double8 fmaf(const simd_double8& a, const simd_double8& b, const simd_double8& c) {
+	simd_double8 d;
+	d.v[0] = _mm256_fmadd_pd(a.v[0], b.v[0], c.v[0]);
+	d.v[1] = _mm256_fmadd_pd(a.v[1], b.v[1], c.v[1]);
+	return d;
+}
+
 
 #define SIMD_FLOAT8_SIZE 8
 
@@ -659,7 +684,7 @@ public:
 	friend inline simd_float8 min(const simd_float8&, const simd_float8&);
 	friend inline simd_float8 round(const simd_float8&);
 	friend inline simd_float8 fmaf(const simd_float8&, const simd_float8&, const simd_float8&);
-	friend class simd_int8;
+		friend class simd_int8;
 	friend simd_float8 log2(const simd_float8& a);
 
 };

@@ -20,23 +20,14 @@
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
 #include <chealpix.h>
+#include <cosmictiger/fmm_kernels.hpp>
 
-#define NHEAL 256
+#define NHEAL 1024
 
 HPX_PLAIN_ACTION(ewald_const::init, ewald_const_init_action);
 
 #ifndef USE_CUDA
-
-#define NREAL 179
-#define NFOUR 92
-
-struct ewald_constants {
-	array<array<float, NDIM>, NREAL> real_indices;
-	array<array<float, NDIM>, NFOUR> four_indices;
-	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
-};
 
 ewald_constants ec;
 
@@ -60,6 +51,10 @@ const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
 	return ec.four_expanse[i];
 }
 
+const tensor_sym<float, LORDER> ewald_const::D0() {
+	return ec.D0;
+}
+
 #endif
 
 void ewald_const::init() {
@@ -72,6 +67,7 @@ void ewald_const::init() {
 #ifdef USE_CUDA
 	ewald_const::init_gpu();
 #else
+
 	int n2max = 10;
 	int nmax = std::sqrt(n2max) + 1;
 	array<float, NDIM> this_h;
@@ -80,7 +76,7 @@ void ewald_const::init() {
 		for (int j = -nmax; j <= nmax; j++) {
 			for (int k = -nmax; k <= nmax; k++) {
 				const int i2 = i * i + j * j + k * k;
-				if (i2 <= n2max) {
+				if (i2 <= n2max && i2 > 0) {
 					this_h[0] = i;
 					this_h[1] = j;
 					this_h[2] = k;
@@ -132,41 +128,21 @@ void ewald_const::init() {
 		}
 		ec.four_expanse[count++] = D0.detraceD();
 	}
-#endif
-	expansion<double> D;
-	for (int i = 0; i < EXPANSION_SIZE; i++) {
-		D[i] = 0.0;
+	tensor_sym<float, LORDER> D;
+	for (int n = 0; n < EXPANSION_SIZE; n++) {
+		D[n] = 0.0;
 	}
-	constexpr double delta = 0.02;
-	const int npix = NHEAL * NHEAL * 12;
-	vector<array<double, NDIM>> pos(npix);
-	for (int i = 0; i < npix; i++) {
-		double theta, phi;
-		double vec[NDIM];
-		pix2ang_ring(NHEAL, i, &theta, &phi);
-		ang2vec(theta, phi, vec);
-		//PRINT( "%e %e %e\n", vec[0], vec[1], vec[2]);
-		for( int dim = 0; dim < NDIM; dim++) {
-			pos[i][dim] = vec[dim] * delta;
-		}
-	}
-	for (int i = 0; i < npix; i++) {
-		expansion<double> D1;
-		ewald_greens_function(D1, pos[i]);
-		for (int j = 0; j < EXPANSION_SIZE; j++) {
-			D[j] += D1[j] / npix;
-		}
-	}
-	for (int n = 0; n < LORDER; n++) {
-		for (int m = 0; m < LORDER; m++) {
-			for (int l = 0; l < LORDER; l++) {
-				if (n + m + l < LORDER && ((l < 2) || (n == 0 && m == 0 && l == 2))) {
-					PRINT("%i %i %i %e\n", n, m, l, D(n, m, l));
-				}
+	constexpr double alpha = 2.0;
+	for (int n = 0; n < LORDER; n += 2) {
+		for (int m = 0; m < LORDER - n; m += 2) {
+			for (int l = 0; l < LORDER - n - m; l += 2) {
+				D(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1) * double_factorial(n - 1)
+						* double_factorial(m - 1) * double_factorial(l - 1);
 			}
 		}
 	}
-
+	ec.D0 = D;
+#endif
 	hpx::wait_all(futs.begin(), futs.end());
 
 }

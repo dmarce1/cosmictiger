@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 
 inline
-int factorial(int n) {
+double factorial(double n) {
 	ASSERT(n >= 0);
 	if (n == 0) {
 		return 1;

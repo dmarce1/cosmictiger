@@ -35,9 +35,35 @@
 
 int hpx_main(int argc, char *argv[]) {
 
+	simd_double8 x;
+	for( x[0] = 0.0; x[0] < 0.5; x[0] += 0.01 ) {
+		PRINT( "%e %e %e\n", x[0], exp(x)[0], exp(x[0]));
+	}
+
 	expansion<simd_float> D;
 	array<simd_float, NDIM> X;
 	ewald_const::init();
+	FILE* fp = fopen( "ewald.txt", "wt");
+	X[0] = X[1] = X[2] = 0.00;
+	for (double x = 0.00; x < 0.5; x += 0.001) {
+		X[0] = x;
+		D = 0.0;
+		ewald_greens_function(D, X);
+		fprintf(fp, "%e ", x);
+		for (int n = 0; n < LORDER; n++) {
+			for (int m = 0; m < LORDER - n; m++) {
+				for (int l = 0; l < 2; l++) {
+					if (l == 2 && (n != 0 || m != 0)) {
+						continue;
+					}
+					fprintf(fp, "%e ", D(n, m, l)[0]);
+				}
+			}
+		}
+		fprintf(fp,  "\n");
+	}
+	fclose(fp);
+
 	std::atomic<int> i;
 	PRINT("%i\n", sizeof(rockstar_record));
 	for (double q = 0.0; q < 1.0; q += 0.01) {

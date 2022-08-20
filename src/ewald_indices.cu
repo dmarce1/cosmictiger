@@ -21,21 +21,15 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
 
+#include <cosmictiger/fmm_kernels.hpp>
+
 #include <algorithm>
-
-#define NREAL 179
-#define NFOUR 92
-
-struct ewald_constants {
-	array<array<float, NDIM>, NREAL> real_indices;
-	array<array<float, NDIM>, NFOUR> four_indices;
-	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
-};
-
 ewald_constants ec;
 __constant__ ewald_constants ec_dev;
 
 void ewald_const::init_gpu() {
+
+
 	int n2max = 12;
 	int nmax = std::sqrt(n2max) + 1;
 	array<float, NDIM> this_h;
@@ -44,11 +38,7 @@ void ewald_const::init_gpu() {
 		for (int j = -nmax; j <= nmax; j++) {
 			for (int k = -nmax; k <= nmax; k++) {
 				const int i2 = i * i + j * j + k * k;
-				const double x = std::max(abs(i) - 0.5, 0.0);
-				const double y = std::max(abs(j) - 0.5, 0.0);
-				const double z = std::max(abs(k) - 0.5, 0.0);
-				const double d = sqrt(sqr(x, y, z));
-				if (d < EWALD_REAL_CUTOFF) {
+				if (i2 <= n2max && i2 > 0) {
 					this_h[0] = i;
 					this_h[1] = j;
 					this_h[2] = k;
@@ -57,14 +47,13 @@ void ewald_const::init_gpu() {
 			}
 		}
 	}
-	PRINT("EWALD REAL COUNT = %i\n", count);
+	PRINT( "count = %i %i\n", count, NREAL);
 	const auto sort_func = [](const array<float,NDIM>& a, const array<float,NDIM>& b) {
 		const auto a2 = sqr(a[0],a[1],a[2]);
 		const auto b2 = sqr(b[0],b[1],b[2]);
 		return a2 > b2;
 	};
 	std::sort(ec.real_indices.begin(), ec.real_indices.end(), sort_func);
-//	PRINT("nreal = %i\n", count);
 	n2max = 8;
 	nmax = std::sqrt(n2max) + 1;
 	count = 0;
@@ -84,7 +73,6 @@ void ewald_const::init_gpu() {
 		}
 	}
 	std::sort(ec.four_indices.begin(), ec.four_indices.end(), sort_func);
-//	PRINT("nfour = %i\n", count);
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
 		array<float, NDIM> h = ec.four_indices[i];
@@ -103,6 +91,20 @@ void ewald_const::init_gpu() {
 		}
 		ec.four_expanse[count++] = D0.detraceD();
 	}
+	tensor_sym<float, LORDER> D;
+	for (int n = 0; n < EXPANSION_SIZE; n++) {
+		D[n] = 0.0;
+	}
+	constexpr double alpha = 2.0;
+	for (int n = 0; n < LORDER; n += 2) {
+		for (int m = 0; m < LORDER - n; m += 2) {
+			for (int l = 0; l < LORDER - n - m; l += 2) {
+				D(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1) * double_factorial(n - 1)
+						* double_factorial(m - 1) * double_factorial(l - 1);
+			}
+		}
+	}
+	ec.D0 = D;
 	cuda_set_device();
 	CUDA_CHECK(cudaMemcpyToSymbol(ec_dev, &ec, sizeof(ewald_constants)));
 }
@@ -113,6 +115,14 @@ CUDA_EXPORT int ewald_const::nfour() {
 
 CUDA_EXPORT int ewald_const::nreal() {
 	return NREAL;
+}
+
+CUDA_EXPORT const tensor_sym<float, LORDER> ewald_const::D0() {
+#ifdef __CUDA_ARCH__
+	return ec_dev.D0;
+#else
+	return ec.D0;
+#endif
 }
 
 CUDA_EXPORT const array<float, NDIM>& ewald_const::real_index(int i) {

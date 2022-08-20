@@ -87,13 +87,13 @@ __device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_
 #endif
 
 inline void erfcexp(double x, double* ec, double *ex) {				// 18 + FLOP_DIV + FLOP_EXP
-	*ex = exp(-x * x);// 2 + FLOP_EXP
+	*ex = exp(-x * x);				// 2 + FLOP_EXP
 	*ec = erf(x);
 }
 
 namespace math {
 inline double max(double a, double b) {
-	if( a > b ) {
+	if (a > b) {
 		return a;
 	} else {
 		return b;
@@ -157,8 +157,45 @@ inline float tsc(float x) {
 	}
 }
 
-#include <cosmictiger/containers.hpp>
 
+template<class T>
+CUDA_EXPORT inline T erfnearzero( T x ) {
+	const T c1 = 1.128379167095513;
+	const T c3 = -0.3761263890318375;
+	const T c5 = 0.1128379167095513;
+	const T c7 = -0.02686617064513125;
+	const T c9 = 0.005223977625442188;
+	const T c11 = -0.0008548327023450853;
+	const T c13 = 0.0001205533298178966;
+	const T c15 = -0.00001492565035840625;
+	const T c17 = 1.646211436588925e-6;
+	const T c19 = -1.636584469123492e-7;
+	const T c21 = 1.480719281587922e-8;
+	T x2 = x * x;
+	T w = c21;
+	w = fmaf(w, x2, c19);
+	w = fmaf(w, x2, c17);
+	w = fmaf(w, x2, c15);
+	w = fmaf(w, x2, c13);
+	w = fmaf(w, x2, c11);
+	w = fmaf(w, x2, c9);
+	w = fmaf(w, x2, c7);
+	w = fmaf(w, x2, c5);
+	w = fmaf(w, x2, c3);
+	w = fmaf(w, x2, c1);
+	w *= x;
+	return w;
+}
+
+inline double double_factorial(int n) {
+	if (n < 1) {
+		return 1;
+	} else {
+		return n * double_factorial(n - 2);
+	}
+}
+
+#include <cosmictiger/containers.hpp>
 
 pair<double, array<double, NDIM>> find_eigenpair(const array<array<double, NDIM>, NDIM>& A, double mu);
 #endif /* MATH_HPP_ */
