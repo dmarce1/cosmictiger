@@ -36,8 +36,8 @@
 int hpx_main(int argc, char *argv[]) {
 
 	simd_double8 x;
-	for( x[0] = 0.0; x[0] < 0.5; x[0] += 0.01 ) {
-		PRINT( "%e %e %e\n", x[0], exp(x)[0], exp(x[0]));
+	for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
+		PRINT( "%e %e %e\n", x[0], erfnearzero(x)[0], erf(x[0]));
 	}
 
 	expansion<simd_float> D;
@@ -52,7 +52,7 @@ int hpx_main(int argc, char *argv[]) {
 		fprintf(fp, "%e ", x);
 		for (int n = 0; n < LORDER; n++) {
 			for (int m = 0; m < LORDER - n; m++) {
-				for (int l = 0; l < 2; l++) {
+				for (int l = 0; l < 2 - n - m; l++) {
 					if (l == 2 && (n != 0 || m != 0)) {
 						continue;
 					}

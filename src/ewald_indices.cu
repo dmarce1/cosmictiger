@@ -92,7 +92,7 @@ void ewald_const::init_gpu() {
 		ec.four_expanse[count++] = D0.detraceD();
 	}
 	tensor_sym<float, LORDER> D;
-	for (int n = 0; n < EXPANSION_SIZE; n++) {
+	for (int n = 0; n < (LORDER+2)*(LORDER+1)*LORDER/6; n++) {
 		D[n] = 0.0;
 	}
 	constexpr double alpha = 2.0;

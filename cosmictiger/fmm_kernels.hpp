@@ -1688,7 +1688,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,8> &D, array<T, NDIM> 
 		Dreal_dbl[75] = fmaf(x[75], Drinvpow_6_0, Dreal_dbl[75]);
 		Dreal_dbl[48] = fmaf(T(3.000000000e+00), x[14]*Drinvpow_4_1, Dreal_dbl[48]);
 		const auto Drz = econst.D0();
-		for( int i = 0; i < EXPANSION_SIZE; i++) {
+		for( int i = 0; i < (LORDER+2)*(LORDER+1)*LORDER/6; i++) {
 			Dreal[i] += zero_mask * T(Dreal_dbl[i]);
 			Dreal[i] -= (T(1) - zero_mask) * Drz[i];
 		}
