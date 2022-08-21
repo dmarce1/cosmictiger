@@ -73,6 +73,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	float ymom_tot = 0.0f;
 	float zmom_tot = 0.0f;
 	float nmom_tot = 0.0f;
+	float dkin_tot = 0.f;
 	const float& hsoft = params.h;
 	flop_counter<int> flops = 0;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
@@ -103,6 +104,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		vx = vels[snki][XDIM];
 		vy = vels[snki][YDIM];
 		vz = vels[snki][ZDIM];
+		float kin0 = 0.5 * sqr(vx, vy, vz);
 		const float sgn = params.top ? 1.f : -1.f;
 		if (params.ascending) {
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
@@ -141,11 +143,12 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 			vz = fmaf(sgn * F.gz, dt, vz); // 3
 			flops += 36;
 		}
-
+		float kin1 = 0.5 * sqr(vx, vy, vz);
 		vels[snki][XDIM] = vx;
 		vels[snki][YDIM] = vy;
 		vels[snki][ZDIM] = vz;
 		phi_tot += 0.5f * force[i].phi;
+		dkin_tot += kin1 - kin0;
 		flops += 557 + params.do_phi * 178;
 
 	}
@@ -155,6 +158,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 	shared_reduce_add(zmom_tot);
 	shared_reduce_add(nmom_tot);
 	shared_reduce_add(kin_tot);
+	shared_reduce_add(dkin_tot);
 	flops += 30;
 	shared_reduce_max(max_rung);
 	if (tid == 0) {
@@ -165,6 +169,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		return_.zmom += zmom_tot;
 		return_.nmom += nmom_tot;
 		return_.kin += kin_tot;
+		return_.dkin += dkin_tot;
 		flops += 6;
 	}
 	add_gpu_flops(flops);
@@ -483,6 +488,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		add_gpu_flops(flops);
 	}
 	if (tid == 0) {
+		atomicAdd(&rc->dkin, kr.dkin);
 		atomicAdd(&rc->kin, kr.kin);
 		atomicAdd(&rc->pot, kr.pot);
 		atomicAdd(&rc->xmom, kr.xmom);

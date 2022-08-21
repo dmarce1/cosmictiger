@@ -93,6 +93,7 @@ struct kick_return {
 	int max_rung;
 	double pot;
 	double kin;
+	double dkin;
 	double xmom;
 	double ymom;
 	double zmom;
@@ -104,6 +105,7 @@ struct kick_return {
 		pot = 0.0;
 		kin = 0.0;
 		xmom = ymom = zmom = nmom = 0.0;
+		dkin = 0.0;
 	}
 	CUDA_EXPORT
 	kick_return& operator+=(const kick_return& other) {
@@ -116,6 +118,7 @@ struct kick_return {
 		ymom += other.ymom;
 		zmom += other.zmom;
 		nmom += other.nmom;
+		dkin += other.dkin;
 		return *this;
 
 	}
@@ -128,6 +131,7 @@ struct kick_return {
 		arc & ymom;
 		arc & zmom;
 		arc & nmom;
+		arc & dkin;
 	}
 };
 

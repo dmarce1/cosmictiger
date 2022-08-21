@@ -441,6 +441,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
 				float g2;
+				float kin0 = 0.5 * sqr(vx, vy, vz);
 				const float sgn = params.top ? 1 : -1;
 				if (params.ascending) {
 					const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
@@ -469,7 +470,9 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					vz = fmaf(sgn * forces.gz[j], dt, vz);                              // 3
 					flops += 49;
 				}
+				float kin1= 0.5 * sqr(vx, vy, vz);
 				kr.pot += 0.5 * forces.phi[j];
+				kr.dkin += kin1 - kin0;
 				flops += 570 + params.do_phi * 178;
 			}
 		}

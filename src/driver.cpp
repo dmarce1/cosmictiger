@@ -312,6 +312,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tm.reset();
 		tm.start();
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+		energies->tckin += this_kr.dkin;
 		tm.stop();
 //		PRINT("Kick took %e\n", tm.read());
 		if (clip_top && top) {
@@ -466,6 +467,8 @@ void driver() {
 		params.runtime = 0.0;
 		params.total_processed = 0;
 		params.years = cosmos_time(1e-6 * a0, a0) * get_options().code_to_s / constants::spyr;
+		auto tmp1 = particles_sum_energies();
+		params.energies.tckin = tmp1.kin;
 //		write_checkpoint(params);
 	}
 	const auto gadget_file = get_options().gadget4_restart;
@@ -734,9 +737,8 @@ void driver() {
 			}
 			double adotdot;
 			double a0 = a;
-			auto tmp1 = particles_sum_energies();
 			cosmos_update(adotdot, adot, a, dt);
-			energies.cosmic += (a - a0) * tmp1.kin / (a0 * a0);
+			energies.cosmic += (a - a0) * energies.tckin / (a0 * a0);
 			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
 			const auto z0 = 1.0 / a0 - 1.0;
 			const auto z1 = 1.0 / a - 1.0;

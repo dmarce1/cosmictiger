@@ -307,26 +307,17 @@ inline void particles_set_particle(particle p, part_int index) {
 struct energies_t {
 	double pot;
 	double kin;
+	double tckin;
 	double xmom;
 	double ymom;
 	double cosmic;
 	double zmom;
 	double nmom;
-	double ckin[MAX_RUNG];
-	double ckin_tot() {
-		double tot = 0.0;
-		for( int i = 0; i < MAX_RUNG; i++) {
-			tot += ckin[i];
-		}
-		return tot;
-	}
 	energies_t() {
 		pot = kin = 0.f;
 		xmom = ymom = zmom = nmom = 0.0;
 		cosmic = 0.0;
-		for( int i = 0; i < MAX_RUNG; i++) {
-			ckin[i] = 0.0;
-		}
+		tckin = 0.0;
 	}
 	energies_t& operator+=(const energies_t& other) {
 		pot += other.pot;
@@ -336,9 +327,7 @@ struct energies_t {
 		ymom += other.ymom;
 		zmom += other.zmom;
 		nmom += other.nmom;
-		for( int i = 0; i < MAX_RUNG; i++) {
-			ckin[i] += other.ckin[i];
-		}
+		tckin += other.tckin;
 		return *this;
 	}
 	template<class A>
@@ -350,9 +339,7 @@ struct energies_t {
 		arc & nmom;
 		arc & pot;
 		arc & kin;
-		for( int i = 0; i < MAX_RUNG; i++) {
-			arc & ckin[i];
-		}
+		arc & tckin;
 	}
 };
 
