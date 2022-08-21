@@ -343,9 +343,9 @@ static void force_test() {
 	} else {
 		initialize(get_options().z0);
 	}
-	constexpr int nthetas = 17;
-	const double thetas[nthetas] = { 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.00 };
-	for (int iter = 2; iter < nthetas; iter++) {
+	constexpr int nthetas = 16;
+	const double thetas[nthetas] = { 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95};
+	for (int iter = 0; iter < nthetas; iter++) {
 		tm_main.start();
 		domains_rebound();
 		domains_begin(0);

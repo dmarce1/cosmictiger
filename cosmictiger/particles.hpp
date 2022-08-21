@@ -35,9 +35,7 @@
 #include <unordered_map>
 
 static __constant__ float rung_dt[MAX_RUNG] = { 1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2), 1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6),
-		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15), 1.0
-				/ (1 << 16), 1.0 / (1 << 17), 1.0 / (1 << 18), 1.0 / (1 << 19), 1.0 / (1 << 20), 1.0 / (1 << 21), 1.0 / (1 << 22), 1.0 / (1 << 23), 1.0 / (1 << 24),
-		1.0 / (1 << 25), 1.0 / (1 << 26), 1.0 / (1 << 27), 1.0 / (1 << 28), 1.0 / (1 << 29), 1.0 / (1 << 30), 1.0 / (1 << 31) };
+		1.0 / (1 << 7), 1.0 / (1 << 8), 1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15) };
 
 #define NO_INDEX ((part_int) 0xFFFFFFFFU)
 
@@ -314,10 +312,21 @@ struct energies_t {
 	double cosmic;
 	double zmom;
 	double nmom;
+	double ckin[MAX_RUNG];
+	double ckin_tot() {
+		double tot = 0.0;
+		for( int i = 0; i < MAX_RUNG; i++) {
+			tot += ckin[i];
+		}
+		return tot;
+	}
 	energies_t() {
 		pot = kin = 0.f;
 		xmom = ymom = zmom = nmom = 0.0;
 		cosmic = 0.0;
+		for( int i = 0; i < MAX_RUNG; i++) {
+			ckin[i] = 0.0;
+		}
 	}
 	energies_t& operator+=(const energies_t& other) {
 		pot += other.pot;
@@ -327,6 +336,9 @@ struct energies_t {
 		ymom += other.ymom;
 		zmom += other.zmom;
 		nmom += other.nmom;
+		for( int i = 0; i < MAX_RUNG; i++) {
+			ckin[i] += other.ckin[i];
+		}
 		return *this;
 	}
 	template<class A>
@@ -338,6 +350,9 @@ struct energies_t {
 		arc & nmom;
 		arc & pot;
 		arc & kin;
+		for( int i = 0; i < MAX_RUNG; i++) {
+			arc & ckin[i];
+		}
 	}
 };
 

@@ -422,7 +422,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,8> &D, array<T, NDIM> 
 	Dfour = 0.0f;
 	D = 0.0f;
 	const auto realsz = econst.nreal();
-	const T zero_mask = r > T(0);
+	const T zero_mask = r > T(0.005);
 	int icnt = 0;
 	for (int i = 0; i < realsz; i++) {
 		const auto n = econst.real_index(i);
@@ -1072,7 +1072,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,8> &D, array<T, NDIM> 
 		const double_type r = sqrt(r2);
 		const double_type n8r = double_type(-8) * r;
 		const double_type rinv = (r > double_type(0)) / max(r, 1.0e-20);
-		double_type exp0 = exp( -double_type(4) * r2 );
+		double_type exp0 = expnearzero( -double_type(4) * r2 );
 		double_type erf0 = erfnearzero(double_type(2) * r);
 		const double_type expfactor = double_type(2.256758334191025) * exp0;
 		double_type e0 = expfactor * rinv;

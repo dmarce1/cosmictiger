@@ -1034,7 +1034,7 @@ void ewald(int direct_flops) {
 	tprint("Dfour = 0.0f;\n");
 	tprint("D = 0.0f;\n");
 	tprint("const auto realsz = econst.nreal();\n");
-	tprint("const T zero_mask = r > T(0);\n");                            // 1
+	tprint("const T zero_mask = r > T(0.005);\n");                            // 1
 //	tprint("const T zero_mask = r > T(%e);\n", 10.f * powf(std::numeric_limits<float>::min(), 1.0 / (2 * ORDER - 3)));                            // 1
 	tprint("int icnt = 0;\n");
 	tprint("for (int i = 0; i < realsz; i++) {\n");
@@ -1122,7 +1122,7 @@ void ewald(int direct_flops) {
 	tprint("const double_type r = sqrt(r2);\n");                                       // 1
 	tprint("const double_type n8r = double_type(-8) * r;\n");                                       // 1
 	tprint("const double_type rinv = (r > double_type(0)) / max(r, 1.0e-20);\n");                // 2
-	tprint("double_type exp0 = exp( -double_type(4) * r2 );\n");
+	tprint("double_type exp0 = expnearzero( -double_type(4) * r2 );\n");
 	tprint("double_type erf0 = erfnearzero(double_type(2) * r);\n");
 	tprint("const double_type expfactor = double_type(2.256758334191025) * exp0;\n");                  // 1
 	tprint("double_type e0 = expfactor * rinv;\n");                                   // 1

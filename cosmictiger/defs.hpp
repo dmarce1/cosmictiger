@@ -86,7 +86,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define KICK_OVERSUBSCRIPTION 1
 #define MAX_DEPTH 128
 #define MAX_PARTICLES_PER_PARCEL (8*1024*1024)
-#define MAX_RUNG 32
+#define MAX_RUNG 16
 #define MIN_CP_PARTS 25
 #define MIN_KICK_THREAD_PARTS (1024)
 #define MIN_PC_PARTS 47

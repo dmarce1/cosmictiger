@@ -344,7 +344,14 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				lc_fut->get();
 				*lc_fut = hpx::make_ready_future();
 			}
-			drift(scale, dt, tau, tau + dt, get_options().nsteps * t0, levels[li]);
+			double a0 = scale;
+			double a1 = scale + 0.5 * cosmos_dadt(scale) * scale * dt;
+			a1 = scale + 0.5 * cosmos_dadt(0.5 * (a1 + a0)) * 0.5 * (a1 + a0) * dt;
+			double a2 = a1 + 0.5 * cosmos_dadt(a1) * a1 * dt;
+			a2 = a1 + 0.5 * cosmos_dadt(0.5 * (a1 + a2)) * 0.5 * (a1 + a2) * dt;
+			double a = 6.0 / (1.0 / a0 + 4.0 / a1 + 1.0 / a2);
+//			PRINT( "%e %e %e\n", a, a0, a1);
+			drift(a, dt, tau, tau + dt, get_options().nsteps * t0, levels[li]);
 			tm.stop();
 			//PRINT("Drift took %e\n", tm.read());
 		}
@@ -645,13 +652,13 @@ void driver() {
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
 			if (z > 50.0) {
-				theta = 0.3;
+				theta = 0.4;
 			} else if (z > 20.0) {
-				theta = 0.5;
+				theta = 0.48;
 			} else if (z > 2.0) {
-				theta = 0.65;
+				theta = 0.54;
 			} else {
-				theta = 0.8;
+				theta = 0.75;
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
 			if (ts <= 10.0) {
@@ -694,11 +701,7 @@ void driver() {
 			max_rung = kr.max_rung;
 //			PRINT("GRAVITY max_rung = %i\n", kr.max_rung);
 			if (minrung <= 0) {
-				if (tau > 0.0) {
-					const double ene = 2.0 * (energies.kin) + energies.pot;
-					energies.cosmic += 0.5 * adot * t0 * ene;
-				}
-				double energy = (energies.kin + energies.pot) + energies.cosmic;
+				double energy = a * (energies.kin + energies.pot) + energies.cosmic;
 				if (tau == 0) {
 					energy0 = 0.0;
 					energies.cosmic = -energy;
@@ -708,10 +711,8 @@ void driver() {
 				const double err = (energy - energy0) / norm;
 				FILE* fp = fopen("energy.txt", "at");
 				fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
-						energies.zmom / energies.nmom, energies.pot, energies.kin, energies.cosmic, err);
+						energies.zmom / energies.nmom, a * energies.pot, a * energies.kin, energies.cosmic, err);
 				fclose(fp);
-				const double ene = 2.0 * (energies.kin) + energies.pot;
-				energies.cosmic += 0.5 * adot * t0 * ene;
 			}
 			dt = t0 / (1 << max_rung);
 			if (full_eval) {
@@ -733,9 +734,9 @@ void driver() {
 			}
 			double adotdot;
 			double a0 = a;
-//			auto tmp1 = particles_sum_energies();
-//			energies.cosmic += adot * dt * energies.kin * a;
+			auto tmp1 = particles_sum_energies();
 			cosmos_update(adotdot, adot, a, dt);
+			energies.cosmic += (a - a0) * tmp1.kin / (a0 * a0);
 			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
 			const auto z0 = 1.0 / a0 - 1.0;
 			const auto z1 = 1.0 / a - 1.0;
