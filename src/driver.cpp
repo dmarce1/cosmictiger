@@ -655,13 +655,13 @@ void driver() {
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
 			if (z > 50.0) {
-				theta = 0.4;
+				theta = 0.41;
 			} else if (z > 20.0) {
-				theta = 0.48;
+				theta = 0.41;
 			} else if (z > 2.0) {
-				theta = 0.54;
+				theta = 0.51;
 			} else {
-				theta = 0.75;
+				theta = 0.61;
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
 			if (ts <= 10.0) {
