@@ -378,8 +378,15 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 }
 
 void do_power_spectrum(int num, double a) {
+	const auto soft_filter = [](double kh) {
+		if( kh > 0.01 ) {
+			return -15.0 * (3.0 * kh * cos(kh) + ((sqr(kh)-3.0)*sin(kh))) * pow(kh,-5.0);
+		} else {
+			return 1.0 - sqr(kh) / 14.0 + sqr(sqr(kh)) / 504.0;
+		}
+	};
 	profiler_enter(__FUNCTION__);
-	const int M = 2;
+	const int M = 16;
 	PRINT("Computing power spectrum\n");
 	const double h = get_options().hubble;
 	const double omega_m = get_options().omega_m;
@@ -387,29 +394,21 @@ void do_power_spectrum(int num, double a) {
 	const int N = get_options().parts_dim;
 	const double D1 = cosmos_growth_factor(omega_m, a) / cosmos_growth_factor(omega_m, 1.0);
 	const double factor = pow(box_size, 3) / pow(N, 6) / sqr(D1);
-	auto power0 = power_spectrum_compute(1);
-	std::string filename = "power0." + std::to_string(num) + ".txt";
-	FILE* fp = fopen(filename.c_str(), "wt");
-	if (fp == NULL) {
-		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+	for (int Mfactor = 1; Mfactor <= M * M; Mfactor *= M) {
+		auto power0 = power_spectrum_compute(Mfactor);
+		const double hsoft = get_options().hsoft * box_size;
+		std::string filename = "power." + std::to_string(Mfactor) + "." + std::to_string(num) + ".txt";
+		FILE* fp = fopen(filename.c_str(), "wt");
+		if (fp == NULL) {
+			THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+		}
+		for (int i = 0; i < power0.size(); i++) {
+			const double k = 2.0 * Mfactor * M_PI * i / box_size;
+			const double sf = soft_filter(k * hsoft);
+			fprintf(fp, "%e %e %e\n", k / h, power0[i] * h * h * h * factor * sf, sf);
+		}
+		fclose(fp);
 	}
-	for (int i = 0; i < power0.size(); i++) {
-		const double k = 2.0 * M_PI * i / box_size;
-		fprintf(fp, "%e %e\n", k / h, power0[i] * h * h * h * factor);
-	}
-	fclose(fp);
-/*
-	auto power1 = power_spectrum_compute(M);
-	filename = "power1." + std::to_string(num) + ".txt";
-	fp = fopen(filename.c_str(), "wt");
-	if (fp == NULL) {
-		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
-	}
-	for (int i = 0; i < power1.size(); i++) {
-		const double k = 2.0 * M * M_PI * i / box_size;
-		fprintf(fp, "%e %e\n", k / h, power1[i] * h * h * h * factor);
-	}
-	fclose(fp);*/
 	profiler_exit();
 }
 

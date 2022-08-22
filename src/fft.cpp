@@ -194,9 +194,9 @@ static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute() {
 			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 				const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
 				const double sz = sinc(M_PI * k / N);
-				const double c0 = pow(1.0 / (sx * sy * sz), 2);
+				const double c0 = pow(1.0 / (sx * sy * sz), 3);
 		//		PRINT( "%e\n", c0);
-		//		Y[box.index(I)] *= c0;
+				Y[box.index(I)] *= c0;
 				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5f;
 				const float pwr = Y[box.index(I)].norm();
 				if( n < N / 2) {
