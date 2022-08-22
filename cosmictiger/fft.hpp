@@ -25,7 +25,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/range.hpp>
 #include <cosmictiger/complex.hpp>
 
-void fft3d_init(int64_t N);
+void fft3d_init(int64_t N, float init_const = 0.0);
 void fft3d_execute();
 void fft3d_inv_execute();
 vector<float> fft3d_read_real(const range<int64_t>&);

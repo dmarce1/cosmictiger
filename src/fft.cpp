@@ -196,7 +196,7 @@ static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute() {
 				const double sz = sinc(M_PI * k / N);
 				const double c0 = pow(1.0 / (sx * sy * sz), 2);
 		//		PRINT( "%e\n", c0);
-				Y[box.index(I)] *= c0;
+		//		Y[box.index(I)] *= c0;
 				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5f;
 				const float pwr = Y[box.index(I)].norm();
 				if( n < N / 2) {
@@ -501,10 +501,10 @@ void fft3d_accumulate_complex(const range<int64_t>& this_box, const vector<cmplx
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-void fft3d_init(int64_t N_) {
+void fft3d_init(int64_t N_, float init_const) {
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<fft3d_init_action>(c, N_));
+		futs.push_back(hpx::async<fft3d_init_action>(c, N_, init_const));
 	}
 	N = N_;
 	range<int64_t> box;
@@ -515,7 +515,7 @@ void fft3d_init(int64_t N_) {
 	real_boxes.resize(hpx_size());
 	find_boxes(box, real_boxes, 0, hpx_size());
 	real_mybox = real_boxes[hpx_rank()];
-	R.resize(real_mybox.volume(), 0.0);
+	R.resize(real_mybox.volume(), init_const);
 	for (int dim = 0; dim < NDIM; dim++) {
 		for (int dim1 = 0; dim1 < NDIM; dim1++) {
 			box.begin[dim1] = 0;

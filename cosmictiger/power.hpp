@@ -21,9 +21,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef POWER_HPP_
 #define POWER_HPP_
 
+#include <cosmictiger/range.hpp>
 
-vector<float> power_spectrum_compute();
 
+vector<float> power_spectrum_compute(int M);
+vector<float> accumulate_density_cuda(int M,  int Ndim, range<int64_t> intbox);
 
 
 #endif /* POWER_HPP_ */

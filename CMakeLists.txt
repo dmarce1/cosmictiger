@@ -82,6 +82,7 @@ set(cosmictiger_source_files
     src/output.cpp
     src/particles.cpp
     src/power.cpp
+    src/power.cu
     src/profiler.cpp
     src/rockstar.cpp
     src/rockstar.cu
