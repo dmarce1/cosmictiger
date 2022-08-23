@@ -105,7 +105,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		vy = vels[snki][YDIM];
 		vz = vels[snki][ZDIM];
 		float kin0 = 0.5 * sqr(vx, vy, vz);
-		const float sgn = params.top ? 1.f : -1.f;
+		const float sgn = params.sign * (params.top ? 1.f : -1.f);
 		if (params.ascending) {
 			dt = 0.5f * rung_dt[params.min_rung] * params.t0;
 			flops += 2;
@@ -194,6 +194,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	auto& force = shmem.f;
 	auto& tree_nodes = data.tree_nodes;
 	const float& h = global_params.h;
+	const float hinv = 1.f / h;
 	int index;
 	auto group = cooperative_groups::this_thread_block();
 	if (group.thread_rank() == 0) {
@@ -259,7 +260,8 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					force.resize(nsinks);
 					for (int l = tid; l < nsinks; l += WARP_SIZE) {
 						auto& f = force[l];
-						f.gx = f.gy = f.gz = f.phi = 0.f;
+						f.gx = f.gy = f.gz = 0.f;
+						f.phi = -SELF_PHI * hinv;
 					}
 				}
 				__syncwarp();

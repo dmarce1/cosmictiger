@@ -218,7 +218,7 @@ size_t lc_time_to_flush(double tau, double tau_max_) {
 		const int nside = compute_nside(tau);
 		const int npix = nside == 0 ? 1 : 12 * sqr(nside);
 		const size_t ranks = std::min(npix, hpx_size());
-		const size_t parts_per_rank = std::pow(get_options().parts_dim, NDIM) / hpx_size();
+		const size_t parts_per_rank = get_options().nparts / hpx_size();
 		/*		double factor = 1.0 / 8.0;
 		 double tm = tau / tau_max * 64;
 		 if (tm > 63.0) {
@@ -562,7 +562,7 @@ size_t lc_find_neighbors() {
 		futs.push_back(hpx::async<lc_find_neighbors_action>(c));
 	}
 	size_t rc = 0;
-	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
+	const double link_len = get_options().lc_b * pow(get_options().nparts, -1.0 / NDIM);
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs.push_back(hpx::async([pix, link_len, &tree_map]() {
 			vector<int> check_pix;
@@ -589,7 +589,7 @@ size_t lc_find_groups() {
 		futs.push_back(hpx::async<lc_find_groups_action>(c));
 	}
 	size_t rc = 0;
-	const double link_len = get_options().lc_b / (double) get_options().parts_dim;
+	const double link_len = get_options().lc_b * pow(get_options().nparts, -1.0 / NDIM);
 	vector<hpx::future<void>> futs2;
 	for (int pix = my_pix_range.first; pix < my_pix_range.second; pix++) {
 		futs2.push_back(hpx::async([pix, &tree_map]() {
@@ -794,7 +794,7 @@ static vector<int> pix_neighbors(int pix) {
 static int compute_nside(double tau) {
 	double nside = std::sqrt(8.0 * hpx_hardware_concurrency() * hpx_size() / 12.0);
 	const double w0 = std::max((tau_max - tau) / tau_max, 0.0);
-	nside = std::min(nside, (get_options().parts_dim * std::sqrt(3) / get_options().lc_b / 2.0 * w0));
+	nside = std::min(nside, (pow(get_options().nparts, 1.0 / NDIM) * std::sqrt(3) / get_options().lc_b / 2.0 * w0));
 	Nside = 1;
 	while (Nside < nside) {
 		Nside *= 2;

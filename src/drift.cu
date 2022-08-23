@@ -33,9 +33,8 @@ using list_type = device_vector<device_vector<lc_entry>>;
 
 __managed__ list_type* list_ptr;
 
-__global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const __restrict__ y, fixed32* const __restrict__ z,
-		const array<float, NDIM>* const vels, const char* const rungs, part_int count, char rung, double a, double dt, double tau0, double tau1, double tau_max,
-		bool do_lc, int nside) {
+__global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const __restrict__ y, fixed32* const __restrict__ z, array<float, NDIM>* const vels,
+		const char* const rungs, part_int count, char rung, double a, double dt, double tau0, double tau1, double tau_max, bool do_lc, int nside, double drag) {
 	do_lc = do_lc && (tau_max - tau1 < 1.0f);
 	const auto& tid = threadIdx.x;
 	const auto& bid = blockIdx.x;
@@ -55,7 +54,7 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 		array<double, NDIM> X0;
 		array<double, NDIM> X1;
 		float vx, vy, vz;
-		const float* vel;
+		float* vel;
 		if (i < end) {
 			this_rung = rungs[i];
 			if (this_rung == rung) {
@@ -66,6 +65,12 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 				x1 = x0 + double(vel[XDIM] * c1);
 				y1 = y0 + double(vel[YDIM] * c1);
 				z1 = z0 + double(vel[ZDIM] * c1);
+				if (drag != 0.0) {
+					const double c0 = 1.0 / (1.0 + drag * dt);
+					for (int dim = 0; dim < NDIM; dim++) {
+						vel[dim] *= c0;
+					}
+				}
 			}
 		}
 		if (do_lc) {
@@ -107,7 +112,7 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 								const double R2 = sqr(x1, y1, z1);
 								if (R2 <= 1.0) {
 									long ipix;
-									double X[NDIM] = {x1, y1, z1};
+									double X[NDIM] = { x1, y1, z1 };
 									vec2pix_nest(nside, X, &ipix);
 									entry.pix = ipix;
 									entry.x = x1;
@@ -148,7 +153,7 @@ __global__ void cuda_drift_kernel(fixed32* const __restrict__ x, fixed32* const 
 	}
 }
 
-void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_max) {
+void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_max, double drag) {
 	static bool init = false;
 	int nblocks;
 	timer tm1;
@@ -173,9 +178,10 @@ void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_
 	fixed32* x = &particles_pos(XDIM, rng.first);
 	fixed32* y = &particles_pos(YDIM, rng.first);
 	fixed32* z = &particles_pos(ZDIM, rng.first);
-	const auto* vels = particles_vel_data() + rng.first;
+	auto* vels = particles_vel_data() + rng.first;
 	const auto* rungs = &particles_rung(rng.first);
-	cuda_drift_kernel<<<nblocks,BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0, tau1, tau_max, get_options().do_lc, get_options().lc_map_size);
+	drag = get_options().create_glass ? M_PI : 0.0;
+	cuda_drift_kernel<<<nblocks,BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0, tau1, tau_max, get_options().do_lc, get_options().lc_map_size, drag);
 	CUDA_CHECK(cudaDeviceSynchronize());
 	cnt = 0;
 	static size_t total_cnt = 0;

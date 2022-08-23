@@ -61,6 +61,22 @@ void cosmos_update(double& adotdot, double& adot, double& a, double dt0) {
 	}
 }
 
+
+double cosmos_ainv(double& adot, double& a, double dt0) {
+	double ainv = 0.0;;
+	constexpr int N = 128;
+	const double dt = dt0 / N;
+	double adotdot;
+	for (int i = 0; i < N; i++) {
+		double a0 = a;
+		cosmos_update0(adotdot, adot, a, dt);
+		double a1 = a;
+		double this_ainv = 0.5 / a0 + 0.5 / a1;
+		ainv += this_ainv / N;
+	}
+	return ainv;
+}
+
 double cosmos_growth_factor(double omega_m, float a) {
 	const double omega_l = 1.f - omega_m;
 	const double a3 = a * sqr(a);

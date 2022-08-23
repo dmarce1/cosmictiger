@@ -217,7 +217,7 @@ void domains_rebound() {
 	domains[0].box = unit_box<double>();
 	domains[0].proc_range.first = 0;
 	domains[0].proc_range.second = hpx_size();
-	domains[0].total_count = std::pow((size_t) get_options().parts_dim, NDIM);
+	domains[0].total_count = get_options().nparts;
 	domains[0].midhi = 1.0;
 	domains[0].midlo = 0.0;
 	domains[0].key = 1;

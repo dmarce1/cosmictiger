@@ -136,6 +136,7 @@ struct kick_return {
 };
 
 struct kick_params {
+	float sign;
 	int min_level;
 	int min_rung;
 	float a;
@@ -156,6 +157,7 @@ struct kick_params {
 	kick_params() {
 		max_dt = 1e30;
 		do_phi = true;
+		sign = 1.0;
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
@@ -172,6 +174,7 @@ struct kick_params {
 		arc & h;
 		arc & eta;
 		arc & GM;
+		arc & sign;
 		arc & save_force;
 		arc & node_load;
 		arc & min_level;

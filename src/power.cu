@@ -36,6 +36,7 @@ __global__ void accumulate_density_kernel(fixed32* X, fixed32* Y, fixed32* Z, fl
 	const part_int ibegin = (size_t) bid * Nparts / (size_t) gsz;
 	const part_int iend = (size_t)(bid + 1) * Nparts / (size_t) gsz;
 	for (part_int i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
+		ALWAYS_ASSERT(i < Nparts);
 		double x = fmod(Mfold * X[i].to_double(), 1.0);
 		double y = fmod(Mfold * Y[i].to_double(), 1.0);
 		double z = fmod(Mfold * Z[i].to_double(), 1.0);

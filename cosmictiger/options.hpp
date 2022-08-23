@@ -23,7 +23,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 struct options {
 	int bucket_size;
+	int Nfour;
 	bool cuda;
+	bool close_pack;
+	bool use_glass;
 	bool save_force;
 	bool do_lc;
 	bool do_power;
@@ -33,6 +36,7 @@ struct options {
 	bool do_views;
 	bool twolpt;
 	bool use_power_file;
+	bool create_glass;
 	int read_check;
 	int tracer_count;
 	int parts_dim;
@@ -74,6 +78,7 @@ struct options {
 	double Y0;
 	double Neff;
 	double omega_k;
+	size_t nparts;
 	std::string config_file;
 	std::string test;
 	std::string lc_dir;
@@ -81,12 +86,17 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & close_pack;
+		arc & nparts;
+		arc & use_glass;
+		arc & create_glass;
 		arc & gadget4_restart;
 		arc & minrung;
 		arc & omega_k;
 		arc & omega_lam;
 		arc & bucket_size;
 		arc & nsteps;
+		arc & Nfour;
 		arc & cuda;
 		arc & do_lc;
 		arc & save_force;

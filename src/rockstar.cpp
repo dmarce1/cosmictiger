@@ -259,7 +259,7 @@ void rockstar_find_all_link_lens(device_vector<rockstar_tree>& trees, device_vec
 	for (auto& p : parts) {
 		p.min_dist2 = std::numeric_limits<float>::max();
 	}
-	double max_link_len = get_options().lc_b / get_options().parts_dim;
+	double max_link_len = get_options().lc_b * pow(get_options().nparts, -1.0 / NDIM);
 	bool gpu = parts.size() > 4 * 1024;
 	if (gpu) {
 		device_vector<int> leaves;
@@ -708,7 +708,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 		float sigma2_v = 0.0;
 		float sigma2_x = 0.0;
 		array<float,2 * NDIM> X;
-		const auto Ndim = get_options().parts_dim;
+		const auto Ndim = pow(get_options().nparts, 1.0/NDIM);
 		device_vector<rockstar_particle>& these_parts = sg.parts;
 		for (int dim = 0; dim < 2 * NDIM; dim++) {
 			X[dim] = 0.0;
@@ -802,7 +802,7 @@ vector<subgroup> rockstar_seeds(device_vector<rockstar_particle> parts, int& nex
 		sg.sigma2_v = sigma2_v;
 		float vcirc_max = 0.0;
 		double H = get_options().hubble * constants::H0 * get_options().code_to_s;
-		const float nparts = pow(get_options().parts_dim,3);
+		const float nparts = get_options().nparts;
 		for( int n = 1; n < radii.size(); n++) {
 			float vcirc = sqrt(3.0 * get_options().omega_m * sqr(H) * n / (8.0 * M_PI * nparts * radii[n].r / rfac));
 			vcirc_max = std::max(vcirc_max,vcirc);
@@ -1086,9 +1086,10 @@ vector<rockstar_record> rockstar_find_subgroups(const vector<lc_entry>& parts, d
 				const int root_id = rockstar_form_tree(trees, parts);
 				vector<rockstar_particle> parts500;
 				rockstar_find_all_link_lens(trees, parts, root_id);
-				const double ll200 = pow(200, -1.0 / 3.0) / get_options().parts_dim;
-				const double ll500 = pow(500, -1.0 / 3.0) / get_options().parts_dim;
-				const double ll2500 = pow(2500, -1.0 / 3.0) / get_options().parts_dim;
+				const auto Ndim = pow(get_options().nparts, 1.0/NDIM);
+				const double ll200 = pow(200, -1.0 / 3.0) / Ndim;
+				const double ll500 = pow(500, -1.0 / 3.0) / Ndim;
+				const double ll2500 = pow(2500, -1.0 / 3.0) / Ndim;
 				double m200 = 0.0;
 				double m500 = 0.0;
 				double m2500 = 0.0;
@@ -1204,7 +1205,7 @@ vector<rockstar_record> rockstar_find_subgroups(const vector<lc_entry>& parts, d
 					const double dx = parts500[i].x - xcom500;
 					const double dy = parts500[i].y - ycom500;
 					const double dz = parts500[i].z - zcom500;
-					rcommax500 = std::max(rcommax500, sqrt(sqr(dx,dy,dz)));
+					rcommax500 = std::max(rcommax500, sqrt(sqr(dx, dy, dz)));
 					Ixx500[XDIM][XDIM] += dx * dx;
 					Ixx500[XDIM][YDIM] += dx * dy;
 					Ixx500[XDIM][ZDIM] += dx * dz;
@@ -1231,7 +1232,7 @@ vector<rockstar_record> rockstar_find_subgroups(const vector<lc_entry>& parts, d
 					A[dim] = lambda2.second[dim] * sqrt(lambda2.first);
 				}
 				double b_o_a500, c_o_a500;
-				if( parts500.size() >= ROCKSTAR_MIN_GROUP ) {
+				if (parts500.size() >= ROCKSTAR_MIN_GROUP) {
 					const auto lambda2 = find_eigenpair(Ixx500, rcommax500);
 					const auto lambda0 = find_eigenpair(Ixx500, 0.0);
 					const auto lambda1 = find_eigenpair(Ixx500, 0.5 * (lambda2.first + lambda0.first));
@@ -1262,12 +1263,12 @@ vector<rockstar_record> rockstar_find_subgroups(const vector<lc_entry>& parts, d
 					}
 				}
 				mvir = parts.size();
-			//	PRINT("%e %e %e %e\n", mvir, m200, m500, m2500);
+				//	PRINT("%e %e %e %e\n", mvir, m200, m500, m2500);
 				double rmax = radii.back();
 				const double omega_m = get_options().omega_m;
 				x = ((omega_m / (sqr(scale) * scale)) / (omega_m / (sqr(scale) * scale)) + (1.0 - omega_m)) - 1.0;
 				y = (18.0 * M_PI * M_PI + 82.0 * x - 39.0 * sqr(x)) / (1.0 + x);
-				rvir = pow(mvir / (4.0 / 3.0 * M_PI * y), 1.0 / 3.0) / get_options().parts_dim;
+				rvir = pow(mvir / (4.0 / 3.0 * M_PI * y), 1.0 / 3.0) / Ndim;
 				RKlypin = cosmos_Klypin_fit(vcirc_max, radii.back(), mvir);
 				const double G = get_options().GM;
 				lambda = J * sqrt(fabs(Etot)) / G / pow(mvir, 2.5);

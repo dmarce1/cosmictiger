@@ -502,6 +502,7 @@ void fft3d_accumulate_complex(const range<int64_t>& this_box, const vector<cmplx
 }
 
 void fft3d_init(int64_t N_, float init_const) {
+	fft3d_destroy();
 	vector<hpx::future<void>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<fft3d_init_action>(c, N_, init_const));

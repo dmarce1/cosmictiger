@@ -85,6 +85,9 @@ bool process_options(int argc, char *argv[]) {
 	("gadget4_restart", po::value < std::string > (&(opts.gadget4_restart))->default_value(""), "file to read gadget4 file and output power spectrum")         //
 	("read_check", po::value<int>(&(opts.read_check))->default_value(-1),
 			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)")                                      //
+	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "Use glass file for IC") //
+	("create_glass", po::value<bool>(&(opts.create_glass))->default_value(false), "Create glass file") //
+	("close_pack", po::value<bool>(&(opts.close_pack))->default_value(false), "Use close packing for grid") //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
 #else
@@ -155,23 +158,27 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
+	opts.nparts = sqr(opts.parts_dim) * opts.parts_dim;
+	opts.Nfour = opts.parts_dim;
+	if (opts.close_pack) {
+		opts.nparts *= 2;
+//		opts.Nfour *= 2;
+	}
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.tree_alloc_line_size = 16 * opts.tree_cache_line_size;
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
 	opts.save_force = opts.test == "force";
-	opts.hsoft *= 1.0 / opts.parts_dim;
 	opts.omega_m = opts.omega_b + opts.omega_c;
-	const size_t nparts = pow(opts.parts_dim, NDIM);
 	opts.code_to_g *= constants::M0;
-	opts.code_to_cm = pow(opts.code_to_g * (8.0 * M_PI) * nparts * constants::G / (3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble)), 1.0 / 3.0);
+	opts.code_to_cm = pow(opts.code_to_g * (8.0 * M_PI) * opts.nparts * constants::G / (3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble)), 1.0 / 3.0);
 	opts.code_to_s = opts.code_to_cm / constants::c;
 	double H = constants::H0 * opts.code_to_s;
-	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / nparts;
+	opts.GM = opts.omega_m * 3.0 * sqr(H * opts.hubble) / (8.0 * M_PI) / opts.nparts;
 	PRINT("box_size = %e Mpc\n", opts.code_to_cm / constants::mpc_to_cm);
 	opts.slice_size = std::min((20.0 / opts.hubble) / (opts.code_to_cm / constants::mpc_to_cm), 1.0);
 	const double Neff = 3.086;
 	const double Theta = 1.0;
-	const auto nside1 = pow(M_PI * nparts / 10000.0 / 12.0, 0.5);
+	const auto nside1 = pow(M_PI * opts.nparts / 10000.0 / 12.0, 0.5);
 	int nside = 1;
 	while (nside < nside1 / 2.0) {
 		nside *= 2;
@@ -190,16 +197,21 @@ bool process_options(int argc, char *argv[]) {
 	} else {
 		opts.omega_k = 1.0 - opts.omega_m - opts.omega_r - opts.omega_lam;
 	}
-	opts.link_len = 1.0 / opts.parts_dim * 0.28;
+	opts.link_len = pow( opts.nparts, -1.0/NDIM) * 0.28;
 	opts.min_group = 20;
 	opts.lc_min_group = 20;
-
+	if (opts.create_glass) {
+		opts.GM = 1.0 / opts.nparts;
+		opts.code_to_cm = constants::mpc_to_cm;
+		opts.hubble = 1.0;
+	}
 	if (opts.parts_dim % 2 == 1) {
 		THROW_ERROR("parts_dim must be an even number\n");
 	}
+	opts.hsoft *= pow( opts.nparts, -1.0/NDIM);
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
-	PRINT("Box size = %e cm/h\n", opts.code_to_cm / constants::mpc_to_cm *  opts.hubble);
+	PRINT("Box size = %e cm/h\n", opts.code_to_cm / constants::mpc_to_cm * opts.hubble);
 #ifdef CHECK_MUTUAL_SORT
 	opts.do_groups = true;
 #endif

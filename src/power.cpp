@@ -30,7 +30,7 @@ static void compute_density_folded(int M);
 HPX_PLAIN_ACTION (compute_density_folded);
 
 vector<float> power_spectrum_compute(int M) {
-	const int N = get_options().parts_dim;
+	const int N = get_options().Nfour;
 	fft3d_init(N,-1.0f);
 	compute_density_folded(M);
 	fft3d_execute();
@@ -46,8 +46,8 @@ static void compute_density_folded(int M) {
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<compute_density_folded_action>(c, M));
 	}
-	const size_t Ndim = get_options().parts_dim;
-	const size_t nparts = sqr(Ndim) * Ndim;
+	const size_t Ndim = get_options().Nfour;
+	const size_t nparts = get_options().nparts;
 	const size_t parts_per_rank = nparts / hpx_size();
 	size_t Nper = Ndim;
 	while (sqr(Nper) * Nper > parts_per_rank) {

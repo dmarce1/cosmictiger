@@ -30,9 +30,9 @@ HPX_PLAIN_ACTION (drift);
 
 #define CHUNK_SIZE (1024*1024)
 
-void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung) {
+void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung, double drag) {
 	profiler_enter(__FUNCTION__);
-	cuda_drift(rung, scale, dt, tau0, tau1, tau_max);
+	cuda_drift(rung, scale, dt, tau0, tau1, tau_max, drag);
 	particles_memadvise_cpu();
 	profiler_exit();
 

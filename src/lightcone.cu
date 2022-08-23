@@ -163,8 +163,8 @@ size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type*
 	*index_ptr = 0;
 	*next_id_ptr = *next_id_value;
 	const auto b = get_options().lc_b;
-	const auto N = get_options().parts_dim;
-	const double link_len = b / N;
+	const auto nparts = get_options().nparts;
+	const double link_len = b * pow(nparts, -1.0/NDIM);
 	cuda_lightcone_kernel<<<nblocks,BLOCK_SIZE>>>(part_map_ptr, tree_map_ptr, rc_ptr, leaves.data(), leaves.size(), index_ptr, next_id_ptr, link_len, hpx_size(),hpx_rank());
 	CUDA_CHECK(cudaDeviceSynchronize());
 	PRINT("lc blocks = %i next id = %lli\n", nblocks, *next_id_ptr);

@@ -179,9 +179,40 @@ double particles_active_pct() {
 		num_active += f.get();
 	}
 	if (hpx_rank() == 0) {
-		num_active /= pow(get_options().parts_dim, NDIM);
+		num_active /= get_options().nparts;
 	}
 	return num_active;
+}
+
+HPX_PLAIN_ACTION(particles_displace);
+
+void particles_displace(double dx, double dy, double dz) {
+	vector<hpx::future<void>> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_displace_action>(c, dx, dy, dz));
+	}
+	const int nthreads = hpx_hardware_concurrency();
+	for (int proc = 0; proc < nthreads; proc++) {
+		futs.push_back(hpx::async([nthreads,proc, dx, dy, dz]() {
+			const part_int begin = (size_t) proc * particles_size() / nthreads;
+			const part_int end = (size_t) (proc + 1) * particles_size() / nthreads;
+			for( part_int i = begin; i < end; i++) {
+				double x = particles_pos(XDIM,i).to_double();
+				double y = particles_pos(YDIM,i).to_double();
+				double z = particles_pos(ZDIM,i).to_double();
+				x = fmod(x + dx, 1.0);
+				y = fmod(y + dy, 1.0);
+				z = fmod(z + dz, 1.0);
+				particles_pos(XDIM,i) = x;
+				particles_pos(YDIM,i) = y;
+				particles_pos(ZDIM,i) = z;
+			}
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());
+	for (auto& f : futs) {
+		f.get();
+	}
 }
 
 void particles_pop_rungs() {
@@ -313,7 +344,7 @@ void particles_set_tracers(size_t count) {
 		fut = hpx::async<particles_set_tracers_action>(hpx_localities()[hpx_rank() + 1], count + particles_size());
 	}
 
-	double particles_per_tracer = std::pow((double) get_options().parts_dim, NDIM) / get_options().tracer_count;
+	double particles_per_tracer =  get_options().nparts / get_options().tracer_count;
 	size_t cycles = count / particles_per_tracer;
 	double start = cycles * particles_per_tracer;
 	start -= count;
@@ -582,8 +613,6 @@ vector<size_t> particles_rung_counts() {
 		}
 	}
 	if (hpx_rank() == 0) {
-		const size_t parts_dim = get_options().parts_dim;
-		const size_t nparts = sqr(parts_dim) * parts_dim;
 		size_t tot = 0;
 		for (int i = 0; i < counts.size(); i++) {
 			tot += counts[i];
@@ -855,7 +884,7 @@ void particles_random_init() {
 	for (const auto& c : children) {
 		futs.push_back(hpx::async<particles_random_init_action>(c));
 	}
-	const size_t total_num_parts = std::pow(get_options().parts_dim, NDIM);
+	const size_t total_num_parts = get_options().nparts;
 	const size_t begin = (size_t)(hpx_rank()) * total_num_parts / hpx_size();
 	const size_t end = (size_t)(hpx_rank() + 1) * total_num_parts / hpx_size();
 	const size_t my_num_parts = end - begin;
@@ -1193,22 +1222,6 @@ void particles_save(FILE* fp) {
 	fwrite(&rung_begin, sizeof(int), 1, fp);
 	fwrite(rung_begins.data(), sizeof(int), rung_begins.size(), fp);
 
-}
-
-void particles_save_glass(const char* filename) {
-	FILE* fp = fopen(filename, "wb");
-	part_int size = get_options().parts_dim;
-	fwrite(&size, sizeof(part_int), 1, fp);
-	for (part_int i = 0; i < particles_size(); i++) {
-		fwrite(&particles_pos(XDIM, i), sizeof(fixed32), 1, fp);
-	}
-	for (part_int i = 0; i < particles_size(); i++) {
-		fwrite(&particles_pos(YDIM, i), sizeof(fixed32), 1, fp);
-	}
-	for (part_int i = 0; i < particles_size(); i++) {
-		fwrite(&particles_pos(ZDIM, i), sizeof(fixed32), 1, fp);
-	}
-	fclose(fp);
 }
 
 HPX_PLAIN_ACTION (particles_sum_energies);

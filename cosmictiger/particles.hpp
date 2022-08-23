@@ -182,6 +182,7 @@ void particles_resize(part_int, bool lock = true);
 void particles_random_init();
 void particles_pop_rungs();
 void particles_push_rungs();
+void particles_displace(double dx, double dy, double dz);
 void particles_destroy();
 void particles_sort_by_sph(pair<part_int> rng);
 void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, part_int offset);

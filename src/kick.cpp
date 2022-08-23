@@ -241,13 +241,14 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	flops += 1511 + params.do_phi * 178;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
+	const float hinv = 1.0f / get_options().hsoft;
 	force_vectors forces;
 	const part_int mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
 		forces = force_vectors(mynparts);
 		for (part_int i = 0; i < mynparts; i++) {
 			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-			forces.phi[i] = 0.0;
+			forces.phi[i] = -SELF_PHI * hinv;
 		}
 	}
 	{

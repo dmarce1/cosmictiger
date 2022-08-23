@@ -172,8 +172,8 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
-std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double tau, double t0, double theta,
-		energies_t* energies, int minrung0, bool do_phi, hpx::future<void>* lc_fut) {
+std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double adot, double tau, double t0, double theta,
+		energies_t* energies, int minrung0, bool do_phi, hpx::future<void>* lc_fut, bool nocrop, double drag) {
 	profiler_enter(__FUNCTION__);
 	timer tm;
 	kick_return kr;
@@ -235,7 +235,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		if (top && minrung == minrung0) {
 			auto counts = particles_rung_counts();
 			if (counts.size() > minrung0 + 1) {
-				const auto total = powf(get_options().parts_dim, NDIM);
+				const auto total = get_options().nparts;
 //				PRINT("Rungs\n");
 				for (int i = 0; i < counts.size(); i++) {
 //					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
@@ -246,7 +246,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 					fast += counts[i];
 				}
 				if (3 * fast > slow) {
-					clip_top = true;
+					clip_top = true && !nocrop;
 //					PRINT("------------------------------------\n");
 //					PRINT("Setting minimum level to %i\n", minrung + 1);
 //					PRINT("------------------------------------\n");
@@ -277,6 +277,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		} else {
 			kparams.top = top;
 		}
+		kparams.sign = get_options().create_glass ? -1.0 : 1.0;
 		kparams.ascending = ascending || top;
 		if (clip_top && top) {
 			kparams.descending = false;
@@ -345,14 +346,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				lc_fut->get();
 				*lc_fut = hpx::make_ready_future();
 			}
-			double a0 = scale;
-			double a1 = scale + 0.5 * cosmos_dadt(scale) * scale * dt;
-			a1 = scale + 0.5 * cosmos_dadt(0.5 * (a1 + a0)) * 0.5 * (a1 + a0) * dt;
-			double a2 = a1 + 0.5 * cosmos_dadt(a1) * a1 * dt;
-			a2 = a1 + 0.5 * cosmos_dadt(0.5 * (a1 + a2)) * 0.5 * (a1 + a2) * dt;
-			double a = 6.0 / (1.0 / a0 + 4.0 / a1 + 1.0 / a2);
+			double a = 1.0 / cosmos_ainv(adot, scale, dt);
 //			PRINT( "%e %e %e\n", a, a0, a1);
-			drift(a, dt, tau, tau + dt, get_options().nsteps * t0, levels[li]);
+			drift(a, dt, tau, tau + dt, get_options().nsteps * t0, levels[li], drag);
 			tm.stop();
 			//PRINT("Drift took %e\n", tm.read());
 		}
@@ -377,7 +373,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 
 }
 
-void do_power_spectrum(int num, double a) {
+double do_power_spectrum(int num, double a) {
 	const auto soft_filter = [](double kh) {
 		if( kh > 0.01 ) {
 			return -15.0 * (3.0 * kh * cos(kh) + ((sqr(kh)-3.0)*sin(kh))) * pow(kh,-5.0);
@@ -386,30 +382,41 @@ void do_power_spectrum(int num, double a) {
 		}
 	};
 	profiler_enter(__FUNCTION__);
-	const int M = 16;
+	const int M = 8;
 	PRINT("Computing power spectrum\n");
 	const double h = get_options().hubble;
 	const double omega_m = get_options().omega_m;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const int N = get_options().parts_dim;
+	const double N6 = pow((double) get_options().Nfour, 6);
 	const double D1 = cosmos_growth_factor(omega_m, a) / cosmos_growth_factor(omega_m, 1.0);
-	const double factor = pow(box_size, 3) / pow(N, 6) / sqr(D1);
-	for (int Mfactor = 1; Mfactor <= M * M; Mfactor *= M) {
+	double factor = pow(box_size, 3) / N6 / sqr(D1);
+	if (get_options().close_pack) {
+		factor *= 0.25;
+	}
+	double maxpow = 0.0;
+	std::string filename = "power." + std::to_string(num) + ".txt";
+	FILE* fp = fopen(filename.c_str(), "wt");
+	if (fp == NULL) {
+		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+	}
+	int pmin = 0;
+	for (int Mfactor = 1; Mfactor <= M * M * M; Mfactor *= M) {
 		auto power0 = power_spectrum_compute(Mfactor);
-		const double hsoft = get_options().hsoft * box_size;
-		std::string filename = "power." + std::to_string(Mfactor) + "." + std::to_string(num) + ".txt";
-		FILE* fp = fopen(filename.c_str(), "wt");
-		if (fp == NULL) {
-			THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
+		int pmax = power0.size();
+		if (Mfactor != M * M * M) {
+			pmax = M * int(sqrt(M * power0.size()) / M + 0.5);
 		}
-		for (int i = 0; i < power0.size(); i++) {
+		const double hsoft = get_options().hsoft * box_size;
+		for (int i = pmin; i < pmax; i++) {
 			const double k = 2.0 * Mfactor * M_PI * i / box_size;
 			const double sf = soft_filter(k * hsoft);
-			fprintf(fp, "%e %e %e\n", k / h, power0[i] * h * h * h * factor * sf, sf);
+			fprintf(fp, "%e %e %e\n", k / h, power0[i] * h * h * h * factor, sf);
 		}
-		fclose(fp);
+		pmin = pmax / M;
 	}
+	fclose(fp);
 	profiler_exit();
+	return maxpow;
 }
 
 void output_time_file() {
@@ -444,6 +451,16 @@ void output_time_file() {
 	profiler_exit();
 }
 
+void save_glass() {
+	const int N = get_options().parts_dim;
+	FILE* fp = fopen("glass.bin", "wb");
+	fwrite(&N, sizeof(int), 1, fp);
+	fwrite(&particles_pos(XDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_pos(YDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fwrite(&particles_pos(ZDIM, 0), sizeof(fixed32), particles_size(), fp);
+	fclose(fp);
+}
+
 void driver() {
 	timer total_time;
 	total_time.start();
@@ -460,18 +477,42 @@ void driver() {
 		params = read_checkpoint();
 	} else {
 		output_time_file();
-		initialize(get_options().z0);
+		if (get_options().create_glass) {
+			if (hpx_size() != 1) {
+				THROW_ERROR("Create glass can only be done with a single locality\n");
+			}
+			const size_t nparts = get_options().nparts;
+			const size_t b = hpx_rank() * nparts / hpx_size();
+			const size_t e = (hpx_rank() + 1) * nparts / hpx_size();
+			particles_resize(e - b);
+			for (part_int i = 0; i < e - b; i++) {
+				const double x = rand1();
+				const double y = rand1();
+				const double z = rand1();
+				particles_pos(XDIM, i) = x;
+				particles_pos(YDIM, i) = y;
+				particles_pos(ZDIM, i) = z;
+				particles_vel(XDIM, i) = 0.0;
+				particles_vel(YDIM, i) = 0.0;
+				particles_vel(ZDIM, i) = 0.0;
+			}
+			params.tau_max = 1.0;
+			params.a = 1.0;
+			params.adot = 0.0;
+		} else {
+			params.a = a0;
+			params.adot = cosmos_dadt(a0);
+			params.tau_max = cosmos_conformal_time(a0, 1.0);
+			initialize(get_options().z0);
+		}
 		if (get_options().do_tracers) {
 			particles_set_tracers();
 		}
 		params.step = 0;
 		params.flops = 0;
 		params.bucket_size = 80;
-		params.tau_max = cosmos_conformal_time(a0, 1.0);
 		PRINT("TAU_MAX = %e\n", params.tau_max);
 		params.tau = 0.0;
-		params.a = a0;
-		params.adot = cosmos_dadt(a0);
 		params.max_rung = 0;
 		params.itime = 0;
 		params.iter = 0;
@@ -553,7 +594,7 @@ void driver() {
 				PRINT( "lc_particles_boundaries1 %e\n", tm.read());
 				tm.reset();
 				tm.start();
-				const double link_len = get_options().lc_b / get_options().parts_dim;
+				const double link_len = get_options().lc_b * pow( get_options().nparts, -NDIM);
 				lc_form_trees(tau, link_len);
 				tm.stop();
 				PRINT( "lc_form_trees %e\n", tm.read());
@@ -603,6 +644,8 @@ void driver() {
 	bool do_check = false;
 	double checkz;
 	buckets50.start();
+	energies_t energies0;
+	double glass_error = 1.0;
 	for (;; step++) {
 
 //		PRINT("STEP  = %i\n", step);
@@ -666,14 +709,16 @@ void driver() {
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
-			if (z > 50.0) {
-				theta = 0.41;
-			} else if (z > 20.0) {
-				theta = 0.41;
-			} else if (z > 2.0) {
-				theta = 0.51;
+			if (get_options().create_glass) {
+				theta = 0.4;
 			} else {
-				theta = 0.61;
+				if (z > 20.0) {
+					theta = 0.41;
+				} else if (z > 2.0) {
+					theta = 0.51;
+				} else {
+					theta = 0.61;
+				}
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
 			if (ts <= 10.0) {
@@ -688,26 +733,37 @@ void driver() {
 			set_options(opts);
 			last_theta = theta;
 			std::pair<kick_return, tree_create_return> tmp;
+			bool nocrop = false;
+			if (int(tau / t0) % 8 == 0 && full_eval) {
+				nocrop = true;
+				minrung0 = std::max(minrung0 - 1, get_options().minrung);
+			}
 			int this_minrung = std::max(minrung, minrung0);
 			int om = this_minrung;
 //				PRINT("MINRUNG0 = %i\n", minrung0);
 //			PRINT( "Doing kick\n");
 			reset_flops();
-			tmp = kick_step_hierarchical(om, max_rung, a, tau, t0, theta, &energies, minrung0, full_eval, &lc_fut);
+			if (full_eval) {
+//				kick_workspace::clear_buffers();
+//				tree_destroy(true);
+				if (get_options().do_power) {
+					do_power_spectrum(step, a);
+				}
+#ifndef CHECK_MUTUAL_SORT
+				if (get_options().do_groups) {
+					do_groups(step, a);
+				}
+#endif
+			}
+			if (get_options().use_glass && minrung == minrung0) {
+				//			particles_displace(rand1(), rand1(), rand1());
+			}
+			tmp = kick_step_hierarchical(om, max_rung, a, adot, tau, t0, theta, &energies, minrung0, full_eval, &lc_fut, nocrop, sqrt(glass_error));
+			if (tau == 0.0) {
+				energies0 = energies;
+			}
 			const double flops = flops_per_second();
 			reset_flops();
-
-			/*if (om == minrung0) {
-			 PRINT("-------------------------------------------------------------------------------\n");
-			 constexpr int target = 70;
-			 const double parts_per_node = pow(get_options().parts_dim, NDIM) / (tmp.second.leaf_count);
-			 PRINT("Changing bucket size from %i to ", bucket_size);
-			 bucket_size *= target / parts_per_node;
-			 PRINT(" %i\n", bucket_size);
-			 PRINT( "leafcount %i nodecount %i\n", tmp.second.leaf_count, tmp.second.node_count);
-			 PRINT("-------------------------------------------------------------------------------\n");
-
-			 }*/
 			if (om != this_minrung) {
 				minrung0++;
 			}
@@ -724,10 +780,15 @@ void driver() {
 				}
 				const double norm = (energies.kin + fabs(energies.pot)) + energies.cosmic;
 				const double err = (energy - energy0) / norm;
+				if (tau > 0.0) {
+					glass_error = fabs(energies0.pot - a * energies.pot) / (a * energies.pot);
+				}
 				FILE* fp = fopen("energy.txt", "at");
-				fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
-						energies.zmom / energies.nmom, a * energies.pot, a * energies.kin, energies.cosmic, err);
+				fprintf(fp, "%e %e %e %e %e %e %e %e %e %e\n", tau / t0, a, energies.xmom / energies.nmom, energies.ymom / energies.nmom,
+						energies.zmom / energies.nmom, a * energies.pot, a * energies.kin, energies.cosmic, err, glass_error);
 				fclose(fp);
+				energies0 = energies;
+				energies0.pot *= a;
 			}
 			dt = t0 / (1 << max_rung);
 			if (full_eval) {
@@ -735,21 +796,11 @@ void driver() {
 			}
 			tree_create_return sr = tmp.second;
 //			PRINT("Done kicking\n");
-			if (full_eval) {
-//				kick_workspace::clear_buffers();
-//				tree_destroy(true);
-				if (get_options().do_power) {
-					do_power_spectrum(step, a);
-				}
-#ifndef CHECK_MUTUAL_SORT
-				if (get_options().do_groups) {
-					do_groups(step, a);
-				}
-#endif
-			}
 			double adotdot;
 			double a0 = a;
-			cosmos_update(adotdot, adot, a, dt);
+			if (!get_options().create_glass) {
+				cosmos_update(adotdot, adot, a, dt);
+			}
 			energies.cosmic += (a - a0) * energies.tckin / (a0 * a0);
 			const double dyears = 0.5 * (a0 + a) * dt * get_options().code_to_s / constants::spyr;
 			const auto z0 = 1.0 / a0 - 1.0;
@@ -777,7 +828,7 @@ void driver() {
 			runtime += total_time.read();
 			double pps = total_processed / runtime;
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
-			const double nparts = std::pow((double) get_options().parts_dim, (double) NDIM);
+			const double nparts = get_options().nparts;
 			if (full_eval) {
 				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr",
 						"mxr", "bs", "Tflops", "time");
@@ -819,6 +870,9 @@ void driver() {
 
 		} while (itime != 0);
 		if (1.0 / a < get_options().z1 + 1.0) {
+			break;
+		} else if (get_options().create_glass && std::abs(glass_error) < 1.0e-5) {
+			save_glass();
 			break;
 		}
 	}
