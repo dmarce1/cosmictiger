@@ -29,12 +29,15 @@ static void compute_density_folded(int M);
 
 HPX_PLAIN_ACTION (compute_density_folded);
 
-vector<float> power_spectrum_compute(int M) {
+power_spectrum_t power_spectrum_compute(int M) {
 	const int N = get_options().Nfour;
 	fft3d_init(N,-1.0f);
 	compute_density_folded(M);
 	fft3d_execute();
 	auto power = fft3d_power_spectrum();
+	for( int i = 0; i < power.k.size(); i++) {
+		power.k[i] *= M;
+	}
 	fft3d_destroy();
 	return power;
 }

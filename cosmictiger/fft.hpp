@@ -37,7 +37,15 @@ void fft3d_force_real();
 range<int64_t> fft3d_complex_range();
 range<int64_t> fft3d_real_range();
 vector<cmplx>& fft3d_complex_vector();
-vector<float> fft3d_power_spectrum();
+
+
+struct power_spectrum_t {
+	vector<float> P;
+	vector<float> k;
+	vector<float> Perr;
+};
+
+power_spectrum_t fft3d_power_spectrum();
 void fft3d2silo(bool real);
 
 #endif /* FFT_HPP_ */

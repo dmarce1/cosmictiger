@@ -385,11 +385,12 @@ double do_power_spectrum(int num, double a) {
 	const int M = 8;
 	PRINT("Computing power spectrum\n");
 	const double h = get_options().hubble;
+	const auto glass = get_options().create_glass;
 	const double omega_m = get_options().omega_m;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const double N6 = pow((double) get_options().Nfour, 6);
+	const double N3 = pow((double) get_options().Nfour, 3);
 	const double D1 = cosmos_growth_factor(omega_m, a) / cosmos_growth_factor(omega_m, 1.0);
-	double factor = pow(box_size, 3) / N6 / sqr(D1);
+	double factor = pow(box_size, 3) / N3 / (glass ? 1.0 : (N3 * sqr(D1)));
 	if (get_options().close_pack) {
 		factor *= 0.25;
 	}
@@ -399,20 +400,23 @@ double do_power_spectrum(int num, double a) {
 	if (fp == NULL) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
 	}
-	int pmin = 0;
-	for (int Mfactor = 1; Mfactor <= M * M * M; Mfactor *= M) {
+	double kmin = 0.0;
+	for (int Mfactor = 1; Mfactor <= M * M; Mfactor *= M) {
 		auto power0 = power_spectrum_compute(Mfactor);
-		int pmax = power0.size();
+		double kmax = power0.k.back() * 1.000001;
 		if (Mfactor != M * M * M) {
-			pmax = M * int(sqrt(M * power0.size()) / M + 0.5);
+			kmax = sqrt(power0.k.front() * kmax * M);
 		}
-		const double hsoft = get_options().hsoft * box_size;
-		for (int i = pmin; i < pmax; i++) {
-			const double k = 2.0 * Mfactor * M_PI * i / box_size;
-			const double sf = soft_filter(k * hsoft);
-			fprintf(fp, "%e %e %e\n", k / h, power0[i] * h * h * h * factor, sf);
+		const double c1 =  h * h * h * factor;
+		const double kshot = 2.0 * M_PI * get_options().parts_dim / box_size;
+		for (int i = 0; i < power0.P.size(); i++) {
+			const double k = power0.k[i];
+			if (k >= kmin && k < kmax) {
+				const double shot_noise = power0.k[std::min(i + 1, (int) power0.P.size() - 1)] > kshot ? factor * N3 : 0.0;
+				fprintf(fp, "%e %e %e %e %e\n", k / h, (power0.P[i] - power0.Perr[i]) * c1, power0.P[i] * c1, (power0.P[i] + power0.Perr[i]) * c1, h * h * h *shot_noise);
+			}
 		}
-		pmin = pmax / M;
+		kmin = kmax;
 	}
 	fclose(fp);
 	profiler_exit();

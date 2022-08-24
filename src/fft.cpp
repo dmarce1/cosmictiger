@@ -51,7 +51,14 @@ static void fft3d_phase3();
 static void finish_force_real();
 static vector<cmplx> transpose_read(const range<int64_t>&, int dim1, int dim2);
 static vector<cmplx> shift_read(const range<int64_t>&, bool);
-static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute();
+struct pspecret {
+	vector<float> k;
+	vector<float> p;
+	vector<double> c;
+	vector<float> pdev;
+};
+static pspecret power_spectrum_compute(const vector<float>& kbins);
+static pspecret power_spectrum_compute2(pspecret, const vector<float>& kbins);
 
 HPX_PLAIN_ACTION (fft3d_accumulate_real);
 HPX_PLAIN_ACTION (fft3d_accumulate_complex);
@@ -71,6 +78,7 @@ HPX_PLAIN_ACTION (shift_read);
 HPX_PLAIN_ACTION (update);
 HPX_PLAIN_ACTION (finish_force_real);
 HPX_PLAIN_ACTION (power_spectrum_compute);
+HPX_PLAIN_ACTION (power_spectrum_compute2);
 
 void fft3d2silo(bool real) {
 	if (real) {
@@ -161,61 +169,189 @@ void fft3d_inv_execute() {
 
 }
 
-vector<float> fft3d_power_spectrum() {
-	auto pr = power_spectrum_compute();
-	const auto& count = pr.second;
-	auto& power = pr.first;
+power_spectrum_t fft3d_power_spectrum() {
+	vector<float> kbins;
+	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const int Nfour = get_options().Nfour;
+	const double Ns = Nfour / 8.0;
+	const double kmin = 0.999999;
+	const double kmax = Nfour / 2.0;
+	const double logkmin = log(kmin);
+	const double logkmax = log(kmax);
+	const double dlogk = (logkmax - logkmin) / Ns;
+	for (int i = 0; i <= Ns; i++) {
+		double logk = logkmin + dlogk * i;
+		kbins.push_back(exp(logk));
+	}
+	auto pr = power_spectrum_compute(kbins);
+	const auto& count = pr.c;
+	auto& power = pr.p;
+	auto& ks = pr.k;
+	power_spectrum_t ret;
+	ret.P.resize(kbins.size() - 1);
+	ret.k.resize(kbins.size() - 1);
+	ret.Perr.resize(kbins.size() - 1, 0.0);
 	for (int i = 0; i < power.size(); i++) {
 		if (count[i] > 0) {
 			power[i] /= count[i];
+			ks[i] /= count[i];
+		}
+		ks[i] = sqrt(kbins[i] * kbins[i + 1]);
+		ks[i] *= 2.0 * M_PI / box_size;
+		ret.P[i] = power[i];
+		ret.k[i] = ks[i];
+	}
+	pr = power_spectrum_compute2(pr, kbins);
+	for (int i = 0; i < power.size(); i++) {
+		if (pr.c[i] > 0) {
+			if (count[i] > 1) {
+				ret.Perr[i] = sqrt(pr.pdev[i]) / sqrt(count[i] - 1) / sqrt(count[i]);
+			} else {
+				ret.P[i] = 0.0;
+				ret.Perr[i] = 0.0;
+			}
 		}
 	}
-	return power;
+
+	return ret;
 }
 
-static std::pair<vector<float>, vector<int64_t>> power_spectrum_compute() {
-	vector<hpx::future<std::pair<vector<float>, vector<int64_t>>> >futs;
+int search_kbins(vector<float> kbins, double k, int binmin, int binmax) {
+	if (k < 0.0 || k >= kbins.back()) {
+		return -1;
+	} else {
+		if (binmax - binmin == 1) {
+			ALWAYS_ASSERT(k >= kbins[binmin]);
+			ALWAYS_ASSERT(k < kbins[binmin + 1]);
+			return binmin;
+		} else {
+			int binmid = (binmax + binmin) / 2;
+			if (k >= kbins[binmid]) {
+				return search_kbins(kbins, k, binmid, binmax);
+			} else {
+				return search_kbins(kbins, k, binmin, binmid);
+			}
+		}
+	}
+	return -1;
+}
+;
+
+static pspecret power_spectrum_compute(const vector<float>& kbins) {
+	vector<hpx::future<pspecret>> futs;
 	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async < power_spectrum_compute_action >( c));
+		futs.push_back(hpx::async<power_spectrum_compute_action>(c, kbins));
 	}
 	const int64_t N = get_options().parts_dim;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const auto& box = cmplx_mybox[ZDIM];
-	array<int64_t,NDIM> I;
-	const float nmax = N / 2;
-	vector<float> power(nmax,0.0);
-	vector<int64_t> count(nmax,0);
+	array<int64_t, NDIM> I;
+
+	const int nbins = kbins.size() - 1;
+	vector<float> power(nbins, 0.0);
+	vector<double> count(nbins, 0);
+	vector<float> ktot(nbins, 0.0);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
-		const double sx = sinc(M_PI * i / N);
-		for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-			const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
-			const double sy = sinc(M_PI * j / N);
-			for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-				const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
-				const double sz = sinc(M_PI * k / N);
-				const double c0 = pow(1.0 / (sx * sy * sz), 3);
-		//		PRINT( "%e\n", c0);
-				Y[box.index(I)] *= c0;
-				const int64_t n = std::sqrt(i*i+j*j+k*k) + 0.5f;
-				const float pwr = Y[box.index(I)].norm();
-				if( n < N / 2) {
-					count[n]++;
-					power[n] += pwr;
+		futs.push_back(hpx::async([N,nbins,&kbins,box]( array<int64_t, NDIM> I) {
+			const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
+			const double sx = sinc(M_PI * i / N);
+			pspecret ret;
+			vector<float> power(nbins, 0.0);
+			vector<double> count(nbins, 0);
+			vector<float> ktot(nbins, 0.0);
+			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+				const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
+				const double sy = sinc(M_PI * j / N);
+				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+					const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
+					const double sz = sinc(M_PI * k / N);
+					const double c0 = pow(1.0 / (sx * sy * sz), 3);
+					Y[box.index(I)] *= c0;
+					const double iii = std::sqrt(i * i + j * j + k * k);
+					if( iii > 0 ) {
+						const int bin = search_kbins(kbins, iii, 0, nbins);
+						if (bin >= 0 ) {
+							const float pwr = Y[box.index(I)].norm();
+							count[bin] += 1;
+							power[bin] += pwr;
+							ktot[bin] += iii;
+						}
+					}
 				}
 			}
-		}
+			ret.p = std::move(power);
+			ret.c = std::move(count);
+			ret.k = std::move(ktot);
+			return ret;
+		}, I));
 	}
 	for (auto& f : futs) {
 		const auto pr = f.get();
-		const auto& this_count = pr.second;
-		const auto& this_power = pr.first;
-		for( int i = 0; i < this_count.size(); i++) {
+		const auto& this_count = pr.c;
+		const auto& this_power = pr.p;
+		const auto& this_ktot = pr.k;
+		for (int i = 0; i < this_count.size(); i++) {
 			count[i] += this_count[i];
 			power[i] += this_power[i];
+			ktot[i] += this_ktot[i];
 		}
 	}
-	return std::make_pair(std::move(power),std::move(count));
+	pspecret rc;
+	rc.p = std::move(power);
+	rc.c = std::move(count);
+	rc.k = std::move(ktot);
+	return rc;
+}
+
+static pspecret power_spectrum_compute2(pspecret rc, const vector<float>& kbins) {
+	vector<hpx::future<pspecret>> futs;
+	for (auto c : hpx_children()) {
+		futs.push_back(hpx::async<power_spectrum_compute2_action>(c, rc, kbins));
+	}
+	const int64_t N = get_options().parts_dim;
+	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	const auto& box = cmplx_mybox[ZDIM];
+	array<int64_t, NDIM> I;
+
+	const int nbins = kbins.size() - 1;
+	vector<float> devs(nbins, 0.0);
+	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
+		futs.push_back(hpx::async([N,nbins,&kbins,box,rc]( array<int64_t, NDIM> I) {
+			const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
+			const double sx = sinc(M_PI * i / N);
+			pspecret ret;
+			vector<float> pdev(nbins, 0.0);
+			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+				const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
+				const double sy = sinc(M_PI * j / N);
+				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+					const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
+					const double sz = sinc(M_PI * k / N);
+					const double c0 = pow(1.0 / (sx * sy * sz), 3);
+					Y[box.index(I)] *= c0;
+					const double iii = std::sqrt(i * i + j * j + k * k);
+					if( iii > 0 ) {
+						const int bin = search_kbins(kbins, iii, 0, nbins);
+						if (bin >= 0 ) {
+							const float pwr = Y[box.index(I)].norm();
+							pdev[bin] += sqr(pwr - rc.p[bin]);
+						}
+					}
+				}
+			}
+			ret.pdev = std::move(pdev);
+			return ret;
+		}, I));
+	}
+	for (auto& f : futs) {
+		const auto pr = f.get();
+		const auto& this_pdev = pr.pdev;
+		for (int i = 0; i < nbins; i++) {
+			devs[i] += this_pdev[i];
+		}
+	}
+	rc.pdev = std::move(devs);
+	return rc;
 }
 
 void fft3d_force_real() {
