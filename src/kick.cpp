@@ -451,11 +451,6 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 						vy = fmaf(sgn * forces.gy[j], dt, vy);
 						vz = fmaf(sgn * forces.gz[j], dt, vz);
 						flops += 9;
-					} else if (params.top && params.vel_init) {
-						const float v = sqrtf(-std::min(forces.phi[j],0.0f) * 0.5f);
-						vx *= v;
-						vy *= v;
-						vz *= v;
 					}
 				}
 				kr.kin += 0.5 * sqr(vx, vy, vz);

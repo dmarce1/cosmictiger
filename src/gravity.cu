@@ -179,7 +179,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 					flops += 6 + greens_function(D, dx);
 					flops += M2L(L, M, D, do_phi);
 					F.gx -= SCALE_FACTOR2 * L(1, 0, 0);
-					F.gy -= SCALE_FACTOR2 *  L(0, 1, 0);
+					F.gy -= SCALE_FACTOR2 * L(0, 1, 0);
 					F.gz -= SCALE_FACTOR2 * L(0, 0, 1);
 					F.phi += SCALE_FACTOR1 * L(0, 0, 0);
 					flops += 4;
@@ -312,20 +312,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						r1inv = rsqrt(r2);					// 4
 						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
-						const float q2 = r2 * h2inv;		// 1
-						r3inv = 15.f / 8.0f;
-						r3inv = fmaf( r3inv, q2, -21.0f / 4.f);
-						r3inv = fmaf( r3inv, q2, 35.0f / 8.0f);
-						r3inv *= h3inv;
-						flops -= 2;
-						if (do_phi) {
-							r1inv = float(-5.0f/ 16.0f);
-							r1inv = fmaf(q2, r1inv, float(21.f / 16.f)); // 2
-							r1inv = fmaf(q2, r1inv, float(-35.0f / 16.0f)); // 2
-							r1inv = fmaf(q2, r1inv, float(35.0f / 16.0f)); // 2
-							r1inv *= hinv;                    // 1
-							flops += 5;
-						}
+						gsoft(r3inv, r1inv, r2, hinv, h3inv, do_phi);
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2
@@ -354,20 +341,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						r1inv = rsqrt(r2);					// 4
 						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
-						const float q2 = r2 * h2inv;		// 1
-						r3inv = 15.f / 8.0f;
-						r3inv = fmaf( r3inv, q2, -21.0f / 4.f);
-						r3inv = fmaf( r3inv, q2, 35.0f / 8.0f);
-						r3inv *= h3inv;
-						flops -= 2;
-						if (do_phi) {
-							r1inv = float(-5.0f/ 16.0f);
-							r1inv = fmaf(q2, r1inv, float(21.f / 16.f)); // 2
-							r1inv = fmaf(q2, r1inv, float(-35.0f / 16.0f)); // 2
-							r1inv = fmaf(q2, r1inv, float(35.0f / 16.0f)); // 2
-							r1inv *= hinv;                    // 1
-							flops += 5;
-						}
+						gsoft(r3inv, r1inv, r2, hinv, h3inv, do_phi);
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2

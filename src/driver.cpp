@@ -70,7 +70,7 @@ struct timing {
 vector<timing> timings;
 
 double nfw_density(double r) {
-	double rmax = 100.0;
+	double rmax = 10.0;
 	return 1.0 / r / sqr(1.0 + r) / (4.0 * M_PI * (-1.0 + 1.0 / (1.0 + rmax) + log(1.0 + rmax)));
 }
 
@@ -129,8 +129,9 @@ void plummer_init(double r0) {
 		double y = y0 + r * ny;
 		double z = z0 + r * nz;
 		//double e = abs();
-		//const auto norm = sqrt(-2.0 * log(rand1())) * cos(2.0 * M_PI * rand1());
-		double v = 1.0;
+		//	double v = sqrt(-2.0 * log(rand1())) * abs(cos(2.0 * M_PI * rand1()));
+		double v = sqrt(get_options().GM * nparts * 0.5 / sqrt(sqr(get_options().plummerR) + sqr(r)) / 2);
+		double v0 = sqrt(get_options().GM * nparts * 0.25);
 		do {
 			nx = 2.0 * rand1() - 1.0;
 			ny = 2.0 * rand1() - 1.0;
@@ -151,22 +152,11 @@ void plummer_init(double r0) {
 		particles_vel(YDIM, i) = vy;
 		particles_vel(ZDIM, i) = vz;
 		particles_rung(i) = 0;
-		do {
-			nx = 2.0 * rand1() - 1.0;
-			ny = 2.0 * rand1() - 1.0;
-			nz = 2.0 * rand1() - 1.0;
-			n2 = sqr(nx, ny, nz);
-		} while (n2 == 0.0 || n2 > 1.0);
-		ninv = 1.0 / sqrt(n2);
-		nx *= ninv;
-		ny *= ninv;
-		nz *= ninv;
-		x = x0 + r * nx;
-		y = y0 + r * ny;
-		z = z0 + r * nz;
-		vx = -vx;
-		vy = -vy;
-		vz = -vz;
+		if (i % 2 == 0) {
+			particles_pos(XDIM, i) += 0.05;
+			particles_vel(XDIM, i) -= 100.0 * v0;
+		}
+
 		/*	particles_pos(XDIM, i + 1) = x;
 		 particles_pos(YDIM, i + 1) = y;
 		 particles_pos(ZDIM, i + 1) = z;

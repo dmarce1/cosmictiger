@@ -80,7 +80,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define WARP_SIZE 32
 #define CUDA_CHECKLIST_SIZE 2048
 #define CUDA_STACK_SIZE 32767
-#define SELF_PHI float(-35.0/16.0)
 #define EWALD_REAL_CUTOFF (2.6)
 #define EWALD_REAL_CUTOFF2 (EWALD_REAL_CUTOFF*EWALD_REAL_CUTOFF)
 #define KICK_OVERSUBSCRIPTION 1

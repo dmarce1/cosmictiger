@@ -66,3 +66,38 @@ __device__
 void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, float h,  bool);
 #endif
 #endif /* GRAVITY_HPP_ */
+
+#define SELF_PHI float(-105/32.0)
+
+template<class T>
+CUDA_EXPORT inline void gsoft( T& f, T& phi, T q2, T hinv, T h3inv, bool do_phi) {
+	f = T(135.f / 16.0f);
+	f = fmaf( f, q2, T(-147.0f / 8.f));
+	f = fmaf( f, q2, T(135.0f / 16.0f));
+	f *=h3inv;
+	if( do_phi ) {
+		phi = float(-45.0f/ 32.0f);
+		phi = fmaf(q2, phi, T(147.f / 32.f)); // 2
+		phi = fmaf(q2, phi, T(-175.0f / 32.0f)); // 2
+		phi = fmaf(q2, phi, T(105.0f / 32.0f)); // 2
+		phi *= hinv;                    // 1
+	}
+}
+
+/*#define SELF_PHI float(-35.0/16.0)
+
+template<class T>
+CUDA_EXPORT inline void gsoft( T& f, T& phi, T q2, T hinv, T h3inv, bool do_phi) {
+	f = T(15.f / 8.0f);
+	f = fmaf( f, q2, T(-21.0f / 4.f));
+	f = fmaf( f, q2, T(35.0f / 8.0f));
+	f *=h3inv;
+	if( do_phi ) {
+		phi = float(-5.0f/ 16.0f);
+		phi = fmaf(q2, phi, T(21.f / 16.f)); // 2
+		phi = fmaf(q2, phi, T(-35.0f / 16.0f)); // 2
+		phi = fmaf(q2, phi, T(35.0f / 16.0f)); // 2
+		phi *= hinv;                    // 1
+	}
+}
+*/
