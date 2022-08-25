@@ -430,6 +430,14 @@ void twolpt_correction2(int dim) {
 	}
 }
 
+float kfilter(float k) {
+	if (k < 0.005) {
+		return 1.0 / (-0.10663951 * k * k + 1.0);
+	} else {
+		return pow(k, 4) / (48 * pow(sin(k / 2.), 4) + 4 * k * (-1 + cos(k)) * sin(k));
+	}
+}
+
 void twolpt_generate(int dim1, int dim2) {
 	const int64_t N = get_options().Nfour;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
@@ -461,6 +469,7 @@ void twolpt_generate(int dim1, int dim2) {
 					if( I[2] > 0 ) {
 						const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 						const int i2 = sqr(i, j, k);
+						const float kz = 2.f * (float) M_PI / box_size * float(k);
 						if (i2 > 0 && i2 < N * N / 4) {
 							const float kz = 2.f * (float) M_PI / box_size * float(k);
 							const float k2 = kx * kx + ky * ky + kz * kz;
@@ -474,7 +483,9 @@ void twolpt_generate(int dim1, int dim2) {
 							Y[index] = cmplx(0.f, 0.f);
 						}
 						if( filter ) {
-							Y[index] *= 1.0 / sqr(sinc(M_PI*i/N)*sinc(M_PI*j/N)*sinc(M_PI*k/N));
+							Y[index] *= kfilter( kx * box_size / N);
+							Y[index] *= kfilter( ky * box_size / N);
+							Y[index] *= kfilter( kz * box_size / N);
 						}
 					}
 				}
@@ -498,8 +509,8 @@ void twolpt_generate(int dim1, int dim2) {
 				if( dim2 != NDIM) {
 					sgn *= -1.0;
 				}
+				const float kz = 2.f * (float) M_PI / box_size * float(k);
 				if (i2 > 0 && i2 < N * N / 4) {
-					const float kz = 2.f * (float) M_PI / box_size * float(k);
 					const float k2 = kx * kx + ky * ky + kz * kz;
 					const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
 					const float x = gsl_rng_uniform_pos(rndgen);
@@ -518,7 +529,9 @@ void twolpt_generate(int dim1, int dim2) {
 					Y[index] = cmplx(0.f, 0.f);
 				}
 				if( filter ) {
-					Y[index] *= 1.0 / sqr(sinc(M_PI*i/N)*sinc(M_PI*j/N)*sinc(M_PI*k/N));
+					Y[index] *= kfilter( kx * box_size / N);
+					Y[index] *= kfilter( ky * box_size / N);
+					Y[index] *= kfilter( kz * box_size / N);
 				}
 				gsl_rng_free(rndgen);
 

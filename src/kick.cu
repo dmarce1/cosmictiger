@@ -114,6 +114,11 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 				vy = fmaf(sgn * F.gy, dt, vy);
 				vz = fmaf(sgn * F.gz, dt, vz);
 				flops += 6;
+			} else if( params.top && params.vel_init) {
+				const float v = sqrtf(fmaxf(-F.phi*0.5f, 0.f));
+				vx *= v;
+				vy *= v;
+				vz *= v;
 			}
 		}
 		kin_tot += 0.5f * sqr(vx, vy, vz);

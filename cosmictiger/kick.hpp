@@ -145,6 +145,7 @@ struct kick_params {
 	float h;
 	float eta;
 	float GM;
+	bool vel_init;
 	bool save_force;
 	bool first_call;
 	bool gpu;
@@ -157,6 +158,7 @@ struct kick_params {
 	kick_params() {
 		max_dt = 1e30;
 		do_phi = true;
+		vel_init = false;
 		sign = 1.0;
 	}
 	template<class A>
@@ -179,6 +181,7 @@ struct kick_params {
 		arc & node_load;
 		arc & min_level;
 		arc & do_phi;
+		arc & vel_init;
 	}
 };
 

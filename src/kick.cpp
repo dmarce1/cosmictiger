@@ -451,6 +451,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 						vy = fmaf(sgn * forces.gy[j], dt, vy);
 						vz = fmaf(sgn * forces.gz[j], dt, vz);
 						flops += 9;
+					} else if (params.top && params.vel_init) {
+						const float v = sqrtf(-std::min(forces.phi[j],0.0f) * 0.5f);
+						vx *= v;
+						vy *= v;
+						vz *= v;
 					}
 				}
 				kr.kin += 0.5 * sqr(vx, vy, vz);
@@ -464,14 +469,15 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
 					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
 					kr.max_rung = std::max((int) rung, kr.max_rung);
-					ALWAYS_ASSERT(rung >= 0);ALWAYS_ASSERT(rung < MAX_RUNG);
+					ALWAYS_ASSERT(rung >= 0);
+					ALWAYS_ASSERT(rung < MAX_RUNG);
 					dt = 0.5f * rung_dt[params.min_rung] * params.t0;                                                            // 2
 					vx = fmaf(sgn * forces.gx[j], dt, vx);                              // 3
 					vy = fmaf(sgn * forces.gy[j], dt, vy);                              // 3
 					vz = fmaf(sgn * forces.gz[j], dt, vz);                              // 3
 					flops += 49;
 				}
-				float kin1= 0.5 * sqr(vx, vy, vz);
+				float kin1 = 0.5 * sqr(vx, vy, vz);
 				kr.pot += 0.5 * forces.phi[j];
 				kr.dkin += kin1 - kin0;
 				flops += 570 + params.do_phi * 178;

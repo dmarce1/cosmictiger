@@ -313,12 +313,16 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
 						const float q2 = r2 * h2inv;		// 1
-						r3inv = fmaf(q2, -1.5f, 2.5f) * h3inv;	// 3
+						r3inv = 15.f / 8.0f;
+						r3inv = fmaf( r3inv, q2, -21.0f / 4.f);
+						r3inv = fmaf( r3inv, q2, 35.0f / 8.0f);
+						r3inv *= h3inv;
 						flops -= 2;
 						if (do_phi) {
-							r1inv = float(3.0f / 8.0f);
-							r1inv = fmaf(q2, r1inv, -float(5.f / 4.f)); // 2
-							r1inv = fmaf(q2, r1inv, float(15.0f / 8.0f)); // 2
+							r1inv = float(-5.0f/ 16.0f);
+							r1inv = fmaf(q2, r1inv, float(21.f / 16.f)); // 2
+							r1inv = fmaf(q2, r1inv, float(-35.0f / 16.0f)); // 2
+							r1inv = fmaf(q2, r1inv, float(35.0f / 16.0f)); // 2
 							r1inv *= hinv;                    // 1
 							flops += 5;
 						}
@@ -351,12 +355,16 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
 						const float q2 = r2 * h2inv;		// 1
-						r3inv = fmaf(q2, -1.5f, 2.5f) * h3inv;	// 3
+						r3inv = 15.f / 8.0f;
+						r3inv = fmaf( r3inv, q2, -21.0f / 4.f);
+						r3inv = fmaf( r3inv, q2, 35.0f / 8.0f);
+						r3inv *= h3inv;
 						flops -= 2;
 						if (do_phi) {
-							r1inv = float(3.0f / 8.0f);
-							r1inv = fmaf(q2, r1inv, -float(5.f / 4.f)); // 2
-							r1inv = fmaf(q2, r1inv, float(15.0f / 8.0f)); // 2
+							r1inv = float(-5.0f/ 16.0f);
+							r1inv = fmaf(q2, r1inv, float(21.f / 16.f)); // 2
+							r1inv = fmaf(q2, r1inv, float(-35.0f / 16.0f)); // 2
+							r1inv = fmaf(q2, r1inv, float(35.0f / 16.0f)); // 2
 							r1inv *= hinv;                    // 1
 							flops += 5;
 						}

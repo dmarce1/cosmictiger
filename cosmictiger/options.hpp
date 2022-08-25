@@ -36,6 +36,8 @@ struct options {
 	bool do_views;
 	bool twolpt;
 	bool use_power_file;
+	bool plummer;
+	double plummerR;
 	bool create_glass;
 	int read_check;
 	int tracer_count;
@@ -92,6 +94,8 @@ struct options {
 		arc & create_glass;
 		arc & gadget4_restart;
 		arc & minrung;
+		arc & plummer;
+		arc & plummerR;
 		arc & omega_k;
 		arc & omega_lam;
 		arc & bucket_size;

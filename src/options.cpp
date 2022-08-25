@@ -87,6 +87,8 @@ bool process_options(int argc, char *argv[]) {
 			"read checkpoint from checkpoint.hello and then move checkpoint.hello to checkpoint.goodbye (default = false)")                                      //
 	("use_glass", po::value<bool>(&(opts.use_glass))->default_value(false), "Use glass file for IC") //
 	("create_glass", po::value<bool>(&(opts.create_glass))->default_value(false), "Create glass file") //
+	("plummer", po::value<bool>(&(opts.plummer))->default_value(false), "Do Plummer model") //
+	("plummerR", po::value<double>(&(opts.plummerR))->default_value(1.0e-2), "Plummer radius") //
 	("close_pack", po::value<bool>(&(opts.close_pack))->default_value(false), "Use close packing for grid") //
 #ifdef USE_CUDA
 	("cuda", po::value<bool>(&(opts.cuda))->default_value(true), "use CUDA (default=true)") //
@@ -197,7 +199,7 @@ bool process_options(int argc, char *argv[]) {
 	} else {
 		opts.omega_k = 1.0 - opts.omega_m - opts.omega_r - opts.omega_lam;
 	}
-	opts.link_len = pow( opts.nparts, -1.0/NDIM) * 0.28;
+	opts.link_len = pow(opts.nparts, -1.0 / NDIM) * 0.28;
 	opts.min_group = 20;
 	opts.lc_min_group = 20;
 	if (opts.create_glass) {
@@ -208,10 +210,17 @@ bool process_options(int argc, char *argv[]) {
 	if (opts.parts_dim % 2 == 1) {
 		THROW_ERROR("parts_dim must be an even number\n");
 	}
-	opts.hsoft *= pow( opts.nparts, -1.0/NDIM);
+	opts.hsoft *= pow(opts.nparts, -1.0 / NDIM);
+	if (opts.plummer) {
+		opts.hsoft = pow(8.0*(4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
+	}
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);
 	PRINT("Box size = %e cm/h\n", opts.code_to_cm / constants::mpc_to_cm * opts.hubble);
+	if (opts.plummer) {
+		opts.GM = 1.0 / opts.nparts;
+		opts.theta = 0.4;
+	}
 #ifdef CHECK_MUTUAL_SORT
 	opts.do_groups = true;
 #endif

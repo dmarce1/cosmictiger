@@ -69,6 +69,114 @@ struct timing {
 
 vector<timing> timings;
 
+double nfw_density(double r) {
+	double rmax = 100.0;
+	return 1.0 / r / sqr(1.0 + r) / (4.0 * M_PI * (-1.0 + 1.0 / (1.0 + rmax) + log(1.0 + rmax)));
+}
+
+double sample_density_distribution(const std::function<double(double)>& f) {
+	double target = rand1();
+	double menc = 0.0;
+	double r = 0.0;
+	double dr = 0.001;
+	double I, I0;
+	I = 0.0;
+	while (menc < target) {
+		menc += 0.5 * I * dr;
+		I0 = 0.5 * I;
+		r += dr;
+		I = f(r) * 4.0 * M_PI * sqr(r);
+		I0 += 0.5 * I;
+		menc += 0.5 * I * dr;
+	}
+	double dr2 = (menc - target) / I0;
+	r -= dr2;
+	return r;
+}
+
+void plummer_init(double r0) {
+	const auto nparts = get_options().nparts;
+	particles_resize(nparts);
+	const auto pdf = [](double x) {
+		if( x > 0.0 ) {
+			return sqr(x)*pow(1.0 + sqr(x), -2.5);
+		} else {
+			return pow(1.0 + sqr(1.0/x), -2.5)/sqr(sqr(x));
+		}
+	};
+	double x0 = 0.5;
+	double y0 = 0.5;
+	double z0 = 0.5;
+	for (part_int i = 0; i < nparts; i++) {
+		double r, p;
+//		r = sample_density_distribution(nfw_density);
+		r = sample_density_distribution([](double r) {
+			return (3.0/(4.0*M_PI))*pow(1.0+sqr(r),-2.5);
+		});
+		r *= get_options().plummerR;
+		double nx, ny, nz, n2;
+		do {
+			nx = 2.0 * rand1() - 1.0;
+			ny = 2.0 * rand1() - 1.0;
+			nz = 2.0 * rand1() - 1.0;
+			n2 = sqr(nx, ny, nz);
+		} while (n2 == 0.0 || n2 > 1.0);
+		double ninv = 1.0 / sqrt(n2);
+		nx *= ninv;
+		ny *= ninv;
+		nz *= ninv;
+		double x = x0 + r * nx;
+		double y = y0 + r * ny;
+		double z = z0 + r * nz;
+		//double e = abs();
+		//const auto norm = sqrt(-2.0 * log(rand1())) * cos(2.0 * M_PI * rand1());
+		double v = 1.0;
+		do {
+			nx = 2.0 * rand1() - 1.0;
+			ny = 2.0 * rand1() - 1.0;
+			nz = 2.0 * rand1() - 1.0;
+			n2 = sqr(nx, ny, nz);
+		} while (n2 == 0.0 || n2 > 1.0);
+		ninv = 1.0 / sqrt(n2);
+		nx *= ninv;
+		ny *= ninv;
+		nz *= ninv;
+		double vx = v * nx;
+		double vy = v * ny;
+		double vz = v * nz;
+		particles_pos(XDIM, i) = x;
+		particles_pos(YDIM, i) = y;
+		particles_pos(ZDIM, i) = z;
+		particles_vel(XDIM, i) = vx;
+		particles_vel(YDIM, i) = vy;
+		particles_vel(ZDIM, i) = vz;
+		particles_rung(i) = 0;
+		do {
+			nx = 2.0 * rand1() - 1.0;
+			ny = 2.0 * rand1() - 1.0;
+			nz = 2.0 * rand1() - 1.0;
+			n2 = sqr(nx, ny, nz);
+		} while (n2 == 0.0 || n2 > 1.0);
+		ninv = 1.0 / sqrt(n2);
+		nx *= ninv;
+		ny *= ninv;
+		nz *= ninv;
+		x = x0 + r * nx;
+		y = y0 + r * ny;
+		z = z0 + r * nz;
+		vx = -vx;
+		vy = -vy;
+		vz = -vz;
+		/*	particles_pos(XDIM, i + 1) = x;
+		 particles_pos(YDIM, i + 1) = y;
+		 particles_pos(ZDIM, i + 1) = z;
+		 particles_vel(XDIM, i + 1) = vx;
+		 particles_vel(YDIM, i + 1) = vy;
+		 particles_vel(ZDIM, i + 1) = vz;
+		 particles_rung(i + 1) = 0;*/
+	}
+}
+
 vector<double> read_checkpoint_list() {
 	vector<double> chkpts;
 	FILE* fp = fopen("checkpoint.txt", "rt");
@@ -284,6 +392,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		} else {
 			kparams.descending = !ascending || top;
 		}
+		kparams.vel_init = get_options().plummer;
 		kparams.node_load = flops_per_node / flops_per_particle;
 		kparams.gpu = true;
 		kparams.min_level = tparams.min_level;
@@ -347,6 +456,9 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				*lc_fut = hpx::make_ready_future();
 			}
 			double a = 1.0 / cosmos_ainv(adot, scale, dt);
+			if (get_options().plummer) {
+				a = 1.0;
+			}
 //			PRINT( "%e %e %e\n", a, a0, a1);
 			drift(a, dt, tau, tau + dt, get_options().nsteps * t0, levels[li], drag);
 			tm.stop();
@@ -401,19 +513,20 @@ double do_power_spectrum(int num, double a) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
 	}
 	double kmin = 0.0;
-	for (int Mfactor = 1; Mfactor <= M * M; Mfactor *= M) {
+	for (int Mfactor = 1; Mfactor <= M * M * M; Mfactor *= M) {
 		auto power0 = power_spectrum_compute(Mfactor);
 		double kmax = power0.k.back() * 1.000001;
 		if (Mfactor != M * M * M) {
 			kmax = sqrt(power0.k.front() * kmax * M);
 		}
-		const double c1 =  h * h * h * factor;
+		const double c1 = h * h * h * factor;
 		const double kshot = 2.0 * M_PI * get_options().parts_dim / box_size;
 		for (int i = 0; i < power0.P.size(); i++) {
 			const double k = power0.k[i];
 			if (k >= kmin && k < kmax) {
 				const double shot_noise = power0.k[std::min(i + 1, (int) power0.P.size() - 1)] > kshot ? factor * N3 : 0.0;
-				fprintf(fp, "%e %e %e %e %e\n", k / h, (power0.P[i] - power0.Perr[i]) * c1, power0.P[i] * c1, (power0.P[i] + power0.Perr[i]) * c1, h * h * h *shot_noise);
+				fprintf(fp, "%e %e %e %e %e\n", k / h, (power0.P[i] - power0.Perr[i]) * c1, power0.P[i] * c1, (power0.P[i] + power0.Perr[i]) * c1,
+						h * h * h * shot_noise);
 			}
 		}
 		kmin = kmax;
@@ -500,14 +613,18 @@ void driver() {
 				particles_vel(YDIM, i) = 0.0;
 				particles_vel(ZDIM, i) = 0.0;
 			}
-			params.tau_max = 1.0;
-			params.a = 1.0;
-			params.adot = 0.0;
 		} else {
-			params.a = a0;
-			params.adot = cosmos_dadt(a0);
-			params.tau_max = cosmos_conformal_time(a0, 1.0);
-			initialize(get_options().z0);
+			if (get_options().plummer) {
+				params.tau_max = 1.0e-4;
+				params.a = 1.0;
+				params.adot = 0.0;
+				plummer_init(1e-3);
+			} else {
+				params.a = a0;
+				params.adot = cosmos_dadt(a0);
+				params.tau_max = cosmos_conformal_time(a0, 1.0);
+				initialize(get_options().z0);
+			}
 		}
 		if (get_options().do_tracers) {
 			particles_set_tracers();
@@ -802,7 +919,7 @@ void driver() {
 //			PRINT("Done kicking\n");
 			double adotdot;
 			double a0 = a;
-			if (!get_options().create_glass) {
+			if (!get_options().create_glass && !get_options().plummer) {
 				cosmos_update(adotdot, adot, a, dt);
 			}
 			energies.cosmic += (a - a0) * energies.tckin / (a0 * a0);
