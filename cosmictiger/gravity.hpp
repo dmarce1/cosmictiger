@@ -65,52 +65,92 @@ __device__
 void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, float h, bool);
 #endif
 #endif /* GRAVITY_HPP_ */
-
-#define SELF_PHI float(-105/32.0)
-
-template<class T>
-CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T hinv, T h3inv, bool do_phi) {
-	f = T(135.f / 16.0f);
-	f = fmaf(f, q2, T(-147.0f / 8.f));
-	f = fmaf(f, q2, T(135.0f / 16.0f));
-	f *= h3inv;
-	if (do_phi) {
-		phi = float(-45.0f / 32.0f);
-		phi = fmaf(q2, phi, T(147.f / 32.f)); // 2
-		phi = fmaf(q2, phi, T(-175.0f / 32.0f)); // 2
-		phi = fmaf(q2, phi, T(105.0f / 32.0f)); // 2
-		phi *= hinv;                    // 1
-	}
-}
-
-template<class T>
-CUDA_EXPORT inline void gforce(T& f, T& phi, T q2, T h, T hinv, T h3inv, bool do_phi) {
-	const T q = sqrtf(q2);
-	const T qinv = 1.f / q;
-	if (q > h) {
-		f = sqr(qinv) * qinv;
-		phi = qinv;
-	} else if (q < 0.5f * h) {
-
-	} else {
-
-	}
-}
-
-/*#define SELF_PHI float(-35.0/16.0)
+/*
+ #define SELF_PHI float(-105/32.0)
 
  template<class T>
- CUDA_EXPORT inline void gsoft( T& f, T& phi, T q2, T hinv, T h3inv, bool do_phi) {
- f = T(15.f / 8.0f);
- f = fmaf( f, q2, T(-21.0f / 4.f));
- f = fmaf( f, q2, T(35.0f / 8.0f));
- f *=h3inv;
- if( do_phi ) {
- phi = float(-5.0f/ 16.0f);
- phi = fmaf(q2, phi, T(21.f / 16.f)); // 2
- phi = fmaf(q2, phi, T(-35.0f / 16.0f)); // 2
- phi = fmaf(q2, phi, T(35.0f / 16.0f)); // 2
+ CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T h2, T hinv, T h3inv, bool do_phi) {
+ q2 *= hinv;
+ q2 *= hinv;
+ f = T(135.f / 16.0f);
+ f = fmaf(f, q2, T(-147.0f / 8.f));
+ f = fmaf(f, q2, T(135.0f / 16.0f));
+ f *= h3inv;
+ if (do_phi) {
+ phi = float(-45.0f / 32.0f);
+ phi = fmaf(q2, phi, T(147.f / 32.f)); // 2
+ phi = fmaf(q2, phi, T(-175.0f / 32.0f)); // 2
+ phi = fmaf(q2, phi, T(105.0f / 32.0f)); // 2
  phi *= hinv;                    // 1
  }
  }
+ #define SELF_PHI float(-14.0/5.0)
+
+ template<class T>
+ CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T h2, T hinv, T h3inv, bool do_phi) {
+ q2 *= hinv;
+ q2 *= hinv;
+ T q = sqrt(q2);
+ T f1, f2;
+ T phi1, phi2;
+ const T w1 = (q2 < T(0.25f) * h2);
+ const T w2 = T(1) - w1;
+ const T qinv = T(1.f) / (q + w1);
+ const T q3inv = sqr(qinv) * qinv;
+ f = T(-32.0f / 3.0f);
+ f = fmaf(f, q, T(192.0f / 5.0f));
+ f = fmaf(f, q, T(-48.0f));
+ f = fmaf(f, q, T(64.0f / 3.0f));
+ f -= T(1.0f / 15.0f) * q3inv;
+ f *= h3inv;
+ if (do_phi) {
+ phi = T(32.0f / 15.0f);
+ phi = fmaf(phi, q, T(-48.0f / 5.0f));
+ phi = fmaf(phi, q, T(16.0f));
+ phi = fmaf(phi, q, T(-32.0f / 3.0f));
+ phi *= q;
+ phi = fmaf(phi, q, T(16.0f / 5.0f));
+ phi -= T(1.0f / 15.0f) * qinv;
+ phi *= hinv;
+ }
+ phi2 = phi;
+ f2 = f;
+ f = T(32.0f);
+ f = fmaf(f, q, T(-192.0f / 5.0f));
+ f *= q;
+ f = fmaf(f, q, T(32.0f / 3.0f));
+ f *= h3inv;
+ if (do_phi) {
+ phi = T(-32.0f / 5.0f);
+ phi = fmaf(phi, q, T(48.0f / 5.0f));
+ phi *= q;
+ phi = fmaf(phi, q, T(-16.0f / 3.0f));
+ phi *= q;
+ phi = fmaf(phi, q, T(14.0f / 5.0f));
+ phi *= hinv;
+ }
+ phi1 = phi;
+ f1 = f;
+ f = w1 * f1 + w2 * f2;
+ phi = w1 * phi1 + w2 * phi2;
+ }
  */
+
+#define SELF_PHI float(-35.0/16.0)
+
+template<class T>
+CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T h2, T hinv, T h3inv, bool do_phi) {
+	q2 *= sqr(hinv);
+	f = T(15.f / 8.0f);
+	f = fmaf(f, q2, T(-21.0f / 4.f));
+	f = fmaf(f, q2, T(35.0f / 8.0f));
+	f *= h3inv;
+	if (do_phi) {
+		phi = float(-5.0f / 16.0f);
+		phi = fmaf(q2, phi, T(21.f / 16.f)); // 2
+		phi = fmaf(q2, phi, T(-35.0f / 16.0f)); // 2
+		phi = fmaf(q2, phi, T(35.0f / 16.0f)); // 2
+		phi *= hinv; // 1
+	}
+}
+

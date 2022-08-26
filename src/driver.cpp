@@ -130,7 +130,7 @@ void plummer_init(double r0) {
 		double z = z0 + r * nz;
 		//double e = abs();
 		//	double v = sqrt(-2.0 * log(rand1())) * abs(cos(2.0 * M_PI * rand1()));
-		double v = sqrt(get_options().GM * nparts * 0.5 / sqrt(sqr(get_options().plummerR) + sqr(r)) / 2);
+		double v = sqrt(get_options().GM * nparts / sqrt(sqr(get_options().plummerR) + sqr(r)) / 2);
 		double v0 = sqrt(get_options().GM * nparts * 0.25);
 		do {
 			nx = 2.0 * rand1() - 1.0;
@@ -153,8 +153,8 @@ void plummer_init(double r0) {
 		particles_vel(ZDIM, i) = vz;
 		particles_rung(i) = 0;
 		if (i % 2 == 0) {
-			particles_pos(XDIM, i) += 0.05;
-			particles_vel(XDIM, i) -= 100.0 * v0;
+	//		particles_pos(XDIM, i) += 0.05;
+	//		particles_vel(XDIM, i) -= 100.0 * v0;
 		}
 
 		/*	particles_pos(XDIM, i + 1) = x;

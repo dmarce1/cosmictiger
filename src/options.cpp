@@ -27,6 +27,8 @@ constexpr bool verbose = true;
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/view.hpp>
 
+#include <cosmictiger/gravity.hpp>
+
 #ifdef HPX_LITE
 #include <boost/program_options.hpp>
 #endif
@@ -119,8 +121,8 @@ bool process_options(int argc, char *argv[]) {
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
 	("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift") //
 	("theta", po::value<double>(&(opts.theta))->default_value(0.8), "opening angle for test problems") //
-	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 25.0), "dark matter softening in units of interparticle spacing") //
-	("eta", po::value<double>(&(opts.eta))->default_value(sqrt(2) / 10.0), "time-step criterion (default=0.141)") //
+	("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 80.0), "dark matter softening in units of interparticle spacing") //
+	("eta", po::value<double>(&(opts.eta))->default_value(0.25), "time-step criterion (default=0.141)") //
 	("test", po::value < std::string > (&(opts.test))->default_value(""), "name of test to run") //
 	("omega_k", po::value<double>(&(opts.omega_k))->default_value(0.0), "") //
 	("omega_lam", po::value<double>(&(opts.omega_lam))->default_value(-1.0), "") //
@@ -160,6 +162,8 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
+	opts.hsoft *= -SELF_PHI;
+	opts.eta /= sqrt(-SELF_PHI);
 	opts.nparts = sqr(opts.parts_dim) * opts.parts_dim;
 	opts.Nfour = opts.parts_dim;
 	if (opts.close_pack) {
@@ -212,7 +216,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 	opts.hsoft *= pow(opts.nparts, -1.0 / NDIM);
 	if (opts.plummer) {
-		opts.hsoft = pow(8.0*(4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
+		opts.hsoft = pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
 	}
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);

@@ -31,14 +31,15 @@
 #include <cosmictiger/fp16.hpp>
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/gravity.hpp>
 #include <cmath>
 
 int hpx_main(int argc, char *argv[]) {
 
-/*	simd_double8 x;
-	for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
-		PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
-	}*/
+	/*	simd_double8 x;
+	 for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
+	 PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
+	 }*/
 
 	expansion<simd_float> D;
 	array<simd_float, NDIM> X;
@@ -48,6 +49,13 @@ int hpx_main(int argc, char *argv[]) {
 	for (double q = 0.0; q < 1.0; q += 0.01) {
 //		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
 	}
+	FILE* fp = fopen("soft.txt", "wt");
+	for (double r = 0.0; r < 1.0; r += 0.01) {
+		double f, phi;
+		gsoft(f, phi,r*r, 1.0, 1.0, 1.0, true);
+		fprintf(fp, "%e %e %e\n", r, phi, f);
+	}
+	fclose(fp);
 	if (!i.is_lock_free()) {
 		PRINT("std::atomic<int> is not lock free!\n");
 		PRINT("std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
@@ -63,7 +71,7 @@ int hpx_main(int argc, char *argv[]) {
 	start_memuse_daemon();
 	if (process_options(argc, argv)) {
 		ewald_const::init();
-		FILE* fp = fopen( "ewald.txt", "wt");
+		FILE* fp = fopen("ewald.txt", "wt");
 		X[0] = X[1] = X[2] = 0.00;
 		for (double x = 0.00; x < 0.5; x += 0.001) {
 			X[0] = x;
@@ -80,7 +88,7 @@ int hpx_main(int argc, char *argv[]) {
 					}
 				}
 			}
-			fprintf(fp,  "\n");
+			fprintf(fp, "\n");
 		}
 		fclose(fp);
 		if (get_options().test != "") {

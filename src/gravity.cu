@@ -312,7 +312,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						r1inv = rsqrt(r2);					// 4
 						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
-						gsoft(r3inv, r1inv, r2, hinv, h3inv, do_phi);
+						gsoft(r3inv, r1inv, r2, h2, hinv, h3inv, do_phi);
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2
@@ -341,7 +341,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						r1inv = rsqrt(r2);					// 4
 						r3inv = sqr(r1inv) * r1inv;		// 2
 					} else {
-						gsoft(r3inv, r1inv, r2, hinv, h3inv, do_phi);
+						gsoft(r3inv, r1inv, r2, h2, hinv, h3inv, do_phi);
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2

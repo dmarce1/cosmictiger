@@ -203,7 +203,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 			const float q2 = R2 * h2inv;
 			float rinv3;
 			float rinv1;
-			gsoft( rinv3, rinv1, q2, hinv, h3inv, true);
+			gsoft( rinv3, rinv1, q2, h2, hinv, h3inv, true);
 			fx -= X * rinv3;
 			fy -= Y * rinv3;
 			fz -= Z * rinv3;
