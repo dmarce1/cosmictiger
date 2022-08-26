@@ -1,22 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
-
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #ifndef FFT_HPP_
 #define FFT_HPP_
@@ -38,7 +37,6 @@ range<int64_t> fft3d_complex_range();
 range<int64_t> fft3d_real_range();
 vector<cmplx>& fft3d_complex_vector();
 
-
 struct power_spectrum_t {
 	vector<float> P;
 	vector<float> k;
@@ -47,5 +45,45 @@ struct power_spectrum_t {
 
 power_spectrum_t fft3d_power_spectrum();
 void fft3d2silo(bool real);
+
+inline CUDA_EXPORT float cloud_weight(float x) {
+	x = fabs(x);
+	if (x > 2.0f) {
+		return 0.0f;
+	} else if (x < 1.0f) {
+		return (4.0f - 6.0f * sqr(x) + 3.0f * x * sqr(x)) / 6.0f;
+	} else {
+		return (8.0f - 12.0 * x + 6.0f * sqr(x) - x * sqr(x)) / 6.0f;
+	}
+}
+
+inline double cloud_filter(double kh) {
+	const double s = sinc(0.5 * kh);
+	return 1.0 / (sqr(sqr(s)));
+}
+#define CLOUD_MIN -1
+#define CLOUD_MAX 2
+
+/*
+ inline CUDA_EXPORT float cloud_weight(float  x) {
+ if (x < -1.0f || x > 2.0f) {
+ return 0.0f;
+ } else if (x < 0.0f) {
+ return 0.5f * sqr(1.0f + x);
+ } else if (x < 1.0f) {
+ return 0.5f + x - sqr(x);
+ } else {
+ return 0.5f * sqr(x - 2.0f);
+ }
+ }
+
+ inline double cloud_filter(double kh) {
+ const double s = sinc(0.5 * kh);
+ return 1.0 / (sqr(s) * s);
+ }
+ #define CLOUD_MIN -1
+ #define CLOUD_MAX 1
+
+ */
 
 #endif /* FFT_HPP_ */

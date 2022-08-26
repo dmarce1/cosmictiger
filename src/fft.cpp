@@ -254,18 +254,18 @@ static pspecret power_spectrum_compute(const vector<float>& kbins) {
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs.push_back(hpx::async([N,nbins,&kbins,box]( array<int64_t, NDIM> I) {
 			const int64_t i = I[0] < N / 2 ? I[0] : I[0] - N;
-			const double sx = sinc(M_PI * i / N);
+			const double sx = cloud_filter(2.0 * M_PI * i / N);
 			pspecret ret;
 			vector<float> power(nbins, 0.0);
 			vector<double> count(nbins, 0);
 			vector<float> ktot(nbins, 0.0);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
-				const double sy = sinc(M_PI * j / N);
+				const double sy = cloud_filter(2.0 * M_PI * j / N);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 					const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
-					const double sz = sinc(M_PI * k / N);
-					const double c0 = pow(1.0 / (sx * sy * sz), 3);
+					const double sz = cloud_filter(2.0 * M_PI * k / N);
+					const double c0 = sx * sy * sz;
 					Y[box.index(I)] *= c0;
 					const double iii = std::sqrt(i * i + j * j + k * k);
 					if( iii > 0 ) {

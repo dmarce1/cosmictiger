@@ -61,12 +61,12 @@ static void compute_density_folded(int M) {
 		for (int k = 0; k < Np; k++) {
 			for (int l = 0; l < Np; l++) {
 				range<int64_t> intbox;
-				intbox.begin[XDIM] = j * Nper - 1;
-				intbox.begin[YDIM] = k * Nper - 1;
-				intbox.begin[ZDIM] = l * Nper - 1;
-				intbox.end[XDIM] = (j + 1) * Nper + 1;
-				intbox.end[YDIM] = (k + 1) * Nper + 1;
-				intbox.end[ZDIM] = (l + 1) * Nper + 1;
+				intbox.begin[XDIM] = j * Nper + CLOUD_MIN;
+				intbox.begin[YDIM] = k * Nper + CLOUD_MIN;
+				intbox.begin[ZDIM] = l * Nper + CLOUD_MIN;
+				intbox.end[XDIM] = (j + 1) * Nper + CLOUD_MAX;
+				intbox.end[YDIM] = (k + 1) * Nper + CLOUD_MAX;
+				intbox.end[ZDIM] = (l + 1) * Nper + CLOUD_MAX;
 				auto rho = accumulate_density_cuda(M,Ndim, intbox);
 				fft3d_accumulate_real(intbox, rho);
 			}

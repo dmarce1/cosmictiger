@@ -430,14 +430,6 @@ void twolpt_correction2(int dim) {
 	}
 }
 
-float kfilter(float k) {
-	if (k < 0.005) {
-		return 1.0 / (-0.10663951 * k * k + 1.0);
-	} else {
-		return pow(k, 4) / (48 * pow(sin(k / 2.), 4) + 4 * k * (-1 + cos(k)) * sin(k));
-	}
-}
-
 void twolpt_generate(int dim1, int dim2) {
 	const int64_t N = get_options().Nfour;
 	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
@@ -450,7 +442,7 @@ void twolpt_generate(int dim1, int dim2) {
 	constexpr int rand_init_iters = 8;
 	vector<hpx::future<void>> futs2;
 //	const auto filter = get_options().use_glass || get_options().close_pack;
-	const bool filter = false;
+	const bool filter = true;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor,filter](array<int64_t,NDIM> I) {
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
@@ -483,9 +475,9 @@ void twolpt_generate(int dim1, int dim2) {
 							Y[index] = cmplx(0.f, 0.f);
 						}
 						if( filter ) {
-							Y[index] *= kfilter( kx * box_size / N);
-							Y[index] *= kfilter( ky * box_size / N);
-							Y[index] *= kfilter( kz * box_size / N);
+							Y[index] *= cloud_filter( kx * box_size / N);
+							Y[index] *= cloud_filter( ky * box_size / N);
+							Y[index] *= cloud_filter( kz * box_size / N);
 						}
 					}
 				}
@@ -529,9 +521,9 @@ void twolpt_generate(int dim1, int dim2) {
 					Y[index] = cmplx(0.f, 0.f);
 				}
 				if( filter ) {
-					Y[index] *= kfilter( kx * box_size / N);
-					Y[index] *= kfilter( ky * box_size / N);
-					Y[index] *= kfilter( kz * box_size / N);
+					Y[index] *= cloud_filter( kx * box_size / N);
+					Y[index] *= cloud_filter( ky * box_size / N);
+					Y[index] *= cloud_filter( kz * box_size / N);
 				}
 				gsl_rng_free(rndgen);
 
@@ -680,7 +672,7 @@ static void init_X0() {
 					} else {
 						for (int dim1 = 0; dim1 < NDIM; dim1++) {
 							double x = I[dim1] * Ninv;
-							X0[dim1][index] = x;
+							X0[dim1][index] = x;// + dim1 * 0.123;
 						}
 						index++;
 					}
@@ -807,8 +799,8 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	auto box = find_my_box();
 	const bool glass = get_options().use_glass;
 	for (int dim = 0; dim < NDIM; dim++) {
-		box.end[dim] += 2;
-		box.begin[dim]--;
+		box.end[dim] += CLOUD_MAX;
+		box.begin[dim] += CLOUD_MIN;
 	}
 	vector<hpx::future<float>> futs;
 	for (auto c : hpx_children()) {
@@ -834,25 +826,14 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 				const int k1 = z0 * N;
 				double t[NDIM] = {x0*N - i1, y0*N - j1, z0*N-k1};
 				double dx = 0.0;
-				const auto weight = [](int i, double x) {
-					if( i == 0 ) {
-						return (-0.5 + x - 0.5*sqr(x))*x;
-					} else if( i == 1 ) {
-						return 1.0 +(-2.5 + 1.5*x)*sqr(x);
-					} else if( i == 2 ) {
-						return (0.5 + 2.0 * x - 1.5*sqr(x))*x;
-					} else {
-						return (-0.5 + 0.5 * x) * sqr(x);
-					}
-				};
-				for( int j = 0; j < 4; j++) {
-					double wtx = weight(j,t[XDIM]);
-					for( int k = 0; k < 4; k++) {
-						double wty = weight(k,t[YDIM]);
-						for( int l = 0; l < 4; l++) {
-							double wtz = weight(l,t[ZDIM]);
+				for( int j = CLOUD_MIN; j <= CLOUD_MAX; j++) {
+					double wtx = cloud_weight(-j+t[XDIM]);
+					for( int k = CLOUD_MIN; k <= CLOUD_MAX; k++) {
+						double wty = cloud_weight(-k+t[YDIM]);
+						for( int l = CLOUD_MIN; l <= CLOUD_MAX; l++) {
+							double wtz = cloud_weight(-l+t[ZDIM]);
 							double wt = wtx * wty * wtz;
-							dx += Y[box.index(i1+j-1,j1+k-1,k1+l-1)] * wt;
+							dx += Y[box.index(i1+j,j1+k,k1+l)] * wt;
 						}
 					}
 				}
