@@ -672,7 +672,7 @@ static void init_X0() {
 					} else {
 						for (int dim1 = 0; dim1 < NDIM; dim1++) {
 							double x = I[dim1] * Ninv;
-							X0[dim1][index] = x;// + dim1 * 0.123;
+							X0[dim1][index] = x + 0.0 * Ninv;
 						}
 						index++;
 					}

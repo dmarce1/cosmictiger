@@ -45,24 +45,42 @@ struct power_spectrum_t {
 
 power_spectrum_t fft3d_power_spectrum();
 void fft3d2silo(bool real);
+/*
+ inline CUDA_EXPORT float cloud_weight(float x) {
+ x = fabs(x);
+ if (x > 2.0f) {
+ return 0.0f;
+ } else if (x < 1.0f) {
+ return (4.0f - 6.0f * sqr(x) + 3.0f * x * sqr(x)) / 6.0f;
+ } else {
+ return (8.0f - 12.0 * x + 6.0f * sqr(x) - x * sqr(x)) / 6.0f;
+ }
+ }
+ */
 
 inline CUDA_EXPORT float cloud_weight(float x) {
 	x = fabs(x);
-	if (x > 2.0f) {
+	const float x2 = sqr(x);
+	const float x3 = x * x2;
+	const float x4 = x2 * x2;
+	const float x5 = x3 * x2;
+	if (x > 3.0f) {
 		return 0.0f;
 	} else if (x < 1.0f) {
-		return (4.0f - 6.0f * sqr(x) + 3.0f * x * sqr(x)) / 6.0f;
+		return (33.0f - 30.0 * x2 + 15.0f * x4 - 5.0f * x5) / 60.0f;
+	} else if (x < 2.0f) {
+		return (51.0 + 75.0 * x - 210 * x2 + 150 * x3 - 45 * x4 + 5 * x5) / 120.0;
 	} else {
-		return (8.0f - 12.0 * x + 6.0f * sqr(x) - x * sqr(x)) / 6.0f;
+		return (243.0 - 405.0 * x + 270 * x2 - 90 * x3 + 15 * x4 - x5) / 120.0;
 	}
 }
 
 inline double cloud_filter(double kh) {
 	const double s = sinc(0.5 * kh);
-	return 1.0 / (sqr(sqr(s)));
+	return 1.0 / (sqr(s * sqr(s)));
 }
-#define CLOUD_MIN -1
-#define CLOUD_MAX 2
+#define CLOUD_MIN -2
+#define CLOUD_MAX 3
 
 /*
  inline CUDA_EXPORT float cloud_weight(float  x) {
