@@ -412,6 +412,9 @@ void twolpt_correction2(int dim) {
 						float k2 = kx * kx + ky * ky + kz * kz;
 						const float K[NDIM] = {kx, ky, kz};
 						Y[index] = -cmplx(0, 1) * K[dim] * Y[index] / k2;
+						Y[index] *= cloud_filter( kx * box_size / N);
+						Y[index] *= cloud_filter( ky * box_size / N);
+						Y[index] *= cloud_filter( kz * box_size / N);
 					} else {
 						Y[index] = cmplx(0, 0);
 					}
@@ -442,7 +445,7 @@ void twolpt_generate(int dim1, int dim2) {
 	constexpr int rand_init_iters = 8;
 	vector<hpx::future<void>> futs2;
 //	const auto filter = get_options().use_glass || get_options().close_pack;
-	const bool filter = true;
+	const bool filter = (dim1 != NDIM || dim2 != NDIM);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
 		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor,filter](array<int64_t,NDIM> I) {
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
