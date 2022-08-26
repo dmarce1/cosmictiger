@@ -57,7 +57,38 @@ void fft3d2silo(bool real);
  }
  }
  */
+/*
+ inline CUDA_EXPORT float cloud_weight(float x) {
+ x = fabs(x);
+ const float x2 = sqr(x);
+ const float x3 = x * x2;
+ const float x4 = x2 * x2;
+ const float x5 = x3 * x2;
+ const float x6 = x3 * x3;
+ const float x7 = x3 * x4;
+ if (x > 4.0f) {
+ return 0.0f;
+ } else if (x < 1.0f) {
+ return 151.0 / 315.0 - x2 / 3.0 + x4 / 9.0 - x6 / 36.0 + x7 / 144.0;
+ } else if (x < 2.0f) {
+ return 103 / 210. - 7 / 90. * x - x2 / 10. - 7. / 18. * x3 + x4 / 2.0 - 7.0 * x5 / 30.0 + x6 / 20.0 - x7 / 240.0;
+ } else if (x < 3.0f) {
+ return -139.0 / 630.0 + 217.0 / 90.0 * x - 23.0 * x2 / 6.0 + 49 * x3 / 18.00 - 19 * x4 / 18 + 7 * x5 / 30 - x6 / 36 + x7 / 720.0;
+ } else {
+ return 1024 / 315.0 - 256.0 * x / 45.0 + 64.0 * x2 / 15.0 - 16. * x3 / 9.0 + 4.0 * x4 / 9.0 - x5 / 15.0 + x6 / 180 - x7 / 5040.0;
+ }
+ }
 
+ inline double cloud_filter(double kh) {
+ const double s = sinc(0.5 * kh);
+ return 1.0 / sqr(sqr(sqr(s)));
+ }
+ #define CLOUD_MIN -3
+ #define CLOUD_MAX 4
+ */
+
+#define CLOUD_MIN -2
+#define CLOUD_MAX 3
 inline CUDA_EXPORT float cloud_weight(float x) {
 	x = fabs(x);
 	const float x2 = sqr(x);

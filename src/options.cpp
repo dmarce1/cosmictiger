@@ -162,8 +162,8 @@ bool process_options(int argc, char *argv[]) {
 	if (rc) {
 		po::notify(vm);
 	}
-	opts.hsoft *= -SELF_PHI;
-	opts.eta /= sqrt(-SELF_PHI);
+	opts.hsoft *= self_phi();
+	opts.eta /= sqrt(self_phi());
 	opts.nparts = sqr(opts.parts_dim) * opts.parts_dim;
 	opts.Nfour = opts.parts_dim;
 	if (opts.close_pack) {
@@ -216,7 +216,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 	opts.hsoft *= pow(opts.nparts, -1.0 / NDIM);
 	if (opts.plummer) {
-		opts.hsoft = pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
+		opts.hsoft = self_phi()*pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
 	}
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);

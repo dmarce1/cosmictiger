@@ -42,6 +42,8 @@
 #include <cosmictiger/profiler.hpp>
 #include <cosmictiger/flops.hpp>
 
+#include <cosmictiger/fft.hpp>
+
 #include <sys/types.h>
 #include <dirent.h>
 
@@ -93,7 +95,96 @@ double sample_density_distribution(const std::function<double(double)>& f) {
 	r -= dr2;
 	return r;
 }
+/*
+ void distribution_init(const std::function<float(float, float, float)>& pdf) {
+ const int N = get_options().Nfour;
+ range<int64_t> box;
+ for (int dim = 0; dim < NDIM; dim++) {
+ box.begin[dim] = 0;
+ box.end[dim] = N;
+ }
+ size_t sz = box.volume();
+ vector<float> rho_x(sz);
+ array<int64_t, NDIM> I;
+ array<float, NDIM> x;
+ for (I[0] = 0; I[0] < N; I[0]++) {
+ for (I[1] = 0; I[1] < N; I[1]++) {
+ for (I[2] = 0; I[2] < N; I[2]++) {
+ for (int dim = 0; dim < NDIM; dim++) {
+ x[dim] = (float) I[dim] / N;
+ }
+ rho_x[box.index(I)] = pdf(x[XDIM], x[YDIM], x[ZDIM]);
+ }
+ }
+ }
+ float rho0 = 0.0;
+ for (I[0] = 0; I[0] < N; I[0]++) {
+ for (I[1] = 0; I[1] < N; I[1]++) {
+ for (I[2] = 0; I[2] < N; I[2]++) {
+ rho0 += rho_x[box.index(I)] / sz;
+ }
+ }
+ }
+ for (I[0] = 0; I[0] < N; I[0]++) {
+ for (I[1] = 0; I[1] < N; I[1]++) {
+ for (I[2] = 0; I[2] < N; I[2]++) {
+ rho_x[box.index(I)] = (rho_x[box.index(I)] - rho0) / rho0;
+ }
+ }
+ }
+ fft3d_init(N);
+ fft3d_accumulate_real(box, rho_x);
+ fft3d_execute();
+ array<float, NDIM> k;
+ const auto fbox = fft3d_complex_range();
+ auto rho_k = fft3d_read_complex(fbox);
+ particles_resize(N * N * N);
+ for (int i = 0; i < particles_size(); i++) {
+ particles_rung(i) = 0;
+ }
+ for (int dim1 = 0; dim1 < NDIM; dim1++) {
+ auto dphi_dx_k = rho_k;
+ for (I[0] = fbox.begin[XDIM]; I[0] < fbox.end[XDIM]; I[0]++) {
+ for (I[1] = fbox.begin[YDIM]; I[1] < fbox.end[YDIM]; I[1]++) {
+ for (I[2] = fbox.begin[ZDIM]; I[2] < fbox.end[ZDIM]; I[2]++) {
+ float k2 = 0.0f;
+ for (int dim2 = 0; dim2 < NDIM; dim2++) {
+ k[dim2] = 2.0 * M_PI * (I[dim2] < N / 2 ? I[dim2] : I[dim2] - N) / N;
+ k2 += sqr(k[dim2]);
+ }
+ const auto iii = fbox.index(I);
+ if (k2 > 0.0) {
+ dphi_dx_k[iii] = dphi_dx_k[iii] * cmplx(0.0, 1.0) * (k[dim1] / k2);
+ } else {
+ dphi_dx_k[iii] = 0.0f;
+ }
+ }
+ }
+ }
+ fft3d_destroy();
 
+ fft3d_init(N);
+ fft3d_accumulate_complex(fbox, dphi_dx_k);
+ fft3d_inv_execute();
+
+ auto dphi_dx_x = fft3d_read_real(box);
+ for (I[0] = box.begin[XDIM]; I[0] < box.end[XDIM]; I[0]++) {
+ for (I[1] = box.begin[YDIM]; I[1] < box.end[YDIM]; I[1]++) {
+ for (I[2] = box.begin[ZDIM]; I[2] < box.end[ZDIM]; I[2]++) {
+ const int iii = box.index(I);
+ const float dx = dphi_dx_x[iii];
+ particles_pos(dim1, iii) = ((float) I[dim1] / N + dx / N);
+ particles_vel(dim1, iii) = 0.0;
+
+ }
+ }
+ }
+
+ }
+ fft3d_destroy();
+
+ }
+ */
 void plummer_init(double r0) {
 	const auto nparts = get_options().nparts;
 	particles_resize(nparts);
@@ -104,10 +195,20 @@ void plummer_init(double r0) {
 			return pow(1.0 + sqr(1.0/x), -2.5)/sqr(sqr(x));
 		}
 	};
+
+	/*	distribution_init([](float x, float y, float z) {
+	 float r = sqrt(sqr(x - 0.51, y - 0.51, z - 0.51));
+	 r *= 4.0;
+	 return 1.0 / r / sqr(1+r);
+	 return 1000*pow(1.0+sqr(r),-2.5);
+	 });
+	 return;*/
+
 	double x0 = 0.5;
 	double y0 = 0.5;
 	double z0 = 0.5;
-	for (part_int i = 0; i < nparts; i++) {
+
+	for (part_int i = 0; i < nparts; i += 2) {
 		double r, p;
 //		r = sample_density_distribution(nfw_density);
 		r = sample_density_distribution([](double r) {
@@ -130,7 +231,7 @@ void plummer_init(double r0) {
 		double z = z0 + r * nz;
 		//double e = abs();
 		//	double v = sqrt(-2.0 * log(rand1())) * abs(cos(2.0 * M_PI * rand1()));
-		double v = sqrt(get_options().GM * nparts / sqrt(sqr(get_options().plummerR) + sqr(r)) / 2);
+		double v = sqrt(get_options().GM * nparts * 0.5 / sqrt(sqr(get_options().plummerR) + sqr(r)) / 2);
 		double v0 = sqrt(get_options().GM * nparts * 0.25);
 		do {
 			nx = 2.0 * rand1() - 1.0;
@@ -151,19 +252,26 @@ void plummer_init(double r0) {
 		particles_vel(XDIM, i) = vx;
 		particles_vel(YDIM, i) = vy;
 		particles_vel(ZDIM, i) = vz;
+		particles_pos(XDIM, i + 1) = 2.0 * x0 - x;
+		particles_pos(YDIM, i + 1) = 2.0 * y0 - y;
+		particles_pos(ZDIM, i + 1) = 2.0 * z0 - z;
+		particles_vel(XDIM, i + 1) = -vx;
+		particles_vel(YDIM, i + 1) = -vy;
+		particles_vel(ZDIM, i + 1) = -vz;
+		particles_rung(i + 1) = 0;
 		particles_rung(i) = 0;
-		if (i % 2 == 0) {
-	//		particles_pos(XDIM, i) += 0.05;
-	//		particles_vel(XDIM, i) -= 100.0 * v0;
+		if (i % 4 == 0) {
+			particles_pos(XDIM, i) += 0.025;
+			particles_vel(XDIM, i) -= 50.0 * v0;
+			particles_pos(XDIM, i + 1) += 0.025;
+			particles_vel(XDIM, i + 1) -= 50.0 * v0;
+		} else {
+			particles_pos(XDIM, i) -= 0.025;
+			particles_vel(XDIM, i) += 50.0 * v0;
+			particles_pos(XDIM, i + 1) -= 0.025;
+			particles_vel(XDIM, i + 1) += 50.0 * v0;
 		}
 
-		/*	particles_pos(XDIM, i + 1) = x;
-		 particles_pos(YDIM, i + 1) = y;
-		 particles_pos(ZDIM, i + 1) = z;
-		 particles_vel(XDIM, i + 1) = vx;
-		 particles_vel(YDIM, i + 1) = vy;
-		 particles_vel(ZDIM, i + 1) = vz;
-		 particles_rung(i + 1) = 0;*/
 	}
 }
 
@@ -506,15 +614,15 @@ double do_power_spectrum(int num, double a) {
 	for (int Mfactor = 1; Mfactor <= M * M * M; Mfactor *= M) {
 		auto power0 = power_spectrum_compute(Mfactor);
 		double kmax = power0.k.back() * 1.000001;
-		if (Mfactor != M * M * M) {
-			kmax = sqrt(power0.k.front() * kmax * M);
-		}
+		//	if (Mfactor != M * M * M) {
+		//		kmax = sqrt(power0.k.front() * kmax * M);
+		//	}
 		const double c1 = h * h * h * factor;
 		const double kshot = 2.0 * M_PI * get_options().parts_dim / box_size;
 		for (int i = 0; i < power0.P.size(); i++) {
 			const double k = power0.k[i];
-			if (k >= kmin && k < kmax) {
-				const double shot_noise = power0.k[std::min(i + 1, (int) power0.P.size() - 1)] > kshot ? factor * N3 : 0.0;
+			if (k >= kmin && k <= kmax) {
+				const double shot_noise = power0.k[std::min(i + 1, (int) power0.P.size() - 1)] > kshot ? 1.0 * factor * N3 : 0.0;
 				fprintf(fp, "%e %e %e %e %e\n", k / h, (power0.P[i] - power0.Perr[i]) * c1, power0.P[i] * c1, (power0.P[i] + power0.Perr[i]) * c1,
 						h * h * h * shot_noise);
 			}
@@ -602,7 +710,11 @@ void driver() {
 				particles_vel(XDIM, i) = 0.0;
 				particles_vel(YDIM, i) = 0.0;
 				particles_vel(ZDIM, i) = 0.0;
+				particles_rung(0) = 0;
 			}
+			params.tau_max = 1.0;
+			params.a = 1.0;
+			params.adot = 0.0;
 		} else {
 			if (get_options().plummer) {
 				params.tau_max = 1.0e-4;
@@ -793,6 +905,9 @@ void driver() {
 				if (get_options().do_slice) {
 					output_slice(number, years);
 				}
+				if (full_eval) {
+					view_output_views((tau + 1e-6 * t0) / t0, a);
+				}
 				if (get_options().do_views) {
 					timer tm;
 					tm.start();
@@ -902,9 +1017,6 @@ void driver() {
 				energies0.pot *= a;
 			}
 			dt = t0 / (1 << max_rung);
-			if (full_eval) {
-				view_output_views((tau + 1e-6 * t0) / t0, a);
-			}
 			tree_create_return sr = tmp.second;
 //			PRINT("Done kicking\n");
 			double adotdot;

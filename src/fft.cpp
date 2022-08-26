@@ -173,7 +173,7 @@ power_spectrum_t fft3d_power_spectrum() {
 	vector<float> kbins;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const int Nfour = get_options().Nfour;
-	const double Ns = Nfour / 8.0;
+	const double Ns = std::max(Nfour / 8.0, 64.0);
 	const double kmin = 0.999999;
 	const double kmax = Nfour / 2.0;
 	const double logkmin = log(kmin);

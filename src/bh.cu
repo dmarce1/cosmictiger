@@ -183,7 +183,7 @@ __global__ void bh_tree_evaluate_kernel(const bh_tree_node* tree_nodes, const in
 			}
 			shared_reduce_add(this_phi);
 			if( tid == 0 ) {
-				this_phi -= SELF_PHI * hinv;
+				this_phi += self_phi() * hinv;
 				phi[i + self.parts.first] = GM * this_phi;
 			}
 		}

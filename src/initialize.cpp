@@ -35,6 +35,8 @@
 #define RECFAST_Z1 0
 #define RECFAST_DZ 10
 
+static std::function<double(double)> glass_spectrum = [](double) {return 0.0;};
+
 std::function<double(double)> run_recfast(cosmic_params params) {
 	std::function<double(double)> func;
 	std::string filename = "recfast.in." + std::to_string(hpx_rank());
@@ -407,7 +409,7 @@ void twolpt_correction2(int dim) {
 					const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 					const int i2 = sqr(i, j, k);
 					const int64_t index = box.index(I);
-					if (i2 > 0 && i2 < N * N / 4) {
+					if (i2 > 0) {
 						float kz = 2.f * (float) M_PI / box_size * float(k);
 						float k2 = kx * kx + ky * ky + kz * kz;
 						const float K[NDIM] = {kx, ky, kz};
@@ -465,7 +467,7 @@ void twolpt_generate(int dim1, int dim2) {
 						const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
 						const int i2 = sqr(i, j, k);
 						const float kz = 2.f * (float) M_PI / box_size * float(k);
-						if (i2 > 0 && i2 < N * N / 4) {
+						if (i2 > 0) {
 							const float kz = 2.f * (float) M_PI / box_size * float(k);
 							const float k2 = kx * kx + ky * ky + kz * kz;
 							const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
@@ -473,7 +475,9 @@ void twolpt_generate(int dim1, int dim2) {
 							const float y = gsl_rng_uniform_pos(rndgen);
 							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-							Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
+							PRINT( "%e %e %e\n", K0,power(K0) , glass_spectrum(K0) );
+							const float P = std::max( power(K0) - glass_spectrum(K0), 0.0);
+							Y[index] = rand_normal * sqrtf(P) * factor * K[dim1] * K[dim2] / k2;
 						} else {
 							Y[index] = cmplx(0.f, 0.f);
 						}
@@ -505,14 +509,15 @@ void twolpt_generate(int dim1, int dim2) {
 					sgn *= -1.0;
 				}
 				const float kz = 2.f * (float) M_PI / box_size * float(k);
-				if (i2 > 0 && i2 < N * N / 4) {
+				if (i2 > 0 ) {
 					const float k2 = kx * kx + ky * ky + kz * kz;
 					const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
 					const float x = gsl_rng_uniform_pos(rndgen);
 					const float y = gsl_rng_uniform_pos(rndgen);
 					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
 					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-					Y[index] = rand_normal * sqrtf(power(K0)) * factor * K[dim1] * K[dim2] / k2;
+					const float P = std::max( power(K0) -glass_spectrum(K0), 0.0);
+					Y[index] = rand_normal * sqrtf(P) * factor * K[dim1] * K[dim2] / k2;
 					if( I[0] > N / 2 ) {
 						Y[index] = Y[index].conj() * sgn;
 					} else if( I[0] == 0 ) {
@@ -699,14 +704,13 @@ static void init_X0() {
 			THROW_ERROR("parts_dim (=%i) must be a multiple of the glass dim (%i)\n", parts_dim, glass_parts_dim);
 		}
 		int Nf = parts_dim / glass_parts_dim;
+		PRINT("glass factor = %i\n", Nf);
 		size_t glass_nparts = sqr(glass_parts_dim) * glass_parts_dim;
 		static vector<fixed32> x(glass_nparts);
 		static vector<fixed32> y(glass_nparts);
 		static vector<fixed32> z(glass_nparts);
-		FREAD(x.data(), sizeof(fixed32), glass_nparts, fp);
-		FREAD(y.data(), sizeof(fixed32), glass_nparts, fp);
-		FREAD(z.data(), sizeof(fixed32), glass_nparts, fp);
 		fclose(fp);
+
 		const int jb = box.begin[XDIM] * Nf;
 		const int lb = box.begin[ZDIM] * Nf;
 		const int kb = box.begin[YDIM] * Nf;

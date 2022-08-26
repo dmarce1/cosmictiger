@@ -261,7 +261,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					for (int l = tid; l < nsinks; l += WARP_SIZE) {
 						auto& f = force[l];
 						f.gx = f.gy = f.gz = 0.f;
-						f.phi = -SELF_PHI * hinv;
+						f.phi = self_phi() * hinv;
 					}
 				}
 				__syncwarp();

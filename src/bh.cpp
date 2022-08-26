@@ -164,7 +164,7 @@ void bh_tree_evaluate(const device_vector<bh_tree_node>& nodes, device_vector<in
 				const auto mypos = nodes[sink_bucket].pos;
 				const auto myradius = nodes[sink_bucket].radius;
 				for (int i = myparts.first; i < myparts.second; i++) {
-					phi[i] = -SELF_PHI * hinv;
+					phi[i] = self_phi() * hinv;
 				}
 				const float thetainv = 1.0f / theta;
 				while (checklist.size()) {
