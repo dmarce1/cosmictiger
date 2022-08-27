@@ -23,6 +23,24 @@
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
+__managed__ double iclose;
+__managed__ double idirect;
+__managed__ double inparts;
+__managed__ bool use_gravity_counters = false;
+
+void reset_gravity_counters() {
+	iclose = idirect = inparts = 0;
+}
+
+void set_gravity_counter_use(bool code) {
+	use_gravity_counters = code;
+}
+
+void get_gravity_counters(double& close, double& direct) {
+	close = iclose / inparts;
+	direct = idirect / inparts;
+}
+
 __device__
 void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
@@ -250,6 +268,8 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 	const float h2inv = sqr(hinv);
 	const float h3inv = h2inv * hinv;
 	flop_counter<int> flops = 7;
+	int close = 0;
+	int direct = 0;
 	if (partlist.size()) {
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
@@ -311,8 +331,10 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					if (r2 > h2) {
 						r1inv = rsqrt(r2);					// 4
 						r3inv = sqr(r1inv) * r1inv;		// 2
+						direct++;
 					} else {
-						gsoft(r3inv, r1inv, r2, h2, hinv, h3inv, do_phi);
+						close++;
+						gsoft(r3inv, r1inv, r2, h2, h2inv, h3inv, do_phi);
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
 					fy = fmaf(dx1, r3inv, fy);                     // 2
@@ -340,7 +362,9 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					if (r2 > h2) {
 						r1inv = rsqrt(r2);					// 4
 						r3inv = sqr(r1inv) * r1inv;		// 2
+						direct++;
 					} else {
+						close++;
 						gsoft(r3inv, r1inv, r2, h2, hinv, h3inv, do_phi);
 					}
 					fx = fmaf(dx0, r3inv, fx);                     // 2
@@ -367,6 +391,14 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 		}
 		__syncwarp();
 	}
+	shared_reduce_add(close);
+	shared_reduce_add(direct);
+	if (tid == 0 && use_gravity_counters) {
+		atomicAdd(&iclose, close);
+		atomicAdd(&idirect, direct);
+		atomicAdd(&inparts, nsink);
+	}
+
 	__syncwarp();
 	add_gpu_flops(flops);
 }

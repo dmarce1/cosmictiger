@@ -671,13 +671,13 @@ static void init_X0() {
 						for (int dim1 = 0; dim1 < NDIM; dim1++) {
 							double x = I[dim1] * Ninv;
 							X0[dim1][index] = x + 0.25;
-							X0[dim1][index + 1] = x + 0.5 * Ninv;
+							X0[dim1][index + 1] = x + 0.75 * Ninv;
 						}
 						index += 2;
 					} else {
 						for (int dim1 = 0; dim1 < NDIM; dim1++) {
 							double x = I[dim1] * Ninv;
-							X0[dim1][index] = x + 0.0 * Ninv;
+							X0[dim1][index] = x;
 						}
 						index++;
 					}

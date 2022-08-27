@@ -909,7 +909,7 @@ void do_expansion_cuda() {
 		//	}
 	}
 
-	tprint("static __constant__ char Ldest1[%i] = { ", entries1.size());
+	tprint("static __device__ char Ldest1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].Ldest);
 		if (i != entries1.size() - 1) {

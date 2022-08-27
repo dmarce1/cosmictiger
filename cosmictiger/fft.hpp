@@ -86,7 +86,30 @@ void fft3d2silo(bool real);
  #define CLOUD_MIN -3
  #define CLOUD_MAX 4
  */
+/*
+ #define CLOUD_MIN -1
+ #define CLOUD_MAX 2
 
+ inline CUDA_EXPORT float cloud_weight(float x) {
+ x = fabs(x);
+ if (x < 2.0f) {
+ const float x2 = sqr(x);
+ const float x3 = x * x2;
+ if (x < 1.0f) {
+ return (2.0f / 3.0f) - x2 + 0.5f * x3;
+ } else {
+ return (4.0f / 3.0f) - 2.f * x + x2 - (1.0f / 6.0f) * x3;
+ }
+ } else {
+ return 0.0f;
+ }
+ }
+
+ inline double cloud_filter(double kh) {
+ const double s = sinc(0.5 * kh);
+ return 1.0 / (sqr(s*sqr(s)));
+ }
+ */
 #define CLOUD_MIN -2
 #define CLOUD_MAX 3
 inline CUDA_EXPORT float cloud_weight(float x) {
@@ -110,8 +133,7 @@ inline double cloud_filter(double kh) {
 	const double s = sinc(0.5 * kh);
 	return 1.0 / (sqr(s * sqr(s)));
 }
-#define CLOUD_MIN -2
-#define CLOUD_MAX 3
+
 
 /*
  inline CUDA_EXPORT float cloud_weight(float  x) {

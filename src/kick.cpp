@@ -462,6 +462,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f; // 6
 					const float factor = eta * sqrtf(params.a);                  // 5
 					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
+					dt = std::min(params.max_dt, dt);
 					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
 					kr.max_rung = std::max((int) rung, kr.max_rung);
 					ALWAYS_ASSERT(rung >= 0);

@@ -131,6 +131,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		if (params.descending) {
 			g2 = sqr(F.gx, F.gy, F.gz);
 			dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0); // 12
+			dt = fminf(params.max_dt, dt);
 			rung = rungs[snki];
 			rung = max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1); // 13
 			rungs[snki] = rung;

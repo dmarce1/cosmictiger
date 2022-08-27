@@ -66,16 +66,20 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const 
 #endif
 #endif /* GRAVITY_HPP_ */
 
+void reset_gravity_counters();
+void get_gravity_counters(double& close, double& direct);
+void set_gravity_counter_use(bool code);
+
 #define FERRER_N 3
 #define NFERRER 4
 
 template<class T>
-CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T h2, T hinv, T h3inv, bool do_phi) {
+CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T h2inv, T hinv, T h3inv, bool do_phi) {
 	constexpr float Af[NFERRER][NFERRER] = { { 1.0 }, { 2.5, -1.5 }, { 35.0 / 8.0, -21.0 / 4.0, 15.0 / 8.0 }, { 105.0 / 16.0, -189.0 / 16.0, 135.0 / 16.0, -35.0
 			/ 16.0 } };
 	constexpr float Aphi[NFERRER][NFERRER + 1] = { { 1.5, -0.5 }, { 15.0 / 8.0, -5.0 / 4.0, 3.0 / 8.0 }, { 35.0 / 16.0, -35.0 / 16.0, 21.0 / 16.0, -5.0 / 16.0 },
 			{ 315.0 / 128.0, -105.0 / 32.0, 189.0 / 64.0, -45.0 / 32.0, 35.0 / 128.0 } };
-	q2 *= sqr(hinv);
+	q2 *= h2inv;
 	f = Af[FERRER_N][FERRER_N];
 	for (int n = FERRER_N - 1; n >= 0; n--) {
 		f = fmaf(f, q2, Af[FERRER_N][n]);

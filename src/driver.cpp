@@ -41,6 +41,7 @@
 #include <cosmictiger/view.hpp>
 #include <cosmictiger/profiler.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/gravity.hpp>
 
 #include <cosmictiger/fft.hpp>
 
@@ -503,6 +504,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		kparams.min_rung = levels[li];
 		kparams.do_phi = do_phi && top;
 		kparams.t0 = t0;
+		kparams.max_dt = SCALE_DT / adot;
 		kparams.theta = theta;
 		expansion<float> L;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
@@ -519,7 +521,14 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		checklist.push_back(root_id);
 		tm.reset();
 		tm.start();
+		if (top) {
+			reset_gravity_counters();
+			set_gravity_counter_use(true);
+		}
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+		if (top) {
+			set_gravity_counter_use(false);
+		}
 		energies->tckin += this_kr.dkin;
 		tm.stop();
 //		PRINT("Kick took %e\n", tm.read());
@@ -611,7 +620,7 @@ double do_power_spectrum(int num, double a) {
 		THROW_ERROR("Unable to open %s for writing\n", filename.c_str());
 	}
 	double kmin = 0.0;
-	for (int Mfactor = 1; Mfactor <= M * M * M; Mfactor *= M) {
+	for (int Mfactor = 1; Mfactor <= 1; Mfactor *= M) {
 		auto power0 = power_spectrum_compute(Mfactor);
 		double kmax = power0.k.back() * 1.000001;
 		//	if (Mfactor != M * M * M) {
@@ -938,6 +947,13 @@ void driver() {
 			if (get_options().create_glass) {
 				theta = 0.4;
 			} else {
+				/*				if (z > 20.0) {
+				 theta = 0.41;
+				 } else if (z > 2.0) {
+				 theta = 0.51;
+				 } else {
+				 theta = 0.61;
+				 }*/
 				if (z > 20.0) {
 					theta = 0.41;
 				} else if (z > 2.0) {
@@ -1052,13 +1068,16 @@ void driver() {
 			double pps = total_processed / runtime;
 			//	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
 			const double nparts = get_options().nparts;
+			double close, direct;
+			get_gravity_counters(close, direct);
+			direct += close;
 			if (full_eval) {
-				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep", "years", "mnr",
-						"mxr", "bs", "Tflops", "time");
+				PRINT_BOTH(textfp, "\n%10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s %10s\n", "runtime", "i", "z", "a", "adot", "timestep",
+						"years", "mnr", "mxr", "bs", "Tflops", "time", "close", "direct");
 			}
 			step_tm.stop();
-			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e \n", runtime, iter - 1, z, a, adot, tau / t0, years,
-					minrung, max_rung, bucket_size, flops * 1e-12, step_tm.read());
+			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e %10.3e %10.3e \n", runtime, iter - 1, z, a, adot,
+					tau / t0, years, minrung, max_rung, bucket_size, flops * 1e-12, step_tm.read(), close , direct);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();
