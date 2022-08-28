@@ -56,8 +56,8 @@ void tprint(const char* str) {
 
 int compute_dx(int P, const char* name = "X", bool trless = false, bool dble = false) {
 	array<int, NDIM> n;
-	tprint("%s x[%i];\n", dble ? "double_type" : "T", (P + 1) * P * (P + 2) / 6);
-	tprint("x[%i] = %s(1);\n", sym_index(0, 0, 0), dble ? "double_type" : "T");
+	tprint("%s x[%i];\n", dble ? "T" : "T", (P + 1) * P * (P + 2) / 6);
+	tprint("x[%i] = %s(1);\n", sym_index(0, 0, 0), dble ? "T" : "T");
 	tprint("x[%i] = %s[0];\n", sym_index(1, 0, 0), name);
 	tprint("x[%i] = %s[1];\n", sym_index(0, 1, 0), name);
 	tprint("x[%i] = %s[2];\n", sym_index(0, 0, 1), name);
@@ -1024,7 +1024,6 @@ void ewald(int direct_flops) {
 	tprint("CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,%i> &D, array<T, NDIM> X) {\n", P);
 	indent();
 	tprint("ewald_const econst;\n");
-	tprint("using double_type = typename todouble<T>::type;\n");
 	tprint("flop_counter<int> flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
 	tprint("const T fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
@@ -1034,9 +1033,70 @@ void ewald(int direct_flops) {
 	tprint("Dfour = 0.0f;\n");
 	tprint("D = 0.0f;\n");
 	tprint("const auto realsz = econst.nreal();\n");
-	tprint("const T zero_mask = r > T(0.005);\n");                            // 1
-//	tprint("const T zero_mask = r > T(%e);\n", 10.f * powf(std::numeric_limits<float>::min(), 1.0 / (2 * ORDER - 3)));                            // 1
+	tprint("const T zero_mask = r > T(0.0);\n");                            // 1
+	int these_flops = 0;
+
+
 	tprint("int icnt = 0;\n");
+
+
+
+	tprint("array<T, NDIM> dx;\n");
+	tprint("dx = X;\n");
+	tprint("{\n");                   // 1
+	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
+	indent();
+	tprint("icnt++;\n");
+	tprint("const T r = sqrt(r2);\n");                                       // 1
+	tprint("const T n8r = T(-8) * r;\n");                                       // 1
+	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
+	tprint("T exp0 = expnearzero( -T(4) * r2 );\n");
+	tprint("T erf0 = erfnearzero(T(2) * r);\n");
+	tprint("const T expfactor = T(2.256758334191025) * exp0;\n");                  // 1
+	tprint("T e0 = expfactor * rinv;\n");                                   // 1
+	tprint("const T rinv0 = T(1);\n");                                           // 2
+	tprint("const T rinv1 = rinv;\n");                                           // 2
+	for (int l = 2; l < (P + 1) / 2; l++) {
+		const int i = l / 2;
+		const int j = l - i;
+		these_flops++;
+		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
+	}
+	tprint("const T d0 = erf0 * rinv;\n");                                       // 2
+	for (int l = 1; l < P; l++) {
+		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
+		if (l != P - 1) {
+			tprint("e0 *= n8r;\n");                                                // (P-1)
+		}
+	}
+	for (int l = 0; l < P; l++) {
+		for (int m = 0; m <= l; m++) {
+			if (l + m < P) {
+				tprint("const T Drinvpow_%i_%i = d%i * rinv%i;\n", l, m, l, m);
+				these_flops++;
+			}
+		}
+	}
+	tprint("array<T,NDIM> dxrinv;\n");
+	tprint("dxrinv[0] = dx[0] * rinv;\n");
+	tprint("dxrinv[1] = dx[1] * rinv;\n");
+	tprint("dxrinv[2] = dx[2] * rinv;\n");
+	these_flops += compute_dx(P, "dxrinv", false, true);
+	these_flops += 37 + 7 * (P - 1) + P * (P + 1) / 2;
+
+	these_flops += compute_detrace_ewald<P>("x", "Dreal");
+	tprint("const auto Drz = econst.D0();\n");
+	tprint( "for( int i = 0; i < %i; i++) {\n", (P+2)*(P+1)*P/6);
+	indent();
+	tprint("Dreal[i] *= zero_mask;\n");
+	tprint("Dreal[i] -= (T(1) - zero_mask) * Drz[i];\n");
+	deindent();
+	tprint("}\n");
+	deindent();
+	tprint("}\n");
+	tprint("flops += icnt * %i;\n", these_flops);
+
+
 	tprint("for (int i = 0; i < realsz; i++) {\n");
 	indent();
 	tprint("const auto n = econst.real_index(i);\n");
@@ -1060,7 +1120,6 @@ void ewald(int direct_flops) {
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
 	tprint("const T rinv1 = rinv;\n");                                           // 2
-	int these_flops = 0;
 	for (int l = 2; l < (P + 1) / 2; l++) {
 		const int i = l / 2;
 		const int j = l - i;
@@ -1099,74 +1158,6 @@ void ewald(int direct_flops) {
 	deindent();
 	tprint("}\n");
 
-	tprint("array<double_type, NDIM> dx;\n");
-	tprint("for (int dim = 0; dim < NDIM; dim++) {\n");
-	indent();
-	printf("#ifdef __CUDACC__\n");
-	tprint("dx[dim] = X[dim];\n");
-	printf("#else\n");
-	tprint("for (int i = 0; i < 8; i++) {\n");
-	indent();
-	tprint("dx[dim][i] = X[dim][i];\n");
-	deindent();
-	tprint("}\n");
-	printf("#endif\n");
-	deindent();
-	tprint("}\n");
-	tprint("double_type r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
-	tprint("{\n");                   // 1
-	indent();
-	tprint("icnt++;\n");
-	tprint("tensor_sym<T, 8> Dreal_dbl;\n");// 1
-	tprint("Dreal_dbl = 0.0;\n");// 1
-	tprint("const double_type r = sqrt(r2);\n");                                       // 1
-	tprint("const double_type n8r = double_type(-8) * r;\n");                                       // 1
-	tprint("const double_type rinv = (r > double_type(0)) / max(r, 1.0e-20);\n");                // 2
-	tprint("double_type exp0 = expnearzero( -double_type(4) * r2 );\n");
-	tprint("double_type erf0 = erfnearzero(double_type(2) * r);\n");
-	tprint("const double_type expfactor = double_type(2.256758334191025) * exp0;\n");                  // 1
-	tprint("double_type e0 = expfactor * rinv;\n");                                   // 1
-	tprint("const double_type rinv0 = double_type(1);\n");                                           // 2
-	tprint("const double_type rinv1 = rinv;\n");                                           // 2
-	for (int l = 2; l < (P + 1) / 2; l++) {
-		const int i = l / 2;
-		const int j = l - i;
-		these_flops++;
-		tprint("const double_type rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
-	}
-	tprint("const double_type d0 = erf0 * rinv;\n");                                       // 2
-	for (int l = 1; l < P; l++) {
-		tprint("const double_type d%i = fmaf(double_type(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
-		if (l != P - 1) {
-			tprint("e0 *= n8r;\n");                                                // (P-1)
-		}
-	}
-	for (int l = 0; l < P; l++) {
-		for (int m = 0; m <= l; m++) {
-			if (l + m < P) {
-				tprint("const double_type Drinvpow_%i_%i = d%i * rinv%i;\n", l, m, l, m);
-				these_flops++;
-			}
-		}
-	}
-	tprint("array<double_type,NDIM> dxrinv;\n");
-	tprint("dxrinv[0] = dx[0] * rinv;\n");
-	tprint("dxrinv[1] = dx[1] * rinv;\n");
-	tprint("dxrinv[2] = dx[2] * rinv;\n");
-	these_flops += compute_dx(P, "dxrinv", false, true);
-	these_flops += 37 + 7 * (P - 1) + P * (P + 1) / 2;
-
-	these_flops += compute_detrace_ewald<P>("x", "Dreal_dbl");
-	tprint("const auto Drz = econst.D0();\n");
-	tprint( "for( int i = 0; i < %i; i++) {\n", (P+2)*(P+1)*P/6);
-	indent();
-	tprint("Dreal[i] += zero_mask * T(Dreal_dbl[i]);\n");
-	tprint("Dreal[i] -= (T(1) - zero_mask) * Drz[i];\n");
-	deindent();
-	tprint("}\n");
-	deindent();
-	tprint("}\n");
-	tprint("flops += icnt * %i;\n", these_flops);
 
 	tprint("const auto foursz = econst.nfour();\n");
 	tprint("for (int i = 0; i < foursz; i++) {\n");
