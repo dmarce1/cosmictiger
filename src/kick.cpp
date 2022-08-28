@@ -175,19 +175,6 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		max_parts = std::min((size_t) max_parts,
 				(size_t) std::max((part_int) (rng.second - rng.first) / kick_block_count(), (part_int) get_options().bucket_size));
 		if (params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local()) {
-			/*	if (eligible && !self_ptr->leaf && self_ptr->nparts() > CUDA_KICK_PARTS_MAX / 8) {
-			 const auto all_local = [](const vector<tree_id>& list) {
-			 bool all = true;
-			 for( int i = 0; i < list.size(); i++) {
-			 if( !tree_get_node(list[i])->is_local_here() ) {
-			 all = false;
-			 break;
-			 }
-			 }
-			 return all;
-			 };
-			 eligible = all_local(dchecklist) && all_local(echecklist);
-			 }*/
 			if (self_ptr->nparts()) {
 				cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
 				parts_covered += self_ptr->nparts();

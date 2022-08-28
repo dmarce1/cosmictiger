@@ -404,31 +404,34 @@ static void bucket_test() {
 	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
 			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
 	const double thetas[] = { 0.5, 0.65, 0.65, 0.65, 0.65, 0.65, 0.8, 0.8, 0.8, 0.8, 0.8 };
-	for (int ci = 0; ci < nchecks; ci++) {
+//	for (int ci = 0; ci < nchecks; ci++) {
 		char* buffer;
-		system("rm -r checkpoint.999999\n");
-		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
-		system(buffer);
-		free(buffer);
+//		system("rm -r checkpoint.999999\n");
+//		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
+//		system(buffer);
+//		free(buffer);
 		for (int bucket_size = 64; bucket_size <= 256; bucket_size += 8) {
 			auto opts = get_options();
 			opts.bucket_size = bucket_size;
 			opts.read_check = 999999;
-			opts.theta = thetas[ci];
+//			opts.theta = thetas[ci];
 			set_options(opts);
-			read_checkpoint();
+		//	read_checkpoint();
 			timer tm;
 			tm.start();
 			for (int trial = 0; trial < 10; trial++) {
+				particles_random_init();
 				domains_rebound();
 				domains_begin(0);
 				domains_end();
 				particles_sort_by_rung(0);
-				tree_create_params tparams(0, thetas[ci], get_options().hsoft);
+				tree_create_params tparams(0, get_options().theta, get_options().hsoft);
 				tree_create(tparams);
+				PRINT( "Tree created\n");
 				kick_params kparams;
 				kparams.node_load = 10;
 				kparams.gpu = true;
+				kparams.max_dt = 1.0;
 				kparams.min_level = tparams.min_level;
 				kparams.save_force = get_options().save_force;
 				kparams.GM = get_options().GM;
@@ -438,7 +441,10 @@ static void bucket_test() {
 				kparams.first_call = true;
 				kparams.min_rung = 0;
 				kparams.t0 = 1.0;
-				kparams.theta = thetas[ci];
+				kparams.do_phi = false;
+				kparams.theta = get_options().theta;
+				kparams.top = true;
+				kparams.ascending = kparams.descending = false;
 				expansion<float> L;
 				for (int i = 0; i < EXPANSION_SIZE; i++) {
 					L[i] = 0.0f;
@@ -452,19 +458,20 @@ static void bucket_test() {
 				root_id.index = 0;
 				vector<tree_id> checklist;
 				checklist.push_back(root_id);
+				PRINT( "Doing kick\n");
 				auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 				tree_destroy(false);
 			}
 			tm.stop();
-			asprintf(&buffer, "buckets.%i.txt", ci);
+			asprintf(&buffer, "buckets.txt");
 			FILE* fp = fopen(buffer, "at");
 			free(buffer);
 			fprintf(fp, "%i %e\n", bucket_size, tm.read());
 			fclose(fp);
-		}
+	/*	}
 		asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]);
 		system(buffer);
-		free(buffer);
+		free(buffer);*/
 	}
 }
 
