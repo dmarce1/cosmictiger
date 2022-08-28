@@ -1158,7 +1158,7 @@ void ewald(int direct_flops) {
 
 	these_flops += compute_detrace_ewald<P>("x", "Dreal_dbl");
 	tprint("const auto Drz = econst.D0();\n");
-	tprint( "for( int i = 0; i < EXPANSION_SIZE; i++) {\n");
+	tprint( "for( int i = 0; i < %i; i++) {\n", (P+2)*(P+1)*P/6);
 	indent();
 	tprint("Dreal[i] += zero_mask * T(Dreal_dbl[i]);\n");
 	tprint("Dreal[i] -= (T(1) - zero_mask) * Drz[i];\n");
