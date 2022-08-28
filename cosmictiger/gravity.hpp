@@ -70,7 +70,7 @@ void reset_gravity_counters();
 void get_gravity_counters(double& close, double& direct);
 void set_gravity_counter_use(bool code);
 
-#define FERRER_N 0
+#define FERRER_N 4
 #define NFERRER 5
 
 template<class T>
