@@ -54,14 +54,22 @@ void tprint(const char* str) {
 	printf("%s", str);
 }
 
+int trless_index(int l, int m, int n, int Q) {
+	return (l + m) * ((l + m) + 1) / 2 + (m) + (Q * (Q + 1) / 2) * (n == 1) + (Q * Q) * (n == 2);
+}
+
 int compute_dx(int P, const char* name = "X", bool trless = false, bool dble = false) {
 	array<int, NDIM> n;
-	tprint("%s x[%i];\n", dble ? "T" : "T", (P + 1) * P * (P + 2) / 6);
-	tprint("x[%i] = %s(1);\n", sym_index(0, 0, 0), dble ? "T" : "T");
-	tprint("x[%i] = %s[0];\n", sym_index(1, 0, 0), name);
-	tprint("x[%i] = %s[1];\n", sym_index(0, 1, 0), name);
-	tprint("x[%i] = %s[2];\n", sym_index(0, 0, 1), name);
+	tprint("%s x[%i];\n", dble ? "T" : "T", trless ? P * P + 1 : (P + 1) * P * (P + 2) / 6);
+	auto index = trless ? std::function<int(int, int, int)>([P](int x, int y, int z) {
+		return trless_index(x,y,z,P);
+	}) :std::function<int(int, int, int)>(sym_index);
+	tprint("x[%i] = %s(1);\n", index(0, 0, 0), dble ? "T" : "T");
+	tprint("x[%i] = %s[0];\n", index(1, 0, 0), name);
+	tprint("x[%i] = %s[1];\n", index(0, 1, 0), name);
+	tprint("x[%i] = %s[2];\n", index(0, 0, 1), name);
 	int flops = 0;
+
 	for (int n0 = 2; n0 < P; n0++) {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
@@ -82,16 +90,21 @@ int compute_dx(int P, const char* name = "X", bool trless = false, bool dble = f
 				}
 				array<int, NDIM> k;
 				k = n - j;
-				tprint("x[%i] = x[%i] * x[%i];\n", sym_index(n[0], n[1], n[2]), sym_index(k[0], k[1], k[2]), sym_index(j[0], j[1], j[2]));
+				if (trless && (((j[2] > 2) || (j[2] > 1 && !(j[0] == 0 && j[1] == 0))))) {
+					PRINT("!!!!!!!!!!!\n");
+					abort();
+				}
+				if (trless && (((k[2] > 2) || (k[2] > 1 && !(k[0] == 0 && k[1] == 0))))) {
+					PRINT("!!!!!!!!!!!\n");
+					abort();
+				}
+				tprint("x[%i] = x[%i] * x[%i]; // %i %i %i | %i %i %i | %i %i %i\n", index(n[0], n[1], n[2]), index(k[0], k[1], k[2]), index(j[0], j[1], j[2]),
+						n[0], n[1], n[2], j[0], j[1], j[2], k[0], k[1], k[2]);
 				flops++;
 			}
 		}
 	}
 	return flops;
-}
-
-int trless_index(int l, int m, int n, int Q) {
-	return (l + m) * ((l + m) + 1) / 2 + (m) + (Q * (Q + 1) / 2) * (n == 1) + (Q * Q) * (n == 2);
 }
 
 int compute_dx_tensor(int P, const char* name = "X") {
@@ -383,13 +396,15 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 							char* str;
 							if (first) {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s[%i] = %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s[%i] = %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+											trless_index(p[0], p[1], p[2], P));
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s[%i] = -%s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s[%i] = -%s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+											trless_index(p[0], p[1], p[2], P));
 									flops++;
 								} else {
 									ASPRINTF(&str, "%s[%i] = T(%.9e) * %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
-											sym_index(p[0], p[1], p[2]));
+											trless_index(p[0], p[1], p[2], P));
 									flops++;
 								}
 								asn.push_back(str);
@@ -397,14 +412,16 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 								first = false;
 							} else {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s[%i] += %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s[%i] += %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+											trless_index(p[0], p[1], p[2], P));
 									flops += 1;
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s[%i] -= %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s[%i] -= %s[%i];\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(),
+											trless_index(p[0], p[1], p[2], P));
 									flops += 1;
 								} else {
 									ASPRINTF(&str, "%s[%i] = fmaf(T(%.9e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
-											sym_index(p[0], p[1], p[2]), oname.c_str(), trless_index(n[0], n[1], n[2], P));
+											trless_index(p[0], p[1], p[2], P), oname.c_str(), trless_index(n[0], n[1], n[2], P));
 									flops += 1;
 								}
 								op.push_back(str);
@@ -1036,10 +1053,7 @@ void ewald(int direct_flops) {
 	tprint("const T zero_mask = r > T(0.0);\n");                            // 1
 	int these_flops = 0;
 
-
 	tprint("int icnt = 0;\n");
-
-
 
 	tprint("array<T, NDIM> dx;\n");
 	tprint("dx = X;\n");
@@ -1086,7 +1100,7 @@ void ewald(int direct_flops) {
 
 	these_flops += compute_detrace_ewald<P>("x", "Dreal");
 	tprint("const auto Drz = econst.D0();\n");
-	tprint( "for( int i = 0; i < %i; i++) {\n", (P+2)*(P+1)*P/6);
+	tprint("for( int i = 0; i < %i; i++) {\n", (P + 2) * (P + 1) * P / 6);
 	indent();
 	tprint("Dreal[i] *= zero_mask;\n");
 	tprint("Dreal[i] -= (T(1) - zero_mask) * Drz[i];\n");
@@ -1095,7 +1109,6 @@ void ewald(int direct_flops) {
 	deindent();
 	tprint("}\n");
 	tprint("flops += icnt * %i;\n", these_flops);
-
 
 	tprint("for (int i = 0; i < realsz; i++) {\n");
 	indent();
@@ -1157,7 +1170,6 @@ void ewald(int direct_flops) {
 	tprint("}\n");
 	deindent();
 	tprint("}\n");
-
 
 	tprint("const auto foursz = econst.nfour();\n");
 	tprint("for (int i = 0; i < foursz; i++) {\n");
