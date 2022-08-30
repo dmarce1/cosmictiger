@@ -51,7 +51,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	(CUDA_MALLOC(&dev_gz, Nsinks * sizeof(double)));
 	vector<double> zero(Nsinks, 0.0);
 	if (hpx_rank() == 0) {
-		vector<double> self_phi1(Nsinks, self_phi() / get_options().hsoft);
+		vector<double> self_phi1(Nsinks, 0.0);
 		CUDA_CHECK(cudaMemcpy(dev_phi, self_phi1.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	} else {
 		CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
@@ -198,7 +198,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 		}
 		if (R2 == 0.f) {
 			phi[tid] += 2.837291f;
-			phi[tid] -= 15.0f / 8.0f * hinv;
+	//		phi[tid] -= 15.0f / 8.0f * hinv;
 		} else if (R2 < h2) {
 			const float q2 = R2 * h2inv;
 			float rinv3;
