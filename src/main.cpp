@@ -41,6 +41,35 @@ int hpx_main(int argc, char *argv[]) {
 	 PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
 	 }*/
 
+	{
+		double toler = 1.19e-7/sqrt(2);
+		double norm = 2.83;
+		double x = 1.0;
+		for (double alpha = 1.0; alpha < 4.0; alpha += 0.1) {
+			x = 1;
+			double error;
+			do {
+				double f = erfc(alpha * x) / norm * (4.0 * M_PI * x) - toler;
+				double dfdx = -8.0 * alpha * exp(-sqr(alpha) * x * x) * sqrt(M_PI) * x / norm + 4.0 * M_PI * erfc(alpha * x) / norm;
+				x -= f / dfdx;
+				error = fabs(f / dfdx);
+			} while (error > 1.e-10);
+			double real = x;
+			x = 1.0e-1;
+			error = 1e10;
+			do {
+				double f = 2.0 * exp(-sqr(M_PI * x / alpha)) / (pow(M_PI, 1.5) * x) - toler / 2.0;
+				double dfdx = 4.0 * exp(-sqr(M_PI * x / alpha)) * sqrt(M_PI) * (-1.0 / sqr(alpha) - 0.5 / sqr(M_PI * x));
+				x -= f / dfdx;
+				error = fabs(f / dfdx);
+
+			} while (error > 1.e-10);
+			double four = x;
+			PRINT("%e %e %e %e\n", alpha, real, four,  6.0 * sqr(real+1.0) * (real+1.0) + sqr(four) * four);
+		}
+
+	}
+
 	expansion<simd_float> D;
 	array<simd_float, NDIM> X;
 

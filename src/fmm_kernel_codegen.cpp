@@ -1044,7 +1044,6 @@ void ewald(int direct_flops) {
 	tprint("ewald_const econst;\n");
 	tprint("flop_counter<int> flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
-	tprint("const T fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
 	tprint("tensor_sym<T, %i> Dreal;\n", P);
 	tprint("tensor_trless_sym<T,%i> Dfour;\n", P);
 	tprint("Dreal = 0.0f;\n");
@@ -1063,11 +1062,11 @@ void ewald(int direct_flops) {
 	indent();
 	tprint("icnt++;\n");
 	tprint("const T r = sqrt(r2);\n");                                       // 1
-	tprint("const T n8r = T(-8*SCALE_FACTOR_INV2) * r;\n");                                       // 1
+	tprint("const T n8r = T(-2*EWALD_ALPHA*EWALD_ALPHA*SCALE_FACTOR_INV2) * r;\n");                                       // 1
 	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
-	tprint("T exp0 = expnearzero( -T(4*SCALE_FACTOR_INV2) * r2 );\n");
-	tprint("T erf0 = erfnearzero(T(2*SCALE_FACTOR_INV1) * r);\n");
-	tprint("const T expfactor = T(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n");                  // 1
+	tprint("T exp0 = expnearzero( -T(EWALD_ALPHA*EWALD_ALPHA*SCALE_FACTOR_INV2) * r2 );\n");
+	tprint("T erf0 = erfnearzero(T(EWALD_ALPHA*SCALE_FACTOR_INV1) * r);\n");
+	tprint("const T expfactor = T(%0.8e*EWALD_ALPHA*SCALE_FACTOR_INV1) * exp0;\n", 2.0 / sqrt(M_PI));                  // 1
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
 	tprint("const T rinv1 = rinv;\n");                                           // 2
@@ -1121,16 +1120,16 @@ void ewald(int direct_flops) {
 	deindent();
 	tprint("}\n");
 	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
-	tprint("if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");                   // 1
+	tprint("if (anytrue(r2 < T(EWALD_ALPHA*EWALD_ALPHA*SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");                   // 1
 	indent();
 	tprint("icnt++;\n");                                       // 1
 	tprint("const T r = sqrt(r2);\n");                                       // 1
-	tprint("const T n8r = T(-8 * SCALE_FACTOR_INV2) * r;\n");                                       // 1
+	tprint("const T n8r = T(-2 * EWALD_ALPHA*EWALD_ALPHA*SCALE_FACTOR_INV2) * r;\n");                                       // 1
 	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
 	tprint("T exp0;\n");
 	tprint("T erfc0;\n");
-	tprint("erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");                          // 20
-	tprint("const T expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;\n");                  // 1
+	tprint("erfcexp(T(SCALE_FACTOR_INV1*EWALD_ALPHA) * r, &erfc0, &exp0);\n");                          // 20
+	tprint("const T expfactor = T(%.8e * EWALD_ALPHA*SCALE_FACTOR_INV1) * exp0;\n", 2.0 / sqrt(M_PI));                  // 1
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
 	tprint("const T rinv1 = rinv;\n");                                           // 2
@@ -1207,7 +1206,7 @@ void ewald(int direct_flops) {
 	those_flops += 16 + 3 * (P * P + 1);
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
 	tprint("D = D + Dfour;\n");                                    // P*P+1
-	tprint("D[0] = T(%.9e * SCALE_FACTOR_INV1) + D[0]; \n", M_PI / 4.0);                                    // 1
+	tprint("D[0] = T(%.9e * SCALE_FACTOR_INV1/(EWALD_ALPHA*EWALD_ALPHA)) + D[0]; \n", M_PI);                                    // 1
 	tprint("return flops;\n");
 	deindent();
 	tprint("}\n");
