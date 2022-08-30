@@ -343,8 +343,14 @@ static void force_test() {
 	} else {
 		initialize(get_options().z0);
 	}
-	constexpr int nthetas = 16;
-	const double thetas[nthetas] = { 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95};
+	constexpr int nthetas = 10;
+	double theta_min = 0.2;
+	double theta_max = 0.999999;
+	double dlog_theta = (log(theta_max) - log(theta_min))/(nthetas-1);
+	double thetas[nthetas];
+	for( int i= 0; i < nthetas; i++) {
+		thetas[i] = exp(log(theta_min) + i * dlog_theta);
+	}
 	for (int iter = 0; iter < nthetas; iter++) {
 		tm_main.start();
 		domains_rebound();
@@ -386,7 +392,7 @@ static void force_test() {
 		tm.start();
 		auto rc = analytic_compare(1000);
 		tm.stop();
-		PRINT("Analytic compare took %e s\n", tm.read());
+		PRINT("Analytic compare took %e s for theta = %e\n", tm.read(), thetas[iter]);
 		PRINT("%e %e %e\n", thetas[iter], rc.first, rc.second);
 		FILE* fp = fopen("force_accuracy.txt", "at");
 		fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
