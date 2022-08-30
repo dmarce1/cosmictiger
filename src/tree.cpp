@@ -273,7 +273,6 @@ long long tree_nodes_next_index() {
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
 
-
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}
@@ -317,6 +316,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		box_r += sqr(0.5 * (box.end[dim] - box.begin[dim]));             // 12
 	}
 	box_r = sqrt(box_r);                                                // 4
+	ALWAYS_ASSERT(box_r>0.0);
+	const double deltax = pow(2.0,-32.0);
+	box_r += 2.0 * deltax;
 	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h); // 10
 	double max_ratio = 1.0;
 	flops += 26;
@@ -340,9 +342,28 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
-			const double xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
+			int nmin;
 			flops += 2;
-			const part_int mid = particles_sort(part_range, xmid, xdim);
+			part_int mid;
+			double xmax = box.end[xdim];
+			double xmin = box.begin[xdim];
+			double imbalance;
+			double xmid;
+			int nlo, nhi;
+			int max_dif = 1 + 0.8 * (part_range.second - part_range.first);
+			do {
+				xmid = 0.5 * (xmax + xmin);
+				mid = particles_sort(part_range, xmid, xdim);
+				nhi = part_range.second - mid;
+				nlo = mid - part_range.first;
+				if (nhi > nlo) {
+					xmin = xmid;
+				} else {
+					xmax = xmid;
+				}
+	//			PRINT( "%i %i %e %e %e\n", nlo, nhi, xmin, xmax, imbalance);
+			} while (abs(nlo-nhi) > max_dif);
+
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 		}
@@ -464,7 +485,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		r = 0.0;
 		for (int dim = 0; dim < NDIM; dim++) {
 			const double span = (rbox.end[dim] - rbox.begin[dim]);
-			ALWAYS_ASSERT(span>=0.0);
+			ALWAYS_ASSERT(span >= 0.0);
 			r += sqr(span * 0.5);            // 12
 		}
 		r = std::sqrt(r);                                              // 4
@@ -498,7 +519,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	} else {
 		array<double, NDIM>& Xmin = rbox.begin;
 		array<double, NDIM>& Xmax = rbox.end;
-		for( int dim = 0; dim < NDIM; dim++) {
+		for (int dim = 0; dim < NDIM; dim++) {
 			Xmin[dim] = box.end[dim];
 			Xmax[dim] = box.begin[dim];
 		}
@@ -581,7 +602,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.mpos->pos = x;
 	node.mpos->multi = multi;
 	node.depth = depth;
-	for( int dim = 0; dim < NDIM; dim++) {
+	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = rbox.begin[dim];
 		node.box.end[dim] = rbox.end[dim];
 	}

@@ -208,7 +208,7 @@ void plummer_init(double r0) {
 	double x0 = 0.5;
 	double y0 = 0.5;
 	double z0 = 0.5;
-
+	PRINT( "Initializing Plummer\n");
 	for (part_int i = 0; i < nparts; i +=2) {
 		double r, p;
 //		r = sample_density_distribution(nfw_density);
@@ -274,6 +274,8 @@ void plummer_init(double r0) {
 		}*/
 
 	}
+	PRINT( "Done Initializing Plummer\n");
+
 }
 
 vector<double> read_checkpoint_list() {
@@ -686,6 +688,7 @@ void save_glass() {
 }
 
 void driver() {
+	PRINT( "Entering main driver\n");
 	timer total_time;
 	total_time.start();
 	timer tmr;
@@ -700,7 +703,7 @@ void driver() {
 	if (get_options().read_check != -1) {
 		params = read_checkpoint();
 	} else {
-		output_time_file();
+//		output_time_file();
 		if (get_options().create_glass) {
 			if (hpx_size() != 1) {
 				THROW_ERROR("Create glass can only be done with a single locality\n");
