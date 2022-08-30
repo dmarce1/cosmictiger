@@ -308,6 +308,9 @@ inline int greens_function(tensor_trless_sym<T, 7>& D, array<T, NDIM> X, bool sc
 #include <cosmictiger/flops.hpp>
 template<class T>
 CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> X) {
+	X[0] *= T(SCALE_FACTOR);
+	X[1] *= T(SCALE_FACTOR);
+	X[2] *= T(SCALE_FACTOR);
 	ewald_const econst;
 	flop_counter<int> flops = 7;
 	T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));
@@ -326,11 +329,11 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> 
 	T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));
 		icnt++;
 		const T r = sqrt(r2);
-		const T n8r = T(-8) * r;
+		const T n8r = T(-8*SCALE_FACTOR_INV2) * r;
 		const T rinv = (r > T(0)) / max(r, 1.0e-20);
-		T exp0 = expnearzero( -T(4) * r2 );
-		T erf0 = erfnearzero(T(2) * r);
-		const T expfactor = T(2.256758334191025) * exp0;
+		T exp0 = expnearzero( -T(4*SCALE_FACTOR_INV2) * r2 );
+		T erf0 = erfnearzero(T(2*SCALE_FACTOR_INV1) * r);
+		const T expfactor = T(2.256758334191025*SCALE_FACTOR_INV1) * exp0;
 		T e0 = expfactor * rinv;
 		const T rinv0 = T(1);
 		const T rinv1 = rinv;
@@ -723,18 +726,18 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> 
 		const auto n = econst.real_index(i);
 		array<T, NDIM> dx;
 		for (int dim = 0; dim < NDIM; dim++) {
-			dx[dim] = X[dim] - n[dim];
+			dx[dim] = X[dim] - T(SCALE_FACTOR) * n[dim];
 		}
 		T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));
-		if (anytrue(r2 < (EWALD_REAL_CUTOFF2))) {
+		if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {
 			icnt++;
 			const T r = sqrt(r2);
-			const T n8r = T(-8) * r;
+			const T n8r = T(-8 * SCALE_FACTOR_INV2) * r;
 			const T rinv = (r > T(0)) / max(r, 1.0e-20);
 			T exp0;
 			T erfc0;
-			erfcexp(T(2.) * r, &erfc0, &exp0);
-			const T expfactor = fouroversqrtpi * exp0;
+			erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);
+			const T expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;
 			T e0 = expfactor * rinv;
 			const T rinv0 = T(1);
 			const T rinv1 = rinv;
@@ -1124,7 +1127,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> 
 		const auto& D0 = econst.four_expansion(i);
 		const T hdotx = fmaf(h[0], X[0], fmaf(h[1], X[1], h[2] * X[2]));
 		T cn, sn;
-		sincos(T(2.0 * M_PI) * hdotx, &sn, &cn);
+		sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);
 		Dfour[0] = fmaf(cn, D0[0], Dfour[0]);
 		Dfour[1] = fmaf(sn, D0[1], Dfour[1]);
 		Dfour[2] = fmaf(sn, D0[2], Dfour[2]);
@@ -1482,7 +1485,7 @@ CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,7> &D, array<T, NDIM> 
 	D[25] = fmaf(T(-5.454545455e-01), Dreal_6_1_220, D[25]);
 	flops += 140 * foursz + 540;
 	D = D + Dfour;
-	D[0] = T(7.853981634e-01) + D[0]; 
+	D[0] = T(7.853981634e-01 * SCALE_FACTOR_INV1) + D[0]; 
 	return flops;
 }
 

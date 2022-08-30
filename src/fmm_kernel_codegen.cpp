@@ -54,10 +54,6 @@ void tprint(const char* str) {
 	printf("%s", str);
 }
 
-int trless_index(int l, int m, int n, int Q) {
-	return (l + m) * ((l + m) + 1) / 2 + (m) + (Q * (Q + 1) / 2) * (n == 1) + (Q * Q) * (n == 2);
-}
-
 int compute_dx(int P, const char* name = "X", bool trless = false, bool dble = false) {
 	array<int, NDIM> n;
 	tprint("%s x[%i];\n", dble ? "T" : "T", trless ? P * P + 1 : (P + 1) * P * (P + 2) / 6);
@@ -449,6 +445,8 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 
 template<int P>
 int compute_detrace_ewald(std::string iname, std::string oname) {
+
+
 	array<int, NDIM> m;
 	array<int, NDIM> k;
 	array<int, NDIM> n;
@@ -1040,6 +1038,9 @@ void ewald(int direct_flops) {
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,%i> &D, array<T, NDIM> X) {\n", P);
 	indent();
+	tprint("X[0] *= T(SCALE_FACTOR);\n");
+	tprint("X[1] *= T(SCALE_FACTOR);\n");
+	tprint("X[2] *= T(SCALE_FACTOR);\n");
 	tprint("ewald_const econst;\n");
 	tprint("flop_counter<int> flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
@@ -1062,11 +1063,11 @@ void ewald(int direct_flops) {
 	indent();
 	tprint("icnt++;\n");
 	tprint("const T r = sqrt(r2);\n");                                       // 1
-	tprint("const T n8r = T(-8) * r;\n");                                       // 1
+	tprint("const T n8r = T(-8*SCALE_FACTOR_INV2) * r;\n");                                       // 1
 	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
-	tprint("T exp0 = expnearzero( -T(4) * r2 );\n");
-	tprint("T erf0 = erfnearzero(T(2) * r);\n");
-	tprint("const T expfactor = T(2.256758334191025) * exp0;\n");                  // 1
+	tprint("T exp0 = expnearzero( -T(4*SCALE_FACTOR_INV2) * r2 );\n");
+	tprint("T erf0 = erfnearzero(T(2*SCALE_FACTOR_INV1) * r);\n");
+	tprint("const T expfactor = T(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n");                  // 1
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
 	tprint("const T rinv1 = rinv;\n");                                           // 2
@@ -1116,20 +1117,20 @@ void ewald(int direct_flops) {
 	tprint("array<T, NDIM> dx;\n");
 	tprint("for (int dim = 0; dim < NDIM; dim++) {\n");
 	indent();
-	tprint("dx[dim] = X[dim] - n[dim];\n");                                // 3
+	tprint("dx[dim] = X[dim] - T(SCALE_FACTOR) * n[dim];\n");                                // 3
 	deindent();
 	tprint("}\n");
 	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");    // 5
-	tprint("if (anytrue(r2 < (EWALD_REAL_CUTOFF2))) {\n");                   // 1
+	tprint("if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");                   // 1
 	indent();
 	tprint("icnt++;\n");                                       // 1
 	tprint("const T r = sqrt(r2);\n");                                       // 1
-	tprint("const T n8r = T(-8) * r;\n");                                       // 1
+	tprint("const T n8r = T(-8 * SCALE_FACTOR_INV2) * r;\n");                                       // 1
 	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");                // 2
 	tprint("T exp0;\n");
 	tprint("T erfc0;\n");
-	tprint("erfcexp(T(2.) * r, &erfc0, &exp0);\n");                          // 20
-	tprint("const T expfactor = fouroversqrtpi * exp0;\n");                  // 1
+	tprint("erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");                          // 20
+	tprint("const T expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;\n");                  // 1
 	tprint("T e0 = expfactor * rinv;\n");                                   // 1
 	tprint("const T rinv0 = T(1);\n");                                           // 2
 	tprint("const T rinv1 = rinv;\n");                                           // 2
@@ -1178,7 +1179,7 @@ void ewald(int direct_flops) {
 	tprint("const auto& D0 = econst.four_expansion(i);\n");
 	tprint("const T hdotx = fmaf(h[0], X[0], fmaf(h[1], X[1], h[2] * X[2]));\n"); // 5
 	tprint("T cn, sn;\n");
-	tprint("sincos(T(2.0 * M_PI) * hdotx, &sn, &cn);\n"); // 35
+	tprint("sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n"); // 35
 	these_flops = 40;
 	bool iscos[P * P + 1];
 	for (k[0] = 0; k[0] < P; k[0]++) {
@@ -1206,7 +1207,7 @@ void ewald(int direct_flops) {
 	those_flops += 16 + 3 * (P * P + 1);
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
 	tprint("D = D + Dfour;\n");                                    // P*P+1
-	tprint("D[0] = T(%.9e) + D[0]; \n", M_PI / 4.0);                                    // 1
+	tprint("D[0] = T(%.9e * SCALE_FACTOR_INV1) + D[0]; \n", M_PI / 4.0);                                    // 1
 	tprint("return flops;\n");
 	deindent();
 	tprint("}\n");

@@ -84,12 +84,12 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 				flops += count * greens_function(D, dx);
 			} else {
 				flops += count * ewald_greens_function(D, dx);
-				flops += count * apply_scale_factor(M[j]);
+//				flops += count * apply_scale_factor(M[j]);
 			}
 			M2L(L0, M[j], D, do_phi);
 		}
 		if (type == GRAVITY_EWALD) {
-			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
+//			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] += L0[i].sum();

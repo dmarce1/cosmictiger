@@ -29,7 +29,6 @@ __constant__ ewald_constants ec_dev;
 
 void ewald_const::init_gpu() {
 
-
 	int n2max = 12;
 	int nmax = std::sqrt(n2max) + 1;
 	array<float, NDIM> this_h;
@@ -50,7 +49,8 @@ void ewald_const::init_gpu() {
 				}
 			}
 		}
-	}	PRINT( "count = %i %i\n", count, NREAL);
+	}
+	PRINT("count = %i %i\n", count, NREAL);
 	const auto sort_func = [](const array<float,NDIM>& a, const array<float,NDIM>& b) {
 		const auto a2 = sqr(a[0],a[1],a[2]);
 		const auto b2 = sqr(b[0],b[1],b[2]);
@@ -88,22 +88,23 @@ void ewald_const::init_gpu() {
 			for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
 				for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
 					const int n0 = n[0] + n[1] + n[2];
-					D0(n) *= signs[n0 % 4] * pow(2.0 * M_PI, n0) * c0;
+					D0(n) *= (signs[n0 % 4] * pow(2.0 * M_PI * SCALE_FACTOR_INV1, n0) * c0) * SCALE_FACTOR_INV1;
 				}
 			}
 		}
-		ec.four_expanse[count++] = D0.detraceD();
+		ec.four_expanse[count] = D0.detraceD();
+		count++;
 	}
 	tensor_sym<float, LORDER> D;
-	for (int n = 0; n < (LORDER+2)*(LORDER+1)*LORDER/6; n++) {
+	for (int n = 0; n < (LORDER + 2) * (LORDER + 1) * LORDER / 6; n++) {
 		D[n] = 0.0;
 	}
 	constexpr double alpha = 2.0;
 	for (int n = 0; n < LORDER; n += 2) {
 		for (int m = 0; m < LORDER - n; m += 2) {
 			for (int l = 0; l < LORDER - n - m; l += 2) {
-				D(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1) * double_factorial(n - 1)
-						* double_factorial(m - 1) * double_factorial(l - 1);
+				D(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) * pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1)
+						* double_factorial(n - 1) * double_factorial(m - 1) * double_factorial(l - 1);
 			}
 		}
 	}

@@ -224,7 +224,7 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
 			const tree_node& other = tree_nodes[multlist[i]];
 			multipole<float> M = other.mpos->multi;
-			flops += apply_scale_factor(M);
+		//	flops += apply_scale_factor(M);
 			array<float, NDIM> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
@@ -232,7 +232,7 @@ void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, c
 			flops += 3 + ewald_greens_function(D, dx);
 			flops += M2L(L, M, D, do_phi);
 		}
-		flops += apply_scale_factor_inv(L);
+		//flops += apply_scale_factor_inv(L);
 		shared_reduce_add_array(L);
 		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
 			Lacc[i] += L[i];

@@ -314,3 +314,8 @@ tensor_sym<T, P> vector_to_sym_tensor(const array<T, NDIM>& vec) {
 	return X;
 }
 
+inline int trless_index(int l, int m, int n, int Q) {
+	return (l + m) * ((l + m) + 1) / 2 + (m) + (Q * (Q + 1) / 2) * (n == 1) + (Q * Q) * (n == 2);
+}
+
+
