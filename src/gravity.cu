@@ -73,6 +73,39 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 }
 
 __device__
+void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
+	const int &tid = threadIdx.x;
+	const auto& tree_nodes = data.tree_nodes;
+	flop_counter<int> flops = 0;
+	if (multlist.size()) {
+		expansion<float> L;
+		expansion<float> D;
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			L[i] = 0.0f;
+		}
+		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
+			const tree_node& other = tree_nodes[multlist[i]];
+			multipole<float> M = other.mpos->multi;
+			//	flops += apply_scale_factor(M);
+			array<float, NDIM> dx;
+			for (int dim = 0; dim < NDIM; dim++) {
+				dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
+			}
+			flops += 3 + ewald_greens_function(D, dx);
+			flops += M2L(L, M, D, do_phi);
+		}
+		//flops += apply_scale_factor_inv(L);
+		shared_reduce_add_array(L);
+		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
+			Lacc[i] += L[i];
+		}
+		flops += 6 * EXPANSION_SIZE;
+		__syncwarp();
+	}
+	add_gpu_flops(flops);
+}
+
+__device__
 void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& partlist, bool do_phi) {
 	__shared__
 	extern int shmem_ptr[];
@@ -155,6 +188,88 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 }
 
 __device__
+void cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& partlist, bool do_phi) {
+	__shared__
+	extern int shmem_ptr[];
+	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
+	const auto* main_src_x = data.x;
+	const auto* main_src_y = data.y;
+	const auto* main_src_z = data.z;
+	auto& src_x = shmem.X.x;
+	auto& src_y = shmem.X.y;
+	auto& src_z = shmem.X.z;
+	auto& barrier = shmem.barrier;
+	const auto* tree_nodes = data.tree_nodes;
+	const int &tid = threadIdx.x;
+	flop_counter<int> flops = 0;
+	if (partlist.size()) {
+		int part_index;
+		expansion<float> L;
+		for (int j = 0; j < EXPANSION_SIZE; j++) {
+			L[j] = 0.0;
+		}
+		int i = 0;
+		auto these_parts = tree_nodes[partlist[0]].part_range;
+		const auto partsz = partlist.size();
+		while (i < partsz) {
+			auto group = cooperative_groups::this_thread_block();
+			if (group.thread_rank() == 0) {
+				init(&barrier, group.size());
+			}
+			group.sync();
+			part_index = 0;
+			while (part_index < KICK_PP_MAX && i < partsz) {
+				while (i + 1 < partsz) {
+					const auto other_tree_parts = tree_nodes[partlist[i + 1]].part_range;
+					if (these_parts.second == other_tree_parts.first) {
+						these_parts.second = other_tree_parts.second;
+						i++;
+					} else {
+						break;
+					}
+				}
+				const part_int imin = these_parts.first;
+				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
+				const int sz = imax - imin;
+				cuda::memcpy_async(group, src_x.data() + part_index, main_src_x + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_y.data() + part_index, main_src_y + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_z.data() + part_index, main_src_z + imin, sizeof(fixed32) * sz, barrier);
+				__syncwarp();
+				these_parts.first += sz;
+				part_index += sz;
+				if (these_parts.first == these_parts.second) {
+					i++;
+					if (i < partsz) {
+						these_parts = tree_nodes[partlist[i]].part_range;
+					}
+				}
+			}
+			barrier.arrive_and_wait();
+			__syncwarp();
+			for (int j = tid; j < part_index; j += warpSize) {
+				array<float, NDIM> dx;
+				dx[XDIM] = distance(self.mpos->pos[XDIM], src_x[j]);
+				dx[YDIM] = distance(self.mpos->pos[YDIM], src_y[j]);
+				dx[ZDIM] = distance(self.mpos->pos[ZDIM], src_z[j]);
+				expansion<float> D;
+				flops += EXPANSION_SIZE + 6 + ewald_greens_function(D, dx);
+				for (int k = 0; k < EXPANSION_SIZE; k++) {
+					L[k] += D[k];
+				}
+			}
+		}
+		shared_reduce_add_array(L);
+		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
+			Lacc[i] += L[i];
+		}
+		flops += 6 * EXPANSION_SIZE;
+
+		__syncwarp();
+	}
+	add_gpu_flops(flops);
+}
+
+__device__
 void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
 	__shared__
@@ -211,35 +326,58 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 }
 
 __device__
-void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
+void cuda_gravity_pc_ewald(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {
 	const int &tid = threadIdx.x;
-	const auto& tree_nodes = data.tree_nodes;
+	__shared__
+	extern int shmem_ptr[];
+	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
+	auto &force = shmem.f;
+	auto& multis = shmem.mpos;
+	const int nsink = self.part_range.second - self.part_range.first;
+	const auto* sink_x = data.x + self.part_range.first;
+	const auto* sink_y = data.y + self.part_range.first;
+	const auto* sink_z = data.z + self.part_range.first;
+	auto& barrier = shmem.barrier;
+	const auto* tree_nodes = data.tree_nodes;
 	flop_counter<int> flops = 0;
+	auto group = cooperative_groups::this_thread_block();
 	if (multlist.size()) {
-		expansion<float> L;
-		expansion<float> D;
-		for (int i = 0; i < EXPANSION_SIZE; i++) {
-			L[i] = 0.0f;
-		}
-		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
-			const tree_node& other = tree_nodes[multlist[i]];
-			multipole<float> M = other.mpos->multi;
-		//	flops += apply_scale_factor(M);
-			array<float, NDIM> dx;
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
-			}
-			flops += 3 + ewald_greens_function(D, dx);
-			flops += M2L(L, M, D, do_phi);
-		}
-		//flops += apply_scale_factor_inv(L);
-		shared_reduce_add_array(L);
-		for (int i = tid; i < EXPANSION_SIZE; i += WARP_SIZE) {
-			Lacc[i] += L[i];
-		}
-		flops += 6 * EXPANSION_SIZE;
 		__syncwarp();
+		int mi = 0;
+		const int cnt = multlist.size();
+		while (mi < cnt) {
+			int mend = min(cnt, mi + KICK_C_MAX);
+			for (int this_mi = mi; this_mi < mend; this_mi++) {
+				cuda::memcpy_async(group, &multis[this_mi - mi], tree_nodes[multlist[this_mi]].mpos, sizeof(multi_pos), barrier);
+			}
+			mend -= mi;
+			mi += mend;
+			barrier.arrive_and_wait();
+			expansion2<float> L;
+			array<float, NDIM> dx;
+			expansion<float> D;
+			for (int j = 0; j < mend; j++) {
+				const auto& pos = multis[j].pos;
+				const auto& M = multis[j].multi;
+				for (int k = tid; k < nsink; k += WARP_SIZE) {
+					auto& F = force[k];
+					L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
+					dx[XDIM] = distance(sink_x[k], pos[XDIM]);
+					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
+					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
+					flops += 6 + ewald_greens_function(D, dx);
+					flops += M2L(L, M, D, do_phi);
+					F.gx -= SCALE_FACTOR2 * L(1, 0, 0);
+					F.gy -= SCALE_FACTOR2 * L(0, 1, 0);
+					F.gz -= SCALE_FACTOR2 * L(0, 0, 1);
+					F.phi += SCALE_FACTOR1 * L(0, 0, 0);
+					flops += 4;
+				}
+			}
+			__syncwarp();
+		}
 	}
+	__syncwarp();
 	add_gpu_flops(flops);
 }
 
@@ -399,6 +537,118 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 		atomicAdd(&inparts, nsink);
 	}
 
+	__syncwarp();
+	add_gpu_flops(flops);
+}
+
+__device__
+void cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, const device_vector<int>& partlist, float h, bool do_phi) {
+	const int &tid = threadIdx.x;
+	__shared__
+	extern int shmem_ptr[];
+	cuda_kick_shmem &shmem = *(cuda_kick_shmem*) shmem_ptr;
+	auto &force = shmem.f;
+	const int nsink = self.part_range.second - self.part_range.first;
+	const auto* sink_x = data.x + self.part_range.first;
+	const auto* sink_y = data.y + self.part_range.first;
+	const auto* sink_z = data.z + self.part_range.first;
+	auto& barrier = shmem.barrier;
+	const auto* main_src_x = data.x;
+	const auto* main_src_y = data.y;
+	const auto* main_src_z = data.z;
+	auto& src_x = shmem.X.x;
+	auto& src_y = shmem.X.y;
+	auto& src_z = shmem.X.z;
+	const auto* tree_nodes = data.tree_nodes;
+	int part_index;
+	const float h2 = sqr(h);
+	const float hinv = 1.f / h;
+	const float h2inv = sqr(hinv);
+	const float h3inv = h2inv * hinv;
+	flop_counter<int> flops = 7;
+	int close = 0;
+	int direct = 0;
+	if (partlist.size()) {
+		int i = 0;
+		auto these_parts = tree_nodes[partlist[0]].part_range;
+		const auto partsz = partlist.size();
+		while (i < partsz) {
+			auto group = cooperative_groups::this_thread_block();
+			part_index = 0;
+			while (part_index < KICK_PP_MAX && i < partsz) {
+				while (i + 1 < partsz) {
+					const auto other_tree_parts = tree_nodes[partlist[i + 1]].part_range;
+					if (these_parts.second == other_tree_parts.first) {
+						these_parts.second = other_tree_parts.second;
+						i++;
+					} else {
+						break;
+					}
+				}
+				const part_int imin = these_parts.first;
+				const part_int imax = min(these_parts.first + (KICK_PP_MAX - part_index), these_parts.second);
+				const int sz = imax - imin;
+				cuda::memcpy_async(group, src_x.data() + part_index, main_src_x + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_y.data() + part_index, main_src_y + imin, sizeof(fixed32) * sz, barrier);
+				cuda::memcpy_async(group, src_z.data() + part_index, main_src_z + imin, sizeof(fixed32) * sz, barrier);
+				__syncwarp();
+				these_parts.first += sz;
+				part_index += sz;
+				if (these_parts.first == these_parts.second) {
+					i++;
+					if (i < partsz) {
+						these_parts = tree_nodes[partlist[i]].part_range;
+					}
+				}
+			}
+			barrier.arrive_and_wait();
+			float fx;
+			float fy;
+			float fz;
+			float pot;
+			float dx0;
+			float dx1;
+			float dx2;
+			__syncwarp();
+			ewald_const econst;
+			const float dxinv = (EWALD_TABLE_SIZE - 3.0f);
+			const float dx = 1.0f / dxinv;
+			for (int k = tid; k < nsink; k += WARP_SIZE) {
+				fx = 0.f;
+				fy = 0.f;
+				fz = 0.f;
+				pot = 0.f;
+				for (int j = 0; j < part_index; j++) {
+					dx0 = distance(sink_x[k], src_x[j]); // 1
+					dx1 = distance(sink_y[k], src_y[j]); // 1
+					dx2 = distance(sink_z[k], src_z[j]); // 1
+					const float sgnx = copysign(1.f, dx0);
+					const float sgny = copysign(1.f, dx1);
+					const float sgnz = copysign(1.f, dx2);
+					dx0 = fabs(dx0);
+					dx1 = fabs(dx1);
+					dx2 = fabs(dx2);
+					float this_fx;
+					float this_fy;
+					float this_fz;
+					float this_pot;
+					econst.table_interp(this_pot, this_fx, this_fy, this_fz, dx0, dx1, dx2, do_phi);
+					fx += sgnx * this_fx;
+					fy += sgny * this_fy;
+					fz += sgnz * this_fz;
+					pot += this_pot;
+
+				}
+				auto& F = force[k];
+				F.gx += fx;
+				F.gy += fy;
+				F.gz += fz;
+				flops += 4;
+				F.phi += pot;
+			}
+		}
+		__syncwarp();
+	}
 	__syncwarp();
 	add_gpu_flops(flops);
 }

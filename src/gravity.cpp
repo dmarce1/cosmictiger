@@ -100,6 +100,8 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 }
 
 void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+
+	THROW_ERROR( "Not supporting CPU cp \n");
 	constexpr int chunk_size = 32;
 	flop_counter<int> flops = 0;
 	if (list.size()) {
@@ -180,6 +182,9 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 }
 
 void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list) {
+
+	THROW_ERROR( "Not supporting CPU cp \n");
+
 	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -253,9 +258,7 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 }
 
 void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
-
-	PRINT( "Called CPU pp\n");
-	abort();
+	THROW_ERROR( "Not supporting CPU cp \n");
 
 	flop_counter<int> flops = 0;
 	timer tm;

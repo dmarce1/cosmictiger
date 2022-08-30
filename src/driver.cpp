@@ -208,8 +208,8 @@ void plummer_init(double r0) {
 	double x0 = 0.5;
 	double y0 = 0.5;
 	double z0 = 0.5;
-	PRINT( "Initializing Plummer\n");
-	for (part_int i = 0; i < nparts; i +=2) {
+	PRINT("Initializing Plummer\n");
+	for (part_int i = 0; i < nparts; i += 2) {
 		double r, p;
 //		r = sample_density_distribution(nfw_density);
 		r = sample_density_distribution([](double r) {
@@ -262,19 +262,19 @@ void plummer_init(double r0) {
 		particles_rung(i + 1) = 0;
 		particles_rung(i) = 0;
 		/*if (i % 4 == 0) {
-			particles_pos(XDIM, i) += 0.025;
-			particles_vel(XDIM, i) -= 50.0 * v0;
-			particles_pos(XDIM, i + 1) += 0.025;
-			particles_vel(XDIM, i + 1) -= 50.0 * v0;
-		} else {
-			particles_pos(XDIM, i) -= 0.025;
-			particles_vel(XDIM, i) += 50.0 * v0;
-			particles_pos(XDIM, i + 1) -= 0.025;
-			particles_vel(XDIM, i + 1) += 50.0 * v0;
-		}*/
+		 particles_pos(XDIM, i) += 0.025;
+		 particles_vel(XDIM, i) -= 50.0 * v0;
+		 particles_pos(XDIM, i + 1) += 0.025;
+		 particles_vel(XDIM, i + 1) -= 50.0 * v0;
+		 } else {
+		 particles_pos(XDIM, i) -= 0.025;
+		 particles_vel(XDIM, i) += 50.0 * v0;
+		 particles_pos(XDIM, i + 1) -= 0.025;
+		 particles_vel(XDIM, i + 1) += 50.0 * v0;
+		 }*/
 
 	}
-	PRINT( "Done Initializing Plummer\n");
+	PRINT("Done Initializing Plummer\n");
 
 }
 
@@ -688,7 +688,7 @@ void save_glass() {
 }
 
 void driver() {
-	PRINT( "Entering main driver\n");
+	PRINT("Entering main driver\n");
 	timer total_time;
 	total_time.start();
 	timer tmr;
@@ -974,6 +974,10 @@ void driver() {
 				bucket_size = 184;
 			}
 			//bucket_size = 128;
+			/*double min_box_dim = 0.25 / sqrt(3) * (theta / (theta + 1));
+			min_box_dim *= 0.5;
+			const int min_bucket_size = (int)(opts.nparts * pow(min_box_dim, NDIM));
+			bucket_size = std::max(std::min(bucket_size, min_bucket_size),1);*/
 			opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
@@ -1081,7 +1085,7 @@ void driver() {
 			}
 			step_tm.stop();
 			PRINT_BOTH(textfp, "%10.3e %10i %10.3e %10.3e %10.3e %10.3e %10.3e %10i %10i %10i %10.3e %10.3e %10.3e %10.3e \n", runtime, iter - 1, z, a, adot,
-					tau / t0, years, minrung, max_rung, bucket_size, flops * 1e-12, step_tm.read(), close , direct);
+					tau / t0, years, minrung, max_rung, bucket_size, flops * 1e-12, step_tm.read(), close, direct);
 			fclose(textfp);
 			total_time.reset();
 			remaining_time.stop();

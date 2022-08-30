@@ -25,10 +25,133 @@
 
 #include <algorithm>
 ewald_constants ec;
-__constant__ ewald_constants ec_dev;
+__managed__ ewald_constants ec_dev;
+
+void ewald_compute(float& pot, float& fx, float& fy, float& fz, float dx0, float dx1, float dx2) {
+	const float cons1 = float(4.0f / sqrtf(M_PI));
+	fx = 0.0;
+	fy = 0.0;
+	fz = 0.0;
+	pot = 0.0;
+	const auto r2 = sqr(dx0, dx1, dx2);  // 5
+
+	if (r2 > 0.f) {
+		const float dx = dx0;
+		const float dy = dx1;
+		const float dz = dx2;
+		const float r2 = sqr(dx, dy, dz);
+		const float r = sqrt(r2);
+		const float rinv = 1.f / r;
+		const float r2inv = rinv * rinv;
+		const float r3inv = r2inv * rinv;
+		float exp0 = exp(-4.0f * r2);
+		float erf0 = erf(2.0f * r);
+		const float expfactor = cons1 * r * exp0;
+		const float d0 = erf0 * rinv;
+		const float d1 = (expfactor - erf0) * r3inv;
+		pot += d0;
+		fx -= dx * d1;
+		fy -= dy * d1;
+		fz -= dz * d1;
+		for (int xi = -3; xi <= +3; xi++) {
+			for (int yi = -3; yi <= +3; yi++) {
+				for (int zi = -3; zi <= +3; zi++) {
+					const bool center = sqr(xi, yi, zi) == 0;
+					if (center) {
+						continue;
+					}
+					const float dx = dx0 - xi;
+					const float dy = dx1 - yi;
+					const float dz = dx2 - zi;
+					const float r2 = sqr(dx, dy, dz);
+					if (r2 < 2.6f * 2.6f) {
+						const float r = sqrt(r2);
+						const float rinv = 1.f / r;
+						const float r2inv = rinv * rinv;
+						const float r3inv = r2inv * rinv;
+						float exp0 = exp(-4.0f * r2);
+						float erfc0 = erfc(2.0f * r);
+						const float expfactor = cons1 * r * exp0;
+						const float d0 = -erfc0 * rinv;
+						const float d1 = (expfactor + erfc0) * r3inv;
+						pot += d0;
+						fx -= dx * d1;
+						fy -= dy * d1;
+						fz -= dz * d1;
+					}
+				}
+			}
+		}
+		pot += float(M_PI / 4.f);
+		for (int xi = -2; xi <= +2; xi++) {
+			for (int yi = -2; yi <= +2; yi++) {
+				for (int zi = -2; zi <= +2; zi++) {
+					const float hx = xi;
+					const float hy = yi;
+					const float hz = zi;
+					const float h2 = sqr(hx, hy, hz);
+					if (h2 > 0.0f && h2 <= 8) {
+						const float hdotx = dx0 * hx + dx1 * hy + dx2 * hz;
+						const float omega = float(2.0 * M_PI) * hdotx;
+						float c, s;
+						sincosf(omega, &s, &c);
+						const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
+						const float c1 = -s * 2.0 * M_PI * c0;
+						pot += c0 * c;
+						fx -= c1 * hx;
+						fy -= c1 * hy;
+						fz -= c1 * hz;
+					}
+				}
+			}
+		}
+	} else {
+		pot += 2.837291f;
+	}
+}
 
 void ewald_const::init_gpu() {
+	double dx = 0.5 / (EWALD_TABLE_SIZE - 3.0);
+	for (int i0 = 0; i0 < EWALD_TABLE_SIZE; i0++) {
+		for (int j0 = 0; j0 < EWALD_TABLE_SIZE; j0++) {
+			for (int k0 = 0; k0 < EWALD_TABLE_SIZE; k0++) {
+				const double dx0 = i0 * dx - dx;
+				const double dx1 = j0 * dx - dx;
+				const double dx2 = k0 * dx - dx;
+				float pot;
+				float fx;
+				float fy;
+				float fz;
 
+				ewald_compute(pot, fx, fy, fz, dx0, dx1, dx2);
+				ec.table[NDIM][i0][j0][k0] = pot;
+				ec.table[XDIM][i0][j0][k0] = fx;
+				ec.table[YDIM][i0][j0][k0] = fy;
+				ec.table[ZDIM][i0][j0][k0] = fz;
+			}
+		}
+	}
+	/*double err = 0.0;
+	 int cnt = 0;
+	 for (double x = 0.0; x < 0.5; x += 0.1) {
+	 for (double y = 0.0; y < 0.5; y += 0.1) {
+	 for (double z = 0.0; z < 0.5; z += 0.1) {
+	 float pot;
+	 float fx;
+	 float fy;
+	 float fz;
+	 ewald_compute(pot, fx, fy, fz, x, y, z);
+	 ewald_const tbl;
+	 double this_err = pot - tbl.table_interp(NDIM,x,y,z);
+	 err += sqr(this_err);
+	 cnt ++;
+	 }
+	 }
+	 }
+	 err /= cnt;
+	 err = sqrt(err);
+	 PRINT( "Table error = %e\n", err);
+	 */
 	int n2max = 12;
 	int nmax = std::sqrt(n2max) + 1;
 	array<float, NDIM> this_h;
@@ -110,7 +233,7 @@ void ewald_const::init_gpu() {
 	}
 	ec.D0 = D;
 	cuda_set_device();
-	CUDA_CHECK(cudaMemcpyToSymbol(ec_dev, &ec, sizeof(ewald_constants)));
+	ec_dev = ec;
 }
 
 CUDA_EXPORT int ewald_const::nfour() {
@@ -143,6 +266,65 @@ CUDA_EXPORT const array<float, NDIM>& ewald_const::four_index(int i) {
 #else
 	return ec.four_indices[i];
 #endif
+}
+
+CUDA_EXPORT void ewald_const::table_interp(float& pot, float& fx, float& fy, float& fz, float x, float y, float z, bool do_pot) {
+#ifdef __CUDA_ARCH__
+	auto& table = ec_dev.table;
+#else
+	auto& table = ec.table;
+#endif
+	const float dxinv = 2.0 * (EWALD_TABLE_SIZE - 3.f);
+	const float dx = 1.f / dxinv;
+	array<float, NDIM> xi;
+	array<float, NDIM> xi2;
+	array<float, NDIM> xi3;
+	xi[XDIM] = x * dxinv + 1.0;
+	xi[YDIM] = y * dxinv + 1.0;
+	xi[ZDIM] = z * dxinv + 1.0;
+	const auto weight = [](int i, float t, float t2, float t3) {
+		if( i == 0 ) {
+			return -0.5f * t + t2 - 0.5f * t3;
+		} else if( i == 1 ) {
+			return 1.f - 2.5f * t2 + 1.5f * t3;
+		} else if( i == 2 ) {
+			return 0.5f * t + 2.f * t2 - 1.5f * t3;
+		} else {
+			return -0.5f * t2 + 0.5f * t3;
+		}
+	};
+	array<int, NDIM> i0, i1;
+	for (int dim = 0; dim < NDIM; dim++) {
+		i0[dim] = xi[dim] - 1;
+		if (i0[dim] > EWALD_TABLE_SIZE - 3) {
+			i0[dim] = EWALD_TABLE_SIZE - 3;
+		}
+		xi[dim] -= i0[dim] + 1;
+		xi2[dim] = sqr(xi[dim]);
+		xi3[dim] = xi[dim] * xi2[dim];
+	}
+	fx = fy = fz = pot = 0.0f;
+	for (i1[XDIM] = 0; i1[XDIM] < 4; i1[XDIM]++) {
+		for (i1[YDIM] = 0; i1[YDIM] < 4; i1[YDIM]++) {
+			for (i1[ZDIM] = 0; i1[ZDIM] < 4; i1[ZDIM]++) {
+				float wt = 1.f;
+				array<int, NDIM> i2;
+				for (int dim = 0; dim < NDIM; dim++) {
+					wt *= weight(i1[dim], xi[dim], xi2[dim], xi3[dim]);
+				}
+				for (int dim = 0; dim < NDIM; dim++) {
+					i2[dim] = i0[dim] + i1[dim];
+				}
+				//		PRINT( "%i %i %i %e\n", i2[XDIM], i2[YDIM], i2[ZDIM], table[interp_dim][i2[XDIM]][i2[YDIM]][i2[ZDIM]] );
+				fx += wt * table[XDIM][i2[XDIM]][i2[YDIM]][i2[ZDIM]];
+				fy += wt * table[YDIM][i2[XDIM]][i2[YDIM]][i2[ZDIM]];
+				fz += wt * table[ZDIM][i2[XDIM]][i2[YDIM]][i2[ZDIM]];
+				if (do_pot) {
+					pot += wt * table[NDIM][i2[XDIM]][i2[YDIM]][i2[ZDIM]];
+				}
+			}
+		}
+	}
 }
 
 CUDA_EXPORT const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {

@@ -58,11 +58,17 @@ void cuda_gravity_cc_direct( const cuda_kick_data&, expansion<float>&, const tre
 __device__
 void cuda_gravity_cp_direct( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, bool do_phi);
 __device__
+void cuda_gravity_cp_ewald( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, bool do_phi);
+__device__
+void cuda_gravity_pc_ewald( const cuda_kick_data& data, const tree_node&, const device_vector<int>&,bool);
+__device__
 void cuda_gravity_pc_direct( const cuda_kick_data& data, const tree_node&, const device_vector<int>&,bool);
 __device__
 void cuda_gravity_cc_ewald( const cuda_kick_data&, expansion<float>&, const tree_node&, const device_vector<int>&, bool do_phi);
 __device__
 void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, float h, bool);
+__device__
+void cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const device_vector<int>&, float h, bool);
 #endif
 #endif /* GRAVITY_HPP_ */
 
@@ -70,7 +76,7 @@ void reset_gravity_counters();
 void get_gravity_counters(double& close, double& direct);
 void set_gravity_counter_use(bool code);
 
-#define FERRER_N 4
+#define FERRER_N 2
 #define NFERRER 5
 
 template<class T>

@@ -351,7 +351,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			double xmid;
 			int nlo, nhi;
 			int max_dif = 1 + 0.8 * (part_range.second - part_range.first);
-			do {
+		//	do {
 				xmid = 0.5 * (xmax + xmin);
 				mid = particles_sort(part_range, xmid, xdim);
 				nhi = part_range.second - mid;
@@ -362,7 +362,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 					xmax = xmid;
 				}
 	//			PRINT( "%i %i %e %e %e\n", nlo, nhi, xmin, xmax, imbalance);
-			} while (abs(nlo-nhi) > max_dif);
+	//		} while (abs(nlo-nhi) > max_dif);
 
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
