@@ -24,7 +24,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/tensor.hpp>
 
-#define EWALD_ALPHA 2.0
+
 #define NREAL 178
 #define NFOUR 92
 

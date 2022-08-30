@@ -81,7 +81,7 @@ void ewald_const::init_gpu() {
 		array<float, NDIM> h = ec.four_indices[i];
 		auto D0 = vector_to_sym_tensor<float, LORDER>(h);
 		const float h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
-		const float c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / sqr(EWALD_ALPHA)) / M_PI;
+		const float c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
 		array<int, NDIM> n;
 		const int signs[4] = { 1, -1, -1, 1 };
 		for (n[0] = 0; n[0] < LORDER; n[0]++) {
@@ -99,7 +99,7 @@ void ewald_const::init_gpu() {
 	for (int n = 0; n < (LORDER + 2) * (LORDER + 1) * LORDER / 6; n++) {
 		D[n] = 0.0;
 	}
-	constexpr double alpha = EWALD_ALPHA;
+	constexpr double alpha = 2.0;
 	for (int n = 0; n < LORDER; n += 2) {
 		for (int m = 0; m < LORDER - n; m += 2) {
 			for (int l = 0; l < LORDER - n - m; l += 2) {
