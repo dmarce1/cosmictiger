@@ -72,7 +72,10 @@ pair<double> analytic_compare(int Nsamples) {
 		sinkz[i] = samples[i].x[ZDIM];
 	}
 	const double gm = get_options().GM;
+	tm.reset();
+	tm.start();
 	auto results = do_analytic(sinkx, sinky, sinkz);
+	tm.stop();
 	vector<double> gerrs, phierrs;
 	for (int i = 0; i < Nsamples; i++) {
 		double f1 = 0.0, f2 = 0.0;
@@ -91,6 +94,8 @@ pair<double> analytic_compare(int Nsamples) {
 		phierrs.push_back(phierr);
 		printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1, f1, f2, f1/f2);
 	}
+	PRINT( "analytic took %e seconds\n", tm.read());
+
 	int index = 99 * Nsamples / 100;
 	std::sort(phierrs.begin(), phierrs.end());
 	std::sort(gerrs.begin(), gerrs.end());

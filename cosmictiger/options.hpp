@@ -39,6 +39,7 @@ struct options {
 	bool plummer;
 	double plummerR;
 	bool create_glass;
+	double toler;
 	int read_check;
 	int tracer_count;
 	int parts_dim;
@@ -99,6 +100,7 @@ struct options {
 		arc & omega_k;
 		arc & omega_lam;
 		arc & bucket_size;
+		arc & toler;
 		arc & nsteps;
 		arc & Nfour;
 		arc & cuda;

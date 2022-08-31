@@ -132,6 +132,7 @@ bool process_options(int argc, char *argv[]) {
 	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255 / 2.73), "") //
 	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "") //
+	("toler", po::value<double>(&(opts.toler))->default_value(-1), "") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9 / .6732), "mass resolution") //
@@ -170,10 +171,14 @@ bool process_options(int argc, char *argv[]) {
 		opts.nparts *= 2;
 //		opts.Nfour *= 2;
 	}
+	if (opts.toler > 0.0) {
+		opts.save_force = true;
+	} else {
+		opts.save_force = opts.test == "force";
+	}
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.tree_alloc_line_size = 16 * opts.tree_cache_line_size;
 	opts.part_cache_line_size = 131072 / (sizeof(fixed32) * NDIM);
-	opts.save_force = opts.test == "force";
 	opts.omega_m = opts.omega_b + opts.omega_c;
 	opts.code_to_g *= constants::M0;
 	opts.code_to_cm = pow(opts.code_to_g * (8.0 * M_PI) * opts.nparts * constants::G / (3.0 * opts.omega_m * sqr(constants::H0 * opts.hubble)), 1.0 / 3.0);
@@ -216,7 +221,7 @@ bool process_options(int argc, char *argv[]) {
 	}
 	opts.hsoft *= pow(opts.nparts, -1.0 / NDIM);
 	if (opts.plummer) {
-		opts.hsoft = self_phi()*pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
+		opts.hsoft = self_phi() * pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.nparts, 1.0 / 3.0);
 	}
 	PRINT("Simulation Options\n");
 	PRINT("code_to_M_solar = %e\n", opts.code_to_g / 1.98e33);

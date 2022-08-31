@@ -42,6 +42,7 @@
 #include <cosmictiger/profiler.hpp>
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/analytic.hpp>
 
 #include <cosmictiger/fft.hpp>
 
@@ -381,8 +382,28 @@ void do_groups(int number, double scale) {
 	profiler_exit();
 }
 
+double compute_new_theta(double theta0, double err0, double toler) {
+	double norm = 1.0;
+	const auto func = [&norm](double theta) {
+		return norm*pow(theta,MORDER)*(MORDER+1)/sqr(theta-1.0);
+	};
+	const auto dfunc = [&norm](double theta) {
+		return ((1 + MORDER)*(MORDER*(-1 + theta) - 2*theta)*pow(theta,-1 + MORDER))/
+		pow(-1 + theta,3);
+	};
+	norm = err0 / func(theta0);
+	double theta = theta0;
+	do {
+		double f = func(theta) - toler;
+		double dfdtheta = dfunc(theta);
+		err0 = fabs(f / dfdtheta);
+		theta -= f / dfdtheta;
+	} while (err0 > 1.0e-7);
+	return theta;
+}
+
 std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, int max_rung, double scale, double adot, double tau, double t0, double theta,
-		energies_t* energies, int minrung0, bool do_phi, hpx::future<void>* lc_fut, bool nocrop, double drag) {
+		energies_t* energies, int minrung0, bool do_phi, hpx::future<void>* lc_fut, bool nocrop, double drag, bool force_eval) {
 	profiler_enter(__FUNCTION__);
 	timer tm;
 	kick_return kr;
@@ -556,6 +577,10 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			}
 		}
 		tm.stop();
+		if (top && get_options().toler > 0.0 && force_eval) {
+			auto err = analytic_compare(1000);
+			kr.err = err.first;
+		}
 		if ((!ascending || top) && !(clip_top && top)) {
 			tm.reset();
 			tm.start();
@@ -881,6 +906,8 @@ void driver() {
 	buckets50.start();
 	energies_t energies0;
 	double glass_error = 1.0;
+
+	double theta = get_options().theta;
 	for (;; step++) {
 
 //		PRINT("STEP  = %i\n", step);
@@ -943,26 +970,20 @@ void driver() {
 				domains_end();
 				PRINT("Rebound done\n");
 			}
-			double theta;
 			const double z = 1.0 / a - 1.0;
 			auto opts = get_options();
 			opts.hsoft = hsoft0;			// / a;
 			if (get_options().create_glass) {
 				theta = 0.4;
 			} else {
-				/*				if (z > 20.0) {
-				 theta = 0.41;
-				 } else if (z > 2.0) {
-				 theta = 0.51;
-				 } else {
-				 theta = 0.61;
-				 }*/
-				if (z > 20.0) {
-					theta = 0.41;
-				} else if (z > 2.0) {
-					theta = 0.51;
-				} else {
-					theta = 0.61;
+				if (get_options().toler < 0.0) {
+					if (z > 20.0) {
+						theta = 0.41;
+					} else if (z > 2.0) {
+						theta = 0.51;
+					} else {
+						theta = 0.61;
+					}
 				}
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
@@ -975,9 +996,9 @@ void driver() {
 			}
 			//bucket_size = 128;
 			/*double min_box_dim = 0.25 / sqrt(3) * (theta / (theta + 1));
-			min_box_dim *= 0.5;
-			const int min_bucket_size = (int)(opts.nparts * pow(min_box_dim, NDIM));
-			bucket_size = std::max(std::min(bucket_size, min_bucket_size),1);*/
+			 min_box_dim *= 0.5;
+			 const int min_bucket_size = (int)(opts.nparts * pow(min_box_dim, NDIM));
+			 bucket_size = std::max(std::min(bucket_size, min_bucket_size),1);*/
 			opts.bucket_size = bucket_size;
 			opts.theta = theta;
 			set_options(opts);
@@ -1008,7 +1029,15 @@ void driver() {
 			if (get_options().use_glass && minrung == minrung0) {
 				//			particles_displace(rand1(), rand1(), rand1());
 			}
-			tmp = kick_step_hierarchical(om, max_rung, a, adot, tau, t0, theta, &energies, minrung0, full_eval, &lc_fut, nocrop, sqrt(glass_error));
+			tmp = kick_step_hierarchical(om, max_rung, a, adot, tau, t0, theta, &energies, minrung0, full_eval, &lc_fut, nocrop, sqrt(glass_error), full_eval);
+			if (full_eval && get_options().toler > 0.0) {
+				PRINT("current theta = %e error = %e\n", theta, tmp.first.err);
+				theta = 0.5 * theta + 0.5 * compute_new_theta(theta, tmp.first.err, get_options().toler);
+				PRINT("new theta = %e\n", theta);
+				FILE* fp = fopen("theta.txt", "at");
+				fprintf(fp, "%e %e\n", 1.0 / a - 1.0, theta);
+				fclose(fp);
+			}
 			if (tau == 0.0) {
 				energies0 = energies;
 			}

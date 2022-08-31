@@ -35,6 +35,34 @@
 #include <cmath>
 
 int hpx_main(int argc, char *argv[]) {
+	{
+			double toler = 1.19e-7 / sqrt(2);
+			double norm = 2.83;
+			double x;
+			for (double alpha = 1.0e-1; alpha < 8.0; alpha += 0.1) {
+				x = 4.0 / alpha;
+				double error;
+				do {
+					double f = erfc(alpha * x) / norm * (4.0 * M_PI * x) - toler;
+					double dfdx = -8.0 * alpha * exp(-sqr(alpha) * x * x) * sqrt(M_PI) * x / norm + 4.0 * M_PI * erfc(alpha * x) / norm;
+					x -= f / dfdx;
+					error = fabs(f / dfdx);
+				} while (error > 1.e-10);
+				double real = x;
+				x = 1.26 * alpha;
+				error = 1e10;
+				do {
+					double f = 2.0 * exp(-sqr(M_PI * x / alpha)) / (pow(M_PI, 1.5) * x) - toler / 2.0;
+					double dfdx = 4.0 * exp(-sqr(M_PI * x / alpha)) * sqrt(M_PI) * (-1.0 / sqr(alpha) - 0.5 / sqr(M_PI * x));
+					x -= f / dfdx;
+					error = fabs(f / dfdx);
+
+				} while (error > 1.e-10);
+				double four = x;
+				PRINT("%e %e %e %e\n", alpha, real, four, sqr(real) * real + sqr(four) * four);
+			}
+
+		}
 
 	/*	simd_double8 x;
 	 for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {

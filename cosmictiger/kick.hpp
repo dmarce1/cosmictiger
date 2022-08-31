@@ -98,7 +98,7 @@ struct kick_return {
 	double ymom;
 	double zmom;
 	double nmom;
-
+	double err;
 	CUDA_EXPORT
 	kick_return() {
 		max_rung = 0;
