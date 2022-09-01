@@ -397,7 +397,7 @@ double compute_new_theta(double theta0, double err0, double toler) {
 		double f = func(theta) - toler;
 		double dfdtheta = dfunc(theta);
 		err0 = fabs(f / dfdtheta);
-		theta -= f / dfdtheta;
+		theta -= 0.5 * f / dfdtheta;
 	} while (err0 > 1.0e-7);
 	return theta;
 }
@@ -579,7 +579,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		tm.stop();
 		if (top && get_options().toler > 0.0 && force_eval) {
 			auto err = analytic_compare(1000);
-			kr.err = err.first;
+			kr.err = err.second;
 		}
 		if ((!ascending || top) && !(clip_top && top)) {
 			tm.reset();
@@ -1035,7 +1035,7 @@ void driver() {
 				theta = 0.5 * theta + 0.5 * compute_new_theta(theta, tmp.first.err, get_options().toler);
 				PRINT("new theta = %e\n", theta);
 				FILE* fp = fopen("theta.txt", "at");
-				fprintf(fp, "%e %e\n", 1.0 / a - 1.0, theta);
+				fprintf(fp, "%e %e %e\n", 1.0 / a - 1.0, tau / params.tau_max, theta);
 				fclose(fp);
 			}
 			if (tau == 0.0) {

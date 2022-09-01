@@ -126,7 +126,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
-	const float alpha = 1.1f;
+	const float alpha = 2.f;
 	const float rmax = 4.15 / alpha + 0.5;
 	const float i2max = sqr(rmax + 0.5);
 	const int imax = sqrt(i2max) + 0.999999;
