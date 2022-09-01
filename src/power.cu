@@ -50,13 +50,13 @@ __global__ void accumulate_density_kernel(fixed32* X, fixed32* Y, fixed32* Z, fl
 					const float y0 = y * Ndim - k;
 					const float z0 = z * Ndim - l;
 					for (int j0 = CLOUD_MIN; j0 <= CLOUD_MAX; j0++) {
-						float wt_x = cloud_weight(x0-j0);
+						float wt_x = cloud_weight(x0 - j0);
 						for (int k0 = CLOUD_MIN; k0 <= CLOUD_MAX; k0++) {
-							float wt_y = cloud_weight(y0-k0);
+							float wt_y = cloud_weight(y0 - k0);
 							for (int l0 = CLOUD_MIN; l0 <= CLOUD_MAX; l0++) {
-								float wt_z = cloud_weight(z0-l0);
+								float wt_z = cloud_weight(z0 - l0);
 								const float wt = wt_x * wt_y * wt_z;
-								atomicAdd(rho + intbox.index(j0+j, k0+k, l0+l), wt);
+								atomicAdd(rho + intbox.index(j0 + j, k0 + k, l0 + l), wt);
 							}
 						}
 					}
@@ -77,7 +77,9 @@ vector<float> accumulate_density_cuda(int M, int Ndim, range<int64_t> intbox) {
 	}
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (const void*) accumulate_density_kernel, BLOCK_SIZE, 0));
 	nblocks *= cuda_smp_count();
-	accumulate_density_kernel<<<nblocks, BLOCK_SIZE>>>(&particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), dev_rho, M, particles_size(), Ndim, intbox);
+	const auto rng = particles_current_range();
+	const auto sz = rng.second - rng.first;
+	accumulate_density_kernel<<<nblocks, BLOCK_SIZE>>>(&particles_pos(XDIM, rng.first), &particles_pos(YDIM, rng.first), &particles_pos(ZDIM, rng.first), dev_rho, M, sz, Ndim, intbox);
 	CUDA_CHECK(cudaDeviceSynchronize());
 	memcpy(rho.data(), dev_rho, sizeof(float) * N3);
 	CUDA_CHECK(cudaFree(dev_rho));

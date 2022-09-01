@@ -169,6 +169,24 @@ HPX_PLAIN_ACTION (particles_pop_rungs);
 HPX_PLAIN_ACTION (particles_push_rungs);
 HPX_PLAIN_ACTION (particles_active_pct);
 
+
+#ifdef TREEPM
+HPX_PLAIN_ACTION (particles_active_count);
+
+size_t particles_active_count() {
+	vector < hpx::future < size_t >> futs;
+	for (auto& c : hpx_children()) {
+		futs.push_back(hpx::async<particles_active_count_action>(c));
+	}
+	auto rng = particles_current_range();
+	size_t num_active = rng.second - rng.first;
+	for (auto& f : futs) {
+		num_active += f.get();
+	}
+	return num_active;
+}
+#endif
+
 double particles_active_pct() {
 	vector<hpx::future<double>> futs;
 	for (auto& c : hpx_children()) {
@@ -184,7 +202,7 @@ double particles_active_pct() {
 	return num_active;
 }
 
-HPX_PLAIN_ACTION(particles_displace);
+HPX_PLAIN_ACTION (particles_displace);
 
 void particles_displace(double dx, double dy, double dz) {
 	vector<hpx::future<void>> futs;
@@ -344,7 +362,7 @@ void particles_set_tracers(size_t count) {
 		fut = hpx::async<particles_set_tracers_action>(hpx_localities()[hpx_rank() + 1], count + particles_size());
 	}
 
-	double particles_per_tracer =  get_options().nparts / get_options().tracer_count;
+	double particles_per_tracer = get_options().nparts / get_options().tracer_count;
 	size_t cycles = count / particles_per_tracer;
 	double start = cycles * particles_per_tracer;
 	start -= count;

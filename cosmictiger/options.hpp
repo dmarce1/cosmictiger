@@ -55,6 +55,7 @@ struct options {
 	int min_group;
 	int slice_res;
 	int nsteps;
+	int p3m_Nmin;
 	double lc_b;
 	double slice_size;
 	double link_len;

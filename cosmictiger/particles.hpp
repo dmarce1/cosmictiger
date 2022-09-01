@@ -216,6 +216,7 @@ void particles_free();
 void particles_save_glass(const char* filename);
 void particles_sort_by_rung(int minrung);
 double particles_active_pct();
+size_t particles_active_count();
 pair<part_int, part_int> particles_current_range();
 
 inline float& particles_pot(part_int index) {

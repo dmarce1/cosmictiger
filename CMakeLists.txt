@@ -89,6 +89,7 @@ set(cosmictiger_source_files
     src/stack_trace.cpp
     src/test.cpp
     src/tree.cpp
+    src/treepm.cpp
     src/view.cpp
     src/zero_order.cpp
 )      

@@ -31,11 +31,11 @@ HPX_PLAIN_ACTION (compute_density_folded);
 
 power_spectrum_t power_spectrum_compute(int M) {
 	const int N = get_options().Nfour;
-	fft3d_init(N,-1.0f);
+	fft3d_init(N, -1.0f);
 	compute_density_folded(M);
 	fft3d_execute();
 	auto power = fft3d_power_spectrum();
-	for( int i = 0; i < power.k.size(); i++) {
+	for (int i = 0; i < power.k.size(); i++) {
 		power.k[i] *= M;
 	}
 	fft3d_destroy();
@@ -52,22 +52,18 @@ static void compute_density_folded(int M) {
 	const size_t Ndim = get_options().Nfour;
 	const size_t nparts = get_options().nparts;
 	const size_t parts_per_rank = nparts / hpx_size();
-	size_t Nper = Ndim;
-	while (sqr(Nper) * Nper > parts_per_rank) {
-		Nper /= 2;
-	}
-	const int Np = Ndim / Nper;
+	const int Np = pow(nparts / parts_per_rank, 1.0 / NDIM) + 0.5;
 	for (int j = 0; j < Np; j++) {
 		for (int k = 0; k < Np; k++) {
 			for (int l = 0; l < Np; l++) {
 				range<int64_t> intbox;
-				intbox.begin[XDIM] = j * Nper + CLOUD_MIN;
-				intbox.begin[YDIM] = k * Nper + CLOUD_MIN;
-				intbox.begin[ZDIM] = l * Nper + CLOUD_MIN;
-				intbox.end[XDIM] = (j + 1) * Nper + CLOUD_MAX;
-				intbox.end[YDIM] = (k + 1) * Nper + CLOUD_MAX;
-				intbox.end[ZDIM] = (l + 1) * Nper + CLOUD_MAX;
-				auto rho = accumulate_density_cuda(M,Ndim, intbox);
+				intbox.begin[XDIM] = (size_t) j * Ndim / Np + CLOUD_MIN;
+				intbox.begin[YDIM] = (size_t) k * Ndim / Np + CLOUD_MIN;
+				intbox.begin[ZDIM] = (size_t) l * Ndim / Np + CLOUD_MIN;
+				intbox.end[XDIM] = (size_t)(j + 1) * Ndim / Np + CLOUD_MAX;
+				intbox.end[YDIM] = (size_t)(k + 1) * Ndim / Np + CLOUD_MAX;
+				intbox.end[ZDIM] = (size_t)(l + 1) * Ndim / Np + CLOUD_MAX;
+				auto rho = accumulate_density_cuda(M, Ndim, intbox);
 				fft3d_accumulate_real(intbox, rho);
 			}
 		}

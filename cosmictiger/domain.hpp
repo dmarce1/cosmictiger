@@ -34,6 +34,9 @@ void domains_save(FILE* fp);
 void domains_load(FILE *fp);
 double domains_get_load_imbalance();
 pair<int, double> domains_find_ewald_level(double theta, size_t key = 1, range<double> box = unit_box<double>(), int depth = 0, double rb = -1.0);
+#ifdef TREEPM
+void domains_fit_boxes2grid();
+#endif
 
 
 struct domain_t {

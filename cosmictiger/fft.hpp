@@ -29,11 +29,11 @@ void fft3d_execute();
 void fft3d_inv_execute();
 vector<float> fft3d_read_real(const range<int64_t>&);
 vector<cmplx> fft3d_read_complex(const range<int64_t>&);
+range<int64_t> fft3d_complex_range();
 void fft3d_accumulate_real(const range<int64_t>&, const vector<float>&);
 void fft3d_accumulate_complex(const range<int64_t>&, const vector<cmplx>&);
 void fft3d_destroy();
 void fft3d_force_real();
-range<int64_t> fft3d_complex_range();
 range<int64_t> fft3d_real_range();
 vector<cmplx>& fft3d_complex_vector();
 
