@@ -1,15 +1,18 @@
 #include <cosmictiger/defs.hpp>
 #ifdef TREEPM
 
+#include <cosmictiger/treepm.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/power.hpp>
+#include <cosmictiger/tree.hpp>
 
 static vector<float> field[NDIM + 1];
 static vector<cmplx> Y0;
 static vector<cmplx> Y;
 static range<int64_t> chain_box;
-static vector<pair<part_int>> chain_mesh;
+static device_vector<pair<part_int>> chain_mesh;
+static vector<int> tree_roots;
 static size_t local_part_count;
 
 void treepm_save_fourier();
@@ -23,6 +26,7 @@ size_t treepm_particles_count(range<int64_t> box);
 void treepm_exchange_boundaries(int Nres);
 vector<array<vector<fixed32>, NDIM>> treepm_particles_get(range<int64_t> box);
 static range<int64_t> double_box2int_box(range<double> box, int Nres);
+range<int64_t> treepm_get_fourier_box(int Nres);
 
 HPX_PLAIN_ACTION (treepm_particles_get);
 HPX_PLAIN_ACTION (treepm_particles_count);
@@ -34,7 +38,17 @@ HPX_PLAIN_ACTION (treepm_filter_fourier);
 HPX_PLAIN_ACTION (treepm_compute_density);
 HPX_PLAIN_ACTION (treepm_create_chainmesh);
 HPX_PLAIN_ACTION (treepm_exchange_boundaries);
+HPX_PLAIN_ACTION (treepm_restore_parts_size);
 
+void treepm_restore_parts_size() {
+	vector<hpx::future<void>> futs1;
+	for (auto c : hpx_children()) {
+		futs1.push_back(hpx::async<treepm_restore_parts_size_action>(c));
+	}
+	particles_resize(local_part_count);
+	hpx::wait_all(futs1.begin(), futs1.end());
+
+}
 void treepm_exchange_boundaries(int Nres) {
 	vector<hpx::future<void>> futs1;
 	for (auto c : hpx_children()) {
@@ -104,10 +118,26 @@ void treepm_exchange_boundaries(int Nres) {
 	}
 	local_part_count = particles_size();
 	particles_resize(pbnds.back());
-
+	const auto int_box = treepm_get_fourier_box(Nres);
+	array<int64_t, NDIM> I;
+	for (I[XDIM] = int_box.begin[XDIM]; I[XDIM] < int_box.end[XDIM]; I[XDIM]++) {
+		for (I[YDIM] = int_box.begin[YDIM]; I[YDIM] < int_box.end[YDIM]; I[YDIM]++) {
+			futs1.push_back(hpx::async([int_box,Nres](array<int64_t, NDIM> I) {
+				for (I[ZDIM] = int_box.begin[ZDIM]; I[ZDIM] < int_box.end[ZDIM]; I[ZDIM]++) {
+					auto j = chain_box.index(I);
+					range<double> rbox;
+					for (int dim = 0; dim < NDIM; dim++) {
+						rbox.begin[dim] = I[dim] / Nres - 1e-9;
+						rbox.end[dim] = (I[dim] + 1) / Nres + 1e-9;
+					}
+					tree_create( tree_create_params(), 0, pair<int, int>(), chain_mesh[j], rbox, 0, false);
+				}
+			}, I));
+		}
+	}
 	for (int i = 0; i < boxes.size(); i++) {
 		auto fut = hpx::async<treepm_particles_get_action>(localities[boxes[i].first], shifts[i]);
-		futs1.push_back(fut.then([i,&boxes,&pbnds](hpx::future<vector<array<vector<fixed32>, NDIM>>> fut) {
+		auto vfut = fut.then([i,&boxes,&pbnds](hpx::future<vector<array<vector<fixed32>, NDIM>>> fut) {
 			auto parts = fut.get();
 			const auto box = boxes[i].second;
 			part_int start = pbnds[i];
@@ -127,7 +157,30 @@ void treepm_exchange_boundaries(int Nres) {
 					}
 				}
 			}
-		}));
+		});
+		vfut = vfut.then([i,&boxes,Nres](hpx::future<void> f) {
+			f.get();
+			array<int64_t,NDIM> I;
+			vector<hpx::future<void>> futs;
+			const auto box = boxes[i].second;
+			for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
+				futs.push_back(hpx::async([box,Nres](array<int64_t, NDIM> I) {
+									for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
+										for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
+											auto j = chain_box.index(I);
+											range<double> rbox;
+											for (int dim = 0; dim < NDIM; dim++) {
+												rbox.begin[dim] = I[dim] / Nres - 1e-9;
+												rbox.end[dim] = (I[dim] + 1) / Nres + 1e-9;
+											}
+											tree_create( tree_create_params(), 0, pair<int, int>(), chain_mesh[j], rbox, 0, false);
+										}
+									}
+								}, I));
+			}
+			return hpx::when_all(futs.begin(), futs.end());
+		});
+		futs1.push_back(std::move(vfut));
 	}
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
@@ -338,18 +391,19 @@ void treepm_filter_fourier(int dim, int Nres) {
 }
 
 void treepm_compute_density(int N) {
-	vector<float> rho0;
 	vector<hpx::future<void>> futs1;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_compute_density_action>(c, N));
 	}
-	range<int64_t> intbox = treepm_get_fourier_box(N);
+	range<int64_t> rho_box = treepm_get_fourier_box(N);
+	const auto int_box = rho_box;
 	for (int dim = 0; dim < NDIM; dim++) {
-		intbox.begin[dim] += CLOUD_MIN;
-		intbox.end[dim] += CLOUD_MAX;
+		rho_box.begin[dim] += CLOUD_MIN;
+		rho_box.end[dim] += CLOUD_MAX;
 	}
-	auto rho = accumulate_density_cuda(1, N, intbox);
-	fft3d_accumulate_real(intbox, rho);
+	auto rho = treepm_compute_density_local(N, chain_mesh, int_box, chain_box, rho_box);
+	vector<float> rho0(rho.begin(), rho.end());
+	fft3d_accumulate_real(chain_box, rho0);
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 

@@ -184,6 +184,7 @@ struct tree_create_return {
 };
 
 struct tree_create_params {
+#ifndef TREEPM
 	int min_rung;
 	double theta;
 	part_int par_parts;
@@ -194,7 +195,6 @@ struct tree_create_params {
 		leaf_pushed = false;
 		do_leaf_sizes = false;
 	}
-	tree_create_params(int min_rung, double theta, double hmax);
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & par_parts;
@@ -204,11 +204,17 @@ struct tree_create_params {
 		arc & theta;
 		arc & min_level;
 	}
+#else
+	tree_create_params();
+#endif
+	tree_create_params(int min_rung, double theta, double hmax);
+
 };
 
 tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
 		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
 void tree_reset();
+void tree_allocate_nodes();
 void tree_destroy(bool free_tree = false);
 int tree_min_level(double theta, double hsoft);
 const tree_node* tree_get_node(tree_id);

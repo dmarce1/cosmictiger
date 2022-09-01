@@ -137,7 +137,6 @@ struct kick_return {
 
 struct kick_params {
 	float sign;
-	int min_level;
 	int min_rung;
 	float a;
 	float t0;
@@ -179,7 +178,6 @@ struct kick_params {
 		arc & sign;
 		arc & save_force;
 		arc & node_load;
-		arc & min_level;
 		arc & do_phi;
 		arc & vel_init;
 	}

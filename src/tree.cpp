@@ -34,7 +34,6 @@ constexpr bool verbose = true;
 #include <unordered_set>
 
 static vector<tree_node> tree_fetch_cache_line(int);
-static void tree_allocate_nodes();
 
 HPX_PLAIN_ACTION (tree_allocate_nodes);
 HPX_PLAIN_ACTION (tree_create);
@@ -164,19 +163,26 @@ tree_allocator::~tree_allocator() {
 	}
 	allocator_mtx--;
 }
-
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
+#ifndef TREEPM
 	theta = theta_;
 	min_rung = min_rung_;
 	min_level = 9;
 	leaf_pushed = false;
 	do_leaf_sizes = false;
 	par_parts = 0;
+#endif
 }
+
+#ifdef TREEPM
+tree_create_params::tree_create_params() {
+}
+#endif
 
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	fast_future<tree_create_return> rc;
+#ifndef TREEPM
 	bool remote = false;
 	if (proc_range.first != hpx_rank()) {
 		threadme = true;
@@ -185,7 +191,9 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 		threadme = part_range.second - part_range.first >= params.par_parts;
 	}
 	if (!threadme) {
+#endif
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
+#ifndef TREEPM
 	} else if (remote) {
 		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
@@ -194,6 +202,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 			return rc;
 		});
 	}
+#endif
 	return rc;
 }
 
@@ -235,7 +244,7 @@ void tree_2_gpu() {
 	}
 }
 
-static void tree_allocate_nodes() {
+void tree_allocate_nodes() {
 	const int tree_alloc_line_size = get_options().tree_alloc_line_size;
 	static const int bucket_size = get_options().bucket_size;
 	vector<hpx::future<void>> futs;
@@ -284,6 +293,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
+#ifndef TREEPM
 	if (depth == 0) {
 		tree_allocate_nodes();
 	}
@@ -297,6 +307,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		params.par_parts = cnt;
 	}
+#endif
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM>& x = rc.pos;
 	multipole<float>& multi = rc.multi;
@@ -311,6 +322,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const int index = allocator.allocate();
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
+#ifdef TREEPM
+	constexpr bool ewald_satisfied = true;
+#else
 	float box_r = 0.0f;
 	for (int dim = 0; dim < NDIM; dim++) {
 		box_r += sqr(0.5 * (box.end[dim] - box.begin[dim]));             // 12
@@ -320,6 +334,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const double deltax = pow(2.0,-32.0);
 	box_r += 2.0 * deltax;
 	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h); // 10
+#endif
 	double max_ratio = 1.0;
 	flops += 26;
 	static const simd_float _2float = fixed2float;
@@ -334,6 +349,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		auto right_parts = part_range;
 		bool left_local_root = false;
 		bool right_local_root = false;
+#ifndef TREEPM
 		if (proc_range.second - proc_range.first > 1) {
 			const int mid = (proc_range.first + proc_range.second) / 2;
 			left_box = domains_range(key << 1);
@@ -342,6 +358,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_local_root = left_range.second - left_range.first == 1;
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
+#endif
 			int nmin;
 			flops += 2;
 			part_int mid;
@@ -366,7 +383,9 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 
 			left_parts.second = right_parts.first = mid;
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
+#ifndef TREEPM
 		}
+#endif
 		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
 		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
 		const auto rcl = futl.get();

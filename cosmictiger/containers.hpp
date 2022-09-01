@@ -113,6 +113,7 @@ public:
 };
 
 template<class T>
+CUDA_EXPORT
 inline array<T, NDIM> operator*(const array<T, NDIM>& a, T b) {
 	array<T, NDIM> c;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -122,6 +123,7 @@ inline array<T, NDIM> operator*(const array<T, NDIM>& a, T b) {
 }
 
 template<class T>
+CUDA_EXPORT
 inline bool operator==(const array<T, NDIM>& a, const array<T, NDIM>& b) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		if (a[dim] != b[dim]) {
@@ -132,11 +134,13 @@ inline bool operator==(const array<T, NDIM>& a, const array<T, NDIM>& b) {
 }
 
 template<class T>
+CUDA_EXPORT
 inline bool operator!=(const array<T, NDIM>& a, const array<T, NDIM>& b) {
 	return !(a == b);
 }
 
 template<class T>
+CUDA_EXPORT
 inline array<T, NDIM> operator+(const array<T, NDIM>& a, const array<T, NDIM>& b) {
 	array<T, NDIM> c;
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -146,6 +150,7 @@ inline array<T, NDIM> operator+(const array<T, NDIM>& a, const array<T, NDIM>& b
 }
 
 template<class T>
+CUDA_EXPORT
 inline array<T, NDIM> operator-(const array<T, NDIM>& a, const array<T, NDIM>& b) {
 	array<T, NDIM> c;
 	for (int dim = 0; dim < NDIM; dim++) {

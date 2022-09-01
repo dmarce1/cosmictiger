@@ -517,7 +517,6 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		kparams.vel_init = get_options().plummer;
 		kparams.node_load = flops_per_node / flops_per_particle;
 		kparams.gpu = true;
-		kparams.min_level = tparams.min_level;
 		kparams.save_force = get_options().save_force;
 		kparams.GM = get_options().GM;
 		kparams.eta = get_options().eta;

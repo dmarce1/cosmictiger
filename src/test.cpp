@@ -284,7 +284,6 @@ static void kick_test() {
 	kick_params kparams;
 	kparams.gpu = true;
 	kparams.node_load = 10;
-	kparams.min_level = tparams.min_level;
 	kparams.save_force = get_options().save_force;
 	kparams.GM = get_options().GM;
 	kparams.h = get_options().hsoft;
@@ -362,7 +361,6 @@ static void force_test() {
 		kick_params kparams;
 		kparams.node_load = 10;
 		kparams.gpu = true;
-		kparams.min_level = tparams.min_level;
 		kparams.save_force = get_options().save_force;
 		kparams.GM = get_options().GM;
 		kparams.h = get_options().hsoft;
@@ -438,7 +436,6 @@ static void bucket_test() {
 				kparams.node_load = 10;
 				kparams.gpu = true;
 				kparams.max_dt = 1.0;
-				kparams.min_level = tparams.min_level;
 				kparams.save_force = get_options().save_force;
 				kparams.GM = get_options().GM;
 				kparams.h = get_options().hsoft;
@@ -524,7 +521,6 @@ static void speed_test() {
 			kick_params kparams;
 			kparams.node_load = 10;
 			kparams.gpu = true;
-			kparams.min_level = tparams.min_level;
 			kparams.save_force = get_options().save_force;
 			kparams.GM = get_options().GM;
 			kparams.h = get_options().hsoft;

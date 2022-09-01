@@ -90,6 +90,7 @@ set(cosmictiger_source_files
     src/test.cpp
     src/tree.cpp
     src/treepm.cpp
+    src/treepm.cu
     src/view.cpp
     src/zero_order.cpp
 )      
@@ -147,6 +148,7 @@ set(cosmictiger_header_files
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp
+    cosmictiger/treepm.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
     cosmictiger/unordered_map_ts.hpp
