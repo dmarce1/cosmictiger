@@ -56,6 +56,7 @@ struct options {
 	int slice_res;
 	int nsteps;
 	int p3m_Nmin;
+	int p3m_chainnbnd;
 	double lc_b;
 	double slice_size;
 	double link_len;
@@ -90,6 +91,7 @@ struct options {
 
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		arc & p3m_chainnbnd;
 		arc & close_pack;
 		arc & nparts;
 		arc & use_glass;

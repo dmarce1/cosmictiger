@@ -51,6 +51,19 @@ struct range {
 	array<T, N> end;
 
 	CUDA_EXPORT
+	inline bool operator!=(const range<T, N>& other) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (begin[dim] != other.begin[dim]) {
+				return true;
+			}
+			if (end[dim] != other.end[dim]) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	CUDA_EXPORT
 	inline range<T, N> intersection(const range<T, N>& other) const {
 		range<T, N> I;
 		for (int dim = 0; dim < N; dim++) {

@@ -169,7 +169,6 @@ HPX_PLAIN_ACTION (particles_pop_rungs);
 HPX_PLAIN_ACTION (particles_push_rungs);
 HPX_PLAIN_ACTION (particles_active_pct);
 
-
 #ifdef TREEPM
 HPX_PLAIN_ACTION (particles_active_count);
 
@@ -770,6 +769,9 @@ static vector<group_int> particles_group_refresh_cache_line(part_int index) {
 	return line;
 }
 
+
+
+
 void particles_destroy() {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
@@ -994,6 +996,22 @@ pair<array<double, NDIM>, double> particles_enclosing_sphere(pair<part_int> rng)
 	return rc;
 }
 
+void particles_swap(part_int lo, part_int hi) {
+	static const bool do_groups = get_options().do_groups;
+	static const bool do_tracers = get_options().do_tracers;
+	for (int dim = 0; dim < NDIM; dim++) {
+		std::swap(particles_x[dim][hi], particles_x[dim][lo]);
+	}
+	std::swap(particles_v[hi], particles_v[lo]);
+	std::swap(particles_r[hi], particles_r[lo]);
+	if (do_groups) {
+		std::swap(particles_lgrp[hi], particles_lgrp[lo]);
+	}
+	if (do_tracers) {
+		std::swap(particles_tr[hi], particles_tr[lo]);
+	}
+}
+
 part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 	part_int begin = rng.first;
 	part_int end = rng.second;
@@ -1014,17 +1032,7 @@ part_int particles_sort(pair<part_int> rng, double xm, int xdim) {
 				hi--;
 				flops++;
 				if (xptr_dim[hi] < xmid) {
-					std::swap(x[hi], x[lo]);
-					std::swap(y[hi], y[lo]);
-					std::swap(z[hi], z[lo]);
-					std::swap(particles_v[hi], particles_v[lo]);
-					std::swap(particles_r[hi], particles_r[lo]);
-					if (do_groups) {
-						std::swap(particles_lgrp[hi], particles_lgrp[lo]);
-					}
-					if (do_tracers) {
-						std::swap(particles_tr[hi], particles_tr[lo]);
-					}
+					particles_swap(hi, lo);
 					break;
 				}
 			}

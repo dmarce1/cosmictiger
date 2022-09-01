@@ -193,6 +193,7 @@ gadget_io_header particles_read_gadget4(std::string);
 hpx::future<vector<int>> particles_get(int rank, const vector<pair<part_int>>& ranges);
 #endif
 void particles_cache_free();
+void particles_swap(part_int lo, part_int hi);
 void particles_group_cache_free();
 pair<array<double, NDIM>, double> particles_enclosing_sphere(pair<part_int> rng);
 vector<output_particle> particles_get_sample(const range<double>& box);
