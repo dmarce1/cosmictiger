@@ -93,10 +93,17 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		L2 = L2P(L, dx, params.do_phi);
 		auto& F = force[i];
+#ifndef TREEPM
 		F.phi += SCALE_FACTOR1 * L2(0, 0, 0);
 		F.gx -= SCALE_FACTOR2 * L2(1, 0, 0);
 		F.gy -= SCALE_FACTOR2 * L2(0, 1, 0);
 		F.gz -= SCALE_FACTOR2 * L2(0, 0, 1);
+#else
+		F.phi += L2(0, 0, 0);
+		F.gx -= L2(1, 0, 0);
+		F.gy -= L2(0, 1, 0);
+		F.gz -= L2(0, 0, 1);
+#endif
 		F.gz *= params.GM;
 		F.gy *= params.GM;
 		F.gx *= params.GM;
@@ -267,9 +274,11 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 				}
 				__syncwarp();
 				if (nsinks) {
+#ifndef TREEPM
 					constexpr int EWALD = 0;
 					constexpr int DIRECT = 1;
 					for (int type = 0; type < 2; type++) {
+#endif
 						nextlist.resize(0);
 						leaflist.resize(0);
 						cclist.resize(0);
@@ -283,7 +292,11 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						constexpr int NLISTS = 5;
 						array<bool, NLISTS> sw;
 						device_vector<int>* lists[NLISTS] = { &cclist, &leaflist, &cplist, &pclist, &nextlist };
+#ifdef TREEPM
+						auto& checks = dchecks;
+#else
 						auto& checks = type == DIRECT ? dchecks : echecks;
+#endif
 						const float thetainv = 1.f / global_params.theta;
 						do {
 							const int maxi = round_up(checks.size(), WARP_SIZE);
@@ -298,9 +311,11 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 											dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 										}
 										float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+#ifndef TREEPM
 										if (type == EWALD) {
 											R2 = fmaxf(R2, sqr(fmaxf(0.5f - other.radius - self.radius, 0.f)));
 										}
+#endif
 										const float mind = self.radius + other.radius + h;
 										const float dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
 										const auto self_parts = self.nparts();
@@ -359,6 +374,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 							__syncwarp();
 
 						} while (checks.size() && self.leaf);
+#ifndef TREEPM
 						if (type == EWALD) {
 							if (self.leaf) {
 								__syncwarp();
@@ -375,6 +391,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 								barrier.arrive_and_wait();
 							}
 						} else {
+#endif
 							if (self.leaf) {
 								__syncwarp();
 								const float h = global_params.h;
@@ -389,8 +406,10 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 								cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
 								barrier.arrive_and_wait();
 							}
+#ifndef TREEPM
 						}
 					}
+#endif
 				}
 				if (self.leaf) {
 					__syncwarp();

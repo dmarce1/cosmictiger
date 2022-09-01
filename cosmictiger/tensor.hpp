@@ -217,6 +217,7 @@ public:
 		return result;
 	}
 
+	CUDA_EXPORT
 	inline T operator()(int l, int m, int n) const {
 		m += n;
 		l += m;
@@ -229,6 +230,7 @@ public:
 		return (*this)[l * (l + 1) * (l + 2) / 6 + m * (m + 1) / 2 + n];
 	}
 
+	CUDA_EXPORT
 	inline T& operator()(int l, int m, int n) {
 		m += n;
 		l += m;

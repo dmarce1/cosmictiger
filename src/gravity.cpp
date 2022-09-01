@@ -28,6 +28,7 @@
 #include <boost/align/aligned_allocator.hpp>
 
 void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+#ifndef TREEPM
 	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);
@@ -97,9 +98,11 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 		flops += 7 * EXPANSION_SIZE;
 	}
 	add_cpu_flops(flops);
+#endif
 }
 
 void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
+#ifndef TREEPM
 
 	THROW_ERROR( "Not supporting CPU cp \n");
 	constexpr int chunk_size = 32;
@@ -179,9 +182,11 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 		}
 	}
 	add_cpu_flops(flops);
+#endif
 }
 
 void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list) {
+#ifndef TREEPM
 
 	THROW_ERROR( "Not supporting CPU cp \n");
 
@@ -255,9 +260,11 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 		}
 	}
 	add_cpu_flops(flops);
+#endif
 }
 
 void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
+#ifndef TREEPM
 	THROW_ERROR( "Not supporting CPU cp \n");
 
 	flop_counter<int> flops = 0;
@@ -376,4 +383,5 @@ void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tre
 		}
 	}
 	add_cpu_flops(flops);
+#endif
 }

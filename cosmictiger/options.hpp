@@ -40,6 +40,7 @@ struct options {
 	double plummerR;
 	bool create_glass;
 	double toler;
+	double p3m_rs;
 	int read_check;
 	int tracer_count;
 	int parts_dim;
@@ -92,6 +93,7 @@ struct options {
 	template<class A>
 	void serialize(A&& arc, unsigned) {
 		arc & p3m_chainnbnd;
+		arc & p3m_rs;
 		arc & close_pack;
 		arc & nparts;
 		arc & use_glass;

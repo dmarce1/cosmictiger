@@ -37,6 +37,7 @@ struct cuda_kick_data {
 	float* gy;
 	float* gz;
 	float* pot;
+	float rs;
 };
 
 struct kick_return;

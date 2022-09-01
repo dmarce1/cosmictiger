@@ -149,6 +149,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 
 kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
 		std::shared_ptr<kick_workspace> cuda_workspace) {
+#ifndef TREEPM
 	flop_counter<int> flops = 0;
 	if (self.proc == 0 && self.index == 0) {
 		profiler_enter(__FUNCTION__);
@@ -504,6 +505,9 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		add_cpu_flops(flops);
 		return kr;
 	}
+#else
+	return kick_return();
+#endif
 }
 
 void kick_set_rc(kick_return kr) {

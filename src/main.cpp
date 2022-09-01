@@ -98,7 +98,9 @@ int hpx_main(int argc, char *argv[]) {
 	PRINT("Starting mem use daemon\n");
 	start_memuse_daemon();
 	if (process_options(argc, argv)) {
+#ifndef TREEPM
 		ewald_const::init();
+
 		FILE* fp = fopen("ewald.txt", "wt");
 		X[0] = X[1] = X[2] = 0.00;
 		for (double x = 0.00; x < 0.5; x += 0.001) {
@@ -119,6 +121,7 @@ int hpx_main(int argc, char *argv[]) {
 			fprintf(fp, "\n");
 		}
 		fclose(fp);
+#endif
 		if (get_options().test != "") {
 			test(get_options().test);
 		} else {

@@ -28,6 +28,7 @@ ewald_constants ec;
 __managed__ ewald_constants ec_dev;
 
 void ewald_compute(float& pot, float& fx, float& fy, float& fz, float dx0, float dx1, float dx2) {
+#ifndef TREEPM
 	const float cons1 = float(4.0f / sqrtf(M_PI));
 	fx = 0.0;
 	fy = 0.0;
@@ -108,9 +109,11 @@ void ewald_compute(float& pot, float& fx, float& fy, float& fz, float dx0, float
 	} else {
 		pot += 2.837291f;
 	}
+#endif
 }
 
 void ewald_const::init_gpu() {
+#ifndef TREEPM
 	double dx = 0.5 / (EWALD_TABLE_SIZE - 3.0);
 	for (int i0 = 0; i0 < EWALD_TABLE_SIZE; i0++) {
 		for (int j0 = 0; j0 < EWALD_TABLE_SIZE; j0++) {
@@ -234,6 +237,7 @@ void ewald_const::init_gpu() {
 	ec.D0 = D;
 	cuda_set_device();
 	ec_dev = ec;
+#endif
 }
 
 CUDA_EXPORT int ewald_const::nfour() {

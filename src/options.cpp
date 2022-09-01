@@ -135,6 +135,7 @@ bool process_options(int argc, char *argv[]) {
 	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "") //
 	("toler", po::value<double>(&(opts.toler))->default_value(-1), "") //
+	("p3m_rs", po::value<double>(&(opts.p3m_rs))->default_value(5.0), "rscale for treepm") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9 / .6732), "mass resolution") //
