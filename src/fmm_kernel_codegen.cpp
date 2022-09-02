@@ -1885,7 +1885,7 @@ void do_expansion_cuda() {
 	tprint("}\n");
 	flops += compute_dx_tensor();
 	flops += 3;
-	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size()));
+	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size());
 	indent();
 	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], La[Lsrc1[i]], Lb[Ldest1[i]]);\n");
 	deindent();
@@ -2329,7 +2329,7 @@ int main() {
 	tprint("M[%i] = %s[2];\n", index(0, 0, 1), "X");
 	flops = 0;
 
-	for (int n0 = 2; n0 < P; n0++) {
+	for (int n0 = 2; n0 < P - 1; n0++) {
 		for (n[0] = 0; n[0] <= n0; n[0]++) {
 			for (n[1] = 0; n[1] <= n0 - n[0]; n[1]++) {
 				n[2] = n0 - n[0] - n[1];

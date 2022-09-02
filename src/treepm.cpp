@@ -6,6 +6,7 @@
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/timer.hpp>
 
 static vector<cmplx> Y0;
 static vector<cmplx> Y;
@@ -55,11 +56,35 @@ kick_return treepm_kick(kick_params params) {
 	}
 	i--;
 	const int Nres = i * opts.p3m_Nmin;
+	timer tm;
+	PRINT( "Doing chainmesh\n");
+	tm.start();
 	treepm_create_chainmesh(Nres);
+	tm.stop();
+	PRINT( "took %e s\n", tm.read());
+
+	PRINT( "Doing exchange and sort\n");
+	tm.reset();
+	tm.start();
 	treepm_exchange_and_sort(Nres);
+	tm.stop();
+	PRINT( "took %e s\n", tm.read());
+
+	PRINT( "Doing long range\n");
+	tm.reset();
+	tm.start();
 	treepm_long_range(Nres, params.do_phi);
+	tm.stop();
+	PRINT( "took %e s\n", tm.read());
+
+	PRINT( "Doing short range\n");
+	tm.reset();
+	tm.start();
 	auto kr = treepm_short_range(params, Nres);
 	treepm_cleanup();
+	PRINT( "took %e s\n", tm.read());
+
+	return kr;
 }
 
 
@@ -83,8 +108,8 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 									kick_workitem work;
 									array<int64_t, NDIM> J;
 									for (J[XDIM] = I[XDIM] - Nbnd; J[XDIM] < I[XDIM] + Nbnd; J[XDIM]++) {
-										for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] < I[XDIM] + Nbnd; J[YDIM]++) {
-											for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] < I[XDIM] + Nbnd; J[ZDIM]++) {
+										for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] < I[YDIM] + Nbnd; J[YDIM]++) {
+											for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] < I[ZDIM] + Nbnd; J[ZDIM]++) {
 												array<double, NDIM> d;
 												for (int dim = 0; dim < NDIM; dim++) {
 													d[dim] = J[dim] == 0 ? 0.0 : J[dim] - 0.999999;
@@ -93,7 +118,7 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 												if (J2 < sqr(Nbnd)) {
 													const auto K = I + J;
 													tree_id id;
-													id.index = tree_roots[box.index(K)];
+													id.index = tree_roots[chain_box.index(K)];
 													work.dchecklist.push_back(id);
 												}
 											}
@@ -103,7 +128,7 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 									for (int dim = 0; dim < NDIM; dim++) {
 										work.pos[dim] = (I[dim] + 0.5) / Nres;
 									}
-									work.self.index = tree_roots[box.index(I)];
+									work.self.index = tree_roots[chain_box.index(I)];
 									std::lock_guard<mutex_type> lock(mutex);
 									works.push_back(work);
 								}
@@ -141,6 +166,7 @@ void treepm_exchange_and_sort(int Nres) {
 	vector < range < int64_t >> shifts;
 	vector<range<double>> rboxes(1, my_rbox);
 	tree_roots.resize(chain_box.volume());
+	tree_allocate_nodes();
 	for (int dim = 0; dim < NDIM; dim++) {
 		vector<range<double>> tmp;
 		for (int i = 0; i < rboxes.size(); i++) {
@@ -197,7 +223,7 @@ void treepm_exchange_and_sort(int Nres) {
 		pbnds[i + 1] = count_futs[i].get() + pbnds[i];
 	}
 	local_part_count = particles_size();
-	particles_resize(pbnds.back());
+	particles_resize(particles_size() + pbnds.back());
 	const auto int_box = treepm_get_fourier_box(Nres);
 	array<int64_t, NDIM> I;
 	for (I[XDIM] = int_box.begin[XDIM]; I[XDIM] < int_box.end[XDIM]; I[XDIM]++) {
@@ -221,7 +247,7 @@ void treepm_exchange_and_sort(int Nres) {
 		auto vfut = fut.then([i,&boxes,&pbnds](hpx::future<vector<array<vector<fixed32>, NDIM>>> fut) {
 			auto parts = fut.get();
 			const auto box = boxes[i].second;
-			part_int start = pbnds[i];
+			part_int start = pbnds[i] + local_part_count;
 			array<int64_t,NDIM> I;
 			for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
 				for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {

@@ -36,6 +36,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
+#include <cosmictiger/treepm.hpp>
 #include <cosmictiger/bh.hpp>
 
 //0.7, 0.8
@@ -356,8 +357,10 @@ static void force_test() {
 		domains_begin(0);
 		domains_end();
 		particles_sort_by_rung(0);
+#ifndef TREEPM
 		tree_create_params tparams(0, thetas[iter], get_options().hsoft);
 		tree_create(tparams);
+#endif
 		kick_params kparams;
 		kparams.node_load = 10;
 		kparams.gpu = true;
@@ -370,6 +373,9 @@ static void force_test() {
 		kparams.min_rung = 0;
 		kparams.t0 = 1.0;
 		kparams.theta = thetas[iter];
+#ifdef TREEPM
+		treepm_kick(kparams);
+#else
 		expansion<float> L;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] = 0.0f;
@@ -385,6 +391,7 @@ static void force_test() {
 		checklist.push_back(root_id);
 		auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
 		tree_destroy(false);
+#endif
 		tm_main.stop();
 		tm.reset();
 		tm.start();
