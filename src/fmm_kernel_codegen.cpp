@@ -923,7 +923,7 @@ void do_expansion_cuda() {
 		//	}
 	}
 
-	tprint("static __device__ char Ldest1[%i] = { ", entries1.size());
+	tprint("static __constant__ char Ldest1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].Ldest);
 		if (i != entries1.size() - 1) {
@@ -1000,7 +1000,7 @@ void do_expansion_cuda() {
 	flops += const_reference_trless_tensor<P>("La", "Lc");
 	flops += 4 * entries.size();
 	flops += 3;
-	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size() - 1 + (entries1.size() == entries2.size() ? 1 : 0));
+	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size());
 	indent();
 	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], Lc[Lsrc1[i]], Lb[Ldest1[i]]);\n");
 	deindent();
@@ -1885,7 +1885,7 @@ void do_expansion_cuda() {
 	tprint("}\n");
 	flops += compute_dx_tensor();
 	flops += 3;
-	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size() - 1 + (entries1.size() == entries2.size() ? 1 : 0));
+	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size()));
 	indent();
 	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], La[Lsrc1[i]], Lb[Ldest1[i]]);\n");
 	deindent();
