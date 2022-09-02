@@ -94,7 +94,7 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 		futs1.push_back(hpx::async<treepm_short_range_action>(c, params, Nres));
 	}
 	params.rs = get_options().p3m_rs / Nres;
-	const int Nbnd = get_options().p3m_Nmin;
+	const int Nbnd = get_options().p3m_chainnbnd;
 	vector<kick_workitem> works;
 	auto box = treepm_get_fourier_box(Nres);
 	vector<hpx::future<void>> futs;
@@ -118,6 +118,13 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 												if (J2 < sqr(Nbnd)) {
 													const auto K = I + J;
 													tree_id id;
+													std::string output;
+													for( int dim = 0; dim < NDIM; dim++) {
+														output += std::to_string(chain_box.begin[dim]) + " ";
+														output += std::to_string(K[dim]) + " ";
+														output += std::to_string(chain_box.end[dim]) + " | ";
+													}
+											//		printf( "%s\n", output.c_str());
 													id.index = tree_roots[chain_box.index(K)];
 													work.dchecklist.push_back(id);
 												}
