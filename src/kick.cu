@@ -140,7 +140,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		ymom_tot += vy;
 		zmom_tot += vz;
 		nmom_tot += sqrtf(sqr(vx, vy, vz));
-		if (params.save_force) {
+		if (params.save_force && params.ascending) {
 			all_gx[snki] = F.gx;
 			all_gy[snki] = F.gy;
 			all_gz[snki] = F.gz;

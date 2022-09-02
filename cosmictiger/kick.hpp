@@ -166,7 +166,9 @@ struct kick_params {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+#ifdef TREEPM
 		arc & rs;
+#endif
 		arc & ascending;
 		arc & descending;
 		arc & top;

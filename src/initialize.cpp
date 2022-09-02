@@ -30,6 +30,7 @@
 
 #include <gsl/gsl_rng.h>
 
+
 #define RECFAST_N 1000
 #define RECFAST_Z0 9990
 #define RECFAST_Z1 0
@@ -451,7 +452,7 @@ void twolpt_generate(int dim1, int dim2) {
 			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
 			const float kx = 2.f * (float) M_PI / box_size * float(i);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				int seed = (I[0] * N + I[1])*1234 + 42;
+				int seed = (I[0] * N + I[1])*1234 + get_options().seed;
 				gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
 				gsl_rng_set(rndgen, seed);
 				for( int l = 0; l < rand_init_iters; l++) {
@@ -490,7 +491,7 @@ void twolpt_generate(int dim1, int dim2) {
 				const int64_t index = box.index(I);
 				const int J0 = I[0] > N / 2 ? N - I[0] : I[0];
 				const int J1 = I[1] > N / 2 ? N - I[1] : I[1];
-				seed = (J0 * N + J1)*1234 + 42;
+				seed = (J0 * N + J1)*1234 + get_options().seed;
 				rndgen = gsl_rng_alloc(gsl_rng_taus);
 				gsl_rng_set(rndgen, seed);
 				for( int l = 0; l < rand_init_iters; l++) {

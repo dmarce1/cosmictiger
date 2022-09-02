@@ -43,8 +43,13 @@ struct dm_part_info {
 	float vy;
 	float vz;
 	int rung;
+	float gx;
+	float gy;
+	float gz;
+	float phi;
 	template<class A>
 	void serialize(A&& arc, unsigned) {
+		static const bool save = get_options().save_force;
 		arc & x;
 		arc & y;
 		arc & z;
@@ -52,6 +57,12 @@ struct dm_part_info {
 		arc & vy;
 		arc & vz;
 		arc & rung;
+		if (save) {
+			arc & gx;
+			arc & gy;
+			arc & gz;
+			arc & phi;
+		}
 	}
 
 };
@@ -100,6 +111,12 @@ view_return view_get_particles(vector<range<double>> boxes = vector<range<double
 						info.vy = particles_vel(YDIM,i);
 						info.vz = particles_vel(ZDIM,i);
 						info.rung = particles_rung(i);
+						if( get_options().save_force) {
+							info.gx = particles_gforce(XDIM, i);
+							info.gy = particles_gforce(YDIM, i);
+							info.gz = particles_gforce(ZDIM, i);
+							info.phi = particles_pot(i);
+						}
 						rc.dm[j].push_back(info);
 						break;
 					}
@@ -140,7 +157,8 @@ void view_output_views(int cycle, double a) {
 		DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
 		view_return parts;
 		parts = view_get_particles();
-		vector<float> x, y, z;
+		vector<float> x, y, z, w;
+		vector<int> r;
 		auto opts = DBMakeOptlist(1);
 		float z0 = 1.0 / a - 1.0;
 		float tm = cosmos_time(1e-6, a) * get_options().code_to_s * constants::seconds_to_years / 1e9;
@@ -167,11 +185,28 @@ void view_output_views(int cycle, double a) {
 			DBPutPointvar1(db, "vx", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "vy", "dark_matter", y.data(), x.size(), DB_FLOAT, opts);
 			DBPutPointvar1(db, "vz", "dark_matter", z.data(), x.size(), DB_FLOAT, opts);
-			x.resize(0);
+			r.resize(0);
 			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(parts.dm[bi][i].rung);
+				r.push_back(parts.dm[bi][i].rung);
 			}
-			DBPutPointvar1(db, "rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "rung", "dark_matter", r.data(), r.size(), DB_INT, opts);
+			if (get_options().save_force) {
+				w.resize(0);
+				x.resize(0);
+				y.resize(0);
+				z.resize(0);
+				for (int i = 0; i < parts.dm[bi].size(); i++) {
+					x.push_back(parts.dm[bi][i].gx );
+					y.push_back(parts.dm[bi][i].gy );
+					z.push_back(parts.dm[bi][i].gz );
+					w.push_back(parts.dm[bi][i].phi );
+				}
+				DBPutPointvar1(db, "gx", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "gy", "dark_matter", y.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "gz", "dark_matter", z.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "phi", "dark_matter", w.data(), w.size(), DB_FLOAT, opts);
+
+			}
 		}
 		DBFreeOptlist(opts);
 		DBClose(db);
@@ -206,7 +241,7 @@ vector<float> output_view(int number, double time) {
 	vector<hpx::future<void>> futs;
 	vector<hpx::future<vector<float>>>val_futs;
 	for (const auto& c : hpx_children()) {
-		val_futs.push_back(hpx::async<output_view_action>( c, number, time));
+		val_futs.push_back(hpx::async<output_view_action>(c, number, time));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	const int Nside = get_options().view_size;

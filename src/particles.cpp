@@ -999,6 +999,7 @@ pair<array<double, NDIM>, double> particles_enclosing_sphere(pair<part_int> rng)
 void particles_swap(part_int lo, part_int hi) {
 	static const bool do_groups = get_options().do_groups;
 	static const bool do_tracers = get_options().do_tracers;
+	static const bool save_force = get_options().save_force;
 	for (int dim = 0; dim < NDIM; dim++) {
 		std::swap(particles_x[dim][hi], particles_x[dim][lo]);
 	}
@@ -1009,6 +1010,12 @@ void particles_swap(part_int lo, part_int hi) {
 	}
 	if (do_tracers) {
 		std::swap(particles_tr[hi], particles_tr[lo]);
+	}
+	if( save_force ) {
+		std::swap(particles_p[hi], particles_p[lo]);
+		for (int dim = 0; dim < NDIM; dim++) {
+			std::swap(particles_g[dim][hi], particles_g[dim][lo]);
+		}
 	}
 }
 
@@ -1067,27 +1074,12 @@ void particles_sort_by_rung(int minrung) {
 		end = particles_size();
 		part_int lo = begin;
 		part_int hi = end;
-		const bool do_groups = get_options().do_groups;
-		const bool do_tracers = get_options().do_tracers;
-		auto& x = particles_x[XDIM];
-		auto& y = particles_x[YDIM];
-		auto& z = particles_x[ZDIM];
 		while (lo < hi) {
 			if (particles_rung(lo) >= minrung) {
 				while (lo != hi) {
 					hi--;
 					if (particles_rung(hi) < minrung) {
-						std::swap(x[hi], x[lo]);
-						std::swap(y[hi], y[lo]);
-						std::swap(z[hi], z[lo]);
-						std::swap(particles_v[hi], particles_v[lo]);
-						std::swap(particles_r[hi], particles_r[lo]);
-						if (do_groups) {
-							std::swap(particles_lgrp[hi], particles_lgrp[lo]);
-						}
-						if (do_tracers) {
-							std::swap(particles_tr[hi], particles_tr[lo]);
-						}
+						particles_swap(hi,lo);
 						break;
 					}
 				}

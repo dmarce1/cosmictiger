@@ -110,8 +110,43 @@ void fft3d2silo(bool real);
  return 1.0 / (sqr(s*sqr(s)));
  }
  */
+
+#define CLOUD_ORDER 3
+
+#if( CLOUD_ORDER == 3 )
+
+#define CLOUD_MIN -1
+#define CLOUD_MAX 2
+
+inline CUDA_EXPORT float cloud_weight(float x) {
+	x = fabs(x);
+	if (x > 2.0f) {
+		return 0.0f;
+	} else if (x < 1.0f) {
+		float y = .5f;
+		y = fmaf(y, x, -1.f);
+		y *= x;
+		y = fmaf(y, x, float(2.0 / 3.0));
+		return y;
+	} else {
+		float y = -float(1.0 / 6.0);
+		y = fmaf(y, x, 1.f);
+		y = fmaf(y, x, -2.f);
+		y = fmaf(y, x, float(4.0 / 3.0));
+		return y;
+	}
+}
+
+inline double cloud_filter(double kh) {
+	const double s = sinc(0.5 * kh);
+	return 1.0 / (sqr(sqr(s)));
+}
+
+#elif( CLOUD_ORDER ==5 )
+
 #define CLOUD_MIN -2
 #define CLOUD_MAX 3
+
 inline CUDA_EXPORT float cloud_weight(float x) {
 	x = fabs(x);
 	const float x2 = sqr(x);
@@ -134,6 +169,7 @@ inline double cloud_filter(double kh) {
 	return 1.0 / (sqr(s * sqr(s)));
 }
 
+#endif
 
 /*
  inline CUDA_EXPORT float cloud_weight(float  x) {

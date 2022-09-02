@@ -39,7 +39,6 @@ vector<size_t> domains_count_below(vector<double> bounds, int depth);
 
 vector<size_t> domains_get_loads();
 
-
 HPX_PLAIN_ACTION (domains_count_below);
 HPX_PLAIN_ACTION (domains_get_loads);
 HPX_PLAIN_ACTION (domains_rebound_sort);
@@ -328,8 +327,43 @@ void domains_rebound() {
 		depth++;
 	}
 	domains_transmit_boxes(boxes_by_key);
+#ifdef TREEPM
+	domains_fit_boxes2grid();
+#endif
 	profiler_exit();
 }
+
+#ifdef TREEPM
+
+void domains_fit_boxes2grid() {
+	vector<hpx::future<void>> futs;
+	auto children = hpx_children();
+	for (auto& c : children) {
+		futs.push_back(hpx::async<domains_fit_boxes2grid_action>(c));
+	}
+	const int N = get_options().p3m_Nmin;
+	const double Ninv = 1.0 / N;
+	const auto round = [Ninv,N](double x ) {
+		return std::round(x * N) * Ninv;
+	};
+	for (auto& domain : local_domains) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			domain.box.begin[dim] = round(domain.box.begin[dim]);
+			domain.box.end[dim] = round(domain.box.end[dim]);
+		}
+	}
+	for (auto& domain : boxes_by_key) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			domain.second.box.begin[dim] = round(domain.second.box.begin[dim]);
+			domain.second.box.end[dim] = round(domain.second.box.end[dim]);
+		}
+	}
+
+	hpx::wait_all(futs.begin(), futs.end());
+
+}
+
+#endif
 
 void domains_transmit_particles(vector<particle> parts) {
 	static mutex_type mutex;
@@ -370,27 +404,25 @@ void domains_begin(int rung) {
 							auto& send = sends[rank];
 							send.push_back(particles_get_particle(i));
 							if( send.size() >= MAX_PARTICLES_PER_PARCEL) {
-								//				PRINT( "Sending %i from %i to %i\n", send.size(), hpx_rank(), rank);
-				futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+								futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[rank], std::move(send)));
+							}
+							my_free_indices.push_back(i);
+						}
+					}
+				}
+				begin = next_begin++ * chunk_size + current_range.first;
 			}
-			my_free_indices.push_back(i);
-		}
-	}
-}
-begin = next_begin++ * chunk_size + current_range.first;
-}
-for( auto i = sends.begin(); i != sends.end(); i++) {
-if( i->second.size()) {
-	//			PRINT( "Sending %i from %i to %i\n", i->second.size(), hpx_rank(),i->first);
-	futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
-}
-}
-{
-std::lock_guard<mutex_type> lock(mutex);
-free_indices.insert(free_indices.end(), my_free_indices.begin(), my_free_indices.end());
-}
-hpx::wait_all(futs.begin(), futs.end());
-}));
+			for( auto i = sends.begin(); i != sends.end(); i++) {
+				if( i->second.size()) {
+					futs.push_back(hpx::async<domains_transmit_particles_action>(hpx_localities()[i->first], std::move(i->second)));
+				}
+			}
+			{
+				std::lock_guard<mutex_type> lock(mutex);
+				free_indices.insert(free_indices.end(), my_free_indices.begin(), my_free_indices.end());
+			}
+			hpx::wait_all(futs.begin(), futs.end());
+		}));
 	}
 
 	hpx::wait_all(futs.begin(), futs.end());
@@ -486,30 +518,6 @@ void domains_end() {
 	profiler_exit();
 }
 
-#ifdef TREEPM
-
-void domains_fit_boxes2grid() {
-	vector<hpx::future<void>> futs;
-	auto children = hpx_children();
-	for (auto& c : children) {
-		futs.push_back(hpx::async<domains_fit_boxes2grid_action>(c));
-	}
-	const int N = get_options().p3m_Nmin;
-	const double Ninv = 1.0 / N;
-	const auto round = [Ninv,N](double x ) {
-		return std::round(x * N) * Ninv;
-	};
-	for (auto& domain : local_domains) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			domain.box.begin[dim] = round(domain.box.begin[dim]);
-			domain.box.end[dim] = round(domain.box.end[dim]);
-		}
-	}
-
-	hpx::wait_all(futs.begin(), futs.end());
-
-}
-
 vector<pair<int, range<double>>> domains_find_intersecting_boxes( range<double> box) {
 	vector<pair<int,range<double>>> res;
 	for( int i = 0; i < local_domains.size(); i++) {
@@ -523,8 +531,6 @@ vector<pair<int, range<double>>> domains_find_intersecting_boxes( range<double> 
 	}
 	return res;
 }
-
-#endif
 
 range<double> domains_find_my_box() {
 	return local_domains[hpx_rank()].box;

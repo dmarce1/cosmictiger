@@ -173,7 +173,7 @@ power_spectrum_t fft3d_power_spectrum() {
 	vector<float> kbins;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const int Nfour = get_options().Nfour;
-	const double Ns = std::max(Nfour / 8.0, 64.0);
+	const double Ns = std::max(Nfour / 8.0, 32.0);
 	const double kmin = 0.999999;
 	const double kmax = Nfour / 2.0;
 	const double logkmin = log(kmin);
@@ -323,12 +323,8 @@ static pspecret power_spectrum_compute2(pspecret rc, const vector<float>& kbins)
 			vector<float> pdev(nbins, 0.0);
 			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
 				const int64_t j = I[1] < N / 2 ? I[1] : I[1] - N;
-				const double sy = sinc(M_PI * j / N);
 				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
 					const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
-					const double sz = sinc(M_PI * k / N);
-					const double c0 = pow(1.0 / (sx * sy * sz), 3);
-					Y[box.index(I)] *= c0;
 					const double iii = std::sqrt(i * i + j * j + k * k);
 					if( iii > 0 ) {
 						const int bin = search_kbins(kbins, iii, 0, nbins);

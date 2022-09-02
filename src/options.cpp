@@ -104,7 +104,8 @@ bool process_options(int argc, char *argv[]) {
 	("do_power", po::value<bool>(&(opts.do_power))->default_value(false), "do mass power spectrum analysis (default=false)") //
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
-	("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(128), "bucket size") //
+	("save_force", po::value<bool>(&(opts.save_force))->default_value(false), "save force and potential in memory") //
+		("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(128), "bucket size") //
 	("minrung", po::value<int>(&(opts.minrung))->default_value(0), "minimum starting rung") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
@@ -114,9 +115,11 @@ bool process_options(int argc, char *argv[]) {
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.28), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(-1), "Nside for lightcone HEALPix map") //
+	("seed", po::value<int>(&(opts.seed))->default_value(1234), "seed for IC rng") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("p3m_Nmin", po::value<int>(&(opts.p3m_Nmin))->default_value(16), "minimum resolution for p3m") //
+	("p3m_chainres", po::value<int>(&(opts.p3m_chainres))->default_value(32), "minimum particles per chain cell") //
 	("parts_dim", po::value<int>(&(opts.parts_dim))->default_value(128), "nparts^(1/3)") //
 	("nsteps", po::value<int>(&(opts.nsteps))->default_value(64), "Number of super-timesteps") //
 	("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift") //
@@ -177,7 +180,7 @@ bool process_options(int argc, char *argv[]) {
 	if (opts.toler > 0.0) {
 		opts.save_force = true;
 	} else {
-		opts.save_force = opts.test == "force";
+		opts.save_force = opts.save_force || (opts.test == "force");
 	}
 	opts.tree_cache_line_size = 65536 / sizeof(tree_node);
 	opts.tree_alloc_line_size = 16 * opts.tree_cache_line_size;
@@ -235,6 +238,13 @@ bool process_options(int argc, char *argv[]) {
 	}
 #ifdef CHECK_MUTUAL_SORT
 	opts.do_groups = true;
+#endif
+#ifdef TREEPM
+	if (pow(opts.p3m_Nmin, NDIM) < 64 * hpx_size()) {
+		THROW_ERROR("p3m_Nmin is too small for number of processors, should be at least %i\n", (int)(pow(hpx_size()*64, 1.0/NDIM)+0.999999));
+	} else if (opts.p3m_Nmin < 16) {
+		THROW_ERROR("p3m_Nmin should be at least 16\n");
+	}
 #endif
 
 	SHOW(check_freq);

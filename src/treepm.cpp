@@ -6,7 +6,6 @@
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/tree.hpp>
-#include <cosmictiger/kick.hpp>
 
 static vector<cmplx> Y0;
 static vector<cmplx> Y;
@@ -16,6 +15,9 @@ static size_t local_part_count;
 
 static range<int64_t> chain_box;
 
+void treepm_compute_gravity(int Nres, bool do_phi);
+void treepm_create_chainmesh(int Nres);
+void treepm_cleanup();
 void treepm_save_fourier();
 void treepm_compute_density(int N);
 void treepm_filter_fourier(int dim, int Nres);
@@ -26,9 +28,11 @@ void treepm_create_chainmesh(int Nres);
 size_t treepm_particles_count(range<int64_t> box);
 void treepm_exchange_and_sort(int Nres);
 vector<array<vector<fixed32>, NDIM>> treepm_particles_get(range<int64_t> box);
-kick_return treepm_kick(kick_params, int);
+kick_return treepm_short_range(kick_params, int);
 static range<int64_t> double_box2int_box(range<double> box, int Nres);
 range<int64_t> treepm_get_fourier_box(int Nres);
+void treepm_long_range(int Nres, bool do_phi);
+
 
 HPX_PLAIN_ACTION (treepm_particles_get);
 HPX_PLAIN_ACTION (treepm_particles_count);
@@ -41,15 +45,28 @@ HPX_PLAIN_ACTION (treepm_compute_density);
 HPX_PLAIN_ACTION (treepm_create_chainmesh);
 HPX_PLAIN_ACTION (treepm_exchange_and_sort);
 HPX_PLAIN_ACTION (treepm_cleanup);
-HPX_PLAIN_ACTION (treepm_kick);
+HPX_PLAIN_ACTION (treepm_short_range);
+
+kick_return treepm_kick(kick_params params) {
+	const auto& opts = get_options();
+	const auto nparts = particles_active_count();
+	int i;
+	for (i = 2; nparts * pow(i * opts.p3m_Nmin, -NDIM) > opts.p3m_chainres; i++) {
+	}
+	i--;
+	const int Nres = i * opts.p3m_Nmin;
+	treepm_create_chainmesh(Nres);
+	treepm_exchange_and_sort(Nres);
+	treepm_long_range(Nres, params.do_phi);
+	auto kr = treepm_short_range(params, Nres);
+	treepm_cleanup();
+}
 
 
-
-
-kick_return treepm_kick(kick_params params, int Nres) {
+kick_return treepm_short_range(kick_params params, int Nres) {
 	vector<hpx::future<kick_return>> futs1;
 	for (auto c : hpx_children()) {
-		futs1.push_back(hpx::async<treepm_kick_action>(c, params, Nres));
+		futs1.push_back(hpx::async<treepm_short_range_action>(c, params, Nres));
 	}
 	params.rs = get_options().p3m_rs / Nres;
 	const int Nbnd = get_options().p3m_Nmin;
@@ -61,37 +78,37 @@ kick_return treepm_kick(kick_params params, int Nres) {
 	vector<hpx::future<void>> futs2;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
 		futs2.push_back(hpx::async([Nbnd,&mutex,box,Nres,&works](array<int64_t, NDIM> I) {
-			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
-				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
-					kick_workitem work;
-					array<int64_t, NDIM> J;
-					for (J[XDIM] = I[XDIM] - Nbnd; J[XDIM] < I[XDIM] + Nbnd; J[XDIM]++) {
-						for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] < I[XDIM] + Nbnd; J[YDIM]++) {
-							for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] < I[XDIM] + Nbnd; J[ZDIM]++) {
-								array<double, NDIM> d;
-								for (int dim = 0; dim < NDIM; dim++) {
-									d[dim] = J[dim] == 0 ? 0.0 : J[dim] - 0.999999;
-								}
-								const auto J2 = sqr(d[XDIM], d[YDIM], d[ZDIM]);
-								if (J2 < sqr(Nbnd)) {
-									const auto K = I + J;
-									tree_id id;
-									id.index = tree_roots[box.index(K)];
-									work.dchecklist.push_back(id);
+							for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
+								for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
+									kick_workitem work;
+									array<int64_t, NDIM> J;
+									for (J[XDIM] = I[XDIM] - Nbnd; J[XDIM] < I[XDIM] + Nbnd; J[XDIM]++) {
+										for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] < I[XDIM] + Nbnd; J[YDIM]++) {
+											for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] < I[XDIM] + Nbnd; J[ZDIM]++) {
+												array<double, NDIM> d;
+												for (int dim = 0; dim < NDIM; dim++) {
+													d[dim] = J[dim] == 0 ? 0.0 : J[dim] - 0.999999;
+												}
+												const auto J2 = sqr(d[XDIM], d[YDIM], d[ZDIM]);
+												if (J2 < sqr(Nbnd)) {
+													const auto K = I + J;
+													tree_id id;
+													id.index = tree_roots[box.index(K)];
+													work.dchecklist.push_back(id);
+												}
+											}
+										}
+									}
+									work.L = 0.f;
+									for (int dim = 0; dim < NDIM; dim++) {
+										work.pos[dim] = (I[dim] + 0.5) / Nres;
+									}
+									work.self.index = tree_roots[box.index(I)];
+									std::lock_guard<mutex_type> lock(mutex);
+									works.push_back(work);
 								}
 							}
-						}
-					}
-					work.L = 0.f;
-					for (int dim = 0; dim < NDIM; dim++) {
-						work.pos[dim] = (I[dim] + 0.5) / Nres;
-					}
-					work.self.index = tree_roots[box.index(I)];
-					std::lock_guard<mutex_type> lock(mutex);
-					works.push_back(work);
-				}
-			}
-		}, I));
+						}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_data(), works);
@@ -285,8 +302,7 @@ vector<array<vector<fixed32>, NDIM>> treepm_particles_get(range<int64_t> box) {
 	return res;
 }
 
-void treepm_compute_gravity(int Nres, bool do_phi) {
-	treepm_allocate_fields(Nres);
+void treepm_long_range(int Nres, bool do_phi) {
 	fft3d_init(Nres);
 	treepm_compute_density(Nres);
 	fft3d_execute();
@@ -418,7 +434,7 @@ void treepm_save_field(int dim, int Nres) {
 		box.begin[dim] += CLOUD_MIN;
 		box.end[dim] += CLOUD_MAX;
 	}
-	treepm_set_field(dim,fft3d_read_real(box));
+	treepm_set_field(dim, fft3d_read_real(box));
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 
@@ -443,7 +459,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 					float filter = 1.0;
 					for (int dim = 0; dim < NDIM; dim++) {
 						k[dim] = cmplx(2.0 * M_PI * I[dim], 0.0);
-						filter *= cloud_filter(k[dim].real() * h);
+						filter *= sqr(cloud_filter(k[dim].real() * h));
 						k2 += sqr(k[dim].real());
 					}
 					filter *= exp(-k2 * rs2);
@@ -465,6 +481,7 @@ void treepm_compute_density(int N) {
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_compute_density_action>(c, N));
 	}
+	treepm_allocate_fields(N);
 	range<int64_t> rho_box = treepm_get_fourier_box(N);
 	const auto int_box = rho_box;
 	for (int dim = 0; dim < NDIM; dim++) {

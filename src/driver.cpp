@@ -943,9 +943,6 @@ void driver() {
 				if (get_options().do_slice) {
 					output_slice(number, years);
 				}
-				if (full_eval) {
-					view_output_views((tau + 1e-6 * t0) / t0, a);
-				}
 				if (get_options().do_views) {
 					timer tm;
 					tm.start();
@@ -1028,7 +1025,11 @@ void driver() {
 			if (get_options().use_glass && minrung == minrung0) {
 				//			particles_displace(rand1(), rand1(), rand1());
 			}
+			PRINT( "theta = %e\n", get_options().theta);
 			tmp = kick_step_hierarchical(om, max_rung, a, adot, tau, t0, theta, &energies, minrung0, full_eval, &lc_fut, nocrop, sqrt(glass_error), full_eval);
+			if (full_eval) {
+				view_output_views((tau + 1e-6 * t0) / t0, a);
+			}
 			if (full_eval && get_options().toler > 0.0) {
 				PRINT("current theta = %e error = %e\n", theta, tmp.first.err);
 				theta = 0.5 * theta + 0.5 * compute_new_theta(theta, tmp.first.err, get_options().toler);

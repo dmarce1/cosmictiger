@@ -39,11 +39,11 @@ CUDA_EXPORT float treepm_get_field(int dim, float x, float y, float z) {
 	int k0 = zi;
 	float res = 0.f;
 	array<int, NDIM> I;
-	for (int i = i0 + CLOUD_MIN; i < i0 + CLOUD_MAX; i++) {
+	for (int i = i0 + CLOUD_MIN; i <= i0 + CLOUD_MAX; i++) {
 		I[XDIM] = i;
-		for (int j = j0 + CLOUD_MIN; j < j0 + CLOUD_MAX; j++) {
+		for (int j = j0 + CLOUD_MIN; j <= j0 + CLOUD_MAX; j++) {
 			I[YDIM] = j;
-			for (int k = k0 + CLOUD_MIN; k < k0 + CLOUD_MAX; k++) {
+			for (int k = k0 + CLOUD_MIN; k <= k0 + CLOUD_MAX; k++) {
 				I[ZDIM] = k;
 				res += cloud_weight(xi - i) * cloud_weight(yi - j) * cloud_weight(zi - k) * fields[dim][int_box.index(I)];
 			}
@@ -71,9 +71,9 @@ __global__ void treepm_compute_density_kernel(int Nres, const fixed32* X, const 
 	I[ZDIM] = bid % (span[ZDIM] * span[YDIM]) + rho_box.begin[ZDIM];
 	I[YDIM] = (bid / span[ZDIM]) % span[YDIM] + rho_box.begin[YDIM];
 	I[XDIM] = bid / (span[ZDIM] * span[YDIM]) + rho_box.begin[XDIM];
-	for (J[XDIM] = CLOUD_MIN; J[XDIM] < CLOUD_MAX; J[XDIM]++) {
-		for (J[YDIM] = CLOUD_MIN; J[YDIM] < CLOUD_MAX; J[YDIM]++) {
-			for (J[ZDIM] = CLOUD_MIN; J[ZDIM] < CLOUD_MAX; J[ZDIM]++) {
+	for (J[XDIM] = CLOUD_MIN; J[XDIM] <= CLOUD_MAX; J[XDIM]++) {
+		for (J[YDIM] = CLOUD_MIN; J[YDIM] <= CLOUD_MAX; J[YDIM]++) {
+			for (J[ZDIM] = CLOUD_MIN; J[ZDIM] <= CLOUD_MAX; J[ZDIM]++) {
 				const auto K = J + I;
 				if (int_box.contains(K)) {
 					const auto& rng = ranges[chain_box.index(K)];

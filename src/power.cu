@@ -49,6 +49,7 @@ __global__ void accumulate_density_kernel(fixed32* X, fixed32* Y, fixed32* Z, fl
 					const float x0 = x * Ndim - j;
 					const float y0 = y * Ndim - k;
 					const float z0 = z * Ndim - l;
+					float wtot = 0.0;
 					for (int j0 = CLOUD_MIN; j0 <= CLOUD_MAX; j0++) {
 						float wt_x = cloud_weight(x0 - j0);
 						for (int k0 = CLOUD_MIN; k0 <= CLOUD_MAX; k0++) {
@@ -56,10 +57,12 @@ __global__ void accumulate_density_kernel(fixed32* X, fixed32* Y, fixed32* Z, fl
 							for (int l0 = CLOUD_MIN; l0 <= CLOUD_MAX; l0++) {
 								float wt_z = cloud_weight(z0 - l0);
 								const float wt = wt_x * wt_y * wt_z;
+								wtot += wt;
 								atomicAdd(rho + intbox.index(j0 + j, k0 + k, l0 + l), wt);
 							}
 						}
 					}
+					ALWAYS_ASSERT(fabsf(1.0f-wtot) < 5e-6f );
 				}
 			}
 		}

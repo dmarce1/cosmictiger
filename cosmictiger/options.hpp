@@ -58,6 +58,8 @@ struct options {
 	int nsteps;
 	int p3m_Nmin;
 	int p3m_chainnbnd;
+	int p3m_chainres;
+	int seed;
 	double lc_b;
 	double slice_size;
 	double link_len;
@@ -118,6 +120,7 @@ struct options {
 		arc & do_views;
 		arc & twolpt;
 		arc & use_power_file;
+		arc & seed;
 		arc & lc_dir;
 		arc & tracer_count;
 		arc & parts_dim;
