@@ -59,7 +59,7 @@ void treepm_free_fields() {
 }
 
 __global__ void treepm_compute_density_kernel(int Nres, const fixed32* X, const fixed32* Y, const fixed32* Z, const pair<part_int>* ranges,
-		range<int64_t> chain_box, range<int64_t> int_box, range<int64_t> rho_box, float* rho) {
+		range<int64_t> int_box, range<int64_t> chain_box, range<int64_t> rho_box, float* rho) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
 	float myrho = 0.f;
