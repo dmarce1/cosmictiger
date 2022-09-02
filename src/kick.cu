@@ -140,7 +140,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		ymom_tot += vy;
 		zmom_tot += vz;
 		nmom_tot += sqrtf(sqr(vx, vy, vz));
-		if (params.save_force && params.ascending) {
+		if (params.save_force) {
 			all_gx[snki] = F.gx;
 			all_gy[snki] = F.gy;
 			all_gz[snki] = F.gz;
@@ -282,9 +282,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						auto& f = force[l];
 						f.gx = f.gy = f.gz = 0.f;
 						f.phi = self_phi() * hinv;
-#ifdef TREEPM
-						f.phi += 4.f * M_PI * sqr(data.rs);
-#endif
 					}
 				}
 				__syncwarp();

@@ -336,13 +336,18 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						f = sqr(phi) * phi;		// 2
 						rinv = phi;
 						direct++;
-					} else {
+						phi += erf0 * rinv;
+						f += (-erf0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
+					} else if( r2 > 0.f ){
 						close++;
 						gsoft(f, phi, r2, hinv, h2inv, h3inv, do_phi);
 						rinv = 1.f / r;
+						phi += erf0 * rinv;
+						f += (-erf0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
+					} else {
+						close++;
+						phi += 4.f * M_PI * sqr(data.rs);
 					}
-					phi += erf0 * rinv;
-					f += (-erf0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
 #else
 					if (r2 > h2) {
 						phi = rsqrt(r2);					// 4
@@ -386,13 +391,18 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 						f = sqr(phi) * phi;		// 2
 						rinv = phi;
 						direct++;
-					} else {
+						phi += erf0 * rinv;
+						f += (-erf0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
+					} else if( r2 > 0.f ){
 						close++;
 						gsoft(f, phi, r2, hinv, h2inv, h3inv, do_phi);
 						rinv = 1.f / r;
+						phi += erf0 * rinv;
+						f += (-erf0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
+					} else {
+						close++;
+						phi += 4.f * M_PI * sqr(data.rs);
 					}
-					phi += erf0 * rinv;
-					f += (-erf0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
 #else
 					if (r2 > h2) {
 						phi = rsqrt(r2);					// 4

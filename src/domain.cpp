@@ -521,7 +521,7 @@ void domains_end() {
 vector<pair<int, range<double>>> domains_find_intersecting_boxes( range<double> box) {
 	vector<pair<int,range<double>>> res;
 	for( int i = 0; i < local_domains.size(); i++) {
-		const auto I = local_domains[i].box.intersection(box);
+		const auto I = local_domains[i].box.periodic_intersection(box);
 		if( I.volume() > 0.0) {
 			pair<int,range<double>> entry;
 			entry.first = i;

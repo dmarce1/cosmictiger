@@ -95,8 +95,8 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 	const int Nbnd = get_options().p3m_chainnbnd;
 	vector<kick_workitem> works;
 	auto box = treepm_get_fourier_box(Nres);
-	PRINT("Nbnd = %i  Nres = %i chain_box = %i %i %i %i %i %i\n", Nbnd, Nres, box.begin[XDIM], box.end[XDIM], box.begin[YDIM], box.end[YDIM], box.begin[ZDIM],
-			box.end[ZDIM]);
+//	PRINT("Nbnd = %i  Nres = %i chain_box = %i %i %i %i %i %i\n", Nbnd, Nres, box.begin[XDIM], box.end[XDIM], box.begin[YDIM], box.end[YDIM], box.begin[ZDIM],
+//			box.end[ZDIM]);
 
 	vector<hpx::future<void>> futs;
 	mutex_type mutex;
@@ -125,6 +125,7 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 						work.pos[dim] = (I[dim] + 0.5) / Nres;
 					}
 					work.self.index = tree_roots[chain_box.index(I)];
+//					PRINT( "%i %i\n", chain_mesh[chain_box.index(I)].first, chain_mesh[chain_box.index(I)].second);
 					std::lock_guard<mutex_type> lock(mutex);
 					works.push_back(work);
 				}
@@ -156,8 +157,8 @@ void treepm_exchange_and_sort(int Nres) {
 	}
 	const auto Nbnd = get_options().p3m_chainnbnd;
 	const auto& localities = hpx_localities();
-	auto my_rbox = domains_find_my_box();
-	my_rbox = my_rbox.pad(1.0 / Nbnd - 0.000001);
+	auto my_intrbox = domains_find_my_box();
+	const auto my_rbox = my_intrbox.pad((double) Nbnd / Nres);
 	vector<pair<int, range<int64_t>>> boxes;
 	vector < range < int64_t >> shifts;
 	vector<range<double>> rboxes(1, my_rbox);
@@ -175,7 +176,6 @@ void treepm_exchange_and_sort(int Nres) {
 				tmp.push_back(box1);
 				tmp.push_back(box2);
 				tmp.push_back(box3);
-				PRINT( "!!!!!!!!!!!!!!!!!1\n");
 			} else if (rboxes[i].begin[dim] < 0.0) {
 				auto box1 = rboxes[i];
 				auto box2 = rboxes[i];
@@ -197,7 +197,7 @@ void treepm_exchange_and_sort(int Nres) {
 	for (int i = 0; i < rboxes.size(); i++) {
 		auto these_rboxes = domains_find_intersecting_boxes(rboxes[i]);
 		for (int i = 0; i < these_rboxes.size(); i++) {
-			if (these_rboxes[i].second != my_rbox) {
+			if (!my_intrbox.contains(these_rboxes[i].second)) {
 				pair<int, range<int64_t>> entry;
 				entry.first = these_rboxes[i].first;
 				entry.second = double_box2int_box(these_rboxes[i].second, Nres);
@@ -416,8 +416,8 @@ void treepm_create_chainmesh(int Nres) {
 	const int Nbnd = get_options().p3m_chainnbnd;
 	chain_box = treepm_get_fourier_box(Nres);
 	chain_box = chain_box.pad(Nbnd);
-	PRINT("Nres = %i chain_box = %i %i %i %i %i %i\n", Nres, chain_box.begin[XDIM], chain_box.end[XDIM], chain_box.begin[YDIM], chain_box.end[YDIM],
-			chain_box.begin[ZDIM], chain_box.end[ZDIM]);
+//	PRINT("Nres = %i chain_box = %i %i %i %i %i %i\n", Nres, chain_box.begin[XDIM], chain_box.end[XDIM], chain_box.begin[YDIM], chain_box.end[YDIM],
+//			chain_box.begin[ZDIM], chain_box.end[ZDIM]);
 	chain_mesh.resize(chain_box.volume());
 	treepm_sort_particles(Nres, treepm_get_fourier_box(Nres), particles_current_range());
 	hpx::wait_all(futs1.begin(), futs1.end());

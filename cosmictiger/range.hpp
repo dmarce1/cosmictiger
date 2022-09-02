@@ -51,7 +51,7 @@ struct range {
 	array<T, N> end;
 
 	CUDA_EXPORT
-	inline bool operator!=(const range<T, N>& other) {
+	inline bool operator!=(const range<T, N>& other) const {
 		for (int dim = 0; dim < NDIM; dim++) {
 			if (begin[dim] != other.begin[dim]) {
 				return true;

@@ -38,6 +38,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/treepm.hpp>
 #include <cosmictiger/bh.hpp>
+#include <cosmictiger/view.hpp>
 
 //0.7, 0.8
 //0.55, 0.65
@@ -364,7 +365,7 @@ static void force_test() {
 		kick_params kparams;
 		kparams.node_load = 10;
 		kparams.gpu = true;
-		kparams.save_force = get_options().save_force;
+		kparams.save_force = true;
 		kparams.GM = get_options().GM;
 		kparams.h = get_options().hsoft;
 		kparams.eta = get_options().eta;
@@ -375,6 +376,8 @@ static void force_test() {
 		kparams.theta = thetas[iter];
 #ifdef TREEPM
 		treepm_kick(kparams);
+		view_output_views(0.0,1.0);
+
 #else
 		expansion<float> L;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
