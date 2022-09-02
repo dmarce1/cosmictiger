@@ -192,16 +192,16 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	}
 	if (!threadme) {
 #endif
-		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
+	rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 #ifndef TREEPM
-	} else if (remote) {
-		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
-	} else {
-		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
-			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
-			return rc;
-		});
-	}
+} else if (remote) {
+	rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+} else {
+	rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
+				auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
+				return rc;
+			});
+}
 #endif
 	return rc;
 }
@@ -282,9 +282,21 @@ long long tree_nodes_next_index() {
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
 
+#ifndef TREEPM
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}
+#endif
+/*	for (part_int i = part_range.first; i < part_range.second; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			const double x = particles_pos(dim, i).to_double();
+			if (!(x >= box.begin[dim] && x < box.end[dim])) {
+				PRINT("%e %e %e\n", box.begin[dim], x, box.end[dim]);
+			}
+			ALWAYS_ASSERT(x >= box.begin[dim] && x < box.end[dim]);
+		}
+	}
+*/
 	int flops = 0;
 	stack_trace_activate();
 	const double h = get_options().hsoft;
@@ -333,7 +345,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	ALWAYS_ASSERT(box_r>0.0);
 	const double deltax = pow(2.0,-32.0);
 	box_r += 2.0 * deltax;
-	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h); // 10
+	bool ewald_satisfied = (box_r < 0.25 * (params.theta / (1.0 + params.theta)) && box_r < 0.125 - 0.25 * h);// 10
 #endif
 	double max_ratio = 1.0;
 	flops += 26;
@@ -359,32 +371,32 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			right_local_root = right_range.second - right_range.first == 1;
 		} else {
 #endif
-			int nmin;
-			flops += 2;
-			part_int mid;
-			double xmax = box.end[xdim];
-			double xmin = box.begin[xdim];
-			double imbalance;
-			double xmid;
-			int nlo, nhi;
-			int max_dif = 1 + 0.8 * (part_range.second - part_range.first);
+		int nmin;
+		flops += 2;
+		part_int mid;
+		double xmax = box.end[xdim];
+		double xmin = box.begin[xdim];
+		double imbalance;
+		double xmid;
+		int nlo, nhi;
+		int max_dif = 1 + 0.8 * (part_range.second - part_range.first);
 		//	do {
-				xmid = 0.5 * (xmax + xmin);
-				mid = particles_sort(part_range, xmid, xdim);
-				nhi = part_range.second - mid;
-				nlo = mid - part_range.first;
-				if (nhi > nlo) {
-					xmin = xmid;
-				} else {
-					xmax = xmid;
-				}
-	//			PRINT( "%i %i %e %e %e\n", nlo, nhi, xmin, xmax, imbalance);
-	//		} while (abs(nlo-nhi) > max_dif);
-
-			left_parts.second = right_parts.first = mid;
-			left_box.end[xdim] = right_box.begin[xdim] = xmid;
-#ifndef TREEPM
+		xmid = 0.5 * (xmax + xmin);
+		mid = particles_sort(part_range, xmid, xdim);
+		nhi = part_range.second - mid;
+		nlo = mid - part_range.first;
+		if (nhi > nlo) {
+			xmin = xmid;
+		} else {
+			xmax = xmid;
 		}
+		//			PRINT( "%i %i %e %e %e\n", nlo, nhi, xmin, xmax, imbalance);
+		//		} while (abs(nlo-nhi) > max_dif);
+
+		left_parts.second = right_parts.first = mid;
+		left_box.end[xdim] = right_box.begin[xdim] = xmid;
+#ifndef TREEPM
+	}
 #endif
 		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
 		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
@@ -633,9 +645,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	nodes[index] = node;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
+#ifndef TREEPM
 	if (key == 1) {
 		profiler_exit();
 	}
+#endif
 	add_cpu_flops(flops);
 	return rc;
 }

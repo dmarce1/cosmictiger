@@ -10,6 +10,7 @@ __managed__ array<float*, NDIM + 1> fields;
 __managed__ range<int> int_box;
 __managed__ int Nres;
 __managed__ float Ninv;
+__managed__ size_t size;
 
 void treepm_allocate_fields(int Nres_) {
 	Nres = Nres_;
@@ -37,6 +38,18 @@ CUDA_EXPORT float treepm_get_field(int dim, float x, float y, float z) {
 	int i0 = xi;
 	int j0 = yi;
 	int k0 = zi;
+	if (i0 >= Nres) {
+		i0--;
+		xi += 1.0f;
+	}
+	if (j0 >= Nres) {
+		j0--;
+		yi += 1.0f;
+	}
+	if (k0 >= Nres) {
+		k0--;
+		zi += 1.0f;
+	}
 	float res = 0.f;
 	array<int, NDIM> I;
 	for (int i = i0 + CLOUD_MIN; i <= i0 + CLOUD_MAX; i++) {
@@ -45,6 +58,12 @@ CUDA_EXPORT float treepm_get_field(int dim, float x, float y, float z) {
 			I[YDIM] = j;
 			for (int k = k0 + CLOUD_MIN; k <= k0 + CLOUD_MAX; k++) {
 				I[ZDIM] = k;
+				for (int dim1 = 0; dim1 < NDIM; dim1++) {
+					if (!(I[dim1] >= int_box.begin[dim1] && I[dim1] < int_box.end[dim1])) {
+						PRINT("%i %i %i %i %e %e %e\n", dim1, int_box.begin[dim1], I[dim1], int_box.end[dim1], xi, yi, zi);
+					}
+					ALWAYS_ASSERT(I[dim1] >= int_box.begin[dim1] && I[dim1] < int_box.end[dim1]);
+				}
 				res += cloud_weight(xi - i) * cloud_weight(yi - j) * cloud_weight(zi - k) * fields[dim][int_box.index(I)];
 			}
 		}
@@ -100,11 +119,11 @@ device_vector<float> treepm_compute_density_local(int Nres, const device_vector<
 	rho.resize(rho_box.volume());
 	treepm_compute_density_kernel<<<rho_box.volume(), BLOCK_SIZE>>>( Nres, &particles_pos(XDIM,0), &particles_pos(YDIM,0), &particles_pos(ZDIM,0), chain_mesh.data(), int_box, chain_box, rho_box, rho.data());
 	CUDA_CHECK(cudaDeviceSynchronize());
-	double rhosum = 0.0;
-	for( int i = 0; i < rho.size(); i++) {
-		rhosum += rho[i];
-	}
-	PRINT( "rhosum = %e\n", rhosum);
+	/*	double rhosum = 0.0;
+	 for( int i = 0; i < rho.size(); i++) {
+	 rhosum += rho[i];
+	 }
+	 PRINT( "rhosum = %e\n", rhosum);*/
 	return rho;
 }
 #endif

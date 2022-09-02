@@ -30,7 +30,7 @@ vector<array<vector<fixed32>, NDIM>> treepm_particles_get(range<int64_t> box);
 kick_return treepm_short_range(kick_params, int);
 static range<int64_t> double_box2int_box(range<double> box, int Nres);
 range<int64_t> treepm_get_fourier_box(int Nres);
-void treepm_long_range(int Nres, bool do_phi);
+void treepm_long_range(int Nres, size_t nparts, bool do_phi);
 
 HPX_PLAIN_ACTION (treepm_particles_get);
 HPX_PLAIN_ACTION (treepm_particles_count);
@@ -69,7 +69,7 @@ kick_return treepm_kick(kick_params params) {
 	PRINT("Doing long range\n");
 	tm.reset();
 	tm.start();
-	treepm_long_range(Nres, params.do_phi);
+	treepm_long_range(Nres, nparts, params.do_phi);
 	tm.stop();
 	PRINT("took %e s\n", tm.read());
 
@@ -112,7 +112,9 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 								if( sqr(K[XDIM], K[YDIM], K[ZDIM]) <= sqr(Nbnd) ) {
 									tree_id id;
 									id.index = tree_roots[chain_box.index(J)];
-									work.dchecklist.push_back(id);
+									if( id.index >= 0 ) {
+										work.dchecklist.push_back(id);
+									}
 								}
 							}
 						}
@@ -122,12 +124,13 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 						work.pos[dim] = (I[dim] + 0.5) / Nres;
 					}
 					work.self.index = tree_roots[chain_box.index(I)];
-//					PRINT( "%i %i\n", chain_mesh[chain_box.index(I)].first, chain_mesh[chain_box.index(I)].second);
-				std::lock_guard<mutex_type> lock(mutex);
-				works.push_back(work);
+					std::lock_guard<mutex_type> lock(mutex);
+					if( work.self.index >= 0 ) {
+						works.push_back(work);
+					}
+				}
 			}
-		}
-	}, I));
+		}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_data(), works);
@@ -229,13 +232,18 @@ void treepm_exchange_and_sort(int Nres) {
 					auto j = chain_box.index(I);
 					range<double> rbox;
 					for (int dim = 0; dim < NDIM; dim++) {
-						rbox.begin[dim] = I[dim] / Nres - 1e-9;
-						rbox.end[dim] = (I[dim] + 1) / Nres + 1e-9;
+						rbox.begin[dim] = (double) I[dim] / Nres;
+						rbox.end[dim] = (double) (I[dim] + 1) / Nres;
 					}
-					auto rc = tree_create( tree_create_params(), 0, pair<int, int>(), chain_mesh[j], rbox, 0, false);
+					if( chain_mesh[j].second - chain_mesh[j].first > 0 ) {
+						//		PRINT( "%li %li\n",chain_mesh[j].first, chain_mesh[j].second);
+					auto rc = tree_create( tree_create_params(), 0, pair<int, int>(hpx_rank(),hpx_rank()+1), chain_mesh[j], rbox, 0, false);
 					tree_roots[j] = rc.id.index;
+				} else {
+					tree_roots[j] = -1;
 				}
-			}, I));
+			}
+		}, I));
 		}
 	}
 	for (int i = 0; i < boxes.size(); i++) {
@@ -273,11 +281,22 @@ void treepm_exchange_and_sort(int Nres) {
 											auto j = chain_box.index(I);
 											range<double> rbox;
 											for (int dim = 0; dim < NDIM; dim++) {
-												rbox.begin[dim] = I[dim] / Nres - 1e-9;
-												rbox.end[dim] = (I[dim] + 1) / Nres + 1e-9;
+												rbox.begin[dim] = (double) I[dim] / Nres;
+												rbox.end[dim] = (double) (I[dim] + 1) / Nres;
+												if( rbox.begin[dim] < 0.0 ) {
+													rbox.begin[dim] += 1.0;
+													rbox.end[dim] += 1.0;
+												} else if( rbox.end[dim] > 1.0 ) {
+													rbox.begin[dim] -= 1.0;
+													rbox.end[dim] -= 1.0;
+												}
 											}
-											auto rc = tree_create( tree_create_params(), 0, pair<int, int>(), chain_mesh[j], rbox, 0, false);
-											tree_roots[j] = rc.id.index;
+											if( chain_mesh[j].second - chain_mesh[j].first > 0 ) {
+												auto rc = tree_create( tree_create_params(), 0, pair<int, int>(hpx_rank(),hpx_rank()+1), chain_mesh[j], rbox, 0, false);
+												tree_roots[j] = rc.id.index;
+											} else {
+												tree_roots[j] = -1;
+											}
 										}
 									}
 								}, I));
@@ -324,8 +343,9 @@ vector<array<vector<fixed32>, NDIM>> treepm_particles_get(range<int64_t> box) {
 	return res;
 }
 
-void treepm_long_range(int Nres, bool do_phi) {
-	fft3d_init(Nres);
+void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
+
+	fft3d_init(Nres, -(double) nparts / (sqr(Nres) * Nres));
 	treepm_compute_density(Nres);
 	fft3d_execute();
 	treepm_save_fourier();
