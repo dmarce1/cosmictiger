@@ -98,7 +98,7 @@ device_vector<float> treepm_compute_density_local(int Nres, const device_vector<
 	cuda_set_device();
 	device_vector<float> rho;
 	rho.resize(rho_box.volume());
-	treepm_compute_density_kernel<<<chain_box.volume(), BLOCK_SIZE>>>( Nres, &particles_pos(XDIM,0), &particles_pos(YDIM,0), &particles_pos(ZDIM,0), chain_mesh.data(), int_box, chain_box, rho_box, rho.data());
+	treepm_compute_density_kernel<<<rho_box.volume(), BLOCK_SIZE>>>( Nres, &particles_pos(XDIM,0), &particles_pos(YDIM,0), &particles_pos(ZDIM,0), chain_mesh.data(), int_box, chain_box, rho_box, rho.data());
 	CUDA_CHECK(cudaDeviceSynchronize());
 	return rho;
 }
