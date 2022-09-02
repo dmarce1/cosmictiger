@@ -9,7 +9,6 @@
 #include <cosmictiger/timer.hpp>
 
 static vector<cmplx> Y0;
-static vector<cmplx> Y;
 static device_vector<pair<part_int>> chain_mesh;
 static vector<int> tree_roots;
 static size_t local_part_count;
@@ -22,7 +21,6 @@ void treepm_cleanup();
 void treepm_save_fourier();
 void treepm_compute_density(int N);
 void treepm_filter_fourier(int dim, int Nres);
-void treepm_restore_fourier();
 void treepm_free_fourier();
 void treepm_save_field(int dim, int Nres);
 void treepm_create_chainmesh(int Nres);
@@ -39,7 +37,6 @@ HPX_PLAIN_ACTION (treepm_particles_count);
 HPX_PLAIN_ACTION (treepm_save_field);
 HPX_PLAIN_ACTION (treepm_free_fourier);
 HPX_PLAIN_ACTION (treepm_save_fourier);
-HPX_PLAIN_ACTION (treepm_restore_fourier);
 HPX_PLAIN_ACTION (treepm_filter_fourier);
 HPX_PLAIN_ACTION (treepm_compute_density);
 HPX_PLAIN_ACTION (treepm_create_chainmesh);
@@ -126,11 +123,11 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 					}
 					work.self.index = tree_roots[chain_box.index(I)];
 //					PRINT( "%i %i\n", chain_mesh[chain_box.index(I)].first, chain_mesh[chain_box.index(I)].second);
-					std::lock_guard<mutex_type> lock(mutex);
-					works.push_back(work);
-				}
+				std::lock_guard<mutex_type> lock(mutex);
+				works.push_back(work);
 			}
-		}, I));
+		}
+	}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_data(), works);
@@ -336,7 +333,6 @@ void treepm_long_range(int Nres, bool do_phi) {
 	const int dim_max = do_phi ? NDIM + 1 : NDIM;
 	for (int dim = 0; dim < dim_max; dim++) {
 		fft3d_init(Nres);
-		treepm_restore_fourier();
 		treepm_filter_fourier(dim, Nres);
 		fft3d_inv_execute();
 		treepm_save_field(dim, Nres);
@@ -429,7 +425,6 @@ void treepm_free_fourier() {
 		futs1.push_back(hpx::async<treepm_free_fourier_action>(c));
 	}
 	Y0 = decltype(Y0)();
-	Y = decltype(Y)();
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 
@@ -439,15 +434,6 @@ void treepm_save_fourier() {
 		futs1.push_back(hpx::async<treepm_save_fourier_action>(c));
 	}
 	Y0 = fft3d_read_complex(fft3d_complex_range());
-	hpx::wait_all(futs1.begin(), futs1.end());
-}
-
-void treepm_restore_fourier() {
-	vector<hpx::future<void>> futs1;
-	for (auto c : hpx_children()) {
-		futs1.push_back(hpx::async<treepm_restore_fourier_action>(c));
-	}
-	Y = Y0;
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 
@@ -476,29 +462,32 @@ void treepm_filter_fourier(int dim, int Nres) {
 	auto box = fft3d_complex_range();
 	const float h = 1.0 / Nres;
 	const float rs2 = sqr(rs);
+	decltype(Y0) Y(Y0.size());
+	vector<hpx::future<void>> futs2;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs1.push_back(hpx::async([box,h,rs2,i,dim](array<int64_t,NDIM> I) {
+		futs2.push_back(hpx::async([box,h,rs2,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
 			array<cmplx, NDIM + 1> k;
 			k[NDIM] = i;
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
 					float k2 = 0.0;
-					float filter = 1.0;
+					float filter = sqr(Nres)*Nres;
 					for (int dim = 0; dim < NDIM; dim++) {
-						k[dim] = cmplx(2.0 * M_PI * I[dim], 0.0);
+						k[dim] = cmplx(2.0 * M_PI * (I[dim] < Nres / 2 ? I[dim] : I[dim] - Nres), 0.0);
 						filter *= sqr(cloud_filter(k[dim].real() * h));
 						k2 += sqr(k[dim].real());
 					}
-					filter *= exp(-k2 * rs2);
-					const auto index = box.index(I);
-					if (k2 > 0.0) {
-						Y[index] = Y0[index] * i * filter * k[dim] / k2;
-					} else {
-						Y[index] = cmplx(0.f, 0.f);
-					}
+					//		filter *= exp(-k2 * rs2);
+				const auto index = box.index(I);
+				if (k2 > 0.0) {
+					Y[index] = Y0[index] * i * filter * k[dim] * (4.0 * M_PI)/ k2;
+				} else {
+					Y[index] = cmplx(0.f, 0.f);
 				}
-			}}, I));
+			}
+		}}, I));
 	}
+	hpx::wait_all(futs2.begin(), futs2.end());
 	fft3d_accumulate_complex(box, Y);
 	hpx::wait_all(futs1.begin(), futs1.end());
 }

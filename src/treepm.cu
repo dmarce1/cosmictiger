@@ -27,7 +27,7 @@ void treepm_allocate_fields(int Nres_) {
 
 void treepm_set_field(int dim, const vector<float>& values) {
 	ALWAYS_ASSERT(values.size() == int_box.volume());
-	memcpy(fields[dim], values.data(), sizeof(values.size()) * sizeof(float));
+	memcpy(fields[dim], values.data(), values.size() * sizeof(float));
 }
 
 CUDA_EXPORT float treepm_get_field(int dim, float x, float y, float z) {
@@ -68,13 +68,13 @@ __global__ void treepm_compute_density_kernel(int Nres, const fixed32* X, const 
 	for (int dim = 0; dim < NDIM; dim++) {
 		span[dim] = rho_box.end[dim] - rho_box.begin[dim];
 	}
-	I[ZDIM] = bid % (span[ZDIM] * span[YDIM]) + rho_box.begin[ZDIM];
+	I[ZDIM] = bid % span[ZDIM] + rho_box.begin[ZDIM];
 	I[YDIM] = (bid / span[ZDIM]) % span[YDIM] + rho_box.begin[YDIM];
 	I[XDIM] = bid / (span[ZDIM] * span[YDIM]) + rho_box.begin[XDIM];
 	for (J[XDIM] = CLOUD_MIN; J[XDIM] <= CLOUD_MAX; J[XDIM]++) {
 		for (J[YDIM] = CLOUD_MIN; J[YDIM] <= CLOUD_MAX; J[YDIM]++) {
 			for (J[ZDIM] = CLOUD_MIN; J[ZDIM] <= CLOUD_MAX; J[ZDIM]++) {
-				const auto K = J + I;
+				const auto K = I - J;
 				if (int_box.contains(K)) {
 					const auto& rng = ranges[chain_box.index(K)];
 					for (part_int i = rng.first + tid; i < rng.second; i += BLOCK_SIZE) {
@@ -100,6 +100,11 @@ device_vector<float> treepm_compute_density_local(int Nres, const device_vector<
 	rho.resize(rho_box.volume());
 	treepm_compute_density_kernel<<<rho_box.volume(), BLOCK_SIZE>>>( Nres, &particles_pos(XDIM,0), &particles_pos(YDIM,0), &particles_pos(ZDIM,0), chain_mesh.data(), int_box, chain_box, rho_box, rho.data());
 	CUDA_CHECK(cudaDeviceSynchronize());
+	double rhosum = 0.0;
+	for( int i = 0; i < rho.size(); i++) {
+		rhosum += rho[i];
+	}
+	PRINT( "rhosum = %e\n", rhosum);
 	return rho;
 }
 #endif

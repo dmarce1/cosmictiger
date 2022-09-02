@@ -110,11 +110,11 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		const float y = sink_y[i].to_float();
 		const float z = sink_z[i].to_float();
 		if( params.do_phi) {
-			F.phi += treepm_get_field(NDIM, x, y, z);
+			F.phi = treepm_get_field(NDIM, x, y, z);
 		}
-		F.gx -= treepm_get_field(XDIM, x, y, z);
-		F.gy -= treepm_get_field(YDIM, x, y, z);
-		F.gz -= treepm_get_field(ZDIM, x, y, z);
+		F.gx = -treepm_get_field(XDIM, x, y, z);
+		F.gy = -treepm_get_field(YDIM, x, y, z);
+		F.gz = -treepm_get_field(ZDIM, x, y, z);
 #endif
 		F.gz *= params.GM;
 		F.gy *= params.GM;
