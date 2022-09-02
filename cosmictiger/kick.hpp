@@ -155,6 +155,9 @@ struct kick_params {
 	bool descending;
 	bool top;
 	bool do_phi;
+#ifdef TREEPM
+	float rs;
+#endif
 	kick_params() {
 		max_dt = 1e30;
 		do_phi = true;
@@ -163,6 +166,7 @@ struct kick_params {
 	}
 	template<class A>
 	void serialize(A && arc, unsigned) {
+		arc & rs;
 		arc & ascending;
 		arc & descending;
 		arc & top;

@@ -38,11 +38,11 @@ inline int greens_function(tensor_sym<T, 7>& D, array<T, NDIM> dx, float rsinv, 
 	D = T(0);
 	T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));
 	const T r = sqrt(r2);
-	const T n8r = T(-2.0) * r * rsinv2;
+	const T n8r = T(-0.5) * r * rsinv2;
 	const T rinv = 1.f / r;
-	T exp0 = expf( -rsinv2 * r2 );
-	T erf0 = erff( rsinv * r);
-	const T expfactor = T(2.0/1.77245385e+00) * rsinv * exp0;
+	T exp0 = expf( -T(0.25) * rsinv2 * r2 );
+	T erf0 = erff( T(0.5) * rsinv * r);
+	const T expfactor = T(1.0/1.77245385e+00) * rsinv * exp0;
 	T e0 = expfactor * rinv;
 	const T rinv0 = T(1);
 	const T rinv1 = rinv;
@@ -424,7 +424,7 @@ inline int greens_function(tensor_sym<T, 7>& D, array<T, NDIM> dx, float rsinv, 
 	D[56] = fmaf(T(1.500000000e+01), x[20]*Drinvpow_5_1, D[56]);
 	D[56] = fmaf(T(4.500000000e+01), x[4]*Drinvpow_4_2, D[56]);
 	D[56] = fmaf(T(1.500000000e+01), x[0]*Drinvpow_3_3, D[56]);
-	D[0] += T(3.141592654e+00) * rsinv2; 
+	D[0] += T(7.853981634e-01) * rsinv2; 
 	return 0; 
 }
 

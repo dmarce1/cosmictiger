@@ -28,6 +28,9 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/flops.hpp>
+#ifdef TREEPM
+#include <cosmictiger/treepm.hpp>
+#endif
 
 #define MIN_PARTS_PCCP 38
 #define MIN_PARTS2_CC 78
@@ -103,6 +106,15 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		F.gx -= L2(1, 0, 0);
 		F.gy -= L2(0, 1, 0);
 		F.gz -= L2(0, 0, 1);
+		const float x = sink_x[i].to_float();
+		const float y = sink_y[i].to_float();
+		const float z = sink_z[i].to_float();
+		if( params.do_phi) {
+			F.phi += treepm_get_field(NDIM, x, y, z);
+		}
+		F.gx -= treepm_get_field(XDIM, x, y, z);
+		F.gy -= treepm_get_field(YDIM, x, y, z);
+		F.gz -= treepm_get_field(ZDIM, x, y, z);
 #endif
 		F.gz *= params.GM;
 		F.gy *= params.GM;
@@ -270,6 +282,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						auto& f = force[l];
 						f.gx = f.gy = f.gz = 0.f;
 						f.phi = self_phi() * hinv;
+#ifdef TREEPM
+						f.phi += 4.f * M_PI * sqr(data.rs);
+#endif
 					}
 				}
 				__syncwarp();
@@ -584,6 +599,9 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		ikick_params[i] = std::move(params);
 	}
 	cuda_set_device();
+#ifdef TREEPM
+	data.rs = kparams.rs;
+#endif
 	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, 0));
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
 	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, 0));

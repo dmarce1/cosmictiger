@@ -26,7 +26,6 @@
 #include <cmath>
 
 static int ntab = 0;
-#define P ORDER
 
 void indent() {
 	ntab++;
@@ -510,6 +509,7 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 	return flops;
 }
 
+#define P ORDER
 template<int Q>
 void const_ref_compute(int sign, tensor_trless_sym<int, Q>& counts, tensor_trless_sym<int, Q>& signs, array<int, NDIM> n) {
 	int flops = 0;
@@ -1620,6 +1620,7 @@ int main() {
 
 #else
 
+#define P ORDER
 template<int Q>
 int compute_dx(const char* name = "X") {
 	array<int, NDIM> n;
@@ -2129,11 +2130,11 @@ int main() {
 	tprint("D = T(0);\n"); // 5
 	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n"); // 5
 	tprint("const T r = sqrt(r2);\n"); // 1
-	tprint("const T n8r = T(-2.0) * r * rsinv2;\n"); // 1
+	tprint("const T n8r = T(-0.5) * r * rsinv2;\n"); // 1
 	tprint("const T rinv = 1.f / r;\n"); // 2
-	tprint("T exp0 = expf( -rsinv2 * r2 );\n");
-	tprint("T erf0 = erff( rsinv * r);\n");
-	tprint("const T expfactor = T(2.0/%.8e) * rsinv * exp0;\n", sqrt(M_PI)); // 1
+	tprint("T exp0 = expf( -T(0.25) * rsinv2 * r2 );\n");
+	tprint("T erf0 = erff( T(0.5) * rsinv * r);\n");
+	tprint("const T expfactor = T(1.0/%.8e) * rsinv * exp0;\n", sqrt(M_PI)); // 1
 	tprint("T e0 = expfactor * rinv;\n"); // 1
 	tprint("const T rinv0 = T(1);\n"); // 2
 	tprint("const T rinv1 = rinv;\n"); // 2
@@ -2162,7 +2163,7 @@ int main() {
 	tprint("dxrinv[2] = dx[2] * rinv;\n");
 	compute_dx<P>("dxrinv");
 	compute_detrace_ewald("x", "D");
-	tprint("D[0] += T(%.9e) * rsinv2; \n", M_PI);                                                // 1
+	tprint("D[0] += T(%.9e) * rsinv2; \n", 0.25 * M_PI);                                                // 1
 	tprint("return 0; \n", M_PI);                                                // 1
 	deindent();
 	tprint("}\n");

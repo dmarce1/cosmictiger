@@ -37,9 +37,8 @@ void domains_transmit_boxes(std::unordered_map<size_t, domain_t> boxes);
 void domains_rebound_sort(vector<double> bounds, int depth);
 vector<size_t> domains_count_below(vector<double> bounds, int depth);
 
-#ifdef TREEPM
 vector<size_t> domains_get_loads();
-#endif
+
 
 HPX_PLAIN_ACTION (domains_count_below);
 HPX_PLAIN_ACTION (domains_get_loads);
@@ -49,7 +48,9 @@ HPX_PLAIN_ACTION (domains_end);
 HPX_PLAIN_ACTION (domains_init_rebounds);
 HPX_PLAIN_ACTION (domains_transmit_particles);
 HPX_PLAIN_ACTION (domains_transmit_boxes);
+#ifdef TREEPM
 HPX_PLAIN_ACTION (domains_fit_boxes2grid);
+#endif
 
 static vector<part_int> free_indices;
 static vector<vector<particle>> trans_particles;

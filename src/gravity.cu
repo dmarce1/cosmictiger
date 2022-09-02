@@ -267,7 +267,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 #ifdef TREEPM
 		const float rsinv = 1.f / data.rs;
 		const float rsinv2 = sqr(rsinv);
-		const float cons = 2.0f / sqrtf(M_PI);
+		const float cons = 1.0f / sqrtf(M_PI);
 #endif
 		int i = 0;
 		auto these_parts = tree_nodes[partlist[0]].part_range;
@@ -328,8 +328,8 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 #ifdef TREEPM
 					const float r = sqrt(r2);
-					const float erf0 = erff(r * rsinv);
-					const float exp0 = expf(-r2 * rsinv2);
+					const float erf0 = erff(0.5f * r * rsinv);
+					const float exp0 = expf(-0.25f * r2 * rsinv2);
 					float rinv;
 					if (r2 > h2) {
 						phi = rsqrt(r2);					// 4
@@ -378,8 +378,8 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 #ifdef TREEPM
 					const float r = sqrt(r2);
-					const float erf0 = erff(r * rsinv);
-					const float exp0 = expf(-r2 * rsinv2);
+					const float erf0 = erff(0.5*f * r * rsinv);
+					const float exp0 = expf(-0.25f * r2 * rsinv2);
 					float rinv;
 					if (r2 > h2) {
 						phi = rsqrt(r2);					// 4
