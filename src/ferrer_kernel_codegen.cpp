@@ -67,8 +67,10 @@ polynomial poly_add(const polynomial& A, const polynomial& B) {
 }
 
 void poly_shrink_to_fit(polynomial& A) {
-	while (A.back() == 0.0 && A.size()) {
-		A.pop_back();
+	if (A.size()) {
+		while (A.back() == 0.0 && A.size()) {
+			A.pop_back();
+		}
 	}
 }
 
@@ -176,49 +178,96 @@ bool poly_zero(const polynomial& A) {
 	return true;
 }
 
-std::vector<polynomial> poly_pot2expansion(const polynomial& pot) {
-	std::vector<polynomial> expansion;
-	expansion.push_back(pot);
-	auto next = expansion[0];
-	while (next.size() > 1 && !poly_zero(next)) {
-		for (int n = 0; n < next.size() - 1; n++) {
-			next[n] = next[n + 1] * (n + 1);
+struct expansion_type {
+	std::vector<polynomial> r;
+	std::vector<polynomial> i;
+};
+
+expansion_type poly_pot2expansion(const polynomial& pot, int order) {
+	expansion_type expansion;
+	expansion.r.push_back(pot);
+	auto r = pot;
+	decltype(r) i(2, 0.0);
+	expansion.i.push_back(i);
+	for (int j = 0; j < order; j++) {
+		double r0 = 0.0;
+		bool jump = false;
+		if (r.size()) {
+			for (int n = 0; n < (int) r.size() - 1; n++) {
+				r[n] = r[n + 1] * (n + 1);
+			}
+			r.pop_back();
+			if (r.size()) {
+				r0 = r[0];
+				jump = true;
+				for (int n = 0; n < (int) r.size() - 1; n++) {
+					r[n] = r[n + 1];
+				}
+				if (r.size()) {
+					r.pop_back();
+				}
+			}
 		}
-		next.pop_back();
-		for (int n = 0; n < next.size() - 1; n++) {
-			next[n] = next[n + 1];
+		i.resize(i.size() + 1);
+		for (int n = i.size() - 1; n >= 2; n--) {
+			i[n] = i[n - 1] / -(n - 1);
 		}
-		next.pop_back();
-		expansion.push_back(next);
+		i[1] = i[0] = 0.0;
+		i.resize(i.size() + 1);
+		for (int n = i.size() - 1; n >= 1; n--) {
+			i[n] = i[n - 1];
+		}
+		if (jump) {
+			i[1] = r0;
+		}
+		expansion.r.push_back(r);
+		expansion.i.push_back(i);
 	}
-	if (poly_zero(expansion.back())) {
-		expansion.pop_back();
+	if (poly_zero(expansion.r.back())) {
+		expansion.r.pop_back();
+	}
+	if (poly_zero(expansion.i.back())) {
+		expansion.i.pop_back();
+	}
+	for (int i = 0; i < expansion.r.size(); i++) {
+		poly_shrink_to_fit(expansion.r[i]);
+	}
+	for (int i = 0; i < expansion.i.size(); i++) {
+		poly_shrink_to_fit(expansion.i[i]);
 	}
 	return expansion;
 }
 
-void poly_print_fma_instructions(polynomial A) {
-	tprint("y = float(%.8e);\n", A.back());
-	while (A.size() > 1) {
-		A.pop_back();
-		A.pop_back();
-		if (A.back() != 0.0) {
-			tprint("y = fmaf( y, q2, float(%.8e) );\n", A.back());
-		} else {
-			tprint("y *= q2;\n");
+bool poly_even_only(polynomial A) {
+	for (int i = 1; i < A.size(); i += 2) {
+		if (A[i] != 0.0) {
+			return false;
 		}
 	}
+	return true;
 }
 
-void poly_print_fma_double_instructions(polynomial A) {
-	tprint("y = double(%.16e);\n", A.back());
-	while (A.size() > 1) {
-		A.pop_back();
-		A.pop_back();
-		if (A.back() != 0.0) {
-			tprint("y = std::fma( y, q2, double(%.16e) );\n", A.back());
-		} else {
-			tprint("y *= q2;\n");
+void poly_print_fma_instructions(polynomial A, const char* varname = "q", const char* type = "float") {
+	if (poly_even_only(A)) {
+		tprint("y = %s(%.8e);\n", type, A.back());
+		while (A.size() > 1) {
+			A.pop_back();
+			A.pop_back();
+			if (A.back() != 0.0) {
+				tprint("y = fma( y, %s2, %s(%.8e) );\n", varname, type, A.back());
+			} else {
+				tprint("y *= q2;\n");
+			}
+		}
+	} else {
+		tprint("y = %s(%.8e);\n", type, A.back());
+		while (A.size() > 1) {
+			A.pop_back();
+			if (A.back() != 0.0) {
+				tprint("y = fma( y, %s, %s(%.8e) );\n", varname, type, A.back());
+			} else {
+				tprint("y *= %s;\n", varname);
+			}
 		}
 	}
 }
@@ -244,7 +293,7 @@ inline double green_a(double k) {
 	}
 }
 
-void print_green_direct(polynomial pot, polynomial force, std::vector<polynomial> expansion, polynomial filter, double kmax) {
+void print_green_direct(polynomial pot, polynomial force, expansion_type expansion, polynomial filter, double kmax) {
 	tprint("#pragma once\n");
 	tprint("\n");
 	tprint("CUDA_EXPORT inline void green_direct(float& phi, float& f, float r, float r2, float rinv, float rsinv, float rsinv2) {\n");
@@ -267,13 +316,15 @@ void print_green_direct(polynomial pot, polynomial force, std::vector<polynomial
 	tprint("}\n");
 	tprint("\n");
 
-	const int L = (pot.size() + 1) / 2;
+	const int L = ORDER;
 	tprint("\n");
 	tprint("CUDA_EXPORT inline array<float, %i> green_kernel(float r, float rsinv, float rsinv2) {\n", L);
 	indent();
 	tprint("array<float, %i> d;\n", L);
 	tprint("float q0 = 1.f;\n");
 	tprint("float q1 = r * rsinv;\n");
+	tprint("float& q = q1;\n");
+	tprint("float qinv = 1.f / q1;\n");
 	tprint("float q2 = sqr(q1);\n");
 	for (int i = 3; i < L; i++) {
 		tprint("float q%i = q1 * q%i;\n", i, i - 1);
@@ -289,9 +340,23 @@ void print_green_direct(polynomial pot, polynomial force, std::vector<polynomial
 	tprint("if (q2 < 1.f) {\n");
 	indent();
 	tprint("float y;\n");
+	tprint("float z;\n");
 	int n = -1;
 	for (int i = 0; i < L; i++) {
-		poly_print_fma_instructions(expansion[i]);
+		if (expansion.r.size() > i) {
+			if (expansion.r[i].size()) {
+				poly_print_fma_instructions(expansion.r[i]);
+			} else {
+				tprint("y = 0.f;\n");
+			}
+		}
+		if (expansion.i.size() > i) {
+			if (expansion.i[i].size()) {
+				tprint("z = y;\n");
+				poly_print_fma_instructions(expansion.i[i], "qinv");
+				tprint("y += z;\n");
+			}
+		}
 		tprint("y *= q%i * rsinv%i;\n", i, i + 1);
 		tprint("d[%i] = fmaf( float(%i), rinv%i, y);\n", i, n, i + 1);
 		n = -n * (2 * i + 1);
@@ -319,7 +384,7 @@ void print_green_direct(polynomial pot, polynomial force, std::vector<polynomial
 	tprint("}\n");
 	tprint("double y;\n");
 	tprint("double q2 = sqr(k);\n");
-	poly_print_fma_double_instructions(filter);
+	poly_print_fma_instructions(filter, "q", "double");
 	tprint("return y;\n");
 	deindent();
 	tprint("}\n");
@@ -344,19 +409,27 @@ void print_green_direct(polynomial pot, polynomial force, std::vector<polynomial
 }
 
 int main() {
-	polynomial rho(3);
-	rho[0] = 1.0;
-	rho[1] = 0.0;
-	rho[2] = -1.0;
+	int p = ORDER - 1;
+	polynomial basis1(2);
+	polynomial basis2(2);
+	basis1[0] = 1.0;
+	basis1[1] = p;
+	basis2[0] = 1.0;
+	basis2[1] = -1.0;
 
-	auto rho0 = rho;
-	for (int i = 0; i < ORDER - 3; i++) {
-		rho = poly_mult(rho, rho0);
+	polynomial basis(3);
+	basis[0] = 1.0;
+	basis[1] = 0.0;
+	basis[2] = -1.0;
+
+	auto rho = basis1;
+	for (int i = 0; i < p; i++) {
+		rho = poly_mult(rho, basis2);
 	}
 	rho = poly_normalize(rho);
 	auto pot = poly_rho2pot(rho);
 	auto force = poly_rho2force(rho);
-	auto expansion = poly_pot2expansion(pot);
+	auto expansion = poly_pot2expansion(pot, ORDER);
 
 	auto kmax = 8.0 * M_PI;
 	auto filter = poly_filter(rho, kmax);
