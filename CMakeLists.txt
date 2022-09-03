@@ -149,6 +149,7 @@ set(cosmictiger_header_files
     cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp
     cosmictiger/treepm.hpp
+    cosmictiger/treepm_kernels.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
     cosmictiger/unordered_map_ts.hpp

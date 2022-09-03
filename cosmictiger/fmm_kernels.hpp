@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/math.hpp>
-#include <cosmictiger/float2double.hpp>
+#include <cosmictiger/treepm_kernels.hpp>
 template<class T>
 using expansion = tensor_sym<T,5>;
 template<class T>
@@ -38,32 +38,20 @@ inline int greens_function(tensor_sym<T, 5>& D, array<T, NDIM> dx, float rsinv, 
 	D = T(0);
 	T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));
 	const T r = sqrt(r2);
-	const T n8r = T(-0.5) * r * rsinv2;
 	const T rinv = 1.f / r;
-	T exp0 = expf( -T(0.25) * rsinv2 * r2 );
-	T erf0 = erff( T(0.5) * rsinv * r);
-	const T expfactor = T(1.0/1.77245385e+00) * rsinv * exp0;
-	T e0 = expfactor * rinv;
 	const T rinv0 = T(1);
 	const T rinv1 = rinv;
 	const T rinv2 = rinv1 * rinv1;
-	const T d0 = erf0 * rinv;
-	const T d1 = fmaf(T(-1) * d0, rinv, e0);
-	e0 *= n8r;
-	const T d2 = fmaf(T(-3) * d1, rinv, e0);
-	e0 *= n8r;
-	const T d3 = fmaf(T(-5) * d2, rinv, e0);
-	e0 *= n8r;
-	const T d4 = fmaf(T(-7) * d3, rinv, e0);
-	const T Drinvpow_0_0 = d0 * rinv0;
-	const T Drinvpow_1_0 = d1 * rinv0;
-	const T Drinvpow_1_1 = d1 * rinv1;
-	const T Drinvpow_2_0 = d2 * rinv0;
-	const T Drinvpow_2_1 = d2 * rinv1;
-	const T Drinvpow_2_2 = d2 * rinv2;
-	const T Drinvpow_3_0 = d3 * rinv0;
-	const T Drinvpow_3_1 = d3 * rinv1;
-	const T Drinvpow_4_0 = d4 * rinv0;
+	const auto d = green_kernel( r, rsinv, rsinv2 );
+	const T Drinvpow_0_0 = d[0] * rinv0;
+	const T Drinvpow_1_0 = d[1] * rinv0;
+	const T Drinvpow_1_1 = d[1] * rinv1;
+	const T Drinvpow_2_0 = d[2] * rinv0;
+	const T Drinvpow_2_1 = d[2] * rinv1;
+	const T Drinvpow_2_2 = d[2] * rinv2;
+	const T Drinvpow_3_0 = d[3] * rinv0;
+	const T Drinvpow_3_1 = d[3] * rinv1;
+	const T Drinvpow_4_0 = d[4] * rinv0;
 	array<T,NDIM> dxrinv;
 	dxrinv[0] = dx[0] * rinv;
 	dxrinv[1] = dx[1] * rinv;
@@ -175,7 +163,6 @@ inline int greens_function(tensor_sym<T, 5>& D, array<T, NDIM> dx, float rsinv, 
 	D[20] = fmaf(x[20], Drinvpow_4_0, D[20]);
 	D[20] = fmaf(T(6.000000000e+00), x[4]*Drinvpow_3_1, D[20]);
 	D[20] = fmaf(T(3.000000000e+00), x[0]*Drinvpow_2_2, D[20]);
-	D[0] += T(7.853981634e-01) * rsinv2; 
 	return 0; 
 }
 

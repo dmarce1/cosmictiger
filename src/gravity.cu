@@ -47,7 +47,7 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	const auto& tree_nodes = data.tree_nodes;
 	flop_counter<int> flops = 0;
 	if (multlist.size()) {
-		PRINT("CC\n");
+		//	PRINT("CC\n");
 
 #ifdef TREEPM
 		const float rsinv = 1.f / data.rs;
@@ -98,7 +98,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 	const int &tid = threadIdx.x;
 	flop_counter<int> flops = 0;
 	if (partlist.size()) {
-		PRINT("CP\n");
+		//	PRINT("CP\n");
 
 #ifdef TREEPM
 		const float rsinv = 1.f / data.rs;
@@ -191,7 +191,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 	flop_counter<int> flops = 0;
 	auto group = cooperative_groups::this_thread_block();
 	if (multlist.size()) {
-		PRINT("PC\n");
+//		PRINT("PC\n");
 
 #ifdef TREEPM
 		const float rsinv = 1.f / data.rs;
@@ -231,6 +231,11 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 					F.gy -= SCALE_FACTOR2 * L(0, 1, 0);
 					F.gz -= SCALE_FACTOR2 * L(0, 0, 1);
 					F.phi += SCALE_FACTOR1 * L(0, 0, 0);
+#else
+					F.gx -= L(1, 0, 0);
+					F.gy -= L(0, 1, 0);
+					F.gz -= L(0, 0, 1);
+					F.phi += L(0, 0, 0);
 #endif
 					flops += 4;
 				}

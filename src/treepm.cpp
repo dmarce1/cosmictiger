@@ -53,8 +53,9 @@ kick_return treepm_kick(kick_params params) {
 	i--;
 	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
+	params.theta = 0.5f;
 //	PRINT( "--------------> %e %e\n",4.0 * M_PI * sqr(rs) * nparts , 1.0 / sqrt(M_PI) / rs);
-	params.phi0 = 4.0 * M_PI * sqr(rs) * nparts + 1.0 / sqrt(M_PI) / rs;
+	params.phi0 = 4.0 * M_PI * sqr(rs) * nparts; // + 1.0 / sqrt(M_PI) / rs;
 	timer tm;
 	PRINT("Doing chainmesh\n");
 	tm.start();

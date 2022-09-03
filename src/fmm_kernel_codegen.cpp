@@ -2098,7 +2098,7 @@ int main() {
 	tprint("#include <cosmictiger/cuda.hpp>\n");
 	tprint("#include <cosmictiger/ewald_indices.hpp>\n");
 	tprint("#include <cosmictiger/math.hpp>\n");
-	tprint("#include <cosmictiger/float2double.hpp>\n");
+	tprint("#include <cosmictiger/treepm_kernels.hpp>\n");
 	tprint("template<class T>\n");
 	tprint("using expansion = tensor_sym<T,%i>;\n", P);
 	tprint("template<class T>\n");
@@ -2130,12 +2130,7 @@ int main() {
 	tprint("D = T(0);\n"); // 5
 	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n"); // 5
 	tprint("const T r = sqrt(r2);\n"); // 1
-	tprint("const T n8r = T(-0.5) * r * rsinv2;\n"); // 1
 	tprint("const T rinv = 1.f / r;\n"); // 2
-	tprint("T exp0 = expf( -T(0.25) * rsinv2 * r2 );\n");
-	tprint("T erf0 = erff( T(0.5) * rsinv * r);\n");
-	tprint("const T expfactor = T(1.0/%.8e) * rsinv * exp0;\n", sqrt(M_PI)); // 1
-	tprint("T e0 = expfactor * rinv;\n"); // 1
 	tprint("const T rinv0 = T(1);\n"); // 2
 	tprint("const T rinv1 = rinv;\n"); // 2
 	for (int l = 2; l < (P + 1) / 2; l++) {
@@ -2143,17 +2138,11 @@ int main() {
 		const int j = l - i;
 		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
 	}
-	tprint("const T d0 = erf0 * rinv;\n");                                       // 2
-	for (int l = 1; l < P; l++) {
-		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
-		if (l != P - 1) {
-			tprint("e0 *= n8r;\n");                                                // (P-1)
-		}
-	}
+	tprint( "const auto d = green_kernel( r, rsinv, rsinv2 );\n" );
 	for (int l = 0; l < P; l++) {
 		for (int m = 0; m <= l; m++) {
 			if (l + m < P) {
-				tprint("const T Drinvpow_%i_%i = d%i * rinv%i;\n", l, m, l, m);
+				tprint("const T Drinvpow_%i_%i = d[%i] * rinv%i;\n", l, m, l, m);
 			}
 		}
 	}
@@ -2163,7 +2152,7 @@ int main() {
 	tprint("dxrinv[2] = dx[2] * rinv;\n");
 	compute_dx<P>("dxrinv");
 	compute_detrace_ewald("x", "D");
-	tprint("D[0] += T(%.9e) * rsinv2; \n", 0.25 * M_PI);                                                // 1
+	//tprint("D[0] += T(%.9e) * rsinv2; \n", 0.25 * M_PI);                                                // 1
 	tprint("return 0; \n", M_PI);                                                // 1
 	deindent();
 	tprint("}\n");
@@ -2222,7 +2211,7 @@ int main() {
 		for (int i = 0; i < 1; i++) {
 			double last_coeff = 1.0;
 			const auto n = entries[i][0].n;
-			const int nindex = trless_index(n[0], n[1], n[2], Pmax);
+			const int nindex = sym_index(n[0], n[1], n[2]);
 			auto& fl = phi_flops;
 			tprint("if( do_phi ) {\n");
 			indent();
