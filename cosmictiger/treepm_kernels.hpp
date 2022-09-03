@@ -23,19 +23,14 @@ CUDA_EXPORT inline array<float, LORDER> green_kernel(float r, float rsinv, float
 	float rinv3 = rinv * rinv2;
 	float rinv4 = sqr(rinv2);
 	if (q2 < 1.f) {
-		d[0] = (35.f / 16.f - 35.f / 16.f * q2 + 21.f / 16.f * q4 - 5.f / 16.f * q6) * q;
-		d[1] = (-35.f / 8.f + 21.f / 4.f * q2 - 15.f / 8.f * q4) * q2 * q;
-		d[2] = (21.0f / 2.0f - 15.0f * q2 / 2.f) * q2 * q2 * q;
-		d[3] = -15.f * q2 * q * q2 * q2;
-		d[0] -= 1.f;
-		d[1] += 1.0f;
-		d[2] -= 3.0f;
-		d[3] += 15.f;
-	//	PRINT( "%e %e %e %e\n", d[0], d[1], d[2]/3.0, d[3]/15.0);
-		d[0] *= rinv;
-		d[1] *= rinv2;
-		d[2] *= rinv3;
-		d[3] *= rinv4;
+		d[0] = (35.f / 16.f - 35.f / 16.f * q2 + 21.f / 16.f * q4 - 5.f / 16.f * q6) * rsinv;
+		d[1] = (-35.f / 8.f + 21.f / 4.f * q2 - 15.f / 8.f * q4) * q * rsinv2;
+		d[2] = (21.0f / 2.0f - 15.0f * q2 / 2.f) * q2 * rsinv2 * rsinv;
+		d[3] = -15.f * q2 * q * sqr(rsinv2);
+		d[0] -= rinv;
+		d[1] += rinv2;
+		d[2] -= 3.f * rinv3;
+		d[3] += 15.f * rinv4;
 	} else {
 		d[0] = d[1] = d[2] = d[3] = 0.f;
 	}
