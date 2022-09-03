@@ -34,15 +34,6 @@ void indent() {
 void deindent() {
 	ntab--;
 }
-
-bool close21(double a) {
-	return std::abs(1.0 - a) < 1.0e-20;
-}
-
-int sym_index(int l, int m, int n) {
-	return (l + m + n) * (l + m + n + 1) * ((l + m + n) + 2) / 6 + (m + n) * ((m + n) + 1) / 2 + n;
-}
-
 template<class ...Args>
 void tprint(const char* str, Args&&...args) {
 	for (int i = 0; i < ntab; i++) {
@@ -57,6 +48,15 @@ void tprint(const char* str) {
 	}
 	printf("%s", str);
 }
+
+bool close21(double a) {
+	return std::abs(1.0 - a) < 1.0e-20;
+}
+
+int sym_index(int l, int m, int n) {
+	return (l + m + n) * (l + m + n + 1) * ((l + m + n) + 2) / 6 + (m + n) * ((m + n) + 1) / 2 + n;
+}
+
 
 #ifndef TREEPM
 
@@ -2068,6 +2068,69 @@ void do_expansion(bool two) {
 	tprint("}\n");
 }
 
+array<vector<pair<float, int>>, P> green_derivs(const vector<pair<float, int>>& in) {
+	array<vector<pair<float, int>>, P> ret;
+	auto a = in;
+	vector<pair<float, int>> b;
+	for (int p = 0; p < P; p++) {
+		ret[p] = a;
+		for (int n = 0; n < a.size(); n++) {
+			if (a[n].second != 0) {
+				pair<float, int> entry;
+				entry.first = a[n].second * a[n].first;
+				entry.second = a[n].second - 2;
+				b.push_back(entry);
+			}
+		}
+		a = std::move(b);
+		for( int n = 0; n < a.size(); n++) {
+			a[n].second += p;
+		}
+	}
+	return ret;
+}
+
+void create_fma_function(const vector<pair<float, int>>& coeffs) {
+	vector<pair<float, int>> pc, nc;
+	for (int i = 0; i < coeffs.size(); i++) {
+		if (coeffs[i].second >= 0) {
+			pc.push_back(coeffs[i]);
+		} else {
+			nc.push_back(coeffs[i]);
+		}
+	}
+
+	std::sort(pc.begin(), pc.end(), [](pair<float, int> a, pair<float, int> b) {
+		return a.second > b.second;
+	});
+	std::sort(nc.begin(), nc.end(), [](pair<float, int> a, pair<float, int> b) {
+		return a.second < b.second;
+	});
+	if (pc.size()) {
+		tprint("y = float(%e);\n", pc[0].first);
+		for (int i = 1; i < pc.size(); i++) {
+			for (int j = 0; j < pc[i].second - pc[i - 1].second - 1; j++) {
+				tprint("y *= q;\n");
+			}
+			tprint("y = fmaf(y, q, float(%e));\n", pc[i].first);
+		}
+	}
+	if( nc.size()) {
+		tprint("z = float(%e);\n", nc[0].first);
+		for (int i = 1; i < nc.size(); i++) {
+			for (int j = 0; j < nc[i].second - nc[i - 1].second - 1; j++) {
+				tprint("z *= qinv;\n");
+			}
+			tprint("z = fmaf(y, qinv, float(%e));\n", nc[i].first);
+		}
+		if( pc.size() ) {
+			tprint("y = fmaf(z, qinv, y);\n");
+		} else {
+			tprint("const float& y = z;\n");
+		}
+	}
+}
+
 int main() {
 
 	fprintf(stderr, "Generating FMM kernels for Pmax = %i\n", P - 1);
@@ -2138,7 +2201,7 @@ int main() {
 		const int j = l - i;
 		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
 	}
-	tprint( "const auto d = green_kernel( r, rsinv, rsinv2 );\n" );
+	tprint("const auto d = green_kernel( r, rsinv, rsinv2 );\n");
 	for (int l = 0; l < P; l++) {
 		for (int m = 0; m <= l; m++) {
 			if (l + m < P) {
@@ -2461,25 +2524,24 @@ int main() {
 #ifdef USE_CUDA
 	do_expansion_cuda<P>();
 #endif
-	/*
+/*
+	vector<pair<float, int>> coeffs1;
+	coeffs1.push_back(pair<float, int>(14.0 / 5.0, 0));
+	coeffs1.push_back(pair<float, int>(-16.0 / 3.0, 2));
+	coeffs1.push_back(pair<float, int>(48.0 / 5.0, 4));
+	coeffs1.push_back(pair<float, int>(-32.0 / 5.0, 5));
+	vector<pair<float, int>> coeffs2;
+	coeffs2.push_back(pair<float, int>(16.0 / 5.0, 0));
+	coeffs2.push_back(pair<float, int>(-1.0 / 15.0, -1));
+	coeffs2.push_back(pair<float, int>(-32.0 / 3.0, 2));
+	coeffs2.push_back(pair<float, int>(16.0, 3));
+	coeffs2.push_back(pair<float, int>(-48.0 / 5.0, 4));
+	coeffs2.push_back(pair<float, int>(32.0 / 15.0, 5));
 
-	 tprint("template<class T>\n");
-	 tprint("CUDA_EXPORT int apply_scale_factor_inv(tensor_trless_sym<T,%i> &L) {\n", P);
-	 indent();
-	 apply_scale_factorL < P > ("L");
-	 tprint("return %i;\n", P * P + 1);
-	 deindent();
-	 tprint("}\n");
-
-	 tprint("template<class T>\n");
-	 tprint("CUDA_EXPORT int apply_scale_factor(tensor_trless_sym<T,%i> &M) {\n", P - 1);
-	 indent();
-	 apply_scale_factorM < P - 1 > ("M");
-	 tprint("return %i;\n", (P - 1) * (P - 1) + 1);
-
-	 deindent();
-	 tprint("}\n");
-	 */
+	auto deriv2 = green_derivs(coeffs2);
+	auto deriv1 = green_derivs(coeffs1);
+	create_fma_function(deriv2[2]);
+*/
 }
 
 #endif

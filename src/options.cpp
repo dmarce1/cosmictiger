@@ -105,7 +105,7 @@ bool process_options(int argc, char *argv[]) {
 	("do_groups", po::value<bool>(&(opts.do_groups))->default_value(false), "do group analysis (default=false)") //
 	("do_tracers", po::value<bool>(&(opts.do_tracers))->default_value(false), "output tracer_count number of tracer particles to SILO (default=false)") //
 	("save_force", po::value<bool>(&(opts.save_force))->default_value(false), "save force and potential in memory") //
-		("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(128), "bucket size") //
+	("bucket_size", po::value<int>(&(opts.bucket_size))->default_value(128), "bucket size") //
 	("minrung", po::value<int>(&(opts.minrung))->default_value(0), "minimum starting rung") //
 	("tracer_count", po::value<int>(&(opts.tracer_count))->default_value(1000000), "number of tracer particles (default=1000000)") //
 	("do_slice", po::value<bool>(&(opts.do_slice))->default_value(false), "output a projection of a slice through the volume (default=false)") //
@@ -173,7 +173,7 @@ bool process_options(int argc, char *argv[]) {
 	opts.eta /= sqrt(self_phi());
 	opts.nparts = sqr(opts.parts_dim) * opts.parts_dim;
 	opts.Nfour = opts.parts_dim;
-	opts.p3m_chainnbnd *= opts.p3m_rs;
+	opts.p3m_chainnbnd = lround(ceil(opts.p3m_chainnbnd * opts.p3m_rs));
 	if (opts.close_pack) {
 		opts.nparts *= 2;
 //		opts.Nfour *= 2;

@@ -54,7 +54,8 @@ kick_return treepm_kick(kick_params params) {
 	i--;
 	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
-	params.theta = 0.3f;
+
+	params.theta = 0.35f;
 	params.phi0 = green_phi0(nparts, rs);
 	timer tm;
 	PRINT("Doing chainmesh\n");
@@ -114,7 +115,10 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 						for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] <= I[YDIM] + Nbnd; J[YDIM]++) {
 							for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] <= I[ZDIM] + Nbnd; J[ZDIM]++) {
 								auto K = J - I;
-								if( sqr(K[XDIM], K[YDIM], K[ZDIM]) <= sqr(Nbnd) ) {
+								for( int dim =0; dim< NDIM; dim++) {
+									K[dim] = std::max(std::abs(K[dim])-1.0, 0.0);
+								}
+								if( sqr(K[XDIM], K[YDIM], K[ZDIM]) < sqr(Nbnd) ) {
 									tree_id id;
 									id.index = tree_roots[chain_box.index(J)];
 									if( id.index >= 0 ) {
