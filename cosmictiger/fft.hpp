@@ -111,7 +111,7 @@ void fft3d2silo(bool real);
  }
  */
 
-#define CLOUD_ORDER 5
+#define CLOUD_ORDER 3
 
 #if( CLOUD_ORDER == 3 )
 

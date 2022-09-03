@@ -45,8 +45,6 @@ HPX_PLAIN_ACTION (treepm_exchange_and_sort);
 HPX_PLAIN_ACTION (treepm_cleanup);
 HPX_PLAIN_ACTION (treepm_short_range);
 
-
-
 kick_return treepm_kick(kick_params params) {
 	const auto& opts = get_options();
 	const auto nparts = particles_active_count();
@@ -57,8 +55,7 @@ kick_return treepm_kick(kick_params params) {
 	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
 	params.theta = 0.3f;
-//	PRINT( "--------------> %e %e\n",4.0 * M_PI * sqr(rs) * nparts , 1.0 / sqrt(M_PI) / rs);
-	params.phi0 = 4.0 * M_PI * sqr(rs) * nparts + 1.0 / sqrt(M_PI) / rs;
+	params.phi0 = green_phi0(nparts, rs);
 	timer tm;
 	PRINT("Doing chainmesh\n");
 	tm.start();
@@ -489,11 +486,10 @@ void treepm_filter_fourier(int dim, int Nres) {
 	const auto i = cmplx(0, 1);
 	auto box = fft3d_complex_range();
 	const float h = 1.0 / Nres;
-	const float rs2 = sqr(rs);
 	decltype(Y0) Y(Y0.size());
 	vector<hpx::future<void>> futs2;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs2.push_back(hpx::async([box,h,rs2,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
+		futs2.push_back(hpx::async([box,h,rs,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
 			array<cmplx, NDIM + 1> k;
 			k[NDIM] = i;
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
@@ -505,7 +501,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 						coeff *= sqr(cloud_filter(k[dim].real() * h));
 						k2 += sqr(k[dim].real());
 					}
-					coeff *= exp(-k2 * rs2);
+					coeff *= green_filter(sqrt(k2)*rs);
 					const auto index = box.index(I);
 					if (k2 > 0.0) {
 						Y[index] = Y0[index] * i * coeff * k[dim] * (4.0 * M_PI)/ k2;
