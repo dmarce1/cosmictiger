@@ -338,29 +338,22 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 #ifdef TREEPM
 					const float r = sqrt(r2);
-					const float erf0 = erff(0.5f * r * rsinv);
-					const float exp0 = expf(-0.25f * r2 * rsinv2);
-					float rinv;
-					const float cons = 1.0f / sqrtf(M_PI);
-					if (r2 * rsinv2 > sqr(5.0f)) {
-						phi = f = 0.f;
-					} else if (r2 > h2) {
-						phi = rsqrt(r2);					// 4
-						f = sqr(phi) * phi;		// 2
-						rinv = phi;
-						direct++;
-						phi -= erf0 * rinv;
-						f -= (erf0 - cons * r * rsinv * exp0) * sqr(rinv) * rinv;
-					} else if (r2 > 0.f) {
-						close++;
-						gsoft(f, phi, r2, hinv, h2inv, h3inv, do_phi);
-						rinv = 1.f / r;
-						phi -= erf0 * rinv;
-						f -= (erf0 - cons * r * rsinv * exp0) * sqr(rinv) * rinv;
+					const float rinv = rsqrt(r2);
+					green_direct(phi, f, r, r2, rinv, rsinv, rsinv2);
+					if (r2 < h2) {
+						if (r2 > 0.f) {
+							phi -= rinv;
+							f -= sqr(rinv) * rinv;
+							float f2, phi2;
+							close++;
+							gsoft(f2, phi2, r2, hinv, h2inv, h3inv, do_phi);
+							f += f2;
+							phi += phi2;
+						} else {
+							phi = f = 0.f;
+						}
 					} else {
-						close++;
-						f = 0.f;
-						phi = 0.f;
+						direct++;
 					}
 #else
 					if (r2 > h2) {

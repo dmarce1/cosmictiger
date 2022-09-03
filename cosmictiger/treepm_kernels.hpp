@@ -26,17 +26,14 @@ CUDA_EXPORT inline array<float, LORDER> green_kernel(float r, float rsinv, float
 		e0 *= nr;
 	}
 	return d;
-	/*const float rinv1 = rinv;
-	const float rinv2 = rinv1 * rinv1;
-	const float d0 = erf0 * rinv;
-	const float d1 = fmaf(float(-1) * d0, rinv, e0);
-	e0 *= n8r;
-	const float d2 = fmaf(float(-3) * d1, rinv, e0);
-	e0 *= n8r;
-	const float d3 = fmaf(float(-5) * d2, rinv, e0);
-	e0 *= n8r;
-	const float d4 = fmaf(T(-7) * d3, rinv, e0);*/
+}
 
+CUDA_EXPORT inline void green_direct(float& phi, float& f, float r, float r2, float rinv, float rsinv, float rsinv2) {
+	const float erfc0 = erfcf(0.5f * r * rsinv);
+	const float exp0 = expf(-0.25f * r2 * rsinv2);
+	const float cons = .5641895835f;
+	phi = erfc0 * rinv;
+	f = (erfc0 + cons * r * rsinv * exp0) * sqr(rinv) * rinv;
 }
 
 #endif /* TREEPM_KERNELS_HPP_ */

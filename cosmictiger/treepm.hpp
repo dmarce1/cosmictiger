@@ -16,4 +16,11 @@ void treepm_free_fields();
 range<int64_t> treepm_get_fourier_box(int Nres);
 device_vector<float> treepm_compute_density_local(int Nres, const device_vector<pair<part_int>>& chain_mesh, range<int64_t> int_box, range<int64_t> chain_box, range<int64_t> rho_box);
 
+#define NSHORT_INTERP 3
+#define SHORT_INTERP0 0
+#define SHORT_INTERP1 1
+#define SHORT_INTERP2 2
+
+#define SHORT_INTERP_SIZE 1024
+
 #endif

@@ -7,6 +7,7 @@
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/treepm_kernels.hpp>
 
 static vector<cmplx> Y0;
 static device_vector<pair<part_int>> chain_mesh;
@@ -44,6 +45,8 @@ HPX_PLAIN_ACTION (treepm_exchange_and_sort);
 HPX_PLAIN_ACTION (treepm_cleanup);
 HPX_PLAIN_ACTION (treepm_short_range);
 
+
+
 kick_return treepm_kick(kick_params params) {
 	const auto& opts = get_options();
 	const auto nparts = particles_active_count();
@@ -53,9 +56,9 @@ kick_return treepm_kick(kick_params params) {
 	i--;
 	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
-	params.theta = 0.5f;
+	params.theta = 0.3f;
 //	PRINT( "--------------> %e %e\n",4.0 * M_PI * sqr(rs) * nparts , 1.0 / sqrt(M_PI) / rs);
-	params.phi0 = 4.0 * M_PI * sqr(rs) * nparts; // + 1.0 / sqrt(M_PI) / rs;
+	params.phi0 = 4.0 * M_PI * sqr(rs) * nparts + 1.0 / sqrt(M_PI) / rs;
 	timer tm;
 	PRINT("Doing chainmesh\n");
 	tm.start();
