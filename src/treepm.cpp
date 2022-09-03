@@ -52,6 +52,9 @@ kick_return treepm_kick(kick_params params) {
 	}
 	i--;
 	const int Nres = i * opts.p3m_Nmin;
+	const double rs = opts.p3m_rs / Nres;
+//	PRINT( "--------------> %e %e\n",4.0 * M_PI * sqr(rs) * nparts , 1.0 / sqrt(M_PI) / rs);
+	params.phi0 = 4.0 * M_PI * sqr(rs) * nparts + 1.0 / sqrt(M_PI) / rs;
 	timer tm;
 	PRINT("Doing chainmesh\n");
 	tm.start();
@@ -78,6 +81,7 @@ kick_return treepm_kick(kick_params params) {
 	tm.start();
 	auto kr = treepm_short_range(params, Nres);
 	treepm_cleanup();
+	tm.stop();
 	PRINT("took %e s\n", tm.read());
 
 	return kr;
@@ -491,21 +495,21 @@ void treepm_filter_fourier(int dim, int Nres) {
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
 					float k2 = 0.0;
-					float filter = sqr(Nres)*Nres;
+					float coeff = sqr(Nres)*Nres;
 					for (int dim = 0; dim < NDIM; dim++) {
 						k[dim] = cmplx(2.0 * M_PI * (I[dim] < Nres / 2 ? I[dim] : I[dim] - Nres), 0.0);
-						filter *= sqr(cloud_filter(k[dim].real() * h));
+						coeff *= sqr(cloud_filter(k[dim].real() * h));
 						k2 += sqr(k[dim].real());
 					}
-					//		filter *= exp(-k2 * rs2);
-				const auto index = box.index(I);
-				if (k2 > 0.0) {
-					Y[index] = Y0[index] * i * filter * k[dim] * (4.0 * M_PI)/ k2;
-				} else {
-					Y[index] = cmplx(0.f, 0.f);
+					coeff *= exp(-k2 * rs2);
+					const auto index = box.index(I);
+					if (k2 > 0.0) {
+						Y[index] = Y0[index] * i * coeff * k[dim] * (4.0 * M_PI)/ k2;
+					} else {
+						Y[index] = cmplx(0.f, 0.f);
+					}
 				}
-			}
-		}}, I));
+			}}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	fft3d_accumulate_complex(box, Y);

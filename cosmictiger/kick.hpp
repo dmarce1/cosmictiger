@@ -144,6 +144,7 @@ struct kick_params {
 	float theta;
 	float h;
 	float eta;
+	float phi0;
 	float GM;
 	bool vel_init;
 	bool save_force;
