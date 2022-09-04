@@ -58,13 +58,8 @@ CUDA_EXPORT float treepm_get_field(int dim, float x, float y, float z) {
 			I[YDIM] = j;
 			for (int k = k0 + CLOUD_MIN; k <= k0 + CLOUD_MAX; k++) {
 				I[ZDIM] = k;
-				for (int dim1 = 0; dim1 < NDIM; dim1++) {
-					if (!(I[dim1] >= int_box.begin[dim1] && I[dim1] < int_box.end[dim1])) {
-						PRINT("%i %i %i %i %e %e %e\n", dim1, int_box.begin[dim1], I[dim1], int_box.end[dim1], xi, yi, zi);
-					}
-					ALWAYS_ASSERT(I[dim1] >= int_box.begin[dim1] && I[dim1] < int_box.end[dim1]);
-				}
-				res += cloud_weight(xi - i) * cloud_weight(yi - j) * cloud_weight(zi - k) * fields[dim][int_box.index(I)];
+				const float wt = cloud_weight(xi - i) * cloud_weight(yi - j) * cloud_weight(zi - k);
+				res += wt * fields[dim][int_box.index(I)];
 			}
 		}
 	}

@@ -87,6 +87,29 @@ polynomial poly_mult(const polynomial& A, const polynomial& B) {
 	return C;
 }
 
+polynomial poly_flip(const polynomial& A) {
+	auto B = A;
+	for (int i = 1; i < A.size(); i += 2) {
+		B[i] = -B[i];
+	}
+	return B;
+}
+
+polynomial poly_shift(const polynomial& A, double x) {
+	polynomial B(A.size(), 0.0);
+	std::vector<double> co(1, 1.0);
+	for (int n = 0; n < A.size(); n++) {
+		for (int m = 0; m < co.size(); m++) {
+			B[m] += pow(x, m) * co[m] * A[n];
+		}
+		for (int i = 1; i < co.size(); i++) {
+			co[i] = co[i] + co[i - 1];
+		}
+		co.push_back(1.0);
+	}
+	return B;
+}
+
 polynomial poly_normalize(const polynomial& A) {
 	double norm = 0.0;
 	for (int i = 0; i < A.size(); i++) {
@@ -373,22 +396,22 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 	deindent();
 	tprint("}\n");
 	tprint("\n");
-/*
-	tprint("\n");
-	tprint("CUDA_EXPORT inline double green_filter(double k) {\n", L);
-	indent();
-	tprint("if(k > double(%.8e)) {\n", kmax);
-	indent();
-	tprint("return 0.f;\n");
-	deindent();
-	tprint("}\n");
-	tprint("double y;\n");
-	tprint("double q2 = sqr(k);\n");
-	poly_print_fma_instructions(filter, "q", "double");
-		tprint("return y;\n");
-	deindent();
-	tprint("}\n");
-	tprint("\n");*/
+	/*
+	 tprint("\n");
+	 tprint("CUDA_EXPORT inline double green_filter(double k) {\n", L);
+	 indent();
+	 tprint("if(k > double(%.8e)) {\n", kmax);
+	 indent();
+	 tprint("return 0.f;\n");
+	 deindent();
+	 tprint("}\n");
+	 tprint("double y;\n");
+	 tprint("double q2 = sqr(k);\n");
+	 poly_print_fma_instructions(filter, "q", "double");
+	 tprint("return y;\n");
+	 deindent();
+	 tprint("}\n");
+	 tprint("\n");*/
 
 	tprint("\n");
 	tprint("CUDA_EXPORT inline float green_phi0(float nparts, float rs) {\n", L);
@@ -422,7 +445,15 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 //#define LUCY
 
 int main() {
-	int p;
+	polynomial Y(3);
+	Y[0] = 0.0;
+	Y[1] = 0.0;
+	Y[2] = 1.0;
+	Y = poly_shift(Y, -1.0);
+	printf("%s\n", poly_to_string(Y).c_str());
+	return 0;
+
+	int p = (ORDER - 1) / 2;
 	p = 4;
 	polynomial basis1(2);
 

@@ -68,6 +68,12 @@ std::function<double(double)> treepm_init_filter() {
 			return (1.0-t)*y1+t*y2+t*(1-t)*((1-t)*a+t*b);
 		}
 	};
+	FILE* fp = fopen("green.txt", "wt");
+	for (double k = 0.0; k < FILTER_MAX; k += 0.01) {
+		fprintf(fp, "%e %e\n", k, func(k));
+	}
+	fclose(fp);
+
 	return func;
 }
 
@@ -550,11 +556,6 @@ void treepm_filter_fourier(int dim, int Nres) {
 	decltype(Y0) Y(Y0.size());
 	vector<hpx::future<void>> futs2;
 	const static auto gfilter = treepm_init_filter();
-/*	FILE* fp = fopen( "green.txt", "wt");
-	for(double k = 0.0; k < FILTER_MAX; k+=0.01) {
-		fprintf( fp, "%e %e %e\n",k, green_filter(k), gfilter(k));
-	}
-	fclose(fp);*/
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
 		futs2.push_back(hpx::async([box,h,rs,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
 			array<cmplx, NDIM + 1> k;

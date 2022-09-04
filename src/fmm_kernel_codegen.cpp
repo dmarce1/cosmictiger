@@ -2517,7 +2517,7 @@ int main() {
 	printf("\n", flops);
 	deindent();
 	tprint("}\n");
-	do_expansion< P >(false);
+//	do_expansion< P >(false);
 
 	do_expansion<2>(true);
 

@@ -164,6 +164,25 @@ inline CUDA_EXPORT float cloud_weight(float x) {
 	}
 }
 
+inline CUDA_EXPORT float dcloud_weight(float x) {
+	float sgn = copysign(1.0, x);
+	x = fabs(x);
+	const float x2 = sqr(x);
+	const float x3 = x * x2;
+	const float x4 = x2 * x2;
+	float rc;
+	if (x > 3.0f) {
+		rc = 0.0f;
+	} else if (x < 1.0f) {
+		rc = (-2.0 * 30.0 * x + 4.0 * 15.0f * x3 - 5.0 * 5.0f * x4) / 60.0f;
+	} else if (x < 2.0f) {
+		rc = (75.0 - 2.0 * 210 * x + 3.0 * 150 * x2 - 4.0 * 45 * x3 + 5.0 * 5 * x4) / 120.0;
+	} else {
+		rc = (-405.0 + 2.0 * 270 * x - 3.0 * 90 * x2 + 4.0 * 15 * x3 - 5.0 * x4) / 120.0;
+	}
+	return sgn * rc;
+}
+
 inline double cloud_filter(double kh) {
 	const double s = sinc(0.5 * kh);
 	return 1.0 / (sqr(s * sqr(s)));
