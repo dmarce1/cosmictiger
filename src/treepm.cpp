@@ -14,6 +14,63 @@ static device_vector<pair<part_int>> chain_mesh;
 static vector<int> tree_roots;
 static size_t local_part_count;
 
+#define FILTER_N 65536
+#define FILTER_MAX (M_PI * 64.0)
+
+std::function<double(double)> treepm_init_filter() {
+	constexpr double M = 1025;
+	const double dk = FILTER_MAX / (FILTER_N - 1.0);
+	const auto I1 = [](double r, double k) {
+		return green_rho(r) * 4.0 * M_PI * sqr(r) * sinc(r * k);
+	};
+	const auto I2 = [](double r, double k) {
+		if( k==0.0 ) {
+			return 0.0;
+		} else {
+			return green_rho(r) * 4.0 * M_PI * sqr(r) * (cos(r*k) - sinc(r*k)) / k;
+		}
+	};
+	vector<double> filter1;
+	vector<double> filter2;
+	for (int n = 0; n <= FILTER_N; n++) {
+		double k = n * dk;
+		double i1 = 0.0;
+		double i2 = 0.0;
+		double r = 0.0;
+		double dr = 1.0 / (M - 1);
+		i1 += (1.0 / 3.0) * I1(0.0, k) * dr;
+		i2 += (1.0 / 3.0) * I2(0.0, k) * dr;
+		for (int m = 1; m < M - 1; m += 2) {
+			r = m * dr;
+			i1 += (4.0 / 3.0) * I1(r, k) * dr;
+			i2 += (4.0 / 3.0) * I2(r, k) * dr;
+		}
+		for (int m = 2; m < M - 1; m += 2) {
+			r = m * dr;
+			i1 += (2.0 / 3.0) * I1(r, k) * dr;
+			i2 += (2.0 / 3.0) * I2(r, k) * dr;
+		}
+		filter1.push_back(i1);
+		filter2.push_back(i2);
+	}
+	const auto func = [filter1, filter2, dk](double k) {
+		if( k >= FILTER_MAX) {
+			return 0.0;
+		} else {
+			int i = k / dk;
+			const double y1 = filter1[i];
+			const double y2 = filter1[i+1];
+			double k1 = filter2[i];
+			double k2 = filter2[i+1];
+			const double a = k1 * dk - (y2 - y1);
+			const double b = -k2 * dk + (y2 - y1);
+			const double t = k /dk - i;
+			return (1.0-t)*y1+t*y2+t*(1-t)*((1-t)*a+t*b);
+		}
+	};
+	return func;
+}
+
 static range<int64_t> chain_box;
 
 void treepm_compute_gravity(int Nres, bool do_phi);
@@ -55,7 +112,7 @@ kick_return treepm_kick(kick_params params) {
 	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
 
-	params.theta = 0.5f;
+	params.theta = 0.33333333333f;
 	params.phi0 = green_phi0(nparts, rs);
 	timer tm;
 	PRINT("Doing chainmesh\n");
@@ -492,6 +549,12 @@ void treepm_filter_fourier(int dim, int Nres) {
 	const float h = 1.0 / Nres;
 	decltype(Y0) Y(Y0.size());
 	vector<hpx::future<void>> futs2;
+	const static auto gfilter = treepm_init_filter();
+/*	FILE* fp = fopen( "green.txt", "wt");
+	for(double k = 0.0; k < FILTER_MAX; k+=0.01) {
+		fprintf( fp, "%e %e %e\n",k, green_filter(k), gfilter(k));
+	}
+	fclose(fp);*/
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
 		futs2.push_back(hpx::async([box,h,rs,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
 			array<cmplx, NDIM + 1> k;
@@ -505,7 +568,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 						coeff *= sqr(cloud_filter(k[dim].real() * h));
 						k2 += sqr(k[dim].real());
 					}
-					coeff *= green_filter(sqrt(k2)*rs);
+					coeff *= gfilter(sqrt(k2)*rs);
 					const auto index = box.index(I);
 					if (k2 > 0.0) {
 						Y[index] = Y0[index] * i * coeff * k[dim] * (4.0 * M_PI)/ k2;

@@ -293,7 +293,7 @@ inline double green_a(double k) {
 	}
 }
 
-void print_green_direct(polynomial pot, polynomial force, expansion_type expansion, polynomial filter, double kmax) {
+void print_green_direct(polynomial rho, polynomial pot, polynomial force, expansion_type expansion, polynomial filter, double kmax) {
 	tprint("#pragma once\n");
 	tprint("\n");
 	tprint("CUDA_EXPORT inline void green_direct(float& phi, float& f, float r, float r2, float rinv, float rsinv, float rsinv2) {\n");
@@ -373,7 +373,7 @@ void print_green_direct(polynomial pot, polynomial force, expansion_type expansi
 	deindent();
 	tprint("}\n");
 	tprint("\n");
-
+/*
 	tprint("\n");
 	tprint("CUDA_EXPORT inline double green_filter(double k) {\n", L);
 	indent();
@@ -385,15 +385,26 @@ void print_green_direct(polynomial pot, polynomial force, expansion_type expansi
 	tprint("double y;\n");
 	tprint("double q2 = sqr(k);\n");
 	poly_print_fma_instructions(filter, "q", "double");
-	tprint("return y;\n");
+		tprint("return y;\n");
 	deindent();
 	tprint("}\n");
-	tprint("\n");
+	tprint("\n");*/
 
 	tprint("\n");
 	tprint("CUDA_EXPORT inline float green_phi0(float nparts, float rs) {\n", L);
 	indent();
 	tprint("return float(%.8e) * sqr(rs) * (nparts - 1) +  float(%.8e) / rs;\n", -4.0 * M_PI * filter[2], pot[0]);
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+	tprint("\n");
+	tprint("CUDA_EXPORT inline float green_rho(float q) {\n", L);
+	indent();
+	tprint("float y;\n");
+	tprint("float q2 = sqr(q);\n");
+	poly_print_fma_instructions(rho, "q");
+	tprint("return y;\n");
 	deindent();
 	tprint("}\n");
 	tprint("\n");
@@ -408,9 +419,13 @@ void print_green_direct(polynomial pot, polynomial force, expansion_type expansi
 
 }
 
+//#define LUCY
+
 int main() {
-	int p = ORDER - 1;
+	int p;
+	p = 4;
 	polynomial basis1(2);
+
 	polynomial basis2(2);
 	basis1[0] = 1.0;
 	basis1[1] = p;
@@ -422,10 +437,17 @@ int main() {
 	basis[1] = 0.0;
 	basis[2] = -1.0;
 
+#ifdef LUCY
 	auto rho = basis1;
 	for (int i = 0; i < p; i++) {
 		rho = poly_mult(rho, basis2);
 	}
+#else
+	auto rho = basis;
+	for (int i = 0; i < ORDER - 3; i++) {
+		rho = poly_mult(rho, basis);
+	}
+#endif
 	rho = poly_normalize(rho);
 	auto pot = poly_rho2pot(rho);
 	auto force = poly_rho2force(rho);
@@ -434,6 +456,6 @@ int main() {
 	auto kmax = 8.0 * M_PI;
 	auto filter = poly_filter(rho, kmax);
 
-	print_green_direct(pot, force, expansion, filter, kmax);
+	print_green_direct(rho, pot, force, expansion, filter, kmax);
 
 }
