@@ -96,18 +96,22 @@ polynomial poly_flip(const polynomial& A) {
 }
 
 polynomial poly_shift(const polynomial& A, double x) {
-	polynomial B(A.size(), 0.0);
-	std::vector<double> co(1, 1.0);
-	for (int n = 0; n < A.size(); n++) {
-		for (int m = 0; m < co.size(); m++) {
-			B[m] += pow(x, m) * co[m] * A[n];
+	if (x != 0.0) {
+		polynomial B(A.size(), 0.0);
+		std::vector<double> co(1, 1.0);
+		for (int n = 0; n < A.size(); n++) {
+			for (int m = 0; m < co.size(); m++) {
+				B[m] += pow(-x, (co.size() - 1) - m) * co[m] * A[n];
+			}
+			for (int i = co.size() - 1; i >= 1; i--) {
+				co[i] = co[i] + co[i - 1];
+			}
+			co.push_back(1.0);
 		}
-		for (int i = 1; i < co.size(); i++) {
-			co[i] = co[i] + co[i - 1];
-		}
-		co.push_back(1.0);
+		return B;
+	} else {
+		return A;
 	}
-	return B;
 }
 
 polynomial poly_normalize(const polynomial& A) {
@@ -147,12 +151,12 @@ std::string poly_to_string(const polynomial& A) {
 	std::string str = std::to_string(A[0]);
 	if (A[1] != 0.0) {
 		str += A[1] > 0.0 ? " + " : " - ";
-		str += std::to_string(std::abs(A[1])) + "*x";
+		str += std::to_string(std::abs(A[1])) + " * x";
 	}
 	for (int i = 2; i < A.size(); i++) {
 		if (A[i] != 0.0) {
 			str += A[i] > 0.0 ? " + " : " - ";
-			str += std::to_string(std::abs(A[i])) + "*x^" + std::to_string(i);
+			str += std::to_string(std::abs(A[i])) + " * x**" + std::to_string(i);
 		}
 	}
 	return str;
@@ -316,6 +320,93 @@ inline double green_a(double k) {
 	}
 }
 
+struct conditional {
+	std::pair<double, double> x;
+	polynomial f;
+};
+
+polynomial poly_pow(const polynomial& A, int n) {
+	polynomial B(1, 1.0);
+	for (int i = 0; i < n; i++) {
+		B = poly_mult(B, A);
+	}
+	return B;
+}
+
+polynomial poly_neg(const polynomial& A) {
+	polynomial B(A.size());
+	for (int i = 0; i < A.size(); i++) {
+		B[i] = -A[i];
+	}
+	return B;
+}
+
+std::vector<conditional> next_cloud(const std::vector<conditional>& A) {
+	std::vector<conditional> B;
+	for (int i = 0; i < A.size(); i++) {
+		double shift = A[i].x.first;
+		const auto Ashift = poly_shift(A[i].f, -shift);
+		polynomial Aleft(Ashift.size() + 1, 0.0), Aright(Ashift.size() + 1, 0.0);
+		for (int n = 0; n < Ashift.size(); n++) {
+			const auto co = Ashift[n] / (1.0 + n);
+			Aleft[n + 1] += co;
+		}
+		polynomial basis(2);
+		basis[0] = -1.0;
+		basis[1] = 1.0;
+		const auto one = polynomial(1, 1.0);
+		for (int n = 0; n < Ashift.size(); n++) {
+			auto term = poly_add(one, poly_neg(poly_pow(basis, n + 1)));
+			Aright = poly_add(Aright, poly_mult(term, polynomial(1, Ashift[n] / (n + 1))));
+		}
+		Aleft = poly_shift(Aleft, shift );
+		Aright = poly_shift(Aright, shift);
+		conditional cl, cr;
+		cl.x.first = A[i].x.first ;
+		cl.x.second = A[i].x.second ;
+		cl.f = Aleft;
+		cr.x.first = A[i].x.first + 1;
+		cr.x.second = A[i].x.second + 1;
+		cr.f = Aright;
+		B.push_back(cl);
+		B.push_back(cr);
+	}
+	int i = 0;
+	double minx = 100000;
+	double maxx = -100000;
+	while (i < B.size()) {
+		int j = i + 1;
+		while (j < B.size()) {
+			if (B[j].x == B[i].x) {
+				B[i].f = poly_add(B[i].f, B[j].f);
+				B[j] = B.back();
+				B.pop_back();
+			} else {
+				j++;
+			}
+		}
+		minx = std::min(minx, B[i].x.first);
+		maxx = std::max(maxx, B[i].x.second);
+		i++;
+	}
+	double shift = 0.5 * (minx + maxx);
+//	printf( "shifting %e\n", shift);
+	for (int i = 0; i < B.size(); i++) {
+
+		B[i].f = poly_shift(B[i].f, -shift);
+		B[i].x.first -= shift;
+		B[i].x.second -= shift;
+	}
+	return B;
+}
+
+void conditionals_print(std::vector<conditional> A) {
+	for (int i = 0; i < A.size(); i++) {
+		auto poly = poly_to_string(A[i].f);
+		printf("%s if x is between %e and %e\n", poly.c_str(), A[i].x.first, A[i].x.second);
+	}
+}
+
 void print_green_direct(polynomial rho, polynomial pot, polynomial force, expansion_type expansion, polynomial filter, double kmax) {
 	tprint("#pragma once\n");
 	tprint("\n");
@@ -445,12 +536,21 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 //#define LUCY
 
 int main() {
-	polynomial Y(3);
-	Y[0] = 0.0;
-	Y[1] = 0.0;
-	Y[2] = 1.0;
-	Y = poly_shift(Y, -1.0);
-	printf("%s\n", poly_to_string(Y).c_str());
+
+	polynomial Y(1);
+	Y[0] = 1.0;
+	Y[1] =0.0;
+	conditional cloud;
+	cloud.f = Y;
+	cloud.x.first = -.5;
+	cloud.x.second = .5;
+	std::vector<conditional> A(1, cloud);
+	for (int i = 0; i < 4; i++) {
+		printf("N = %i\n", i);
+		conditionals_print(A);
+		printf("\n");
+		A = next_cloud(A);
+	}
 	return 0;
 
 	int p = (ORDER - 1) / 2;
