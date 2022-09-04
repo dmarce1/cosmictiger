@@ -24,6 +24,7 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
+#include <cosmictiger/kernels.hpp>
 
 static void compute_density_folded(int M);
 

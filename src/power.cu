@@ -24,6 +24,7 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #include <cosmictiger/power.hpp>
 

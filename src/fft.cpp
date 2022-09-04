@@ -22,6 +22,7 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #include <fftw3.h>
 #include <silo.h>

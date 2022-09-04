@@ -27,6 +27,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/zero_order.hpp>
 #include <cosmictiger/boltzmann.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #include <gsl/gsl_rng.h>
 

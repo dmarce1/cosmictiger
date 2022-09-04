@@ -7,7 +7,7 @@
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/timer.hpp>
-#include <cosmictiger/treepm_kernels.hpp>
+#include <cosmictiger/kernels.hpp>
 
 static vector<cmplx> Y0;
 static device_vector<pair<part_int>> chain_mesh;

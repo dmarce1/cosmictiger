@@ -1,6 +1,7 @@
 #include <vector>
 #include <cmath>
 #include <string>
+#include <algorithm>
 
 #include <cosmictiger/defs.hpp>
 
@@ -359,11 +360,11 @@ std::vector<conditional> next_cloud(const std::vector<conditional>& A) {
 			auto term = poly_add(one, poly_neg(poly_pow(basis, n + 1)));
 			Aright = poly_add(Aright, poly_mult(term, polynomial(1, Ashift[n] / (n + 1))));
 		}
-		Aleft = poly_shift(Aleft, shift );
+		Aleft = poly_shift(Aleft, shift);
 		Aright = poly_shift(Aright, shift);
 		conditional cl, cr;
-		cl.x.first = A[i].x.first ;
-		cl.x.second = A[i].x.second ;
+		cl.x.first = A[i].x.first;
+		cl.x.second = A[i].x.second;
 		cl.f = Aleft;
 		cr.x.first = A[i].x.first + 1;
 		cr.x.second = A[i].x.second + 1;
@@ -535,45 +536,62 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 
 //#define LUCY
 
+#define CLOUD_ORDER 3
+
+std::vector<conditional> conditionals_remove_negatives(std::vector<conditional>& A) {
+	std::vector<conditional> B;
+	for (int i = 0; i < A.size(); i++) {
+		if (A[i].x.second > 0.0) {
+			conditional b = A[i];
+			b.x.first = std::max(0.0, b.x.first);
+			B.push_back(b);
+		}
+	}
+	return B;
+}
+
+void print_conditionals_fma( std::vector<conditional> cloud) {
+	std::sort(cloud.begin(), cloud.end(), [](conditional a,conditional b) {
+		return a.x.second < b.x.second;
+	});
+	double xmin = cloud[0].x.first;
+	double xmax = cloud.back().x.second;
+	tprint("y = 0.0f;\n");
+	for (int i = 0; i < cloud.size(); i++) {
+		tprint("%s( x < float(%.8e) ) {\n", i == 0 ? "if" : "} else if", cloud[i].x.second);
+		indent();
+		poly_print_fma_instructions(cloud[i].f, "x");
+		deindent();
+		if (i == cloud.size() - 1) {
+			tprint("}\n");
+		}
+	}
+}
+
 int main() {
 
 	polynomial Y(1);
 	Y[0] = 1.0;
-	Y[1] =0.0;
-	conditional cloud;
-	cloud.f = Y;
-	cloud.x.first = -.5;
-	cloud.x.second = .5;
-	std::vector<conditional> A(1, cloud);
-	for (int i = 0; i < 4; i++) {
-		printf("N = %i\n", i);
-		conditionals_print(A);
-		printf("\n");
-		A = next_cloud(A);
+	Y[1] = 0.0;
+	conditional ngp;
+	ngp.f = Y;
+	ngp.x.first = -.5;
+	ngp.x.second = .5;
+	std::vector<conditional> cloud(1, ngp);
+	for (int i = 0; i < CLOUD_ORDER; i++) {
+		cloud = next_cloud(cloud);
 	}
-	return 0;
-
-	int p = (ORDER - 1) / 2;
-	p = 4;
-	polynomial basis1(2);
-
-	polynomial basis2(2);
-	basis1[0] = 1.0;
-	basis1[1] = p;
-	basis2[0] = 1.0;
-	basis2[1] = -1.0;
-
-	polynomial basis(3);
-	basis[0] = 1.0;
-	basis[1] = 0.0;
-	basis[2] = -1.0;
-
+	cloud = conditionals_remove_negatives(cloud);
 #ifdef LUCY
 	auto rho = basis1;
 	for (int i = 0; i < p; i++) {
 		rho = poly_mult(rho, basis2);
 	}
 #else
+	polynomial basis(3);
+	basis[0] = 1.0;
+	basis[1] = 0.0;
+	basis[2] = -1.0;
 	auto rho = basis;
 	for (int i = 0; i < ORDER - 3; i++) {
 		rho = poly_mult(rho, basis);
@@ -588,5 +606,30 @@ int main() {
 	auto filter = poly_filter(rho, kmax);
 
 	print_green_direct(rho, pot, force, expansion, filter, kmax);
+
+
+	tprint("\n");
+	tprint( "#define CLOUD_MIN -%i\n", CLOUD_ORDER/2 );
+	tprint( "#define CLOUD_MAX %i\n", CLOUD_ORDER/2+1 );
+	tprint("\n");
+
+	tprint( "inline CUDA_EXPORT float cloud_weight(float x) {\n");
+	indent();
+	tprint( "float y;\n");
+	tprint( "x = abs(x);\n");
+	print_conditionals_fma(cloud);
+	tprint("return y;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+	tprint( "inline CUDA_EXPORT float cloud_filter(float kh) {\n");
+	indent();
+	tprint( "const double s = sinc(0.5 * kh);\n");
+	tprint( "return pow(s, -%i);\n", CLOUD_ORDER + 1);
+	deindent();
+	tprint("}\n");
+
+
 
 }

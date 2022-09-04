@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/math.hpp>
-#include <cosmictiger/treepm_kernels.hpp>
+#include <cosmictiger/kernels.hpp>
 template<class T>
 using expansion = tensor_sym<T,7>;
 template<class T>
