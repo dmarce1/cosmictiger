@@ -301,12 +301,16 @@ void poly_print_fma_instructions(polynomial A, const char* varname = "q", const 
 }
 
 double poly_eval(polynomial A, double x) {
-	double sum = A.back();
-	while (A.size() > 1) {
-		A.pop_back();
-		sum = std::fma(sum, x, A.back());
+	if (A.size()) {
+		double sum = A.back();
+		while (A.size() > 1) {
+			A.pop_back();
+			sum = std::fma(sum, x, A.back());
+		}
+		return sum;
+	} else {
+		return 0.0;
 	}
-	return sum;
 }
 
 double sqr(double a) {
@@ -342,6 +346,23 @@ polynomial poly_neg(const polynomial& A) {
 	return B;
 }
 
+void conditionals_compress(std::vector<conditional>& B) {
+	int i = 0;
+	while (i < B.size()) {
+		int j = i + 1;
+		while (j < B.size()) {
+			if (B[j].x == B[i].x) {
+				B[i].f = poly_add(B[i].f, B[j].f);
+				B[j] = B.back();
+				B.pop_back();
+			} else {
+				j++;
+			}
+		}
+		i++;
+	}
+}
+
 std::vector<conditional> next_cloud(const std::vector<conditional>& A) {
 	std::vector<conditional> B;
 	for (int i = 0; i < A.size(); i++) {
@@ -372,23 +393,12 @@ std::vector<conditional> next_cloud(const std::vector<conditional>& A) {
 		B.push_back(cl);
 		B.push_back(cr);
 	}
-	int i = 0;
+	conditionals_compress(B);
 	double minx = 100000;
 	double maxx = -100000;
-	while (i < B.size()) {
-		int j = i + 1;
-		while (j < B.size()) {
-			if (B[j].x == B[i].x) {
-				B[i].f = poly_add(B[i].f, B[j].f);
-				B[j] = B.back();
-				B.pop_back();
-			} else {
-				j++;
-			}
-		}
+	for (int i = 0; i < B.size(); i++) {
 		minx = std::min(minx, B[i].x.first);
 		maxx = std::max(maxx, B[i].x.second);
-		i++;
 	}
 	double shift = 0.5 * (minx + maxx);
 //	printf( "shifting %e\n", shift);
@@ -536,7 +546,7 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 
 //#define LUCY
 
-#define CLOUD_ORDER 3
+#define CLOUD_ORDER 4
 
 std::vector<conditional> conditionals_remove_negatives(std::vector<conditional>& A) {
 	std::vector<conditional> B;
@@ -550,7 +560,7 @@ std::vector<conditional> conditionals_remove_negatives(std::vector<conditional>&
 	return B;
 }
 
-void print_conditionals_fma( std::vector<conditional> cloud) {
+void print_conditionals_fma(std::vector<conditional> cloud) {
 	std::sort(cloud.begin(), cloud.end(), [](conditional a,conditional b) {
 		return a.x.second < b.x.second;
 	});
@@ -568,8 +578,93 @@ void print_conditionals_fma( std::vector<conditional> cloud) {
 	}
 }
 
+const double control_point(int i) {
+	return i;
+}
+
+polynomial poly_scale(const polynomial& A, double a) {
+	auto B = A;
+	for (int n = 0; n < A.size(); n++) {
+		B[n] *= pow(1.0/a, n);
+	}
+	return B;
+}
+
+std::vector<conditional> Bspline_produce(int i, int k) {
+	std::vector<conditional> B;
+	if (k == 0) {
+		conditional A;
+		A.x.first = i;
+		A.x.second = i + 1.0;
+		A.f.resize(1, 1.0);
+		return std::vector < conditional > (1, A);
+	} else {
+		auto left = Bspline_produce(i, k - 1);
+		auto right = Bspline_produce(i + 1, k - 1);
+		polynomial wleft(2), wright(2);
+		const double ti = control_point(i);
+		const double tip1 = control_point(i + 1);
+		const double tipk = control_point(i + k);
+		const double tipkp1 = control_point(i + k + 1);
+		wleft[0] = -ti / (tipk - ti);
+		wleft[1] = 1.0 / (tipk - ti);
+		wright[0] = tipkp1 / (tipkp1 - tip1);
+		wright[1] = -1.0 / (tipkp1 - tip1);
+		for (int i = 0; i < left.size(); i++) {
+			left[i].f = poly_mult(left[i].f, wleft);
+		}
+		for (int i = 0; i < right.size(); i++) {
+			right[i].f = poly_mult(right[i].f, wright);
+		}
+		B.insert(B.begin(), left.begin(), left.end());
+		B.insert(B.begin(), right.begin(), right.end());
+		conditionals_compress(B);
+		return B;
+	}
+}
+
+double conditionals_eval(const std::vector<conditional>& A, double x) {
+	for (int i = 0; i < A.size(); i++) {
+		if (x >= A[i].x.first && x < A[i].x.second) {
+			return poly_eval(A[i].f, x);
+		}
+	}
+	return 0.0;
+}
+
+conditional conditional_shift(const conditional& A, double shift) {
+	conditional B;
+	B.x.first = A.x.first + shift;
+	B.x.second = A.x.second + shift;
+	B.f = poly_shift(A.f, shift);
+	return B;
+}
+
+conditional conditional_scale(const conditional& A, double a) {
+	conditional B;
+	B.f = poly_scale(A.f, a);
+	B.x.first = A.x.first * a;
+	B.x.second = A.x.second * a;
+	return B;
+}
+
+std::vector<conditional> Bspline(int k) {
+	auto B = Bspline_produce(0, k);
+	const double shift = -(k + 1) / 2.0;
+	for (int i = 0; i < B.size(); i++) {
+		B[i] = conditional_scale(conditional_shift(B[i], shift), 1.0 / -shift);
+	}
+	return B;
+}
+
 int main() {
 
+	auto B = Bspline(2);
+	for (double x = -1.0; x < 1.0; x += 0.01) {
+		printf("%e %e\n", x, conditionals_eval(B, x));
+	}
+
+	return 0;
 	polynomial Y(1);
 	Y[0] = 1.0;
 	Y[1] = 0.0;
@@ -607,29 +702,26 @@ int main() {
 
 	print_green_direct(rho, pot, force, expansion, filter, kmax);
 
-
 	tprint("\n");
-	tprint( "#define CLOUD_MIN -%i\n", CLOUD_ORDER/2 );
-	tprint( "#define CLOUD_MAX %i\n", CLOUD_ORDER/2+1 );
+	tprint("#define CLOUD_MIN -%i\n", CLOUD_ORDER / 2);
+	tprint("#define CLOUD_MAX %i\n", CLOUD_ORDER / 2 + 1);
 	tprint("\n");
 
-	tprint( "inline CUDA_EXPORT float cloud_weight(float x) {\n");
+	tprint("inline CUDA_EXPORT float cloud_weight(float x) {\n");
 	indent();
-	tprint( "float y;\n");
-	tprint( "x = abs(x);\n");
+	tprint("float y;\n");
+	tprint("x = abs(x);\n");
 	print_conditionals_fma(cloud);
 	tprint("return y;\n");
 	deindent();
 	tprint("}\n");
 	tprint("\n");
 
-	tprint( "inline CUDA_EXPORT float cloud_filter(float kh) {\n");
+	tprint("inline CUDA_EXPORT float cloud_filter(float kh) {\n");
 	indent();
-	tprint( "const double s = sinc(0.5 * kh);\n");
-	tprint( "return pow(s, -%i);\n", CLOUD_ORDER + 1);
+	tprint("const double s = sinc(0.5 * kh);\n");
+	tprint("return pow(s, -%i);\n", CLOUD_ORDER + 1);
 	deindent();
 	tprint("}\n");
-
-
 
 }
