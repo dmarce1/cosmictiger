@@ -684,7 +684,7 @@ std::vector<conditional> conditionals_to_mass_function(std::vector<conditional> 
 		auto M = poly_integrate(poly_mult(A[i].f, fourpir2));
 		M[0] -= poly_eval(M, A[i].x.first);
 		M[0] += M0;
-		fflush(stdout);
+		fflush (stdout);
 		M0 = poly_eval(M, A[i].x.second);
 		mass[i].f = M;
 		mass[i].x = A[i].x;
@@ -708,14 +708,51 @@ std::vector<conditional> Bspline(int k) {
 	return B;
 }
 
-std::vector<conditional> conditionals_to_force(const std::vector<conditional>& A) {
+double evaluate_potential(const potential_type& pot, double x) {
+	return poly_eval(pot.r.f, x) + pot.i / x;
+}
+
+
+
+double potentials_eval(const std::vector<potential_type>& A, double x) {
+	for (int i = 0; i < A.size(); i++) {
+		if (x >= A[i].r.x.first && x < A[i].r.x.second) {
+			return evaluate_potential(A[i], x);
+		}
+	}
+	return 0.0;
+}
+
+std::vector<potential_type> conditionals_to_potential(const std::vector<conditional>& A) {
+	std::vector<potential_type> F, pot;
+	auto M = conditionals_to_mass_function(A);
+	F.resize(A.size());
+	pot.resize(A.size());
+	for (int n = 0; n < A.size(); n++) {
+		F[n].r.f.resize(M[n].f.size() - 2);
+		for (int m = 0; m < F[n].r.f.size(); m++) {
+			F[n].r.f[m] = M[n].f[m + 2];
+		}
+		F[n].r.x = M[n].x;
+		F[n].i = -M[n].f[0];
+	}
+	double pot0 = 1.0 + F.back().i;
+	for (int n = A.size() - 1; n >= 0; n--) {
+		auto phi = poly_neg(poly_integrate_a2x(F[n].r.f, F[n].r.x.second));
+		pot[n].r.x = F[n].r.x;
+		pot[n].r.f = phi;
+		pot[n].r.f[0] += pot0;
+		pot[n].i = -F[n].i;
+		pot0 = evaluate_potential(pot[n], F[n].r.x.first);
+	}
+	return pot;
 }
 
 int main() {
 
-	auto B = conditionals_to_mass_function(Bspline(2));
+	auto B = conditionals_to_potential(Bspline(3));
 	for (double x = 0.0; x < 1.0; x += 0.01) {
-		printf("%e %e\n", x, conditionals_eval(B, x));
+		printf("%e %e\n", x, potentials_eval(B, x));
 	}
 
 	return 0;
