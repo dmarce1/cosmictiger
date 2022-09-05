@@ -585,7 +585,7 @@ const double control_point(int i) {
 polynomial poly_scale(const polynomial& A, double a) {
 	auto B = A;
 	for (int n = 0; n < A.size(); n++) {
-		B[n] *= pow(1.0/a, n);
+		B[n] *= pow(1.0 / a, n);
 	}
 	return B;
 }
@@ -648,19 +648,73 @@ conditional conditional_scale(const conditional& A, double a) {
 	return B;
 }
 
+polynomial poly_integrate(const polynomial& A) {
+	polynomial B(A.size() + 1);
+	B[0] = 0.0;
+	for (int i = 1; i < B.size(); i++) {
+		B[i] = A[i - 1] / i;
+	}
+	return B;
+}
+
+polynomial poly_integrate_a2x(const polynomial& A, double a) {
+	auto B = poly_integrate(A);
+	B[0] -= poly_eval(B, a);
+	return B;
+}
+
+void conditionals_sort(std::vector<conditional>& A) {
+	std::sort(A.begin(), A.end(), [](conditional a, conditional b) {
+		return a.x.first < b.x.first;
+	});
+}
+
+struct potential_type {
+	conditional r;
+	double i;
+};
+
+std::vector<conditional> conditionals_to_mass_function(std::vector<conditional> A) {
+	conditionals_sort(A);
+	std::vector<conditional> mass(A.size());
+	double M0 = 0.0;
+	polynomial fourpir2(3, 0.0);
+	fourpir2[2] = 4.0 * M_PI;
+	for (int i = 0; i < A.size(); i++) {
+		auto M = poly_integrate(poly_mult(A[i].f, fourpir2));
+		M[0] -= poly_eval(M, A[i].x.first);
+		M[0] += M0;
+		fflush(stdout);
+		M0 = poly_eval(M, A[i].x.second);
+		mass[i].f = M;
+		mass[i].x = A[i].x;
+	}
+	return mass;
+}
+
 std::vector<conditional> Bspline(int k) {
 	auto B = Bspline_produce(0, k);
 	const double shift = -(k + 1) / 2.0;
 	for (int i = 0; i < B.size(); i++) {
 		B[i] = conditional_scale(conditional_shift(B[i], shift), 1.0 / -shift);
 	}
+	B = conditionals_remove_negatives(B);
+	auto M = conditionals_to_mass_function(B);
+	auto mass = poly_eval(M.back().f, 1.0);
+	auto norm = 1.0 / mass;
+	for (int i = 0; i < B.size(); i++) {
+		B[i].f = poly_mult(polynomial(1, norm), B[i].f);
+	}
 	return B;
+}
+
+std::vector<conditional> conditionals_to_force(const std::vector<conditional>& A) {
 }
 
 int main() {
 
-	auto B = Bspline(2);
-	for (double x = -1.0; x < 1.0; x += 0.01) {
+	auto B = conditionals_to_mass_function(Bspline(2));
+	for (double x = 0.0; x < 1.0; x += 0.01) {
 		printf("%e %e\n", x, conditionals_eval(B, x));
 	}
 
