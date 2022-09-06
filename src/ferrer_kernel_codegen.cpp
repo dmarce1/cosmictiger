@@ -2,6 +2,9 @@
 #include <cmath>
 #include <string>
 #include <algorithm>
+#include <array>
+
+#include <functional>
 
 #include <cosmictiger/defs.hpp>
 
@@ -14,6 +17,8 @@ void indent() {
 void deindent() {
 	ntab--;
 }
+
+//#define BSPLINE
 
 template<class ...Args>
 void tprint(const char* str, Args&&...args) {
@@ -71,6 +76,15 @@ void poly_shrink_to_fit(polynomial& A) {
 	if (A.size()) {
 		while (A.back() == 0.0 && A.size()) {
 			A.pop_back();
+		}
+	}
+}
+void poly_shrink_to_fits(std::vector<polynomial>& A) {
+	for (int n = 0; n < A.size(); n++) {
+		if (A[n].size()) {
+			while (A[n].back() == 0.0 && A[n].size()) {
+				A[n].pop_back();
+			}
 		}
 	}
 }
@@ -206,6 +220,98 @@ bool poly_zero(const polynomial& A) {
 	return true;
 }
 
+bool polys_zero(const std::vector<polynomial>& A) {
+	for (int n = 0; n < A.size(); n++) {
+		for (int i = 0; i < A[n].size(); i++) {
+			if (A[n][i] != 0.0) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
+struct conditional {
+	std::pair<double, double> x;
+	polynomial f;
+};
+
+struct potential_type {
+	conditional r;
+	double i;
+};
+
+#ifdef BSPLINE
+
+struct expansion_type {
+	std::vector<std::vector<polynomial>> r;
+	std::vector<std::vector<polynomial>> i;
+};
+
+expansion_type poly_pot2expansion(const std::vector<potential_type>& pot, int order) {
+	expansion_type expansion;
+	std::vector<polynomial> r(pot.size());
+	std::vector<polynomial> i(pot.size());
+	for (int j = 0; j < pot.size(); j++) {
+		r[j] = pot[j].r.f;
+		i[j].resize(2, 0.0);
+		i[j][1] = pot[j].i;
+	}
+	expansion.i.push_back(i);
+	expansion.r.push_back(r);
+	for (int j = 0; j < order; j++) {
+		double r0 = 0.0;
+		bool jump = false;
+		for (int ci = 0; ci < pot.size(); ci++) {
+			if (r[ci].size()) {
+				for (int n = 0; n < (int) r[ci].size() - 1; n++) {
+					r[ci][n] = r[ci][n + 1] * (n + 1);
+				}
+				r[ci].pop_back();
+				if (r[ci].size()) {
+					r0 = r[ci][0];
+					jump = true;
+					for (int n = 0; n < (int) r[ci].size() - 1; n++) {
+						r[ci][n] = r[ci][n + 1];
+					}
+					if (r[ci].size()) {
+						r[ci].pop_back();
+					}
+				}
+			}
+			i.resize(i[ci].size() + 1);
+			for (int n = i[ci].size() - 1; n >= 2; n--) {
+				i[ci][n] = i[ci][n - 1] / -(n - 1);
+			}
+			i[ci][1] = i[ci][0] = 0.0;
+			i[ci].resize(i[ci].size() + 1);
+			for (int n = i[ci].size() - 1; n >= 1; n--) {
+				i[ci][n] = i[ci][n - 1];
+			}
+			if (jump) {
+				i[ci][1] = r0;
+			}
+		}
+		expansion.r.push_back(r);
+		expansion.i.push_back(i);
+	}
+	if (polys_zero(expansion.r.back())) {
+		expansion.r.pop_back();
+	}
+	if (polys_zero(expansion.i.back())) {
+		expansion.i.pop_back();
+	}
+	for (int i = 0; i < expansion.r.size(); i++) {
+		poly_shrink_to_fits(expansion.r[i]);
+	}
+	for (int i = 0; i < expansion.i.size(); i++) {
+		poly_shrink_to_fits(expansion.i[i]);
+	}
+	return expansion;
+}
+
+#else
+
 struct expansion_type {
 	std::vector<polynomial> r;
 	std::vector<polynomial> i;
@@ -266,6 +372,8 @@ expansion_type poly_pot2expansion(const polynomial& pot, int order) {
 	return expansion;
 }
 
+#endif
+
 bool poly_even_only(polynomial A) {
 	for (int i = 1; i < A.size(); i += 2) {
 		if (A[i] != 0.0) {
@@ -275,13 +383,17 @@ bool poly_even_only(polynomial A) {
 	return true;
 }
 
+bool close2zero(double number) {
+	return std::abs(number) < 1e-10;
+}
+
 void poly_print_fma_instructions(polynomial A, const char* varname = "q", const char* type = "float") {
 	if (poly_even_only(A)) {
 		tprint("y = %s(%.8e);\n", type, A.back());
 		while (A.size() > 1) {
 			A.pop_back();
 			A.pop_back();
-			if (A.back() != 0.0) {
+			if (A.back() != 0.0 && !close2zero(A.back())) {
 				tprint("y = fma( y, %s2, %s(%.8e) );\n", varname, type, A.back());
 			} else {
 				tprint("y *= q2;\n");
@@ -291,7 +403,7 @@ void poly_print_fma_instructions(polynomial A, const char* varname = "q", const 
 		tprint("y = %s(%.8e);\n", type, A.back());
 		while (A.size() > 1) {
 			A.pop_back();
-			if (A.back() != 0.0) {
+			if (A.back() != 0.0 && !close2zero(A.back())) {
 				tprint("y = fma( y, %s, %s(%.8e) );\n", varname, type, A.back());
 			} else {
 				tprint("y *= %s;\n", varname);
@@ -324,11 +436,6 @@ inline double green_a(double k) {
 		return 1.0 - 1.0 / 22.0 * sqr(k) + 1.0 / 1144.0 * sqr(sqr(k)) - (1.0 / 102960.0) * sqr(sqr(k)) * sqr(k);
 	}
 }
-
-struct conditional {
-	std::pair<double, double> x;
-	polynomial f;
-};
 
 polynomial poly_pow(const polynomial& A, int n) {
 	polynomial B(1, 1.0);
@@ -418,7 +525,31 @@ void conditionals_print(std::vector<conditional> A) {
 	}
 }
 
+void print_conditionals_fma(std::vector<conditional> cloud) {
+	std::sort(cloud.begin(), cloud.end(), [](conditional a,conditional b) {
+		return a.x.second < b.x.second;
+	});
+	double xmin = cloud[0].x.first;
+	double xmax = cloud.back().x.second;
+	tprint("y = 0.0f;\n");
+	for (int i = 0; i < cloud.size(); i++) {
+		tprint("%s( x < float(%.8e) ) {\n", i == 0 ? "if" : "} else if", cloud[i].x.second);
+		indent();
+		poly_print_fma_instructions(cloud[i].f, "x");
+		deindent();
+		if (i == cloud.size() - 1) {
+			tprint("}\n");
+		}
+	}
+}
+
+#ifdef BSPLINE
+void print_green_direct(polynomial rho, std::vector<potential_type> pot, std::vector<potential_type> force, expansion_type expansion, polynomial filter, double kmax) {
+#else
 void print_green_direct(polynomial rho, polynomial pot, polynomial force, expansion_type expansion, polynomial filter, double kmax) {
+#endif
+
+#ifndef BSPLINE
 	tprint("#pragma once\n");
 	tprint("\n");
 	tprint("CUDA_EXPORT inline void green_direct(float& phi, float& f, float r, float r2, float rinv, float rsinv, float rsinv2) {\n");
@@ -440,6 +571,7 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 	deindent();
 	tprint("}\n");
 	tprint("\n");
+#endif
 
 	const int L = ORDER;
 	tprint("\n");
@@ -467,6 +599,33 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 	tprint("float y;\n");
 	tprint("float z;\n");
 	int n = -1;
+#ifdef BSPLINE
+	for (int i = 0; i < L; i++) {
+		if (expansion.r.size() > i) {
+			if (expansion.r[i].size()) {
+				std::vector<conditional> c(expansion.r.size());
+				for (int l = 0; l < c.size(); l++) {
+					c[l].x = pot[l].r.x;
+					c[l].f = expansion.r[i][l];
+				}
+				print_conditionals_fma(c);
+			} else {
+				tprint("y = 0.f;\n");
+			}
+		}
+		if (expansion.i.size() > i) {
+			if (expansion.i[i].size()) {
+				tprint("z = y;\n");
+				std::vector<conditional> c(expansion.r.size());
+				for (int l = 0; l < c.size(); l++) {
+					c[l].x = pot[l].r.x;
+					c[l].f = expansion.i[i][l];
+				}
+				print_conditionals_fma(c, "qinv");
+				tprint("y += z;\n");
+			}
+		}
+#else
 	for (int i = 0; i < L; i++) {
 		if (expansion.r.size() > i) {
 			if (expansion.r[i].size()) {
@@ -482,6 +641,7 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 				tprint("y += z;\n");
 			}
 		}
+#endif
 		tprint("y *= q%i * rsinv%i;\n", i, i + 1);
 		tprint("d[%i] = fmaf( float(%i), rinv%i, y);\n", i, n, i + 1);
 		n = -n * (2 * i + 1);
@@ -560,26 +720,24 @@ std::vector<conditional> conditionals_remove_negatives(std::vector<conditional>&
 	return B;
 }
 
-void print_conditionals_fma(std::vector<conditional> cloud) {
-	std::sort(cloud.begin(), cloud.end(), [](conditional a,conditional b) {
-		return a.x.second < b.x.second;
-	});
-	double xmin = cloud[0].x.first;
-	double xmax = cloud.back().x.second;
-	tprint("y = 0.0f;\n");
-	for (int i = 0; i < cloud.size(); i++) {
-		tprint("%s( x < float(%.8e) ) {\n", i == 0 ? "if" : "} else if", cloud[i].x.second);
-		indent();
-		poly_print_fma_instructions(cloud[i].f, "x");
-		deindent();
-		if (i == cloud.size() - 1) {
-			tprint("}\n");
-		}
+polynomial poly_integrate(const polynomial& A) {
+	polynomial B(A.size() + 1);
+	B[0] = 0.0;
+	for (int i = 1; i < B.size(); i++) {
+		B[i] = A[i - 1] / i;
 	}
+	return B;
+}
+
+polynomial poly_integrate_a2x(const polynomial& A, double a) {
+	auto B = poly_integrate(A);
+	B[0] -= poly_eval(B, a);
+	return B;
 }
 
 const double control_point(int i) {
 	return i;
+
 }
 
 polynomial poly_scale(const polynomial& A, double a) {
@@ -588,6 +746,27 @@ polynomial poly_scale(const polynomial& A, double a) {
 		B[n] *= pow(1.0 / a, n);
 	}
 	return B;
+}
+
+polynomial Wendland(int l, int k) {
+	polynomial W;
+	if (k == 0) {
+		polynomial a(2);
+		a[0] = 1.0;
+		a[1] = -1.0;
+		W = poly_pow(a, l);
+	} else {
+		polynomial a(2);
+		a[0] = 0.0;
+		a[1] = 1.0;
+		auto b = Wendland(l, k - 1);
+		auto I = poly_mult(a, b);
+		I = poly_integrate_a2x(I, 1.0);
+		W = poly_neg(I);
+	}
+	W = poly_normalize(W);
+	return W;
+
 }
 
 std::vector<conditional> Bspline_produce(int i, int k) {
@@ -648,31 +827,11 @@ conditional conditional_scale(const conditional& A, double a) {
 	return B;
 }
 
-polynomial poly_integrate(const polynomial& A) {
-	polynomial B(A.size() + 1);
-	B[0] = 0.0;
-	for (int i = 1; i < B.size(); i++) {
-		B[i] = A[i - 1] / i;
-	}
-	return B;
-}
-
-polynomial poly_integrate_a2x(const polynomial& A, double a) {
-	auto B = poly_integrate(A);
-	B[0] -= poly_eval(B, a);
-	return B;
-}
-
 void conditionals_sort(std::vector<conditional>& A) {
 	std::sort(A.begin(), A.end(), [](conditional a, conditional b) {
 		return a.x.first < b.x.first;
 	});
 }
-
-struct potential_type {
-	conditional r;
-	double i;
-};
 
 std::vector<conditional> conditionals_to_mass_function(std::vector<conditional> A) {
 	conditionals_sort(A);
@@ -712,8 +871,6 @@ double evaluate_potential(const potential_type& pot, double x) {
 	return poly_eval(pot.r.f, x) + pot.i / x;
 }
 
-
-
 double potentials_eval(const std::vector<potential_type>& A, double x) {
 	for (int i = 0; i < A.size(); i++) {
 		if (x >= A[i].r.x.first && x < A[i].r.x.second) {
@@ -721,6 +878,17 @@ double potentials_eval(const std::vector<potential_type>& A, double x) {
 		}
 	}
 	return 0.0;
+}
+
+polynomial poly_derivative(const polynomial& A) {
+	polynomial B;
+	if (A.size()) {
+		B.resize(A.size() - 1);
+		for (int n = 1; n < A.size(); n++) {
+			B[n - 1] = A[n] * n;
+		}
+	}
+	return B;
 }
 
 std::vector<potential_type> conditionals_to_potential(const std::vector<conditional>& A) {
@@ -736,11 +904,12 @@ std::vector<potential_type> conditionals_to_potential(const std::vector<conditio
 		F[n].r.x = M[n].x;
 		F[n].i = -M[n].f[0];
 	}
-	double pot0 = 1.0 + F.back().i;
+	double pot0 = 1.0;
 	for (int n = A.size() - 1; n >= 0; n--) {
 		auto phi = poly_neg(poly_integrate_a2x(F[n].r.f, F[n].r.x.second));
 		pot[n].r.x = F[n].r.x;
 		pot[n].r.f = phi;
+		pot[n].r.f[0] += F[n].i / F[n].r.x.second;
 		pot[n].r.f[0] += pot0;
 		pot[n].i = -F[n].i;
 		pot0 = evaluate_potential(pot[n], F[n].r.x.first);
@@ -748,14 +917,272 @@ std::vector<potential_type> conditionals_to_potential(const std::vector<conditio
 	return pot;
 }
 
-int main() {
+//#define WENDLAND
 
-	auto B = conditionals_to_potential(Bspline(3));
-	for (double x = 0.0; x < 1.0; x += 0.01) {
-		printf("%e %e\n", x, potentials_eval(B, x));
+template<int M>
+class matrix: public std::array<std::array<double, M>, M> {
+public:
+	matrix<M - 1> cofactor_matrix(int i, int j) {
+		const auto& A = *this;
+		matrix<M - 1> B;
+		for (int n = 0; n < M - 1; n++) {
+			const int n0 = n < i ? n : n + 1;
+			for (int m = 0; m < M - 1; m++) {
+				const int m0 = m < j ? m : m + 1;
+				B[n][m] = A[n0][m0];
+			}
+		}
+		return B;
+	}
+	void print() {
+		for (int i = 0; i < M; i++) {
+			for (int j = 0; j < M; j++) {
+				printf("%e ", (*this)[i][j]);
+			}
+			printf("\n");
+		}
+	}
+	double determinant() {
+		double det = 0.0;
+		double sgn = 1.0;
+		for (int n = 0; n < M; n++) {
+			const auto a = (*this)[0][n] * sgn * cofactor_matrix(0, n).determinant();
+			det += a;
+			sgn *= -1.0;
+		}
+		return det;
+	}
+	matrix transpose() {
+		const auto& A = *this;
+		matrix B;
+		for (int n = 0; n < M; n++) {
+			for (int m = 0; m < M; m++) {
+				B[n][m] = A[m][n];
+			}
+		}
+		return B;
+	}
+	matrix operator*(const double a) {
+		const auto& A = *this;
+		matrix B;
+		for (int n = 0; n < M; n++) {
+			for (int m = 0; m < M; m++) {
+				B[n][m] = a * A[n][m];
+			}
+		}
+		return B;
+	}
+	matrix inverse() {
+		const auto& A = *this;
+		matrix B;
+		for (int n = 0; n < M; n++) {
+			for (int m = 0; m < M; m++) {
+				const double sgn = (n + m) % 2 == 0 ? 1.0 : -1.0;
+				B[n][m] = sgn * cofactor_matrix(n, m).determinant();
+			}
+		}
+		B = B.transpose();
+		const auto det = determinant();
+		printf("%e\n", det);
+		B = B * (1.0 / det);
+		return B;
 	}
 
-	return 0;
+};
+
+template<>
+class matrix<1> : public std::array<std::array<double, 1>, 1> {
+public:
+	double determinant() {
+		return (*this)[0][0];
+	}
+
+};
+
+template<int N>
+matrix<2 * N> spline_coefficients() {
+	matrix<2 * N> A;
+	for (int n = 0; n < 2 * N; n++) {
+		for (int m = 0; m < 2 * N; m++) {
+			A[n][m] = 0.0;
+		}
+	}
+	for (int n = 0; n < N; n++) {
+		A[n][n] = factorial(n);
+	}
+	for (int n = 0; n < 2 * N; n++) {
+		A[N][n] = 1.0;
+		for (int m = N + 1; m < 2 * N; m++) {
+			A[m][n] = A[m - 1][n] * (n - (m - N - 1));
+		}
+	}
+	return A.inverse();
+}
+
+double integrate(const std::function<double(double)>& func, double a, double b, int N = 16384) {
+	N = 2 * (N / 2) + 1;
+	double dx = (b - a) / (N - 1);
+	double sum = (1.0 / 3.0) * (func(a) + func(b)) * dx;
+	for (int i = 1; i < N - 1; i += 2) {
+		sum += 4.0 / 3.0 * func(a + i * dx) * dx;
+	}
+	for (int i = 2; i < N - 1; i += 2) {
+		sum += 2.0 / 3.0 * func(a + i * dx) * dx;
+	}
+	return sum;
+}
+
+template<int N>
+std::function<double(double)> func_from_data(std::array<std::vector<double>, N> I, double dx, double xmin, double xmax) {
+	auto coeff = spline_coefficients<N>();
+	const double dxinv = 1.0 / dx;
+	auto func = [I,dxinv,dx,coeff,xmin,xmax](double x) {
+		if( x < xmin || x >xmax) {
+			printf( "out of range interpolation\n");
+			abort();
+		}
+		const int i = std::min((int) (x * dxinv), (int)I[0].size()-1);
+		polynomial co(2*N, 0.0);
+		for( int j = 0; j < 2 * N; j++) {
+			for( int m = 0; m < N; m++) {
+				co[j] += coeff[j][m] * I[m][i] * pow(dx,m);
+			}
+			for( int m = 0; m < N; m++) {
+				co[j] += coeff[j][m+N] * I[m][i+1] * pow(dx,m);
+			}
+		}
+		return poly_eval(co, x * dxinv - i);
+	};
+	return func;
+}
+
+template<int N>
+std::function<double(double)> construct_interpolation(const std::array<std::function<double(double)>, N> f, double xmin, double xmax, int M) {
+
+	const double dx = (xmax - xmin) / (M - 1);
+	std::array<std::vector<double>, N> I;
+	for (int n = 0; n < N; n++) {
+		I[n].resize(M, 0.0);
+	}
+	for (int i = 0; i < M; i++) {
+		const double x = i * dx;
+		for (int n = 0; n < N; n++) {
+			I[n][i] = f[n](x);
+		}
+	}
+	const double dxinv = 1.0 / dx;
+	auto func = func_from_data<N>(I, dx, xmin, xmax);
+	int NCHECK = 1024;
+	double abs_err = 0.0;
+	double rel_err = 0.0;
+	for (int i = 0; i < NCHECK; i++) {
+		double x = (double) i / (NCHECK - 1);
+		double a = func(x);
+		double b = f[0](x);
+		abs_err += sqr(a - b);
+		rel_err += sqr(1.0 - b / a);
+	}
+//	printf("Error = %e %e\n", sqrt(abs_err / NCHECK), sqrt(rel_err / NCHECK));
+	return func;
+}
+
+std::function<double(double)> compute_mass_function(std::function<double(double)> rho, std::function<double(double)> drho, std::function<double(double)> d2rho,
+		int ninterp) {
+	std::array<std::vector<double>, 4> I;
+	double dr = 1.0 / (ninterp - 1);
+	for (int i = 0; i < 4; i++) {
+		I[i].resize(ninterp);
+	}
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		std::function<double(double)> integrand = [rho](double r ) {return 4.0 * M_PI * r * r * rho(r);};
+		I[0][i] = integrate(integrand, 0.0, r);
+		I[1][i] = integrand(r);
+		I[2][i] = 4.0 * M_PI * r * (2.0 * rho(r) + r * drho(r));
+		I[3][i] = 4.0 * M_PI * (2.0 * rho(r) + 4.0 * r * drho(r) + r * r * d2rho(r));
+	}
+	return func_from_data<4>(I, dr, 0.0, 1.0);
+}
+
+std::function<double(double)> compute_potential_function(std::function<double(double)> rho, std::function<double(double)> drho,
+		std::function<double(double)> d2rho, int ninterp) {
+	double dr = 1.0 / (ninterp - 1);
+	std::array<std::vector<double>, 4> I;
+	for (int i = 0; i < 4; i++) {
+		I[i].resize(ninterp);
+	}
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		std::function<double(double)> integrand = [rho](double r ) {return 4.0 * M_PI * r * r * rho(r);};
+		I[0][i] = integrate(integrand, 0.0, r);
+		I[1][i] = integrand(r);
+		I[2][i] = 4.0 * M_PI * r * (2.0 * rho(r) + r * drho(r));
+		I[3][i] = 4.0 * M_PI * (2.0 * rho(r) + 4.0 * r * drho(r) + r * r * d2rho(r));
+	}
+	auto dM0 = I[3][0] / 6.0;
+	const auto d2Mrdr20 = 4.0 * M_PI * rho(0.0) - 2.0 * dM0;
+	auto Mr = func_from_data<4>(I, dr, 0.0, 1.0);
+
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		std::function<double(double)> integrand = [Mr](double r ) {return r == 0.0 ? 0.0 : Mr(r)/(r*r);};
+		std::function<double(double)> integrand2 = [Mr,rho](double r ) {return -2.0 * Mr(r) / (r * r * r) + 4.0 * M_PI * rho(r);};
+		std::function<double(double)> integrand3 =
+				[Mr,rho,drho](double r ) {return 6.0 * Mr(r) / (r * r * r * r) - 8.0 * M_PI * rho(r) / r + 4.0 * M_PI * drho(r);};
+		I[0][i] = -1.0 + integrate(integrand, 1.0, r);
+		I[1][i] = r == 0.0 ? 0.0 : integrand(r);
+		I[2][i] = r == 0.0 ? d2Mrdr20 : integrand2(r);
+		I[3][i] = r == 0.0 ? 0.0 : integrand3(r);
+	}
+	return func_from_data<4>(I, dr, 0.0, 1.0);
+}
+
+int main() {
+	polynomial basis(3);
+	basis[0] = 1.0;
+	basis[1] = 0.0;
+	basis[2] = -1.0;
+	auto rho = basis;
+	for (int i = 0; i < 5; i++) {
+		rho = poly_mult(rho, basis);
+	}
+
+	rho = poly_normalize(rho);
+	auto rhod1 = poly_derivative(rho);
+	auto rhod2 = poly_derivative(rhod1);
+
+	std::function<double(double)> rho0 = [rho]( double r ) {
+		return poly_eval(rho, r);
+	};
+	std::function<double(double)> drho = [rhod1]( double r ) {
+		return poly_eval(rhod1, r);
+	};
+	std::function<double(double)> d2rho = [rhod2]( double r ) {
+		return poly_eval(rhod2, r);
+	};
+
+	//auto Mr = compute_mass_function(rho0, drho, d2rho, 32);
+	auto pot0 = compute_potential_function(rho0, drho, d2rho, 40);
+
+	for (double x = 0.0; x < 1.0; x += 0.01) {
+//		printf("%e %e\n", x, pot0(x));
+	}
+
+	/*int nw = 10;
+	 polynomial W[nw];
+	 for (int i = 0; i < nw; i++) {
+	 W[i] = Wendland(i+1, i);
+	 }
+	 for (double r = 0.0; r < 1.00001; r += 0.01) {
+	 printf("%e ", r);
+	 for (int i = 0; i < nw; i++) {
+	 printf("%e ", poly_eval(poly_mult(W[i], polynomial(1,1.0/W[i][0])), r));
+	 }
+	 printf("\n");
+	 }
+	 return 0;
+	 */
+
 	polynomial Y(1);
 	Y[0] = 1.0;
 	Y[1] = 0.0;
@@ -768,23 +1195,24 @@ int main() {
 		cloud = next_cloud(cloud);
 	}
 	cloud = conditionals_remove_negatives(cloud);
+#ifndef BSPLINE
 #ifdef LUCY
 	auto rho = basis1;
 	for (int i = 0; i < p; i++) {
 		rho = poly_mult(rho, basis2);
 	}
-#else
-	polynomial basis(3);
-	basis[0] = 1.0;
-	basis[1] = 0.0;
-	basis[2] = -1.0;
-	auto rho = basis;
-	for (int i = 0; i < ORDER - 3; i++) {
-		rho = poly_mult(rho, basis);
-	}
-#endif
 	rho = poly_normalize(rho);
+#else
+#ifdef WENDLAND
+	auto rho = Wendland(4,2);
+#else
+#endif
+#endif
 	auto pot = poly_rho2pot(rho);
+	for (double r = 0.0; r < 1.0; r += 0.01) {
+		printf("%e %e %e %e\n", r, -poly_eval(pot, r), pot0(r), (-poly_eval(pot, r) - pot0(r)) / poly_eval(pot, r));
+	}
+	return 0;
 	auto force = poly_rho2force(rho);
 	auto expansion = poly_pot2expansion(pot, ORDER);
 
@@ -792,6 +1220,15 @@ int main() {
 	auto filter = poly_filter(rho, kmax);
 
 	print_green_direct(rho, pot, force, expansion, filter, kmax);
+#else
+	auto rho = Bspline(ORDER - 3);
+	auto pot = conditionals_to_potential(rho);
+	auto force = pot;
+	for (int i = 0; i < pot.size(); i++) {
+		force[i].r.f = poly_neg(poly_derivative(pot[i].r.f));
+		force[i].i = pot[i].i;
+	}
+#endif
 
 	tprint("\n");
 	tprint("#define CLOUD_MIN -%i\n", CLOUD_ORDER / 2);
@@ -814,5 +1251,13 @@ int main() {
 	tprint("return pow(s, -%i);\n", CLOUD_ORDER + 1);
 	deindent();
 	tprint("}\n");
+
+	auto I = rho;
+	polynomial fourpir4(5, 0.0);
+	fourpir4[4] = 4.0 * M_PI;
+	I = poly_mult(I, fourpir4);
+	I = poly_integrate(I);
+	double sigma2 = poly_eval(I, 1.0) / (4.0 / 3.0 * M_PI);
+	tprint("// kernel rms = %e\n", sqrt(sigma2));
 
 }
