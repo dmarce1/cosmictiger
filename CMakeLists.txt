@@ -184,6 +184,7 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 
 #set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
     target_compile_options(lc2rockstar PRIVATE -DLC2GADGET2 )
+    target_compile_options(ferrer_kernel_codegen PRIVATE -D_GLIBCXX_DEBUG )
 set_source_files_properties(./src/drift.cu PROPERTIES COMPILE_FLAGS -maxrregcount=64)
 
 

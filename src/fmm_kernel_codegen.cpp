@@ -2161,7 +2161,7 @@ int main() {
 	tprint("#include <cosmictiger/cuda.hpp>\n");
 	tprint("#include <cosmictiger/ewald_indices.hpp>\n");
 	tprint("#include <cosmictiger/math.hpp>\n");
-	tprint("#include <cosmictiger/treepm_kernels.hpp>\n");
+	tprint("#include <cosmictiger/kernels.hpp>\n");
 	tprint("template<class T>\n");
 	tprint("using expansion = tensor_sym<T,%i>;\n", P);
 	tprint("template<class T>\n");

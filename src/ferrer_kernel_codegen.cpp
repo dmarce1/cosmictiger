@@ -74,8 +74,11 @@ polynomial poly_add(const polynomial& A, const polynomial& B) {
 
 void poly_shrink_to_fit(polynomial& A) {
 	if (A.size()) {
-		while (A.back() == 0.0 && A.size()) {
+		while (A.back() == 0.0) {
 			A.pop_back();
+			if (!A.size()) {
+				break;
+			}
 		}
 	}
 }
@@ -983,7 +986,6 @@ public:
 		}
 		B = B.transpose();
 		const auto det = determinant();
-		printf("%e\n", det);
 		B = B * (1.0 / det);
 		return B;
 	}
@@ -1041,7 +1043,7 @@ std::function<double(double)> func_from_data(std::array<std::vector<double>, N> 
 			printf( "out of range interpolation\n");
 			abort();
 		}
-		const int i = std::min((int) (x * dxinv), (int)I[0].size()-1);
+		const int i = std::min((int) (x * dxinv), (int)I[0].size()-2);
 		polynomial co(2*N, 0.0);
 		for( int j = 0; j < 2 * N; j++) {
 			for( int m = 0; m < N; m++) {
@@ -1104,6 +1106,279 @@ std::function<double(double)> compute_mass_function(std::function<double(double)
 	return func_from_data<4>(I, dr, 0.0, 1.0);
 }
 
+struct green_type {
+	int n;
+	std::vector<double> a;
+
+};
+
+green_type green_divr(const green_type& A) {
+	green_type B = A;
+	B.n--;
+	return B;
+}
+
+void green_print(green_type A) {
+	printf("%e Mr / r^%i ", A.a[0], -A.n);
+	if (A.a.size() > 1) {
+		printf(" + ");
+	}
+	for (int i = 1; i < A.a.size(); i++) {
+		printf("d%idrho%i / r^%i ", i - 1, i - 1, -(3 + A.n + i - 1));
+		if (i != A.a.size() - 1) {
+			printf(" + ");
+		}
+	}
+	printf("\n");
+}
+
+green_type green_deriv(const green_type& A) {
+	green_type B;
+	B.a.resize(A.a.size() + 1, 0.0);
+	B.a[0] += A.a[0] * double(A.n);
+	B.a[1] += A.a[0] * 4.0 * M_PI;
+	for (int i = 1; i < A.a.size(); i++) {
+		B.a[i + 1] += A.a[i];
+		B.a[i] += A.a[i] * (A.n + 3 + i - 1);
+	}
+	B.n = A.n - 1;
+	return B;
+}
+
+std::function<double(double)> green_function(green_type A, std::function<double(double)> Mr, std::vector<std::function<double(double)>> drho) {
+	if (A.a.size() > drho.size() + 1) {
+		printf("Error in green_function\n");
+		abort();
+	}
+	std::function<double(double)> func = [A,Mr,drho](double r) {
+		double sum;
+		if( r == 0.0 ) {
+			r = 1e-7;
+			sum = Mr(fabs(r)) * A.a[0];
+			for( int i = 0; i < A.a.size()-1; i++) {
+				sum += 0.5*drho[i](-r) * A.a[i+1] * pow(r,3+i);
+				sum += 0.5*drho[i](r) * A.a[i+1] * pow(r,3+i);
+			}
+			sum *= pow(r, A.n);
+		} else {
+			sum = Mr(fabs(r)) * A.a[0];
+			for( int i = 0; i < A.a.size()-1; i++) {
+				sum += drho[i](r) * A.a[i+1] * pow(r,3+i);
+			}
+			sum *= pow(r, A.n);
+		}
+		return sum;
+	};
+	return func;
+}
+
+template<int N>
+void output_interpolation_code(const char* name, const std::array<std::vector<double>, N>& I, int ninterp, double dx) {
+	static auto coeff = spline_coefficients<N>();
+	tprint("\n");
+	tprint("CUDA_EXPORT inline double %s(float x) {\n", name);
+	indent();
+	tprint("if( x >= 1.0 ) {\n", 1.0 / dx);
+	indent();
+	tprint("return 0.0;\n");
+	deindent();
+	tprint("}\n");
+	ninterp--;
+	std::array<std::vector<double>, 2 * N> J;
+	for (int m = 0; m < 2 * N; m++) {
+		J[m].resize(ninterp, 0.0);
+	}
+	for (int n = 0; n < ninterp; n++) {
+		for (int j = 0; j < 2 * N; j++) {
+			for (int m = 0; m < N; m++) {
+				J[j][n] += coeff[j][m] * I[m][n] * pow(dx, m);
+			}
+			for (int m = 0; m < N; m++) {
+				J[j][n] += coeff[j][m + N] * I[m][n + 1] * pow(dx, m);
+			}
+		}
+	}
+	tprint("constexpr float co[%i][%i] = {", 2 * N, ninterp);
+	for (int m = 0; m < 2 * N; m++) {
+		printf("{");
+		for (int n = 0; n < ninterp; n++) {
+			printf("%.8e", J[m][n]);
+			if (n != ninterp - 1) {
+				printf(",");
+			}
+		}
+		printf("}");
+		if (m != 2 * N - 1) {
+			printf(", ");
+		}
+	}
+	printf("};\n");
+	tprint("float x0 = x * float(%.8e);\n", 1.0 / dx);
+	tprint("int i = x * float(%.8e);\n", 1.0 / dx);
+	tprint("float t = x0 - i;\n", 1.0 / dx, 1.0 / dx);
+	tprint("float y = co[%i][i];\n", 2 * N - 1);
+	for (int i = 2 * N - 2; i >= 0; i--) {
+		tprint("y = fmaf( y, t, co[%i][i] );\n", i);
+	}
+	tprint("return y;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+}
+
+void create_potentials_code(const std::function<double(int, double)> drho, int ninterp) {
+	tprint("#pragma once\n");
+	tprint("\n");
+	double dr = 1.0 / (ninterp - 1);
+	std::array<std::vector<double>, 4> I;
+	for (int i = 0; i < 4; i++) {
+		I[i].resize(ninterp);
+	}
+	double pot0;
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		std::function<double(double)> integrand = [drho](double r ) {return 4.0 * M_PI * r * r * drho(0,r);};
+		I[0][i] = integrate(integrand, 0.0, r);
+		I[1][i] = integrand(r);
+		I[2][i] = 4.0 * M_PI * r * (2.0 * drho(0, r) + r * drho(1, r));
+		I[3][i] = 4.0 * M_PI * (2.0 * drho(0, r) + 4.0 * r * drho(1, r) + r * r * drho(2, r));
+	}
+	auto Mr = func_from_data<4>(I, dr, 0.0, 1.0);
+	std::vector<std::function<double(double)>> drho_table(3 + ORDER);
+	for (int i = 0; i < 3 + ORDER; i++) {
+		drho_table[i] = [drho,i](double r) {
+			return drho(i,r);
+		};
+	}
+	green_type green0, green1, green2, green3;
+	green0.n = -2;
+	green0.a = polynomial(1, 1.0);
+	green1 = green_deriv(green0);
+	green2 = green_deriv(green1);
+	auto dydx1 = green_function(green0, Mr, drho_table);
+	auto dydx2 = green_function(green1, Mr, drho_table);
+	auto dydx3 = green_function(green2, Mr, drho_table);
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		std::function<double(double)> integrand = [Mr](double r ) {return r == 0.0 ? 0.0 : Mr(r)/(r*r);};
+		I[0][i] = 1.0 - integrate(integrand, 1.0, r);
+		if (i == 0) {
+			pot0 = I[0][0];
+		}
+		I[1][i] = -dydx1(r);
+		I[2][i] = -dydx2(r);
+		I[3][i] = -dydx3(r);
+	}
+	output_interpolation_code<4>("potential_kernel", I, ninterp, dr);
+	output_interpolation_code<4>("green_kernel_0", I, ninterp, dr);
+
+	green0.n = -3;
+	green0.a = polynomial(1, 1.0);
+	green1 = green_deriv(green0);
+	green2 = green_deriv(green1);
+	green3 = green_deriv(green2);
+	auto y0 = green_function(green0, Mr, drho_table);
+	dydx1 = green_function(green1, Mr, drho_table);
+	dydx2 = green_function(green2, Mr, drho_table);
+	dydx3 = green_function(green3, Mr, drho_table);
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		I[0][i] = y0(r);
+		I[1][i] = dydx1(r);
+		I[2][i] = dydx2(r);
+		I[3][i] = dydx3(r);
+	}
+	output_interpolation_code<4>("force_kernel", I, ninterp, dr);
+
+	for (int order = 1; order < ORDER; order++) {
+		green0.n = -3;
+		green0.a = polynomial(1, 1.0);
+		for (int i = 1; i < order; i++) {
+			green0 = green_deriv(green0);
+			green0 = green_divr(green0);
+		}
+		green0.n += 2 * order;
+		green1 = green_deriv(green0);
+		green2 = green_deriv(green1);
+		green3 = green_deriv(green2);
+		auto y0 = green_function(green0, Mr, drho_table);
+		dydx1 = green_function(green1, Mr, drho_table);
+		dydx2 = green_function(green2, Mr, drho_table);
+		dydx3 = green_function(green3, Mr, drho_table);
+		for (int i = 0; i < ninterp; i++) {
+			const double r = i * dr;
+			I[0][i] = y0(r);
+			I[1][i] = dydx1(r);
+			I[2][i] = dydx2(r);
+			I[3][i] = dydx3(r);
+		}
+		std::string name = "green_kernel_" + std::to_string(order);
+		output_interpolation_code<4>(name.c_str(), I, ninterp, dr);
+	}
+	tprint("\n");
+	tprint("CUDA_EXPORT inline array<float, %i> green_kernel(float r, float rsinv, float rsinv2) {\n", ORDER);
+	indent();
+	tprint("array<float, %i> d;\n", ORDER);
+	tprint("float q = r * rsinv;\n");
+	tprint("float qinv0 = 1.0f;\n");
+	tprint("float qinv1 = 1.0f / q;\n");
+	tprint("float rsinv1 = rsinv1;\n");
+	tprint("float rinv1 = 1.f / r;\n");
+	tprint("float y;\n");
+	for (int i = 2; i < ORDER; i++) {
+		tprint("float qinv%i = qinv%i * qinv%i;\n", i, i / 2, i - i / 2);
+		tprint("float rinv%i = rinv%i * rinv%i;\n", i, i / 2, i - i / 2);
+		if (i != 2) {
+			tprint("float rsinv%i = rsinv%i * rsinv%i;\n", i, i / 2, i - i / 2);
+		}
+	}
+	tprint("float rsinv%i = rsinv%i * rsinv%i;\n", ORDER, ORDER / 2, ORDER - ORDER / 2);
+	tprint("float rinv%i = rinv%i * rinv%i;\n", ORDER, ORDER / 2, ORDER - ORDER / 2);
+	int n = 1;
+	for (int i = 0; i < ORDER; i++) {
+		tprint("y = green_kernel_%i( q ) * qinv%i * rsinv%i;\n", i, i, i + 1);
+		tprint("d[%i] = fmaf( float(%i), rinv%i, y);\n", i, n, i + 1);
+		n *= (2 * i - 1);
+	}
+	tprint("return d;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+	tprint("\n");
+	tprint("CUDA_EXPORT inline void green_direct(float& phi, float& f, float r, float r2, float rinv, float rsinv, float rsinv2) {\n");
+	indent();
+	tprint("const float q = r * rsinv;\n");
+	tprint("phi = rinv;\n");
+	tprint("f = rinv * sqr(rinv);\n");
+	tprint("float y = potential_kernel(q);\n");
+	tprint("phi -= y * rsinv;\n");
+	tprint("y = force_kernel(q);\n");
+	tprint("f -= y * sqr(rsinv) * rsinv;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+	for (int i = 0; i < ninterp; i++) {
+		const double r = i * dr;
+		I[0][i] = drho(0, r);
+		I[1][i] = drho(1, r);
+		I[2][i] = drho(2, r);
+		I[3][i] = drho(3, r);
+	}
+	output_interpolation_code<4>("green_rho", I, ninterp, dr);
+
+	tprint("\n");
+	tprint("CUDA_EXPORT inline float green_phi0(float nparts, float rs) {\n");
+	indent();
+	tprint("return float(%.8e) * sqr(rs) * (nparts - 1) +  float(%.8e) / rs;\n", 0.5*integrate([drho](double r) {
+		return 16.0*M_PI*M_PI*drho(0,r) * r*r*r*r/3.0;}, 0.0, 1.0), pot0);
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+}
+
 std::function<double(double)> compute_potential_function(std::function<double(double)> rho, std::function<double(double)> drho,
 		std::function<double(double)> d2rho, int ninterp) {
 	double dr = 1.0 / (ninterp - 1);
@@ -1123,6 +1398,19 @@ std::function<double(double)> compute_potential_function(std::function<double(do
 	const auto d2Mrdr20 = 4.0 * M_PI * rho(0.0) - 2.0 * dM0;
 	auto Mr = func_from_data<4>(I, dr, 0.0, 1.0);
 
+	std::vector<std::function<double(double)>> drho_table;
+	drho_table.push_back(rho);
+	drho_table.push_back(drho);
+	drho_table.push_back(d2rho);
+	green_type green;
+	green.n = -2;
+	green.a.resize(1, 1.0);
+	auto dphidr = green_function(green, Mr, drho_table);
+	green = green_deriv(green);
+	auto dphi2dr2 = green_function(green, Mr, drho_table);
+	green = green_deriv(green);
+	const double dr0 = 1.0e-6 * dr;
+	auto dphi3dr3 = green_function(green, Mr, drho_table);
 	for (int i = 0; i < ninterp; i++) {
 		const double r = i * dr;
 		std::function<double(double)> integrand = [Mr](double r ) {return r == 0.0 ? 0.0 : Mr(r)/(r*r);};
@@ -1130,10 +1418,11 @@ std::function<double(double)> compute_potential_function(std::function<double(do
 		std::function<double(double)> integrand3 =
 				[Mr,rho,drho](double r ) {return 6.0 * Mr(r) / (r * r * r * r) - 8.0 * M_PI * rho(r) / r + 4.0 * M_PI * drho(r);};
 		I[0][i] = -1.0 + integrate(integrand, 1.0, r);
-		I[1][i] = r == 0.0 ? 0.0 : integrand(r);
-		I[2][i] = r == 0.0 ? d2Mrdr20 : integrand2(r);
-		I[3][i] = r == 0.0 ? 0.0 : integrand3(r);
+		I[1][i] = r == 0.0 ? 0.5 * (dphidr(dr0) + dphidr(-dr0)) : dphidr(r);
+		I[2][i] = r == 0.0 ? 0.5 * (dphi2dr2(dr0) + dphi2dr2(-dr0)) : dphi2dr2(r);
+		I[3][i] = r == 0.0 ? 0.5 * (dphi3dr3(dr0) + dphi3dr3(-dr0)) : dphi3dr3(r);
 	}
+	output_interpolation_code<4>("test", I, ninterp, dr);
 	return func_from_data<4>(I, dr, 0.0, 1.0);
 }
 
@@ -1143,47 +1432,21 @@ int main() {
 	basis[1] = 0.0;
 	basis[2] = -1.0;
 	auto rho = basis;
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < 3; i++) {
 		rho = poly_mult(rho, basis);
 	}
-
 	rho = poly_normalize(rho);
-	auto rhod1 = poly_derivative(rho);
-	auto rhod2 = poly_derivative(rhod1);
 
-	std::function<double(double)> rho0 = [rho]( double r ) {
-		return poly_eval(rho, r);
+	/*auto drhodx = [rho](int n, double r ) {
+		polynomial rho0 = rho;
+		for( int i = 0; i < n; i++) {
+			rho0 = poly_derivative(rho0);
+		}
+		return poly_eval(rho0, r);
 	};
-	std::function<double(double)> drho = [rhod1]( double r ) {
-		return poly_eval(rhod1, r);
-	};
-	std::function<double(double)> d2rho = [rhod2]( double r ) {
-		return poly_eval(rhod2, r);
-	};
+	create_potentials_code(drhodx, 9);*/
 
-	//auto Mr = compute_mass_function(rho0, drho, d2rho, 32);
-	auto pot0 = compute_potential_function(rho0, drho, d2rho, 40);
-
-	for (double x = 0.0; x < 1.0; x += 0.01) {
-//		printf("%e %e\n", x, pot0(x));
-	}
-
-	/*int nw = 10;
-	 polynomial W[nw];
-	 for (int i = 0; i < nw; i++) {
-	 W[i] = Wendland(i+1, i);
-	 }
-	 for (double r = 0.0; r < 1.00001; r += 0.01) {
-	 printf("%e ", r);
-	 for (int i = 0; i < nw; i++) {
-	 printf("%e ", poly_eval(poly_mult(W[i], polynomial(1,1.0/W[i][0])), r));
-	 }
-	 printf("\n");
-	 }
-	 return 0;
-	 */
-
-	polynomial Y(1);
+	polynomial Y(2);
 	Y[0] = 1.0;
 	Y[1] = 0.0;
 	conditional ngp;
@@ -1210,10 +1473,9 @@ int main() {
 #endif
 	auto pot = poly_rho2pot(rho);
 	for (double r = 0.0; r < 1.0; r += 0.01) {
-		printf("%e %e %e %e\n", r, -poly_eval(pot, r), pot0(r), (-poly_eval(pot, r) - pot0(r)) / poly_eval(pot, r));
+		//	printf("%e %e %e %e\n", r, -poly_eval(pot, r), pot0(r), (-poly_eval(pot, r) - pot0(r)) / poly_eval(pot, r));
 	}
-	return 0;
-	auto force = poly_rho2force(rho);
+		auto force = poly_rho2force(rho);
 	auto expansion = poly_pot2expansion(pot, ORDER);
 
 	auto kmax = 8.0 * M_PI;
