@@ -24,6 +24,7 @@
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/timer.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #include <fenv.h>
 

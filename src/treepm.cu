@@ -3,6 +3,7 @@
 #include <cosmictiger/treepm.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #define BLOCK_SIZE 32
 
@@ -17,8 +18,8 @@ void treepm_allocate_fields(int Nres_) {
 	Ninv = 1.0f / Nres;
 	auto ibox = treepm_get_fourier_box(Nres);
 	for (int dim = 0; dim < NDIM; dim++) {
-		int_box.begin[dim] = ibox.begin[dim] + CLOUD_MIN;
-		int_box.end[dim] = ibox.end[dim] + CLOUD_MAX;
+		int_box.begin[dim] = ibox.begin[dim] + CLOUD_MIN ;
+		int_box.end[dim] = ibox.end[dim] + CLOUD_MAX ;
 	}
 	const auto vol = int_box.volume();
 	for (int dim = 0; dim < NDIM + 1; dim++) {

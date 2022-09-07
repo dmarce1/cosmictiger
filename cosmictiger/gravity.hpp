@@ -77,34 +77,3 @@ void cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node&, const d
 void reset_gravity_counters();
 void get_gravity_counters(double& close, double& direct);
 void set_gravity_counter_use(bool code);
-
-#define FERRER_N 2
-#define NFERRER 5
-
-template<class T>
-CUDA_EXPORT inline void gsoft(T& f, T& phi, T q2, T hinv, T h2inv, T h3inv, bool do_phi) {
-	constexpr float Af[NFERRER][NFERRER] = { { 1.0 }, { 2.5, -1.5 }, { 35.0 / 8.0, -21.0 / 4.0, 15.0 / 8.0 }, { 105.0 / 16.0, -189.0 / 16.0, 135.0 / 16.0, -35.0
-			/ 16.0 }, { 1155. / 128., -693. / 32., 1485. / 64., -385. / 32., 315. / 128. } };
-	constexpr float Aphi[NFERRER][NFERRER + 1] = { { 1.5, -0.5 }, { 15.0 / 8.0, -5.0 / 4.0, 3.0 / 8.0 }, { 35.0 / 16.0, -35.0 / 16.0, 21.0 / 16.0, -5.0 / 16.0 },
-			{ 315.0 / 128.0, -105.0 / 32.0, 189.0 / 64.0, -45.0 / 32.0, 35.0 / 128.0 }, { 693. / 256., -1155. / 256., 693. / 128., -495. / 128., 385. / 256., -63
-					/ 256. } };
-	q2 *= h2inv;
-	f = Af[FERRER_N][FERRER_N];
-	for (int n = FERRER_N - 1; n >= 0; n--) {
-		f = fmaf(f, q2, Af[FERRER_N][n]);
-	}
-	f *= h3inv;
-	if (do_phi) {
-		phi = Aphi[FERRER_N][FERRER_N + 1];
-		for (int n = FERRER_N; n >= 0; n--) {
-			phi = fmaf(phi, q2, Aphi[FERRER_N][n]);
-		}
-		phi *= hinv; // 1
-	}
-}
-
-CUDA_EXPORT inline float self_phi() {
-	float f, phi;
-	gsoft(f, phi, 0.0f, 1.f, 1.f, 1.f, true);
-	return phi;
-}

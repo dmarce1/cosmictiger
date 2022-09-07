@@ -266,7 +266,7 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tree_id>& list, float hfloat) {
 #ifndef TREEPM
 	THROW_ERROR( "Not supporting CPU cp \n");
-
+/*
 	flop_counter<int> flops = 0;
 	timer tm;
 	tm.start();
@@ -382,6 +382,6 @@ void cpu_gravity_pp(force_vectors& f, int do_phi, tree_id self, const vector<tre
 			}
 		}
 	}
-	add_cpu_flops(flops);
+	add_cpu_flops(flops);*/
 #endif
 }

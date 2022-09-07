@@ -26,6 +26,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/safe_io.hpp>
 #include <cosmictiger/view.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #include <cosmictiger/gravity.hpp>
 
@@ -115,7 +116,7 @@ bool process_options(int argc, char *argv[]) {
 	("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false), "use 2LPT initial conditions (default = true)") //
 	("lc_b", po::value<double>(&(opts.lc_b))->default_value(0.28), "linking length for lightcone group finder") //
 	("lc_map_size", po::value<int>(&(opts.lc_map_size))->default_value(-1), "Nside for lightcone HEALPix map") //
-	("seed", po::value<int>(&(opts.seed))->default_value(1234), "seed for IC rng") //
+	("seed", po::value<int>(&(opts.seed))->default_value(42), "seed for IC rng") //
 	("view_size", po::value<int>(&(opts.view_size))->default_value(1024), "view healpix Nside") //
 	("slice_res", po::value<int>(&(opts.slice_res))->default_value(4096), "slice resolution") //
 	("p3m_Nmin", po::value<int>(&(opts.p3m_Nmin))->default_value(16), "minimum resolution for p3m") //
@@ -134,11 +135,11 @@ bool process_options(int argc, char *argv[]) {
 	("omega_c", po::value<double>(&(opts.omega_c))->default_value(0.26503), "") //
 	("Neff", po::value<double>(&(opts.Neff))->default_value(3.046), "") //
 	("Theta", po::value<double>(&(opts.Theta))->default_value(2.7255 / 2.73), "") //
-	("p3m_chainnbnd", po::value<int>(&(opts.p3m_chainnbnd))->default_value(5), "chain mesh boundary size") //
+	("p3m_chainnbnd", po::value<int>(&(opts.p3m_chainnbnd))->default_value(1), "chain mesh boundary size") //
 	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "") //
 	("toler", po::value<double>(&(opts.toler))->default_value(-1), "") //
-	("p3m_rs", po::value<double>(&(opts.p3m_rs))->default_value(1.0), "rscale for treepm") //
+	("p3m_rs", po::value<double>(&(opts.p3m_rs))->default_value(3.8), "rscale for treepm") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9 / .6732), "mass resolution") //

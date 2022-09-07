@@ -20,6 +20,7 @@
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/kernels.hpp>
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
@@ -66,7 +67,7 @@ void cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 				dx[dim] = distance(self.mpos->pos[dim], other.mpos->pos[dim]);
 			}
 #ifdef TREEPM
-			flops += 6 + greens_function(D, dx, rsinv, rsinv2);
+			flops += 6 + greens_function(D, dx, rsinv, rsinv2, do_phi);
 #else
 			flops += 6 + greens_function(D, dx);
 #endif
@@ -154,7 +155,7 @@ void cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, 
 				dx[ZDIM] = distance(self.mpos->pos[ZDIM], src_z[j]);
 				expansion<float> D;
 #ifdef TREEPM
-				flops += 6 + greens_function(D, dx, rsinv, rsinv2);
+				flops += 6 + greens_function(D, dx, rsinv, rsinv2, do_phi);
 #else
 				flops += 6 + greens_function(D, dx);
 #endif
@@ -221,7 +222,7 @@ void cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, c
 					dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 					dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 #ifdef TREEPM
-					flops += 6 + greens_function(D, dx, rsinv, rsinv2);
+					flops += 6 + greens_function(D, dx, rsinv, rsinv2, do_phi);
 #else
 					flops += 6 + greens_function(D, dx);
 #endif
@@ -322,11 +323,11 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 			float f;
 			float phi;
 			__syncwarp();
-			/*			int kmid = (nsink / WARP_SIZE) * WARP_SIZE;
-			 if (nsink - kmid >= WARP_SIZE / 2) {
-			 kmid = nsink;
-			 }*/
-			for (int k = tid; k < nsink; k += WARP_SIZE) {
+			int kmid = (nsink / WARP_SIZE) * WARP_SIZE;
+			if (nsink - kmid >= WARP_SIZE / 2) {
+				kmid = nsink;
+			}
+			for (int k = tid; k < kmid; k += WARP_SIZE) {
 				fx = 0.f;
 				fy = 0.f;
 				fz = 0.f;
@@ -337,28 +338,28 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const auto r2 = sqr(dx0, dx1, dx2);  // 5
 #ifdef TREEPM
-					const float r = sqrt(r2);
-					const float rinv = rsqrt(r2);
-					green_direct(phi, f, r, r2, rinv, rsinv, rsinv2);
-					if (r2 < h2) {
-						if (r2 > 0.f) {
-							phi -= rinv;
-							f -= sqr(rinv) * rinv;
-							float f2, phi2;
-							close++;
-							gsoft(f2, phi2, r2, hinv, h2inv, h3inv, do_phi);
-							f += f2;
-							phi += phi2;
-						} else {
-							phi = f = 0.f;
-						}
-					} else {
-						direct++;
-					}
+							const float r = sqrt(r2);
+							const float rinv = rsqrt(r2);
+							green_direct(phi, f, r, r2, rinv, rsinv, rsinv2);
+							if (r2 < h2) {
+								if (r2 > 0.f) {
+									phi -= rinv;
+									f -= sqr(rinv) * rinv;
+									float f2, phi2;
+									close++;
+									gsoft(f2, phi2, r2, hinv, h2inv, h3inv, do_phi);
+									f += f2;
+									phi += phi2;
+								} else {
+									phi = f = 0.f;
+								}
+							} else {
+								direct++;
+							}
 #else
 					if (r2 > h2) {
 						phi = rsqrt(r2);					// 4
-						f = sqr(phi) * phi;// 2
+						f = sqr(phi) * phi;					// 2
 						direct++;
 					} else {
 						close++;
@@ -378,49 +379,66 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 				flops += 4;
 				F.phi += pot;
 			}
-			/*			for (int k = kmid; k < nsink; k++) {
-			 fx = 0.f;
-			 fy = 0.f;
-			 fz = 0.f;
-			 pot = 0.f;
-			 for (int j = tid; j < part_index; j += WARP_SIZE) {
-			 dx0 = distance(sink_x[k], src_x[j]); // 2
-			 dx1 = distance(sink_y[k], src_y[j]); // 2
-			 dx2 = distance(sink_z[k], src_z[j]); // 2
-			 const auto r2 = sqr(dx0, dx1, dx2);  // 5
-			 #ifdef TREEPM
-			 #error
-			 #else
-			 if (r2 > h2) {
-			 phi = rsqrt(r2);					// 4
-			 f = sqr(phi) * phi;// 2
-			 direct++;
-			 } else {
-			 close++;
-			 gsoft(f, phi, r2, hinv, h2inv, h3inv, do_phi);
-			 }
-			 #endif
-			 fx = fmaf(dx0, f, fx);                     // 2
-			 fy = fmaf(dx1, f, fy);                     // 2
-			 fz = fmaf(dx2, f, fz);                     // 2
-			 pot -= phi;                                  // 1
-			 flops += 23;
-			 }
-			 shared_reduce_add(fx);
-			 shared_reduce_add(fy);
-			 shared_reduce_add(fz);
-			 if (do_phi) {
-			 shared_reduce_add(pot);
-			 }
-			 if (tid == 0) {
-			 auto& F = force[k];
-			 F.gx -= fx;
-			 F.gy -= fy;
-			 F.gz -= fz;
-			 flops += 4;
-			 F.phi += pot;
-			 }
-			 }*/
+			for (int k = kmid; k < nsink; k++) {
+				fx = 0.f;
+				fy = 0.f;
+				fz = 0.f;
+				pot = 0.f;
+				for (int j = tid; j < part_index; j += WARP_SIZE) {
+					dx0 = distance(sink_x[k], src_x[j]); // 2
+					dx1 = distance(sink_y[k], src_y[j]); // 2
+					dx2 = distance(sink_z[k], src_z[j]); // 2
+					const auto r2 = sqr(dx0, dx1, dx2);  // 5
+#ifdef TREEPM
+							const float r = sqrt(r2);
+							const float rinv = rsqrt(r2);
+							green_direct(phi, f, r, r2, rinv, rsinv, rsinv2);
+							if (r2 < h2) {
+								if (r2 > 0.f) {
+									phi -= rinv;
+									f -= sqr(rinv) * rinv;
+									float f2, phi2;
+									close++;
+									gsoft(f2, phi2, r2, hinv, h2inv, h3inv, do_phi);
+									f += f2;
+									phi += phi2;
+								} else {
+									phi = f = 0.f;
+								}
+							} else {
+								direct++;
+							}
+#else
+					if (r2 > h2) {
+						phi = rsqrt(r2);					// 4
+						f = sqr(phi) * phi;					// 2
+						direct++;
+					} else {
+						close++;
+						gsoft(f, phi, r2, hinv, h2inv, h3inv, do_phi);
+					}
+#endif
+					fx = fmaf(dx0, f, fx);                     // 2
+					fy = fmaf(dx1, f, fy);                     // 2
+					fz = fmaf(dx2, f, fz);                     // 2
+					pot -= phi;                                  // 1
+					flops += 23;
+				}
+				shared_reduce_add(fx);
+				shared_reduce_add(fy);
+				shared_reduce_add(fz);
+				if (do_phi) {
+					shared_reduce_add(pot);
+				}
+				if (tid == 0) {
+					auto& F = force[k];
+					F.gx -= fx;
+					F.gy -= fy;
+					F.gz -= fz;
+					flops += 4;
+					F.phi += pot;
+				}
+			}
 		}
 		__syncwarp();
 	}
@@ -689,8 +707,8 @@ void cuda_gravity_pp_ewald(const cuda_kick_data& data, const tree_node& self, co
 				pot = 0.f;
 				for (int j = 0; j < part_index; j++) {
 					dx0 = distance(sink_x[k], src_x[j]); // 1
-					dx1 = distance(sink_y[k], src_y[j]);// 1
-					dx2 = distance(sink_z[k], src_z[j]);// 1
+					dx1 = distance(sink_y[k], src_y[j]); // 1
+					dx2 = distance(sink_z[k], src_z[j]); // 1
 					const float sgnx = copysign(1.f, dx0);
 					const float sgny = copysign(1.f, dx1);
 					const float sgnz = copysign(1.f, dx2);

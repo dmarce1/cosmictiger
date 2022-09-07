@@ -2179,7 +2179,7 @@ int main() {
 
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
-	tprint("inline int greens_function(tensor_sym<T, %i>& D, array<T, NDIM> dx, float rsinv, float rsinv2) {\n", P);
+	tprint("inline int greens_function(tensor_sym<T, %i>& D, array<T, NDIM> dx, float rsinv, float rsinv2, bool do_phi) {\n", P);
 	flops = 0;
 	indent();
 //	tprint("if( scale ) {\n");
@@ -2201,7 +2201,7 @@ int main() {
 		const int j = l - i;
 		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
 	}
-	tprint("const auto d = green_kernel( r, rsinv, rsinv2 );\n");
+	tprint("const auto d = green_kernel( r, rsinv, rsinv2, do_phi );\n");
 	for (int l = 0; l < P; l++) {
 		for (int m = 0; m <= l; m++) {
 			if (l + m < P) {

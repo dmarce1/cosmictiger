@@ -208,7 +208,7 @@ kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree
 void kick_show_timings();
 void kick_set_rc(kick_return kr);
 #ifdef USE_CUDA
-kick_return cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, vector<kick_workitem> workitems);
+kick_return cuda_execute_kicks(kick_params params, fixed32*, fixed32*, fixed32*, tree_node*, const vector<kick_workitem>& workitems);
 #endif
 int kick_block_count();
 size_t kick_estimate_cuda_mem_usage(double theta, int nparts, int check_count);

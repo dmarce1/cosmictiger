@@ -26,6 +26,7 @@ constexpr bool verbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #include <unistd.h>
 #include <stack>

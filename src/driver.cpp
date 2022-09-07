@@ -43,6 +43,7 @@
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/analytic.hpp>
+#include <cosmictiger/treepm.hpp>
 
 #include <cosmictiger/fft.hpp>
 
@@ -468,7 +469,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 				const auto total = get_options().nparts;
 //				PRINT("Rungs\n");
 				for (int i = 0; i < counts.size(); i++) {
-//					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
+					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] / total);
 				}
 				size_t fast = 0;
 				size_t slow = counts[minrung0];
@@ -492,11 +493,16 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		 tm.stop();
 		 PRINT("drift = %e\n", tm.read());
 		 }*/
+#ifdef TREEPM
+		tree_create_params tparams;
+		tree_create_return this_sr;
+#else
 		tree_create_params tparams(levels[li], theta, 0.f);
-		tm.reset();
 		tm.start();
 		auto this_sr = tree_create(tparams);
 		tm.stop();
+#endif
+		tm.reset();
 //		PRINT("Tree create took %e\n", tm.read());
 		if (top) {
 			sr = this_sr;
@@ -547,7 +553,11 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			reset_gravity_counters();
 			set_gravity_counter_use(true);
 		}
+#ifdef TREEPM
+		kick_return this_kr = treepm_kick(kparams);
+#else
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+#endif
 		if (top) {
 			set_gravity_counter_use(false);
 		}

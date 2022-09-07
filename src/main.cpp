@@ -31,6 +31,7 @@
 #include <cosmictiger/fp16.hpp>
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/kernels.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cmath>
 
@@ -79,8 +80,8 @@ int hpx_main(int argc, char *argv[]) {
 	}
 	FILE* fp = fopen("soft.txt", "wt");
 	for (double r = 0.0; r < 1.0; r += 0.01) {
-		double f, phi;
-		gsoft(f, phi,r*r, 1.0, 1.0, 1.0, true);
+		float f, phi;
+		gsoft(f, phi,(float)(r*r), 1.0f, 1.0f, 1.0f, true);
 		fprintf(fp, "%e %e %e\n", r, phi, f);
 	}
 	fclose(fp);

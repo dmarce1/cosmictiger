@@ -396,6 +396,9 @@ void poly_print_fma_instructions(polynomial A, const char* varname = "q", const 
 		while (A.size() > 1) {
 			A.pop_back();
 			A.pop_back();
+			if (!A.size()) {
+				break;
+			}
 			if (A.back() != 0.0 && !close2zero(A.back())) {
 				tprint("y = fma( y, %s2, %s(%.8e) );\n", varname, type, A.back());
 			} else {
@@ -578,7 +581,7 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 
 	const int L = ORDER;
 	tprint("\n");
-	tprint("CUDA_EXPORT inline array<float, %i> green_kernel(float r, float rsinv, float rsinv2) {\n", L);
+	tprint("CUDA_EXPORT inline array<float, %i> green_kernel(float r, float rsinv, float rsinv2, bool do_phi) {\n", L);
 	indent();
 	tprint("array<float, %i> d;\n", L);
 	tprint("float q0 = 1.f;\n");
@@ -602,34 +605,12 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 	tprint("float y;\n");
 	tprint("float z;\n");
 	int n = -1;
-#ifdef BSPLINE
 	for (int i = 0; i < L; i++) {
-		if (expansion.r.size() > i) {
-			if (expansion.r[i].size()) {
-				std::vector<conditional> c(expansion.r.size());
-				for (int l = 0; l < c.size(); l++) {
-					c[l].x = pot[l].r.x;
-					c[l].f = expansion.r[i][l];
-				}
-				print_conditionals_fma(c);
-			} else {
-				tprint("y = 0.f;\n");
-			}
+		if (i == 0) {
+			tprint("if( do_phi ) {\n");
+			indent();
 		}
-		if (expansion.i.size() > i) {
-			if (expansion.i[i].size()) {
-				tprint("z = y;\n");
-				std::vector<conditional> c(expansion.r.size());
-				for (int l = 0; l < c.size(); l++) {
-					c[l].x = pot[l].r.x;
-					c[l].f = expansion.i[i][l];
-				}
-				print_conditionals_fma(c, "qinv");
-				tprint("y += z;\n");
-			}
-		}
-#else
-	for (int i = 0; i < L; i++) {
+
 		if (expansion.r.size() > i) {
 			if (expansion.r[i].size()) {
 				poly_print_fma_instructions(expansion.r[i]);
@@ -644,10 +625,13 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 				tprint("y += z;\n");
 			}
 		}
-#endif
 		tprint("y *= q%i * rsinv%i;\n", i, i + 1);
 		tprint("d[%i] = fmaf( float(%i), rinv%i, y);\n", i, n, i + 1);
 		n = -n * (2 * i + 1);
+		if (i == 0) {
+			deindent();
+			tprint("}\n");
+		}
 	}
 	deindent();
 	tprint("} else {\n");
@@ -705,11 +689,71 @@ void print_green_direct(polynomial rho, polynomial pot, polynomial force, expans
 	}
 	fclose(fp);
 
+	tprint("\n");
+	tprint("CUDA_EXPORT inline void gsoft(float& f, float& phi, float q2, float hinv, float h2inv, float h3inv, bool do_phi) {\n");
+	indent();
+	tprint("q2 *= h2inv;\n");
+	tprint("f = phi = 0.f;\n");
+	tprint("if (q2 < 1.f) {\n");
+	indent();
+	tprint("float y;\n");
+	tprint("if( do_phi ) {\n");
+	indent();
+	poly_print_fma_instructions(pot);
+	tprint("phi = y * hinv;\n");
+	deindent();
+	tprint("}\n");
+	poly_print_fma_instructions(force);
+	tprint("f = y * h3inv;\n");
+	deindent();
+	tprint("}\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+	tprint("\n");
+
+	tprint("CUDA_EXPORT inline float self_phi() {\n");
+	indent();
+	tprint("float f, phi;\n");
+	tprint("gsoft(f, phi, 0.0f, 1.f, 1.f, 1.f, true);\n");
+	tprint("return phi;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+}
+
+polynomial lane_emden(double n) {
+	std::vector<double> a, b;
+	a.push_back(1);
+	b.push_back(1);
+	int k = 1;
+	while (std::abs(b.back()) > 1e-15) {
+		double sum = 0.0;
+		double ak = -b[k - 1] / (2 * k * (2 * k + 1));
+		a.push_back(ak);
+		for (int j = 0; j <= k - 1; j++) {
+			sum += (n * (k - j) - j) * (a[k - j] * b[j]);
+		}
+		double bk = sum / k;
+		printf("%e\n", bk);
+		b.push_back(bk);
+		k++;
+	}
+	polynomial A;
+	for (int i = 0; i < b.size(); i++) {
+		A.push_back(b[i]);
+		if (i < b.size() - 1) {
+			A.push_back(0.0);
+		}
+	}
+	return A;
 }
 
 //#define LUCY
 
-#define CLOUD_ORDER 4
+#define CLOUD_ORDER 5
+#define STENCIL_ORDER 4
 
 std::vector<conditional> conditionals_remove_negatives(std::vector<conditional>& A) {
 	std::vector<conditional> B;
@@ -1371,7 +1415,7 @@ void create_potentials_code(const std::function<double(int, double)> drho, int n
 	tprint("\n");
 	tprint("CUDA_EXPORT inline float green_phi0(float nparts, float rs) {\n");
 	indent();
-	tprint("return float(%.8e) * sqr(rs) * (nparts - 1) +  float(%.8e) / rs;\n", 0.5*integrate([drho](double r) {
+	tprint("return float(%.8e) * sqr(rs) * (nparts - 1) +  float(%.8e) / rs;\n", 0.5 * integrate([drho](double r) {
 		return 16.0*M_PI*M_PI*drho(0,r) * r*r*r*r/3.0;}, 0.0, 1.0), pot0);
 	deindent();
 	tprint("}\n");
@@ -1426,7 +1470,42 @@ std::function<double(double)> compute_potential_function(std::function<double(do
 	return func_from_data<4>(I, dr, 0.0, 1.0);
 }
 
+polynomial poly_truncate(const polynomial& A) {
+	polynomial B(A.size());
+	for (int i = 0; i < A.size(); i++) {
+		if (fabs(A[i]) >= 1.19e-7 * abs(A[0])) {
+			B[i] = A[i];
+		} else {
+			B[i] = 0.0;
+		}
+	}
+	poly_shrink_to_fit(B);
+	return B;
+}
+
+template<int N>
+std::vector<double> create_stencil() {
+	std::vector<double> stencil;
+	constexpr int M = 2 * N + 1;
+	matrix<M> A;
+	for (int n = 0; n < M; n++) {
+		double x = n - N;
+		double x0 = 1.0;
+		for (int m = 0; m < M; m++) {
+			A[n][m] = x0;
+			x0 *= x;
+		}
+	}
+	A = A.inverse();
+	for (int i = 0; i < M; i++) {
+		stencil.push_back(A[1][i]);
+	}
+	return stencil;
+}
+
 int main() {
+
+	auto stencil = create_stencil<STENCIL_ORDER>();
 	polynomial basis(3);
 	basis[0] = 1.0;
 	basis[1] = 0.0;
@@ -1437,18 +1516,33 @@ int main() {
 	}
 	rho = poly_normalize(rho);
 
-	/*auto drhodx = [rho](int n, double r ) {
-		polynomial rho0 = rho;
-		for( int i = 0; i < n; i++) {
-			rho0 = poly_derivative(rho0);
-		}
-		return poly_eval(rho0, r);
-	};
-	create_potentials_code(drhodx, 9);*/
+#define Power(a,b) pow(a,b)
+#define Pi M_PI
 
-	polynomial Y(2);
+//	double coeffs[9] = { 1, -0.16666666666666666 * Power(Pi, 2), Power(Pi,4) / 120., -0.0001984126984126984 * Power(Pi, 6), Power(Pi,8) / 362880.,
+//			-2.505210838544172e-8 * Power(Pi, 10), Power(Pi,12) / 6.2270208e9, -7.647163731819816e-13 * Power(Pi, 14), Power(Pi,16) / 3.55687428096e14 };
+
+//	rho.resize(18);
+//	for (int i = 0; i < 9; i++) {
+//		rho[2 * i] = coeffs[i];
+//		rho[2 * i + 1] = 0.0;
+//	}
+//	auto rho0 = rho;
+//	rho = poly_mult(rho, rho0);
+//	rho = poly_mult(rho, rho0);
+//	rho = poly_normalize(rho);
+//	rho = poly_truncate(rho);
+	/*auto drhodx = [rho](int n, double r ) {
+	 polynomial rho0 = rho;
+	 for( int i = 0; i < n; i++) {
+	 rho0 = poly_derivative(rho0);
+	 }
+	 return poly_eval(rho0, r);
+	 };
+	 create_potentials_code(drhodx, 9);*/
+
+	polynomial Y(1);
 	Y[0] = 1.0;
-	Y[1] = 0.0;
 	conditional ngp;
 	ngp.f = Y;
 	ngp.x.first = -.5;
@@ -1472,11 +1566,16 @@ int main() {
 #endif
 #endif
 	auto pot = poly_rho2pot(rho);
+	pot = poly_truncate(pot);
 	for (double r = 0.0; r < 1.0; r += 0.01) {
 		//	printf("%e %e %e %e\n", r, -poly_eval(pot, r), pot0(r), (-poly_eval(pot, r) - pot0(r)) / poly_eval(pot, r));
 	}
-		auto force = poly_rho2force(rho);
+	auto force = poly_rho2force(rho);
+	force = poly_truncate(force);
 	auto expansion = poly_pot2expansion(pot, ORDER);
+	for (int i = 0; i < ORDER; i++) {
+		expansion.r[i] = poly_truncate(expansion.r[i]);
+	}
 
 	auto kmax = 8.0 * M_PI;
 	auto filter = poly_filter(rho, kmax);
@@ -1501,6 +1600,7 @@ int main() {
 	indent();
 	tprint("float y;\n");
 	tprint("x = abs(x);\n");
+	tprint("const float x2 = x * x;\n");
 	print_conditionals_fma(cloud);
 	tprint("return y;\n");
 	deindent();
@@ -1514,12 +1614,24 @@ int main() {
 	deindent();
 	tprint("}\n");
 
-	auto I = rho;
-	polynomial fourpir4(5, 0.0);
-	fourpir4[4] = 4.0 * M_PI;
-	I = poly_mult(I, fourpir4);
-	I = poly_integrate(I);
-	double sigma2 = poly_eval(I, 1.0) / (4.0 / 3.0 * M_PI);
-	tprint("// kernel rms = %e\n", sqrt(sigma2));
+	tprint("\n");
+	/*	tprint("inline CUDA_EXPORT float apply_stencil(const array<float, %i>& y ) {\n", 2 * STENCIL_ORDER + 1);
+	 indent();
+	 tprint("float w = 0.0f;\n", stencil[0]);
+	 for (int i = 0; i <= STENCIL_ORDER; i++) {
+	 int j = i;
+	 if (stencil[j] != 0.0) {
+	 tprint("w = fmaf( float(%.8e), y[%i], w);\n", stencil[j], j);
+	 }
+	 j = 2 * STENCIL_ORDER - i;
+	 if (stencil[j] != 0.0) {
+	 tprint("w = fmaf( float(%.8e), y[%i], w);\n", stencil[j], j);
+	 }
+	 }
+	 tprint("return w;\n");
+	 deindent();
+	 tprint("}\n");
+	 tprint("\n");
+	 tprint("#define STENCIL_ORDER %i\n", STENCIL_ORDER);*/
 
 }

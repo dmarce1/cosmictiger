@@ -28,6 +28,7 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/cuda_mem.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/kernels.hpp>
 #ifdef TREEPM
 #include <cosmictiger/treepm.hpp>
 #endif
@@ -356,7 +357,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 										}
 										flops += 33;
 									}
-								//	sw[CC] = sw[CP] = sw[PC] = false;
+									//	sw[CC] = sw[CP] = sw[PC] = false;
 									if (!sw[CC] && !sw[CP] && !sw[PC]) {
 										sw[LEAF] = other.leaf;
 										sw[NEXT] = !sw[LEAF];
@@ -505,7 +506,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 }
 
 kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
-		vector<kick_workitem> workitems) {
+		const vector<kick_workitem>& workitems) {
 	timer tm;
 	tm.start();
 	int nblocks = kick_block_count();
@@ -605,9 +606,15 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	data.rs = kparams.rs;
 #endif
 	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, 0));
+	tm.stop();
+	PRINT("----> %e\n", tm.read());
+	tm.reset();
+	tm.start();
 	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
 	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, 0));
 	CUDA_CHECK(cudaDeviceSynchronize());
+	tm.stop();
+	PRINT("----> %e\n", tm.read());
 	return *return_;
 }
 

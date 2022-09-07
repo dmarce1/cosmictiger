@@ -118,7 +118,7 @@ kick_return treepm_kick(kick_params params) {
 	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
 
-	params.theta = 0.33333333333f;
+	params.theta = get_options().theta;
 	params.phi0 = green_phi0(nparts, rs);
 	timer tm;
 	PRINT("Doing chainmesh\n");
@@ -145,7 +145,11 @@ kick_return treepm_kick(kick_params params) {
 	tm.reset();
 	tm.start();
 	auto kr = treepm_short_range(params, Nres);
+	timer tm2;
+	tm2.start();
 	treepm_cleanup();
+	tm2.stop();
+	PRINT( "-----> %e\n", tm2.read());
 	tm.stop();
 	PRINT("took %e s\n", tm.read());
 
@@ -157,6 +161,8 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_short_range_action>(c, params, Nres));
 	}
+	timer tm;
+	tm.start();
 	params.rs = get_options().p3m_rs / Nres;
 	const int Nbnd = get_options().p3m_chainnbnd;
 	vector<kick_workitem> works;
@@ -205,6 +211,8 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 		}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
+	tm.stop();
+	PRINT("----> %e\n", tm.read());
 	auto rc = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_data(), works);
 	for (auto& kr : futs1) {
 		rc += kr.get();
@@ -549,6 +557,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 		futs1.push_back(hpx::async<treepm_filter_fourier_action>(c, dim, Nres));
 	}
 	const float rs = get_options().p3m_rs / Nres;
+	const float hsoft = get_options().hsoft;
 	array<int64_t, NDIM> I;
 	const auto i = cmplx(0, 1);
 	auto box = fft3d_complex_range();
@@ -557,7 +566,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 	vector<hpx::future<void>> futs2;
 	const static auto gfilter = treepm_init_filter();
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs2.push_back(hpx::async([box,h,rs,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
+		futs2.push_back(hpx::async([hsoft,box,h,rs,i,dim,&Y,Nres](array<int64_t,NDIM> I) {
 			array<cmplx, NDIM + 1> k;
 			k[NDIM] = i;
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
@@ -570,6 +579,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 						k2 += sqr(k[dim].real());
 					}
 					coeff *= gfilter(sqrt(k2)*rs);
+					coeff *= gfilter(sqrt(k2)*hsoft);
 					const auto index = box.index(I);
 					if (k2 > 0.0) {
 						Y[index] = Y0[index] * i * coeff * k[dim] * (4.0 * M_PI)/ k2;

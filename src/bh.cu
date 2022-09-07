@@ -7,6 +7,7 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/kernels.hpp>
 
 #define BH_LIST_SIZE 1024
 #define BH_SOURCE_LIST_SIZE (16*1024)
