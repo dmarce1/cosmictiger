@@ -196,7 +196,9 @@ struct kick_workitem {
 	array<fixed32, NDIM> pos;
 	tree_id self;
 	vector<tree_id> dchecklist;
+#ifndef TREEPM
 	vector<tree_id> echecklist;
+#endif
 };
 
 struct kick_workspace;

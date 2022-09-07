@@ -149,7 +149,7 @@ kick_return treepm_kick(kick_params params) {
 	tm2.start();
 	treepm_cleanup();
 	tm2.stop();
-	PRINT( "-----> %e\n", tm2.read());
+	PRINT("-----> %e\n", tm2.read());
 	tm.stop();
 	PRINT("took %e s\n", tm.read());
 
@@ -165,20 +165,37 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 	tm.start();
 	params.rs = get_options().p3m_rs / Nres;
 	const int Nbnd = get_options().p3m_chainnbnd;
-	vector<kick_workitem> works;
 	auto box = treepm_get_fourier_box(Nres);
+	vector<kick_workitem> works;
+	works.reserve(box.volume());
 //	PRINT("Nbnd = %i  Nres = %i chain_box = %i %i %i %i %i %i\n", Nbnd, Nres, box.begin[XDIM], box.end[XDIM], box.begin[YDIM], box.end[YDIM], box.begin[ZDIM],
 //			box.end[ZDIM]);
 
+	int cell_count = 0;
+	array<int64_t, NDIM> I, J;
+	for (J[XDIM] = -Nbnd; J[XDIM] <= Nbnd; J[XDIM]++) {
+		for (J[YDIM] = -Nbnd; J[YDIM] <= +Nbnd; J[YDIM]++) {
+			for (J[ZDIM] = -Nbnd; J[ZDIM] <= +Nbnd; J[ZDIM]++) {
+				auto K = J;
+				for (int dim = 0; dim < NDIM; dim++) {
+					K[dim] = std::max(std::abs(K[dim]) - 1.0, 0.0);
+				}
+				if (sqr(K[XDIM], K[YDIM], K[ZDIM]) < sqr(Nbnd)) {
+					cell_count++;
+				}
+			}
+		}
+	}
+	PRINT("%i cells per workitem\n", cell_count);
 	vector<hpx::future<void>> futs;
 	mutex_type mutex;
-	array<int64_t, NDIM> I;
 	vector<hpx::future<void>> futs2;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs2.push_back(hpx::async([Nbnd,&mutex,box,Nres,&works](array<int64_t, NDIM> I) {
+		futs2.push_back(hpx::async([cell_count,Nbnd,&mutex,box,Nres,&works](array<int64_t, NDIM> I) {
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
 					kick_workitem work;
+					work.dchecklist.reserve(cell_count);
 					array<int64_t, NDIM> J;
 					for (J[XDIM] = I[XDIM] - Nbnd; J[XDIM] <= I[XDIM] + Nbnd; J[XDIM]++) {
 						for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] <= I[YDIM] + Nbnd; J[YDIM]++) {
@@ -306,8 +323,8 @@ void treepm_exchange_and_sort(int Nres) {
 	const auto int_box = treepm_get_fourier_box(Nres);
 	array<int64_t, NDIM> I;
 	for (I[XDIM] = int_box.begin[XDIM]; I[XDIM] < int_box.end[XDIM]; I[XDIM]++) {
+		futs1.push_back(hpx::async([int_box,Nres](array<int64_t, NDIM> I) {
 		for (I[YDIM] = int_box.begin[YDIM]; I[YDIM] < int_box.end[YDIM]; I[YDIM]++) {
-			futs1.push_back(hpx::async([int_box,Nres](array<int64_t, NDIM> I) {
 				for (I[ZDIM] = int_box.begin[ZDIM]; I[ZDIM] < int_box.end[ZDIM]; I[ZDIM]++) {
 					auto j = chain_box.index(I);
 					range<double> rbox;
@@ -316,15 +333,14 @@ void treepm_exchange_and_sort(int Nres) {
 						rbox.end[dim] = (double) (I[dim] + 1) / Nres;
 					}
 					if( chain_mesh[j].second - chain_mesh[j].first > 0 ) {
-						//		PRINT( "%li %li\n",chain_mesh[j].first, chain_mesh[j].second);
-					auto rc = tree_create( tree_create_params(), 0, pair<int, int>(hpx_rank(),hpx_rank()+1), chain_mesh[j], rbox, 0, false);
-					tree_roots[j] = rc.id.index;
-				} else {
-					tree_roots[j] = -1;
+						auto rc = tree_create( tree_create_params(), 0, pair<int, int>(hpx_rank(),hpx_rank()+1), chain_mesh[j], rbox, 0, false);
+						tree_roots[j] = rc.id.index;
+					} else {
+						tree_roots[j] = -1;
+					}
 				}
 			}
 		}, I));
-		}
 	}
 	for (int i = 0; i < boxes.size(); i++) {
 		auto fut = hpx::async<treepm_particles_get_action>(localities[boxes[i].first], shifts[i]);
@@ -489,7 +505,9 @@ void treepm_sort_particles(int Nres, range<int64_t> box, pair<part_int> part_ran
 		left_box.end[xdim] = right_box.begin[xdim] = imid;
 		static std::atomic<int> nthreads = 0;
 		hpx::future<void> fut;
-		if (nthreads++ < hpx_hardware_concurrency() - 1) {
+		bool thread = nthreads++ < 4 * hpx_hardware_concurrency() - 1;
+		thread = thread && (left_rng.second - left_rng.first) > 1024;
+		if (thread) {
 			fut = hpx::async([Nres, left_box, left_rng]() {
 				treepm_sort_particles(Nres, left_box, left_rng);
 				nthreads--;

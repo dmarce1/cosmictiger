@@ -49,9 +49,11 @@ struct cuda_kick_params {
 	expansion<float> L;
 	int self;
 	int* dchecks;
+#ifndef TREEPM
 	int* echecks;
-	int dcount;
 	int ecount;
+#endif
+	int dcount;
 };
 
 __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kick_data& data, const expansion<float>& L, const tree_node& self) {
@@ -205,7 +207,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	auto& sparams = shmem.params;
 	auto& L = shmem.L;
 	auto& dchecks = shmem.dchecks;
+#ifndef TREEPM
 	auto& echecks = shmem.echecks;
+#endif
 	auto& nextlist = shmem.nextlist;
 	auto& cclist = shmem.cclist;
 	auto& cplist = shmem.cplist;
@@ -232,7 +236,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		flop_counter<int> flops = 0;
 		L.resize(0);
 		dchecks.resize(0);
+#ifndef TREEPM
 		echecks.resize(0);
+#endif
 		sparams.resize(0);
 		{
 			expansion_type this_L;
@@ -241,12 +247,14 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			L.push_back(this_L);
 		}
 		dchecks.resize(params[index].dcount);
+#ifndef TREEPM
 		echecks.resize(params[index].ecount);
-		for (int i = tid; i < params[index].dcount; i += WARP_SIZE) {
-			dchecks[i] = params[index].dchecks[i];
-		}
 		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
 			echecks[i] = params[index].echecks[i];
+		}
+#endif
+		for (int i = tid; i < params[index].dcount; i += WARP_SIZE) {
+			dchecks[i] = params[index].dchecks[i];
 		}
 		{
 			search_params sparam;
@@ -447,7 +455,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					}
 					__syncwarp();
 					dchecks.push_top();
+#ifndef TREEPM
 					echecks.push_top();
+#endif
 					sparams.back().phase += 1;
 					{
 						search_params sparam;
@@ -464,7 +474,9 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			case 1: {
 				L.pop_back();
 				dchecks.pop_top();
+#ifndef TREEPM
 				echecks.pop_top();
+#endif
 				sparams.back().phase += 1;
 				{
 					search_params sparam;
@@ -519,7 +531,9 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	int ecount = 0;
 	for (int i = 0; i < workitems.size(); i++) {
 		dcount += workitems[i].dchecklist.size();
+#ifndef TREEPM
 		ecount += workitems[i].echecklist.size();
+#endif
 	}
 	const int alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount + sizeof(int) * ecount;
 	if (data_size < alloc_size) {
@@ -538,8 +552,10 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	offset += sizeof(cuda_kick_params) * workitems.size();
 	int* dchecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * dcount;
+#ifndef TREEPM
 	int* echecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * ecount;
+#endif
 	int* current_index = (int*) (data_ptr + offset);
 	offset += sizeof(int);
 	offset = 0;
@@ -549,31 +565,41 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	offset += sizeof(cuda_kick_params) * workitems.size();
 	int* dev_dchecks = (int*) (dev_data_ptr + offset);
 	offset += sizeof(int) * dcount;
+#ifndef TREEPM
 	int* dev_echecks = (int*) (dev_data_ptr + offset);
 	offset += sizeof(int) * ecount;
+#endif
 	int* dev_current_index = (int*) (dev_data_ptr + offset);
 	offset += sizeof(int);
 	*current_index = 0;
 	*return_ = kick_return();
 	vector<int> dindices(workitems.size() + 1);
+#ifndef TREEPM
 	vector<int> eindices(workitems.size() + 1);
+#endif
 	dcount = 0;
 	ecount = 0;
 	for (int i = 0; i < workitems.size(); i++) {
 		dindices[i] = dcount;
+#ifndef TREEPM
 		eindices[i] = ecount;
+#endif
 		for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 			dchecks[dcount] = workitems[i].dchecklist[j].index;
 			dcount++;
 		}
+#ifndef TREEPM
 		for (int j = 0; j < workitems[i].echecklist.size(); j++) {
 			echecks[ecount] = workitems[i].echecklist[j].index;
 			ecount++;
 		}
+#endif
 	}
 
 	dindices[workitems.size()] = dcount;
+#ifndef TREEPM
 	eindices[workitems.size()] = ecount;
+#endif
 	cuda_kick_data data;
 	data.x = dev_x;
 	data.y = dev_y;
@@ -596,9 +622,11 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		params.L = workitems[i].L;
 		params.self = workitems[i].self.index;
 		params.dchecks = dev_dchecks + dindices[i];
-		params.echecks = dev_echecks + eindices[i];
-		params.dcount = dindices[i + 1] - dindices[i];
+#ifndef TREEPM
+		params.ehecks = dev_echecks + eindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
+#endif
+		params.dcount = dindices[i + 1] - dindices[i];
 		ikick_params[i] = std::move(params);
 	}
 	cuda_set_device();

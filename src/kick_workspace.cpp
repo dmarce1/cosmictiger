@@ -66,7 +66,7 @@ bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
 }
 
 void kick_workspace::to_gpu() {
-
+#ifndef TREEPM
 	cuda_set_device();
 //	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
@@ -323,6 +323,7 @@ void kick_workspace::to_gpu() {
 	particles_resize(opartsize);
 	kick_set_rc(kr);
 //	PRINT("GPU took %e seconds\n", tm.read());
+#endif
 
 }
 
@@ -349,6 +350,7 @@ void kick_workspace::clear_buffers() {
 
 void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecks,
 		vector<tree_id> && echecks) {
+#ifndef TREEPM
 	kick_workitem item;
 	item.L = L;
 	item.pos = pos;
@@ -376,4 +378,5 @@ void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<flo
 	if (do_work) {
 		ptr->to_gpu();
 	}
+#endif
 }
