@@ -18,8 +18,8 @@ void treepm_allocate_fields(int Nres_) {
 	Ninv = 1.0f / Nres;
 	auto ibox = treepm_get_fourier_box(Nres);
 	for (int dim = 0; dim < NDIM; dim++) {
-		int_box.begin[dim] = ibox.begin[dim] + CLOUD_MIN;
-		int_box.end[dim] = ibox.end[dim] + CLOUD_MAX;
+		int_box.begin[dim] = ibox.begin[dim] + CLOUD_MIN ;
+		int_box.end[dim] = ibox.end[dim] + CLOUD_MAX ;
 	}
 	const auto vol = int_box.volume();
 	for (int dim = 0; dim < NDIM + 1; dim++) {
@@ -91,14 +91,14 @@ __global__ void treepm_compute_density_kernel(int Nres, const fixed32* X, const 
 			for (J[ZDIM] = CLOUD_MIN; J[ZDIM] <= CLOUD_MAX; J[ZDIM]++) {
 				const auto K = I - J;
 				if (int_box.contains(K)) {
-					const fixed32 x0 = I[XDIM] / (double) Nres;
-					const fixed32 y0 = I[YDIM] / (double) Nres;
-					const fixed32 z0 = I[ZDIM] / (double) Nres;
+					const fixed32 x0 = fmod((I[XDIM] + Nres) / (double) Nres,1.0);
+					const fixed32 y0 = fmod((I[YDIM] + Nres) / (double) Nres,1.0);
+					const fixed32 z0 = fmod((I[ZDIM] + Nres) / (double) Nres,1.0);
 					const auto& rng = ranges[chain_box.index(K)];
 					for (part_int i = rng.first + tid; i < rng.second; i += BLOCK_SIZE) {
-						const float x = (X[i] - x0).to_float() * Nres;
-						const float y = (Y[i] - y0).to_float() * Nres;
-						const float z = (Z[i] - z0).to_float() * Nres;
+						const float x = distance(X[i], x0)*Nres;
+						const float y = distance(Y[i], y0)*Nres;
+						const float z = distance(Z[i], z0)*Nres;
 						myrho += cloud_weight(x) * cloud_weight(y) * cloud_weight(z);
 					}
 				}
