@@ -993,6 +993,9 @@ void driver() {
 				}
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
+#ifdef TREEPM
+			bucket_size = 64;
+#else
 			if (ts <= 10.0) {
 				bucket_size = 112;
 			} else if (ts < 55.0) {
@@ -1000,6 +1003,7 @@ void driver() {
 			} else {
 				bucket_size = 184;
 			}
+#endif
 			//bucket_size = 128;
 			/*double min_box_dim = 0.25 / sqrt(3) * (theta / (theta + 1));
 			 min_box_dim *= 0.5;

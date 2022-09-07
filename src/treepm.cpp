@@ -112,10 +112,13 @@ kick_return treepm_kick(kick_params params) {
 	const auto& opts = get_options();
 	const auto nparts = particles_active_count();
 	int i;
-	for (i = 2; nparts * pow(i * opts.p3m_Nmin, -NDIM) > opts.p3m_chainres; i++) {
+	for (i = 2; pow(i, NDIM)/hpx_size() < 32*32*32; i+=2) {
 	}
-	i--;
-	const int Nres = i * opts.p3m_Nmin;
+	const int Nres = i;
+//	for (i = 2; nparts * pow(i * opts.p3m_Nmin, -NDIM) > opts.p3m_chainres; i++) {
+//	}
+//	i--;
+//	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
 
 	params.theta = get_options().theta;

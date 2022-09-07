@@ -86,14 +86,14 @@ __global__ void treepm_compute_density_kernel(int Nres, const fixed32* X, const 
 	I[ZDIM] = bid % span[ZDIM] + rho_box.begin[ZDIM];
 	I[YDIM] = (bid / span[ZDIM]) % span[YDIM] + rho_box.begin[YDIM];
 	I[XDIM] = bid / (span[ZDIM] * span[YDIM]) + rho_box.begin[XDIM];
+	const fixed32 x0 = fmod((I[XDIM] + Nres) / (double) Nres,1.0);
+	const fixed32 y0 = fmod((I[YDIM] + Nres) / (double) Nres,1.0);
+	const fixed32 z0 = fmod((I[ZDIM] + Nres) / (double) Nres,1.0);
 	for (J[XDIM] = CLOUD_MIN; J[XDIM] <= CLOUD_MAX; J[XDIM]++) {
 		for (J[YDIM] = CLOUD_MIN; J[YDIM] <= CLOUD_MAX; J[YDIM]++) {
 			for (J[ZDIM] = CLOUD_MIN; J[ZDIM] <= CLOUD_MAX; J[ZDIM]++) {
 				const auto K = I - J;
 				if (int_box.contains(K)) {
-					const fixed32 x0 = fmod((I[XDIM] + Nres) / (double) Nres,1.0);
-					const fixed32 y0 = fmod((I[YDIM] + Nres) / (double) Nres,1.0);
-					const fixed32 z0 = fmod((I[ZDIM] + Nres) / (double) Nres,1.0);
 					const auto& rng = ranges[chain_box.index(K)];
 					for (part_int i = rng.first + tid; i < rng.second; i += BLOCK_SIZE) {
 						const float x = distance(X[i], x0)*Nres;
