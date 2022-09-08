@@ -175,6 +175,7 @@ inline simd_float4 fmaf(const simd_float4& a, const simd_float4& b, const simd_f
 	return d;
 }
 
+
 class alignas(sizeof(__m128d)) simd_double {
 	__m128d v;
 public:
@@ -939,4 +940,13 @@ inline simd_float16 fmaf(const simd_float16& a, const simd_float16& b, const sim
 inline simd_float8 fmaxf(simd_float8 a, simd_float8 b) {
 	return max(a, b);
 }
+
+inline simd_float8 fma(const simd_float8& a, const simd_float8& b, const simd_float8& c) {
+	return fmaf(a,b,c);
+}
+
+inline simd_double fma(const simd_double& a, const simd_double& b, const simd_double& c) {
+	return fmaf(a,b,c);
+}
+
 #endif /* SIMD_FLOAT_HPP_ */

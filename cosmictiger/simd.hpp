@@ -242,6 +242,9 @@ inline simd_double8 exp(simd_double8 a) { 	// 24
 	return c;
 }
 
+inline simd_float f_max(simd_float a, simd_float b) {
+	return max(a,b);
+}
 #endif /* SIMD_HPP_ */
 
 #endif

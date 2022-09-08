@@ -28,7 +28,7 @@
 #include <boost/align/aligned_allocator.hpp>
 
 void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree_id>& list, tree_id self, bool do_phi) {
-#ifndef TREEPM
+#ifdef FMM
 	flop_counter<int> flops = 0;
 	if (list.size()) {
 		static const simd_float _2float(fixed2float);

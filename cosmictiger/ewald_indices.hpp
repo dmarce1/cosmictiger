@@ -28,6 +28,8 @@
 #define NFOUR 92
 #define EWALD_TABLE_SIZE 16
 
+using ewald_type = double;
+
 using ewald_table_t = array<array<array<array<float, EWALD_TABLE_SIZE>, EWALD_TABLE_SIZE>, EWALD_TABLE_SIZE>, NDIM + 1>;
 
 struct ewald_const {
@@ -36,17 +38,21 @@ struct ewald_const {
 	static int nreal();
 	static void init();
 	static void init_gpu();CUDA_EXPORT
-	static const array<float, NDIM>& real_index(int i);CUDA_EXPORT
-	static const array<float, NDIM>& four_index(int i);CUDA_EXPORT
-	static const tensor_trless_sym<float, LORDER>& four_expansion(int i);CUDA_EXPORT
-	static const tensor_sym<float, LORDER> D0();
+	static const array<ewald_type, NDIM>& real_index(int i);CUDA_EXPORT
+	static const array<ewald_type, NDIM>& four_index(int i);CUDA_EXPORT
+	static const tensor_trless_sym<ewald_type, LORDER>& four_expansion(int i);CUDA_EXPORT
+	static const tensor_sym<ewald_type, LORDER> D0();
 	CUDA_EXPORT void table_interp(float& pot, float& fx, float& fy, float& fz, float x, float y, float z, bool do_pot);
 };
 
 struct ewald_constants {
 	ewald_table_t table;
-	array<array<float, NDIM>, NREAL> real_indices;
-	array<array<float, NDIM>, NFOUR> four_indices;
-	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
-	tensor_sym<float, LORDER> D0;
+	array<array<ewald_type, NDIM>, NREAL> real_indices;
+	array<array<ewald_type, NDIM>, NFOUR> four_indices;
+	array<tensor_trless_sym<ewald_type, LORDER>, NFOUR> four_expanse;
+	tensor_sym<ewald_type, LORDER> D0;
 };
+
+
+
+long double high_precision_ewald(const array<long double, NDIM>& X);

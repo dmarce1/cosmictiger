@@ -157,7 +157,7 @@ void ewald_const::init_gpu() {
 	 */
 	int n2max = 12;
 	int nmax = std::sqrt(n2max) + 1;
-	array<float, NDIM> this_h;
+	array<ewald_type, NDIM> this_h;
 	int count = 0;
 	for (int i = -nmax; i <= nmax; i++) {
 		for (int j = -nmax; j <= nmax; j++) {
@@ -177,7 +177,7 @@ void ewald_const::init_gpu() {
 		}
 	}
 	PRINT("count = %i %i\n", count, NREAL);
-	const auto sort_func = [](const array<float,NDIM>& a, const array<float,NDIM>& b) {
+	const auto sort_func = [](const array<ewald_type,NDIM>& a, const array<ewald_type,NDIM>& b) {
 		const auto a2 = sqr(a[0],a[1],a[2]);
 		const auto b2 = sqr(b[0],b[1],b[2]);
 		return a2 > b2;
@@ -204,10 +204,10 @@ void ewald_const::init_gpu() {
 	std::sort(ec.four_indices.begin(), ec.four_indices.end(), sort_func);
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
-		array<float, NDIM> h = ec.four_indices[i];
-		auto D0 = vector_to_sym_tensor<float, LORDER>(h);
-		const float h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
-		const float c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
+		array<ewald_type, NDIM> h = ec.four_indices[i];
+		auto D0 = vector_to_sym_tensor<ewald_type, LORDER>(h);
+		const ewald_type h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
+		const ewald_type c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
 		array<int, NDIM> n;
 		const int signs[4] = { 1, -1, -1, 1 };
 		for (n[0] = 0; n[0] < LORDER; n[0]++) {
@@ -221,7 +221,7 @@ void ewald_const::init_gpu() {
 		ec.four_expanse[count] = D0.detraceD();
 		count++;
 	}
-	tensor_sym<float, LORDER> D;
+	tensor_sym<ewald_type, LORDER> D;
 	for (int n = 0; n < (LORDER + 2) * (LORDER + 1) * LORDER / 6; n++) {
 		D[n] = 0.0;
 	}
@@ -230,7 +230,7 @@ void ewald_const::init_gpu() {
 		for (int m = 0; m < LORDER - n; m += 2) {
 			for (int l = 0; l < LORDER - n - m; l += 2) {
 				D(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) * pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1)
-						* double_factorial(n - 1) * double_factorial(m - 1) * double_factorial(l - 1);
+						* double_factorial(n + m + l - 1);
 			}
 		}
 	}
@@ -248,7 +248,7 @@ CUDA_EXPORT int ewald_const::nreal() {
 	return NREAL;
 }
 
-CUDA_EXPORT const tensor_sym<float, LORDER> ewald_const::D0() {
+CUDA_EXPORT const tensor_sym<ewald_type, LORDER> ewald_const::D0() {
 #ifdef __CUDA_ARCH__
 	return ec_dev.D0;
 #else
@@ -256,7 +256,7 @@ CUDA_EXPORT const tensor_sym<float, LORDER> ewald_const::D0() {
 #endif
 }
 
-CUDA_EXPORT const array<float, NDIM>& ewald_const::real_index(int i) {
+CUDA_EXPORT const array<ewald_type, NDIM>& ewald_const::real_index(int i) {
 #ifdef __CUDA_ARCH__
 	return ec_dev.real_indices[i];
 #else
@@ -264,7 +264,7 @@ CUDA_EXPORT const array<float, NDIM>& ewald_const::real_index(int i) {
 #endif
 }
 
-CUDA_EXPORT const array<float, NDIM>& ewald_const::four_index(int i) {
+CUDA_EXPORT const array<ewald_type, NDIM>& ewald_const::four_index(int i) {
 #ifdef __CUDA_ARCH__
 	return ec_dev.four_indices[i];
 #else
@@ -331,7 +331,7 @@ CUDA_EXPORT void ewald_const::table_interp(float& pot, float& fx, float& fy, flo
 	}
 }
 
-CUDA_EXPORT const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
+CUDA_EXPORT const tensor_trless_sym<ewald_type, LORDER>& ewald_const::four_expansion(int i) {
 #ifdef __CUDA_ARCH__
 	return ec_dev.four_expanse[i];
 #else

@@ -994,7 +994,7 @@ void driver() {
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
 #ifdef TREEPM
-			bucket_size = 64;
+			bucket_size = 96;
 #else
 			if (ts <= 10.0) {
 				bucket_size = 112;

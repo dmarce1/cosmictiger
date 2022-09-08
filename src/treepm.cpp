@@ -1,5 +1,4 @@
 #include <cosmictiger/defs.hpp>
-#ifdef TREEPM
 
 #include <cosmictiger/treepm.hpp>
 #include <cosmictiger/domain.hpp>
@@ -13,6 +12,12 @@ static vector<cmplx> Y0;
 static device_vector<pair<part_int>> chain_mesh;
 static vector<int> tree_roots;
 static size_t local_part_count;
+
+#ifdef FMMPM
+array<vector<float>, EXPANSION_SIZE> D_k;
+array<vector<float>, MULTIPOLE_SIZE> M_k;
+array<vector<float>, EXPANSION_SIZE> L_k;
+#endif
 
 #define FILTER_N 65536
 #define FILTER_MAX (M_PI * 64.0)
@@ -109,10 +114,12 @@ HPX_PLAIN_ACTION (treepm_cleanup);
 HPX_PLAIN_ACTION (treepm_short_range);
 
 kick_return treepm_kick(kick_params params) {
+	kick_return kr;
+#ifdef TREEPM
 	const auto& opts = get_options();
 	const auto nparts = particles_active_count();
 	int i;
-	for (i = 2; pow(i, NDIM)/hpx_size() < 32*32*32; i+=2) {
+	for (i = 2; pow(i, NDIM) / hpx_size() < 32 * 32 * 32; i += 2) {
 	}
 	const int Nres = i;
 //	for (i = 2; nparts * pow(i * opts.p3m_Nmin, -NDIM) > opts.p3m_chainres; i++) {
@@ -147,7 +154,7 @@ kick_return treepm_kick(kick_params params) {
 	PRINT("Doing short range\n");
 	tm.reset();
 	tm.start();
-	auto kr = treepm_short_range(params, Nres);
+	kr = treepm_short_range(params, Nres);
 	timer tm2;
 	tm2.start();
 	treepm_cleanup();
@@ -155,7 +162,7 @@ kick_return treepm_kick(kick_params params) {
 	PRINT("-----> %e\n", tm2.read());
 	tm.stop();
 	PRINT("took %e s\n", tm.read());
-
+#endif
 	return kr;
 }
 
@@ -166,7 +173,9 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 	}
 	timer tm;
 	tm.start();
+#ifdef TREEPM
 	params.rs = get_options().p3m_rs / Nres;
+#endif
 	const int Nbnd = get_options().p3m_chainnbnd;
 	auto box = treepm_get_fourier_box(Nres);
 	vector<kick_workitem> works;
@@ -246,7 +255,9 @@ void treepm_cleanup() {
 		futs1.push_back(hpx::async<treepm_cleanup_action>(c));
 	}
 	particles_resize(local_part_count);
+#ifdef TREEPM
 	treepm_free_fields();
+#endif
 	hpx::wait_all(futs1.begin(), futs1.end());
 
 }
@@ -327,7 +338,7 @@ void treepm_exchange_and_sort(int Nres) {
 	array<int64_t, NDIM> I;
 	for (I[XDIM] = int_box.begin[XDIM]; I[XDIM] < int_box.end[XDIM]; I[XDIM]++) {
 		futs1.push_back(hpx::async([int_box,Nres](array<int64_t, NDIM> I) {
-		for (I[YDIM] = int_box.begin[YDIM]; I[YDIM] < int_box.end[YDIM]; I[YDIM]++) {
+			for (I[YDIM] = int_box.begin[YDIM]; I[YDIM] < int_box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = int_box.begin[ZDIM]; I[ZDIM] < int_box.end[ZDIM]; I[ZDIM]++) {
 					auto j = chain_box.index(I);
 					range<double> rbox;
@@ -443,7 +454,7 @@ vector<array<vector<fixed32>, NDIM>> treepm_particles_get(range<int64_t> box) {
 }
 
 void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
-
+#ifdef TREEPM
 	fft3d_init(Nres, -(double) nparts / (sqr(Nres) * Nres));
 	treepm_compute_density(Nres);
 	fft3d_execute();
@@ -458,6 +469,45 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 		fft3d_destroy();
 	}
 	treepm_free_fourier();
+#else
+	static bool green_init = false;
+	const int Nbnd = get_options().p3m_chainnbnd;
+	if (!green_init) {
+		green_init = true;
+		fft3d_init(Nres);
+		auto box = treepm_get_fourier_box(Nres);
+		for (int i = 0; i < EXPANSION_SIZE; i++) {
+			D_k[i].resize(box.volume());
+		}
+		array<int64_t, NDIM> I;
+		array<int64_t, NDIM> J;
+		for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
+			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
+				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						J[dim] = I[dim] < Nres / 2 ? I[dim] : I[dim] - Nres;
+					}
+					bool zero = false;
+					for (int dim = 0; dim < NDIM; dim++) {
+						zero = zero || J[dim] <= Nbnd;
+					}
+					if (!zero) {
+						array<float,NDIM> dx;
+						for( int dim =0; dim < NDIM; dim++) {
+							dx[dim] = (double) J[dim] / Nres;
+						}
+						expansion<float> D;
+					} else {
+						for (int j = 0; j < EXPANSION_SIZE; j++) {
+							D_k[j][box.index(I)] = 0.0;
+						}
+					}
+				}
+			}
+		}
+	}
+
+#endif
 }
 
 static range<int64_t> double_box2int_box(range<double> rbox, int Nres) {
@@ -559,6 +609,7 @@ void treepm_save_fourier() {
 }
 
 void treepm_save_field(int dim, int Nres) {
+#ifdef TREEPM
 	vector<hpx::future<void>> futs1;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_save_field_action>(c, dim, Nres));
@@ -570,6 +621,7 @@ void treepm_save_field(int dim, int Nres) {
 	}
 	treepm_set_field(dim, fft3d_read_real(box));
 	hpx::wait_all(futs1.begin(), futs1.end());
+#endif
 }
 
 void treepm_filter_fourier(int dim, int Nres) {
@@ -616,6 +668,7 @@ void treepm_filter_fourier(int dim, int Nres) {
 }
 
 void treepm_compute_density(int N) {
+#ifdef TREEPM
 	vector<hpx::future<void>> futs1;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_compute_density_action>(c, N));
@@ -631,6 +684,6 @@ void treepm_compute_density(int N) {
 	vector<float> rho0(rho.begin(), rho.end());
 	fft3d_accumulate_real(rho_box, rho0);
 	hpx::wait_all(futs1.begin(), futs1.end());
+#endif
 }
 
-#endif

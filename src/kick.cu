@@ -623,7 +623,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		params.self = workitems[i].self.index;
 		params.dchecks = dev_dchecks + dindices[i];
 #ifndef TREEPM
-		params.ehecks = dev_echecks + eindices[i];
+		params.echecks = dev_echecks + eindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
 #endif
 		params.dcount = dindices[i + 1] - dindices[i];

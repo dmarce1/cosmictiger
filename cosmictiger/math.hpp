@@ -88,7 +88,7 @@ __device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_
 
 inline void erfcexp(double x, double* ec, double *ex) {				// 18 + FLOP_DIV + FLOP_EXP
 	*ex = exp(-x * x);				// 2 + FLOP_EXP
-	*ec = erf(x);
+	*ec = erfc(x);
 }
 
 namespace math {
@@ -137,6 +137,16 @@ inline double sinc(double x) {
 		return sin(x) / x;
 	}
 }
+
+
+inline double double_factorial(int n) {
+	if (n < 1) {
+		return 1;
+	} else {
+		return n * double_factorial(n - 2);
+	}
+}
+
 
 inline void atomic_add(std::atomic<float>& y, float x) {
 	float z = y;
@@ -209,13 +219,15 @@ CUDA_EXPORT T expnearzero(T x) {
 	return w;
 }
 
-inline double double_factorial(int n) {
-	if (n < 1) {
-		return 1;
-	} else {
-		return n * double_factorial(n - 2);
-	}
+
+inline CUDA_EXPORT double f_max(double a, double b) {
+	return a > b ? a : b;
 }
+
+inline CUDA_EXPORT float f_max(float a, float b) {
+	return a > b ? a : b;
+}
+
 
 #include <cosmictiger/containers.hpp>
 

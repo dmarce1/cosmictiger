@@ -37,41 +37,41 @@
 
 int hpx_main(int argc, char *argv[]) {
 	{
-			double toler = 1.19e-7 / sqrt(2);
-			double norm = 2.83;
-			double x;
-			for (double alpha = 1.0e-1; alpha < 8.0; alpha += 0.1) {
-				x = 4.0 / alpha;
-				double error;
-				do {
-					double f = erfc(alpha * x) / norm * (4.0 * M_PI * x) - toler;
-					double dfdx = -8.0 * alpha * exp(-sqr(alpha) * x * x) * sqrt(M_PI) * x / norm + 4.0 * M_PI * erfc(alpha * x) / norm;
-					x -= f / dfdx;
-					error = fabs(f / dfdx);
-				} while (error > 1.e-10);
-				double real = x;
-				x = 1.26 * alpha;
-				error = 1e10;
-				do {
-					double f = 2.0 * exp(-sqr(M_PI * x / alpha)) / (pow(M_PI, 1.5) * x) - toler / 2.0;
-					double dfdx = 4.0 * exp(-sqr(M_PI * x / alpha)) * sqrt(M_PI) * (-1.0 / sqr(alpha) - 0.5 / sqr(M_PI * x));
-					x -= f / dfdx;
-					error = fabs(f / dfdx);
+		double toler = 1.19e-7 / sqrt(2);
+		double norm = 2.83;
+		double x;
+		for (double alpha = 1.0e-1; alpha < 8.0; alpha += 0.1) {
+			x = 4.0 / alpha;
+			double error;
+			do {
+				double f = erfc(alpha * x) / norm * (4.0 * M_PI * x) - toler;
+				double dfdx = -8.0 * alpha * exp(-sqr(alpha) * x * x) * sqrt(M_PI) * x / norm + 4.0 * M_PI * erfc(alpha * x) / norm;
+				x -= f / dfdx;
+				error = fabs(f / dfdx);
+			} while (error > 1.e-10);
+			double real = x;
+			x = 1.26 * alpha;
+			error = 1e10;
+			do {
+				double f = 2.0 * exp(-sqr(M_PI * x / alpha)) / (pow(M_PI, 1.5) * x) - toler / 2.0;
+				double dfdx = 4.0 * exp(-sqr(M_PI * x / alpha)) * sqrt(M_PI) * (-1.0 / sqr(alpha) - 0.5 / sqr(M_PI * x));
+				x -= f / dfdx;
+				error = fabs(f / dfdx);
 
-				} while (error > 1.e-10);
-				double four = x;
-				PRINT("%e %e %e %e\n", alpha, real, four, sqr(real) * real + sqr(four) * four);
-			}
-
+			} while (error > 1.e-10);
+			double four = x;
+			PRINT("%e %e %e %e\n", alpha, real, four, sqr(real) * real + sqr(four) * four);
 		}
+
+	}
 
 	/*	simd_double8 x;
 	 for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
 	 PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
 	 }*/
 
-	expansion<simd_float> D;
-	array<simd_float, NDIM> X;
+	expansion<double> D;
+	array<long double, NDIM> X;
 
 	std::atomic<int> i;
 	PRINT("%i\n", sizeof(rockstar_record));
@@ -81,7 +81,7 @@ int hpx_main(int argc, char *argv[]) {
 	FILE* fp = fopen("soft.txt", "wt");
 	for (double r = 0.0; r < 1.0; r += 0.01) {
 		float f, phi;
-		gsoft(f, phi,(float)(r*r), 1.0f, 1.0f, 1.0f, true);
+		gsoft(f, phi, (float) (r * r), 1.0f, 1.0f, 1.0f, true);
 		fprintf(fp, "%e %e %e\n", r, phi, f);
 	}
 	fclose(fp);
@@ -104,21 +104,10 @@ int hpx_main(int argc, char *argv[]) {
 
 		FILE* fp = fopen("ewald.txt", "wt");
 		X[0] = X[1] = X[2] = 0.00;
-		for (double x = 0.00; x < 0.5; x += 0.001) {
+		for (long double x = 0.00; x < 0.5; x += 0.000001) {
 			X[0] = x;
-			D = 0.0;
-			ewald_greens_function(D, X);
-			fprintf(fp, "%e ", x);
-			for (int n = 0; n < LORDER; n++) {
-				for (int m = 0; m < LORDER - n; m++) {
-					for (int l = 0; l < LORDER - n - m; l++) {
-						if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
-							continue;
-						}
-						fprintf(fp, "%e ", D(n, m, l)[0]);
-					}
-				}
-			}
+			fprintf(fp, "%Le ", x);
+			fprintf(fp, "%Le ", high_precision_ewald(X));
 			fprintf(fp, "\n");
 		}
 		fclose(fp);

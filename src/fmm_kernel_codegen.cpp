@@ -21,6 +21,7 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/tensor.hpp>
+#include <cosmictiger/math.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -57,15 +58,15 @@ int sym_index(int l, int m, int n) {
 	return (l + m + n) * (l + m + n + 1) * ((l + m + n) + 2) / 6 + (m + n) * ((m + n) + 1) / 2 + n;
 }
 
-
-#ifndef TREEPM
+#if !defined (TREEPM) || defined(FMMPM)
 
 int compute_dx(int P, const char* name = "X", bool trless = false, bool dble = false) {
 	array<int, NDIM> n;
 	tprint("%s x[%i];\n", dble ? "T" : "T", trless ? P * P + 1 : (P + 1) * P * (P + 2) / 6);
 	auto index = trless ? std::function<int(int, int, int)>([P](int x, int y, int z) {
-				return trless_index(x,y,z,P);
-			}) :std::function<int(int, int, int)>(sym_index);
+		return trless_index(x,y,z,P);
+	}) :
+									std::function<int(int, int, int)>(sym_index);
 	tprint("x[%i] = %s(1);\n", index(0, 0, 0), dble ? "T" : "T");
 	tprint("x[%i] = %s[0];\n", index(1, 0, 0), name);
 	tprint("x[%i] = %s[1];\n", index(0, 1, 0), name);
@@ -746,8 +747,8 @@ void do_expansion(bool two) {
 	}
 	for (auto& e : entries) {
 		std::sort(e.begin(), e.end(), [](entry a, entry b) {
-					return( a.factor < b.factor );
-				});
+			return( a.factor < b.factor );
+		});
 	}
 	double last_factor = 1.0;
 	tprint("if( do_phi ) {\n");
@@ -906,14 +907,14 @@ void do_expansion_cuda() {
 		}
 	}
 	std::sort(entries.begin(), entries.end(), [](entry a, entry b) {
-				if( a.Ldest < b.Ldest) {
-					return true;
-				} else if( a.Ldest > b.Ldest) {
-					return false;
-				} else {
-					return a.Lsource < b.Lsource;
-				}
-			});
+		if( a.Ldest < b.Ldest) {
+			return true;
+		} else if( a.Ldest > b.Ldest) {
+			return false;
+		} else {
+			return a.Lsource < b.Lsource;
+		}
+	});
 	vector<entry> entries1, entries2;
 	for (int i = 0; i < entries.size(); i++) {
 		//	if (i < (entries.size() + 1) / 2) {
@@ -1043,6 +1044,12 @@ void ewald(int direct_flops) {
 	tprint("ewald_const econst;\n");
 	tprint("flop_counter<int> flops = %i;\n", 7);
 	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
+/*	tprint("if( r < 0.05 ) {\n");
+	indent();
+	tprint("green_ewald_smallx( D, X );\n");
+	tprint("return 0;\n");
+	deindent();
+	tprint("}\n");*/
 	tprint("const T fouroversqrtpi = T(%.9e);\n", 4.0 / sqrt(M_PI));
 	tprint("tensor_sym<T, %i> Dreal;\n", P);
 	tprint("tensor_trless_sym<T,%i> Dfour;\n", P);
@@ -1050,26 +1057,26 @@ void ewald(int direct_flops) {
 	tprint("Dfour = 0.0f;\n");
 	tprint("D = 0.0f;\n");
 	tprint("const auto realsz = econst.nreal();\n");
-	tprint("const T zero_mask = r > T(0.0);\n");// 1
+	tprint("const T zero_mask = r > T(0.0);\n"); // 1
 	int these_flops = 0;
 
 	tprint("int icnt = 0;\n");
 
 	tprint("array<T, NDIM> dx;\n");
 	tprint("dx = X;\n");
-	tprint("{\n");// 1
-	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");// 5
+	tprint("{\n"); // 1
 	indent();
+	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n"); // 5
 	tprint("icnt++;\n");
-	tprint("const T r = sqrt(r2);\n");// 1
-	tprint("const T n8r = T(-8*SCALE_FACTOR_INV2) * r;\n");// 1
-	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");// 2
+	tprint("const T r = sqrt(r2);\n"); // 1
+	tprint("const T n8r = T(-8*SCALE_FACTOR_INV2) * r;\n"); // 1
+	tprint("const T rinv = (r > T(0)) / f_max(r, 1.0e-20);\n"); // 2
 	tprint("T exp0 = expnearzero( -T(4*SCALE_FACTOR_INV2) * r2 );\n");
 	tprint("T erf0 = erfnearzero(T(2*SCALE_FACTOR_INV1) * r);\n");
-	tprint("const T expfactor = T(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n");// 1
-	tprint("T e0 = expfactor * rinv;\n");// 1
-	tprint("const T rinv0 = T(1);\n");// 2
-	tprint("const T rinv1 = rinv;\n");// 2
+	tprint("const T expfactor = T(2.256758334191025*SCALE_FACTOR_INV1) * exp0;\n"); // 1
+	tprint("T e0 = expfactor * rinv;\n"); // 1
+	tprint("const T rinv0 = T(1);\n"); // 2
+	tprint("const T rinv1 = rinv;\n"); // 2
 	for (int l = 2; l < (P + 1) / 2; l++) {
 		const int i = l / 2;
 		const int j = l - i;
@@ -1119,20 +1126,20 @@ void ewald(int direct_flops) {
 	tprint("dx[dim] = X[dim] - T(SCALE_FACTOR) * n[dim];\n");                                // 3
 	deindent();
 	tprint("}\n");
-	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");// 5
-	tprint("if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");// 1
+	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");                                // 5
+	tprint("if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");                                // 1
 	indent();
-	tprint("icnt++;\n");// 1
-	tprint("const T r = sqrt(r2);\n");// 1
-	tprint("const T n8r = T(-8 * SCALE_FACTOR_INV2) * r;\n");// 1
-	tprint("const T rinv = (r > T(0)) / max(r, 1.0e-20);\n");// 2
+	tprint("icnt++;\n");                                // 1
+	tprint("const T r = sqrt(r2);\n");                                // 1
+	tprint("const T n8r = T(-8 * SCALE_FACTOR_INV2) * r;\n");                                // 1
+	tprint("const T rinv = (r > T(0)) / f_max(r, 1.0e-20);\n");                                // 2
 	tprint("T exp0;\n");
 	tprint("T erfc0;\n");
-	tprint("erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");// 20
-	tprint("const T expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;\n");// 1
-	tprint("T e0 = expfactor * rinv;\n");// 1
-	tprint("const T rinv0 = T(1);\n");// 2
-	tprint("const T rinv1 = rinv;\n");// 2
+	tprint("erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");                                // 20
+	tprint("const T expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;\n");                                // 1
+	tprint("T e0 = expfactor * rinv;\n");                                // 1
+	tprint("const T rinv0 = T(1);\n");                                // 2
+	tprint("const T rinv1 = rinv;\n");                                // 2
 	for (int l = 2; l < (P + 1) / 2; l++) {
 		const int i = l / 2;
 		const int j = l - i;
@@ -1178,7 +1185,7 @@ void ewald(int direct_flops) {
 	tprint("const auto& D0 = econst.four_expansion(i);\n");
 	tprint("const T hdotx = fmaf(h[0], X[0], fmaf(h[1], X[1], h[2] * X[2]));\n"); // 5
 	tprint("T cn, sn;\n");
-	tprint("sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n");// 35
+	tprint("sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n"); // 35
 	these_flops = 40;
 	bool iscos[P * P + 1];
 	for (k[0] = 0; k[0] < P; k[0]++) {
@@ -1205,12 +1212,155 @@ void ewald(int direct_flops) {
 	int those_flops = compute_detrace<P>("Dreal", "D", 'd');
 	those_flops += 16 + 3 * (P * P + 1);
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
-	tprint("D = D + Dfour;\n");// P*P+1
-	tprint("D[0] = T(%.9e * SCALE_FACTOR_INV1) + D[0]; \n", M_PI / 4.0);// 1
+	tprint("D = D + Dfour;\n"); // P*P+1
+	tprint("D[0] = T(%.9e * SCALE_FACTOR_INV1) + D[0]; \n", M_PI / 4.0); // 1
 	tprint("return flops;\n");
 	deindent();
 	tprint("}\n");
 
+}
+
+#define EWALD_ORDER 1
+
+void sort(int& i, int& j, int& k) {
+	if (i < j) {
+		std::swap(i, j);
+	}
+	if (j < k) {
+		std::swap(k, j);
+	}
+	if (i < j) {
+		std::swap(i, j);
+	}
+}
+
+void print_ewald_fmas(tensor_sym<double, EWALD_ORDER> coeffs, const char* name, int number) {
+	tprint("%s[%i] = 0.0f;\n", name, number);
+	for (int i = 0; i < EWALD_ORDER; i++) {
+		for (int j = 0; j < EWALD_ORDER; j++) {
+			for (int k = 0; k < EWALD_ORDER; k++) {
+				if (i + j + k >= EWALD_ORDER) {
+					continue;
+				}
+				const double val = coeffs(i, j, k);
+				if (fabs(val) > 1e-10) {
+					tprint("%s[%i] = fmaf( x%iy%iz%i, float(%.10e), %s[%i]);\n", name, number, i, j, k, val, name, number);
+				}
+			}
+		}
+	}
+
+}
+
+tensor_sym<tensor_sym<double, EWALD_ORDER>, ORDER> do_ewald_taylors() {
+	tensor_sym<tensor_sym<double, EWALD_ORDER>, ORDER> coeffs;
+	constexpr int Q = ORDER + EWALD_ORDER - 1;
+	tensor_sym<double, Q> D;
+	for (int i = 0; i < Q * (Q + 1) * (Q + 2) / 6; i++) {
+		D[i] = 0.0;
+	}
+	for (int n = 0; n < Q; n += 2) {
+		for (int m = 0; m < Q - n; m += 2) {
+			for (int l = 0; l < Q - n - m; l += 2) {
+				D(n, m, l) -= pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(2.0, n + m + l + 1) * double_factorial(m + l + n - 1);
+			}
+		}
+	}
+	array<double, Q> d;
+	array<int, NDIM> m, n;
+	for (int i = -4; i <= 4; i++) {
+		for (int j = -4; j <= 4; j++) {
+			for (int k = -4; k <= 4; k++) {
+				const double r2 = sqr(i, j, k);
+				const double r = sqrt(r2);
+				if (r < 3.6 && r > 0.0) {
+					const double n8r = -8.0 * r;
+					const double rinv = 1.0 / r;
+					const double exp0 = exp(-4.0 * r2);
+					const double erfc0 = erfc(2.0 * r);
+					const double expfactor = 4.0 / sqrt(M_PI) * exp0;
+					d[0] = -erfc0 * rinv;
+					double e0 = expfactor * rinv;
+					for (int l = 1; l < Q; l++) {
+						d[l] = std::fma(-(2 * l - 1) * rinv, d[l - 1], e0);
+						e0 *= n8r;
+					}
+					array<int, NDIM> n;
+					array<double, NDIM> vec;
+					vec[0] = i/sqrt(sqr(i,j,k));
+					vec[1] = j/sqrt(sqr(i,j,k));
+					vec[2] = k/sqrt(sqr(i,j,k));
+					const auto X = vector_to_sym_tensor<double, Q>(vec);
+
+					for (n[0] = 0; n[0] < Q; n[0] += 2) {
+						for (n[1] = 0; n[1] < Q - n[0]; n[1] += 2) {
+							for (n[2] = 0; n[2] < Q - n[0] - n[1]; n[2] += 2) {
+								const int n0 = n[0] + n[1] + n[2];
+								for (m[0] = 0; m[0] <= n[0] / 2; m[0]++) {
+									for (m[1] = 0; m[1] <= n[1] / 2; m[1]++) {
+										for (m[2] = 0; m[2] <= n[2] / 2; m[2]++) {
+											const int m0 = m[0] + m[1] + m[2];
+											double num = double(vfactorial(n));
+											double den = double((1 << m0) * vfactorial(m) * vfactorial(n - (m) * 2));
+											double factor = num / den;
+											const auto p = n - m * 2;
+											D(n[0], n[1], n[2]) = std::fma(factor * X(p[0], p[1], p[2]), d[n0 - m0] * pow(rinv, m0), D(n[0], n[1], n[2]));
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	auto D1 = D.detraceD();
+	D = 0.0;
+	for (int i = -3; i <= 3; i++) {
+		for (int j = -3; j <= 3; j++) {
+			for (int k = -3; k <= 3; k++) {
+				const double h2 = sqr(i, j, k);
+				if (h2 < 10.0 && h2 > 0.0) {
+					for (n[0] = 0; n[0] < Q; n[0] += 2) {
+						for (n[1] = 0; n[1] < Q - n[0]; n[1] += 2) {
+							for (n[2] = 0; n[2] < Q - n[0] - n[1]; n[2] += 2) {
+								if (n[2] > 2 || (n[2] == 2 && n[2] + n[0] + n[1] != 2)) {
+									//			continue;
+								}
+								const double kx = 2.0 * M_PI * i;
+								const double ky = 2.0 * M_PI * j;
+								const double kz = 2.0 * M_PI * k;
+								D(n[0], n[1], n[2]) -= pow(-1, (n[0] + n[1] + n[2]) / 2) * (1.0 / (h2 * M_PI)) * pow(kx, n[0]) * pow(ky, n[1]) * pow(kz, n[2])
+										* exp(-M_PI * M_PI * h2 * 0.25);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	D(0, 0, 0) += 7.853981633974483e-01;
+	auto D2 = D.detraceD();
+	const auto D3 = D1 + D2;
+	for (n[0] = 0; n[0] < EWALD_ORDER; n[0]++) {
+		for (n[1] = 0; n[1] < EWALD_ORDER - n[0]; n[1]++) {
+			for (n[2] = 0; n[2] < EWALD_ORDER - n[0] - n[1]; n[2]++) {
+//				coeffs(n[0], n[1], n[2]) = 0.0;
+				for (m[0] = 0; m[0] < ORDER; m[0]++) {
+					for (m[1] = 0; m[1] < ORDER - m[0]; m[1]++) {
+						for (m[2] = 0; m[2] < ORDER - m[0] - m[1]; m[2]++) {
+							const double num = 1.0;
+							const double den = (factorial(n[0]) * factorial(n[1]) * factorial(n[2]));
+							coeffs(m[0], m[1], m[2])(n[0], n[1], n[2]) = num / den * D3(n[0] + m[0], n[1] + m[1], n[2] + m[2]);
+							//						PRINT( "%i %i %i | %i %i %i | %e\n",n[0], n[1], n[2],m[0], m[1], m[2],coeffs(n[0], n[1], n[2])(m[0], m[1], m[2]) );
+						}
+					}
+				}
+			}
+		}
+	}
+	return coeffs;
 }
 
 int main() {
@@ -1252,14 +1402,65 @@ int main() {
 	tprint("using multipole = tensor_trless_sym<T,%i>;\n", P - 1);
 	tprint("#define EXPANSION_SIZE %i\n", P * P + 1);
 	tprint("#define MULTIPOLE_SIZE %i\n", (P - 1) * (P - 1) + 1);
+#ifdef FMMPM
+	const auto maxval = 1.0;
+#else
 	const auto maxval = 1000.0;
+#endif
 	tprint("#define SCALE_FACTOR %ef\n", maxval);
 	for (int n = 0; n <= P; n++) {
 		tprint("#define SCALE_FACTOR%i %ef\n", n, pow(maxval, n));
 		tprint("#define SCALE_FACTOR_INV%i %ef\n", n, 1.0 / pow(maxval, n));
 	}
+	array<int, NDIM> n;
 
-	tprint("\n\ntemplate<class T>\n");
+/*
+	auto ewald_coeffs = do_ewald_taylors();
+	tprint("\n");
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT inline void green_ewald_smallx( tensor_trless_sym<T, %i>& D, array<T,NDIM> X ) {\n", ORDER);
+	indent();
+	tprint("tensor_sym<T, %i> D0;\n", ORDER);
+
+	tprint("const float x0y0z0 = 1.0f;\n");
+	for (n[0] = 0; n[0] < EWALD_ORDER; n[0]++) {
+		for (n[1] = 0; n[1] < EWALD_ORDER; n[1]++) {
+			for (n[2] = 0; n[2] < EWALD_ORDER; n[2]++) {
+				if (sqr(n[0], n[1], n[2]) == 0) {
+					continue;
+				}
+				if (n[0] + n[1] + n[2] >= EWALD_ORDER) {
+					continue;
+				}
+				int dim;
+				if (n[2] >= 1) {
+					dim = ZDIM;
+				} else if (n[1] >= 1) {
+					dim = YDIM;
+				} else {
+					dim = XDIM;
+				}
+				auto k = n;
+				k[dim]--;
+				tprint("const float x%iy%iz%i = x%iy%iz%i * X[%i];\n", n[0], n[1], n[2], k[0], k[1], k[2], dim);
+			}
+		}
+	}
+
+//	void print_ewald_fmas(tensor_sym<double, EWALD_ORDER> coeffs, const char* name, int number) {
+	for (n[0] = 0; n[0] < ORDER; n[0]++) {
+		for (n[1] = 0; n[1] < ORDER - n[0]; n[1]++) {
+			for (n[2] = 0; n[2] < ORDER - n[0] - n[1]; n[2]++) {
+				print_ewald_fmas(ewald_coeffs(n[0], n[1], n[2]), "D0", sym_index(n[0], n[1], n[2]));
+			}
+		}
+	}
+	int those_flops = compute_detrace<P>("D0", "D", 'd');
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+*/
+	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT\n");
 	tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X, bool scale = true) {\n", P);
 	flops = 0;
@@ -1274,7 +1475,7 @@ int main() {
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("const T r = sqrt(r2);\n");
-	tprint("const T rinv1 = -(r > T(0)) / max(r, T(1e-20));\n");
+	tprint("const T rinv1 = -(r > T(0)) / f_max(r, T(1e-20));\n");
 	for (int i = 1; i < P; i++) {
 		const int j = i / 2;
 		const int k = i - j;
@@ -1305,14 +1506,13 @@ int main() {
 
 	ewald(flops);
 
-	array<int, NDIM> n;
 	array<int, NDIM> m;
 	for (int Pmax = 2; Pmax <= P; Pmax += P - 2) {
 		flops = 0;
 		tprint("\n\ntemplate<class T>\n");
 		tprint("CUDA_EXPORT\n");
 		tprint("inline int M2L(tensor_trless_sym<T, %i>& L, const tensor_trless_sym<T, %i>& M, const tensor_trless_sym<T, %i>& D, bool do_phi) {\n", Pmax,
-				P - 1, P);
+		P - 1, P);
 		indent();
 		int phi_flops = 0;
 		flops += const_reference_trless<P - 1>("M");
@@ -1470,7 +1670,7 @@ int main() {
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
 	tprint("tensor_trless_sym<T, %i> M2M(const tensor_trless_sym<T,%i>& Ma, array<T, NDIM>& X) {\n",
-			P - 1, P - 1);
+	P - 1, P - 1);
 	flops = 0;
 	indent();
 	tprint("tensor_sym<T, %i> Mb;\n", P - 1);
@@ -1525,8 +1725,8 @@ int main() {
 	}
 	for (auto& m : mentries) {
 		std::sort(m.begin(), m.end(), [](mentry a, mentry b) {
-					return a.factor > b.factor;
-				});
+			return a.factor > b.factor;
+		});
 	}
 	int total_size = 0;
 	for (int i = 0; i < mentries.size(); i++) {
@@ -1798,14 +1998,14 @@ void do_expansion_cuda() {
 		}
 	}
 	std::sort(entries.begin(), entries.end(), [](entry a, entry b) {
-		if( a.Ldest < b.Ldest) {
-			return true;
-		} else if( a.Ldest > b.Ldest) {
-			return false;
-		} else {
-			return a.Lsource < b.Lsource;
-		}
-	});
+				if( a.Ldest < b.Ldest) {
+					return true;
+				} else if( a.Ldest > b.Ldest) {
+					return false;
+				} else {
+					return a.Lsource < b.Lsource;
+				}
+			});
 	vector<entry> entries1, entries2;
 	for (int i = 0; i < entries.size(); i++) {
 		entries1.push_back(entries[i]);
@@ -1983,8 +2183,8 @@ void do_expansion(bool two) {
 	}
 	for (auto& e : entries) {
 		std::sort(e.begin(), e.end(), [](entry a, entry b) {
-			return( a.factor < b.factor );
-		});
+					return( a.factor < b.factor );
+				});
 	}
 	double last_factor = 1.0;
 	tprint("if( do_phi ) {\n");
@@ -2101,11 +2301,11 @@ void create_fma_function(const vector<pair<float, int>>& coeffs) {
 	}
 
 	std::sort(pc.begin(), pc.end(), [](pair<float, int> a, pair<float, int> b) {
-		return a.second > b.second;
-	});
+				return a.second > b.second;
+			});
 	std::sort(nc.begin(), nc.end(), [](pair<float, int> a, pair<float, int> b) {
-		return a.second < b.second;
-	});
+				return a.second < b.second;
+			});
 	if (pc.size()) {
 		tprint("y = float(%e);\n", pc[0].first);
 		for (int i = 1; i < pc.size(); i++) {
@@ -2190,12 +2390,12 @@ int main() {
 //	deindent();
 //	tprint("}\n");
 
-	tprint("D = T(0);\n"); // 5
-	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n"); // 5
-	tprint("const T r = sqrt(r2);\n"); // 1
-	tprint("const T rinv = 1.f / r;\n"); // 2
-	tprint("const T rinv0 = T(1);\n"); // 2
-	tprint("const T rinv1 = rinv;\n"); // 2
+	tprint("D = T(0);\n");// 5
+	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");// 5
+	tprint("const T r = sqrt(r2);\n");// 1
+	tprint("const T rinv = 1.f / r;\n");// 2
+	tprint("const T rinv0 = T(1);\n");// 2
+	tprint("const T rinv1 = rinv;\n");// 2
 	for (int l = 2; l < (P + 1) / 2; l++) {
 		const int i = l / 2;
 		const int j = l - i;
@@ -2216,7 +2416,7 @@ int main() {
 	compute_dx<P>("dxrinv");
 	compute_detrace_ewald("x", "D");
 	//tprint("D[0] += T(%.9e) * rsinv2; \n", 0.25 * M_PI);                                                // 1
-	tprint("return 0; \n", M_PI);                                                // 1
+	tprint("return 0; \n", M_PI);// 1
 	deindent();
 	tprint("}\n");
 
@@ -2227,7 +2427,7 @@ int main() {
 		tprint("\n\ntemplate<class T>\n");
 		tprint("CUDA_EXPORT\n");
 		tprint("inline int M2L(tensor_sym<T, %i>& L, const tensor_sym<T, %i>& M, const tensor_sym<T, %i>& D, bool do_phi) {\n", Pmax,
-		P - 1, P);
+				P - 1, P);
 		indent();
 		int phi_flops = 0;
 		n[0] = n[1] = n[2] = 0;
@@ -2409,7 +2609,7 @@ int main() {
 	tprint("\n\ntemplate<class T>\n");
 	tprint("CUDA_EXPORT\n");
 	tprint("tensor_sym<T, %i> M2M(const tensor_sym<T,%i>& Ma, array<T, NDIM>& X) {\n",
-	P - 1, P - 1);
+			P - 1, P - 1);
 	flops = 0;
 	indent();
 	tprint("auto Mb = Ma;\n", P - 1);
@@ -2454,8 +2654,8 @@ int main() {
 	}
 	for (auto& m : mentries) {
 		std::sort(m.begin(), m.end(), [](mentry a, mentry b) {
-			return a.factor > b.factor;
-		});
+					return a.factor > b.factor;
+				});
 	}
 	int total_size = 0;
 	for (int i = 0; i < mentries.size(); i++) {
@@ -2524,24 +2724,24 @@ int main() {
 #ifdef USE_CUDA
 	do_expansion_cuda<P>();
 #endif
-/*
-	vector<pair<float, int>> coeffs1;
-	coeffs1.push_back(pair<float, int>(14.0 / 5.0, 0));
-	coeffs1.push_back(pair<float, int>(-16.0 / 3.0, 2));
-	coeffs1.push_back(pair<float, int>(48.0 / 5.0, 4));
-	coeffs1.push_back(pair<float, int>(-32.0 / 5.0, 5));
-	vector<pair<float, int>> coeffs2;
-	coeffs2.push_back(pair<float, int>(16.0 / 5.0, 0));
-	coeffs2.push_back(pair<float, int>(-1.0 / 15.0, -1));
-	coeffs2.push_back(pair<float, int>(-32.0 / 3.0, 2));
-	coeffs2.push_back(pair<float, int>(16.0, 3));
-	coeffs2.push_back(pair<float, int>(-48.0 / 5.0, 4));
-	coeffs2.push_back(pair<float, int>(32.0 / 15.0, 5));
+	/*
+	 vector<pair<float, int>> coeffs1;
+	 coeffs1.push_back(pair<float, int>(14.0 / 5.0, 0));
+	 coeffs1.push_back(pair<float, int>(-16.0 / 3.0, 2));
+	 coeffs1.push_back(pair<float, int>(48.0 / 5.0, 4));
+	 coeffs1.push_back(pair<float, int>(-32.0 / 5.0, 5));
+	 vector<pair<float, int>> coeffs2;
+	 coeffs2.push_back(pair<float, int>(16.0 / 5.0, 0));
+	 coeffs2.push_back(pair<float, int>(-1.0 / 15.0, -1));
+	 coeffs2.push_back(pair<float, int>(-32.0 / 3.0, 2));
+	 coeffs2.push_back(pair<float, int>(16.0, 3));
+	 coeffs2.push_back(pair<float, int>(-48.0 / 5.0, 4));
+	 coeffs2.push_back(pair<float, int>(32.0 / 15.0, 5));
 
-	auto deriv2 = green_derivs(coeffs2);
-	auto deriv1 = green_derivs(coeffs1);
-	create_fma_function(deriv2[2]);
-*/
+	 auto deriv2 = green_derivs(coeffs2);
+	 auto deriv1 = green_derivs(coeffs1);
+	 create_fma_function(deriv2[2]);
+	 */
 }
 
 #endif
