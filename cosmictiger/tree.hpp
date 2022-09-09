@@ -169,7 +169,11 @@ struct tree_node {
 };
 
 struct tree_create_return {
+#ifdef FMMPM
+	pm_multipole<double> multi;
+#else
 	multipole<float> multi;
+#endif
 	array<fixed32, NDIM> pos;
 	tree_id id;
 	float radius;

@@ -46,10 +46,14 @@
 
 struct cuda_kick_params {
 	array<fixed32, NDIM> Lpos;
+#ifdef FMMPM
+	pm_expansion<double> L;
+#else
 	expansion<float> L;
+#endif
 	int self;
 	int* dchecks;
-#ifndef TREEPM
+#ifdef FMM
 	int* echecks;
 	int ecount;
 #endif
@@ -207,7 +211,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	auto& sparams = shmem.params;
 	auto& L = shmem.L;
 	auto& dchecks = shmem.dchecks;
-#ifndef TREEPM
+#ifdef FMM
 	auto& echecks = shmem.echecks;
 #endif
 	auto& nextlist = shmem.nextlist;
@@ -232,22 +236,30 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 	index = __shfl_sync(0xFFFFFFFF, index, 0);
 	__syncthreads();
 	kick_return kr;
+#ifdef FMMPM
+	pm_expansion<double> pm_L;
+	array<double, NDIM> pm_Lpos;
+#endif
 	while (index < item_count) {
 		flop_counter<int> flops = 0;
 		L.resize(0);
 		dchecks.resize(0);
-#ifndef TREEPM
+#ifdef FMM
 		echecks.resize(0);
 #endif
 		sparams.resize(0);
 		{
 			expansion_type this_L;
 			this_L.pos = params[index].Lpos;
+#ifdef FMMPM
+			this_L.expansion = 0.0f;
+#else
 			this_L.expansion = params[index].L;
+#endif
 			L.push_back(this_L);
 		}
 		dchecks.resize(params[index].dcount);
-#ifndef TREEPM
+#ifdef FMM
 		echecks.resize(params[index].ecount);
 		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
 			echecks[i] = params[index].echecks[i];
@@ -262,6 +274,13 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			sparam.self = params[index].self;
 			sparams.push_back(sparam);
 		}
+#ifdef FMMPM
+		pm_L = params[index].L;
+		for (int dim = 0; dim < NDIM; dim++) {
+			pm_Lpos[dim] = params[index].Lpos[dim].to_double();
+		}
+
+#endif
 		__syncwarp();
 		int depth = 0;
 		while (depth >= 0) {
@@ -295,11 +314,23 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 #else
 						f.phi = self_phi() * hinv;
 #endif
+#ifdef FMMPM
+						array<double, NDIM> dx;
+						for (int dim = 0; dim < NDIM; dim++) {
+							dx[dim] = data.x[l].to_double() - pm_Lpos[dim];
+						}
+						auto L2 = pm_L2P(pm_L, dx, global_params.do_phi);
+						f.phi += L2(0, 0, 0);
+						f.gx -= L2(1, 0, 0);
+						f.gy -= L2(0, 1, 0);
+						f.gz -= L2(0, 0, 1);
+#endif
+
 					}
 				}
 				__syncwarp();
 				if (nsinks) {
-#ifndef TREEPM
+#ifdef FMM
 					constexpr int EWALD = 0;
 					constexpr int DIRECT = 1;
 					for (int type = 0; type < 2; type++) {
@@ -317,10 +348,10 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					constexpr int NLISTS = 5;
 					array<bool, NLISTS> sw;
 					device_vector<int>* lists[NLISTS] = { &cclist, &leaflist, &cplist, &pclist, &nextlist };
-#ifdef TREEPM
-					auto& checks = dchecks;
-#else
+#ifdef FMM
 					auto& checks = type == DIRECT ? dchecks : echecks;
+#else
+					auto& checks = dchecks;
 #endif
 					const float thetainv = 1.f / global_params.theta;
 					do {
@@ -336,7 +367,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
 									}
 									float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-#ifndef TREEPM
+#ifdef FMM
 									if (type == EWALD) {
 										R2 = fmaxf(R2, sqr(fmaxf(0.5f - other.radius - self.radius, 0.f)));
 									}
@@ -400,7 +431,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						__syncwarp();
 
 					} while (checks.size() && self.leaf);
-#ifndef TREEPM
+#ifdef FMM
 					if (type == EWALD) {
 						if (self.leaf) {
 							__syncwarp();
@@ -432,7 +463,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
 						barrier.arrive_and_wait();
 					}
-#ifndef TREEPM
+#ifdef FMM
 				}
 			}
 #endif
@@ -455,7 +486,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 					}
 					__syncwarp();
 					dchecks.push_top();
-#ifndef TREEPM
+#ifdef FMM
 					echecks.push_top();
 #endif
 					sparams.back().phase += 1;
@@ -474,7 +505,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			case 1: {
 				L.pop_back();
 				dchecks.pop_top();
-#ifndef TREEPM
+#ifdef FMM
 				echecks.pop_top();
 #endif
 				sparams.back().phase += 1;
@@ -531,7 +562,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	int ecount = 0;
 	for (int i = 0; i < workitems.size(); i++) {
 		dcount += workitems[i].dchecklist.size();
-#ifndef TREEPM
+#ifdef FMM
 		ecount += workitems[i].echecklist.size();
 #endif
 	}
@@ -552,7 +583,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	offset += sizeof(cuda_kick_params) * workitems.size();
 	int* dchecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * dcount;
-#ifndef TREEPM
+#ifdef FMM
 	int* echecks = (int*) (data_ptr + offset);
 	offset += sizeof(int) * ecount;
 #endif
@@ -565,7 +596,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	offset += sizeof(cuda_kick_params) * workitems.size();
 	int* dev_dchecks = (int*) (dev_data_ptr + offset);
 	offset += sizeof(int) * dcount;
-#ifndef TREEPM
+#ifdef FMM
 	int* dev_echecks = (int*) (dev_data_ptr + offset);
 	offset += sizeof(int) * ecount;
 #endif
@@ -574,21 +605,21 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	*current_index = 0;
 	*return_ = kick_return();
 	vector<int> dindices(workitems.size() + 1);
-#ifndef TREEPM
+#ifdef FMM
 	vector<int> eindices(workitems.size() + 1);
 #endif
 	dcount = 0;
 	ecount = 0;
 	for (int i = 0; i < workitems.size(); i++) {
 		dindices[i] = dcount;
-#ifndef TREEPM
+#ifdef FMM
 		eindices[i] = ecount;
 #endif
 		for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
 			dchecks[dcount] = workitems[i].dchecklist[j].index;
 			dcount++;
 		}
-#ifndef TREEPM
+#ifdef FMM
 		for (int j = 0; j < workitems[i].echecklist.size(); j++) {
 			echecks[ecount] = workitems[i].echecklist[j].index;
 			ecount++;
@@ -597,7 +628,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 	}
 
 	dindices[workitems.size()] = dcount;
-#ifndef TREEPM
+#ifdef FMM
 	eindices[workitems.size()] = ecount;
 #endif
 	cuda_kick_data data;
@@ -622,7 +653,7 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		params.L = workitems[i].L;
 		params.self = workitems[i].self.index;
 		params.dchecks = dev_dchecks + dindices[i];
-#ifndef TREEPM
+#ifdef FMM
 		params.echecks = dev_echecks + eindices[i];
 		params.ecount = eindices[i + 1] - eindices[i];
 #endif

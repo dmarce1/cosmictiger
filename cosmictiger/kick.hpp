@@ -192,11 +192,15 @@ struct kick_params {
 };
 
 struct kick_workitem {
+#ifdef FMMPM
+	pm_expansion<double> L;
+#else
 	expansion<float> L;
+#endif
 	array<fixed32, NDIM> pos;
 	tree_id self;
 	vector<tree_id> dchecklist;
-#ifndef TREEPM
+#ifdef FMM
 	vector<tree_id> echecklist;
 #endif
 };

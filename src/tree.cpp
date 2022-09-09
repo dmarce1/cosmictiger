@@ -281,7 +281,11 @@ long long tree_nodes_next_index() {
 
 tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
 		bool local_root) {
-
+#ifdef FMMPM
+	constexpr int multi_size = PM_MULTIPOLE_SIZE;
+#else
+	constexpr int multi_size = MULTIPOLE_SIZE;
+#endif
 #ifndef TREEPM
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
@@ -322,7 +326,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 #endif
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM>& x = rc.pos;
+#ifdef FMMPM
+	pm_multipole<double>& multi = rc.multi;
+#else
 	multipole<float>& multi = rc.multi;
+#endif
 	auto& rbox = rc.box;
 	float& radius = rc.radius;
 	array<double, NDIM> Xc;
@@ -531,8 +539,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			x[dim] = Xc[dim];															// 3
 		}
 		array<simd_double, NDIM> mdx;
-		multipole<simd_double> simdM;
-		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+		pm_multipole<simd_double> simdM;
+		for (int i = 0; i < multi_size; i++) {
 			simdM[i][LEFT] = ml[i];
 			simdM[i][RIGHT] = mr[i];
 		}
@@ -541,10 +549,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			mdx[dim][RIGHT] = Xr[dim] - Xc[dim];                // 3
 		}
 		simdM = M2M<simd_double>(simdM, mdx);
-		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+		for (int i = 0; i < multi_size; i++) {
 			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
 		}
-		flops += 2421 + MULTIPOLE_SIZE * 2;
+		flops += 2421 + multi_size * 2;
 		children[LEFT] = rcl.id;
 		children[RIGHT] = rcr.id;
 	} else {
@@ -578,7 +586,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		radius = std::sqrt(r);
 		children[LEFT].index = children[RIGHT].index = -1;
 		multipole<double> M;
-		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+		for (int i = 0; i < multi_size; i++) {
 			M[i] = 0.0;
 		}
 		array<double, NDIM> dx;
@@ -587,7 +595,35 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (int dim = 0; dim < NDIM; dim++) {
 			Y[dim] = fixed32(Xc[dim]).raw();
 		}
-
+#ifdef FMMPM
+		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
+			array<simd_int, NDIM> X;
+			simd_double8 mask;
+			const part_int maxj = std::min(i + SIMD_FLOAT_SIZE, part_range.second);
+			for (part_int j = i; j < maxj; j++) {
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim][j - i] = particles_pos(dim, j).raw();
+				}
+				mask[j - i] = 1.0f;
+			}
+			for (part_int j = maxj; j < i + SIMD_FLOAT8_SIZE; j++) {
+				mask[j - i] = 0.f;
+				for (int dim = 0; dim < NDIM; dim++) {
+					X[dim][j - i] = particles_pos(dim, maxj - 1).raw();
+				}
+			}
+			array < simd_double8, NDIM > dx;
+			for (int dim = 0; dim < NDIM; dim++) {
+				dx[dim] = simd_double8(X[dim] - Y[dim]) * fixed2double;        // 3
+			}
+			auto m = P2M(dx);                                         // 211
+			for (int j = 0; j < multi_size; j++) {
+				m[j] *= mask;                                          // multi_size
+				M[j] += m[j].sum();                                    // multi_size * 6
+			}
+			flops += 214 + multi_size * 7;
+		}
+#else
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
 			array<simd_int, NDIM> X;
 			simd_float mask;
@@ -609,13 +645,14 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;        // 3
 			}
 			auto m = P2M(dx);                                         // 211
-			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-				m[j] *= mask;                                          // MULTIPOLE_SIZE
-				M[j] += m[j].sum();                                    // MULTIPOLE_SIZE * 6
+			for (int j = 0; j < multi_size; j++) {
+				m[j] *= mask;                                          // multi_size
+				M[j] += m[j].sum();                                    // multi_size * 6
 			}
-			flops += 214 + MULTIPOLE_SIZE * 7;
+			flops += 214 + multi_size * 7;
 		}
-		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
+#endif
+		for (int i = 0; i < multi_size; i++) {
 			multi[i] = M[i];
 		}
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -631,7 +668,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.pos = x;
 	node.mpos = multis + index;
 	node.mpos->pos = x;
-	node.mpos->multi = multi;
+	node.mpos->multi = M2M<float,double>(multi);
 	node.depth = depth;
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = rbox.begin[dim];

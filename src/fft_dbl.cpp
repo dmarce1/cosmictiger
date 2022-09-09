@@ -167,7 +167,7 @@ void fft3d_dbl_inv_execute() {
 
 }
 
-power_spectrum_t fft3d_dbl_power_spectrum() {
+power_spectrum_dbl_t fft3d_dbl_power_spectrum() {
 	vector<double> kbins;
 	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	const int Nfour = get_options().Nfour;
@@ -185,7 +185,7 @@ power_spectrum_t fft3d_dbl_power_spectrum() {
 	const auto& count = pr.c;
 	auto& power = pr.p;
 	auto& ks = pr.k;
-	power_spectrum_t ret;
+	power_spectrum_dbl_t ret;
 	ret.P.resize(kbins.size() - 1);
 	ret.k.resize(kbins.size() - 1);
 	ret.Perr.resize(kbins.size() - 1, 0.0);

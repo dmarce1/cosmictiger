@@ -37,13 +37,13 @@ void fft3d_dbl_force_real();
 range<int64_t> fft3d_dbl_real_range();
 vector<complex<double>>& fft3d_dbl_complex_vector();
 
-struct power_spectrum_t {
+struct power_spectrum_dbl_t {
 	vector<double> P;
 	vector<double> k;
 	vector<double> Perr;
 };
 
-power_spectrum_t fft3d_dbl_power_spectrum();
+power_spectrum_dbl_t fft3d_dbl_power_spectrum();
 void fft3d_dbl2silo(bool real);
 
 

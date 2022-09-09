@@ -549,6 +549,11 @@ public:
 		b.v[1] = _mm256_sqrt_pd(a.v[1]);
 		return b;
 	}
+	double sum() const {
+		double s = v[0][0] + v[0][1] + v[0][2] + v[0][3];
+		s += v[1][0] + v[1][1] + v[1][2] + v[1][3];
+		return s;
+	}
 
 };
 

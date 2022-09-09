@@ -293,6 +293,7 @@ void kick_workspace::to_gpu() {
 						workitems[i].dchecklist[j].index = iter->second;
 					}
 				}
+#ifdef FMM
 				for (int j = 0; j < workitems[i].echecklist.size(); j++) {
 					if( workitems[i].echecklist[j].proc != hpx_rank()) {
 						const auto iter = tree_map.find(workitems[i].echecklist[j]);
@@ -300,6 +301,7 @@ void kick_workspace::to_gpu() {
 						workitems[i].echecklist[j].index = iter->second;
 					}
 				}
+#endif
 			}
 		}));
 	}
@@ -350,7 +352,7 @@ void kick_workspace::clear_buffers() {
 
 void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> && dchecks,
 		vector<tree_id> && echecks) {
-#ifndef TREEPM
+#ifdef FMM
 	kick_workitem item;
 	item.L = L;
 	item.pos = pos;
