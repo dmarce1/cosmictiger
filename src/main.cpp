@@ -35,7 +35,10 @@
 #include <cosmictiger/gravity.hpp>
 #include <cmath>
 
+#include <fenv.h>
+
 int hpx_main(int argc, char *argv[]) {
+
 	{
 		double toler = 1.19e-7 / sqrt(2);
 		double norm = 2.83;
@@ -125,6 +128,10 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
+	feenableexcept (FE_DIVBYZERO);
+	feenableexcept (FE_INVALID);
+	feenableexcept (FE_OVERFLOW);
+
 	PRINT("STARTING MAIN\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
 	cfg.push_back("hpx.stacks.small_size=524288");

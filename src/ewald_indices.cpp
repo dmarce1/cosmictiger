@@ -175,7 +175,7 @@ long double high_precision_ewald(const array<long double, NDIM>& X) {
 		long double r = sqrtl(r2);
 		long double erf0 = erfl(2.0l * r);
 		long double exp0 = expl(-4.0l * r2);
-		phi += erf0 / r;
+		phi += r > 0.0L ? erf0 / r : 4.0L / sqrtl(pi);
 	}
 	for (h[0] = -3; h[0] <= 3; h[0]++) {
 		for (h[1] = -3; h[1] <= 3; h[1]++) {

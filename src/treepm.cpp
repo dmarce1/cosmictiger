@@ -622,18 +622,21 @@ void treepm_green_init(int Nres) {
 						J[dim] = (I[dim] < Nres / 2 ? I[dim] : I[dim] - Nres);
 						x[dim] = (double) J[dim] / Nres;
 					}
-					long double phi_ewald = high_precision_ewald(x);
-					long double phi_direct = -1.0l / sqrtl(sqr(x[XDIM],x[YDIM],x[YDIM]));
-					long double phi = phi_ewald;
+					long double phi = high_precision_ewald(x);
 					int dist2 = 0;
 					for( int dim = 0; dim < NDIM; dim++) {
-						dist2 += sqr(std::min(std::abs(J[dim]-0.999999),0.0));
+						dist2 += sqr(std::max(std::abs(J[dim]) - 0.999999, 0.0));
 					}
 					if( dist2 >= sqr(nbnd)) {
-						phi += phi_direct;
+						const long double r2 = sqr(x[XDIM],x[YDIM],x[ZDIM]);
+					//	if( r == 0.0 ) {
+					//		PRINT( "%i %i\n",dist2, nbnd);
+					//	}
+						phi += -1.0l / sqrtl(r2);
 					}
 					const auto index = box.index(I);
 					R[index] = phi;
+
 				}
 			}}, I));
 	}
@@ -666,10 +669,12 @@ void treepm_green_save(int Nres) {
 					const auto index = box.index(I);
 					for( int n = 1; n < PM_EXPANSION_SIZE; n++) {
 						D_k[n][index] = D_k[0][index] * kk_trless[n];
-					}
+						//	PRINT( "%e %e\n", D_k[0][index].real(),  kk_trless[n].real());
 
-				}
-			}}, I));
+			}
+
+		}
+	}}, I));
 	}
 	hpx::wait_all(futs1.begin(), futs1.end());
 }

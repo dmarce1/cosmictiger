@@ -78,6 +78,21 @@ HPX_PLAIN_ACTION (dbl_update);
 HPX_PLAIN_ACTION (dbl_power_spectrum_compute);
 HPX_PLAIN_ACTION (dbl_power_spectrum_compute2);
 
+#include <fenv.h>
+
+void enable_exceptions() {
+/*	vector<hpx::future<void>> futs;
+	for (int i = 0; i < hpx_hardware_concurrency(); i++) {
+		futs.push_back(hpx::async([]() {
+			feenableexcept (FE_DIVBYZERO);
+			feenableexcept (FE_INVALID);
+			feenableexcept (FE_OVERFLOW);
+
+		}));
+	}
+	hpx::wait_all(futs.begin(), futs.end());*/
+}
+
 void fft3d_dbl2silo(bool real) {
 	if (real) {
 		DBfile *db = DBCreateReal("real.silo", DB_CLOBBER, DB_LOCAL, "", DB_PDB);
@@ -133,6 +148,7 @@ void fft3d_dbl2silo(bool real) {
 }
 
 void fft3d_dbl_execute() {
+	enable_exceptions();
 //	PRINT("FFT z\n");
 	fft3d_dbl_phase1();
 //	PRINT("Transpose y-z\n");
@@ -151,6 +167,7 @@ void fft3d_dbl_execute() {
 }
 
 void fft3d_dbl_inv_execute() {
+	enable_exceptions();
 //	PRINT("Transpose z-x\n");
 	dbl_transpose(0, 2);
 //	PRINT("inv FFT x\n");
@@ -359,7 +376,6 @@ range<int64_t> fft3d_dbl_real_range() {
 vector<complex<double>>& fft3d_dbl_complex_vector() {
 	return Y;
 }
-
 
 vector<double> fft3d_dbl_read_real(const range<int64_t>& this_box) {
 	vector<hpx::future<void>> futs;
@@ -651,12 +667,14 @@ static void fft3d_dbl_phase1() {
 			for (i[1] = real_mybox.begin[1]; i[1] != real_mybox.end[1]; i[1]++) {
 				for (i[2] = 0; i[2] != N; i[2]++) {
 					in[i[2]] = R[real_mybox.index(i)];
+
 				}
 				fftw_execute(p);
 				for (i[2] = 0; i[2] < N / 2 + 1; i[2]++) {
 					const int64_t l = cmplx_mybox[ZDIM].index(i);
 					Y[l].real() = out[i[2]][0];
 					Y[l].imag() = out[i[2]][1];
+
 				}
 			}
 			lock.lock();
@@ -745,6 +763,7 @@ static void fft3d_dbl_phase3() {
 				fftw_execute(p);
 				for (i[2] = 0; i[2] != N; i[2]++) {
 					R[real_mybox.index(i)] = out[i[2]] * Ninv;
+
 				}
 			}
 			lock.lock();

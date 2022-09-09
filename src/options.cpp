@@ -174,7 +174,9 @@ bool process_options(int argc, char *argv[]) {
 	opts.eta /= sqrt(self_phi());
 	opts.nparts = sqr(opts.parts_dim) * opts.parts_dim;
 	opts.Nfour = opts.parts_dim;
+#ifdef TREEPM
 	opts.p3m_chainnbnd = lround(ceil(opts.p3m_chainnbnd * opts.p3m_rs));
+#endif
 	if (opts.close_pack) {
 		opts.nparts *= 2;
 //		opts.Nfour *= 2;
