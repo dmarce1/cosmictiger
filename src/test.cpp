@@ -358,7 +358,7 @@ static void force_test() {
 		domains_begin(0);
 		domains_end();
 		particles_sort_by_rung(0);
-#ifndef TREEPM
+#ifdef FMM
 		tree_create_params tparams(0, thetas[iter], get_options().hsoft);
 		tree_create(tparams);
 #endif
@@ -374,7 +374,7 @@ static void force_test() {
 		kparams.min_rung = 0;
 		kparams.t0 = 1.0;
 		kparams.theta = thetas[iter];
-#ifdef TREEPM
+#ifndef FMM
 		treepm_kick(kparams);
 		view_output_views(0.0,1.0);
 

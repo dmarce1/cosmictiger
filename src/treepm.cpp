@@ -129,21 +129,16 @@ HPX_PLAIN_ACTION (treepm_short_range);
 
 kick_return treepm_kick(kick_params params) {
 	kick_return kr;
-#ifdef TREEPM
 	const auto& opts = get_options();
-	const auto nparts = particles_active_count();
 	int i;
 	for (i = 2; pow(i, NDIM) / hpx_size() < 32 * 32 * 32; i += 2) {
 	}
 	const int Nres = i;
-//	for (i = 2; nparts * pow(i * opts.p3m_Nmin, -NDIM) > opts.p3m_chainres; i++) {
-//	}
-//	i--;
-//	const int Nres = i * opts.p3m_Nmin;
 	const double rs = opts.p3m_rs / Nres;
-
 	params.theta = get_options().theta;
+#ifdef TREEPM
 	params.phi0 = green_phi0(nparts, rs);
+#endif
 	timer tm;
 	PRINT("Doing chainmesh\n");
 	tm.start();
@@ -161,7 +156,7 @@ kick_return treepm_kick(kick_params params) {
 	PRINT("Doing long range\n");
 	tm.reset();
 	tm.start();
-	treepm_long_range(Nres, nparts, params.do_phi);
+	treepm_long_range(Nres, get_options().nparts, params.do_phi);
 	tm.stop();
 	PRINT("took %e s\n", tm.read());
 
@@ -176,7 +171,6 @@ kick_return treepm_kick(kick_params params) {
 	PRINT("-----> %e\n", tm2.read());
 	tm.stop();
 	PRINT("took %e s\n", tm.read());
-#endif
 	return kr;
 }
 
@@ -563,6 +557,9 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 	const int Nbnd = get_options().p3m_chainnbnd;
 	fft3d_dbl_init(Nres);
 	if (!green_init) {
+		timer tm;
+		tm.start();
+		PRINT("Initializing greens function\n");
 		green_init = true;
 		const auto rsz = treepm_get_fourier_box(Nres).volume();
 		const auto csz = fft3d_dbl_complex_range().volume();
@@ -578,6 +575,8 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 		treepm_green_save(Nres);
 		fft3d_dbl_destroy();
 		fft3d_dbl_init(Nres);
+		tm.stop();
+		PRINT("Done in %e\n", tm.read());
 	}
 	for (int n = 0; n < PM_MULTIPOLE_SIZE; n++) {
 		fft3d_dbl_init(Nres);
@@ -594,7 +593,7 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 				}
 				fft3d_dbl_init(Nres);
 				treepm_expansion_init(n, m, l, Nres);
-				fft3d_dbl_execute();
+				fft3d_dbl_inv_execute();
 				treepm_expansion_save(n, m, l, Nres);
 				fft3d_dbl_destroy();
 			}
@@ -697,6 +696,30 @@ void treepm_multi_save(int n, int Nres) {
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 
+complex<double> M_k_sym(int n, int m, int l, int i) {
+	if (l > 1) {
+		if (l == 2 && n == 0 && m == 0) {
+			return M_k[trless_index(n, m, l, PM_ORDER - 1)][i];
+		} else {
+			return -M_k_sym(n + 2, m, l - 2, i) - M_k_sym(n, m + 2, l - 2, i);
+		}
+	} else {
+		return M_k[trless_index(n, m, l, PM_ORDER - 1)][i];
+	}
+}
+
+complex<double> D_k_sym(int n, int m, int l, int i) {
+	if (l > 1) {
+		if (l == 2 && n == 0 && m == 0) {
+			return D_k[trless_index(n, m, l, PM_ORDER)][i];
+		} else {
+			return -D_k_sym(n + 2, m, l - 2, i) - D_k_sym(n, m + 2, l - 2, i);
+		}
+	} else {
+		return D_k[trless_index(n, m, l, PM_ORDER)][i];
+	}
+}
+
 void treepm_expansion_init(int nx, int ny, int nz, int Nres) {
 	vector<hpx::future<void>> futs1;
 	vector<hpx::future<void>> futs2;
@@ -723,17 +746,13 @@ void treepm_expansion_init(int nx, int ny, int nz, int Nres) {
 				const double coeff = 1.0 / vfactorial(m);
 				const int nthreads = hpx_hardware_concurrency();
 				futs2.resize(0);
-				const int mi = trless_index(m[0], m[1], m[2], (PM_ORDER - 1));
 				const int li = trless_index(n[0], n[1], n[2], PM_ORDER);
-				const int di = trless_index(n[0] + m[0], n[1] + m[1], n[2] + m[2], PM_ORDER);
 				for (int proc = 0; proc < nthreads; proc++) {
-					futs2.push_back(hpx::async([proc,nthreads,coeff,mi,di,&Y,li]() {
+					futs2.push_back(hpx::async([proc,nthreads,coeff,&Y,m,n,li]() {
 						const auto b = (size_t) proc * Y.size() / nthreads;
 						const auto e = (size_t) (proc + 1) * Y.size() / nthreads;
-						const auto& m = M_k[mi];
-						const auto& d = D_k[di];
 						for( size_t i = b; i < e; i++) {
-							Y[i] += m[i] * d[i] * coeff;
+							Y[i] += M_k_sym(m[0], m[1],m[2], i) * D_k_sym(m[0]+n[0], m[1]+n[1],m[2]+n[2], i) * coeff;
 						}
 					}));
 
@@ -749,12 +768,12 @@ void treepm_expansion_init(int nx, int ny, int nz, int Nres) {
 
 void treepm_expansion_save(int n, int m, int l, int Nres) {
 	vector<hpx::future<void>> futs1;
-	const int nbnd = get_options().p3m_chainnbnd;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_expansion_save_action>(c, n, m, l, Nres));
 	}
 	const auto box = treepm_get_fourier_box(Nres);
-	L_x(n, m, l) = fft3d_dbl_read_real(box);
+	auto L = fft3d_dbl_read_real(box);
+	L_x(n, m, l) = L;
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 

@@ -164,7 +164,7 @@ tree_allocator::~tree_allocator() {
 	allocator_mtx--;
 }
 tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax_) {
-#ifndef TREEPM
+#ifdef FMM
 	theta = theta_;
 	min_rung = min_rung_;
 	min_level = 9;
@@ -174,7 +174,7 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 #endif
 }
 
-#ifdef TREEPM
+#ifndef FMM
 tree_create_params::tree_create_params() {
 }
 #endif
@@ -182,7 +182,7 @@ tree_create_params::tree_create_params() {
 fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
 		const range<double>& box, const int depth, const bool local_root, bool threadme) {
 	fast_future<tree_create_return> rc;
-#ifndef TREEPM
+#ifdef FMM
 	bool remote = false;
 	if (proc_range.first != hpx_rank()) {
 		threadme = true;
@@ -193,7 +193,7 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	if (!threadme) {
 #endif
 	rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
-#ifndef TREEPM
+#ifdef FMM
 } else if (remote) {
 	rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 } else {
@@ -286,7 +286,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 #else
 	constexpr int multi_size = MULTIPOLE_SIZE;
 #endif
-#ifndef TREEPM
+#ifdef FMM
 	if (key == 1) {
 		profiler_enter(__FUNCTION__);
 	}
@@ -309,7 +309,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	if (depth >= MAX_DEPTH) {
 		THROW_ERROR("%s\n", "Maximum depth exceeded\n");
 	}
-#ifndef TREEPM
+#ifdef FMM
 	if (depth == 0) {
 		tree_allocate_nodes();
 	}
@@ -342,7 +342,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	const int index = allocator.allocate();
 	bool isleaf = true;
 	const auto nparts = part_range.second - part_range.first;
-#ifdef TREEPM
+#ifndef FMM
 	constexpr bool ewald_satisfied = true;
 #else
 	float box_r = 0.0f;
@@ -369,7 +369,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		auto right_parts = part_range;
 		bool left_local_root = false;
 		bool right_local_root = false;
-#ifndef TREEPM
+#ifdef FMM
 		if (proc_range.second - proc_range.first > 1) {
 			const int mid = (proc_range.first + proc_range.second) / 2;
 			left_box = domains_range(key << 1);
@@ -403,7 +403,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 
 		left_parts.second = right_parts.first = mid;
 		left_box.end[xdim] = right_box.begin[xdim] = xmid;
-#ifndef TREEPM
+#ifdef FMM
 	}
 #endif
 		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
@@ -585,7 +585,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		radius = std::sqrt(r);
 		children[LEFT].index = children[RIGHT].index = -1;
+#ifdef FMMPM
+		pm_multipole<double> M;
+#else
 		multipole<double> M;
+#endif
 		for (int i = 0; i < multi_size; i++) {
 			M[i] = 0.0;
 		}
@@ -682,7 +686,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	nodes[index] = node;
 	rc.id.index = index;
 	rc.id.proc = hpx_rank();
-#ifndef TREEPM
+#ifdef FMM
 	if (key == 1) {
 		profiler_exit();
 	}

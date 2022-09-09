@@ -188,7 +188,7 @@ struct tree_create_return {
 };
 
 struct tree_create_params {
-#ifndef TREEPM
+#ifdef FMM
 	int min_rung;
 	double theta;
 	part_int par_parts;
