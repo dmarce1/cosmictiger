@@ -61,6 +61,7 @@ set(cosmictiger_source_files
     src/flops.cpp
     src/flops.cu
     src/fft.cpp
+    src/fft_dbl.cpp
     src/gravity.cpp
     src/gravity.cu
     src/group_tree.cpp
@@ -116,6 +117,7 @@ set(cosmictiger_header_files
     cosmictiger/driver.hpp
     cosmictiger/ewald_incides.hpp
     cosmictiger/fft.hpp
+    cosmictiger/fft_dbl.hpp
     cosmictiger/fixedcapvec.hpp
     cosmictiger/fixes.hpp
     cosmictiger/gravity.hpp
@@ -161,7 +163,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas dl silo chealpix quadmath
+    Boost::boost fftw3f fftw3 gsl gslcblas dl silo chealpix quadmath
   SOURCES
     ${cosmictiger_source_files}
   HEADERS

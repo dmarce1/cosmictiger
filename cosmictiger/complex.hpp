@@ -65,6 +65,11 @@ public:
 		return *this * other.conj() / other.norm();
 	}
 
+	complex operator/=(complex other) {
+		*this = *this * other.conj() / other.norm();
+		return *this;
+	}
+
 	complex operator/(T other) const {
 		complex b;
 		b.x = x / other;
@@ -82,6 +87,10 @@ public:
 	complex& operator*=(T other) {
 		x *= other;
 		y *= other;
+		return *this;
+	}
+	complex& operator*=(complex other) {
+		*this = *this * other;
 		return *this;
 	}
 
