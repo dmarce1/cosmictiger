@@ -212,7 +212,7 @@ power_spectrum_dbl_t fft3d_dbl_power_spectrum() {
 			ks[i] /= count[i];
 		}
 		ks[i] = sqrt(kbins[i] * kbins[i + 1]);
-		ks[i] *= 2.0 * M_PI / box_size;
+		ks[i] *= 2.0 * M_PI;// / box_size;
 		ret.P[i] = power[i];
 		ret.k[i] = ks[i];
 	}
@@ -281,7 +281,7 @@ static pspecret dbl_power_spectrum_compute(const vector<double>& kbins) {
 					const int64_t k = I[2] < N / 2 ? I[2] : I[2] - N;
 					const double sz = cloud_filter(2.0 * M_PI * k / N);
 					const double c0 = sx * sy * sz;
-					Y[box.index(I)] *= c0;
+			//		Y[box.index(I)] *= c0;
 					const double iii = std::sqrt(i * i + j * j + k * k);
 					if( iii > 0 ) {
 						const int bin = search_kbins(kbins, iii, 0, nbins);

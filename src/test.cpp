@@ -344,6 +344,7 @@ static void force_test() {
 	} else {
 		initialize(get_options().z0);
 	}
+
 	constexpr int nthetas = 16;
 	double theta_min = 0.2;
 	double theta_max = 0.999999;

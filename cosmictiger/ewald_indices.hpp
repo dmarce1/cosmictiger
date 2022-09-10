@@ -55,4 +55,4 @@ struct ewald_constants {
 
 
 
-long double high_precision_ewald(const array<long double, NDIM>& X);
+double high_precision_ewald(const array<double, NDIM>& X);

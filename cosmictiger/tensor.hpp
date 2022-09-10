@@ -103,7 +103,7 @@ public:
 		ASSERT(m <= l);
 		ASSERT(n <= 1 || (n == 2 && l == 0 && m == 0));
 		return (*this)[l * (l + 1) / 2 + m + (P * (P + 1) / 2) * (n == 1) + (N - 1) * (n == 2)];
-	}
+		}
 
 	CUDA_EXPORT
 	inline T operator()(int l, int m, int n) const {

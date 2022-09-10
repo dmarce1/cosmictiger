@@ -291,16 +291,16 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		profiler_enter(__FUNCTION__);
 	}
 #endif
-/*	for (part_int i = part_range.first; i < part_range.second; i++) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			const double x = particles_pos(dim, i).to_double();
-			if (!(x >= box.begin[dim] && x < box.end[dim])) {
-				PRINT("%e %e %e\n", box.begin[dim], x, box.end[dim]);
-			}
-			ALWAYS_ASSERT(x >= box.begin[dim] && x < box.end[dim]);
-		}
-	}
-*/
+	/*	for (part_int i = part_range.first; i < part_range.second; i++) {
+	 for (int dim = 0; dim < NDIM; dim++) {
+	 const double x = particles_pos(dim, i).to_double();
+	 if (!(x >= box.begin[dim] && x < box.end[dim])) {
+	 PRINT("%e %e %e\n", box.begin[dim], x, box.end[dim]);
+	 }
+	 ALWAYS_ASSERT(x >= box.begin[dim] && x < box.end[dim]);
+	 }
+	 }
+	 */
 	int flops = 0;
 	stack_trace_activate();
 	const double h = get_options().hsoft;
@@ -358,6 +358,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	double max_ratio = 1.0;
 	flops += 26;
 	static const simd_float _2float = fixed2float;
+#ifdef FMMPM
+	constexpr bool root_centered = true;
+#else
+	constexpr bool root_centered = false;
+#endif
 	if (proc_range.second - proc_range.first > 1 || nparts > bucket_size || (!ewald_satisfied && nparts > 0)) {
 		isleaf = false;
 		const int xdim = box.longest_dim();
@@ -489,52 +494,61 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		}
 		flops += 29;
 		r = 0.0;
-		if (mr[0] != 0.0) {
-			if (ml[0] != 0.0) {
-				for (int dim = 0; dim < NDIM; dim++) {
-					const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
-					const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
-					Xc2[dim] = (xmax + xmin) * 0.5;
-					r += sqr((xmax - xmin) * 0.5);
-				}
-				flops += 45;
-			} else {
-				Xc2 = Xr;
-				r = Rr * Rr;
-				flops++;
-			}
-		} else {
-			if (ml[0] != 0.0) {
-				Xc2 = Xl;
-				r = Rl * Rl;
-				flops++;
-			} else {
-				ALWAYS_ASSERT(false);
-				flops += 6;
-			}
-		}
-		radius2 = std::sqrt(r);                                         // 4
-		if (tried1 && radius1 < radius2) {
-			Xc = Xc1;
-			radius = radius1;
-		} else {
-			Xc = Xc2;
-			radius = radius2;
-		}
-		r = 0.0;
-		for (int dim = 0; dim < NDIM; dim++) {
-			const double span = (rbox.end[dim] - rbox.begin[dim]);
-			ALWAYS_ASSERT(span >= 0.0);
-			r += sqr(span * 0.5);            // 12
-		}
-		r = std::sqrt(r);                                              // 4
-		if (r < radius) {                                              // 1
-			radius = r;
+		if (root_centered && depth == 0) {
+			radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
-				Xc[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;         // 6
+				const auto span = 0.5 * (box.begin[dim] + box.end[dim]);
+				Xc[dim] = span;
+				radius += sqr(0.5 * span);
+			}
+			radius = sqrt(radius);
+		} else {
+			if (mr[0] != 0.0) {
+				if (ml[0] != 0.0) {
+					for (int dim = 0; dim < NDIM; dim++) {
+						const double xmax = std::max(Xl[dim] + N[dim] * Rl, Xr[dim] + N[dim] * Rr);
+						const double xmin = std::min(Xl[dim] - N[dim] * Rl, Xr[dim] - N[dim] * Rr);
+						Xc2[dim] = (xmax + xmin) * 0.5;
+						r += sqr((xmax - xmin) * 0.5);
+					}
+					flops += 45;
+				} else {
+					Xc2 = Xr;
+					r = Rr * Rr;
+					flops++;
+				}
+			} else {
+				if (ml[0] != 0.0) {
+					Xc2 = Xl;
+					r = Rl * Rl;
+					flops++;
+				} else {
+					ALWAYS_ASSERT(false);
+					flops += 6;
+				}
+			}
+			radius2 = std::sqrt(r);                                         // 4
+			if (tried1 && radius1 < radius2) {
+				Xc = Xc1;
+				radius = radius1;
+			} else {
+				Xc = Xc2;
+				radius = radius2;
+			}
+			r = 0.0;
+			for (int dim = 0; dim < NDIM; dim++) {
+				const double span = (rbox.end[dim] - rbox.begin[dim]);
+				ALWAYS_ASSERT(span >= 0.0);
+				r += sqr(span * 0.5);            // 12
+			}
+			r = std::sqrt(r);                                              // 4
+			if (r < radius) {                                              // 1
+				radius = r;
+				for (int dim = 0; dim < NDIM; dim++) {
+					Xc[dim] = (rbox.begin[dim] + rbox.end[dim]) * 0.5;         // 6
+				}
 			}
 		}
-
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];															// 3
 		}
@@ -569,21 +583,33 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				Xmin[dim] = std::min(Xmin[dim], x);													// 3
 			}
 		}
-		for (int dim = 0; dim < NDIM; dim++) {
-			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;												// 6
-		}
-		r = 0.0;
-		flops += 15;
-		for (part_int i = part_range.first; i < part_range.second; i++) {
-			double this_radius = 0.0;
+		if (root_centered && depth == 0) {
+			radius = 0.0;
 			for (int dim = 0; dim < NDIM; dim++) {
-				const double x = particles_pos(dim, i).to_double();              // 3
-				this_radius += sqr(x - Xc[dim]);                                 // 9
+				const auto span = 0.5 * (box.begin[dim] + box.end[dim]);
+				Xc[dim] = span;
+				radius += sqr(0.5 * span);
 			}
-			r = std::max(r, this_radius);                                       // 2
-			flops += 14;
+			radius = sqrt(radius);
+
+		} else {
+
+			for (int dim = 0; dim < NDIM; dim++) {
+				Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;												// 6
+			}
+			r = 0.0;
+			flops += 15;
+			for (part_int i = part_range.first; i < part_range.second; i++) {
+				double this_radius = 0.0;
+				for (int dim = 0; dim < NDIM; dim++) {
+					const double x = particles_pos(dim, i).to_double();              // 3
+					this_radius += sqr(x - Xc[dim]);                                 // 9
+				}
+				r = std::max(r, this_radius);                                       // 2
+				flops += 14;
+			}
+			radius = std::sqrt(r);
 		}
-		radius = std::sqrt(r);
 		children[LEFT].index = children[RIGHT].index = -1;
 #ifdef FMMPM
 		pm_multipole<double> M;
@@ -651,7 +677,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			auto m = P2M(dx);                                         // 211
 			for (int j = 0; j < multi_size; j++) {
 				m[j] *= mask;                                          // multi_size
-				M[j] += m[j].sum();                                    // multi_size * 6
+				M[j] += m[j].sum();// multi_size * 6
 			}
 			flops += 214 + multi_size * 7;
 		}
@@ -672,7 +698,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.pos = x;
 	node.mpos = multis + index;
 	node.mpos->pos = x;
-	node.mpos->multi = M2M<float,double>(multi);
+	node.mpos->multi = M2M<float, double>(multi);
 	node.depth = depth;
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = rbox.begin[dim];

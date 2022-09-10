@@ -47,7 +47,7 @@ HPX_PLAIN_ACTION (domains_end);
 HPX_PLAIN_ACTION (domains_init_rebounds);
 HPX_PLAIN_ACTION (domains_transmit_particles);
 HPX_PLAIN_ACTION (domains_transmit_boxes);
-#ifdef TREEPM
+#ifndef FMM
 HPX_PLAIN_ACTION (domains_fit_boxes2grid);
 #endif
 
@@ -327,13 +327,13 @@ void domains_rebound() {
 		depth++;
 	}
 	domains_transmit_boxes(boxes_by_key);
-#ifdef TREEPM
+#ifndef FMM
 	domains_fit_boxes2grid();
 #endif
 	profiler_exit();
 }
 
-#ifdef TREEPM
+#ifndef FMM
 
 void domains_fit_boxes2grid() {
 	vector<hpx::future<void>> futs;

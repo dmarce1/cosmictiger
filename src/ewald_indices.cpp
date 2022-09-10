@@ -147,47 +147,45 @@ void ewald_const::init() {
 
 }
 
-long double high_precision_ewald(const array<long double, NDIM>& X) {
+double high_precision_ewald(const array<double, NDIM>& X) {
 	array<int, NDIM> h;
-	long double phi = 0.0l;
-	long double pi = acos(-1.0l);
+	double phi = 0.0;
+	double pi = acos(-1.0);
 	for (h[0] = -4; h[0] <= 4; h[0]++) {
 		for (h[1] = -4; h[1] <= 4; h[1]++) {
 			for (h[2] = -4; h[2] <= 4; h[2]++) {
-				long double x = X[XDIM] - h[XDIM];
-				long double y = X[YDIM] - h[YDIM];
-				long double z = X[ZDIM] - h[ZDIM];
-				long double r2 = sqr(x, y, z);
+				double x = X[XDIM] - h[XDIM];
+				double y = X[YDIM] - h[YDIM];
+				double z = X[ZDIM] - h[ZDIM];
+				double r2 = sqr(x, y, z);
 				if (r2 < 3.6 && sqr(h[0], h[1], h[2]) != 0) {
-					long double r = sqrtl(r2);
-					long double erfc0 = erfcl(2.0l * r);
-					long double exp0 = expl(-4.0l * r2);
+					double r = sqrt(r2);
+					double erfc0 = erfc(2.0l * r);
 					phi -= erfc0 / r;
 				}
 			}
 		}
 	}
 	{
-		long double x = X[XDIM];
-		long double y = X[YDIM];
-		long double z = X[ZDIM];
-		long double r2 = sqr(x, y, z);
-		long double r = sqrtl(r2);
-		long double erf0 = erfl(2.0l * r);
-		long double exp0 = expl(-4.0l * r2);
-		phi += r > 0.0L ? erf0 / r : 4.0L / sqrtl(pi);
+		double x = X[XDIM];
+		double y = X[YDIM];
+		double z = X[ZDIM];
+		double r2 = sqr(x, y, z);
+		double r = sqrt(r2);
+		double erf0 = erf(2.0l * r);
+		phi += r > 0.0 ? erf0 / r : 4.0 / sqrt(pi);
 	}
 	for (h[0] = -3; h[0] <= 3; h[0]++) {
 		for (h[1] = -3; h[1] <= 3; h[1]++) {
 			for (h[2] = -3; h[2] <= 3; h[2]++) {
-				const long double h2 = sqr(h[XDIM], h[YDIM], h[ZDIM]);
+				const double h2 = sqr(h[XDIM], h[YDIM], h[ZDIM]);
 				if (h2 > 0.0l && h2 < 10.0l) {
-					const long double hdotx = h[XDIM] * X[XDIM] + h[YDIM] * X[YDIM] + h[ZDIM] * X[ZDIM];
-					phi -= 1.0l / (pi * h2) * expl(-sqr(pi) * h2 * 0.25l) * cosl(2.0l * pi * hdotx);
+					const double hdotx = h[XDIM] * X[XDIM] + h[YDIM] * X[YDIM] + h[ZDIM] * X[ZDIM];
+					phi -= 1.0 / (pi * h2) * expl(-sqr(pi) * h2 * 0.25) * cosl(2.0 * pi * hdotx);
 				}
 			}
 		}
 	}
-	phi += pi * 0.25l;
+	phi += pi * 0.25;
 	return phi;
 }

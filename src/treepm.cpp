@@ -134,6 +134,7 @@ kick_return treepm_kick(kick_params params) {
 	for (i = 2; pow(i, NDIM) / hpx_size() < 32 * 32 * 32; i += 2) {
 	}
 	const int Nres = i;
+	PRINT("NRES = %i\n", Nres);
 	const double rs = opts.p3m_rs / Nres;
 	params.theta = get_options().theta;
 #ifdef TREEPM
@@ -184,15 +185,23 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 #ifdef TREEPM
 	params.rs = get_options().p3m_rs / Nres;
 #endif
+
+
+
 	const int Nbnd = get_options().p3m_chainnbnd;
+
+
+
+
 	auto box = treepm_get_fourier_box(Nres);
 	vector<kick_workitem> works;
 	works.reserve(box.volume());
 //	PRINT("Nbnd = %i  Nres = %i chain_box = %i %i %i %i %i %i\n", Nbnd, Nres, box.begin[XDIM], box.end[XDIM], box.begin[YDIM], box.end[YDIM], box.begin[ZDIM],
 //			box.end[ZDIM]);
 
-	int cell_count = 0;
 	array<int64_t, NDIM> I, J;
+#ifdef TREEPM
+	int cell_count = 0;
 	for (J[XDIM] = -Nbnd; J[XDIM] <= Nbnd; J[XDIM]++) {
 		for (J[YDIM] = -Nbnd; J[YDIM] <= +Nbnd; J[YDIM]++) {
 			for (J[ZDIM] = -Nbnd; J[ZDIM] <= +Nbnd; J[ZDIM]++) {
@@ -207,6 +216,9 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 		}
 	}
 	PRINT("%i cells per workitem\n", cell_count);
+#else
+	const int cell_count = sqr(2 * Nbnd + 1) * (2 * Nbnd + 1);
+#endif
 	vector<hpx::future<void>> futs;
 	mutex_type mutex;
 	vector<hpx::future<void>> futs2;
@@ -220,35 +232,50 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 					for (J[XDIM] = I[XDIM] - Nbnd; J[XDIM] <= I[XDIM] + Nbnd; J[XDIM]++) {
 						for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] <= I[YDIM] + Nbnd; J[YDIM]++) {
 							for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] <= I[ZDIM] + Nbnd; J[ZDIM]++) {
-								auto K = J - I;
-								for( int dim =0; dim< NDIM; dim++) {
-									K[dim] = std::max(std::abs(K[dim])-0.999999, 0.0);
-								}
-								if( sqr(K[XDIM], K[YDIM], K[ZDIM]) < sqr(Nbnd) ) {
-									tree_id id;
-									id.index = tree_roots[chain_box.index(J)];
-									if( id.index >= 0 ) {
-										work.dchecklist.push_back(id);
-									}
-								}
-							}
-						}
-					}
-					const auto jjj = box.index(I);
-					for( int n = 0; n < PM_EXPANSION_SIZE; n++) {
-						work.L[n] = L_x[n][jjj];
-					}
-					for (int dim = 0; dim < NDIM; dim++) {
-						work.pos[dim] = (I[dim] + 0.5) / Nres;
-					}
-					work.self.index = tree_roots[chain_box.index(I)];
-					std::lock_guard<mutex_type> lock(mutex);
-					if( work.self.index >= 0 ) {
-						works.push_back(work);
-					}
+#ifdef TREEPM
+				auto K = J - I;
+				for( int dim =0; dim< NDIM; dim++) {
+					K[dim] = std::max(std::abs(K[dim])-0.999999, 0.0);
 				}
+				if( sqr(K[XDIM], K[YDIM], K[ZDIM]) < sqr(Nbnd) ) {
+#endif
+				tree_id id;
+				id.index = tree_roots[chain_box.index(J)];
+				if( id.index >= 0 ) {
+					work.dchecklist.push_back(id);
+				}
+#ifdef TREEPM
 			}
-		}, I));
+#endif
+
+			}
+		}
+	}
+	const auto jjj = box.index(I);
+	for( int n = 0; n < PM_EXPANSION_SIZE; n++) {
+		work.L[n] = L_x[n][jjj];
+	}
+	range<double> test_box;
+	for (int dim = 0; dim < NDIM; dim++) {
+		work.pos[dim] = (I[dim] + 0.5) / Nres;
+		test_box.begin[dim] = I[dim] / (double) Nres;
+		test_box.end[dim] = (I[dim]+1.0) / (double) Nres;
+	}
+	work.self.index = tree_roots[chain_box.index(I)];
+	std::lock_guard<mutex_type> lock(mutex);
+	if( work.self.index >= 0 ) {
+		auto node = tree_data()[work.self.index];
+			array<double, NDIM> x;
+			for( int dim = 0; dim < NDIM; dim++) {
+				x[dim]= node.pos[dim].to_double();
+			}
+	//		ALWAYS_ASSERT(test_box.contains(x));
+
+		works.push_back(work);
+	}
+}
+}
+}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	tm.stop();
@@ -360,14 +387,17 @@ void treepm_exchange_and_sort(int Nres) {
 						rbox.begin[dim] = (double) I[dim] / Nres;
 						rbox.end[dim] = (double) (I[dim] + 1) / Nres;
 					}
+					const auto ini = int_box.index(I);
 					if( chain_mesh[j].second - chain_mesh[j].first > 0 ) {
 						auto rc = tree_create( tree_create_params(), 0, pair<int, int>(hpx_rank(),hpx_rank()+1), chain_mesh[j], rbox, 0, false);
-						const auto ini = int_box.index(I);
 						for( int l = 0; l < PM_MULTIPOLE_SIZE; l++) {
 							M_x[l][ini] = rc.multi[l];
 						}
 						tree_roots[j] = rc.id.index;
 					} else {
+						for( int l = 0; l < PM_MULTIPOLE_SIZE; l++) {
+							M_x[l][ini] = 0.0;
+						}
 						tree_roots[j] = -1;
 					}
 				}
@@ -555,8 +585,8 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 #else
 	static bool green_init = false;
 	const int Nbnd = get_options().p3m_chainnbnd;
-	fft3d_dbl_init(Nres);
 	if (!green_init) {
+		fft3d_dbl_init(Nres);
 		timer tm;
 		tm.start();
 		PRINT("Initializing greens function\n");
@@ -572,11 +602,17 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 		}
 		treepm_green_init(Nres);
 		fft3d_dbl_execute();
+
 		treepm_green_save(Nres);
+		auto power = fft3d_dbl_power_spectrum();
+		for (int i = 0; i < Nres / 2; i++) {
+			PRINT("%e %e %e\n", 2.0 * i * M_PI, D_k[0][i].real(), D_k[0][i].imag());
+		}
+
 		fft3d_dbl_destroy();
-		fft3d_dbl_init(Nres);
 		tm.stop();
 		PRINT("Done in %e\n", tm.read());
+
 	}
 	for (int n = 0; n < PM_MULTIPOLE_SIZE; n++) {
 		fft3d_dbl_init(Nres);
@@ -609,36 +645,31 @@ void treepm_green_init(int Nres) {
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_green_init_action>(c, Nres));
 	}
-	const auto box = fft3d_dbl_real_range();
+	const auto box = treepm_get_fourier_box(Nres);
 	vector<double> R(box.volume());
 	array<int64_t, NDIM> I;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
 		futs2.push_back(hpx::async([nbnd,box,Nres,&R](array<int64_t,NDIM> I) {
-			array<long double, NDIM > x;
+			array<double, NDIM > x;
 			array<int64_t, NDIM> J;
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
 					for (int dim = 0; dim < NDIM; dim++) {
-						J[dim] = (I[dim] < Nres / 2 ? I[dim] : I[dim] - Nres);
+						J[dim] = ((I[dim] < Nres / 2) ? I[dim] : I[dim] - Nres);
 						x[dim] = (double) J[dim] / Nres;
 					}
-					long double phi = high_precision_ewald(x);
-					int dist2 = 0;
-					for( int dim = 0; dim < NDIM; dim++) {
-						dist2 += sqr(std::max(std::abs(J[dim]) - 0.999999, 0.0));
-					}
-					if( dist2 >= sqr(nbnd)) {
-						const long double r2 = sqr(x[XDIM],x[YDIM],x[ZDIM]);
-					//	if( r == 0.0 ) {
-					//		PRINT( "%i %i\n",dist2, nbnd);
-					//	}
-						phi += -1.0l / sqrtl(r2);
-					}
-					const auto index = box.index(I);
-					R[index] = phi;
-
+					double phi = high_precision_ewald(x);
+					int jmax = std::max(std::abs(J[XDIM]),std::max(std::abs(J[YDIM]),std::abs(J[ZDIM])));
+					if( jmax > nbnd ) {
+					const double r2 = sqr(x[XDIM],x[YDIM],x[ZDIM]);
+					phi += -1.0 / sqrt(r2);
 				}
-			}}, I));
+
+				const auto index = box.index(I);
+				R[index] = phi;
+
+			}
+		}}, I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	fft3d_dbl_accumulate_real(box, R);
@@ -653,28 +684,33 @@ void treepm_green_save(int Nres) {
 		futs1.push_back(hpx::async<treepm_green_save_action>(c, Nres));
 	}
 	const auto box = fft3d_dbl_complex_range();
-	D_k[0] = fft3d_dbl_read_complex(box);
+	const auto Y = fft3d_dbl_read_complex(box);
 	array<int64_t, NDIM> I;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs1.push_back(hpx::async([box,Nres](array<int64_t,NDIM> I) {
+		futs1.push_back(hpx::async([Y,box,Nres](array<int64_t,NDIM> I) {
 			const auto* nodes = tree_data();
+			const auto factor = 1.0 / (Nres*sqr(Nres));
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
 					array<complex<double>, NDIM> K;
 					for (int dim = 0; dim < NDIM; dim++) {
-						K[dim] = complex<double>(0.0,2.0 * M_PI * (I[dim] < Nres / 2 ? I[dim] : I[dim] - Nres));
+						K[dim] = complex<double>(0.0, 2.0 * M_PI * ((I[dim] < Nres / 2) ? I[dim] : I[dim] - Nres));
 					}
 					tensor_sym<complex<double>, PM_ORDER> kk = vector_to_sym_tensor<complex<double>,PM_ORDER>(K);
 					const auto kk_trless = kk.detraceD();
 					const auto index = box.index(I);
-					for( int n = 1; n < PM_EXPANSION_SIZE; n++) {
-						D_k[n][index] = D_k[0][index] * kk_trless[n];
-						//	PRINT( "%e %e\n", D_k[0][index].real(),  kk_trless[n].real());
+					if(sqr(I[XDIM],I[YDIM],I[ZDIM])==0) {
+						for( int n = 0; n < PM_EXPANSION_SIZE; n++) {
+							D_k[n][index] = complex<double>(0.0,0.0);
+						}
+					} else {
+						for( int n = 0; n < PM_EXPANSION_SIZE; n++) {
+							D_k[n][index] = Y[index] * kk_trless[n];
+						}
+					}
 
-			}
-
-		}
-	}}, I));
+				}
+			}}, I));
 	}
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
@@ -698,6 +734,13 @@ void treepm_multi_save(int n, int Nres) {
 	}
 	const auto box = fft3d_dbl_complex_range();
 	M_k[n] = fft3d_dbl_read_complex(box);
+	if (n == 0) {
+		array<int64_t, NDIM> I;
+		I[0] = I[1] = I[2] = 0;
+		if (box.contains(I)) {
+			M_k[n][box.index(I)] = complex<double>(0.0, 0.0);
+		}
+	}
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 
@@ -748,21 +791,24 @@ void treepm_expansion_init(int nx, int ny, int nz, int Nres) {
 	for (m[0] = 0; m[0] < q0; m[0]++) {
 		for (m[1] = 0; m[1] < q0 - m[0]; m[1]++) {
 			for (m[2] = 0; m[2] < q0 - m[0] - m[1]; m[2]++) {
-				const double coeff = 1.0 / vfactorial(m);
+				double coeff = 1.0 / vfactorial(m);
 				const int nthreads = hpx_hardware_concurrency();
 				futs2.resize(0);
-				const int li = trless_index(n[0], n[1], n[2], PM_ORDER);
+				const int m0 = m[0] + m[1] + m[2];
 				for (int proc = 0; proc < nthreads; proc++) {
-					futs2.push_back(hpx::async([proc,nthreads,coeff,&Y,m,n,li]() {
+					futs2.push_back(hpx::async([proc,m0,n0,nthreads,coeff,&Y,m,n]() {
 						const auto b = (size_t) proc * Y.size() / nthreads;
 						const auto e = (size_t) (proc + 1) * Y.size() / nthreads;
+						const int m0 = n[0] + n[1] + n[2];
 						for( size_t i = b; i < e; i++) {
-							Y[i] += M_k_sym(m[0], m[1],m[2], i) * D_k_sym(m[0]+n[0], m[1]+n[1],m[2]+n[2], i) * coeff;
+							const auto number = M_k_sym(m[0], m[1],m[2], i) * D_k_sym(m[0]+n[0], m[1]+n[1],m[2]+n[2], i) * coeff;
+							Y[i] += number;
 						}
 					}));
 
 				}
 				hpx::wait_all(futs2.begin(), futs2.end());
+
 			}
 		}
 	}

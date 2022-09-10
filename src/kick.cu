@@ -108,6 +108,7 @@ __device__ void do_kick(kick_return& return_, kick_params params, const cuda_kic
 		F.gx -= SCALE_FACTOR2 * L2(1, 0, 0);
 		F.gy -= SCALE_FACTOR2 * L2(0, 1, 0);
 		F.gz -= SCALE_FACTOR2 * L2(0, 0, 1);
+
 #else
 		F.phi += L2(0, 0, 0);
 		F.gx -= L2(1, 0, 0);
@@ -275,9 +276,16 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			sparams.push_back(sparam);
 		}
 #ifdef FMMPM
-		pm_L = params[index].L;
+		const auto pm_L = params[index].L;
+	//	if( tid ==0 ){
+	//	PRINT( "%e\n", pm_L(0,0,1));
+	//	}
+		const auto& self = tree_nodes[sparams.back().self];
+
 		for (int dim = 0; dim < NDIM; dim++) {
 			pm_Lpos[dim] = params[index].Lpos[dim].to_double();
+		//	PRINT( "%e\n", self.pos[dim].to_double() - params[index].Lpos[dim].to_double());
+
 		}
 
 #endif
@@ -286,13 +294,13 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		while (depth >= 0) {
 //			auto tm2 = clock64();
 //			node_count++;
-			const auto& self = tree_nodes[sparams.back().self];
 			switch (sparams.back().phase) {
 
 			case 0: {
 				array<float, NDIM> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], L.back().pos[dim]);
+
 				}
 				flops += 3;
 				{
@@ -316,10 +324,11 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 #endif
 #ifdef FMMPM
 						array<double, NDIM> dx;
-						for (int dim = 0; dim < NDIM; dim++) {
-							dx[dim] = data.x[l].to_double() - pm_Lpos[dim];
-						}
+						dx[XDIM] = data.x[self.part_range.first+l].to_double() - pm_Lpos[XDIM];
+						dx[YDIM] = data.y[self.part_range.first+l].to_double() - pm_Lpos[YDIM];
+						dx[ZDIM] = data.z[self.part_range.first+l].to_double() - pm_Lpos[ZDIM];
 						auto L2 = pm_L2P(pm_L, dx, global_params.do_phi);
+//						auto L2 =pm_L;
 						f.phi += L2(0, 0, 0);
 						f.gx -= L2(1, 0, 0);
 						f.gy -= L2(0, 1, 0);
@@ -652,6 +661,8 @@ kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev
 		params.Lpos = workitems[i].pos;
 		params.L = workitems[i].L;
 		params.self = workitems[i].self.index;
+		auto pos = tree_data()[params.self].pos;
+
 		params.dchecks = dev_dchecks + dindices[i];
 #ifdef FMM
 		params.echecks = dev_echecks + eindices[i];

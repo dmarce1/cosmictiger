@@ -159,7 +159,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 						const float dy = Y - yi;
 						const float dz = Z - zi;
 						const float r2 = sqr(dx, dy, dz);
-						if (r2 < rmax) {
+						if (r2 < sqr(rmax)) {
 							const float r = sqrt(r2);
 							const float rinv = 1.f / r;
 							const float r2inv = rinv * rinv;
