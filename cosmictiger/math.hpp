@@ -24,6 +24,7 @@
 #include <cosmictiger/simd.hpp>
 #include <cosmictiger/flops.hpp>
 
+#include <functional>
 #include <atomic>
 
 template<class T>
@@ -138,7 +139,6 @@ inline double sinc(double x) {
 	}
 }
 
-
 inline double double_factorial(int n) {
 	if (n < 1) {
 		return 1;
@@ -146,7 +146,6 @@ inline double double_factorial(int n) {
 		return n * double_factorial(n - 2);
 	}
 }
-
 
 inline void atomic_add(std::atomic<float>& y, float x) {
 	float z = y;
@@ -169,8 +168,9 @@ inline float tsc(float x) {
 
 template<class T>
 CUDA_EXPORT inline T erfnearzero(T x) {
-	const T c[15] = { 1.1283791670955126,-0.37612638903183752,0.11283791670955126,-0.026866170645131252,0.0052239776254421878,-0.00085483270234508528,0.00012055332981789664,-0.000014925650358406251,
-		   1.6462114365889247e-6,-1.6365844691234924e-7,1.4807192815879217e-8,-1.2290555301717927e-9,9.422759064650411e-11,-6.7113668551641104e-12,4.4632242632864773e-13};
+	const T c[15] = { 1.1283791670955126, -0.37612638903183752, 0.11283791670955126, -0.026866170645131252, 0.0052239776254421878, -0.00085483270234508528,
+			0.00012055332981789664, -0.000014925650358406251, 1.6462114365889247e-6, -1.6365844691234924e-7, 1.4807192815879217e-8, -1.2290555301717927e-9,
+			9.422759064650411e-11, -6.7113668551641104e-12, 4.4632242632864773e-13 };
 	T x2 = x * x;
 	T w = c[14];
 	for (int i = 13; i >= 0; i--) {
@@ -219,7 +219,6 @@ CUDA_EXPORT T expnearzero(T x) {
 	return w;
 }
 
-
 inline CUDA_EXPORT double f_max(double a, double b) {
 	return a > b ? a : b;
 }
@@ -228,6 +227,17 @@ inline CUDA_EXPORT float f_max(float a, float b) {
 	return a > b ? a : b;
 }
 
+inline double difference(const std::function<double(double, double, double)>& f, double x, double y, double z, int n, int m, int l, double dx = 5e-3) {
+	if (n > 0) {
+		return (difference(f, x + dx, y, z, n - 1, m, l, dx) - difference(f, x - dx, y, z, n - 1, m, l, dx)) / (2.0 * dx);
+	} else if (m > 0) {
+		return (difference(f, x, y + dx, z, n, m - 1, l, dx) - difference(f, x, y - dx, z, n, m - 1, l, dx)) / (2.0 * dx);
+	} else if (l > 0) {
+		return (difference(f, x, y, z + dx, n, m, l - 1, dx) - difference(f, x, y, z - dx, n, m, l - 1, dx)) / (2.0 * dx);
+	} else {
+		return f(x, y, z);
+	}
+}
 
 #include <cosmictiger/containers.hpp>
 

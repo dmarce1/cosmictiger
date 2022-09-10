@@ -21,12 +21,12 @@
 #include <cosmictiger/kernels.hpp>
 
 __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
-		double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);
+		double* rphi, double* rgx, double* rgy, double*rgz, float hsoft, int Nres, int nbnd, bool near);
 
 #define ANALYTIC_BLOCK_SIZE 256
 
 std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
-		const vector<fixed32>& sinkz) {
+		const vector<fixed32>& sinkz, int nres, int nbnd, bool near) {
 	cuda_set_device();
 	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
 	fixed32* dev_sinkx;
@@ -84,7 +84,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 			const int begin = size_t(j) * size_t(total_size) / size_t(num_kernels);
 			const int end = size_t(j + 1) * size_t(total_size) / size_t(num_kernels);
 			analytic_gravity_kernel<<<Nsinks,ANALYTIC_BLOCK_SIZE,0,streams[i]>>>(dev_sinkx, dev_sinky, dev_sinkz, dev_srcx + begin, dev_srcy + begin,
-					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz, get_options().hsoft);
+					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz, get_options().hsoft,nres,nbnd,near);
 		}
 		for (int i = 0; i < num_kernels; i++) {
 			cuda_stream_synchronize(streams[i]);
@@ -115,7 +115,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 }
 
 __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
-		double* rphi, double* rgx, double* rgy, double*rgz, float h) {
+		double* rphi, double* rgx, double* rgy, double*rgz, float h, int nres, int nbnd, bool near) {
 
 	__shared__ double phi[ANALYTIC_BLOCK_SIZE];
 	__shared__ double gx[ANALYTIC_BLOCK_SIZE];
@@ -134,10 +134,25 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 	float h2inv = 1.0 / h2;
 	float h3inv = hinv * hinv * hinv;
 	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
+	array<int, NDIM> I, J;
 	for (int sourcei = tid; sourcei < Nsource; sourcei += ANALYTIC_BLOCK_SIZE) {
 		const float X = distance(x, sourcex[sourcei]);
 		const float Y = distance(y, sourcey[sourcei]);
 		const float Z = distance(z, sourcez[sourcei]);
+		I[XDIM] = x.to_double() * nres;
+		I[YDIM] = y.to_double() * nres;
+		I[ZDIM] = z.to_double() * nres;
+		J[XDIM] = sourcex[sourcei].to_double() * nres;
+		J[YDIM] = sourcey[sourcei].to_double() * nres;
+		J[ZDIM] = sourcez[sourcei].to_double() * nres;
+		int maxi = 0;
+		for (int dim = 0; dim < NDIM; dim++) {
+			int dif = min(abs(I[dim] - J[dim]), min(abs(I[dim] + nres - J[dim]), abs(I[dim] - nres - J[dim])));
+			maxi = max(maxi,dif);
+		}
+		if ((near && maxi > nbnd) || (!near && maxi <= nbnd)) {
+	//		continue;
+		}
 		const float R2 = sqr(X, Y, Z);
 		float fx = 0.f;
 		float fy = 0.f;
@@ -196,12 +211,11 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 		}
 		if (R2 == 0.f) {
 			phi[tid] += 2.837291f;
-			phi[tid] -= 15.0f / 8.0f * hinv;
 		} else if (R2 < h2) {
 			const float q2 = R2 * h2inv;
 			float rinv3;
 			float rinv1;
-			gsoft( rinv3, rinv1, q2, hinv, h2inv, h3inv, true);
+			gsoft(rinv3, rinv1, q2, hinv, h2inv, h3inv, true);
 			fx -= X * rinv3;
 			fy -= Y * rinv3;
 			fz -= Z * rinv3;

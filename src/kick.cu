@@ -328,7 +328,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 						dx[YDIM] = data.y[self.part_range.first+l].to_double() - pm_Lpos[YDIM];
 						dx[ZDIM] = data.z[self.part_range.first+l].to_double() - pm_Lpos[ZDIM];
 						auto L2 = pm_L2P(pm_L, dx, global_params.do_phi);
-//						auto L2 =pm_L;
+		//				auto L2 =pm_L;
 						f.phi += L2(0, 0, 0);
 						f.gx -= L2(1, 0, 0);
 						f.gy -= L2(0, 1, 0);
@@ -406,7 +406,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 										}
 										flops += 33;
 									}
-									sw[CC] = sw[CP] = sw[PC] = false;
 									if (!sw[CC] && !sw[CP] && !sw[PC]) {
 										sw[LEAF] = other.leaf;
 										sw[NEXT] = !sw[LEAF];

@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/fixed.hpp>
 
 std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx,
-		const vector<fixed32>& sinky, const vector<fixed32>& sinkz);
+		const vector<fixed32>& sinky, const vector<fixed32>& sinkz, int, int, bool);
 pair<double> analytic_compare(int Nsamples);
 
 

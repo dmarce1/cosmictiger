@@ -160,7 +160,7 @@ double high_precision_ewald(const array<double, NDIM>& X) {
 				double r2 = sqr(x, y, z);
 				if (r2 < 3.6 && sqr(h[0], h[1], h[2]) != 0) {
 					double r = sqrt(r2);
-					double erfc0 = erfc(2.0l * r);
+					double erfc0 = erfc(2.0 * r);
 					phi -= erfc0 / r;
 				}
 			}
@@ -181,7 +181,7 @@ double high_precision_ewald(const array<double, NDIM>& X) {
 				const double h2 = sqr(h[XDIM], h[YDIM], h[ZDIM]);
 				if (h2 > 0.0l && h2 < 10.0l) {
 					const double hdotx = h[XDIM] * X[XDIM] + h[YDIM] * X[YDIM] + h[ZDIM] * X[ZDIM];
-					phi -= 1.0 / (pi * h2) * expl(-sqr(pi) * h2 * 0.25) * cosl(2.0 * pi * hdotx);
+					phi -= 1.0 / (pi * h2) * expl(-sqr(pi) * h2 * 0.25) * cos(2.0 * pi * hdotx);
 				}
 			}
 		}

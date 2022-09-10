@@ -33,13 +33,16 @@ HPX_PLAIN_ACTION (do_analytic);
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
 static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
-#ifdef USE_CUDA
 	vector<hpx::future<return_type>> futs;
 	for (auto c : hpx_children()) {
 		futs.push_back(hpx::async<do_analytic_action>( c, sinkx, sinky, sinkz));
 	}
 
-	auto results = gravity_analytic_call_kernel(sinkx, sinky, sinkz);
+#ifdef FMMPM
+	auto results = gravity_analytic_call_kernel(sinkx, sinky, sinkz, get_options().p3m_Nmin, get_options().p3m_chainnbnd, false);
+#else
+	auto results = gravity_analytic_call_kernel(sinkx, sinky, sinkz, 1, 0, false);
+#endif
 
 	for (auto& f : futs) {
 		auto other = f.get();
@@ -51,13 +54,9 @@ static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed3
 		}
 	}
 	return results;
-#else
-	return return_type();
-#endif
 }
 
 pair<double> analytic_compare(int Nsamples) {
-#ifdef USE_CUDA
 	timer tm;
 	tm.start();
 	auto samples = particles_sample(Nsamples);
@@ -113,7 +112,4 @@ pair<double> analytic_compare(int Nsamples) {
 	rc.first = force50;
 	rc.second = force100;
 	return rc;
-#else
-	PRINT("analytic compare not available without CUDA\n");
-#endif
 }
