@@ -39,7 +39,7 @@ using fixed64 = fixed<uint64_t, 32>;
 static constexpr float fixed2float = 1.f / float(size_t(1) << size_t(32));
 
 
-static constexpr float fixed2double = 1.0 / double(size_t(1) << size_t(32));
+static constexpr double fixed2double = 1.0 / double(size_t(1) << size_t(32));
 
 template<class T, int SIGBITS = 32>
 class fixed {

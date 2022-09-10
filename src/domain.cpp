@@ -533,7 +533,8 @@ vector<pair<int, range<double>>> domains_find_intersecting_boxes( range<double> 
 }
 
 range<double> domains_find_my_box() {
-	return local_domains[hpx_rank()].box;
+	auto box = local_domains[hpx_rank()].box;
+	return box;
 }
 
 static void domains_check() {

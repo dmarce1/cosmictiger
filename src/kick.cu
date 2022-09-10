@@ -275,12 +275,12 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			sparam.self = params[index].self;
 			sparams.push_back(sparam);
 		}
+		const auto& self = tree_nodes[sparams.back().self];
 #ifdef FMMPM
 		const auto pm_L = params[index].L;
 	//	if( tid ==0 ){
 	//	PRINT( "%e\n", pm_L(0,0,1));
 	//	}
-		const auto& self = tree_nodes[sparams.back().self];
 
 		for (int dim = 0; dim < NDIM; dim++) {
 			pm_Lpos[dim] = params[index].Lpos[dim].to_double();
@@ -362,6 +362,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 #else
 					auto& checks = dchecks;
 #endif
+//					PRINT( "%i\n", checks.size());
 					const float thetainv = 1.f / global_params.theta;
 					do {
 						const int maxi = round_up(checks.size(), WARP_SIZE);
@@ -405,7 +406,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 										}
 										flops += 33;
 									}
-									//	sw[CC] = sw[CP] = sw[PC] = false;
+									sw[CC] = sw[CP] = sw[PC] = false;
 									if (!sw[CC] && !sw[CP] && !sw[PC]) {
 										sw[LEAF] = other.leaf;
 										sw[NEXT] = !sw[LEAF];

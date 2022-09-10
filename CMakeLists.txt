@@ -150,6 +150,7 @@ set(cosmictiger_header_files
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
     cosmictiger/test.hpp
+    cosmictiger/tensor.hpp
     cosmictiger/treepm.hpp
     cosmictiger/treepm_kernels.hpp
     cosmictiger/tree.hpp
@@ -187,14 +188,14 @@ execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
 #set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
     target_compile_options(lc2rockstar PRIVATE -DLC2GADGET2 )
     target_compile_options(ferrer_kernel_codegen PRIVATE -D_GLIBCXX_DEBUG )
-set_source_files_properties(./src/drift.cu PROPERTIES COMPILE_FLAGS -maxrregcount=64)
+set_source_files_properties(./src/drift.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
 
 
 
 if( COSMICTIGER_WITH_CUDA )
 	target_link_libraries(cosmictiger PUBLIC cudart)
 	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       -DUSE_CUDA --use_fast_math -lineinfo ;
+                       -DUSE_CUDA --use_fast_math -G -lineinfo ;
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
 	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )

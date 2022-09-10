@@ -593,7 +593,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			radius = sqrt(radius);
 
 		} else {
-
 			for (int dim = 0; dim < NDIM; dim++) {
 				Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;												// 6
 			}
@@ -698,7 +697,11 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 	node.pos = x;
 	node.mpos = multis + index;
 	node.mpos->pos = x;
+#ifdef FMMPM
 	node.mpos->multi = M2M<float, double>(multi);
+#else
+	node.mpos->multi = multi;
+#endif
 	node.depth = depth;
 	for (int dim = 0; dim < NDIM; dim++) {
 		node.box.begin[dim] = rbox.begin[dim];

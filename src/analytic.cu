@@ -1,17 +1,14 @@
 /*
  CosmicTiger - A cosmological N-Body code
  Copyright (C) 2021  Dominic C. Marcello
-
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
  as published by the Free Software Foundation; either version 2
  of the License, or (at your option) any later version.
-
  This program is distributed in the hope that it will be useful,
  but WITHOUT ANY WARRANTY; without even the implied warranty of
  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  GNU General Public License for more details.
-
  You should have received a copy of the GNU General Public License
  along with this program; if not, write to the Free Software
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
@@ -52,7 +49,7 @@ std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_ker
 	(CUDA_MALLOC(&dev_gz, Nsinks * sizeof(double)));
 	vector<double> zero(Nsinks, 0.0);
 	if (hpx_rank() == 0) {
-		vector<double> self_phi1(Nsinks, 0.0);
+		vector<double> self_phi1(Nsinks, self_phi() / get_options().hsoft);
 		CUDA_CHECK(cudaMemcpy(dev_phi, self_phi1.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
 	} else {
 		CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
@@ -127,16 +124,11 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 
 	const int& tid = threadIdx.x;
 	const int& bid = blockIdx.x;
-	const float alpha = 2.f;
-	const float rmax = 4.15 / alpha + 0.5;
-	const float i2max = sqr(rmax + 0.5);
-	const int imax = sqrt(i2max) + 0.999999;
-	const float h2max = sqr(1.26 * alpha + 0.5);
-	const int hmax = sqrt(h2max) + 0.999999;
+
 	const fixed32 x = sinkx[bid];
 	const fixed32 y = sinky[bid];
 	const fixed32 z = sinkz[bid];
-	const float cons1 = float(2.0f / sqrtf(M_PI));
+	const float cons1 = float(4.0f / sqrtf(M_PI));
 	float h2 = h * h;
 	float hinv = 1.0 / (h);
 	float h2inv = 1.0 / h2;
@@ -152,22 +144,22 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 		float fz = 0.f;
 		float pot = 0.f;
 		if (R2 > 0.f) {
-			for (int xi = -imax; xi <= +imax; xi++) {
-				for (int yi = -imax; yi <= +imax; yi++) {
-					for (int zi = -imax; zi <= +imax; zi++) {
+			for (int xi = -4; xi <= +4; xi++) {
+				for (int yi = -4; yi <= +4; yi++) {
+					for (int zi = -4; zi <= +4; zi++) {
 						const float dx = X - xi;
 						const float dy = Y - yi;
 						const float dz = Z - zi;
 						const float r2 = sqr(dx, dy, dz);
-						if (r2 < sqr(rmax)) {
+						if (r2 < 2.6f * 2.6f) {
 							const float r = sqrt(r2);
 							const float rinv = 1.f / r;
 							const float r2inv = rinv * rinv;
 							const float r3inv = r2inv * rinv;
 							float exp0;
 							float erfc0;
-							erfcexp(alpha * r, &erfc0, &exp0);
-							const float expfactor = alpha * cons1 * r * exp0;
+							erfcexp(2.f * r, &erfc0, &exp0);
+							const float expfactor = cons1 * r * exp0;
 							const float d0 = -erfc0 * rinv;
 							const float d1 = (expfactor + erfc0) * r3inv;
 							pot += d0;
@@ -178,20 +170,20 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 					}
 				}
 			}
-			phi[tid] += float(M_PI / sqr(alpha));
-			for (int xi = -hmax; xi <= +hmax; xi++) {
-				for (int yi = -hmax; yi <= +hmax; yi++) {
-					for (int zi = -hmax; zi <= +hmax; zi++) {
+			phi[tid] += float(M_PI / 4.f);
+			for (int xi = -2; xi <= +2; xi++) {
+				for (int yi = -2; yi <= +2; yi++) {
+					for (int zi = -2; zi <= +2; zi++) {
 						const float hx = xi;
 						const float hy = yi;
 						const float hz = zi;
 						const float h2 = sqr(hx, hy, hz);
-						if (h2 > 0.0f && h2 <= h2max) {
+						if (h2 > 0.0f && h2 <= 8) {
 							const float hdotx = X * hx + Y * hy + Z * hz;
 							const float omega = float(2.0 * M_PI) * hdotx;
 							float c, s;
 							sincosf(omega, &s, &c);
-							const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI) * h2 / sqr(alpha)) * float(1.f / M_PI);
+							const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
 							const float c1 = -s * 2.0 * M_PI * c0;
 							pot += c0 * c;
 							fx -= c1 * hx;
@@ -204,16 +196,12 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 		}
 		if (R2 == 0.f) {
 			phi[tid] += 2.837291f;
-			//		phi[tid] -= 15.0f / 8.0f * hinv;
+			phi[tid] -= 15.0f / 8.0f * hinv;
 		} else if (R2 < h2) {
-			const float q2 = R2;
-			float rinv1 = rsqrt(R2);
-			float rinv3 = sqr(rinv1) * rinv1;
-			fx += X * rinv3;
-			fy += Y * rinv3;
-			fz += Z * rinv3;
-			pot += rinv1;
-			gsoft(rinv3, rinv1, q2, hinv, h2inv, h3inv, true);
+			const float q2 = R2 * h2inv;
+			float rinv3;
+			float rinv1;
+			gsoft( rinv3, rinv1, q2, hinv, h2inv, h3inv, true);
 			fx -= X * rinv3;
 			fy -= Y * rinv3;
 			fz -= Z * rinv3;
