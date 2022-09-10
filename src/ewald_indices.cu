@@ -208,7 +208,7 @@ void ewald_const::init_gpu() {
 			}
 		}
 	}
-	PRINT( "%i %i\n", count, NFOUR);
+	PRINT("%i %i\n", count, NFOUR);
 
 	std::sort(ec.four_indices.begin(), ec.four_indices.end(), sort_func);
 	count = 0;
@@ -230,7 +230,7 @@ void ewald_const::init_gpu() {
 		ec.four_expanse[count] = D0.detraceD();
 		count++;
 	}
-		tensor_sym<ewald_type, PM_ORDER> D;
+	tensor_sym<ewald_type, PM_ORDER> D;
 	for (int n = 0; n < (PM_ORDER + 2) * (PM_ORDER + 1) * PM_ORDER / 6; n++) {
 		D[n] = 0.0;
 	}
@@ -239,7 +239,7 @@ void ewald_const::init_gpu() {
 		for (int m = 0; m < PM_ORDER - n; m += 2) {
 			for (int l = 0; l < PM_ORDER - n - m; l += 2) {
 				D(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) * pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1)
-						* double_factorial(n + m + l - 1);
+						* double_factorial(n - 1) * double_factorial(m - 1) * double_factorial(l - 1);
 			}
 		}
 	}
