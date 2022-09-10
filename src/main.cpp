@@ -73,7 +73,6 @@ int hpx_main(int argc, char *argv[]) {
 	 PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
 	 }*/
 
-	expansion<double> D;
 	array<double, NDIM> X;
 
 	std::atomic<int> i;
@@ -104,16 +103,17 @@ int hpx_main(int argc, char *argv[]) {
 	if (process_options(argc, argv)) {
 #ifndef TREEPM
 		ewald_const::init();
+		pm_expansion<double> D;
 
 		FILE* fp = fopen("ewald.txt", "wt");
 		X[0] = X[1] = X[2] = 0.00;
 		for (double x = 0.0; x <= 0.501; x += 0.01) {
 			X[0] = x;
-			auto y1 = high_precision_ewald(X);
-			X[0] += 0.0001;
-			auto y2 = high_precision_ewald(X);
+			ewald_greens_function(D, X);
 			fprintf(fp, "%e ", x);
-			fprintf(fp, "%e %e ", high_precision_ewald(X), (y2-y1)/0.0001);
+			for (int i = 0; i < PM_EXPANSION_SIZE; i++) {
+				fprintf(fp, "%e ", D[i]);
+			}
 			fprintf(fp, "\n");
 		}
 		fclose(fp);

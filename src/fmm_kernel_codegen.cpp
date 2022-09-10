@@ -169,7 +169,7 @@ int mul(std::string a, array<int, NDIM> n, double b, std::string c, array<int, N
 }
 
 int fma(std::string a, array<int, NDIM> n, double b, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = fmaf(T(%.16e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
+	tprint("%s%i%i%i = FMA(T(%.16e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
 	return 2;
 }
 
@@ -230,7 +230,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									ASPRINTF(&str, "%s_%i_%i_%i%i%i -= %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i = fmaf(T(%.16e), %s[%i], %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
+									ASPRINTF(&str, "%s_%i_%i_%i%i%i = FMA(T(%.16e), %s[%i], %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
 											iname.c_str(), sym_index(p[0], p[1], p[2]), iname.c_str(), n0, m0, j[0], j[1], j[2]);
 									flops += 2;
 								}
@@ -330,11 +330,11 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									}
 								} else {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s[%i] = fmaf(T(%.16e), %s_%i_%i_%i%i%i, %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
+										ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s_%i_%i_%i%i%i, %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
 												iname.c_str(), n0, m0, p[0], p[1], p[2], oname.c_str(), trless_index(n[0], n[1], n[2], P));
 										flops += 2;
 									} else {
-										ASPRINTF(&str, "%s[%i] = fmaf(T(%.16e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
+										ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
 												iname.c_str(), sym_index(p[0], p[1], p[2]), oname.c_str(), trless_index(n[0], n[1], n[2], P));
 										flops += 2;
 									}
@@ -420,7 +420,7 @@ int compute_detraceD(std::string iname, std::string oname, char type = 'f') {
 											trless_index(p[0], p[1], p[2], P));
 									flops += 1;
 								} else {
-									ASPRINTF(&str, "%s[%i] = fmaf(T(%.16e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+									ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s[%i], %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
 											trless_index(p[0], p[1], p[2], P), oname.c_str(), trless_index(n[0], n[1], n[2], P));
 									flops += 1;
 								}
@@ -481,7 +481,7 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 							const auto p = n - m * 2;
 							char* str;
 							if (close21(factor)) {
-								ASPRINTF(&str, "%s[%i] = fmaf(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
+								ASPRINTF(&str, "%s[%i] = FMA(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
 										sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 								flops += 2;
 							} else if (close21(-factor)) {
@@ -489,7 +489,7 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 										sym_index(p[0], p[1], p[2]), n0 - m0, m0);
 								flops += 2;
 							} else {
-								ASPRINTF(&str, "%s[%i] = fmaf(T(%.16e), %s[%i]*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
+								ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s[%i]*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
 										iname.c_str(), sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 
 								flops += 3;
@@ -574,7 +574,7 @@ int print_const_ref(std::string name, std::string& cmd, const tensor_trless_sym<
 					fma = false;
 				}
 				if (fma) {
-					cmd += "fmaf(";
+					cmd += "FMA(";
 				} else {
 					cmd += "(";
 				}
@@ -763,7 +763,7 @@ void do_expansion(bool two, const char* name) {
 			last_factor = factor;
 			phi_flops++;
 		}
-		tprint("Lb[%i] = fmaf( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
+		tprint("Lb[%i] = FMA( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
 		phi_flops += 2;
 	}
 	if (!close21(last_factor)) {
@@ -803,7 +803,7 @@ void do_expansion(bool two, const char* name) {
 					flops++;
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Lb[%i] = fmaf( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
+				ASPRINTF(&str, "Lb[%i] = FMA( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
 				cmds.push_back(str);
 				free(str);
 				flops += 2;
@@ -1003,14 +1003,14 @@ void do_expansion_cuda() {
 	flops += 3;
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size());
 	indent();
-	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], Lc[Lsrc1[i]], Lb[Ldest1[i]]);\n");
+	tprint("Lb[Ldest1[i]] = FMA(factor1[i] * dx[xsrc1[i]], Lc[Lsrc1[i]], Lb[Ldest1[i]]);\n");
 	deindent();
 	tprint("}\n");
 	tprint("if( do_phi ) {\n");
 	indent();
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", phi_entries.size());
 	indent();
-	tprint("Lb[0] = fmaf(phi_factor[i] * dx[phi_Lsrc[i]], Lc[phi_Lsrc[i]], Lb[0]);\n");
+	tprint("Lb[0] = FMA(phi_factor[i] * dx[phi_Lsrc[i]], Lc[phi_Lsrc[i]], Lb[0]);\n");
 	deindent();
 	tprint("}\n");
 	deindent();
@@ -1044,7 +1044,7 @@ void ewald(int direct_flops) {
 	tprint("X[2] *= T(SCALE_FACTOR);\n");
 	tprint("ewald_const econst;\n");
 	tprint("flop_counter<int> flops = %i;\n", 7);
-	tprint("T r = sqrt(fmaf(X[0], X[0], fmaf(X[1], X[1], sqr(X[2]))));\n"); // 6
+	tprint("T r = sqrt(FMA(X[0], X[0], FMA(X[1], X[1], sqr(X[2]))));\n"); // 6
 	/*	tprint("if( r < 0.05 ) {\n");
 	 indent();
 	 tprint("green_ewald_smallx( D, X );\n");
@@ -1067,7 +1067,7 @@ void ewald(int direct_flops) {
 	tprint("dx = X;\n");
 	tprint("{\n"); // 1
 	indent();
-	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n"); // 5
+	tprint("T r2 = FMA(dx[0], dx[0], FMA(dx[1], dx[1], sqr(dx[2])));\n"); // 5
 	tprint("icnt++;\n");
 	tprint("const T r = sqrt(r2);\n"); // 1
 	tprint("const T n8r = T(-8*SCALE_FACTOR_INV2) * r;\n"); // 1
@@ -1086,7 +1086,7 @@ void ewald(int direct_flops) {
 	}
 	tprint("const T d0 = erf0 * rinv;\n");                                       // 2
 	for (int l = 1; l < N; l++) {
-		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (N-1)*4
+		tprint("const T d%i = FMA(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (N-1)*4
 		if (l != N - 1) {
 			tprint("e0 *= n8r;\n");                                                // (N-1)
 		}
@@ -1127,7 +1127,7 @@ void ewald(int direct_flops) {
 	tprint("dx[dim] = X[dim] - T(SCALE_FACTOR) * n[dim];\n");                                // 3
 	deindent();
 	tprint("}\n");
-	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");                                // 5
+	tprint("T r2 = FMA(dx[0], dx[0], FMA(dx[1], dx[1], sqr(dx[2])));\n");                                // 5
 	tprint("if (anytrue(r2 < T(SCALE_FACTOR2*EWALD_REAL_CUTOFF2))) {\n");                                // 1
 	indent();
 	tprint("icnt++;\n");                                // 1
@@ -1136,7 +1136,7 @@ void ewald(int direct_flops) {
 	tprint("const T rinv = (r > T(0)) / f_max(r, 1.0e-20);\n");                                // 2
 	tprint("T exp0;\n");
 	tprint("T erfc0;\n");
-	tprint("erfcexp(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");                                // 20
+	tprint("ERFCEXP(T(2.*SCALE_FACTOR_INV1) * r, &erfc0, &exp0);\n");                                // 20
 	tprint("const T expfactor = fouroversqrtpi  * T(SCALE_FACTOR_INV1) * exp0;\n");                                // 1
 	tprint("T e0 = expfactor * rinv;\n");                                // 1
 	tprint("const T rinv0 = T(1);\n");                                // 2
@@ -1149,7 +1149,7 @@ void ewald(int direct_flops) {
 	}
 	tprint("const T d0 = -erfc0 * rinv;\n");                                       // 2
 	for (int l = 1; l < N; l++) {
-		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (N-1)*4
+		tprint("const T d%i = FMA(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (N-1)*4
 		if (l != N - 1) {
 			tprint("e0 *= n8r;\n");                                                // (N-1)
 		}
@@ -1184,9 +1184,9 @@ void ewald(int direct_flops) {
 	indent();
 	tprint("const auto &h = econst.four_index(i);\n");
 	tprint("const auto& D0 = econst.four_expansion(i);\n");
-	tprint("const T hdotx = fmaf(h[0], X[0], fmaf(h[1], X[1], h[2] * X[2]));\n"); // 5
+	tprint("const T hdotx = FMA(h[0], X[0], FMA(h[1], X[1], h[2] * X[2]));\n"); // 5
 	tprint("T cn, sn;\n");
-	tprint("sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n"); // 35
+	tprint("SINCOS(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n"); // 35
 	these_flops = 40;
 	bool iscos[N * N + 1];
 	for (k[0] = 0; k[0] < N; k[0]++) {
@@ -1201,7 +1201,7 @@ void ewald(int direct_flops) {
 	int maxi = (N * N + 1);
 	for (int i = 0; i < maxi; i++) {
 		int j = i + maxi;
-		tprint("Dfour[%i] = fmaf(%cn, D0[%i], Dfour[%i]);\n", i, iscos[i] ? 'c' : 's', i, i);
+		tprint("Dfour[%i] = FMA(%cn, D0[%i], Dfour[%i]);\n", i, iscos[i] ? 'c' : 's', i, i);
 		these_flops += 2;
 
 	}
@@ -1245,7 +1245,7 @@ void print_ewald_fmas(tensor_sym<double, EWALD_ORDER> coeffs, const char* name, 
 				}
 				const double val = coeffs(i, j, k);
 				if (fabs(val) > 1e-10) {
-					tprint("%s[%i] = fmaf( x%iy%iz%i, float(%.10e), %s[%i]);\n", name, number, i, j, k, val, name, number);
+					tprint("%s[%i] = FMA( x%iy%iz%i, float(%.10e), %s[%i]);\n", name, number, i, j, k, val, name, number);
 				}
 			}
 		}
@@ -1482,7 +1482,7 @@ int main() {
 	tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("r2 = sqr(X[0], X[1], X[2]);\n");
 	tprint("const T r = sqrt(r2);\n");
-	tprint("const T rinv1 = -(r > T(0)) / f_max(r, T(1e-20));\n");
+	tprint("const T rinv1 = -T(1) / r;\n");
 	for (int i = 1; i < P; i++) {
 		const int j = i / 2;
 		const int k = i - j;
@@ -1628,7 +1628,7 @@ int main() {
 					last_coeff = coeff;
 					fl++;
 				}
-				tprint("L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				tprint("L[%i] = FMA(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				fl += 2;
 			}
@@ -1673,7 +1673,7 @@ int main() {
 					last_coeff = coeff;
 					fl++;
 				}
-				ASPRINTF(&str, "L[%i] = fmaf(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				ASPRINTF(&str, "L[%i] = FMA(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				cmds.push_back(str);
 				free(str);
@@ -1833,7 +1833,7 @@ int main() {
 					free(str);
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Mb[%i] = fmaf( x[%i], Ma%i%i%i, Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), k[0], k[1], k[2],
+				ASPRINTF(&str, "Mb[%i] = FMA( x[%i], Ma%i%i%i, Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), k[0], k[1], k[2],
 						sym_index(n[0], n[1], n[2]));
 				cmds.push_back(str);
 				free(str);
@@ -1965,7 +1965,7 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 							const auto p = n - m * 2;
 							char* str;
 							if (close21(factor)) {
-								ASPRINTF(&str, "%s[%i] = fmaf(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
+								ASPRINTF(&str, "%s[%i] = FMA(%s[%i], Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), iname.c_str(),
 										sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 								flops += 2;
 							} else if (close21(-factor)) {
@@ -1973,7 +1973,7 @@ int compute_detrace_ewald(std::string iname, std::string oname) {
 										sym_index(p[0], p[1], p[2]), n0 - m0, m0);
 								flops += 2;
 							} else {
-								ASPRINTF(&str, "%s[%i] = fmaf(T(%.16e), %s[%i]*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
+								ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s[%i]*Drinvpow_%i_%i, %s[%i]);\n", oname.c_str(), sym_index(n[0], n[1], n[2]), factor,
 										iname.c_str(), sym_index(p[0], p[1], p[2]), n0 - m0, m0, oname.c_str(), sym_index(n[0], n[1], n[2]));
 
 								flops += 3;
@@ -2162,14 +2162,14 @@ void do_expansion_cuda() {
 	flops += 3;
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", entries1.size());
 	indent();
-	tprint("Lb[Ldest1[i]] = fmaf(factor1[i] * dx[xsrc1[i]], La[Lsrc1[i]], Lb[Ldest1[i]]);\n");
+	tprint("Lb[Ldest1[i]] = FMA(factor1[i] * dx[xsrc1[i]], La[Lsrc1[i]], Lb[Ldest1[i]]);\n");
 	deindent();
 	tprint("}\n");
 	tprint("if( do_phi ) {\n");
 	indent();
 	tprint("for( int i = tid; i < %i; i+=WARP_SIZE) {\n", phi_entries.size());
 	indent();
-	tprint("Lb[0] = fmaf(phi_factor[i] * dx[phi_Lsrc[i]], La[phi_Lsrc[i]], Lb[0]);\n");
+	tprint("Lb[0] = FMA(phi_factor[i] * dx[phi_Lsrc[i]], La[phi_Lsrc[i]], Lb[0]);\n");
 	deindent();
 	tprint("}\n");
 	deindent();
@@ -2274,7 +2274,7 @@ void do_expansion(bool two) {
 			last_factor = factor;
 			phi_flops++;
 		}
-		tprint("Lb[%i] = fmaf( x[%i], La[%i], Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), sym_index(p[0], p[1], p[2]), index);
+		tprint("Lb[%i] = FMA( x[%i], La[%i], Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), sym_index(p[0], p[1], p[2]), index);
 		phi_flops += 2;
 	}
 	if (!close21(last_factor)) {
@@ -2314,7 +2314,7 @@ void do_expansion(bool two) {
 					flops++;
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Lb[%i] = fmaf( x[%i], La[%i], Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), sym_index(p[0], p[1], p[2]), index);
+				ASPRINTF(&str, "Lb[%i] = FMA( x[%i], La[%i], Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), sym_index(p[0], p[1], p[2]), index);
 				cmds.push_back(str);
 				free(str);
 				flops += 2;
@@ -2387,7 +2387,7 @@ void create_fma_function(const vector<pair<float, int>>& coeffs) {
 			for (int j = 0; j < pc[i].second - pc[i - 1].second - 1; j++) {
 				tprint("y *= q;\n");
 			}
-			tprint("y = fmaf(y, q, float(%e));\n", pc[i].first);
+			tprint("y = FMA(y, q, float(%e));\n", pc[i].first);
 		}
 	}
 	if( nc.size()) {
@@ -2396,10 +2396,10 @@ void create_fma_function(const vector<pair<float, int>>& coeffs) {
 			for (int j = 0; j < nc[i].second - nc[i - 1].second - 1; j++) {
 				tprint("z *= qinv;\n");
 			}
-			tprint("z = fmaf(y, qinv, float(%e));\n", nc[i].first);
+			tprint("z = FMA(y, qinv, float(%e));\n", nc[i].first);
 		}
 		if( pc.size() ) {
-			tprint("y = fmaf(z, qinv, y);\n");
+			tprint("y = FMA(z, qinv, y);\n");
 		} else {
 			tprint("const float& y = z;\n");
 		}
@@ -2466,9 +2466,9 @@ int main() {
 //	tprint("}\n");
 
 	tprint("D = T(0);\n");// 5
-	tprint("T r2 = fmaf(dx[0], dx[0], fmaf(dx[1], dx[1], sqr(dx[2])));\n");// 5
+	tprint("T r2 = FMA(dx[0], dx[0], FMA(dx[1], dx[1], sqr(dx[2])));\n");// 5
 	tprint("const T r = sqrt(r2);\n");// 1
-	tprint("const T rinv = 1.f / r;\n");// 2
+	tprint("const T rinv = T(1) / r;\n");// 2
 	tprint("const T rinv0 = T(1);\n");// 2
 	tprint("const T rinv1 = rinv;\n");// 2
 	for (int l = 2; l < (P + 1) / 2; l++) {
@@ -2562,7 +2562,7 @@ int main() {
 					last_coeff = coeff;
 					fl++;
 				}
-				tprint("L[%i] = fmaf(M[%i], D[%i], L[%i]);\n", nindex, sym_index(m[0], m[1], m[2]), sym_index(n[0] + m[0], n[1] + m[1], n[2] + m[2]),
+				tprint("L[%i] = FMA(M[%i], D[%i], L[%i]);\n", nindex, sym_index(m[0], m[1], m[2]), sym_index(n[0] + m[0], n[1] + m[1], n[2] + m[2]),
 						sym_index(n[0], n[1], n[2]));
 				fl += 2;
 			}
@@ -2607,7 +2607,7 @@ int main() {
 					last_coeff = coeff;
 					fl++;
 				}
-				ASPRINTF(&str, "L[%i] = fmaf(M[%i], D[%i], L[%i]);\n", nindex, sym_index(m[0], m[1], m[2]), sym_index(n[0] + m[0], n[1] + m[1], n[2] + m[2]),
+				ASPRINTF(&str, "L[%i] = FMA(M[%i], D[%i], L[%i]);\n", nindex, sym_index(m[0], m[1], m[2]), sym_index(n[0] + m[0], n[1] + m[1], n[2] + m[2]),
 						sym_index(n[0], n[1], n[2]));
 				cmds.push_back(str);
 				free(str);
@@ -2763,7 +2763,7 @@ int main() {
 					free(str);
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Mb[%i] = fmaf( x[%i], Ma[%i], Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), sym_index(k[0], k[1], k[2]),
+				ASPRINTF(&str, "Mb[%i] = FMA( x[%i], Ma[%i], Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), sym_index(k[0], k[1], k[2]),
 						sym_index(n[0], n[1], n[2]));
 				cmds.push_back(str);
 				free(str);

@@ -155,8 +155,11 @@ void ewald_const::init_gpu() {
 	 err = sqrt(err);
 	 PRINT( "Table error = %e\n", err);
 	 */
-	int n2max = 12;
-	int nmax = std::sqrt(n2max) + 1;
+#ifdef FMMPM
+	int nmax = 4;
+#else
+	int nmax = 3;
+#endif
 	array<ewald_type, NDIM> this_h;
 	int count = 0;
 	for (int i = -nmax; i <= nmax; i++) {
@@ -183,7 +186,11 @@ void ewald_const::init_gpu() {
 		return a2 > b2;
 	};
 	std::sort(ec.real_indices.begin(), ec.real_indices.end(), sort_func);
-	n2max = 8;
+#ifdef FMMPM
+	int n2max = 10;
+#else
+	int n2max = 8;
+#endif
 	nmax = std::sqrt(n2max) + 1;
 	count = 0;
 	for (int i = -nmax; i <= nmax; i++) {
@@ -201,6 +208,8 @@ void ewald_const::init_gpu() {
 			}
 		}
 	}
+	PRINT( "%i %i\n", count, NFOUR);
+
 	std::sort(ec.four_indices.begin(), ec.four_indices.end(), sort_func);
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
@@ -221,7 +230,7 @@ void ewald_const::init_gpu() {
 		ec.four_expanse[count] = D0.detraceD();
 		count++;
 	}
-	tensor_sym<ewald_type, PM_ORDER> D;
+		tensor_sym<ewald_type, PM_ORDER> D;
 	for (int n = 0; n < (PM_ORDER + 2) * (PM_ORDER + 1) * PM_ORDER / 6; n++) {
 		D[n] = 0.0;
 	}

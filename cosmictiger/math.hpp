@@ -69,8 +69,7 @@ CUDA_EXPORT int constrain_range(T& x) {
 	return flops;
 }
 
-#ifdef USE_CUDA
-__device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_DIV + FLOP_EXP
+CUDA_EXPORT inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_DIV + FLOP_EXP
 	const float p(0.3275911f);
 	const float a1(0.254829592f);
 	const float a2(-0.284496736f);
@@ -85,7 +84,6 @@ __device__ inline void erfcexp(float x, float* ec, float *ex) {				// 18 + FLOP_
 	*ex = expf(-x * x);// 2 + FLOP_EXP
 	*ec = fmaf(a1, t1, fmaf(a2, t2, fmaf(a3, t3, fmaf(a4, t4, a5 * t5)))) * *ex;// 10
 }
-#endif
 
 inline void erfcexp(double x, double* ec, double *ex) {				// 18 + FLOP_DIV + FLOP_EXP
 	*ex = exp(-x * x);				// 2 + FLOP_EXP
@@ -242,4 +240,52 @@ inline double difference(const std::function<double(double, double, double)>& f,
 #include <cosmictiger/containers.hpp>
 
 pair<double, array<double, NDIM>> find_eigenpair(const array<array<double, NDIM>, NDIM>& A, double mu);
+
+
+#ifndef __CUDACC__
+inline simd_float FMA(simd_float a, simd_float b, simd_float c) {
+	return fmaf(a,b,c);
+}
+
+
+CUDA_EXPORT inline void SINCOS( simd_float x, simd_float* s, simd_float* c) {
+	sincos(x,s,c);
+}
+
+CUDA_EXPORT inline void ERFCEXP( simd_float x, simd_float* erfc0, simd_float* exp0) {
+	erfcexp(x,erfc0,exp0);
+}
+
+inline simd_double FMA(simd_double a, simd_double b, simd_double c) {
+	return fmaf(a,b,c);
+}
+inline simd_double8 FMA(simd_double8 a, simd_double8 b, simd_double8 c) {
+	return fmaf(a,b,c);
+}
+#endif
+CUDA_EXPORT inline float FMA(float a, float b, float c) {
+	return fmaf(a,b,c);
+}
+CUDA_EXPORT inline double FMA(double a, double b, double c) {
+	return fma(a,b,c);
+}
+
+
+CUDA_EXPORT inline void ERFCEXP( float x, float* erfc0, float* exp0) {
+	erfcexp(x,erfc0,exp0);
+}
+
+CUDA_EXPORT inline void ERFCEXP( double x, double* erfc0, double* exp0) {
+	*erfc0 = erfc(x);
+	*exp0 = exp(-sqr(x));
+}
+
+CUDA_EXPORT inline void SINCOS( float x, float* s, float* c) {
+	sincosf(x,s,c);
+}
+
+CUDA_EXPORT inline void SINCOS( double x, double* s, double* c) {
+	sincos(x,s,c);
+}
+
 #endif /* MATH_HPP_ */

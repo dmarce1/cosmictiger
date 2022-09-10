@@ -24,8 +24,13 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/tensor.hpp>
 
+#ifdef FMMPM
+#define NREAL 364
+#define NFOUR 146
+#else
 #define NREAL 178
 #define NFOUR 92
+#endif
 #define EWALD_TABLE_SIZE 16
 
 using ewald_type = double;
