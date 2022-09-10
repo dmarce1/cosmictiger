@@ -275,7 +275,6 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 			sparam.self = params[index].self;
 			sparams.push_back(sparam);
 		}
-		const auto& self = tree_nodes[sparams.back().self];
 #ifdef FMMPM
 		const auto pm_L = params[index].L;
 	//	if( tid ==0 ){
@@ -294,6 +293,7 @@ __global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cud
 		while (depth >= 0) {
 //			auto tm2 = clock64();
 //			node_count++;
+			const auto& self = tree_nodes[sparams.back().self];
 			switch (sparams.back().phase) {
 
 			case 0: {
