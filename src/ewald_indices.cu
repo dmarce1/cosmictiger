@@ -205,14 +205,14 @@ void ewald_const::init_gpu() {
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
 		array<ewald_type, NDIM> h = ec.four_indices[i];
-		auto D0 = vector_to_sym_tensor<ewald_type, LORDER>(h);
+		auto D0 = vector_to_sym_tensor<ewald_type, PM_ORDER>(h);
 		const ewald_type h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
 		const ewald_type c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
 		array<int, NDIM> n;
 		const int signs[4] = { 1, -1, -1, 1 };
-		for (n[0] = 0; n[0] < LORDER; n[0]++) {
-			for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
-				for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
+		for (n[0] = 0; n[0] < PM_ORDER; n[0]++) {
+			for (n[1] = 0; n[1] < PM_ORDER - n[0]; n[1]++) {
+				for (n[2] = 0; n[2] < PM_ORDER - n[0] - n[1]; n[2]++) {
 					const int n0 = n[0] + n[1] + n[2];
 					D0(n) *= (signs[n0 % 4] * pow(2.0 * M_PI * SCALE_FACTOR_INV1, n0) * c0) * SCALE_FACTOR_INV1;
 				}
@@ -221,14 +221,14 @@ void ewald_const::init_gpu() {
 		ec.four_expanse[count] = D0.detraceD();
 		count++;
 	}
-	tensor_sym<ewald_type, LORDER> D;
-	for (int n = 0; n < (LORDER + 2) * (LORDER + 1) * LORDER / 6; n++) {
+	tensor_sym<ewald_type, PM_ORDER> D;
+	for (int n = 0; n < (PM_ORDER + 2) * (PM_ORDER + 1) * PM_ORDER / 6; n++) {
 		D[n] = 0.0;
 	}
 	constexpr double alpha = 2.0;
-	for (int n = 0; n < LORDER; n += 2) {
-		for (int m = 0; m < LORDER - n; m += 2) {
-			for (int l = 0; l < LORDER - n - m; l += 2) {
+	for (int n = 0; n < PM_ORDER; n += 2) {
+		for (int m = 0; m < PM_ORDER - n; m += 2) {
+			for (int l = 0; l < PM_ORDER - n - m; l += 2) {
 				D(n, m, l) = pow(SCALE_FACTOR_INV1, n + m + l + 1) * pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1)
 						* double_factorial(n + m + l - 1);
 			}
@@ -248,7 +248,7 @@ CUDA_EXPORT int ewald_const::nreal() {
 	return NREAL;
 }
 
-CUDA_EXPORT const tensor_sym<ewald_type, LORDER> ewald_const::D0() {
+CUDA_EXPORT const tensor_sym<ewald_type, PM_ORDER> ewald_const::D0() {
 #ifdef __CUDA_ARCH__
 	return ec_dev.D0;
 #else
@@ -331,7 +331,7 @@ CUDA_EXPORT void ewald_const::table_interp(float& pot, float& fx, float& fy, flo
 	}
 }
 
-CUDA_EXPORT const tensor_trless_sym<ewald_type, LORDER>& ewald_const::four_expansion(int i) {
+CUDA_EXPORT const tensor_trless_sym<ewald_type, PM_ORDER>& ewald_const::four_expansion(int i) {
 #ifdef __CUDA_ARCH__
 	return ec_dev.four_expanse[i];
 #else

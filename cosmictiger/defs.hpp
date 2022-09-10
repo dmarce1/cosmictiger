@@ -120,7 +120,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define LORDER ORDER
 #define MORDER (LORDER-1)
 #ifdef FMMPM
-#define PM_ORDER (ORDER)
+#define PM_ORDER (ORDER+2)
 #else
 #define PM_ORDER ORDER
 #endif

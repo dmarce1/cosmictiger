@@ -1033,10 +1033,11 @@ void do_expansion_cuda() {
 	tprint("#endif\n");
 }
 
+template<int N>
 void ewald(int direct_flops) {
 	tprint("#include <cosmictiger/flops.hpp>\n");
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,%i> &D, array<T, NDIM> X) {\n", P);
+	tprint("CUDA_EXPORT int ewald_greens_function(tensor_trless_sym<T,%i> &D, array<T, NDIM> X) {\n", N);
 	indent();
 	tprint("X[0] *= T(SCALE_FACTOR);\n");
 	tprint("X[1] *= T(SCALE_FACTOR);\n");
@@ -1051,8 +1052,8 @@ void ewald(int direct_flops) {
 	 deindent();
 	 tprint("}\n");*/
 	tprint("const T fouroversqrtpi = T(%.16e);\n", 4.0 / sqrt(M_PI));
-	tprint("tensor_sym<T, %i> Dreal;\n", P);
-	tprint("tensor_trless_sym<T,%i> Dfour;\n", P);
+	tprint("tensor_sym<T, %i> Dreal;\n", N);
+	tprint("tensor_trless_sym<T,%i> Dfour;\n", N);
 	tprint("Dreal = 0.0f;\n");
 	tprint("Dfour = 0.0f;\n");
 	tprint("D = 0.0f;\n");
@@ -1077,22 +1078,22 @@ void ewald(int direct_flops) {
 	tprint("T e0 = expfactor * rinv;\n"); // 1
 	tprint("const T rinv0 = T(1);\n"); // 2
 	tprint("const T rinv1 = rinv;\n"); // 2
-	for (int l = 2; l < (P + 1) / 2; l++) {
+	for (int l = 2; l < (N + 1) / 2; l++) {
 		const int i = l / 2;
 		const int j = l - i;
 		these_flops++;
-		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
+		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (N-2)
 	}
 	tprint("const T d0 = erf0 * rinv;\n");                                       // 2
-	for (int l = 1; l < P; l++) {
-		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
-		if (l != P - 1) {
-			tprint("e0 *= n8r;\n");                                                // (P-1)
+	for (int l = 1; l < N; l++) {
+		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (N-1)*4
+		if (l != N - 1) {
+			tprint("e0 *= n8r;\n");                                                // (N-1)
 		}
 	}
-	for (int l = 0; l < P; l++) {
+	for (int l = 0; l < N; l++) {
 		for (int m = 0; m <= l; m++) {
-			if (l + m < P) {
+			if (l + m < N) {
 				tprint("const T Drinvpow_%i_%i = d%i * rinv%i;\n", l, m, l, m);
 				these_flops++;
 			}
@@ -1102,12 +1103,12 @@ void ewald(int direct_flops) {
 	tprint("dxrinv[0] = dx[0] * rinv;\n");
 	tprint("dxrinv[1] = dx[1] * rinv;\n");
 	tprint("dxrinv[2] = dx[2] * rinv;\n");
-	these_flops += compute_dx(P, "dxrinv", false, true);
-	these_flops += 37 + 7 * (P - 1) + P * (P + 1) / 2;
+	these_flops += compute_dx(N, "dxrinv", false, true);
+	these_flops += 37 + 7 * (N - 1) + N * (N + 1) / 2;
 
-	these_flops += compute_detrace_ewald<P>("x", "Dreal");
+	these_flops += compute_detrace_ewald<N>("x", "Dreal");
 	tprint("const auto Drz = econst.D0();\n");
-	tprint("for( int i = 0; i < %i; i++) {\n", (P + 2) * (P + 1) * P / 6);
+	tprint("for( int i = 0; i < %i; i++) {\n", (N + 2) * (N + 1) * N / 6);
 	indent();
 	tprint("Dreal[i] *= zero_mask;\n");
 	tprint("Dreal[i] -= (T(1) - zero_mask) * Drz[i];\n");
@@ -1140,22 +1141,22 @@ void ewald(int direct_flops) {
 	tprint("T e0 = expfactor * rinv;\n");                                // 1
 	tprint("const T rinv0 = T(1);\n");                                // 2
 	tprint("const T rinv1 = rinv;\n");                                // 2
-	for (int l = 2; l < (P + 1) / 2; l++) {
+	for (int l = 2; l < (N + 1) / 2; l++) {
 		const int i = l / 2;
 		const int j = l - i;
 		these_flops++;
-		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (P-2)
+		tprint("const T rinv%i = rinv%i * rinv%i;\n", l, i, j);                      // (N-2)
 	}
 	tprint("const T d0 = -erfc0 * rinv;\n");                                       // 2
-	for (int l = 1; l < P; l++) {
-		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (P-1)*4
-		if (l != P - 1) {
-			tprint("e0 *= n8r;\n");                                                // (P-1)
+	for (int l = 1; l < N; l++) {
+		tprint("const T d%i = fmaf(T(%i) * d%i, rinv, e0);\n", l, -2 * l + 1, l - 1);            // (N-1)*4
+		if (l != N - 1) {
+			tprint("e0 *= n8r;\n");                                                // (N-1)
 		}
 	}
-	for (int l = 0; l < P; l++) {
+	for (int l = 0; l < N; l++) {
 		for (int m = 0; m <= l; m++) {
-			if (l + m < P) {
+			if (l + m < N) {
 				tprint("const T Drinvpow_%i_%i = d%i * rinv%i;\n", l, m, l, m);
 				these_flops++;
 			}
@@ -1165,13 +1166,13 @@ void ewald(int direct_flops) {
 	tprint("dxrinv[0] = dx[0] * rinv;\n");
 	tprint("dxrinv[1] = dx[1] * rinv;\n");
 	tprint("dxrinv[2] = dx[2] * rinv;\n");
-	these_flops += compute_dx(P, "dxrinv");
+	these_flops += compute_dx(N, "dxrinv");
 	array<int, NDIM> m;
 	array<int, NDIM> k;
 	array<int, NDIM> n;
-	these_flops += 37 + 7 * (P - 1) + P * (P + 1) / 2;
+	these_flops += 37 + 7 * (N - 1) + N * (N + 1) / 2;
 
-	these_flops += compute_detrace_ewald<P>("x", "Dreal");
+	these_flops += compute_detrace_ewald<N>("x", "Dreal");
 
 	deindent();
 	tprint("}\n");
@@ -1187,17 +1188,17 @@ void ewald(int direct_flops) {
 	tprint("T cn, sn;\n");
 	tprint("sincos(T(2.0 * M_PI * SCALE_FACTOR_INV1) * hdotx, &sn, &cn);\n"); // 35
 	these_flops = 40;
-	bool iscos[P * P + 1];
-	for (k[0] = 0; k[0] < P; k[0]++) {
-		for (k[1] = 0; k[1] < P - k[0]; k[1]++) {
-			const int zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, P) : intmin(P - k[0] - k[1], 2);
+	bool iscos[N * N + 1];
+	for (k[0] = 0; k[0] < N; k[0]++) {
+		for (k[1] = 0; k[1] < N - k[0]; k[1]++) {
+			const int zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, N) : intmin(N - k[0] - k[1], 2);
 			for (k[2] = 0; k[2] < zmax; k[2]++) {
 				const int k0 = k[0] + k[1] + k[2];
-				iscos[trless_index(k[0], k[1], k[2], P)] = (k0 % 2 == 0);
+				iscos[trless_index(k[0], k[1], k[2], N)] = (k0 % 2 == 0);
 			}
 		}
 	}
-	int maxi = (P * P + 1);
+	int maxi = (N * N + 1);
 	for (int i = 0; i < maxi; i++) {
 		int j = i + maxi;
 		tprint("Dfour[%i] = fmaf(%cn, D0[%i], Dfour[%i]);\n", i, iscos[i] ? 'c' : 's', i, i);
@@ -1209,10 +1210,10 @@ void ewald(int direct_flops) {
 	tprint("}\n");
 //	reference_sym("Dreal", P);
 //	reference_trless("D", P);
-	int those_flops = compute_detrace<P>("Dreal", "D", 'd');
-	those_flops += 16 + 3 * (P * P + 1);
-	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + P * P + 1);
-	tprint("D = D + Dfour;\n"); // P*P+1
+	int those_flops = compute_detrace<N>("Dreal", "D", 'd');
+	those_flops += 16 + 3 * (N * N + 1);
+	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + N * N + 1);
+	tprint("D = D + Dfour;\n"); // N*N+1
 	tprint("D[0] = T(%.16e * SCALE_FACTOR_INV1) + D[0]; \n", M_PI / 4.0); // 1
 	tprint("return flops;\n");
 	deindent();
@@ -1509,8 +1510,54 @@ int main() {
 	tprint("return %i + scale * NDIM;\n", flops);
 	deindent();
 	tprint("}\n");
+	if( PM_ORDER != ORDER) {
+		tprint("template<class T>\n");
+		tprint("CUDA_EXPORT\n");
+		tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X, bool scale = true) {\n", PM_ORDER);
+		flops = 0;
+		indent();
+		tprint("if( scale ) {\n");
+		indent();
+		tprint("X[0] *= T(SCALE_FACTOR);\n");
+		tprint("X[1] *= T(SCALE_FACTOR);\n");
+		tprint("X[2] *= T(SCALE_FACTOR);\n");
+		deindent();
+		tprint("}\n");
+		tprint("auto r2 = sqr(X[0], X[1], X[2]);\n");
+		tprint("r2 = sqr(X[0], X[1], X[2]);\n");
+		tprint("const T r = sqrt(r2);\n");
+		tprint("const T rinv1 = -(r > T(0)) / f_max(r, T(1e-20));\n");
+		for (int i = 1; i < PM_ORDER; i++) {
+			const int j = i / 2;
+			const int k = i - j;
+			tprint("const T rinv%i = -rinv%i * rinv%i;\n", i + 1, j + 1, k);
+		}
+		tprint("X[0] *= rinv1;\n");
+		tprint("X[1] *= rinv1;\n");
+		tprint("X[2] *= rinv1;\n");
+		flops += 12;
+		flops += compute_dx(PM_ORDER, "X", true);
+	//	reference_trless("D", PM_ORDER);
+		flops += compute_detraceD<PM_ORDER>("x", "D");
+		flops += 11 + (PM_ORDER - 1) * 2;
+		array<int, NDIM> k;
+		for (k[0] = 0; k[0] < PM_ORDER; k[0]++) {
+			for (k[1] = 0; k[1] < PM_ORDER - k[0]; k[1]++) {
+				const int zmax = (k[0] == 0 && k[1] == 0) ? intmin(3, PM_ORDER) : intmin(PM_ORDER - k[0] - k[1], 2);
+				for (k[2] = 0; k[2] < zmax; k[2]++) {
+					const int k0 = k[0] + k[1] + k[2];
+					tprint("D[%i] *= rinv%i;\n", trless_index(k[0], k[1], k[2], PM_ORDER), k0 + 1);
+					flops++;
+				}
+			}
+		}
+		tprint("return %i + scale * NDIM;\n", flops);
+		deindent();
+		tprint("}\n");
 
-	ewald(flops);
+
+	}
+	ewald<PM_ORDER>(flops);
 
 	array<int, NDIM> m;
 	for (int Pmax = 2; Pmax <= P; Pmax += P - 2) {
@@ -1712,9 +1759,9 @@ int main() {
 	flops += compute_dx(PM_ORDER - 1);
 
 	for (int i = 0; i < (PM_ORDER - 1) * PM_ORDER * (PM_ORDER + 1) / 6; i++) {
-		for (n[0] = 0; n[0] < P - 1; n[0]++) {
-			for (n[1] = 0; n[1] < P - n[0] - 1; n[1]++) {
-				for (n[2] = 0; n[2] < P - n[0] - n[1] - 1; n[2]++) {
+		for (n[0] = 0; n[0] < PM_ORDER - 1; n[0]++) {
+			for (n[1] = 0; n[1] < PM_ORDER- n[0] - 1; n[1]++) {
+				for (n[2] = 0; n[2] < PM_ORDER - n[0] - n[1] - 1; n[2]++) {
 					if (i == sym_index(n[0], n[1], n[2])) {
 						tprint("Mb[%i] = Ma%i%i%i;\n", i, n[0], n[1], n[2]);
 					}

@@ -40,8 +40,8 @@ struct ewald_const {
 	static void init_gpu();CUDA_EXPORT
 	static const array<ewald_type, NDIM>& real_index(int i);CUDA_EXPORT
 	static const array<ewald_type, NDIM>& four_index(int i);CUDA_EXPORT
-	static const tensor_trless_sym<ewald_type, LORDER>& four_expansion(int i);CUDA_EXPORT
-	static const tensor_sym<ewald_type, LORDER> D0();
+	static const tensor_trless_sym<ewald_type, PM_ORDER>& four_expansion(int i);CUDA_EXPORT
+	static const tensor_sym<ewald_type, PM_ORDER> D0();
 	CUDA_EXPORT void table_interp(float& pot, float& fx, float& fy, float& fz, float x, float y, float z, bool do_pot);
 };
 
@@ -49,8 +49,8 @@ struct ewald_constants {
 	ewald_table_t table;
 	array<array<ewald_type, NDIM>, NREAL> real_indices;
 	array<array<ewald_type, NDIM>, NFOUR> four_indices;
-	array<tensor_trless_sym<ewald_type, LORDER>, NFOUR> four_expanse;
-	tensor_sym<ewald_type, LORDER> D0;
+	array<tensor_trless_sym<ewald_type, PM_ORDER>, NFOUR> four_expanse;
+	tensor_sym<ewald_type, PM_ORDER> D0;
 };
 
 

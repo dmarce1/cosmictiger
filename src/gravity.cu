@@ -455,7 +455,7 @@ void cuda_gravity_pp_direct(const cuda_kick_data& data, const tree_node& self, c
 
 }
 
-#ifndef TREEPM
+#ifdef FMM
 
 __device__
 void cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, const tree_node& self, const device_vector<int>& multlist, bool do_phi) {

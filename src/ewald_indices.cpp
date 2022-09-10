@@ -47,11 +47,11 @@ const array<float, NDIM>& ewald_const::four_index(int i) {
 	return ec.four_indices[i];
 }
 
-const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
+const tensor_trless_sym<float, PM_ORDER>& ewald_const::four_expansion(int i) {
 	return ec.four_expanse[i];
 }
 
-const tensor_sym<float, LORDER> ewald_const::D0() {
+const tensor_sym<float, PM_ORDER> ewald_const::D0() {
 	return ec.D0;
 }
 
@@ -113,14 +113,14 @@ void ewald_const::init() {
 	count = 0;
 	for (int i = 0; i < NFOUR; i++) {
 		array<float, NDIM> h = ec.four_indices[i];
-		auto D0 = vector_to_sym_tensor<float, LORDER>(h);
+		auto D0 = vector_to_sym_tensor<float, PM_ORDER>(h);
 		const float h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
 		const float c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
 		array<int, NDIM> n;
 		const int signs[4] = { 1, -1, -1, 1 };
-		for (n[0] = 0; n[0] < LORDER; n[0]++) {
-			for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
-				for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
+		for (n[0] = 0; n[0] < PM_ORDER; n[0]++) {
+			for (n[1] = 0; n[1] < PM_ORDER - n[0]; n[1]++) {
+				for (n[2] = 0; n[2] < PM_ORDER - n[0] - n[1]; n[2]++) {
 					const int n0 = n[0] + n[1] + n[2];
 					D0(n) *= signs[n0 % 4] * pow(2.0 * M_PI, n0) * c0;
 				}
@@ -128,14 +128,14 @@ void ewald_const::init() {
 		}
 		ec.four_expanse[count++] = D0.detraceD();
 	}
-	tensor_sym<float, LORDER> D;
-	for (int n = 0; n < EXPANSION_SIZE; n++) {
+	tensor_sym<float, PM_ORDER> D;
+	for (int n = 0; n < PM_EXPANSION_SIZE; n++) {
 		D[n] = 0.0;
 	}
 	constexpr double alpha = 2.0;
-	for (int n = 0; n < LORDER; n += 2) {
-		for (int m = 0; m < LORDER - n; m += 2) {
-			for (int l = 0; l < LORDER - n - m; l += 2) {
+	for (int n = 0; n < PM_ORDER; n += 2) {
+		for (int m = 0; m < PM_ORDER - n; m += 2) {
+			for (int l = 0; l < PM_ORDER - n - m; l += 2) {
 				D(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1) * double_factorial(n - 1)
 						* double_factorial(m - 1) * double_factorial(l - 1);
 			}
