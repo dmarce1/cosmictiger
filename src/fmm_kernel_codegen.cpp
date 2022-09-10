@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 
+#define BUFFER 0
 static int ntab = 0;
 
 void indent() {
@@ -708,8 +709,18 @@ void do_expansion(bool two, const char* name) {
 		tprint("Lb(1,0,0) = La(1,0,0);\n");
 		tprint("Lb(0,1,0) = La(0,1,0);\n");
 		tprint("Lb(0,0,1) = La(0,0,1);\n");
-	} else {
+	} else if (N == Q) {
 		tprint("Lb = La;\n");
+	} else {
+		for (int l = 0; l < Q; l++) {
+			for (int m = 0; m < Q - l; m++) {
+				for (int n = 0; n < Q - l - m; n++) {
+					if (n > 2 && !(n == 2 && l == 0 && m == 0)) {
+						tprint("Lb[%i] = La[%i];\n", trless_index(l, m, n, Q), trless_index(l, m, n, N));
+					}
+				}
+			}
+		}
 	}
 	struct entry {
 		int Ldest;
@@ -1044,7 +1055,23 @@ void ewald(int direct_flops) {
 	tprint("X[2] *= T(SCALE_FACTOR);\n");
 	tprint("ewald_const econst;\n");
 	tprint("flop_counter<int> flops = %i;\n", 7);
+	tprint("array<T,NDIM> xshift;\n");
 	tprint("T r = sqrt(FMA(X[0], X[0], FMA(X[1], X[1], sqr(X[2]))));\n"); // 6
+	tprint("if( r < T(0.02) ) {\n");
+	indent();
+	tprint("xshift = X;\n");
+	tprint("X[XDIM] =X[YDIM]=X[ZDIM] =T(0);\n");
+	deindent();
+	tprint("} else {\n");
+	indent();
+	tprint("xshift[XDIM] = T(0);\n");
+	tprint("xshift[YDIM] = T(0);\n");
+	tprint("xshift[ZDIM] = T(0);\n");
+	deindent();
+	tprint("} \n");
+
+	tprint("r = sqrt(FMA(X[0], X[0], FMA(X[1], X[1], sqr(X[2]))));\n"); // 6
+
 	/*	tprint("if( r < 0.05 ) {\n");
 	 indent();
 	 tprint("green_ewald_smallx( D, X );\n");
@@ -1215,6 +1242,7 @@ void ewald(int direct_flops) {
 	tprint("flops += %i * foursz + %i;\n", these_flops, those_flops + N * N + 1);
 	tprint("D = D + Dfour;\n"); // N*N+1
 	tprint("D[0] = T(%.16e * SCALE_FACTOR_INV1) + D[0]; \n", M_PI / 4.0); // 1
+	tprint("D = L2L(D, xshift, true);\n");
 	tprint("return flops;\n");
 	deindent();
 	tprint("}\n");
@@ -1510,7 +1538,7 @@ int main() {
 	tprint("return %i + scale * NDIM;\n", flops);
 	deindent();
 	tprint("}\n");
-	if( PM_ORDER != ORDER) {
+	if ( PM_ORDER != ORDER) {
 		tprint("template<class T>\n");
 		tprint("CUDA_EXPORT\n");
 		tprint("inline int greens_function(tensor_trless_sym<T, %i>& D, array<T, NDIM> X, bool scale = true) {\n", PM_ORDER);
@@ -1537,7 +1565,7 @@ int main() {
 		tprint("X[2] *= rinv1;\n");
 		flops += 12;
 		flops += compute_dx(PM_ORDER, "X", true);
-	//	reference_trless("D", PM_ORDER);
+		//	reference_trless("D", PM_ORDER);
 		flops += compute_detraceD<PM_ORDER>("x", "D");
 		flops += 11 + (PM_ORDER - 1) * 2;
 		array<int, NDIM> k;
@@ -1555,8 +1583,15 @@ int main() {
 		deindent();
 		tprint("}\n");
 
-
 	}
+	do_expansion<P, P>(false, "L2L");
+	do_expansion<PM_ORDER, PM_ORDER>(false, "L2L");
+
+	do_expansion<P, 2>(true, "L2P");
+
+	do_expansion<PM_ORDER, 2>(true, "pm_L2P");
+
+
 	ewald<PM_ORDER>(flops);
 
 	array<int, NDIM> m;
@@ -1760,7 +1795,7 @@ int main() {
 
 	for (int i = 0; i < (PM_ORDER - 1) * PM_ORDER * (PM_ORDER + 1) / 6; i++) {
 		for (n[0] = 0; n[0] < PM_ORDER - 1; n[0]++) {
-			for (n[1] = 0; n[1] < PM_ORDER- n[0] - 1; n[1]++) {
+			for (n[1] = 0; n[1] < PM_ORDER - n[0] - 1; n[1]++) {
 				for (n[2] = 0; n[2] < PM_ORDER - n[0] - n[1] - 1; n[2]++) {
 					if (i == sym_index(n[0], n[1], n[2])) {
 						tprint("Mb[%i] = Ma%i%i%i;\n", i, n[0], n[1], n[2]);
@@ -1865,10 +1900,6 @@ int main() {
 	deindent();
 	tprint("}\n");
 
-	do_expansion<P, P>(false, "L2L");
-
-	do_expansion<P, 2>(true, "L2P");
-	do_expansion<PM_ORDER, 2>(true, "pm_L2P");
 
 #ifdef USE_CUDA
 	do_expansion_cuda<P>();

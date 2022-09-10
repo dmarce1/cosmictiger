@@ -109,6 +109,8 @@ int hpx_main(int argc, char *argv[]) {
 		X[0] = X[1] = X[2] = 0.00;
 		for (double x = 0.0; x <= 0.501; x += 0.01) {
 			X[0] = x;
+			X[1] = 0.0986421;
+			X[2] = -0.3123;
 			ewald_greens_function(D, X);
 			fprintf(fp, "%e ", x);
 			for (int i = 0; i < PM_EXPANSION_SIZE; i++) {
