@@ -169,7 +169,7 @@ HPX_PLAIN_ACTION (particles_pop_rungs);
 HPX_PLAIN_ACTION (particles_push_rungs);
 HPX_PLAIN_ACTION (particles_active_pct);
 
-#ifdef TREEPM
+#ifndef FMM
 HPX_PLAIN_ACTION (particles_active_count);
 
 size_t particles_active_count() {

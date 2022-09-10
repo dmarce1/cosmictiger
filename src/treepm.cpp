@@ -17,6 +17,7 @@ static size_t local_part_count;
 #ifdef FMMPM
 tensor_trless_sym<vector<double>, PM_ORDER> G_x;
 tensor_trless_sym<vector<complex<double>>, PM_ORDER> G_k;
+std::unordered_map<int, tensor_trless_sym<vector<complex<double>>, PM_ORDER>> G_k_store;
 tensor_trless_sym<vector<double>, (PM_ORDER - 1)> M_x;
 tensor_trless_sym<vector<complex<double>>, (PM_ORDER - 1)> M_k;
 tensor_trless_sym<vector<double>, PM_ORDER> L_x;
@@ -136,9 +137,10 @@ kick_return treepm_kick(kick_params params) {
 	kick_return kr;
 	const auto& opts = get_options();
 	int i;
-	for (i = 2; pow(i, NDIM) / hpx_size() < 32 * 32 * 32; i += 2) {
+	auto active_count = particles_active_count();
+	for (i = 2 * (2 * opts.p3m_chainnbnd + 1); active_count / (sqr(i) * i) > 1024; i += 2) {
 	}
-	i = get_options().p3m_Nmin;
+//	i = get_options().p3m_Nmin;
 	const int Nres = i;
 	PRINT("NRES = %i\n", Nres);
 	const double rs = opts.p3m_rs / Nres;
@@ -194,6 +196,7 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 
 	/********************************************************/
 	const int Nbnd = get_options().p3m_chainnbnd;
+	const double rs = get_options().p3m_rs;
 //	const int Nbnd = 0;
 	/********************************************************/
 
@@ -227,7 +230,7 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 	mutex_type mutex;
 	vector<hpx::future<void>> futs2;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs2.push_back(hpx::async([cell_count,Nbnd,&mutex,box,Nres,&works](array<int64_t, NDIM> I) {
+		futs2.push_back(hpx::async([rs,cell_count,Nbnd,&mutex,box,Nres,&works](array<int64_t, NDIM> I) {
 			for (I[YDIM] = box.begin[YDIM]; I[YDIM] < box.end[YDIM]; I[YDIM]++) {
 				for (I[ZDIM] = box.begin[ZDIM]; I[ZDIM] < box.end[ZDIM]; I[ZDIM]++) {
 					kick_workitem work;
@@ -236,27 +239,20 @@ kick_return treepm_short_range(kick_params params, int Nres) {
 					for (J[XDIM] = I[XDIM] - Nbnd; J[XDIM] <= I[XDIM] + Nbnd; J[XDIM]++) {
 						for (J[YDIM] = I[YDIM] - Nbnd; J[YDIM] <= I[YDIM] + Nbnd; J[YDIM]++) {
 							for (J[ZDIM] = I[ZDIM] - Nbnd; J[ZDIM] <= I[ZDIM] + Nbnd; J[ZDIM]++) {
-#ifdef TREEPM
-				auto K = J - I;
-				for( int dim =0; dim< NDIM; dim++) {
-					K[dim] = std::max(std::abs(K[dim])-0.999999, 0.0);
-				}
-				if( sqr(K[XDIM], K[YDIM], K[ZDIM]) < sqr(Nbnd) ) {
-#endif
-				tree_id id;
-				id.index = tree_roots[chain_box.index(J)];
-				if( id.index >= 0 ) {
-					work.dchecklist.push_back(id);
-				}
-#ifdef TREEPM
-			}
-#endif
+								auto K = J - I;
+								if( sqr(K[XDIM], K[YDIM], K[ZDIM]) <= sqr(rs) ) {
+									tree_id id;
+									id.index = tree_roots[chain_box.index(J)];
+									if( id.index >= 0 ) {
+										work.dchecklist.push_back(id);
+									}
+								}
 
-			}
-		}
-	}
-	const auto jjj = box.index(I);
-	for( int n = 0; n < PM_EXPANSION_SIZE; n++) {
+							}
+						}
+					}
+					const auto jjj = box.index(I);
+					for( int n = 0; n < PM_EXPANSION_SIZE; n++) {
 #ifdef FMMPM
 				work.L[n] = L_x[n][jjj];
 #else
@@ -598,9 +594,9 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 	treepm_free_fourier();
 #else
 #ifdef FMMPM
-	static bool green_init = false;
+	bool green_init = G_k_store.find(Nres) != G_k_store.end();
 	const int Nbnd = get_options().p3m_chainnbnd;
-	if (!green_init) {
+	if (green_init) {
 		fft3d_dbl_init(Nres);
 		timer tm;
 		tm.start();
@@ -663,7 +659,7 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 #ifdef FMMPM
 void treepm_green_init(int Nres) {
 	vector<hpx::future<void>> futs1, futs2;
-	const int nbnd = get_options().p3m_chainnbnd;
+	const double rmax = get_options().p3m_rs;
 //	const int nbnd = 0;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_green_init_action>(c, Nres));
@@ -671,7 +667,7 @@ void treepm_green_init(int Nres) {
 	const auto box = treepm_get_fourier_box(Nres);
 	array<int64_t, NDIM> I;
 	for (I[XDIM] = box.begin[XDIM]; I[XDIM] < box.end[XDIM]; I[XDIM]++) {
-		futs1.push_back(hpx::async([nbnd,box,Nres](array<int64_t,NDIM> I) {
+		futs1.push_back(hpx::async([rmax,box,Nres](array<int64_t,NDIM> I) {
 
 			array<double, NDIM > x;
 			array<int64_t, NDIM> J;
@@ -680,12 +676,12 @@ void treepm_green_init(int Nres) {
 					int jmax = 0;
 					for (int dim = 0; dim < NDIM; dim++) {
 						J[dim] = ((I[dim] < Nres / 2) ? I[dim] : I[dim] - Nres);
-						jmax =std::max(jmax,(int)std::abs(J[dim]));
+						jmax += sqr(J[dim]);
 						x[dim] = (double) J[dim] / Nres;
 					}
 					tensor_trless_sym<double, PM_ORDER> Dewald;
 					tensor_trless_sym<double, PM_ORDER> D;
-					if(jmax>nbnd) {
+					if(jmax>sqr(rmax)) {
 						greens_function(D,x);
 					} else {
 						D = 0.0;
@@ -721,6 +717,9 @@ void treepm_green_save(int n, int Nres) {
 	}
 	const auto box = fft3d_dbl_complex_range();
 	G_k[n] = fft3d_dbl_read_complex(box);
+	if (n == PM_EXPANSION_SIZE - 1) {
+		G_k_store[Nres] = G_k;
+	}
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 
@@ -728,6 +727,12 @@ void treepm_multi_init(int n, int Nres) {
 	vector<hpx::future<void>> futs1;
 	for (auto c : hpx_children()) {
 		futs1.push_back(hpx::async<treepm_multi_init_action>(c, n, Nres));
+	}
+	if (n == 0) {
+		const auto& store = G_k_store[Nres];
+		if (G_k[0].size() != store[0].size()) {
+			G_k = store;
+		}
 	}
 	const auto box = treepm_get_fourier_box(Nres);
 	fft3d_dbl_accumulate_real(box, M_x[n]);
@@ -744,12 +749,12 @@ void treepm_multi_save(int n, int Nres) {
 	const auto box = fft3d_dbl_complex_range();
 	M_k[n] = fft3d_dbl_read_complex(box);
 	/*if (n == 0) {
-		array<int64_t, NDIM> I;
-		I[0] = I[1] = I[2] = 0;
-		if (box.contains(I)) {
-			M_k[n][box.index(I)] = complex<double>(0.0, 0.0);
-		}
-	}*/
+	 array<int64_t, NDIM> I;
+	 I[0] = I[1] = I[2] = 0;
+	 if (box.contains(I)) {
+	 M_k[n][box.index(I)] = complex<double>(0.0, 0.0);
+	 }
+	 }*/
 	hpx::wait_all(futs1.begin(), futs1.end());
 }
 

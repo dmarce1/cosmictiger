@@ -935,7 +935,7 @@ void do_expansion_cuda() {
 		//	}
 	}
 
-	tprint("static __constant__ char Ldest1[%i] = { ", entries1.size());
+	tprint("static __device__ short Ldest1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].Ldest);
 		if (i != entries1.size() - 1) {
@@ -943,7 +943,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ float factor1[%i] = { ", entries1.size());
+	tprint("static __device__ float factor1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("float(%.16e)", entries1[i].factor);
 		if (i != entries1.size() - 1) {
@@ -951,7 +951,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ char xsrc1[%i] = { ", entries1.size());
+	tprint("static __device__ short xsrc1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].xsource);
 		if (i != entries1.size() - 1) {
@@ -959,7 +959,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ char Lsrc1[%i] = { ", entries1.size());
+	tprint("static __device__ short Lsrc1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].Lsource);
 		if (i != entries1.size() - 1) {
@@ -968,7 +968,7 @@ void do_expansion_cuda() {
 	}
 	tprint("};\n");
 
-	tprint("static __constant__ float phi_factor[%i] = { ", phi_entries.size());
+	tprint("static __device__ float phi_factor[%i] = { ", phi_entries.size());
 	for (int i = 0; i < phi_entries.size(); i++) {
 		printf("float(%.16e)", phi_entries[i].factor);
 		if (i != phi_entries.size() - 1) {
@@ -976,7 +976,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ char phi_Lsrc[%i] = { ", phi_entries.size());
+	tprint("static __device__ short phi_Lsrc[%i] = { ", phi_entries.size());
 	for (int i = 0; i < phi_entries.size(); i++) {
 		printf("%i", phi_entries[i].Lsource);
 		if (i != phi_entries.size() - 1) {

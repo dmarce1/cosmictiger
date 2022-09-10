@@ -493,7 +493,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 		 tm.stop();
 		 PRINT("drift = %e\n", tm.read());
 		 }*/
-#ifdef TREEPM
+#ifndef FMM
 		tree_create_params tparams;
 		tree_create_return this_sr;
 #else
@@ -553,7 +553,7 @@ std::pair<kick_return, tree_create_return> kick_step_hierarchical(int& minrung, 
 			reset_gravity_counters();
 			set_gravity_counter_use(true);
 		}
-#ifdef TREEPM
+#ifndef FMM
 		kick_return this_kr = treepm_kick(kparams);
 #else
 		kick_return this_kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
@@ -993,7 +993,7 @@ void driver() {
 				}
 			}
 			const auto ts = 100 * tau / t0 / get_options().nsteps;
-#ifdef TREEPM
+#ifndef FMM
 			bucket_size = 96;
 #else
 			if (ts <= 10.0) {

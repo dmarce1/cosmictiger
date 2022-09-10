@@ -139,7 +139,7 @@ bool process_options(int argc, char *argv[]) {
 	("Y0", po::value<double>(&(opts.Y0))->default_value(0.2454006), "") //
 	("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "") //
 	("toler", po::value<double>(&(opts.toler))->default_value(-1), "") //
-	("p3m_rs", po::value<double>(&(opts.p3m_rs))->default_value(3.8), "rscale for treepm") //
+	("p3m_rs", po::value<double>(&(opts.p3m_rs))->default_value(2.0), "rscale for treepm") //
 	("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "") //
 	("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index") //
 	("code_to_g", po::value<double>(&(opts.code_to_g))->default_value(1.e9 / .6732), "mass resolution") //
@@ -176,6 +176,32 @@ bool process_options(int argc, char *argv[]) {
 	opts.Nfour = opts.parts_dim;
 #ifdef TREEPM
 	opts.p3m_chainnbnd = lround(ceil(opts.p3m_chainnbnd * opts.p3m_rs));
+#else
+#ifdef FMMPM
+	int count = -2;
+	int last_count =-1;
+	int n = 0;
+	while (last_count != count) {
+		last_count = count;
+		count = 0;
+		for (int i = 0; i <= n; i++) {
+			for (int j = 0; j <= n; j++) {
+				for (int k = 0; k <= n; k++) {
+					if (sqr(i, j, k) <= sqr(opts.p3m_rs)) {
+						count++;
+					}
+				}
+			}
+		}
+		if (count == last_count) {
+			n--;
+		} else {
+			n++;
+		}
+	}
+	PRINT("Setting bound width to %i\n", n);
+	opts.p3m_chainnbnd = n;
+#endif
 #endif
 	if (opts.close_pack) {
 		opts.nparts *= 2;

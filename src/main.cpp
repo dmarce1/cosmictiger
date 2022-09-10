@@ -133,9 +133,9 @@ int hpx_main(int argc, char *argv[]) {
 
 #ifndef HPX_LITE
 int main(int argc, char *argv[]) {
-	feenableexcept (FE_DIVBYZERO);
-	feenableexcept (FE_INVALID);
-	feenableexcept (FE_OVERFLOW);
+//	feenableexcept (FE_DIVBYZERO);
+//	feenableexcept (FE_INVALID);
+//	feenableexcept (FE_OVERFLOW);
 
 	PRINT("STARTING MAIN\n");
 	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
