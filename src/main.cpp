@@ -37,59 +37,133 @@
 
 #include <fenv.h>
 
+int dec_index(array<int, NDIM>& n) {
+	for (int dim = 0; dim < NDIM; dim++) {
+		if (n[dim] > 0) {
+			n[dim]--;
+			return dim;
+		}
+	}
+	return -1;
+}
+
+double rot_tensor(const array<array<double, NDIM>, NDIM>& rot_mat, array<int, NDIM> m, array<int, NDIM> n) {
+	auto n1 = n;
+	vector<int> indices;
+	int i;
+	while ((i = dec_index(m)) != -1) {
+		indices.push_back(i);
+	}
+	std::sort(indices.begin(), indices.end());
+	double sum = 0.0;
+	do {
+		double res = 1.0;
+		n = n1;
+		int j = 0;
+		while ((i = dec_index(n)) != -1) {
+			res *= rot_mat[i][indices[j]];
+			j++;
+		}
+		sum += res;
+	} while (std::next_permutation(indices.begin(), indices.end()));
+	return sum;
+}
+
+template<class T, int Q>
+tensor_trless_sym<T, Q> rotate_tensor(const tensor_trless_sym<T, Q>& A, array<T, NDIM> X, bool inv = false) {
+	T norm = sqrt(sqr(X[XDIM], X[YDIM], X[ZDIM]));
+	norm = T(1) / norm;
+	for (int dim = 0; dim < NDIM; dim++) {
+		X[dim] *= norm;
+	}
+	const double& x = X[XDIM];
+	const double& y = X[YDIM];
+	const double& z = X[ZDIM];
+	const double R = sqrt(sqr(x) + sqr(y));
+
+	array<array<double, NDIM>, NDIM> rot_mat;
+	if (R == 0.0) {
+		return A;
+	}
+	if (inv) {
+		rot_mat[0][0] = x * z / R;
+		rot_mat[0][1] = -y / R;
+		rot_mat[0][2] = x;
+		rot_mat[1][0] = y * z / R;
+		rot_mat[1][1] = x / R;
+		rot_mat[1][2] = y;
+		rot_mat[2][0] = -R;
+		rot_mat[2][1] = 0.0;
+		rot_mat[2][2] = z;
+	} else {
+		rot_mat[0][0] = x * z / R;
+		rot_mat[0][1] = y * z / R;
+		rot_mat[0][2] = -R;
+		rot_mat[1][0] = -y / R;
+		rot_mat[1][1] = x / R;
+		rot_mat[1][2] = 0.0;
+		rot_mat[2][0] = x;
+		rot_mat[2][1] = y;
+		rot_mat[2][2] = z;
+
+	}
+	tensor_trless_sym<T, Q> B;
+	for (int n = 0; n < Q; n++) {
+		for (int m = 0; m < Q - n; m++) {
+			for (int l = 0; l < Q - n - m; l++) {
+				if (l >= 2 && !(l == 2 && n == 0 && m == 0)) {
+					continue;
+				}
+				array<int, NDIM> n0, m0;
+				n0[XDIM] = n;
+				n0[YDIM] = m;
+				n0[ZDIM] = l;
+				B(n, m, l) = 0.0;
+				for (m0[XDIM] = 0; m0[XDIM] < Q; m0[XDIM]++) {
+					for (m0[YDIM] = 0; m0[YDIM] < Q - m0[XDIM]; m0[YDIM]++) {
+						m0[ZDIM] = n0[XDIM] + n0[YDIM] + n0[ZDIM] - m0[XDIM] - m0[YDIM];
+						if (m0[ZDIM] < 0 || m0[ZDIM] >= Q - m0[XDIM] - m0[YDIM]) {
+							continue;
+						}
+						B(n, m, l) += rot_tensor(rot_mat, m0, n0) * A(m0[XDIM], m0[YDIM], m0[ZDIM]);
+					}
+				}
+			}
+		}
+	}
+
+	return B;
+
+}
+
 void test_multipoles() {
 	pm_multipole<double> M;
-	pm_expansion<double> L;
-	constexpr int ntrials = 1;
+	array<double, NDIM> X;
 	for (int i = 0; i < PM_MULTIPOLE_SIZE; i++) {
 		M[i] = 1.0;
 	}
-	array<double, NDIM> x;
-	array<double, NDIM> y;
-	for (int dim = 0; dim < NDIM; dim++) {
-		y[dim] = 0.0;
-	}
-	for (int i = 0; i < ntrials; i++) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = 2.0 * rand1() - 1.0;
-			y[dim] -= x[dim];
-		}
-		M = M2M(M, x);
-	}
-	M = M2M(M, y);
+	X[XDIM] = -1.0;
+	X[YDIM] = -1.0;
+	X[ZDIM] = -1.0;
+	auto M0 = rotate_tensor(M, X);
+	M0 = rotate_tensor(M0, X, true);
+	const auto M1 = M0;
 	for (int n = 0; n < PM_ORDER - 1; n++) {
 		for (int m = 0; m < PM_ORDER - 1 - n; m++) {
 			for (int l = 0; l < PM_ORDER - 1 - n - m; l++) {
 				if (l >= 2 && !(l == 2 && n == 0 && m == 0)) {
 					continue;
 				}
-				PRINT("%i %i %i %e\n", n, m, l, M(n, m, l));
+				PRINT("%i %i %i %e\n", n, m, l, M1(n, m, l));
+
 			}
 		}
-	}
-	PRINT("!!!!!!!!!!!\n");
-	for (int i = 0; i < PM_EXPANSION_SIZE; i++) {
-		L[i] = 1.0;
-	}
-	for (int dim = 0; dim < NDIM; dim++) {
-		y[dim] = 0.0;
-	}
-	for (int i = 0; i < ntrials; i++) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			x[dim] = 2.0 * rand1() - 1.0;
-			y[dim] -= x[dim];
-		}
-		L = L2L(L, x, true);
-	}
-	L = L2L(L, y, true);
-	for (int i = 0; i < PM_EXPANSION_SIZE; i++) {
-		PRINT("%.16e\n", L[i]);
 	}
 }
 
 int hpx_main(int argc, char *argv[]) {
 	test_multipoles();
-	return 0;
+	return 0.0;
 	{
 		double toler = 1.19e-7 / sqrt(2);
 		double norm = 2.83;

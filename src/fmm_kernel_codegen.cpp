@@ -137,32 +137,32 @@ int compute_dx_tensor(int P, const char* name = "X") {
 }
 
 int acc(std::string a, array<int, NDIM> n, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i += %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
+	tprint("%s%i_%i_%i += %s%i_%i_%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
 	return 1;
 }
 
 int dec(std::string a, array<int, NDIM> n, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i -= %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
+	tprint("%s%i_%i_%i -= %s%i_%i_%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
 	return 1;
 }
 
 int eqp(std::string a, array<int, NDIM> n, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
+	tprint("%s%i_%i_%i = %s%i_%i_%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
 	return 0;
 }
 
 int eqn(std::string a, array<int, NDIM> n, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = -%s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
+	tprint("%s%i_%i_%i = -%s%i_%i_%i;\n", a.c_str(), n[0], n[1], n[2], c.c_str(), j[0], j[1], j[2]);
 	return 1;
 }
 
 int mul(std::string a, array<int, NDIM> n, double b, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = T(%.16e) * %s%i%i%i;\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2]);
+	tprint("%s%i_%i_%i = T(%.16e) * %s%i_%i_%i;\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2]);
 	return 1;
 }
 
 int fma(std::string a, array<int, NDIM> n, double b, std::string c, array<int, NDIM> j) {
-	tprint("%s%i%i%i = FMA(T(%.16e), %s%i%i%i, %s%i%i%i);\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
+	tprint("%s%i_%i_%i = FMA(T(%.16e), %s%i_%i_%i, %s%i_%i_%i);\n", a.c_str(), n[0], n[1], n[2], b, c.c_str(), j[0], j[1], j[2], a.c_str(), n[0], n[1], n[2]);
 	return 2;
 }
 
@@ -202,13 +202,13 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							char* str;
 							if (first) {
 								if (close21(factor)) {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "T %s_%i_%i_%i_%i_%i = %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = -%s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
+									ASPRINTF(&str, "T %s_%i_%i_%i_%i_%i = -%s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
 											sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "T %s_%i_%i_%i%i%i = T(%.16e) * %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor, iname.c_str(),
+									ASPRINTF(&str, "T %s_%i_%i_%i_%i_%i = T(%.16e) * %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor, iname.c_str(),
 											sym_index(p[0], p[1], p[2]));
 									flops++;
 								}
@@ -217,13 +217,13 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 								free(str);
 							} else {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i += %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i += %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i -= %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i -= %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
-									ASPRINTF(&str, "%s_%i_%i_%i%i%i = FMA(T(%.16e), %s[%i], %s_%i_%i_%i%i%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
+									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i = FMA(T(%.16e), %s[%i], %s_%i_%i_%i_%i_%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
 											iname.c_str(), sym_index(p[0], p[1], p[2]), iname.c_str(), n0, m0, j[0], j[1], j[2]);
 									flops += 2;
 								}
@@ -272,14 +272,14 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							if (first) {
 								if (m0 > 0) {
 									if (close21(factor)) {
-										ASPRINTF(&str, "%s[%i] = %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0], p[1],
+										ASPRINTF(&str, "%s[%i] = %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0], p[1],
 												p[2]);
 									} else if (close21(-factor)) {
-										ASPRINTF(&str, "%s[%i] = -%s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+										ASPRINTF(&str, "%s[%i] = -%s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
 												p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s[%i] = T(%.16e) * %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
+										ASPRINTF(&str, "%s[%i] = T(%.16e) * %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
 												n0, m0, p[0], p[1], p[2]);
 										flops++;
 									}
@@ -303,7 +303,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							} else {
 								if (close21(factor)) {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s[%i] += %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+										ASPRINTF(&str, "%s[%i] += %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
 												p[1], p[2]);
 										flops++;
 									} else {
@@ -313,7 +313,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									}
 								} else if (close21(-factor)) {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s[%i] -= %s_%i_%i_%i%i%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+										ASPRINTF(&str, "%s[%i] -= %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
 												p[1], p[2]);
 										flops++;
 									} else {
@@ -323,7 +323,7 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 									}
 								} else {
 									if (m0 > 0) {
-										ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s_%i_%i_%i%i%i, %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
+										ASPRINTF(&str, "%s[%i] = FMA(T(%.16e), %s_%i_%i_%i_%i_%i, %s[%i]);\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
 												iname.c_str(), n0, m0, p[0], p[1], p[2], oname.c_str(), trless_index(n[0], n[1], n[2], P));
 										flops += 2;
 									} else {
@@ -604,9 +604,9 @@ int const_reference_trless(std::string name) {
 		for (n[1] = 0; n[1] < Q - n[0]; n[1]++) {
 			for (n[2] = 0; n[2] < Q - n[0] - n[1]; n[2]++) {
 				if (!(n[2] >= 2 && !(n[0] == 0 && n[1] == 0 && n[2] == 2))) {
-					tprint("const T %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
+					tprint("const T %s%i_%i_%i = ", name.c_str(), n[0], n[1], n[2]);
 				} else {
-					tprint("const T %s%i%i%i = ", name.c_str(), n[0], n[1], n[2]);
+					tprint("const T %s%i_%i_%i = ", name.c_str(), n[0], n[1], n[2]);
 				}
 				tensor_trless_sym<int, Q> counts;
 				tensor_trless_sym<int, Q> signs;
@@ -660,7 +660,7 @@ void reference_trless(std::string name, int Q) {
 					continue;
 				}
 				const int index = trless_index(l, m, n, Q);
-				tprint("T& %s%i%i%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
+				tprint("T& %s%i_%i_%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
 			}
 		}
 	}
@@ -671,7 +671,7 @@ void reference_sym(std::string name, int Q) {
 		for (int m = 0; m < Q - l; m++) {
 			for (int n = 0; n < Q - l - m; n++) {
 				const int index = sym_index(l, m, n);
-				tprint("const T %s%i%i%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
+				tprint("const T %s%i_%i_%i = %s[%i];\n", name.c_str(), l, m, n, name.c_str(), index);
 			}
 		}
 	}
@@ -771,7 +771,7 @@ void do_expansion(bool two, const char* name) {
 			last_factor = factor;
 			phi_flops++;
 		}
-		tprint("Lb[%i] = FMA( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
+		tprint("Lb[%i] = FMA( x[%i], La%i_%i_%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
 		phi_flops += 2;
 	}
 	if (!close21(last_factor)) {
@@ -811,7 +811,7 @@ void do_expansion(bool two, const char* name) {
 					flops++;
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Lb[%i] = FMA( x[%i], La%i%i%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
+				ASPRINTF(&str, "Lb[%i] = FMA( x[%i], La%i_%i_%i, Lb[%i]);\n", index, sym_index(k[0], k[1], k[2]), p[0], p[1], p[2], index);
 				cmds.push_back(str);
 				free(str);
 				flops += 2;
@@ -1660,7 +1660,7 @@ int main() {
 					last_coeff = coeff;
 					fl++;
 				}
-				tprint("L[%i] = FMA(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				tprint("L[%i] = FMA(M%i_%i_%i, D%i_%i_%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				fl += 2;
 			}
@@ -1705,7 +1705,7 @@ int main() {
 					last_coeff = coeff;
 					fl++;
 				}
-				ASPRINTF(&str, "L[%i] = FMA(M%i%i%i, D%i%i%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
+				ASPRINTF(&str, "L[%i] = FMA(M%i_%i_%i, D%i_%i_%i, L[%i]);\n", nindex, m[0], m[1], m[2], n[0] + m[0], n[1] + m[1], n[2] + m[2],
 						trless_index(n[0], n[1], n[2], Pmax));
 				cmds.push_back(str);
 				free(str);
@@ -1795,7 +1795,7 @@ int main() {
 			for (n[1] = 0; n[1] < PM_ORDER - n[0] - 1; n[1]++) {
 				for (n[2] = 0; n[2] < PM_ORDER - n[0] - n[1] - 1; n[2]++) {
 					if (i == sym_index(n[0], n[1], n[2])) {
-						tprint("Mb[%i] = Ma%i%i%i;\n", i, n[0], n[1], n[2]);
+						tprint("Mb[%i] = Ma%i_%i_%i;\n", i, n[0], n[1], n[2]);
 					}
 				}
 			}
@@ -1865,7 +1865,7 @@ int main() {
 					free(str);
 					last_factor = factor;
 				}
-				ASPRINTF(&str, "Mb[%i] = FMA( x[%i], Ma%i%i%i, Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), k[0], k[1], k[2],
+				ASPRINTF(&str, "Mb[%i] = FMA( x[%i], Ma%i_%i_%i, Mb[%i]);\n", nindex, sym_index(n[0] - k[0], n[1] - k[1], n[2] - k[2]), k[0], k[1], k[2],
 						sym_index(n[0], n[1], n[2]));
 				cmds.push_back(str);
 				free(str);
