@@ -521,7 +521,6 @@ static range<int64_t> double_box2int_box(range<double> rbox, int Nres) {
 }
 
 range<int64_t> treepm_get_fourier_box(int Nres) {
-	ALWAYS_ASSERT(Nres >= get_options().p3m_Nmin);
 	auto rbox = domains_find_my_box();
 	return double_box2int_box(rbox, Nres);
 }
@@ -596,7 +595,7 @@ void treepm_long_range(int Nres, size_t nparts, bool do_phi) {
 #ifdef FMMPM
 	bool green_init = G_k_store.find(Nres) != G_k_store.end();
 	const int Nbnd = get_options().p3m_chainnbnd;
-	if (green_init) {
+	if (!green_init) {
 		fft3d_dbl_init(Nres);
 		timer tm;
 		tm.start();

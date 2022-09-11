@@ -633,10 +633,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, j).raw();
 				}
-				mask[j - i] = 1.0f;
+				mask[j - i] = 1.0;
 			}
 			for (part_int j = maxj; j < i + SIMD_FLOAT8_SIZE; j++) {
-				mask[j - i] = 0.f;
+				mask[j - i] = 0.0;
 				for (int dim = 0; dim < NDIM; dim++) {
 					X[dim][j - i] = particles_pos(dim, maxj - 1).raw();
 				}

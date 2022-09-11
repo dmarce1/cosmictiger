@@ -37,8 +37,59 @@
 
 #include <fenv.h>
 
-int hpx_main(int argc, char *argv[]) {
+void test_multipoles() {
+	pm_multipole<double> M;
+	pm_expansion<double> L;
+	constexpr int ntrials = 1;
+	for (int i = 0; i < PM_MULTIPOLE_SIZE; i++) {
+		M[i] = 1.0;
+	}
+	array<double, NDIM> x;
+	array<double, NDIM> y;
+	for (int dim = 0; dim < NDIM; dim++) {
+		y[dim] = 0.0;
+	}
+	for (int i = 0; i < ntrials; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			x[dim] = 2.0 * rand1() - 1.0;
+			y[dim] -= x[dim];
+		}
+		M = M2M(M, x);
+	}
+	M = M2M(M, y);
+	for (int n = 0; n < PM_ORDER - 1; n++) {
+		for (int m = 0; m < PM_ORDER - 1 - n; m++) {
+			for (int l = 0; l < PM_ORDER - 1 - n - m; l++) {
+				if (l >= 2 && !(l == 2 && n == 0 && m == 0)) {
+					continue;
+				}
+				PRINT("%i %i %i %e\n", n, m, l, M(n, m, l));
+			}
+		}
+	}
+	PRINT("!!!!!!!!!!!\n");
+	for (int i = 0; i < PM_EXPANSION_SIZE; i++) {
+		L[i] = 1.0;
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		y[dim] = 0.0;
+	}
+	for (int i = 0; i < ntrials; i++) {
+		for (int dim = 0; dim < NDIM; dim++) {
+			x[dim] = 2.0 * rand1() - 1.0;
+			y[dim] -= x[dim];
+		}
+		L = L2L(L, x, true);
+	}
+	L = L2L(L, y, true);
+	for (int i = 0; i < PM_EXPANSION_SIZE; i++) {
+		PRINT("%.16e\n", L[i]);
+	}
+}
 
+int hpx_main(int argc, char *argv[]) {
+	test_multipoles();
+	return 0;
 	{
 		double toler = 1.19e-7 / sqrt(2);
 		double norm = 2.83;

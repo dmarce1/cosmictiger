@@ -94,14 +94,6 @@ int compute_dx(int P, const char* name = "X", bool trless = false, bool dble = f
 				}
 				array<int, NDIM> k;
 				k = n - j;
-				if (trless && (((j[2] > 2) || (j[2] > 1 && !(j[0] == 0 && j[1] == 0))))) {
-					PRINT("!!!!!!!!!!!\n");
-					abort();
-				}
-				if (trless && (((k[2] > 2) || (k[2] > 1 && !(k[0] == 0 && k[1] == 0))))) {
-					PRINT("!!!!!!!!!!!\n");
-					abort();
-				}
 				tprint("x[%i] = x[%i] * x[%i]; // %i %i %i | %i %i %i | %i %i %i\n", index(n[0], n[1], n[2]), index(k[0], k[1], k[2]), index(j[0], j[1], j[2]),
 						n[0], n[1], n[2], j[0], j[1], j[2], k[0], k[1], k[2]);
 				flops++;
@@ -525,8 +517,11 @@ void const_ref_compute(int sign, tensor_trless_sym<int, Q>& counts, tensor_trles
 		const_ref_compute(-sign, counts, signs, n1);
 		const_ref_compute(-sign, counts, signs, n2);
 	} else {
-		counts(n)++;signs
-		(n) = sign;
+		if(counts(n)) {
+			ALWAYS_ASSERT(signs(n)==sign);
+		}
+		counts(n)++;
+		signs(n) = sign;
 	}
 }
 
@@ -572,6 +567,8 @@ int print_const_ref(std::string name, std::string& cmd, const tensor_trless_sym<
 				if (n[0] != last_index[0] || n[1] != last_index[1] || n[2] != last_index[2]) {
 					fma = true;
 				} else {
+					PRINT( "!!!!!!!!!!!!!!!!!!!!!!!!1\n");
+					abort();
 					fma = false;
 				}
 				if (fma) {
@@ -1585,12 +1582,12 @@ int main() {
 
 	}
 	do_expansion<P, P>(false, "L2L");
-	do_expansion<PM_ORDER, PM_ORDER>(false, "L2L");
+	if (PM_ORDER != P) {
+		do_expansion<PM_ORDER, PM_ORDER>(false, "L2L");
+	}
 
 	do_expansion<P, 2>(true, "L2P");
-
 	do_expansion<PM_ORDER, 2>(true, "pm_L2P");
-
 
 	ewald<PM_ORDER>(flops);
 
@@ -1899,7 +1896,6 @@ int main() {
 	printf("/* FLOPS = %i*/\n", flops);
 	deindent();
 	tprint("}\n");
-
 
 #ifdef USE_CUDA
 	do_expansion_cuda<P>();

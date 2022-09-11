@@ -36,7 +36,7 @@ inline int intmin(int a, int b) {
 }
 
 inline
-int dfactorial(int n) {
+double dfactorial(double n) {
 	ASSERT(n >= -1);
 	if (n >= -1 && n <= 1) {
 		return 1;
