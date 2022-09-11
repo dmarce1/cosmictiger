@@ -23,8 +23,10 @@
 #include <cosmictiger/tensor.hpp>
 #include <cosmictiger/math.hpp>
 
+#include <set>
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 #define BUFFER 0
 static int ntab = 0;
@@ -202,7 +204,8 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							char* str;
 							if (first) {
 								if (close21(factor)) {
-									ASPRINTF(&str, "T %s_%i_%i_%i_%i_%i = %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "T %s_%i_%i_%i_%i_%i = %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 								} else if (close21(-factor)) {
 									ASPRINTF(&str, "T %s_%i_%i_%i_%i_%i = -%s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
 											sym_index(p[0], p[1], p[2]));
@@ -217,10 +220,12 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 								free(str);
 							} else {
 								if (close21(factor)) {
-									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i += %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i += %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else if (close21(-factor)) {
-									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i -= %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(), sym_index(p[0], p[1], p[2]));
+									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i -= %s[%i];\n", iname.c_str(), n0, m0, j[0], j[1], j[2], iname.c_str(),
+											sym_index(p[0], p[1], p[2]));
 									flops++;
 								} else {
 									ASPRINTF(&str, "%s_%i_%i_%i_%i_%i = FMA(T(%.16e), %s[%i], %s_%i_%i_%i_%i_%i);\n", iname.c_str(), n0, m0, j[0], j[1], j[2], factor,
@@ -272,15 +277,15 @@ int compute_detrace(std::string iname, std::string oname, char type = 'f') {
 							if (first) {
 								if (m0 > 0) {
 									if (close21(factor)) {
-										ASPRINTF(&str, "%s[%i] = %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0], p[1],
-												p[2]);
+										ASPRINTF(&str, "%s[%i] = %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
+												p[1], p[2]);
 									} else if (close21(-factor)) {
 										ASPRINTF(&str, "%s[%i] = -%s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), iname.c_str(), n0, m0, p[0],
 												p[1], p[2]);
 										flops++;
 									} else {
-										ASPRINTF(&str, "%s[%i] = T(%.16e) * %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor, iname.c_str(),
-												n0, m0, p[0], p[1], p[2]);
+										ASPRINTF(&str, "%s[%i] = T(%.16e) * %s_%i_%i_%i_%i_%i;\n", oname.c_str(), trless_index(n[0], n[1], n[2], P), factor,
+												iname.c_str(), n0, m0, p[0], p[1], p[2]);
 										flops++;
 									}
 								} else {
@@ -517,11 +522,11 @@ void const_ref_compute(int sign, tensor_trless_sym<int, Q>& counts, tensor_trles
 		const_ref_compute(-sign, counts, signs, n1);
 		const_ref_compute(-sign, counts, signs, n2);
 	} else {
-		if(counts(n)) {
-			ALWAYS_ASSERT(signs(n)==sign);
+		if (counts(n)) {
+			ALWAYS_ASSERT(signs(n) == sign);
 		}
-		counts(n)++;
-		signs(n) = sign;
+		counts(n)++;signs
+		(n) = sign;
 	}
 }
 
@@ -567,7 +572,7 @@ int print_const_ref(std::string name, std::string& cmd, const tensor_trless_sym<
 				if (n[0] != last_index[0] || n[1] != last_index[1] || n[2] != last_index[2]) {
 					fma = true;
 				} else {
-					PRINT( "!!!!!!!!!!!!!!!!!!!!!!!!1\n");
+					PRINT("!!!!!!!!!!!!!!!!!!!!!!!!1\n");
 					abort();
 					fma = false;
 				}
@@ -1389,6 +1394,182 @@ tensor_sym<tensor_sym<double, EWALD_ORDER>, ORDER> do_ewald_taylors() {
 	return coeffs;
 }
 
+int dec_index(std::array<int, NDIM>& n) {
+	for (int dim = 0; dim < NDIM; dim++) {
+		if (n[dim] > 0) {
+			n[dim]--;
+			return dim;
+		}
+	}
+	return -1;
+}
+
+using index_type = std::array<std::array<int,NDIM>,NDIM>;
+std::set<index_type> term_exists;
+
+struct index_type_hash {
+	size_t operator()(index_type counts) const {
+		size_t key = 0;
+		for (int i = 0; i < NDIM; i++) {
+			for (int j = 0; j < NDIM; j++) {
+				key = (9842671 * key) ^ counts[i][j];
+			}
+		}
+		return key;
+	}
+};
+
+std::string index_to_string(index_type counts) {
+	std::string str = "rot";
+	for (int dim1 = 0; dim1 < NDIM; dim1++) {
+		for (int dim2 = 0; dim2 < NDIM; dim2++) {
+			str += "_";
+			str += std::to_string(counts[dim1][dim2]);
+		}
+	}
+	return str;
+}
+
+template<int Q>
+void do_rotations() {
+
+	tprint("\n");
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT\n");
+	tprint("inline int tensor_rotate(tensor_trless_sym<T, %i>& A, array<T, NDIM> X) {\n", Q);
+	indent();
+	tprint("const T norminv = T(1) / sqrt(sqr(X[XDIM],X[YDIM],X[ZDIM]);\n");
+	tprint("for( int dim = 0; dim < NDIM; dim++) {\n");
+	indent();
+	tprint("X[dim] *= norminv;\n");
+	deindent();
+	tprint("}\n");
+	tprint("const T x = X[XDIM];\n");
+	tprint("const T y = X[YDIM];\n");
+	tprint("const T z = X[ZDIM];\n");
+	tprint("const T R = sqrt(sqr(x)+sqr(y));\n");
+	tprint("if( R > 0.0 ) {\n");
+	tprint("const auto A0 = A;\n");
+	tprint("A = T(0);\n");
+	tprint("const T sum;\n");
+	tprint("const T Rinv = 1.0 / R;\n");
+	tprint("const T cos0sin0 = 1.0;\n");
+	tprint("const T cos1sin0 = x * Rinv;\n");
+	tprint("const T cos0sin1 = y * Rinv;\n");
+	for (int i = 0; i < Q; i++) {
+		for (int j = 0; j < Q - i; j++) {
+			if( i + j == 0 ) {
+				continue;
+			}
+			int i0, j0;
+			if (i > 0) {
+				i0 = i - 1;
+				j0 = j;
+			} else {
+				i0 = i;
+				j0 = j - 1;
+			}
+			tprint("const T cos%isin%i = cos%isin%i * cos%isin%i;\n", i, j, i0, j0, i - i0, j - j0);
+		}
+	}
+	index_type I;
+	for (int dim1 = 0; dim1 < NDIM; dim1++) {
+		for (int dim2 = 0; dim2 < NDIM; dim2++) {
+			I[dim1][dim2] = 0;
+		}
+	}
+	term_exists.insert(I);
+	for (int dim1 = 0; dim1 < NDIM; dim1++) {
+		for (int dim2 = 0; dim2 < NDIM; dim2++) {
+			I[dim1][dim2] = 1;
+			term_exists.insert(I);
+			I[dim1][dim2] = 0;
+		}
+	}
+	for (int n = 0; n < Q; n++) {
+		for (int m = 0; m < Q - n; m++) {
+			for (int l = 0; l < Q - n - m; l++) {
+				if (l >= 2 && !(l == 2 && n == 0 && m == 0)) {
+					continue;
+				}
+				std::array<int, NDIM> n0, m0;
+				n0[XDIM] = n;
+				n0[YDIM] = m;
+				n0[ZDIM] = l;
+				for (m0[XDIM] = 0; m0[XDIM] < Q; m0[XDIM]++) {
+					for (m0[YDIM] = 0; m0[YDIM] < Q - m0[XDIM]; m0[YDIM]++) {
+						m0[ZDIM] = n0[XDIM] + n0[YDIM] + n0[ZDIM] - m0[XDIM] - m0[YDIM];
+						if (m0[ZDIM] < 0 || m0[ZDIM] >= Q - m0[XDIM] - m0[YDIM]) {
+							continue;
+						}
+						auto n1 = n0;
+						auto m1 = m0;
+						vector<int> indices;
+						int i;
+						while ((i = dec_index(m1)) != -1) {
+							indices.push_back(i);
+						}
+						std::unordered_map<index_type, int, index_type_hash> count_index;
+						std::sort(indices.begin(), indices.end());
+						do {
+							n1 = n0;
+							int j = 0;
+							index_type counts;
+							for (int dim1 = 0; dim1 < NDIM; dim1++) {
+								for (int dim2 = 0; dim2 < NDIM; dim2++) {
+									counts[dim1][dim2] = 0;
+								}
+							}
+							while ((i = dec_index(n1)) != -1) {
+								counts[i][indices[j]]++;
+								j++;
+							}
+							count_index[counts]++;
+						} while (std::next_permutation(indices.begin(), indices.end()));
+						double last_factor = 1.0;
+						double factor = 1.0;
+						vector<std::pair<index_type, int>> vec_count_index;
+						for (auto i = count_index.begin(); i != count_index.end(); i++) {
+							vec_count_index.push_back(*i);
+						}
+						std::sort(vec_count_index.begin(), vec_count_index.end(), [](const std::pair<index_type, int>& a, const std::pair<index_type, int> b) {
+							return a.second < b.second;
+						});
+						for (auto i : vec_count_index) {
+							int sincnt = 0;
+							int coscnt = 0;
+							int sgn = 1;
+							if (i.first[0][2] > 0 || i.first[1][2] > 0 || i.first[2][0] > 0 || i.first[2][1] > 0) {
+								continue;
+							}
+							coscnt += i.first[0][0];
+							coscnt += i.first[1][1];
+							sincnt += i.first[0][1];
+							sincnt += i.first[1][0];
+							sgn = (i.first[1][0] % 2 == 1) ? -1 : 1;
+							if (i.second > 1 || sgn == -1) {
+								tprint("A[%i] = FMA(T(%s%i) * cos%isin%i, A0[%i], A[%i]);\n", trless_index(n, m, l, Q), sgn == -1 ? "-" : "", i.second, coscnt, sincnt,
+										trless_index(m0[0], m0[1], m0[2], Q), trless_index(n, m, l, Q));
+							} else {
+								tprint("A[%i] = FMA( cos%isin%i, A0[%i], A[%i]);\n", trless_index(n, m, l, Q), coscnt, sincnt, trless_index(m0[0], m0[1], m0[2], Q),
+										trless_index(n, m, l, Q));
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	deindent();
+	tprint("}\n");
+	tprint("return A;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+
+}
+
 int main() {
 
 	fprintf(stderr, "Generating FMM kernels for Pmax = %i\n", P - 1);
@@ -1917,6 +2098,8 @@ int main() {
 
 	deindent();
 	tprint("}\n");
+
+//	do_rotations<ORDER>();
 
 }
 

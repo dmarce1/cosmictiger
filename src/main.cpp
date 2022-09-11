@@ -154,11 +154,25 @@ void test_multipoles() {
 				if (l >= 2 && !(l == 2 && n == 0 && m == 0)) {
 					continue;
 				}
-				PRINT("%i %i %i %e\n", n, m, l, M1(n, m, l));
-
 			}
 		}
 	}
+	X[XDIM] = 0.0;
+	X[YDIM] = 0.0;
+	X[ZDIM] = 1.0;
+	tensor_trless_sym<double, 8> D;
+	greens_function(D, X, true);
+	for (int n = 0; n < 8; n++) {
+		for (int m = 0; m < 8 - n; m++) {
+			for (int l = 0; l < 8 - n - m; l++) {
+				if (l >= 2 && !(l == 2 && n == 0 && m == 0)) {
+					continue;
+				}
+				PRINT("%i %i %i %e\n", n, m, l, D(n, m, l));
+			}
+		}
+	}
+
 }
 
 int hpx_main(int argc, char *argv[]) {
