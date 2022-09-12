@@ -33,6 +33,7 @@
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/kernels.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/spherical.hpp>
 #include <cmath>
 
 #include <fenv.h>
