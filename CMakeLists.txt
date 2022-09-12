@@ -8,7 +8,7 @@ find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
 find_package(Boost REQUIRED)
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
-set(COSMICTIGER_WITH_ORDER "10" )
+set(COSMICTIGER_WITH_ORDER "6" )
 if( COSMICTIGER_WITH_CUDA ) 
 	enable_language(CUDA)
 	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
@@ -62,6 +62,7 @@ set(cosmictiger_source_files
     src/flops.cu
     src/fft.cpp
     src/fft_dbl.cpp
+    src/fft_vector.cpp
     src/gravity.cpp
     src/gravity.cu
     src/group_tree.cpp
@@ -118,6 +119,7 @@ set(cosmictiger_header_files
     cosmictiger/ewald_incides.hpp
     cosmictiger/fft.hpp
     cosmictiger/fft_dbl.hpp
+    cosmictiger/fft_vector.hpp
     cosmictiger/fixedcapvec.hpp
     cosmictiger/fixes.hpp
     cosmictiger/gravity.hpp

@@ -137,7 +137,7 @@ tensor_trless_sym<T, Q> rotate_tensor(const tensor_trless_sym<T, Q>& A, array<T,
 }
 
 void test_multipoles() {
-	pm_multipole<double> M;
+	/*pm_multipole<double> M;
 	array<double, NDIM> X;
 	for (int i = 0; i < PM_MULTIPOLE_SIZE; i++) {
 		M[i] = 1.0;
@@ -172,12 +172,12 @@ void test_multipoles() {
 			}
 		}
 	}
-
+*/
 }
 
 int hpx_main(int argc, char *argv[]) {
-	test_multipoles();
-	return 0.0;
+//	test_multipoles();
+//	return 0.0;
 	{
 		double toler = 1.19e-7 / sqrt(2);
 		double norm = 2.83;
