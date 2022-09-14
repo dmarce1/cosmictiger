@@ -178,6 +178,7 @@ add_hpx_executable(
  
 add_executable( recfast recfast/recfast.f )
 add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
+add_executable( spherical_fmm src/spherical_fmm.cpp   )
 add_executable( ferrer_kernel_codegen src/ferrer_kernel_codegen.cpp cosmictiger/defs.hpp )
 add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
 target_link_libraries( fmm_kernel_codegen PUBLIC dl )
@@ -219,6 +220,7 @@ add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMM
 target_include_directories(lc2rockstar PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(spherical_fmm PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(ferrer_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 target_compile_definitions(ferrer_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
