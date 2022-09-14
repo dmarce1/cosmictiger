@@ -132,28 +132,75 @@ void spherical_expansion_L2L(spherical_expansion<T, P>& L, T x, T y, T z) {
 	}
 }
 
-template<int P>
-void test_M2L() {
-	float x0 = rand1();
-	float y0 = rand1();
-	float z0 = rand1();
-	float x1 = 5 * rand1();
-	float y1 = 5 * rand1();
-	float z1 = 5 * rand1();
-	float x2 = rand1();
-	float y2 = rand1();
-	float z2 = rand1();
-//	x0 = y0 = z0 = 0.0;
-//	x2 = y2 = z2 =0.0;
-	auto M = spherical_regular_harmonic<float, P>(x0, y0, z0);
-	auto L = spherical_expansion_M2L<float, P>(M, x1, y1, z1);
-	spherical_expansion_L2L(L, x2, y2, z2);
-	const float pot_a = 1.0 / sqrt(sqr((x2 + x1) - x0, (y2 + y1) - y0, (z2 + z1) - z0));
-	const float pot_n = L[0].real();
-	printf("%e %e\n", pot_a, pot_n);
+void random_unit(float& x, float& y, float& z) {
+	const float theta = acos(2 * rand1() - 1.0);
+	const float phi = rand1() * 2.0 * M_PI;
+	x = cos(phi) * sin(theta);
+	y = sin(phi) * sin(theta);
+	z = cos(theta);
+}
 
+void random_vector(float& x, float& y, float& z) {
+	do {
+		x = 2 * rand1() - 1;
+		y = 2 * rand1() - 1;
+		z = 2 * rand1() - 1;
+	} while (sqr(x, y, z) > 1);
+}
+
+template<int P>
+float test_M2L(float theta, int N = 10000) {
+	float err = 0.0;
+	for (int i = 0; i < N; i++) {
+		float x0, x1, x2, y0, y1, y2, z0, z1, z2;
+		random_vector(x0, y0, z0);
+		random_unit(x1, y1, z1);
+		random_vector(x2, y2, z2);
+		x1 /= 0.5 * theta;
+		y1 /= 0.5 * theta;
+		z1 /= 0.5 * theta;
+		auto M = spherical_regular_harmonic<float, P>(x0, y0, z0);
+		auto L = spherical_expansion_M2L<float, P>(M, x1, y1, z1);
+		spherical_expansion_L2L(L, x2, y2, z2);
+		const float dx = (x2 + x1) - x0;
+		const float dy = (y2 + y1) - y0;
+		const float dz = (z2 + z1) - z0;
+		const float r = sqrt(sqr(dx, dy, dz));
+		const float ap = 1.0 / r;
+		const float ax = -dx / (r * r * r);
+		const float ay = -dy / (r * r * r);
+		const float az = -dz / (r * r * r);
+		const float np = L(0, 0).real();
+		const float nx = -L(1, 1).real();
+		const float ny = -L(1, 1).imag();
+		const float nz = -L(1, 0).real();
+		const float ag = sqrt(sqr(ax, ay, az));
+		const float ng = sqrt(sqr(nx, ny, nz));
+		err += sqr((ag - ng) / ag);
+
+	}
+	err = sqrt(err / N);
+	return err;
 }
 
 int main() {
-	test_M2L<5>();
+	for (float theta = 0.2; theta < 0.95; theta += 0.05) {
+		print("%e | ", theta);
+		print(" %e", test_M2L<2>(theta));
+		print(" %e", test_M2L<3>(theta));
+		print(" %e", test_M2L<4>(theta));
+		print(" %e", test_M2L<5>(theta));
+		print(" %e", test_M2L<6>(theta));
+		print(" %e", test_M2L<7>(theta));
+		print(" %e", test_M2L<8>(theta));
+		print(" %e", test_M2L<9>(theta));
+		print(" %e", test_M2L<10>(theta));
+		print(" %e", test_M2L<11>(theta));
+		print(" %e", test_M2L<12>(theta));
+		print(" %e", test_M2L<13>(theta));
+		print(" %e", test_M2L<14>(theta));
+		print(" %e", test_M2L<15>(theta));
+		print(" %e", test_M2L<16>(theta));
+		print("\n");
+	}
 }
