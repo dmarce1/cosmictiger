@@ -96,13 +96,14 @@ void spherical_expansion_M2M(spherical_expansion<T, P>& M, T x, T y, T z) {
 }
 
 template<class T, int P>
-spherical_expansion<T, P> spherical_expansion_M2L(const spherical_expansion<T, P>& M, T x, T y, T z) {
+spherical_expansion<T, P> spherical_expansion_M2L(const spherical_expansion<T, P - 1>& M, T x, T y, T z) {
 	const auto O = spherical_singular_harmonic<T, P>(x, y, z);
 	spherical_expansion<T, P> L;
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
 			L[index(n, m)] = complex<T>(T(0), T(0));
-			for (int k = 0; k <= P - n; k++) {
+			const int kmax = std::min(P - n, P - 1);
+			for (int k = 0; k <= kmax; k++) {
 				const int lmin = std::max(-k, -n - k - m);
 				const int lmax = std::min(k, n + k - m);
 				for (int l = lmin; l <= lmax; l++) {
@@ -159,7 +160,7 @@ float test_M2L(float theta, int N = 10000) {
 		x1 /= 0.5 * theta;
 		y1 /= 0.5 * theta;
 		z1 /= 0.5 * theta;
-		auto M = spherical_regular_harmonic<float, P>(x0, y0, z0);
+		auto M = spherical_regular_harmonic<float, P - 1>(x0, y0, z0);
 		auto L = spherical_expansion_M2L<float, P>(M, x1, y1, z1);
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const float dx = (x2 + x1) - x0;
@@ -183,24 +184,133 @@ float test_M2L(float theta, int N = 10000) {
 	return err;
 }
 
-int main() {
-	for (float theta = 0.2; theta < 0.95; theta += 0.05) {
-		print("%e | ", theta);
-		print(" %e", test_M2L<2>(theta));
-		print(" %e", test_M2L<3>(theta));
-		print(" %e", test_M2L<4>(theta));
-		print(" %e", test_M2L<5>(theta));
-		print(" %e", test_M2L<6>(theta));
-		print(" %e", test_M2L<7>(theta));
-		print(" %e", test_M2L<8>(theta));
-		print(" %e", test_M2L<9>(theta));
-		print(" %e", test_M2L<10>(theta));
-		print(" %e", test_M2L<11>(theta));
-		print(" %e", test_M2L<12>(theta));
-		print(" %e", test_M2L<13>(theta));
-		print(" %e", test_M2L<14>(theta));
-		print(" %e", test_M2L<15>(theta));
-		print(" %e", test_M2L<16>(theta));
-		print("\n");
+template<class T, int N, bool INV, int STRIDE = 1, int OFFSET = 0, bool NORMALIZED = false>
+struct FFT {
+	void operator()(array<complex<T>, STRIDE * N>& F) {
+		const auto& index = [](int n) {
+			return n * STRIDE + OFFSET;
+		};
+		if (!NORMALIZED && INV) {
+			for (int n = 0; n < N; n++) {
+				F[n] /= N;
+			}
+		}
+		FFT<T, N / 2, INV, 2 * STRIDE, OFFSET, true> fft_even;
+		FFT<T, N / 2, INV, 2 * STRIDE, OFFSET + STRIDE, true> fft_odd;
+		fft_even(F);
+		fft_odd(F);
+		const auto F0 = F;
+		const float sgn = INV ? T(1.0) : T(-1.0);
+		for (int i = 0; i < N / 2; i++) {
+			const auto R = F0[index(2 * i + 1)] * complex<T>(cos(2.0 * M_PI * i / N), sgn * sin(2.0 * M_PI * i / N));
+			F[index(i)] = F0[index(2 * i)] + R;
+			F[index(i + N / 2)] = F0[index(2 * i)] - R;
+		}
 	}
+};
+
+template<class T, bool INV, int STRIDE, int OFFSET, bool NORMALIZED>
+struct FFT<T, 1, INV, STRIDE, OFFSET, NORMALIZED> {
+	void operator()(array<complex<T>, STRIDE>& F) {
+	}
+};
+
+template<class T, int N, int M, bool INV>
+struct FFT2 {
+	void operator()(array<array<complex<T>, M>, N>& F) {
+		array<array<complex<T>, N>, M> G;
+		FFT<T, M, INV> fftn;
+		FFT<T, N, INV> fftm;
+		for (int n = 0; n < N; n++) {
+			fftn(F[n]);
+		}
+		for (int n = 0; n < N; n++) {
+			for (int m = 0; m < M; m++) {
+				G[m][n] = F[n][m];
+			}
+		}
+		for (int m = 0; m < M; m++) {
+			fftm(G[m]);
+		}
+		for (int n = 0; n < N; n++) {
+			for (int m = 0; m < M; m++) {
+				F[n][m] = G[m][n];
+			}
+		}
+	}
+};
+
+template<class T, int P>
+spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T x, T y, T z) {
+	const auto Gx = spherical_singular_harmonic<T, P>(x, y, z);
+	spherical_expansion<T, P> Lx;
+	constexpr int N = 2 * (P + 1);
+	array<array<complex<T>, N>, N> Gk;
+	array<array<complex<T>, N>, N> Mk;
+	array<array<complex<T>, N>, N> Lk;
+	array<array<complex<T>, N>, N> TrLk;
+	for (int n = 0; n < N; n++) {
+		for (int m = 0; m < N; m++) {
+			Gk[n][m] = Mk[n][m] = complex<T>(T(0), T(0));
+		}
+	}
+	for (int n = 0; n <= P; n++) {
+		for (int m = 0; m <= n; m++) {
+			Gk[(N - n) % N][(N - m) % N] = Gx[index(n, m)];
+		}
+		for (int m = -1; m >= -n; m--) {
+			Gk[(N - n) % N][(N - m) % N] = Gx(n, m);
+		}
+	}
+//	Gk[1][1] = complex<T>(T(2), T(0));
+	for (int n = 0; n < P; n++) {
+		for (int m = 0; m <= n; m++) {
+			Mk[n][m] = Mx[index(n, m)].conj();
+		}
+		for (int m = -1; m >= -n; m--) {
+			Mk[n][N + m] = Mx(n, m).conj();
+		}
+	}
+	FFT2<T, N, N, false> fft;
+	FFT2<T, N, N, true> fft_inv;
+	fft(Gk);
+	fft(Mk);
+	for (int n = 0; n < N; n++) {
+		for (int m = 0; m < N; m++) {
+			Lk[n][m] = Gk[n][m] * Mk[n][m];
+		}
+	}
+	fft_inv(Lk);
+	for (int n = 0; n < N; n++) {
+		for (int m = 0; m < N; m++) {
+			printf("%e + i%e ", Lk[n][m].real(), Lk[n][m].imag());
+		}
+		printf("\n");
+	}
+
+	for (int n = 0; n <= P; n++) {
+		for (int m = 0; m <= n; m++) {
+			Lx[index(n, m)] = Lk[(N-n)%N][(N-m)%N];
+		}
+	}
+	return Lx;
+}
+
+int main() {
+	constexpr int P = 3;
+	float theta = 0.7;
+	float x0, x1, x2, y0, y1, y2, z0, z1, z2;
+	random_vector(x0, y0, z0);
+	random_unit(x1, y1, z1);
+	random_vector(x2, y2, z2);
+	x1 /= 0.5 * theta;
+	y1 /= 0.5 * theta;
+	z1 /= 0.5 * theta;
+	auto M = spherical_regular_harmonic<float, P - 1>(x0, y0, z0);
+	auto L0 = spherical_expansion_M2L<float, P>(M, x1, y1, z1);
+	auto L1 = fourier_M2L<float, P>(M, x1, y1, z1);
+	printf("\n");
+	L0.print();
+	printf("\n");
+	L1.print();
 }
