@@ -255,20 +255,22 @@ spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T
 		}
 	}
 	for (int n = 0; n <= P; n++) {
-		for (int m = 0; m <= n; m++) {
-			Gk[(N - n) % N][(N - m) % N] = Gx[index(n, m)];
-		}
-		for (int m = -1; m >= -n; m--) {
-			Gk[(N - n) % N][(N - m) % N] = Gx(n, m);
+		for (int m = -n; m <= n; m++) {
+			if (m % 2 == 0) {
+				Gk[(N - n) % N][(N - m) % N] = Gx(n, m);
+			} else {
+				Gk[(2 * N - n - N / 2) % N][(N - m) % N] = Gx(n, m);
+			}
 		}
 	}
 //	Gk[1][1] = complex<T>(T(2), T(0));
 	for (int n = 0; n < P; n++) {
-		for (int m = 0; m <= n; m++) {
-			Mk[n][m] = Mx[index(n, m)].conj();
-		}
-		for (int m = -1; m >= -n; m--) {
-			Mk[n][N + m] = Mx(n, m).conj();
+		for (int m = -n; m <= n; m++) {
+			if (m % 2 == 0) {
+				Mk[n][(N + m) % N] = Mx(n, m).conj();
+			} else {
+				Mk[n + N / 2][(N + m) % N] = Mx(n, m).conj();
+			}
 		}
 	}
 	FFT2<T, N, N, false> fft;
@@ -290,7 +292,11 @@ spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T
 
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
-			Lx[index(n, m)] = Lk[(N-n)%N][(N-m)%N];
+			if (m % 2 == 0) {
+				Lx[index(n, m)] = Lk[(N - n) % N][(N - m) % N];
+			} else {
+				Lx[index(n, m)] = Lk[(2 * N - n - N / 2) % N][(N - m) % N];
+			}
 		}
 	}
 	return Lx;
@@ -313,4 +319,13 @@ int main() {
 	L0.print();
 	printf("\n");
 	L1.print();
+	double err = 0.0;
+	for (int l = 0; l <= P; l++) {
+		for (int m = 0; m <= l; m++) {
+			err += (L1(l, m) - L0(l, m)).norm();
+		}
+	}
+	err = sqrt(err / ((P + 1) * (P + 1)));
+	PRINT("err = %e\n", err);
+
 }
