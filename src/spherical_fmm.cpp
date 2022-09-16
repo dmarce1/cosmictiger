@@ -267,7 +267,7 @@ void FFT_spherical_expansion(array<complex<T>, N / 2>& A, array<complex<T>, N / 
 		Z[n] = A[n] + I * B[n];
 		Z[N - n] = A[n].conj() * nonepow<T>(n) + I * (B[n].conj() * nonepow<T>(n));
 	}
-	Z[N/2]=0.0;
+	Z[N / 2] = 0.0;
 	FFT<T, N, false> fft;
 	fft(Z);
 	for (int n = 0; n < N / 2; n++) {
@@ -281,57 +281,98 @@ void FFT_spherical_expansion(array<complex<T>, N / 2>& A, array<complex<T>, N / 
 	}
 }
 
+template<class T, int N>
+void FFT_spherical_expansion_inv(array<complex<T>, N / 2>& A, array<complex<T>, N / 2>& B) {
+	array<complex<T>, N> Z;
+	const auto I = complex<T>(T(0), T(1));
+	for (int n = 0; n < N / 2; n++) {
+		Z[n] = A[n] + I * B[n];
+		Z[n + N / 2] = A[n].conj() + I * (B[n].conj());
+	}
+//	Z[N / 2] = 0.0;
+	FFT<T, N, true> fft_inv;
+	fft_inv(Z);
+	for (int n = 0; n < N / 2; n++) {
+		const auto sym = T(0.5) * (Z[n] + Z[(N - n) % (N)].conj());
+		const auto ant = T(0.5) * (Z[n] - Z[(N - n) % (N)].conj());
+		if (n % 2 == 0) {
+			A[n] = sym;
+			B[n] = ant / I;
+		} else {
+			B[n] = sym / I;
+			A[n] = ant;
+		}
+	}
+}
+
 template<class T, int P>
 spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T x, T y, T z) {
 	const auto Gx = spherical_singular_harmonic<T, P>(x, y, z);
 	spherical_expansion<T, P> Lx;
-	constexpr int N = 2 * (P + 1);
-	array<array<complex<T>, N>, N> Gk;
-	array<array<complex<T>, N>, N> Mk;
-	array<array<complex<T>, N>, N> Lk;
-	array<array<complex<T>, N>, N> TrLk;
-	for (int n = 0; n < N; n++) {
+	constexpr int N = (P + 1);
+	array<array<complex<T>, N>, 2 * N> Gk;
+	array<array<complex<T>, N>, 2 * N> Mk;
+	array<array<complex<T>, N>, 2 * N> Lk;
+	for (int n = 0; n < 2 * N; n++) {
 		for (int m = 0; m < N; m++) {
 			Gk[n][m] = Mk[n][m] = complex<T>(T(0), T(0));
 		}
 	}
-	for (int n = 0; n <= P; n++) {
-		for (int m = -n; m <= n; m++) {
-			if (m % 2 == 0) {
-				Gk[(N - n) % N][(N - m) % N] = Gx(n, m);
-			} else {
-				Gk[(2 * N - n - N / 2) % N][(N - m) % N] = Gx(n, m);
-			}
-		}
-	}
-//	Gk[1][1] = complex<T>(T(2), T(0));
-	for (int n = 0; n < P; n++) {
-		for (int m = -n; m <= n; m++) {
-			if (m % 2 == 0) {
-				Mk[n][(N + m) % N] = Mx(n, m).conj();
-			} else {
-				Mk[n + N / 2][(N + m) % N] = Mx(n, m).conj();
-			}
-		}
-	}
-	FFT2<T, N, N, false> fft;
-	FFT2<T, N, N, true> fft_inv;
-	fft(Gk);
-	fft(Mk);
 	for (int n = 0; n < N; n++) {
-		for (int m = 0; m < N; m++) {
-			Lk[n][m] = Gk[n][m] * Mk[n][m];
+		const int nnn = (2 * N - n) % (2 * N);
+		for (int m = 0; m <= n; m++) {
+			Gk[nnn][m] = Gx(n, -m);
 		}
 	}
-	fft_inv(Lk);
-
-	for (int n = 0; n <= P; n++) {
+	for (int n = 0; n < P; n++) {
 		for (int m = 0; m <= n; m++) {
-			if (m % 2 == 0) {
-				Lx[index(n, m)] = Lk[(N - n) % N][(N - m) % N];
-			} else {
-				Lx[index(n, m)] = Lk[(2 * N - n - N / 2) % N][(N - m) % N];
-			}
+			Mk[n][m] = Mx(n, m).conj();
+		}
+	}
+	for (int n = 0; n < 2 * N; n++) {
+		FFT_spherical_expansion<T, 2 * N>(Gk[n], Mk[n]);
+	}
+	FFT<T, 2 * N, false> fft;
+	FFT<T, 2 * N, true> fft_inv;
+	for (int m = 0; m < N; m++) {
+		array<complex<T>, 2 * N> col;
+		for (int n = 0; n < 2 * N; n++) {
+			col[n] = Gk[n][m];
+		}
+		fft(col);
+		for (int n = 0; n < 2 * N; n++) {
+			Gk[n][m] = col[n];
+		}
+		for (int n = 0; n < 2 * N; n++) {
+			col[n] = Mk[n][m];
+		}
+		fft(col);
+		for (int n = 0; n < 2 * N; n++) {
+			Mk[n][m] = col[n];
+		}
+	}
+	for (int m = 0; m < N; m++) {
+		array<complex<T>, 2 * N> col;
+		for (int n = 0; n < 2 * N; n++) {
+			col[n] = Gk[n][m] * Mk[n][m];
+		}
+		fft_inv(col);
+		for (int n = 0; n < 2 * N; n++) {
+			Lk[n][m] = col[n];
+		}
+	}
+	for (int n = 0; n < 2 * N; n += 2) {
+		FFT_spherical_expansion_inv<T, 2 * N>(Lk[n], Lk[n + 1]);
+	}
+	for (int n = 0; n < 2 * N; n++) {
+		for (int m = 0; m < N; m++) {
+			print("%e + i%e   ", Lk[n][m].real(), Lk[n][m].imag());
+		}
+		printf("\n");
+	}
+	for (int n = 0; n < N; n++) {
+		for (int m = 0; m <= n; m++) {
+			Lx[index(n, m)] = Lk[(2 * N - n) % (2 * N)][m].conj() * nonepow<T>(m);
 		}
 	}
 	return Lx;
@@ -348,21 +389,20 @@ int main() {
 	B[0] = rand1();
 	A1[0] = A[0];
 	B1[0] = B[0];
-	A1[N / 2] = 0;
-	B1[N / 2] = 0;
+	A1[N / 2] = A[0];
+	B1[N / 2] = B[0];
 	for (int n = 1; n < N / 2; n++) {
 		A[n] = complex<float>(rand1(), rand1());
 		B[n] = complex<float>(rand1(), rand1());
 		A1[n] = A[n];
-		A1[N - n] = A[n].conj() * nonepow<float>(n);
+		A1[(n + N / 2) % (N)] = A[n].conj();
 		B1[n] = B[n];
-		B1[N - n] = B[n].conj() * nonepow<float>(n);
+		B1[(n + N / 2) % (N)] = B[n].conj();
 	}
-
-	FFT<float, N, false> fft;
-	FFT_spherical_expansion<float, N>(A, B);
-	fft(A1);
-	fft(B1);
+	FFT<float, N, true> fft_inv;
+	FFT_spherical_expansion_inv<float, N>(A, B);
+	fft_inv(A1);
+	fft_inv(B1);
 	for (int i = 0; i < N / 2; i++) {
 		print("%e %e %e %e \n", A1[i].real(), A1[i].imag(), A[i].real(), A[i].imag());
 	}
