@@ -240,6 +240,47 @@ struct FFT2 {
 	}
 };
 
+template<class T, int N>
+void FFT_c2r_symmetric(array<complex<T>, N / 2 + 1>& A, array<complex<T>, N / 2 + 1>& B, array<float, N>& A0, array<float, N>& B0) {
+	array<complex<T>, N> C;
+	complex<T> I(T(0), T(1));
+	for (int n = 0; n <= N / 2; n++) {
+		C[n] = A[n] + I * B[n];
+	}
+	for (int n = -1; n > -N / 2; n--) {
+		C[N + n] = (A[-n].conj() + I * (B[-n].conj()));
+	}
+	FFT<T, N, false> fft;
+	fft(C);
+	for (int n = 0; n < N; n++) {
+		A0[n] = C[n].real();
+		B0[n] = C[n].imag();
+	}
+}
+
+template<class T, int N>
+void FFT_spherical_expansion(array<complex<T>, N / 2>& A, array<complex<T>, N / 2>& B) {
+	array<complex<T>, N> Z;
+	const auto I = complex<T>(T(0), T(1));
+	Z[0] = A[0] + I * B[0];
+	for (int n = 1; n < N / 2; n++) {
+		Z[n] = A[n] + I * B[n];
+		Z[N - n] = A[n].conj() * nonepow<T>(n) + I * (B[n].conj() * nonepow<T>(n));
+	}
+	Z[N/2]=0.0;
+	FFT<T, N, false> fft;
+	fft(Z);
+	for (int n = 0; n < N / 2; n++) {
+		const auto even = T(0.5) * (Z[n] + Z[n + N / 2]);
+		const auto odd = T(0.5) * (Z[n] - Z[n + N / 2]);
+		A[n].real() = even.real();
+		A[n].imag() = odd.imag();
+		B[n].imag() = even.imag();
+		B[n].real() = odd.real();
+		B[n] /= I;
+	}
+}
+
 template<class T, int P>
 spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T x, T y, T z) {
 	const auto Gx = spherical_singular_harmonic<T, P>(x, y, z);
@@ -283,12 +324,6 @@ spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T
 		}
 	}
 	fft_inv(Lk);
-	for (int n = 0; n < N; n++) {
-		for (int m = 0; m < N; m++) {
-			printf("%e + i%e ", Lk[n][m].real(), Lk[n][m].imag());
-		}
-		printf("\n");
-	}
 
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
@@ -303,6 +338,38 @@ spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T
 }
 
 int main() {
+
+	constexpr int N = 8;
+	array<complex<float>, N / 2> A;
+	array<complex<float>, N / 2> B;
+	array<complex<float>, N> A1;
+	array<complex<float>, N> B1;
+	A[0] = rand1();
+	B[0] = rand1();
+	A1[0] = A[0];
+	B1[0] = B[0];
+	A1[N / 2] = 0;
+	B1[N / 2] = 0;
+	for (int n = 1; n < N / 2; n++) {
+		A[n] = complex<float>(rand1(), rand1());
+		B[n] = complex<float>(rand1(), rand1());
+		A1[n] = A[n];
+		A1[N - n] = A[n].conj() * nonepow<float>(n);
+		B1[n] = B[n];
+		B1[N - n] = B[n].conj() * nonepow<float>(n);
+	}
+
+	FFT<float, N, false> fft;
+	FFT_spherical_expansion<float, N>(A, B);
+	fft(A1);
+	fft(B1);
+	for (int i = 0; i < N / 2; i++) {
+		print("%e %e %e %e \n", A1[i].real(), A1[i].imag(), A[i].real(), A[i].imag());
+	}
+	for (int i = 0; i < N / 2; i++) {
+		print("%e %e %e %e \n", B1[i].real(), B1[i].imag(), B[i].real(), B[i].imag());
+	}
+
 	constexpr int P = 3;
 	float theta = 0.7;
 	float x0, x1, x2, y0, y1, y2, z0, z1, z2;
