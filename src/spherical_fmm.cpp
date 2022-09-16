@@ -209,6 +209,61 @@ struct FFT {
 	}
 };
 
+int lcd(int number) {
+	int best = number;
+	int div = number - 1;
+	while (div > 1) {
+		if (number % div == 0) {
+			best = div;
+		}
+		div--;
+	}
+	return best;
+}
+
+template<class T>
+void ctfft_run(vector<complex<T>>& F, int N, T sgn) {
+	if (N == 1) {
+		return;
+	}
+	int radix = lcd(N);
+	printf("%i\n", radix);
+	for (int n = 0; n < radix; n++) {
+		vector<complex<T>> G;
+		for (int i = n; i < N; i += radix) {
+			G.push_back(F[i]);
+		}
+		ctfft_run(G, N / radix, sgn);
+		int j = 0;
+		for (int i = n; i < N; i += radix) {
+			F[i] = G[j++];
+		}
+	}
+	complex<T> F0[N];
+	for (int n = 0; n < N; n++) {
+		F0[n] = F[n];
+	}
+	for (int n = 0; n < N / radix; n++) {
+		complex<T> Tw[radix];
+		for (int l = 0; l < radix; l++) {
+			for (int m = 1; m < radix; m++) {
+				Tw[m] = expc(complex<T>(T(0), sgn * (2.0 * M_PI * (n + l * N / radix) * m / N)));
+			}
+			auto f = F0[radix * n];
+			for (int m = 1; m < radix; m++) {
+				f += F0[m + radix * n] * Tw[m];
+			}
+			F[(n + l * N / radix)] = f;
+		}
+	}
+}
+
+template<class T, int N>
+void ctfft(vector<complex<T>>& F) {
+	ctfft_run(F, N, -1.0f);
+
+}
+
 template<class T, bool INV, int STRIDE, int OFFSET, bool NORMALIZED>
 struct FFT<T, 1, INV, STRIDE, OFFSET, NORMALIZED> {
 	void operator()(array<complex<T>, STRIDE>& F) {
@@ -376,63 +431,20 @@ spherical_expansion<T, P> fourier_M2L(const spherical_expansion<T, P - 1>& Mx, T
 		}
 	}
 	return Lx;
+
 }
 
 int main() {
-
-	constexpr int N = 8;
-	array<complex<float>, N / 2> A;
-	array<complex<float>, N / 2> B;
-	array<complex<float>, N> A1;
-	array<complex<float>, N> B1;
-	A[0] = rand1();
-	B[0] = rand1();
-	A1[0] = A[0];
-	B1[0] = B[0];
-	A1[N / 2] = A[0];
-	B1[N / 2] = B[0];
-	for (int n = 1; n < N / 2; n++) {
-		A[n] = complex<float>(rand1(), rand1());
-		B[n] = complex<float>(rand1(), rand1());
-		A1[n] = A[n];
-		A1[(n + N / 2) % (N)] = A[n].conj();
-		B1[n] = B[n];
-		B1[(n + N / 2) % (N)] = B[n].conj();
+	constexpr int N = 10;
+	vector<complex<float>> A(N);
+	for (int i = 0; i < N; i++) {
+		A[i].real() = cos(2.0 * M_PI * (i - N / 2) / N);
+		A[i].imag() = 0.0;
 	}
-	FFT<float, N, true> fft_inv;
-	FFT_spherical_expansion_inv<float, N>(A, B);
-	fft_inv(A1);
-	fft_inv(B1);
-	for (int i = 0; i < N / 2; i++) {
-		print("%e %e %e %e \n", A1[i].real(), A1[i].imag(), A[i].real(), A[i].imag());
+	FFT<float, N, false> test;
+	ctfft<float, N>(A);
+	for (int i = 0; i < N; i++) {
+		print("%e %e\n", A[i].real(), A[i].imag());
 	}
-	for (int i = 0; i < N / 2; i++) {
-		print("%e %e %e %e \n", B1[i].real(), B1[i].imag(), B[i].real(), B[i].imag());
-	}
-
-	constexpr int P = 3;
-	float theta = 0.7;
-	float x0, x1, x2, y0, y1, y2, z0, z1, z2;
-	random_vector(x0, y0, z0);
-	random_unit(x1, y1, z1);
-	random_vector(x2, y2, z2);
-	x1 /= 0.5 * theta;
-	y1 /= 0.5 * theta;
-	z1 /= 0.5 * theta;
-	auto M = spherical_regular_harmonic<float, P - 1>(x0, y0, z0);
-	auto L0 = spherical_expansion_M2L<float, P>(M, x1, y1, z1);
-	auto L1 = fourier_M2L<float, P>(M, x1, y1, z1);
-	printf("\n");
-	L0.print();
-	printf("\n");
-	L1.print();
-	double err = 0.0;
-	for (int l = 0; l <= P; l++) {
-		for (int m = 0; m <= l; m++) {
-			err += (L1(l, m) - L0(l, m)).norm();
-		}
-	}
-	err = sqrt(err / ((P + 1) * (P + 1)));
-	PRINT("err = %e\n", err);
 
 }
