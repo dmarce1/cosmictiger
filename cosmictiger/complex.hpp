@@ -30,14 +30,12 @@ class complex {
 public:
 	complex() = default;
 
-	complex(T a) {
-		x = a;
-		y = T(0.0);
+	constexpr complex(T a) :
+			x(a), y(0.0) {
 	}
 
-	complex(T a, T b) {
-		x = a;
-		y = b;
+	constexpr complex(T a, T b) :
+			x(a), y(b) {
 	}
 
 	complex& operator+=(complex other) {
@@ -163,12 +161,16 @@ inline void swap(complex<T>& a, complex<T>& b) {
 
 using cmplx = complex<float>;
 
-inline cmplx expc(cmplx z) {
-	float x, y;
-	float t = std::exp(z.real());
-	sincosf(z.imag(), &y, &x);
-	x *= t;
-	y *= t;
-	return cmplx(x, y);
+template<class T>
+inline complex<T> expc(complex<T> z) {
+	float x, y, t;
+	x = cos(z.imag());
+	y = sin(z.imag());
+	if (z.real() != 0.0) {
+		t = std::exp(z.real());
+		x *= t;
+		y *= t;
+	}
+	return complex<T>(x, y);
 }
 #endif /* COMPLEX_HPP_ */
