@@ -96,7 +96,9 @@ struct spherical_swap_xz_l {
 	static constexpr int nops = 4 + spherical_swap_xz_l<T, P, N, M, L + 1, SING>::nops;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 		spherical_swap_xz_l<T, P, N, M, L + 1, SING> nextl;
-		O[index(N, M)] += A(N, L) * brot<T, N, SING ? M : L, SING ? L : M>::value;
+		constexpr auto coeff = brot<T, N, SING ? M : L, SING ? L : M>::value;
+		//	printf("%e\n", coeff);
+		O[index(N, M)] += A(N, L) * coeff;
 		nextl(O, A);
 	}
 };
@@ -108,40 +110,40 @@ struct spherical_swap_xz_l<T, P, N, M, L, SING, true> {
 	}
 };
 
-template<class T, int P, int N, int M, bool SING, bool TERM = (M > N)>
+template<class T, int P, int N, int M, bool SING, bool LOWER, bool TERM = LOWER ? (M > P - N || M > N) : (M > N)>
 struct spherical_swap_xz_m {
-	static constexpr int nops = spherical_swap_xz_m<T, P, N, M + 1, SING>::nops + spherical_swap_xz_l<T, P, N, M, -N, SING>::nops;
+	static constexpr int nops = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER>::nops + spherical_swap_xz_l<T, P, N, M, -N, SING>::nops;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 		int n = N;
 		int m = M;
 		O[index(n, m)] = 0.0;
-		spherical_swap_xz_m<T, P, N, M + 1, SING> nextm;
+		spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER> nextm;
 		spherical_swap_xz_l<T, P, N, M, -N, SING> nextl;
 		nextl(O, A);
 		nextm(O, A);
 	}
 };
 
-template<class T, int P, int N, int M, bool SING>
-struct spherical_swap_xz_m<T, P, N, M, SING, true> {
+template<class T, int P, int N, int M, bool SING, bool LOWER>
+struct spherical_swap_xz_m<T, P, N, M, SING, LOWER, true> {
 	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 	}
 };
 
-template<class T, int P, int N, bool SING, bool TERM = (N > P)>
+template<class T, int P, int N, bool SING, bool LOWER, bool TERM = (N > P)>
 struct spherical_swap_xz_n {
-	static constexpr int nops = spherical_swap_xz_m<T, P, N, 0, SING>::nops + spherical_swap_xz_n<T, P, N + 1, SING>::nops;
+	static constexpr int nops = spherical_swap_xz_m<T, P, N, 0, SING, LOWER>::nops + spherical_swap_xz_n<T, P, N + 1, SING, LOWER>::nops;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
-		spherical_swap_xz_m<T, P, N, 0, SING> nextm;
-		spherical_swap_xz_n<T, P, N + 1, SING> nextn;
+		spherical_swap_xz_m<T, P, N, 0, SING, LOWER> nextm;
+		spherical_swap_xz_n<T, P, N + 1, SING, LOWER> nextn;
 		nextm(O, A);
 		nextn(O, A);
 	}
 };
 
-template<class T, int P, int N, bool SING>
-struct spherical_swap_xz_n<T, P, N, SING, true> {
+template<class T, int P, int N, bool SING, bool LOWER>
+struct spherical_swap_xz_n<T, P, N, SING, LOWER, true> {
 	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 	}
@@ -178,7 +180,7 @@ struct spherical_rotate_z_l {
 template<class T, int P, int L>
 struct spherical_rotate_z_l<T, P, L, true> {
 	static constexpr int nops = 0;
-	void operator()(spherical_expansion<T, P>& O, complex<T>* ) {
+	void operator()(spherical_expansion<T, P>& O, complex<T>*) {
 	}
 };
 
@@ -199,9 +201,11 @@ struct spherical_rotate_z {
 
 template<class T, int P>
 struct spherical_rotate_to_z_regular {
-	static constexpr int nops = 21 + 2 * (spherical_swap_xz_n<T, P, 1, false>::nops + spherical_rotate_z<T, P>::nops);
+	static constexpr int nops = 21
+			+ (spherical_swap_xz_n<T, P, 1, false, false>::nops + spherical_swap_xz_n<T, P, 1, false, true>::nops + 2 * spherical_rotate_z<T, P>::nops);
 	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
-		spherical_swap_xz_n<T, P, 1, false> xz;
+		spherical_swap_xz_n<T, P, 1, false, false> xz;
+		spherical_swap_xz_n<T, P, 1, false, true> trunc_xz;
 		spherical_rotate_z<T, P> rot;
 		const T phi = atan2(x, y);
 		const T theta = atan2(sqrt(x * x + y * y), z);
@@ -210,15 +214,15 @@ struct spherical_rotate_to_z_regular {
 		xz(O, A);
 		rot(O, theta);
 		A = O;
-		xz(O, A);
+		trunc_xz(O, A);
 	}
 };
 
 template<class T, int P>
 struct spherical_inv_rotate_to_z_singular {
-	static constexpr int nops = 21 + 2 * (spherical_swap_xz_n<T, P, 1, true>::nops + spherical_rotate_z<T, P>::nops);
+	static constexpr int nops = 21 + 2 * (spherical_swap_xz_n<T, P, 1, true, false>::nops + spherical_rotate_z<T, P>::nops);
 	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
-		spherical_swap_xz_n<T, P, 1, true> xz;
+		spherical_swap_xz_n<T, P, 1, true, false> xz;
 		spherical_rotate_z<T, P> rot;
 		const T phi = atan2(x, y);
 		const T theta = atan2(sqrt(x * x + y * y), z);
@@ -365,6 +369,29 @@ struct spherical_expansion_M2L_type {
 			rpow[i] = rpow[i - 1] * rinv;
 		}
 		spherical_expansion_M2L_n<T, P, 0> run;
+	/*	for (int n = 0; n < P - 1; n++) {
+			for (int m = 0; m <= n; m++) {
+				if (m > (P-1) - n) {
+					M[index(n, m)] = complex<T>(0, 0);
+				}
+			}
+		}*/
+	/*	M[index(5,5)] = complex<T>(0,0);
+		M[index(5,4)] = complex<T>(0,0);
+		M[index(5,3)] = complex<T>(0,0);
+		M[index(5,2)] = complex<T>(0,0);
+
+
+		M[index(4,4)] = complex<T>(0,0);
+		M[index(4,3)] = complex<T>(0,0);
+		M[index(4,2)] = complex<T>(0,0);
+
+		M[index(3,3)] = complex<T>(0,0);
+		M[index(3,2)] = complex<T>(0,0);
+
+		M[index(2,2)] = complex<T>(0,0);*/
+
+
 		run(L, M, rpow.data());
 		inv_rot(L, x, y, z);
 		return L;
@@ -463,15 +490,7 @@ real test_M2L(real theta = 0.5) {
 
 int main() {
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
-	printf("%i %i\n", 3, spherical_expansion_M2L_type<float, 3>::nops);
-	printf("%i %i\n", 4, spherical_expansion_M2L_type<float, 4>::nops);
-	printf("%i %i\n", 5, spherical_expansion_M2L_type<float, 5>::nops);
-	printf("%i %i\n", 6, spherical_expansion_M2L_type<float, 6>::nops);
 	printf("%i %i\n", 7, spherical_expansion_M2L_type<float, 7>::nops);
-	printf("%i %i\n", 8, spherical_expansion_M2L_type<float, 8>::nops);
-	printf("%i %i\n", 9, spherical_expansion_M2L_type<float, 9>::nops);
-	printf("%i %i\n", 10, spherical_expansion_M2L_type<float, 10>::nops);
-
 	printf("err = %e\n", test_M2L<7>());
 
 	/*constexpr int P = 5;
