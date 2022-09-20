@@ -91,7 +91,7 @@ double Brot(int n, int m, int l) {
 	}
 }
 
-template<class T, bool zero, bool one, bool none>
+template<class T, bool zero, bool one, bool none, bool onlyreal>
 struct accumulate {
 	static constexpr int nops = 4;
 	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
@@ -99,15 +99,23 @@ struct accumulate {
 	}
 };
 
+template<class T, bool zero, bool one, bool none>
+struct accumulate<T,zero,one,none,true> {
+	static constexpr int nops = 2;
+	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
+		A.real() += B.real() * coeff;
+	}
+};
+
 template<class T>
-struct accumulate<T, true, false, false> {
+struct accumulate<T,true,false,false,false> {
 	static constexpr int nops = 0;
 	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
 	}
 };
 
 template<class T>
-struct accumulate<T, false, true, false> {
+struct accumulate<T,false,true,false,false> {
 	static constexpr int nops = 2;
 	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
 		A += B;
@@ -115,21 +123,44 @@ struct accumulate<T, false, true, false> {
 };
 
 template<class T>
-struct accumulate<T, false, false, true> {
+struct accumulate<T,false,false,true,false> {
 	static constexpr int nops = 2;
 	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
 		A -= B;
 	}
 };
 
+template<class T>
+struct accumulate<T,true,false,false,true> {
+	static constexpr int nops = 0;
+	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
+	}
+};
+
+template<class T>
+struct accumulate<T,false,true,false,true> {
+	static constexpr int nops = 1;
+	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
+		A.real() += B.real();
+	}
+};
+
+template<class T>
+struct accumulate<T,false,false,true,true> {
+	static constexpr int nops = 1;
+	void operator()(complex<T>& A, T coeff, const complex<T>& B) {
+		A.real() -= B.real();
+	}
+};
+
 template<class T, int P, int N, int M, int L, bool SING, bool UPPER, bool TERM = UPPER ? (L + N > (P - 1) || L > N) : (L > N)>
 struct spherical_swap_xz_l {
-	static constexpr auto coeff = (1 << N) * brot<T, N, SING ? M : L, SING ? L : M>::value;
-	static constexpr int nops = spherical_swap_xz_l<T, P, N, M, L + 1, SING, UPPER>::nops + accumulate<T, coeff == T(0), coeff == T(1), coeff == T(-1)>::nops;
+	static constexpr auto coeff = (1<<N)*brot<T, N, SING ? M : L, SING ? L : M>::value;
+	static constexpr int nops = spherical_swap_xz_l<T, P, N, M, L + 1, SING, UPPER>::nops + accumulate<T, coeff == T(0), coeff == T(1), coeff == T(-1),M==0 || L==0>::nops;
 
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 		spherical_swap_xz_l<T, P, N, M, L + 1, SING, UPPER> nextl;
-		accumulate<T, coeff == T(0), coeff == T(1), coeff == T(-1)> a;
+		accumulate<T, coeff == T(0), coeff == T(1), coeff == T(-1), M==0 || L==0> a;
 		a(O[index(N, M)], coeff, A(N, L));
 		nextl(O, A);
 	}
@@ -145,13 +176,13 @@ struct spherical_swap_xz_l<T, P, N, M, L, SING, UPPER, true> {
 template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool TERM = LOWER ? (M > P - N || M > N) : (M > N)>
 struct spherical_swap_xz_m {
 	static constexpr int LB = UPPER ? (N - (P - 1) > -N ? N - (P - 1) : -N) : -N;
-	static constexpr int nops = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER>::nops + spherical_swap_xz_l<T, P, N, M, LB, SING, UPPER>::nops + 1;
+	static constexpr int nops = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER>::nops + spherical_swap_xz_l<T, P, N, M, LB, SING, UPPER>::nops +1;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 		O[index(N, M)] = 0.0;
 		spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER> nextm;
 		spherical_swap_xz_l<T, P, N, M, LB, SING, UPPER> nextl;
 		nextl(O, A);
-		O[index(N, M)] *= T(1) / (1 << N);
+		O[index(N, M)] *= T(1)/(1<<N);
 		nextm(O, A);
 	}
 };
