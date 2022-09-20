@@ -93,26 +93,28 @@ double Brot(int n, int m, int l) {
 
 template<class T, int P, int N, int M, int L, bool SING, bool TERM = (L > N)>
 struct spherical_swap_xz_l {
+	static constexpr int nops = 4 + spherical_swap_xz_l<T, P, N, M, L + 1, SING>::nops;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 		spherical_swap_xz_l<T, P, N, M, L + 1, SING> nextl;
-		O[index(N, M)] += A(N,L) * brot<T, N, SING ? M : L, SING ? L : M>::value;
+		O[index(N, M)] += A(N, L) * brot<T, N, SING ? M : L, SING ? L : M>::value;
 		nextl(O, A);
 	}
 };
 
 template<class T, int P, int N, int M, int L, bool SING>
 struct spherical_swap_xz_l<T, P, N, M, L, SING, true> {
+	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 	}
 };
 
 template<class T, int P, int N, int M, bool SING, bool TERM = (M > N)>
 struct spherical_swap_xz_m {
+	static constexpr int nops = spherical_swap_xz_m<T, P, N, M + 1, SING>::nops + spherical_swap_xz_l<T, P, N, M, -N, SING>::nops;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 		int n = N;
 		int m = M;
 		O[index(n, m)] = 0.0;
-
 		spherical_swap_xz_m<T, P, N, M + 1, SING> nextm;
 		spherical_swap_xz_l<T, P, N, M, -N, SING> nextl;
 		nextl(O, A);
@@ -122,14 +124,15 @@ struct spherical_swap_xz_m {
 
 template<class T, int P, int N, int M, bool SING>
 struct spherical_swap_xz_m<T, P, N, M, SING, true> {
+	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 	}
 };
 
 template<class T, int P, int N, bool SING, bool TERM = (N > P)>
 struct spherical_swap_xz_n {
+	static constexpr int nops = spherical_swap_xz_m<T, P, N, 0, SING>::nops + spherical_swap_xz_n<T, P, N + 1, SING>::nops;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
-
 		spherical_swap_xz_m<T, P, N, 0, SING> nextm;
 		spherical_swap_xz_n<T, P, N + 1, SING> nextn;
 		nextm(O, A);
@@ -139,23 +142,94 @@ struct spherical_swap_xz_n {
 
 template<class T, int P, int N, bool SING>
 struct spherical_swap_xz_n<T, P, N, SING, true> {
+	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) {
 	}
 };
 
-template<class T, int P>
-void spherical_swap_xz_singular(spherical_expansion<T, P>& O) {
-	const auto A = O;
-	spherical_swap_xz_n<T, P, 1, true> run;
-	run(O, A);
-}
+template<class T, int P, int L, int M, bool TERM = (M > L)>
+struct spherical_rotate_z_m {
+	static constexpr int nops = spherical_rotate_z_m<T, P, L, M + 1>::nops + 6;
+	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
+		spherical_rotate_z_m<T, P, L, M + 1> nextm;
+		O[index(L, M)] *= R[M];
+		nextm(O, R);
+	}
+};
+
+template<class T, int P, int L, int M>
+struct spherical_rotate_z_m<T, P, L, M, true> {
+	static constexpr int nops = 0;
+	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
+	}
+};
+
+template<class T, int P, int L, bool TERM = (L > P)>
+struct spherical_rotate_z_l {
+	static constexpr int nops = spherical_rotate_z_l<T, P, L + 1>::nops + spherical_rotate_z_m<T, P, L, 0>::nops;
+	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
+		spherical_rotate_z_l<T, P, L + 1> nextl;
+		spherical_rotate_z_m<T, P, L, 0> nextm;
+		nextm(O, R);
+		nextl(O, R);
+	}
+};
+
+template<class T, int P, int L>
+struct spherical_rotate_z_l<T, P, L, true> {
+	static constexpr int nops = 0;
+	void operator()(spherical_expansion<T, P>& O, complex<T>* ) {
+	}
+};
 
 template<class T, int P>
-void spherical_swap_xz_regular(spherical_expansion<T, P>& O) {
-	const auto A = O;
-	spherical_swap_xz_n<T, P, 1, false> run;
-	run(O, A);
-}
+struct spherical_rotate_z {
+	static constexpr int nops = 6 * (P - 1) + spherical_rotate_z_l<T, P, 1>::nops;
+	void operator()(spherical_expansion<T, P>& O, T phi) {
+		array<complex<T>, P + 1> R;
+		R[0] = complex<T>(1, 0);
+		const auto R0 = complex<T>(cos(-phi), sin(-phi));
+		for (int n = 1; n <= P; n++) {
+			R[n] = R[n - 1] * R0;
+		}
+		spherical_rotate_z_l<T, P, 1> run;
+		run(O, R.data());
+	}
+};
+
+template<class T, int P>
+struct spherical_rotate_to_z_regular {
+	static constexpr int nops = 21 + 2 * (spherical_swap_xz_n<T, P, 1, false>::nops + spherical_rotate_z<T, P>::nops);
+	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
+		spherical_swap_xz_n<T, P, 1, false> xz;
+		spherical_rotate_z<T, P> rot;
+		const T phi = atan2(x, y);
+		const T theta = atan2(sqrt(x * x + y * y), z);
+		rot(O, -phi);
+		auto A = O;
+		xz(O, A);
+		rot(O, theta);
+		A = O;
+		xz(O, A);
+	}
+};
+
+template<class T, int P>
+struct spherical_inv_rotate_to_z_singular {
+	static constexpr int nops = 21 + 2 * (spherical_swap_xz_n<T, P, 1, true>::nops + spherical_rotate_z<T, P>::nops);
+	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
+		spherical_swap_xz_n<T, P, 1, true> xz;
+		spherical_rotate_z<T, P> rot;
+		const T phi = atan2(x, y);
+		const T theta = atan2(sqrt(x * x + y * y), z);
+		auto A = O;
+		xz(O, A);
+		rot(O, -theta);
+		A = O;
+		xz(O, A);
+		rot(O, phi);
+	}
+};
 
 template<class T, int P>
 spherical_expansion<T, P> spherical_singular_harmonic(T x, T y, T z) {
@@ -198,84 +272,109 @@ void spherical_expansion_M2M(spherical_expansion<T, P>& M, T x, T y, T z) {
 	}
 }
 
-template<class T, int P>
-void spherical_rotate_z(spherical_expansion<T, P>& O, T phi) {
-	for (int l = 0; l <= P; l++) {
-		for (int m = 0; m <= l; m++) {
-			O[index(l, m)] *= expc(complex<T>(0, -m * phi));
-		}
-	}
-}
-
-template<class T, int P>
-spherical_expansion<T, P> spherical_expansion_M2L(spherical_expansion<T, P - 1> M, T x, T y, T z) {
-	const auto O = spherical_singular_harmonic<T, P>(x, y, z);
-	spherical_expansion<T, P> L;
-	int count = 0;
-	for (int n = 0; n <= P; n++) {
-		for (int m = 0; m <= n; m++) {
-			L[index(n, m)] = complex<T>(T(0), T(0));
-			const int kmax = std::min(P - n, P - 1);
-			for (int k = 0; k <= kmax; k++) {
-				const int lmin = std::max(-k, -n - k - m);
-				const int lmax = std::min(k, n + k - m);
-				for (int l = lmin; l <= lmax; l++) {
-					L[index(n, m)] += M(k, l).conj() * O(n + k, m + l);
-					count += 9;
-				}
-			}
-		}
-	}
-//spherical_inv_rotate_to_z(L, x, y, z);
-
-//	printf( "%i\n", count);
-	return L;
-}
-
-template<class T, int P>
-void spherical_rotate_to_z_regular(spherical_expansion<T, P>& O, T x, T y, T z) {
-	const T phi = atan2(x, y);
-	const T theta = atan2(sqrt(x * x + y * y), z);
-	spherical_rotate_z(O, -phi);
-	spherical_swap_xz_regular(O);
-	spherical_rotate_z(O, theta);
-	spherical_swap_xz_regular(O);
-}
-
-template<class T, int P>
-void spherical_inv_rotate_to_z_singular(spherical_expansion<T, P>& O, T x, T y, T z) {
-	const T phi = atan2(x, y);
-	const T theta = atan2(sqrt(x * x + y * y), z);
-	spherical_swap_xz_singular(O);
-	spherical_rotate_z(O, -theta);
-	spherical_swap_xz_singular(O);
-	spherical_rotate_z(O, phi);
-}
-
 double factorial(int n) {
 	return n == 0 ? 1.0 : n * factorial(n - 1);
 }
 
-template<class T, int P>
-spherical_expansion<T, P> spherical_expansion_rot_M2L(spherical_expansion<T, P - 1> M, T x, T y, T z) {
-	spherical_rotate_to_z_regular(M, x, y, z);
-	const T r = sqrt(x * x + y * y + z * z);
-	//	const auto O = spherical_singular_harmonic<T, P>(x,y,z);
-	spherical_expansion<T, P> L;
-	int count = 0;
-	for (int n = 0; n <= P; n++) {
-		for (int m = 0; m <= n; m++) {
-			L[index(n, m)] = complex<T>(T(0), T(0));
-			const int kmax = std::min(P - n, P - 1);
-			for (int k = m; k <= kmax; k++) {
-				L[index(n, m)] += nonepow<T>(m) * M(k, m).conj() * factorial(n + k) * pow(r, -k - n - 1);
-			}
-		}
+template<class T, int N>
+struct facto {
+	constexpr T operator()() const {
+		facto<T, N - 1> f;
+		return T(N) * f();
 	}
-	spherical_inv_rotate_to_z_singular(L, x, y, z);
+};
 
-//	printf( "%i\n", count);
-	return L;
+template<class T>
+struct facto<T, 0> {
+	constexpr T operator()() const {
+		return T(1);
+	}
+};
+
+template<class T, int P, int N, int M, int K, bool TERM = (K > P - N || K > (P - 1))>
+struct spherical_expansion_M2L_k {
+	static constexpr int nops = 6 + spherical_expansion_M2L_k<T, P, N, M, K + 1>::nops;
+	void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& O, const T* rpow) {
+		spherical_expansion_M2L_k<T, P, N, M, K + 1> next;
+		constexpr facto<T, N + K> factorial;
+		constexpr auto c0 = ((M % 2 == 0 ? T(1) : T(-1)) * factorial());
+		L[index(N, M)] += O(K, M).conj() * (c0 * rpow[K + N + 1]);
+		next(L, O, rpow);
+	}
+};
+
+template<class T, int P, int N, int M, int K>
+struct spherical_expansion_M2L_k<T, P, N, M, K, true> {
+	static constexpr int nops = 0;
+	void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>&, const T*) {
+	}
+};
+
+template<class T, int P, int N, int M, bool TERM = (M > N)>
+struct spherical_expansion_M2L_m {
+	static constexpr int nops = spherical_expansion_M2L_m<T, P, N, M + 1>::nops + spherical_expansion_M2L_k<T, P, N, M, M>::nops;
+	void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& O, const T* rpow) {
+		spherical_expansion_M2L_m<T, P, N, M + 1> nextm;
+		spherical_expansion_M2L_k<T, P, N, M, M> nextk;
+		L[index(N, M)] = complex<T>(T(0), T(0));
+		nextk(L, O, rpow);
+		nextm(L, O, rpow);
+	}
+};
+
+template<class T, int P, int N, int M>
+struct spherical_expansion_M2L_m<T, P, N, M, true> {
+	static constexpr int nops = 0;
+	void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>&, const T*) {
+	}
+};
+
+template<class T, int P, int N, bool TERM = (N > P)>
+struct spherical_expansion_M2L_n {
+	static constexpr int nops = spherical_expansion_M2L_n<T, P, N + 1>::nops + spherical_expansion_M2L_m<T, P, N, 0>::nops;
+	void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& M, const T* rpow) {
+		spherical_expansion_M2L_n<T, P, N + 1> nextn;
+		spherical_expansion_M2L_m<T, P, N, 0> nextm;
+		nextm(L, M, rpow);
+		nextn(L, M, rpow);
+	}
+};
+
+template<class T, int P, int N>
+struct spherical_expansion_M2L_n<T, P, N, true> {
+	static constexpr int nops = 0;
+	void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& M, const T*) {
+	}
+};
+
+template<class T, int P>
+struct spherical_expansion_M2L_type {
+	static constexpr int nops = 14 + P + spherical_rotate_to_z_regular<T, P - 1>::nops + spherical_inv_rotate_to_z_singular<T, P>::nops
+			+ spherical_expansion_M2L_n<T, P, 0>::nops;
+	spherical_expansion<T, P> operator()(spherical_expansion<T, P - 1> M, T x, T y, T z) {
+		int flops = 0;
+		spherical_rotate_to_z_regular<T, P - 1> rot;
+		spherical_inv_rotate_to_z_singular<T, P> inv_rot;
+		rot(M, x, y, z);
+		const T r = sqrt(x * x + y * y + z * z);
+		spherical_expansion<T, P> L;
+		const T rinv = T(1) / r;
+		array<T, P + 2> rpow;
+		rpow[0] = T(1);
+		for (int i = 1; i < P + 2; i++) {
+			rpow[i] = rpow[i - 1] * rinv;
+		}
+		spherical_expansion_M2L_n<T, P, 0> run;
+		run(L, M, rpow.data());
+		inv_rot(L, x, y, z);
+		return L;
+	}
+};
+
+template<class T, int P>
+spherical_expansion<T, P> spherical_expansion_M2L(spherical_expansion<T, P - 1> M, T x, T y, T z) {
+	spherical_expansion_M2L_type<T, P> run;
+	return run(M, x, y, z);
 }
 
 template<class T, int P>
@@ -338,7 +437,7 @@ real test_M2L(real theta = 0.5) {
 		z1 /= 0.5 * theta;
 		x2 = y2 = z2 = 0.0;
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
-		auto L = spherical_expansion_rot_M2L<real, P>(M, x1, y1, z1);
+		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
@@ -359,13 +458,21 @@ real test_M2L(real theta = 0.5) {
 	}
 	tm1.stop();
 	err = sqrt(err / N);
-	PRINT("%i %e %e\n", P, err, tm1.read());
 	return err;
 }
 
 int main() {
-	//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
-	test_M2L<7>();
+//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
+	printf("%i %i\n", 3, spherical_expansion_M2L_type<float, 3>::nops);
+	printf("%i %i\n", 4, spherical_expansion_M2L_type<float, 4>::nops);
+	printf("%i %i\n", 5, spherical_expansion_M2L_type<float, 5>::nops);
+	printf("%i %i\n", 6, spherical_expansion_M2L_type<float, 6>::nops);
+	printf("%i %i\n", 7, spherical_expansion_M2L_type<float, 7>::nops);
+	printf("%i %i\n", 8, spherical_expansion_M2L_type<float, 8>::nops);
+	printf("%i %i\n", 9, spherical_expansion_M2L_type<float, 9>::nops);
+	printf("%i %i\n", 10, spherical_expansion_M2L_type<float, 10>::nops);
+
+	printf("err = %e\n", test_M2L<7>());
 
 	/*constexpr int P = 5;
 	 spherical_expansion<float, P> O;
