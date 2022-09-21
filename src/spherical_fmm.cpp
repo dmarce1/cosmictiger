@@ -156,7 +156,7 @@ struct spherical_swap_xz_l<T, P, N, M, L, SING, UPPER, NOEVENHI, true> {
 
 template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = LOWER ? (M > P - N || M > N) : (M > N)>
 struct spherical_swap_xz_m {
-	static constexpr int LB = (NOEVENHI && N == P) ? ((P + N) % 2 == 0 ? 1 : 0) : 0;
+	static constexpr int LB = (NOEVENHI && N == P) ? (((P + N) / 2) % 2 == 1 ? 1 : 0) : 0;
 	using mtype = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER, NOEVENHI>;
 	using ltype = spherical_swap_xz_l<T, P, N, M, LB, SING, UPPER, NOEVENHI>;
 	static constexpr int nops = mtype::nops + ltype::nops + 1;
@@ -202,21 +202,37 @@ struct spherical_rotate_z_m {
 	static constexpr int nops = spherical_rotate_z_m<T, P, L, M + 1, NOEVENHI>::nops + 6;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
 		spherical_rotate_z_m<T, P, L, M + 1, NOEVENHI> nextm;
-		if( P==L&&P==7) {
-//			printf( "%i %i %e %e\n", L, M, O[index(L, M)].real(), O[index(L, M)].imag());
-		}
 		O[index(L, M)] *= R[M];
 		nextm(O, R);
 	}
 };
 
+
+template<class T, bool REAL>
+struct rotate_z_mult {
+	static constexpr int nops = 6;
+	void operator()(complex<T>& O, const complex<T>& R) const {
+		O *= R;
+	}
+};
+
+template<class T>
+struct rotate_z_mult<T,false> {
+	static constexpr int nops = 2;
+	void operator()(complex<T>& O, const complex<T>& R) const {
+		O *= R;
+	}
+};
+
 template<class T, int P, int L, int M>
 struct spherical_rotate_z_m<T, P, L, M, true, false> {
-	using mtype = spherical_rotate_z_m<T, P, L, M + 2, true>;
-	static constexpr int nops = mtype::nops + 6;
+	using mtype = spherical_rotate_z_m<T, P, L, L == P ? M + 2 : M + 1, true>;
+	using optype = rotate_z_mult<T,L >= P - 1 && ((M % 2 == (P + L) / 2) % 2)>;
+	static constexpr int nops = mtype::nops + optype::nops;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
 		mtype nextm;
-		O[index(L, M)] *= R[M];
+		optype op;
+		op(O[index(L, M)] ,R[M]);
 		nextm(O, R);
 	}
 };
@@ -233,7 +249,7 @@ struct spherical_rotate_z_l {
 	static constexpr int nops = spherical_rotate_z_l<T, P, L + 1, NOEVENHI>::nops + spherical_rotate_z_m<T, P, L, 0, NOEVENHI>::nops;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
 		spherical_rotate_z_l<T, P, L + 1, NOEVENHI> nextl;
-		spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? ((P + L) % 2 == 0 ? 1 : 0)  : 0, NOEVENHI> nextm;
+		spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? (((P + L) / 2) % 2 == 1 ? 1 : 0) : 0, NOEVENHI> nextm;
 		nextm(O, R);
 		nextl(O, R);
 	}
@@ -287,7 +303,7 @@ struct spherical_inv_rotate_to_z_singular {
 	using xz_type =spherical_swap_xz_n<T, P, 1, true, false, false, true>;
 	using rtype1 = spherical_rotate_z<T, P, false>;
 	using rtype2 = spherical_rotate_z<T, P, true>;
-	static constexpr int nops = 21 + rtype1::nops+ rtype2::nops + xz_type::nops + truncxz_type::nops;
+	static constexpr int nops = 21 + rtype1::nops + rtype2::nops + xz_type::nops + truncxz_type::nops;
 	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
 		truncxz_type trunc_xz;
 		xz_type xz;
@@ -297,8 +313,6 @@ struct spherical_inv_rotate_to_z_singular {
 		const T theta = atan2(sqrt(x * x + y * y), z);
 		auto A = O;
 		trunc_xz(O, A);
-	//	O.print();
-	//	abort();
 		rot2(O, -theta);
 		A = O;
 		xz(O, A);
@@ -551,12 +565,12 @@ real test_M2L(real theta = 0.5) {
 //		x2 = y2 = z2 = 0.0;
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
-			auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
+		auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
 
-			L.print();
-			printf( "\n");
-			L2.print();
-			break;
+		L.print();
+		printf("\n");
+		L2.print();
+		break;
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
@@ -597,7 +611,7 @@ struct run_tests<NMAX, NMAX> {
 };
 
 int main() {
-	run_tests<8, 7> run;
+	run_tests<9, 8> run;
 	run();
 	//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
