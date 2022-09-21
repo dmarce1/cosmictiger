@@ -611,7 +611,7 @@ struct run_tests<NMAX, NMAX> {
 };
 
 int main() {
-	run_tests<9, 8> run;
+	run_tests<9, 5> run;
 	run();
 	//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
