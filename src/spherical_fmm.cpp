@@ -197,18 +197,7 @@ struct spherical_swap_xz_n<T, P, N, SING, LOWER, UPPER, NOEVENHI, true> {
 	}
 };
 
-template<class T, int P, int L, int M, bool NOEVENHI, bool TERM = (M > L)>
-struct spherical_rotate_z_m {
-	static constexpr int nops = spherical_rotate_z_m<T, P, L, M + 1, NOEVENHI>::nops + 6;
-	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
-		spherical_rotate_z_m<T, P, L, M + 1, NOEVENHI> nextm;
-		O[index(L, M)] *= R[M];
-		nextm(O, R);
-	}
-};
-
-
-template<class T, bool REAL>
+template<class T, bool REAL, bool IMAG>
 struct rotate_z_mult {
 	static constexpr int nops = 6;
 	void operator()(complex<T>& O, const complex<T>& R) const {
@@ -217,54 +206,79 @@ struct rotate_z_mult {
 };
 
 template<class T>
-struct rotate_z_mult<T,false> {
+struct rotate_z_mult<T, true, false> {
 	static constexpr int nops = 2;
 	void operator()(complex<T>& O, const complex<T>& R) const {
-		O *= R;
+		O.imag() = O.real() * R.imag();
+		O.real() *= R.real();
 	}
 };
 
-template<class T, int P, int L, int M>
-struct spherical_rotate_z_m<T, P, L, M, true, false> {
-	using mtype = spherical_rotate_z_m<T, P, L, L == P ? M + 2 : M + 1, true>;
-	using optype = rotate_z_mult<T,L >= P - 1 && ((M % 2 == (P + L) / 2) % 2)>;
-	static constexpr int nops = mtype::nops + optype::nops;
+template<class T>
+struct rotate_z_mult<T, false, true> {
+	static constexpr int nops = 2;
+	void operator()(complex<T>& O, const complex<T>& R) const {
+		O.real() = -O.imag() * R.imag();
+		O.imag() *= R.real();
+	}
+};
+
+template<class T, int P, int L, int M, bool NOEVENHI, bool ODD, bool TERM = (M > L)>
+struct spherical_rotate_z_m {
+	using mtype =spherical_rotate_z_m<T, P, L, M + 1, NOEVENHI, ODD>;
+	using optype = rotate_z_mult<T,NOEVENHI && (L >= P - 1 && (M % 2 != ((P + L) / 2) % 2)), false>;
+	static constexpr int nops = mtype::nops + 6;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
 		mtype nextm;
-		optype op;
-		op(O[index(L, M)] ,R[M]);
+		O[index(L, M)] *= R[M];
 		nextm(O, R);
 	}
 };
 
-template<class T, int P, int L, int M, bool NOEVENHI>
-struct spherical_rotate_z_m<T, P, L, M, NOEVENHI, true> {
+template<class T, int P, int L, int M>
+struct spherical_rotate_z_m<T, P, L, M, false, true, false> {
+	using mtype = spherical_rotate_z_m<T, P, L, M + 1, false, true>;
+	using optype = rotate_z_mult<T,(L == P) && (M % 2 != 0), (L == P) && (M % 2 == 1)>;
+	static constexpr int nops = mtype::nops + optype::nops;
+	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
+		mtype nextm;
+		optype op;
+		op(O[index(L, M)], R[M]);
+		nextm(O, R);
+	}
+};
+
+template<class T, int P, int L, int M, bool NOEVENHI, bool ODD>
+struct spherical_rotate_z_m<T, P, L, M, NOEVENHI, ODD, true> {
 	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
 	}
 };
 
-template<class T, int P, int L, bool NOEVENHI, bool TERM = (L > P)>
+template<class T, int P, int L, bool NOEVENHI, bool ODD, bool TERM = (L > P)>
 struct spherical_rotate_z_l {
-	static constexpr int nops = spherical_rotate_z_l<T, P, L + 1, NOEVENHI>::nops + spherical_rotate_z_m<T, P, L, 0, NOEVENHI>::nops;
+	using ltype = spherical_rotate_z_l<T, P, L + 1, NOEVENHI, ODD>;
+	using mtype = spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? (((P + L) / 2) % 2 == 1 ? 1 : 0) : 0, NOEVENHI,ODD>;
+	static constexpr int nops = ltype::nops + mtype::nops;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
-		spherical_rotate_z_l<T, P, L + 1, NOEVENHI> nextl;
-		spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? (((P + L) / 2) % 2 == 1 ? 1 : 0) : 0, NOEVENHI> nextm;
+		ltype nextl;
+		mtype nextm;
 		nextm(O, R);
 		nextl(O, R);
 	}
 };
 
-template<class T, int P, int L, bool NOEVENHI>
-struct spherical_rotate_z_l<T, P, L, NOEVENHI, true> {
+template<class T, int P, int L, bool NOEVENHI, bool ODD>
+struct spherical_rotate_z_l<T, P, L, NOEVENHI, ODD, true> {
 	static constexpr int nops = 0;
 	void operator()(spherical_expansion<T, P>& O, complex<T>*) {
 	}
 };
 
-template<class T, int P, bool NOEVENHI>
+template<class T, int P, bool NOEVENHI, bool ODD>
 struct spherical_rotate_z {
-	static constexpr int nops = 6 * (P - 1) + spherical_rotate_z_l<T, P, 1, NOEVENHI>::nops;
+	using ltype =spherical_rotate_z_l<T, P, 1, NOEVENHI,ODD>;
+	static constexpr int nops = 6 * (P - 1) + ltype::nops;
 	void operator()(spherical_expansion<T, P>& O, T phi) {
 		array<complex<T>, P + 1> R;
 		R[0] = complex<T>(1, 0);
@@ -272,20 +286,21 @@ struct spherical_rotate_z {
 		for (int n = 1; n <= P; n++) {
 			R[n] = R[n - 1] * R0;
 		}
-		spherical_rotate_z_l<T, P, 1, NOEVENHI> run;
+		ltype run;
 		run(O, R.data());
 	}
 };
 
 template<class T, int P>
 struct spherical_rotate_to_z_regular {
-	static constexpr int nops = 21
-			+ (spherical_swap_xz_n<T, P, 1, false, false, false, false>::nops + spherical_swap_xz_n<T, P, 1, false, true, false, false>::nops
-					+ 2 * spherical_rotate_z<T, P, false>::nops);
+	using xz_type = spherical_swap_xz_n<T, P, 1, false, false, false, false>;
+	using rot_type =spherical_rotate_z<T, P, false, false>;
+	using xz_type2 =spherical_swap_xz_n<T, P, 1, false, true, false, false>;
+	static constexpr int nops = 21 + (xz_type::nops + xz_type2::nops + 2 * rot_type::nops);
 	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
-		spherical_swap_xz_n<T, P, 1, false, false, false, false> xz;
-		spherical_swap_xz_n<T, P, 1, false, true, false, false> trunc_xz;
-		spherical_rotate_z<T, P, false> rot;
+		xz_type xz;
+		xz_type2 trunc_xz;
+		rot_type rot;
 		const T phi = atan2(x, y);
 		const T theta = atan2(sqrt(x * x + y * y), z);
 		rot(O, -phi);
@@ -301,8 +316,8 @@ template<class T, int P>
 struct spherical_inv_rotate_to_z_singular {
 	using truncxz_type =spherical_swap_xz_n<T, P, 1, true, false, true, false>;
 	using xz_type =spherical_swap_xz_n<T, P, 1, true, false, false, true>;
-	using rtype1 = spherical_rotate_z<T, P, false>;
-	using rtype2 = spherical_rotate_z<T, P, true>;
+	using rtype1 = spherical_rotate_z<T, P, false,true>;
+	using rtype2 = spherical_rotate_z<T, P, true, false>;
 	static constexpr int nops = 21 + rtype1::nops + rtype2::nops + xz_type::nops + truncxz_type::nops;
 	void operator()(spherical_expansion<T, P>& O, T x, T y, T z) {
 		truncxz_type trunc_xz;
@@ -316,6 +331,8 @@ struct spherical_inv_rotate_to_z_singular {
 		rot2(O, -theta);
 		A = O;
 		xz(O, A);
+//		O.print();
+//		abort();
 		rot1(O, phi);
 	}
 };
@@ -541,7 +558,7 @@ spherical_expansion<T, P> spherical_expansion_ref_M2L(spherical_expansion<T, P -
 template<int P>
 real test_M2L(real theta = 0.5) {
 	real err = 0.0;
-	int N = 1;
+	int N = 10000;
 	timer tm1, tm2;
 	tm1.start();
 	for (int i = 0; i < N; i++) {
@@ -565,12 +582,11 @@ real test_M2L(real theta = 0.5) {
 //		x2 = y2 = z2 = 0.0;
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
-		auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
-
-		L.print();
-		printf("\n");
-		L2.print();
-		break;
+				auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
+		 L.print();
+		 printf( "\n");
+		 L2.print();
+		 abort();
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
@@ -611,7 +627,7 @@ struct run_tests<NMAX, NMAX> {
 };
 
 int main() {
-	run_tests<9, 5> run;
+	run_tests<10, 9> run;
 	run();
 	//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
