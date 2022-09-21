@@ -216,7 +216,7 @@ struct rotate_z_mult<T, true, false> {
 
 template<class T>
 struct rotate_z_mult<T, false, true> {
-	static constexpr int nops = 2;
+	static constexpr int nops = 3;
 	void operator()(complex<T>& O, const complex<T>& R) const {
 		O.real() = -O.imag() * R.imag();
 		O.imag() *= R.real();
@@ -238,7 +238,7 @@ struct spherical_rotate_z_m {
 template<class T, int P, int L, int M>
 struct spherical_rotate_z_m<T, P, L, M, false, true, false> {
 	using mtype = spherical_rotate_z_m<T, P, L, M + 1, false, true>;
-	using optype = rotate_z_mult<T,(L == P) && (M % 2 != 0), (L == P) && (M % 2 == 1)>;
+	using optype = rotate_z_mult<T,(L == P) && (M % 2 == 0), (L == P) && (M % 2 != 0)>;
 	static constexpr int nops = mtype::nops + optype::nops;
 	void operator()(spherical_expansion<T, P>& O, complex<T>* R) {
 		mtype nextm;
@@ -582,11 +582,16 @@ real test_M2L(real theta = 0.5) {
 //		x2 = y2 = z2 = 0.0;
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
-				auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
-		 L.print();
-		 printf( "\n");
-		 L2.print();
-		 abort();
+	//				auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
+	//	 L.print();
+	//	 printf( "\n");
+		 for( int n = 0; n <= P; n++) {
+			 for( int m = 0; m<=n; m++) {
+//				 L2[index(n,m)] -= L[index(n,m)];
+			 }
+		 }
+	/*	 L2.print();
+		 abort();*/
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
@@ -627,7 +632,7 @@ struct run_tests<NMAX, NMAX> {
 };
 
 int main() {
-	run_tests<10, 9> run;
+	run_tests<10, 7> run;
 	run();
 	//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
