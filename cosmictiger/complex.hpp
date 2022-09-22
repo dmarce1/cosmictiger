@@ -21,135 +21,135 @@
 #define COMPLEX_HPP_
 
 #include <algorithm>
-
+#include <cosmictiger/cuda.hpp>
 #include <math.h>
 
 template<class T = float>
 class complex {
 	T x, y;
 public:
-	complex() = default;
+	CUDA_EXPORT complex() = default;
 
-	constexpr complex(T a) :
+	CUDA_EXPORT constexpr complex(T a) :
 			x(a), y(0.0) {
 	}
 
-	constexpr complex(T a, T b) :
+	CUDA_EXPORT constexpr complex(T a, T b) :
 			x(a), y(b) {
 	}
 
-	complex& operator+=(complex other) {
+	CUDA_EXPORT complex& operator+=(complex other) {
 		x += other.x;
 		y += other.y;
 		return *this;
 	}
 
-	complex& operator-=(complex other) {
+	CUDA_EXPORT complex& operator-=(complex other) {
 		x -= other.x;
 		y -= other.y;
 		return *this;
 	}
 
-	complex operator*(complex other) const {
+	CUDA_EXPORT complex operator*(complex other) const {
 		complex a;
 		a.x = x * other.x - y * other.y;
 		a.y = x * other.y + y * other.x;
 		return a;
 	}
 
-	complex operator/(complex other) const {
+	CUDA_EXPORT complex operator/(complex other) const {
 		return *this * other.conj() / other.norm();
 	}
 
-	complex operator/=(complex other) {
+	CUDA_EXPORT complex operator/=(complex other) {
 		*this = *this * other.conj() / other.norm();
 		return *this;
 	}
 
-	complex operator/(T other) const {
+	CUDA_EXPORT complex operator/(T other) const {
 		complex b;
 		b.x = x / other;
 		b.y = y / other;
 		return b;
 	}
 
-	complex operator*(T other) const {
+	CUDA_EXPORT complex operator*(T other) const {
 		complex b;
 		b.x = x * other;
 		b.y = y * other;
 		return b;
 	}
 
-	complex& operator*=(T other) {
+	CUDA_EXPORT complex& operator*=(T other) {
 		x *= other;
 		y *= other;
 		return *this;
 	}
-	complex& operator*=(complex other) {
+	CUDA_EXPORT complex& operator*=(complex other) {
 		*this = *this * other;
 		return *this;
 	}
 
-	complex operator+(complex other) const {
+	CUDA_EXPORT complex operator+(complex other) const {
 		complex a;
 		a.x = x + other.x;
 		a.y = y + other.y;
 		return a;
 	}
 
-	complex operator-(complex other) const {
+	CUDA_EXPORT complex operator-(complex other) const {
 		complex a;
 		a.x = x - other.x;
 		a.y = y - other.y;
 		return a;
 	}
 
-	complex conj() const {
+	CUDA_EXPORT complex conj() const {
 		complex a;
 		a.x = x;
 		a.y = -y;
 		return a;
 	}
 
-	T real() const {
+	CUDA_EXPORT T real() const {
 		return x;
 	}
 
-	T imag() const {
+	CUDA_EXPORT T imag() const {
 		return y;
 	}
 
-	T& real() {
+	CUDA_EXPORT T& real() {
 		return x;
 	}
 
-	T& imag() {
+	CUDA_EXPORT T& imag() {
 		return y;
 	}
 
-	T norm() const {
+	CUDA_EXPORT T norm() const {
 		return ((*this) * conj()).real();
 	}
 
-	T abs() const {
+	CUDA_EXPORT T abs() const {
 		return sqrtf(norm());
 	}
 
-	complex operator-() const {
+	CUDA_EXPORT complex operator-() const {
 		complex a;
 		a.x = -x;
 		a.y = -y;
 		return a;
 	}
 	template<class A>
-	void serialize(A&& arc, unsigned) {
+	CUDA_EXPORT void serialize(A&& arc, unsigned) {
 		arc & x;
 		arc & y;
 	}
 };
 
 template<class T>
-inline complex<T> operator*(T a, complex<T> b) {
+CUDA_EXPORT inline complex<T> operator*(T a, complex<T> b) {
 	return b * a;
 }
 
