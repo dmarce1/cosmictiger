@@ -162,12 +162,14 @@ struct spherical_swap_xz_l<T, P, N, M, L, SING, UPPER, NOEVENHI, true> {
 	}
 };
 
-template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = LOWER ? (M > P - N || M > N) : (M > N)>
+template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = LOWER ? (M > (P+1) - N || M > N) : (M > N)>
 struct spherical_swap_xz_m {
 	static constexpr int LB = (NOEVENHI && N == P) ? (((P + N) / 2) % 2 == 1 ? 1 : 0) : 0;
 	using mtype = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER, NOEVENHI>;
 	using ltype = spherical_swap_xz_l<T, P, N, M, LB, SING, UPPER, NOEVENHI>;
-	static constexpr int nops = mtype::nops + ltype::nops + 1;CUDA_EXPORT
+	static constexpr int nops = mtype::nops + ltype::nops + 1;
+
+	CUDA_EXPORT
 	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
 		O[index(N, M)] = T(0);
 		constexpr mtype nextm;
@@ -588,16 +590,16 @@ real test_M2L(real theta = 0.5) {
 //		x2 = y2 = z2 = 0.0;
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
-		//				auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
-		//	 L.print();
-		//	 printf( "\n");
+		/*auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
+		L.print();
+		printf("\n");
 		for (int n = 0; n <= P; n++) {
 			for (int m = 0; m <= n; m++) {
-//				 L2[index(n,m)] -= L[index(n,m)];
+				L2[index(n, m)] -= L[index(n, m)];
 			}
 		}
-		/*	 L2.print();
-		 abort();*/
+		L2.print();
+		abort();*/
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
@@ -689,8 +691,8 @@ void speed_test(int N, int nblocks) {
 	multipole<float>* Mc;
 	CUDA_CHECK(cudaMallocManaged(&Ls, sizeof(spherical_expansion<float, P> )));
 	CUDA_CHECK(cudaMallocManaged(&Lc, sizeof(expansion<float> )));
-	CUDA_CHECK(cudaMallocManaged(&Ms, N*sizeof(spherical_expansion<float, P> )));
-	CUDA_CHECK(cudaMallocManaged(&Mc, N*sizeof(expansion<float> )));
+	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(spherical_expansion<float, P> )));
+	CUDA_CHECK(cudaMallocManaged(&Mc, N * sizeof(expansion<float> )));
 	CUDA_CHECK(cudaMallocManaged(&x, sizeof(float) * N));
 	CUDA_CHECK(cudaMallocManaged(&y, sizeof(float) * N));
 	CUDA_CHECK(cudaMallocManaged(&z, sizeof(float) * N));
@@ -733,9 +735,9 @@ void speed_test(int N, int nblocks) {
 
 int main() {
 
-	speed_test<7>(4*1024 * 1024, 100);
-//	run_tests<11, 3> run;
-//	run();
+//	speed_test<7>(4*1024 * 1024, 100);
+	run_tests<10, 7> run;
+	run();
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
 	 printf("err = %e\n", test_M2L<6>());
