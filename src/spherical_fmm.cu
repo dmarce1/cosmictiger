@@ -267,7 +267,7 @@ struct spherical_rotate_z_m<T, P, L, M, NOEVENHI, ODD, true> {
 template<class T, int P, int L, bool NOEVENHI, bool ODD, bool TERM = (L > P)>
 struct spherical_rotate_z_l {
 	using ltype = spherical_rotate_z_l<T, P, L + 1, NOEVENHI, ODD>;
-	using mtype = spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? (((P + L) / 2) % 2 == 1 ? 1 : 0) : 0, NOEVENHI,ODD>;
+	using mtype = spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? (((P + L) / 2) % 2 == 1 ? 1 : 2) : 1, NOEVENHI,ODD>;
 	static constexpr int nops = ltype::nops + mtype::nops;CUDA_EXPORT
 	inline void operator()(spherical_expansion<T, P>& O, complex<T>* R) const {
 		constexpr ltype nextl;
@@ -640,15 +640,18 @@ struct run_tests<NMAX, NMAX> {
 
 #define BLOCK_SIZE 32
 
+
+#define BLOCK_SIZE 32
+
 __global__ void test_old(multipole<float>* M, expansion<float>* Lptr, float* x, float* y, float* z, int N) {
 	const int tid = threadIdx.x;
-	const int bid = threadIdx.x;
+	const int bid = blockIdx.x;
 	auto& L = *Lptr;
-	const int b = bid * N / BLOCK_SIZE;
-	const int e = (bid + 1) * N / BLOCK_SIZE;
+	const int b = (size_t) bid * N / gridDim.x;
+	const int e = (size_t)(bid + 1) * N / gridDim.x;
 	expansion<float> D;
 	expansion<float> L1;
-	for (int i = b; i < e; i++) {
+	for (int i = b + tid; i < e; i += BLOCK_SIZE) {
 		array<float, 3> X;
 		X[XDIM] = x[i];
 		X[YDIM] = y[i];
@@ -665,23 +668,22 @@ __global__ void test_old(multipole<float>* M, expansion<float>* Lptr, float* x, 
 template<int P>
 __global__ void test_new(spherical_expansion<float, P - 1>* M, spherical_expansion<float, P>* Lptr, float* x, float* y, float* z, int N) {
 	const int tid = threadIdx.x;
-	const int bid = threadIdx.x;
+	const int bid = blockIdx.x;
 	auto& L = *Lptr;
-	const int b = bid * N / BLOCK_SIZE;
-	const int e = (bid + 1) * N / BLOCK_SIZE;
+	const int b = (size_t) bid * N / gridDim.x;
+	const int e = (size_t)(bid + 1) * N / gridDim.x;
 	expansion<float> D;
 	expansion<float> L1;
-	for (int i = b; i < e; i++) {
+	for (int i = b + tid; i < e; i += BLOCK_SIZE) {
 		auto L1 = spherical_expansion_M2L<float, P>(M[i], x[i], y[i], z[i]);
 		for (int l = 0; l <= P; l++) {
 			for (int m = 0; m <= l; m++) {
-				L[index(l, m)] += (L1, l, m);
+				L[index(l, m)] += L1(l, m);
 			}
 		}
 	}
 
 }
-
 template<int P>
 void speed_test(int N, int nblocks) {
 	float* x, *y, *z;
@@ -714,6 +716,8 @@ void speed_test(int N, int nblocks) {
 	int sblocks, cblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cblocks, (const void*) test_old, WARP_SIZE, 0));
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&sblocks, (const void*) test_new<P>, WARP_SIZE, 0));
+	cblocks *= 82;
+	sblocks *= 82;
 	timer tms, tmc;
 	tmc.start();
 	test_old<<<cblocks,BLOCK_SIZE>>>(Mc,Lc,x,y,z,N);
@@ -735,7 +739,7 @@ void speed_test(int N, int nblocks) {
 
 int main() {
 
-//	speed_test<7>(4*1024 * 1024, 100);
+	speed_test<7>(4*1024 * 1024, 100);
 	run_tests<10, 7> run;
 	run();
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
