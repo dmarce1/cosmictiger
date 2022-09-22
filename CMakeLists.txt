@@ -178,6 +178,7 @@ add_hpx_executable(
  
 add_executable( recfast recfast/recfast.f )
 add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
+add_executable( spherical_fmm_codegen src/spherical_fmm_codegen.cpp)
 add_executable( spherical_fmm src/spherical_fmm.cpp   )
 add_executable( ferrer_kernel_codegen src/ferrer_kernel_codegen.cpp cosmictiger/defs.hpp )
 add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
@@ -220,6 +221,7 @@ add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMM
 target_include_directories(lc2rockstar PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
+target_include_directories(spherical_fmm_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(spherical_fmm PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(ferrer_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
@@ -228,6 +230,7 @@ if( COSMICTIGER_WITH_LONG_LONG_PART_INT )
 	target_compile_definitions(cosmictiger PUBLIC LONG_LONG_PART_INT)
 endif()
 target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
+target_compile_definitions(spherical_fmm_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
 add_executable(
  	healpix2silo
