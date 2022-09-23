@@ -14,6 +14,18 @@
 
 using real = float;
 
+double Pm(int l, int m, double x) {
+	if (m > l) {
+		return 0.0;
+	} else if (l == 0) {
+		return 1.0;
+	} else if (l == m) {
+		return -(2 * l - 1) * Pm(l - 1, l - 1, x) * sqrt(1.0 - x * x);
+	} else {
+		return ((2 * l - 1) * x * Pm(l - 1, m, x) - (l - 1 + m) * Pm(l - 2, m, x)) / (l - m);
+	}
+}
+
 CUDA_EXPORT constexpr int index(int l, int m) {
 	return l * (l + 1) / 2 + m;
 }
@@ -40,6 +52,223 @@ struct spherical_expansion: public array<complex<T>, (P + 1) * (P + 2) / 2> {
 			}
 			printf("\n");
 		}
+	}
+};
+
+#define MBITS 23
+
+template<int P>
+constexpr int multi_bits(int n = 1) {
+	if (n == P + 1) {
+		return 0;
+	} else {
+		return (2 * n + 1) * (MBITS - n + 1) + multi_bits<P>(n + 1);
+	}
+}
+
+template<int BITS>
+class bitstream {
+	static constexpr int N = ((BITS - 1) / CHAR_BIT) + 1;
+	array<unsigned char, N> bits;
+	mutable int nextbit;
+	mutable int byte;CUDA_EXPORT
+	void next() {
+		if (nextbit == CHAR_BIT) {
+			byte++;
+			nextbit = 0;
+		} else {
+			nextbit++;
+			if (nextbit == CHAR_BIT) {
+				byte++;
+				nextbit = 0;
+			}
+		}
+		ALWAYS_ASSERT(byte < N);
+	}
+public:
+	CUDA_EXPORT
+	int read_bits(int count) const {
+		int res = 0;
+		if (nextbit == CHAR_BIT) {
+			nextbit = 0;
+			byte++;
+		}
+		if (count <= CHAR_BIT - nextbit) {
+			res = bits[byte] >> nextbit;
+			res &= (1 << count) - 1;
+			nextbit += count;
+			return res;
+		} else {
+			int n = 0;
+			res = bits[byte] >> nextbit;
+			n += CHAR_BIT - nextbit;
+			nextbit = 0;
+			byte++;
+			while (count >= CHAR_BIT + n) {
+				res |= ((int) bits[byte]) << n;
+				byte++;
+				n += CHAR_BIT;
+			}
+			if (count - n > 0) {
+				res |= (((int) bits[byte]) & ((1 << (count - n)) - 1)) << (n);
+				nextbit = count - n;
+			}
+			return res;
+		}
+	}
+	void write_bits(int i, int count) {
+		for (int j = 0; j < count; j++) {
+			next();
+			if (i & 1) {
+				bits[byte] |= 1 << nextbit;
+			} else {
+				bits[byte] &= ~(1 << nextbit);
+			}
+			i >>= 1;
+		}
+	}
+	bitstream() {
+		reset();
+	}
+	CUDA_EXPORT
+	void reset() {
+		nextbit = CHAR_BIT;
+		byte = -1;
+	}
+};
+
+double factorial(int n) {
+	return n == 0 ? 1.0 : n * factorial(n - 1);
+}
+
+CUDA_EXPORT constexpr double const_sqrt_helper(double a, double xn, int iter) {
+	if (iter == 5) {
+		return xn;
+	} else {
+		return const_sqrt_helper(a, 0.5 * (xn + a / xn), iter + 1);
+	}
+}
+
+CUDA_EXPORT constexpr double const_sqrt(double a) {
+	return const_sqrt_helper(a, 0.5, 0);
+
+}
+
+CUDA_EXPORT constexpr double Ylm_xy0(int l, int m, double z) {
+	if (m > l) {
+		return 0.0;
+	} else if (l == 0) {
+		return 1.0;
+	} else if (l == m) {
+		return const_sqrt(1.0 - z * z) * Ylm_xy0(l - 1, l - 1, z) / (2 * l);
+	} else {
+		return ((2 * l - 1) * z * Ylm_xy0(l - 1, m, z) - Ylm_xy0(l - 2, m, z)) / (l * l - m * m);
+	}
+}
+
+CUDA_EXPORT constexpr double const_abs(double a) {
+	return a > 0.0 ? a : -a;
+}
+
+CUDA_EXPORT constexpr double const_max(double a, double b) {
+	return a > b ? a : b;
+}
+
+struct Ylm_max {
+	CUDA_EXPORT
+	constexpr double operator()(int l, int m) {
+		constexpr int N = 64;
+		double next = 0.0;
+		constexpr int ix = 0;
+		constexpr int iy = N;
+		for (int iz = 0; iz <= N; iz++) {
+			next = const_max(next, Ylm_xy0(l, m, (double) iz / N));
+		}
+		return next;
+	}
+};
+
+template<int P>
+struct Ylm_max_array {
+	double a[P + 1][P + 1];CUDA_EXPORT
+	constexpr Ylm_max_array() :
+			a() {
+		for (int i = 0; i <= P; i++)
+			for (int j = 0; j <= i; j++) {
+				a[i][j] = 1.001 * Ylm_max()(i, j);
+			}
+	}
+	CUDA_EXPORT
+	constexpr double operator()(int l, int m) const {
+		return a[l][m];
+	}
+
+};
+
+template<class T, int P>
+class compressed_multipole {
+	static constexpr int N = multi_bits<P>();
+	float r;
+	float mass;
+	mutable bitstream<N> bits;
+public:
+	void compress(const spherical_expansion<T, P>& O, T scale) {
+		constexpr Ylm_max_array<P> norms;
+		bits.reset();
+		float rpow = 1.0;
+		float m = O[index(0, 0)].real();
+		float minv = 1.0f / m;
+		for (int n = 1; n <= P; n++) {
+			for (int m = -n; m <= n; m++) {
+				float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
+				value *= rpow;
+				value *= minv;
+				int sgn = value > 0.0 ? 0 : 1;
+				value = fabs(value) / norms(n, abs(m));
+//				if (value >= 1.0) {
+//					printf("%e %e\n", value, norms(n, abs(m)));
+//				}
+				int i = 0;
+				for (int j = 0; j < MBITS - n; j++) {
+					i <<= 1;
+					if (value >= 0.5) {
+						i |= 1;
+					}
+					value = fmod(2.0 * value, 1.0);
+				}
+				i <<= 1;
+				i |= sgn;
+				bits.write_bits(i, MBITS - n + 1);
+			}
+			rpow /= scale;
+		}
+		mass = m;
+		r = scale;
+	}
+	CUDA_EXPORT
+	spherical_expansion<T, P> decompress() const {
+		constexpr Ylm_max_array<P> norms;
+		bits.reset();
+		float rpow = 1.0;
+		spherical_expansion<T, P> O;
+		O[0].real() = mass;
+		O[0].imag() = 0.f;
+		for (int n = 1; n <= P; n++) {
+			for (int m = -n; m <= n; m++) {
+				int i = bits.read_bits(MBITS - n + 1);
+				int sgn = i & 1;
+				i >>= 1;
+				float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
+				value *= rpow * mass * norms(n, abs(m));
+				if (m >= 0) {
+					O[index(n, m)].real() = value;
+				} else {
+					O[index(n, -m)].imag() = value;
+				}
+			}
+			rpow *= r;
+		}
+		return O;
 	}
 };
 
@@ -382,10 +611,6 @@ void spherical_expansion_M2M(spherical_expansion<T, P>& M, T x, T y, T z) {
 	}
 }
 
-double factorial(int n) {
-	return n == 0 ? 1.0 : n * factorial(n - 1);
-}
-
 template<class T, int N>
 struct facto {
 	CUDA_EXPORT
@@ -499,7 +724,8 @@ struct spherical_expansion_M2L_type {
 };
 
 template<class T, int P>
-CUDA_EXPORT spherical_expansion<T, P> spherical_expansion_M2L(spherical_expansion<T, P - 1> M, T x, T y, T z) {
+CUDA_EXPORT spherical_expansion<T, P> spherical_expansion_M2L(compressed_multipole<T, P - 1> Mc, T x, T y, T z) {
+	const auto M = Mc.decompress();
 	constexpr spherical_expansion_M2L_type<T, P> run;
 	return run(M, x, y, z);
 }
@@ -589,7 +815,9 @@ real test_M2L(real theta = 0.5) {
 		z1 /= 0.5 * theta;
 //		x2 = y2 = z2 = 0.0;
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
-		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
+		compressed_multipole<real, P - 1> Mc;
+		Mc.compress(M, 1.0);
+		auto L = spherical_expansion_M2L<real, P>(Mc, x1, y1, z1);
 		/*auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
 		 L.print();
 		 printf("\n");
@@ -665,7 +893,7 @@ __global__ void test_old(multipole<float>* M, expansion<float>* Lptr, float* x, 
 }
 
 template<int P>
-__global__ void test_new(spherical_expansion<float, P - 1>* M, spherical_expansion<float, P>* Lptr, float* x, float* y, float* z, int N) {
+__global__ void test_new(compressed_multipole<float, P - 1>* M, spherical_expansion<float, P>* Lptr, float* x, float* y, float* z, int N) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
 	auto& L = *Lptr;
@@ -688,11 +916,11 @@ void speed_test(int N, int nblocks) {
 	float* x, *y, *z;
 	spherical_expansion<float, P>* Ls;
 	expansion<float>* Lc;
-	spherical_expansion<float, P - 1>* Ms;
+	compressed_multipole<float, P - 1>* Ms;
 	multipole<float>* Mc;
 	CUDA_CHECK(cudaMallocManaged(&Ls, sizeof(spherical_expansion<float, P> )));
 	CUDA_CHECK(cudaMallocManaged(&Lc, sizeof(expansion<float> )));
-	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(spherical_expansion<float, P> )));
+	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(compressed_multipole<float, P> )));
 	CUDA_CHECK(cudaMallocManaged(&Mc, N * sizeof(expansion<float> )));
 	CUDA_CHECK(cudaMallocManaged(&x, sizeof(float) * N));
 	CUDA_CHECK(cudaMallocManaged(&y, sizeof(float) * N));
@@ -703,14 +931,14 @@ void speed_test(int N, int nblocks) {
 		z[i] = 2.0 * rand1() - 1.0;
 	}
 	for (int j = 0; j < N; j++) {
+		spherical_expansion<float, P - 1> m;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			(Mc)[j][i] = 2.0 * rand1() - 1.0;
 		}
 	}
 	for (int j = 0; j < N; j++) {
-		for (int i = 0; i < Ls->size(); i++) {
-			(Ms)[j][i] = 2.0 * rand1() - 1.0;
-		}
+		spherical_expansion<float, P - 1> m = spherical_regular_harmonic<float, P - 1>(2 * rand1() - 1, 2 * rand1() - 1, 2 * rand1() - 1);
+		Ms[j].compress(m, 1.0);
 	}
 	int sblocks, cblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cblocks, (const void*) test_old, WARP_SIZE, 0));
@@ -736,109 +964,12 @@ void speed_test(int N, int nblocks) {
 	CUDA_CHECK(cudaFree(z));
 }
 
-template<int BITS>
-class bitstream {
-	static constexpr int N = ((BITS - 1) / CHAR_BIT) + 1;
-	array<unsigned char, N> bits;
-	int nextbit;
-	int byte;
-	void next() {
-		if (nextbit == CHAR_BIT) {
-			byte++;
-			nextbit = 0;
-		} else {
-			nextbit++;
-			if (nextbit == CHAR_BIT) {
-				byte++;
-				nextbit = 0;
-			}
-		}
-	}
-public:
-	int read_bits(int count) {
-		int res = 0;
-		if (nextbit == CHAR_BIT) {
-			nextbit = 0;
-			byte++;
-		}
-		if (count <= CHAR_BIT - nextbit) {
-			res = bits[byte] >> nextbit;
-			res &= (1 << count) - 1;
-			nextbit += count;
-			printf("---> %i\n", nextbit);
-			return res;
-		} else {
-			int n = 0;
-			res = bits[byte] >> nextbit;
-			n += CHAR_BIT - nextbit;
-			count -= CHAR_BIT - nextbit;
-			printf("%i %i\n", count, nextbit);
-			nextbit = 0;
-			byte++;
-			while (count >= CHAR_BIT) {
-				res |= ((int) bits[byte]) << n;
-				byte++;
-				count -= CHAR_BIT;
-				n += CHAR_BIT;
-			}
-			if (count > 0) {
-				printf("%i %i %i %i %i\n", n, count, bits[byte], (((int) bits[byte]) & ((1 << count) - 1)), (((int) bits[byte]) & ((1 << count) - 1)) << (n ));
-				printf("res = %i\n", res);
-				res |= (((int) bits[byte]) & ((1 << count) - 1)) << (n);
-				printf("res = %i\n", res);
-				nextbit = count;
-			}
-			return res;
-
-		}
-		/* res =0;
-		 for (int j = 0; j < count; j++) {
-		 next();
-		 if ((bits[byte] >> nextbit) & 1) {
-		 res |= 1 << j;
-		 } else {
-		 res &= ~(1 << j);
-		 }
-		 }
-		 return res;*/
-	}
-	void write_bits(int i, int count) {
-		for (int j = 0; j < count; j++) {
-			next();
-			if (i & 1) {
-				bits[byte] |= 1 << nextbit;
-			} else {
-				bits[byte] &= ~(1 << nextbit);
-			}
-			i >>= 1;
-		}
-	}
-	bitstream() {
-		reset();
-	}
-	void reset() {
-		nextbit = CHAR_BIT;
-		byte = -1;
-	}
-};
-
 int main() {
-	int one = 0x3;
-	int two = 101101;
-	int three = 14;
-	bitstream<59> bs;
-	bs.write_bits(one, 4);
-	bs.write_bits(two, 19);
-	bs.write_bits(three, 5);
-	bs.reset();
-	int i = bs.read_bits(4);
-	int j = bs.read_bits(19);
-	int k = bs.read_bits(5);
-	printf("%i %i %i %i %i %i\n", one, two, three, i, j, k);
-
-//	speed_test<7>(4 * 1024 * 1024, 100);
-//	run_tests<10, 7> run;
-//	run();
+	speed_test<7>(512 * 1024, 100);
+//	run_tests<9, 7> run;
+	//run();
+//	constexpr int P = 7;
+//	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
 	 printf("err = %e\n", test_M2L<6>());
