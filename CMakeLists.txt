@@ -178,6 +178,9 @@ add_hpx_executable(
   DEPENDENCIES
   SOURCES
     ./src/spherical_fmm.cu
+    ./src/assert.cu
+    ./src/assert.cpp
+    ./src/hpx.cpp
   HEADERS
  )
  

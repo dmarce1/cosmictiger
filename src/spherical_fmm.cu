@@ -162,7 +162,7 @@ struct spherical_swap_xz_l<T, P, N, M, L, SING, UPPER, NOEVENHI, true> {
 	}
 };
 
-template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = LOWER ? (M > (P+1) - N || M > N) : (M > N)>
+template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = LOWER ? (M > (P + 1) - N || M > N) : (M > N)>
 struct spherical_swap_xz_m {
 	static constexpr int LB = (NOEVENHI && N == P) ? (((P + N) / 2) % 2 == 1 ? 1 : 0) : 0;
 	using mtype = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER, NOEVENHI>;
@@ -591,15 +591,15 @@ real test_M2L(real theta = 0.5) {
 		auto M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		auto L = spherical_expansion_M2L<real, P>(M, x1, y1, z1);
 		/*auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
-		L.print();
-		printf("\n");
-		for (int n = 0; n <= P; n++) {
-			for (int m = 0; m <= n; m++) {
-				L2[index(n, m)] -= L[index(n, m)];
-			}
-		}
-		L2.print();
-		abort();*/
+		 L.print();
+		 printf("\n");
+		 for (int n = 0; n <= P; n++) {
+		 for (int m = 0; m <= n; m++) {
+		 L2[index(n, m)] -= L[index(n, m)];
+		 }
+		 }
+		 L2.print();
+		 abort();*/
 		spherical_expansion_L2L(L, x2, y2, z2);
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
@@ -639,7 +639,6 @@ struct run_tests<NMAX, NMAX> {
 };
 
 #define BLOCK_SIZE 32
-
 
 #define BLOCK_SIZE 32
 
@@ -737,11 +736,109 @@ void speed_test(int N, int nblocks) {
 	CUDA_CHECK(cudaFree(z));
 }
 
-int main() {
+template<int BITS>
+class bitstream {
+	static constexpr int N = ((BITS - 1) / CHAR_BIT) + 1;
+	array<unsigned char, N> bits;
+	int nextbit;
+	int byte;
+	void next() {
+		if (nextbit == CHAR_BIT) {
+			byte++;
+			nextbit = 0;
+		} else {
+			nextbit++;
+			if (nextbit == CHAR_BIT) {
+				byte++;
+				nextbit = 0;
+			}
+		}
+	}
+public:
+	int read_bits(int count) {
+		int res = 0;
+		if (nextbit == CHAR_BIT) {
+			nextbit = 0;
+			byte++;
+		}
+		if (count <= CHAR_BIT - nextbit) {
+			res = bits[byte] >> nextbit;
+			res &= (1 << count) - 1;
+			nextbit += count;
+			printf("---> %i\n", nextbit);
+			return res;
+		} else {
+			int n = 0;
+			res = bits[byte] >> nextbit;
+			n += CHAR_BIT - nextbit;
+			count -= CHAR_BIT - nextbit;
+			printf("%i %i\n", count, nextbit);
+			nextbit = 0;
+			byte++;
+			while (count >= CHAR_BIT) {
+				res |= ((int) bits[byte]) << n;
+				byte++;
+				count -= CHAR_BIT;
+				n += CHAR_BIT;
+			}
+			if (count > 0) {
+				printf("%i %i %i %i %i\n", n, count, bits[byte], (((int) bits[byte]) & ((1 << count) - 1)), (((int) bits[byte]) & ((1 << count) - 1)) << (n ));
+				printf("res = %i\n", res);
+				res |= (((int) bits[byte]) & ((1 << count) - 1)) << (n);
+				printf("res = %i\n", res);
+				nextbit = count;
+			}
+			return res;
 
-	speed_test<7>(4*1024 * 1024, 100);
-	run_tests<10, 7> run;
-	run();
+		}
+		/* res =0;
+		 for (int j = 0; j < count; j++) {
+		 next();
+		 if ((bits[byte] >> nextbit) & 1) {
+		 res |= 1 << j;
+		 } else {
+		 res &= ~(1 << j);
+		 }
+		 }
+		 return res;*/
+	}
+	void write_bits(int i, int count) {
+		for (int j = 0; j < count; j++) {
+			next();
+			if (i & 1) {
+				bits[byte] |= 1 << nextbit;
+			} else {
+				bits[byte] &= ~(1 << nextbit);
+			}
+			i >>= 1;
+		}
+	}
+	bitstream() {
+		reset();
+	}
+	void reset() {
+		nextbit = CHAR_BIT;
+		byte = -1;
+	}
+};
+
+int main() {
+	int one = 0x3;
+	int two = 101101;
+	int three = 14;
+	bitstream<59> bs;
+	bs.write_bits(one, 4);
+	bs.write_bits(two, 19);
+	bs.write_bits(three, 5);
+	bs.reset();
+	int i = bs.read_bits(4);
+	int j = bs.read_bits(19);
+	int k = bs.read_bits(5);
+	printf("%i %i %i %i %i %i\n", one, two, three, i, j, k);
+
+//	speed_test<7>(4 * 1024 * 1024, 100);
+//	run_tests<10, 7> run;
+//	run();
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
 	 printf("err = %e\n", test_M2L<6>());
