@@ -374,12 +374,12 @@ struct spherical_swap_xz_l {
 	using artype = accumulate<T, close2(cor, real(0)), close2(cor, real(1)), close2(cor, real(-1))>;
 	using aitype = accumulate<T, close2(coi, real(0)), close2(coi, real(1)), close2(coi, real(-1))>;
 	static constexpr int nops = ltype::nops + artype::nops + aitype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
+	inline void operator()(spherical_expansion<T, P>& O,  array<complex<T>,P+1>& A) const {
 		constexpr ltype nextl;
 		constexpr artype real;
 		constexpr aitype imag;
-		real(O[index(N, M)].real(), cor, A(N, L).real());
-		imag(O[index(N, M)].imag(), coi, A(N, L).imag());
+		real(O[index(N, M)].real(), cor, A[L].real());
+		imag(O[index(N, M)].imag(), coi, A[L].imag());
 		nextl(O, A);
 	}
 };
@@ -387,7 +387,7 @@ struct spherical_swap_xz_l {
 template<class T, int P, int N, int M, int L, bool SING, bool UPPER, bool NOEVENHI>
 struct spherical_swap_xz_l<T, P, N, M, L, SING, UPPER, NOEVENHI, true> {
 	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
+	inline void operator()(spherical_expansion<T, P>& O,  array<complex<T>,P+1>& A) const {
 	}
 };
 
@@ -399,7 +399,7 @@ struct spherical_swap_xz_m {
 	static constexpr int nops = mtype::nops + ltype::nops + 1;
 
 	CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
+	inline void operator()(spherical_expansion<T, P>& O,  array<complex<T>,P+1>& A) const {
 		O[index(N, M)] = T(0);
 		constexpr mtype nextm;
 		constexpr ltype nextl;
@@ -411,7 +411,7 @@ struct spherical_swap_xz_m {
 template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI>
 struct spherical_swap_xz_m<T, P, N, M, SING, LOWER, UPPER, NOEVENHI, true> {
 	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
+	inline void operator()(spherical_expansion<T, P>& O,  array<complex<T>,P+1>& A) const {
 	}
 };
 
@@ -420,9 +420,12 @@ struct spherical_swap_xz_n {
 	using mtype = spherical_swap_xz_m<T, P, N, 0, SING, LOWER, UPPER, NOEVENHI>;
 	using ltype = spherical_swap_xz_n<T, P, N + 1, SING, LOWER, UPPER, NOEVENHI>;
 	static constexpr int nops = mtype::nops + ltype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
+	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>,P+1>& A) const {
 		constexpr mtype nextm;
 		constexpr ltype nextn;
+		for( int m = 0; m <= N; m++) {
+			A[m] = O[index(N,m)];
+		}
 		nextm(O, A);
 		nextn(O, A);
 	}
@@ -431,7 +434,7 @@ struct spherical_swap_xz_n {
 template<class T, int P, int N, bool SING, bool LOWER, bool UPPER, bool NOEVENHI>
 struct spherical_swap_xz_n<T, P, N, SING, LOWER, UPPER, NOEVENHI, true> {
 	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const spherical_expansion<T, P>& A) const {
+	inline void operator()(spherical_expansion<T, P>& O,  array<complex<T>,P+1>& A) const {
 	}
 };
 
@@ -535,14 +538,13 @@ struct spherical_rotate_to_z_regular {
 	using xz_type2 =spherical_swap_xz_n<T, P, 1, false, true, false, false>;
 	static constexpr int nops = 5 + (xz_type::nops + xz_type2::nops + 2 * rot_type::nops);CUDA_EXPORT
 	inline void operator()(spherical_expansion<T, P>& O, T x, T y, T z, T R, T Rinv, T rinv) const {
+		array<complex<T>,P+1> A;
 		constexpr xz_type xz;
 		constexpr xz_type2 trunc_xz;
 		rot_type rot;
 		rot(O, complex<T>(y * Rinv, x * Rinv));
-		auto A = O;
 		xz(O, A);
 		rot(O, complex<T>(z * rinv, -R * rinv));
-		A = O;
 		trunc_xz(O, A);
 	}
 };
@@ -555,14 +557,13 @@ struct spherical_inv_rotate_to_z_singular {
 	using rtype2 = spherical_rotate_z<T, P, true, false>;
 	static constexpr int nops = 5 + rtype1::nops + rtype2::nops + xz_type::nops + truncxz_type::nops;CUDA_EXPORT
 	inline void operator()(spherical_expansion<T, P>& O, T x, T y, T z, T R, T Rinv, T rinv) const {
+		array<complex<T>,P+1> A;
 		constexpr truncxz_type trunc_xz;
 		constexpr xz_type xz;
 		constexpr rtype1 rot1;
 		constexpr rtype2 rot2;
-		auto A = O;
 		trunc_xz(O, A);
 		rot2(O, complex<T>(z * rinv, R * rinv));
-		A = O;
 		xz(O, A);
 //		O.print();
 //		abort();
@@ -965,9 +966,9 @@ void speed_test(int N, int nblocks) {
 }
 
 int main() {
-	speed_test<7>(512 * 1024, 100);
-//	run_tests<9, 7> run;
-	//run();
+	//speed_test<7>(2 * 1024 * 1024, 100);
+	run_tests<9, 7> run;
+	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
