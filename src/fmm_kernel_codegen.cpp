@@ -53,6 +53,8 @@ void tprint(const char* str) {
 	printf("%s", str);
 }
 
+
+
 bool close21(double a) {
 	return std::abs(1.0 - a) < 1.0e-20;
 }

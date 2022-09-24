@@ -83,7 +83,7 @@ class bitstream {
 				nextbit = 0;
 			}
 		}
-		ALWAYS_ASSERT(byte < N);
+//		ALWAYS_ASSERT(byte < N);
 	}
 public:
 	CUDA_EXPORT
@@ -466,7 +466,7 @@ struct rotate_z_mult<T, false, true> {
 
 template<class T, int P, int L, int M, bool NOEVENHI, bool ODD, bool TERM = (M > L)>
 struct spherical_rotate_z_m {
-	using mtype =spherical_rotate_z_m<T, P, L, M + 1, NOEVENHI, ODD>;
+	using mtype =spherical_rotate_z_m<T, P, L, M + 1 + (NOEVENHI && L==P), NOEVENHI, ODD>;
 	using optype = rotate_z_mult<T,NOEVENHI && (L >= P - 1 && (M % 2 != ((P + L) / 2) % 2)), false>;
 	static constexpr int nops = mtype::nops + 6;CUDA_EXPORT
 	inline void operator()(spherical_expansion<T, P>& O, complex<T>* R) const {
@@ -819,8 +819,8 @@ real test_M2L(real theta = 0.5) {
 		compressed_multipole<real, P - 1> Mc;
 		Mc.compress(M, 1.0);
 		auto L = spherical_expansion_M2L<real, P>(Mc, x1, y1, z1);
-		/*auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
-		 L.print();
+		auto L2 = spherical_expansion_ref_M2L<real, P>(M, x1, y1, z1);
+		/* L.print();
 		 printf("\n");
 		 for (int n = 0; n <= P; n++) {
 		 for (int m = 0; m <= n; m++) {
