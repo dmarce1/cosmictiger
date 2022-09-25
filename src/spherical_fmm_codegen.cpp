@@ -53,23 +53,37 @@ constexpr double nonepow(int m) {
 	return m % 2 == 0 ? double(1) : double(-1);
 }
 
-int z_rot(int P, const char* name, bool noevenhi) {
+int z_rot(const char* fname, int P, const char* name, bool noevenhi) {
+	//noevenhi = false;
 	int flops = 0;
-	tprint("{\n");
+	tprint("\n");
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT inline void %s( array<T,%i>& %s, T cosphi, T sinphi ) {\n", fname, (P + 1) * (P + 1), name);
 	indent();
 	tprint("T tmp;\n");
+	tprint("T Rx = cosphi;\n");
+	tprint("T Ry = sinphi;\n");
 	int mmin = 1;
+	bool initR = true;
 	for (int m = 1; m <= P; m++) {
 		for (int l = m; l <= P; l++) {
 			if (noevenhi && l == P) {
-				if ((((P + l) / 2) % 2 == 1) ? m % 2 == 1 : m % 2 == 0) {
+				if ((((P + l) / 2) % 2 == 1) ? m % 2 == 0 : m % 2 == 1) {
 					continue;
 				}
 			}
+			if (!initR) {
+				tprint("tmp = Rx;\n");
+				tprint("Rx = Rx * cosphi - Ry * sinphi;\n");
+				tprint("Ry = tmp * sinphi + Ry * cosphi;\n");
+				flops += 6;
+				initR = true;
+			}
+
 			if (noevenhi && (l >= P - 1 && (m % 2 != ((P + l) / 2) % 2))) {
-				tprint("%s[%i] = %s[%i] * Ry + %s[%i] * Rx;\n", name, index(l, m), name, index(l, -m), name, index(l, -m));
-				tprint("%s[%i] *= Rx;\n", name, index(l, m), name, index(l, m));
-				flops += 4;
+				tprint("%s[%i] = %s[%i] * Ry;\n", name, index(l, -m), name, index(l, m));
+				tprint("%s[%i] *= Rx;\n", name, index(l, m));
+				flops += 2;
 			} else {
 				tprint("tmp = %s[%i];\n", name, index(l, m));
 				tprint("%s[%i] = %s[%i] * Rx - %s[%i] * Ry;\n", name, index(l, m), name, index(l, m), name, index(l, -m));
@@ -78,12 +92,7 @@ int z_rot(int P, const char* name, bool noevenhi) {
 			}
 
 		}
-		if (m != P) {
-			tprint("tmp = Rx;\n");
-			tprint("Rx = Rx * cosphi - Ry * sinphi;\n");
-			tprint("Ry = tmp * sinphi + Ry * cosphi;\n");
-			flops += 6;
-		}
+		initR = false;
 	}
 	deindent();
 	tprint("}\n");
@@ -98,32 +107,40 @@ int m2l(int P, const char* mname, const char* lname) {
 	int flops = 0;
 	tprint("{\n");
 	indent();
-	tprint("T coeff[P+1];\n");
-	tprint("coeff[0] = rinv;\n");
+	tprint("T c0[%i];\n", P + 1);
+	tprint("c0[0] = rinv;\n");
 	for (int n = 1; n <= P; n++) {
-		tprint("coeff[%i] = rinv * coeff[%i];\n", n, n - 1);
+		tprint("c0[%i] = rinv * c0[%i];\n", n, n - 1);
 		flops++;
 	}
-	for (int n = 1; n <= P; n++) {
-		tprint("coeff[%i] *= T(%.16e);\n", n, n - 1, factorial(n));
+	for (int n = 2; n <= P; n++) {
+		tprint("c0[%i] *= T(%.16e);\n", n, factorial(n));
 		flops++;
 	}
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
 			int k = m;
-			tprint("%s[%i] = %s%s[%i] * coeff[%i];\n", lname, index(n, m), m % 2 == 0 ? "" : "-", mname, index(k, m), n + k);
-			flops += 1 + (m % 2 == 1);
-			if (n != 0) {
-				tprint("%s[%i] = %s%s[%i] * coeff[%i];\n", lname, index(n, -m), m % 2 == 0 ? "" : "-", mname, index(k, -m), n + k);
+			const int maxk = std::min(P - n, P - 1);
+			if (k <= maxk) {
+				tprint("%s[%i] = %s%s[%i] * c0[%i];\n", lname, index(n, m), m % 2 == 0 ? "" : "-", mname, index(k, m), n + k);
 				flops += 1 + (m % 2 == 1);
-			}
-			for (int k = m + 1; k <= std::min(P - n, P - 1); k++) {
-				tprint("%s[%i] %s= %s[%i] * coeff[%i];\n", lname, index(n, m), m % 2 == 0 ? "+" : "-", mname, index(k, m), n + k);
-				if (n != 0) {
-					tprint("%s[%i] %s= %s[%i] * coeff[%i];\n", lname, index(n, -m), m % 2 == 0 ? "+" : "-", mname, index(k, -m), n + k);
+				if (m != 0) {
+					tprint("%s[%i] = %s%s[%i] * c0[%i];\n", lname, index(n, -m), m % 2 == 0 ? "" : "-", mname, index(k, -m), n + k);
+					flops += 1 + (m % 2 == 1);
+				}
+				for (int k = m + 1; k <= maxk; k++) {
+					tprint("%s[%i] %s= %s[%i] * c0[%i];\n", lname, index(n, m), m % 2 == 0 ? "+" : "-", mname, index(k, m), n + k);
+					if (m != 0) {
+						tprint("%s[%i] %s= %s[%i] * c0[%i];\n", lname, index(n, -m), m % 2 == 0 ? "+" : "-", mname, index(k, -m), n + k);
+						flops += 2;
+					}
 					flops += 2;
 				}
-				flops += 2;
+			} else {
+				tprint("%s[%i] = T(0);\n", lname, index(n, m));
+				if (m != 0) {
+					tprint("%s[%i] = T(0);\n", lname, index(n, -m));
+				}
 			}
 		}
 	}
@@ -133,26 +150,29 @@ int m2l(int P, const char* mname, const char* lname) {
 
 }
 
-int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict, bool noevenhi) {
-	tprint("{\n");
+int xz_swap(const char* fname, int P, const char* name, bool inv, bool m_restrict, bool l_restrict, bool noevenhi) {
+	//noevenhi = false;
+	tprint("\n");
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT inline void %s( array<T,%i>& %s ) {\n", fname, (P + 1) * (P + 1), name);
 	indent();
 	tprint("array<T, %i> A;\n", 2 * P + 1);
 	tprint("T tmp;\n");
 	int flops = 0;
 	auto brot = [inv](int n, int m, int l) {
 		if( inv ) {
-			return Brot(n,l,m);
-		} else {
 			return Brot(n,m,l);
+		} else {
+			return Brot(n,l,m);
 		}
 	};
 	for (int n = 1; n <= P; n++) {
 		int lmax = n;
-		if (l_restrict && lmax > (P) - n) {
-			lmax = (P) - n;
+		if (l_restrict && lmax > (P+1) - n) {
+			lmax = (P+1) - n;
 		}
 		for (int m = -lmax; m <= lmax; m++) {
-			tprint("A[%i] = %s[%i];\n", m + P, name, m + P);
+			tprint("A[%i] = %s[%i];\n", m + P, name, index(n, m));
 		}
 		std::vector < std::vector<std::pair<float, int>>>ops(2 * n + 1);
 		int mmax = n;
@@ -161,8 +181,8 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 		}
 		int mmin = 0;
 		int stride = 1;
-		if (noevenhi && n == P) {
-			mmin = (((P + n) / 2) % 2 == 1 ? 1 : 0);
+		if (noevenhi && n == P+1) {
+			mmin = (((P+1 + n) / 2) % 2 == 1 ? 1 : 0);
 			stride = 2;
 		}
 		for (int m = 0; m <= mmax; m += stride) {
@@ -172,7 +192,7 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 				if (r != 0.0) {
 					ops[n + m].push_back(std::make_pair(r, P + l));
 				}
-				if (i != 0.0 && m > 0) {
+				if (i != 0.0 && m != 0) {
 					ops[n - m].push_back(std::make_pair(i, P - l));
 				}
 			}
@@ -194,10 +214,10 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 				}
 				if (len == 1) {
 					if (close21(ops[m][l].first)) {
-						tprint("%s[%i] %s= A[%i];\n", name, index(n, n - m), l == 0 ? "" : "+", ops[m][l].second);
+						tprint("%s[%i] %s= A[%i];\n", name, index(n, m - n), l == 0 ? "" : "+", ops[m][l].second);
 						flops += 1 - (l == 0);
 					} else {
-						tprint("%s[%i] %s= T(%.16e) * A[%i];\n", name, index(n, n - m), l == 0 ? "" : "+", ops[m][l].first, ops[m][l].second);
+						tprint("%s[%i] %s= T(%.16e) * A[%i];\n", name, index(n, m - n), l == 0 ? "" : "+", ops[m][l].first, ops[m][l].second);
 						flops += 2 - (l == 0);
 					}
 				} else {
@@ -206,7 +226,7 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 						tprint("tmp += A[%i];\n", ops[m][l + p].second);
 						flops++;
 					}
-					tprint("%s[%i] %s= T(%.16e) * tmp;\n", name, index(n, n - m), l == 0 ? "" : "+", ops[m][l].first);
+					tprint("%s[%i] %s= T(%.16e) * tmp;\n", name, index(n, m - n), l == 0 ? "" : "+", ops[m][l].first);
 					flops += 2 - (l == 0);
 				}
 				l += len - 1;
@@ -222,55 +242,79 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 int main() {
 	int P = 7;
 	int flops = 0;
+	tprint("#pragma once\n");
+	tprint("#\n");
+	tprint("#include <cosmictiger/containers.hpp>\n");
+	tprint("#include <cosmictiger/cuda.hpp>\n");
+	tprint("\n");
+	flops += 2 * z_rot("spherical_rotate_z_multipole", P - 1, "M", false);
+	flops += z_rot("spherical_rotate_z_expansion_abridged", P, "L", true);
+	flops += z_rot("spherical_rotate_z_expansion_full", P, "L", false);
+	flops += xz_swap("spherical_swap_zx_multipole_full", P - 1, "M", false, false, false, false);
+	flops += xz_swap("spherical_swap_zx_multipole_abridged", P - 1, "M", false, true, false, false);
+	flops += xz_swap("spherical_swap_zx_expansion_abridged1", P, "L", true, false, true, false);
+	flops += xz_swap("spherical_swap_zx_expansion_abridged2", P, "L", true, false, false, true);
+
+	tprint("\n");
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT array<T, %i> spherical_M2L(array<T, %i> M, T x, T y, T z) {\n");
+	tprint("CUDA_EXPORT array<T, %i> spherical_M2L(array<T, %i> M, T x, T y, T z) {\n", (P + 1) * (P + 1), P * P);
 	indent();
+	tprint("array<T,%i> L;\n", (P + 1) * (P + 1));
 	tprint("const T R2 = (x * x + y * y);\n");
 	flops += 3;
-	tprint("const T R = sqrt(x * x + y * y);\n");
-	flops += 7;
+	tprint("const T R = sqrt(R2);\n");
+	flops += 4;
 	tprint("const T Rinv = T(1) / R;\n");
 	flops += 4;
 	tprint("const T r = sqrt(z * z + R2);\n");
 	flops += 6;
 	tprint("const T rinv = T(1) / r;\n");
 	flops += 4;
-	tprint("T Rx0;\n");
-	tprint("T Ry0;\n");
-	tprint("T Rx;\n");
-	tprint("T Ry;\n");
+	tprint("T cosphi0;\n");
+	tprint("T cosphi;\n");
+	tprint("T sinphi0;\n");
+	tprint("T sinphi;\n");
 
-	tprint("Rx = y * Rinv;\n");
+	tprint("cosphi = y * Rinv;\n");
 	flops++;
-	tprint("Ry = x * Rinv;\n");
+	tprint("sinphi = x * Rinv;\n");
 	flops++;
-	flops += z_rot(P - 1, "M", false);
+	tprint("spherical_rotate_z_multipole(M, cosphi, sinphi);\n");
 
-	flops += xz_swap(P - 1, "M", false, false, false, false);
+//	flops += xz_swap(P - 1, "M", false, false, false, false);
+	tprint("spherical_swap_zx_multipole_full(M);\n");
 
-	tprint("Rx0 = Rx;\n");
-	tprint("Ry0 = Ry;\n");
-	tprint("Rx = z * rinv;\n");
+	tprint("cosphi0 = cosphi;\n");
+	tprint("sinphi0 = sinphi;\n");
+	tprint("cosphi = z * rinv;\n");
 	flops++;
-	tprint("Ry = -R * rinv;\n");
+	tprint("sinphi = -R * rinv;\n");
 	flops += 2;
-	flops += z_rot(P - 1, "M", false);
+	tprint("spherical_rotate_z_multipole(M, cosphi, sinphi);\n");
 
-	flops += xz_swap(P - 1, "M", false, true, false, false);
+	//	flops += xz_swap(P - 1, "M", false, true, false, false);
+//	flops += xz_swap(P - 1, "M", false, false, false, false);
+	tprint("spherical_swap_zx_multipole_abridged(M);\n");
+
 	flops += m2l(P, "M", "L");
 
-	flops += xz_swap(P, "L", true, false, true, false);
+	//	flops += xz_swap(P, "L", true, false, true, false);
+	tprint("spherical_swap_zx_expansion_abridged1(L);\n");
 
-	tprint("Ry = -Ry;\n");
+	tprint("sinphi = -sinphi;\n");
 	flops += 1;
-	flops += z_rot(P, "L", true);
-	flops += xz_swap(P, "L", true, false, false, true);
-	tprint("Rx = Rx0;\n");
-	tprint("Ry = -Ry0;\n");
+	tprint("spherical_rotate_z_expansion_abridged(L, cosphi, sinphi);\n");
+	//	flops += z_rot(P, "L", true);
+	//	flops += xz_swap(P, "L", true, false, false, true);
+	tprint("spherical_swap_zx_expansion_abridged2(L);\n");
+	tprint("cosphi = cosphi0;\n");
+	tprint("sinphi = -sinphi0;\n");
 	flops += 1;
-	flops += z_rot(P, "L", false);
+	tprint("spherical_rotate_z_expansion_full(L, cosphi, sinphi);\n");
+	tprint("return L;\n");
 	tprint("//FLOPS = %i\n", flops);
 	deindent();
 	tprint("}");
+	tprint("\n");
 	return 0;
 }
