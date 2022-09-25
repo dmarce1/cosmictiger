@@ -27,7 +27,7 @@ double Ylm_xy0(int l, int m, double z) {
 
 struct Ylm_max {
 	double operator()(int l, int m) {
-		int N = 1024;
+		int N = 64;
 		double next = 0.0;
 		int ix = 0;
 		int iy = N;
@@ -41,7 +41,7 @@ struct Ylm_max {
 struct Ylm_max_array {
 	std::vector<std::vector<double>> a;
 	Ylm_max_array(int P) :
-			a((P+1),std::vector<double>((P+1))) {
+			a((P + 1), std::vector<double>((P + 1))) {
 		for (int i = 0; i <= P; i++)
 			for (int j = 0; j <= i; j++) {
 				a[i][j] = 1.001 * Ylm_max()(i, j);
@@ -100,96 +100,201 @@ double nonepow(int m) {
 	return m % 2 == 0 ? double(1) : double(-1);
 }
 
-template<int P>
-int multi_bits(int n = 1) {
-	if (n == P + 1) {
-		return 0;
-	} else {
-		return (2 * n + 1) * (MBITS - n + 1) + multi_bits<P>(n + 1);
-	}
-}
-
 int decompress(int P) {
 	int nextbit = CHAR_BIT;
 	int byte = -1;
-	const auto read_bits = [&nextbit,&byte](int count) {
-//		int res = 0;
-			if (nextbit == CHAR_BIT) {
-				nextbit = 0;
-				byte++;
-			}
-			if (count <= CHAR_BIT - nextbit) {
-//			res = bits[byte] >> nextbit;
-				tprint( "i = bits[%i] >> %i;\n", byte, nextbit);
-//	res &= (1 << count) - 1;
-				tprint( "i &= %i;\n", (1<<count)-1);
-				nextbit += count;
-//			return res;
+	const auto write_bits = [&nextbit,&byte](int count) {
+		if (nextbit == CHAR_BIT) {
+			nextbit = 0;
+			byte++;
+		}
+		if( nextbit != 0 ) {
+			if( count <= CHAR_BIT - nextbit) {
+				tprint( "arc.bits[%i] = (i << %i) | (arc.bits[%i] & %i);\n", byte, nextbit, byte, ((1 << nextbit) - 1));
 			} else {
-				int n = 0;
-//			res = bits[byte] >> nextbit;
-				tprint( "i = bits[%i] >> %i;\n", byte, nextbit);
-				n += CHAR_BIT - nextbit;
-				nextbit = 0;
-				byte++;
-				while (count >= CHAR_BIT + n) {
-//				res |= ((int) bits[byte]) << n;
-					tprint( "i |= ((int) bits[%i]) << %i;\n", byte, n);
-					byte++;
-					n += CHAR_BIT;
-				}
-				if (count - n > 0) {
-					//		res |= (((int) bits[byte]) & ((1 << (count - n)) - 1)) << (n);
-					tprint( "i |= (((int) bits[%i]) & %i;\n", byte, ((1 << (count - n)) - 1) << (n));
-					nextbit = count - n;
-				}
-				//	return res;
+				tprint( "arc.bits[%i] = ((i << %i) & 0xFF) | (arc.bits[%i] & %i);\n", byte, nextbit, byte, ((1 << nextbit) - 1));
 			}
-		};
+		} else {
+			if( count <= CHAR_BIT ) {
+				tprint( "arc.bits[%i] = i | (arc.bits[%i] & %i);\n", byte, byte, ((1 << nextbit) - 1));
+			} else {
+				tprint( "arc.bits[%i] = (i & 0xFF) | (arc.bits[%i] & %i);\n", byte, byte, ((1 << nextbit) - 1));
+			}
+		}
+		const int m = CHAR_BIT - nextbit;
+		nextbit = count < m ? nextbit + count : 0;
+		byte += count < m ? 0 : 1;
+		count -= m;
+		if (count > 0) {
+			tprint( "i >>= %i;\n", m);
+			while (count >= CHAR_BIT) {
+				if( count == CHAR_BIT) {
+					tprint( "arc.bits[%i] = i;\n", byte);
+				} else {
+					tprint( "arc.bits[%i] = i & 0xFF;\n", byte);
+				}
+				count -= CHAR_BIT;
+				tprint( "i >>= %i;\n", CHAR_BIT);
+				byte++;
+			}
+		}
+		if (count > 0) {
+			tprint( "arc.bits[%i] = i;\n",byte);
+			nextbit += count;
+		}
+	};
+
+	const auto read_bits = [&nextbit,&byte](int count) {
+		if (nextbit == CHAR_BIT) {
+			nextbit = 0;
+			byte++;
+		}
+		if (count <= CHAR_BIT - nextbit) {
+			if( nextbit ) {
+				tprint( "i = arc.bits[%i] >> %i;\n", byte, nextbit);
+			} else {
+				tprint( "i = arc.bits[%i];\n", byte);
+			}
+			tprint( "i &= %i;\n", (1<<count)-1);
+			nextbit += count;
+		} else {
+			int n = 0;
+			if( nextbit ) {
+				tprint( "i = arc.bits[%i] >> %i;\n", byte, nextbit);
+			} else {
+				tprint( "i = arc.bits[%i];\n", byte);
+			}
+			n += CHAR_BIT - nextbit;
+			nextbit = 0;
+			byte++;
+			while (count >= CHAR_BIT + n) {
+				if( n != 0 ) {
+					tprint( "i |= ((int) arc.bits[%i]) << %i;\n", byte, n);
+				} else {
+					tprint( "i |= ((int) arc.bits[%i]);\n", byte);
+				}
+				byte++;
+				n += CHAR_BIT;
+			}
+			if (count - n > 0) {
+				tprint( "i |= (((int) arc.bits[%i]) & %i) << %i;\n", byte, ((1 << (count - n)) - 1),(n));
+				nextbit = count - n;
+			}
+		}
+	};
 
 	int flops = 0;
-	tprint( "template<class T, int P>\n");
-	tprint( "struct compressed_multipole {\n");
+	static bool init = false;
+	if (!init) {
+		tprint("\n");
+		tprint("template<int P>\n");
+		tprint("constexpr int compressed_multi_bits(int n = 1) {;\n");
+		indent();
+		tprint("if (n == P + 1) {;\n");
+		indent();
+		tprint("return 0;\n");
+		deindent();
+		tprint("} else {\n");
+		indent();
+		tprint("return (2 * n + 1) * (%i - n) + compressed_multi_bits<P>(n + 1);\n", MBITS + 1);
+		deindent();
+		tprint("}\n");
+		deindent();
+		tprint("}\n");
+		tprint("\n");
+		tprint("template<class T, int P>\n");
+		tprint("struct compressed_multipole {\n");
+		indent();
+		tprint("array<unsigned char,compressed_multi_bits<P>()> bits;\n");
+		tprint("T scale;\n");
+		tprint("T mass;\n");
+		deindent();
+		tprint("};\n");
+		tprint("\n");
+		init = true;
+	}
+	tprint("template<class T>\n");
+	tprint(" array<T,%i> spherical_multipole_decompress(const compressed_multipole<T,%i>& arc) {\n", (P + 1) * (P + 1), P);
 	indent();
-	tprint( "array<T,%i>& bits;\n", (P+1)*(P+1));
-	tprint( "T scale;\n");
-	tprint( "T mass;\n");
-	deindent();
-	tprint("}\n");
-	tprint("\n");
-	tprint(" array<T,%i> spherical_multipole_decompress(const array<T,%i>& bits) {\n");
-	indent();
-	tprint("array<T,%i> M;\n");
+	tprint("array<T,%i> M;\n", (P + 1) * (P + 1));
 
 	const Ylm_max_array norms(P);
-	tprint( "T rpow = T(1);\n");
-//	spherical_expansion<T, P> O;
-//	O[0].real() = mass;
-//	O[0].imag() = 0.f;
-	tprint( "int i;\n");
-	tprint( "int s;\n");
-	tprint( "T v;\n");
-	tprint( "M[0] = mass;\n");
+	tprint("T rpow = arc.scale * arc.mass;\n");
+	flops++;
+	tprint("int i;\n");
+	tprint("int s;\n");
+	tprint("T v;\n");
+	tprint("M[0] = arc.mass;\n");
 	for (int n = 1; n <= P; n++) {
 		for (int m = -n; m <= n; m++) {
 			read_bits(MBITS - n + 1);
-//			int sgn = i & 1;
-			tprint( "s = i & 1;\n");
-//			i >>= 1;
-			tprint( "i >>= 1;\n");
-			float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
-			value *= rpow * mass * norms(n, abs(m));
-			if (m >= 0) {
-				O[index(n, m)].real() = value;
-			} else {
-				O[index(n, -m)].imag() = value;
-			}
+			tprint("s = i & 1;\n");
+			tprint("i >>= 1;\n");
+			tprint("v = (s ? T(-1) : T(1)) * T(i) * T(%.16e);\n", norms(n, abs(m)) / (float) (1 << (MBITS - n)));
+			flops += 3;
+			tprint("v *= rpow;\n");
+			flops += 1;
+			tprint("M[%i] = v;\n", index(n, m));
 		}
-		rpow *= r;
+		if (n != P) {
+			tprint("rpow *= arc.scale;\n");
+			flops++;
+		}
 	}
-	return O;
+	tprint("return M;\n");
+	deindent();
+	tprint("}\n");
+	tprint("\n");
+	nextbit = CHAR_BIT;
+	byte = -1;
+	tprint("template<class T>\n");
+	tprint("compressed_multipole<T,%i> spherical_multipole_compress(const array<T,%i>& M, T scale) {\n", P, (P + 1) * (P + 1));
+	indent();
+	tprint("compressed_multipole<T,%i> arc;\n", P);
+	tprint("arc.scale = scale;\n");
+	tprint("arc.mass = M[0];\n");
+	tprint("T scaleinv = T(1) / scale;\n");
+	tprint("T rpow = scaleinv / M[0];\n");
+	flops++;
+	tprint("int i;\n");
+	tprint("int s;\n");
+	tprint("T v;\n");
+	for (int n = 1; n <= P; n++) {
+		for (int m = -n; m <= n; m++) {
 
-
+			//		float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
+			tprint("i = 0;\n");
+			tprint("v = M[%i] * rpow * T(%.16e);\n", index(n, m), 1.0 / norms(n, abs(m)));
+//			int sgn = value > 0.0 ? 0 : 1;
+			tprint("s = v > T(0) ? 0 : 1;\n");
+			tprint("v = abs(v);\n");
+//			value = fabs(value) / norms(n, abs(m));
+			//				if (value >= 1.0) {
+			//					printf("%e %e\n", value, norms(n, abs(m)));
+			//				}
+			int i = 0;
+			for (int j = 0; j < MBITS - n; j++) {
+//				i <<= 1;
+				tprint("i <<= 1;\n");
+//				if (value >= 0.5) {
+//					i |= 1;
+//				}
+				tprint("i |= v > T(0.5) ? 1 : 0;\n");
+//				value = fmod(2.0 * value, 1.0);
+				tprint("v = fmod(T(2)*v,T(1));\n");
+			}
+//			i <<= 1;
+			tprint("i <<= 1;\n");
+//			i |= sgn;
+			tprint("i |= s;\n");
+			write_bits(MBITS - n + 1);
+		}
+		if (n != P) {
+			tprint("rpow *= scaleinv;\n");
+			flops++;
+		}
+	}
+	tprint("return arc;\n");
 	deindent();
 	tprint("}\n");
 	tprint("\n");
@@ -379,13 +484,13 @@ int xz_swap(const char* fname, int P, const char* name, bool inv, bool m_restric
 }
 
 int main() {
+	tprint("#pragma once\n");
+	tprint("\n");
+	tprint("#include <cosmictiger/containers.hpp>\n");
+	tprint("#include <cosmictiger/cuda.hpp>\n");
+	tprint("\n");
 	for (int P = 1; P <= 12; P++) {
 		int flops = 0;
-		tprint("#pragma once\n");
-		tprint("#\n");
-		tprint("#include <cosmictiger/containers.hpp>\n");
-		tprint("#include <cosmictiger/cuda.hpp>\n");
-		tprint("\n");
 		flops += 2 * z_rot("spherical_rotate_z_multipole", P - 1, "M", false);
 		flops += z_rot("spherical_rotate_z_expansion_abridged", P, "L", true);
 		flops += z_rot("spherical_rotate_z_expansion_full", P, "L", false);
@@ -403,7 +508,7 @@ int main() {
 		flops += 3;
 		tprint("const T R = sqrt(R2);\n");
 		flops += 4;
-		tprint("const T Rinv = T(1) / (R + T(1-e30));\n");
+		tprint("const T Rinv = T(1) / (R + T(1e-30));\n");
 		flops += 5;
 		tprint("const T r = sqrt(z * z + R2);\n");
 		flops += 6;
@@ -451,10 +556,12 @@ int main() {
 		flops += 1;
 		tprint("spherical_rotate_z_expansion_full(L, cosphi, sinphi);\n");
 		tprint("return L;\n");
+		tprint("\n");
 		tprint("//FLOPS = %i\n", flops);
 		deindent();
 		tprint("}");
 		tprint("\n");
+		flops += decompress(P);
 		fprintf(stderr, "%i %i\n", P, flops);
 	}
 	return 0;

@@ -118,14 +118,27 @@ public:
 		}
 	}
 	void write_bits(int i, int count) {
-		for (int j = 0; j < count; j++) {
-			next();
-			if (i & 1) {
-				bits[byte] |= 1 << nextbit;
-			} else {
-				bits[byte] &= ~(1 << nextbit);
+		if (nextbit == CHAR_BIT) {
+			nextbit = 0;
+			byte++;
+		}
+		bits[byte] = ((i << nextbit) & 0xFF) | (bits[byte] & ((1 << nextbit) - 1));
+		const int m = CHAR_BIT - nextbit;
+		nextbit = count < m ? nextbit + count : 0;
+		byte += count < m ? 0 : 1;
+		count -= m;
+		if (count > 0) {
+			i >>= m;
+			while (count >= CHAR_BIT) {
+				bits[byte] = i & 0xFF;
+				count -= CHAR_BIT;
+				i >>= CHAR_BIT;
+				byte++;
 			}
-			i >>= 1;
+		}
+		if (count > 0) {
+			bits[byte] = i;
+			nextbit += count;
 		}
 	}
 	bitstream() {
@@ -138,74 +151,73 @@ public:
 	}
 };
 
-
-template<class T, int P>
-class compressed_multipole {
-	static constexpr int N = multi_bits<P>();
-	float r;
-	float mass;
-	mutable bitstream<N> bits;
-public:
-	void compress(const spherical_expansion<T, P>& O, T scale) {
-		constexpr Ylm_max_array<P> norms;
-		bits.reset();
-		float rpow = 1.0;
-		float m = O[index(0, 0)].real();
-		float minv = 1.0f / m;
-		for (int n = 1; n <= P; n++) {
-			for (int m = -n; m <= n; m++) {
-				float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
-				value *= rpow;
-				value *= minv;
-				int sgn = value > 0.0 ? 0 : 1;
-				value = fabs(value) / norms(n, abs(m));
-//				if (value >= 1.0) {
-//					printf("%e %e\n", value, norms(n, abs(m)));
-//				}
-				int i = 0;
-				for (int j = 0; j < MBITS - n; j++) {
-					i <<= 1;
-					if (value >= 0.5) {
-						i |= 1;
-					}
-					value = fmod(2.0 * value, 1.0);
-				}
-				i <<= 1;
-				i |= sgn;
-				bits.write_bits(i, MBITS - n + 1);
-			}
-			rpow /= scale;
-		}
-		mass = m;
-		r = scale;
-	}
-	CUDA_EXPORT
-	spherical_expansion<T, P> decompress() const {
-		constexpr Ylm_max_array<P> norms;
-		bits.reset();
-		float rpow = 1.0;
-		spherical_expansion<T, P> O;
-		O[0].real() = mass;
-		O[0].imag() = 0.f;
-		for (int n = 1; n <= P; n++) {
-			for (int m = -n; m <= n; m++) {
-				int i = bits.read_bits(MBITS - n + 1);
-				int sgn = i & 1;
-				i >>= 1;
-				float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
-				value *= rpow * mass * norms(n, abs(m));
-				if (m >= 0) {
-					O[index(n, m)].real() = value;
-				} else {
-					O[index(n, -m)].imag() = value;
-				}
-			}
-			rpow *= r;
-		}
-		return O;
-	}
-};
-
+/*template<class T, int P>
+ class compressed_multipole {
+ static constexpr int N = multi_bits<P>();
+ float r;
+ float mass;
+ mutable bitstream<N> bits;
+ public:
+ void compress(const spherical_expansion<T, P>& O, T scale) {
+ constexpr Ylm_max_array<P> norms;
+ bits.reset();
+ float rpow = 1.0;
+ float m = O[index(0, 0)].real();
+ float minv = 1.0f / m;
+ for (int n = 1; n <= P; n++) {
+ for (int m = -n; m <= n; m++) {
+ float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
+ value *= rpow;
+ value *= minv;
+ int sgn = value > 0.0 ? 0 : 1;
+ value = fabs(value) / norms(n, abs(m));
+ //				if (value >= 1.0) {
+ //					printf("%e %e\n", value, norms(n, abs(m)));
+ //				}
+ int i = 0;
+ for (int j = 0; j < MBITS - n; j++) {
+ i <<= 1;
+ if (value >= 0.5) {
+ i |= 1;
+ }
+ value = fmod(2.0 * value, 1.0);
+ }
+ i <<= 1;
+ i |= sgn;
+ bits.write_bits(i, MBITS - n + 1);
+ }
+ rpow /= scale;
+ }
+ mass = m;
+ r = scale;
+ }
+ CUDA_EXPORT
+ spherical_expansion<T, P> decompress() const {
+ constexpr Ylm_max_array<P> norms;
+ bits.reset();
+ float rpow = 1.0;
+ spherical_expansion<T, P> O;
+ O[0].real() = mass;
+ O[0].imag() = 0.f;
+ for (int n = 1; n <= P; n++) {
+ for (int m = -n; m <= n; m++) {
+ int i = bits.read_bits(MBITS - n + 1);
+ int sgn = i & 1;
+ i >>= 1;
+ float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
+ value *= rpow * mass * norms(n, abs(m));
+ if (m >= 0) {
+ O[index(n, m)].real() = value;
+ } else {
+ O[index(n, -m)].imag() = value;
+ }
+ }
+ rpow *= r;
+ }
+ return O;
+ }
+ };
+ */
 
 double factorial(int n) {
 	return n == 0 ? 1.0 : n * factorial(n - 1);
@@ -461,7 +473,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 //			printf("\n");
 
 //			L2.print();
-	//	abort();
+		//	abort();
 		for (int l = 0; l <= P; l++) {
 			float norm = 0.0;
 			for (int m = 0; m <= l; m++) {
@@ -469,8 +481,8 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 			}
 			norm /= l + 1;
 			for (int m = 0; m <= l; m++) {
-				err2 += abs(L2(l, m).real() - L(l, m).real())/norm;
-				err2 += abs(L2(l, m).imag() - L(l, m).imag())/norm;
+				err2 += abs(L2(l, m).real() - L(l, m).real()) / norm;
+				err2 += abs(L2(l, m).imag() - L(l, m).imag()) / norm;
 			}
 		}
 		const real dx = (x2 + x1) - x0;
@@ -610,9 +622,34 @@ void speed_test(int N, int nblocks) {
 }
 
 int main() {
+	/*constexpr int nbits = 20;
+	 bitstream<20> bits;
+	 bits.write_bits(5, 5);
+	 bits.write_bits(232323, 20);
+	 bits.write_bits(9, 5);
+	 bits.reset();
+	 printf("%i\n", bits.read_bits(5));
+	 printf("%i\n", bits.read_bits(20));
+	 printf("%i\n", bits.read_bits(5));*/
+	constexpr int P = 6;
+	array<float, (P + 1) * (P + 1)> M;
+	constexpr Ylm_max_array<P> ylm;
+	for (int l = 0; l <= P; l++) {
+		for (int m = -l; m <= l; m++) {
+			M[l * (l + 1) + m] = 0.99 * ylm(l, abs(m));
+		}
+	}
+	auto arc = spherical_multipole_compress<float>(M, 1.0f);
+	auto M2 = spherical_multipole_decompress<float>(arc);
+	for (int l = 0; l <= P; l++) {
+		for (int m = -l; m <= l; m++) {
+			printf("%e %e %e\n", M[l * (l + 1) + m], M2[l * (l + 1) + m], M[l * (l + 1) + m] / M2[l * (l + 1) + m]);
+		}
+	}
+
 	//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<12, 2> run;
-	run();
+//	run_tests<12, 2> run;
+//	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
