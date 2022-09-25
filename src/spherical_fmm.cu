@@ -138,6 +138,75 @@ public:
 	}
 };
 
+
+template<class T, int P>
+class compressed_multipole {
+	static constexpr int N = multi_bits<P>();
+	float r;
+	float mass;
+	mutable bitstream<N> bits;
+public:
+	void compress(const spherical_expansion<T, P>& O, T scale) {
+		constexpr Ylm_max_array<P> norms;
+		bits.reset();
+		float rpow = 1.0;
+		float m = O[index(0, 0)].real();
+		float minv = 1.0f / m;
+		for (int n = 1; n <= P; n++) {
+			for (int m = -n; m <= n; m++) {
+				float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
+				value *= rpow;
+				value *= minv;
+				int sgn = value > 0.0 ? 0 : 1;
+				value = fabs(value) / norms(n, abs(m));
+//				if (value >= 1.0) {
+//					printf("%e %e\n", value, norms(n, abs(m)));
+//				}
+				int i = 0;
+				for (int j = 0; j < MBITS - n; j++) {
+					i <<= 1;
+					if (value >= 0.5) {
+						i |= 1;
+					}
+					value = fmod(2.0 * value, 1.0);
+				}
+				i <<= 1;
+				i |= sgn;
+				bits.write_bits(i, MBITS - n + 1);
+			}
+			rpow /= scale;
+		}
+		mass = m;
+		r = scale;
+	}
+	CUDA_EXPORT
+	spherical_expansion<T, P> decompress() const {
+		constexpr Ylm_max_array<P> norms;
+		bits.reset();
+		float rpow = 1.0;
+		spherical_expansion<T, P> O;
+		O[0].real() = mass;
+		O[0].imag() = 0.f;
+		for (int n = 1; n <= P; n++) {
+			for (int m = -n; m <= n; m++) {
+				int i = bits.read_bits(MBITS - n + 1);
+				int sgn = i & 1;
+				i >>= 1;
+				float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
+				value *= rpow * mass * norms(n, abs(m));
+				if (m >= 0) {
+					O[index(n, m)].real() = value;
+				} else {
+					O[index(n, -m)].imag() = value;
+				}
+			}
+			rpow *= r;
+		}
+		return O;
+	}
+};
+
+
 double factorial(int n) {
 	return n == 0 ? 1.0 : n * factorial(n - 1);
 }
@@ -207,73 +276,6 @@ struct Ylm_max_array {
 };
 
 template<class T, int P>
-class compressed_multipole {
-	static constexpr int N = multi_bits<P>();
-	float r;
-	float mass;
-	mutable bitstream<N> bits;
-public:
-	void compress(const spherical_expansion<T, P>& O, T scale) {
-		constexpr Ylm_max_array<P> norms;
-		bits.reset();
-		float rpow = 1.0;
-		float m = O[index(0, 0)].real();
-		float minv = 1.0f / m;
-		for (int n = 1; n <= P; n++) {
-			for (int m = -n; m <= n; m++) {
-				float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
-				value *= rpow;
-				value *= minv;
-				int sgn = value > 0.0 ? 0 : 1;
-				value = fabs(value) / norms(n, abs(m));
-//				if (value >= 1.0) {
-//					printf("%e %e\n", value, norms(n, abs(m)));
-//				}
-				int i = 0;
-				for (int j = 0; j < MBITS - n; j++) {
-					i <<= 1;
-					if (value >= 0.5) {
-						i |= 1;
-					}
-					value = fmod(2.0 * value, 1.0);
-				}
-				i <<= 1;
-				i |= sgn;
-				bits.write_bits(i, MBITS - n + 1);
-			}
-			rpow /= scale;
-		}
-		mass = m;
-		r = scale;
-	}
-	CUDA_EXPORT
-	spherical_expansion<T, P> decompress() const {
-		constexpr Ylm_max_array<P> norms;
-		bits.reset();
-		float rpow = 1.0;
-		spherical_expansion<T, P> O;
-		O[0].real() = mass;
-		O[0].imag() = 0.f;
-		for (int n = 1; n <= P; n++) {
-			for (int m = -n; m <= n; m++) {
-				int i = bits.read_bits(MBITS - n + 1);
-				int sgn = i & 1;
-				i >>= 1;
-				float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
-				value *= rpow * mass * norms(n, abs(m));
-				if (m >= 0) {
-					O[index(n, m)].real() = value;
-				} else {
-					O[index(n, -m)].imag() = value;
-				}
-			}
-			rpow *= r;
-		}
-		return O;
-	}
-};
-
-template<class T, int P>
 spherical_expansion<T, P> spherical_regular_harmonic(T x, T y, T z) {
 	const T r2 = x * x + y * y + z * z;
 	const complex<T> R = complex<T>(x, y);
@@ -293,284 +295,6 @@ spherical_expansion<T, P> spherical_regular_harmonic(T x, T y, T z) {
 	}
 	return Y;
 }
-
-template<int N, int M, int L, bool TERM = (L < -N) || (L > N)>
-struct brot {
-	static constexpr real value =
-			(M == 0) ?
-					real(0.5) * (brot<N - 1, 0, L - 1>::value - brot<N - 1, 0, L + 1>::value) :
-					(M > 0 ?
-							real(0.5) * (brot<N - 1, M - 1, L - 1>::value + brot<N - 1, M - 1, L + 1>::value + real(2) * brot<N - 1, M - 1, L>::value) :
-							real(0.5) * (brot<N - 1, M + 1, L - 1>::value + brot<N - 1, M + 1, L + 1>::value - real(2) * brot<N - 1, M + 1, L>::value));
-};
-
-template<bool TERM>
-struct brot<0, 0, 0, TERM> {
-	static constexpr real value = 1;
-};
-
-template<int N, int M, int L>
-struct brot<N, M, L, true> {
-	static constexpr real value = 0;
-};
-
-double Brot(int n, int m, int l) {
-	if (n == 0 && m == 0 && l == 0) {
-		return 1.0;
-	} else if (abs(l) > n) {
-		return 0.0;
-	} else if (m == 0) {
-		return 0.5 * (Brot(n - 1, m, l - 1) - Brot(n - 1, m, l + 1));
-	} else if (m > 0) {
-		return 0.5 * (Brot(n - 1, m - 1, l - 1) + Brot(n - 1, m - 1, l + 1) + 2.0 * Brot(n - 1, m - 1, l));
-	} else {
-		return 0.5 * (Brot(n - 1, m + 1, l - 1) + Brot(n - 1, m + 1, l + 1) - 2.0 * Brot(n - 1, m + 1, l));
-	}
-}
-
-template<class T, bool zero, bool one, bool none>
-struct accumulate {
-	static constexpr int nops = 2;CUDA_EXPORT
-	inline void operator()(T& A, T coeff, const T& B) const {
-		A += B * coeff;
-	}
-};
-
-template<class T>
-struct accumulate<T, true, false, false> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(T& A, T coeff, const T& B) const {
-	}
-};
-
-template<class T>
-struct accumulate<T, false, true, false> {
-	static constexpr int nops = 1;CUDA_EXPORT
-	inline void operator()(T& A, T coeff, const T& B) const {
-		A += B;
-	}
-};
-
-template<class T>
-struct accumulate<T, false, false, true> {
-	static constexpr int nops = 1;CUDA_EXPORT
-	inline void operator()(T& A, T coeff, const T& B) const {
-		A -= B;
-	}
-};
-
-template<class T>
-CUDA_EXPORT inline constexpr bool close2(T a, T b) {
-	return (a > b - T(1e-6)) && (a < b + T(1e-6));
-}
-
-template<class T, int P, int N, int M, int L, bool SING, bool UPPER, bool NOEVENHI, bool TERM = UPPER ? (L > P - N || L > N) : (L > N)>
-struct spherical_swap_xz_l {
-	static constexpr auto co1 = brot<N, SING ? M : L, SING ? L : M>::value;
-	static constexpr auto co2 = brot<N, SING ? M : -L, SING ? -L : M>::value;
-	static constexpr auto sgn = L % 2 == 0 ? 1 : -1;
-	static constexpr auto cor = L == 0 ? co1 : co1 + sgn * co2;
-	static constexpr auto coi = L == 0 ? real(0) : co1 - sgn * co2;
-	using ltype = spherical_swap_xz_l<T, P, N, M, L + 1 + (NOEVENHI && N ==P), SING, UPPER,NOEVENHI>;
-	using artype = accumulate<T, close2(cor, real(0)), close2(cor, real(1)), close2(cor, real(-1))>;
-	using aitype = accumulate<T, close2(coi, real(0)), close2(coi, real(1)), close2(coi, real(-1))>;
-	static constexpr int nops = ltype::nops + artype::nops + aitype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>, P + 1>& A) const {
-		constexpr ltype nextl;
-		constexpr artype real;
-		constexpr aitype imag;
-		real(O[index(N, M)].real(), cor, A[L].real());
-		imag(O[index(N, M)].imag(), coi, A[L].imag());
-		nextl(O, A);
-	}
-};
-
-template<class T, int P, int N, int M, int L, bool SING, bool UPPER, bool NOEVENHI>
-struct spherical_swap_xz_l<T, P, N, M, L, SING, UPPER, NOEVENHI, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>, P + 1>& A) const {
-	}
-};
-
-template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = LOWER ? (M > (P + 1) - N || M > N) : (M > N)>
-struct spherical_swap_xz_m {
-	static constexpr int LB = (NOEVENHI && N == P) ? (((P + N) / 2) % 2 == 1 ? 1 : 0) : 0;
-	using mtype = spherical_swap_xz_m<T, P, N, M + 1, SING, LOWER, UPPER, NOEVENHI>;
-	using ltype = spherical_swap_xz_l<T, P, N, M, LB, SING, UPPER, NOEVENHI>;
-	static constexpr int nops = mtype::nops + ltype::nops + 1;
-
-	CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>, P + 1>& A) const {
-		O[index(N, M)] = T(0);
-		constexpr mtype nextm;
-		constexpr ltype nextl;
-		nextl(O, A);
-		nextm(O, A);
-	}
-};
-
-template<class T, int P, int N, int M, bool SING, bool LOWER, bool UPPER, bool NOEVENHI>
-struct spherical_swap_xz_m<T, P, N, M, SING, LOWER, UPPER, NOEVENHI, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>, P + 1>& A) const {
-	}
-};
-
-template<class T, int P, int N, bool SING, bool LOWER, bool UPPER, bool NOEVENHI, bool TERM = (N > P)>
-struct spherical_swap_xz_n {
-	using mtype = spherical_swap_xz_m<T, P, N, 0, SING, LOWER, UPPER, NOEVENHI>;
-	using ltype = spherical_swap_xz_n<T, P, N + 1, SING, LOWER, UPPER, NOEVENHI>;
-	static constexpr int nops = mtype::nops + ltype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>, P + 1>& A) const {
-		constexpr mtype nextm;
-		constexpr ltype nextn;
-		for (int m = 0; m <= N; m++) {
-			A[m] = O[index(N, m)];
-		}
-		nextm(O, A);
-		nextn(O, A);
-	}
-};
-
-template<class T, int P, int N, bool SING, bool LOWER, bool UPPER, bool NOEVENHI>
-struct spherical_swap_xz_n<T, P, N, SING, LOWER, UPPER, NOEVENHI, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, array<complex<T>, P + 1>& A) const {
-	}
-};
-
-template<class T, bool REAL, bool IMAG>
-struct rotate_z_mult {
-	static constexpr int nops = 6;CUDA_EXPORT
-	inline void operator()(complex<T>& O, const complex<T>& R) const {
-		O *= R;
-	}
-};
-
-template<class T>
-struct rotate_z_mult<T, true, false> {
-	static constexpr int nops = 2;CUDA_EXPORT
-	inline void operator()(complex<T>& O, const complex<T>& R) const {
-		O.imag() = O.real() * R.imag();
-		O.real() *= R.real();
-	}
-};
-
-template<class T>
-struct rotate_z_mult<T, false, true> {
-	static constexpr int nops = 3;CUDA_EXPORT
-	inline void operator()(complex<T>& O, const complex<T>& R) const {
-		O.real() = -O.imag() * R.imag();
-		O.imag() *= R.real();
-	}
-};
-
-template<class T, int P, int L, int M, bool NOEVENHI, bool ODD, bool TERM = (M > L)>
-struct spherical_rotate_z_m {
-	using mtype =spherical_rotate_z_m<T, P, L, M + 1 + (NOEVENHI && L==P), NOEVENHI, ODD>;
-	using optype = rotate_z_mult<T,NOEVENHI && (L >= P - 1 && (M % 2 != ((P + L) / 2) % 2)), false>;
-	static constexpr int nops = mtype::nops + 6;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, complex<T>* R) const {
-		constexpr mtype nextm;
-		O[index(L, M)] *= R[M];
-		nextm(O, R);
-	}
-};
-
-template<class T, int P, int L, int M>
-struct spherical_rotate_z_m<T, P, L, M, false, true, false> {
-	using mtype = spherical_rotate_z_m<T, P, L, M + 1, false, true>;
-	using optype = rotate_z_mult<T,(L == P) && (M % 2 == 0), (L == P) && (M % 2 != 0)>;
-	static constexpr int nops = mtype::nops + optype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, complex<T>* R) const {
-		constexpr mtype nextm;
-		constexpr optype op;
-		op(O[index(L, M)], R[M]);
-		nextm(O, R);
-	}
-};
-
-template<class T, int P, int L, int M, bool NOEVENHI, bool ODD>
-struct spherical_rotate_z_m<T, P, L, M, NOEVENHI, ODD, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, complex<T>* R) const {
-	}
-};
-
-template<class T, int P, int L, bool NOEVENHI, bool ODD, bool TERM = (L > P)>
-struct spherical_rotate_z_l {
-	using ltype = spherical_rotate_z_l<T, P, L + 1, NOEVENHI, ODD>;
-	using mtype = spherical_rotate_z_m<T, P, L, (NOEVENHI && L == P) ? (((P + L) / 2) % 2 == 1 ? 1 : 2) : 1, NOEVENHI,ODD>;
-	static constexpr int nops = ltype::nops + mtype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, complex<T>* R) const {
-		constexpr ltype nextl;
-		constexpr mtype nextm;
-		nextm(O, R);
-		nextl(O, R);
-	}
-};
-
-template<class T, int P, int L, bool NOEVENHI, bool ODD>
-struct spherical_rotate_z_l<T, P, L, NOEVENHI, ODD, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, complex<T>*) const {
-	}
-};
-
-template<class T, int P, bool NOEVENHI, bool ODD>
-struct spherical_rotate_z {
-	using ltype = spherical_rotate_z_l<T, P, 1, NOEVENHI,ODD>;
-	static constexpr int nops = 6 * (P - 1) + ltype::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, const complex<T>& R0) const {
-		array<complex<T>, P + 1> R;
-		R[0] = complex<T>(1, 0);
-		for (int n = 1; n <= P; n++) {
-			R[n] = R[n - 1] * R0;
-		}
-		constexpr ltype run;
-		run(O, R.data());
-	}
-};
-
-template<class T, int P>
-struct spherical_rotate_to_z_regular {
-	using xz_type = spherical_swap_xz_n<T, P, 1, false, false, false, false>;
-	using rot_type =spherical_rotate_z<T, P, false, false>;
-	using xz_type2 =spherical_swap_xz_n<T, P, 1, false, true, false, false>;
-	static constexpr int nops = 5 + (xz_type::nops + xz_type2::nops + 2 * rot_type::nops);CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, T x, T y, T z, T R, T Rinv, T rinv) const {
-		array<complex<T>, P + 1> A;
-		constexpr xz_type xz;
-		constexpr xz_type2 trunc_xz;
-		rot_type rot;
-		rot(O, complex<T>(y * Rinv, x * Rinv));
-		xz(O, A);
-		rot(O, complex<T>(z * rinv, -R * rinv));
-		trunc_xz(O, A);
-	}
-};
-
-template<class T, int P>
-struct spherical_inv_rotate_to_z_singular {
-	using truncxz_type =spherical_swap_xz_n<T, P, 1, true, false, true, false>;
-	using xz_type =spherical_swap_xz_n<T, P, 1, true, false, false, true>;
-	using rtype1 = spherical_rotate_z<T, P, false,true>;
-	using rtype2 = spherical_rotate_z<T, P, true, false>;
-	static constexpr int nops = 5 + rtype1::nops + rtype2::nops + xz_type::nops + truncxz_type::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& O, T x, T y, T z, T R, T Rinv, T rinv) const {
-		array<complex<T>, P + 1> A;
-		constexpr truncxz_type trunc_xz;
-		constexpr xz_type xz;
-		constexpr rtype1 rot1;
-		constexpr rtype2 rot2;
-		trunc_xz(O, A);
-		rot2(O, complex<T>(z * rinv, R * rinv));
-		xz(O, A);
-//		O.print();
-//		abort();
-		rot1(O, complex<T>(y * Rinv, -x * Rinv));
-	}
-};
 
 template<class T, int P>
 spherical_expansion<T, P> spherical_singular_harmonic(T x, T y, T z) {
@@ -611,125 +335,6 @@ void spherical_expansion_M2M(spherical_expansion<T, P>& M, T x, T y, T z) {
 			}
 		}
 	}
-}
-
-template<class T, int N>
-struct facto {
-	CUDA_EXPORT
-	constexpr T operator()() const {
-		constexpr facto<T, N - 1> f;
-		return T(N) * f();
-	}
-};
-
-template<class T>
-struct facto<T, 0> {
-	CUDA_EXPORT
-	constexpr T operator()() const {
-		return T(1);
-	}
-};
-
-template<class T, int P, int N, int M, int K, bool TERM = (K > P - N || K > (P - 1))>
-struct spherical_expansion_M2L_k {
-	static constexpr int nops = 5 + spherical_expansion_M2L_k<T, P, N, M, K + 1>::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& O, const T* rpow) const {
-		constexpr spherical_expansion_M2L_k<T, P, N, M, K + 1> next;
-		constexpr facto<real, N + K> factorial;
-		constexpr real c0 = ((M % 2 == 0 ? (1) : (-1)) * factorial());
-		L[index(N, M)] += O(K, M) * (c0 * rpow[K + N + 1]);
-		next(L, O, rpow);
-	}
-};
-
-template<class T, int P, int N, int K>
-struct spherical_expansion_M2L_k<T, P, N, 0, K, false> {
-	static constexpr int M = 0;
-	static constexpr int nops = 3 + spherical_expansion_M2L_k<T, P, N, M, K + 1>::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& O, const T* rpow) const {
-		constexpr spherical_expansion_M2L_k<T, P, N, M, K + 1> next;
-		constexpr facto<real, N + K> factorial;
-		constexpr real c0 = ((M % 2 == 0 ? (1) : (-1)) * factorial());
-		L[index(N, M)].real() += O(K, M).real() * (c0 * rpow[K + N + 1]);
-		next(L, O, rpow);
-	}
-};
-
-template<class T, int P, int N, int M, int K>
-struct spherical_expansion_M2L_k<T, P, N, M, K, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>&, const T*) const {
-	}
-};
-
-template<class T, int P, int N, int M, bool TERM = (M > N)>
-struct spherical_expansion_M2L_m {
-	static constexpr int nops = spherical_expansion_M2L_m<T, P, N, M + 1>::nops + spherical_expansion_M2L_k<T, P, N, M, M>::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& O, const T* rpow) const {
-		constexpr spherical_expansion_M2L_m<T, P, N, M + 1> nextm;
-		constexpr spherical_expansion_M2L_k<T, P, N, M, M> nextk;
-		L[index(N, M)] = complex<T>(T(0), T(0));
-		nextk(L, O, rpow);
-		nextm(L, O, rpow);
-	}
-};
-
-template<class T, int P, int N, int M>
-struct spherical_expansion_M2L_m<T, P, N, M, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>&, const T*) const {
-	}
-};
-
-template<class T, int P, int N, bool TERM = (N > P)>
-struct spherical_expansion_M2L_n {
-	static constexpr int nops = spherical_expansion_M2L_n<T, P, N + 1>::nops + spherical_expansion_M2L_m<T, P, N, 0>::nops;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& M, const T* rpow) const {
-		constexpr spherical_expansion_M2L_n<T, P, N + 1> nextn;
-		constexpr spherical_expansion_M2L_m<T, P, N, 0> nextm;
-		nextm(L, M, rpow);
-		nextn(L, M, rpow);
-	}
-};
-
-template<class T, int P, int N>
-struct spherical_expansion_M2L_n<T, P, N, true> {
-	static constexpr int nops = 0;CUDA_EXPORT
-	inline void operator()(spherical_expansion<T, P>& L, const spherical_expansion<T, P - 1>& M, const T*) const {
-	}
-};
-
-template<class T, int P>
-struct spherical_expansion_M2L_type {
-	static constexpr int nops = (P + 1) + 24 + spherical_rotate_to_z_regular<T, P - 1>::nops + spherical_inv_rotate_to_z_singular<T, P>::nops
-			+ spherical_expansion_M2L_n<T, P, 0>::nops;CUDA_EXPORT
-	inline spherical_expansion<T, P> operator()(spherical_expansion<T, P - 1> M, T x, T y, T z) const {
-		const T R2 = (x * x + y * y);
-		const T R = sqrt(x * x + y * y);
-		const T Rinv = T(1) / R;
-		const T r = sqrt(z * z + R2);
-		const T rinv = T(1) / r;
-		constexpr spherical_rotate_to_z_regular<T, P - 1> rot;
-		constexpr spherical_inv_rotate_to_z_singular<T, P> inv_rot;
-		rot(M, x, y, z, R, Rinv, rinv);
-		spherical_expansion<T, P> L;
-		array<T, P + 2> rpow;
-		rpow[0] = T(1);
-		for (int i = 1; i < P + 2; i++) {
-			rpow[i] = rpow[i - 1] * rinv;
-		}
-		constexpr spherical_expansion_M2L_n<T, P, 0> run;
-		run(L, M, rpow.data());
-		inv_rot(L, x, y, z, R, Rinv, rinv);
-		return L;
-	}
-};
-
-template<class T, int P>
-CUDA_EXPORT spherical_expansion<T, P> spherical_expansion_M2L(compressed_multipole<T, P - 1> Mc, T x, T y, T z) {
-	const auto M = Mc.decompress();
-	constexpr spherical_expansion_M2L_type<T, P> run;
-	return run(M, x, y, z);
 }
 
 template<class T, int P>
@@ -794,7 +399,7 @@ spherical_expansion<T, P> spherical_expansion_ref_M2L(spherical_expansion<T, P -
 #include <fenv.h>
 
 template<int P>
-real test_M2L(real theta = 0.5) {
+std::pair<real, real> test_M2L(real theta = 0.5) {
 	real err = 0.0;
 	int N = 10000;
 	timer tm1, tm2;
@@ -803,6 +408,7 @@ real test_M2L(real theta = 0.5) {
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
 
+	float err2 = 0.0;
 	for (int i = 0; i < N; i++) {
 		real x0, x1, x2, y0, y1, y2, z0, z1, z2;
 		random_vector(x0, y0, z0);
@@ -849,12 +455,24 @@ real test_M2L(real theta = 0.5) {
 				L2[index(l, m)].real() = L0[l * (l + 1) + m];
 			}
 		}
-		//	L.print();
-		//	printf("\n");
-
-		//	L2.print();
 		spherical_expansion_L2L(L, x2, y2, z2);
 		spherical_expansion_L2L(L2, x2, y2, z2);
+//			L.print();
+//			printf("\n");
+
+//			L2.print();
+	//	abort();
+		for (int l = 0; l <= P; l++) {
+			float norm = 0.0;
+			for (int m = 0; m <= l; m++) {
+				norm += L(l, m).norm();
+			}
+			norm /= l + 1;
+			for (int m = 0; m <= l; m++) {
+				err2 += abs(L2(l, m).real() - L(l, m).real())/norm;
+				err2 += abs(L2(l, m).imag() - L(l, m).imag())/norm;
+			}
+		}
 		const real dx = (x2 + x1) - x0;
 		const real dy = (y2 + y1) - y0;
 		const real dz = (z2 + z1) - z0;
@@ -875,12 +493,13 @@ real test_M2L(real theta = 0.5) {
 	}
 	tm1.stop();
 	err = sqrt(err / N);
-	return err;
+	return std::make_pair(err, err2 / N / 2.0);
 }
 template<int NMAX, int N = 3>
 struct run_tests {
 	void operator()() {
-		printf("%i %i %e\n", N, spherical_expansion_M2L_type<float, N>::nops, test_M2L<N>());
+		auto a = test_M2L<N>();
+		printf("%i %e %e\n", N, a.first, a.second);
 		run_tests<NMAX, N + 1> run;
 		run();
 	}
@@ -920,20 +539,17 @@ __global__ void test_old(multipole<float>* M, expansion<float>* Lptr, float* x, 
 }
 
 template<int P>
-__global__ void test_new(compressed_multipole<float, P - 1>* M, spherical_expansion<float, P>* Lptr, float* x, float* y, float* z, int N) {
+__global__ void test_new(array<float, P * P>* M, array<float, (P + 1) * (P + 1)>* Lptr, float* x, float* y, float* z, int N) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
 	auto& L = *Lptr;
 	const int b = (size_t) bid * N / gridDim.x;
 	const int e = (size_t)(bid + 1) * N / gridDim.x;
-	expansion<float> D;
-	expansion<float> L1;
+	array<float, (P + 1) * (P + 1)> L1;
 	for (int i = b + tid; i < e; i += BLOCK_SIZE) {
-		auto L1 = spherical_expansion_M2L<float, P>(M[i], x[i], y[i], z[i]);
-		for (int l = 0; l <= P; l++) {
-			for (int m = 0; m <= l; m++) {
-				L[index(l, m)] += L1(l, m);
-			}
+		auto L1 = spherical_M2L<float>(M[i], x[i], y[i], z[i]);
+		for (int l = 0; l <= (P + 1) * (P + 1); l++) {
+			L[l] += L1[l];
 		}
 	}
 
@@ -941,13 +557,13 @@ __global__ void test_new(compressed_multipole<float, P - 1>* M, spherical_expans
 template<int P>
 void speed_test(int N, int nblocks) {
 	float* x, *y, *z;
-	spherical_expansion<float, P>* Ls;
 	expansion<float>* Lc;
-	compressed_multipole<float, P - 1>* Ms;
+	array<float, (P + 1) * (P + 1)>* Ls;
+	array<float, P * P>* Ms;
 	multipole<float>* Mc;
-	CUDA_CHECK(cudaMallocManaged(&Ls, sizeof(spherical_expansion<float, P> )));
+	CUDA_CHECK(cudaMallocManaged(&Ls, sizeof(array<float, (P + 1) * (P + 1)> )));
 	CUDA_CHECK(cudaMallocManaged(&Lc, sizeof(expansion<float> )));
-	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(compressed_multipole<float, P> )));
+	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(array<float, P * P> )));
 	CUDA_CHECK(cudaMallocManaged(&Mc, N * sizeof(expansion<float> )));
 	CUDA_CHECK(cudaMallocManaged(&x, sizeof(float) * N));
 	CUDA_CHECK(cudaMallocManaged(&y, sizeof(float) * N));
@@ -964,8 +580,10 @@ void speed_test(int N, int nblocks) {
 		}
 	}
 	for (int j = 0; j < N; j++) {
-		spherical_expansion<float, P - 1> m = spherical_regular_harmonic<float, P - 1>(2 * rand1() - 1, 2 * rand1() - 1, 2 * rand1() - 1);
-		Ms[j].compress(m, 1.0);
+		for (int i = 0; i < P * P; i++) {
+			Ms[j][i] = rand1();
+		}
+//		Ms[j].compress(m, 1.0);
 	}
 	int sblocks, cblocks;
 	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cblocks, (const void*) test_old, WARP_SIZE, 0));
@@ -978,7 +596,7 @@ void speed_test(int N, int nblocks) {
 	CUDA_CHECK(cudaDeviceSynchronize());
 	tmc.stop();
 	tms.start();
-	test_new<<<sblocks,BLOCK_SIZE>>>(Ms,Ls,x,y,z,N);
+	test_new<P> <<<sblocks,BLOCK_SIZE>>>(Ms,Ls,x,y,z,N);
 	CUDA_CHECK(cudaDeviceSynchronize());
 	tms.stop();
 	printf("Spherical = %e Cartesian = %e\n", tms.read(), tmc.read());
@@ -993,7 +611,7 @@ void speed_test(int N, int nblocks) {
 
 int main() {
 	//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<8, 7> run;
+	run_tests<12, 2> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
