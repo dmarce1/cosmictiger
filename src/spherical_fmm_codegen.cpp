@@ -108,19 +108,19 @@ int decompress(int P) {
 			nextbit = 0;
 			byte++;
 		}
-		if( nextbit != 0 ) {
-			if( count <= CHAR_BIT - nextbit) {
-				tprint( "arc.bits[%i] = (i << %i) | (arc.bits[%i] & %i);\n", byte, nextbit, byte, ((1 << nextbit) - 1));
-			} else {
+	//	if( nextbit != 0 ) {
+	//		if( count <= CHAR_BIT - nextbit) {
+	//			tprint( "arc.bits[%i] = (i << %i) | (arc.bits[%i] & %i);\n", byte, nextbit, byte, ((1 << nextbit) - 1));
+	//		} else {
 				tprint( "arc.bits[%i] = ((i << %i) & 0xFF) | (arc.bits[%i] & %i);\n", byte, nextbit, byte, ((1 << nextbit) - 1));
-			}
-		} else {
-			if( count <= CHAR_BIT ) {
-				tprint( "arc.bits[%i] = i | (arc.bits[%i] & %i);\n", byte, byte, ((1 << nextbit) - 1));
-			} else {
-				tprint( "arc.bits[%i] = (i & 0xFF) | (arc.bits[%i] & %i);\n", byte, byte, ((1 << nextbit) - 1));
-			}
-		}
+	//		}
+	//	} else {
+	//		if( count <= CHAR_BIT ) {
+	//			tprint( "arc.bits[%i] = i | (arc.bits[%i] & %i);\n", byte, byte, ((1 << nextbit) - 1));
+	//		} else {
+	//			tprint( "arc.bits[%i] = (i & 0xFF) | (arc.bits[%i] & %i);\n", byte, byte, ((1 << nextbit) - 1));
+	//		}
+	//	}
 		const int m = CHAR_BIT - nextbit;
 		nextbit = count < m ? nextbit + count : 0;
 		byte += count < m ? 0 : 1;
@@ -128,11 +128,11 @@ int decompress(int P) {
 		if (count > 0) {
 			tprint( "i >>= %i;\n", m);
 			while (count >= CHAR_BIT) {
-				if( count == CHAR_BIT) {
-					tprint( "arc.bits[%i] = i;\n", byte);
-				} else {
+			//	if( count == CHAR_BIT) {
+			//		tprint( "arc.bits[%i] = i;\n", byte);
+			//	} else {
 					tprint( "arc.bits[%i] = i & 0xFF;\n", byte);
-				}
+			//	}
 				count -= CHAR_BIT;
 				tprint( "i >>= %i;\n", CHAR_BIT);
 				byte++;
@@ -150,29 +150,29 @@ int decompress(int P) {
 			byte++;
 		}
 		if (count <= CHAR_BIT - nextbit) {
-			if( nextbit ) {
+		//	if( nextbit ) {
 				tprint( "i = arc.bits[%i] >> %i;\n", byte, nextbit);
-			} else {
-				tprint( "i = arc.bits[%i];\n", byte);
-			}
+		//	} else {
+		//		tprint( "i = arc.bits[%i];\n", byte);
+		//	}
 			tprint( "i &= %i;\n", (1<<count)-1);
 			nextbit += count;
 		} else {
 			int n = 0;
-			if( nextbit ) {
+		//	if( nextbit ) {
 				tprint( "i = arc.bits[%i] >> %i;\n", byte, nextbit);
-			} else {
-				tprint( "i = arc.bits[%i];\n", byte);
-			}
+		//	} else {
+		//		tprint( "i = arc.bits[%i];\n", byte);
+		//	}
 			n += CHAR_BIT - nextbit;
 			nextbit = 0;
 			byte++;
 			while (count >= CHAR_BIT + n) {
-				if( n != 0 ) {
+			//	if( n != 0 ) {
 					tprint( "i |= ((int) arc.bits[%i]) << %i;\n", byte, n);
-				} else {
-					tprint( "i |= ((int) arc.bits[%i]);\n", byte);
-				}
+			//	} else {
+			//		tprint( "i |= ((int) arc.bits[%i]);\n", byte);
+			//	}
 				byte++;
 				n += CHAR_BIT;
 			}
@@ -258,35 +258,40 @@ int decompress(int P) {
 	flops++;
 	tprint("int i;\n");
 	tprint("int s;\n");
+	tprint("int e;\n");
 	tprint("T v;\n");
 	for (int n = 1; n <= P; n++) {
 		for (int m = -n; m <= n; m++) {
 
-			//		float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
-			tprint("i = 0;\n");
-			tprint("v = M[%i] * rpow * T(%.16e);\n", index(n, m), 1.0 / norms(n, abs(m)));
-//			int sgn = value > 0.0 ? 0 : 1;
-			tprint("s = v > T(0) ? 0 : 1;\n");
-			tprint("v = abs(v);\n");
+
+	//		float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
+			tprint( "i = 0;\n");
+			tprint( "v = M[%i] * rpow * T(%.16e);\n", index(n,m), 1.0/norms(n, abs(m)));
+			//int sgn = value > 0.0 ? 0 : 1;
+		//	tprint( "s = v > T(0) ? 0 : 1;\n");
+			tprint( "s = (((unsigned&)v) & (unsigned) 0x10000000) >> 31;\n");
+			tprint( "e = ((((unsigned&)v) & (unsigned) 0x7F800000) >> 23) - 127;\n");
+			tprint( "printf( \"%i\\n\", e);\n");
+			tprint( "i = (0x800000 | ((unsigned&)v) & (unsigned) 0x7FFFFF) >> (%i-e);\n", 23 - MBITS + n);
 //			value = fabs(value) / norms(n, abs(m));
 			//				if (value >= 1.0) {
 			//					printf("%e %e\n", value, norms(n, abs(m)));
 			//				}
-			int i = 0;
-			for (int j = 0; j < MBITS - n; j++) {
+		//	int i = 0;
+		//	for (int j = 0; j < MBITS - n; j++) {
 //				i <<= 1;
-				tprint("i <<= 1;\n");
+		//		tprint( "i <<= 1;\n");
 //				if (value >= 0.5) {
 //					i |= 1;
 //				}
-				tprint("i |= v > T(0.5) ? 1 : 0;\n");
+		//		tprint( "i |= v > T(0.5) ? 1 : 0;\n");
 //				value = fmod(2.0 * value, 1.0);
-				tprint("v = fmod(T(2)*v,T(1));\n");
-			}
+		//		tprint( "v = fmod(T(2)*v,T(1));\n");
+	//		}
 //			i <<= 1;
-			tprint("i <<= 1;\n");
+			tprint( "i <<= 1;\n");
 //			i |= sgn;
-			tprint("i |= s;\n");
+			tprint( "i |= s;\n");
 			write_bits(MBITS - n + 1);
 		}
 		if (n != P) {

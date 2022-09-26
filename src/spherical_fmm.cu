@@ -636,9 +636,10 @@ int main() {
 	constexpr Ylm_max_array<P> ylm;
 	for (int l = 0; l <= P; l++) {
 		for (int m = -l; m <= l; m++) {
-			M[l * (l + 1) + m] = 0.99 * ylm(l, abs(m));
+			M[l * (l + 1) + m] = ((double)l/(P+1)) * ylm(l, abs(m));
 		}
 	}
+	M[0] = 1.001;
 	auto arc = spherical_multipole_compress<float>(M, 1.0f);
 	auto M2 = spherical_multipole_decompress<float>(arc);
 	for (int l = 0; l <= P; l++) {
