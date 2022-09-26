@@ -631,26 +631,9 @@ int main() {
 	 printf("%i\n", bits.read_bits(5));
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
-	constexpr int P = 6;
-	array<float, (P + 1) * (P + 1)> M;
-	constexpr Ylm_max_array<P> ylm;
-	for (int l = 0; l <= P; l++) {
-		for (int m = -l; m <= l; m++) {
-			M[l * (l + 1) + m] = ((double)l/(P+1)) * ylm(l, abs(m));
-		}
-	}
-	M[0] = 1.001;
-	auto arc = spherical_multipole_compress<float>(M, 1.0f);
-	auto M2 = spherical_multipole_decompress<float>(arc);
-	for (int l = 0; l <= P; l++) {
-		for (int m = -l; m <= l; m++) {
-			printf("%e %e %e\n", M[l * (l + 1) + m], M2[l * (l + 1) + m], M[l * (l + 1) + m] / M2[l * (l + 1) + m]);
-		}
-	}
-
 	//speed_test<7>(2 * 1024 * 1024, 100);
-//	run_tests<12, 2> run;
-//	run();
+	run_tests<12, 2> run;
+	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
 //printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
