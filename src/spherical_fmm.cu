@@ -456,7 +456,21 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		}
 //		compressed_multipole<real, P - 1> Mc;
 //		Mc.compress(M, 1.0);
-		auto L0 = spherical_M2L<real>(M, x1, y1, z1);
+		array<float, (P + 1) * (P + 1)> L0;
+		array<float, 4> L3;
+		for (int n = 0; n < (P + 1) * (P + 1); n++) {
+			L0[n] = 0.0;
+		}
+		for( int n = 0; n < 4; n++) {
+			L3[n] = 0.0;
+		}
+		M2L<real>(L0, M, x1, y1, z1);
+		M2L<real>(L3, M, x1, y1, z1);
+		for (int n = 0; n < 4; n++) {
+			printf("%e %e %e\n", L0[n]/ L3[n], L0[n], L3[n]);
+		}
+		printf("\n");
+		abort();
 		auto L = spherical_expansion_ref_M2L<real, P>(M0, x1, y1, z1);
 		spherical_expansion<real, P> L2;
 		for (int l = 0; l <= P; l++) {
@@ -559,10 +573,7 @@ __global__ void test_new(array<float, P * P>* M, array<float, (P + 1) * (P + 1)>
 	const int e = (size_t)(bid + 1) * N / gridDim.x;
 	array<float, (P + 1) * (P + 1)> L1;
 	for (int i = b + tid; i < e; i += BLOCK_SIZE) {
-		auto L1 = spherical_M2L<float>(M[i], x[i], y[i], z[i]);
-		for (int l = 0; l <= (P + 1) * (P + 1); l++) {
-			L[l] += L1[l];
-		}
+		M2L<float>(L, M[i], x[i], y[i], z[i]);
 	}
 
 }
@@ -632,7 +643,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 	//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<12, 2> run;
+	run_tests<12, 7> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
