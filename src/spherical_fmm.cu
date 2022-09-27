@@ -339,9 +339,13 @@ void spherical_expansion_M2M(spherical_expansion<T, P>& M, T x, T y, T z) {
 		for (int m = 0; m <= n; m++) {
 			M[index(n, m)] = complex<T>(T(0), T(0));
 			for (int k = 0; k <= n; k++) {
-				const int lmin = std::max(-k, m - n + k);
-				const int lmax = std::min(k, m + n - k);
-				for (int l = lmin; l <= lmax; l++) {
+				for (int l = -k; l <= k; l++) {
+					if (abs(m - l) > n - k) {
+						continue;
+					}
+					if (-abs(m - l) < k - n) {
+						continue;
+					}
 					M[index(n, m)] += Y(k, l) * M0(n - k, m - l);
 				}
 			}
@@ -424,7 +428,9 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 	for (int i = 0; i < N; i++) {
 		real x0, x1, x2, y0, y1, y2, z0, z1, z2;
 		random_vector(x0, y0, z0);
-		random_unit(x1, y1, z1);
+		random_vector(x0, y0, z0);
+		random_vector(x0, y0, z0);
+			random_unit(x1, y1, z1);
 		random_vector(x2, y2, z2);
 		/*	x0 = 0.0;
 		 y0 = 0.0;
@@ -461,15 +467,28 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		for (int n = 0; n < (P + 1) * (P + 1); n++) {
 			L0[n] = 0.0;
 		}
-		for( int n = 0; n < 4; n++) {
+		for (int n = 0; n < 4; n++) {
 			L3[n] = 0.0;
 		}
 		M2L<real>(L0, M, x1, y1, z1);
-		M2L<real>(L3, M, x1, y1, z1);
-		for (int n = 0; n < 4; n++) {
-			printf("%e %e %e\n", L0[n]/ L3[n], L0[n], L3[n]);
+		/*	M2L<real>(L3, M, x1, y1, z1);
+		 for (int n = 0; n < 4; n++) {
+		 printf("%e %e %e\n", L0[n]/ L3[n], L0[n], L3[n]);
+		 }
+		 printf("\n");
+		 abort();*/
+		auto H1 = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
+		array<real, P * P> H2;
+		regular_harmonic<real>(H2, x0, y0, z0);
+		spherical_expansion_M2M(H1, x1, y1, z1);
+		M2M(H2, x1, y1, z1);
+		for (int l = 0; l < P; l++) {
+			for (int m = -l; m <= l; m++) {
+				auto h1 = m >= 0 ? H1[index(l, abs(m))].real() : H1[index(l, abs(m))].imag();
+				auto h2 = H2[l * (l + 1) + m];
+				printf("%i %i %e %e %e\n", l, m, h1, h2, h1 - h2);
+			}
 		}
-		printf("\n");
 		abort();
 		auto L = spherical_expansion_ref_M2L<real, P>(M0, x1, y1, z1);
 		spherical_expansion<real, P> L2;
@@ -643,7 +662,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 	//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<12, 7> run;
+	run_tests<13, 7> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
