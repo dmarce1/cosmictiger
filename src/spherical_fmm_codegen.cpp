@@ -99,7 +99,72 @@ int index(int l, int m) {
 double nonepow(int m) {
 	return m % 2 == 0 ? double(1) : double(-1);
 }
-int z_rot(int P, const char* name, bool noevenhi) {
+
+int greens(int P) {
+	int flops = 0;
+	tprint("\n");
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT expansion_type<T> spherical_greens( T x, T y, T z ) {\n");
+	indent();
+	tprint("const T r2 = x * x + y * y + z * z;\n");
+	flops += 5;
+	tprint("const T r2inv = T(1) / r2;\n");
+	flops += 4;
+	tprint("expansion_type<T> O;\n");
+	tprint("O[0] = T(0);\n");
+	tprint("x *= r2inv;\n");
+	tprint("y *= r2inv;\n");
+	tprint("z *= r2inv;\n");
+	flops += 3;
+	tprint("T ax;\n");
+	tprint("T ay;\n");
+	for (int m = 0; m <= P; m++) {
+		if (m == 1) {
+			tprint("O[%i] = x * O[0];\n", index(m, m));
+			tprint("O[%i] = y * O[0];\n", index(m, -m));
+			flops += 2;
+		} else if (m > 0) {
+			tprint("ax = O[%i] * T(%i);\n", index(m - 1, m - 1), 2 * m - 1);
+			tprint("ay = O[%i] * T(%i);\n", index(m - 1, -(m - 1)), 2 * m - 1);
+			tprint("O[%i] = x * ax - y * ay;\n", index(m, m));
+			tprint("O[%i] = y * ax + x * ay;\n", index(m, -m));
+			flops += 8;
+		}
+		if (m + 1 <= P) {
+			tprint("O[%i] = T(%i) * z * O[%i];\n", index(m + 1, m), 2 * m + 1, index(m, m));
+			flops += 2;
+			if (m != 0) {
+				tprint("O[%i] = T(%i) * z * O[%i];\n", index(m + 1, -m), 2 * m + 1, index(m, -m));
+				flops += 2;
+			}
+		}
+		for (int n = m + 2; n <= P; n++) {
+			if (m != 0) {
+				tprint("ax = T(%i) * z;\n", 2 * n - 1);
+				tprint("ay = T(-%i) * r2inv;\n", (n - 1) * (n - 1) - m * m);
+				tprint("O[%i] = (ax * O[%i] + ay * O[%i]);\n", index(n, m), index(n - 1, m), index(n - 2, m));
+				tprint("O[%i] = (ax * O[%i] + ay * O[%i]);\n", index(n, -m), index(n - 1, -m), index(n - 2, -m));
+				flops += 8;
+			} else {
+				if ((n - 1) * (n - 1) - m * m == 1) {
+					tprint("O[%i] = (T(%i) * z * O[%i] - r2inv * O[%i]);\n", index(n, m), 2 * n - 1, index(n - 1, m), index(n - 2, m));
+					flops += 4;
+				} else {
+					tprint("O[%i] = (T(%i) * z * O[%i] - T(%i) * r2inv * O[%i]);\n", index(n, m), 2 * n - 1, index(n - 1, m), (n - 1) * (n - 1) - m * m,
+							index(n - 2, m));
+					flops += 5;
+				}
+
+			}
+		}
+	}
+	deindent();
+	tprint("}");
+	tprint("\n");
+	return flops;
+}
+
+int z_rot(int P, const char* name, bool noevenhi, bool exclude) {
 	//noevenhi = false;
 	int flops = 0;
 	tprint("\n");
@@ -126,16 +191,25 @@ int z_rot(int P, const char* name, bool noevenhi) {
 				flops += 6;
 				initR = true;
 			}
-
-			if (noevenhi && (l >= P - 1 && (m % 2 != ((P + l) / 2) % 2))) {
+			if (exclude && l == P && m % 2 == 1) {
+				tprint("%s[%i] = -%s[%i] * Ry;\n", name, index(l, m), name, index(l, -m));
+				tprint("%s[%i] *= Rx;\n", name, index(l, -m));
+				flops += 3;
+			}else if (exclude && l == P && m % 2 == 0) {
 				tprint("%s[%i] = %s[%i] * Ry;\n", name, index(l, -m), name, index(l, m));
 				tprint("%s[%i] *= Rx;\n", name, index(l, m));
 				flops += 2;
 			} else {
-				tprint("tmp = %s[%i];\n", name, index(l, m));
-				tprint("%s[%i] = %s[%i] * Rx - %s[%i] * Ry;\n", name, index(l, m), name, index(l, m), name, index(l, -m));
-				tprint("%s[%i] = tmp * Ry + %s[%i] * Rx;\n", name, index(l, -m), name, index(l, -m));
-				flops += 6;
+				if (noevenhi && ((l >= P - 1 && m % 2 == P % 2))) {
+					tprint("%s[%i] = %s[%i] * Ry;\n", name, index(l, -m), name, index(l, m));
+					tprint("%s[%i] *= Rx;\n", name, index(l, m));
+					flops += 2;
+				} else {
+						tprint("tmp = %s[%i];\n", name, index(l, m));
+					tprint("%s[%i] = %s[%i] * Rx - %s[%i] * Ry;\n", name, index(l, m), name, index(l, m), name, index(l, -m));
+					tprint("%s[%i] = tmp * Ry + %s[%i] * Rx;\n", name, index(l, -m), name, index(l, -m));
+					flops += 6;
+				}
 			}
 
 		}
@@ -180,10 +254,10 @@ int m2l(int P, const char* mname, const char* lname) {
 					flops += 2;
 				}
 			} else {
-				tprint("%s[%i] = T(0);\n", lname, index(n, m));
-				if (m != 0) {
-					tprint("%s[%i] = T(0);\n", lname, index(n, -m));
-				}
+				//tprint("%s[%i] = T(0);\n", lname, index(n, m));
+			//	if (m != 0) {
+			//		tprint("%s[%i] = T(0);\n", lname, index(n, -m));
+			//	}
 			}
 		}
 	}
@@ -212,25 +286,27 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 	};
 	for (int n = 1; n <= P; n++) {
 		int lmax = n;
-		if (l_restrict && lmax > (P + 1) - n) {
-			lmax = (P + 1) - n;
+		if (l_restrict && lmax > (P) - n) {
+			lmax = (P ) - n;
 		}
 		for (int m = -lmax; m <= lmax; m++) {
-			tprint("A[%i] = %s[%i];\n", m + P, name, index(n, m));
+			if (noevenhi && P == n && P % 2 != abs(m) % 2) {
+			} else {
+				tprint("A[%i] = %s[%i];\n", m + P, name, index(n, m));
+			}
 		}
 		std::vector < std::vector<std::pair<float, int>>>ops(2 * n + 1);
 		int mmax = n;
-		if (m_restrict && mmax > (P + 1) - n) {
+		if (m_restrict && mmax > (P) - n) {
 			mmax = (P + 1) - n;
 		}
 		int mmin = 0;
 		int stride = 1;
-		if (noevenhi && n == P + 1) {
-			mmin = (((P + 1 + n) / 2) % 2 == 1 ? 1 : 0);
-			stride = 2;
-		}
 		for (int m = 0; m <= mmax; m += stride) {
 			for (int l = 0; l <= lmax; l++) {
+				if (noevenhi && P == n && P % 2 != abs(l) % 2) {
+					continue;
+				}
 				double r = l == 0 ? brot(n, m, 0) : brot(n, m, l) + nonepow(l) * brot(n, m, -l);
 				double i = l == 0 ? 0.0 : brot(n, m, l) - nonepow(l) * brot(n, m, -l);
 				if (r != 0.0) {
@@ -247,6 +323,10 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 			});
 		}
 		for (int m = 0; m < 2 * n + 1; m++) {
+			if (ops[m].size() == 0 && !m_restrict && !l_restrict) {
+	//			fprintf(stderr, " %i %i %i %i %i\n", m_restrict, l_restrict, noevenhi, n, m - n);
+	//			tprint("%s[%i] = T(0);\n", name, index(n, m - n));
+			}
 			for (int l = 0; l < ops[m].size(); l++) {
 				int len = 1;
 				while (len + l < ops[m].size()) {
@@ -317,10 +397,9 @@ int main() {
 		tprint("sinphi = x * Rinv;\n");
 		flops++;
 		tprint("const auto multi_rot = [&M,&cosphi,&sinphi]()\n");
-		flops += 2*z_rot(P - 1, "M", false);
+		flops += 2 * z_rot(P - 1, "M", false, false);
 		tprint(";\n");
 		tprint("multi_rot();\n");
-
 
 //	flops += xz_swap(P - 1, "M", false, false, false, false);
 		flops += xz_swap(P - 1, "M", false, false, false, false);
@@ -338,14 +417,14 @@ int main() {
 
 		tprint("sinphi = -sinphi;\n");
 		flops += 1;
-		flops += z_rot(P, "L", true);
+		flops += z_rot(P, "L", true, false);
 		//	flops += z_rot(P, "L", true);
 		//	flops += xz_swap(P, "L", true, false, false, true);
 		flops += xz_swap(P, "L", true, false, false, true);
 		tprint("cosphi = cosphi0;\n");
 		tprint("sinphi = -sinphi0;\n");
 		flops += 1;
-		flops += z_rot(P, "L", false);
+		flops += z_rot(P, "L", false, true);
 		tprint("return L;\n");
 		tprint("\n");
 		tprint("//FLOPS = %i\n", flops);
