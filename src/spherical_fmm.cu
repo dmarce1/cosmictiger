@@ -662,7 +662,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 	//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<24, 7> run;
+	run_tests<13, 7> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
