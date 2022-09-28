@@ -13,7 +13,7 @@
 #include <cuda.h>
 #include <cosmictiger/fmm_kernels.hpp>
 
-using real = float;
+using real = double;
 
 double Pm(int l, int m, double x) {
 	if (m > l) {
@@ -154,19 +154,19 @@ public:
 /*template<class T, int P>
  class compressed_multipole {
  static constexpr int N = multi_bits<P>();
- float r;
- float mass;
+ real r;
+ real mass;
  mutable bitstream<N> bits;
  public:
  void compress(const spherical_expansion<T, P>& O, T scale) {
  constexpr Ylm_max_array<P> norms;
  bits.reset();
- float rpow = 1.0;
- float m = O[index(0, 0)].real();
- float minv = 1.0f / m;
+ real rpow = 1.0;
+ real m = O[index(0, 0)].real();
+ real minv = 1.0f / m;
  for (int n = 1; n <= P; n++) {
  for (int m = -n; m <= n; m++) {
- float value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
+ real value = m >= 0 ? O[index(n, m)].real() : O[index(n, -m)].imag();
  value *= rpow;
  value *= minv;
  int sgn = value > 0.0 ? 0 : 1;
@@ -195,7 +195,7 @@ public:
  spherical_expansion<T, P> decompress() const {
  constexpr Ylm_max_array<P> norms;
  bits.reset();
- float rpow = 1.0;
+ real rpow = 1.0;
  spherical_expansion<T, P> O;
  O[0].real() = mass;
  O[0].imag() = 0.f;
@@ -204,7 +204,7 @@ public:
  int i = bits.read_bits(MBITS - n + 1);
  int sgn = i & 1;
  i >>= 1;
- float value = (sgn ? -1.0f : 1.0f) * (float) i / (float) (1 << (MBITS - n));
+ real value = (sgn ? -1.0f : 1.0f) * (real) i / (real) (1 << (MBITS - n));
  value *= rpow * mass * norms(n, abs(m));
  if (m >= 0) {
  O[index(n, m)].real() = value;
@@ -424,7 +424,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 	feenableexcept (FE_INVALID);
 	feenableexcept (FE_OVERFLOW);
 
-	float err2 = 0.0;
+	real err2 = 0.0;
 	for (int i = 0; i < N; i++) {
 		real x0, x1, x2, y0, y1, y2, z0, z1, z2;
 		random_vector(x0, y0, z0);
@@ -462,8 +462,8 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		}
 //		compressed_multipole<real, P - 1> Mc;
 //		Mc.compress(M, 1.0);
-		array<float, (P + 1) * (P + 1)> L0;
-		array<float, 4> L3;
+		array<real, (P + 1) * (P + 1)> L0;
+		array<real, 4> L3;
 		for (int n = 0; n < (P + 1) * (P + 1); n++) {
 			L0[n] = 0.0;
 		}
@@ -477,7 +477,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		 }
 		 printf("\n");
 		 abort();*/
-		auto H1 = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
+/*		auto H1 = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		array<real, P * P> H2;
 		regular_harmonic<real>(H2, x0, y0, z0);
 		spherical_expansion_M2M(H1, x1, y1, z1);
@@ -489,7 +489,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 				printf("%i %i %e %e %e\n", l, m, h1, h2, h1 - h2);
 			}
 		}
-		abort();
+		abort();*/
 		auto L = spherical_expansion_ref_M2L<real, P>(M0, x1, y1, z1);
 		spherical_expansion<real, P> L2;
 		for (int l = 0; l <= P; l++) {
@@ -508,7 +508,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 //			L2.print();
 		//	abort();
 		for (int l = 0; l <= P; l++) {
-			float norm = 0.0;
+			real norm = 0.0;
 			for (int m = 0; m <= l; m++) {
 				norm += L(l, m).norm();
 			}
@@ -561,16 +561,16 @@ struct run_tests<NMAX, NMAX> {
 
 #define BLOCK_SIZE 32
 
-__global__ void test_old(multipole<float>* M, expansion<float>* Lptr, float* x, float* y, float* z, int N) {
+__global__ void test_old(multipole<real>* M, expansion<real>* Lptr, real* x, real* y, real* z, int N) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
 	auto& L = *Lptr;
 	const int b = (size_t) bid * N / gridDim.x;
 	const int e = (size_t)(bid + 1) * N / gridDim.x;
-	expansion<float> D;
-	expansion<float> L1;
+	expansion<real> D;
+	expansion<real> L1;
 	for (int i = b + tid; i < e; i += BLOCK_SIZE) {
-		array<float, 3> X;
+		array<real, 3> X;
 		X[XDIM] = x[i];
 		X[YDIM] = y[i];
 		X[ZDIM] = z[i];
@@ -584,39 +584,39 @@ __global__ void test_old(multipole<float>* M, expansion<float>* Lptr, float* x, 
 }
 
 template<int P>
-__global__ void test_new(array<float, P * P>* M, array<float, (P + 1) * (P + 1)>* Lptr, float* x, float* y, float* z, int N) {
+__global__ void test_new(array<real, P * P>* M, array<real, (P + 1) * (P + 1)>* Lptr, real* x, real* y, real* z, int N) {
 	const int tid = threadIdx.x;
 	const int bid = blockIdx.x;
 	auto& L = *Lptr;
 	const int b = (size_t) bid * N / gridDim.x;
 	const int e = (size_t)(bid + 1) * N / gridDim.x;
-	array<float, (P + 1) * (P + 1)> L1;
+	array<real, (P + 1) * (P + 1)> L1;
 	for (int i = b + tid; i < e; i += BLOCK_SIZE) {
-		M2L<float>(L, M[i], x[i], y[i], z[i]);
+		M2L<real>(L, M[i], x[i], y[i], z[i]);
 	}
 
 }
 template<int P>
 void speed_test(int N, int nblocks) {
-	float* x, *y, *z;
-	expansion<float>* Lc;
-	array<float, (P + 1) * (P + 1)>* Ls;
-	array<float, P * P>* Ms;
-	multipole<float>* Mc;
-	CUDA_CHECK(cudaMallocManaged(&Ls, sizeof(array<float, (P + 1) * (P + 1)> )));
-	CUDA_CHECK(cudaMallocManaged(&Lc, sizeof(expansion<float> )));
-	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(array<float, P * P> )));
-	CUDA_CHECK(cudaMallocManaged(&Mc, N * sizeof(expansion<float> )));
-	CUDA_CHECK(cudaMallocManaged(&x, sizeof(float) * N));
-	CUDA_CHECK(cudaMallocManaged(&y, sizeof(float) * N));
-	CUDA_CHECK(cudaMallocManaged(&z, sizeof(float) * N));
+	real* x, *y, *z;
+	expansion<real>* Lc;
+	array<real, (P + 1) * (P + 1)>* Ls;
+	array<real, P * P>* Ms;
+	multipole<real>* Mc;
+	CUDA_CHECK(cudaMallocManaged(&Ls, sizeof(array<real, (P + 1) * (P + 1)> )));
+	CUDA_CHECK(cudaMallocManaged(&Lc, sizeof(expansion<real> )));
+	CUDA_CHECK(cudaMallocManaged(&Ms, N * sizeof(array<real, P * P> )));
+	CUDA_CHECK(cudaMallocManaged(&Mc, N * sizeof(expansion<real> )));
+	CUDA_CHECK(cudaMallocManaged(&x, sizeof(real) * N));
+	CUDA_CHECK(cudaMallocManaged(&y, sizeof(real) * N));
+	CUDA_CHECK(cudaMallocManaged(&z, sizeof(real) * N));
 	for (int i = 0; i < N; i++) {
 		x[i] = 2.0 * rand1() - 1.0;
 		y[i] = 2.0 * rand1() - 1.0;
 		z[i] = 2.0 * rand1() - 1.0;
 	}
 	for (int j = 0; j < N; j++) {
-		spherical_expansion<float, P - 1> m;
+		spherical_expansion<real, P - 1> m;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			(Mc)[j][i] = 2.0 * rand1() - 1.0;
 		}
@@ -662,21 +662,21 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 	//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<13, 7> run;
+	run_tests<24, 7> run;
 	run();
 //	constexpr int P = 7;
-//	printf( "%i %i\n", sizeof(spherical_expansion<float,P-1>), sizeof(compressed_multipole<float,P-1>));
-//printf("%e %e\n", Brot(10, -3, 1), brot<float, 10, -3, 1>::value);
+//	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
+//printf("%e %e\n", Brot(10, -3, 1), brot<real, 10, -3, 1>::value);
 	/*printf("err = %e\n", test_M2L<5>());
 	 printf("err = %e\n", test_M2L<6>());
 	 printf("err = %e\n", test_M2L<20>());*/
 
 	/*constexpr int P = 5;
-	 spherical_expansion<float, P> O;
-	 float x = 1.0;
-	 float y = -1.0;
-	 float z = 1.0;
-	 auto L = spherical_regular_harmonic<float, P>(x, y, z);
+	 spherical_expansion<real, P> O;
+	 real x = 1.0;
+	 real y = -1.0;
+	 real z = 1.0;
+	 auto L = spherical_regular_harmonic<real, P>(x, y, z);
 	 for (int l = 0; l <= P; l++) {
 	 for (int m = 0; m <= l; m++) {
 	 printf("%i %i %e %e\n", l, m, L(l, m).real(), L(l, m).imag());
