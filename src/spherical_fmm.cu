@@ -37,6 +37,10 @@ CUDA_EXPORT constexpr T nonepow(int m) {
 	return m % 2 == 0 ? T(1) : T(-1);
 }
 
+double nonepow(int m) {
+	return m % 2 == 0 ? double(1) : double(-1);
+}
+
 template<class T, int P>
 struct spherical_expansion: public array<complex<T>, (P + 1) * (P + 2) / 2> {
 	CUDA_EXPORT
@@ -506,53 +510,53 @@ spherical_expansion<T, P> spherical_expansion_exp_M2L(spherical_expansion<T, P -
 
 #include <fenv.h>
 
-void ewald_compute(float& pot, float& fx, float& fy, float& fz, float dx0, float dx1, float dx2) {
-	const float cons1 = float(4.0f / sqrtf(M_PI));
+void ewald_compute(double& pot, double& fx, double& fy, double& fz, double dx0, double dx1, double dx2) {
+	const double cons1 = double(4.0f / sqrtf(M_PI));
 	fx = 0.0;
 	fy = 0.0;
 	fz = 0.0;
 	pot = 0.0;
 	const auto r2 = sqr(dx0, dx1, dx2);  // 5
 
-	if (r2 > 0.f) {
-		const float dx = dx0;
-		const float dy = dx1;
-		const float dz = dx2;
-		const float r2 = sqr(dx, dy, dz);
-		const float r = sqrt(r2);
-		const float rinv = 1.f / r;
-		const float r2inv = rinv * rinv;
-		const float r3inv = r2inv * rinv;
-		float exp0 = exp(-4.0f * r2);
-		float erf0 = erf(2.0f * r);
-		const float expfactor = cons1 * r * exp0;
-		//	const float d0 = erf0 * rinv;
-		//	const float d1 = (expfactor - erf0) * r3inv;
-		//pot += d0;
-//		fx -= dx * d1;
-//		fy -= dy * d1;
-//		fz -= dz * d1;
-		for (int xi = -3; xi <= +3; xi++) {
-			for (int yi = -3; yi <= +3; yi++) {
-				for (int zi = -3; zi <= +3; zi++) {
+	if (r2 > 0.) {
+		const double dx = dx0;
+		const double dy = dx1;
+		const double dz = dx2;
+		const double r2 = sqr(dx, dy, dz);
+		const double r = sqrt(r2);
+		const double rinv = 1. / r;
+		const double r2inv = rinv * rinv;
+		const double r3inv = r2inv * rinv;
+		double exp0 = exp(-4.0 * r2);
+		double erf0 = erf(2.0 * r);
+		const double expfactor = cons1 * r * exp0;
+		const double d0 = erf0 * rinv;
+		const double d1 = (expfactor - erf0) * r3inv;
+		pot += d0;
+		fx -= dx * d1;
+		fy -= dy * d1;
+		fz -= dz * d1;
+		for (int xi = -4; xi <= +4; xi++) {
+			for (int yi = -4; yi <= +4; yi++) {
+				for (int zi = -4; zi <= +4; zi++) {
 					const bool center = sqr(xi, yi, zi) == 0;
 					if (center) {
-						///		continue;
+						continue;
 					}
-					const float dx = dx0 - xi;
-					const float dy = dx1 - yi;
-					const float dz = dx2 - zi;
-					const float r2 = sqr(dx, dy, dz);
-					if (r2 < 2.6f * 2.6f) {
-						const float r = sqrt(r2);
-						const float rinv = 1.f / r;
-						const float r2inv = rinv * rinv;
-						const float r3inv = r2inv * rinv;
-						float exp0 = exp(-4.0f * r2);
-						float erfc0 = erfc(2.0f * r);
-						const float expfactor = cons1 * r * exp0;
-						const float d0 = -erfc0 * rinv;
-						const float d1 = (expfactor + erfc0) * r3inv;
+					const double dx = dx0 - xi;
+					const double dy = dx1 - yi;
+					const double dz = dx2 - zi;
+					const double r2 = sqr(dx, dy, dz);
+					if (r2 < 3.6 * 3.6) {
+						const double r = sqrt(r2);
+						const double rinv = 1. / r;
+						const double r2inv = rinv * rinv;
+						const double r3inv = r2inv * rinv;
+						double exp0 = exp(-4.0 * r2);
+						double erfc0 = erfc(2.0 * r);
+						const double expfactor = cons1 * r * exp0;
+						const double d0 = -erfc0 * rinv;
+						const double d1 = (expfactor + erfc0) * r3inv;
 						pot += d0;
 						fx -= dx * d1;
 						fy -= dy * d1;
@@ -561,21 +565,21 @@ void ewald_compute(float& pot, float& fx, float& fy, float& fz, float dx0, float
 				}
 			}
 		}
-		pot += float(M_PI / 4.f);
-		for (int xi = -2; xi <= +2; xi++) {
-			for (int yi = -2; yi <= +2; yi++) {
-				for (int zi = -2; zi <= +2; zi++) {
-					const float hx = xi;
-					const float hy = yi;
-					const float hz = zi;
-					const float h2 = sqr(hx, hy, hz);
-					if (h2 > 0.0f && h2 <= 8) {
-						const float hdotx = dx0 * hx + dx1 * hy + dx2 * hz;
-						const float omega = float(2.0 * M_PI) * hdotx;
-						float c, s;
-						sincosf(omega, &s, &c);
-						const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
-						const float c1 = -s * 2.0 * M_PI * c0;
+		pot += double(M_PI / 4.);
+		for (int xi = -4; xi <= +4; xi++) {
+			for (int yi = -4; yi <= +4; yi++) {
+				for (int zi = -4; zi <= +4; zi++) {
+					const double hx = xi;
+					const double hy = yi;
+					const double hz = zi;
+					const double h2 = sqr(hx, hy, hz);
+					if (h2 > 0.0f && h2 <= 10) {
+						const double hdotx = dx0 * hx + dx1 * hy + dx2 * hz;
+						const double omega = double(2.0 * M_PI) * hdotx;
+						double c, s;
+						sincos(omega, &s, &c);
+						const double c0 = -1. / h2 * exp(double(-M_PI * M_PI * 0.25f) * h2) * double(1. / M_PI);
+						const double c1 = -s * 2.0 * M_PI * c0;
 						pot += c0 * c;
 						fx -= c1 * hx;
 						fy -= c1 * hy;
@@ -605,21 +609,34 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 		}
 	}
 	G[(P + 1) * (P + 1)] = T(0);
-	for (int hx = -4; hx <= 4; hx++) {
-		for (int hy = -4; hy <= 4; hy++) {
-			for (int hz = -4; hz <= 4; hz++) {
-				const T x = x0 - hx;
-				const T y = y0 - hy;
-				const T z = z0 - hz;
-				const T r = sqrt(x * x + y * y + z * z);
-				if (r <= 4) {
+	for (int ix = -3; ix <= 3; ix++) {
+		for (int iy = -3; iy <= 3; iy++) {
+			for (int iz = -3; iz <= 3; iz++) {
+				const T x = x0 - ix;
+				const T y = y0 - iy;
+				const T z = z0 - iz;
+				const T r2 = sqr(x, y, z);
+				if (r2 <= sqr(2.6)) {
+					const T r = sqrt(x * x + y * y + z * z);
 					greens(Gr, x, y, z);
 					T gamma1 = sqrt(M_PI) * erfc(alpha * r);
 					T gamma0inv = 1.0f / sqrt(M_PI);
 					for (int l = 0; l <= P; l++) {
 						const T gamma = gamma1 * gamma0inv;
-						for (int m = -l; m <= l; m++) {
-							G[index(l, m)] += gamma * Gr[index(l, m)];
+						if (ix * ix + iy * iy + iz * iz == 0) {
+							if ((x0 * x0 + y0 * y0 + z0 * z0) == 0.0) {
+								if (l == 0) {
+									G[index(0, 0)] -= T(2) * alpha / sqrt(M_PI);
+								}
+							} else {
+								for (int m = -l; m <= l; m++) {
+									G[index(l, m)] += (gamma - nonepow(l)) * Gr[index(l, m)];
+								}
+							}
+						} else {
+							for (int m = -l; m <= l; m++) {
+								G[index(l, m)] += gamma * Gr[index(l, m)];
+							}
 						}
 						const T x = alpha * alpha * r * r;
 						const T s = l + 0.5f;
@@ -630,11 +647,12 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 			}
 		}
 	}
-	for (int hx = -4; hx <= 4; hx++) {
-		for (int hy = -4; hy <= 4; hy++) {
-			for (int hz = -4; hz <= 4; hz++) {
-				const T h = sqrt(hx * hx + hy * hy + hz * hz);
-				if (h <= 4 && h > 0) {
+	for (int hx = -2; hx <= 2; hx++) {
+		for (int hy = -2; hy <= 2; hy++) {
+			for (int hz = -2; hz <= 2; hz++) {
+				const int h2 = hx * hx + hy * hy + hz * hz;
+				if (h2 <= 8 && h2 > 0) {
+					const T h = sqrt(h2);
 					greens(Gf, (T) hx, (T) hy, (T) hz);
 					const T hdotx = hx * x0 + hy * y0 + hz * z0;
 					T gamma0inv = 1.0f / sqrt(M_PI);
@@ -793,40 +811,20 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 			M[n] = (0);
 			L[n] = (0);
 		}
-		P2M<real>(M, -x0 / 2.0, -y0 / 2.0, -z0 / 2.0);
+		P2M<real>(M, -x0 / 2.0, +y0 / 3.0, -z0 / 4.0);
 		for (int n = 0; n <= P * P; n++) {
 			M[n] *= (0.5);
 			L[n] = (0);
 		}
-	/*	{
-			multipole_type<real, P> M0, M1;
-			for (int n = 0; n <= P * P; n++) {
-				M0[n] = (0);
-				M1[n] = (0);
-			}
-			P2M<real>(M0, 0.0f, 4.f, 1.0f);
-			for (int n = 0; n <= P * P; n++) {
-				M0[n] *= 0.5;
-			}
-			M1 = M0;
-			M2M<real>(M0, 0.f, -4.f, -1.f);
-			for( int l = 0; l < P; l++) {
-				for( int m = -l; m <= l; m++) {
-					printf( "%i %i %e %e\n", l, m, M0[l*(l+1)+m], M1[l*(l+1)+m]);
-				}
-			}
-			printf( "%i %i %e %e\n", -1, -1, M0[P*P], M1[P*P]);
 
-		}
-		abort();*/
-		M2M<real>(M, -real(x0 / 2.0), -real(y0 / 2.0), -real(z0 / 2.0));
+		M2M<real>(M, -real(x0 / 2.0), -real(4.0 * y0 / 3.0), -real(3.0 * z0 / 4.0));
 		for (int n = 0; n <= (P + 1) * (P + 1); n++) {
 			L[n] = (0);
 		}
 
 		M2L_ewald<real, P>(L, M, x1, y1, z1);
 		L2L<real>(L, x2, y2, z2);
-		float phi, fx, fy, fz;
+		double phi, fx, fy, fz;
 		ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
 		fx *= 0.5;
 		fy *= 0.5;
@@ -990,7 +988,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 //speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<11, 7> run;
+	run_tests<13, 3> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
