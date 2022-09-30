@@ -970,9 +970,9 @@ int M2M_norot(int P) {
 		}
 	}
 	if (P > 1) {
-		tprint("M[%i] -= x * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
-		tprint("M[%i] -= y * M[%i];\n", (P + 1) * (P + 1), index(1, -1));
-		tprint("M[%i] -= T(2) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] += T(0.5) * x * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
+		tprint("M[%i] += T(0.5) * y * M[%i];\n", (P + 1) * (P + 1), index(1, -1));
+		tprint("M[%i] += T(0.5) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
 		tprint("M[%i] += x * x * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
 		tprint("M[%i] += y * y * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
 		tprint("M[%i] += z * z * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
@@ -1007,6 +1007,15 @@ int M2M_rot1(int P) {
 	flops++;
 	tprint("T sinphi = -y * Rinv;\n");
 	flops += 2;
+	if (P > 1) {
+		tprint("M[%i] -= T(4)*x * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
+		tprint("M[%i] -= T(4)*y * M[%i];\n", (P + 1) * (P + 1), index(1, -1));
+		tprint("M[%i] -= T(2)*z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] += x * x * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		tprint("M[%i] += y * y * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		tprint("M[%i] += z * z * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		flops += 18;
+	}
 	flops += z_rot(P, "M", false, false);
 	const auto yindex = [](int l, int m) {
 		return l*(l+1)/2+m;
@@ -1081,16 +1090,10 @@ int M2M_rot1(int P) {
 				}
 			}
 		}
+
 	}
 	tprint("sinphi = -sinphi;\n");
 	flops++;
-	if (P > 1) {
-		tprint("M[%i] -= R * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
-		tprint("M[%i] -= T(2) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
-		tprint("M[%i] += R * R * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
-		tprint("M[%i] += z * z * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
-		flops += 12;
-	}
 	flops += z_rot(P, "M", false, false);
 	deindent();
 	tprint("}");
@@ -1158,7 +1161,7 @@ int M2M_rot2(int P) {
 		}
 	}
 	if (P > 1) {
-		tprint("M[%i] -= T(2) * r * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] += r * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
 		tprint("M[%i] += r * r * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
 		flops += 6;
 	}
@@ -1759,13 +1762,13 @@ int main() {
 		regular_harmonic_xz(P);
 		switch (m2m_rot[P]) {
 		case 0:
-			M2M_norot(P - 1);
+			M2M_rot1(P - 1);
 			break;
 		case 1:
 			M2M_rot1(P - 1);
 			break;
 		case 2:
-			M2M_rot2(P - 1);
+			M2M_rot1(P - 1);
 			break;
 		};
 		switch (l2l_rot[P]) {

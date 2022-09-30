@@ -612,7 +612,6 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 				const T y = y0 - hy;
 				const T z = z0 - hz;
 				const T r = sqrt(x * x + y * y + z * z);
-				const T h = sqrt(hx * hx + hy * hy + hz * hz);
 				if (r <= 4) {
 					greens(Gr, x, y, z);
 					T gamma1 = sqrt(M_PI) * erfc(alpha * r);
@@ -628,6 +627,13 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 						gamma1 = s * gamma1 + pow(x, s) * exp(-x);
 					}
 				}
+			}
+		}
+	}
+	for (int hx = -4; hx <= 4; hx++) {
+		for (int hy = -4; hy <= 4; hy++) {
+			for (int hz = -4; hz <= 4; hz++) {
+				const T h = sqrt(hx * hx + hy * hy + hz * hz);
 				if (h <= 4 && h > 0) {
 					greens(Gf, (T) hx, (T) hy, (T) hz);
 					const T hdotx = hx * x0 + hy * y0 + hz * z0;
@@ -725,7 +731,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	L[index(1, -1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, -1)];
 	L[index(1, +0)] -= G[(P + 1) * (P + 1)] * M[index(1, +0)];
 	L[index(1, +1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, +1)];
-	L[(P + 1) * (P + 1)] -= T(0.5)*G[(P + 1) * (P + 1)] * M[index(0, 0)];
+	L[(P + 1) * (P + 1)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[index(0, 0)];
 }
 
 template<int P>
@@ -739,6 +745,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 	feenableexcept (FE_OVERFLOW);
 
 	real err2 = 0.0;
+	real norm = 0.0;
 	for (int i = 0; i < N; i++) {
 		real x0, x1, x2, y0, y1, y2, z0, z1, z2;
 		random_vector(x0, y0, z0);
@@ -769,43 +776,70 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		 P2M(M, -x0, -y0, -z0);
 		 M2L(L, M, x1, y1, z1);
 		 auto L2 = L2P(L, x2, y2, z2);*/
-	//	x0 = y0 = z0 = 0.0;
+		//x0 = y0 = 0.0;
+		//	x0 = 0.03;
+		//	x2 = -.02;
 		//z2 = 1e-5;
-//		y2 = 1e-5;
-//		x2 = 1e-5;
-//		z1 = 0.24;
-	//	y1 = 0.0;
-//		x1 = 0.0;
+		//	y2 = 1e-10;
+		//	x2 = 1e-10;
+		//	z1 = 0.24;
+		//	y1 = 0.0;
+		//	x1 = 0.0;
 //		z2 = 0.05;
+		//	x0 = y0 = 0.0;
 		multipole_type<real, P> M;
 		expansion_type<real, P> L;
 		for (int n = 0; n <= P * P; n++) {
 			M[n] = (0);
 			L[n] = (0);
 		}
-		P2M(M, x0, y0, z0);
+		P2M<real>(M, -x0 / 2.0, -y0 / 2.0, -z0 / 2.0);
 		for (int n = 0; n <= P * P; n++) {
 			M[n] *= (0.5);
 			L[n] = (0);
 		}
-		for (int n = 0; n <= (P+1) * (P+1); n++) {
+	/*	{
+			multipole_type<real, P> M0, M1;
+			for (int n = 0; n <= P * P; n++) {
+				M0[n] = (0);
+				M1[n] = (0);
+			}
+			P2M<real>(M0, 0.0f, 4.f, 1.0f);
+			for (int n = 0; n <= P * P; n++) {
+				M0[n] *= 0.5;
+			}
+			M1 = M0;
+			M2M<real>(M0, 0.f, -4.f, -1.f);
+			for( int l = 0; l < P; l++) {
+				for( int m = -l; m <= l; m++) {
+					printf( "%i %i %e %e\n", l, m, M0[l*(l+1)+m], M1[l*(l+1)+m]);
+				}
+			}
+			printf( "%i %i %e %e\n", -1, -1, M0[P*P], M1[P*P]);
+
+		}
+		abort();*/
+		M2M<real>(M, -real(x0 / 2.0), -real(y0 / 2.0), -real(z0 / 2.0));
+		for (int n = 0; n <= (P + 1) * (P + 1); n++) {
 			L[n] = (0);
 		}
+
 		M2L_ewald<real, P>(L, M, x1, y1, z1);
-		L2L<real>(L, -x2, -y2, -z2);
+		L2L<real>(L, x2, y2, z2);
 		float phi, fx, fy, fz;
-		ewald_compute(phi, fx, fy, fz, (x2 + x1) - x0, (y2 + y1) - y0, (z2 + z1) - z0);
+		ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
 		fx *= 0.5;
 		fy *= 0.5;
 		fz *= 0.5;
 
 		phi *= 0.5;
-	//	printf("%e %e %e | %e %e %e %e | %e %e %e %e\n", x2, y2, z2, L[0], -L[3], -L[1], -L[2], phi, fx, fy, fz);
-	//	err += (sqr(L[3]+fx)+ sqr(L[1]+fy)+ sqr(L[2]+fz))/(fx*fx+fy*fy+fz*fz);
-	//	printf( "%e\n",err);
-		err += abs(phi - L[0]) / abs(phi);
+		//printf("%e %e %e | %e %e %e | %e %e %e %e | %e %e %e %e\n", x0, y0, z0, x2, y2, z2, L[0], -L[3], -L[1], -L[2], phi, fx, fy, fz);
+		//	err += (sqr(L[3]+fx)+ sqr(L[1]+fy)+ sqr(L[2]+fz))/(fx*fx+fy*fy+fz*fz);
+		//	printf( "%e\n",err);
+		err += abs((phi - L[0]));
+		norm += abs(phi);
 //		printf( "%e\n", err);
-	//	abort();
+//		abort();
 		/*spherical_expansion<real, P - 1> M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
 		 auto L = spherical_expansion_exp_M2L<real, P>(M, x1, y1, z1);
 		 spherical_expansion_L2L<real, P>(L, x2, y2, z2);
@@ -828,7 +862,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 //		err += sqr((ag - ng) / ag);
 	}
 	tm1.stop();
-	err = sqrt(err / N);
+	err /= norm;
 	return std::make_pair(err, err2 / N / 2.0);
 }
 template<int NMAX, int N = 3>
@@ -956,7 +990,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 //speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<13, 7> run;
+	run_tests<11, 7> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
