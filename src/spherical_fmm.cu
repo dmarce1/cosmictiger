@@ -12,8 +12,9 @@
 #include <cosmictiger/simd.hpp>
 #include <cuda.h>
 #include <cosmictiger/fmm_kernels.hpp>
+#include <fftw3.h>
 
-using real = double;
+using real = float;
 
 double Pm(int l, int m, double x) {
 	if (m > l) {
@@ -406,13 +407,326 @@ spherical_expansion<T, P> spherical_expansion_ref_M2L(spherical_expansion<T, P -
 			}
 		}
 	}
-//spherical_inv_rotate_to_z(L, x, y, z);
-
-//	printf( "%i\n", count);
 	return L;
 }
 
+template<class T, int P>
+spherical_expansion<T, P> spherical_expansion_exp_M2L(spherical_expansion<T, P - 1> M0, T x, T y, T z) {
+	real scale = sqrt(x * x + y * y + z * z);
+	auto G0 = spherical_singular_harmonic<T, P>(x, y, z);
+	constexpr int FN = 2 * P * (2 * P + 2);
+	array<complex<T>, FN> G;
+	array<complex<T>, FN> M;
+	array<complex<T>, FN> L;
+	for (int n = 0; n <= P; n++) {
+		for (int m = 0; m <= n; m++) {
+			G0[index(n, m)].real() *= pow(scale, -(n + 1));
+			G0[index(n, m)].imag() *= pow(scale, -(n + 1));
+		}
+	}
+	for (int n = 0; n < P; n++) {
+		for (int m = 0; m <= n; m++) {
+			M0[index(n, m)].real() *= pow(scale, n);
+			M0[index(n, m)].imag() *= pow(scale, n);
+		}
+	}
+	for (int i = 0; i < FN; i++) {
+		G[i] = M[i] = complex<T>(0, 0);
+	}
+	for (int n = 0; n <= P; n++) {
+		for (int m = -n; m <= n; m++) {
+			int i = (P - n) * (2 * P + 2) + (P - m);
+			//	printf("%i %i %e + i %e\n", n, m, G0(n, m).real(), G0(n, m).imag());
+			G[i] = G0(n, m);
+		}
+	}
+	for (int n = 0; n < P; n++) {
+		for (int m = -n; m <= n; m++) {
+			int i = n * (2 * P + 2) + P + m;
+			M[i] = M0(n, m).conj();
+		}
+	}
+	/*for (int n = 0; n < FN; n++) {
+	 L[n] = complex<T>(0, 0);
+	 for (int m = 0; m < FN; m++) {
+	 L[n] += M[m] * G[(n - m + FN) % FN];
+	 }
+	 }*/
+	fftwf_complex *gin, *min, *mout, *gout, *lin, *lout;
+	fftwf_plan pg, pm, pl;
+	gin = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FN);
+	min = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FN);
+	lin = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FN);
+	gout = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FN);
+	mout = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FN);
+	lout = (fftwf_complex*) fftwf_malloc(sizeof(fftwf_complex) * FN);
+
+	pg = fftwf_plan_dft_1d(FN, gin, gout, FFTW_FORWARD, FFTW_ESTIMATE);
+	pm = fftwf_plan_dft_1d(FN, min, mout, FFTW_FORWARD, FFTW_ESTIMATE);
+	pl = fftwf_plan_dft_1d(FN, lin, lout, FFTW_BACKWARD, FFTW_ESTIMATE);
+	for (int i = 0; i < FN; i++) {
+		gin[i][0] = G[i].real();
+		gin[i][1] = G[i].imag();
+		min[i][0] = M[i].real();
+		min[i][1] = M[i].imag();
+	}
+	fftwf_execute(pg); /* repeat as needed */
+	fftwf_execute(pm); /* repeat as needed */
+	for (int i = 0; i < FN; i++) {
+		const auto mx = mout[i][0];
+		const auto my = mout[i][1];
+		const auto gx = gout[i][0];
+		const auto gy = gout[i][1];
+		lin[i][0] = (mx * gx - my * gy) / FN;
+		lin[i][1] = (my * gx + mx * gy) / FN;
+	}
+	fftwf_execute(pl); /* repeat as needed */
+	for (int i = 0; i < FN; i++) {
+		L[i].real() = lout[i][0];
+		L[i].imag() = lout[i][1];
+	}
+
+	fftwf_destroy_plan(pg);
+	fftwf_destroy_plan(pm);
+	fftwf_free(gin);
+	fftwf_free(gout);
+	fftwf_free(min);
+	fftwf_free(mout);
+	fftwf_free(lin);
+	fftwf_free(lout);
+	spherical_expansion<real, P> L0;
+	for (int n = 0; n <= P; n++) {
+		for (int m = 0; m <= n; m++) {
+			int i = (P - n) * (2 * P + 2) - m + 2 * P;
+			L0[index(n, m)] = L[i] * pow(scale, (n + 1));
+		}
+	}
+	return L0;
+}
+
 #include <fenv.h>
+
+void ewald_compute(float& pot, float& fx, float& fy, float& fz, float dx0, float dx1, float dx2) {
+	const float cons1 = float(4.0f / sqrtf(M_PI));
+	fx = 0.0;
+	fy = 0.0;
+	fz = 0.0;
+	pot = 0.0;
+	const auto r2 = sqr(dx0, dx1, dx2);  // 5
+
+	if (r2 > 0.f) {
+		const float dx = dx0;
+		const float dy = dx1;
+		const float dz = dx2;
+		const float r2 = sqr(dx, dy, dz);
+		const float r = sqrt(r2);
+		const float rinv = 1.f / r;
+		const float r2inv = rinv * rinv;
+		const float r3inv = r2inv * rinv;
+		float exp0 = exp(-4.0f * r2);
+		float erf0 = erf(2.0f * r);
+		const float expfactor = cons1 * r * exp0;
+		//	const float d0 = erf0 * rinv;
+		//	const float d1 = (expfactor - erf0) * r3inv;
+		//pot += d0;
+//		fx -= dx * d1;
+//		fy -= dy * d1;
+//		fz -= dz * d1;
+		for (int xi = -3; xi <= +3; xi++) {
+			for (int yi = -3; yi <= +3; yi++) {
+				for (int zi = -3; zi <= +3; zi++) {
+					const bool center = sqr(xi, yi, zi) == 0;
+					if (center) {
+						///		continue;
+					}
+					const float dx = dx0 - xi;
+					const float dy = dx1 - yi;
+					const float dz = dx2 - zi;
+					const float r2 = sqr(dx, dy, dz);
+					if (r2 < 2.6f * 2.6f) {
+						const float r = sqrt(r2);
+						const float rinv = 1.f / r;
+						const float r2inv = rinv * rinv;
+						const float r3inv = r2inv * rinv;
+						float exp0 = exp(-4.0f * r2);
+						float erfc0 = erfc(2.0f * r);
+						const float expfactor = cons1 * r * exp0;
+						const float d0 = -erfc0 * rinv;
+						const float d1 = (expfactor + erfc0) * r3inv;
+						pot += d0;
+						fx -= dx * d1;
+						fy -= dy * d1;
+						fz -= dz * d1;
+					}
+				}
+			}
+		}
+		pot += float(M_PI / 4.f);
+		for (int xi = -2; xi <= +2; xi++) {
+			for (int yi = -2; yi <= +2; yi++) {
+				for (int zi = -2; zi <= +2; zi++) {
+					const float hx = xi;
+					const float hy = yi;
+					const float hz = zi;
+					const float h2 = sqr(hx, hy, hz);
+					if (h2 > 0.0f && h2 <= 8) {
+						const float hdotx = dx0 * hx + dx1 * hy + dx2 * hz;
+						const float omega = float(2.0 * M_PI) * hdotx;
+						float c, s;
+						sincosf(omega, &s, &c);
+						const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
+						const float c1 = -s * 2.0 * M_PI * c0;
+						pot += c0 * c;
+						fx -= c1 * hx;
+						fy -= c1 * hy;
+						fz -= c1 * hz;
+					}
+				}
+			}
+		}
+	} else {
+		pot += 2.837291f;
+	}
+}
+
+template<class T, int P>
+void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y0, T z0) {
+	constexpr T alpha = 2.f;
+	const auto index = [](int l, int m) {
+		return l * (l + 1) + m;
+	};
+
+	expansion_type<T, P> G;
+	expansion_type<T, P> Gr;
+	expansion_type<T, P> Gf;
+	for (int l = 0; l <= P; l++) {
+		for (int m = -l; m <= l; m++) {
+			G[index(l, m)] = T(0);
+		}
+	}
+	G[(P + 1) * (P + 1)] = T(0);
+	for (int hx = -4; hx <= 4; hx++) {
+		for (int hy = -4; hy <= 4; hy++) {
+			for (int hz = -4; hz <= 4; hz++) {
+				const T x = x0 - hx;
+				const T y = y0 - hy;
+				const T z = z0 - hz;
+				const T r = sqrt(x * x + y * y + z * z);
+				const T h = sqrt(hx * hx + hy * hy + hz * hz);
+				if (r <= 4) {
+					greens(Gr, x, y, z);
+					T gamma1 = sqrt(M_PI) * erfc(alpha * r);
+					T gamma0inv = 1.0f / sqrt(M_PI);
+					for (int l = 0; l <= P; l++) {
+						const T gamma = gamma1 * gamma0inv;
+						for (int m = -l; m <= l; m++) {
+							G[index(l, m)] += gamma * Gr[index(l, m)];
+						}
+						const T x = alpha * alpha * r * r;
+						const T s = l + 0.5f;
+						gamma0inv /= -s;
+						gamma1 = s * gamma1 + pow(x, s) * exp(-x);
+					}
+				}
+				if (h <= 4 && h > 0) {
+					greens(Gf, (T) hx, (T) hy, (T) hz);
+					const T hdotx = hx * x0 + hy * y0 + hz * z0;
+					T gamma0inv = 1.0f / sqrt(M_PI);
+					T hpow = 1.f / h;
+					T pipow = 1.f / sqrt(M_PI);
+					for (int l = 0; l <= P; l++) {
+						for (int m = 0; m <= l; m++) {
+							const T phi = T(2.0 * M_PI) * hdotx;
+							T Rx, Ry, ax, ay, bx, by;
+							sincos(phi, &Ry, &Rx);
+							if (m == 0) {
+								ax = Gf[index(l, m)] * Rx;
+								ay = Gf[index(l, m)] * Ry;
+							} else {
+								ax = Gf[index(l, m)] * Rx - Gf[index(l, -m)] * Ry;
+								ay = Gf[index(l, m)] * Ry + Gf[index(l, -m)] * Rx;
+							}
+							T c0 = gamma0inv * hpow * pipow * exp(-h * h * T(M_PI * M_PI) / (alpha * alpha));
+							ax *= c0;
+							ay *= c0;
+							if (l % 4 == 1) {
+								T tmp = ax;
+								ax = -ay;
+								ay = tmp;
+							} else if (l % 4 == 2) {
+								ax = -ax;
+								ay = -ay;
+							} else if (l % 4 == 3) {
+								T tmp = ax;
+								ax = ay;
+								ay = -tmp;
+							}
+							G[index(l, m)] += ax;
+							if (m != 0) {
+								G[index(l, -m)] += ay;
+							}
+						}
+						const T s = l + 0.5f;
+						gamma0inv /= s;
+						hpow *= h * h;
+						pipow *= M_PI;
+					}
+				}
+			}
+		}
+	}
+	for (int l = 0; l <= P; l++) {
+		for (int m = -l; m <= l; m++) {
+			G[index(l, m)] *= -1;
+		}
+	}
+	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
+	spherical_expansion<T, P> L0, G0;
+	spherical_expansion<T, P - 1> M0;
+	for (int l = 0; l <= P; l++) {
+		G0[l * (l + 1) / 2].real() = G[index(l, 0)];
+		G0[l * (l + 1) / 2].imag() = T(0);
+		for (int m = 1; m <= l; m++) {
+			G0[l * (l + 1) / 2 + m].real() = G[index(l, m)];
+			G0[l * (l + 1) / 2 + m].imag() = G[index(l, -m)];
+		}
+	}
+	for (int l = 0; l < P; l++) {
+		M0[l * (l + 1) / 2].real() = M[index(l, 0)];
+		M0[l * (l + 1) / 2].imag() = T(0);
+		for (int m = 1; m <= l; m++) {
+			M0[l * (l + 1) / 2 + m].real() = M[index(l, m)];
+			M0[l * (l + 1) / 2 + m].imag() = M[index(l, -m)];
+		}
+	}
+	for (int n = 0; n <= P; n++) {
+		for (int m = 0; m <= n; m++) {
+			L0[n * (n + 1) / 2 + m] = complex<T>(T(0), T(0));
+			const int kmax = std::min(P - n, P - 1);
+			for (int k = 0; k <= kmax; k++) {
+				const int lmin = std::max(-k, -n - k - m);
+				const int lmax = std::min(k, n + k - m);
+				for (int l = lmin; l <= lmax; l++) {
+					L0[n * (n + 1) / 2 + m] += M0(k, l).conj() * G0(n + k, m + l);
+				}
+			}
+		}
+	}
+	for (int l = 0; l <= P; l++) {
+		L[index(l, 0)] = L0[l * (l + 1) / 2].real();
+		for (int m = 1; m <= l; m++) {
+			L[index(l, m)] = L0[l * (l + 1) / 2 + m].real();
+			L[index(l, -m)] = L0[l * (l + 1) / 2 + m].imag();
+		}
+	}
+	L[index(0, 0)] += M[index(0, 0)] * T(M_PI / (alpha * alpha));
+//	printf( "%e %e\n",  G[(P + 1) * (P + 1)] * M[P * P], L[index(0, 0)]);
+	L[index(0, 0)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[P * P];
+	L[index(1, -1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, -1)];
+	L[index(1, +0)] -= G[(P + 1) * (P + 1)] * M[index(1, +0)];
+	L[index(1, +1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, +1)];
+	L[(P + 1) * (P + 1)] -= T(0.5)*G[(P + 1) * (P + 1)] * M[index(0, 0)];
+}
 
 template<int P>
 std::pair<real, real> test_M2L(real theta = 0.5) {
@@ -429,112 +743,89 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		real x0, x1, x2, y0, y1, y2, z0, z1, z2;
 		random_vector(x0, y0, z0);
 		random_vector(x0, y0, z0);
-		random_vector(x0, y0, z0);
-			random_unit(x1, y1, z1);
+		//	random_vector(x0, y0, z0);
+		random_unit(x1, y1, z1);
 		random_vector(x2, y2, z2);
-		/*	x0 = 0.0;
-		 y0 = 0.0;
-		 z0 = 0.0;
-		 x1 = 1.0;
-		 y1 = 1.0;
-		 z1 = 0.0;
-		 x2 = 0.0;
-		 y2 = 0.0;
-		 z2 = 0.0;*/
+//		x0 = y0 = z0 = 0;
+		//	x2 = y2 = z2 = 0;
 
-		x1 /= 0.5 * theta;
-		y1 /= 0.5 * theta;
-		z1 /= 0.5 * theta;
-		///	x1 = z1 = 0.0;
-		//x2 = y2 = z2 = 0.0;
-		//z2 = x2 = y2 = 0.0;
-		//	z0 = x0 = y0 = 0.0;
-
-		auto M0 = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
-		array<real, P * P> M;
-		for (int l = 0; l < P; l++) {
-			for (int m = 0; m <= l; m++) {
-				if (m) {
-					M[l * (l + 1) - m] = M0[index(l, m)].imag();
-				}
-				M[l * (l + 1) + m] = M0[index(l, m)].real();
-			}
-		}
-//		compressed_multipole<real, P - 1> Mc;
-//		Mc.compress(M, 1.0);
-		array<real, (P + 1) * (P + 1)> L0;
-		array<real, 4> L3;
-		for (int n = 0; n < (P + 1) * (P + 1); n++) {
-			L0[n] = 0.0;
-		}
-		for (int n = 0; n < 4; n++) {
-			L3[n] = 0.0;
-		}
-		M2L<real>(L0, M, x1, y1, z1);
-		/*	M2L<real>(L3, M, x1, y1, z1);
-		 for (int n = 0; n < 4; n++) {
-		 printf("%e %e %e\n", L0[n]/ L3[n], L0[n], L3[n]);
+//		x1 /= 0.5 * theta;
+//		y1 /= 0.5 * theta;
+//		z1 /= 0.5 * theta;
+		x1 /= 2.0;
+		y1 /= 2.0;
+		z1 /= 2.0;
+		x0 *= 0.25 * theta;
+		y0 *= 0.25 * theta;
+		z0 *= 0.25 * theta;
+		x2 *= 0.25 * theta;
+		y2 *= 0.25 * theta;
+		z2 *= 0.25 * theta;
+		/*multipole_type<real, P> M;
+		 expansion_type<real, P> L;
+		 for (int l = 0; l < L.size(); l++) {
+		 L[l] = 0.f;
 		 }
-		 printf("\n");
-		 abort();*/
-/*		auto H1 = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
-		array<real, P * P> H2;
-		regular_harmonic<real>(H2, x0, y0, z0);
-		spherical_expansion_M2M(H1, x1, y1, z1);
-		M2M(H2, x1, y1, z1);
-		for (int l = 0; l < P; l++) {
-			for (int m = -l; m <= l; m++) {
-				auto h1 = m >= 0 ? H1[index(l, abs(m))].real() : H1[index(l, abs(m))].imag();
-				auto h2 = H2[l * (l + 1) + m];
-				printf("%i %i %e %e %e\n", l, m, h1, h2, h1 - h2);
-			}
+		 P2M(M, -x0, -y0, -z0);
+		 M2L(L, M, x1, y1, z1);
+		 auto L2 = L2P(L, x2, y2, z2);*/
+	//	x0 = y0 = z0 = 0.0;
+		//z2 = 1e-5;
+//		y2 = 1e-5;
+//		x2 = 1e-5;
+//		z1 = 0.24;
+	//	y1 = 0.0;
+//		x1 = 0.0;
+//		z2 = 0.05;
+		multipole_type<real, P> M;
+		expansion_type<real, P> L;
+		for (int n = 0; n <= P * P; n++) {
+			M[n] = (0);
+			L[n] = (0);
 		}
-		abort();*/
-		auto L = spherical_expansion_ref_M2L<real, P>(M0, x1, y1, z1);
-		spherical_expansion<real, P> L2;
-		for (int l = 0; l <= P; l++) {
-			for (int m = 0; m <= l; m++) {
-				if (m != 0) {
-					L2[index(l, m)].imag() = L0[l * (l + 1) - m];
-				}
-				L2[index(l, m)].real() = L0[l * (l + 1) + m];
-			}
+		P2M(M, x0, y0, z0);
+		for (int n = 0; n <= P * P; n++) {
+			M[n] *= (0.5);
+			L[n] = (0);
 		}
-		spherical_expansion_L2L(L, x2, y2, z2);
-		spherical_expansion_L2L(L2, x2, y2, z2);
-//			L.print();
-//			printf("\n");
+		for (int n = 0; n <= (P+1) * (P+1); n++) {
+			L[n] = (0);
+		}
+		M2L_ewald<real, P>(L, M, x1, y1, z1);
+		L2L<real>(L, -x2, -y2, -z2);
+		float phi, fx, fy, fz;
+		ewald_compute(phi, fx, fy, fz, (x2 + x1) - x0, (y2 + y1) - y0, (z2 + z1) - z0);
+		fx *= 0.5;
+		fy *= 0.5;
+		fz *= 0.5;
 
-//			L2.print();
-		//	abort();
-		for (int l = 0; l <= P; l++) {
-			real norm = 0.0;
-			for (int m = 0; m <= l; m++) {
-				norm += L(l, m).norm();
-			}
-			norm /= l + 1;
-			for (int m = 0; m <= l; m++) {
-				err2 += abs(L2(l, m).real() - L(l, m).real()) / norm;
-				err2 += abs(L2(l, m).imag() - L(l, m).imag()) / norm;
-			}
-		}
-		const real dx = (x2 + x1) - x0;
-		const real dy = (y2 + y1) - y0;
-		const real dz = (z2 + z1) - z0;
-		const real r = sqrt(sqr(dx, dy, dz));
-		const real ap = 1.0 / r;
-		const real ax = -dx / (r * r * r);
-		const real ay = -dy / (r * r * r);
-		const real az = -dz / (r * r * r);
-		const real np = L2(0, 0).real();
-		const real nx = -L2(1, 1).real();
-		const real ny = -L2(1, 1).imag();
-		const real nz = -L2(1, 0).real();
-		const real ag = sqrt(sqr(ax, ay, az));
-		const real ng = sqrt(sqr(nx, ny, nz));
-		//printf("%e %e %e | %e %e %e\n", nx, ny, nz, ax, ay, az);
+		phi *= 0.5;
+	//	printf("%e %e %e | %e %e %e %e | %e %e %e %e\n", x2, y2, z2, L[0], -L[3], -L[1], -L[2], phi, fx, fy, fz);
+	//	err += (sqr(L[3]+fx)+ sqr(L[1]+fy)+ sqr(L[2]+fz))/(fx*fx+fy*fy+fz*fz);
+	//	printf( "%e\n",err);
+		err += abs(phi - L[0]) / abs(phi);
+//		printf( "%e\n", err);
+	//	abort();
+		/*spherical_expansion<real, P - 1> M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
+		 auto L = spherical_expansion_exp_M2L<real, P>(M, x1, y1, z1);
+		 spherical_expansion_L2L<real, P>(L, x2, y2, z2);
+		 const real dx = (x2 + x1) - x0;
+		 const real dy = (y2 + y1) - y0;
+		 const real dz = (z2 + z1) - z0;
+		 const real r = sqrt(sqr(dx, dy, dz));
+		 const real ap = 1.0 / r;
+		 const real ax = -dx / (r * r * r);
+		 const real ay = -dy / (r * r * r);
+		 const real az = -dz / (r * r * r);
+		 const real np = L(0, 0).real();
+		 const real nx = -L(1, 1).real();
+		 const real ny = -L(1, 1).imag();
+		 const real nz = -L(1, 0).real();
+		 const real ag = sqrt(sqr(ax, ay, az));
+		 const real ng = sqrt(sqr(nx, ny, nz));*/
+		//	printf("%e %e %e | %e %e %e\n", nx, ny, nz, ax, ay, az);
 //		abort();
-		err += sqr((ag - ng) / ag);
+//		err += sqr((ag - ng) / ag);
 	}
 	tm1.stop();
 	err = sqrt(err / N);
@@ -544,7 +835,7 @@ template<int NMAX, int N = 3>
 struct run_tests {
 	void operator()() {
 		auto a = test_M2L<N>();
-		printf("%i %e %e\n", N, a.first, a.second);
+		printf("%i %e\n", N, a.first);
 		run_tests<NMAX, N + 1> run;
 		run();
 	}
@@ -650,6 +941,9 @@ void speed_test(int N, int nblocks) {
 	CUDA_CHECK(cudaFree(y));
 	CUDA_CHECK(cudaFree(z));
 }
+bool close21(double a) {
+	return std::abs(1.0 - a) < 1.0e-20;
+}
 
 int main() {
 	/*constexpr int nbits = 20;
@@ -661,7 +955,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(5));
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
-	//speed_test<7>(2 * 1024 * 1024, 100);
+//speed_test<7>(2 * 1024 * 1024, 100);
 	run_tests<13, 7> run;
 	run();
 //	constexpr int P = 7;

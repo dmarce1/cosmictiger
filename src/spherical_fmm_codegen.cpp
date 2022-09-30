@@ -166,6 +166,7 @@ int greens(int P) {
 	tprint("const T r2inv = T(1) / r2;\n");
 	flops += 4;
 	tprint("O[0] = sqrt(r2inv);\n");
+	tprint("O[%i] = T(0);\n", (P + 1) * (P + 1));
 	flops += 4;
 	tprint("x *= r2inv;\n");
 	tprint("y *= r2inv;\n");
@@ -226,6 +227,7 @@ int greens_xz(int P) {
 	tprint("CUDA_EXPORT void greens_xz(expansion_xz_type<T,%i>& O, T x, T z, T r2inv ) {\n", P);
 	indent();
 	tprint("O[0] = sqrt(r2inv);\n");
+	tprint("O[%i] = T(0);\n", (P + 1) * (P + 1));
 	flops += 4;
 	tprint("x *= r2inv;\n");
 	flops += 1;
@@ -764,6 +766,7 @@ int regular_harmonic(int P) {
 	tprint("T ax;\n");
 	tprint("T ay;\n");
 	tprint("Y[0] = T(1);\n");
+	tprint("Y[%i] = r2;\n", (P + 1) * (P + 1));
 	for (int m = 0; m <= P; m++) {
 		if (m > 0) {
 			//	Y[index(m, m)] = Y[index(m - 1, m - 1)] * R / T(2 * m);
@@ -820,6 +823,7 @@ int regular_harmonic_xz(int P) {
 	tprint("T ax;\n");
 	tprint("T ay;\n");
 	tprint("Y[0] = T(1);\n");
+	tprint("Y[%i] = r2;\n", (P + 2) * (P + 1) / 2);
 	const auto index = [](int l, int m) {
 		return l*(l+1)/2+m;
 	};
@@ -854,6 +858,125 @@ int regular_harmonic_xz(int P) {
 			tprint("Y[%i] = ax * Y[%i] + ay * Y[%i];\n", index(n, m), index(n - 1, m), -(double) inv, index(n - 2, m));
 			flops += 5;
 		}
+	}
+	deindent();
+	tprint("}");
+	tprint("\n");
+	return flops;
+}
+
+int M2M_norot(int P) {
+	int flops = 0;
+	const auto c = tprint_on;
+	set_tprint(false);
+	flops += regular_harmonic(P);
+	set_tprint(c);
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT void M2M(multipole_type<T, %i>& M, T x, T y, T z) {\n", P + 1);
+	indent();
+//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
+	tprint("expansion_type<T, %i> Y;\n", P);
+	tprint("regular_harmonic(Y, -x, -y, -z);\n");
+	flops += 3;
+	tprint("T mx;\n");
+	tprint("T my;\n");
+	tprint("T gx;\n");
+	tprint("T gy;\n");
+	for (int n = P; n >= 0; n--) {
+		for (int m = 0; m <= n; m++) {
+			for (int k = 1; k <= n; k++) {
+				const int lmin = std::max(-k, m - n + k);
+				const int lmax = std::min(k, m + n - k);
+				for (int l = -k; l <= k; l++) {
+					char* mxstr = nullptr;
+					char* mystr = nullptr;
+					char* gxstr = nullptr;
+					char* gystr = nullptr;
+					int mxsgn = 1;
+					int mysgn = 1;
+					int gxsgn = 1;
+					int gysgn = 1;
+					if (abs(m - l) > n - k) {
+						continue;
+					}
+					if (-abs(m - l) < k - n) {
+						continue;
+					}
+					if (m - l > 0) {
+						asprintf(&mxstr, "M[%i]", index(n - k, abs(m - l)));
+						asprintf(&mystr, "M[%i]", index(n - k, -abs(m - l)));
+					} else if (m - l < 0) {
+						if (abs(m - l) % 2 == 0) {
+							asprintf(&mxstr, "M[%i]", index(n - k, abs(m - l)));
+							asprintf(&mystr, "M[%i]", index(n - k, -abs(m - l)));
+							mysgn = -1;
+						} else {
+							asprintf(&mxstr, "M[%i]", index(n - k, abs(m - l)));
+							asprintf(&mystr, "M[%i]", index(n - k, -abs(m - l)));
+							mxsgn = -1;
+						}
+					} else {
+						asprintf(&mxstr, "M[%i]", index(n - k, 0));
+					}
+					if (l > 0) {
+						asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
+						asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
+					} else if (l < 0) {
+						if (abs(l) % 2 == 0) {
+							asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
+							asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
+							gysgn = -1;
+						} else {
+							asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
+							asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
+							gxsgn = -1;
+						}
+					} else {
+						asprintf(&gxstr, "Y[%i]", index(k, 0));
+					}
+					const auto csgn = [](int i) {
+						return i > 0 ? '+' : '-';
+					};
+					tprint("M[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+					flops += 2;
+					if (gystr && mystr) {
+						tprint("M[%i] %c= %s * %s;\n", index(n, m), csgn(-mysgn * gysgn), mystr, gystr);
+						flops += 2;
+					}
+					if (m > 0) {
+						if (gystr) {
+							tprint("M[%i] %c= %s * %s;\n", index(n, -m), csgn(mxsgn * gysgn), mxstr, gystr);
+							flops += 2;
+						}
+						if (mystr) {
+							tprint("M[%i] %c= %s * %s;\n", index(n, -m), csgn(mysgn * gxsgn), mystr, gxstr);
+							flops += 2;
+						}
+					}
+					if (gxstr) {
+						free(gxstr);
+					}
+					if (mxstr) {
+						free(mxstr);
+					}
+					if (gystr) {
+						free(gystr);
+					}
+					if (mystr) {
+						free(mystr);
+					}
+				}
+			}
+		}
+	}
+	if (P > 1) {
+		tprint("M[%i] -= x * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
+		tprint("M[%i] -= y * M[%i];\n", (P + 1) * (P + 1), index(1, -1));
+		tprint("M[%i] -= T(2) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] += x * x * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		tprint("M[%i] += y * y * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		tprint("M[%i] += z * z * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		flops += 18;
 	}
 	deindent();
 	tprint("}");
@@ -961,8 +1084,14 @@ int M2M_rot1(int P) {
 	}
 	tprint("sinphi = -sinphi;\n");
 	flops++;
+	if (P > 1) {
+		tprint("M[%i] -= R * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
+		tprint("M[%i] -= T(2) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] += R * R * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		tprint("M[%i] += z * z * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		flops += 12;
+	}
 	flops += z_rot(P, "M", false, false);
-	flops++;
 	deindent();
 	tprint("}");
 	tprint("\n");
@@ -1027,6 +1156,11 @@ int M2M_rot2(int P) {
 			}
 
 		}
+	}
+	if (P > 1) {
+		tprint("M[%i] -= T(2) * r * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] += r * r * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
+		flops += 6;
 	}
 	flops += xz_swap(P, "M", false, false, false, false);
 	tprint("sinphi = -sinphi;\n");
@@ -1141,6 +1275,16 @@ int L2L_norot(int P) {
 			}
 		}
 	}
+	if (P > 1) {
+		tprint("L[%i] -= T(2) * x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += x * x * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += y * y * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		flops += 16;
+	}
+
 	deindent();
 	tprint("}");
 	tprint("\n");
@@ -1239,6 +1383,13 @@ int L2L_rot1(int P) {
 			}
 		}
 	}
+	if (P > 1) {
+		tprint("L[%i] -= T(2) * R * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += R * R * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		flops += 11;
+	}
 	tprint("sinphi = -sinphi;\n");
 	flops++;
 	flops += z_rot(P, "L", false, false);
@@ -1308,6 +1459,11 @@ int L2L_rot2(int P) {
 
 		}
 	}
+	if (P > 1) {
+		tprint("L[%i] -= T(2) * r * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L[%i] += r * r * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		flops += 6;
+	}
 	flops += xz_swap(P, "L", true, false, false, false);
 	tprint("sinphi = -sinphi;\n");
 	flops += z_rot(P, "L", false, false);
@@ -1333,7 +1489,7 @@ int L2P(int P) {
 	indent();
 	//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
 	tprint("expansion_type<T, %i> Y;\n", P);
-	tprint("expansion_type<T, 4> L;\n");
+	tprint("expansion_type<T, 1> L;\n");
 	tprint("L[0] = L[1] = L[2] = L[3] = T(0);\n");
 	tprint("regular_harmonic(Y, -x, -y, -z);\n");
 	flops += 3;
@@ -1444,123 +1600,21 @@ int L2P(int P) {
 			}
 		}
 	}
+	if (P > 1) {
+		tprint("L[%i] -= x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L[%i] -= y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += x * x * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += y * y * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		flops += 16;
+	}
 	tprint("return L;\n");
 	deindent();
 	tprint("}");
 	tprint("\n");
 	return flops;
 }
-
-int M2M_norot(int P) {
-	int flops = 0;
-	const auto c = tprint_on;
-	set_tprint(false);
-	flops += regular_harmonic(P);
-	set_tprint(c);
-	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2M(multipole_type<T, %i>& M, T x, T y, T z) {\n", P + 1);
-	indent();
-//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
-	tprint("expansion_type<T, %i> Y;\n", P);
-	tprint("regular_harmonic(Y, -x, -y, -z);\n");
-	flops += 3;
-	tprint("T mx;\n");
-	tprint("T my;\n");
-	tprint("T gx;\n");
-	tprint("T gy;\n");
-	for (int n = P; n >= 0; n--) {
-		for (int m = 0; m <= n; m++) {
-			for (int k = 1; k <= n; k++) {
-				const int lmin = std::max(-k, m - n + k);
-				const int lmax = std::min(k, m + n - k);
-				for (int l = -k; l <= k; l++) {
-					char* mxstr = nullptr;
-					char* mystr = nullptr;
-					char* gxstr = nullptr;
-					char* gystr = nullptr;
-					int mxsgn = 1;
-					int mysgn = 1;
-					int gxsgn = 1;
-					int gysgn = 1;
-					if (abs(m - l) > n - k) {
-						continue;
-					}
-					if (-abs(m - l) < k - n) {
-						continue;
-					}
-					if (m - l > 0) {
-						asprintf(&mxstr, "M[%i]", index(n - k, abs(m - l)));
-						asprintf(&mystr, "M[%i]", index(n - k, -abs(m - l)));
-					} else if (m - l < 0) {
-						if (abs(m - l) % 2 == 0) {
-							asprintf(&mxstr, "M[%i]", index(n - k, abs(m - l)));
-							asprintf(&mystr, "M[%i]", index(n - k, -abs(m - l)));
-							mysgn = -1;
-						} else {
-							asprintf(&mxstr, "M[%i]", index(n - k, abs(m - l)));
-							asprintf(&mystr, "M[%i]", index(n - k, -abs(m - l)));
-							mxsgn = -1;
-						}
-					} else {
-						asprintf(&mxstr, "M[%i]", index(n - k, 0));
-					}
-					if (l > 0) {
-						asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
-						asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
-					} else if (l < 0) {
-						if (abs(l) % 2 == 0) {
-							asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
-							asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
-							gysgn = -1;
-						} else {
-							asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
-							asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
-							gxsgn = -1;
-						}
-					} else {
-						asprintf(&gxstr, "Y[%i]", index(k, 0));
-					}
-					const auto csgn = [](int i) {
-						return i > 0 ? '+' : '-';
-					};
-					tprint("M[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
-					flops += 2;
-					if (gystr && mystr) {
-						tprint("M[%i] %c= %s * %s;\n", index(n, m), csgn(-mysgn * gysgn), mystr, gystr);
-						flops += 2;
-					}
-					if (m > 0) {
-						if (gystr) {
-							tprint("M[%i] %c= %s * %s;\n", index(n, -m), csgn(mxsgn * gysgn), mxstr, gystr);
-							flops += 2;
-						}
-						if (mystr) {
-							tprint("M[%i] %c= %s * %s;\n", index(n, -m), csgn(mysgn * gxsgn), mystr, gxstr);
-							flops += 2;
-						}
-					}
-					if (gxstr) {
-						free(gxstr);
-					}
-					if (mxstr) {
-						free(mxstr);
-					}
-					if (gystr) {
-						free(gystr);
-					}
-					if (mystr) {
-						free(mystr);
-					}
-				}
-			}
-		}
-	}
-	deindent();
-	tprint("}");
-	tprint("\n");
-	return flops;
-}
-
 int P2M(int P) {
 	int flops = 0;
 	tprint("\n");
@@ -1569,11 +1623,10 @@ int P2M(int P) {
 	flops += regular_harmonic(P);
 	set_tprint(c);
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT multipole_type<T,%i> P2M( T x, T y, T z ) {\n", P + 1);
+	tprint("CUDA_EXPORT void P2M( multipole_type<T,%i>& M, T x, T y, T z ) {\n", P + 1);
 	indent();
-	tprint("multipole_type<T,%i> M;\n", P + 1);
 	tprint("regular_harmonic(M, -x, -y, -z);\n");
-	tprint("return M;\n");
+	tprint("M[%i] = x * x + y * y + z * z;\n", (P + 1) * (P + 1));
 	deindent();
 	tprint("}\n");
 	tprint("\n");
@@ -1587,15 +1640,15 @@ int main() {
 	tprint("#include <cosmictiger/cuda.hpp>\n");
 	tprint("\n");
 	tprint("template<class T, int P>\n");
-	tprint("using multipole_type = array<T, P*P>;\n");
+	tprint("using multipole_type = array<T, (P > 2) ? P*P+1:P*P>;\n");
 	tprint("\n");
 	tprint("template<class T, int P>\n");
-	tprint("using expansion_type = array<T, (P+1)*(P+1)>;\n");
+	tprint("using expansion_type = array<T, (P > 1) ? (P+1)*(P+1)+1:(P+1)*(P+1)>;\n");
 	tprint("\n");
 	tprint("template<class T, int P>\n");
-	tprint("using expansion_xz_type = array<T, (P+1)*(P+2)/2>;\n");
+	tprint("using expansion_xz_type = array<T, (P > 1) ? (P+1)*(P+2)/2+1:(P+1)*(P+2)/2>;\n");
 	tprint("\n");
-	constexpr int pmax = 142;
+	constexpr int pmax = 16;
 	std::vector<int> pc_flops(pmax + 1);
 	std::vector<int> cp_flops(pmax + 1);
 	std::vector<int> cc_flops(pmax + 1);
@@ -1713,6 +1766,17 @@ int main() {
 			break;
 		case 2:
 			M2M_rot2(P - 1);
+			break;
+		};
+		switch (l2l_rot[P]) {
+		case 0:
+			L2L_norot(P);
+			break;
+		case 1:
+			L2L_rot1(P);
+			break;
+		case 2:
+			L2L_rot2(P);
 			break;
 		};
 		L2P(P);

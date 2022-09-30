@@ -193,6 +193,7 @@ add_executable( spherical_fmm_codegen src/spherical_fmm_codegen.cpp )
 add_executable( ferrer_kernel_codegen src/ferrer_kernel_codegen.cpp cosmictiger/defs.hpp )
 add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
 target_link_libraries( fmm_kernel_codegen PUBLIC dl )
+target_link_libraries( spherical_fmm PUBLIC fftw3f fftw3 )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
 #set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
