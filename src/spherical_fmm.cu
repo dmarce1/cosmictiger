@@ -592,7 +592,6 @@ void ewald_compute(double& pot, double& fx, double& fy, double& fz, double dx0, 
 		pot += 2.837291f;
 	}
 }
-
 template<class T, int P>
 void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y0, T z0) {
 	constexpr T alpha = 2.f;
@@ -707,42 +706,142 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
 	spherical_expansion<T, P> L0, G0;
 	spherical_expansion<T, P - 1> M0;
-	for (int l = 0; l <= P; l++) {
-		G0[l * (l + 1) / 2].real() = G[index(l, 0)];
-		G0[l * (l + 1) / 2].imag() = T(0);
-		for (int m = 1; m <= l; m++) {
-			G0[l * (l + 1) / 2 + m].real() = G[index(l, m)];
-			G0[l * (l + 1) / 2 + m].imag() = G[index(l, -m)];
-		}
-	}
-	for (int l = 0; l < P; l++) {
-		M0[l * (l + 1) / 2].real() = M[index(l, 0)];
-		M0[l * (l + 1) / 2].imag() = T(0);
-		for (int m = 1; m <= l; m++) {
-			M0[l * (l + 1) / 2 + m].real() = M[index(l, m)];
-			M0[l * (l + 1) / 2 + m].imag() = M[index(l, -m)];
-		}
-	}
+	/*	for (int l = 0; l <= P; l++) {
+	 G0[l * (l + 1) / 2].real() = G[index(l, 0)];
+	 G0[l * (l + 1) / 2].imag() = T(0);
+	 for (int m = 1; m <= l; m++) {
+	 G0[l * (l + 1) / 2 + m].real() = G[index(l, m)];
+	 G0[l * (l + 1) / 2 + m].imag() = G[index(l, -m)];
+	 }
+	 }
+	 for (int l = 0; l < P; l++) {
+	 M0[l * (l + 1) / 2].real() = M[index(l, 0)];
+	 M0[l * (l + 1) / 2].imag() = T(0);
+	 for (int m = 1; m <= l; m++) {
+	 M0[l * (l + 1) / 2 + m].real() = M[index(l, m)];
+	 M0[l * (l + 1) / 2 + m].imag() = M[index(l, -m)];
+	 }
+	 }*/
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
-			L0[n * (n + 1) / 2 + m] = complex<T>(T(0), T(0));
+			L[index(n, m)] = L[index(n, -m)] = 0;
 			const int kmax = std::min(P - n, P - 1);
 			for (int k = 0; k <= kmax; k++) {
 				const int lmin = std::max(-k, -n - k - m);
 				const int lmax = std::min(k, n + k - m);
 				for (int l = lmin; l <= lmax; l++) {
-					L0[n * (n + 1) / 2 + m] += M0(k, l).conj() * G0(n + k, m + l);
+					auto mx = M[index(k, abs(l))];
+					auto my = M[index(k, -abs(l))];
+					auto gx = G[index(n + k, abs(l + m))];
+					auto gy = G[index(n + k, -abs(l + m))];
+					if (l == 0) {
+						if ((l + m) == 0) {
+							L[index(n, m)] += mx * gx;
+						} else if ((l + m) < 0) {
+							if (abs((l + m)) % 2 == 0) {
+								L[index(n, m)] += mx * gx;
+								if (m != 0) {
+									L[index(n, -m)] -= mx * gy;
+								}
+							} else {
+								L[index(n, m)] -= mx * gx;
+								if (m != 0) {
+									L[index(n, -m)] += mx * gy;
+								}
+							}
+						} else {
+							L[index(n, m)] += mx * gx;
+							if (m != 0) {
+								L[index(n, -m)] += mx * gy;
+							}
+						}
+					} else if (l < 0) {
+						if (abs(l) % 2 == 0) {
+							if ((l + m) == 0) {
+								L[index(n, m)] += mx * gx;
+								if (m != 0) {
+									L[index(n, -m)] += gx * my;
+								}
+							} else if ((l + m) < 0) {
+								if (abs((l + m)) % 2 == 0) {
+									L[index(n, m)] += mx * gx + my * gy;
+									if (m != 0) {
+										L[index(n, -m)] -= mx * gy - gx * my;
+									}
+								} else {
+									L[index(n, m)] -= mx * gx + my * gy;
+									if (m != 0) {
+										L[index(n, -m)] += mx * gy - gx * my;
+									}
+								}
+							} else {
+								L[index(n, m)] += mx * gx - my * gy;
+								if (m != 0) {
+									L[index(n, -m)] += mx * gy + gx * my;
+								}
+							}
+						} else {
+							if ((l + m) == 0) {
+								L[index(n, m)] -= mx * gx;
+								if (m != 0) {
+									L[index(n, -m)] -= gx * my;
+								}
+							} else if ((l + m) < 0) {
+								if (abs((l + m)) % 2 == 0) {
+									L[index(n, m)] -= mx * gx + my * gy;
+									if (m != 0) {
+										L[index(n, -m)] += mx * gy - gx * my;
+									}
+								} else {
+									L[index(n, m)] += mx * gx + my * gy;
+									if (m != 0) {
+										L[index(n, -m)] -= mx * gy - gx * my;
+									}
+								}
+							} else {
+								L[index(n, m)] -= mx * gx - my * gy;
+								if (m != 0) {
+									L[index(n, -m)] -= mx * gy + gx * my;
+								}
+							}
+						}
+					} else {
+						if ((l + m) == 0) {
+							L[index(n, m)] += mx * gx;
+							if (m != 0) {
+								L[index(n, -m)] -= gx * my;
+							}
+						} else if ((l + m) < 0) {
+							if (abs((l + m)) % 2 == 0) {
+								L[index(n, m)] += mx * gx - my * gy;
+								if (m != 0) {
+									L[index(n, -m)] -= mx * gy + gx * my;
+								}
+							} else {
+								L[index(n, m)] -= mx * gx - my * gy;
+								if (m != 0) {
+									L[index(n, -m)] += mx * gy + gx * my;
+								}
+							}
+						} else {
+							L[index(n, m)] += mx * gx + my * gy;
+							if (m != 0) {
+								L[index(n, -m)] += mx * gy - gx * my;
+							}
+						}
+
+					}
 				}
 			}
 		}
 	}
-	for (int l = 0; l <= P; l++) {
-		L[index(l, 0)] = L0[l * (l + 1) / 2].real();
-		for (int m = 1; m <= l; m++) {
-			L[index(l, m)] = L0[l * (l + 1) / 2 + m].real();
-			L[index(l, -m)] = L0[l * (l + 1) / 2 + m].imag();
-		}
-	}
+	/*	for (int l = 0; l <= P; l++) {
+	 L[index(l, 0)] = L0[l * (l + 1) / 2].real();
+	 for (int m = 1; m <= l; m++) {
+	 L[index(l, m)] = L0[l * (l + 1) / 2 + m].real();
+	 L[index(l, -m)] = L0[l * (l + 1) / 2 + m].imag();
+	 }
+	 }*/
 	L[index(0, 0)] += M[index(0, 0)] * T(M_PI / (alpha * alpha));
 //	printf( "%e %e\n",  G[(P + 1) * (P + 1)] * M[P * P], L[index(0, 0)]);
 	L[index(0, 0)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[P * P];
@@ -777,15 +876,16 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 //		x1 /= 0.5 * theta;
 //		y1 /= 0.5 * theta;
 //		z1 /= 0.5 * theta;
-		x1 /= 2.0;
-		y1 /= 2.0;
-		z1 /= 2.0;
-		x0 *= 0.25 * theta;
-		y0 *= 0.25 * theta;
-		z0 *= 0.25 * theta;
-		x2 *= 0.25 * theta;
-		y2 *= 0.25 * theta;
-		z2 *= 0.25 * theta;
+		const auto alpha = 0.25;
+		x1 *= alpha;
+		y1 *= alpha;
+		z1 *= alpha;
+		x0 *= 0.5 * theta * alpha;
+		y0 *= 0.5 * theta * alpha;
+		z0 *= 0.5 * theta * alpha;
+		x2 *= 0.5 * theta * alpha;
+		y2 *= 0.5 * theta * alpha;
+		z2 *= 0.5 * theta * alpha;
 		/*multipole_type<real, P> M;
 		 expansion_type<real, P> L;
 		 for (int l = 0; l < L.size(); l++) {
@@ -794,7 +894,8 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		 P2M(M, -x0, -y0, -z0);
 		 M2L(L, M, x1, y1, z1);
 		 auto L2 = L2P(L, x2, y2, z2);*/
-		//x0 = y0 = 0.0;
+//		x0 = y0 = z0 = 0.0;
+		//	x2 = y2 = z2 = 0.0;
 		//	x0 = 0.03;
 		//	x2 = -.02;
 		//z2 = 1e-5;
@@ -977,7 +1078,41 @@ bool close21(double a) {
 	return std::abs(1.0 - a) < 1.0e-20;
 }
 
+template<int Nmax>
+struct const_factorial {
+	double y[Nmax + 1];
+	constexpr const_factorial() :
+			y() {
+		y[0] = 1.0;
+		for (int i = 1; i <= Nmax; i++) {
+			y[i] = i * y[i - 1];
+		}
+	}
+	constexpr double operator()(int n) const {
+		return y[n];
+	}
+};
+
+constexpr double const_exp(double x0) {
+	constexpr int N = 12;
+	if (x0 < 0.0) {
+		return 1.0 / const_exp(-x0);
+	} else {
+		constexpr const_factorial<N> factorial;
+		int k = x0 / 0.6931471805599453094172 + 0.5;
+		double x = x0 - k * 0.6931471805599453094172;
+		double y = 1.0 / factorial(N);
+		for (int i = N - 1; i >= 0; i--) {
+			y = y * x + 1.0 / factorial(i);
+		}
+		return y * (1 << k);
+	}
+}
+
 int main() {
+	for (double r = -2.0; r < 2.0; r += 0.01) {
+//		printf("%e %e\n", (const_exp(r) - exp(r)) / const_exp(r));
+	}
 	/*constexpr int nbits = 20;
 	 bitstream<20> bits;
 	 bits.write_bits(5, 5);
@@ -988,7 +1123,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 //speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<13, 3> run;
+	run_tests<10, 3> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
