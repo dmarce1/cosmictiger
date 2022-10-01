@@ -598,7 +598,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	const auto index = [](int l, int m) {
 		return l * (l + 1) + m;
 	};
-
+	expansion_type<T, P> L2 = L;
 	expansion_type<T, P> G;
 	expansion_type<T, P> G0;
 	for (int l = 0; l <= P; l++) {
@@ -699,19 +699,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 		}
 	}
 	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
-	decltype(G) G2;
-	for( int l = 0; l <= P; l++){
-		for(int m =-l;m<=l;m++) {
-			 G2[index(l,m)] = 0;
-		}
-	}
-	greens_ewald<float>(G2, x0, y0, z0);
-	for( int l = 0; l <= P; l++){
-		for(int m =-l;m<=l;m++) {
-			printf( "%i %i %e %e\n",l,m, G[index(l,m)], G2[index(l,m)]);
-		}
-	}
-	abort();
+	G[0] +=  T(M_PI / (alpha * alpha));
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
 			L[index(n, m)] = L[index(n, -m)] = 0;
@@ -825,12 +813,21 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 			}
 		}
 	}
-	L[index(0, 0)] += M[index(0, 0)] * T(M_PI / (alpha * alpha));
+	//L[index(0, 0)] += M[index(0, 0)] * T(M_PI / (alpha * alpha));
 	L[index(0, 0)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[P * P];
 	L[index(1, -1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, -1)];
 	L[index(1, +0)] -= G[(P + 1) * (P + 1)] * M[index(1, +0)];
 	L[index(1, +1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, +1)];
 	L[(P + 1) * (P + 1)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[index(0, 0)];
+
+	M2L_ewald<float>(L2,M, x0,y0,z0);
+	for( int l = 0; l <= P; l++){
+		for(int m =-l;m<=l;m++) {
+			printf( "%i %i %e %e\n",l,m, L[index(l,m)], L2[index(l,m)]);
+		}
+	}
+	abort();
+
 }
 
 template<int P>

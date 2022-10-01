@@ -605,10 +605,143 @@ int m2l_rot1(int P, int Q) {
 	return flops;
 }
 
+int m2l_ewald(int P) {
+	int flops = 0;
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT void M2L_ewald(expansion_type<T, %i>& L, const multipole_type<T, %i>& M,T x, T y, T z) {\n", P, P);
+	indent();
+	tprint("expansion_type<T, %i> G;\n", P);
+	tprint("greens_ewald(G, x, y, z);\n");
+	tprint("M2L(L,M,G);\n");
+	deindent();
+	tprint("}");
+	tprint("\n");
+	return flops;
+}
+
+int m2lg(int P, int Q) {
+	int flops = 0;
+	tprint("template<class T>\n");
+	tprint("CUDA_EXPORT void M2L(expansion_type<T, %i>& L, const multipole_type<T, %i>& M, const expansion_type<T, %i>& O) {\n", Q, P, P);
+	indent();
+	for (int n = 0; n <= Q; n++) {
+		for (int m = 0; m <= n; m++) {
+			const int kmax = std::min(P - n, P - 1);
+			for (int k = 0; k <= kmax; k++) {
+				const int lmin = std::max(-k, -n - k - m);
+				const int lmax = std::min(k, n + k - m);
+				for (int l = lmin; l <= lmax; l++) {
+					bool greal = false;
+					bool mreal = false;
+					int gxsgn = 1;
+					int gysgn = 1;
+					int mxsgn = 1;
+					int mysgn = 1;
+					char* gxstr = nullptr;
+					char* gystr = nullptr;
+					char* mxstr = nullptr;
+					char* mystr = nullptr;
+					if (m + l > 0) {
+						asprintf(&gxstr, "O[%i]", index(n + k, m + l));
+						asprintf(&gystr, "O[%i]", index(n + k, -m - l));
+					} else if (m + l < 0) {
+						if (abs(m + l) % 2 == 0) {
+							asprintf(&gxstr, "O[%i]", index(n + k, -m - l));
+							asprintf(&gystr, "O[%i]", index(n + k, m + l));
+							gysgn = -1;
+						} else {
+							asprintf(&gxstr, "O[%i]", index(n + k, -m - l));
+							asprintf(&gystr, "O[%i]", index(n + k, m + l));
+							gxsgn = -1;
+						}
+					} else {
+						greal = true;
+						asprintf(&gxstr, "O[%i]", index(n + k, 0));
+					}
+					if (l > 0) {
+						asprintf(&mxstr, "M[%i]", index(k, l));
+						asprintf(&mystr, "M[%i]", index(k, -l));
+						mysgn = -1;
+					} else if (l < 0) {
+						if (l % 2 == 0) {
+							asprintf(&mxstr, "M[%i]", index(k, -l));
+							asprintf(&mystr, "M[%i]", index(k, l));
+						} else {
+							asprintf(&mxstr, "M[%i]", index(k, -l));
+							asprintf(&mystr, "M[%i]", index(k, l));
+							mxsgn = -1;
+							mysgn = -1;
+						}
+					} else {
+						mreal = true;
+						asprintf(&mxstr, "M[%i]", index(k, 0));
+					}
+					const auto csgn = [](int i) {
+						return i > 0 ? '+' : '-';
+					};
+					if (!mreal) {
+						if (!greal) {
+							tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+							tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(-mysgn * gysgn), mystr, gystr);
+							flops += 4;
+							if (m > 0) {
+								tprint("L[%i] %c= %s * %s;\n", index(n, -m), csgn(mysgn * gxsgn), mystr, gxstr);
+								tprint("L[%i] %c= %s * %s;\n", index(n, -m), csgn(mxsgn * gysgn), mxstr, gystr);
+								flops += 4;
+							}
+						} else {
+							tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+							flops += 2;
+							if (m > 0) {
+								tprint("L[%i] %c= %s * %s;\n", index(n, -m), csgn(mysgn * gxsgn), mystr, gxstr);
+								flops += 2;
+							}
+						}
+					} else {
+						if (!greal) {
+							tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+							flops += 2;
+							if (m > 0) {
+								tprint("L[%i] %c= %s * %s;\n", index(n, -m), csgn(mxsgn * gysgn), mxstr, gystr);
+								flops += 2;
+							}
+						} else {
+							tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+							flops += 2;
+						}
+					}
+					if (gxstr) {
+						free(gxstr);
+					}
+					if (gystr) {
+						free(gystr);
+					}
+					if (mxstr) {
+						free(mxstr);
+					}
+					if (mystr) {
+						free(mystr);
+					}
+				}
+			}
+		}
+	}
+	tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n",index(0, 0) , (P + 1) * (P + 1),P * P);
+	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, -1), (P + 1) * (P + 1),index(1, -1));
+	tprint("L[%i] -= O[%i] * M[%i];\n", index(1, +0), (P + 1) * (P + 1), index(1, +0));
+	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, +1), (P + 1) * (P + 1), index(1, +1));
+	tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", (P + 1) * (P + 1), (P + 1) * (P + 1), index(0, 0));
+	flops += 14;
+	deindent();
+	tprint("}");
+	tprint("\n");
+	return flops;
+}
+
 int m2l_norot(int P, int Q) {
 	int flops = 0;
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2L(expansion_type<T, %i>& L, multipole_type<T, %i> M, T x, T y, T z) {\n", Q, P);
+	tprint("CUDA_EXPORT void M2L(expansion_type<T, %i>& L, const multipole_type<T, %i>& M, T x, T y, T z) {\n", Q, P);
 	indent();
 	const auto c = tprint_on;
 	set_tprint(false);
@@ -832,7 +965,7 @@ int ewald_greens() {
 					flops++;
 					if (ix * ix + iy * iy + iz * iz == 0) {
 						for (int m = -l; m <= l; m++) {
-							tprint("G[%i] -= sw*(gamma - T(%.1e)) * Gr[%i];\n", index(l, m),  nonepow<double>(l), index(l, m));
+							tprint("G[%i] -= sw*(gamma - T(%.1e)) * Gr[%i];\n", index(l, m), nonepow<double>(l), index(l, m));
 							flops += 4;
 						}
 						if (l == 0) {
@@ -841,16 +974,14 @@ int ewald_greens() {
 						}
 
 					} else {
+						for (int m = -l; m <= l; m++) {
 							if (first) {
-								for (int m = -l; m <= l; m++) {
 								tprint("G[%i] = -gamma * Gr[%i];\n", index(l, m), index(l, m));
-								}
 							} else {
-								for (int m = -l; m <= l; m++) {
 								tprint("G[%i] -= gamma * Gr[%i];\n", index(l, m), index(l, m));
-								}
 							}
 							flops += 2;
+						}
 					}
 					gamma0inv *= 1.0 / -(l + 0.5);
 					if (l != P) {
@@ -990,6 +1121,8 @@ int ewald_greens() {
 	}
 
 	tprint("G[%i] = T(%.16e);\n", (P + 1) * (P + 1), (4.0 * M_PI / 3.0));
+	tprint("G[%i] += T(%.16e);\n", index(0,0), M_PI / (alpha*alpha));
+	flops++;
 
 	deindent();
 	tprint("/* flops = %i */\n", flops);
@@ -2097,5 +2230,7 @@ int main() {
 		P2M(P - 1);
 	}
 	ewald_greens<7>();
+	m2lg(7,7);
+	m2l_ewald(7);
 	return 0;
 }
