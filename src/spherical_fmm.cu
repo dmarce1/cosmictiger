@@ -821,13 +821,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	L[(P + 1) * (P + 1)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[index(0, 0)];
 
 	M2L_ewald<float>(L2,M, x0,y0,z0);
-	for( int l = 0; l <= P; l++){
-		for(int m =-l;m<=l;m++) {
-			printf( "%i %i %e %e\n",l,m, L[index(l,m)], L2[index(l,m)]);
-		}
-	}
-	abort();
-
+//	L = L2;
 }
 
 template<int P>
@@ -855,7 +849,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 //		x1 /= 0.5 * theta;
 //		y1 /= 0.5 * theta;
 //		z1 /= 0.5 * theta;
-		const auto alpha = 0.25;
+		const auto alpha = 0.45*rand1() + 0.05;
 		x1 *= alpha;
 		y1 *= alpha;
 		z1 *= alpha;
@@ -865,6 +859,12 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		x2 *= 0.5 * theta * alpha;
 		y2 *= 0.5 * theta * alpha;
 		z2 *= 0.5 * theta * alpha;
+		double f0 = rand1();
+		double f1 = rand1();
+		double f2 = rand1();
+		double g0 = rand1();
+		double g1 = rand1();
+		double g2 = rand1();
 		/*multipole_type<real, P> M;
 		 expansion_type<real, P> L;
 		 for (int l = 0; l < L.size(); l++) {
@@ -891,19 +891,21 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 			M[n] = (0);
 			L[n] = (0);
 		}
-		P2M<real>(M, -x0 / 2.0, +y0 / 3.0, -z0 / 4.0);
+		P2M<real>(M, -x0*f0, -y0 *f1, -z0 *f2);
 		for (int n = 0; n <= P * P; n++) {
 			M[n] *= (0.5);
 			L[n] = (0);
 		}
 
-		M2M<real>(M, -real(x0 / 2.0), -real(4.0 * y0 / 3.0), -real(3.0 * z0 / 4.0));
+		M2M<real>(M, -real(x0)*(1-f0), -real(y0)*(1-f1), -real(z0)*(1-f2));
 		for (int n = 0; n <= (P + 1) * (P + 1); n++) {
 			L[n] = (0);
 		}
 
 		M2L_ewald<real, P>(L, M, x1, y1, z1);
-		L2L<real>(L, x2, y2, z2);
+		g0 =g1 =g2 = 0.0;
+		L2L<real>(L, x2*g0, y2*g1, z2*g2);
+		auto L2 = L2P<real>(L, x2*(1-g0), y2*(1-g1), z2*(1-g2));
 		double phi, fx, fy, fz;
 		ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
 		fx *= 0.5;
@@ -914,7 +916,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		//printf("%e %e %e | %e %e %e | %e %e %e %e | %e %e %e %e\n", x0, y0, z0, x2, y2, z2, L[0], -L[3], -L[1], -L[2], phi, fx, fy, fz);
 		//	err += (sqr(L[3]+fx)+ sqr(L[1]+fy)+ sqr(L[2]+fz))/(fx*fx+fy*fy+fz*fz);
 		//	printf( "%e\n",err);
-		err += abs((phi - L[0]));
+		err += abs((phi - L2[0]));
 		norm += abs(phi);
 //		printf( "%e\n", err);
 //		abort();
@@ -1102,7 +1104,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 //speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<8, 7> run;
+	run_tests<7, 6> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));

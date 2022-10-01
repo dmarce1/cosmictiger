@@ -726,8 +726,8 @@ int m2lg(int P, int Q) {
 			}
 		}
 	}
-	tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n",index(0, 0) , (P + 1) * (P + 1),P * P);
-	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, -1), (P + 1) * (P + 1),index(1, -1));
+	tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", index(0, 0), (P + 1) * (P + 1), P * P);
+	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, -1), (P + 1) * (P + 1), index(1, -1));
 	tprint("L[%i] -= O[%i] * M[%i];\n", index(1, +0), (P + 1) * (P + 1), index(1, +0));
 	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, +1), (P + 1) * (P + 1), index(1, +1));
 	tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", (P + 1) * (P + 1), (P + 1) * (P + 1), index(0, 0));
@@ -857,24 +857,23 @@ int m2l_norot(int P, int Q) {
 	return flops;
 }
 
-template<class T, int P>
-spherical_expansion<T, P> spherical_singular_harmonic(T x, T y, T z) {
-	const T r2 = x * x + y * y + z * z;
-	const T r2inv = T(1) / r2;
-	complex<T> R = complex<T>(x, y);
-	spherical_expansion<T, P> O;
-	O[cindex(0, 0)] = complex<T>(sqrt(r2inv), T(0));
+std::vector<complex<double> > spherical_singular_harmonic(int P, double x, double y, double z) {
+	const double r2 = x * x + y * y + z * z;
+	const double r2inv = double(1) / r2;
+	complex<double> R = complex<double>(x, y);
+	std::vector<complex<double>> O((P + 1) * (P + 1));
+	O[cindex(0, 0)] = complex<double>(sqrt(r2inv), double(0));
 	R *= r2inv;
 	z *= r2inv;
 	for (int m = 0; m <= P; m++) {
 		if (m > 0) {
-			O[cindex(m, m)] = O[cindex(m - 1, m - 1)] * R * T(2 * m - 1);
+			O[cindex(m, m)] = O[cindex(m - 1, m - 1)] * R * double(2 * m - 1);
 		}
 		if (m + 1 <= P) {
-			O[cindex(m + 1, m)] = T(2 * m + 1) * z * O[cindex(m, m)];
+			O[cindex(m + 1, m)] = double(2 * m + 1) * z * O[cindex(m, m)];
 		}
 		for (int n = m + 2; n <= P; n++) {
-			O[cindex(n, m)] = (T(2 * n - 1) * z * O[cindex(n - 1, m)] - T((n - 1) * (n - 1) - m * m) * r2inv * O[cindex(n - 2, m)]);
+			O[cindex(n, m)] = (double(2 * n - 1) * z * O[cindex(n - 1, m)] - double((n - 1) * (n - 1) - m * m) * r2inv * O[cindex(n - 2, m)]);
 		}
 	}
 	return O;
@@ -884,8 +883,7 @@ bool close2zero(double a) {
 	return abs(a) < 1e-10;
 }
 
-template<int P>
-int ewald_greens() {
+int ewald_greens(int P) {
 	int flops = 0;
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT void greens_ewald(expansion_type<T, %i>& G, T x0, T y0, T z0) {\n", P, P);
@@ -1007,7 +1005,7 @@ int ewald_greens() {
 				const int h2 = hx * hx + hy * hy + hz * hz;
 				if (h2 <= 8 && h2 > 0) {
 					const double h = sqrt(h2);
-					auto G0 = spherical_singular_harmonic<double, P>((double) hx, (double) hy, (double) hz);
+					auto G0 = spherical_singular_harmonic(P, (double) hx, (double) hy, (double) hz);
 					bool init = false;
 					if (hx) {
 						if (hx == 1) {
@@ -1121,7 +1119,7 @@ int ewald_greens() {
 	}
 
 	tprint("G[%i] = T(%.16e);\n", (P + 1) * (P + 1), (4.0 * M_PI / 3.0));
-	tprint("G[%i] += T(%.16e);\n", index(0,0), M_PI / (alpha*alpha));
+	tprint("G[%i] += T(%.16e);\n", index(0, 0), M_PI / (alpha * alpha));
 	flops++;
 
 	deindent();
@@ -1932,19 +1930,18 @@ int L2P(int P) {
 	flops += regular_harmonic(P);
 	set_tprint(c);
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT expansion_type<T, 1> L2P(const expansion_type<T, %i>& L0, T x, T y, T z) {\n", P);
+	tprint("CUDA_EXPORT expansion_type<T, %i> L2P(expansion_type<T, %i>& L, T x, T y, T z) {\n", 1, P);
 	indent();
 	//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
 	tprint("expansion_type<T, %i> Y;\n", P);
-	tprint("expansion_type<T, 1> L;\n");
-	tprint("L[0] = L[1] = L[2] = L[3] = T(0);\n");
+	tprint("expansion_type<T,1> L1;\n");
+	tprint("L1[0] = L1[1] = L1[2] = L1[3] = T(0);\n");
 	tprint("regular_harmonic(Y, -x, -y, -z);\n");
 	flops += 3;
 	tprint("T mx;\n");
 	tprint("T my;\n");
 	tprint("T gx;\n");
 	tprint("T gy;\n");
-	int cnt = 0;
 	for (int n = 0; n <= 1; n++) {
 		for (int m = 0; m <= n; m++) {
 			for (int k = 0; k <= P - n; k++) {
@@ -1960,22 +1957,21 @@ int L2P(int P) {
 					int gxsgn = 1;
 					int gysgn = 1;
 					if (m + l > 0) {
-						asprintf(&mxstr, "L0[%i]", index(n + k, abs(m + l)));
-						asprintf(&mystr, "L0[%i]", index(n + k, -abs(m + l)));
+						asprintf(&mxstr, "L[%i]", index(n + k, abs(m + l)));
+						asprintf(&mystr, "L[%i]", index(n + k, -abs(m + l)));
 					} else if (m + l < 0) {
 						if (abs(m + l) % 2 == 0) {
-							asprintf(&mxstr, "L0[%i]", index(n + k, abs(m + l)));
-							asprintf(&mystr, "L0[%i]", index(n + k, -abs(m + l)));
+							asprintf(&mxstr, "L[%i]", index(n + k, abs(m + l)));
+							asprintf(&mystr, "L[%i]", index(n + k, -abs(m + l)));
 							mysgn = -1;
 						} else {
-							asprintf(&mxstr, "L0[%i]", index(n + k, abs(m + l)));
-							asprintf(&mystr, "L0[%i]", index(n + k, -abs(m + l)));
+							asprintf(&mxstr, "L[%i]", index(n + k, abs(m + l)));
+							asprintf(&mystr, "L[%i]", index(n + k, -abs(m + l)));
 							mxsgn = -1;
 						}
 					} else {
-						asprintf(&mxstr, "L0[%i]", index(n + k, 0));
+						asprintf(&mxstr, "L[%i]", index(n + k, 0));
 					}
-					bool yone = false;
 					if (l > 0) {
 						asprintf(&gxstr, "Y[%i]", index(k, abs(l)));
 						asprintf(&gystr, "Y[%i]", index(k, -abs(l)));
@@ -1996,40 +1992,21 @@ int L2P(int P) {
 					const auto csgn = [](int i) {
 						return i > 0 ? '+' : '-';
 					};
-					const auto csgn2 = [](int i) {
-						return i > 0 ? ' ' : '-';
-					};
-					if (k == 0) {
-						tprint("L[%i] = %s;\n", index(n, m), mxstr);
-						if (gystr && mystr) {
-							tprint("L[%i] = %s;\n", index(n, m), mystr);
-						}
-						if (m > 0) {
-							if (gystr) {
-								tprint("L[%i] = %s;\n", index(n, -m), mxstr);
-							}
-							if (mystr) {
-								tprint("L[%i] = %s;\n", index(n, -m), mystr);
-							}
-						}
-					} else {
-						tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+					tprint("L1[%i] %c= %s * %s;\n", index(n, m), csgn(mxsgn * gxsgn), mxstr, gxstr);
+					flops += 2;
+					if (gystr && mystr) {
+						tprint("L1[%i] %c= %s * %s;\n", index(n, m), csgn(-mysgn * gysgn), mystr, gystr);
 						flops += 2;
-						if (gystr && mystr) {
-							tprint("L[%i] %c= %s * %s;\n", index(n, m), csgn(-mysgn * gysgn), mystr, gystr);
+					}
+					if (m > 0) {
+						if (gystr) {
+							tprint("L1[%i] %c= %s * %s;\n", index(n, -m), csgn(mxsgn * gysgn), mxstr, gystr);
 							flops += 2;
 						}
-						if (m > 0) {
-							if (gystr) {
-								tprint("L[%i] %c= %s * %s;\n", index(n, -m), csgn(mxsgn * gysgn), mxstr, gystr);
-								flops += 2;
-							}
-							if (mystr) {
-								tprint("L[%i] %c= %s * %s;\n", index(n, -m), csgn(mysgn * gxsgn), mystr, gxstr);
-								flops += 2;
-							}
+						if (mystr) {
+							tprint("L1[%i] %c= %s * %s;\n", index(n, -m), csgn(mysgn * gxsgn), mystr, gxstr);
+							flops += 2;
 						}
-
 					}
 					if (gxstr) {
 						free(gxstr);
@@ -2048,18 +2025,18 @@ int L2P(int P) {
 		}
 	}
 	if (P > 1) {
-		tprint("L[%i] -= T(2) * x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
-		tprint("L[%i] -= T(2) * y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
-		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
-		tprint("L[%i] += x * x * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
-		tprint("L[%i] += y * y * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
-		tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
-		flops += 18;
+		tprint("L1[%i] -= T(2) * x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L1[%i] -= T(2) * y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
+		tprint("L1[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
+		tprint("L1[%i] += x * x * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L1[%i] += y * y * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		tprint("L1[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+		flops += 16;
 	}
-	tprint("return L;\n");
+	tprint("return L1;");
+
 	deindent();
 	tprint("}");
-	tprint("\n");
 	return flops;
 }
 int P2M(int P) {
@@ -2095,7 +2072,7 @@ int main() {
 	tprint("template<class T, int P>\n");
 	tprint("using expansion_xz_type = array<T, (P > 1) ? (P+1)*(P+2)/2+1:(P+1)*(P+2)/2>;\n");
 	tprint("\n");
-	constexpr int pmax = 7;
+	constexpr int pmax = 20;
 	std::vector<int> pc_flops(pmax + 1);
 	std::vector<int> cp_flops(pmax + 1);
 	std::vector<int> cc_flops(pmax + 1);
@@ -2108,9 +2085,9 @@ int main() {
 	std::vector<int> m2m_rot(pmax + 1);
 	std::vector<int> l2l_rot(pmax + 1);
 	set_tprint(false);
-	fprintf(stderr, "%2s %5s %5s %2s %5s %5s %2s %5s %5s %5s %5s %2s %5s %5s %2s %5s %5.2s %5s %5.2s\n", "p", "CC", "eff", "-r", "PC", "eff", "-r", "CP", "eff",
-			"M2M", "eff", "-r", "L2L", "eff", "-r", "P2M", "eff", "L2P", "eff");
-	for (int P = 7; P <= pmax; P++) {
+	fprintf(stderr, "%2s %5s %5s %2s %5s %5s %2s %5s %5s %5s %5s %2s %5s %5s %2s %5s %5s %5s %5s %8s %8s %8s\n", "p", "CC", "eff", "-r", "PC", "eff", "-r", "CP", "eff",
+			"M2M", "eff", "-r", "L2L", "eff", "-r", "P2M", "eff", "L2P", "eff", "CC_ewald", "green", "m2l");
+	for (int P = 2; P <= pmax; P++) {
 		auto r0 = m2l_norot(P, P);
 		auto r1 = m2l_rot1(P, P);
 		auto r2 = m2l_rot2(P, P);
@@ -2166,10 +2143,14 @@ int main() {
 		}
 		l2p_flops[P] = L2P(P);
 		p2m_flops[P] = P2M(P - 1);
-		fprintf(stderr, "%2i %5i %5.2f %2i %5i %5.2f %2i %5i %5.2f %5i %5.2f %2i %5i %5.2f %2i %5i %5.2f %5i %5.2f\n", P, cc_flops[P],
+		int eflopsg = ewald_greens(P);
+		int eflopsm = m2lg(P, P);
+
+
+		fprintf(stderr, "%2i %5i %5.2f %2i %5i %5.2f %2i %5i %5.2f %5i %5.2f %2i %5i %5.2f %2i %5i %5.2f %5i %5.2f %8i %8i %8i\n", P, cc_flops[P],
 				cc_flops[P] / pow(P + 1, 3), cc_rot[P], pc_flops[P], pc_flops[P] / pow(P + 1, 2), pc_rot[P], cp_flops[P], cp_flops[P] / pow(P + 1, 2), m2m_flops[P],
 				m2m_flops[P] / pow(P + 1, 3), m2m_rot[P], l2l_flops[P], l2l_flops[P] / pow(P + 1, 3), l2l_rot[P], p2m_flops[P], p2m_flops[P] / pow(P + 1, 2),
-				l2p_flops[P], l2p_flops[P] / pow(P + 1, 2));
+				l2p_flops[P], l2p_flops[P] / pow(P + 1, 2), eflopsg+eflopsm, eflopsg, eflopsm);
 	}
 	set_tprint(true);
 	regular_harmonic(1);
@@ -2228,9 +2209,9 @@ int main() {
 		};
 		L2P(P);
 		P2M(P - 1);
+		ewald_greens(P);
+		m2lg(P, P);
+		m2l_ewald(P);
 	}
-	ewald_greens<7>();
-	m2lg(7,7);
-	m2l_ewald(7);
 	return 0;
 }
