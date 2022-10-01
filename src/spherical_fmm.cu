@@ -600,8 +600,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	};
 
 	expansion_type<T, P> G;
-	expansion_type<T, P> Gr;
-	expansion_type<T, P> Gf;
+	expansion_type<T, P> G0;
 	for (int l = 0; l <= P; l++) {
 		for (int m = -l; m <= l; m++) {
 			G[index(l, m)] = T(0);
@@ -617,7 +616,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 				const T r2 = sqr(x, y, z);
 				if (r2 <= sqr(2.6)) {
 					const T r = sqrt(x * x + y * y + z * z);
-					greens(Gr, x, y, z);
+					greens(G0, x, y, z);
 					T gamma1 = sqrt(M_PI) * erfc(alpha * r);
 					T gamma0inv = 1.0f / sqrt(M_PI);
 					for (int l = 0; l <= P; l++) {
@@ -625,16 +624,16 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 						if (ix * ix + iy * iy + iz * iz == 0) {
 							if ((x0 * x0 + y0 * y0 + z0 * z0) == 0.0) {
 								if (l == 0) {
-									G[index(0, 0)] -= T(2) * alpha / sqrt(M_PI);
+									G[index(0, 0)] += T(2) * alpha / sqrt(M_PI);
 								}
 							} else {
 								for (int m = -l; m <= l; m++) {
-									G[index(l, m)] += (gamma - nonepow(l)) * Gr[index(l, m)];
+									G[index(l, m)] -= (gamma - nonepow(l)) * G0[index(l, m)];
 								}
 							}
 						} else {
 							for (int m = -l; m <= l; m++) {
-								G[index(l, m)] += gamma * Gr[index(l, m)];
+								G[index(l, m)] -= gamma * G0[index(l, m)];
 							}
 						}
 						const T x = alpha * alpha * r * r;
@@ -647,12 +646,13 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 		}
 	}
 	for (int hx = -2; hx <= 2; hx++) {
+
 		for (int hy = -2; hy <= 2; hy++) {
 			for (int hz = -2; hz <= 2; hz++) {
 				const int h2 = hx * hx + hy * hy + hz * hz;
 				if (h2 <= 8 && h2 > 0) {
 					const T h = sqrt(h2);
-					greens(Gf, (T) hx, (T) hy, (T) hz);
+					greens(G0, (T) hx, (T) hy, (T) hz);
 					const T hdotx = hx * x0 + hy * y0 + hz * z0;
 					T gamma0inv = 1.0f / sqrt(M_PI);
 					T hpow = 1.f / h;
@@ -663,11 +663,11 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 							T Rx, Ry, ax, ay, bx, by;
 							sincos(phi, &Ry, &Rx);
 							if (m == 0) {
-								ax = Gf[index(l, m)] * Rx;
-								ay = Gf[index(l, m)] * Ry;
+								ax = G0[index(l, m)] * Rx;
+								ay = G0[index(l, m)] * Ry;
 							} else {
-								ax = Gf[index(l, m)] * Rx - Gf[index(l, -m)] * Ry;
-								ay = Gf[index(l, m)] * Ry + Gf[index(l, -m)] * Rx;
+								ax = G0[index(l, m)] * Rx - G0[index(l, -m)] * Ry;
+								ay = G0[index(l, m)] * Ry + G0[index(l, -m)] * Rx;
 							}
 							T c0 = gamma0inv * hpow * pipow * exp(-h * h * T(M_PI * M_PI) / (alpha * alpha));
 							ax *= c0;
@@ -684,9 +684,9 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 								ax = ay;
 								ay = -tmp;
 							}
-							G[index(l, m)] += ax;
+							G[index(l, m)] -= ax;
 							if (m != 0) {
-								G[index(l, -m)] += ay;
+								G[index(l, -m)] -= ay;
 							}
 						}
 						const T s = l + 0.5f;
@@ -698,30 +698,20 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 			}
 		}
 	}
-	for (int l = 0; l <= P; l++) {
-		for (int m = -l; m <= l; m++) {
-			G[index(l, m)] *= -1;
+	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
+	decltype(G) G2;
+	for( int l = 0; l <= P; l++){
+		for(int m =-l;m<=l;m++) {
+			 G2[index(l,m)] = 0;
 		}
 	}
-	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
-	spherical_expansion<T, P> L0, G0;
-	spherical_expansion<T, P - 1> M0;
-	/*	for (int l = 0; l <= P; l++) {
-	 G0[l * (l + 1) / 2].real() = G[index(l, 0)];
-	 G0[l * (l + 1) / 2].imag() = T(0);
-	 for (int m = 1; m <= l; m++) {
-	 G0[l * (l + 1) / 2 + m].real() = G[index(l, m)];
-	 G0[l * (l + 1) / 2 + m].imag() = G[index(l, -m)];
-	 }
-	 }
-	 for (int l = 0; l < P; l++) {
-	 M0[l * (l + 1) / 2].real() = M[index(l, 0)];
-	 M0[l * (l + 1) / 2].imag() = T(0);
-	 for (int m = 1; m <= l; m++) {
-	 M0[l * (l + 1) / 2 + m].real() = M[index(l, m)];
-	 M0[l * (l + 1) / 2 + m].imag() = M[index(l, -m)];
-	 }
-	 }*/
+	greens_ewald<float>(G2, x0, y0, z0);
+	for( int l = 0; l <= P; l++){
+		for(int m =-l;m<=l;m++) {
+			printf( "%i %i %e %e\n",l,m, G[index(l,m)], G2[index(l,m)]);
+		}
+	}
+	abort();
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
 			L[index(n, m)] = L[index(n, -m)] = 0;
@@ -835,15 +825,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 			}
 		}
 	}
-	/*	for (int l = 0; l <= P; l++) {
-	 L[index(l, 0)] = L0[l * (l + 1) / 2].real();
-	 for (int m = 1; m <= l; m++) {
-	 L[index(l, m)] = L0[l * (l + 1) / 2 + m].real();
-	 L[index(l, -m)] = L0[l * (l + 1) / 2 + m].imag();
-	 }
-	 }*/
 	L[index(0, 0)] += M[index(0, 0)] * T(M_PI / (alpha * alpha));
-//	printf( "%e %e\n",  G[(P + 1) * (P + 1)] * M[P * P], L[index(0, 0)]);
 	L[index(0, 0)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[P * P];
 	L[index(1, -1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, -1)];
 	L[index(1, +0)] -= G[(P + 1) * (P + 1)] * M[index(1, +0)];
@@ -1123,7 +1105,7 @@ int main() {
 	 printf("%i\n", bits.read_bits(20));
 	 printf("%i\n", bits.read_bits(5));*/
 //speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<10, 3> run;
+	run_tests<8, 7> run;
 	run();
 //	constexpr int P = 7;
 //	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
