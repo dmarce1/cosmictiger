@@ -14,7 +14,7 @@
 #include <cosmictiger/fmm_kernels.hpp>
 #include <fftw3.h>
 
-using real = float;
+using real = double;
 
 double Pm(int l, int m, double x) {
 	if (m > l) {
@@ -227,70 +227,6 @@ public:
 double factorial(int n) {
 	return n == 0 ? 1.0 : n * factorial(n - 1);
 }
-
-CUDA_EXPORT constexpr double const_sqrt_helper(double a, double xn, int iter) {
-	if (iter == 5) {
-		return xn;
-	} else {
-		return const_sqrt_helper(a, 0.5 * (xn + a / xn), iter + 1);
-	}
-}
-
-CUDA_EXPORT constexpr double const_sqrt(double a) {
-	return const_sqrt_helper(a, 0.5, 0);
-
-}
-
-CUDA_EXPORT constexpr double Ylm_xy0(int l, int m, double z) {
-	if (m > l) {
-		return 0.0;
-	} else if (l == 0) {
-		return 1.0;
-	} else if (l == m) {
-		return const_sqrt(1.0 - z * z) * Ylm_xy0(l - 1, l - 1, z) / (2 * l);
-	} else {
-		return ((2 * l - 1) * z * Ylm_xy0(l - 1, m, z) - Ylm_xy0(l - 2, m, z)) / (l * l - m * m);
-	}
-}
-
-CUDA_EXPORT constexpr double const_abs(double a) {
-	return a > 0.0 ? a : -a;
-}
-
-CUDA_EXPORT constexpr double const_max(double a, double b) {
-	return a > b ? a : b;
-}
-
-struct Ylm_max {
-	CUDA_EXPORT
-	constexpr double operator()(int l, int m) {
-		constexpr int N = 64;
-		double next = 0.0;
-		constexpr int ix = 0;
-		constexpr int iy = N;
-		for (int iz = 0; iz <= N; iz++) {
-			next = const_max(next, Ylm_xy0(l, m, (double) iz / N));
-		}
-		return next;
-	}
-};
-
-template<int P>
-struct Ylm_max_array {
-	double a[P + 1][P + 1];CUDA_EXPORT
-	constexpr Ylm_max_array() :
-			a() {
-		for (int i = 0; i <= P; i++)
-			for (int j = 0; j <= i; j++) {
-				a[i][j] = 1.001 * Ylm_max()(i, j);
-			}
-	}
-	CUDA_EXPORT
-	constexpr double operator()(int l, int m) const {
-		return a[l][m];
-	}
-
-};
 
 template<class T, int P>
 spherical_expansion<T, P> spherical_regular_harmonic(T x, T y, T z) {
@@ -573,7 +509,7 @@ void ewald_compute(double& pot, double& fx, double& fy, double& fz, double dx0, 
 					const double hy = yi;
 					const double hz = zi;
 					const double h2 = sqr(hx, hy, hz);
-					if (h2 > 0.0f && h2 <= 10) {
+					if (h2 > 0.0 && h2 <= 10) {
 						const double hdotx = dx0 * hx + dx1 * hy + dx2 * hz;
 						const double omega = double(2.0 * M_PI) * hdotx;
 						double c, s;
@@ -699,7 +635,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 		}
 	}
 	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
-	G[0] +=  T(M_PI / (alpha * alpha));
+	G[0] += T(M_PI / (alpha * alpha));
 	for (int n = 0; n <= P; n++) {
 		for (int m = 0; m <= n; m++) {
 			L[index(n, m)] = L[index(n, -m)] = 0;
@@ -820,7 +756,7 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	L[index(1, +1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, +1)];
 	L[(P + 1) * (P + 1)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[index(0, 0)];
 
-	M2L_ewald<float>(L2,M, x0,y0,z0);
+	M2L_ewald<real>(L2, M, x0, y0, z0);
 //	L = L2;
 }
 
@@ -849,7 +785,7 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 //		x1 /= 0.5 * theta;
 //		y1 /= 0.5 * theta;
 //		z1 /= 0.5 * theta;
-		const auto alpha = 0.45*rand1() + 0.05;
+		const auto alpha = 0.45 * rand1() + 0.05;
 		x1 *= alpha;
 		y1 *= alpha;
 		z1 *= alpha;
@@ -887,25 +823,24 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 		//	x0 = y0 = 0.0;
 		multipole_type<real, P> M;
 		expansion_type<real, P> L;
-		for (int n = 0; n <= P * P; n++) {
+		for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
 			M[n] = (0);
 			L[n] = (0);
 		}
-		P2M<real>(M, -x0*f0, -y0 *f1, -z0 *f2);
-		for (int n = 0; n <= P * P; n++) {
+		P2M<real>(M, -x0 * f0, -y0 * f1, -z0 * f2);
+		for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
 			M[n] *= (0.5);
-			L[n] = (0);
 		}
 
-		M2M<real>(M, -real(x0)*(1-f0), -real(y0)*(1-f1), -real(z0)*(1-f2));
-		for (int n = 0; n <= (P + 1) * (P + 1); n++) {
+		M2M<real>(M, -real(x0) * (1 - f0), -real(y0) * (1 - f1), -real(z0) * (1 - f2));
+		for (int n = 0; n <= (P > 1 ? (P + 1) * (P + 1) : (P + 1) * (P + 1) - 1); n++) {
 			L[n] = (0);
 		}
 
 		M2L_ewald<real, P>(L, M, x1, y1, z1);
-		g0 =g1 =g2 = 0.0;
-		L2L<real>(L, x2*g0, y2*g1, z2*g2);
-		auto L2 = L2P<real>(L, x2*(1-g0), y2*(1-g1), z2*(1-g2));
+		g0 = g1 = g2 = 0.0;
+		L2L<real>(L, x2 * g0, y2 * g1, z2 * g2);
+		auto L2 = L2P<real>(L, x2 * (1 - g0), y2 * (1 - g1), z2 * (1 - g2));
 		double phi, fx, fy, fz;
 		ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
 		fx *= 0.5;
@@ -983,6 +918,7 @@ __global__ void test_old(multipole<real>* M, expansion<real>* Lptr, real* x, rea
 		M2L(L1, M[i], D, true);
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] += L1[i];
+
 		}
 	}
 
@@ -1090,47 +1026,66 @@ constexpr double const_exp(double x0) {
 	}
 }
 
-int main() {
-	for (double r = -2.0; r < 2.0; r += 0.01) {
-//		printf("%e %e\n", (const_exp(r) - exp(r)) / const_exp(r));
+constexpr int ewald_real_size() {
+	int i = 0;
+	for (int xi = -4; xi <= +4; xi++) {
+		for (int yi = -4; yi <= +4; yi++) {
+			for (int zi = -4; zi <= +4; zi++) {
+				const int r2 = xi * xi + yi * yi + zi * zi;
+				if (r2 < 3.1 * 3.1 && r2 > 0) {
+					i++;
+				}
+			}
+		}
 	}
-	/*constexpr int nbits = 20;
-	 bitstream<20> bits;
-	 bits.write_bits(5, 5);
-	 bits.write_bits(232323, 20);
-	 bits.write_bits(9, 5);
-	 bits.reset();
-	 printf("%i\n", bits.read_bits(5));
-	 printf("%i\n", bits.read_bits(20));
-	 printf("%i\n", bits.read_bits(5));*/
-//speed_test<7>(2 * 1024 * 1024, 100);
-	run_tests<7, 6> run;
-	run();
-//	constexpr int P = 7;
-//	printf( "%i %i\n", sizeof(spherical_expansion<real,P-1>), sizeof(compressed_multipole<real,P-1>));
-//printf("%e %e\n", Brot(10, -3, 1), brot<real, 10, -3, 1>::value);
-	/*printf("err = %e\n", test_M2L<5>());
-	 printf("err = %e\n", test_M2L<6>());
-	 printf("err = %e\n", test_M2L<20>());*/
+	return i;
+}
 
-	/*constexpr int P = 5;
-	 spherical_expansion<real, P> O;
-	 real x = 1.0;
-	 real y = -1.0;
-	 real z = 1.0;
-	 auto L = spherical_regular_harmonic<real, P>(x, y, z);
-	 for (int l = 0; l <= P; l++) {
-	 for (int m = 0; m <= l; m++) {
-	 printf("%i %i %e %e\n", l, m, L(l, m).real(), L(l, m).imag());
-	 }
-	 }
-	 spherical_rotate_to_z_regular(L, x, y, z);
-	 spherical_inv_rotate_to_z_regular(L, x, y, z);
-	 printf("\n");
-	 for (int l = 0; l <= P; l++) {
-	 for (int m = 0; m <= l; m++) {
-	 printf("%i %i %e %e\n", l, m, L(l, m).real(), L(l, m).imag());
-	 }
-	 }
-	 */
+constexpr int ewald_four_size() {
+	int i = 0;
+	for (int xi = -2; xi <= +2; xi++) {
+		for (int yi = -2; yi <= +2; yi++) {
+			for (int zi = -2; zi <= +2; zi++) {
+				const int r2 = xi * xi + yi * yi + zi * zi;
+				if (r2 <= 8 && r2 > 0) {
+					i++;
+				}
+			}
+		}
+	}
+	return i;
+}
+
+template<class T, int P>
+constexpr T const_S(int n, int m0, T x, T y, T z) {
+	const T r2 = x * x + y * y + z * z;
+	const T r2inv = T(1) / r2;
+	const T m = m0 >= 0 ? m0 : -m0;
+	T Ox = T(1), Oy = T(0), Oxm1 = T(0), Oym1 = T(0), Oxm2 = T(0);
+	x *= r2inv;
+	y *= r2inv;
+	Oxm1 = Ox;
+	Oym1 = Oy;
+	for (int m1 = 1; m1 <= m; m1++) {
+		const T tmp = Ox;
+		Ox = (tmp * x - Oy * y) * T(2 * m1 - 1);
+		Oy = (tmp * y + Oy * x) * T(2 * m1 - 1);
+		Oxm1 = Ox;
+		Oym1 = Oy;
+	}
+	if (m0 < 0) {
+		Oxm1 = Oym1;
+	}
+	for (int n1 = m + 1; n1 <= n; n1++) {
+		Ox = T(2 * n - 1) * z * Oxm1 - T((n - 1) * (n - 1) - m * m) * r2inv * Oxm2;
+		Oxm2 = Oxm1;
+		Oxm1 = Ox;
+	}
+	return Ox;
+}
+
+int main() {
+
+	run_tests<17, 2> run;
+	run();
 }
