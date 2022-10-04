@@ -1099,12 +1099,12 @@ constexpr T const_S(int n, int m0, T x, T y, T z) {
 int main() {
 
 	run_tests<11, 3> run;
-	print("EWALD\n");
-	run(EWALD);
 	print("M2L\n");
 	run(CC);
 	print("M2P\n");
 	run(PC);
 	print("P2L\n");
 	run(CP);
+	print("EWALD\n");
+	run(EWALD);
 }
