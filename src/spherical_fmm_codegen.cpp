@@ -116,8 +116,8 @@ int index(int l, int m) {
 
 int greens_body(int P) {
 	int flops = 0;
-	tprint("const T r2 = x * x + y * y + z * z;\n");
-	flops += 5;
+	tprint("const T r2 = FMA(x, x, FMA(y, y, z * z));\n");
+	flops += 5 - 2 * fmaops;
 	tprint("const T r2inv = T(1) / r2;\n");
 	flops += 4;
 	tprint("O[0] = SQRT(r2inv);\n");
@@ -494,17 +494,17 @@ int m2l_rot1(int P, int Q) {
 	 tprint("L[n] = T(0);\n");
 	 deindent();
 	 tprint("}\n");*/
-	tprint("const T R2 = (x * x + y * y);\n");
-	flops += 3;
+	tprint("const T R2 = FMA(x, x, y * y);\n");
+	flops += 3 - fmaops;
 	tprint("const T R = SQRT(R2);\n");
 	flops += 4;
 	tprint("const T Rzero = T(R<T(1e-37));\n");
 	tprint("const T Rinv = T(1) / (R + Rzero);\n");
 	flops += 5;
-	tprint("const T r2inv = T(1) / (z * z + R2);\n");
-	flops += 6;
-	tprint("T cosphi = x * Rinv + Rzero;\n");
-	flops++;
+	tprint("const T r2inv = T(1) / FMA(z, z, R2);\n");
+	flops += 6 - fmaops;
+	tprint("T cosphi = FMA(x, Rinv, Rzero);\n");
+	flops += 2 - fmaops;
 	tprint("T sinphi = -y * Rinv;\n");
 	flops += 2;
 	flops += z_rot(P - 1, "M", false, false, false);
@@ -817,16 +817,16 @@ int m2lg(int P, int Q) {
 	indent();
 	flops += m2lg_body(P, Q);
 	if (!nophi && P > 2) {
-		tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", index(0, 0), (P + 1) * (P + 1), P * P);
-		flops += 3;
+		tprint("L[%i] = FMA(T(-0.5) * O[%i], M[%i], L[%i]);\n", index(0, 0), (P + 1) * (P + 1), P * P, index(0, 0));
+		flops += 3 - fmaops;
 	}
 	if (P > 1) {
-		tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, -1), (P + 1) * (P + 1), index(1, -1));
-		tprint("L[%i] -= O[%i] * M[%i];\n", index(1, +0), (P + 1) * (P + 1), index(1, +0));
-		tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, +1), (P + 1) * (P + 1), index(1, +1));
-		tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", (P + 1) * (P + 1), (P + 1) * (P + 1), index(0, 0));
+		tprint("L[%i] = FMA(T(-2) * O[%i], M[%i], L[%i]);\n", index(1, -1), (P + 1) * (P + 1), index(1, -1), index(1, -1));
+		tprint("L[%i] -= O[%i] * M[%i];\n", index(1, +0), (P + 1) * (P + 1), index(1, +0), index(1, +0));
+		tprint("L[%i] = FMA(T(-2) * O[%i], M[%i], L[%i]);\n", index(1, +1), (P + 1) * (P + 1), index(1, +1), index(1, +1));
+		tprint("L[%i] = FMA(T(-0.5) * O[%i], M[%i], L[%i]);\n", (P + 1) * (P + 1), (P + 1) * (P + 1), index(0, 0), (P + 1) * (P + 1), (P + 1) * (P + 1));
+		flops += 10 - 3 * fmaops;
 	}
-	flops += 11;
 	deindent();
 	tprint("}");
 	tprint("\n");
@@ -1220,16 +1220,16 @@ int m2l_rot2(int P, int Q) {
 	 deindent();
 	 tprint("}\n");*/
 
-	tprint("const T R2 = (x * x + y * y);\n");
-	flops += 3;
+	tprint("const T R2 = FMA(x, x, y * y);\n");
+	flops += 3 - fmaops;
 	tprint("const T R = SQRT(R2);\n");
 	flops += 4;
 	tprint("const T Rzero = T(R<T(1e-37));\n");
 	tprint("const T Rinv = T(1) / (R + Rzero);\n");
 	flops += 5;
-	tprint("const T r = SQRT(z * z + R2);\n");
+	tprint("const T r = SQRT(FMA(z, z, R2));\n");
 	tprint("const T rzero = T(r<T(1e-37));\n");
-	flops += 6;
+	flops += 6 - fmaops;
 	tprint("const T rinv = T(1) / (r + rzero);\n");
 	flops += 5;
 	tprint("T cosphi0;\n");
@@ -1239,8 +1239,8 @@ int m2l_rot2(int P, int Q) {
 
 	tprint("cosphi = y * Rinv;\n");
 	flops++;
-	tprint("sinphi = x * Rinv + Rzero;\n");
-	flops += 2;
+	tprint("sinphi = FMA(x, Rinv, Rzero);\n");
+	flops += 2 - fmaops;
 	tprint("const auto multi_rot = [&M,&cosphi,&sinphi]()\n");
 	flops += 2 * z_rot(P - 1, "M", false, false, false);
 	tprint(";\n");
@@ -1250,8 +1250,8 @@ int m2l_rot2(int P, int Q) {
 
 	tprint("cosphi0 = cosphi;\n");
 	tprint("sinphi0 = sinphi;\n");
-	tprint("cosphi = z * rinv + rzero;\n");
-	flops += 2;
+	tprint("cosphi = FMA(z, rinv, rzero);\n");
+	flops += 2 - fmaops;
 	tprint("sinphi = -R * rinv;\n");
 	flops += 2;
 	tprint("multi_rot();\n");
@@ -1287,8 +1287,8 @@ int regular_harmonic(int P) {
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT void regular_harmonic(expansion_type<T, %i>& Y, T x, T y, T z) {\n", P);
 	indent();
-	tprint("const T r2 = x * x + y * y + z * z;\n");
-	flops += 5;
+	tprint("const T r2 = FMA(x, x, FMA(y, y, z * z));\n");
+	flops += 5 - 2 * fmaops;
 	tprint("T ax;\n");
 	tprint("T ay;\n");
 	tprint("Y[0] = T(1);\n");
@@ -1344,8 +1344,8 @@ int regular_harmonic_xz(int P) {
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT void regular_harmonic_xz(expansion_xz_type<T, %i>& Y, T x, T z) {\n", P);
 	indent();
-	tprint("const T r2 = x * x + z * z;\n");
-	flops += 5;
+	tprint("const T r2 = FMA(x, x, z * z);\n");
+	flops += 3 - fmaops;
 	tprint("T ax;\n");
 	tprint("T ay;\n");
 	tprint("Y[0] = T(1);\n");
@@ -1565,18 +1565,18 @@ int M2M_rot1(int P) {
 	tprint("CUDA_EXPORT void M2M%s(multipole_type<T, %i>& M, T x, T y, T z) {\n", nophi ? "_norot" : "", P + 1);
 	indent();
 
-	tprint("const T R2 = (x * x + y * y);\n");
-	flops += 3;
+	tprint("const T R2 = FMA(x, x, y * y);\n");
+	flops += 3 - fmaops;
 	tprint("const T R = SQRT(R2);\n");
 	flops += 4;
 	tprint("const T Rzero = (R<T(1e-37));\n");
 	flops++;
 	tprint("const T Rinv = T(1) / (R + Rzero);\n");
 	flops += 5;
-	tprint("const T r2inv = T(1) / (z * z + R2);\n");
-	flops += 6;
-	tprint("T cosphi = x * Rinv + Rzero;\n");
-	flops += 2;
+	tprint("const T r2inv = T(1) / FMA(z, z, R2);\n");
+	flops += 6 - fmaops;
+	tprint("T cosphi = FMA(x, Rinv, Rzero);\n");
+	flops += 2 - fmaops;
 	tprint("T sinphi = -y * Rinv;\n");
 	flops += 2;
 	flops += z_rot(P, "M", false, false, false);
@@ -1722,12 +1722,12 @@ int M2M_rot2(int P) {
 	indent();
 	//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
 
-	tprint("const T R2 = (x * x + y * y);\n");
-	flops += 3;
+	tprint("const T R2 = FMA(x, x, y * y);\n");
+	flops += 3 - fmaops;
 	tprint("const T R = SQRT(R2);\n");
 	flops += 4;
-	tprint("const T r = SQRT(R2 + z * z);\n");
-	flops += 6;
+	tprint("const T r = SQRT(FMA(z, z, R2));\n");
+	flops += 6 - fmaops;
 	tprint("const T Rzero = T(R<T(1e-37));");
 	tprint("const T rzero = T(r<T(1e-37));");
 	flops += 2;
@@ -1737,14 +1737,14 @@ int M2M_rot2(int P) {
 	flops += 5;
 	tprint("T cosphi = y * Rinv;\n");
 	flops++;
-	tprint("T sinphi = x * Rinv + Rzero;\n");
-	flops += 2;
+	tprint("T sinphi = FMA(x, Rinv, Rzero);\n");
+	flops += 2 - fmaops;
 	flops += z_rot(P, "M", false, false, false);
 	flops += xz_swap(P, "M", false, false, false, false);
 	tprint("T cosphi0 = cosphi;\n");
 	tprint("T sinphi0 = sinphi;\n");
-	tprint("cosphi = z * rinv + rzero;\n");
-	flops++;
+	tprint("cosphi = FMA(z, rinv, rzero);\n");
+	flops += 2 - fmaops;
 	tprint("sinphi = -R * rinv;\n");
 	flops += z_rot(P, "M", false, false, false);
 	flops += xz_swap(P, "M", false, false, false, false);
@@ -1973,16 +1973,16 @@ int L2L_rot1(int P) {
 	tprint("CUDA_EXPORT void L2L%s(expansion_type<T, %i>& L, T x, T y, T z) {\n", nophi ? "_nopot" : "", P);
 	indent();
 
-	tprint("const T R2 = (x * x + y * y);\n");
-	flops += 3;
+	tprint("const T R2 = FMA(x, x, y * y);\n");
+	flops += 3 - fmaops;
 	tprint("const T R = SQRT(R2);\n");
 	flops += 4;
 	tprint("const T Rzero = (R<T(1e-37));\n");
 	flops++;
 	tprint("const T Rinv = T(1) / (R + Rzero);\n");
 	flops += 5;
-	tprint("T cosphi = x * Rinv + Rzero;\n");
-	flops += 2;
+	tprint("T cosphi = FMA(x, Rinv, Rzero);\n");
+	flops += 2 - fmaops;
 	tprint("T sinphi = -y * Rinv;\n");
 	flops += z_rot(P, "L", false, false, false);
 	const auto yindex = [](int l, int m) {
@@ -2129,8 +2129,8 @@ int L2L_rot2(int P) {
 	indent();
 	//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
 
-	tprint("const T R2 = (x * x + y * y);\n");
-	flops += 3;
+	tprint("const T R2 = FMA(x, x, y * y);\n");
+	flops += 3 - fmaops;
 	tprint("const T R = SQRT(R2);\n");
 	flops += 4;
 	tprint("const T r = SQRT(R2 + z * z);\n");
@@ -2144,15 +2144,15 @@ int L2L_rot2(int P) {
 	flops += 5;
 	tprint("T cosphi = y * Rinv;\n");
 	flops++;
-	tprint("T sinphi = x * Rinv + Rzero;\n");
-	flops += 1;
+	tprint("T sinphi = FMA(x, Rinv, Rzero);\n");
+	flops += 1 - fmaops;
 	flops += 1;
 	flops += z_rot(P, "L", false, false, false);
 	flops += xz_swap(P, "L", true, false, false, false);
 	tprint("T cosphi0 = cosphi;\n");
 	tprint("T sinphi0 = sinphi;\n");
-	tprint("cosphi = z * rinv + rzero;\n");
-	flops++;
+	tprint("cosphi = FMA(z, rinv, rzero);\n");
+	flops += 2 - fmaops;
 	tprint("sinphi = -R * rinv;\n");
 	flops += z_rot(P, "L", false, false, false);
 	flops += xz_swap(P, "L", true, false, false, false);
@@ -2410,9 +2410,9 @@ int P2M(int P) {
 	indent();
 	tprint("regular_harmonic(M, -x, -y, -z);\n");
 	if (!nophi) {
-		tprint("M[%i] = x * x + y * y + z * z;\n", (P + 1) * (P + 1));
+		tprint("M[%i] = FMA(x, x, FMA(y, y, z * z));\n", (P + 1) * (P + 1));
+		flops += 5 - 2 * fmaops;
 	}
-	flops += 5;
 	deindent();
 	tprint("}\n");
 	tprint("\n");
