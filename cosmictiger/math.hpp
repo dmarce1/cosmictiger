@@ -263,13 +263,13 @@ inline simd_double8 FMA(simd_double8 a, simd_double8 b, simd_double8 c) {
 	return fmaf(a,b,c);
 }
 #endif
-CUDA_EXPORT inline float FMA(float a, float b, float c) {
+/*CUDA_EXPORT inline float FMA(float a, float b, float c) {
 	return fmaf(a,b,c);
 }
 CUDA_EXPORT inline double FMA(double a, double b, double c) {
 	return fma(a,b,c);
 }
-
+*/
 
 //CUDA_EXPORT inline void ERFCEXP( float x, float* erfc0, float* exp0) {
 //	erfcexp(x,erfc0,exp0);

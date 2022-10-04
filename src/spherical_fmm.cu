@@ -766,7 +766,7 @@ enum test_type {
 
 template<int P>
 
-real test_M2L(test_type type, real theta = 0.75) {
+real test_M2L(test_type type, real theta = 0.5) {
 	real err = 0.0;
 	int N = 10000;
 	timer tm1, tm2;
