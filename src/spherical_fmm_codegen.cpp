@@ -337,37 +337,66 @@ int m2l(int P, int Q, const char* mname, const char* lname) {
 //	tprint("}\n");
 	for (int n = nophi; n <= Q; n++) {
 		for (int m = 0; m <= n; m++) {
-			bool pfirst = true;
-			bool nfirst = true;
-			const int maxk = std::min(P - n, P - 1);
-			bool looped = true;
-			for (int k = m; k <= maxk; k++) {
-				looped = true;
-				if (pfirst) {
-					pfirst = false;
-					tprint("%s[%i] = %s%s[%i] * c0[%i];\n", lname, index(n, m), m % 2 == 0 ? "" : "-", mname, index(k, m), n + k);
-					flops += 1 + (m % 2 == 0);
-				} else {
-					tprint("%s[%i] %s= %s[%i] * c0[%i];\n", lname, index(n, m), m % 2 == 0 ? "+" : "-", mname, index(k, m), n + k);
-					flops += 2;
-				}
-				if (m != 0) {
-					if (nfirst) {
-						tprint("%s[%i] = %s%s[%i] * c0[%i];\n", lname, index(n, -m), m % 2 == 0 ? "" : "-", mname, index(k, -m), n + k);
-						flops += 1 + (m % 2 == 0);
-						nfirst = false;
+			if (m % 2 == 0) {
+				bool pfirst = true;
+				bool nfirst = true;
+				const int maxk = std::min(P - n, P - 1);
+				bool looped = true;
+				for (int k = m; k <= maxk; k++) {
+					looped = true;
+					if (pfirst) {
+						pfirst = false;
+						tprint("%s[%i] = %s[%i] * c0[%i];\n", lname, index(n, m), mname, index(k, m), n + k);
+						flops += 1;
 					} else {
-						tprint("%s[%i] %s= %s[%i] * c0[%i];\n", lname, index(n, -m), m % 2 == 0 ? "+" : "-", mname, index(k, -m), n + k);
-						flops += 2;
+						tprint("%s[%i] = FMA(%s[%i], c0[%i], %s[%i]);\n", lname, index(n, m), mname, index(k, m), n + k, lname, index(n, m));
+						flops += 2 - fmaops;
+					}
+					if (m != 0) {
+						if (nfirst) {
+							nfirst = false;
+							tprint("%s[%i] = %s[%i] * c0[%i];\n", lname, index(n, -m), mname, index(k, -m), n + k);
+							flops += 1;
+						} else {
+							tprint("%s[%i] = FMA(%s[%i], c0[%i], %s[%i]);\n", lname, index(n, -m), mname, index(k, -m), n + k, lname, index(n, -m));
+							flops += 2 - fmaops;
+						}
 					}
 				}
-			}
-			if (!looped) {
-				tprint("%s[%i] = T(0);\n", lname, index(n, m));
-				if (m != 0) {
-					tprint("%s[%i] =T(0);\n", lname, index(n, -m));
+			} else {
+				bool pfirst = true;
+				bool nfirst = true;
+				const int maxk = std::min(P - n, P - 1);
+				bool looped = true;
+				for (int k = m; k <= maxk; k++) {
+					looped = true;
+					if (pfirst) {
+						pfirst = false;
+						tprint("Lr = %s[%i] * c0[%i];\n", mname, index(k, m), n + k);
+						flops += 1;
+					} else {
+						tprint("Lr = FMA(%s[%i], c0[%i], Lr);\n", mname, index(k, m), n + k);
+						flops += 2 - fmaops;
+					}
+					if (m != 0) {
+						if (nfirst) {
+							nfirst = false;
+							tprint("Li = %s[%i] * c0[%i];\n", mname, index(k, -m), n + k);
+							flops += 1;
+						} else {
+							tprint("Li = FMA(%s[%i], c0[%i], Li);\n", mname, index(k, -m), n + k);
+							flops += 2 - fmaops;
+						}
+					}
 				}
-
+				if (!pfirst) {
+					tprint("%s[%i] = -Lr;\n", lname, index(n, m));
+					flops++;
+				}
+				if (!nfirst) {
+					tprint("%s[%i] = -Li;\n", lname, index(n, -m));
+					flops++;
+				}
 			}
 		}
 	}
@@ -605,7 +634,7 @@ int m2l_rot1(int P, int Q) {
 	tprint("L0[n] += L[n];\n");
 	deindent();
 	tprint("}\n");
-	flops +=  (Q + 1) * (Q + 1);
+	flops += (Q + 1) * (Q + 1);
 
 	deindent();
 	tprint("}");
