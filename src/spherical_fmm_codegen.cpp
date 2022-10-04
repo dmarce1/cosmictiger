@@ -330,12 +330,17 @@ int m2l(int P, int Q, const char* mname, const char* lname) {
 	}
 	tprint("T Lr;\n");
 	tprint("T Li;\n");
+//	tprint("for( int n = 0; n < %i; n++) {", Q == 1 ? 4 : (Q + 1) * (Q + 1) + 1);
+//	indent();
+//	tprint("L[n] = T(0);\n");
+//	deindent();
+//	tprint("}\n");
 	for (int n = nophi; n <= Q; n++) {
 		for (int m = 0; m <= n; m++) {
 			bool pfirst = true;
 			bool nfirst = true;
 			const int maxk = std::min(P - n, P - 1);
-			bool looped = false;
+			bool looped = true;
 			for (int k = m; k <= maxk; k++) {
 				looped = true;
 				if (pfirst) {
@@ -356,6 +361,13 @@ int m2l(int P, int Q, const char* mname, const char* lname) {
 						flops += 2;
 					}
 				}
+			}
+			if (!looped) {
+				tprint("%s[%i] = T(0);\n", lname, index(n, m));
+				if (m != 0) {
+					tprint("%s[%i] =T(0);\n", lname, index(n, -m));
+				}
+
 			}
 		}
 	}
@@ -588,12 +600,12 @@ int m2l_rot1(int P, int Q) {
 	flops++;
 	flops += z_rot(Q, "L", false, false);
 	flops++;
-	tprint("for( int n = 0; n < %i; n++) {", Q == 1 ? 4 : (Q + 1) * (Q + 1) + 1);
+	tprint("for( int n = 0; n < %i; n++) {", (Q + 1) * (Q + 1));
 	indent();
 	tprint("L0[n] += L[n];\n");
 	deindent();
 	tprint("}\n");
-	flops += Q == 1 ? 4 : (Q + 1) * (Q + 1) + 1;
+	flops +=  (Q + 1) * (Q + 1);
 
 	deindent();
 	tprint("}");
@@ -1241,12 +1253,12 @@ int m2l_rot2(int P, int Q) {
 	tprint("sinphi = -sinphi0;\n");
 	flops += 1;
 	flops += z_rot(Q, "L", false, true);
-	tprint("for( int n = 0; n < %i; n++) {", Q == 1 ? 4 : (Q + 1) * (Q + 1) + 1);
+	tprint("for( int n = 0; n < %i; n++) {", (Q + 1) * (Q + 1));
 	indent();
 	tprint("L0[n] += L[n];\n");
 	deindent();
 	tprint("}\n");
-	flops += Q == 1 ? 4 : (Q + 1) * (Q + 1) + 1;
+	flops += (Q + 1) * (Q + 1);
 	tprint("\n");
 	deindent();
 	tprint("}");
