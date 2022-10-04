@@ -117,14 +117,14 @@ int m2l_cp(int P) {
 	int flops = 0;
 	tprint("\n");
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2L%s( expansion_type<T,%i>& L, T M, T x, T y, T z ) {\n", nophi ? "_nopot" : "", P);
+	tprint("CUDA_EXPORT void P2L%s( expansion_type<T,%i>& L, T x, T y, T z ) {\n", nophi ? "_nopot" : "", P);
 	indent();
 	tprint("const T r2 = x * x + y * y + z * z;\n");
 	flops += 5;
 	tprint("const T r2inv = T(1) / r2;\n");
 	flops += 4;
 	tprint("expansion_type<T, %i> O;\n", P);
-	tprint("O[0] = M / sqrt(r2);\n");
+	tprint("O[0] = T(1) / sqrt(r2);\n");
 	flops += 8;
 	tprint("x *= r2inv;\n");
 	tprint("y *= r2inv;\n");
@@ -497,7 +497,7 @@ int xz_swap(int P, const char* name, bool inv, bool m_restrict, bool l_restrict,
 int m2l_rot1(int P, int Q) {
 	int flops = 0;
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2L%s(expansion_type<T, %i>& L, multipole_type<T, %i> M, T x, T y, T z) {\n", nophi ? "_nopot" : "", Q, P);
+	tprint("CUDA_EXPORT void M2%s%s(expansion_type<T, %i>& L, multipole_type<T, %i> M, T x, T y, T z) {\n", Q == 1 ? "P" : "L", nophi ? "_nopot" : "", Q, P);
 	indent();
 	const auto tpo = tprint_on;
 	set_tprint(false);
@@ -622,7 +622,8 @@ int m2l_ewald(int P) {
 int m2lg(int P, int Q) {
 	int flops = 0;
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2L%s(expansion_type<T, %i>& L, const multipole_type<T, %i>& M, const expansion_type<T, %i>& O) {\n", nophi ? "_nopot" : "", Q, P, P);
+	tprint("CUDA_EXPORT void M2L%s(expansion_type<T, %i>& L, const multipole_type<T, %i>& M, const expansion_type<T, %i>& O) {\n", nophi ? "_nopot" : "", Q, P,
+			P);
 	indent();
 	for (int n = nophi; n <= Q; n++) {
 		for (int m = 0; m <= n; m++) {
@@ -726,14 +727,16 @@ int m2lg(int P, int Q) {
 			}
 		}
 	}
-	if (!nophi) {
+	if (!nophi && P > 2) {
 		tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", index(0, 0), (P + 1) * (P + 1), P * P);
 		flops += 3;
 	}
-	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, -1), (P + 1) * (P + 1), index(1, -1));
-	tprint("L[%i] -= O[%i] * M[%i];\n", index(1, +0), (P + 1) * (P + 1), index(1, +0));
-	tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, +1), (P + 1) * (P + 1), index(1, +1));
-	tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", (P + 1) * (P + 1), (P + 1) * (P + 1), index(0, 0));
+	if( P > 1 ) {
+		tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, -1), (P + 1) * (P + 1), index(1, -1));
+		tprint("L[%i] -= O[%i] * M[%i];\n", index(1, +0), (P + 1) * (P + 1), index(1, +0));
+		tprint("L[%i] -= T(2) * O[%i] * M[%i];\n", index(1, +1), (P + 1) * (P + 1), index(1, +1));
+		tprint("L[%i] -= T(0.5) * O[%i] * M[%i];\n", (P + 1) * (P + 1), (P + 1) * (P + 1), index(0, 0));
+	}
 	flops += 11;
 	deindent();
 	tprint("}");
@@ -744,7 +747,8 @@ int m2lg(int P, int Q) {
 int m2l_norot(int P, int Q) {
 	int flops = 0;
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2L%s(expansion_type<T, %i>& L, const multipole_type<T, %i>& M, T x, T y, T z) {\n", nophi ? "_nopot" : "", Q, P);
+	tprint("CUDA_EXPORT void M2%s%s(expansion_type<T, %i>& L, const multipole_type<T, %i>& M, T x, T y, T z) {\n", Q == 1 ? "P" : "L", nophi ? "_nopot" : "", Q,
+			P);
 	indent();
 	const auto c = tprint_on;
 	set_tprint(false);
@@ -952,7 +956,7 @@ int ewald_greens(int P) {
 		}
 	}
 	for (int l = nophi; l <= P; l++) {
-		tprint("gamma = gamma1 * gamma0inv;\n" );
+		tprint("gamma = gamma1 * gamma0inv;\n");
 		flops += rcnt;
 		for (int m = -l; m <= l; m++) {
 			tprint("G[%i] -= sw*(gamma - T(%.1e)) * Gr[%i];\n", index(l, m), nonepow<double>(l), index(l, m));
@@ -1022,7 +1026,7 @@ int ewald_greens(int P) {
 		tprint("gamma = gamma1 * gamma0inv;\n");
 		flops += rcnt;
 		for (int m = -l; m <= l; m++) {
-			tprint("G[%i] = -gamma * Gr[%i];\n", index(l, m), index(l, m));
+			tprint("G[%i] -= gamma * Gr[%i];\n", index(l, m), index(l, m));
 			flops += rcnt * 2;
 		}
 		tprint("gamma0inv *= T(1) / T(%.16e);\n", -(l + 0.5));
@@ -1182,7 +1186,7 @@ int ewald_greens(int P) {
 int m2l_rot2(int P, int Q) {
 	int flops = 0;
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2L%s(expansion_type<T, %i>& L, multipole_type<T, %i> M, T x, T y, T z) {\n", nophi ? "_norot" : "", Q, P);
+	tprint("CUDA_EXPORT void M2%s%s(expansion_type<T, %i>& L, multipole_type<T, %i> M, T x, T y, T z) {\n", Q == 1 ? "P" : "L", nophi ? "_norot" : "", Q, P);
 	indent();
 	tprint("const T R2 = (x * x + y * y);\n");
 	flops += 3;
@@ -1363,9 +1367,9 @@ int M2M_norot(int P) {
 	tprint("regular_harmonic(Y, -x, -y, -z);\n");
 	flops += 3;
 	if (P > 1 && !nophi) {
-		tprint("M[%i] += T(0.5) * x * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
-		tprint("M[%i] += T(0.5) * y * M[%i];\n", (P + 1) * (P + 1), index(1, -1));
-		tprint("M[%i] += T(0.5) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
+		tprint("M[%i] -= T(4) * x * M[%i];\n", (P + 1) * (P + 1), index(1, 1));
+		tprint("M[%i] -= T(4) * y * M[%i];\n", (P + 1) * (P + 1), index(1, -1));
+		tprint("M[%i] -= T(2) * z * M[%i];\n", (P + 1) * (P + 1), index(1, 0));
 		tprint("M[%i] += x * x * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
 		tprint("M[%i] += y * y * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
 		tprint("M[%i] += z * z * M[%i];\n", (P + 1) * (P + 1), index(0, 0));
@@ -1504,10 +1508,6 @@ int M2M_rot1(int P) {
 	tprint("expansion_xz_type<T, %i> Y;\n", P);
 	tprint("regular_harmonic_xz(Y, -R, -z);\n");
 	flops += 2;
-	tprint("T mx;\n");
-	tprint("T my;\n");
-	tprint("T gx;\n");
-	tprint("T gy;\n");
 	for (int n = P; n >= 0; n--) {
 		for (int m = 0; m <= n; m++) {
 			for (int k = 1; k <= n; k++) {
@@ -1584,7 +1584,7 @@ int M2M_rot1(int P) {
 int M2M_rot2(int P) {
 	int flops = 0;
 	tprint("template<class T>\n");
-	tprint("CUDA_EXPORT void M2M(multipole_type%s<T, %i>& M, T x, T y, T z) {\n", nophi ? "_norot" : "", P + 1);
+	tprint("CUDA_EXPORT void M2M%s(multipole_type<T, %i>& M, T x, T y, T z) {\n", nophi ? "_nopot" : "", P + 1);
 	indent();
 	//const auto Y = spherical_regular_harmonic<T, P>(-x, -y, -z);
 
@@ -1795,8 +1795,6 @@ int L2L_rot1(int P) {
 	flops++;
 	tprint("const T Rinv = T(1) / (R + Rzero);\n");
 	flops += 5;
-	tprint("const T r2inv = T(1) / (z * z + R2);\n");
-	flops += 6;
 	tprint("T cosphi = x * Rinv + Rzero;\n");
 	flops += 2;
 	tprint("T sinphi = -y * Rinv;\n");
@@ -1865,20 +1863,22 @@ int L2L_rot1(int P) {
 			}
 		}
 	}
-	if (P > 1) {
-		tprint("L[%i] -= T(2) * R * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
-		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
-		flops += 6;
-		if (!nophi) {
-			tprint("L[%i] += R * R * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
-			tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
-			flops += 6;
-		}
-	}
 	tprint("sinphi = -sinphi;\n");
 	flops++;
 	flops += z_rot(P, "L", false, false);
 	flops++;
+	if (P > 1) {
+		tprint("L[%i] -= T(2) * x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
+		flops += 9;
+		if (!nophi) {
+			tprint("L[%i] += x * x * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+			tprint("L[%i] += y * y * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+			tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+			flops += 9;
+		}
+	}
 	deindent();
 	tprint("}");
 	tprint("\n");
@@ -1948,14 +1948,6 @@ int L2L_rot2(int P) {
 
 		}
 	}
-	if (P > 1) {
-		tprint("L[%i] -= T(2) * r * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
-		flops += 3;
-		if (!nophi) {
-			tprint("L[%i] += r * r * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
-			flops += 3;
-		}
-	}
 	flops += xz_swap(P, "L", true, false, false, false);
 	tprint("sinphi = -sinphi;\n");
 	flops += z_rot(P, "L", false, false);
@@ -1964,6 +1956,18 @@ int L2L_rot2(int P) {
 	tprint("sinphi = -sinphi0;\n");
 	flops += 1;
 	flops += z_rot(P, "L", false, false);
+	if (P > 1) {
+		tprint("L[%i] -= T(2) * x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
+		tprint("L[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
+		flops += 9;
+		if (!nophi) {
+			tprint("L[%i] += x * x * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+			tprint("L[%i] += y * y * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+			tprint("L[%i] += z * z * L[%i];\n", index(0, 0), (P + 1) * (P + 1));
+			flops += 9;
+		}
+	}
 	deindent();
 	tprint("}");
 	tprint("\n");
@@ -1976,6 +1980,7 @@ int L2P(int P) {
 	set_tprint(false);
 	flops += regular_harmonic(P);
 	set_tprint(c);
+	tprint("\n");
 	tprint("template<class T>\n");
 	tprint("CUDA_EXPORT expansion_type<T, %i> L2P%s(expansion_type<T, %i>& L, T x, T y, T z) {\n", 1, nophi ? "_norot" : "", P);
 	indent();
@@ -1989,10 +1994,6 @@ int L2P(int P) {
 	}
 	tprint("regular_harmonic(Y, -x, -y, -z);\n");
 	flops += 3;
-	tprint("T mx;\n");
-	tprint("T my;\n");
-	tprint("T gx;\n");
-	tprint("T gy;\n");
 	for (int n = nophi; n <= 1; n++) {
 		for (int m = 0; m <= n; m++) {
 			bool first = true;
@@ -2082,7 +2083,7 @@ int L2P(int P) {
 			}
 		}
 	}
-	if (P > 1) {
+	if (P >= 1) {
 		tprint("L1[%i] -= T(2) * x * L[%i];\n", index(1, 1), (P + 1) * (P + 1));
 		tprint("L1[%i] -= T(2) * y * L[%i];\n", index(1, -1), (P + 1) * (P + 1));
 		tprint("L1[%i] -= T(2) * z * L[%i];\n", index(1, 0), (P + 1) * (P + 1));
@@ -2097,7 +2098,9 @@ int L2P(int P) {
 	tprint("return L1;");
 
 	deindent();
-	tprint("}");
+	tprint("}\n");
+	tprint("\n");
+
 	return flops;
 }
 int P2M(int P) {
@@ -2136,8 +2139,8 @@ int main() {
 	tprint("template<class T, int P>\n");
 	tprint("using expansion_xz_type = array<T, (P > 1) ? (P+1)*(P+2)/2+1:(P+1)*(P+2)/2>;\n");
 	tprint("\n");
-	constexpr int pmax = 16;
-	for (int b = 0; b < 2; b++) {
+	constexpr int pmax = 10;
+	for (int b = 0; b < 1; b++) {
 		nophi = b != 0;
 		std::vector<int> pc_flops(pmax + 1);
 		std::vector<int> cp_flops(pmax + 1);
@@ -2153,7 +2156,7 @@ int main() {
 		set_tprint(false);
 		fprintf(stderr, "%2s %5s %5s %2s %5s %5s %2s %5s %5s %5s %5s %2s %5s %5s %2s %5s %5s %5s %5s %8s %8s %8s\n", "p", "CC", "eff", "-r", "PC", "eff", "-r",
 				"CP", "eff", "M2M", "eff", "-r", "L2L", "eff", "-r", "P2M", "eff", "L2P", "eff", "CC_ewald", "green", "m2l");
-		for (int P = 2; P <= pmax; P++) {
+		for (int P = 3; P <= pmax; P++) {
 			auto r0 = m2l_norot(P, P);
 			auto r1 = m2l_rot1(P, P);
 			auto r2 = m2l_rot2(P, P);
@@ -2218,11 +2221,15 @@ int main() {
 					p2m_flops[P] / pow(P + 1, 2), l2p_flops[P], l2p_flops[P] / pow(P + 1, 2), eflopsg + eflopsm, eflopsg, eflopsm);
 		}
 		set_tprint(true);
-		if(b==0)regular_harmonic(1);
-		if(b==0)regular_harmonic_xz(1);
-		for (int P = 2; P <= pmax; P++) {
-			if(b==0)greens(P);
-			if(b==0)greens_xz(P);
+		if (b == 0)
+			regular_harmonic(2);
+		if (b == 0)
+			regular_harmonic_xz(2);
+		for (int P = 3; P <= pmax; P++) {
+			if (b == 0)
+				greens(P);
+			if (b == 0)
+				greens_xz(P);
 			switch (cc_rot[P]) {
 			case 0:
 				m2l_norot(P, P);
@@ -2248,17 +2255,19 @@ int main() {
 				};
 			}
 			m2l_cp(P);
-			if(b==0)regular_harmonic(P);
-			if(b==0)regular_harmonic_xz(P);
+			if (b == 0)
+				regular_harmonic(P);
+			if (b == 0)
+				regular_harmonic_xz(P);
 			switch (m2m_rot[P]) {
 			case 0:
-				M2M_rot1(P - 1);
+				M2M_norot(P - 1);
 				break;
 			case 1:
 				M2M_rot1(P - 1);
 				break;
 			case 2:
-				M2M_rot1(P - 1);
+				M2M_rot2(P - 1);
 				break;
 			};
 			switch (l2l_rot[P]) {

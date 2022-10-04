@@ -248,9 +248,9 @@ inline simd_float FMA(simd_float a, simd_float b, simd_float c) {
 }
 
 
-CUDA_EXPORT inline void SINCOS( simd_float x, simd_float* s, simd_float* c) {
-	sincos(x,s,c);
-}
+//CUDA_EXPORT inline void SINCOS( simd_float x, simd_float* s, simd_float* c) {
+//	sincos(x,s,c);
+//}
 
 CUDA_EXPORT inline void ERFCEXP( simd_float x, simd_float* erfc0, simd_float* exp0) {
 	erfcexp(x,erfc0,exp0);
@@ -271,21 +271,21 @@ CUDA_EXPORT inline double FMA(double a, double b, double c) {
 }
 
 
-CUDA_EXPORT inline void ERFCEXP( float x, float* erfc0, float* exp0) {
-	erfcexp(x,erfc0,exp0);
-}
+//CUDA_EXPORT inline void ERFCEXP( float x, float* erfc0, float* exp0) {
+//	erfcexp(x,erfc0,exp0);
+//}
 
-CUDA_EXPORT inline void ERFCEXP( double x, double* erfc0, double* exp0) {
-	*erfc0 = erfc(x);
-	*exp0 = exp(-sqr(x));
-}
+//CUDA_EXPORT inline void ERFCEXP( double x, double* erfc0, double* exp0) {
+//	*erfc0 = erfc(x);
+//	*exp0 = exp(-sqr(x));
+//}
 
-CUDA_EXPORT inline void SINCOS( float x, float* s, float* c) {
-	sincosf(x,s,c);
-}
+//CUDA_EXPORT inline void SINCOS( float x, float* s, float* c) {
+//	sincosf(x,s,c);
+//}
 
-CUDA_EXPORT inline void SINCOS( double x, double* s, double* c) {
-	sincos(x,s,c);
-}
+//CUDA_EXPORT inline void SINCOS( double x, double* s, double* c) {
+//	sincos(x,s,c);
+//}
 
 #endif /* MATH_HPP_ */

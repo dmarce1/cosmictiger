@@ -14,7 +14,7 @@
 #include <cosmictiger/fmm_kernels.hpp>
 #include <fftw3.h>
 
-using real = double;
+using real = float;
 
 double Pm(int l, int m, double x) {
 	if (m > l) {
@@ -760,8 +760,13 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 //	L = L2;
 }
 
+enum test_type {
+	CC, PC, CP, EWALD
+};
+
 template<int P>
-std::pair<real, real> test_M2L(real theta = 0.5) {
+
+real test_M2L(test_type type, real theta = 0.75) {
 	real err = 0.0;
 	int N = 10000;
 	timer tm1, tm2;
@@ -773,126 +778,133 @@ std::pair<real, real> test_M2L(real theta = 0.5) {
 	real err2 = 0.0;
 	real norm = 0.0;
 	for (int i = 0; i < N; i++) {
-		real x0, x1, x2, y0, y1, y2, z0, z1, z2;
-		random_vector(x0, y0, z0);
-		random_vector(x0, y0, z0);
-		//	random_vector(x0, y0, z0);
-		random_unit(x1, y1, z1);
-		random_vector(x2, y2, z2);
-//		x0 = y0 = z0 = 0;
-		//	x2 = y2 = z2 = 0;
+		if (type == EWALD) {
+			real x0, x1, x2, y0, y1, y2, z0, z1, z2;
+			random_vector(x0, y0, z0);
+			random_unit(x1, y1, z1);
+			random_vector(x2, y2, z2);
+			const auto alpha = 0.45 * rand1() + 0.05;
+			x1 *= alpha;
+			y1 *= alpha;
+			z1 *= alpha;
+			x0 *= 0.5 * theta * alpha;
+			y0 *= 0.5 * theta * alpha;
+			z0 *= 0.5 * theta * alpha;
+			x2 *= 0.5 * theta * alpha;
+			y2 *= 0.5 * theta * alpha;
+			z2 *= 0.5 * theta * alpha;
+//			x0 = y0 = z0 = 0.0;
+//			x2 = y2 = z2 = 0.0;
+			double f0 = rand1();
+			double f1 = rand1();
+			double f2 = rand1();
+			double g0 = rand1();
+			double g1 = rand1();
+			double g2 = rand1();
+			multipole_type<real, P> M;
+			expansion_type<real, P> L;
+			for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
+				M[n] = (0);
+			}
+			P2M<real>(M, -x0 * f0, -y0 * f1, -z0 * f2);
+			for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
+				M[n] *= (0.5);
+			}
+			M2M<real>(M, -real(x0) * (1 - f0), -real(y0) * (1 - f1), -real(z0) * (1 - f2));
+			for (int n = 0; n <= (P > 1 ? (P + 1) * (P + 1) : (P + 1) * (P + 1) - 1); n++) {
+				L[n] = (0);
+			}
+			//	g0 = g1 = g2 = 0.0;
+			M2L_ewald<real, P>(L, M, x1, y1, z1);
+			L2L<real>(L, x2 * g0, y2 * g1, z2 * g2);
+			auto L2 = L2P<real>(L, x2 * (1 - g0), y2 * (1 - g1), z2 * (1 - g2));
+			double phi, fx, fy, fz;
+			ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
+			fx *= 0.5;
+			fy *= 0.5;
+			fz *= 0.5;
+			phi *= 0.5;
+			err += abs((phi - L2[0]));
+			norm += abs(phi);
 
-//		x1 /= 0.5 * theta;
-//		y1 /= 0.5 * theta;
-//		z1 /= 0.5 * theta;
-		const auto alpha = 0.45 * rand1() + 0.05;
-		x1 *= alpha;
-		y1 *= alpha;
-		z1 *= alpha;
-		x0 *= 0.5 * theta * alpha;
-		y0 *= 0.5 * theta * alpha;
-		z0 *= 0.5 * theta * alpha;
-		x2 *= 0.5 * theta * alpha;
-		y2 *= 0.5 * theta * alpha;
-		z2 *= 0.5 * theta * alpha;
-		double f0 = rand1();
-		double f1 = rand1();
-		double f2 = rand1();
-		double g0 = rand1();
-		double g1 = rand1();
-		double g2 = rand1();
-		/*multipole_type<real, P> M;
-		 expansion_type<real, P> L;
-		 for (int l = 0; l < L.size(); l++) {
-		 L[l] = 0.f;
-		 }
-		 P2M(M, -x0, -y0, -z0);
-		 M2L(L, M, x1, y1, z1);
-		 auto L2 = L2P(L, x2, y2, z2);*/
-//		x0 = y0 = z0 = 0.0;
-		//	x2 = y2 = z2 = 0.0;
-		//	x0 = 0.03;
-		//	x2 = -.02;
-		//z2 = 1e-5;
-		//	y2 = 1e-10;
-		//	x2 = 1e-10;
-		//	z1 = 0.24;
-		//	y1 = 0.0;
-		//	x1 = 0.0;
-//		z2 = 0.05;
-		//	x0 = y0 = 0.0;
-		multipole_type<real, P> M;
-		expansion_type<real, P> L;
-		for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
-			M[n] = (0);
-			L[n] = (0);
+		} else {
+			real x0, x1, x2, y0, y1, y2, z0, z1, z2;
+			random_vector(x0, y0, z0);
+			random_unit(x1, y1, z1);
+			random_vector(x2, y2, z2);
+			if (type == CP) {
+				x0 = y0 = z0 = 0;
+			} else if (type == PC) {
+				x2 = y2 = z2 = 0;
+			}
+			if (type == CC) {
+				x1 /= 0.5 * theta;
+				y1 /= 0.5 * theta;
+				z1 /= 0.5 * theta;
+			} else {
+				x1 /= theta;
+				y1 /= theta;
+				z1 /= theta;
+			}
+			double f0 = rand1();
+			double f1 = rand1();
+			double f2 = rand1();
+			double g0 = rand1();
+			double g1 = rand1();
+			double g2 = rand1();
+			multipole_type<real, P> M;
+			expansion_type<real, P> L;
+			for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
+				M[n] = (0);
+			}
+			P2M<real>(M, -x0 * f0, -y0 * f1, -z0 * f2);
+
+			M2M<real>(M, -real(x0) * (1 - f0), -real(y0) * (1 - f1), -real(z0) * (1 - f2));
+			for (int n = 0; n <= (P > 1 ? (P + 1) * (P + 1) : (P + 1) * (P + 1) - 1); n++) {
+				L[n] = (0);
+			}
+			expansion_type<real, 1> L2;
+			for (int l = 0; l < 4; l++) {
+				L2[l] = 0.0;
+			}
+			if (type == CC) {
+				M2L<real>(L, M, x1, y1, z1);
+				L2L<real>(L, x2 * g0, y2 * g1, z2 * g2);
+				L2 = L2P<real>(L, x2 * (1 - g0), y2 * (1 - g1), z2 * (1 - g2));
+			} else if (type == PC) {
+				M2P<real>(L2, M, x1, y1, z1);
+			} else if (type == CP) {
+				P2L<real>(L, x1, y1, z1);
+				L2L<real>(L, x2 * g0, y2 * g1, z2 * g2);
+				L2 = L2P<real>(L, x2 * (1 - g0), y2 * (1 - g1), z2 * (1 - g2));
+			}
+			const real dx = (x2 + x1) - x0;
+			const real dy = (y2 + y1) - y0;
+			const real dz = (z2 + z1) - z0;
+			const real r = sqrt(sqr(dx, dy, dz));
+			const real phi = 1.0 / r;
+			err += abs((L2[0] - phi));
+			norm += abs(phi);
 		}
-		P2M<real>(M, -x0 * f0, -y0 * f1, -z0 * f2);
-		for (int n = 0; n <= (P > 2 ? P * P : (P * P - 1)); n++) {
-			M[n] *= (0.5);
-		}
-
-		M2M<real>(M, -real(x0) * (1 - f0), -real(y0) * (1 - f1), -real(z0) * (1 - f2));
-		for (int n = 0; n <= (P > 1 ? (P + 1) * (P + 1) : (P + 1) * (P + 1) - 1); n++) {
-			L[n] = (0);
-		}
-
-		M2L_ewald<real, P>(L, M, x1, y1, z1);
-		g0 = g1 = g2 = 0.0;
-		L2L<real>(L, x2 * g0, y2 * g1, z2 * g2);
-		auto L2 = L2P<real>(L, x2 * (1 - g0), y2 * (1 - g1), z2 * (1 - g2));
-		double phi, fx, fy, fz;
-		ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
-		fx *= 0.5;
-		fy *= 0.5;
-		fz *= 0.5;
-
-		phi *= 0.5;
-		//printf("%e %e %e | %e %e %e | %e %e %e %e | %e %e %e %e\n", x0, y0, z0, x2, y2, z2, L[0], -L[3], -L[1], -L[2], phi, fx, fy, fz);
-		//	err += (sqr(L[3]+fx)+ sqr(L[1]+fy)+ sqr(L[2]+fz))/(fx*fx+fy*fy+fz*fz);
-		//	printf( "%e\n",err);
-		err += abs((phi - L2[0]));
-		norm += abs(phi);
-//		printf( "%e\n", err);
-//		abort();
-		/*spherical_expansion<real, P - 1> M = spherical_regular_harmonic<real, P - 1>(x0, y0, z0);
-		 auto L = spherical_expansion_exp_M2L<real, P>(M, x1, y1, z1);
-		 spherical_expansion_L2L<real, P>(L, x2, y2, z2);
-		 const real dx = (x2 + x1) - x0;
-		 const real dy = (y2 + y1) - y0;
-		 const real dz = (z2 + z1) - z0;
-		 const real r = sqrt(sqr(dx, dy, dz));
-		 const real ap = 1.0 / r;
-		 const real ax = -dx / (r * r * r);
-		 const real ay = -dy / (r * r * r);
-		 const real az = -dz / (r * r * r);
-		 const real np = L(0, 0).real();
-		 const real nx = -L(1, 1).real();
-		 const real ny = -L(1, 1).imag();
-		 const real nz = -L(1, 0).real();
-		 const real ag = sqrt(sqr(ax, ay, az));
-		 const real ng = sqrt(sqr(nx, ny, nz));*/
-		//	printf("%e %e %e | %e %e %e\n", nx, ny, nz, ax, ay, az);
-//		abort();
-//		err += sqr((ag - ng) / ag);
 	}
 	tm1.stop();
 	err /= norm;
-	return std::make_pair(err, err2 / N / 2.0);
+	return err;
 }
+
 template<int NMAX, int N = 3>
 struct run_tests {
-	void operator()() {
-		auto a = test_M2L<N>();
-		printf("%i %e\n", N, a.first);
+	void operator()(test_type type) {
+		auto a = test_M2L<N>(type);
+		printf("%i %e\n", N, a);
 		run_tests<NMAX, N + 1> run;
-		run();
+		run(type);
 	}
 };
 
 template<int NMAX>
 struct run_tests<NMAX, NMAX> {
-	void operator()() {
+	void operator()(test_type type) {
 
 	}
 };
@@ -1086,6 +1098,13 @@ constexpr T const_S(int n, int m0, T x, T y, T z) {
 
 int main() {
 
-	run_tests<17, 2> run;
-	run();
+	run_tests<11, 3> run;
+	print("EWALD\n");
+	run(EWALD);
+	print("M2L\n");
+	run(CC);
+	print("M2P\n");
+	run(PC);
+	print("P2L\n");
+	run(CP);
 }
