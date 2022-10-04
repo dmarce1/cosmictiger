@@ -14,7 +14,7 @@
 #include <cosmictiger/fmm_kernels.hpp>
 #include <fftw3.h>
 
-using real = float;
+using real = double;
 
 double Pm(int l, int m, double x) {
 	if (m > l) {
@@ -528,6 +528,8 @@ void ewald_compute(double& pot, double& fx, double& fy, double& fz, double dx0, 
 		pot += 2.837291f;
 	}
 }
+
+/*
 template<class T, int P>
 void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y0, T z0) {
 	constexpr T alpha = 2.f;
@@ -759,6 +761,9 @@ void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y
 	M2L_ewald<real>(L2, M, x0, y0, z0);
 //	L = L2;
 }
+*/
+
+
 
 enum test_type {
 	CC, PC, CP, EWALD
@@ -777,6 +782,7 @@ real test_M2L(test_type type, real theta = 0.5) {
 
 	real err2 = 0.0;
 	real norm = 0.0;
+	double phi, fx, fy, fz;
 	for (int i = 0; i < N; i++) {
 		if (type == EWALD) {
 			real x0, x1, x2, y0, y1, y2, z0, z1, z2;
@@ -815,15 +821,15 @@ real test_M2L(test_type type, real theta = 0.5) {
 				L[n] = (0);
 			}
 			//	g0 = g1 = g2 = 0.0;
-			M2L_ewald<real, P>(L, M, x1, y1, z1);
+			M2L_ewald<real>(L, M, x1, y1, z1);
 			L2L<real>(L, x2 * g0, y2 * g1, z2 * g2);
 			auto L2 = L2P<real>(L, x2 * (1 - g0), y2 * (1 - g1), z2 * (1 - g2));
-			double phi, fx, fy, fz;
 			ewald_compute(phi, fx, fy, fz, (-x2 + x1) + x0, (-y2 + y1) + y0, (-z2 + z1) + z0);
 			fx *= 0.5;
 			fy *= 0.5;
 			fz *= 0.5;
 			phi *= 0.5;
+			//printf( "%e %e %e\n", fx, -L2[3], fx + L2[3]);
 			err += abs((phi - L2[0]));
 			norm += abs(phi);
 
@@ -1098,7 +1104,7 @@ constexpr T const_S(int n, int m0, T x, T y, T z) {
 
 int main() {
 
-	run_tests<11, 3> run;
+	run_tests<8, 3> run;
 	print("M2L\n");
 	run(CC);
 	print("M2P\n");
