@@ -529,241 +529,100 @@ void ewald_compute(double& pot, double& fx, double& fy, double& fz, double dx0, 
 	}
 }
 
-/*
 template<class T, int P>
-void M2L_ewald(expansion_type<T, P>& L, const multipole_type<T, P>& M, T x0, T y0, T z0) {
-	constexpr T alpha = 2.f;
-	const auto index = [](int l, int m) {
-		return l * (l + 1) + m;
+void M2L_ewald2(double& r2, double& h2, T alpha) {
+	r2 = 0;
+	h2 = 0;
+	const auto threesqr = [](int i) {
+		for( int x = 0; x <= i; x++ ) {
+			for( int y = 0; y <= i; y++) {
+				for( int z = 0; z <= i; z++) {
+					if( x*x + y*y + z*z == i ) {
+						return true;
+					}
+				}
+			}
+		}
+		return false;
 	};
-	expansion_type<T, P> L2 = L;
-	expansion_type<T, P> G;
-	expansion_type<T, P> G0;
-	for (int l = 0; l <= P; l++) {
-		for (int m = -l; m <= l; m++) {
-			G[index(l, m)] = T(0);
-		}
-	}
-	G[(P + 1) * (P + 1)] = T(0);
-	for (int ix = -3; ix <= 3; ix++) {
-		for (int iy = -3; iy <= 3; iy++) {
-			for (int iz = -3; iz <= 3; iz++) {
-				const T x = x0 - ix;
-				const T y = y0 - iy;
-				const T z = z0 - iz;
-				const T r2 = sqr(x, y, z);
-				if (r2 <= sqr(2.6)) {
-					const T r = sqrt(x * x + y * y + z * z);
-					greens(G0, x, y, z);
-					T gamma1 = sqrt(M_PI) * erfc(alpha * r);
-					T gamma0inv = 1.0f / sqrt(M_PI);
-					for (int l = 0; l <= P; l++) {
-						const T gamma = gamma1 * gamma0inv;
-						if (ix * ix + iy * iy + iz * iz == 0) {
-							if ((x0 * x0 + y0 * y0 + z0 * z0) == 0.0) {
-								if (l == 0) {
-									G[index(0, 0)] += T(2) * alpha / sqrt(M_PI);
+
+	T dx = 0.01;
+
+	int R2 = 1;
+	while (1) {
+		T m = T(0);
+		const int e = sqrt(R2);
+		for (T x0 = 0; x0 < 0.5; x0 += dx) {
+			for (T y0 = x0; y0 < 0.5; y0 += dx) {
+				for (T z0 = y0; z0 < 0.5; z0 += dx) {
+					for (int xi = 0; xi <= e; xi++) {
+						for (int yi = xi; yi <= e; yi++) {
+							for (int zi = yi; zi <= e; zi++) {
+								if (xi * xi + yi * yi + zi * zi != R2) {
+									continue;
 								}
-							} else {
-								for (int m = -l; m <= l; m++) {
-									G[index(l, m)] -= (gamma - nonepow(l)) * G0[index(l, m)];
+								const T x = x0 - xi;
+								const T y = y0 - yi;
+								const T z = z0 - zi;
+								const T r0 = sqrt(x0 * x0 + y0 * y0 + z0 * z0);
+								if (r0 != T(0)) {
+									const T r = sqrt(x * x + y * y + z * z);
+									T a = r0 * erfc(alpha * r) / r;
+									m = std::max(m, abs(a));
 								}
-							}
-						} else {
-							for (int m = -l; m <= l; m++) {
-								G[index(l, m)] -= gamma * G0[index(l, m)];
 							}
 						}
-						const T x = alpha * alpha * r * r;
-						const T s = l + 0.5f;
-						gamma0inv /= -s;
-						gamma1 = s * gamma1 + pow(x, s) * exp(-x);
 					}
 				}
 			}
 		}
+		if (m < std::numeric_limits < T > ::epsilon()) {
+			break;
+		}
+		while (!threesqr(++R2))
+			;
 	}
-	for (int hx = -2; hx <= 2; hx++) {
-
-		for (int hy = -2; hy <= 2; hy++) {
-			for (int hz = -2; hz <= 2; hz++) {
-				const int h2 = hx * hx + hy * hy + hz * hz;
-				if (h2 <= 8 && h2 > 0) {
-					const T h = sqrt(h2);
-					greens(G0, (T) hx, (T) hy, (T) hz);
-					const T hdotx = hx * x0 + hy * y0 + hz * z0;
-					T gamma0inv = 1.0f / sqrt(M_PI);
-					T hpow = 1.f / h;
-					T pipow = 1.f / sqrt(M_PI);
-					for (int l = 0; l <= P; l++) {
-						for (int m = 0; m <= l; m++) {
-							const T phi = T(2.0 * M_PI) * hdotx;
-							T Rx, Ry, ax, ay, bx, by;
-							sincos(phi, &Ry, &Rx);
-							if (m == 0) {
-								ax = G0[index(l, m)] * Rx;
-								ay = G0[index(l, m)] * Ry;
-							} else {
-								ax = G0[index(l, m)] * Rx - G0[index(l, -m)] * Ry;
-								ay = G0[index(l, m)] * Ry + G0[index(l, -m)] * Rx;
-							}
-							T c0 = gamma0inv * hpow * pipow * exp(-h * h * T(M_PI * M_PI) / (alpha * alpha));
-							ax *= c0;
-							ay *= c0;
-							if (l % 4 == 1) {
-								T tmp = ax;
-								ax = -ay;
-								ay = tmp;
-							} else if (l % 4 == 2) {
-								ax = -ax;
-								ay = -ay;
-							} else if (l % 4 == 3) {
-								T tmp = ax;
-								ax = ay;
-								ay = -tmp;
-							}
-							G[index(l, m)] -= ax;
-							if (m != 0) {
-								G[index(l, -m)] -= ay;
+	while (!threesqr(--R2))
+		;
+	r2 = R2;
+	R2 = 1;
+	while (1) {
+		T m = T(0);
+		const int e = sqrt(R2);
+		int n = 0;
+		for (T x0 = 0; x0 < 0.5; x0 += dx) {
+			for (T y0 = x0; y0 < 0.5; y0 += dx) {
+				for (T z0 = y0; z0 < 0.5; z0 += dx) {
+					for (int xi = 0; xi <= e; xi++) {
+						for (int yi = xi; yi <= e; yi++) {
+							for (int zi = yi; zi <= e; zi++) {
+								if (xi * xi + yi * yi + zi * zi != R2) {
+									continue;
+								}
+								const T x = x0 - xi;
+								const T y = y0 - yi;
+								const T z = z0 - zi;
+								const T h2 = xi * xi + yi * yi + zi * zi;
+								const T hdotx = x * xi + y * yi + z * zi;
+								const T r = sqrt(x * x + y * y + z * z);
+								T a = r * abs(cos(2.0 * M_PI * hdotx) * exp(-M_PI * M_PI * h2 / (alpha * alpha)) / (h2 * sqrt(M_PI)));
+								m = std::max(m, abs(a));
 							}
 						}
-						const T s = l + 0.5f;
-						gamma0inv /= s;
-						hpow *= h * h;
-						pipow *= M_PI;
 					}
 				}
 			}
 		}
-	}
-	G[(P + 1) * (P + 1)] = T(4.0 * M_PI / 3.0);
-	G[0] += T(M_PI / (alpha * alpha));
-	for (int n = 0; n <= P; n++) {
-		for (int m = 0; m <= n; m++) {
-			L[index(n, m)] = L[index(n, -m)] = 0;
-			const int kmax = std::min(P - n, P - 1);
-			for (int k = 0; k <= kmax; k++) {
-				const int lmin = std::max(-k, -n - k - m);
-				const int lmax = std::min(k, n + k - m);
-				for (int l = lmin; l <= lmax; l++) {
-					auto mx = M[index(k, abs(l))];
-					auto my = M[index(k, -abs(l))];
-					auto gx = G[index(n + k, abs(l + m))];
-					auto gy = G[index(n + k, -abs(l + m))];
-					if (l == 0) {
-						if ((l + m) == 0) {
-							L[index(n, m)] += mx * gx;
-						} else if ((l + m) < 0) {
-							if (abs((l + m)) % 2 == 0) {
-								L[index(n, m)] += mx * gx;
-								if (m != 0) {
-									L[index(n, -m)] -= mx * gy;
-								}
-							} else {
-								L[index(n, m)] -= mx * gx;
-								if (m != 0) {
-									L[index(n, -m)] += mx * gy;
-								}
-							}
-						} else {
-							L[index(n, m)] += mx * gx;
-							if (m != 0) {
-								L[index(n, -m)] += mx * gy;
-							}
-						}
-					} else if (l < 0) {
-						if (abs(l) % 2 == 0) {
-							if ((l + m) == 0) {
-								L[index(n, m)] += mx * gx;
-								if (m != 0) {
-									L[index(n, -m)] += gx * my;
-								}
-							} else if ((l + m) < 0) {
-								if (abs((l + m)) % 2 == 0) {
-									L[index(n, m)] += mx * gx + my * gy;
-									if (m != 0) {
-										L[index(n, -m)] -= mx * gy - gx * my;
-									}
-								} else {
-									L[index(n, m)] -= mx * gx + my * gy;
-									if (m != 0) {
-										L[index(n, -m)] += mx * gy - gx * my;
-									}
-								}
-							} else {
-								L[index(n, m)] += mx * gx - my * gy;
-								if (m != 0) {
-									L[index(n, -m)] += mx * gy + gx * my;
-								}
-							}
-						} else {
-							if ((l + m) == 0) {
-								L[index(n, m)] -= mx * gx;
-								if (m != 0) {
-									L[index(n, -m)] -= gx * my;
-								}
-							} else if ((l + m) < 0) {
-								if (abs((l + m)) % 2 == 0) {
-									L[index(n, m)] -= mx * gx + my * gy;
-									if (m != 0) {
-										L[index(n, -m)] += mx * gy - gx * my;
-									}
-								} else {
-									L[index(n, m)] += mx * gx + my * gy;
-									if (m != 0) {
-										L[index(n, -m)] -= mx * gy - gx * my;
-									}
-								}
-							} else {
-								L[index(n, m)] -= mx * gx - my * gy;
-								if (m != 0) {
-									L[index(n, -m)] -= mx * gy + gx * my;
-								}
-							}
-						}
-					} else {
-						if ((l + m) == 0) {
-							L[index(n, m)] += mx * gx;
-							if (m != 0) {
-								L[index(n, -m)] -= gx * my;
-							}
-						} else if ((l + m) < 0) {
-							if (abs((l + m)) % 2 == 0) {
-								L[index(n, m)] += mx * gx - my * gy;
-								if (m != 0) {
-									L[index(n, -m)] -= mx * gy + gx * my;
-								}
-							} else {
-								L[index(n, m)] -= mx * gx - my * gy;
-								if (m != 0) {
-									L[index(n, -m)] += mx * gy + gx * my;
-								}
-							}
-						} else {
-							L[index(n, m)] += mx * gx + my * gy;
-							if (m != 0) {
-								L[index(n, -m)] += mx * gy - gx * my;
-							}
-						}
-
-					}
-				}
-			}
+		if (m < std::numeric_limits < T > ::epsilon()) {
+			break;
 		}
+		while (!threesqr(++R2))
+			;
 	}
-	//L[index(0, 0)] += M[index(0, 0)] * T(M_PI / (alpha * alpha));
-	L[index(0, 0)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[P * P];
-	L[index(1, -1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, -1)];
-	L[index(1, +0)] -= G[(P + 1) * (P + 1)] * M[index(1, +0)];
-	L[index(1, +1)] -= 2.0 * G[(P + 1) * (P + 1)] * M[index(1, +1)];
-	L[(P + 1) * (P + 1)] -= T(0.5) * G[(P + 1) * (P + 1)] * M[index(0, 0)];
-
-	M2L_ewald<real>(L2, M, x0, y0, z0);
-//	L = L2;
+	while (!threesqr(--R2))
+		;
+	h2 = R2;
 }
-*/
-
-
 
 enum test_type {
 	CC, PC, CP, EWALD
@@ -1103,14 +962,24 @@ constexpr T const_S(int n, int m0, T x, T y, T z) {
 }
 
 int main() {
+	double h2, r2;
+	for (double alpha = 1.0; alpha <= 3.0; alpha += 1.0e-2) {
+		M2L_ewald2<float, 6>(r2, h2, alpha);
+		printf("%e %e %e\n", alpha, r2, h2);
+	}
+	printf("\n");
+	for (double alpha = 1.0; alpha <= 3.0; alpha += 1.0e-2) {
+		M2L_ewald2<double, 6>(r2, h2, alpha);
+		printf("%e %e %e\n", alpha, r2, h2);
+	}
 
-	run_tests<8, 3> run;
-	print("M2L\n");
-	run(CC);
-	print("M2P\n");
-	run(PC);
-	print("P2L\n");
-	run(CP);
-	print("EWALD\n");
-	run(EWALD);
+	/*	run_tests<4, 3> run;
+	 print("M2L\n");
+	 run(CC);
+	 print("M2P\n");
+	 run(PC);
+	 print("P2L\n");
+	 run(CP);
+	 print("EWALD\n");
+	 run(EWALD);*/
 }
