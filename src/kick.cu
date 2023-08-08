@@ -21,7 +21,7 @@
 #include <cosmictiger/cuda_reduce.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/fixedcapvec.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
+#include <cosmictiger/sfmm.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/particles.hpp>

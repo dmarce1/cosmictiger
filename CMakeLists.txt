@@ -56,8 +56,6 @@ set(cosmictiger_source_files
     src/drift.cu
     src/driver.cpp
     src/domain.cpp
-    src/ewald_indices.cpp
-    src/ewald_indices.cu
     src/flops.cpp
     src/flops.cu
     src/fft.cpp
@@ -166,7 +164,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f fftw3 gsl gslcblas dl silo chealpix quadmath
+    Boost::boost fftw3f fftw3 gsl gslcblas dl silo chealpix quadmath simd sfmm
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
@@ -177,11 +175,9 @@ add_hpx_executable(
 
  
 add_executable( recfast recfast/recfast.f )
-add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
 add_executable( spherical_fmm src/spherical_fmm.cpp   )
 add_executable( ferrer_kernel_codegen src/ferrer_kernel_codegen.cpp cosmictiger/defs.hpp )
 add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
-target_link_libraries( fmm_kernel_codegen PUBLIC dl )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
 #set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
@@ -201,25 +197,15 @@ if( COSMICTIGER_WITH_CUDA )
                        -DUSE_CUDA --use_fast_math -lineinfo ;
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
-	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA  )
 	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 	set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 endif()
  
  
  
-add_custom_command(
-    OUTPUT cosmictiger/fmm_kernels.hpp
-    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
-    DEPENDS fmm_kernel_codegen
-    COMMENT "generating cosmictiger/fmm_kernels.hpp"
-)
-add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
-#add_dependencies( cosmictiger generate_fmm_kernels )
  
 target_include_directories(lc2rockstar PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(spherical_fmm PUBLIC ${PROJECT_SOURCE_DIR})
 target_include_directories(ferrer_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
@@ -227,7 +213,6 @@ target_compile_definitions(ferrer_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH
 if( COSMICTIGER_WITH_LONG_LONG_PART_INT ) 
 	target_compile_definitions(cosmictiger PUBLIC LONG_LONG_PART_INT)
 endif()
-target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
 add_executable(
  	healpix2silo

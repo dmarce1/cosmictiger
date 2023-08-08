@@ -58,12 +58,6 @@ struct search_params {
 	int phase;
 };
 
-struct force_type {
-	float gx;
-	float gy;
-	float gz;
-	float phi;
-};
 
 struct cuda_kick_shmem {
 	union {
@@ -74,7 +68,7 @@ struct cuda_kick_shmem {
 		}X;
 		array<multi_pos, KICK_C_MAX> mpos;
 	};
-	device_vector<force_type> f;
+	device_vector<force_type<float>> f;
 	stack_vector<int> echecks;
 	stack_vector<int> dchecks;
 	device_vector<int> leaflist;

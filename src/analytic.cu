@@ -171,9 +171,8 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 							const float rinv = 1.f / r;
 							const float r2inv = rinv * rinv;
 							const float r3inv = r2inv * rinv;
-							float exp0;
-							float erfc0;
-							erfcexp(2.f * r, &erfc0, &exp0);
+							const float exp0 = exp(-4.f * r2);
+							const float erfc0 = erfc(2.f * r);
 							const float expfactor = cons1 * r * exp0;
 							const float d0 = -erfc0 * rinv;
 							const float d1 = (expfactor + erfc0) * r3inv;

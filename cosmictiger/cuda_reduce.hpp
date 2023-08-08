@@ -70,7 +70,7 @@ __device__ inline void shared_reduce_add(T& number) {
 }
 
 template<class T, int N>
-__device__ inline void shared_reduce_add_array(array<T, N>& number) {
+__device__ inline void shared_reduce_add_array(T* number) {
 	for (int P = warpSize / 2; P >= 1; P /= 2) {
 		for( int n = 0; n < N; n++ ) {
 			number[n] += __shfl_xor_sync(0xffffffff, number[n], P);

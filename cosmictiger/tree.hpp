@@ -21,12 +21,12 @@
 #define TREE_HPP_
 
 #include <cosmictiger/fixed.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
 #include <cosmictiger/range.hpp>
+#include <cosmictiger/sfmm.hpp>
 #include <hpx/serialization/serialization_fwd.hpp>
 
 struct multipole_pos {

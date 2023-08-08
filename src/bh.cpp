@@ -226,7 +226,7 @@ void bh_tree_evaluate(const device_vector<bh_tree_node>& nodes, device_vector<in
 			const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 			const simd_float far_flag = r2 > h2;// 1
 			simd_float rinv1;
-			if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+			if (reduce_sum(far_flag) == SIMD_FLOAT_SIZE) {                                            // 7/8
 				rinv1 = rsqrt(r2);// 5
 			} else {
 				const simd_float r = sqrt(r2);                                                    // 4
@@ -234,13 +234,13 @@ void bh_tree_evaluate(const device_vector<bh_tree_node>& nodes, device_vector<in
 				const simd_float q = r * hinv;// 1
 				const simd_float q2 = sqr(q);// 1
 				simd_float  rinv1_near = simd_float(3.0 / 8.0);
-				rinv1_near = fmaf(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
-				rinv1_near = fmaf(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
+				rinv1_near = fma(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
+				rinv1_near = fma(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
 				rinv1_near *= hinv;// 1
 				const auto near_flag = (simd_float(1) - far_flag);// 1
 				rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;// 4
 			}
-			phi[i] -= (M * rinv1).sum();																									// 1
+			phi[i] -= reduce_sum(M * rinv1);																									// 1
 		}
 		phi[i] *= GM;
 	}
@@ -321,7 +321,7 @@ void bh_tree_evaluate_point(const device_vector<bh_tree_node>& nodes, array<floa
 		const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 		const simd_float far_flag = r2 > h2;                 // 1
 		simd_float rinv1;
-		if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+		if (reduce_sum(far_flag) == SIMD_FLOAT_SIZE) {                                            // 7/8
 			rinv1 = rsqrt(r2);                                            // 5
 		} else {
 			const simd_float r = sqrt(r2);                                                    // 4
@@ -329,14 +329,14 @@ void bh_tree_evaluate_point(const device_vector<bh_tree_node>& nodes, array<floa
 			const simd_float q = r * hinv;                                                    // 1
 			const simd_float q2 = sqr(q);                                                    // 1
 			simd_float rinv1_near = -5.0f / 16.0f;
-			rinv1_near = fmaf(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
-			rinv1_near = fmaf(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
+			rinv1_near = fma(rinv1_near, q2, simd_float(-5.0 / 4.0));									// 2
+			rinv1_near = fma(rinv1_near, q2, simd_float(15.0 / 8.0));									// 2
 			rinv1_near *= hinv;//
 			rinv1_near *= r > simd_float(0);
 			const auto near_flag = (simd_float(1) - far_flag);                                                    // 1
 			rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;                                                    // 4
 		}
-		phi -= (M * rinv1).sum();																									// 1
+		phi -= reduce_sum(M * rinv1);																									// 1
 	}
 	phi *= GM;
 

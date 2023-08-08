@@ -17,7 +17,6 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
@@ -40,7 +39,7 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 			tree_ptrs[i] = tree_get_node(list[i]);
 		}
 		static thread_local vector<multipole<simd_float>, boost::alignment::aligned_allocator<multipole<simd_float>, SIMD_FLOAT_SIZE * sizeof(float)>> M;
-		static thread_local vector<array<simd_int, NDIM>, boost::alignment::aligned_allocator<array<simd_int, NDIM>, SIMD_FLOAT_SIZE * sizeof(float)>> Y;
+		static thread_local vector<sfmm::vec3<simd_fixed>, boost::alignment::aligned_allocator<sfmm::vec3<simd_fixed>, SIMD_FLOAT_SIZE * sizeof(float)>> Y;
 		M.resize(nsource);
 		Y.resize(nsource);
 		for (int i = 0; i < tree_ptrs.size(); i++) {
@@ -67,33 +66,25 @@ void cpu_gravity_cc(gravity_cc_type type, expansion<float>& L, const vector<tree
 				Y[k][j][l] = Y[lastk][j][lastl];
 			}
 		}
-		array<simd_int, NDIM> X;
+		sfmm::vec3<simd_fixed> X;
 		for (int dim = 0; dim < NDIM; dim++) {
 			X[dim] = self_ptr->mpos->pos[dim].raw();
 		}
 		expansion<simd_float> L0;
-		L0 = simd_float(0.0f);
+		L0 = 0.0f;
 		for (int j = 0; j < nsource; j++) {
 			const int count = std::min(SIMD_FLOAT_SIZE, (int) (tree_ptrs.size() - j * SIMD_FLOAT_SIZE));
-			array<simd_float, NDIM> dx;
-			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = simd_float(X[dim] - Y[j][dim]) * _2float;
-			}
+			sfmm::vec3<simd_float> dx;
+			dx = distance(X, Y[j]);
 			flops += 3 * count;
-			expansion<simd_float> D;
 			if (type == GRAVITY_DIRECT) {
-				flops += count * greens_function(D, dx);
+				flops += count * M2L(L0, M[j], dx, do_phi);
 			} else {
-				flops += count * ewald_greens_function(D, dx);
-//				flops += count * apply_scale_factor(M[j]);
+				flops += count * M2L_ewald(L0, M[j], dx, do_phi);
 			}
-			M2L(L0, M[j], D, do_phi);
-		}
-		if (type == GRAVITY_EWALD) {
-//			flops += SIMD_FLOAT_SIZE * apply_scale_factor_inv(L0);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
-			L[i] += L0[i].sum();
+			L[i] += reduce_sum(L0[i]);
 		}
 		flops += 7 * EXPANSION_SIZE;
 	}
@@ -151,7 +142,7 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 				X[dim] = self_ptr->mpos->pos[dim].raw();
 			}
 			expansion<simd_float> L0;
-			L0 = simd_float(0.0f);
+			L0 = 0.0f;
 			for (int j = 0; j < nsource; j += SIMD_FLOAT_SIZE) {
 				const int cnt = std::min(count - j, SIMD_FLOAT_SIZE);
 				const int k = j / SIMD_FLOAT_SIZE;
@@ -162,21 +153,16 @@ void cpu_gravity_cp(expansion<float>& L, const vector<tree_id>& list, tree_id se
 					Y[ZDIM][l] = srcz[j + l].raw();
 					mass[l] = masses[j + l];
 				}
-				array<simd_float, NDIM> dx;
+				sfmm::vec3<simd_float> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
 				}
 				flops += cnt * 3;
 				expansion<simd_float> D;
-				flops += count * greens_function(D, dx);
-				for (int l = 0; l < EXPANSION_SIZE; l++) {
-					L0[l] += mass * D[l];
-
-				}
-				flops += cnt * EXPANSION_SIZE;
+				flops += P2L(L0, mass, dx, do_phi);
 			}
 			for (int i = 0; i < EXPANSION_SIZE; i++) {
-				L[i] += L0[i].sum();
+				L[i] += reduce_sum(L0[i]);
 			}
 			flops += 7 * EXPANSION_SIZE;
 		}
@@ -232,30 +218,26 @@ void cpu_gravity_pc(force_vectors& f, int do_phi, tree_id self, const vector<tre
 		const auto range = self_ptr->part_range;
 		array<simd_int, NDIM> X;
 		for (part_int i = range.first; i < range.second; i++) {
-			expansion2<simd_float> L;
-			L(0, 0, 0) = simd_float(0.0f);
-			L(1, 0, 0) = simd_float(0.0f);
-			L(0, 1, 0) = simd_float(0.0f);
-			L(0, 0, 1) = simd_float(0.0f);
+			force_type<simd_float> f0;
+			f0.init();
 			for (int dim = 0; dim < NDIM; dim++) {
 				X[dim] = particles_pos(dim, i).raw();
 			}
 			for (int j = 0; j < nsource; j++) {
 				const int count = std::min(SIMD_FLOAT_SIZE, (int) (tree_ptrs.size() - j * SIMD_FLOAT_SIZE));
-				array<simd_float, NDIM> dx;
+				sfmm::vec3<simd_float> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = simd_float(X[dim] - Y[j][dim]) * _2float;
 				}
 				flops += 3 * count;
-				expansion<simd_float> D;
-				flops += count * greens_function(D, dx);
-				flops += count * M2L(L, M[j], D, do_phi);
+				flops += count * M2P(f0, M[j], dx, do_phi);
 			}
 			const int j = i - range.first;
-			f.gx[j] -= SCALE_FACTOR2 * L(1, 0, 0).sum();
-			f.gy[j] -= SCALE_FACTOR2 * L(0, 1, 0).sum();
-			f.gz[j] -= SCALE_FACTOR2 * L(0, 0, 1).sum();
-			f.phi[j] += SCALE_FACTOR1 * L(0, 0, 0).sum();
+
+			f.gx[j] -= reduce_sum(f0.potential);
+			f.gy[j] -= reduce_sum(f0.force[0]);
+			f.gz[j] -= reduce_sum(f0.force[1]);
+			f.phi[j] += reduce_sum(f0.force[2]);
 			flops += 28;
 		}
 	}

@@ -33,7 +33,7 @@ constexpr bool verbose = true;
 
 HPX_PLAIN_ACTION (kick);
 
-simd_float box_intersects_sphere(const range<simd_double8>& box, const array<simd_int, NDIM>& x, simd_float r) {
+simd_float box_intersects_sphere(const range<simd_double8>& box, const sfmm::vec3<simd_fixed>& x, simd_float r) {
 	simd_float d2 = 0.0f;
 	for (int dim = 0; dim < NDIM; dim++) {
 		const simd_double8 X = simd_double8(x[dim]) * simd_double8(fixed32::to_float_factor);
@@ -410,12 +410,14 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				for (part_int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
-				const auto L2 = L2P(L, dx, true);
+				force_type<float> f;
+				f.init();
+				L2P(f, L, dx, true);
 				float hsoft = get_options().hsoft;
-				forces.phi[j] += SCALE_FACTOR1 * L2(0, 0, 0);
-				forces.gx[j] -= SCALE_FACTOR2 * L2(1, 0, 0);
-				forces.gy[j] -= SCALE_FACTOR2 * L2(0, 1, 0);
-				forces.gz[j] -= SCALE_FACTOR2 * L2(0, 0, 1);
+				forces.phi[j] += f.potential;
+				forces.gx[j] += f.force[0];
+				forces.gy[j] += f.force[1];
+				forces.gz[j] += f.force[2];
 				forces.gx[j] *= GM;
 				forces.gy[j] *= GM;
 				forces.gz[j] *= GM;
