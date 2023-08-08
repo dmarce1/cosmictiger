@@ -5,24 +5,30 @@
  *      Author: dmarce1
  */
 
-#ifndef SIMD_HPP_
-#define SIMD_HPP_
-
+#ifndef SIMD1_HPP_
+#define SIMD1_HPP_
 
 #include <simd.hpp>
+#include <cosmictiger/sfmm.hpp>
 
 static constexpr int SIMD_FLOAT_SIZE = simd::simd_f32::size();
+#ifndef __CUDACC__
 
 using simd_float = simd::simd_f32;
+using simd_double = simd::simd_f64;
 using simd_int = simd::simd_i32;
-
-
 
 class simd_double8 {
 	simd::simd_f64 v[2];
 public:
-	inline simd_double8(const simd_i32&) {
-
+	inline simd_double8(const simd_fixed& a) {
+		__m128i& v0 = *((__m128i*) &a);
+		__m128i& v1 = *((__m128i*) (((float*) &a) + 4));
+		sfmm::simd_f64 factor(1.0 / (std::numeric_limits<std::uint32_t>::max() + 1.0));
+		const auto A0 = _mm256_mul_pd(_mm256_cvtepi32_pd(v0), (__m256d&) factor);
+		const auto A1 = _mm256_mul_pd(_mm256_cvtepi32_pd(v1), (__m256d&) factor);
+		v[0] = *((simd::simd_f64*) (&A0));
+		v[1] = *((simd::simd_f64*) (&A1));
 	}
 	simd_double8() = default;
 	inline double& operator[](int i) {
@@ -116,7 +122,6 @@ public:
 
 	friend class simd_float8;
 
-
 	friend inline simd_double8 round(const simd_double8& a) {
 		simd_double8 b;
 		b.v[0] = round(a.v[0]);
@@ -137,5 +142,16 @@ public:
 
 };
 
+inline simd_float simd_double8_2_simd_float(const simd_double8& v) {
+	simd_float a;
+	__m128& a0 = *((__m128*) &a);
+	__m128& a1 = *((__m128*) (((float*) &a) + 4));
+	__m256d& v0 = *((__m256d*) &v);
+	__m256d& v1 = *((__m256d*) (((double*) &v) + 4));
+	a0 = _mm256_cvtpd_ps(v0);
+	a1 = _mm256_cvtpd_ps(v1);
+	return a;
+}
+#endif
 
 #endif /* SIMD_HPP_ */

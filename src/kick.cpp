@@ -36,7 +36,7 @@ HPX_PLAIN_ACTION (kick);
 simd_float box_intersects_sphere(const range<simd_double8>& box, const sfmm::vec3<simd_fixed>& x, simd_float r) {
 	simd_float d2 = 0.0f;
 	for (int dim = 0; dim < NDIM; dim++) {
-		const simd_double8 X = simd_double8(x[dim]) * simd_double8(fixed32::to_float_factor);
+		const simd_double8 X = simd_double8(x[dim]);
 		simd_double8 d2begin = X - box.begin[dim];
 		simd_double8 d2beginp1 = d2begin + simd_double8(1.0);
 		simd_double8 d2beginm1 = d2begin + simd_double8(-1.0);
@@ -51,7 +51,7 @@ simd_float box_intersects_sphere(const range<simd_double8>& box, const sfmm::vec
 		d2endp1 = sqr(d2endp1);
 		d2endm1 = sqr(d2endm1);
 		d2end = min(d2end, min(d2endp1, d2endm1));
-		d2 += simd_float(((X < box.begin[dim]) + (X > box.end[dim])) * min(d2begin, d2end));
+		d2 += simd_double8_2_simd_float(((X < box.begin[dim]) + (X > box.end[dim])) * min(d2begin, d2end));
 	}
 	return d2 < sqr(r);
 }
@@ -205,11 +205,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	const simd_float thetainv(1.0 / params.theta);
 	static const simd_float sink_bias(SINK_BIAS);
 	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
-	array<float, NDIM> Ldx;
+	sfmm::vec3<float> Ldx;
 	simd_float self_radius = self_ptr->radius;
-	array<simd_int, NDIM> self_pos;
+	sfmm::vec3<simd_fixed> self_pos;
 	range<simd_double8> self_box;
-	array<simd_int, NDIM> other_pos;
+	sfmm::vec3<simd_fixed> other_pos;
 	array<simd_float, NDIM> dx;
 	simd_float other_radius;
 	simd_float other_leaf;
@@ -226,7 +226,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	for (int dim = 0; dim < NDIM; dim++) {
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
-	L = L2L(L, Ldx, params.do_phi);
+	L2L(L, Ldx, params.do_phi);
 	flops += 1511 + params.do_phi * 178;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
@@ -406,7 +406,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		for (part_int i = rng.first; i < rng.second; i++) {
 			if (particles_rung(i) >= params.min_rung) {
 				const part_int j = i - rng.first;
-				array<float, NDIM> dx;
+				sfmm::vec3<float> dx;
 				for (part_int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}

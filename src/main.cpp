@@ -30,7 +30,6 @@
 #include <cosmictiger/healpix.hpp>
 #include <cosmictiger/fp16.hpp>
 #include <cosmictiger/rockstar.hpp>
-#include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/kernels.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cmath>

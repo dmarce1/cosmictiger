@@ -178,6 +178,8 @@ add_executable( recfast recfast/recfast.f )
 add_executable( spherical_fmm src/spherical_fmm.cpp   )
 add_executable( ferrer_kernel_codegen src/ferrer_kernel_codegen.cpp cosmictiger/defs.hpp )
 add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
+target_compile_definitions(spherical_fmm PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
+target_compile_definitions(lc2rockstar PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
 #set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)

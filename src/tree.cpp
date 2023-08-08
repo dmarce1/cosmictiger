@@ -669,14 +669,14 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 					X[dim][j - i] = particles_pos(dim, maxj - 1).raw();
 				}
 			}
-			array < simd_float, NDIM > dx;
+			sfmm::vec3<simd_float> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;        // 3
 			}
-			auto m = P2M(dx);                                         // 211
+			multipole<simd_float> m;
+			P2M(m, mask, dx);                                         // 211
 			for (int j = 0; j < multi_size; j++) {
-				m[j] *= mask;                                          // multi_size
-				M[j] += m[j].sum();// multi_size * 6
+				M[j] += reduce_sum(m[j]);// multi_size * 6
 			}
 			flops += 214 + multi_size * 7;
 		}

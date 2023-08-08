@@ -23,6 +23,7 @@
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/flops.hpp>
+#include <cosmictiger/sfmm.hpp>
 
 #include <boost/align/aligned_allocator.hpp>
 
