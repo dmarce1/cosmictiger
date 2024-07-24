@@ -498,7 +498,7 @@ void test(std::string test) {
 		test_cuda_chemistry_kernel();
 	//	chemistry_test();
 	} else {
-		THROW_ERROR("test %s is not known\n", test.c_str());
+		THROW_ERROR("test \"%s\" is not known\n", test.c_str());
 	}
 
 }

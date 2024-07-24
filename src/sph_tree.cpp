@@ -222,7 +222,7 @@ fast_future<sph_tree_create_return> sph_tree_create_fork(sph_tree_create_params 
 		rc.set_value(sph_tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
 //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
-		rc = hpx::async<sph_tree_create_action>(HPX_PRIORITY_HI, hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async<sph_tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
 		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
 			auto rc = sph_tree_create(params,key,proc_range,part_range,box,depth,local_root);
@@ -238,7 +238,7 @@ static void sph_tree_allocate_nodes() {
 	static const int bucket_size = get_options().sph_bucket_size;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_tree_allocate_nodes_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<sph_tree_allocate_nodes_action>(c));
 	}
 	next_id = -tree_cache_line_size;
 	nodes.resize(std::max(size_t(size_t(SPH_TREE_NODE_ALLOCATION_SIZE) * sph_particles_size() / bucket_size), (size_t) NSPH_TREES_MIN));
@@ -470,7 +470,7 @@ void sph_tree_destroy(bool free_sph_tree) {
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
 	for (const auto& c : children) {
-		futs.push_back(hpx::async<sph_tree_destroy_action>(HPX_PRIORITY_HI, c, free_sph_tree));
+		futs.push_back(hpx::async<sph_tree_destroy_action>(c, free_sph_tree));
 	}
 	if (free_sph_tree) {
 		nodes = decltype(nodes)();
@@ -535,9 +535,9 @@ static const sph_tree_node* tree_cache_read(tree_id id) {
 			auto prms = std::make_shared<hpx::lcos::local::promise<vector<sph_tree_node>>>();
 			tree_cache[bin][line_id] = prms->get_future();
 			lock.unlock();
-			hpx::async(HPX_PRIORITY_HI, [prms,line_id]() {
+			hpx::async([prms,line_id]() {
 				const sph_tree_fetch_cache_line_action action;
-				auto fut = hpx::async<sph_tree_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+				auto fut = hpx::async<sph_tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 				prms->set_value(fut.get());
 				return 'a';
 			});

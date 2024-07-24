@@ -172,7 +172,7 @@ set(cosmictiger_header_files
 add_hpx_executable(
   cosmictiger
   DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas dl silo chealpix quadmath
+    Boost::boost fftw3f gsl gslcblas dl siloh5 chealpix quadmath
   SOURCES
     ${cosmictiger_source_files}
   HEADERS
@@ -241,7 +241,7 @@ add_executable(
  
  
  
-target_link_libraries(healpix2silo PUBLIC chealpix silo boost_program_options dl)
+target_link_libraries(healpix2silo PUBLIC chealpix siloh5 boost_program_options dl)
 target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
 
 

@@ -133,10 +133,9 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor_fork(sph_tree_neighbor_p
 		}
 		rc = sph_tree_neighbor(params, self, std::move(checklist), level + 1);
 	} else if (remote) {
-		rc = hpx::async<sph_tree_neighbor_action>(HPX_PRIORITY_HI, hpx_localities()[self_ptr->proc_range.first], params, self, std::move(checklist), level + 1);
+		rc = hpx::async<sph_tree_neighbor_action>(hpx_localities()[self_ptr->proc_range.first], params, self, std::move(checklist), level + 1);
 	} else {
-		const auto thread_priority = all_local ? HPX_PRIORITY_LO : HPX_PRIORITY_NORMAL;
-		rc = hpx::async(thread_priority, [self,level, params] (vector<tree_id> checklist) {
+		rc = hpx::async([self,level, params] (vector<tree_id> checklist) {
 			auto rc = sph_tree_neighbor(params, self,std::move(checklist), level + 1);
 			nthreads--;
 			return rc;

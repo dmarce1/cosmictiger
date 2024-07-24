@@ -398,6 +398,7 @@ hpx::future<size_t> rockstar_find_subgroups_gpu_prep(rockstar_gpu_workspace& ws,
 }
 
 void rockstar_find_subgroups_gpu_run(rockstar_gpu_workspace& ws, vector<rockstar_tree, pinned_allocator<rockstar_tree>>& trees, rockstar_particles parts, float link_len, int& next_id) {
+
 	auto results = rockstar_find_subgroups_gpu(trees, parts, ws.selves, ws.lists, link_len, next_id);
 	for (int i = 0; i < results.size(); i++) {
 		ws.promises[i].set_value(results[i]);

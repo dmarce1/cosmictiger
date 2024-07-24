@@ -35,6 +35,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <hpx/runtime/threads/run_as_os_thread.hpp>
 #else
 #define HPX_LATE
+#include <hpx/local/execution.hpp>
+#include <hpx/local/future.hpp>
+#include <hpx/local/init.hpp>
 #include <hpx/include/run_as.hpp>
 #endif
 #else
@@ -47,16 +50,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define PAR_EXECUTION_POLICY hpx::parallel::execution::par(hpx::parallel::execution::task)
 #define hpx_copy hpx::parallel::copy
 #define hpx_fill hpx::parallel::fill
-#define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority_critical)
-#define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority_normal)
-#define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority_low)
 #else
 #define PAR_EXECUTION_POLICY hpx::execution::par(hpx::execution::task)
 #define hpx_copy hpx::copy
 #define hpx_fill hpx::fill
-#define HPX_PRIORITY_HI hpx::launch::async(hpx::threads::thread_priority::critical)
-#define HPX_PRIORITY_NORMAL hpx::launch::async(hpx::threads::thread_priority::normal)
-#define HPX_PRIORITY_LO hpx::launch::async(hpx::threads::thread_priority::low)
 #endif
 #else
 #define HPX_PRIORITY_HI hpx::launch::async
@@ -71,9 +68,9 @@ const vector<hpx::id_type>& hpx_localities();
 const vector<hpx::id_type>& hpx_children();
 void hpx_init();
 
-using mutex_type = hpx::lcos::local::mutex;
-using spinlock_type = hpx::lcos::local::spinlock;
-using shared_mutex_type = hpx::lcos::local::shared_mutex;
+using mutex_type = hpx::mutex;
+using spinlock_type = hpx::spinlock;
+using shared_mutex_type = hpx::shared_mutex;
 
 #endif
 

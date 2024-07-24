@@ -594,7 +594,7 @@ static const array<fixed32, NDIM>* sph_particles_cache_read_line(line_id_type li
 		part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -671,7 +671,7 @@ static const pair<float, char>* sph_particles_fcold_cache_read_line(line_id_type
 		fcold_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_fcold_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_fcold_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -750,7 +750,7 @@ static const pair<float>* sph_particles_energy_and_smoothlen_cache_read_line(lin
 		entr_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_energy_and_smoothlen_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_energy_and_smoothlen_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -818,7 +818,7 @@ static const char* sph_particles_rung_cache_read_line(line_id_type line_id) {
 		rung_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_rung_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_rung_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -886,7 +886,7 @@ static const array<float, NDIM>* sph_particles_vels_cache_read_line(line_id_type
 		vels_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_vels_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_vels_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -952,7 +952,7 @@ static const float* sph_particles_kappas_cache_read_line(line_id_type line_id) {
 		kappas_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_kappas_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_kappas_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -1019,7 +1019,7 @@ static const float* sph_particles_rho_cache_read_line(line_id_type line_id) {
 		rho_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_rho_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_rho_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -1123,7 +1123,7 @@ static const aux_quantities* sph_particles_aux_cache_read_line(line_id_type line
 		aux_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
-			auto line_fut = hpx::async<sph_particles_fetch_aux_cache_line_action>(HPX_PRIORITY_HI, hpx_localities()[line_id.proc],line_id.index);
+			auto line_fut = hpx::async<sph_particles_fetch_aux_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
 			prms->set_value(line_fut.get());
 		});
 		lock.lock();
@@ -1151,7 +1151,7 @@ void sph_particles_cache_free1() {
 	static const auto stars = get_options().stars;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_cache_free1_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<sph_particles_cache_free1_action>(c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	entr_part_cache = decltype(entr_part_cache)();
@@ -1167,7 +1167,7 @@ void sph_particles_cache_free_entr() {
 	static const auto stars = get_options().stars;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_cache_free1_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<sph_particles_cache_free1_action>(c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	entr_part_cache = decltype(entr_part_cache)();
@@ -1180,7 +1180,7 @@ void sph_particles_cache_free_eint() {
 	static const auto stars = get_options().stars;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_cache_free1_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<sph_particles_cache_free1_action>(c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	entr_part_cache = decltype(entr_part_cache)();
@@ -1194,7 +1194,7 @@ void sph_particles_cache_free2() {
 	static const auto stars = get_options().stars;
 	vector<hpx::future<void>> futs;
 	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<sph_particles_cache_free2_action>(HPX_PRIORITY_HI, c));
+		futs.push_back(hpx::async<sph_particles_cache_free2_action>(c));
 	}
 	const int nthreads = hpx_hardware_concurrency();
 	part_cache = decltype(part_cache)();

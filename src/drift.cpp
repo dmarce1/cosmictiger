@@ -38,7 +38,7 @@ drift_return drift(double scale, double dt, double tau0, double tau1, double tau
 	particles_memadvise_cpu();
 	vector<hpx::future<drift_return>> rfuts;
 	for (auto c : hpx_children()) {
-		rfuts.push_back(hpx::async<drift_action>(HPX_PRIORITY_HI, c, scale, dt, tau0, tau1, tau_max, rung));
+		rfuts.push_back(hpx::async<drift_action>(c, scale, dt, tau0, tau1, tau_max, rung));
 	}
 	const int nthreads = 2 * hpx::thread::hardware_concurrency();
 	//PRINT("Drifting on %i with %i threads\n", hpx_rank(), nthreads);

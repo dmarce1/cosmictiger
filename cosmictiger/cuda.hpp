@@ -109,10 +109,11 @@ inline __device__ double atomicAdd(double* address, double val)
 
 #define CUDA_EXPORT __host__ __device__
 
-#include <thrust/system/cuda/experimental/pinned_allocator.h>
+#include <thrust/mr/allocator.h>
+#include <thrust/mr/device_memory_resource.h>
 
 template<class T>
-using pinned_allocator = thrust::system::cuda::experimental::pinned_allocator< T >;
+using pinned_allocator = thrust::mr::stateless_resource_allocator<T, thrust::cuda::universal_host_pinned_memory_resource>;
 
 void cuda_set_device();
 size_t cuda_free_mem();
