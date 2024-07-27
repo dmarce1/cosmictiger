@@ -194,7 +194,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 					}
 					std::swap(nextlist, checklist);
 				}
-				const int maxi = round_up((int) sourcelist.size(), SIMD_FLOAT_SIZE);
+				const int maxi = round_up(sourcelist.size(), SIMD_FLOAT_SIZE);
 				while(sourcelist.size() < maxi) {
 					bh_source src;
 					src.m = 0.0f;
@@ -225,7 +225,7 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 			const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 			const simd_float far_flag = r2 > h2;// 1
 			simd_float rinv1;
-			if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+			if (reduce_sum(far_flag) == SIMD_FLOAT_SIZE) {                                            // 7/8
 				rinv1 = rsqrt(r2);// 5
 			} else {
 				const simd_float r = sqrt(r2);                                                    // 4
@@ -233,14 +233,14 @@ void bh_tree_evaluate(const vector<bh_tree_node>& nodes, vector<int>& sink_bucke
 				const simd_float r1overh1 = r * hinv;// 1
 				const simd_float r2oh2 = r1overh1 * r1overh1;// 1
 				simd_float rinv1_near = -5.0f / 16.0f;
-				rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));// 2
-				rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));// 2
-				rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));// 2
+				rinv1_near = simd::fma(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));// 2
+				rinv1_near = simd::fma(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));// 2
+				rinv1_near = simd::fma(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));// 2
 				rinv1_near *= hinv;// 1
 				const auto near_flag = (simd_float(1) - far_flag);// 1
 				rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;// 4
 			}
-			phi[i] -= (M * rinv1).sum();																									// 1
+			phi[i] -= reduce_sum(M * rinv1);																									// 1
 		}
 		phi[i] *= GM;
 	}
@@ -291,7 +291,7 @@ void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM
 		}
 		std::swap(nextlist, checklist);
 	}
-	const int maxi = round_up((int) sourcelist.size(), SIMD_FLOAT_SIZE);
+	const int maxi = round_up(sourcelist.size(), SIMD_FLOAT_SIZE);
 	while (sourcelist.size() < maxi) {
 		bh_source src;
 		src.m = 0.0f;
@@ -321,7 +321,7 @@ void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM
 		const simd_float r2 = max(sqr(dx[XDIM], dx[YDIM], dx[ZDIM]), tiny);                 // 5
 		const simd_float far_flag = r2 > h2;                 // 1
 		simd_float rinv1;
-		if (far_flag.sum() == SIMD_FLOAT_SIZE) {                                            // 7/8
+		if (reduce_sum(far_flag) == SIMD_FLOAT_SIZE) {                                            // 7/8
 			rinv1 = rsqrt(r2);                                            // 5
 		} else {
 			const simd_float r = sqrt(r2);                                                    // 4
@@ -329,14 +329,14 @@ void bh_tree_evaluate_point(const vector<bh_tree_node>& nodes, array<float, NDIM
 			const simd_float r1overh1 = r * hinv;                                                    // 1
 			const simd_float r2oh2 = r1overh1 * r1overh1;                                                    // 1
 			simd_float rinv1_near = -5.0f / 16.0f;
-			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                                                    // 2
-			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                                                    // 2
-			rinv1_near = fmaf(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                                                    // 2
+			rinv1_near = simd::fma(rinv1_near, r2oh2, simd_float(21.0f / 16.0f));                                                    // 2
+			rinv1_near = simd::fma(rinv1_near, r2oh2, simd_float(-35.0f / 16.0f));                                                    // 2
+			rinv1_near = simd::fma(rinv1_near, r2oh2, simd_float(35.0f / 16.0f));                                                    // 2
 			rinv1_near *= hinv;                                                    // 1
 			const auto near_flag = (simd_float(1) - far_flag);                                                    // 1
 			rinv1 = far_flag * rinv1_far + near_flag * rinv1_near;                                                    // 4
 		}
-		phi -= (M * rinv1).sum();																									// 1
+		phi -= reduce_sum(M * rinv1);																									// 1
 	}
 	phi *= GM;
 

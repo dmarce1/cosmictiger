@@ -20,6 +20,16 @@
 #ifndef COSMICTIGER_FIXED_HPP_
 #define COSMICTIGER_FIXED_HPP_
 
+#include <sfmm.hpp>
+
+using fixed32 = sfmm::fixed32;
+using fixed64 = sfmm::fixed64;
+#ifndef __CUDACC__
+using simd_fixed32 = sfmm::simd_fixed32;
+using simd_fixed64 = sfmm::simd_fixed64;
+#endif
+
+/*
 #include <cosmictiger/assert.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/simd.hpp>
@@ -333,5 +343,5 @@ CUDA_EXPORT inline fixed32 sum(fixed32 a, fixed32 b) {
 CUDA_EXPORT inline float double_distance(fixed32 a, fixed32 b) {
 	return (fixed<int32_t>(a) - fixed<int32_t>(b)).to_double();
 }
-
+*/
 #endif /* COSMICTIGER_FIXED_HPP_ */

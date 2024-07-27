@@ -102,7 +102,7 @@ CUDA_EXPORT inline float anytrue(float x) {
 #ifndef __CUDACC__
 
 inline float anytrue(const simd_float& x) {
-	return x.sum();
+	return reduce_sum(x);
 }
 
 #endif

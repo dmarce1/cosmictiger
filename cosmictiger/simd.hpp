@@ -22,8 +22,16 @@
 
 #ifndef __CUDACC__
 
-#include <cosmictiger/defs.hpp>
+#include <simd.hpp>
 
+using simd_float = simd::simd_f32;
+using simd_double = simd::simd_f64;
+using simd_int = simd::simd_i32;
+
+#define SIMD_FLOAT_SIZE (simd_float::size())
+#define SIMD_DOUBLE_SIZE (simd_double::size())
+
+/*
 #include <immintrin.h>
 
 #include <cmath>
@@ -177,8 +185,9 @@ inline simd_float operator*(float r, const simd_float& y) {
 inline simd_float8 pow(const simd_float8& a, const simd_float8& b) {
 	return exp(log(a) * b);
 }
+*/
+#endif
 
-#endif /* SIMD_HPP_ */
 
 
 #endif

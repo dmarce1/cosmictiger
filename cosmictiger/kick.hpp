@@ -67,6 +67,7 @@ struct cuda_kick_shmem {
 		array<fixed32, KICK_PP_MAX> x;
 		array<fixed32, KICK_PP_MAX> y;
 		array<fixed32, KICK_PP_MAX> z;
+		array<char, KICK_PP_MAX> type;
 	}src;
 	device_vector<float> gx;
 	device_vector<float> gy;

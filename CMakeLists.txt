@@ -183,8 +183,8 @@ add_hpx_executable(
 
  
 add_executable( recfast recfast/recfast.f )
-add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
-target_link_libraries( fmm_kernel_codegen PUBLIC dl )
+#add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
+#target_link_libraries( fmm_kernel_codegen PUBLIC dl )
 execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
  
 set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=160)
@@ -209,29 +209,29 @@ if( COSMICTIGER_WITH_CUDA )
                        -DUSE_CUDA --use_fast_math --diag-suppress=177 --diag-suppress=550 --diag-suppress=20054;
                         >)
     target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
-	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
+#	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
 	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
 	set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 endif()
  
  
  
-add_custom_command(
-    OUTPUT cosmictiger/fmm_kernels.hpp
-    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
-    DEPENDS fmm_kernel_codegen
-    COMMENT "generating cosmictiger/fmm_kernels.hpp"
-)
-add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
+#add_custom_command(
+#    OUTPUT cosmictiger/fmm_kernels.hpp
+#    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
+#    DEPENDS fmm_kernel_codegen
+#    COMMENT "generating cosmictiger/fmm_kernels.hpp"
+#)
+#add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
 #add_dependencies( cosmictiger generate_fmm_kernels )
  
 target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
+#target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
 target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 if( COSMICTIGER_WITH_LONG_LONG_PART_INT ) 
 	target_compile_definitions(cosmictiger PUBLIC LONG_LONG_PART_INT)
 endif()
-target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
+#target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
 add_executable(
  	healpix2silo

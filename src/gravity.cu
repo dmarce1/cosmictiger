@@ -35,13 +35,12 @@ int cuda_gravity_cc_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
 			const tree_node& other = tree_nodes[multlist[i]];
 			const multipole<float>& M = other.multi;
-			array<float, NDIM> dx;
+			vec3<float> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
 			flops += 3;
-			flops += greens_function(D, dx);
-			flops += M2L(L, M, D, do_phi);
+			flops += M2L(L, M, dx);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			shared_reduce_add(L[i]);
@@ -70,9 +69,7 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-#ifndef DM_CON_H_ONLY
 	auto& src_type = shmem.src.type;
-#endif
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -123,22 +120,13 @@ int cuda_gravity_cp_direct(const cuda_kick_data& data, expansion<float>& Lacc, c
 			}
 			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
-				array<float, NDIM> dx;
+				vec3<float> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-#ifndef DM_CON_H_ONLY
 				const float mass = !sph ? 1.f : (src_type[j] != DARK_MATTER_TYPE ? sph_mass : dm_mass);
-#else
-				constexpr float mass = 1.f;
-#endif
 				flops += 3;
-				expansion<float> D;
-				flops += greens_function(D, dx);
-				for (int k = 0; k < EXPANSION_SIZE; k++) {
-					L[k] += mass * D[k];
-				}
-				flops += 2 * EXPANSION_SIZE;
+				flops += P2L(L, mass, dx);
 			}
 		}
 		for (int k = 0; k < EXPANSION_SIZE; k++) {
@@ -174,24 +162,21 @@ int cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, co
 	if (multlist.size()) {
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
-			expansion2<float> L;
-			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
+			force_type<float> f(0.0);
 			for (int j = 0; j < multlist.size(); j++) {
-				array<float, NDIM> dx;
+				vec3<float> dx;
 				const auto& pos = tree_nodes[multlist[j]].pos;
 				const auto& M = tree_nodes[multlist[j]].multi;
 				dx[XDIM] = distance(sink_x[k], pos[XDIM]);
 				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 				flops += 3;
-				expansion<float> D;
-				flops += greens_function(D, dx);
-				flops += M2L(L, M, D, do_phi);
+				flops += M2P(f, M, dx);
 			}
-			gx[k] -= L(1, 0, 0);
-			gy[k] -= L(0, 1, 0);
-			gz[k] -= L(0, 0, 1);
-			phi[k] += L(0, 0, 0);
+			gx[k] -= f.force[0];
+			gy[k] -= f.force[1];
+			gz[k] -= f.force[2];
+			phi[k] += f.potential;
 		}
 		__syncwarp();
 	}
@@ -209,20 +194,18 @@ int cuda_gravity_cc_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 	const auto& tree_nodes = data.tree_nodes;
 	if (multlist.size()) {
 		expansion<float> L;
-		expansion<float> D;
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			L[i] = 0.0f;
 		}
 		for (int i = tid; i < multlist.size(); i += WARP_SIZE) {
 			const tree_node& other = tree_nodes[multlist[i]];
 			const multipole<float>& M = other.multi;
-			array<float, NDIM> dx;
+			vec3<float> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
 				dx[dim] = distance(self.pos[dim], other.pos[dim]);
 			}
 			flops += 3;
-			flops += ewald_greens_function(D, dx);
-			flops += M2L(L, M, D, do_phi);
+			flops += M2L_ewald(L, M, dx);
 		}
 		for (int i = 0; i < EXPANSION_SIZE; i++) {
 			shared_reduce_add(L[i]);
@@ -251,9 +234,7 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 	auto& src_x = shmem.src.x;
 	auto& src_y = shmem.src.y;
 	auto& src_z = shmem.src.z;
-#ifndef DM_CON_H_ONLY
 	auto& src_type = shmem.src.type;
-#endif
 	const auto* tree_nodes = data.tree_nodes;
 	const int &tid = threadIdx.x;
 	if (partlist.size()) {
@@ -288,9 +269,7 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 					src_x[i1] = main_src_x[i2];
 					src_y[i1] = main_src_y[i2];
 					src_z[i1] = main_src_z[i2];
-#ifndef DM_CON_H_ONLY
 					src_type[i1] = main_src_type[i2];
-#endif
 				}
 				__syncwarp();
 				these_parts.first += sz;
@@ -304,22 +283,13 @@ int cuda_gravity_cp_ewald(const cuda_kick_data& data, expansion<float>& Lacc, co
 			}
 			__syncwarp();
 			for (int j = tid; j < part_index; j += warpSize) {
-				array<float, NDIM> dx;
+				vec3<float> dx;
 				dx[XDIM] = distance(self.pos[XDIM], src_x[j]);
 				dx[YDIM] = distance(self.pos[YDIM], src_y[j]);
 				dx[ZDIM] = distance(self.pos[ZDIM], src_z[j]);
-#ifndef DM_CON_H_ONLY
 				const float mass = !sph ? 1.f : (src_type[j] != DARK_MATTER_TYPE ? sph_mass : dm_mass);
-#else
-				constexpr float mass = 1.f;
-#endif
 				flops += 3;
-				expansion<float> D;
-				flops += ewald_greens_function(D, dx);
-				for (int k = 0; k < EXPANSION_SIZE; k++) {
-					L[k] += mass * D[k];
-				}
-				flops += 2 * EXPANSION_SIZE;
+				flops += P2L_ewald(L, mass, dx);
 			}
 		}
 		for (int k = 0; k < EXPANSION_SIZE; k++) {
@@ -355,24 +325,21 @@ int cuda_gravity_pc_ewald(const cuda_kick_data& data, const tree_node& self, con
 	if (multlist.size()) {
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
-			expansion2<float> L;
-			L(0, 0, 0) = L(1, 0, 0) = L(0, 1, 0) = L(0, 0, 1) = 0.0f;
+			force_type<float> f;
 			for (int j = 0; j < multlist.size(); j++) {
-				array<float, NDIM> dx;
+				vec3<float> dx;
 				const auto& pos = tree_nodes[multlist[j]].pos;
 				const auto& M = tree_nodes[multlist[j]].multi;
 				dx[XDIM] = distance(sink_x[k], pos[XDIM]);
 				dx[YDIM] = distance(sink_y[k], pos[YDIM]);
 				dx[ZDIM] = distance(sink_z[k], pos[ZDIM]);
 				flops += 3;
-				expansion<float> D;
-				flops += ewald_greens_function(D, dx);
-				flops += M2L(L, M, D, do_phi);
+				flops += M2P_ewald(f, M, dx);
 			}
-			gx[k] -= L(1, 0, 0);
-			gy[k] -= L(0, 1, 0);
-			gz[k] -= L(0, 0, 1);
-			phi[k] += L(0, 0, 0);
+			gx[k] -= f.force[0];
+			gy[k] -= f.force[1];
+			gz[k] -= f.force[2];
+			phi[k] += f.potential;
 		}
 		__syncwarp();
 	}

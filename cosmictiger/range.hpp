@@ -24,6 +24,7 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/fixed.hpp>
 
 template<class T>
 inline array<T, NDIM> shift_up(array<T, NDIM> i) {
@@ -49,7 +50,7 @@ struct range {
 	array<T, N> end;
 
 	CUDA_EXPORT
-	inline range<T, N> intersection(const range<T, N>& other) const {
+	inline range<T, N> intersection(const range<T, N> &other) const {
 		range<T, N> I;
 		for (int dim = 0; dim < N; dim++) {
 #ifdef __CUDA_ARCH__
@@ -63,7 +64,7 @@ struct range {
 		return I;
 	}
 	CUDA_EXPORT
-	inline range periodic_intersection(const range& other) const {
+	inline range periodic_intersection(const range &other) const {
 		range I;
 #ifdef __CUDA_ARCH__
 		for (int dim = 0; dim < N; dim++) {
@@ -86,7 +87,8 @@ struct range {
 				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
 				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
 				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+					I.begin[dim] = std::max(begin[dim] - T(1),
+							other.begin[dim]);
 					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
 				}
 			}
@@ -95,7 +97,7 @@ struct range {
 		return I;
 	}
 	CUDA_EXPORT
-	inline bool periodic_intersects(const range& other) const {
+	inline bool periodic_intersects(const range &other) const {
 		range I;
 #ifdef __CUDA_ARCH__
 		for (int dim = 0; dim < N; dim++) {
@@ -118,7 +120,8 @@ struct range {
 				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
 				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
 				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+					I.begin[dim] = std::max(begin[dim] - T(1),
+							other.begin[dim]);
 					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
 				}
 			}
@@ -142,7 +145,7 @@ struct range {
 	range& operator=(const range&) = default;
 	range& operator=(range&&) = default;
 
-	inline range shift(const array<T, N>& s) const {
+	inline range shift(const array<T, N> &s) const {
 		range r = *this;
 		for (int dim = 0; dim < N; dim++) {
 			r.begin[dim] += s[dim];
@@ -151,15 +154,14 @@ struct range {
 		return r;
 	}
 
-	range(const T& sz) {
+	range(const T &sz) {
 		for (int dim = 0; dim < N; dim++) {
 			begin[dim] = T(0);
-			end[dim] = sz;
 		}
 	}
 
 	CUDA_EXPORT
-	inline bool contains(const range<T, N>& box) const {
+	inline bool contains(const range<T, N> &box) const {
 		bool rc = true;
 		for (int dim = 0; dim < N; dim++) {
 			if (begin[dim] > box.begin[dim]) {
@@ -175,7 +177,7 @@ struct range {
 	}
 
 	CUDA_EXPORT
-	inline bool contains(const array<T, N>& p) const {
+	inline bool contains(const array<T, N> &p) const {
 		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				return false;
@@ -184,11 +186,12 @@ struct range {
 		return true;
 	}
 
-	inline bool periodic_contains(const array<T, N>& p) const {
+	inline bool periodic_contains(const array<T, N> &p) const {
 		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				if (p[dim] + T(1) < begin[dim] || p[dim] + T(1) >= end[dim]) {
-					if (p[dim] - T(1) < begin[dim] || p[dim] - T(1) >= end[dim]) {
+					if (p[dim] - T(1) < begin[dim]
+							|| p[dim] - T(1) >= end[dim]) {
 						return false;
 					}
 				}
@@ -255,19 +258,21 @@ struct range {
 	inline T index(T xi, T yi, T zi) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
-		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
+		return spanz * (spany * (xi - begin[0]) + (yi - begin[1]))
+				+ (zi - begin[2]);
 	}
 
 	CUDA_EXPORT
-	inline T index(const array<T, N> & i) const {
+	inline T index(const array<T, N> &i) const {
 		return index(i.data());
 	}
 
 	CUDA_EXPORT
-	inline T index(const T * i) const {
+	inline T index(const T *i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
-		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
+		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1]))
+				+ (i[2] - begin[2]);
 	}
 
 	inline range<T, N> transpose(int dim1, int dim2) const {
@@ -291,7 +296,7 @@ struct range {
 	}
 
 	template<class A>
-	void serialize(A&& arc, unsigned) {
+	void serialize(A &&arc, unsigned) {
 		for (int dim = 0; dim < N; dim++) {
 			arc & begin[dim];
 			arc & end[dim];
@@ -326,12 +331,15 @@ inline range<fixed32> fixed32_unit_box() {
 	range<fixed32> r;
 	for (int dim = 0; dim < NDIM; dim++) {
 		r.begin[dim] = 0.0;
-		r.end[dim] = fixed32::max();
+		r.end[dim] = std::numeric_limits < std::uint32_t
+				> ::max()
+						/ (double(std::numeric_limits < std::uint32_t > ::max())
+								+ double(1));
 	}
 	return r;
 }
 
-inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
+inline range<fixed32> rngdbl2rngfixed32(const range<double> &other) {
 	range<fixed32> rc;
 	for (int dim = 0; dim < NDIM; dim++) {
 		rc.begin[dim] = other.begin[dim];
@@ -340,60 +348,47 @@ inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
 	return rc;
 }
 
-using range_fixed = fixed<int,29>;
+using range_fixed = fixed32;
 
 struct fixed32_range: public range<range_fixed> {
 	fixed32_range() {
 	}
 	CUDA_EXPORT
-	fixed32_range& operator=(const fixed32_range& other) {
+	fixed32_range& operator=(const fixed32_range &other) {
 		begin = other.begin;
 		end = other.end;
 		return *this;
 	}
 	CUDA_EXPORT
-	fixed32_range& operator=(fixed32_range&& other) {
+	fixed32_range& operator=(fixed32_range &&other) {
 		begin = other.begin;
 		end = other.end;
 		return *this;
 	}
 	CUDA_EXPORT
-	fixed32_range(const fixed32_range& other) {
+	fixed32_range(const fixed32_range &other) {
 		begin = other.begin;
 		end = other.end;
 	}
 	CUDA_EXPORT
-	fixed32_range(fixed32_range&& other) {
+	fixed32_range(fixed32_range &&other) {
 		begin = other.begin;
 		end = other.end;
 	}
 	CUDA_EXPORT
-	bool contains(const array<fixed32, NDIM>& pt) const {
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				for (int k = -1; k <= 1; k++) {
-					bool contains = true;
-					array<double, NDIM> I;
-					I[0] = i;
-					I[1] = j;
-					I[2] = k;
-					for (int dim = 0; dim < NDIM; dim++) {
-						if (range_fixed(pt[dim]) + range_fixed::min() < begin[dim] + range_fixed(I[dim])) {
-							contains = false;
-							break;
-						}
-						if (range_fixed(pt[dim]) > end[dim] + range_fixed(I[dim]) + range_fixed::min()) {
-							contains = false;
-							break;
-						}
-					}
-					if (contains == true) {
-						return true;
-					}
+	bool contains(const array<fixed32, NDIM> &pt) const {
+		for (int dim = 0; dim < NDIM; dim++) {
+			if (end[dim] - begin[dim] > 0) {
+				if (pt[dim] < begin[dim] || pt[dim] > end[dim]) {
+					return false;
+				}
+			} else if (end[dim] - begin[dim] < 0) {
+				if (pt[dim] < begin[dim] && pt[dim] > end[dim]) {
+					return false;
 				}
 			}
 		}
-		return false;
+		return true;
 	}
 	/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
 	 if (!valid) {
@@ -420,12 +415,12 @@ struct fixed32_range: public range<range_fixed> {
 	 }
 	 }*/
 	template<class A>
-	void serialize(A&& arc, unsigned i) {
+	void serialize(A &&arc, unsigned i) {
 		range<range_fixed>::serialize(arc, i);
 	}
 };
 
-CUDA_EXPORT
+/*CUDA_EXPORT
 inline float distance(range_fixed a, fixed32 b) {
 	float f = a.to_double() - b.to_double();
 	while (f > 0.5) {
@@ -441,5 +436,5 @@ CUDA_EXPORT
 inline float distance(fixed32 b, range_fixed a) {
 	return -distance(a, b);
 
-}
+}*/
 #endif /* RANGE_HPP_ */

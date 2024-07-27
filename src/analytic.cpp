@@ -101,7 +101,7 @@ void analytic_compare(int Nsamples) {
 		lerr_force += gerr;
 		lmax_phi = std::max(lmax_phi, ferr);
 		lmax_force = std::max(lmax_force, gerr);
-		printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].to_float(), sinky[i].to_float(), sinkz[i].to_float(), g1, g2, g2 / g1, f1, f2, f1/f2);
+		printf("%.10e %.10e %.10e | %.10e %.10e %.10e |%.10e %.10e %.10e \n", sinkx[i].to_double(), sinky[i].to_double(), sinkz[i].to_double(), g1, g2, g2 / g1, f1, f2, f1/f2);
 	}
 	lerr_force =(lerr_force/force_norm);
 	lerr_phi = (lerr_phi/phi_norm);
