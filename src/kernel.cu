@@ -15,6 +15,7 @@
  */
 
 #define __KERNEL_CU__
+#include <functional>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/kernel.hpp>
 

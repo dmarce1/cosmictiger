@@ -25,6 +25,7 @@
 #include <cosmictiger/sph_particles.hpp>
 
 #include <atomic>
+#include <functional>
 
 struct cuda_kick_data {
 	tree_node* tree_nodes;

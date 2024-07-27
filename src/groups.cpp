@@ -156,7 +156,7 @@ std::pair<size_t, size_t> groups_save(int number, double scale, double time) {
 		THROW_ERROR("Unable to open %s\n", fname.c_str());
 	}
 	if (groups.size()) {
-		hpx::parallel::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
+		hpx::sort(PAR_EXECUTION_POLICY, groups.begin(), groups.end(), [](const group_entry& a, const group_entry& b) {
 			return a.id < b.id;
 		}).get();
 	}

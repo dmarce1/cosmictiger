@@ -307,7 +307,7 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 		std::unique_lock<spinlock_type> lock(mutex[bin]);
 		auto iter = tree_cache[bin].find(line_id);
 		if (iter == tree_cache[bin].end()) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_tree_node>>>();
+			auto prms = std::make_shared<hpx::promise<vector<group_tree_node>>>();
 			auto& entry = tree_cache[bin][line_id];
 			entry.data = prms->get_future();
 			entry.epoch = tree_cache_epoch;
@@ -320,7 +320,7 @@ static const group_tree_node* group_tree_cache_read(tree_id id) {
 			lock.lock();
 			iter = tree_cache[bin].find(line_id);
 		} else if (iter->second.epoch < tree_cache_epoch) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<group_tree_node>>>();
+			auto prms = std::make_shared<hpx::promise<vector<group_tree_node>>>();
 			auto old_fut = std::move(iter->second.data);
 			auto& entry = tree_cache[bin][line_id];
 			entry.data = prms->get_future();

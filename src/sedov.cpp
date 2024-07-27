@@ -1108,7 +1108,7 @@ sed_real zeroin_(sed_real *ax, sed_real *bx, D_fp f, sed_real *tol) {
 #include <mutex>
 
 #include <hpx/synchronization/spinlock.hpp>
-using mutex_type = hpx::lcos::local::spinlock;
+using mutex_type = hpx::spinlock;
 
 namespace sedov {
 

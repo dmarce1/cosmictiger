@@ -590,7 +590,7 @@ static const array<fixed32, NDIM>* sph_particles_cache_read_line(line_id_type li
 	auto iter = part_cache[bin].find(line_id);
 	const array<fixed32, NDIM>* ptr;
 	if (iter == part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<fixed32, NDIM>>> >();
+		auto prms = std::make_shared<hpx::promise<vector<array<fixed32, NDIM>>> >();
 		part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -667,7 +667,7 @@ static const pair<float, char>* sph_particles_fcold_cache_read_line(line_id_type
 	std::unique_lock<spinlock_type> lock(fcold_mutexes[bin]);
 	auto iter = fcold_part_cache[bin].find(line_id);
 	if (iter == fcold_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<pair<float, char>>> >();
+		auto prms = std::make_shared<hpx::promise<vector<pair<float, char>>> >();
 		fcold_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -746,7 +746,7 @@ static const pair<float>* sph_particles_energy_and_smoothlen_cache_read_line(lin
 	std::unique_lock<spinlock_type> lock(entr_mutexes[bin]);
 	auto iter = entr_part_cache[bin].find(line_id);
 	if (iter == entr_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<pair<float>>> >();
+		auto prms = std::make_shared<hpx::promise<vector<pair<float>>> >();
 		entr_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -814,7 +814,7 @@ static const char* sph_particles_rung_cache_read_line(line_id_type line_id) {
 	std::unique_lock<spinlock_type> lock(rung_mutexes[bin]);
 	auto iter = rung_part_cache[bin].find(line_id);
 	if (iter == rung_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<char>> >();
+		auto prms = std::make_shared<hpx::promise<vector<char>> >();
 		rung_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -882,7 +882,7 @@ static const array<float, NDIM>* sph_particles_vels_cache_read_line(line_id_type
 	std::unique_lock<spinlock_type> lock(vels_mutexes[bin]);
 	auto iter = vels_part_cache[bin].find(line_id);
 	if (iter == vels_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<array<float, NDIM>>> >();
+		auto prms = std::make_shared<hpx::promise<vector<array<float, NDIM>>> >();
 		vels_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -948,7 +948,7 @@ static const float* sph_particles_kappas_cache_read_line(line_id_type line_id) {
 	std::unique_lock<spinlock_type> lock(kappas_mutexes[bin]);
 	auto iter = kappas_part_cache[bin].find(line_id);
 	if (iter == kappas_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<float>> >();
+		auto prms = std::make_shared<hpx::promise<vector<float>> >();
 		kappas_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -1015,7 +1015,7 @@ static const float* sph_particles_rho_cache_read_line(line_id_type line_id) {
 	std::unique_lock<spinlock_type> lock(rho_mutexes[bin]);
 	auto iter = rho_part_cache[bin].find(line_id);
 	if (iter == rho_part_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<float>> >();
+		auto prms = std::make_shared<hpx::promise<vector<float>> >();
 		rho_part_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {
@@ -1119,7 +1119,7 @@ static const aux_quantities* sph_particles_aux_cache_read_line(line_id_type line
 	std::unique_lock<spinlock_type> lock(aux_mutexes[bin]);
 	auto iter = aux_cache[bin].find(line_id);
 	if (iter == aux_cache[bin].end()) {
-		auto prms = std::make_shared<hpx::lcos::local::promise<vector<aux_quantities>> >();
+		auto prms = std::make_shared<hpx::promise<vector<aux_quantities>> >();
 		aux_cache[bin][line_id] = prms->get_future();
 		lock.unlock();
 		hpx::apply([prms,line_id]() {

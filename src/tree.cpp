@@ -652,7 +652,7 @@ static const tree_node* tree_cache_read(tree_id id) {
 		std::unique_lock<spinlock_type> lock(mutex[bin]);
 		auto iter = tree_cache[bin].find(line_id);
 		if (iter == tree_cache[bin].end()) {
-			auto prms = std::make_shared<hpx::lcos::local::promise<vector<tree_node>>>();
+			auto prms = std::make_shared<hpx::promise<vector<tree_node>>>();
 			tree_cache[bin][line_id] = prms->get_future();
 			lock.unlock();
 			hpx::async([prms,line_id]() {
