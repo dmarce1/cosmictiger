@@ -1,21 +1,21 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2021  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #include <cosmictiger/analytic.hpp>
 #include <cosmictiger/hpx.hpp>
@@ -26,13 +26,15 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
-static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz);
+static return_type do_analytic(const vector<fixed32> &sinkx,
+		const vector<fixed32> &sinky, const vector<fixed32> &sinkz);
 
-HPX_PLAIN_ACTION(do_analytic);
+HPX_PLAIN_ACTION (do_analytic);
 
 using return_type = std::pair<vector<double>, array<vector<double>, NDIM>>;
 
-static return_type do_analytic(const vector<fixed32>& sinkx, const vector<fixed32>& sinky, const vector<fixed32>& sinkz) {
+static return_type do_analytic(const vector<fixed32> &sinkx,
+		const vector<fixed32> &sinky, const vector<fixed32> &sinkz) {
 #ifdef USE_CUDA
 	vector<hpx::future<return_type>> futs;
 	for (auto c : hpx_children()) {
@@ -95,6 +97,7 @@ void analytic_compare(int Nsamples) {
 		const double gerr = fabs(g1-g2);
 		const double ferr = fabs(f1-f2);
 		lerr_phi += (ferr);
+	//	printf( "%e\n", ferr);
 		lerr_force += gerr;
 		lmax_phi = std::max(lmax_phi, ferr);
 		lmax_force = std::max(lmax_force, gerr);
@@ -102,11 +105,13 @@ void analytic_compare(int Nsamples) {
 	}
 	lerr_force =(lerr_force/force_norm);
 	lerr_phi = (lerr_phi/phi_norm);
+	lmax_force =(Nsamples*lmax_force/force_norm);
+	lmax_phi = (Nsamples*lmax_phi/phi_norm);
 	PRINT("Force RMS Error     = %e\n", lerr_force);
 	PRINT("Force Max Error     = %e\n", lmax_force);
 	PRINT("Potential RMS Error = %e\n", lerr_phi);
 	PRINT("Potential Max Error = %e\n", lmax_phi);
 #else
-	PRINT( "analytic compare not available without CUDA\n");
+	PRINT("analytic compare not available without CUDA\n");
 #endif
 }

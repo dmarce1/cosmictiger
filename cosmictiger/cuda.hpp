@@ -115,11 +115,12 @@ struct pinned_allocator {
 	using value_type = T;
 	T* allocate(size_t sz) const {
 		T* ptr;
+		sz *= sizeof(T);
 		CUDA_CHECK(cudaMallocHost(&ptr, sz));
 		return ptr;
 	}
 	void deallocate(T* ptr, size_t) const {
-		CUDA_CHECK(cudaFree(ptr));
+		cudaFree(ptr);
 	}
 };
 

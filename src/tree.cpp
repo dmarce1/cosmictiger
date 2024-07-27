@@ -277,6 +277,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			part_range.second = particles_size();
 		}
 	}
+
+
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM> x;
 	array<double, NDIM> Xc;

@@ -337,16 +337,21 @@ static void kick_test() {
 
 static void force_test() {
 	timer tm;
-	if( get_options().sph == true ) {
+	if( get_options().sph ) {
 		PRINT( "FORCE_TEST should be run without sph !\n");
 		abort();
 	}
+	if( get_options().htime ) {
+		PRINT( "FORCE_TEST should be run without htime !\n");
+		abort();
+	}
 	tm.start();
-//	particles_random_init();
-	initialize(get_options().z0);
+	particles_random_init();
+//	initialize(get_options().z0);
 	tm.stop();
 	PRINT("particles_random_init: %e s\n", tm.read());
 	tm.reset();
+
 
 	tm.start();
 	domains_rebound();

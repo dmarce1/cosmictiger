@@ -185,9 +185,7 @@ __global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32*
 					}
 				}
 			}
-		} else {
-			if( R2 != 0.0 )
-			PRINT( "SOFT\n");
+		} else if( R2 > 0.0 ) {
 			float rinv, rinv3;
 			const float q = sqrtf(R2) * hinv;
 			const float q2 = q * q;
