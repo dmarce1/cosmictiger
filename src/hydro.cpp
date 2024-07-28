@@ -401,9 +401,9 @@ void hydro_star_test() {
 #else
 		const float d0 = sph_particles_rho(k);
 #endif
-		const float x = sph_particles_pos(XDIM, k).to_float();
-		const float y = sph_particles_pos(YDIM, k).to_float();
-		const float z = sph_particles_pos(ZDIM, k).to_float();
+		const float x = sph_particles_pos(XDIM, k).to_double();
+		const float y = sph_particles_pos(YDIM, k).to_double();
+		const float z = sph_particles_pos(ZDIM, k).to_double();
 		const float r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
 		float d1 = 0.0;
 		if (r < rmax) {
@@ -788,7 +788,7 @@ void hydro_sod_test() {
 	for (int l = 0; l < N; l++) {
 		const int i = rand() % sph_particles_size();
 		const int j = sph_particles_dm_index(i);
-		float x = particles_pos(XDIM, j).to_float();
+		float x = particles_pos(XDIM, j).to_double();
 		const float h = sph_particles_smooth_len(i);
 #ifdef HOPKINS
 		const float rho = sph_particles_rho_rho(i);
@@ -1031,9 +1031,9 @@ void hydro_blast_test() {
 	for (int l = 0; l < N; l++) {
 		const int i = rand() % sph_particles_size();
 		const int j = sph_particles_dm_index(i);
-		float x = particles_pos(XDIM, j).to_float() - 0.5;
-		float y = particles_pos(YDIM, j).to_float() - 0.5;
-		float z = particles_pos(ZDIM, j).to_float() - 0.5;
+		float x = particles_pos(XDIM, j).to_double() - 0.5;
+		float y = particles_pos(YDIM, j).to_double() - 0.5;
+		float z = particles_pos(ZDIM, j).to_double() - 0.5;
 #ifdef HOPKINS
 		const float rho = sph_particles_rho_rho(i);
 #else

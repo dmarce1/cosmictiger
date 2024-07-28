@@ -213,9 +213,9 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 		x[ZDIM] = params.z;
 		const bool test = self_ptr->box.contains(x);
 		//PRINT("%i\n", test);
-		//PRINT("%e %e %e\n", x[XDIM].to_float(), self_ptr->box.begin[0].to_float(), self_ptr->box.end[0].to_float());
-		//PRINT("%e %e %e\n", x[YDIM].to_float(), self_ptr->box.begin[1].to_float(), self_ptr->box.end[1].to_float());
-		//PRINT("%e %e %e\n", x[ZDIM].to_float(), self_ptr->box.begin[2].to_float(), self_ptr->box.end[2].to_float());
+		//PRINT("%e %e %e\n", x[XDIM].to_double(), self_ptr->box.begin[0].to_double(), self_ptr->box.end[0].to_double());
+		//PRINT("%e %e %e\n", x[YDIM].to_double(), self_ptr->box.begin[1].to_double(), self_ptr->box.end[1].to_double());
+		//PRINT("%e %e %e\n", x[ZDIM].to_double(), self_ptr->box.begin[2].to_double(), self_ptr->box.end[2].to_double());
 		if (!test && level > 3) {
 			return hpx::make_ready_future(kr);
 		}
@@ -235,8 +235,8 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 	if ((params.seti | SPH_INTERACTIONS_I) && self_ptr->nactive) {
 		if (!range_intersect(self_ptr->outer_box, self_ptr->inner_box)) {
 			for (int dim = 0; dim < NDIM; dim++) {
-				PRINT("%e %e\n", self_ptr->outer_box.begin[dim].to_float(), self_ptr->outer_box.end[dim].to_float());
-				PRINT("%e %e\n", self_ptr->inner_box.begin[dim].to_float(), self_ptr->inner_box.end[dim].to_float());
+				PRINT("%e %e\n", self_ptr->outer_box.begin[dim].to_double(), self_ptr->outer_box.end[dim].to_double());
+				PRINT("%e %e\n", self_ptr->inner_box.begin[dim].to_double(), self_ptr->inner_box.end[dim].to_double());
 			}
 		}
 
@@ -302,7 +302,7 @@ hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params
 				X[XDIM] = myx;
 				X[YDIM] = myy;
 				X[ZDIM] = myz;
-				const auto tiny = 10.0 * range_fixed::min().to_double();
+				const auto tiny = 10.0 / std::numeric_limits<float>::max();
 				/*				if (sph_particles_id(i) == 591) {
 				 show = true;
 				 PRINT("??????????? %e\n", h / params.h_wt);

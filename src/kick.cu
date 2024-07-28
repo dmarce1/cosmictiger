@@ -110,7 +110,7 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 	float zmom_tot = 0.0f;
 	float nmom_tot = 0.0f;
 	int rung;
-	array<float, NDIM> dx;
+	vec3<float> dx;
 	part_int snki;
 	for (int i = tid; i < nsink; i += WARP_SIZE) {
 		snki = self.sink_part_range.first + i;
@@ -120,13 +120,14 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		flops += 537 + (true) * 178;
-		L2 = L2P(L, dx, true);
+		force_type<float> f0(0.0);
+		L2P(f0, L, dx);
 		int j = NO_INDEX;
 		char my_type = DARK_MATTER_TYPE;
-		phi[i] += L2(0, 0, 0);
-		gx[i] -= L2(1, 0, 0);
-		gy[i] -= L2(0, 1, 0);
-		gz[i] -= L2(0, 0, 1);
+		phi[j] += f0.potential;
+		gx[j] += f0.force[0];
+		gy[j] += f0.force[1];
+		gz[j] += f0.force[2];
 //		PRINT( "%e %e %e\n", gx[i], gy[i], gz[i]);
 		phi[i] *= params.GM;
 		gx[i] *= params.GM;
@@ -141,11 +142,6 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		vy = vel_y[snki];
 		vz = vel_z[snki];
 		float hsoft = params.h;
-#ifndef DM_CON_H_ONLY
-		if (vsoft) {
-			hsoft = softlens[snki];
-		}
-#endif
 		if (params.htime) {
 			ALWAYS_ASSERT(!sph);
 			float sgn = params.top ? 1.f : -1.f;
@@ -331,14 +327,14 @@ __global__ void cuda_kick_kernel(kick_params global_params, cuda_kick_data data,
 			switch (phase.back()) {
 
 			case 0: {
-				array<float, NDIM> dx;
+				vec3<float> dx;
 				for (int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(self.pos[dim], Lpos.back()[dim]);
 				}
-				auto this_L = L2L_cuda(L.back(), dx, true);
 				if (tid == 0) {
-					L.back() = this_L;
+					L2L(L.back(), dx);
 				}
+				__syncwarp();
 				const int nsinks = self.part_range.second - self.part_range.first;
 				gx.resize(nsinks);
 				gy.resize(nsinks);

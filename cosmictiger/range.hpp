@@ -87,8 +87,7 @@ struct range {
 				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
 				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
 				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1),
-							other.begin[dim]);
+					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
 					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
 				}
 			}
@@ -99,37 +98,16 @@ struct range {
 	CUDA_EXPORT
 	inline bool periodic_intersects(const range &other) const {
 		range I;
-#ifdef __CUDA_ARCH__
 		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = max(begin[dim], other.begin[dim]);
-			I.end[dim] = min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = min(end[dim] + T(1), other.end[dim]);
-				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
-					I.end[dim] = min(end[dim] - T(1), other.end[dim]);
-				}
+			if (distance(other.begin[dim], begin[dim]) > 0.0) {
+				I.begin[dim] = other.begin[dim];
+			} else {
+				I.begin[dim] = begin[dim];
 			}
-		}
-#else
-		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
-			I.end[dim] = std::min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
-				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1),
-							other.begin[dim]);
-					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
-				}
-			}
-		}
-#endif
-		for (int dim = 0; dim < NDIM; dim++) {
-			if (I.end[dim] <= I.begin[dim]) {
-				return false;
+			if (distance(other.end[dim], end[dim]) > 0.0) {
+				I.end[dim] = end[dim];
+			} else {
+				I.end[dim] = other.end[dim];
 			}
 		}
 		return true;
@@ -190,8 +168,7 @@ struct range {
 		for (int dim = 0; dim < N; dim++) {
 			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
 				if (p[dim] + T(1) < begin[dim] || p[dim] + T(1) >= end[dim]) {
-					if (p[dim] - T(1) < begin[dim]
-							|| p[dim] - T(1) >= end[dim]) {
+					if (p[dim] - T(1) < begin[dim] || p[dim] - T(1) >= end[dim]) {
 						return false;
 					}
 				}
@@ -258,8 +235,7 @@ struct range {
 	inline T index(T xi, T yi, T zi) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
-		return spanz * (spany * (xi - begin[0]) + (yi - begin[1]))
-				+ (zi - begin[2]);
+		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
 	}
 
 	CUDA_EXPORT
@@ -271,8 +247,7 @@ struct range {
 	inline T index(const T *i) const {
 		const auto spanz = end[2] - begin[2];
 		const auto spany = end[1] - begin[1];
-		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1]))
-				+ (i[2] - begin[2]);
+		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
 	}
 
 	inline range<T, N> transpose(int dim1, int dim2) const {
@@ -332,9 +307,7 @@ inline range<fixed32> fixed32_unit_box() {
 	for (int dim = 0; dim < NDIM; dim++) {
 		r.begin[dim] = 0.0;
 		r.end[dim] = std::numeric_limits < std::uint32_t
-				> ::max()
-						/ (double(std::numeric_limits < std::uint32_t > ::max())
-								+ double(1));
+				> ::max() / (double(std::numeric_limits < std::uint32_t > ::max()) + double(1));
 	}
 	return r;
 }
@@ -421,20 +394,20 @@ struct fixed32_range: public range<range_fixed> {
 };
 
 /*CUDA_EXPORT
-inline float distance(range_fixed a, fixed32 b) {
-	float f = a.to_double() - b.to_double();
-	while (f > 0.5) {
-		f -= 1.0;
-	}
-	while (f < -0.5) {
-		f += 1.0;
-	}
-	return f;
-}
+ inline float distance(range_fixed a, fixed32 b) {
+ float f = a.to_double() - b.to_double();
+ while (f > 0.5) {
+ f -= 1.0;
+ }
+ while (f < -0.5) {
+ f += 1.0;
+ }
+ return f;
+ }
 
-CUDA_EXPORT
-inline float distance(fixed32 b, range_fixed a) {
-	return -distance(a, b);
+ CUDA_EXPORT
+ inline float distance(fixed32 b, range_fixed a) {
+ return -distance(a, b);
 
-}*/
+ }*/
 #endif /* RANGE_HPP_ */

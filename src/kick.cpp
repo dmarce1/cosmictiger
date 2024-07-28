@@ -177,20 +177,20 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 	static const simd_float sink_bias(SINK_BIAS);
 	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
 	const bool do_phi = true;
-	array<float, NDIM> Ldx;
+	vec3<float> Ldx;
 	simd_float self_radius = self_ptr->radius;
-	array<simd_int, NDIM> self_pos;
+	vec3<simd_fixed32> self_pos;
 	for (int dim = 0; dim < NDIM; dim++) {
-		self_pos[dim] = self_ptr->pos[dim].raw();
+		self_pos[dim] = self_ptr->pos[dim];
 	}
-	array<simd_int, NDIM> other_pos;
-	array<simd_float, NDIM> dx;
+	vec3<simd_fixed32> other_pos;
+	vec3<simd_float> dx;
 	simd_float other_radius;
 	simd_float other_leaf;
 	for (int dim = 0; dim < NDIM; dim++) {
 		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
 	}
-	L = L2L(L, Ldx, do_phi);
+	L = L2L(L, Ldx);
 	const bool vsoft = get_options().vsoft;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
@@ -213,14 +213,14 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		auto& checklist = gtype == GRAVITY_DIRECT ? dchecklist : echecklist;
 		do {
 			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-				const int maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+				const int maxci = std::min(checklist.size(), ci + SIMD_FLOAT_SIZE);
 				const int maxi = maxci - ci;
 				for (int i = ci; i < maxci; i++) {
 					other_ptrs[i - ci] = tree_get_node(checklist[i]);
 				}
 				for (int i = 0; i < maxi; i++) {
 					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
+						other_pos[dim][i] = other_ptrs[i]->pos[dim];
 					}
 					other_radius[i] = other_ptrs[i]->radius;
 					other_leaf[i] = other_ptrs[i]->leaf;
@@ -233,7 +233,7 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 					other_leaf[i] = 0;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
+					dx[dim] = distance(self_pos[dim], other_pos[dim]);                         // 3
 				}
 				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
 				if (gtype == GRAVITY_EWALD) {
@@ -293,11 +293,12 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 		for (part_int i = rng.first; i < rng.second; i++) {
 			if (particles_rung(i) >= params.min_rung) {
 				const part_int j = i - rng.first;
-				array<float, NDIM> dx;
+				vec3<float> dx;
 				for (part_int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
-				const auto L2 = L2P(L, dx, true);
+				force_type<float> f0(0.0);
+				L2P(f0, L, dx);
 				float m = 1.f;
 				int type = DARK_MATTER_TYPE;
 				if (sph) {
@@ -308,10 +309,10 @@ hpx::future<kick_return> kick(kick_params params, expansion<float> L, array<fixe
 				if (vsoft) {
 					hsoft = particles_softlen(i);
 				}
-				forces.phi[j] += L2(0, 0, 0);
-				forces.gx[j] -= L2(1, 0, 0);
-				forces.gy[j] -= L2(0, 1, 0);
-				forces.gz[j] -= L2(0, 0, 1);
+				forces.phi[j] += f0.potential;
+				forces.gx[j] += f0.force[0];
+				forces.gy[j] += f0.force[1];
+				forces.gz[j] += f0.force[2];
 				forces.gx[j] *= GM;
 				forces.gy[j] *= GM;
 				forces.gz[j] *= GM;

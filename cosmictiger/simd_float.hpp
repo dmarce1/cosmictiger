@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
-
+/*
 
 #ifndef SIMD_FLOAT_HPP_
 #define SIMD_FLOAT_HPP_
@@ -806,3 +806,4 @@ inline simd_float8 fmaxf(simd_float8 a, simd_float8 b) {
 	return max(a, b);
 }
 #endif /* SIMD_FLOAT_HPP_ */
+

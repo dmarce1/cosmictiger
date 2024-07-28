@@ -25,7 +25,7 @@
 
 HPX_PLAIN_ACTION (groups_find);
 
-void atomic_min(std::atomic<group_int>& min_value, group_int value) {
+void atomic_min(std::atomic<group_int> &min_value, group_int value) {
 	group_int prev_value = min_value;
 	while (prev_value > value && !min_value.compare_exchange_strong(prev_value, value)) {
 	}
@@ -34,7 +34,7 @@ void atomic_min(std::atomic<group_int>& min_value, group_int value) {
 hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, double link_len, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	hpx::future<size_t> rc;
-	const group_tree_node* self_ptr = group_tree_get_node(self);
+	const group_tree_node *self_ptr = group_tree_get_node(self);
 	bool remote = false;
 	if (self.proc != hpx_rank()) {
 		threadme = true;
@@ -42,7 +42,8 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	} else if (threadme) {
 		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || (self_ptr->proc_range.second - self_ptr->proc_range.first > 1)) {
+			if (nthreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency()
+					|| (self_ptr->proc_range.second - self_ptr->proc_range.first > 1)) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -55,10 +56,11 @@ hpx::future<size_t> groups_find_fork(tree_id self, vector<tree_id> checklist, do
 	} else if (remote) {
 		ASSERT(self_ptr->proc_range.first >= 0);
 		ASSERT(self_ptr->proc_range.first < hpx_size());
-		rc = hpx::async<groups_find_action>(hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
+		rc = hpx::async < groups_find_action
+				> (hpx_localities()[self_ptr->proc_range.first], self, std::move(checklist), link_len);
 	} else {
-		rc = hpx::async([self,link_len] (vector<tree_id> checklist) {
-			auto rc = groups_find(self,std::move(checklist), link_len);
+		rc = hpx::async([self, link_len](vector<tree_id> checklist) {
+			auto rc = groups_find(self, std::move(checklist), link_len);
 			nthreads--;
 			return rc;
 		}, std::move(checklist));
@@ -85,7 +87,7 @@ static vector<tree_id> get_list() {
 	return std::move(list);
 }
 
-static void cleanup_list(vector<tree_id> && list) {
+static void cleanup_list(vector<tree_id> &&list) {
 	lists.push(std::move(list));
 }
 
@@ -98,12 +100,12 @@ static leaf_workspace get_leaf_workspace() {
 	return std::move(list);
 }
 
-static void cleanup_leaf_workspace(leaf_workspace && list) {
+static void cleanup_leaf_workspace(leaf_workspace &&list) {
 	leaf_workspaces.push(std::move(list));
 }
 
 hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double link_len) {
-	const group_tree_node* self_ptr = group_tree_get_node(self);
+	const group_tree_node *self_ptr = group_tree_get_node(self);
 	bool thread_left = true;
 	vector<tree_id> nextlist = get_list();
 	vector<tree_id> leaflist = get_list();
@@ -113,7 +115,7 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 	const bool iamleaf = self_ptr->children[LEFT].index == -1;
 	do {
 		for (int ci = 0; ci < checklist.size(); ci++) {
-			const group_tree_node* other_ptr = group_tree_get_node(checklist[ci]);
+			const group_tree_node *other_ptr = group_tree_get_node(checklist[ci]);
 			if (other_ptr->last_active) {
 				if (self_box.periodic_intersection(other_ptr->box).volume() > 0) {
 					if (other_ptr->children[LEFT].index == -1) {
@@ -130,19 +132,19 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 	} while (iamleaf && checklist.size());
 	if (self_ptr->children[LEFT].index == -1) {
 		leaf_workspace ws = get_leaf_workspace();
-		vector<fixed32>& X = ws.X;
-		vector<fixed32>& Y = ws.Y;
-		vector<fixed32>& Z = ws.Z;
-		vector<group_int>& G = ws.G;
+		vector<fixed32> &X = ws.X;
+		vector<fixed32> &Y = ws.Y;
+		vector<fixed32> &Z = ws.Z;
+		vector<group_int> &G = ws.G;
 		if (leaflist.size()) {
 			const auto my_rng = self_ptr->part_range;
 			const float link_len2 = sqr(link_len);
 			bool found_any_link = false;
-			int total_size = 0;
+			size_t total_size = 0;
 			for (int i = 0; i < leaflist.size(); i++) {
-				const group_tree_node* other_ptr = group_tree_get_node(leaflist[i]);
+				const group_tree_node *other_ptr = group_tree_get_node(leaflist[i]);
 				if (other_ptr != self_ptr) {
-					const auto& other_rng = other_ptr->part_range;
+					const auto &other_rng = other_ptr->part_range;
 					const int other_size = other_rng.second - other_rng.first;
 					total_size += other_size;
 				}
@@ -153,11 +155,12 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 			G.resize(total_size);
 			total_size = 0;
 			for (int i = 0; i < leaflist.size(); i++) {
-				const group_tree_node* other_ptr = group_tree_get_node(leaflist[i]);
+				const group_tree_node *other_ptr = group_tree_get_node(leaflist[i]);
 				if (other_ptr != self_ptr) {
-					const auto& other_rng = other_ptr->part_range;
+					const auto &other_rng = other_ptr->part_range;
 					int other_size = other_rng.second - other_rng.first;
-					particles_global_read_pos_and_group(other_ptr->global_part_range(), X.data(), Y.data(), Z.data(), G.data(), total_size);
+					particles_global_read_pos_and_group(other_ptr->global_part_range(), X.data(), Y.data(), Z.data(),
+							G.data(), total_size);
 					for (int i = total_size; i < total_size + other_size; i++) {
 						array<double, NDIM> x;
 						x[XDIM] = X[i].to_double();
@@ -177,30 +180,29 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				}
 			}
 			for (part_int k = my_rng.first; k < my_rng.second; k++) {
-				simd_int sink_x = particles_pos(XDIM, k).raw();
-				simd_int sink_y = particles_pos(YDIM, k).raw();
-				simd_int sink_z = particles_pos(ZDIM, k).raw();
+				fixed32 sink_x = particles_pos(XDIM, k);
+				fixed32 sink_y = particles_pos(YDIM, k);
+				fixed32 sink_z = particles_pos(ZDIM, k);
 				for (int j = 0; j < total_size; j += SIMD_FLOAT_SIZE) {
-					static const simd_float _2float(fixed2float);
 					const int lmax = std::min(total_size, j + SIMD_FLOAT_SIZE);
-					simd_int src_x;
-					simd_int src_y;
-					simd_int src_z;
+					simd_fixed32 src_x;
+					simd_fixed32 src_y;
+					simd_fixed32 src_z;
 					for (int l = j; l < lmax; l++) {
 						const int l0 = l - j;
-						src_x[l0] = X[l].raw();
-						src_y[l0] = Y[l].raw();
-						src_z[l0] = Z[l].raw();
+						src_x[l0] = X[l];
+						src_y[l0] = Y[l];
+						src_z[l0] = Z[l];
 					}
-					const simd_float x = simd_float(src_x - sink_x) * _2float;
-					const simd_float y = simd_float(src_y - sink_y) * _2float;
-					const simd_float z = simd_float(src_z - sink_z) * _2float;
+					const simd_float x = distance(src_x, sink_x);
+					const simd_float y = distance(src_y, sink_y);
+					const simd_float z = distance(src_z, sink_z);
 					const simd_float dist = sqr(x, y, z);
 					const simd_float lt = dist < link_len2;
 					for (int l = j; l < lmax; l++) {
 						const int l0 = l - j;
 						if (lt[l0]) {
-							auto& grp = particles_group(k);
+							auto &grp = particles_group(k);
 							const group_int start_group = particles_group(k);
 							if ((group_int) grp == NO_GROUP) {
 								grp = particles_group_init(k);
@@ -218,30 +220,29 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 			do {
 				found_link = false;
 				for (part_int j = my_rng.first; j < my_rng.second; j++) {
-					simd_int sink_x = particles_pos(XDIM, j).raw();
-					simd_int sink_y = particles_pos(YDIM, j).raw();
-					simd_int sink_z = particles_pos(ZDIM, j).raw();
+					fixed32 sink_x = particles_pos(XDIM, j);
+					fixed32 sink_y = particles_pos(YDIM, j);
+					fixed32 sink_z = particles_pos(ZDIM, j);
 					for (part_int k = j + 1; k < my_rng.second; k += SIMD_FLOAT_SIZE) {
-						static const simd_float _2float(fixed2float);
-						const int lmax = std::min(my_rng.second, k + SIMD_FLOAT_SIZE);
-						simd_int src_x;
-						simd_int src_y;
-						simd_int src_z;
+						const int lmax = std::min((size_t) my_rng.second, k + SIMD_FLOAT_SIZE);
+						simd_fixed32 src_x;
+						simd_fixed32 src_y;
+						simd_fixed32 src_z;
 						for (int l = k; l < lmax; l++) {
 							const int l0 = l - k;
-							src_x[l0] = particles_pos(XDIM, l).raw();
-							src_y[l0] = particles_pos(YDIM, l).raw();
-							src_z[l0] = particles_pos(ZDIM, l).raw();
+							src_x[l0] = particles_pos(XDIM, l);
+							src_y[l0] = particles_pos(YDIM, l);
+							src_z[l0] = particles_pos(ZDIM, l);
 						}
-						const simd_float x = simd_float(src_x - sink_x) * _2float;
-						const simd_float y = simd_float(src_y - sink_y) * _2float;
-						const simd_float z = simd_float(src_z - sink_z) * _2float;
+						const simd_float x = distance(src_x, sink_x);
+						const simd_float y = distance(src_y, sink_y);
+						const simd_float z = distance(src_z, sink_z);
 						const simd_float dist = sqr(x, y, z);
 						const simd_float lt = dist < link_len2;
 						for (int l = k; l < lmax; l++) {
 							if (lt[l - k] == 1.0) {
-								auto& grpa = particles_group(l);
-								auto& grpb = particles_group(j);
+								auto &grpa = particles_group(l);
+								auto &grpb = particles_group(j);
 								if ((group_int) grpa == NO_GROUP) {
 									grpa = particles_group_init(l);
 									found_link = true;
@@ -288,8 +289,8 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 		cleanup_list(std::move(nextlist));
 		cleanup_list(std::move(leaflist));
 		if (checklist.size()) {
-			const group_tree_node* cl = group_tree_get_node(self_ptr->children[LEFT]);
-			const group_tree_node* cr = group_tree_get_node(self_ptr->children[RIGHT]);
+			const group_tree_node *cl = group_tree_get_node(self_ptr->children[LEFT]);
+			const group_tree_node *cr = group_tree_get_node(self_ptr->children[RIGHT]);
 			std::array<hpx::future<size_t>, NCHILD> futs;
 			futs[RIGHT] = groups_find_fork(self_ptr->children[RIGHT], checklist, link_len, true);
 			futs[LEFT] = groups_find_fork(self_ptr->children[LEFT], std::move(checklist), link_len, false);
@@ -300,12 +301,13 @@ hpx::future<size_t> groups_find(tree_id self, vector<tree_id> checklist, double 
 				group_tree_set_active(self, tot != 0);
 				return hpx::make_ready_future(tot);
 			} else {
-				return hpx::when_all(futs.begin(), futs.end()).then([self](hpx::future<std::vector<hpx::future<size_t>>> futfut) {
-					auto futs = futfut.get();
-					const auto tot = futs[LEFT].get() + futs[RIGHT].get();
-					group_tree_set_active(self, tot != 0);
-					return tot;
-				});
+				return hpx::when_all(futs.begin(), futs.end()).then(
+						[self](hpx::future<std::vector<hpx::future<size_t>>> futfut) {
+							auto futs = futfut.get();
+							const auto tot = futs[LEFT].get() + futs[RIGHT].get();
+							group_tree_set_active(self, tot != 0);
+							return tot;
+						});
 			}
 		} else {
 			group_tree_set_active(self, false);

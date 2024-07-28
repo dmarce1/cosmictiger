@@ -273,9 +273,9 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(parts.dm[bi][i].x.to_float());
-				y.push_back(parts.dm[bi][i].y.to_float());
-				z.push_back(parts.dm[bi][i].z.to_float());
+				x.push_back(parts.dm[bi][i].x.to_double());
+				y.push_back(parts.dm[bi][i].y.to_double());
+				z.push_back(parts.dm[bi][i].z.to_double());
 			}
 			float *coords1[NDIM] = { x.data(), y.data(), z.data() };
 			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, opts);
@@ -301,9 +301,9 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].x.to_float());
-				y.push_back(parts.hydro[bi][i].y.to_float());
-				z.push_back(parts.hydro[bi][i].z.to_float());
+				x.push_back(parts.hydro[bi][i].x.to_double());
+				y.push_back(parts.hydro[bi][i].y.to_double());
+				z.push_back(parts.hydro[bi][i].z.to_double());
 			}
 			float *coords2[NDIM] = { x.data(), y.data(), z.data() };
 //			PRINT( "gas points\n");
@@ -408,9 +408,9 @@ void view_output_views(int cycle, double a) {
 			y.resize(0);
 			z.resize(0);
 			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(parts.star[bi][i].x.to_float());
-				y.push_back(parts.star[bi][i].y.to_float());
-				z.push_back(parts.star[bi][i].z.to_float());
+				x.push_back(parts.star[bi][i].x.to_double());
+				y.push_back(parts.star[bi][i].y.to_double());
+				z.push_back(parts.star[bi][i].z.to_double());
 			}
 			float *coords3[NDIM] = { x.data(), y.data(), z.data() };
 			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
@@ -498,9 +498,9 @@ vector<float> output_view(int number, double time) {
 						for( int zi = -1; zi <= 0; zi++) {
 							double vec[NDIM];
 							long int ipix;
-							vec[XDIM] = particles_pos(XDIM,i).to_float() + xi;
-							vec[YDIM] = particles_pos(YDIM,i).to_float() + yi;
-							vec[ZDIM] = particles_pos(ZDIM,i).to_float() + zi;
+							vec[XDIM] = particles_pos(XDIM,i).to_double() + xi;
+							vec[YDIM] = particles_pos(YDIM,i).to_double() + yi;
+							vec[ZDIM] = particles_pos(ZDIM,i).to_double() + zi;
 							const float r2 = sqr(vec[XDIM],vec[YDIM],vec[ZDIM]);
 							if( r2 < 1.0 && r2 > 0.0) {
 								vec2pix_ring(Nside, vec, &ipix);

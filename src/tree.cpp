@@ -90,7 +90,7 @@ void tree_free_neighbor_list() {
 	neighbor_list.resize(0);
 }
 
-int tree_allocate_neighbor_list(const vector<tree_id>& values) {
+int tree_allocate_neighbor_list(const vector<tree_id> &values) {
 	std::lock_guard<mutex_type> lock(neighbor_list_mutex);
 	if (values.size()) {
 		int i = neighbor_list.size();
@@ -117,7 +117,7 @@ static std::atomic<int> last_cache_entry_mtx(0);
 
 struct last_cache_entry_t {
 	tree_id line;
-	const tree_node* ptr;
+	const tree_node *ptr;
 	void reset() {
 		line.proc = line.index = -1;
 		ptr = nullptr;
@@ -202,8 +202,9 @@ tree_create_params::tree_create_params(int min_rung_, double theta_, double hmax
 	}
 }
 
-fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key, const pair<int, int>& proc_range, const pair<part_int>& part_range,
-		const range<double>& box, const int depth, const bool local_root, bool threadme) {
+fast_future<tree_create_return> tree_create_fork(tree_create_params params, size_t key,
+		const pair<int, int> &proc_range, const pair<part_int> &part_range, const range<double> &box, const int depth,
+		const bool local_root, bool threadme) {
 	static std::atomic<int> nthreads(0);
 	fast_future<tree_create_return> rc;
 	bool remote = false;
@@ -213,7 +214,8 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 	} else if (threadme) {
 		threadme = part_range.second - part_range.first > MIN_SORT_THREAD_PARTS;
 		if (threadme) {
-			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() || proc_range.second - proc_range.first > 1) {
+			if (nthreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency()
+					|| proc_range.second - proc_range.first > 1) {
 				threadme = true;
 			} else {
 				threadme = false;
@@ -225,10 +227,11 @@ fast_future<tree_create_return> tree_create_fork(tree_create_params params, size
 		rc.set_value(tree_create(params, key, proc_range, part_range, box, depth, local_root));
 	} else if (remote) {
 //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
-		rc = hpx::async<tree_create_action>(hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
+		rc = hpx::async < tree_create_action
+				> (hpx_localities()[proc_range.first], params, key, proc_range, part_range, box, depth, local_root);
 	} else {
-		rc = hpx::async([params,proc_range,key,part_range,depth,local_root, box]() {
-			auto rc = tree_create(params,key,proc_range,part_range,box,depth,local_root);
+		rc = hpx::async([params, proc_range, key, part_range, depth, local_root, box]() {
+			auto rc = tree_create(params, key, proc_range, part_range, box, depth, local_root);
 			nthreads--;
 			return rc;
 		});
@@ -240,11 +243,12 @@ static void tree_allocate_nodes() {
 	const int tree_cache_line_size = get_options().tree_cache_line_size;
 	static const int bucket_size = BUCKET_SIZE;
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async<tree_allocate_nodes_action>(c));
+	for (const auto &c : hpx_children()) {
+		futs.push_back(hpx::async < tree_allocate_nodes_action > (c));
 	}
 	next_id = -tree_cache_line_size;
-	nodes.resize(std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
+	nodes.resize(
+			std::max(size_t(size_t(TREE_NODE_ALLOCATION_SIZE) * particles_size() / bucket_size), (size_t) NTREES_MIN));
 	while (allocator_mtx++ != 0) {
 		allocator_mtx--;
 	}
@@ -255,8 +259,8 @@ static void tree_allocate_nodes() {
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
-tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range, pair<part_int> part_range, range<double> box, int depth,
-		bool local_root) {
+tree_create_return tree_create(tree_create_params params, size_t key, pair<int, int> proc_range,
+		pair<part_int> part_range, range<double> box, int depth, bool local_root) {
 	stack_trace_activate();
 	const double h = get_options().hsoft;
 	static const int bucket_size = BUCKET_SIZE;
@@ -277,7 +281,6 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			part_range.second = particles_size();
 		}
 	}
-
 
 	array<tree_id, NCHILD> children;
 	array<fixed32, NDIM> x;
@@ -351,8 +354,10 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			left_box.end[xdim] = right_box.begin[xdim] = xmid;
 			flops += 2;
 		}
-		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1, right_local_root, true);
-		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root, false);
+		auto futr = tree_create_fork(params, (key << 1) + 1, right_range, right_parts, right_box, depth + 1,
+				right_local_root, true);
+		auto futl = tree_create_fork(params, (key << 1), left_range, left_parts, left_box, depth + 1, left_local_root,
+				false);
 		const auto rcl = futl.get();
 		const auto rcr = futr.get();
 		const auto xl = rcl.pos;
@@ -434,8 +439,8 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 		for (int dim = 0; dim < NDIM; dim++) {
 			x[dim] = Xc[dim];
 		}
-		array<simd_double, NDIM> mdx;
-		multipole<simd_double> simdM;
+		vec3<simd_double> mdx;
+		multipole<simd_double> simdM(0.0);
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			simdM[i][LEFT] = ml[i];
 			simdM[i][RIGHT] = mr[i];
@@ -445,7 +450,7 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			mdx[dim][RIGHT] = Xr[dim] - Xc[dim];
 		}
 		flops += 2 * NDIM;
-		simdM = M2M<simd_double>(simdM, mdx);
+		M2M(simdM, mdx);
 		flops += 1203 * NCHILD;
 		for (int i = 0; i < MULTIPOLE_SIZE; i++) {
 			multi[i] = simdM[i][LEFT] + simdM[i][RIGHT];
@@ -480,22 +485,22 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			Xc[dim] = (Xmax[dim] + Xmin[dim]) * 0.5;
 		}
 		flops += 2 * NDIM;
-		const part_int maxi = round_up(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE) + part_range.first;
-		array<simd_int, NDIM> Y;
+		const part_int maxi = round_up(part_range.second - part_range.first, (part_int) SIMD_FLOAT_SIZE)
+				+ part_range.first;
+		array<simd_fixed32, NDIM> Y;
 		for (int dim = 0; dim < NDIM; dim++) {
-			Y[dim] = fixed32(Xc[dim]).raw();
+			Y[dim] = simd_fixed32(Xc[dim]);
 		}
-		const simd_float _2float = fixed2float;
 		const double dm_mass = get_options().dm_mass;
 		const double sph_mass = get_options().sph_mass;
 
 		for (part_int i = part_range.first; i < maxi; i += SIMD_FLOAT_SIZE) {
-			array<simd_int, NDIM> X;
+			vec3<simd_fixed32> X;
 			simd_float mask;
-			const int maxj = std::min(i + SIMD_FLOAT_SIZE, part_range.second);
+			const int maxj = std::min(i + SIMD_FLOAT_SIZE, (size_t) part_range.second);
 			for (part_int j = i; j < maxj; j++) {
 				for (int dim = 0; dim < NDIM; dim++) {
-					X[dim][j - i] = particles_pos(dim, j).raw();
+					X[dim][j - i] = particles_pos(dim, j);
 				}
 				if (sph) {
 					mask[j - i] = particles_type(j) == DARK_MATTER_TYPE ? dm_mass : sph_mass;
@@ -506,22 +511,20 @@ tree_create_return tree_create(tree_create_params params, size_t key, pair<int, 
 			for (part_int j = maxj; j < i + SIMD_FLOAT_SIZE; j++) {
 				mask[j - i] = 0.f;
 				for (int dim = 0; dim < NDIM; dim++) {
-					X[dim][j - i] = particles_pos(dim, maxj - 1).raw();
+					X[dim][j - i] = particles_pos(dim, maxj - 1);
 				}
 			}
-			array < simd_float, NDIM > dx;
+			vec3<simd_float> dx;
 			for (int dim = 0; dim < NDIM; dim++) {
-				dx[dim] = simd_float(X[dim] - Y[dim]) * _2float;
+				dx[dim] = distance(X[dim], Y[dim]);
 			}
 			flops += SIMD_FLOAT_SIZE * NDIM * 3;
-			auto m = P2M(dx);
+			multipole<simd_float> m;
+			P2M(m, mask, dx);
 			flops += 211 * SIMD_FLOAT_SIZE;
-			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-				m[j] *= mask;
-			}
 			flops += SIMD_FLOAT_SIZE * MULTIPOLE_SIZE;
 			for (int j = 0; j < MULTIPOLE_SIZE; j++) {
-				M[j] += m[j].sum();
+				M[j] += reduce_sum(m[j]);
 			}
 			flops += MULTIPOLE_SIZE * (1 + 3);
 		}
@@ -602,8 +605,8 @@ void tree_reset() {
 
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
-	for (const auto& c : children) {
-		futs.push_back(hpx::async<tree_reset_action>(c));
+	for (const auto &c : children) {
+		futs.push_back(hpx::async < tree_reset_action > (c));
 	}
 	tree_cache = decltype(tree_cache)();
 	reset_last_cache_entries();
@@ -616,8 +619,8 @@ void tree_destroy(bool free_tree) {
 
 	vector<hpx::future<void>> futs;
 	const auto children = hpx_children();
-	for (const auto& c : children) {
-		futs.push_back(hpx::async<tree_destroy_action>(c, free_tree));
+	for (const auto &c : children) {
+		futs.push_back(hpx::async < tree_destroy_action > (c, free_tree));
 	}
 	if (free_tree) {
 		nodes = decltype(nodes)();
@@ -645,7 +648,7 @@ const tree_node* tree_get_node(tree_id id) {
 static const tree_node* tree_cache_read(tree_id id) {
 	const int line_size = get_options().tree_cache_line_size;
 	tree_id line_id;
-	const tree_node* ptr;
+	const tree_node *ptr;
 	line_id.proc = id.proc;
 	ASSERT(line_id.proc >= 0 && line_id.proc < hpx_size());
 	line_id.index = (id.index / line_size) * line_size;
@@ -657,9 +660,9 @@ static const tree_node* tree_cache_read(tree_id id) {
 			auto prms = std::make_shared<hpx::promise<vector<tree_node>>>();
 			tree_cache[bin][line_id] = prms->get_future();
 			lock.unlock();
-			hpx::async([prms,line_id]() {
+			hpx::async([prms, line_id]() {
 				const tree_fetch_cache_line_action action;
-				auto fut = hpx::async<tree_fetch_cache_line_action>(hpx_localities()[line_id.proc],line_id.index);
+				auto fut = hpx::async < tree_fetch_cache_line_action > (hpx_localities()[line_id.proc], line_id.index);
 				prms->set_value(fut.get());
 				return 'a';
 			});

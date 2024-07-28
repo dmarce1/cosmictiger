@@ -365,7 +365,7 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 			outer_box.begin[dim] = 1.9;
 			outer_box.end[dim] = -0.9;
 		}
-		const auto tiny = 2.0 * range_fixed::min().to_double();
+	//	const auto tiny = 2.0 * range_fixed::min().to_double();
 		for (part_int i = part_range.first; i < part_range.second; i++) {
 			const float h = params.h_wt * sph_particles_smooth_len(i);
 			array<fixed32, NDIM> X;
@@ -374,11 +374,11 @@ sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key
 			}
 			for (int dim = 0; dim < NDIM; dim++) {
 				const double x = X[dim].to_double();
-				inner_box.begin[dim] = std::min(inner_box.begin[dim].to_double(), x - tiny);
-				inner_box.end[dim] = std::max(inner_box.end[dim].to_double(), x + tiny);
+				inner_box.begin[dim] = std::min(inner_box.begin[dim].to_double(), x);
+				inner_box.end[dim] = std::max(inner_box.end[dim].to_double(), x);
 				if (sph_particles_rung(i) >= params.min_rung) {
-					outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h - tiny);
-					outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h + tiny);
+					outer_box.begin[dim] = std::min(outer_box.begin[dim].to_double(), x - h);
+					outer_box.end[dim] = std::max(outer_box.end[dim].to_double(), x + h);
 				}
 			}
 			if (sph_particles_rung(i) >= params.min_rung) {

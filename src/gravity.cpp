@@ -258,9 +258,9 @@ size_t cpu_gravity_pc(gravity_cc_type type, force_vectors &f, int min_rung, tree
 					}
 				}
 				const int j = i - range.first;
-				f.gx[j] -= reduce_sum(L.force[0]);
-				f.gy[j] -= reduce_sum(L.force[1]);
-				f.gz[j] -= reduce_sum(L.force[2]);
+				f.gx[j] += reduce_sum(L.force[0]);
+				f.gy[j] += reduce_sum(L.force[1]);
+				f.gz[j] += reduce_sum(L.force[2]);
 				f.phi[j] += reduce_sum(L.potential);
 			}
 		}

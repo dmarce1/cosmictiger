@@ -258,11 +258,11 @@ inline __device__ bool compute_softlens(float & h,float hmin, float hmax, float 
 		}
 		__syncthreads();
 		for (int dim = 0; dim < NDIM; dim++) {
-			if (obox.end[dim] < range_fixed(x[dim] + fixed32(h)) + range_fixed::min()) {
+			if (obox.end[dim] < range_fixed(x[dim] + fixed32(h))) {
 				box_xceeded = true;
 				break;
 			}
-			if (range_fixed(x[dim]) < obox.begin[dim] + range_fixed(h) + range_fixed::min()) {
+			if (range_fixed(x[dim]) < obox.begin[dim] + range_fixed(h)) {
 				box_xceeded = true;
 				break;
 			}
