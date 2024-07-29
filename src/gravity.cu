@@ -162,7 +162,8 @@ int cuda_gravity_pc_direct(const cuda_kick_data& data, const tree_node& self, co
 	if (multlist.size()) {
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
-			force_type<float> f(0.0);
+			force_type<float> f;
+			f.init();
 			for (int j = 0; j < multlist.size(); j++) {
 				vec3<float> dx;
 				const auto& pos = tree_nodes[multlist[j]].pos;
@@ -326,6 +327,7 @@ int cuda_gravity_pc_ewald(const cuda_kick_data& data, const tree_node& self, con
 		__syncwarp();
 		for (int k = tid; k < nsink; k += WARP_SIZE) {
 			force_type<float> f;
+			f.init();
 			for (int j = 0; j < multlist.size(); j++) {
 				vec3<float> dx;
 				const auto& pos = tree_nodes[multlist[j]].pos;

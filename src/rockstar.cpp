@@ -6,6 +6,7 @@
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/hpx.hpp>
+#include <cuda_runtime.h>
 
 void rockstar_assign_link_len(const vector<rockstar_tree>& trees, vector<rockstar_particle>& parts, int self_id, vector<int> checklist, float link_len) {
 	static thread_local vector<int> nextlist;

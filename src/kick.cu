@@ -120,7 +120,8 @@ __device__ int __noinline__ do_kick(kick_return& return_, kick_params params, co
 		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
 		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
 		flops += 537 + (true) * 178;
-		force_type<float> f0(0.0);
+		force_type<float> f0;
+		f0.init();
 		L2P(f0, L, dx);
 		int j = NO_INDEX;
 		char my_type = DARK_MATTER_TYPE;

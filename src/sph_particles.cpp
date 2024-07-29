@@ -196,7 +196,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						if( sph_particles_entr(i) <= 0.0 ) {
 							PRINT( "%e %e\n", sph_particles_entr(i),(sph_particles_dentr2(i)) * dt2);
 						}
-						ALWAYS_ASSERT( isfinite(sph_particles_entr(i)));
+						ALWAYS_ASSERT( std::isfinite(sph_particles_entr(i)));
 						ALWAYS_ASSERT( sph_particles_entr(i)>0.0);
 #else
 						sph_particles_eint(i) += (-sph_particles_eint0(i)) * dt2;
@@ -208,7 +208,7 @@ std::pair<double, double> sph_particles_apply_updates(int minrung, int phase, fl
 						if( sph_particles_eint(i) <= 0.0 ) {
 							PRINT( "%e %e\n", sph_particles_eint(i),(sph_particles_deint2(i)) * dt2);
 						}
-						ALWAYS_ASSERT( isfinite(sph_particles_eint(i)));
+						ALWAYS_ASSERT( std::isfinite(sph_particles_eint(i)));
 						ALWAYS_ASSERT( sph_particles_eint(i)>0.0);
 #endif
 					}

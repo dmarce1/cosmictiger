@@ -29,6 +29,10 @@
 
 using cuda_mem_int = uint64_t;
 
+void cuda_mem_init(size_t heap_size);
+
+#ifdef __CUDACC__
+
 class cuda_mem {
 	array<array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
 	array<long long, CUDA_MEM_NBIN> qin;
@@ -55,10 +59,7 @@ public:
 	void reset();
 };
 
-void cuda_mem_init(size_t heap_size);
 __device__ cuda_mem* get_cuda_heap();
-
-#ifdef __CUDACC__
 
 template<class T>
 class device_vector {

@@ -33,6 +33,7 @@ constexpr bool verbose = true;
 #include <fenv.h>
 #include <unistd.h>
 #include <stack>
+#include <cuda_runtime.h>
 
 HPX_PLAIN_ACTION (sph_tree_neighbor);
 
