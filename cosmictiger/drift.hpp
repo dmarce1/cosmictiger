@@ -1,6 +1,6 @@
 /*
 CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+Copyright (C) 2026  Dominic C. Marcello
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -17,13 +17,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef DRIFT_HPP_
 #define DRIFT_HPP_
 
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/particles.hpp>
-
 
 struct drift_return {
 	double kin;
@@ -35,8 +33,7 @@ struct drift_return {
 	double cold_mass;
 	double flops;
 	part_int nmapped;
-	template<class Arc>
-	void serialize(Arc&& a, unsigned) {
+	template <class Arc> void serialize(Arc&& a, unsigned) {
 		a & vol;
 		a & therm;
 		a & kin;
@@ -48,9 +45,8 @@ struct drift_return {
 	}
 };
 
-void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung, double drag = 0.0);
+void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung = -1, double drag = 0.0);
 
-
-void cuda_drift(char rung, float a, float dt, float tau0, float tau1, float tau_max, double drag);
+void cuda_drift(int rung, float a, float dt, float tau0, float tau1, float tau_max, double drag);
 
 #endif /* DRIFT_HPP_ */

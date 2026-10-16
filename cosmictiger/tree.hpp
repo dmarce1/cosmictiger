@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -20,14 +20,14 @@
 #ifndef TREE_HPP_
 #define TREE_HPP_
 
+#include <hpx/serialization/serialization_fwd.hpp>
+
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
-#include <cosmictiger/range.hpp>
-#include <hpx/serialization/serialization_fwd.hpp>
 
 struct multipole_pos {
 	multipole<float> m;
@@ -37,9 +37,7 @@ struct multipole_pos {
 struct tree_id {
 	int proc;
 	int index;
-	inline bool operator==(tree_id other) const {
-		return proc == other.proc && index == other.index;
-	}
+	inline bool operator==(tree_id other) const { return proc == other.proc && index == other.index; }
 	inline bool operator<(tree_id other) const {
 		if (proc < other.proc) {
 			return true;
@@ -51,11 +49,8 @@ struct tree_id {
 			return false;
 		}
 	}
-	inline bool operator!=(tree_id other) const {
-		return proc != other.proc || index != other.index;
-	}
-	template<class A>
-	void serialize(A&& a, unsigned) {
+	inline bool operator!=(tree_id other) const { return proc != other.proc || index != other.index; }
+	template <class A> void serialize(A&& a, unsigned) {
 		a & proc;
 		a & index;
 	}
@@ -63,8 +58,8 @@ struct tree_id {
 
 struct tree_id_hash {
 	inline size_t operator()(tree_id id) const {
-		const int line_size = get_options().tree_cache_line_size;
-		const int i = id.index / line_size;
+		int const line_size = get_options().tree_cache_line_size;
+		int const i = id.index / line_size;
 		return i * (hpx_size() - 1) + ((id.proc < hpx_rank()) ? id.proc : id.proc - 1);
 	}
 };
@@ -86,14 +81,13 @@ struct tree_id_hash_hi {
 struct multi_pos {
 	multipole<float> multi;
 	array<fixed32, NDIM> pos;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
+	template <class A> void serialize(A&& arc, unsigned) {
 		arc & multi;
 		arc & pos;
 	}
 };
 
-multi_pos* tree_add_multipole(const multi_pos& mpos);
+multi_pos* tree_add_multipole(multi_pos const& mpos);
 
 struct tree_node {
 	fixed32_range box;
@@ -104,30 +98,24 @@ struct tree_node {
 	multi_pos* mpos;
 	float radius;
 	struct {
-		unsigned short depth :14;
-		unsigned short local_root :1;
-		unsigned short leaf :1;
-	};CUDA_EXPORT
+		unsigned short depth : 14;
+		unsigned short local_root : 1;
+		unsigned short leaf : 1;
+	};
+	CUDA_EXPORT
 
 	CUDA_EXPORT
-	inline part_int nparts() const {
-		return part_range.second - part_range.first;
-	}
+	inline part_int nparts() const { return part_range.second - part_range.first; }
 	inline particle_global_range global_part_range() const {
 		particle_global_range r;
 		r.proc = proc_range.first;
 		r.range = part_range;
 		return r;
 	}
-	inline bool is_local() const {
-		return proc_range.second - proc_range.first == 1;
-	}
-	inline bool is_local_here() const {
-		return is_local() && proc_range.first == hpx_rank();
-	}
+	inline bool is_local() const { return proc_range.second - proc_range.first == 1; }
+	inline bool is_local_here() const { return is_local() && proc_range.first == hpx_rank(); }
 	HPX_SERIALIZATION_SPLIT_MEMBER();
-	template<class A>
-	void load(A && arc, unsigned) {
+	template <class A> void load(A&& arc, unsigned) {
 		multi_pos this_mpos;
 		arc & this_mpos;
 		mpos = tree_add_multipole(this_mpos);
@@ -147,9 +135,8 @@ struct tree_node {
 		depth = depth0;
 		leaf = leaf0;
 	}
-	template<class A>
-	void save(A && arc, unsigned) const {
-		arc & *mpos;
+	template <class A> void save(A&& arc, unsigned) const {
+		arc&* mpos;
 		arc & box;
 		arc & pos;
 		arc & children;
@@ -174,8 +161,7 @@ struct tree_create_return {
 	tree_id id;
 	float radius;
 	range<double> box;
-	template<class A>
-	void serialize(A&& a, unsigned) {
+	template <class A> void serialize(A&& a, unsigned) {
 		a & multi;
 		a & id;
 		a & pos;
@@ -195,8 +181,7 @@ struct tree_create_params {
 		do_leaf_sizes = false;
 	}
 	tree_create_params(int min_rung, double theta, double hmax);
-	template<class A>
-	void serialize(A&& arc, unsigned) {
+	template <class A> void serialize(A&& arc, unsigned) {
 		arc & par_parts;
 		arc & do_leaf_sizes;
 		arc & leaf_pushed;
@@ -206,23 +191,24 @@ struct tree_create_params {
 	}
 };
 
-tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()), pair<part_int> part_range =
-		pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0, bool local_root = (hpx_size() == 1));
+tree_create_return tree_create(tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()),
+							   pair<part_int> part_range = pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0,
+							   bool local_root = (hpx_size() == 1));
 void tree_reset();
 void tree_destroy(bool free_tree = false);
 int tree_min_level(double theta, double hsoft);
-const tree_node* tree_get_node(tree_id);
+tree_node const* tree_get_node(tree_id);
 void tree_sort_particles_by_sph_particles();
 void tree_free_neighbor_list();
 long long tree_nodes_size();
 long long tree_nodes_next_index();
 void tree_clear_neighbor_ranges();
 int tree_avg_leaf_size();
-int tree_allocate_neighbor_list(const vector<tree_id>& values);
+int tree_allocate_neighbor_list(vector<tree_id> const& values);
 void tree_set_neighbor_range(tree_id id, pair<int, int> rng);
-void tree_set_boxes(tree_id id, const fixed32_range& ibox, const fixed32_range& obox, float hmax);
-const tree_id tree_get_leaf(int i);
-size_t tree_add_remote(const tree_node& remote);
+void tree_set_boxes(tree_id id, fixed32_range const& ibox, fixed32_range const& obox, float hmax);
+tree_id const tree_get_leaf(int i);
+size_t tree_add_remote(tree_node const& remote);
 tree_node* tree_data();
 tree_id& tree_get_neighbor(int i);
 void tree_2_cpu();

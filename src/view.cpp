@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -17,21 +17,24 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/options.hpp>
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/math.hpp>
-#include <cosmictiger/particles.hpp>
-#include <cosmictiger/view.hpp>
-#include <cosmictiger/constants.hpp>
-#include <cosmictiger/cosmology.hpp>
-
-#include <silo.h>
-
 #include <atomic>
 
 #include <chealpix.h>
+#include <hpx/threading_base/annotated_function.hpp>
+#include <silo.h>
 
-HPX_PLAIN_ACTION (output_view);
+#include <cosmictiger/constants.hpp>
+#include <cosmictiger/cosmology.hpp>
+#include <cosmictiger/hpx.hpp>
+#include <cosmictiger/math.hpp>
+#include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph.hpp>
+#include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/stars.hpp>
+#include <cosmictiger/view.hpp>
+
+HPX_PLAIN_ACTION(output_view);
 
 static vector<range<double>> view_boxes;
 
@@ -43,8 +46,7 @@ struct dm_part_info {
 	float vy;
 	float vz;
 	int rung;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
+	template <typename A> void serialize(A&& arc, unsigned) {
 		arc & x;
 		arc & y;
 		arc & z;
@@ -53,91 +55,206 @@ struct dm_part_info {
 		arc & vz;
 		arc & rung;
 	}
+};
 
+struct sph_part_info : public dm_part_info {
+	float eint;
+	float rho;
+	float h;
+	float H;
+	float Hp;
+	float H2;
+	float Hn;
+	float Hep;
+	float Hepp;
+	float He;
+	float Z;
+	float alpha;
+	float cold_frac;
+	template <typename A> void serialize(A&& arc, unsigned ver) {
+		dm_part_info::serialize(arc, ver);
+		arc & eint;
+		arc & rho;
+		arc & h;
+		arc & H;
+		arc & Hp;
+		arc & H2;
+		arc & Hn;
+		arc & Hep;
+		arc & Hepp;
+		arc & cold_frac;
+		arc & He;
+		arc & Z;
+		arc & alpha;
+	}
+};
+
+struct star_part_info : public dm_part_info {
+	float Y;
+	float Z;
+	float M;
+	float zform;
+	template <typename A> void serialize(A&& arc, unsigned ver) {
+		dm_part_info::serialize(arc, ver);
+		arc & Y;
+		arc & Z;
+		arc & M;
+		arc & zform;
+	}
 };
 
 struct view_return {
+	vector<vector<sph_part_info>> hydro;
 	vector<vector<dm_part_info>> dm;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
+	vector<vector<star_part_info>> star;
+	template <typename A> void serialize(A&& arc, unsigned) {
+		arc & hydro;
 		arc & dm;
+		arc & star;
 	}
 };
 
 view_return view_get_particles(vector<range<double>> boxes);
 
-HPX_PLAIN_ACTION (view_get_particles);
+HPX_PLAIN_ACTION(view_get_particles);
 
 view_return view_get_particles(vector<range<double>> boxes = vector<range<double>>()) {
 	if (hpx_rank() == 0) {
 		boxes = view_boxes;
 	}
 	view_return rc;
+	rc.hydro.resize(boxes.size());
 	rc.dm.resize(boxes.size());
+	rc.star.resize(boxes.size());
 	vector<hpx::future<view_return>> futs;
 	for (auto& c : hpx_children()) {
 		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
 	}
-	const int nthreads = hpx_hardware_concurrency();
+	bool const chem = get_options().chem;
+	bool const stars = get_options().stars;
+	int const nthreads = hpx_hardware_concurrency();
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, boxes]() {
-			view_return rc;
-			rc.dm.resize(boxes.size());
-			const part_int b = (size_t) proc * particles_size() / nthreads;
-			const part_int e = (size_t) (proc+1) * particles_size() / nthreads;
-			for( part_int i = b; i < e; i++) {
-				array<double,NDIM> x;
-				x[XDIM] = particles_pos(XDIM,i).to_double();
-				x[YDIM] = particles_pos(YDIM,i).to_double();
-				x[ZDIM] = particles_pos(ZDIM,i).to_double();
-				for( int j = 0; j < boxes.size(); j++) {
-					if( boxes[j].contains(x)) {
-						dm_part_info info;
-						info.x = particles_pos(XDIM,i);
-						info.y = particles_pos(YDIM,i);
-						info.z = particles_pos(ZDIM,i);
-						info.vx = particles_vel(XDIM,i);
-						info.vy = particles_vel(YDIM,i);
-						info.vz = particles_vel(ZDIM,i);
-						info.rung = particles_rung(i);
-						rc.dm[j].push_back(info);
-						break;
+		futs.push_back(hpx::async(hpx::annotated_function(
+			[proc, nthreads, boxes, chem, stars]() {
+				view_return rc;
+				rc.hydro.resize(boxes.size());
+				rc.dm.resize(boxes.size());
+				rc.star.resize(boxes.size());
+				part_int const b = (size_t)proc * particles_size() / nthreads;
+				part_int const e = (size_t)(proc + 1) * particles_size() / nthreads;
+				for (part_int i = b; i < e; i++) {
+					array<double, NDIM> x;
+					x[XDIM] = particles_pos(XDIM, i).to_double();
+					x[YDIM] = particles_pos(YDIM, i).to_double();
+					x[ZDIM] = particles_pos(ZDIM, i).to_double();
+					for (int j = 0; j < boxes.size(); j++) {
+						if (boxes[j].contains(x)) {
+							part_int const k = particles_type(i);
+							switch (k) {
+							case DARK_MATTER_TYPE: {
+								dm_part_info info{};
+								info.x = particles_pos(XDIM, i);
+								info.y = particles_pos(YDIM, i);
+								info.z = particles_pos(ZDIM, i);
+								info.vx = particles_vel(XDIM, i);
+								info.vy = particles_vel(YDIM, i);
+								info.vz = particles_vel(ZDIM, i);
+								info.rung = particles_rung(i);
+								rc.dm[j].push_back(info);
+								break;
+							}
+							case SPH_TYPE: {
+								sph_part_info info{};
+								int const l = particles_cat_index(i);
+								if (!sph_particles_isstar(l)) {
+									info.x = particles_pos(XDIM, i);
+									info.y = particles_pos(YDIM, i);
+									info.z = particles_pos(ZDIM, i);
+									info.vx = particles_vel(XDIM, i);
+									info.vy = particles_vel(YDIM, i);
+									info.vz = particles_vel(ZDIM, i);
+#ifdef HOPKINS
+									info.eint = sph_particles_eint_pre(l);
+									info.rho = sph_particles_rho_rho(l);
+#else
+									info.eint = sph_particles_eint(l);
+									info.rho = sph_particles_rho(l);
+#endif
+									info.h = sph_particles_smooth_len(l);
+									info.rung = particles_rung(i);
+									info.alpha = sph_particles_alpha(l);
+									if (chem) {
+										info.H = sph_particles_H(l);
+										info.Hp = sph_particles_Hp(l);
+										info.Hn = sph_particles_Hn(l);
+										info.H2 = sph_particles_H2(l);
+										info.Hep = sph_particles_Hep(l);
+										info.Hepp = sph_particles_Hepp(l);
+										info.Z = sph_particles_Z(l);
+										info.He = sph_particles_He0(l);
+									}
+									if (stars) {
+										info.cold_frac = sph_particles_cold_mass(l);
+									} else {
+										info.cold_frac = 0.0;
+									}
+									rc.hydro[j].push_back(info);
+								} else {
+									int const k = particles_cat_index(i);
+									star_part_info info{};
+									info.x = particles_pos(XDIM, i);
+									info.y = particles_pos(YDIM, i);
+									info.z = particles_pos(ZDIM, i);
+									info.vx = particles_vel(XDIM, i);
+									info.vy = particles_vel(YDIM, i);
+									info.vz = particles_vel(ZDIM, i);
+									info.rung = particles_rung(i);
+									rc.star[j].push_back(info);
+								}
+								break;
+							}
+							}
+						}
 					}
 				}
-			}
-			return rc;
-		}));
+				return rc;
+			},
+			"collect_view_particles")));
 	}
 
 	for (auto& f : futs) {
 		auto tmp = f.get();
 		for (int i = 0; i < boxes.size(); i++) {
+			rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
 			rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
+			rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
 		}
 	}
 	return rc;
-
 }
 
 void view_output_views(int cycle, double a) {
 	profiler_enter("view_output_views");
+	bool const chem = get_options().chem;
+	bool const stars = get_options().stars;
 	if (!view_boxes.size()) {
 		return;
 	}
-	const double code_to_cm = get_options().code_to_cm;
-	const double code_to_s = get_options().code_to_s;
-	const double code_to_g = get_options().code_to_g;
-//	const double code_to_velocity = code_to_cm / code_to_s / a;
-//	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
-//	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
-	const double code_to_velocity = 1.;
-	const double code_to_energy = 1.;
-	const double code_to_density = 1.;
+	double const code_to_cm = get_options().code_to_cm;
+	double const code_to_s = get_options().code_to_s;
+	double const code_to_g = get_options().code_to_g;
+	//	const double code_to_velocity = code_to_cm / code_to_s / a;
+	//	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
+	//	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
+	double const code_to_velocity = 1.;
+	double const code_to_energy = 1.;
+	double const code_to_density = 1.;
 	for (int bi = 0; bi < view_boxes.size(); bi++) {
+		bool stars = get_options().stars;
 		PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", view_boxes[bi].begin[XDIM], view_boxes[bi].end[XDIM], view_boxes[bi].begin[YDIM],
-				view_boxes[bi].end[YDIM], view_boxes[bi].begin[ZDIM], view_boxes[bi].end[ZDIM]);
+			  view_boxes[bi].end[YDIM], view_boxes[bi].begin[ZDIM], view_boxes[bi].end[ZDIM]);
 		std::string filename = "view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo";
-		DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
+		DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
 		view_return parts;
 		parts = view_get_particles();
 		vector<float> x, y, z;
@@ -154,7 +271,7 @@ void view_output_views(int cycle, double a) {
 				y.push_back(parts.dm[bi][i].y.to_float());
 				z.push_back(parts.dm[bi][i].z.to_float());
 			}
-			float *coords1[NDIM] = { x.data(), y.data(), z.data() };
+			float* coords1[NDIM] = {x.data(), y.data(), z.data()};
 			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, opts);
 			x.resize(0);
 			y.resize(0);
@@ -173,6 +290,155 @@ void view_output_views(int cycle, double a) {
 			}
 			DBPutPointvar1(db, "rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
 		}
+		if (parts.hydro[bi].size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].x.to_float());
+				y.push_back(parts.hydro[bi][i].y.to_float());
+				z.push_back(parts.hydro[bi][i].z.to_float());
+			}
+			float* coords2[NDIM] = {x.data(), y.data(), z.data()};
+			//			PRINT( "gas points\n");
+			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, opts);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].vx * code_to_velocity);
+				y.push_back(parts.hydro[bi][i].vy * code_to_velocity);
+				z.push_back(parts.hydro[bi][i].vz * code_to_velocity);
+			}
+			// PRINT( "Vels\n");
+			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, opts);
+			x.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				x.push_back(parts.hydro[bi][i].rung);
+			}
+			// PRINT( "rungs\n");
+			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			if (stars) {
+				x.resize(0);
+				for (int i = 0; i < parts.hydro[bi].size(); i++) {
+					x.push_back(parts.hydro[bi][i].cold_frac);
+				}
+				DBPutPointvar1(db, "cold_frac", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			}
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.hydro[bi].size(); i++) {
+				double const h = parts.hydro[bi][i].h;
+				x.push_back(parts.hydro[bi][i].rho * code_to_density);
+				y.push_back(parts.hydro[bi][i].eint * code_to_energy);
+				z.push_back(parts.hydro[bi][i].alpha);
+			}
+			//			PRINT( "h and ent\n");
+			DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			if (chem) {
+				double const code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s)); // 7
+				double const code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;								   // 10
+				vector<float> p, q, t, u, w, s;
+				for (int i = 0; i < parts.hydro[bi].size(); i++) {
+					x.push_back(parts.hydro[bi][i].Hp);
+					y.push_back(parts.hydro[bi][i].Hn);
+					z.push_back(parts.hydro[bi][i].H2);
+					p.push_back(parts.hydro[bi][i].Hep);
+					q.push_back(parts.hydro[bi][i].Hepp);
+					u.push_back(parts.hydro[bi][i].He);
+					s.push_back(parts.hydro[bi][i].H);
+					w.push_back(parts.hydro[bi][i].Z);
+					double const h = parts.hydro[bi][i].h;
+					double rho = parts.hydro[bi][i].rho;
+					double const Hp = parts.hydro[bi][i].Hp;
+					double const Hn = parts.hydro[bi][i].Hn;
+					double const H2 = parts.hydro[bi][i].H2;
+					double const He = parts.hydro[bi][i].He;
+					double const Z = parts.hydro[bi][i].Z;
+					double const Hep = parts.hydro[bi][i].Hep;
+					double const Hepp = parts.hydro[bi][i].Hepp;
+					double const Y = He + Hep + Hepp;
+					double const H = parts.hydro[bi][i].H;
+					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp + Z / 10.0;
+					rho *= code_to_density * pow(a, -3);
+					n *= constants::avo * rho;								// 8
+					double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2); // 4
+					double gamma = 1. + 1. / cv;							// 5
+					cv *= double(constants::kb);							// 1
+					double eint = parts.hydro[bi][i].eint;					// 11
+					eint /= sqr(a);
+					eint *= sqr(get_options().code_to_cm / get_options().code_to_s);
+					// PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
+					double energy = eint * rho;
+					double T = energy / (n * cv); // 5
+					if (stars) {
+						T /= 1.f - parts.hydro[bi][i].cold_frac;
+					}
+					//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
+					t.push_back(T);
+				}
+				DBPutPointvar1(db, "H", "gas", s.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, opts);
+				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, opts);
+			}
+		}
+		if (parts.star[bi].size()) {
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].x.to_float());
+				y.push_back(parts.star[bi][i].y.to_float());
+				z.push_back(parts.star[bi][i].z.to_float());
+			}
+			float* coords3[NDIM] = {x.data(), y.data(), z.data()};
+			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].vx * code_to_velocity);
+				y.push_back(parts.star[bi][i].vy * code_to_velocity);
+				z.push_back(parts.star[bi][i].vz * code_to_velocity);
+			}
+			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, opts);
+			x.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].rung);
+			}
+			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, opts);
+
+			vector<float> p;
+			x.resize(0);
+			y.resize(0);
+			z.resize(0);
+			for (int i = 0; i < parts.star[bi].size(); i++) {
+				x.push_back(parts.star[bi][i].Y);
+				y.push_back(parts.star[bi][i].Z);
+				z.push_back(parts.star[bi][i].M);
+				p.push_back(parts.star[bi][i].zform);
+			}
+			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
+			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
+		}
 		DBFreeOptlist(opts);
 		DBClose(db);
 	}
@@ -187,9 +453,9 @@ void view_read_view_file() {
 	}
 	range<float> view_box;
 	while (fscanf(fp, "%f %f %f %f %f %f\n", &view_box.begin[XDIM], &view_box.end[XDIM], &view_box.begin[YDIM], &view_box.end[YDIM], &view_box.begin[ZDIM],
-			&view_box.end[ZDIM]) == 2 * NDIM) {
+				  &view_box.end[ZDIM]) == 2 * NDIM) {
 		PRINT("Reading box for view at x range (%f,%f) yrange (%f,%f) zrange (%f,%f)\n", view_box.begin[XDIM], view_box.end[XDIM], view_box.begin[YDIM],
-				view_box.end[YDIM], view_box.begin[ZDIM], view_box.end[ZDIM]);
+			  view_box.end[YDIM], view_box.begin[ZDIM], view_box.end[ZDIM]);
 		range<double> view_box_d;
 		for (int dim = 0; dim < NDIM; dim++) {
 			view_box_d.begin[dim] = view_box.begin[dim];
@@ -198,46 +464,47 @@ void view_read_view_file() {
 		view_boxes.push_back(view_box_d);
 	}
 	fclose(fp);
-
 }
 
 vector<float> output_view(int number, double time) {
 	profiler_enter("output_view");
 	vector<hpx::future<void>> futs;
-	vector<hpx::future<vector<float>>>val_futs;
-	for (const auto& c : hpx_children()) {
-		val_futs.push_back(hpx::async<output_view_action>( c, number, time));
+	vector<hpx::future<vector<float>>> val_futs;
+	for (auto const& c : hpx_children()) {
+		val_futs.push_back(hpx::async<output_view_action>(c, number, time));
 	}
-	const int nthreads = hpx_hardware_concurrency();
-	const int Nside = get_options().view_size;
-	const int Npix = 12 * sqr(Nside);
+	int const nthreads = hpx_hardware_concurrency();
+	int const Nside = get_options().view_size;
+	int const Npix = 12 * sqr(Nside);
 	vector<std::atomic<float>> values(Npix);
 	for (auto& v : values) {
 		v = 0.0f;
 	}
 	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([nthreads,proc,Nside,&values]() {
-			const part_int begin = (size_t) proc * particles_size() / nthreads;
-			const part_int end = (size_t) (proc + 1) * particles_size() / nthreads;
-			for( int i = begin; i < end; i++) {
-				for( int xi = -1; xi <= 0; xi++) {
-					for( int yi = -1; yi <= 0; yi++) {
-						for( int zi = -1; zi <= 0; zi++) {
-							double vec[NDIM];
-							long int ipix;
-							vec[XDIM] = particles_pos(XDIM,i).to_float() + xi;
-							vec[YDIM] = particles_pos(YDIM,i).to_float() + yi;
-							vec[ZDIM] = particles_pos(ZDIM,i).to_float() + zi;
-							const float r2 = sqr(vec[XDIM],vec[YDIM],vec[ZDIM]);
-							if( r2 < 1.0 && r2 > 0.0) {
-								vec2pix_ring(Nside, vec, &ipix);
-								atomic_add(values[ipix], 1.0 / r2);
+		futs.push_back(hpx::async(hpx::annotated_function(
+			[nthreads, proc, Nside, &values]() {
+				part_int const begin = (size_t)proc * particles_size() / nthreads;
+				part_int const end = (size_t)(proc + 1) * particles_size() / nthreads;
+				for (int i = begin; i < end; i++) {
+					for (int xi = -1; xi <= 0; xi++) {
+						for (int yi = -1; yi <= 0; yi++) {
+							for (int zi = -1; zi <= 0; zi++) {
+								double vec[NDIM];
+								long int ipix;
+								vec[XDIM] = particles_pos(XDIM, i).to_float() + xi;
+								vec[YDIM] = particles_pos(YDIM, i).to_float() + yi;
+								vec[ZDIM] = particles_pos(ZDIM, i).to_float() + zi;
+								float const r2 = sqr(vec[XDIM], vec[YDIM], vec[ZDIM]);
+								if (r2 < 1.0 && r2 > 0.0) {
+									vec2pix_ring(Nside, vec, &ipix);
+									atomic_add(values[ipix], particles_mass(i) / r2);
+								}
 							}
 						}
 					}
 				}
-			}
-		}));
+			},
+			"project_view_mass")));
 	}
 	hpx::wait_all(futs.begin(), futs.end());
 	vector<float> results(values.size());
@@ -245,7 +512,7 @@ vector<float> output_view(int number, double time) {
 		results[i] = values[i];
 	}
 	for (auto& val_fut : val_futs) {
-		const auto vals = val_fut.get();
+		auto const vals = val_fut.get();
 		for (int i = 0; i < vals.size(); i++) {
 			results[i] += vals[i];
 		}

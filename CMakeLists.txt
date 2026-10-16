@@ -1,38 +1,54 @@
-cmake_minimum_required(VERSION 3.12.4)
-cmake_policy(VERSION 3.12.4)
-cmake_policy(SET CMP0003 NEW)
-cmake_policy(SET CMP0074 NEW)
-project(cosmictiger CXX C Fortran)
+# CosmicTiger - A cosmological N-Body code
+# Copyright (C) 2026  Dominic C. Marcello
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+cmake_minimum_required(VERSION 3.24)
+project(cosmictiger LANGUAGES CXX C Fortran)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_STANDARD 20)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
-find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
-find_package(Boost REQUIRED)
 option(COSMICTIGER_WITH_CUDA "Enable CUDA" ON)
 option(COSMICTIGER_WITH_LONG_LONG_PART_INT "Use long long to index local particles" OFF)
-set(COSMICTIGER_WITH_ORDER "7" )
-if( COSMICTIGER_WITH_CUDA ) 
-	enable_language(CUDA)
-	set(CUDA_PROPAGATE_HOST_FLAGS FALSE)
-	execute_process(COMMAND nvcc -lcuda ${PROJECT_SOURCE_DIR}/src/cuda_detect.cu -o cuda_detect)
-	execute_process(COMMAND ./cuda_detect OUTPUT_VARIABLE CUDA_ARCH)
-	message(STATUS "CUDA Architecture: ${CUDA_ARCH}")
+set(COSMICTIGER_WITH_ORDER "7" CACHE STRING "Expansion order P+1")
+if(COSMICTIGER_WITH_CUDA)
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES native)
+    endif()
+    enable_language(CUDA)
+    find_package(CUDAToolkit REQUIRED)
 endif()
+
+find_package(HPX REQUIRED NO_CMAKE_PACKAGE_REGISTRY)
+find_package(Boost REQUIRED COMPONENTS program_options)
+find_package(GSL REQUIRED)
+find_path(FFTW3F_INCLUDE_DIR fftw3.h REQUIRED)
+find_library(FFTW3F_LIBRARY NAMES fftw3f REQUIRED)
+find_path(SILO_INCLUDE_DIR silo.h REQUIRED)
+find_library(SILO_LIBRARY NAMES siloh5 silo REQUIRED)
+find_path(CHEALPIX_INCLUDE_DIR chealpix.h REQUIRED)
+find_library(CHEALPIX_LIBRARY NAMES chealpix REQUIRED)
+
 message(STATUS "cosmictiger expansion order P+1 = ${COSMICTIGER_WITH_ORDER}")
-set(CMAKE_CXX_FLAGS "-Wno-attributes --fast-math")
 
 include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
-CHECK_CXX_COMPILER_FLAG("-maltivec" COMPILER_SUPPORTS_MALTIVEC)
-if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -fno-pie -no-pie")
-endif()
-if(COMPILER_SUPPORTS_MALTIVEC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -maltivec")
-endif()
-
-execute_process(COMMAND g++ ${PROJECT_SOURCE_DIR}/src/simd_type.cpp -march=native -o simd_detect)
-execute_process(COMMAND ./simd_detect OUTPUT_VARIABLE SIMD_ARCH)
-message(STATUS "${SIMD_ARCH}")
-
+check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
 
 set(cosmictiger_source_files
     healpix/error_handling.cc
@@ -49,7 +65,7 @@ set(cosmictiger_source_files
     src/bh.cu
     src/boltzmann.cpp
     src/compress.cpp
- 	src/cosmology.cpp
+    src/cosmology.cpp
     src/cuda.cpp
     src/cuda_mem.cu
     src/drift.cpp
@@ -91,10 +107,26 @@ set(cosmictiger_source_files
     src/tree.cpp
     src/view.cpp
     src/zero_order.cpp
-)      
-                       
-                        
-                        
+    src/chemistry.cpp
+    src/chemistry.cu
+    src/hydro.cpp
+    src/kernel.cu
+    src/exact_sod.cpp
+    src/sedov.cpp
+    src/sph_particles.cpp
+    src/sph.cpp
+    src/sph.cu
+    src/sph_aux.cu
+    src/sph_cond_init.cu
+    src/sph_prehydro.cu
+    src/sph_conduction.cu
+    src/sph_hydro.cu
+    src/sph_rungs.cu
+    src/sphere.cu
+    src/sph_tree.cpp
+    src/stars.cpp
+    tests/sph_gravity.cpp
+)
 
 set(cosmictiger_header_files
     cosmictiger/assert.hpp
@@ -106,16 +138,15 @@ set(cosmictiger_header_files
     cosmictiger/cosmology.hpp
     cosmictiger/cuda.hpp
     cosmictiger/cuda_reduce.hpp
-    cosmictiger/cuda_vector.hpp
     cosmictiger/defs.hpp
     cosmictiger/device_vector.hpp
     cosmictiger/domain.hpp
     cosmictiger/drift.hpp
     cosmictiger/driver.hpp
-    cosmictiger/ewald_incides.hpp
+    cosmictiger/ewald_indices.hpp
+    cosmictiger/fixed.hpp
     cosmictiger/fft.hpp
     cosmictiger/fixedcapvec.hpp
-    cosmictiger/fixes.hpp
     cosmictiger/gravity.hpp
     cosmictiger/initialize.hpp
     cosmictiger/interp.hpp
@@ -128,7 +159,6 @@ set(cosmictiger_header_files
     cosmictiger/hpx.hpp
     cosmictiger/kick.hpp
     cosmictiger/kick_workspace.hpp
-    cosmictiger/lc_group_archive.hpp
     cosmictiger/lightcone.hpp
     cosmictiger/math.hpp
     cosmictiger/memused.hpp
@@ -148,93 +178,147 @@ set(cosmictiger_header_files
     cosmictiger/test.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
-    cosmictiger/unordered_map_ts.hpp
     cosmictiger/unordered_set_ts.hpp
     cosmictiger/view.hpp
     cosmictiger/zero_order.hpp
+    cosmictiger/chemistry.hpp
+    cosmictiger/hydro.hpp
+    cosmictiger/kernel.hpp
+    cosmictiger/exact_sod.hpp
+    cosmictiger/sph.hpp
+    cosmictiger/sph_cuda.hpp
+    cosmictiger/sph_particles.hpp
+    cosmictiger/sph_tree.hpp
+    cosmictiger/sphere.hpp
+    cosmictiger/stars.hpp
 )
 
-add_hpx_executable(
-  cosmictiger
-  DEPENDENCIES
-    Boost::boost fftw3f gsl gslcblas dl silo chealpix quadmath
-  SOURCES
-    ${cosmictiger_source_files}
-  HEADERS
-    ${cosmictiger_header_files}
- )
- 
-
-
- 
-add_executable( recfast recfast/recfast.f )
-add_executable( fmm_kernel_codegen src/fmm_kernel_codegen.cpp  cosmictiger/tensor.hpp )
-add_executable( lc2rockstar src/lc2rockstar.cpp src/compress.cpp )
-target_link_libraries( fmm_kernel_codegen PUBLIC dl )
-execute_process(COMMAND cp ${PROJECT_SOURCE_DIR}/power.init .)
- 
-#set_source_files_properties(./src/gravity.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-#set_source_files_properties(./src/kick.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-#set_source_files_properties(./src/analytic.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-
-#set_source_files_properties(./src/cuda_mem.cu PROPERTIES COMPILE_FLAGS -maxrregcount=128)
-    target_compile_options(lc2rockstar PRIVATE -DLC2GADGET2 )
-set_source_files_properties(./src/drift.cu PROPERTIES COMPILE_FLAGS -maxrregcount=64)
-
-
-
-if( COSMICTIGER_WITH_CUDA )
-	target_link_libraries(cosmictiger PUBLIC cudart)
-	target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
-                       -DUSE_CUDA --use_fast_math -lineinfo ;
-                        >)
-    target_compile_options(cosmictiger PRIVATE -DUSE_CUDA -DBOOST_STACKTRACE_USE_ADDR2LINE )
-	target_compile_options(fmm_kernel_codegen PRIVATE -DUSE_CUDA )
-	set_property(TARGET cosmictiger PROPERTY CUDA_ARCHITECTURES ${CUDA_ARCH})
-	set_property(TARGET cosmictiger PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+add_hpx_executable(cosmictiger
+    DEPENDENCIES Boost::boost Boost::program_options GSL::gsl GSL::gslcblas
+        ${FFTW3F_LIBRARY} ${SILO_LIBRARY} ${CHEALPIX_LIBRARY} dl quadmath
+    SOURCES ${cosmictiger_source_files}
+    HEADERS ${cosmictiger_header_files})
+target_include_directories(cosmictiger PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(cosmictiger SYSTEM PRIVATE
+    ${FFTW3F_INCLUDE_DIR} ${SILO_INCLUDE_DIR} ${CHEALPIX_INCLUDE_DIR})
+target_compile_definitions(cosmictiger PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+target_compile_options(cosmictiger PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-attributes;-ffast-math>)
+if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    target_compile_options(cosmictiger PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 endif()
- 
- 
- 
+if(COSMICTIGER_WITH_LONG_LONG_PART_INT)
+    target_compile_definitions(cosmictiger PRIVATE LONG_LONG_PART_INT)
+endif()
+if(COSMICTIGER_WITH_CUDA)
+    target_link_libraries(cosmictiger PUBLIC CUDA::cudart)
+    target_compile_definitions(cosmictiger PRIVATE USE_CUDA BOOST_STACKTRACE_USE_ADDR2LINE)
+    target_compile_options(cosmictiger PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math;-lineinfo>)
+    set_target_properties(cosmictiger PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+    set_source_files_properties(src/drift.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=64)
+    set_source_files_properties(src/chemistry.cu PROPERTIES COMPILE_OPTIONS -maxrregcount=40)
+    set_source_files_properties(src/sph.cu src/sph_prehydro.cu src/sph_aux.cu
+        src/sph_cond_init.cu src/sph_hydro.cu src/sph_conduction.cu src/sph_rungs.cu
+        PROPERTIES COMPILE_OPTIONS -maxrregcount=128)
+endif()
+
+add_executable(recfast recfast/recfast.f)
+add_executable(fmm_kernel_codegen src/fmm_kernel_codegen.cpp cosmictiger/tensor.hpp)
+target_link_libraries(fmm_kernel_codegen PRIVATE dl)
+target_include_directories(fmm_kernel_codegen PRIVATE ${PROJECT_SOURCE_DIR})
+target_compile_definitions(fmm_kernel_codegen PRIVATE ORDER=${COSMICTIGER_WITH_ORDER})
+if(COSMICTIGER_WITH_CUDA)
+    target_compile_definitions(fmm_kernel_codegen PRIVATE USE_CUDA)
+    target_link_libraries(fmm_kernel_codegen PRIVATE CUDA::cudart)
+endif()
+configure_file(power.init power.init COPYONLY)
 add_custom_command(
-    OUTPUT cosmictiger/fmm_kernels.hpp
-    COMMAND ./fmm_kernel_codegen > ${PROJECT_SOURCE_DIR}/cosmictiger/fmm_kernels.hpp
+    OUTPUT ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${PROJECT_BINARY_DIR}/cosmictiger
+    COMMAND fmm_kernel_codegen > ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp
     DEPENDS fmm_kernel_codegen
-    COMMENT "generating cosmictiger/fmm_kernels.hpp"
-)
-add_custom_target( generate_fmm_kernels DEPENDS cosmictiger/fmm_kernels.hpp COMMENT "" )
-#add_dependencies( cosmictiger generate_fmm_kernels )
- 
-target_include_directories(lc2rockstar PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(cosmictiger PUBLIC ${PROJECT_SOURCE_DIR})
-target_include_directories(fmm_kernel_codegen PUBLIC ${PROJECT_SOURCE_DIR})
-target_compile_definitions(cosmictiger PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
-if( COSMICTIGER_WITH_LONG_LONG_PART_INT ) 
-	target_compile_definitions(cosmictiger PUBLIC LONG_LONG_PART_INT)
+    COMMENT "Generating FMM kernels for comparison with the checked-in header")
+add_custom_target(generate_fmm_kernels DEPENDS ${PROJECT_BINARY_DIR}/cosmictiger/fmm_kernels.hpp)
+
+add_executable(lc2rockstar src/lc2rockstar.cpp src/compress.cpp)
+target_compile_definitions(lc2rockstar PRIVATE LC2GADGET2)
+target_include_directories(lc2rockstar PRIVATE ${PROJECT_SOURCE_DIR})
+if(COSMICTIGER_WITH_CUDA)
+    target_link_libraries(lc2rockstar PRIVATE CUDA::cudart)
 endif()
-target_compile_definitions(fmm_kernel_codegen PUBLIC ORDER=${COSMICTIGER_WITH_ORDER})
 
-add_executable(
- 	healpix2silo
- 	src/healpix2silo.cpp
- )
- 
- 
- 
- 
-target_link_libraries(healpix2silo PUBLIC chealpix silo boost_program_options dl)
-target_include_directories(healpix2silo PUBLIC ${PROJECT_SOURCE_DIR})
+add_executable(healpix2silo src/healpix2silo.cpp)
+target_link_libraries(healpix2silo PRIVATE ${CHEALPIX_LIBRARY} ${SILO_LIBRARY} Boost::program_options dl)
+target_include_directories(healpix2silo PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(healpix2silo SYSTEM PRIVATE ${CHEALPIX_INCLUDE_DIR} ${SILO_INCLUDE_DIR})
 
+add_hpx_executable(groups2halofunc
+    SOURCES src/assert.cpp src/hpx.cpp src/groups2halofunc.cpp src/group_entry.cpp)
+target_link_libraries(groups2halofunc PUBLIC Boost::program_options)
+target_include_directories(groups2halofunc PRIVATE ${PROJECT_SOURCE_DIR})
 
+foreach(tool_target IN ITEMS fmm_kernel_codegen lc2rockstar healpix2silo groups2halofunc)
+    target_compile_options(${tool_target} PRIVATE -Wno-attributes -ffast-math)
+    if(COMPILER_SUPPORTS_MARCH_NATIVE)
+        target_compile_options(${tool_target} PRIVATE -march=native)
+    endif()
+endforeach()
 
-add_hpx_executable(
- 	groups2halofunc
-   SOURCES
- 	src/assert.cpp
- 	src/hpx.cpp
- 	src/groups2halofunc.cpp
- 	src/group_entry.cpp
- )
-
-target_link_libraries(groups2halofunc PUBLIC boost_program_options)
-target_include_directories(groups2halofunc PUBLIC ${PROJECT_SOURCE_DIR})
+include(CTest)
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    foreach(test_name IN ITEMS sph_gravity_cpu sph_gravity_cuda checkpoint_state_dm checkpoint_state_sph)
+        set(test_workdir "${PROJECT_BINARY_DIR}/tests/${test_name}")
+        file(MAKE_DIRECTORY "${test_workdir}")
+        if(test_name MATCHES "^sph_gravity")
+            set(test_mode sphGravity)
+            set(test_sph true)
+        else()
+            set(test_mode checkpointState)
+            if(test_name STREQUAL "checkpoint_state_sph")
+                set(test_sph true)
+            else()
+                set(test_sph false)
+            endif()
+        endif()
+        if(test_name STREQUAL "sph_gravity_cuda" OR test_name STREQUAL "checkpoint_state_sph")
+            set(test_cuda true)
+        else()
+            set(test_cuda false)
+        endif()
+        add_test(NAME ${test_name} COMMAND cosmictiger
+            --test=${test_mode} --parts_dim=8 --hydro.sph=${test_sph}
+            --cuda=${test_cuda} --hpx:threads=2 --hpx:bind=none)
+        set_tests_properties(${test_name} PROPERTIES
+            WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+    endforeach()
+    set(rejected_options_workdir "${PROJECT_BINARY_DIR}/tests/rejected_options")
+    file(MAKE_DIRECTORY "${rejected_options_workdir}")
+    add_test(NAME rejected_options COMMAND cosmictiger --invalid_option_for_test=true
+        --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(rejected_options PROPERTIES WORKING_DIRECTORY "${rejected_options_workdir}"
+        RUN_SERIAL TRUE TIMEOUT 20 WILL_FAIL TRUE)
+    if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        set(migration_workdir "${PROJECT_BINARY_DIR}/tests/sph_migration_mpi")
+        file(MAKE_DIRECTORY "${migration_workdir}")
+        add_test(NAME sph_migration_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+            --test=sphGravity --parts_dim=8 --hydro.sph=true --cuda=false
+            --hpx:threads=2 --hpx:bind=none --hpx:localities=2)
+        set_tests_properties(sph_migration_mpi PROPERTIES WORKING_DIRECTORY "${migration_workdir}"
+            RUN_SERIAL TRUE TIMEOUT 120)
+        add_test(NAME smoke_sph_mpi COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_smoke.py sph_mpi
+            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            ${PROJECT_BINARY_DIR}/tests/smoke_sph_mpi --mpi-exec=${MPIEXEC_EXECUTABLE})
+        set_tests_properties(smoke_sph_mpi PROPERTIES RUN_SERIAL TRUE TIMEOUT 260)
+    endif()
+    foreach(smoke_mode IN ITEMS sod dm_cpu dm_cuda sph)
+        add_test(NAME smoke_${smoke_mode} COMMAND ${Python3_EXECUTABLE}
+            ${PROJECT_SOURCE_DIR}/tests/run_smoke.py ${smoke_mode}
+            $<TARGET_FILE:cosmictiger> ${PROJECT_SOURCE_DIR}/power.init
+            ${PROJECT_BINARY_DIR}/tests/smoke_${smoke_mode})
+        set_tests_properties(smoke_${smoke_mode} PROPERTIES RUN_SERIAL TRUE TIMEOUT 500)
+    endforeach()
+endif()

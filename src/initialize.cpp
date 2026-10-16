@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -17,18 +17,21 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cmath>
+
+#include <gsl/gsl_rng.h>
+
+#include <cosmictiger/boltzmann.hpp>
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/initialize.hpp>
-#include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/zero_order.hpp>
-#include <cosmictiger/boltzmann.hpp>
-
-#include <gsl/gsl_rng.h>
 
 #define RECFAST_N 1000
 #define RECFAST_Z0 9990
@@ -84,23 +87,23 @@ std::function<double(double)> run_recfast(cosmic_params params) {
 	xe = std::move(tmp);
 	fclose(fp);
 	auto inter_func = [xe](double a) {
-		const double z = 1.0 / a - 1.0;
-		const int i1 = std::min(std::max((int)(z / RECFAST_DZ),1),RECFAST_N-2);
-		if( i1 == RECFAST_N - 2 ) {
-			return (double) xe.back();
+		double const z = 1.0 / a - 1.0;
+		int const i1 = std::min(std::max((int)(z / RECFAST_DZ), 1), RECFAST_N - 2);
+		if (i1 == RECFAST_N - 2) {
+			return (double)xe.back();
 		} else {
-			const int i0 = i1 - 1;
-			const int i2 = i1 + 1;
-			const int i3 = i1 + 2;
-			const double t = z / RECFAST_DZ - i1;
-			const double y0 = xe[i0];
-			const double y1 = xe[i1];
-			const double y2 = xe[i2];
-			const double y3 = xe[i3];
-			const double ct = t * (1.0 - t);
-			const double d = -0.5 * ct * ((1.0 - t) * y0 + t * y3);
-			const double b = (1.0 - t + ct * (1.0 - 1.5 * t)) * y1;
-			const double c = (t + ct * (1.5 * t - 0.5)) * y2;
+			int const i0 = i1 - 1;
+			int const i2 = i1 + 1;
+			int const i3 = i1 + 2;
+			double const t = z / RECFAST_DZ - i1;
+			double const y0 = xe[i0];
+			double const y1 = xe[i1];
+			double const y2 = xe[i2];
+			double const y3 = xe[i3];
+			double const ct = t * (1.0 - t);
+			double const d = -0.5 * ct * ((1.0 - t) * y0 + t * y3);
+			double const b = (1.0 - t + ct * (1.0 - 1.5 * t)) * y1;
+			double const c = (t + ct * (1.5 * t - 0.5)) * y2;
 			return d + b + c;
 		}
 	};
@@ -114,7 +117,7 @@ struct power_spectrum_function {
 	float dlogk;
 	float operator()(float k) const {
 		float logk = std::log(k);
-		const float k0 = (logk - logkmin) / dlogk;
+		float const k0 = (logk - logkmin) / dlogk;
 		int i0 = int(k0) - 1;
 		if (i0 < 0) {
 			PRINT("power.init does not have sufficient range min %e max %e tried %e\n", exp(logkmin), exp(logkmax), k);
@@ -140,14 +143,14 @@ struct power_spectrum_function {
 	}
 	float sigma8_integrand(float x) const {
 		float R = 8 / get_options().hubble;
-		const float c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(R, 6);
+		float const c0 = float(9) / (2. * float(M_PI) * float(M_PI)) / powf(R, 6);
 		float k = std::exp(x);
 		float P = (*this)(k);
 		float tmp = (std::sin(k * R) - k * R * std::cos(k * R));
 		return c0 * P * tmp * tmp * std::pow(k, -3);
 	}
 	float normalize() {
-		const int N = 8 * 1024;
+		int const N = 8 * 1024;
 		float sum = 0.0;
 		float logkmax = this->logkmax - 2.5 * dlogk;
 		float logkmin = this->logkmin + 1.5 * dlogk;
@@ -170,7 +173,6 @@ struct power_spectrum_function {
 		}
 		return sum;
 	}
-
 };
 
 static void zeldovich_begin(int dim1, int dim2);
@@ -184,15 +186,15 @@ static void twolpt_f2delta2_inv();
 static void twolpt_correction2(int dim);
 static power_spectrum_function read_power_spectrum();
 
-HPX_PLAIN_ACTION (zeldovich_begin);
-HPX_PLAIN_ACTION (zeldovich_end);
-HPX_PLAIN_ACTION (twolpt_init);
-HPX_PLAIN_ACTION (twolpt_phase);
-HPX_PLAIN_ACTION (twolpt_correction1);
-HPX_PLAIN_ACTION (twolpt_f2delta2_inv);
-HPX_PLAIN_ACTION (twolpt_correction2);
-HPX_PLAIN_ACTION (twolpt);
-HPX_PLAIN_ACTION (twolpt_destroy);
+HPX_PLAIN_ACTION(zeldovich_begin);
+HPX_PLAIN_ACTION(zeldovich_end);
+HPX_PLAIN_ACTION(twolpt_init);
+HPX_PLAIN_ACTION(twolpt_phase);
+HPX_PLAIN_ACTION(twolpt_correction1);
+HPX_PLAIN_ACTION(twolpt_f2delta2_inv);
+HPX_PLAIN_ACTION(twolpt_correction2);
+HPX_PLAIN_ACTION(twolpt);
+HPX_PLAIN_ACTION(twolpt_destroy);
 
 static vector<float> delta2;
 static vector<cmplx> delta2_inv;
@@ -200,6 +202,9 @@ static vector<float> delta2_part;
 static vector<fixed32> X0[NDIM];
 
 static void init_X0();
+static void clear_X0();
+HPX_PLAIN_ACTION(init_X0);
+HPX_PLAIN_ACTION(clear_X0);
 
 power_spectrum_function compute_power_spectrum() {
 	power_spectrum_function func;
@@ -221,11 +226,11 @@ power_spectrum_function compute_power_spectrum() {
 	params.Theta = get_options().Theta;
 	params.hubble = get_options().hubble;
 	PRINT("Computing zero order universe...");
-	fflush (stdout);
+	fflush(stdout);
 	auto fxe = run_recfast(params);
 	create_zero_order_universe(&uni, fxe, 1.1, params);
 	PRINT("Done.\n");
-	const auto ns = get_options().ns;
+	auto const ns = get_options().ns;
 	fflush(stdout);
 	double kmin;
 	double kmax;
@@ -237,20 +242,20 @@ power_spectrum_function compute_power_spectrum() {
 	func.logkmax = log(kmax);
 	func.dlogk = (func.logkmax - func.logkmin) / Nk;
 	for (int i = 0; i < Nk; i++) {
-		double k = exp(func.logkmin + (double) i * func.dlogk);
+		double k = exp(func.logkmin + (double)i * func.dlogk);
 		func.P.push_back(m_k(k));
 	}
-	const auto norm = func.normalize();
+	auto const norm = func.normalize();
 	if (hpx_rank() == 0) {
-		const int M = 2 * Nk;
-		const double logkmin = log(kmin);
-		const double logkmax = log(kmax);
-		const double dlogk = (logkmax - logkmin) / M;
+		int const M = 2 * Nk;
+		double const logkmin = log(kmin);
+		double const logkmax = log(kmax);
+		double const dlogk = (logkmax - logkmin) / M;
 		FILE* fp = fopen("power.dat", "wt");
-		const double lh = params.hubble;
-		const double lh3 = lh * lh * lh;
+		double const lh = params.hubble;
+		double const lh3 = lh * lh * lh;
 		for (int i = 1; i < M - 2; i++) {
-			double k = exp(logkmin + (double) i * dlogk);
+			double k = exp(logkmin + (double)i * dlogk);
 			fprintf(fp, "%e %e %e\n", k / lh, norm * m_k(k) * lh3, norm * vel_k(k) * lh3);
 		}
 		fclose(fp);
@@ -260,17 +265,17 @@ power_spectrum_function compute_power_spectrum() {
 
 void initialize(double z0) {
 	init_X0();
-	const int64_t N = get_options().Nfour;
-	const float omega_m = get_options().omega_m;
-	const float a0 = 1.0 / (z0 + 1.0);
-	const float D1 = cosmos_growth_factor(omega_m, a0) / cosmos_growth_factor(omega_m, 1.0);
-	const float Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
-	const float f1 = std::pow(Om, 5.f / 9.f);
-	const float H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
-	const float H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
+	int64_t const N = get_options().Nfour;
+	float const omega_m = get_options().omega_m;
+	float const a0 = 1.0 / (z0 + 1.0);
+	float const D1 = cosmos_growth_factor(omega_m, a0) / cosmos_growth_factor(omega_m, 1.0);
+	float const Om = omega_m / (omega_m + (a0 * a0 * a0) * (1.0 - omega_m));
+	float const f1 = std::pow(Om, 5.f / 9.f);
+	float const H0 = constants::H0 * get_options().code_to_s * get_options().hubble;
+	float const H = H0 * std::sqrt(omega_m / (a0 * a0 * a0) + 1.0 - omega_m);
 	float prefac1 = f1 * H * a0 * a0;
-	const float D2 = -3.f * sqr(D1) / 7.f;
-	const float f2 = 2.f * std::pow(Om, 6.f / 11.f);
+	float const D2 = -3.f * sqr(D1) / 7.f;
+	float const f2 = 2.f * std::pow(Om, 6.f / 11.f);
 	float prefac2 = f2 * H * a0 * a0;
 	PRINT("D1 = %e\n", D1);
 	PRINT("D2 = %e\n", D2);
@@ -279,7 +284,7 @@ void initialize(double z0) {
 	for (int dim = 0; dim < NDIM; dim++) {
 		fft3d_init(N);
 		zeldovich_begin(dim, NDIM);
-//		fft3d_force_real();
+		//		fft3d_force_real();
 		fft3d_inv_execute();
 		float dxmax = zeldovich_end(dim, dim == 0, D1, prefac1);
 		PRINT("dxmax = %e\n", dxmax);
@@ -335,8 +340,8 @@ void initialize(double z0) {
 
 		twolpt_correction1();
 		twolpt_f2delta2_inv();
-//		fft3d2silo(false);
-//		system( "cp complex.silo complex.3.silo\n");
+		//		fft3d2silo(false);
+		//		system( "cp complex.silo complex.3.silo\n");
 		fft3d_destroy();
 
 		for (int dim = 0; dim < NDIM; dim++) {
@@ -348,33 +353,31 @@ void initialize(double z0) {
 		}
 		twolpt_destroy();
 	}
-	for (int dim = 0; dim < NDIM; dim++) {
-		X0[dim] = vector<fixed32>();
-	}
+	clear_X0();
 }
 
 void twolpt_f2delta2_inv() {
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
+	for (auto const& c : hpx_children()) {
 		futs.push_back(hpx::async<twolpt_f2delta2_inv_action>(c));
 	}
-	const auto box = fft3d_complex_range();
+	auto const box = fft3d_complex_range();
 	delta2_inv = fft3d_read_complex(box);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void twolpt_correction1() {
-	const int N = get_options().Nfour;
+	int const N = get_options().Nfour;
 	if (hpx_rank() == 0) {
 		fft3d_init(N);
 	}
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
+	for (auto const& c : hpx_children()) {
 		futs.push_back(hpx::async<twolpt_correction1_action>(c));
 	}
-	const auto box = fft3d_real_range();
+	auto const box = fft3d_real_range();
 	fft3d_accumulate_real(box, delta2);
-//	fft3d2silo(true);
+	//	fft3d2silo(true);
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
 		fft3d_execute();
@@ -382,165 +385,168 @@ void twolpt_correction1() {
 }
 
 void twolpt_correction2(int dim) {
-	const int N = get_options().Nfour;
+	int const N = get_options().Nfour;
 	if (hpx_rank() == 0) {
 		fft3d_init(N);
 	}
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
+	for (auto const& c : hpx_children()) {
 		futs.push_back(hpx::async<twolpt_correction2_action>(c, dim));
 	}
-	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const float factor = std::pow(box_size, -1.5) * N * N * N;
-	const auto box = fft3d_complex_range();
+	float const box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	float const factor = std::pow(box_size, -1.5) * N * N * N;
+	auto const box = fft3d_complex_range();
 	auto Y = delta2_inv;
 	array<int64_t, NDIM> I;
 	vector<hpx::future<void>> futs2;
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs2.push_back(hpx::async([N,box,box_size,&Y,dim,factor](array<int64_t,NDIM> I) {
-			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
-			const float kx = 2.f * (float) M_PI / box_size * float(i);
-			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
-				const float ky = 2.f * (float) M_PI / box_size * float(j);
-				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-					const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
-					const int i2 = sqr(i, j, k);
-					const int64_t index = box.index(I);
-					if (i2 > 0) {
-						float kz = 2.f * (float) M_PI / box_size * float(k);
-						float k2 = kx * kx + ky * ky + kz * kz;
-						const float K[NDIM] = {kx, ky, kz};
-						Y[index] = -cmplx(0, 1) * K[dim] * Y[index] / k2;
-						Y[index] *= cloud_filter( kx * box_size / N);
-						Y[index] *= cloud_filter( ky * box_size / N);
-						Y[index] *= cloud_filter( kz * box_size / N);
-					} else {
-						Y[index] = cmplx(0, 0);
+		futs2.push_back(hpx::async(
+			[N, box, box_size, &Y, dim, factor](array<int64_t, NDIM> I) {
+				int const i = (I[0] < N / 2 ? I[0] : I[0] - N);
+				float const kx = 2.f * (float)M_PI / box_size * float(i);
+				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+					int const j = (I[1] < N / 2 ? I[1] : I[1] - N);
+					float const ky = 2.f * (float)M_PI / box_size * float(j);
+					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+						int const k = (I[2] < N / 2 ? I[2] : I[2] - N);
+						int const i2 = sqr(i, j, k);
+						int64_t const index = box.index(I);
+						if (i2 > 0) {
+							float kz = 2.f * (float)M_PI / box_size * float(k);
+							float k2 = kx * kx + ky * ky + kz * kz;
+							float const K[NDIM] = {kx, ky, kz};
+							Y[index] = -cmplx(0, 1) * K[dim] * Y[index] / k2;
+							Y[index] *= cloud_filter(kx * box_size / N);
+							Y[index] *= cloud_filter(ky * box_size / N);
+							Y[index] *= cloud_filter(kz * box_size / N);
+						} else {
+							Y[index] = cmplx(0, 0);
+						}
 					}
 				}
-			}
-		}, I));
+			},
+			I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	fft3d_accumulate_complex(box, Y);
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
-//		fft3d2silo(false);
-//		std::string cmd = std::string("cp complex.silo complex.") + std::to_string(dim) + ".silo\n";
-//		system(cmd.c_str());
+		//		fft3d2silo(false);
+		//		std::string cmd = std::string("cp complex.silo complex.") + std::to_string(dim) + ".silo\n";
+		//		system(cmd.c_str());
 		fft3d_inv_execute();
 	}
 }
 
 void twolpt_generate(int dim1, int dim2) {
-	const int64_t N = get_options().Nfour;
-	const float box_size = get_options().code_to_cm / constants::mpc_to_cm;
-	const float factor = std::pow(box_size, -1.5) * N * N * N;
+	int64_t const N = get_options().Nfour;
+	float const box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	float const factor = std::pow(box_size, -1.5) * N * N * N;
 	vector<cmplx> Y;
 	static auto power = get_options().use_power_file ? read_power_spectrum() : compute_power_spectrum();
-	const auto box = fft3d_complex_range();
+	auto const box = fft3d_complex_range();
 	Y.resize(box.volume());
 	array<int64_t, NDIM> I;
 	constexpr int rand_init_iters = 8;
 	vector<hpx::future<void>> futs2;
-//	const auto filter = get_options().use_glass || get_options().close_pack;
-	const bool filter = (dim1 != NDIM || dim2 != NDIM);
+	//	const auto filter = get_options().use_glass || get_options().close_pack;
+	bool const filter = (dim1 != NDIM || dim2 != NDIM);
 	for (I[0] = box.begin[0]; I[0] != box.end[0]; I[0]++) {
-		futs2.push_back(hpx::async([N,box,box_size,&Y,dim1,dim2,factor,filter](array<int64_t,NDIM> I) {
-			const int i = (I[0] < N / 2 ? I[0] : I[0] - N);
-			const float kx = 2.f * (float) M_PI / box_size * float(i);
-			for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
-				int seed = (I[0] * N + I[1])*1234 + 42;
-				gsl_rng * rndgen = gsl_rng_alloc(gsl_rng_taus);
-				gsl_rng_set(rndgen, seed);
-				for( int l = 0; l < rand_init_iters; l++) {
-					gsl_rng_uniform_pos(rndgen);
-				}
-				const int j = (I[1] < N / 2 ? I[1] : I[1] - N);
-				const float ky = 2.f * (float) M_PI / box_size * float(j);
-				for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
-					const int64_t index = box.index(I);
-					if( I[2] > 0 ) {
-						const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
-						const int i2 = sqr(i, j, k);
-						const float kz = 2.f * (float) M_PI / box_size * float(k);
-						if (i2 > 0) {
-							const float kz = 2.f * (float) M_PI / box_size * float(k);
-							const float k2 = kx * kx + ky * ky + kz * kz;
-							const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-							const float x = gsl_rng_uniform_pos(rndgen);
-							const float y = gsl_rng_uniform_pos(rndgen);
-							const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
-							const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-							const float P = power(K0);
-							Y[index] = rand_normal * sqrtf(P) * factor * K[dim1] * K[dim2] / k2;
-						} else {
-							Y[index] = cmplx(0.f, 0.f);
-						}
-						if( filter ) {
-							Y[index] *= cloud_filter( kx * box_size / N);
-							Y[index] *= cloud_filter( ky * box_size / N);
-							Y[index] *= cloud_filter( kz * box_size / N);
+		futs2.push_back(hpx::async(
+			[N, box, box_size, &Y, dim1, dim2, factor, filter](array<int64_t, NDIM> I) {
+				int const i = (I[0] < N / 2 ? I[0] : I[0] - N);
+				float const kx = 2.f * (float)M_PI / box_size * float(i);
+				for (I[1] = box.begin[1]; I[1] != box.end[1]; I[1]++) {
+					int seed = (I[0] * N + I[1]) * 1234 + 42;
+					gsl_rng* rndgen = gsl_rng_alloc(gsl_rng_taus);
+					gsl_rng_set(rndgen, seed);
+					for (int l = 0; l < rand_init_iters; l++) {
+						gsl_rng_uniform_pos(rndgen);
+					}
+					int const j = (I[1] < N / 2 ? I[1] : I[1] - N);
+					float const ky = 2.f * (float)M_PI / box_size * float(j);
+					for (I[2] = box.begin[2]; I[2] != box.end[2]; I[2]++) {
+						int64_t const index = box.index(I);
+						if (I[2] > 0) {
+							int const k = (I[2] < N / 2 ? I[2] : I[2] - N);
+							int const i2 = sqr(i, j, k);
+							float const kz = 2.f * (float)M_PI / box_size * float(k);
+							if (i2 > 0) {
+								float const kz = 2.f * (float)M_PI / box_size * float(k);
+								float const k2 = kx * kx + ky * ky + kz * kz;
+								float const K0 = sqrtf(kx * kx + ky * ky + kz * kz);
+								float const x = gsl_rng_uniform_pos(rndgen);
+								float const y = gsl_rng_uniform_pos(rndgen);
+								cmplx const K[NDIM + 1] = {{0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
+								auto const rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+								float const P = power(K0);
+								Y[index] = rand_normal * sqrtf(P) * factor * K[dim1] * K[dim2] / k2;
+							} else {
+								Y[index] = cmplx(0.f, 0.f);
+							}
+							if (filter) {
+								Y[index] *= cloud_filter(kx * box_size / N);
+								Y[index] *= cloud_filter(ky * box_size / N);
+								Y[index] *= cloud_filter(kz * box_size / N);
+							}
 						}
 					}
-				}
-				gsl_rng_free(rndgen);
-				I[2] = 0;
-				const int64_t index = box.index(I);
-				const int J0 = I[0] > N / 2 ? N - I[0] : I[0];
-				const int J1 = I[1] > N / 2 ? N - I[1] : I[1];
-				seed = (J0 * N + J1)*1234 + 42;
-				rndgen = gsl_rng_alloc(gsl_rng_taus);
-				gsl_rng_set(rndgen, seed);
-				for( int l = 0; l < rand_init_iters; l++) {
-					gsl_rng_uniform_pos(rndgen);
-				}
-				const int k = (I[2] < N / 2 ? I[2] : I[2] - N);
-				const int i2 = sqr(i, j, k);
-				float sgn = 1.0;
-				if( dim1 != NDIM) {
-					sgn *= -1.0;
-				}
-				if( dim2 != NDIM) {
-					sgn *= -1.0;
-				}
-				const float kz = 2.f * (float) M_PI / box_size * float(k);
-				if (i2 > 0 ) {
-					const float k2 = kx * kx + ky * ky + kz * kz;
-					const float K0 = sqrtf(kx * kx + ky * ky + kz * kz);
-					const float x = gsl_rng_uniform_pos(rndgen);
-					const float y = gsl_rng_uniform_pos(rndgen);
-					const cmplx K[NDIM + 1] = { {0,-kx}, {0,-ky}, {0,-kz}, {1,0}};
-					const auto rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
-					const float P = power(K0);
-					Y[index] = rand_normal * sqrtf(P) * factor * K[dim1] * K[dim2] / k2;
-					if( I[0] > N / 2 ) {
-						Y[index] = Y[index].conj() * sgn;
-					} else if( I[0] == 0 ) {
-						if( I[1] > N / 2 ) {
+					gsl_rng_free(rndgen);
+					I[2] = 0;
+					int64_t const index = box.index(I);
+					int const J0 = I[0] > N / 2 ? N - I[0] : I[0];
+					int const J1 = I[1] > N / 2 ? N - I[1] : I[1];
+					seed = (J0 * N + J1) * 1234 + 42;
+					rndgen = gsl_rng_alloc(gsl_rng_taus);
+					gsl_rng_set(rndgen, seed);
+					for (int l = 0; l < rand_init_iters; l++) {
+						gsl_rng_uniform_pos(rndgen);
+					}
+					int const k = (I[2] < N / 2 ? I[2] : I[2] - N);
+					int const i2 = sqr(i, j, k);
+					float sgn = 1.0;
+					if (dim1 != NDIM) {
+						sgn *= -1.0;
+					}
+					if (dim2 != NDIM) {
+						sgn *= -1.0;
+					}
+					float const kz = 2.f * (float)M_PI / box_size * float(k);
+					if (i2 > 0) {
+						float const k2 = kx * kx + ky * ky + kz * kz;
+						float const K0 = sqrtf(kx * kx + ky * ky + kz * kz);
+						float const x = gsl_rng_uniform_pos(rndgen);
+						float const y = gsl_rng_uniform_pos(rndgen);
+						cmplx const K[NDIM + 1] = {{0, -kx}, {0, -ky}, {0, -kz}, {1, 0}};
+						auto const rand_normal = expc(cmplx(0, 1) * 2.f * float(M_PI) * y) * sqrtf(-logf(fabsf(x)));
+						float const P = power(K0);
+						Y[index] = rand_normal * sqrtf(P) * factor * K[dim1] * K[dim2] / k2;
+						if (I[0] > N / 2) {
 							Y[index] = Y[index].conj() * sgn;
+						} else if (I[0] == 0) {
+							if (I[1] > N / 2) {
+								Y[index] = Y[index].conj() * sgn;
+							}
 						}
+					} else {
+						Y[index] = cmplx(0.f, 0.f);
 					}
-				} else {
-					Y[index] = cmplx(0.f, 0.f);
+					if (filter) {
+						Y[index] *= cloud_filter(kx * box_size / N);
+						Y[index] *= cloud_filter(ky * box_size / N);
+						Y[index] *= cloud_filter(kz * box_size / N);
+					}
+					gsl_rng_free(rndgen);
 				}
-				if( filter ) {
-					Y[index] *= cloud_filter( kx * box_size / N);
-					Y[index] *= cloud_filter( ky * box_size / N);
-					Y[index] *= cloud_filter( kz * box_size / N);
-				}
-				gsl_rng_free(rndgen);
-
-			}
-		}, I));
+			},
+			I));
 	}
 	hpx::wait_all(futs2.begin(), futs2.end());
 	fft3d_accumulate_complex(box, Y);
 }
 
 void twolpt(int dim1, int dim2) {
-	const int N = get_options().Nfour;
+	int const N = get_options().Nfour;
 	if (hpx_rank() == 0) {
 		fft3d_init(N);
 	}
@@ -551,24 +557,24 @@ void twolpt(int dim1, int dim2) {
 		}
 	}
 	vector<cmplx> Y;
-	const auto box = fft3d_real_range();
+	auto const box = fft3d_real_range();
 	Y.resize(box.volume());
 	twolpt_generate(dim1, dim2);
 	fft3d_accumulate_complex(box, Y);
 	hpx::wait_all(futs.begin(), futs.end());
 	if (hpx_rank() == 0) {
-//		fft3d_force_real();
+		//		fft3d_force_real();
 		fft3d_inv_execute();
 	}
 }
 
 void twolpt_phase(int phase) {
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
+	for (auto const& c : hpx_children()) {
 		futs.push_back(hpx::async<twolpt_phase_action>(c, phase));
 	}
-	const auto box = fft3d_real_range();
-	const auto vol = box.volume();
+	auto const box = fft3d_real_range();
+	auto const vol = box.volume();
 	if (phase > 2 * NDIM) {
 		auto this_delta2_part = fft3d_read_real(box);
 		for (int i = 0; i < vol; i++) {
@@ -590,17 +596,17 @@ void twolpt_phase(int phase) {
 
 void twolpt_init() {
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
+	for (auto const& c : hpx_children()) {
 		futs.push_back(hpx::async<twolpt_init_action>(c));
 	}
-	const auto box = fft3d_real_range();
+	auto const box = fft3d_real_range();
 	delta2.resize(box.volume(), 0.0);
 	hpx::wait_all(futs.begin(), futs.end());
 }
 
 void twolpt_destroy() {
 	vector<hpx::future<void>> futs;
-	for (const auto& c : hpx_children()) {
+	for (auto const& c : hpx_children()) {
 		futs.push_back(hpx::async<twolpt_destroy_action>(c));
 	}
 	delta2 = decltype(delta2)();
@@ -616,16 +622,15 @@ static void zeldovich_begin(int dim1, int dim2) {
 	}
 	twolpt_generate(dim1, dim2);
 	hpx::wait_all(futs.begin(), futs.end());
-
 }
 
 static range<int64_t> find_my_box(range<int64_t> box, int begin, int end, int depth) {
 	if (end - begin == 1) {
 		return box;
 	} else {
-		const int xdim = depth % NDIM;
-		const int mid = (begin + end) / 2;
-		const float w = float(mid - begin) / float(end - begin);
+		int const xdim = depth % NDIM;
+		int const mid = (begin + end) / 2;
+		float const w = float(mid - begin) / float(end - begin);
 		if (hpx_rank() < mid) {
 			auto left = box;
 			left.end[xdim] = (((1.0 - w) * box.begin[xdim] + w * box.end[xdim]) + 0.5);
@@ -647,12 +652,33 @@ static range<int64_t> find_my_box() {
 	return find_my_box(box, 0, hpx_size(), 0);
 }
 
+static void clear_X0() {
+	vector<hpx::future<void>> futures;
+	if (get_options().sph) {
+		for (auto const& child : hpx_children()) {
+			futures.push_back(hpx::async<clear_X0_action>(child));
+		}
+	}
+	for (int dim = 0; dim < NDIM; dim++) {
+		X0[dim] = vector<fixed32>();
+	}
+	for (auto& future : futures) {
+		future.get();
+	}
+}
+
 static void init_X0() {
+	vector<hpx::future<void>> remoteFutures;
+	if (get_options().sph) {
+		for (auto const& child : hpx_children()) {
+			remoteFutures.push_back(hpx::async<init_X0_action>(child));
+		}
+	}
 	vector<hpx::future<void>> futs;
-	const double Ninv = 1.0 / get_options().parts_dim;
-	const auto ibox = find_my_box();
-	const auto glass = get_options().use_glass;
-	const auto close_pack = get_options().close_pack;
+	double const Ninv = 1.0 / get_options().parts_dim;
+	auto const ibox = find_my_box();
+	auto const glass = get_options().use_glass;
+	auto const close_pack = get_options().close_pack;
 	if (!glass) {
 		auto box = find_my_box();
 		array<int64_t, NDIM> I;
@@ -670,7 +696,7 @@ static void init_X0() {
 					if (close_pack) {
 						for (int dim1 = 0; dim1 < NDIM; dim1++) {
 							double x = I[dim1] * Ninv;
-							X0[dim1][index] = x + 0.25;
+							X0[dim1][index] = x + (get_options().sph ? 0.25 * Ninv : 0.25);
 							X0[dim1][index + 1] = x + 0.75 * Ninv;
 						}
 						index += 2;
@@ -693,8 +719,8 @@ static void init_X0() {
 		int glass_parts_dim;
 		int parts_dim = get_options().parts_dim;
 		for (int dim = 0; dim < NDIM; dim++) {
-			box.begin[dim] = (double) ibox.begin[dim] / parts_dim;
-			box.end[dim] = (double) ibox.end[dim] / parts_dim;
+			box.begin[dim] = (double)ibox.begin[dim] / parts_dim;
+			box.end[dim] = (double)ibox.end[dim] / parts_dim;
 		}
 		FREAD(&glass_parts_dim, sizeof(int), 1, fp);
 		if (parts_dim % glass_parts_dim != 0) {
@@ -711,16 +737,16 @@ static void init_X0() {
 		FREAD(z.data(), sizeof(float), glass_nparts, fp);
 		fclose(fp);
 
-		const int jb = box.begin[XDIM] * Nf;
-		const int lb = box.begin[ZDIM] * Nf;
-		const int kb = box.begin[YDIM] * Nf;
-		const int je = std::min((int) box.end[XDIM] * Nf, Nf - 1) + 1;
-		const int ke = std::min((int) box.end[YDIM] * Nf, Nf - 1) + 1;
-		const int le = std::min((int) box.end[ZDIM] * Nf, Nf - 1) + 1;
+		int const jb = box.begin[XDIM] * Nf;
+		int const lb = box.begin[ZDIM] * Nf;
+		int const kb = box.begin[YDIM] * Nf;
+		int const je = std::min((int)box.end[XDIM] * Nf, Nf - 1) + 1;
+		int const ke = std::min((int)box.end[YDIM] * Nf, Nf - 1) + 1;
+		int const le = std::min((int)box.end[ZDIM] * Nf, Nf - 1) + 1;
 		mutex_type mutex;
 		vector<part_int> counts(je - jb);
 		for (int j = jb; j < je; j++) {
-			futs.push_back(hpx::async([j,lb,le,jb,kb,ke,glass_nparts,&mutex,box,Nf,&counts]() {
+			futs.push_back(hpx::async([j, lb, le, jb, kb, ke, glass_nparts, &mutex, box, Nf, &counts]() {
 				part_int this_count = 0;
 				for (int k = kb; k < ke; k++) {
 					for (int l = lb; l < le; l++) {
@@ -728,11 +754,11 @@ static void init_X0() {
 							double x0 = x[i].to_double();
 							double y0 = y[i].to_double();
 							double z0 = z[i].to_double();
-							const double X = (j + x0) / Nf;
+							double const X = (j + x0) / Nf;
 							if (X >= box.begin[XDIM] && X < box.end[XDIM]) {
-								const double Y = (k + y0) / Nf;
+								double const Y = (k + y0) / Nf;
 								if (Y >= box.begin[YDIM] && Y < box.end[YDIM]) {
-									const double Z = (l + z0) / Nf;
+									double const Z = (l + z0) / Nf;
 									if (Z >= box.begin[ZDIM] && Z < box.end[ZDIM]) {
 										this_count++;
 									}
@@ -748,7 +774,7 @@ static void init_X0() {
 		futs.resize(0);
 		size_t total = 0;
 		for (int i = 0; i < counts.size(); i++) {
-			const auto this_count = counts[i];
+			auto const this_count = counts[i];
 			counts[i] = total;
 			total += this_count;
 		}
@@ -756,8 +782,8 @@ static void init_X0() {
 			X0[dim].resize(total);
 		}
 		for (int j = jb; j < je; j++) {
-			const part_int index_begin = counts[j - jb];
-			futs.push_back(hpx::async([j,lb,le,kb,ke,glass_nparts,&mutex,box,Nf, index_begin]() {
+			part_int const index_begin = counts[j - jb];
+			futs.push_back(hpx::async([j, lb, le, kb, ke, glass_nparts, &mutex, box, Nf, index_begin]() {
 				part_int iii = index_begin;
 				for (int k = kb; k < ke; k++) {
 					for (int l = lb; l < le; l++) {
@@ -765,11 +791,11 @@ static void init_X0() {
 							double x0 = x[i].to_double();
 							double y0 = y[i].to_double();
 							double z0 = z[i].to_double();
-							const double X = (j + x0) / Nf;
+							double const X = (j + x0) / Nf;
 							if (X >= box.begin[XDIM] && X < box.end[XDIM]) {
-								const double Y = (k + y0) / Nf;
+								double const Y = (k + y0) / Nf;
 								if (Y >= box.begin[YDIM] && Y < box.end[YDIM]) {
-									const double Z = (l + z0) / Nf;
+									double const Z = (l + z0) / Nf;
 									if (Z >= box.begin[ZDIM] && Z < box.end[ZDIM]) {
 										X0[XDIM][iii] = X;
 										X0[YDIM][iii] = Y;
@@ -795,18 +821,74 @@ static void init_X0() {
 		particles_vel(ZDIM, i) = 0.0;
 		particles_rung(i) = 0;
 	}
+	if (get_options().sph) {
+		// nparts counts one species; the two species carry complementary mass fractions.
+		part_int const count = particles_size();
+		sph_particles_resize(count);
+		double const gasOffset = (close_pack ? 0.25 : 0.5) * Ninv;
+		for (int dim = 0; dim < NDIM; dim++) {
+			X0[dim].resize(2 * size_t(count));
+			for (part_int i = 0; i < count; i++) {
+				double x = X0[dim][i].to_double() + gasOffset;
+				if (x >= 1.0) {
+					x -= 1.0;
+				}
+				X0[dim][count + i] = x;
+				particles_pos(dim, count + i) = x;
+				particles_vel(dim, count + i) = 0.0;
+			}
+		}
+		double const scale = 1.0 / (1.0 + get_options().z0);
+		double const energyUnit = sqr(get_options().code_to_cm / get_options().code_to_s);
+		double const neutralNumber = 1.0 - 0.75 * get_options().Y0;
+		double const initialTemperature = 1000.0;
+		double const thermalEnergy = 1.5 * constants::kb * constants::avo * neutralNumber * initialTemperature / energyUnit;
+		double const density = get_options().sph_mass * get_options().nparts;
+		float const smoothLength = std::cbrt(get_options().sneighbor_number / ((4.0 * M_PI / 3.0) * get_options().nparts));
+		for (part_int i = 0; i < count; i++) {
+			particles_rung(count + i) = 0;
+#ifdef ENTROPY
+			sph_particles_rec2(i).A = thermalEnergy * (get_options().gamma - 1.0) / std::pow(density / (scale * scale * scale), get_options().gamma - 1.0);
+#else
+			sph_particles_rec2(i).eint = thermalEnergy * scale * scale;
+#endif
+			sph_particles_smooth_len(i) = smoothLength;
+			sph_particles_alpha(i) = get_options().alpha0;
+			sph_particles_shear(i) = 0.0f;
+			sph_particles_omega(i) = 1.0f;
+			sph_particles_omegaP(i) = 1.0f;
+			sph_particles_cold_mass(i) = 0.0f;
+#ifdef HOPKINS
+			sph_particles_rho_rho(i) = density;
+#else
+			sph_particles_rho(i) = density;
+#endif
+			sph_particles_pressure(i) = density * thermalEnergy * scale * scale * (get_options().gamma - 1.0);
+			sph_particles_H(i) = 1.0 - get_options().Y0;
+			sph_particles_He0(i) = get_options().Y0;
+			sph_particles_Hn(i) = 1.0e-30f;
+			sph_particles_Hp(i) = 1.0e-30f;
+			sph_particles_H2(i) = 1.0e-30f;
+			sph_particles_Hep(i) = 1.0e-30f;
+			sph_particles_Hepp(i) = 1.0e-30f;
+			sph_particles_Z(i) = 1.0e-30f;
+		}
+	}
+	for (auto& future : remoteFutures) {
+		future.get();
+	}
 }
 
 static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
-//PRINT( "enter zeldovich_end\n");
+	// PRINT( "enter zeldovich_end\n");
 	float dxmax = 0.0;
 	spinlock_type mutex;
-	const int64_t N = get_options().Nfour;
-	const double box_size = get_options().code_to_cm / constants::mpc_to_cm;
+	int64_t const N = get_options().Nfour;
+	double const box_size = get_options().code_to_cm / constants::mpc_to_cm;
 	auto box = find_my_box();
-	const bool glass = get_options().use_glass;
+	bool const glass = get_options().use_glass;
 	for (int dim = 0; dim < NDIM; dim++) {
-		box.end[dim] += CLOUD_MAX;
+		box.end[dim] += CLOUD_MAX + (get_options().sph ? 1 : 0);
 		box.begin[dim] += CLOUD_MIN;
 	}
 	vector<hpx::future<float>> futs;
@@ -816,31 +898,43 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 	static vector<float> Y;
 	Y = fft3d_read_real(box);
 	array<int64_t, NDIM> I;
-	const float Ninv = 1.0 / N;
-	const int nthreads = hpx_hardware_concurrency();
-	const double box_size_inv = 1.0 / box_size;
+	float const Ninv = 1.0 / N;
+	int const nthreads = hpx_hardware_concurrency();
+	double const box_size_inv = 1.0 / box_size;
 	for (part_int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc,nthreads, N,box, box_size_inv, dim, D1, prefac1]() {
-			const size_t b = (size_t) proc * particles_size() / nthreads;
-			const size_t e = (size_t) (proc + 1) * particles_size() / nthreads;
+		futs.push_back(hpx::async([proc, nthreads, N, box, box_size_inv, dim, D1, prefac1]() {
+			size_t const b = (size_t)proc * particles_size() / nthreads;
+			size_t const e = (size_t)(proc + 1) * particles_size() / nthreads;
 			double dxmax = 0.0;
-			for( part_int i = b; i < e; i++) {
-				const double x0 = X0[XDIM][i].to_double();
-				const double y0 = X0[YDIM][i].to_double();
-				const double z0 = X0[ZDIM][i].to_double();
-				const int i1 = x0 * N;
-				const int j1 = y0 * N;
-				const int k1 = z0 * N;
-				double t[NDIM] = {x0*N - i1, y0*N - j1, z0*N-k1};
+			for (part_int i = b; i < e; i++) {
+				double const x0 = X0[XDIM][i].to_double();
+				double const y0 = X0[YDIM][i].to_double();
+				double const z0 = X0[ZDIM][i].to_double();
+				int i1 = x0 * N;
+				int j1 = y0 * N;
+				int k1 = z0 * N;
+				double t[NDIM] = {x0 * N - i1, y0 * N - j1, z0 * N - k1};
+				if (get_options().sph) {
+					// A positive gas offset may wrap through the upper periodic boundary.
+					if (i1 < box.begin[XDIM] - CLOUD_MIN) {
+						i1 += N;
+					}
+					if (j1 < box.begin[YDIM] - CLOUD_MIN) {
+						j1 += N;
+					}
+					if (k1 < box.begin[ZDIM] - CLOUD_MIN) {
+						k1 += N;
+					}
+				}
 				double dx = 0.0;
-				for( int j = CLOUD_MIN; j <= CLOUD_MAX; j++) {
-					double wtx = cloud_weight(-j+t[XDIM]);
-					for( int k = CLOUD_MIN; k <= CLOUD_MAX; k++) {
-						double wty = cloud_weight(-k+t[YDIM]);
-						for( int l = CLOUD_MIN; l <= CLOUD_MAX; l++) {
-							double wtz = cloud_weight(-l+t[ZDIM]);
+				for (int j = CLOUD_MIN; j <= CLOUD_MAX; j++) {
+					double wtx = cloud_weight(-j + t[XDIM]);
+					for (int k = CLOUD_MIN; k <= CLOUD_MAX; k++) {
+						double wty = cloud_weight(-k + t[YDIM]);
+						for (int l = CLOUD_MIN; l <= CLOUD_MAX; l++) {
+							double wtz = cloud_weight(-l + t[ZDIM]);
 							double wt = wtx * wty * wtz;
-							dx += Y[box.index(i1+j,j1+k,k1+l)] * wt;
+							dx += Y[box.index(i1 + j, j1 + k, k1 + l)] * wt;
 						}
 					}
 				}
@@ -852,16 +946,16 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 				} else if (x < 0.0) {
 					x += 1.0;
 				}
-				particles_pos(dim,i) = x;
+				particles_pos(dim, i) = x;
 				particles_vel(dim, i) += prefac1 * dx;
-				const double Ndim = pow(get_options().nparts, 1.0 / NDIM);
+				double const Ndim = pow(get_options().nparts, 1.0 / NDIM);
 				dxmax = std::max(std::abs(dxmax), dx * Ndim);
 			}
-			return (float) dxmax;
+			return (float)dxmax;
 		}));
 	}
 	for (auto& f : futs) {
-		const auto tmp = f.get();
+		auto const tmp = f.get();
 		dxmax = std::max(dxmax, tmp);
 	}
 	return dxmax;
@@ -869,7 +963,7 @@ static float zeldovich_end(int dim, bool init_parts, float D1, float prefac1) {
 
 static power_spectrum_function read_power_spectrum() {
 	power_spectrum_function func;
-	const float h = get_options().hubble;
+	float const h = get_options().hubble;
 	FILE* fp = fopen("power.init", "rt");
 	vector<std::pair<float, float>> data;
 	if (!fp) {
@@ -885,8 +979,8 @@ static power_spectrum_function read_power_spectrum() {
 			k *= h;
 			p /= (h * h * h);
 			func.P.push_back(p);
-			kmax = std::max(kmax, (float) k);
-			kmin = std::min(kmin, (float) k);
+			kmax = std::max(kmax, (float)k);
+			kmin = std::min(kmin, (float)k);
 		}
 	}
 	func.logkmin = std::log(kmin);

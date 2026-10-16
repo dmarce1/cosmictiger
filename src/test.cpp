@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -22,25 +22,29 @@ constexpr bool verbose = true;
 #include <fenv.h>
 
 #include <cosmictiger/analytic.hpp>
+#include <cosmictiger/bh.hpp>
+#include <cosmictiger/chemistry.hpp>
 #include <cosmictiger/domain.hpp>
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/driver.hpp>
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/gravity.hpp>
+#include <cosmictiger/hydro.hpp>
 #include <cosmictiger/initialize.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/rockstar.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/sphere.hpp>
+#include <cosmictiger/stars.hpp>
 #include <cosmictiger/test.hpp>
 #include <cosmictiger/timer.hpp>
 #include <cosmictiger/tree.hpp>
-#include <cosmictiger/bh.hpp>
 
-//0.7, 0.8
-//0.55, 0.65
-//0.4, 0.5
+// 0.7, 0.8
+// 0.55, 0.65
+// 0.4, 0.5
 /*
  float rand_normal() {
  float x = 2.0 * rand1() - 1.0;
@@ -102,7 +106,7 @@ static void rockstar_test() {
 }
 
 static void fft1_test() {
-	const int N = 100;
+	int const N = 100;
 	range<int64_t> box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		box.begin[dim] = 0;
@@ -110,7 +114,7 @@ static void fft1_test() {
 	}
 	vector<float> A(box.volume());
 	for (int i = 0; i < box.volume(); i++) {
-		A[i] = 0.1 + (double) rand() / RAND_MAX;
+		A[i] = 0.1 + (double)rand() / RAND_MAX;
 	}
 	fft3d_init(N);
 	fft3d_accumulate_real(box, A);
@@ -119,7 +123,7 @@ static void fft1_test() {
 	auto B = fft3d_read_real(box);
 	fft3d_destroy();
 	for (int i = 0; i < box.volume(); i++) {
-		const double err = std::abs(A[i] - B[i]) / A[i];
+		double const err = std::abs(A[i] - B[i]) / A[i];
 		if (err > 1.0e-5) {
 			PRINT("%e %e %e\n", err, A[i], B[i]);
 		}
@@ -127,7 +131,7 @@ static void fft1_test() {
 }
 
 static void fft2_test() {
-	const int N = 4;
+	int const N = 4;
 	range<int64_t> box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		box.begin[dim] = 0;
@@ -183,7 +187,6 @@ static void domain_test() {
 	tm.stop();
 	PRINT("domains_end: %e s\n", tm.read());
 	tm.reset();
-
 }
 
 static void tree_test() {
@@ -231,7 +234,6 @@ static void tree_test() {
 	tm.stop();
 	PRINT("tree_create: %e s\n", tm.read());
 	tm.reset();
-
 }
 
 static void kick_test() {
@@ -317,12 +319,12 @@ static void kick_test() {
 	PRINT("tree_destroy: %e s\n", tm.read());
 	tm.reset();
 	tm.start();
-	//drift(1.0, 0.0, 0.0, 0.0, 0.0);
+	// drift(1.0, 0.0, 0.0, 0.0, 0.0);
 	tm.stop();
 	PRINT("drift: %e s\n", tm.read());
 	total_time.stop();
 	PRINT("avg time per step = %e\n", total_time.read());
-	const double flops_measure = total_flops / total_time.read() / hpx_size();
+	double const flops_measure = total_flops / total_time.read() / hpx_size();
 	PRINT("FLOPS / s / locality = %e\n", flops_measure);
 	FILE* fp = fopen("results.txt", "at");
 	fprintf(fp, "%i %e %e\n", hpx_size(), total_time.read(), flops_measure);
@@ -337,14 +339,14 @@ static void force_test() {
 	timer tm_main;
 	constexpr int NITER = 1;
 	tm_main.start();
-	const auto read_check = get_options().read_check;
+	auto const read_check = get_options().read_check;
 	if (read_check != -1) {
 		read_checkpoint();
 	} else {
 		initialize(get_options().z0);
 	}
 	constexpr int nthetas = 16;
-	const double thetas[nthetas] = { 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95};
+	double const thetas[nthetas] = {0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95};
 	for (int iter = 0; iter < nthetas; iter++) {
 		tm_main.start();
 		domains_rebound();
@@ -391,96 +393,94 @@ static void force_test() {
 		FILE* fp = fopen("force_accuracy.txt", "at");
 		fprintf(fp, "%e %e %e\n", thetas[iter], rc.first, rc.second);
 		fclose(fp);
-
 	}
 
 	kick_workspace::clear_buffers();
 	PRINT("AVERAGE TIME = %e\n", tm_main.read() / NITER);
-
 }
 
 static void bucket_test() {
 	int nchecks = 11;
-	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
-			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
-	const double thetas[] = { 0.5, 0.65, 0.65, 0.65, 0.65, 0.65, 0.8, 0.8, 0.8, 0.8, 0.8 };
-//	for (int ci = 0; ci < nchecks; ci++) {
-		char* buffer;
-//		system("rm -r checkpoint.999999\n");
-//		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
-//		system(buffer);
-//		free(buffer);
-		for (int bucket_size = 64; bucket_size <= 256; bucket_size += 8) {
-			auto opts = get_options();
-			opts.bucket_size = bucket_size;
-			opts.read_check = 999999;
-//			opts.theta = thetas[ci];
-			set_options(opts);
+	static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+								  "checkpoint.z.1.7",  "checkpoint.z.1.1",	"checkpoint.z.0.6",	 "checkpoint.z.0.3", "checkpoint.z.0.1"};
+	double const thetas[] = {0.5, 0.65, 0.65, 0.65, 0.65, 0.65, 0.8, 0.8, 0.8, 0.8, 0.8};
+	//	for (int ci = 0; ci < nchecks; ci++) {
+	char* buffer;
+	//		system("rm -r checkpoint.999999\n");
+	//		asprintf(&buffer, "mv %s checkpoint.999999\n", checkpoints[ci]);
+	//		system(buffer);
+	//		free(buffer);
+	for (int bucket_size = 64; bucket_size <= 256; bucket_size += 8) {
+		auto opts = get_options();
+		opts.bucket_size = bucket_size;
+		opts.read_check = 999999;
+		//			opts.theta = thetas[ci];
+		set_options(opts);
 		//	read_checkpoint();
-			timer tm;
-			tm.start();
-			for (int trial = 0; trial < 10; trial++) {
-				particles_random_init();
-				domains_rebound();
-				domains_begin(0);
-				domains_end();
-				particles_sort_by_rung(0);
-				tree_create_params tparams(0, get_options().theta, get_options().hsoft);
-				tree_create(tparams);
-				PRINT( "Tree created\n");
-				kick_params kparams;
-				kparams.node_load = 10;
-				kparams.gpu = true;
-				kparams.max_dt = 1.0;
-				kparams.min_level = tparams.min_level;
-				kparams.save_force = get_options().save_force;
-				kparams.GM = get_options().GM;
-				kparams.h = get_options().hsoft;
-				kparams.eta = get_options().eta;
-				kparams.a = 1.0;
-				kparams.first_call = true;
-				kparams.min_rung = 0;
-				kparams.t0 = 1.0;
-				kparams.do_phi = false;
-				kparams.theta = get_options().theta;
-				kparams.top = true;
-				kparams.ascending = kparams.descending = false;
-				expansion<float> L;
-				for (int i = 0; i < EXPANSION_SIZE; i++) {
-					L[i] = 0.0f;
-				}
-				array<fixed32, NDIM> pos;
-				for (int dim = 0; dim < NDIM; dim++) {
-					pos[dim] = 0.f;
-				}
-				tree_id root_id;
-				root_id.proc = 0;
-				root_id.index = 0;
-				vector<tree_id> checklist;
-				checklist.push_back(root_id);
-				PRINT( "Doing kick\n");
-				auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
-				tree_destroy(false);
+		timer tm;
+		tm.start();
+		for (int trial = 0; trial < 10; trial++) {
+			particles_random_init();
+			domains_rebound();
+			domains_begin(0);
+			domains_end();
+			particles_sort_by_rung(0);
+			tree_create_params tparams(0, get_options().theta, get_options().hsoft);
+			tree_create(tparams);
+			PRINT("Tree created\n");
+			kick_params kparams;
+			kparams.node_load = 10;
+			kparams.gpu = true;
+			kparams.max_dt = 1.0;
+			kparams.min_level = tparams.min_level;
+			kparams.save_force = get_options().save_force;
+			kparams.GM = get_options().GM;
+			kparams.h = get_options().hsoft;
+			kparams.eta = get_options().eta;
+			kparams.a = 1.0;
+			kparams.first_call = true;
+			kparams.min_rung = 0;
+			kparams.t0 = 1.0;
+			kparams.do_phi = false;
+			kparams.theta = get_options().theta;
+			kparams.top = true;
+			kparams.ascending = kparams.descending = false;
+			expansion<float> L;
+			for (int i = 0; i < EXPANSION_SIZE; i++) {
+				L[i] = 0.0f;
 			}
-			tm.stop();
-			asprintf(&buffer, "buckets.txt");
-			FILE* fp = fopen(buffer, "at");
-			free(buffer);
-			fprintf(fp, "%i %e\n", bucket_size, tm.read());
-			fclose(fp);
-	/*	}
-		asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]);
-		system(buffer);
-		free(buffer);*/
+			array<fixed32, NDIM> pos;
+			for (int dim = 0; dim < NDIM; dim++) {
+				pos[dim] = 0.f;
+			}
+			tree_id root_id;
+			root_id.proc = 0;
+			root_id.index = 0;
+			vector<tree_id> checklist;
+			checklist.push_back(root_id);
+			PRINT("Doing kick\n");
+			auto kr = kick(kparams, L, pos, root_id, checklist, checklist, nullptr);
+			tree_destroy(false);
+		}
+		tm.stop();
+		asprintf(&buffer, "buckets.txt");
+		FILE* fp = fopen(buffer, "at");
+		free(buffer);
+		fprintf(fp, "%i %e\n", bucket_size, tm.read());
+		fclose(fp);
+		/*	}
+			asprintf(&buffer, "mv checkpoint.999999 %s\n", checkpoints[ci]);
+			system(buffer);
+			free(buffer);*/
 	}
 }
 
 static void speed_test() {
 	constexpr int nchecks = 11;
-	static char* checkpoints[] = { "checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
-			"checkpoint.z.1.7", "checkpoint.z.1.1", "checkpoint.z.0.6", "checkpoint.z.0.3", "checkpoint.z.0.1" };
-	const double thetas[] = { 0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7 };
-	const double counts[] = { 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4 };
+	static char* checkpoints[] = {"checkpoint.z.48.9", "checkpoint.z.20.0", "checkpoint.z.10.5", "checkpoint.z.6.2", "checkpoint.z.4.0", "checkpoint.z.2.6",
+								  "checkpoint.z.1.7",  "checkpoint.z.1.1",	"checkpoint.z.0.6",	 "checkpoint.z.0.3", "checkpoint.z.0.1"};
+	double const thetas[] = {0.4, 0.55, 0.55, 0.55, 0.55, 0.55, 0.7, 0.7, 0.7, 0.7, 0.7};
+	double const counts[] = {1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4};
 	int buckets[nchecks];
 	int bbegin = 96;
 	int bend = 168;
@@ -585,10 +585,19 @@ void bh_test() {
 	 err_tot += err;
 	 }
 	 PRINT("%e\n", err_tot / phi1.size());*/
-
 }
 
+void sphGravityTest();
+
 void test(std::string test) {
+	if (test == "checkpointState") {
+		checkpointStateTest();
+		return;
+	}
+	if (test == "sphGravity") {
+		sphGravityTest();
+		return;
+	}
 	if (test == "domain") {
 		domain_test();
 	} else if (test == "fft1") {
@@ -605,10 +614,30 @@ void test(std::string test) {
 		kick_test();
 	} else if (test == "tree") {
 		tree_test();
+	} else if (test == "rt") {
+		hydro_rt_test();
+	} else if (test == "sod") {
+		hydro_sod_test();
+	} else if (test == "blast") {
+		hydro_blast_test();
+	} else if (test == "helmholtz") {
+		hydro_helmholtz_test();
 	} else if (test == "bh") {
 		bh_test();
+	} else if (test == "stars") {
+		stars_test_mass();
+	} else if (test == "star") {
+		hydro_star_test();
+	} else if (test == "disc") {
+		hydro_disc_test();
+	} else if (test == "sphere") {
+		sphere_surface_test();
+	} else if (test == "plummer") {
+		hydro_plummer();
+	} else if (test == "chemistry") {
+		test_cuda_chemistry_kernel();
+		//	chemistry_test();
 	} else {
 		THROW_ERROR("test %s is not known\n", test.c_str());
 	}
-
 }

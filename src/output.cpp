@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -17,19 +17,19 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/output.hpp>
-#include <cosmictiger/particles.hpp>
+#include <silo.h>
+
 #include <cosmictiger/constants.hpp>
 #include <cosmictiger/math.hpp>
-
-#include <silo.h>
+#include <cosmictiger/output.hpp>
+#include <cosmictiger/particles.hpp>
 
 vector<float> output_get_slice();
 
-HPX_PLAIN_ACTION (output_get_slice);
+HPX_PLAIN_ACTION(output_get_slice);
 
-void output_particles(const std::string filename, const vector<output_particle>& parts) {
-	DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
+void output_particles(std::string const filename, vector<output_particle> const& parts) {
+	DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
 	vector<double> x(parts.size());
 	vector<double> y(parts.size());
 	vector<double> z(parts.size());
@@ -38,10 +38,10 @@ void output_particles(const std::string filename, const vector<output_particle>&
 		y[i] = parts[i].x[YDIM].to_double();
 		z[i] = parts[i].x[ZDIM].to_double();
 	}
-	const int nparts = parts.size();
-	double *coords[NDIM] = { x.data(), y.data(), z.data() };
-		DBPutPointmesh(db, "points", NDIM, coords, nparts, DB_DOUBLE, NULL);
-		x = decltype(x)();
+	int const nparts = parts.size();
+	double* coords[NDIM] = {x.data(), y.data(), z.data()};
+	DBPutPointmesh(db, "points", NDIM, coords, nparts, DB_DOUBLE, NULL);
+	x = decltype(x)();
 	y = decltype(y)();
 	z = decltype(z)();
 	for (int dim = 0; dim < NDIM; dim++) {
@@ -71,20 +71,20 @@ void output_slice(int number, double time) {
 	profiler_enter("output_slice");
 	constexpr int ndim = 2;
 	auto pixels = output_get_slice();
-	const int res = get_options().slice_res;
-	const std::string filename = std::string("slice.") + std::to_string(number) + std::string(".silo");
-	DBfile *db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Data", DB_PDB);
+	int const res = get_options().slice_res;
+	std::string const filename = std::string("slice.") + std::to_string(number) + std::string(".silo");
+	DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Data", DB_PDB);
 	vector<float> x(res + 1);
 	vector<float> y(res + 1);
-	const float hubble = get_options().hubble;
-	const float c0 = get_options().code_to_cm * hubble / constants::mpc_to_cm;
+	float const hubble = get_options().hubble;
+	float const c0 = get_options().code_to_cm * hubble / constants::mpc_to_cm;
 	for (int i = 0; i < res + 1; i++) {
-		y[i] = x[i] = (float) i / res * c0;
+		y[i] = x[i] = (float)i / res * c0;
 	}
-	const char* coordnames[] = { "x", "y" };
-	const float* coords[] = { x.data(), y.data() };
-	const int dims1[] = { res + 1, res + 1 };
-	const int dims2[] = { res, res };
+	char const* coordnames[] = {"x", "y"};
+	float const* coords[] = {x.data(), y.data()};
+	int const dims1[] = {res + 1, res + 1};
+	int const dims2[] = {res, res};
 	auto optlist = DBMakeOptlist(5);
 	float ftime = time;
 	char label[6];
@@ -102,21 +102,21 @@ void output_slice(int number, double time) {
 }
 
 vector<float> output_get_slice() {
-	vector<hpx::future<vector<float>>>futs;
-	const int res = get_options().slice_res;
+	vector<hpx::future<vector<float>>> futs;
+	int const res = get_options().slice_res;
 	vector<float> pixels(sqr(res), 0.0);
-	for (const auto& c : hpx_children()) {
-		futs.push_back(hpx::async < output_get_slice_action > (c));
+	for (auto const& c : hpx_children()) {
+		futs.push_back(hpx::async<output_get_slice_action>(c));
 	}
 	for (int i = 0; i < particles_size(); i++) {
-		const double z = particles_pos(ZDIM, i).to_double();
+		double const z = particles_pos(ZDIM, i).to_double();
 		if (z < get_options().slice_size) {
-			const double x = particles_pos(XDIM, i).to_double();
-			const double y = particles_pos(YDIM, i).to_double();
-			const int xi = x * res;
-			const int yi = y * res;
-			const int j = xi * res + yi;
-			pixels[j] += 1.0;
+			double const x = particles_pos(XDIM, i).to_double();
+			double const y = particles_pos(YDIM, i).to_double();
+			int const xi = x * res;
+			int const yi = y * res;
+			int const j = xi * res + yi;
+			pixels[j] += particles_mass(i);
 		}
 	}
 	for (auto& f : futs) {
@@ -127,4 +127,3 @@ vector<float> output_get_slice() {
 	}
 	return pixels;
 }
-

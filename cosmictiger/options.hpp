@@ -1,24 +1,25 @@
 /*
-CosmicTiger - A cosmological N-Body code
-Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026  Dominic C. Marcello
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-*/
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
 
 #pragma once
 
+#include <stddef.h>
 #include <string>
 
 struct options {
@@ -86,8 +87,72 @@ struct options {
 	std::string lc_dir;
 	std::string gadget4_restart;
 
-	template<class A>
-	void serialize(A&& arc, unsigned) {
+	bool htime{};
+	bool sph{};
+	bool yreflect{};
+	int visc_type{};
+	bool stars{};
+	bool chem{};
+	bool conduction{};
+	bool vsoft{};
+	bool gravity{};
+	int glass{};
+	double kernel{};
+	bool diffusion{};
+	int sph_bucket_size{};
+	double alpha0{};
+	double alpha1{};
+	double beta{};
+	double alpha_decay{};
+	double gneighbor_number{};
+	double sneighbor_number{};
+	double hmin{};
+	double hmax{};
+	double damping{};
+	double sigma8_c{};
+	double dm_mass{};
+	double sph_mass{};
+	double cfl{};
+	double rho0_b{};
+	double rho0_c{};
+	double gamma{};
+	double gy{};
+	double gcentral{};
+	double hcentral{};
+
+	template <typename A> void serialize(A&& arc, unsigned) {
+		arc & htime;
+		arc & sph;
+		arc & yreflect;
+		arc & visc_type;
+		arc & stars;
+		arc & chem;
+		arc & conduction;
+		arc & vsoft;
+		arc & gravity;
+		arc & glass;
+		arc & kernel;
+		arc & diffusion;
+		arc & sph_bucket_size;
+		arc & alpha0;
+		arc & alpha1;
+		arc & beta;
+		arc & alpha_decay;
+		arc & gneighbor_number;
+		arc & sneighbor_number;
+		arc & hmin;
+		arc & hmax;
+		arc & damping;
+		arc & sigma8_c;
+		arc & dm_mass;
+		arc & sph_mass;
+		arc & cfl;
+		arc & rho0_b;
+		arc & rho0_c;
+		arc & gamma;
+		arc & gy;
+		arc & gcentral;
+		arc & hcentral;
 		arc & close_pack;
 		arc & nparts;
 		arc & use_glass;
@@ -154,6 +219,6 @@ struct options {
 	}
 };
 
-bool process_options(int argc, char *argv[]);
-const options& get_options();
-void set_options(const options& opts);
+bool process_options(int argc, char* argv[]);
+options const& get_options();
+void set_options(options const& opts);

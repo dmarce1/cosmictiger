@@ -1,5 +1,6 @@
 /*
- Copyright (C) 2021  Dominic C. Marcello
+ CosmicTiger - A cosmological N-Body code
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -17,25 +18,27 @@
  */
 
 constexpr bool verbose = true;
+#include <stack>
+
+#include <unistd.h>
+
 #include <cosmictiger/fast_future.hpp>
+#include <cosmictiger/flops.hpp>
 #include <cosmictiger/gravity.hpp>
 #include <cosmictiger/kick.hpp>
 #include <cosmictiger/kick_workspace.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/safe_io.hpp>
+#include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
-#include <cosmictiger/flops.hpp>
 
-#include <unistd.h>
-#include <stack>
+HPX_PLAIN_ACTION(kick);
 
-HPX_PLAIN_ACTION (kick);
-
-simd_float box_intersects_sphere(const range<simd_double8>& box, const array<simd_int, NDIM>& x, simd_float r) {
+simd_float box_intersects_sphere(range<simd_double8> const& box, array<simd_int, NDIM> const& x, simd_float r) {
 	simd_float d2 = 0.0f;
 	for (int dim = 0; dim < NDIM; dim++) {
-		const simd_double8 X = simd_double8(x[dim]) * simd_double8(fixed32::to_float_factor);
+		simd_double8 const X = simd_double8(x[dim]) * simd_double8(fixed32::to_float_factor);
 		simd_double8 d2begin = X - box.begin[dim];
 		simd_double8 d2beginp1 = d2begin + simd_double8(1.0);
 		simd_double8 d2beginm1 = d2begin + simd_double8(-1.0);
@@ -64,8 +67,8 @@ struct workspace {
 	vector<tree_id> cclist;
 	vector<tree_id> leaflist;
 	workspace() = default;
-	workspace(const workspace&) = delete;
-	workspace& operator=(const workspace&) = delete;
+	workspace(workspace const&) = delete;
+	workspace& operator=(workspace const&) = delete;
 	workspace(workspace&&) = default;
 	workspace& operator=(workspace&&) = default;
 };
@@ -75,6 +78,9 @@ static std::atomic<size_t> parts_covered;
 static hpx::promise<kick_return> local_return_promise;
 static hpx::future<kick_return> local_return_future;
 static kick_return local_return;
+static mutex_type localReturnMutex;
+static size_t localParticleGoal;
+static bool localReturnSent;
 
 static workspace get_workspace() {
 	if (local_workspaces.empty()) {
@@ -95,13 +101,13 @@ static void cleanup_workspace(workspace&& workspace) {
 }
 
 hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
-		vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, bool threadme) {
+								   vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, bool threadme) {
 	static std::atomic<int> nthreads(1);
 	hpx::future<kick_return> rc;
-	const tree_node* self_ptr = tree_get_node(self);
+	tree_node const* self_ptr = tree_get_node(self);
 	bool remote = false;
 	bool all_local = true;
-	for (const auto& i : dchecklist) {
+	for (auto const& i : dchecklist) {
 		if (i.proc != hpx_rank()) {
 			all_local = false;
 			break;
@@ -112,7 +118,7 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		remote = true;
 	} else if (threadme) {
 		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
-		const int maxthreads = std::max(1, hpx_size() == 1 ? (int) hpx_hardware_concurrency() * 2 : (int) hpx_hardware_concurrency() / 2);
+		int const maxthreads = std::max(1, hpx_size() == 1 ? (int)hpx_hardware_concurrency() * 2 : (int)hpx_hardware_concurrency() / 2);
 		if (threadme) {
 			if (nthreads++ < maxthreads || !self_ptr->is_local()) {
 				threadme = true;
@@ -131,34 +137,41 @@ hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array
 		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
 	} else {
 		if (all_local) {
-			rc = hpx::async([params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
-				auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace);
-				nthreads--;
-				return rc;
-			}, std::move(dchecklist), std::move(echecklist));
+			rc = hpx::async(
+				[params, self, L, pos, cuda_workspace](vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+					auto rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), cuda_workspace);
+					nthreads--;
+					return rc;
+				},
+				std::move(dchecklist), std::move(echecklist));
 		} else {
-			rc = hpx::async(HPX_PRIORITY_HI, [params,self,L,pos, cuda_workspace] (vector<tree_id> dchecklist, vector<tree_id> echecklist) {
-				auto rc = kick(params,L,pos,self,std::move(dchecklist),std::move(echecklist), cuda_workspace);
-				nthreads--;
-				return rc;
-			}, std::move(dchecklist), std::move(echecklist));
+			rc = hpx::async(
+				HPX_PRIORITY_HI,
+				[params, self, L, pos, cuda_workspace](vector<tree_id> dchecklist, vector<tree_id> echecklist) {
+					auto rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), cuda_workspace);
+					nthreads--;
+					return rc;
+				},
+				std::move(dchecklist), std::move(echecklist));
 		}
 	}
 	return rc;
 }
 
 kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
-		std::shared_ptr<kick_workspace> cuda_workspace) {
+				 std::shared_ptr<kick_workspace> cuda_workspace) {
 	flop_counter<int> flops = 0;
 	if (self.proc == 0 && self.index == 0) {
 		profiler_enter(__FUNCTION__);
 	}
 	stack_trace_activate();
-	const tree_node* self_ptr = tree_get_node(self);
+	tree_node const* self_ptr = tree_get_node(self);
 	timer tm;
 	if (self_ptr->local_root) {
 		tm.start();
 		parts_covered = 0;
+		localParticleGoal = self_ptr->nparts();
+		localReturnSent = false;
 		local_return = kick_return();
 		local_return_promise = decltype(local_return_promise)();
 		local_return_future = local_return_promise.get_future();
@@ -168,12 +181,11 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	size_t cuda_mem_usage;
 	if (get_options().cuda && params.gpu) {
 		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
-			cuda_workspace = std::make_shared < kick_workspace > (params, self_ptr->nparts());
+			cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
 		}
 		size_t max_parts = CUDA_KICK_PARTS_MAX;
-		const auto rng = particles_current_range();
-		max_parts = std::min((size_t) max_parts,
-				(size_t) std::max((part_int) (rng.second - rng.first) / kick_block_count(), (part_int) get_options().bucket_size));
+		auto const rng = particles_current_range();
+		max_parts = std::min((size_t)max_parts, (size_t)std::max((part_int)(rng.second - rng.first) / kick_block_count(), (part_int)get_options().bucket_size));
 		if (params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local()) {
 			if (self_ptr->nparts()) {
 				cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
@@ -189,20 +201,20 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		thread_left = cuda_workspace != nullptr;
 	}
 	kick_return kr;
-	const float hfloat = params.h;
-	const float GM = params.GM;
-	const float eta = params.eta;
-	const bool save_force = params.save_force;
+	float const hfloat = params.h;
+	float const GM = params.GM;
+	float const eta = params.eta;
+	bool const save_force = params.save_force;
 	auto workspace = get_workspace();
 	vector<tree_id>& nextlist = workspace.nextlist;
 	vector<tree_id>& cclist = workspace.cclist;
 	vector<tree_id>& cplist = workspace.cplist;
 	vector<tree_id>& pclist = workspace.pclist;
 	vector<tree_id>& leaflist = workspace.leaflist;
-	const simd_float thetainv2(1.0 / sqr(params.theta));
-	const simd_float thetainv(1.0 / params.theta);
-	static const simd_float sink_bias(SINK_BIAS);
-	array<const tree_node*, SIMD_FLOAT_SIZE> other_ptrs;
+	simd_float const thetainv2(1.0 / sqr(params.theta));
+	simd_float const thetainv(1.0 / params.theta);
+	static simd_float const sink_bias(SINK_BIAS);
+	array<tree_node const*, SIMD_FLOAT_SIZE> other_ptrs;
 	array<float, NDIM> Ldx;
 	simd_float self_radius = self_ptr->radius;
 	array<simd_int, NDIM> self_pos;
@@ -214,8 +226,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	range<simd_double8> other_box;
 	for (int dim = 0; dim < NDIM; dim++) {
 		self_pos[dim] = self_ptr->pos[dim].raw();
-		self_box.begin[dim] = (double) self_ptr->box.begin[dim].raw();
-		self_box.end[dim] = (double) self_ptr->box.end[dim].raw();
+		self_box.begin[dim] = (double)self_ptr->box.begin[dim].raw();
+		self_box.end[dim] = (double)self_ptr->box.end[dim].raw();
 	}
 	for (int dim = 0; dim < NDIM; dim++) {
 		self_box.begin[dim] *= range_fixed::to_float_factor;
@@ -228,14 +240,14 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 	flops += 1511 + params.do_phi * 178;
 	simd_float my_hsoft;
 	my_hsoft = get_options().hsoft;
-	const float hinv = 1.0f / get_options().hsoft;
+	float const hinv = 1.0f / get_options().hsoft;
 	force_vectors forces;
-	const part_int mynparts = self_ptr->nparts();
+	part_int const mynparts = self_ptr->nparts();
 	if (self_ptr->leaf) {
 		forces = force_vectors(mynparts);
 		for (part_int i = 0; i < mynparts; i++) {
 			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-			forces.phi[i] = self_phi() * hinv;
+			forces.phi[i] = particles_mass(self_ptr->part_range.first + i) * self_phi() * hinv;
 		}
 	}
 	{
@@ -245,8 +257,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		auto& checklist = echecklist;
 		do {
 			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-				const int maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
-				const int maxi = maxci - ci;
+				int const maxci = std::min((int)checklist.size(), ci + SIMD_FLOAT_SIZE);
+				int const maxi = maxci - ci;
 				for (int i = ci; i < maxci; i++) {
 					other_ptrs[i - ci] = tree_get_node(checklist[i]);
 				}
@@ -268,13 +280,13 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					}
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
+					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float; // 3
 				}
-				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
+				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
 				R2 = max(R2, max(sqr(simd_float(0.5) - (self_radius + other_radius)), simd_float(0)));
-				const auto hsoft = my_hsoft;
-				const simd_float dcc = (self_radius + other_radius) * thetainv;
-				const simd_float cc = R2 > sqr(dcc);
+				auto const hsoft = my_hsoft;
+				simd_float const dcc = (self_radius + other_radius) * thetainv;
+				simd_float const cc = R2 > sqr(dcc);
 				flops += maxi * 15;
 				for (int i = 0; i < maxi; i++) {
 					if (cc[i]) {
@@ -282,7 +294,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					} else if (other_leaf[i]) {
 						leaflist.push_back(checklist[ci + i]);
 					} else {
-						const auto child_checks = other_ptrs[i]->children;
+						auto const child_checks = other_ptrs[i]->children;
 						nextlist.push_back(child_checks[LEFT]);
 						nextlist.push_back(child_checks[RIGHT]);
 					}
@@ -309,8 +321,8 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		auto& checklist = dchecklist;
 		do {
 			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-				const int maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
-				const int maxi = maxci - ci;
+				int const maxci = std::min((int)checklist.size(), ci + SIMD_FLOAT_SIZE);
+				int const maxi = maxci - ci;
 				for (int i = ci; i < maxci; i++) {
 					other_ptrs[i - ci] = tree_get_node(checklist[i]);
 				}
@@ -329,15 +341,15 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					other_leaf[i] = 0;
 				}
 				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float;                         // 3
+					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float; // 3
 				}
-				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);                                       // 5
-				const auto hsoft = my_hsoft;
-				const auto mind = self_radius + other_radius + hsoft;
-				const simd_float dcc = max((self_radius + other_radius) * thetainv, mind);
-				const simd_float dcp = max((thetainv * self_radius + other_radius), mind);
-				const simd_float dpc = max((self_radius + other_radius * thetainv), mind);
-				const simd_float cc = R2 > sqr(dcc);
+				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
+				auto const hsoft = my_hsoft;
+				auto const mind = self_radius + other_radius + hsoft;
+				simd_float const dcc = max((self_radius + other_radius) * thetainv, mind);
+				simd_float const dcp = max((thetainv * self_radius + other_radius), mind);
+				simd_float const dpc = max((self_radius + other_radius * thetainv), mind);
+				simd_float const cc = R2 > sqr(dcc);
 				flops += maxi * 20;
 				simd_float pc, cp;
 				cp = simd_float(0);
@@ -358,7 +370,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 							other_box.begin[dim][i] = other_box.end[dim][i] = 0.0;
 						}
 					}
-					const auto nocc = (simd_float(1) - cc) * other_leaf;
+					auto const nocc = (simd_float(1) - cc) * other_leaf;
 					pc = nocc * ((R2 > sqr(dpc)) + box_intersects_sphere(self_box, other_pos, other_radius)) * (dpc > dcp);
 					cp = nocc * ((R2 > sqr(dcp)) + box_intersects_sphere(other_box, self_pos, self_radius)) * (dcp > dpc);
 					flops += maxi * 34;
@@ -373,7 +385,7 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 					} else if (other_leaf[i]) {
 						leaflist.push_back(checklist[ci + i]);
 					} else {
-						const auto child_checks = other_ptrs[i]->children;
+						auto const child_checks = other_ptrs[i]->children;
 						nextlist.push_back(child_checks[LEFT]);
 						nextlist.push_back(child_checks[RIGHT]);
 					}
@@ -400,15 +412,15 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 
 	if (self_ptr->leaf) {
 		cleanup_workspace(std::move(workspace));
-		const auto rng = self_ptr->part_range;
+		auto const rng = self_ptr->part_range;
 		for (part_int i = rng.first; i < rng.second; i++) {
 			if (particles_rung(i) >= params.min_rung) {
-				const part_int j = i - rng.first;
+				part_int const j = i - rng.first;
 				array<float, NDIM> dx;
 				for (part_int dim = 0; dim < NDIM; dim++) {
 					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
 				}
-				const auto L2 = L2P(L, dx, true);
+				auto const L2 = L2P(L, dx, true);
 				float hsoft = get_options().hsoft;
 				forces.phi[j] += SCALE_FACTOR1 * L2(0, 0, 0);
 				forces.gx[j] -= SCALE_FACTOR2 * L2(1, 0, 0);
@@ -428,49 +440,100 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 				auto& vy = particles_vel(YDIM, i);
 				auto& vz = particles_vel(ZDIM, i);
 				auto& rung = particles_rung(i);
-				float g2;
-				float kin0 = 0.5 * sqr(vx, vy, vz);
-				const float sgn = params.top ? 1 : -1;
-				if (params.ascending) {
-					const float dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-					if (!params.first_call) {
-						vx = fmaf(sgn * forces.gx[j], dt, vx);
-						vy = fmaf(sgn * forces.gy[j], dt, vy);
-						vz = fmaf(sgn * forces.gz[j], dt, vz);
-						flops += 9;
+				if (params.htime) {
+					float g2;
+					float kin0 = 0.5 * sqr(vx, vy, vz);
+					float const sgn = params.top ? 1 : -1;
+					if (params.ascending) {
+						float const dt = 0.5f * rung_dt[params.min_rung] * params.t0;
+						if (!params.first_call) {
+							vx = fmaf(sgn * forces.gx[j], dt, vx);
+							vy = fmaf(sgn * forces.gy[j], dt, vy);
+							vz = fmaf(sgn * forces.gz[j], dt, vz);
+							flops += 9;
+						}
 					}
+					kr.kin += 0.5 * sqr(vx, vy, vz);
+					kr.xmom += vx;
+					kr.ymom += vy;
+					kr.zmom += vz;
+					kr.nmom += sqrt(sqr(vx, vy, vz));
+					if (params.descending) {
+						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;			  // 6
+						float const factor = eta * sqrtf(params.a);								  // 5
+						float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float)params.t0); // 14
+						dt = std::min(params.max_dt, dt);
+						rung = std::max(params.min_rung + int((int)ceilf(log2f(params.t0 / dt)) > params.min_rung), (int)(rung - 1)); // 13
+						kr.max_rung = std::max((int)rung, kr.max_rung);
+						ALWAYS_ASSERT(rung >= 0);
+						ALWAYS_ASSERT(rung < MAX_RUNG);
+						dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
+						vx = fmaf(sgn * forces.gx[j], dt, vx);			  // 3
+						vy = fmaf(sgn * forces.gy[j], dt, vy);			  // 3
+						vz = fmaf(sgn * forces.gz[j], dt, vz);			  // 3
+						flops += 49;
+					}
+					float kin1 = 0.5 * sqr(vx, vy, vz);
+					kr.pot += 0.5 * forces.phi[j];
+					kr.dkin += kin1 - kin0;
+				} else {
+					float const mass = particles_mass(i);
+					bool const gas = particles_type(i) == SPH_TYPE;
+					float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
+					if (gas) {
+						part_int const k = particles_cat_index(i);
+						sph_particles_gforce(XDIM, k) = forces.gx[j];
+						sph_particles_gforce(YDIM, k) = forces.gy[j];
+						sph_particles_gforce(ZDIM, k) = forces.gz[j];
+					} else if (!params.first_call) {
+						float const dt = 0.5f * rung_dt[rung] * params.t0;
+						vx = fmaf(forces.gx[j], dt, vx);
+						vy = fmaf(forces.gy[j], dt, vy);
+						vz = fmaf(forces.gz[j], dt, vz);
+					}
+					kr.kin += 0.5f * mass * sqr(vx, vy, vz);
+					kr.xmom += mass * vx;
+					kr.ymom += mass * vy;
+					kr.zmom += mass * vz;
+					kr.nmom += mass * sqrt(sqr(vx, vy, vz));
+					if (!gas) {
+						float const syncVx = vx, syncVy = vy, syncVz = vz;
+						float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
+						float dt = std::min(eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
+						dt = std::min(dt, params.max_dt);
+						rung = std::max(std::max((int)ceilf(log2f(params.t0 / dt)), std::max((int)rung - 1, params.min_rung)), 1);
+						ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+						dt = 0.5f * rung_dt[rung] * params.t0;
+						vx = fmaf(forces.gx[j], dt, vx);
+						vy = fmaf(forces.gy[j], dt, vy);
+						vz = fmaf(forces.gz[j], dt, vz);
+						kr.dmKineticCorrection += 0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
+						kr.dmXMomentumCorrection += mass * (syncVx - vx);
+						kr.dmYMomentumCorrection += mass * (syncVy - vy);
+						kr.dmZMomentumCorrection += mass * (syncVz - vz);
+						kr.dmMomentumNormCorrection += mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
+					}
+					kr.max_rung = std::max(kr.max_rung, (int)rung);
+					kr.pot += 0.5f * mass * forces.phi[j];
+					kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
 				}
-				kr.kin += 0.5 * sqr(vx, vy, vz);
-				kr.xmom += vx;
-				kr.ymom += vy;
-				kr.zmom += vz;
-				kr.nmom += sqrt(sqr(vx, vy, vz));
-				if (params.descending) {
-					g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f; // 6
-					const float factor = eta * sqrtf(params.a);                  // 5
-					float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);      // 14
-					dt = std::min(params.max_dt, dt);
-					rung = std::max(params.min_rung + int((int) ceilf(log2f(params.t0 / dt)) > params.min_rung), (int) (rung - 1)); //13
-					kr.max_rung = std::max((int) rung, kr.max_rung);
-					ALWAYS_ASSERT(rung >= 0);
-					ALWAYS_ASSERT(rung < MAX_RUNG);
-					dt = 0.5f * rung_dt[params.min_rung] * params.t0;                                                            // 2
-					vx = fmaf(sgn * forces.gx[j], dt, vx);                              // 3
-					vy = fmaf(sgn * forces.gy[j], dt, vy);                              // 3
-					vz = fmaf(sgn * forces.gz[j], dt, vz);                              // 3
-					flops += 49;
-				}
-				float kin1 = 0.5 * sqr(vx, vy, vz);
-				kr.pot += 0.5 * forces.phi[j];
-				kr.dkin += kin1 - kin0;
 				flops += 570 + params.do_phi * 178;
 			}
 		}
-		parts_covered += self_ptr->nparts();
-		local_return += kr;
-		const auto goal = rng.second - rng.first;
-		if (goal == parts_covered) {
-			local_return_promise.set_value(local_return);
+		kick_return completed;
+		bool publish = false;
+		{
+			std::lock_guard<mutex_type> lock(localReturnMutex);
+			parts_covered += self_ptr->nparts();
+			local_return += kr;
+			if (cuda_workspace == nullptr && parts_covered == localParticleGoal && !localReturnSent) {
+				completed = local_return;
+				localReturnSent = true;
+				publish = true;
+			}
+		}
+		if (publish) {
+			local_return_promise.set_value(completed);
 		}
 		add_cpu_flops(flops);
 		if (self_ptr->local_root) {
@@ -480,14 +543,14 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 		}
 	} else {
 		cleanup_workspace(std::move(workspace));
-		const tree_node* cl = tree_get_node(self_ptr->children[LEFT]);
-		const tree_node* cr = tree_get_node(self_ptr->children[RIGHT]);
+		tree_node const* cl = tree_get_node(self_ptr->children[LEFT]);
+		tree_node const* cr = tree_get_node(self_ptr->children[RIGHT]);
 		std::array<hpx::future<kick_return>, NCHILD> futs;
 		futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
 		futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
 		if (self_ptr->proc_range.second - self_ptr->proc_range.first > 1) {
-			const auto rcl = futs[LEFT].get();
-			const auto rcr = futs[RIGHT].get();
+			auto const rcl = futs[LEFT].get();
+			auto const rcr = futs[RIGHT].get();
 			kr += rcl;
 			kr += rcr;
 			flops += 12;
@@ -507,6 +570,12 @@ kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> po
 }
 
 void kick_set_rc(kick_return kr) {
-	local_return += kr;
-	local_return_promise.set_value(local_return);
+	kick_return completed;
+	{
+		std::lock_guard<mutex_type> lock(localReturnMutex);
+		local_return += kr;
+		completed = local_return;
+		localReturnSent = true;
+	}
+	local_return_promise.set_value(completed);
 }

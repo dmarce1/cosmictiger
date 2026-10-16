@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -20,9 +20,10 @@
 #ifndef KICK_HPP_
 #define KICK_HPP_
 
-#include <cosmictiger/tree.hpp>
-
 #include <atomic>
+
+#include <cosmictiger/sph_particles.hpp>
+#include <cosmictiger/tree.hpp>
 
 #define KICK_C_MAX 32
 
@@ -32,6 +33,15 @@ struct cuda_kick_data {
 	fixed32* y;
 	fixed32* z;
 	array<float, NDIM>* vel;
+	float* sph_gx;
+	float* sph_gy;
+	float* sph_gz;
+	part_int* cat_index;
+	char* type;
+	bool sph;
+	float dm_mass;
+	float sph_mass;
+	bool vsoft;
 	char* rungs;
 	float* gx;
 	float* gy;
@@ -45,7 +55,7 @@ struct kick_return;
 
 #include <cosmictiger/stack_vector.hpp>
 
-#define KICK_PP_MAX (32*29)
+#define KICK_PP_MAX (32 * 29)
 
 struct expansion_type {
 	array<fixed32, NDIM> pos;
@@ -70,7 +80,8 @@ struct cuda_kick_shmem {
 			array<fixed32, KICK_PP_MAX> x;
 			array<fixed32, KICK_PP_MAX> y;
 			array<fixed32, KICK_PP_MAX> z;
-		}X;
+			array<float, KICK_PP_MAX> mass;
+		} X;
 		array<multi_pos, KICK_C_MAX> mpos;
 	};
 	device_vector<force_type> f;
@@ -85,7 +96,6 @@ struct cuda_kick_shmem {
 	device_vector<expansion_type> L;
 	device_vector<search_params> params;
 	barrier_type barrier;
-
 };
 #endif
 
@@ -98,6 +108,11 @@ struct kick_return {
 	double ymom;
 	double zmom;
 	double nmom;
+	double dmKineticCorrection;
+	double dmXMomentumCorrection;
+	double dmYMomentumCorrection;
+	double dmZMomentumCorrection;
+	double dmMomentumNormCorrection;
 
 	CUDA_EXPORT
 	kick_return() {
@@ -106,9 +121,14 @@ struct kick_return {
 		kin = 0.0;
 		xmom = ymom = zmom = nmom = 0.0;
 		dkin = 0.0;
+		dmKineticCorrection = 0.0;
+		dmXMomentumCorrection = 0.0;
+		dmYMomentumCorrection = 0.0;
+		dmZMomentumCorrection = 0.0;
+		dmMomentumNormCorrection = 0.0;
 	}
 	CUDA_EXPORT
-	kick_return& operator+=(const kick_return& other) {
+	kick_return& operator+=(kick_return const& other) {
 		if (other.max_rung > max_rung) {
 			max_rung = other.max_rung;
 		}
@@ -119,11 +139,15 @@ struct kick_return {
 		zmom += other.zmom;
 		nmom += other.nmom;
 		dkin += other.dkin;
-		return *this;
+		dmKineticCorrection += other.dmKineticCorrection;
+		dmXMomentumCorrection += other.dmXMomentumCorrection;
+		dmYMomentumCorrection += other.dmYMomentumCorrection;
+		dmZMomentumCorrection += other.dmZMomentumCorrection;
+		dmMomentumNormCorrection += other.dmMomentumNormCorrection;
 
+		return *this;
 	}
-	template<class A>
-	void serialize(A&& arc, unsigned) {
+	template <class A> void serialize(A&& arc, unsigned) {
 		arc & max_rung;
 		arc & pot;
 		arc & kin;
@@ -132,10 +156,16 @@ struct kick_return {
 		arc & zmom;
 		arc & nmom;
 		arc & dkin;
+		arc & dmKineticCorrection;
+		arc & dmXMomentumCorrection;
+		arc & dmYMomentumCorrection;
+		arc & dmZMomentumCorrection;
+		arc & dmMomentumNormCorrection;
 	}
 };
 
 struct kick_params {
+	bool htime;
 	float sign;
 	int min_level;
 	int min_rung;
@@ -156,13 +186,14 @@ struct kick_params {
 	bool top;
 	bool do_phi;
 	kick_params() {
+		htime = true;
 		max_dt = 1e30;
 		do_phi = true;
 		vel_init = false;
 		sign = 1.0;
 	}
-	template<class A>
-	void serialize(A && arc, unsigned) {
+	template <class A> void serialize(A&& arc, unsigned) {
+		arc & htime;
 		arc & ascending;
 		arc & descending;
 		arc & top;
@@ -197,7 +228,7 @@ struct kick_workspace;
 
 #ifndef __CUDACC__
 kick_return kick(kick_params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
-		std::shared_ptr<kick_workspace>);
+				 std::shared_ptr<kick_workspace>);
 #endif
 void kick_show_timings();
 void kick_set_rc(kick_return kr);

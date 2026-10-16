@@ -1,6 +1,6 @@
 /*
  CosmicTiger - A cosmological N-Body code
- Copyright (C) 2021  Dominic C. Marcello
+ Copyright (C) 2026  Dominic C. Marcello
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -18,18 +18,17 @@
  */
 
 #define CODE_GEN_CPP
-#include <cosmictiger/defs.hpp>
-#include <cosmictiger/containers.hpp>
-#include <cosmictiger/tensor.hpp>
-
 #include <algorithm>
 #include <cmath>
+#include <functional>
+
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/defs.hpp>
+#include <cosmictiger/tensor.hpp>
 
 static int ntab = 0;
 
-void indent() {
-	ntab++;
-}
+void indent() { ntab++; }
 
 void deindent() {
 	ntab--;
@@ -932,7 +931,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ float factor1[%i] = { ", entries1.size());
+	tprint("inline __constant__ float factor1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("float(%.9e)", entries1[i].factor);
 		if (i != entries1.size() - 1) {
@@ -940,7 +939,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ char xsrc1[%i] = { ", entries1.size());
+	tprint("inline __constant__ char xsrc1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].xsource);
 		if (i != entries1.size() - 1) {
@@ -948,7 +947,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ char Lsrc1[%i] = { ", entries1.size());
+	tprint("inline __constant__ char Lsrc1[%i] = { ", entries1.size());
 	for (int i = 0; i < entries1.size(); i++) {
 		printf("%i", entries1[i].Lsource);
 		if (i != entries1.size() - 1) {
@@ -957,7 +956,7 @@ void do_expansion_cuda() {
 	}
 	tprint("};\n");
 
-	tprint("static __constant__ float phi_factor[%i] = { ", phi_entries.size());
+	tprint("inline __constant__ float phi_factor[%i] = { ", phi_entries.size());
 	for (int i = 0; i < phi_entries.size(); i++) {
 		printf("float(%.9e)", phi_entries[i].factor);
 		if (i != phi_entries.size() - 1) {
@@ -965,7 +964,7 @@ void do_expansion_cuda() {
 		}
 	}
 	tprint("};\n");
-	tprint("static __constant__ char phi_Lsrc[%i] = { ", phi_entries.size());
+	tprint("inline __constant__ char phi_Lsrc[%i] = { ", phi_entries.size());
 	for (int i = 0; i < phi_entries.size(); i++) {
 		printf("%i", phi_entries[i].Lsource);
 		if (i != phi_entries.size() - 1) {
@@ -1222,7 +1221,7 @@ int main() {
 
 	tprint("/*\n"
 			"CosmicTiger - A cosmological N-Body code\n"
-			"Copyright (C) 2021  Dominic C. Marcello\n"
+			"Copyright (C) 2026  Dominic C. Marcello\n"
 			"\n"
 			"This program is free software; you can redistribute it and/or\n"
 			"modify it under the terms of the GNU General Public License\n"

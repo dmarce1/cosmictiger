@@ -1,0 +1,11 @@
+BasedOnStyle: LLVM
+UseTab: Always
+IndentWidth: 4
+TabWidth: 4
+ColumnLimit: 160
+BreakBeforeBraces: Attach
+PointerAlignment: Left
+QualifierAlignment: Right
+InsertBraces: true
+SortIncludes: CaseSensitive
+IncludeBlocks: Preserve
