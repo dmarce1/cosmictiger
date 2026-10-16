@@ -74,11 +74,18 @@ int hpx_main(int argc, char* argv[]) {
     }
     PRINT("tree_node size = %i\n", sizeof(TreeNode));
     hpxInit();
-    healpixInit();
     PRINT("Starting mem use daemon\n");
     startMemuseDaemon();
     try {
         if (processOptions(argc, argv)) {
+            // Help, invalid options and the metadata-only checkpoint test need no GPU.
+            if (getOptions().test == "checkpointState" && !getOptions().sph) {
+                checkpointStateTest();
+                stopMemuseDaemon();
+                return hpx::finalize();
+            }
+            hpxInitCuda();
+            healpixInit();
             EwaldConst::init();
             FILE* fp = fopen("ewald.txt", "wt");
             xValue[0] = xValue[1] = xValue[2] = 0.00;

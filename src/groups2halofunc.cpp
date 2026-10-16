@@ -17,6 +17,8 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <iostream>
+
 #include <boost/program_options.hpp>
 
 #include <cosmictiger/group_entry.hpp>
@@ -86,18 +88,24 @@ int main(int argc, char* argv[]) {
     namespace po = boost::program_options;
     po::options_description commandOpts("options");
 
-    commandOpts.add_options()                                                                  //
-        ("help", "produce help message")                                                       //
-        ("in", po::value<int>(&innum)->default_value(-1), "input number")                      //
-        ("box_size", po::value<float>(&boxSize)->default_value(684.0), "box size in Mpc")      //
-        ("nbins", po::value<int>(&numberOfBins)->default_value(1000), "number of log bins")    //
+    commandOpts.add_options()                                                               //
+        ("help", "produce help message")                                                    //
+        ("input.groupNumber", po::value<int>(&innum)->default_value(-1), "input number")    //
+        ("analysis.boxSize", po::value<float>(&boxSize)->default_value(684.0),
+            "box size in Mpc")    //
+        ("analysis.numberOfBins", po::value<int>(&numberOfBins)->default_value(1000),
+            "number of log bins")    //
         ;
     boost::program_options::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
     po::notify(vm);
+    if (vm.count("help")) {
+        std::cout << commandOpts << "\n";
+        return 0;
+    }
 
     if (innum == -1) {
-        printf("Input number not specified. Use --in=\n");
+        printf("Input number not specified. Use --input.groupNumber=\n");
         return -1;
     }
 

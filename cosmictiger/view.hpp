@@ -21,8 +21,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define VIEW_HPP_
 
 Vector<float> outputView(int number, double time);
-void viewOutputViews(int cycle, double a);
+void viewOutputViews(int cycle, double a, bool force = false);
 
-void viewReadViewFile();
+void viewConfigure();
 
 #endif /* VIEW_HPP_ */

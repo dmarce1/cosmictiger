@@ -19,23 +19,28 @@
 
 #include <cosmictiger/sph_cuda.hpp>
 
+namespace detail {
+
 struct RungsWorkspace {
     DeviceVector<Fixed32> x;
     DeviceVector<Fixed32> y;
     DeviceVector<Fixed32> z;
+    DeviceVector<float> h;
     DeviceVector<char> rungs;
 };
+
+}    // namespace detail
 
 __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {
     int const tid = threadIdx.x;
     int const blockSize = blockDim.x;
     __shared__ int index;
-    __shared__ RungsWorkspace ws;
+    __shared__ detail::RungsWorkspace ws;
     if (tid == 0) {
         index = atomicAdd(&reduce->counter, 1);
     }
     __syncthreads();
-    new (&ws) RungsWorkspace();
+    new (&ws) detail::RungsWorkspace();
     int flops = 0;
     Array<Fixed32, NDIM> x;
     int changes = 0;
@@ -44,6 +49,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
         ws.x.resize(0);
         ws.y.resize(0);
         ws.z.resize(0);
+        ws.h.resize(0);
         ws.rungs.resize(0);
         SphTreeNode const& self = data.trees[data.selfs[index]];
         for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
@@ -64,6 +70,8 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                         x[ZDIM] = data.z[pi];
                         if (self.outerBox.contains(x)) {
                             contains = true;
+                        } else {
+                            contains = sphSupportIntersects(self.innerBox, x, data.h[pi]);
                         }
                     }
                 }
@@ -75,6 +83,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                 ws.x.resize(nextSize);
                 ws.y.resize(nextSize);
                 ws.z.resize(nextSize);
+                ws.h.resize(nextSize);
                 ws.rungs.resize(nextSize);
                 if (contains) {
                     ASSERT(j < total);
@@ -82,6 +91,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                     ws.x[k] = x[XDIM];
                     ws.y[k] = x[YDIM];
                     ws.z[k] = x[ZDIM];
+                    ws.h[k] = data.h[pi];
                     ws.rungs[k] = rung;
                 }
             }
@@ -94,7 +104,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                 auto const yI = data.y[i];
                 auto const zI = data.z[i];
                 auto const hI = data.rec2Snk[sinkIndex].h;
-                char& rungI = data.rungs[i];
+                int const rungI = data.rungs[i];
                 auto const h2I = sqr(hI);
                 int const jmax = roundUp(ws.x.size(), blockSize);
                 int maxRungJ = 0;
@@ -108,7 +118,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                         float const yIj = distance(yI, yJ);     // 1
                         float const zIj = distance(zI, zJ);     // 1
                         float const r2 = sqr(xIj, yIj, zIj);    // 5
-                        if (r2 < h2I) {                         // 1
+                        if (r2 < fmaxf(h2I, sqr(ws.h[j]))) {
                             maxRungJ = max(maxRungJ, rungJ);
                         }
                         flops += 9;
@@ -118,7 +128,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                 if (tid == 0) {
                     if (rungI < maxRungJ - MAX_RUNG_DIF) {
                         changes++;
-                        rungI = maxRungJ - MAX_RUNG_DIF;
+                        data.rungsSnk[data.dmIndexSnk[sinkIndex]] = maxRungJ - MAX_RUNG_DIF;
                     }
                 }
             }

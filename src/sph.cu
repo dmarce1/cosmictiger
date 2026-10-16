@@ -108,7 +108,7 @@ SphRunReturn sphRunCuda(SphRunParameters params, SphRunCudaData data, cudaStream
         synchronizeCudaStream(stream);
     } break;
     case SPH_RUN_RUNGS: {
-        sphCudaRungs<<<hydroNblocks, RUNGS_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
+        sphCudaRungs<<<rungsNblocks, RUNGS_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
         synchronizeCudaStream(stream);
         auto gflops = reduce->flops / tm.read() / (1024.0 * 1024 * 1024);
         rc.maxVsig = reduce->vsigMax;
@@ -129,6 +129,8 @@ SphRunReturn sphRunCuda(SphRunParameters params, SphRunCudaData data, cudaStream
         rc.dtinvVisc = reduce->dtinvVisc;
         rc.dtinvDiff = reduce->dtinvDiff;
         rc.dtinvCond = reduce->dtinvCond;
+        rc.dtinvDivv = reduce->dtinvDivv;
+        rc.dtinvOmega = reduce->dtinvOmega;
     } break;
     }
     tm.stop();

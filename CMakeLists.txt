@@ -126,6 +126,7 @@ set(cosmictiger_source_files
     src/sph_tree.cpp
     src/stars.cpp
     tests/sph_gravity.cpp
+    tests/units_output.cpp
 )
 
 set(cosmictiger_header_files
@@ -178,12 +179,16 @@ set(cosmictiger_header_files
     cosmictiger/test.hpp
     cosmictiger/tree.hpp
     cosmictiger/timer.hpp
+    cosmictiger/units.hpp
+    cosmictiger/simulation_units.hpp
+    cosmictiger/legacy_options.hpp
     cosmictiger/unordered_set_ts.hpp
     cosmictiger/view.hpp
     cosmictiger/zero_order.hpp
     cosmictiger/chemistry.hpp
     cosmictiger/hydro.hpp
     cosmictiger/kernel.hpp
+    cosmictiger/monaghan_sph.hpp
     cosmictiger/exact_sod.hpp
     cosmictiger/sph.hpp
     cosmictiger/sph_cuda.hpp
@@ -268,12 +273,60 @@ endforeach()
 include(CTest)
 if(BUILD_TESTING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME grouped_options COMMAND ${Python3_EXECUTABLE}
+        ${PROJECT_SOURCE_DIR}/tests/run_options.py $<TARGET_FILE:cosmictiger>
+        ${PROJECT_BINARY_DIR}/tests/grouped_options)
+    set_tests_properties(grouped_options PROPERTIES RUN_SERIAL TRUE TIMEOUT 240)
+
+    add_executable(units_test tests/units.cpp)
+    target_include_directories(units_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_link_libraries(units_test PRIVATE Boost::boost)
+    add_test(NAME units COMMAND units_test)
+    set_tests_properties(units PROPERTIES TIMEOUT 20)
+
+    add_executable(units_fast_math_test tests/units.cpp)
+    target_include_directories(units_fast_math_test PRIVATE ${PROJECT_SOURCE_DIR})
+    target_link_libraries(units_fast_math_test PRIVATE Boost::boost)
+    target_compile_options(units_fast_math_test PRIVATE -ffast-math)
+    add_test(NAME units_fast_math COMMAND units_fast_math_test)
+    set_tests_properties(units_fast_math PROPERTIES TIMEOUT 20)
+
+    add_executable(legacy_options_test tests/legacy_options.cpp)
+    target_include_directories(legacy_options_test PRIVATE ${PROJECT_SOURCE_DIR})
+    add_test(NAME legacy_options COMMAND legacy_options_test)
+    set_tests_properties(legacy_options PROPERTIES TIMEOUT 20)
+
+    set(units_output_workdir "${PROJECT_BINARY_DIR}/tests/units_output")
+    file(MAKE_DIRECTORY "${units_output_workdir}")
+    add_test(NAME units_output COMMAND cosmictiger --run.test=unitsOutput
+        --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=true
+        --hpx:threads=2 --hpx:bind=none)
+    set_tests_properties(units_output PROPERTIES
+        WORKING_DIRECTORY "${units_output_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
+
+    add_executable(monaghan_sph_test tests/monaghan_sph.cpp)
+    target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
+    add_test(NAME monaghan_sph COMMAND monaghan_sph_test)
+    set_tests_properties(monaghan_sph PROPERTIES TIMEOUT 20)
+
     add_executable(particle_selection_test tests/particle_selection.cpp)
     target_include_directories(particle_selection_test PRIVATE ${PROJECT_SOURCE_DIR})
     add_test(NAME particle_selection COMMAND particle_selection_test)
     set_tests_properties(particle_selection PROPERTIES TIMEOUT 10)
 
     if(COSMICTIGER_WITH_CUDA)
+        add_executable(monaghan_sph_cuda_test tests/monaghan_sph_cuda.cu
+            src/sph_prehydro.cu src/sph_hydro.cu src/cuda_memory.cu src/assert.cu)
+        target_include_directories(monaghan_sph_cuda_test PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(monaghan_sph_cuda_test PRIVATE
+            USE_CUDA ORDER=${COSMICTIGER_WITH_ORDER})
+        target_link_libraries(monaghan_sph_cuda_test PRIVATE CUDA::cudart HPX::hpx)
+        target_compile_options(monaghan_sph_cuda_test PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr;--use_fast_math>)
+        set_target_properties(monaghan_sph_cuda_test PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+        add_test(NAME monaghan_sph_cuda COMMAND monaghan_sph_cuda_test)
+        set_tests_properties(monaghan_sph_cuda PROPERTIES RUN_SERIAL TRUE TIMEOUT 120)
+
         # These host regressions need CUDA headers, but do not initialize or run a GPU.
         add_executable(numerical_utilities_test tests/numerical_utilities.cpp)
         add_executable(compression_test tests/compression.cpp src/compress.cpp)
@@ -300,6 +353,12 @@ if(BUILD_TESTING)
         target_compile_definitions(range_cuda_compile PRIVATE USE_CUDA)
         target_link_libraries(range_cuda_compile PRIVATE CUDA::cudart)
         set_target_properties(range_cuda_compile PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+
+        add_library(units_cuda_compile OBJECT tests/units_cuda_compile.cu)
+        target_include_directories(units_cuda_compile PRIVATE ${PROJECT_SOURCE_DIR})
+        target_compile_definitions(units_cuda_compile PRIVATE USE_CUDA)
+        target_link_libraries(units_cuda_compile PRIVATE CUDA::cudart Boost::boost)
+        set_target_properties(units_cuda_compile PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
     endif()
 
     foreach(test_name IN ITEMS sph_gravity_cpu sph_gravity_cuda checkpoint_state_dm checkpoint_state_sph)
@@ -322,8 +381,8 @@ if(BUILD_TESTING)
             set(test_cuda false)
         endif()
         add_test(NAME ${test_name} COMMAND cosmictiger
-            --test=${test_mode} --parts_dim=8 --hydro.sph=${test_sph}
-            --cuda=${test_cuda} --hpx:threads=2 --hpx:bind=none)
+            --run.test=${test_mode} --initial.particlesPerDimension=8 --hydro.enabled=${test_sph}
+            --compute.cuda=${test_cuda} --hpx:threads=2 --hpx:bind=none)
         set_tests_properties(${test_name} PROPERTIES
             WORKING_DIRECTORY "${test_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
     endforeach()
@@ -334,11 +393,19 @@ if(BUILD_TESTING)
     set_tests_properties(rejected_options PROPERTIES WORKING_DIRECTORY "${rejected_options_workdir}"
         RUN_SERIAL TRUE TIMEOUT 20 WILL_FAIL TRUE)
     if(HPX_WITH_PARCELPORT_MPI AND MPIEXEC_EXECUTABLE)
+        set(units_mpi_workdir "${PROJECT_BINARY_DIR}/tests/units_output_mpi")
+        file(MAKE_DIRECTORY "${units_mpi_workdir}")
+        add_test(NAME units_output_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
+            ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
+            --run.test=unitsOutput --initial.particlesPerDimension=8 --hydro.enabled=true
+            --compute.cuda=true --hpx:threads=2 --hpx:bind=none --hpx:localities=2)
+        set_tests_properties(units_output_mpi PROPERTIES
+            WORKING_DIRECTORY "${units_mpi_workdir}" RUN_SERIAL TRUE TIMEOUT 120)
         set(migration_workdir "${PROJECT_BINARY_DIR}/tests/sph_migration_mpi")
         file(MAKE_DIRECTORY "${migration_workdir}")
         add_test(NAME sph_migration_mpi COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2
             ${MPIEXEC_PREFLAGS} $<TARGET_FILE:cosmictiger> ${MPIEXEC_POSTFLAGS}
-            --test=sphGravity --parts_dim=8 --hydro.sph=true --cuda=false
+            --run.test=sphGravity --initial.particlesPerDimension=8 --hydro.enabled=true --compute.cuda=false
             --hpx:threads=2 --hpx:bind=none --hpx:localities=2)
         set_tests_properties(sph_migration_mpi PROPERTIES WORKING_DIRECTORY "${migration_workdir}"
             RUN_SERIAL TRUE TIMEOUT 120)

@@ -1,0 +1,203 @@
+# Monaghan (1992) SPH baseline
+
+This implementation follows the nonrelativistic SPH equations in J. J. Monaghan,
+*Smoothed Particle Hydrodynamics*, **Annual Review of Astronomy and Astrophysics**
+30 (1992), 543–574. Equation and printed-page references below were checked against
+the supplied scan, ADS identifier `1992ARA&A..30..543M`.
+
+The active fluid model uses density and specific internal energy with an ideal-gas
+equation of state. Stars, chemistry, thermal conduction, and species diffusion
+remain in the source tree but are detached from this baseline. Requests to enable
+the retained chemistry, conduction, or diffusion options fail explicitly. Ordinary
+particle advection is used; the optional XSPH variant in equation 3.19 is not enabled.
+
+## Kernel and density
+
+The spline in section 7, pp.554–555, is
+
+\[
+ W(r,h)=\frac{1}{\pi h^3}
+ \begin{cases}
+  1-\frac32q^2+\frac34q^3,&0\le q\le1,\\
+  \frac14(2-q)^3,&1<q\le2,\\
+  0,&q>2,
+ \end{cases}
+ \qquad q=r/h.
+\]
+
+The code stores the **support radius** \(H=2h\). Consequently its dimensionless
+kernel has normalization \(8/\pi\), changes polynomial at \(r/H=1/2\), and vanishes
+at \(r/H=1\). Density includes the self contribution and uses the gather sum
+
+\[
+ \rho_i=\sum_j m_j W(r_{ij},H_i/2).
+\]
+
+This gather choice is a deliberate practical variation: equation 6.3 on p.553
+writes the adaptive density interpolant with the **source** length \(h_j\).
+Section 6 permits summation instead of integrating the continuity equation, but
+does not prescribe this gather solve or its numerical parameters.
+
+For the current equal-mass gas particles, the smoothing solve holds
+
+\[
+ \frac{4\pi}{3}\frac{\rho_i H_i^3}{m}=N_{\rm target},
+\]
+
+so \(H_i\propto\rho_i^{-1/3}\), consistent with equation 6.2. The target is a
+kernel-weighted count, including self, rather than an integer number of neighbors.
+The self contribution imposes \(N_{\rm target}>32/3\). The solve respects the
+configured support-radius bounds, refreshes neighbors if the search box is too
+small, and caps each local solve at 128 iterations. Its relative residual tolerance
+is \(10^{-4}\); a bound-limited solution need not attain the requested target.
+The periodic search uses one nearest image per pair, so the effective maximum
+support is also capped at half the box width; a requested minimum above that limit
+is rejected. The effective limits are printed at startup in initial interparticle
+spacings. These numerical choices are implementation details, not prescriptions
+in the paper.
+
+## Pair force, viscosity, and thermal work
+
+Let \(\mathbf r_{ij}=\mathbf r_i-\mathbf r_j\),
+\(\mathbf v_{ij}=\mathbf v_i-\mathbf v_j\). The symmetric gradient is
+
+\[
+ \nabla_i\widetilde W_{ij}
+ =\tfrac12[\nabla_i W(r_{ij},H_i/2)+\nabla_i W(r_{ij},H_j/2)].
+\]
+
+This is one of the two choices explicitly offered on p.554. A pair participates
+when it lies inside either support radius. The zero-separation gradient is zero.
+
+Equations 6.4–6.5 give the physical-coordinate pair rates
+
+\[
+ \frac{d\mathbf v_i}{dt}
+ =-\sum_j m_j C_{ij}\nabla_i\widetilde W_{ij},\qquad
+ \frac{du_i}{dt}
+ =\frac12\sum_jm_j C_{ij}\mathbf v_{ij}\cdot\nabla_i\widetilde W_{ij},
+\]
+
+\[
+ C_{ij}=\frac{P_i}{\rho_i^2}+\frac{P_j}{\rho_j^2}+\Pi_{ij},\qquad
+ P_i=(\gamma-1)\rho_i u_i,\qquad c_i^2=\gamma(\gamma-1)u_i.
+\]
+
+The artificial viscosity follows equations 4.1–4.2, pp.550–551:
+
+\[
+ \mu_{ij}=\frac{\bar h_{ij}\,\mathbf v_{ij}\cdot\mathbf r_{ij}}
+ {r_{ij}^2+\epsilon\bar h_{ij}^2},\quad
+ \Pi_{ij}=\frac{-\alpha\bar c_{ij}\mu_{ij}+\beta\mu_{ij}^2}{\bar\rho_{ij}}
+ \quad\hbox{for }\mathbf v_{ij}\cdot\mathbf r_{ij}<0,
+\]
+
+and \(\Pi_{ij}=0\) otherwise. Arithmetic means are used for density and sound
+speed, and \(\bar h_{ij}=(H_i+H_j)/4\). The default values are the paper's
+\(\alpha=1\), \(\beta=2\), and \(\epsilon=0.01\).
+
+The active formulation has no pressure-entropy weighting, grad-h factors, evolving
+viscosity coefficient, or shear limiter. The same symmetric pressure and viscosity
+factors enter force and thermal work. Their simultaneous pair rates conserve linear
+and angular momentum and balance kinetic with internal energy. This algebraic
+identity does not imply exact conservation by a finite-step asynchronous integrator.
+
+## Time integration and cosmological variables
+
+The existing individual-rung predictor/corrector integration and particle drift
+are retained. Section 10.3, p.563, permits leapfrog and predictor/corrector methods.
+Neighbor rung limiting uses the union of the two supports and immutable source-rung
+snapshots during each pass; it does not wake inactive particles.
+
+The Courant-viscous limit uses
+
+\[
+ \Delta t_{\rm cv}=C_{\rm CFL}\min_i
+ \frac{h_i}{c_i+0.6[\alpha c_i+\beta\max_j(-\mu_{ij},0)]}.
+\]
+
+The code interprets two apparent issues in the printed p.563 formulas:
+
+- The printed force limit \(h/|\mathbf f|\) lacks a square root and has dimensions
+  of time squared. The implemented acceleration limit scales as
+  \(\sqrt{h/|\mathbf a|}\).
+- The printed viscous limit uses \(\max\mu\), although equation 4.2 makes \(\mu\)
+  negative for approaching particles. The implementation uses the nonnegative
+  compression magnitude \(\max(-\mu,0)\).
+
+The Courant coefficient defaults to 0.25. The acceleration coefficient remains the
+existing `gravity.timestepEta` setting. The explicit integrator also limits fractional
+thermal-energy change, smoothing-length change, and cosmological expansion.
+
+CosmicTiger evolves comoving positions \(\mathbf x\), conformal time
+\(d\tau=dt/a\), stored velocity \(\mathbf w=a\mathbf v_{\rm pec}\), and stored
+specific internal energy \(E=a^2u\). Density is comoving. The driver passes
+\(a\,da/dt\) to the SPH `adot` field; this differs from the driver's own physical
+\(da/dt\) field. The scaled physical relative velocity used for viscosity is
+
+\[
+ a\,\Delta\mathbf v_{\rm physical}
+ =\Delta\mathbf w+a\frac{da}{dt}\Delta\mathbf x.
+\]
+
+Peculiar velocity differences supply the pair pressure work. Physical relative
+velocities supply viscosity and its heating, so homogeneous expansion does not
+cause artificial viscosity. The homogeneous adiabatic source is
+
+\[
+ \frac{dE}{d\tau}\bigg|_{\rm background}
+ =(5-3\gamma)\frac{da}{dt}E,
+\]
+
+which vanishes for \(\gamma=5/3\). The pair-force and thermal-work prefactors contain
+\(m/a\) after converting to these stored variables. These transformations are
+repository requirements; the cited equations in the review are noncosmological.
+
+## Parameters and compatibility
+
+Application options use `groupName.optionName` with camelCase names. The principal
+hydrodynamic controls are:
+
+| Option | Default | Meaning |
+| --- | ---: | --- |
+| `hydro.enabled` | `false` | Enable the Monaghan gas solver |
+| `hydro.gamma` | `5/3` | Ideal-gas adiabatic index |
+| `hydro.viscosityAlpha` | `1` | Linear viscosity coefficient |
+| `hydro.viscosityBeta` | `2` | Quadratic viscosity coefficient |
+| `hydro.viscosityEpsilon` | `0.01` | Denominator coefficient \(\eta^2/\bar h^2\) |
+| `hydro.neighborNumber` | `60` | Kernel-weighted support-sphere count |
+| `hydro.minSupportRadius` | `1e-6` | Minimum \(H\), in initial interparticle spacings |
+| `hydro.maxSupportRadius` | `1000` | Requested maximum \(H\), in initial interparticle spacings; capped at half the box |
+| `hydro.cfl` | `0.25` | Courant-viscous and fractional-energy coefficient |
+
+Old SPH checkpoints with formulation marker `reserved=0` are rejected. New SPH
+checkpoints use version 2 and `reserved=1` to identify the Monaghan discretization.
+The version increase also makes earlier executables reject new SPH checkpoints. The native
+dark-matter checkpoint header remains unchanged. This prevents silently restarting
+an old SPH state under a different discretization. A separate parameter block
+also rejects changes to viscosity coefficients, smoothing constraints, timestep
+controls, gravity enablement, and external accelerations on SPH restart.
+
+## Validation scope
+
+The independent `monaghan_sph` CTest target exercises float and double kernel
+normalization, spline joins, analytic versus finite-difference derivatives, the
+\(H=2h\) convention, viscosity signs and coefficients, regularization, and invariance
+under length-unit changes and velocity boosts. Pair tests use unequal pressures,
+densities, masses, and supports to check net force, torque, and total energy rate,
+including a pair inside only one support. They also check separation, uniform
+translation, and the distinction between peculiar and physical thermal work.
+
+The `monaghan_sph_cuda` target invokes the production density, smoothing, and
+hydrodynamics kernels. It checks lower, upper, and fixed support bounds; the
+weighted-neighbor residual; periodic support intersection; a uniform lattice;
+nonzero perturbations; timestep selection; unequal-support pair conservation;
+and homogeneous expansion with a nonmonatomic gamma.
+
+Validation on 2026-10-16: the complete CUDA build and all 23 CTest checks passed,
+including grouped CLI/INI checks, CPU/CUDA mixed-mass gravity, SPH checkpoint
+compatibility, MPI migration and evolution, the coarse Sod problem, and a short
+cosmological SPH evolution with restart. At the smoke test's coarse resolution,
+Sod density relative L1 error was 0.11484; the largest sampled relative total-energy
+drift was 8.24e-8. These are regression results, not a resolution-convergence study
+or evidence of long-time accuracy. No performance claim follows from them.

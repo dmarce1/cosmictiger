@@ -23,6 +23,7 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/output.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/simulation_units.hpp>
 
 Vector<float> outputGetSlice();
 
@@ -78,7 +79,9 @@ void outputSlice(int number, double time) {
     Vector<float> x(res + 1);
     Vector<float> y(res + 1);
     float const hubble = getOptions().hubble;
-    float const c0 = getOptions().codeToCm * hubble / constants::kMpcToCm;
+    float const c0 =
+        (units::scalesFromOptions(getOptions()).lengthScale() * double(hubble) / units::kMegaparsec)
+            .value();
     for (int i = 0; i < res + 1; i++) {
         y[i] = x[i] = (float) i / res * c0;
     }

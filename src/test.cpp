@@ -594,8 +594,13 @@ void bhTest() {
 }
 
 void sphGravityTest();
+void unitsOutputTest();
 
 void test(std::string test) {
+    if (test == "unitsOutput") {
+        unitsOutputTest();
+        return;
+    }
     if (test == "checkpointState") {
         checkpointStateTest();
         return;

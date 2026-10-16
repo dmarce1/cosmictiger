@@ -32,6 +32,7 @@ static int ppnode;
 static bool hyper;
 
 HPX_PLAIN_ACTION(hpxInit, HpxInitAction);
+HPX_PLAIN_ACTION(hpxInitCuda, HpxInitCudaAction);
 
 static void detectProcessesPerNode();
 static bool detectHyperthreading();
@@ -72,9 +73,6 @@ void hpxInit() {
     if (index2 < numberOfRanks) {
         children.push_back(localities[index2]);
     }
-#ifdef USE_CUDA
-    cudaInit();
-#endif
 
     Vector<hpx::future<void>> futs;
     for (auto c : hpxChildren()) {
@@ -83,6 +81,17 @@ void hpxInit() {
     hpx::wait_all(futs.begin(), futs.end());
     detectProcessesPerNode();
     hyper = detectHyperthreading();
+}
+
+void hpxInitCuda() {
+#ifdef USE_CUDA
+    cudaInit();
+#endif
+    Vector<hpx::future<void>> futures;
+    for (auto const& child : hpxChildren()) {
+        futures.push_back(hpx::async<HpxInitCudaAction>(child));
+    }
+    hpx::wait_all(futures.begin(), futures.end());
 }
 
 int hpxRank() {

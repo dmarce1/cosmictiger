@@ -188,7 +188,7 @@ void hydroDriver(double tmax, int numberOfSteps = 64) {
         PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
         step++;
     } while (t < tmax);
-    viewOutputViews(mainStep, 1.0);
+    viewOutputViews(mainStep, 1.0, true);
 }
 
 void hydroPlummer() {

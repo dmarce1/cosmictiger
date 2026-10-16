@@ -39,6 +39,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 Vector<hpx::id_type> const& hpxLocalities();
 Vector<hpx::id_type> const& hpxChildren();
 void hpxInit();
+void hpxInitCuda();
 
 using MutexType = hpx::mutex;
 using SpinlockType = hpx::spinlock;

@@ -17,6 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
@@ -60,23 +61,27 @@ int main(int argc, char** argv) {
     namespace po = boost::program_options;
     po::options_description commandOpts("options");
 
-    commandOpts.add_options()                                                          //
-        ("help", "produce help message")                                               //
-        ("in", po::value<std::string>(&infile)->default_value(""), "input file")       //
-        ("out", po::value<std::string>(&outfile)->default_value(""), "output file")    //
+    commandOpts.add_options()                                                                  //
+        ("help", "produce help message")                                                       //
+        ("input.file", po::value<std::string>(&infile)->default_value(""), "input file")       //
+        ("output.file", po::value<std::string>(&outfile)->default_value(""), "output file")    //
         ;
 
     boost::program_options::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
     po::notify(vm);
+    if (vm.count("help")) {
+        std::cout << commandOpts << "\n";
+        return 0;
+    }
 
     if (infile == "") {
-        printf("Input file not specified. Use --in=\n");
+        printf("Input file not specified. Use --input.file=\n");
         return -1;
     }
 
     if (outfile == "") {
-        printf("Output file not specified. Use --out=\n");
+        printf("Output file not specified. Use --output.file=\n");
         return -1;
     }
 

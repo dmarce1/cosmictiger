@@ -171,6 +171,18 @@ struct SoftlensRecord {
     char type;
 };
 
+// A source can reach any sink in this box through a periodic image. Expanding
+// the unwrapped interval before testing avoids inconsistent endpoint wrapping.
+CUDA_EXPORT inline bool sphSupportIntersects(
+    Fixed32Range const& sinkBox, Array<Fixed32, NDIM> const& sourcePosition, float sourceSupport) {
+    Fixed32Range expanded = sinkBox;
+    for (int dim = 0; dim < NDIM; dim++) {
+        expanded.begin[dim] -= RangeFixed(sourceSupport);
+        expanded.end[dim] += RangeFixed(sourceSupport);
+    }
+    return expanded.contains(sourcePosition);
+}
+
 #ifdef __CUDACC__
 template <int blockSize>
 inline __device__ bool computeSoftlens(float& h, float hmin, float hmax, float n,
@@ -178,111 +190,77 @@ inline __device__ bool computeSoftlens(float& h, float hmin, float hmax, float n
     Fixed32Range const& obox, int typeI, float& wcount) {
     int const tid = threadIdx.x;
     int const runtimeBlockSize = blockDim.x;
-    if (h < hmin) {
-        if (tid == 0) {
-            h = hmin * 1.1f;
-        }
-        __syncthreads();
+    ALWAYS_ASSERT(hmin > 0.0f && hmax >= hmin && n > 0.0f);
+    if (tid == 0) {
+        h = fminf(fmaxf(h, hmin), hmax);
     }
-    if (h > hmax) {
-        if (tid == 0) {
-            //			h = hmax * 0.5f;
-        }
-        __syncthreads();
-    }
-    float const hinv = 1.f / h;
     __syncthreads();
-    int count;
-    float f;
-    float dfdh;
-    int boxXceeded = false;
-    int iter = 0;
-    float dh;
-    float error;
-    float sgn;
-    float lastSgn = 0.f;
-    float w = 1.0f;
-    do {
-        float maxDh = h * 0.1f;
-        float const hinv = 1.f / h;    // 4
-        float const h2 = sqr(h);       // 1
-        count = 0;
-        f = 0.f;
-        dfdh = 0.f;
-        auto const& xI = x[XDIM];
-        auto const& yI = x[YDIM];
-        auto const& zI = x[ZDIM];
+    float lower = hmin;
+    float upper = hmax;
+    float const target = n * float(3.0 / (4.0 * M_PI));
+    // rho H^3 / m = sum W(r/H) is held fixed, giving H proportional to rho^-1/3.
+    // hmin and hmax bound the support radius without modifying the density sum.
+    for (int iteration = 0; iteration < 128; iteration++) {
+        int boxExceeded = false;
+        for (int dim = 0; dim < NDIM; dim++) {
+            if (obox.end[dim] < RangeFixed(x[dim]) + RangeFixed(h) + RangeFixed::min() ||
+                RangeFixed(x[dim]) < obox.begin[dim] + RangeFixed(h) + RangeFixed::min()) {
+                boxExceeded = true;
+            }
+        }
+        if (boxExceeded) {
+            return false;
+        }
+        float const hinv = 1.0f / h;
+        float sum = 0.0f;
+        float derivative = 0.0f;
         for (int j = tid; j < rec.size(); j += runtimeBlockSize) {
-            auto const& r = rec[j];
-            auto const& typeJ = r.type;
-            if (typeJ == typeI) {
-                auto const& xJ = r.x;
-                auto const& yJ = r.y;
-                auto const& zJ = r.z;
-                float const xIj = distance(xI, xJ);
-                float const yIj = distance(yI, yJ);
-                float const zIj = distance(zI, zJ);
-                float const r2 = sqr(xIj, yIj, zIj);                 // 2
-                float const r = sqrt(r2);                            // 4
-                float const q = r * hinv;                            // 1
-                if (q < 1.f) {                                       // 1
-                    float const w = kernelW(q);                      // 4
-                    float const dwdh = -q * dkernelWDq(q) * hinv;    // 3
-                    f += w;                                          // 1
-                    dfdh += dwdh;                                    // 1
-                    count++;
+            auto const& neighbor = rec[j];
+            if (neighbor.type == typeI) {
+                float const dx = distance(x[XDIM], neighbor.x);
+                float const dy = distance(x[YDIM], neighbor.y);
+                float const dz = distance(x[ZDIM], neighbor.z);
+                float const q = sqrtf(sqr(dx, dy, dz)) * hinv;
+                if (q < 1.0f) {
+                    sum += kernelW(q);
+                    derivative -= q * dkernelWDq(q) * hinv;
                 }
             }
         }
-        sharedReduceAdd<float, blockSize>(f);
-        sharedReduceAdd<int, blockSize>(count);
-        wcount = float(4 * M_PI / 3) * f;
-        sharedReduceAdd<float, blockSize>(dfdh);
-        float xValue, dXdh;
-        dsmoothXDh(h, hmin, hmax, xValue, dXdh);
-        dh = 0.2f * h;
-        if (count > 1) {
-            dfdh = dfdh + dXdh * f;
-            f *= xValue;
-            f -= n * float(3.0 / (4.0 * M_PI));
-            dh = -f / dfdh;
-            sgn = copysignf(1.f, dh);
-            if (sgn * lastSgn < 0.f) {
-                w = fmaxf(0.5f * w, 0.001f);
-            } else {
-                w = fminf(1.f, w * 1.1f);
-            }
-            lastSgn = sgn;
-            dh = fminf(fmaxf(dh, -maxDh), maxDh);
+        sharedReduceAdd<float, blockSize>(sum);
+        sharedReduceAdd<float, blockSize>(derivative);
+        wcount = float(4.0 * M_PI / 3.0) * sum;
+        float const residual = sum - target;
+        if (fabsf(residual) <= SPH_SMOOTHLEN_TOLER * target || (h <= hmin && residual >= 0.0f) ||
+            (h >= hmax && residual <= 0.0f)) {
+            return true;
         }
-        error = fabsf(dh / h);
+        if (residual > 0.0f) {
+            upper = h;
+        } else {
+            lower = h;
+        }
+        float change = derivative > 0.0f ? -residual / derivative : 0.2f * h;
+        change = fminf(fmaxf(change, -0.2f * h), 0.2f * h);
+        float next = fminf(fmaxf(h + change, hmin), hmax);
+        if (next < lower || next > upper) {
+            next = 0.5f * (lower + upper);
+        }
+        if (next == h) {
+            return true;
+        }
         __syncthreads();
         if (tid == 0) {
-            h += w * dh;
-            if (iter >= 100) {
-                PRINT("over iteration on h solve - %i %e %e %e %e %i\n", iter, h, dh, w, error,
-                    count);
-            }
+            h = next;
         }
         __syncthreads();
-        for (int dim = 0; dim < NDIM; dim++) {
-            if (obox.end[dim] < RangeFixed(x[dim] + Fixed32(h)) + RangeFixed::min()) {
-                boxXceeded = true;
-                break;
-            }
-            if (RangeFixed(x[dim]) < obox.begin[dim] + RangeFixed(h) + RangeFixed::min()) {
-                boxXceeded = true;
-                break;
-            }
-        }
-        iter++;
-        sharedReduceAdd<int, blockSize>(boxXceeded);
-    } while (error > 1e-4f && !boxXceeded);
-    if (tid == 0 && h <= 0.f) {
-        PRINT("Less than ZERO H! sph.cu %e\n", h);
+    }
+    if (tid == 0) {
+        PRINT("SPH smoothing-length solve did not converge: h=%e bounds=[%e,%e] target=%e\n", h,
+            hmin, hmax, n);
         __trap();
     }
-    return !boxXceeded;
+    return false;
 }
 #endif
 

@@ -30,6 +30,7 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/simulation_units.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/zero_order.hpp>
 
@@ -397,7 +398,8 @@ void twolptCorrection2(int dim) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<TwolptCorrection2Action>(c, dim));
     }
-    float const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    float const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     auto const box = fft3dComplexRange();
     auto yValue = delta2Inv;
@@ -444,7 +446,8 @@ void twolptCorrection2(int dim) {
 
 void twolptGenerate(int dim1, int dim2) {
     int64_t const n = getOptions().nfour;
-    float const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    float const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     float const factor = std::pow(boxSize, -1.5) * n * n * n;
     Vector<ComplexFloat> yValue;
     static auto power = getOptions().usePowerFile ? readPowerSpectrum() : computePowerSpectrum();
@@ -854,11 +857,16 @@ static void initX0() {
             }
         }
         double const scale = 1.0 / (1.0 + getOptions().z0);
-        double const energyUnit = sqr(getOptions().codeToCm / getOptions().codeToS);
+        auto const unitScales = units::scalesFromOptions(getOptions());
+        units::CosmologicalContext const context(scale, getOptions().hubble);
         double const neutralNumber = 1.0 - 0.75 * getOptions().y0;
-        double const initialTemperature = 1000.0;
-        double const thermalEnergy =
-            1.5 * constants::kB * constants::kAvo * neutralNumber * initialTemperature / energyUnit;
+        auto const initialTemperature = units::Temperature::from_value(1000.0);
+        units::SpecificEnergy const physicalEnergy =
+            1.5 * units::kBoltzmann * units::kParticlesPerGram * neutralNumber * initialTemperature;
+        double const thermalEnergy = (physicalEnergy / unitScales.specificEnergyScale()).value();
+        double const storedThermalEnergy = units::toStoredSpecificEnergy(
+            units::PhysicalSpecificEnergy(physicalEnergy), unitScales, context)
+                                               .value();
         double const density = getOptions().sphMass * getOptions().numberOfParticles;
         float const smoothLength = std::cbrt(
             getOptions().sneighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberOfParticles));
@@ -868,7 +876,7 @@ static void initX0() {
             sphParticlesRec2(i).entropy = thermalEnergy * (getOptions().gamma - 1.0) /
                 std::pow(density / (scale * scale * scale), getOptions().gamma - 1.0);
 #else
-            sphParticlesRec2(i).eint = thermalEnergy * scale * scale;
+            sphParticlesRec2(i).eint = storedThermalEnergy;
 #endif
             sphParticlesSmoothingLength(i) = smoothLength;
             sphParticlesAlpha(i) = getOptions().alpha0;
@@ -903,7 +911,8 @@ static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, floa
     float dxmax = 0.0;
     SpinlockType mutex;
     int64_t const n = getOptions().nfour;
-    double const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    double const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto box = findMyBox();
     bool const glass = getOptions().useGlass;
     for (int dim = 0; dim < NDIM; dim++) {

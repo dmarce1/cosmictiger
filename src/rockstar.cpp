@@ -8,6 +8,7 @@
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/rockstar.hpp>
+#include <cosmictiger/simulation_units.hpp>
 #include <cosmictiger/timer.hpp>
 
 void rockstarFindSubgroups(DeviceVector<RockstarParticle>& parts, float scale = 1.0);
@@ -1300,12 +1301,14 @@ Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts
                 lambda = jValue * sqrt(fabs(etotValue)) / g / pow(mvir, 2.5);
                 lambdaB = jValue / sqrt(2.0 * g * sqr(mvir) * mvir * rvir);
                 toW = grp.t / grp.w;
-                double const convMass = getOptions().codeToG * getOptions().hubble / constants::kM0;
-                double const lengthConversionFactor =
-                    getOptions().codeToCm * getOptions().hubble / constants::kMpcToCm * 1000.0;
+                auto const unitScales = units::scalesFromOptions(getOptions());
+                double const convMass =
+                    (unitScales.massScale() * getOptions().hubble / units::kSolarMass).value();
                 double const convPos =
-                    getOptions().codeToCm * getOptions().hubble / constants::kMpcToCm;
-                double const convVel = getOptions().codeToCm / getOptions().codeToS / 100000.0;
+                    (unitScales.lengthScale() * getOptions().hubble / units::kMegaparsec).value();
+                double const lengthConversionFactor = convPos * 1000.0;
+                double const convVel =
+                    (unitScales.velocityScale() / units::Velocity::from_value(1.e5)).value();
                 double const convAng = convMass * convPos * convVel;
                 double const convEne = convMass * sqr(convVel);
                 x += xc;

@@ -321,6 +321,13 @@ std::pair<double, double> sphParticlesApplyUpdates(
                         }
                     }
                 }
+#ifndef ENTROPY
+                if (rung2 >= minrung && !sphParticlesIsstar(i)) {
+                    // Diagnostics and interpolation must use the corrected internal energy.
+                    sphParticlesPressure(i) =
+                        (getOptions().gamma - 1.0) * sphParticlesRho(i) * sphParticlesEint(i);
+                }
+#endif
             }
             return std::make_pair(error, norm);
         }));

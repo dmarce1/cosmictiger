@@ -554,6 +554,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     hostZ.resize(particleStorageSize);
     if (params.runType == SPH_RUN_RUNGS) {
         hostRungs.resize(particleStorageSize);
+        hostH.resize(particleStorageSize);
     } else if (params.runType == SPH_RUN_COND_INIT) {
         hostRungs.resize(particleStorageSize);
         hostH.resize(particleStorageSize);
@@ -680,6 +681,8 @@ SphRunReturn SphRunWorkspace::toGpu() {
                         offset);
                     sphParticlesGlobalReadRho(node.globalParticleRange(), hostRho.data(), offset);
                 } else if (params.runType == SPH_RUN_RUNGS) {
+                    sphParticlesGlobalReadEnergyAndSmoothlen(
+                        node.globalParticleRange(), nullptr, hostH.data(), offset);
                     sphParticlesGlobalReadRungs(
                         node.globalParticleRange(), hostRungs.data(), offset);
                 } else if (params.runType == SPH_RUN_COND_INIT) {
@@ -731,6 +734,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     CUDA_CHECK(cudaMalloc(&cudaData.z, sizeof(Fixed32) * hostZ.size()));
     if (params.runType == SPH_RUN_RUNGS) {
         CUDA_CHECK(cudaMalloc(&cudaData.rungs, sizeof(char) * hostRungs.size()));
+        CUDA_CHECK(cudaMalloc(&cudaData.h, sizeof(float) * hostH.size()));
     } else if (params.runType == SPH_RUN_COND_INIT) {
         CUDA_CHECK(cudaMalloc(&cudaData.rungs, sizeof(char) * hostRungs.size()));
         CUDA_CHECK(cudaMalloc(&cudaData.h, sizeof(float) * hostH.size()));
@@ -873,6 +877,8 @@ SphRunReturn SphRunWorkspace::toGpu() {
                 sizeof(char) * hostStar.size(), cudaMemcpyHostToDevice, stream));
         }
     } else if (params.runType == SPH_RUN_RUNGS) {
+        CUDA_CHECK(cudaMemcpyAsync(cudaData.h, hostH.data(), sizeof(float) * hostH.size(),
+            cudaMemcpyHostToDevice, stream));
         CUDA_CHECK(cudaMemcpyAsync(cudaData.rungs, hostRungs.data(),
             sizeof(char) * hostRungs.size(), cudaMemcpyHostToDevice, stream));
     } else if (params.runType == SPH_RUN_COND_INIT) {
@@ -1004,22 +1010,10 @@ SphRunReturn SphRunWorkspace::toGpu() {
 
     auto rc = sphRunCuda(params, cudaData, stream);
     synchronizeCudaStream(stream);
-    if (params.runType == SPH_RUN_RUNGS) {
-        CUDA_CHECK(cudaMemcpyAsync(hostRungs.data(), cudaData.rungs,
-            sizeof(char) * hostRungs.size(), cudaMemcpyDeviceToHost, stream));
-    }
     cudaEndStream(stream);
     if (params.runType == SPH_RUN_RUNGS) {
-        for (int i = 0; i < hostSelflist.size(); i++) {
-            auto const& node = hostTrees[hostSelflist[i]];
-            ParticleInteger const offset = node.sinkParticleRange.first - node.particleRange.first;
-            for (ParticleInteger j = node.particleRange.first; j < node.particleRange.second; j++) {
-                sphParticlesRung(j + offset) = hostRungs[j];
-            }
-        }
-    }
-    if (params.runType == SPH_RUN_RUNGS) {
         CUDA_CHECK(cudaFree(cudaData.rungs));
+        CUDA_CHECK(cudaFree(cudaData.h));
     } else if (params.runType == SPH_RUN_COND_INIT) {
         CUDA_CHECK(cudaFree(cudaData.rungs));
         CUDA_CHECK(cudaFree(cudaData.rho));

@@ -73,19 +73,12 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 bool contains = false;
                 Array<Fixed32, NDIM> position;
                 if (pi < other.particleRange.second) {
-                    position = {data.x[pi], data.y[pi], data.z[pi]};
+                    position[XDIM] = data.x[pi];
+                    position[YDIM] = data.y[pi];
+                    position[ZDIM] = data.z[pi];
                     contains = self.outerBox.contains(position);
                     if (!contains) {
-                        contains = true;
-                        for (int dim = 0; dim < NDIM; dim++) {
-                            if (distance(position[dim], self.innerBox.begin[dim]) + data.h[pi] <
-                                    0.0f ||
-                                distance(self.innerBox.end[dim], position[dim]) + data.h[pi] <
-                                    0.0f) {
-                                contains = false;
-                                break;
-                            }
-                        }
+                        contains = sphSupportIntersects(self.innerBox, position, data.h[pi]);
                     }
                 }
                 int slot = contains;
@@ -132,10 +125,10 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const radius = sqrtf(r2);
                 float const invHI = 1.0f / hI;
                 float const invHJ = 1.0f / neighbor.h;
-                float const gradientI = monaghan_sph::kernelDerivative(radius * invHI) *
-                    sqr(sqr(invHI)) / radius;
-                float const gradientJ = monaghan_sph::kernelDerivative(radius * invHJ) *
-                    sqr(sqr(invHJ)) / radius;
+                float const gradientI =
+                    monaghan_sph::kernelDerivative(radius * invHI) * sqr(sqr(invHI)) / radius;
+                float const gradientJ =
+                    monaghan_sph::kernelDerivative(radius * invHJ) * sqr(sqr(invHJ)) / radius;
                 float const gradient = 0.5f * (gradientI + gradientJ);
                 float const vx = data.vx[i] - neighbor.vx;
                 float const vy = data.vy[i] - neighbor.vy;
@@ -149,14 +142,15 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const soundJ = sqrtf(gamma * (gamma - 1.0f) * neighbor.energy);
                 float const viscosity = monaghan_sph::artificialViscosity(
                     rhoI, neighbor.rho, soundI, soundJ, mu, params.alpha0, params.beta);
-                float const pressurePair = monaghan_sph::pressureCoefficient(
-                    rhoI, neighbor.rho, pressureI, pressureJ);
+                float const pressurePair =
+                    monaghan_sph::pressureCoefficient(rhoI, neighbor.rho, pressureI, pressureJ);
                 float const force = massOverA * (pressurePair + viscosity) * gradient;
                 ax -= force * dx;
                 ay -= force * dy;
                 az -= force * dz;
-                energyRate += massOverA * monaghan_sph::pairEnergyRate(pressurePair, viscosity,
-                    peculiarDotR * gradient, physicalDotR * gradient);
+                energyRate += massOverA *
+                    monaghan_sph::pairEnergyRate(
+                        pressurePair, viscosity, peculiarDotR * gradient, physicalDotR * gradient);
                 divergence -= massOverA / rhoI * peculiarDotR * gradientI;
                 maxCompression = fmaxf(maxCompression, -mu);
             }
@@ -171,9 +165,26 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                 float const gy = data.gravity ? data.gySnk[sink] : 0.0f;
                 float const gz = data.gravity ? data.gzSnk[sink] : 0.0f;
                 ax += gx;
-                ay += gy;
+                ay += gy + params.gy;
                 az += gz;
-                data.rec6Snk[sink].dvel = {ax, ay, az};
+                if (data.gcentral != 0.0f) {
+                    float const dx = distance(data.x[i], Fixed32(0.5));
+                    float const dy = distance(data.y[i], Fixed32(0.5));
+                    float const dz = distance(data.z[i], Fixed32(0.5));
+                    float const radius = sqrtf(sqr(dx, dy, dz));
+                    float const hinv = 1.0f / data.hcentral;
+                    float const force =
+                        data.gcentral * kernelFqinv(radius * hinv) * hinv * hinv * hinv;
+                    ax -= force * dx;
+                    ay -= force * dy;
+                    az -= force * dz;
+                }
+                ax -= params.damping * data.vx[i];
+                ay -= params.damping * data.vy[i];
+                az -= params.damping * data.vz[i];
+                data.rec6Snk[sink].dvel[XDIM] = ax;
+                data.rec6Snk[sink].dvel[YDIM] = ay;
+                data.rec6Snk[sink].dvel[ZDIM] = az;
                 // Homogeneous adiabatic expansion of a^2*u for arbitrary gamma.
                 energyRate += (5.0f - 3.0f * gamma) * params.adot * ainv * energyI;
                 data.deint2Snk[sink] = energyRate;
@@ -182,28 +193,25 @@ __global__ void sphCudaHydro(SphRunParameters params, SphRunCudaData data, SphRe
                     data.deint1Snk[sink] = 0.0f;
                     data.divvSnk[sink] = divergence;
                     float const smoothingLength = 0.5f * hI;
-                    // Section 7.2: max(-mu) is positive for approaching particles.
+                    // Section 10.3: max(-mu) is positive for approaching particles.
                     float const dtinvCfl = soundI / smoothingLength;
-                    float const dtinvVisc =
-                        0.6f * (params.alpha0 * soundI + params.beta * maxCompression) /
-                        smoothingLength;
-                    float const dtinvDivv = params.a * fabsf(divergence) /
-                        (3.0f + dlogsmoothXDlogh(hI, params.hmin, params.hmax));
+                    float const dtinvVisc = 0.6f *
+                        (params.alpha0 * soundI + params.beta * maxCompression) / smoothingLength;
+                    float const dtinvDivv = params.a * fabsf(divergence) / 3.0f;
                     float const acceleration = sqrtf(sqr(ax, ay, az));
-                    float const dtinvAcc = params.cfl *
-                        sqrtf(params.a * acceleration / smoothingLength) / data.eta;
-                    float const dtinv = fmaxf(dtinvCfl + dtinvVisc,
-                        fmaxf(dtinvDivv, dtinvAcc));
-                    float hydroDt = fminf(params.maxDt,
-                        params.cfl * params.a / fmaxf(dtinv, 1.0e-30f));
+                    float const dtinvAcc =
+                        params.cfl * sqrtf(params.a * acceleration / smoothingLength) / data.eta;
+                    float const dtinv = fmaxf(dtinvCfl + dtinvVisc, fmaxf(dtinvDivv, dtinvAcc));
+                    float hydroDt =
+                        fminf(params.maxDt, params.cfl * params.a / fmaxf(dtinv, 1.0e-30f));
                     // Bound fractional thermal change in the existing explicit integrator.
                     if (energyRate != 0.0f) {
                         hydroDt = fminf(hydroDt, params.cfl * energyI / fabsf(energyRate));
                     }
                     float const gravityAcceleration = sqrtf(sqr(gx, gy, gz));
                     float const gravityDt = fminf(params.maxDt,
-                        data.eta * sqrtf(params.a * data.gsoft /
-                            fmaxf(gravityAcceleration, 1.0e-30f)));
+                        data.eta *
+                            sqrtf(params.a * data.gsoft / fmaxf(gravityAcceleration, 1.0e-30f)));
                     ALWAYS_ASSERT(isfinite(hydroDt) && hydroDt > 0.0f);
                     int const hydroRung = max(1, int(ceilf(log2f(params.t0 / hydroDt))));
                     int const gravityRung = max(1, int(ceilf(log2f(params.t0 / gravityDt))));

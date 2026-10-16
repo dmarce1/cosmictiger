@@ -3,6 +3,7 @@
 
 #include <cosmictiger/compress.hpp>
 #include <cosmictiger/constants.hpp>
+#include <cosmictiger/legacy_options.hpp>
 #include <cosmictiger/options.hpp>
 
 struct Gadget2Header {
@@ -145,8 +146,12 @@ int main(int argc, char* argv[]) {
     int numberOfGroups;
     fread(&numberOfGroups, sizeof(int), 1, fpin);
     printf("%i FoF groups found.\n", numberOfGroups);
-    Options* opts = (Options*) malloc(sizeof(Options));
-    fread(opts, sizeof(Options), 1, fpin);
+    Options opts{};
+    if (!legacy_options::readLightconeOptions(fpin, opts)) {
+        printf("Unable to read legacy options header from %s\n", infile);
+        fclose(fpin);
+        return -1;
+    }
     std::unordered_map<std::string, Vector<double>> db;
     size_t haloCount = 0;
     size_t subhaloCount = 0;
@@ -164,8 +169,8 @@ int main(int argc, char* argv[]) {
         arc.read(fpin);
         uncompressParticles(parts, arc);
         int numberOfParticles = arc.size();
-        double const xscale = opts->codeToCm * opts->hubble / constants::kMpcToCm;
-        double const vscale = opts->codeToCm / opts->codeToS / 100000.0;
+        double const xscale = opts.codeToCm * opts.hubble / constants::kMpcToCm;
+        double const vscale = opts.codeToCm / opts.codeToS / 100000.0;
         Array<double, NDIM> minx;
         for (int dim = 0; dim < NDIM; dim++) {
             minx[dim] = std::numeric_limits<double>::max();
@@ -195,8 +200,8 @@ int main(int argc, char* argv[]) {
         header.npart[1] = numberOfParticles;
         header.npartTotal[1] = numberOfParticles;
         header.npartTotal[2] = 0;
-        header.mass[1] = opts->codeToG * opts->hubble / constants::kM0;
-        header.hubbleParam = opts->hubble;
+        header.mass[1] = opts.codeToG * opts.hubble / constants::kM0;
+        header.hubbleParam = opts.hubble;
         header.redshift = 0.0;
         header.time = 1.0;
         header.flagSfr = 0;
@@ -205,8 +210,8 @@ int main(int argc, char* argv[]) {
         header.flagMetals = 0;
         header.flagStellarage = 0;
         header.numFiles = 1;
-        header.omega0 = opts->omegaM;
-        header.omegaLambda = 1.0 - opts->omegaM;
+        header.omega0 = opts.omegaM;
+        header.omegaLambda = 1.0 - opts.omegaM;
         header.hashtabsize = 0;
         for (int i = 0; i < 84; i++) {
             header.fill[i] = 0;
@@ -223,14 +228,14 @@ int main(int argc, char* argv[]) {
             printf("Unable to open config.cfg for writing\n");
             return -3;
         }
-        double const h = opts->hsoft * opts->codeToCm * opts->hubble / constants::kMpcToCm / 2.0;
+        double const h = opts.hsoft * opts.codeToCm * opts.hubble / constants::kMpcToCm / 2.0;
         double const linkingLength =
-            opts->lcB;    /// opts->parts_dim * opts->code_to_cm * opts->hubble /
-                          /// constants::mpc_to_cm / box_size * pow(numberOfParticles, 1.0 / 3.0);
+            opts.lcB;    /// opts->parts_dim * opts->code_to_cm * opts->hubble /
+                         /// constants::mpc_to_cm / box_size * pow(numberOfParticles, 1.0 / 3.0);
         fprintf(fpout, "FILE_FORMAT = \"GADGET2\"\n");
-        fprintf(fpout, "h0 = %f\n", opts->hubble);
-        fprintf(fpout, "Om = %f\n", opts->omegaM);
-        fprintf(fpout, "Ol = %f\n", 1.0 - opts->omegaM);
+        fprintf(fpout, "h0 = %f\n", opts.hubble);
+        fprintf(fpout, "Om = %f\n", opts.omegaM);
+        fprintf(fpout, "Ol = %f\n", 1.0 - opts.omegaM);
         fprintf(fpout, "GADGET_LENGTH_CONVERSION = 1\n");
         fprintf(fpout, "GADGET_MASS_CONVERSION = 1\n");
         fprintf(fpout, "FORCE_RES = %e\n", h);

@@ -35,6 +35,15 @@ struct Options {
     bool doTracers;
     bool doSlice;
     bool doViews;
+    bool outputSilo;
+    int outputSiloInterval;
+    std::string outputDirectory;
+    double outputXMin;
+    double outputXMax;
+    double outputYMin;
+    double outputYMax;
+    double outputZMin;
+    double outputZMax;
     bool twolpt;
     bool usePowerFile;
     bool plummer;
@@ -121,6 +130,10 @@ struct Options {
     double gcentral{};
     double hcentral{};
 
+    // Append new fields: legacy lightcone files contain the preceding raw Options layout.
+    std::string outputUnits{"code"};
+    std::string outputFrame{"comoving"};
+
     template <typename A>
     void serialize(A&& arc, unsigned) {
         arc & htime;
@@ -177,6 +190,17 @@ struct Options {
         arc & doTracers;
         arc & doSlice;
         arc & doViews;
+        arc & outputSilo;
+        arc & outputSiloInterval;
+        arc & outputDirectory;
+        arc & outputUnits;
+        arc & outputFrame;
+        arc & outputXMin;
+        arc & outputXMax;
+        arc & outputYMin;
+        arc & outputYMax;
+        arc & outputZMin;
+        arc & outputZMax;
         arc & twolpt;
         arc & usePowerFile;
         arc & lcDir;

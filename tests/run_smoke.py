@@ -61,6 +61,9 @@ def main():
     # invocation cannot accidentally pass by examining stale results.
     for name in ("sod.txt", "progress.txt", "energy.txt", "energy.dat", "rho.dat"):
         (args.workdir / name).unlink(missing_ok=True)
+    output_directory = args.workdir / "silo snapshots"
+    if output_directory.exists():
+        shutil.rmtree(output_directory)
     for checkpoint_dir in args.workdir.glob("checkpoint.*"):
         if checkpoint_dir.is_dir() and re.fullmatch(r"checkpoint\.[0-9]+", checkpoint_dir.name):
             shutil.rmtree(checkpoint_dir)
@@ -69,20 +72,36 @@ def main():
     if recfast.exists():
         shutil.copy2(recfast, args.workdir / "recfast")
     command = [str(args.executable), "--hpx:threads=2", "--hpx:bind=none",
-               "--parts_dim=8", "--do_views=false", "--do_lc=false",
-               "--do_power=false", "--do_groups=false"]
+               "--initial.particlesPerDimension=8", "--analysis.views=false",
+               "--lightcone.enabled=false", "--analysis.power=false", "--analysis.groups=false"]
     if args.mode == "sod":
-        command += ["--test=sod", "--hydro.sph=true", "--cuda=true"]
+        # Select the left half of the domain, a directory containing spaces,
+        # and a cadence that does not divide the final cycle (20).
+        output_config = args.workdir / "silo.ini"
+        output_config.write_text("[output]\nsilo = true\nxMax = 0.5\n"
+                                 "siloInterval = 7\ndirectory = silo snapshots\n")
+        command += ["--run.test=sod", "--hydro.enabled=true", "--compute.cuda=true",
+                    f"--configuration={output_config.resolve()}"]
     elif args.mode == "sph":
-        command += ["--hydro.sph=true", "--cuda=true", "--max_iter=1", "--check_freq=0"]
+        command += ["--hydro.enabled=true", "--compute.cuda=true",
+                    "--run.maxIterations=1", "--checkpoint.intervalSeconds=0"]
     elif args.mode == "sph_mpi":
-        command += ["--hydro.sph=true", "--cuda=true", "--max_iter=1", "--hpx:localities=2"]
+        command += ["--hydro.enabled=true", "--compute.cuda=true",
+                    "--run.maxIterations=1", "--hpx:localities=2"]
         command = [args.mpi_exec, "-n", "2"] + command
     else:
-        command += ["--hydro.sph=false", "--max_iter=1",
-                    "--cuda=" + str(args.mode == "dm_cuda").lower()]
+        command += ["--hydro.enabled=false", "--run.maxIterations=1",
+                    "--compute.cuda=" + str(args.mode == "dm_cuda").lower()]
     run_simulation(command, args.workdir, "run.log")
     if args.mode == "sod":
+        output_log = (args.workdir / "run.log").read_text()
+        if "Silo particle output: x [0, 0.5], y [0, 1], z [0, 1]" not in output_log:
+            raise RuntimeError("Sod run did not select the configured Silo box")
+        snapshots = sorted(output_directory.glob("view.0.*.silo"))
+        cycles = {int(path.name.split(".")[2]) for path in snapshots}
+        if cycles != {0, 7, 14, 20} or any(path.stat().st_size == 0 for path in snapshots):
+            raise RuntimeError(f"Sod Silo cadence/final snapshot mismatch: {sorted(cycles)}")
+        print("Silo: cycles 0, 7, 14, 20 in the configured directory (including final snapshot)")
         rows = [[float(value) for value in line.split()]
                 for line in (args.workdir / "sod.txt").read_text().splitlines()]
         if len(rows) != 1000 or any(len(row) != 5 for row in rows):
@@ -124,8 +143,8 @@ def main():
             checkpoint = max(int(path.parent.name.split(".")[1]) for path in checkpoints)
             (args.workdir / "progress.txt").unlink()
             restart_command = [arg for arg in command
-                               if not arg.startswith(("--max_iter=", "--check_freq="))]
-            restart_command += [f"--read_check={checkpoint}", "--max_iter=0"]
+                               if not arg.startswith(("--run.maxIterations=", "--checkpoint.intervalSeconds="))]
+            restart_command += [f"--checkpoint.readIndex={checkpoint}", "--run.maxIterations=0"]
             run_simulation(restart_command, args.workdir, "restart.log")
             restarted = []
             for line in (args.workdir / "progress.txt").read_text().splitlines():

@@ -21,6 +21,7 @@
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/monaghan_sph.hpp>
 #include <cosmictiger/options.hpp>
 
 #define KERNEL_CUBIC_SPLINE
@@ -38,17 +39,7 @@ void kernelAdjustOptions(Options& opts);
 template <typename T>
 CUDA_EXPORT inline T kernelW(T q) {
 #ifdef KERNEL_CUBIC_SPLINE
-    T w1, w2, res;
-    T sw, mq;
-    T const c0 = T(8.0 / M_PI);
-    w1 = T(6);
-    w1 = fmaf(q, w1, -T(6));
-    w1 *= q;
-    w1 = fmaf(q, w1, T(1));
-    mq = T(1) - q;
-    w2 = T(2) * sqr(mq) * mq;
-    sw = q < T(0.5);
-    res = c0 * (sw * w1 + (T(1) - sw) * w2);
+    T res = monaghan_sph::kernelValue(q);
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
     T w1, w2, res;
@@ -106,17 +97,7 @@ CUDA_EXPORT inline T kernelW(T q) {
 template <typename T>
 CUDA_EXPORT inline T dkernelWDq(T q) {
 #ifdef KERNEL_CUBIC_SPLINE
-    T w1, w2, res;
-    T sw;
-    T const c0 = T(8.0 / M_PI);
-    w1 = T(18);
-    w1 = fmaf(q, w1, -T(12));
-    w1 *= q;
-    w2 = T(-6);
-    w2 *= sqr(T(1) - q);
-    sw = q < T(0.5);
-    res = c0 * (sw * w1 + (T(1) - sw) * w2);
-
+    T res = monaghan_sph::kernelDerivative(q);
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
     T w1, w2, res;

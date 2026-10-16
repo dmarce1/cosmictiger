@@ -22,7 +22,6 @@
 #include <cosmictiger/cosmology.hpp>
 #include <cosmictiger/drift.hpp>
 #include <cosmictiger/hpx.hpp>
-#include <cosmictiger/kernel.hpp>
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/sph_particles.hpp>
 
@@ -55,8 +54,7 @@ void drift(
             float const divv = sphParticlesDivv(i);
             // Predict the comoving support from the peculiar divergence (Monaghan 6.2).
             // The next density solve enforces the neighbor constraint.
-            double const dloghdt =
-                divv / (3.0 + dlogsmoothXDlogh(h, hmin, hmax));
+            double const dloghdt = divv / 3.0;
             h = std::clamp(h * std::exp(dloghdt * dt), double(hmin), double(hmax));
         }
     }

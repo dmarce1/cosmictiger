@@ -20,6 +20,7 @@
 #define SMOOTHLEN_BUFFER 0.21
 #define SCALE_DT 0.01
 
+#include <array>
 #include <cstdint>
 
 #include <dirent.h>
@@ -48,6 +49,7 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
 #include <cosmictiger/profiler.hpp>
+#include <cosmictiger/simulation_units.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/sph_tree.hpp>
@@ -483,10 +485,13 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     profilerExit();
 
     sparams.phase = 0;
-    int doneiters = 0;
+    int densityIterations = 0;
     if (!vsoft) {
         sphParticlesResetConverged();
         do {
+            if (++densityIterations > 256) {
+                THROW_ERROR("SPH smoothing lengths did not converge after 256 tree rebuilds\n");
+            }
             sparams.set = SPH_SET_ACTIVE;
             sparams.runType = SPH_RUN_PREHYDRO1;
             Timer tm;
@@ -550,7 +555,11 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
         tm.reset();
     }
     sphParticlesResetConverged();
+    densityIterations = 0;
     do {
+        if (++densityIterations > 256) {
+            THROW_ERROR("SPH neighbor densities did not converge after 256 tree rebuilds\n");
+        }
         sparams.set = SPH_SET_ACTIVE;
         sparams.runType = SPH_RUN_PREHYDRO2;
         Timer tm;
@@ -774,7 +783,7 @@ SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phas
     tm.stop();
     tm.reset();
     tm.start();
-    tnparams.seti = SPH_INTERACTIONS_I;
+    tnparams.seti = SPH_INTERACTIONS_IJ;
     tnparams.runType = SPH_TREE_NEIGHBOR_NEIGHBORS;
     profilerEnter("sph_tree_neighbor:SPH_TREE_NEIGHBOR_BOXES");
     sphTreeNeighbor(tnparams, rootId, checklist).get();
@@ -1152,7 +1161,8 @@ double doPowerSpectrum(int num, double a) {
     double const h = getOptions().hubble;
     auto const glass = getOptions().createGlass;
     double const omegaM = getOptions().omegaM;
-    double const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    double const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     double const n3 = pow((double) getOptions().nfour, 3);
     double const d1 = cosmosGrowthFactor(omegaM, a) / cosmosGrowthFactor(omegaM, 1.0);
     double factor = pow(boxSize, 3) / n3 / (glass ? 1.0 : (n3 * sqr(d1)));
@@ -1737,6 +1747,8 @@ namespace detail {
 
 constexpr uint64_t kCheckpointMagic = 0x4354535048303031ULL;
 constexpr uint32_t kCheckpointVersion = 1;
+constexpr uint32_t kSphCheckpointVersion = 2;
+constexpr uint32_t kMonaghanSph = 1;
 
 struct CheckpointHeader {
     uint64_t magic;
@@ -1809,26 +1821,45 @@ uint32_t checkpointFlags(Options const& opts) {
 }
 
 CheckpointHeader checkpointHeader(Options const& opts) {
-    return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts), opts.dmMass, opts.sphMass,
-        opts.gamma, opts.hsoft, opts.gm, opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm,
-        opts.codeToS, opts.codeToG, opts.numberOfParticles, opts.numberOfSteps, 0U};
+    return {kCheckpointMagic, opts.sph ? kSphCheckpointVersion : kCheckpointVersion,
+        checkpointFlags(opts), opts.dmMass, opts.sphMass, opts.gamma, opts.hsoft, opts.gm,
+        opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm, opts.codeToS, opts.codeToG,
+        opts.numberOfParticles, opts.numberOfSteps, opts.sph ? kMonaghanSph : 0U};
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
-    return header.version == kCheckpointVersion && header.flags == checkpointFlags(opts) &&
-        header.darkMatterMass == opts.dmMass && header.gasMass == opts.sphMass &&
-        header.gamma == opts.gamma && header.softening == opts.hsoft &&
-        header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
-        header.omegaRadiation == opts.omegaR && header.omegaLambda == opts.omegaLam &&
-        header.unitLength == opts.codeToCm && header.unitTime == opts.codeToS &&
-        header.unitMass == opts.codeToG && header.particlesPerSpecies == opts.numberOfParticles &&
+    return header.version == (opts.sph ? kSphCheckpointVersion : kCheckpointVersion) &&
+        header.flags == checkpointFlags(opts) &&
+        header.reserved == (opts.sph ? kMonaghanSph : 0U) && header.darkMatterMass == opts.dmMass &&
+        header.gasMass == opts.sphMass && header.gamma == opts.gamma &&
+        header.softening == opts.hsoft && header.gravitationalMass == opts.gm &&
+        header.omegaMatter == opts.omegaM && header.omegaRadiation == opts.omegaR &&
+        header.omegaLambda == opts.omegaLam && header.unitLength == opts.codeToCm &&
+        header.unitTime == opts.codeToS && header.unitMass == opts.codeToG &&
+        header.particlesPerSpecies == opts.numberOfParticles &&
         header.nominalSteps == opts.numberOfSteps;
+}
+
+// Stored only for Monaghan SPH checkpoints; the dark-matter layout is unchanged.
+std::array<double, 13> sphCheckpointParameters(Options const& opts) {
+    return {opts.alpha0, opts.beta, opts.viscosityEpsilon, opts.sneighborNumber, opts.hmin,
+        opts.hmax, opts.cfl, opts.eta, opts.gy, opts.gcentral, opts.hcentral, opts.damping,
+        opts.gravity ? 1.0 : 0.0};
 }
 
 void writeDriverState(FILE* fp, DriverParameters const& params) {
     auto const header = checkpointHeader(getOptions());
-    if (fwrite(&header, sizeof(header), 1, fp) != 1 ||
-        fwrite(&params, sizeof(params), 1, fp) != 1) {
+    if (fwrite(&header, sizeof(header), 1, fp) != 1) {
+        THROW_ERROR("Unable to write checkpoint header\n");
+    }
+    if (getOptions().sph) {
+        auto const sphParameters = sphCheckpointParameters(getOptions());
+        if (fwrite(sphParameters.data(), sizeof(double), sphParameters.size(), fp) !=
+            sphParameters.size()) {
+            THROW_ERROR("Unable to write SPH checkpoint parameters\n");
+        }
+    }
+    if (fwrite(&params, sizeof(params), 1, fp) != 1) {
         THROW_ERROR("Unable to write checkpoint driver state\n");
     }
 }
@@ -1846,6 +1877,13 @@ DriverParameters readDriverState(FILE* fp) {
         if (!checkpointCompatible(header, getOptions())) {
             THROW_ERROR("Checkpoint physics, particle layout or integrator differs from the "
                         "requested run\n");
+        }
+        if (getOptions().sph) {
+            auto sphParameters = sphCheckpointParameters(getOptions());
+            FREAD(sphParameters.data(), sizeof(double), sphParameters.size(), fp);
+            if (sphParameters != sphCheckpointParameters(getOptions())) {
+                THROW_ERROR("SPH checkpoint parameters differ from the requested run\n");
+            }
         }
         FREAD(&params, sizeof(params), 1, fp);
     } else {
@@ -1912,6 +1950,16 @@ void checkpointStateTest() {
     ALWAYS_ASSERT(restored.energies.therm == kThermal && restored.energies.heating == kHeating);
     auto changed = getOptions();
     auto const header = detail::checkpointHeader(changed);
+    changed.outputUnits = "both";
+    changed.outputFrame = "lab";
+    ALWAYS_ASSERT(detail::checkpointCompatible(header, changed));
+    changed = getOptions();
+    if (changed.sph) {
+        auto oldFormulation = header;
+        oldFormulation.reserved = 0;
+        oldFormulation.version = 1;
+        ALWAYS_ASSERT(!detail::checkpointCompatible(oldFormulation, changed));
+    }
     changed.sph = !changed.sph;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
@@ -1920,6 +1968,16 @@ void checkpointStateTest() {
     changed = getOptions();
     changed.chem = !changed.chem;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
+    auto const sphParameters = detail::sphCheckpointParameters(getOptions());
+    changed = getOptions();
+    changed.alpha0 += 0.25;
+    ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
+    changed = getOptions();
+    changed.sneighborNumber += 1.0;
+    ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
+    changed = getOptions();
+    changed.hmax *= 2.0;
+    ALWAYS_ASSERT(sphParameters != detail::sphCheckpointParameters(changed));
     changed = getOptions();
     changed.numberOfSteps++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));

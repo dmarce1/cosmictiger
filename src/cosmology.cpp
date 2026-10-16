@@ -24,13 +24,14 @@
 #include <cosmictiger/flops.hpp>
 #include <cosmictiger/math.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/simulation_units.hpp>
 
 void cosmosUpdate0(double& adotdot, double& adot, double& a, double dt) {
     double const omegaM = getOptions().omegaM;
     double const omegaR = getOptions().omegaR;
     double const omegaLam = getOptions().omegaLam;
     double const omegaK = getOptions().omegaK;
-    auto const h = constants::kH0 * getOptions().codeToS * getOptions().hubble;
+    auto const h = units::normalizedHubble100(getOptions()) * getOptions().hubble;
     double const adot0 = adot;
 
     adotdot = a * sqr(h) * (-omegaR / (sqr(sqr(a))) - 0.5 * omegaM / (sqr(a) * a) + omegaLam);
@@ -86,7 +87,7 @@ double cosmosGrowthFactor(double omegaM, float a) {
 }
 
 double cosmosDadt(double a) {
-    auto const h = constants::kH0 * getOptions().codeToS * getOptions().hubble;
+    auto const h = units::normalizedHubble100(getOptions()) * getOptions().hubble;
     auto const omegaM = getOptions().omegaM;
     auto const omegaR = getOptions().omegaR;
     auto const omegaK = getOptions().omegaK;

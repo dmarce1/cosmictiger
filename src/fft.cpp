@@ -25,6 +25,7 @@
 #include <cosmictiger/fft.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/simulation_units.hpp>
 
 #define MAX_BOX_SIZE (8 * 1024 * 1024)
 
@@ -173,7 +174,8 @@ void fft3dInvExecute() {
 
 PowerSpectrumT fft3dPowerSpectrum() {
     Vector<float> kbins;
-    double const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    double const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     int const nfour = getOptions().nfour;
     double const ns = std::max(nfour / 8.0, 64.0);
     double const kmin = 0.999999;
@@ -244,7 +246,8 @@ static PowerSpectrumReturn powerSpectrumCompute(Vector<float> const& kbins) {
         futs.push_back(hpx::async<PowerSpectrumComputeAction>(c, kbins));
     }
     int64_t const n = getOptions().particlesPerDimension;
-    float const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    float const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const& box = cmplxMybox[ZDIM];
     Array<int64_t, NDIM> iValue;
 
@@ -313,7 +316,8 @@ static PowerSpectrumReturn powerSpectrumCompute2(
         futs.push_back(hpx::async<PowerSpectrumCompute2Action>(c, rc, kbins));
     }
     int64_t const n = getOptions().particlesPerDimension;
-    float const boxSize = getOptions().codeToCm / constants::kMpcToCm;
+    float const boxSize =
+        (units::scalesFromOptions(getOptions()).lengthScale() / units::kMegaparsec).value();
     auto const& box = cmplxMybox[ZDIM];
     Array<int64_t, NDIM> iValue;
 

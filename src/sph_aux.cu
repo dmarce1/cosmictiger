@@ -19,22 +19,6 @@
 
 #include <cosmictiger/sph_cuda.hpp>
 
-struct AuxRecord1 {
-    Fixed32 x;
-    Fixed32 y;
-    Fixed32 z;
-};
-
-struct AuxRecord2 {
-    float vx;
-    float vy;
-    float vz;
-};
-
-struct AuxWorkspace {
-    DeviceVector<AuxRecord1> rec1;
-    DeviceVector<AuxRecord2> rec2;
-    DeviceVector<int> neighbors;
-};
-
+// The Monaghan baseline has constant alpha/beta and no separate auxiliary stage.
+// Keep the entry point for the legacy dispatch interface.
 __global__ void sphCudaAux(SphRunParameters params, SphRunCudaData data, SphReduction* reduce) {}

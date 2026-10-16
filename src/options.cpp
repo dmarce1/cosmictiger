@@ -17,7 +17,10 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -36,20 +39,40 @@
 
 #define SHOW(label, opt) show(label, opts.opt)
 
+namespace detail {
+
+bool isFiniteOption(double value) {
+    // Keep option validation effective when the solver is built with -ffast-math.
+    constexpr std::uint64_t kExponentMask = UINT64_C(0x7ff0000000000000);
+    return (std::bit_cast<std::uint64_t>(value) & kExponentMask) != kExponentMask;
+}
+
+bool isFiniteFloatOption(double value) {
+    constexpr double kLargestFloat = std::numeric_limits<float>::max();
+    return isFiniteOption(value) && value >= -kLargestFloat && value <= kLargestFloat;
+}
+
+bool isPositiveFloatOption(double value) {
+    // Device fast math flushes subnormal floats, so require a positive normal.
+    return isFiniteFloatOption(value) && value >= std::numeric_limits<float>::min();
+}
+
+}    // namespace detail
+
 void show(char const* name, bool opt) {
-    PRINT("%-20s: %c\n", name, opt ? 'T' : 'F');
+    PRINT("%-34s: %c\n", name, opt ? 'T' : 'F');
 }
 
 void show(char const* name, int opt) {
-    PRINT("%-20s: %i\n", name, opt);
+    PRINT("%-34s: %i\n", name, opt);
 }
 
 void show(char const* name, double opt) {
-    PRINT("%-20s: %e\n", name, opt);
+    PRINT("%-34s: %e\n", name, opt);
 }
 
 void show(char const* name, std::string opt) {
-    PRINT("%-20s: %s\n", name, opt.c_str());
+    PRINT("%-34s: %s\n", name, opt.c_str());
 }
 
 Options globalOpts;
@@ -73,139 +96,181 @@ bool processOptions(int argc, char* argv[]) {
     Options opts{};
     namespace po = hpx::program_options;
     bool rc;
-    po::options_description commandOpts("options");
+    po::options_description runOpts("Run control");
+    runOpts.add_options()("help", "produce help message")("configuration",
+        po::value<std::string>(&opts.configFile)->default_value(""),
+        "INI configuration file; explicit command-line values take precedence")(
+        "run.test", po::value<std::string>(&opts.test)->default_value(""), "name of test to run")(
+        "run.maxIterations", po::value<int>(&opts.maxIter)->default_value(1000000),
+        "maximum number of time steps")("run.numberOfSteps",
+        po::value<int>(&opts.numberOfSteps)->default_value(64), "number of super time steps")(
+        "run.minRung", po::value<int>(&opts.minrung)->default_value(0), "minimum starting rung");
 
-    commandOpts.add_options()               //
-        ("help", "produce help message")    //
-        ("config_file", po::value<std::string>(&(opts.configFile))->default_value(""),
-            "configuration file")    //
-        ("lc_dir", po::value<std::string>(&(opts.lcDir))->default_value("./lightcone"),
-            "directory for lightcone output")    //
-        ("gadget4_restart", po::value<std::string>(&(opts.gadget4Restart))->default_value(""),
-            "file to read gadget4 file and output power spectrum")    //
-        ("read_check", po::value<int>(&(opts.readCheck))->default_value(-1),
-            "read checkpoint from checkpoint.hello and then move checkpoint.hello to "
-            "checkpoint.goodbye (default = false)")    //
-        ("use_glass", po::value<bool>(&(opts.useGlass))->default_value(false),
-            "Use glass file for IC")    //
-        ("create_glass", po::value<bool>(&(opts.createGlass))->default_value(false),
-            "Create glass file")    //
-        ("plummer", po::value<bool>(&(opts.plummer))->default_value(false),
-            "Do Plummer model")    //
-        ("plummerR", po::value<double>(&(opts.plummerR))->default_value(1.0e-2),
-            "Plummer radius")    //
-        ("close_pack", po::value<bool>(&(opts.closePack))->default_value(false),
-            "Use close packing for grid")    //
+    po::options_description computeOpts("Compute");
+    computeOpts.add_options()
 #ifdef USE_CUDA
-        ("cuda", po::value<bool>(&(opts.cuda))->default_value(true),
-            "use CUDA (default=true)")    //
+        ("compute.cuda", po::value<bool>(&opts.cuda)->default_value(true), "use CUDA")
 #else
-        ("cuda", po::value<bool>(&(opts.cuda))->default_value(false),
-            "use CUDA (not enabled for this build)")    //
+        ("compute.cuda", po::value<bool>(&opts.cuda)->default_value(false),
+            "use CUDA (not enabled for this build)")
 #endif
-        ("check_freq", po::value<int>(&(opts.checkFreq))->default_value(1000000000),
-            "time int seconds after startup to dump checkpoint \"checkpoint.hello\" and exit "
-            "(default=3600)")    //
-        ("max_iter", po::value<int>(&(opts.maxIter))->default_value(1000000),
-            "maximum number of time-steps (default=1000000)")    //
-        ("do_lc", po::value<bool>(&(opts.doLc))->default_value(false),
-            "do lightcone analysis (default=false)")    //
-        ("do_power", po::value<bool>(&(opts.doPower))->default_value(false),
-            "do mass power spectrum analysis (default=false)")    //
-        ("do_groups", po::value<bool>(&(opts.doGroups))->default_value(false),
-            "do group analysis (default=false)")    //
-        ("do_tracers", po::value<bool>(&(opts.doTracers))->default_value(false),
-            "output tracer_count number of tracer particles to SILO (default=false)")             //
-        ("bucket_size", po::value<int>(&(opts.bucketSize))->default_value(128), "bucket size")    //
-        ("minrung", po::value<int>(&(opts.minrung))->default_value(0),
-            "minimum starting rung")    //
-        ("tracer_count", po::value<int>(&(opts.tracerCount))->default_value(1000000),
-            "number of tracer particles (default=1000000)")    //
-        ("do_slice", po::value<bool>(&(opts.doSlice))->default_value(false),
-            "output a projection of a slice through the volume (default=false)")    //
-        ("do_views", po::value<bool>(&(opts.doViews))->default_value(false),
-            "output instantaneous healpix maps (default=false)")    //
-        ("use_power_file", po::value<bool>(&(opts.usePowerFile))->default_value(true),
-            "read initial power spectrum from power.init - must be evenly spaced in log k "
-            "(default=false)")    //
-        ("twolpt", po::value<bool>(&(opts.twolpt))->default_value(false),
-            "use 2LPT initial conditions (default = true)")    //
-        ("lc_b", po::value<double>(&(opts.lcB))->default_value(0.28),
-            "linking length for lightcone group finder")    //
-        ("lc_map_size", po::value<int>(&(opts.lcMapSize))->default_value(-1),
-            "Nside for lightcone HEALPix map")    //
-        ("view_size", po::value<int>(&(opts.viewSize))->default_value(1024),
-            "view healpix Nside")    //
-        ("slice_res", po::value<int>(&(opts.sliceRes))->default_value(4096),
-            "slice resolution")    //
-        ("parts_dim", po::value<int>(&(opts.particlesPerDimension))->default_value(128),
-            "nparts^(1/3)")    //
-        ("nsteps", po::value<int>(&(opts.numberOfSteps))->default_value(64),
-            "Number of super-timesteps")                                                   //
-        ("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift")    //
-        ("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift")       //
-        ("theta", po::value<double>(&(opts.theta))->default_value(0.8),
-            "opening angle for test problems")    //
-        ("hsoft", po::value<double>(&(opts.hsoft))->default_value(1.0 / 80.0),
-            "dark matter softening in units of interparticle spacing")    //
-        ("eta", po::value<double>(&(opts.eta))->default_value(0.25),
-            "time-step criterion (default=0.141)")    //
-        ("test", po::value<std::string>(&(opts.test))->default_value(""),
-            "name of test to run")                                                          //
-        ("omega_k", po::value<double>(&(opts.omegaK))->default_value(0.0), "")              //
-        ("omega_lam", po::value<double>(&(opts.omegaLam))->default_value(-1.0), "")         //
-        ("omega_b", po::value<double>(&(opts.omegaB))->default_value(0.049389), "")         //
-        ("omega_c", po::value<double>(&(opts.omegaC))->default_value(0.26503), "")          //
-        ("Neff", po::value<double>(&(opts.neff))->default_value(3.046), "")                 //
-        ("Theta", po::value<double>(&(opts.thetaCmb))->default_value(2.7255 / 2.73), "")    //
-        ("Y0", po::value<double>(&(opts.y0))->default_value(0.2454006), "")                 //
-        ("sigma8", po::value<double>(&(opts.sigma8))->default_value(0.8607), "")            //
-        ("hubble", po::value<double>(&(opts.hubble))->default_value(0.6732), "")            //
-        ("ns", po::value<double>(&(opts.ns))->default_value(0.96605), "spectral index")     //
-        ("code_to_g", po::value<double>(&(opts.codeToG))->default_value(1.e9 / .6732),
-            "mass resolution")    //
+            ("compute.bucketSize", po::value<int>(&opts.bucketSize)->default_value(128),
+                "tree leaf bucket size");
 
-        ("hydro.sph", po::value<bool>(&(opts.sph))->default_value(false),
-            "use Monaghan (1992) density/internal-energy SPH")    //
-        ("hydro.chem", po::value<bool>(&(opts.chem))->default_value(false),
-            "legacy chemistry (currently detached from SPH)")    //
-        ("hydro.conduction", po::value<bool>(&(opts.conduction))->default_value(false),
-            "legacy conduction (currently detached from SPH)")    //
-        ("hydro.gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity")    //
-        ("hydro.diffusion", po::value<bool>(&(opts.diffusion))->default_value(false),
-            "legacy diffusion (currently detached from SPH)")    //
-        ("hydro.yreflect", po::value<bool>(&(opts.yreflect))->default_value(false),
-            "Reflecting y for SPH only")    //
-        ("hydro.gy", po::value<double>(&(opts.gy))->default_value(0.0),
-            "gravitational acceleration in y direction (for SPH)")    //
-        ("hydro.alpha", po::value<double>(),
-            "constant linear artificial-viscosity coefficient (alias for hydro.alpha0)")    //
-        ("hydro.alpha0", po::value<double>(&(opts.alpha0))->default_value(1.0),
-            "constant linear artificial-viscosity coefficient alpha")    //
-        ("hydro.alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0),
-            "legacy viscosity-switch parameter; only its default is accepted with SPH")    //
-        ("hydro.alphaDecay", po::value<double>(&(opts.alphaDecay))->default_value(0.1),
-            "legacy viscosity-switch parameter; only its default is accepted with SPH")    //
-        ("hydro.beta", po::value<double>(&(opts.beta))->default_value(2.0),
-            "constant quadratic artificial-viscosity coefficient beta")    //
-        ("hydro.viscosityEpsilon", po::value<double>(&(opts.viscosityEpsilon))->default_value(0.01),
-            "viscosity denominator regularization eta^2/h_Monaghan^2")    //
-        ("hydro.gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0),
-            "ideal-gas adiabatic index")    //
-        ("hydro.gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0),
-            "magnitude of central force")    //
-        ("hydro.hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01),
-            "softening length for central force")    //
-        ("hydro.viscType", po::value<int>(&(opts.viscType))->default_value(2),
-            "artificial-viscosity type; Monaghan SPH supports only 2 (constant)")    //
-        ("hydro.hmin", po::value<double>(&(opts.hmin))->default_value(1.0e-6),
-            "minimum kernel support radius (2 h_Monaghan), in interparticle spacings")    //
-        ("hydro.hmax", po::value<double>(&(opts.hmax))->default_value(1000.0),
-            "maximum kernel support radius (2 h_Monaghan), in interparticle spacings")    //
-        ("hydro.sneighborNumber", po::value<double>(&(opts.sneighborNumber))->default_value(60),
-            "kernel-weighted neighbor target within the support sphere, including self")    //
-        ("hydro.cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition")    //
-        ;
+    po::options_description checkpointOpts("Checkpoints");
+    checkpointOpts.add_options()("checkpoint.readIndex",
+        po::value<int>(&opts.readCheck)->default_value(-1),
+        "checkpoint index to restart; -1 starts a new run")("checkpoint.intervalSeconds",
+        po::value<int>(&opts.checkFreq)->default_value(1000000000),
+        "elapsed wall time between checkpoints, in seconds");
+
+    po::options_description initialOpts("Initial conditions");
+    initialOpts.add_options()("initial.gadget4Restart",
+        po::value<std::string>(&opts.gadget4Restart)->default_value(""),
+        "Gadget4 input file for power-spectrum analysis")("initial.useGlass",
+        po::value<bool>(&opts.useGlass)->default_value(false),
+        "initialize from a glass file")("initial.createGlass",
+        po::value<bool>(&opts.createGlass)->default_value(false), "create a glass file")(
+        "initial.plummer", po::value<bool>(&opts.plummer)->default_value(false),
+        "initialize the dark-matter Plummer model")("initial.plummerRadius",
+        po::value<double>(&opts.plummerR)->default_value(1.0e-2), "Plummer radius")(
+        "initial.closePack", po::value<bool>(&opts.closePack)->default_value(false),
+        "use a close-packed particle lattice")("initial.usePowerFile",
+        po::value<bool>(&opts.usePowerFile)->default_value(true),
+        "read power.init, evenly spaced in log wave number")("initial.twoLpt",
+        po::value<bool>(&opts.twolpt)->default_value(false),
+        "use second-order Lagrangian initial conditions")("initial.particlesPerDimension",
+        po::value<int>(&opts.particlesPerDimension)->default_value(128),
+        "particle lattice size along each dimension, per species");
+
+    po::options_description outputOpts("Particle output");
+    outputOpts.add_options()("output.silo", po::value<bool>(&opts.outputSilo)->default_value(false),
+        "write particle Silo files for the configured box")("output.siloInterval",
+        po::value<int>(&opts.outputSiloInterval)->default_value(1),
+        "number of synchronized coarse steps between particle Silo snapshots")("output.directory",
+        po::value<std::string>(&opts.outputDirectory)->default_value("./output"),
+        "directory for particle Silo files; relative paths start at the working directory")(
+        "output.units", po::value<std::string>(&opts.outputUnits)->default_value("code"),
+        "particle Silo units: code, cgs, cosmological, or both (cgs and cosmological)")(
+        "output.frame", po::value<std::string>(&opts.outputFrame)->default_value("comoving"),
+        "particle Silo frame: comoving, lab, or both; converted velocities are peculiar")(
+        "output.xMin", po::value<double>(&opts.outputXMin)->default_value(0.0),
+        "minimum x coordinate of the Silo box, in [0, 1]")("output.xMax",
+        po::value<double>(&opts.outputXMax)->default_value(1.0),
+        "maximum x coordinate of the Silo box, in [0, 1]")("output.yMin",
+        po::value<double>(&opts.outputYMin)->default_value(0.0),
+        "minimum y coordinate of the Silo box, in [0, 1]")("output.yMax",
+        po::value<double>(&opts.outputYMax)->default_value(1.0),
+        "maximum y coordinate of the Silo box, in [0, 1]")("output.zMin",
+        po::value<double>(&opts.outputZMin)->default_value(0.0),
+        "minimum z coordinate of the Silo box, in [0, 1]")("output.zMax",
+        po::value<double>(&opts.outputZMax)->default_value(1.0),
+        "maximum z coordinate of the Silo box, in [0, 1]");
+
+    po::options_description analysisOpts("Analysis");
+    analysisOpts.add_options()("analysis.power",
+        po::value<bool>(&opts.doPower)->default_value(false),
+        "compute the mass power spectrum")("analysis.groups",
+        po::value<bool>(&opts.doGroups)->default_value(false), "find particle groups")(
+        "analysis.tracers", po::value<bool>(&opts.doTracers)->default_value(false),
+        "write tracer particles to Silo")("analysis.tracerCount",
+        po::value<int>(&opts.tracerCount)->default_value(1000000), "number of tracer particles")(
+        "analysis.slice", po::value<bool>(&opts.doSlice)->default_value(false),
+        "write a projected slice through the volume")("analysis.views",
+        po::value<bool>(&opts.doViews)->default_value(false), "write instantaneous HEALPix maps")(
+        "analysis.viewSize", po::value<int>(&opts.viewSize)->default_value(1024),
+        "view HEALPix Nside")("analysis.sliceResolution",
+        po::value<int>(&opts.sliceRes)->default_value(4096), "slice resolution");
+
+    po::options_description lightconeOpts("Lightcone analysis");
+    lightconeOpts.add_options()("lightcone.enabled",
+        po::value<bool>(&opts.doLc)->default_value(false), "enable lightcone analysis")(
+        "lightcone.directory", po::value<std::string>(&opts.lcDir)->default_value("./lightcone"),
+        "directory for lightcone output")("lightcone.linkingLength",
+        po::value<double>(&opts.lcB)->default_value(0.28), "lightcone group-finder linking length")(
+        "lightcone.mapSize", po::value<int>(&opts.lcMapSize)->default_value(-1),
+        "lightcone HEALPix Nside; -1 chooses automatically");
+
+    po::options_description gravityOpts("Gravity");
+    gravityOpts.add_options()(
+        "gravity.enabled", po::value<bool>(&opts.gravity)->default_value(true), "enable gravity")(
+        "gravity.openingAngle", po::value<double>(&opts.theta)->default_value(0.8),
+        "opening angle for test problems")("gravity.softening",
+        po::value<double>(&opts.hsoft)->default_value(1.0 / 80.0),
+        "dark-matter softening in interparticle spacings")("gravity.timestepEta",
+        po::value<double>(&opts.eta)->default_value(0.25), "gravity time-step criterion");
+
+    po::options_description cosmologyOpts("Cosmology");
+    cosmologyOpts.add_options()("cosmology.startRedshift",
+        po::value<double>(&opts.z0)->default_value(49.0), "starting redshift")(
+        "cosmology.endRedshift", po::value<double>(&opts.z1)->default_value(0.0),
+        "ending redshift")("cosmology.omegaK", po::value<double>(&opts.omegaK)->default_value(0.0),
+        "curvature density parameter; recomputed from the density budget")("cosmology.omegaLambda",
+        po::value<double>(&opts.omegaLam)->default_value(-1.0),
+        "dark-energy density parameter; negative chooses a flat universe")("cosmology.omegaB",
+        po::value<double>(&opts.omegaB)->default_value(0.049389), "baryon density parameter")(
+        "cosmology.omegaC", po::value<double>(&opts.omegaC)->default_value(0.26503),
+        "cold-dark-matter density parameter")("cosmology.nEff",
+        po::value<double>(&opts.neff)->default_value(3.046),
+        "effective number of neutrino species")("cosmology.thetaCmb",
+        po::value<double>(&opts.thetaCmb)->default_value(2.7255 / 2.73),
+        "CMB temperature divided by 2.73 K")("cosmology.heliumFraction",
+        po::value<double>(&opts.y0)->default_value(0.2454006),
+        "primordial helium mass fraction")("cosmology.sigma8",
+        po::value<double>(&opts.sigma8)->default_value(0.8607), "power-spectrum normalization")(
+        "cosmology.hubble", po::value<double>(&opts.hubble)->default_value(0.6732),
+        "dimensionless Hubble parameter")("cosmology.spectralIndex",
+        po::value<double>(&opts.ns)->default_value(0.96605), "primordial spectral index");
+
+    po::options_description unitsOpts("Units");
+    unitsOpts.add_options()("units.massSolar",
+        po::value<double>(&opts.codeToG)->default_value(1.e9 / .6732),
+        "particle mass unit in solar masses");
+
+    po::options_description hydroOpts("Monaghan (1992) SPH");
+    hydroOpts.add_options()("hydro.enabled", po::value<bool>(&opts.sph)->default_value(false),
+        "use density/internal-energy SPH")("hydro.chemistry",
+        po::value<bool>(&opts.chem)->default_value(false),
+        "legacy chemistry; true is unsupported in the Monaghan SPH baseline")("hydro.conduction",
+        po::value<bool>(&opts.conduction)->default_value(false),
+        "legacy conduction; true is unsupported in the Monaghan SPH baseline")("hydro.diffusion",
+        po::value<bool>(&opts.diffusion)->default_value(false),
+        "legacy diffusion; true is unsupported in the Monaghan SPH baseline")("hydro.yReflect",
+        po::value<bool>(&opts.yreflect)->default_value(false),
+        "legacy reflecting y boundary; true is currently unsupported")("hydro.yAcceleration",
+        po::value<double>(&opts.gy)->default_value(0.0),
+        "uniform gravitational acceleration in the y direction")("hydro.viscosityAlpha",
+        po::value<double>(&opts.alpha0)->default_value(1.0),
+        "constant linear artificial-viscosity coefficient alpha")("hydro.viscosityBeta",
+        po::value<double>(&opts.beta)->default_value(2.0),
+        "constant quadratic artificial-viscosity coefficient beta")("hydro.viscosityEpsilon",
+        po::value<double>(&opts.viscosityEpsilon)->default_value(0.01),
+        "viscosity denominator regularization eta^2 / h_Monaghan^2")("hydro.gamma",
+        po::value<double>(&opts.gamma)->default_value(5.0 / 3.0),
+        "ideal-gas adiabatic index")("hydro.centralAcceleration",
+        po::value<double>(&opts.gcentral)->default_value(0.0), "magnitude of the central force")(
+        "hydro.centralSoftening", po::value<double>(&opts.hcentral)->default_value(0.01),
+        "softening length for the central force")("hydro.minSupportRadius",
+        po::value<double>(&opts.hmin)->default_value(1.0e-6),
+        "minimum kernel support radius (2 h_Monaghan), in interparticle spacings")(
+        "hydro.maxSupportRadius", po::value<double>(&opts.hmax)->default_value(1000.0),
+        "maximum kernel support radius in interparticle spacings; capped at half the box")(
+        "hydro.neighborNumber", po::value<double>(&opts.sneighborNumber)->default_value(60),
+        "kernel-weighted neighbor target within the support sphere, including self")(
+        "hydro.cfl", po::value<double>(&opts.cfl)->default_value(0.25), "Courant time-step factor");
+
+    po::options_description commandOpts("CosmicTiger options");
+    commandOpts.add(runOpts)
+        .add(computeOpts)
+        .add(checkpointOpts)
+        .add(initialOpts)
+        .add(outputOpts)
+        .add(analysisOpts)
+        .add(lightconeOpts)
+        .add(gravityOpts)
+        .add(cosmologyOpts)
+        .add(unitsOpts)
+        .add(hydroOpts);
     PRINT("Processing options\n");
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
@@ -215,13 +280,12 @@ bool processOptions(int argc, char* argv[]) {
         rc = false;
     } else {
         if (!opts.configFile.empty()) {
-            std::ifstream cfgFs{vm["config_file"].as<std::string>()};
+            std::ifstream cfgFs{opts.configFile};
             if (cfgFs) {
                 po::store(po::parse_config_file(cfgFs, commandOpts), vm);
                 rc = true;
             } else {
-                PRINT("Configuration file %s not found!\n", opts.configFile.c_str());
-                return false;
+                THROW_ERROR("Cannot open configuration file %s\n", opts.configFile.c_str());
             }
         } else {
             rc = true;
@@ -234,9 +298,108 @@ bool processOptions(int argc, char* argv[]) {
     if (!rc) {
         return false;
     }
-    if (opts.doTracers && opts.tracerCount <= 0) {
-        THROW_ERROR("tracer_count must be positive when do_tracers is enabled\n");
+    if (opts.outputSiloInterval <= 0) {
+        THROW_ERROR("output.siloInterval must be positive\n");
     }
+    if (opts.outputDirectory.empty()) {
+        THROW_ERROR("output.directory must not be empty\n");
+    }
+    if (opts.outputUnits != "code" && opts.outputUnits != "cgs" &&
+        opts.outputUnits != "cosmological" && opts.outputUnits != "both") {
+        THROW_ERROR("output.units must be code, cgs, cosmological, or both\n");
+    }
+    if (opts.outputFrame != "comoving" && opts.outputFrame != "lab" && opts.outputFrame != "both") {
+        THROW_ERROR("output.frame must be comoving, lab, or both\n");
+    }
+    if (opts.outputUnits == "code" && opts.outputFrame != "comoving") {
+        THROW_ERROR("output.units=code requires output.frame=comoving because native fields "
+                    "retain their evolution normalization; choose output.units=cgs, "
+                    "cosmological, or both for lab-frame output\n");
+    }
+    double const outputMin[] = {opts.outputXMin, opts.outputYMin, opts.outputZMin};
+    double const outputMax[] = {opts.outputXMax, opts.outputYMax, opts.outputZMax};
+    char const* const outputAxes[] = {"x", "y", "z"};
+    for (int dim = 0; dim < NDIM; dim++) {
+        if (!detail::isFiniteOption(outputMin[dim]) || !detail::isFiniteOption(outputMax[dim]) ||
+            outputMin[dim] < 0.0 || outputMax[dim] > 1.0 || outputMin[dim] >= outputMax[dim]) {
+            THROW_ERROR("output.%sMin and output.%sMax must be finite and satisfy "
+                        "0 <= min < max <= 1\n",
+                outputAxes[dim], outputAxes[dim]);
+        }
+    }
+    if (opts.doTracers && opts.tracerCount <= 0) {
+        THROW_ERROR("analysis.tracerCount must be positive when analysis.tracers is enabled\n");
+    }
+    if (opts.particlesPerDimension <= 0) {
+        THROW_ERROR("initial.particlesPerDimension must be positive\n");
+    }
+    if (opts.numberOfSteps <= 0) {
+        THROW_ERROR("run.numberOfSteps must be positive\n");
+    }
+    if (opts.bucketSize <= 0) {
+        THROW_ERROR("compute.bucketSize must be positive\n");
+    }
+    if (opts.chem || opts.conduction || opts.diffusion) {
+        THROW_ERROR("hydro.chemistry, hydro.conduction and hydro.diffusion are detached from SPH; "
+                    "leave them false\n");
+    }
+    if (opts.yreflect) {
+        THROW_ERROR("hydro.yReflect=true is unsupported in the Monaghan SPH baseline\n");
+    }
+    if (!detail::isFiniteOption(opts.gy) || !detail::isFiniteOption(opts.gcentral) ||
+        !detail::isFiniteOption(opts.hcentral) || opts.hcentral <= 0.0) {
+        THROW_ERROR("hydro.yAcceleration and hydro.centralAcceleration must be finite; "
+                    "hydro.centralSoftening must be finite and positive\n");
+    }
+    if (!detail::isFiniteOption(opts.alpha0) || opts.alpha0 < 0.0 ||
+        !detail::isFiniteOption(opts.beta) || opts.beta < 0.0 ||
+        !detail::isFiniteOption(opts.viscosityEpsilon) || opts.viscosityEpsilon <= 0.0) {
+        THROW_ERROR("hydro.viscosityAlpha and hydro.viscosityBeta must be finite and nonnegative; "
+                    "hydro.viscosityEpsilon must be finite and positive\n");
+    }
+    if (!detail::isFiniteOption(opts.gamma) || opts.gamma <= 1.0) {
+        THROW_ERROR("hydro.gamma must be finite and greater than one\n");
+    }
+    if (!detail::isFiniteOption(opts.cfl) || opts.cfl <= 0.0 || opts.cfl > 1.0) {
+        THROW_ERROR("hydro.cfl must be finite and in (0, 1]\n");
+    }
+    if (!detail::isFiniteOption(opts.sneighborNumber) || opts.sneighborNumber <= 32.0 / 3.0) {
+        THROW_ERROR(
+            "hydro.neighborNumber must be finite and greater than 32/3 (the self-kernel floor)\n");
+    }
+    if (!detail::isFiniteOption(opts.hmin) || !detail::isFiniteOption(opts.hmax) ||
+        opts.hmin <= 0.0 || opts.hmax < opts.hmin) {
+        THROW_ERROR(
+            "hydro support radii must be finite with 0 < minSupportRadius <= maxSupportRadius\n");
+    }
+    if (!detail::isFiniteFloatOption(opts.alpha0) || !detail::isFiniteFloatOption(opts.beta) ||
+        !detail::isPositiveFloatOption(opts.viscosityEpsilon)) {
+        THROW_ERROR("hydro.viscosityAlpha, hydro.viscosityBeta and hydro.viscosityEpsilon must "
+                    "be representable in single precision, with positive viscosityEpsilon\n");
+    }
+    if (!detail::isFiniteFloatOption(opts.gamma) || static_cast<float>(opts.gamma) <= 1.0f) {
+        THROW_ERROR("hydro.gamma must remain finite and greater than one in single precision\n");
+    }
+    if (!detail::isPositiveFloatOption(opts.cfl)) {
+        THROW_ERROR("hydro.cfl must remain finite and positive in single precision\n");
+    }
+    if (!detail::isFiniteFloatOption(opts.sneighborNumber) ||
+        static_cast<float>(opts.sneighborNumber) <= static_cast<float>(32.0 / 3.0)) {
+        THROW_ERROR("hydro.neighborNumber must remain finite and above 32/3 in single precision\n");
+    }
+    if (!detail::isFiniteFloatOption(opts.gy) || !detail::isFiniteFloatOption(opts.gcentral) ||
+        !detail::isPositiveFloatOption(opts.hcentral)) {
+        THROW_ERROR("hydro.yAcceleration, hydro.centralAcceleration and hydro.centralSoftening "
+                    "must be representable in single precision, with positive centralSoftening\n");
+    }
+    if (!detail::isPositiveFloatOption(opts.hmin / opts.particlesPerDimension) ||
+        !detail::isPositiveFloatOption(std::min(opts.hmax / opts.particlesPerDimension, 0.5))) {
+        THROW_ERROR("hydro support radii must remain finite and positive in single precision "
+                    "after normalization by initial.particlesPerDimension\n");
+    }
+    opts.alpha1 = opts.alpha0;
+    opts.alphaDecay = 0.1;
+    opts.viscType = 2;
     opts.glass = 0;
     opts.stars = false;
     opts.vsoft = false;
@@ -245,7 +408,11 @@ bool processOptions(int argc, char* argv[]) {
     opts.sigma8C = opts.sigma8;
     opts.sphBucketSize = opts.bucketSize;
     opts.hmin /= opts.particlesPerDimension;
-    opts.hmax /= opts.particlesPerDimension;
+    opts.hmax = std::min(opts.hmax / opts.particlesPerDimension, 0.5);
+    if (opts.hmin > 0.5) {
+        THROW_ERROR("hydro.minSupportRadius cannot exceed half the periodic box after "
+                    "normalization by initial.particlesPerDimension\n");
+    }
     bool const hydroTest = opts.test == "sphGravity" || opts.test == "sod" ||
         opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" ||
         opts.test == "disc" || opts.test == "star" || opts.test == "plummer";
@@ -270,13 +437,17 @@ bool processOptions(int argc, char* argv[]) {
                 "The lightcone and halo finders require equal-mass dark matter particles\n");
         }
         if (opts.stars && !opts.chem) {
-            THROW_ERROR("Star formation requires hydro.chem=true\n");
+            THROW_ERROR("Star formation requires hydro.chemistry=true\n");
         }
     } else {
         opts.chem = opts.stars = opts.conduction = opts.diffusion = false;
     }
     opts.hsoft *= selfPhi();
     opts.eta /= sqrt(selfPhi());
+    if (!detail::isPositiveFloatOption(opts.eta)) {
+        THROW_ERROR("gravity.timestepEta must remain finite and positive in single precision "
+                    "after normalization\n");
+    }
     opts.numberOfParticles = sqr(opts.particlesPerDimension) * opts.particlesPerDimension;
     opts.nfour = opts.particlesPerDimension;
     if (opts.closePack) {
@@ -309,7 +480,9 @@ bool processOptions(int argc, char* argv[]) {
     while (nside < nside1 / 2.0) {
         nside *= 2;
     }
-    opts.lcMapSize = nside;
+    if (opts.lcMapSize < 0) {
+        opts.lcMapSize = nside;
+    }
     PRINT("lc map size = %e\n", nside1);
 
     double omegaR = 32.0 * M_PI / 3.0 * constants::kG * constants::kSigma *
@@ -333,17 +506,29 @@ bool processOptions(int argc, char* argv[]) {
         opts.hubble = 1.0;
     }
     if (opts.particlesPerDimension % 2 == 1) {
-        THROW_ERROR("parts_dim must be an even number\n");
+        THROW_ERROR("initial.particlesPerDimension must be an even number\n");
     }
     opts.hsoft *= pow(opts.numberOfParticles, -1.0 / NDIM);
     if (opts.plummer) {
         opts.hsoft = selfPhi() *
             pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.numberOfParticles, 1.0 / 3.0);
     }
-    SHOW("sph", sph);
-    SHOW("htime", htime);
-    SHOW("chem", chem);
-    SHOW("stars", stars);
+    if (opts.gravity && !detail::isPositiveFloatOption(opts.hsoft)) {
+        THROW_ERROR("gravity.softening must remain finite and positive in single precision "
+                    "after normalization when gravity.enabled is true\n");
+    }
+    SHOW("hydro.enabled", sph);
+    SHOW("run.hierarchicalGravity", htime);
+    SHOW("hydro.chemistry", chem);
+    SHOW("hydro.stars", stars);
+    SHOW("hydro.viscosityAlpha", alpha0);
+    SHOW("hydro.viscosityBeta", beta);
+    SHOW("hydro.viscosityEpsilon", viscosityEpsilon);
+    SHOW("hydro.gamma", gamma);
+    SHOW("hydro.neighborNumber", sneighborNumber);
+    show("hydro.minSupportRadius", opts.hmin * opts.particlesPerDimension);
+    show("hydro.maxSupportRadius", opts.hmax * opts.particlesPerDimension);
+    SHOW("hydro.cfl", cfl);
     PRINT("Simulation Options\n");
     PRINT("code_to_M_solar = %e\n", opts.codeToG / 1.98e33);
     PRINT("Box size = %e cm/h\n", opts.codeToCm / constants::kMpcToCm * opts.hubble);
@@ -355,61 +540,72 @@ bool processOptions(int argc, char* argv[]) {
     opts.doGroups = true;
 #endif
 
-    SHOW("check_freq", checkFreq);
-    SHOW("code_to_cm", codeToCm);
-    SHOW("code_to_g", codeToG);
-    SHOW("code_to_s", codeToS);
-    SHOW("cuda", cuda);
-    SHOW("do_lc", doLc);
-    SHOW("do_groups", doGroups);
-    SHOW("do_power", doPower);
-    SHOW("do_slice", doSlice);
-    SHOW("do_tracers", doTracers);
-    SHOW("do_views", doViews);
-    SHOW("eta", eta);
-    SHOW("GM", gm);
-    SHOW("hsoft", hsoft);
-    SHOW("hubble", hubble);
-    SHOW("lc_b", lcB);
-    SHOW("lc_min_group", lcMinGroup);
-    SHOW("lc_map_size", lcMapSize);
-    SHOW("link_len", linkingLength);
-    SHOW("max_iter", maxIter);
-    SHOW("min_group", minGroup);
-    SHOW("omega_b", omegaB);
-    SHOW("omega_c", omegaC);
-    SHOW("omega_gam", omegaGam);
-    SHOW("omega_m", omegaM);
-    SHOW("omega_nu", omegaNu);
-    SHOW("omega_r", omegaR);
-    SHOW("part_cache_line_size", particleCacheLineSize);
-    SHOW("parts_dim", particlesPerDimension);
-    SHOW("read_check", readCheck);
-    SHOW("save_force", saveForce);
-    SHOW("sigma8", sigma8);
-    SHOW("slice_res", sliceRes);
-    SHOW("slice_size", sliceSize);
-    SHOW("Theta", thetaCmb);
-    SHOW("theta", theta);
-    SHOW("tracer_count", tracerCount);
-    SHOW("tree_cache_line_size", treeCacheLineSize);
-    SHOW("twolpt", twolpt);
-    SHOW("use_power_file", usePowerFile);
-    SHOW("view_size", viewSize);
-    SHOW("z0", z0);
-    SHOW("z1", z1);
+    SHOW("checkpoint.intervalSeconds", checkFreq);
+    SHOW("units.lengthCm", codeToCm);
+    SHOW("units.massG", codeToG);
+    SHOW("units.timeSeconds", codeToS);
+    SHOW("compute.cuda", cuda);
+    SHOW("lightcone.enabled", doLc);
+    SHOW("analysis.groups", doGroups);
+    SHOW("analysis.power", doPower);
+    SHOW("analysis.slice", doSlice);
+    SHOW("analysis.tracers", doTracers);
+    SHOW("analysis.views", doViews);
+    SHOW("output.silo", outputSilo);
+    SHOW("output.siloInterval", outputSiloInterval);
+    SHOW("output.directory", outputDirectory);
+    SHOW("output.units", outputUnits);
+    SHOW("output.frame", outputFrame);
+    SHOW("output.xMin", outputXMin);
+    SHOW("output.xMax", outputXMax);
+    SHOW("output.yMin", outputYMin);
+    SHOW("output.yMax", outputYMax);
+    SHOW("output.zMin", outputZMin);
+    SHOW("output.zMax", outputZMax);
+    SHOW("gravity.timestepEta", eta);
+    SHOW("gravity.gm", gm);
+    SHOW("gravity.softening", hsoft);
+    SHOW("cosmology.hubble", hubble);
+    SHOW("lightcone.linkingLength", lcB);
+    SHOW("lightcone.minGroupSize", lcMinGroup);
+    SHOW("lightcone.mapSize", lcMapSize);
+    SHOW("analysis.linkingLength", linkingLength);
+    SHOW("run.maxIterations", maxIter);
+    SHOW("analysis.minGroupSize", minGroup);
+    SHOW("cosmology.omegaB", omegaB);
+    SHOW("cosmology.omegaC", omegaC);
+    SHOW("cosmology.omegaGamma", omegaGam);
+    SHOW("cosmology.omegaM", omegaM);
+    SHOW("cosmology.omegaNu", omegaNu);
+    SHOW("cosmology.omegaR", omegaR);
+    SHOW("compute.particleCacheLineSize", particleCacheLineSize);
+    SHOW("initial.particlesPerDimension", particlesPerDimension);
+    SHOW("checkpoint.readIndex", readCheck);
+    SHOW("analysis.saveForce", saveForce);
+    SHOW("cosmology.sigma8", sigma8);
+    SHOW("analysis.sliceResolution", sliceRes);
+    SHOW("analysis.sliceSize", sliceSize);
+    SHOW("cosmology.thetaCmb", thetaCmb);
+    SHOW("gravity.openingAngle", theta);
+    SHOW("analysis.tracerCount", tracerCount);
+    SHOW("compute.treeCacheLineSize", treeCacheLineSize);
+    SHOW("initial.twoLpt", twolpt);
+    SHOW("initial.usePowerFile", usePowerFile);
+    SHOW("analysis.viewSize", viewSize);
+    SHOW("cosmology.startRedshift", z0);
+    SHOW("cosmology.endRedshift", z1);
 
-    SHOW("ns", ns);
-    SHOW("Y0", y0);
-    SHOW("Neff", neff);
-    SHOW("config_file", configFile);
-    SHOW("test", test);
+    SHOW("cosmology.spectralIndex", ns);
+    SHOW("cosmology.heliumFraction", y0);
+    SHOW("cosmology.nEff", neff);
+    SHOW("configuration", configFile);
+    SHOW("run.test", test);
 #ifndef USE_CUDA
     if (opts.cuda) {
         THROW_ERROR("This executable was compiled without CUDA support\n");
     }
 #endif
     setOptions(opts);
-    viewReadViewFile();
+    viewConfigure();
     return rc;
 }
