@@ -19,216 +19,230 @@
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/gravity.hpp>
-#include <cosmictiger/particles.hpp>
 #include <cosmictiger/options.hpp>
+#include <cosmictiger/particles.hpp>
 
-__global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
-		double* rphi, double* rgx, double* rgy, double*rgz, float hsoft);
+__global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* sinkz,
+    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int nsource, double* rphi, double* rgx,
+    double* rgy, double* rgz, float hsoft);
 
 #define ANALYTIC_BLOCK_SIZE 256
 
-std::pair<vector<double>, array<vector<double>, NDIM>> gravity_analytic_call_kernel(const vector<fixed32>& sinkx, const vector<fixed32>& sinky,
-		const vector<fixed32>& sinkz) {
-	cuda_set_device();
-	std::pair<vector<double>, array<vector<double>, NDIM>> rc;
-	fixed32* dev_sinkx;
-	fixed32* dev_sinky;
-	fixed32* dev_sinkz;
-	fixed32* dev_srcx;
-	fixed32* dev_srcy;
-	fixed32* dev_srcz;
-	double* dev_phi;
-	double* dev_gx;
-	double* dev_gy;
-	double* dev_gz;
-	const int Nsinks = sinkx.size();
-	(CUDA_MALLOC(&dev_sinkx, Nsinks * sizeof(fixed32)));
-	(CUDA_MALLOC(&dev_sinky, Nsinks * sizeof(fixed32)));
-	(CUDA_MALLOC(&dev_sinkz, Nsinks * sizeof(fixed32)));
-	(CUDA_MALLOC(&dev_phi, Nsinks * sizeof(double)));
-	(CUDA_MALLOC(&dev_gx, Nsinks * sizeof(double)));
-	(CUDA_MALLOC(&dev_gy, Nsinks * sizeof(double)));
-	(CUDA_MALLOC(&dev_gz, Nsinks * sizeof(double)));
-	vector<double> zero(Nsinks, 0.0);
-	if (hpx_rank() == 0) {
-		vector<double> self_phi1(Nsinks, self_phi() / get_options().hsoft);
-		CUDA_CHECK(cudaMemcpy(dev_phi, self_phi1.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
-	} else {
-		CUDA_CHECK(cudaMemcpy(dev_phi, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
-	}
-	CUDA_CHECK(cudaMemcpy(dev_gx, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_gy, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_gz, zero.data(), Nsinks * sizeof(double), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_sinkx, sinkx.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_sinky, sinky.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(dev_sinkz, sinkz.data(), Nsinks * sizeof(fixed32), cudaMemcpyHostToDevice));
-	PRINT("%li free\n", cuda_free_mem());
-	const size_t parts_per_loop = (size_t) cuda_free_mem() / (NDIM * sizeof(fixed32)) * 85 / 100;
-	int occupancy;
-	CUDA_CHECK(
-			cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analytic_gravity_kernel, ANALYTIC_BLOCK_SIZE,
-					sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
-	int num_kernels = std::max((int) (occupancy * cuda_smp_count() / Nsinks), 1);
-	vector<cudaStream_t> streams(num_kernels);
-	for (int i = 0; i < num_kernels; i++) {
-		cudaStreamCreate(&streams[i]);
-	}
-	PRINT("%li particles per loop, %li kernels\n", parts_per_loop, num_kernels);
-	for (size_t i = 0; i < particles_size(); i += parts_per_loop) {
-		const int total_size = std::min(size_t(particles_size()), size_t(i) + size_t(parts_per_loop)) - size_t(i);
-		(CUDA_MALLOC(&dev_srcx, total_size * sizeof(fixed32)));
-		(CUDA_MALLOC(&dev_srcy, total_size * sizeof(fixed32)));
-		(CUDA_MALLOC(&dev_srcz, total_size * sizeof(fixed32)));
-		CUDA_CHECK(cudaMemcpy(dev_srcx, &particles_pos(0, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpy(dev_srcy, &particles_pos(1, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
-		CUDA_CHECK(cudaMemcpy(dev_srcz, &particles_pos(2, i), total_size * sizeof(fixed32), cudaMemcpyHostToDevice));
-		for (int j = 0; j < num_kernels; j++) {
-			const int begin = size_t(j) * size_t(total_size) / size_t(num_kernels);
-			const int end = size_t(j + 1) * size_t(total_size) / size_t(num_kernels);
-			analytic_gravity_kernel<<<Nsinks,ANALYTIC_BLOCK_SIZE,0,streams[i]>>>(dev_sinkx, dev_sinky, dev_sinkz, dev_srcx + begin, dev_srcy + begin,
-					dev_srcz + begin, end - begin, dev_phi, dev_gx, dev_gy, dev_gz, get_options().hsoft);
-		}
-		for (int i = 0; i < num_kernels; i++) {
-			cuda_stream_synchronize(streams[i]);
-		}
-		CUDA_CHECK(cudaFree(dev_srcx));
-		CUDA_CHECK(cudaFree(dev_srcy));
-		CUDA_CHECK(cudaFree(dev_srcz));
-	}
-	for (int i = 0; i < num_kernels; i++) {
-		cudaStreamDestroy(streams[i]);
-	}
-	rc.first.resize(Nsinks);
-	for (int dim = 0; dim < NDIM; dim++) {
-		rc.second[dim].resize(Nsinks);
-	}
-	CUDA_CHECK(cudaMemcpy(rc.first.data(), dev_phi, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(rc.second[XDIM].data(), dev_gx, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(rc.second[YDIM].data(), dev_gy, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(rc.second[ZDIM].data(), dev_gz, sizeof(double) * Nsinks, cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaFree(dev_phi));
-	CUDA_CHECK(cudaFree(dev_gx));
-	CUDA_CHECK(cudaFree(dev_gy));
-	CUDA_CHECK(cudaFree(dev_gz));
-	CUDA_CHECK(cudaFree(dev_sinkx));
-	CUDA_CHECK(cudaFree(dev_sinky));
-	CUDA_CHECK(cudaFree(dev_sinkz));
-	return rc;
+std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel(
+    Vector<Fixed32> const& sinkx, Vector<Fixed32> const& sinky, Vector<Fixed32> const& sinkz) {
+    cudaSetDevice();
+    std::pair<Vector<double>, Array<Vector<double>, NDIM>> rc;
+    Fixed32* devSinkx;
+    Fixed32* devSinky;
+    Fixed32* devSinkz;
+    Fixed32* devSrcx;
+    Fixed32* devSrcy;
+    Fixed32* devSrcz;
+    double* devPhi;
+    double* devGx;
+    double* devGy;
+    double* devGz;
+    int const nsinks = sinkx.size();
+    (CUDA_MALLOC(&devSinkx, nsinks * sizeof(Fixed32)));
+    (CUDA_MALLOC(&devSinky, nsinks * sizeof(Fixed32)));
+    (CUDA_MALLOC(&devSinkz, nsinks * sizeof(Fixed32)));
+    (CUDA_MALLOC(&devPhi, nsinks * sizeof(double)));
+    (CUDA_MALLOC(&devGx, nsinks * sizeof(double)));
+    (CUDA_MALLOC(&devGy, nsinks * sizeof(double)));
+    (CUDA_MALLOC(&devGz, nsinks * sizeof(double)));
+    Vector<double> zero(nsinks, 0.0);
+    if (hpxRank() == 0) {
+        Vector<double> selfPhi1(nsinks, selfPhi() / getOptions().hsoft);
+        CUDA_CHECK(
+            cudaMemcpy(devPhi, selfPhi1.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+    } else {
+        CUDA_CHECK(
+            cudaMemcpy(devPhi, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+    }
+    CUDA_CHECK(cudaMemcpy(devGx, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(devGy, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(devGz, zero.data(), nsinks * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(devSinkx, sinkx.data(), nsinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(devSinky, sinky.data(), nsinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+    CUDA_CHECK(
+        cudaMemcpy(devSinkz, sinkz.data(), nsinks * sizeof(Fixed32), cudaMemcpyHostToDevice));
+    PRINT("%li free\n", cudaFreeMem());
+    size_t const partsPerLoop = (size_t) cudaFreeMem() / (NDIM * sizeof(Fixed32)) * 85 / 100;
+    int occupancy;
+    CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&occupancy, analyticGravityKernel,
+        ANALYTIC_BLOCK_SIZE, sizeof(double) * (NDIM + 1) * ANALYTIC_BLOCK_SIZE));
+    int numKernels = std::max((int) (occupancy * cudaSmpCount() / nsinks), 1);
+    Vector<cudaStream_t> streams(numKernels);
+    for (int i = 0; i < numKernels; i++) {
+        cudaStreamCreate(&streams[i]);
+    }
+    PRINT("%li particles per loop, %li kernels\n", partsPerLoop, numKernels);
+    for (size_t i = 0; i < particlesSize(); i += partsPerLoop) {
+        int const totalSize =
+            std::min(size_t(particlesSize()), size_t(i) + size_t(partsPerLoop)) - size_t(i);
+        (CUDA_MALLOC(&devSrcx, totalSize * sizeof(Fixed32)));
+        (CUDA_MALLOC(&devSrcy, totalSize * sizeof(Fixed32)));
+        (CUDA_MALLOC(&devSrcz, totalSize * sizeof(Fixed32)));
+        CUDA_CHECK(cudaMemcpy(
+            devSrcx, &particlesPos(0, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(
+            devSrcy, &particlesPos(1, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(
+            devSrcz, &particlesPos(2, i), totalSize * sizeof(Fixed32), cudaMemcpyHostToDevice));
+        for (int j = 0; j < numKernels; j++) {
+            int const begin = size_t(j) * size_t(totalSize) / size_t(numKernels);
+            int const end = size_t(j + 1) * size_t(totalSize) / size_t(numKernels);
+            analyticGravityKernel<<<nsinks, ANALYTIC_BLOCK_SIZE, 0, streams[i]>>>(devSinkx,
+                devSinky, devSinkz, devSrcx + begin, devSrcy + begin, devSrcz + begin, end - begin,
+                devPhi, devGx, devGy, devGz, getOptions().hsoft);
+        }
+        for (int i = 0; i < numKernels; i++) {
+            synchronizeCudaStream(streams[i]);
+        }
+        CUDA_CHECK(cudaFree(devSrcx));
+        CUDA_CHECK(cudaFree(devSrcy));
+        CUDA_CHECK(cudaFree(devSrcz));
+    }
+    for (int i = 0; i < numKernels; i++) {
+        cudaStreamDestroy(streams[i]);
+    }
+    rc.first.resize(nsinks);
+    for (int dim = 0; dim < NDIM; dim++) {
+        rc.second[dim].resize(nsinks);
+    }
+    CUDA_CHECK(
+        cudaMemcpy(rc.first.data(), devPhi, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(
+        cudaMemcpy(rc.second[XDIM].data(), devGx, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(
+        cudaMemcpy(rc.second[YDIM].data(), devGy, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(
+        cudaMemcpy(rc.second[ZDIM].data(), devGz, sizeof(double) * nsinks, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(devPhi));
+    CUDA_CHECK(cudaFree(devGx));
+    CUDA_CHECK(cudaFree(devGy));
+    CUDA_CHECK(cudaFree(devGz));
+    CUDA_CHECK(cudaFree(devSinkx));
+    CUDA_CHECK(cudaFree(devSinky));
+    CUDA_CHECK(cudaFree(devSinkz));
+    return rc;
 }
 
-__global__ void analytic_gravity_kernel(fixed32* sinkx, fixed32* sinky, fixed32* sinkz, fixed32* sourcex, fixed32* sourcey, fixed32* sourcez, int Nsource,
-		double* rphi, double* rgx, double* rgy, double*rgz, float h) {
+__global__ void analyticGravityKernel(Fixed32* sinkx, Fixed32* sinky, Fixed32* sinkz,
+    Fixed32* sourcex, Fixed32* sourcey, Fixed32* sourcez, int nsource, double* rphi, double* rgx,
+    double* rgy, double* rgz, float h) {
+    __shared__ double phi[ANALYTIC_BLOCK_SIZE];
+    __shared__ double gx[ANALYTIC_BLOCK_SIZE];
+    __shared__ double gy[ANALYTIC_BLOCK_SIZE];
+    __shared__ double gz[ANALYTIC_BLOCK_SIZE];
 
-	__shared__ double phi[ANALYTIC_BLOCK_SIZE];
-	__shared__ double gx[ANALYTIC_BLOCK_SIZE];
-	__shared__ double gy[ANALYTIC_BLOCK_SIZE];
-	__shared__ double gz[ANALYTIC_BLOCK_SIZE];
+    int const& tid = threadIdx.x;
+    int const& bid = blockIdx.x;
 
-	const int& tid = threadIdx.x;
-	const int& bid = blockIdx.x;
-
-	const fixed32 x = sinkx[bid];
-	const fixed32 y = sinky[bid];
-	const fixed32 z = sinkz[bid];
-	const float cons1 = float(4.0f / sqrtf(M_PI));
-	float h2 = h * h;
-	float hinv = 1.0 / (h);
-	float h2inv = 1.0 / h2;
-	float h3inv = hinv * hinv * hinv;
-	phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
-	for (int sourcei = tid; sourcei < Nsource; sourcei += ANALYTIC_BLOCK_SIZE) {
-		const float X = distance(x, sourcex[sourcei]);
-		const float Y = distance(y, sourcey[sourcei]);
-		const float Z = distance(z, sourcez[sourcei]);
-		const float R2 = sqr(X, Y, Z);
-		float fx = 0.f;
-		float fy = 0.f;
-		float fz = 0.f;
-		float pot = 0.f;
-		if (R2 > 0.f) {
-			for (int xi = -4; xi <= +4; xi++) {
-				for (int yi = -4; yi <= +4; yi++) {
-					for (int zi = -4; zi <= +4; zi++) {
-						const float dx = X - xi;
-						const float dy = Y - yi;
-						const float dz = Z - zi;
-						const float r2 = sqr(dx, dy, dz);
-						if (r2 < 2.6f * 2.6f) {
-							const float r = sqrt(r2);
-							const float rinv = 1.f / r;
-							const float r2inv = rinv * rinv;
-							const float r3inv = r2inv * rinv;
-							float exp0;
-							float erfc0;
-							erfcexp(2.f * r, &erfc0, &exp0);
-							const float expfactor = cons1 * r * exp0;
-							const float d0 = -erfc0 * rinv;
-							const float d1 = (expfactor + erfc0) * r3inv;
-							pot += d0;
-							fx -= dx * d1;
-							fy -= dy * d1;
-							fz -= dz * d1;
-						}
-					}
-				}
-			}
-			phi[tid] += float(M_PI / 4.f);
-			for (int xi = -2; xi <= +2; xi++) {
-				for (int yi = -2; yi <= +2; yi++) {
-					for (int zi = -2; zi <= +2; zi++) {
-						const float hx = xi;
-						const float hy = yi;
-						const float hz = zi;
-						const float h2 = sqr(hx, hy, hz);
-						if (h2 > 0.0f && h2 <= 8) {
-							const float hdotx = X * hx + Y * hy + Z * hz;
-							const float omega = float(2.0 * M_PI) * hdotx;
-							float c, s;
-							sincosf(omega, &s, &c);
-							const float c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) * float(1.f / M_PI);
-							const float c1 = -s * 2.0 * M_PI * c0;
-							pot += c0 * c;
-							fx -= c1 * hx;
-							fy -= c1 * hy;
-							fz -= c1 * hz;
-						}
-					}
-				}
-			}
-		}
-		if (R2 == 0.f) {
-			phi[tid] += 2.837291f;
-			phi[tid] -= 15.0f / 8.0f * hinv;
-		} else if (R2 < h2) {
-			const float q2 = R2 * h2inv;
-			float rinv3;
-			float rinv1;
-			gsoft( rinv3, rinv1, q2, h2, hinv, h3inv, true);
-			fx -= X * rinv3;
-			fy -= Y * rinv3;
-			fz -= Z * rinv3;
-			pot -= rinv1;
-		}
-		phi[tid] += pot;
-		gx[tid] += fx;
-		gy[tid] += fy;
-		gz[tid] += fz;
-	}
-	__syncthreads();
-	for (int P = ANALYTIC_BLOCK_SIZE / 2; P >= 1; P /= 2) {
-		if (tid < P) {
-			gx[tid] += gx[tid + P];
-			gy[tid] += gy[tid + P];
-			gz[tid] += gz[tid + P];
-			phi[tid] += phi[tid + P];
-		}
-		__syncthreads();
-	}
-	if (tid == 0) {
-		atomicAdd(rphi + bid, phi[0]);
-		atomicAdd(rgx + bid, gx[0]);
-		atomicAdd(rgy + bid, gy[0]);
-		atomicAdd(rgz + bid, gz[0]);
-	}
-
+    Fixed32 const x = sinkx[bid];
+    Fixed32 const y = sinky[bid];
+    Fixed32 const z = sinkz[bid];
+    float const cons1 = float(4.0f / sqrtf(M_PI));
+    float h2 = h * h;
+    float hinv = 1.0 / (h);
+    float h2inv = 1.0 / h2;
+    float h3inv = hinv * hinv * hinv;
+    phi[tid] = gx[tid] = gy[tid] = gz[tid] = 0.0f;
+    for (int sourcei = tid; sourcei < nsource; sourcei += ANALYTIC_BLOCK_SIZE) {
+        float const xValue = distance(x, sourcex[sourcei]);
+        float const yValue = distance(y, sourcey[sourcei]);
+        float const zValue = distance(z, sourcez[sourcei]);
+        float const r2Value = sqr(xValue, yValue, zValue);
+        float fx = 0.f;
+        float fy = 0.f;
+        float fz = 0.f;
+        float pot = 0.f;
+        if (r2Value > 0.f) {
+            for (int xi = -4; xi <= +4; xi++) {
+                for (int yi = -4; yi <= +4; yi++) {
+                    for (int zi = -4; zi <= +4; zi++) {
+                        float const dx = xValue - xi;
+                        float const dy = yValue - yi;
+                        float const dz = zValue - zi;
+                        float const r2 = sqr(dx, dy, dz);
+                        if (r2 < 2.6f * 2.6f) {
+                            float const r = sqrt(r2);
+                            float const rinv = 1.f / r;
+                            float const r2inv = rinv * rinv;
+                            float const r3inv = r2inv * rinv;
+                            float exp0;
+                            float erfc0;
+                            erfcexp(2.f * r, &erfc0, &exp0);
+                            float const expfactor = cons1 * r * exp0;
+                            float const d0 = -erfc0 * rinv;
+                            float const d1 = (expfactor + erfc0) * r3inv;
+                            pot += d0;
+                            fx -= dx * d1;
+                            fy -= dy * d1;
+                            fz -= dz * d1;
+                        }
+                    }
+                }
+            }
+            phi[tid] += float(M_PI / 4.f);
+            for (int xi = -2; xi <= +2; xi++) {
+                for (int yi = -2; yi <= +2; yi++) {
+                    for (int zi = -2; zi <= +2; zi++) {
+                        float const hx = xi;
+                        float const hy = yi;
+                        float const hz = zi;
+                        float const h2 = sqr(hx, hy, hz);
+                        if (h2 > 0.0f && h2 <= 8) {
+                            float const hdotx = xValue * hx + yValue * hy + zValue * hz;
+                            float const omega = float(2.0 * M_PI) * hdotx;
+                            float c, s;
+                            sincosf(omega, &s, &c);
+                            float const c0 = -1.0f / h2 * expf(float(-M_PI * M_PI * 0.25f) * h2) *
+                                float(1.f / M_PI);
+                            float const c1 = -s * 2.0 * M_PI * c0;
+                            pot += c0 * c;
+                            fx -= c1 * hx;
+                            fy -= c1 * hy;
+                            fz -= c1 * hz;
+                        }
+                    }
+                }
+            }
+        }
+        if (r2Value == 0.f) {
+            phi[tid] += 2.837291f;
+            phi[tid] -= 15.0f / 8.0f * hinv;
+        } else if (r2Value < h2) {
+            float const q2 = r2Value * h2inv;
+            float rinv3;
+            float rinv1;
+            gsoft(rinv3, rinv1, q2, h2, hinv, h3inv, true);
+            fx -= xValue * rinv3;
+            fy -= yValue * rinv3;
+            fz -= zValue * rinv3;
+            pot -= rinv1;
+        }
+        phi[tid] += pot;
+        gx[tid] += fx;
+        gy[tid] += fy;
+        gz[tid] += fz;
+    }
+    __syncthreads();
+    for (int p = ANALYTIC_BLOCK_SIZE / 2; p >= 1; p /= 2) {
+        if (tid < p) {
+            gx[tid] += gx[tid + p];
+            gy[tid] += gy[tid + p];
+            gz[tid] += gz[tid + p];
+            phi[tid] += phi[tid + p];
+        }
+        __syncthreads();
+    }
+    if (tid == 0) {
+        atomicAdd(rphi + bid, phi[0]);
+        atomicAdd(rgx + bid, gx[0]);
+        atomicAdd(rgy + bid, gy[0]);
+        atomicAdd(rgz + bid, gz[0]);
+    }
 }

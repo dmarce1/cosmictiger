@@ -35,10 +35,12 @@
 #include <complex>
 
 #define xcomplex std::complex
-typedef xcomplex<float>  fcomplex;
+typedef xcomplex<float> fcomplex;
 typedef xcomplex<double> dcomplex;
 
-template<typename T> inline xcomplex<T> times_i(xcomplex<T> inp)
-  { return xcomplex<T>(-inp.imag(),inp.real()); }
+template <typename T>
+inline xcomplex<T> times_i(xcomplex<T> inp) {
+    return xcomplex<T>(-inp.imag(), inp.real());
+}
 
 #endif

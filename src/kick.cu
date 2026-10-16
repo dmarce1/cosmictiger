@@ -40,665 +40,702 @@
  __managed__ double gravity_time;
  static __managed__ double kick_time;*/
 
-struct cuda_kick_params {
-	array<fixed32, NDIM> Lpos;
-	expansion<float> L;
-	int self;
-	int* dchecks;
-	int* echecks;
-	int dcount;
-	int ecount;
+struct CudaKickParams {
+    Array<Fixed32, NDIM> lpos;
+    Expansion<float> lValue;
+    int self;
+    int* dchecks;
+    int* echecks;
+    int dcount;
+    int ecount;
 };
 
-__device__ void do_kick(kick_return& return_, kick_params params, cuda_kick_data const& data, expansion<float> const& L, tree_node const& self) {
-	//	auto tm = clock64();
-	int const& tid = threadIdx.x;
-	extern __shared__ int shmem_ptr[];
-	cuda_kick_shmem& shmem = *(cuda_kick_shmem*)shmem_ptr;
-	auto& all_phi = data.pot;
-	auto& all_gx = data.gx;
-	auto& all_gy = data.gy;
-	auto& all_gz = data.gz;
-	auto* __restrict__ rungs = data.rungs;
-	auto* __restrict__ vels = data.vel;
-	auto& force = shmem.f;
-	auto const* sink_x = data.x + self.part_range.first;
-	auto const* sink_y = data.y + self.part_range.first;
-	auto const* sink_z = data.z + self.part_range.first;
-	int const nsink = self.part_range.second - self.part_range.first;
-	int max_rung = 0;
-	float phi_tot = 0.0f;
-	float kin_tot = 0.f;
-	float xmom_tot = 0.0f;
-	float ymom_tot = 0.0f;
-	float zmom_tot = 0.0f;
-	float nmom_tot = 0.0f;
-	float dkin_tot = 0.f;
-	float dmKineticCorrection = 0.0f;
-	float dmXMomentumCorrection = 0.0f;
-	float dmYMomentumCorrection = 0.0f;
-	float dmZMomentumCorrection = 0.0f;
-	float dmMomentumNormCorrection = 0.0f;
+__device__ void doKick(KickReturn& result, KickParams params, CudaKickData const& data,
+    Expansion<float> const& lValue2, TreeNode const& self) {
+    //	auto tm = clock64();
+    int const& tid = threadIdx.x;
+    extern __shared__ int shmemPtr[];
+    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
+    auto& allPhi = data.pot;
+    auto& allGx = data.gx;
+    auto& allGy = data.gy;
+    auto& allGz = data.gz;
+    auto* __restrict__ rungs = data.rungs;
+    auto* __restrict__ vels = data.vel;
+    auto& force = shmem.f;
+    auto const* sinkX = data.x + self.partRange.first;
+    auto const* sinkY = data.y + self.partRange.first;
+    auto const* sinkZ = data.z + self.partRange.first;
+    int const nsink = self.partRange.second - self.partRange.first;
+    int maxRung = 0;
+    float phiTot = 0.0f;
+    float kinTot = 0.f;
+    float xmomTot = 0.0f;
+    float ymomTot = 0.0f;
+    float zmomTot = 0.0f;
+    float nmomTot = 0.0f;
+    float dkinTot = 0.f;
+    float dmKineticCorrection = 0.0f;
+    float dmXMomentumCorrection = 0.0f;
+    float dmYMomentumCorrection = 0.0f;
+    float dmZMomentumCorrection = 0.0f;
+    float dmMomentumNormCorrection = 0.0f;
 
-	float const& hsoft = params.h;
-	flop_counter<int> flops = 0;
-	for (int i = tid; i < nsink; i += WARP_SIZE) {
-		expansion2<float> L2;
-		array<float, NDIM> dx;
-		part_int snki;
-		float vx;
-		float vy;
-		float vz;
-		float dt;
-		float g2;
-		int rung;
-		snki = self.part_range.first + i;
-		if (!params.htime && rungs[snki] < params.min_rung) {
-			continue;
-		}
-		ASSERT(snki >= 0);
-		dx[XDIM] = distance(sink_x[i], self.pos[XDIM]); // 1
-		dx[YDIM] = distance(sink_y[i], self.pos[YDIM]); // 1
-		dx[ZDIM] = distance(sink_z[i], self.pos[ZDIM]); // 1
-		L2 = L2P(L, dx, params.do_phi);
-		auto& F = force[i];
-		F.phi += SCALE_FACTOR1 * L2(0, 0, 0);
-		F.gx -= SCALE_FACTOR2 * L2(1, 0, 0);
-		F.gy -= SCALE_FACTOR2 * L2(0, 1, 0);
-		F.gz -= SCALE_FACTOR2 * L2(0, 0, 1);
-		F.gz *= params.GM;
-		F.gy *= params.GM;
-		F.gx *= params.GM;
-		F.phi *= params.GM;
-		vx = vels[snki][XDIM];
-		vy = vels[snki][YDIM];
-		vz = vels[snki][ZDIM];
-		float const mass = data.sph ? (data.type[snki] == DARK_MATTER_TYPE ? data.dm_mass : data.sph_mass) : 1.0f;
-		float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
-		if (params.htime) {
-			float const sgn = params.sign * (params.top ? 1.f : -1.f);
-			if (params.ascending) {
-				dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-				flops += 2;
-				if (!params.first_call) {
-					vx = fmaf(sgn * F.gx, dt, vx);
-					vy = fmaf(sgn * F.gy, dt, vy);
-					vz = fmaf(sgn * F.gz, dt, vz);
-					flops += 6;
-				}
-			}
-			kin_tot += 0.5f * sqr(vx, vy, vz);
-			xmom_tot += vx;
-			ymom_tot += vy;
-			zmom_tot += vz;
-			nmom_tot += sqrtf(sqr(vx, vy, vz));
-			if (params.save_force) {
-				all_gx[snki] = F.gx;
-				all_gy[snki] = F.gy;
-				all_gz[snki] = F.gz;
-				all_phi[snki] = F.phi;
-			}
+    float const& hsoft = params.h;
+    FlopCounter<int> flops = 0;
+    for (int i = tid; i < nsink; i += WARP_SIZE) {
+        Expansion2<float> l2;
+        Array<float, NDIM> dx;
+        PartInt snki;
+        float vx;
+        float vy;
+        float vz;
+        float dt;
+        float g2;
+        int rung;
+        snki = self.partRange.first + i;
+        if (!params.htime && rungs[snki] < params.minRung) {
+            continue;
+        }
+        ASSERT(snki >= 0);
+        dx[XDIM] = distance(sinkX[i], self.pos[XDIM]);    // 1
+        dx[YDIM] = distance(sinkY[i], self.pos[YDIM]);    // 1
+        dx[ZDIM] = distance(sinkZ[i], self.pos[ZDIM]);    // 1
+        l2 = l2P(lValue2, dx, params.doPhi);
+        auto& fValue = force[i];
+        fValue.phi += SCALE_FACTOR1 * l2(0, 0, 0);
+        fValue.gx -= SCALE_FACTOR2 * l2(1, 0, 0);
+        fValue.gy -= SCALE_FACTOR2 * l2(0, 1, 0);
+        fValue.gz -= SCALE_FACTOR2 * l2(0, 0, 1);
+        fValue.gz *= params.gm;
+        fValue.gy *= params.gm;
+        fValue.gx *= params.gm;
+        fValue.phi *= params.gm;
+        vx = vels[snki][XDIM];
+        vy = vels[snki][YDIM];
+        vz = vels[snki][ZDIM];
+        float const mass =
+            data.sph ? (data.type[snki] == DARK_MATTER_TYPE ? data.dmMass : data.sphMass) : 1.0f;
+        float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
+        if (params.htime) {
+            float const sgn = params.sign * (params.top ? 1.f : -1.f);
+            if (params.ascending) {
+                dt = 0.5f * rungDt[params.minRung] * params.t0;
+                flops += 2;
+                if (!params.firstCall) {
+                    vx = fmaf(sgn * fValue.gx, dt, vx);
+                    vy = fmaf(sgn * fValue.gy, dt, vy);
+                    vz = fmaf(sgn * fValue.gz, dt, vz);
+                    flops += 6;
+                }
+            }
+            kinTot += 0.5f * sqr(vx, vy, vz);
+            xmomTot += vx;
+            ymomTot += vy;
+            zmomTot += vz;
+            nmomTot += sqrtf(sqr(vx, vy, vz));
+            if (params.saveForce) {
+                allGx[snki] = fValue.gx;
+                allGy[snki] = fValue.gy;
+                allGz[snki] = fValue.gz;
+                allPhi[snki] = fValue.phi;
+            }
 
-			if (params.descending) {
-				g2 = sqr(F.gx, F.gy, F.gz);
-				dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0); // 12
-				dt = fminf(params.max_dt, dt);
-				rung = rungs[snki];
-				rung = max(params.min_rung + int((int)ceilf(log2f(params.t0 / dt)) > params.min_rung), rung - 1); // 13
-				rungs[snki] = rung;
-				max_rung = max(rung, max_rung);
-				ALWAYS_ASSERT(rung >= 0);
-				ALWAYS_ASSERT(rung < MAX_RUNG);
-				dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
-				vx = fmaf(sgn * F.gx, dt, vx);					  // 3
-				vy = fmaf(sgn * F.gy, dt, vy);					  // 3
-				vz = fmaf(sgn * F.gz, dt, vz);					  // 3
-				flops += 36;
-			}
-		} else {
-			bool const gas = data.sph && data.type[snki] == SPH_TYPE;
-			if (gas) {
-				part_int const k = data.cat_index[snki];
-				data.sph_gx[k] = F.gx;
-				data.sph_gy[k] = F.gy;
-				data.sph_gz[k] = F.gz;
-			} else if (!params.first_call) {
-				float const dt = 0.5f * rung_dt[rungs[snki]] * params.t0;
-				vx = fmaf(F.gx, dt, vx);
-				vy = fmaf(F.gy, dt, vy);
-				vz = fmaf(F.gz, dt, vz);
-			}
-			kin_tot += 0.5f * mass * sqr(vx, vy, vz);
-			xmom_tot += mass * vx;
-			ymom_tot += mass * vy;
-			zmom_tot += mass * vz;
-			nmom_tot += mass * sqrtf(sqr(vx, vy, vz));
-			if (params.save_force) {
-				all_gx[snki] = F.gx;
-				all_gy[snki] = F.gy;
-				all_gz[snki] = F.gz;
-				all_phi[snki] = F.phi;
-			}
-			if (!gas) {
-				float const syncVx = vx, syncVy = vy, syncVz = vz;
-				float const g2 = sqr(F.gx, F.gy, F.gz) + 1e-35f;
-				float dt = fminf(params.eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
-				dt = fminf(dt, params.max_dt);
-				rung = max(max((int)ceilf(log2f(params.t0 / dt)), max((int)rungs[snki] - 1, params.min_rung)), 1);
-				ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
-				rungs[snki] = rung;
-				dt = 0.5f * rung_dt[rung] * params.t0;
-				vx = fmaf(F.gx, dt, vx);
-				vy = fmaf(F.gy, dt, vy);
-				vz = fmaf(F.gz, dt, vz);
-				dmKineticCorrection += 0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
-				dmXMomentumCorrection += mass * (syncVx - vx);
-				dmYMomentumCorrection += mass * (syncVy - vy);
-				dmZMomentumCorrection += mass * (syncVz - vz);
-				dmMomentumNormCorrection += mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
-			}
-			max_rung = max(max_rung, (int)rungs[snki]);
-		}
-		float kin1 = 0.5 * mass * sqr(vx, vy, vz);
-		vels[snki][XDIM] = vx;
-		vels[snki][YDIM] = vy;
-		vels[snki][ZDIM] = vz;
-		phi_tot += 0.5f * mass * force[i].phi;
-		dkin_tot += kin1 - kin0;
-		flops += 557 + params.do_phi * 178;
-	}
-	shared_reduce_add(phi_tot);
-	shared_reduce_add(xmom_tot);
-	shared_reduce_add(ymom_tot);
-	shared_reduce_add(zmom_tot);
-	shared_reduce_add(nmom_tot);
-	shared_reduce_add(kin_tot);
-	shared_reduce_add(dkin_tot);
-	shared_reduce_add(dmKineticCorrection);
-	shared_reduce_add(dmXMomentumCorrection);
-	shared_reduce_add(dmYMomentumCorrection);
-	shared_reduce_add(dmZMomentumCorrection);
-	shared_reduce_add(dmMomentumNormCorrection);
+            if (params.descending) {
+                g2 = sqr(fValue.gx, fValue.gy, fValue.gz);
+                dt = fminf(params.eta * sqrt(params.a * hsoft * rsqrtf(g2)), params.t0);    // 12
+                dt = fminf(params.maxDt, dt);
+                rung = rungs[snki];
+                rung =
+                    max(params.minRung + int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
+                        rung - 1);    // 13
+                rungs[snki] = rung;
+                maxRung = max(rung, maxRung);
+                ALWAYS_ASSERT(rung >= 0);
+                ALWAYS_ASSERT(rung < MAX_RUNG);
+                dt = 0.5f * rungDt[params.minRung] * params.t0;    // 2
+                vx = fmaf(sgn * fValue.gx, dt, vx);                // 3
+                vy = fmaf(sgn * fValue.gy, dt, vy);                // 3
+                vz = fmaf(sgn * fValue.gz, dt, vz);                // 3
+                flops += 36;
+            }
+        } else {
+            bool const gas = data.sph && data.type[snki] == SPH_TYPE;
+            if (gas) {
+                PartInt const k = data.catIndex[snki];
+                data.sphGx[k] = fValue.gx;
+                data.sphGy[k] = fValue.gy;
+                data.sphGz[k] = fValue.gz;
+            } else if (!params.firstCall) {
+                float const dt = 0.5f * rungDt[rungs[snki]] * params.t0;
+                vx = fmaf(fValue.gx, dt, vx);
+                vy = fmaf(fValue.gy, dt, vy);
+                vz = fmaf(fValue.gz, dt, vz);
+            }
+            kinTot += 0.5f * mass * sqr(vx, vy, vz);
+            xmomTot += mass * vx;
+            ymomTot += mass * vy;
+            zmomTot += mass * vz;
+            nmomTot += mass * sqrtf(sqr(vx, vy, vz));
+            if (params.saveForce) {
+                allGx[snki] = fValue.gx;
+                allGy[snki] = fValue.gy;
+                allGz[snki] = fValue.gz;
+                allPhi[snki] = fValue.phi;
+            }
+            if (!gas) {
+                float const syncVx = vx, syncVy = vy, syncVz = vz;
+                float const g2 = sqr(fValue.gx, fValue.gy, fValue.gz) + 1e-35f;
+                float dt =
+                    fminf(params.eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
+                dt = fminf(dt, params.maxDt);
+                rung = max(max((int) ceilf(log2f(params.t0 / dt)),
+                               max((int) rungs[snki] - 1, params.minRung)),
+                    1);
+                ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+                rungs[snki] = rung;
+                dt = 0.5f * rungDt[rung] * params.t0;
+                vx = fmaf(fValue.gx, dt, vx);
+                vy = fmaf(fValue.gy, dt, vy);
+                vz = fmaf(fValue.gz, dt, vz);
+                dmKineticCorrection +=
+                    0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
+                dmXMomentumCorrection += mass * (syncVx - vx);
+                dmYMomentumCorrection += mass * (syncVy - vy);
+                dmZMomentumCorrection += mass * (syncVz - vz);
+                dmMomentumNormCorrection +=
+                    mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
+            }
+            maxRung = max(maxRung, (int) rungs[snki]);
+        }
+        float kin1 = 0.5 * mass * sqr(vx, vy, vz);
+        vels[snki][XDIM] = vx;
+        vels[snki][YDIM] = vy;
+        vels[snki][ZDIM] = vz;
+        phiTot += 0.5f * mass * force[i].phi;
+        dkinTot += kin1 - kin0;
+        flops += 557 + params.doPhi * 178;
+    }
+    sharedReduceAdd(phiTot);
+    sharedReduceAdd(xmomTot);
+    sharedReduceAdd(ymomTot);
+    sharedReduceAdd(zmomTot);
+    sharedReduceAdd(nmomTot);
+    sharedReduceAdd(kinTot);
+    sharedReduceAdd(dkinTot);
+    sharedReduceAdd(dmKineticCorrection);
+    sharedReduceAdd(dmXMomentumCorrection);
+    sharedReduceAdd(dmYMomentumCorrection);
+    sharedReduceAdd(dmZMomentumCorrection);
+    sharedReduceAdd(dmMomentumNormCorrection);
 
-	flops += 30;
-	shared_reduce_max(max_rung);
-	if (tid == 0) {
-		return_.max_rung = max(return_.max_rung, max_rung);
-		return_.pot += phi_tot;
-		return_.xmom += xmom_tot;
-		return_.ymom += ymom_tot;
-		return_.zmom += zmom_tot;
-		return_.nmom += nmom_tot;
-		return_.kin += kin_tot;
-		return_.dkin += dkin_tot;
-		return_.dmKineticCorrection += dmKineticCorrection;
-		return_.dmXMomentumCorrection += dmXMomentumCorrection;
-		return_.dmYMomentumCorrection += dmYMomentumCorrection;
-		return_.dmZMomentumCorrection += dmZMomentumCorrection;
-		return_.dmMomentumNormCorrection += dmMomentumNormCorrection;
+    flops += 30;
+    sharedReduceMax(maxRung);
+    if (tid == 0) {
+        result.maxRung = max(result.maxRung, maxRung);
+        result.pot += phiTot;
+        result.xmom += xmomTot;
+        result.ymom += ymomTot;
+        result.zmom += zmomTot;
+        result.nmom += nmomTot;
+        result.kin += kinTot;
+        result.dkin += dkinTot;
+        result.dmKineticCorrection += dmKineticCorrection;
+        result.dmXMomentumCorrection += dmXMomentumCorrection;
+        result.dmYMomentumCorrection += dmYMomentumCorrection;
+        result.dmZMomentumCorrection += dmZMomentumCorrection;
+        result.dmMomentumNormCorrection += dmMomentumNormCorrection;
 
-		flops += 6;
-	}
-	add_gpu_flops(flops);
+        flops += 6;
+    }
+    addGpuFlops(flops);
 }
 
-__global__ void cuda_kick_kernel(kick_return* rc, kick_params global_params, cuda_kick_data data, cuda_kick_params* params, int item_count, int* next_item) {
-	//	auto tm1 = clock64();
-	int const& tid = threadIdx.x;
-	extern __shared__ int shmem_ptr[];
-	cuda_kick_shmem& shmem = *(cuda_kick_shmem*)shmem_ptr;
-	new (shmem_ptr) cuda_kick_shmem;
-	auto& sparams = shmem.params;
-	auto& L = shmem.L;
-	auto& dchecks = shmem.dchecks;
-	auto& echecks = shmem.echecks;
-	auto& nextlist = shmem.nextlist;
-	auto& cclist = shmem.cclist;
-	auto& cplist = shmem.cplist;
-	auto& pclist = shmem.pclist;
-	auto& leaflist = shmem.leaflist;
-	auto& barrier = shmem.barrier;
-	auto& force = shmem.f;
-	auto& tree_nodes = data.tree_nodes;
-	float const& h = global_params.h;
-	float const hinv = 1.f / h;
-	int index;
-	auto group = cooperative_groups::this_thread_block();
-	if (group.thread_rank() == 0) {
-		init(&barrier, group.size());
-	}
-	group.sync();
-	if (tid == 0) {
-		index = atomicAdd(next_item, 1);
-	}
-	index = __shfl_sync(0xFFFFFFFF, index, 0);
-	__syncthreads();
-	kick_return kr;
-	while (index < item_count) {
-		flop_counter<int> flops = 0;
-		L.resize(0);
-		dchecks.resize(0);
-		echecks.resize(0);
-		sparams.resize(0);
-		{
-			expansion_type this_L;
-			this_L.pos = params[index].Lpos;
-			this_L.expansion = params[index].L;
-			L.push_back(this_L);
-		}
-		dchecks.resize(params[index].dcount);
-		echecks.resize(params[index].ecount);
-		for (int i = tid; i < params[index].dcount; i += WARP_SIZE) {
-			dchecks[i] = params[index].dchecks[i];
-		}
-		for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
-			echecks[i] = params[index].echecks[i];
-		}
-		{
-			search_params sparam;
-			sparam.phase = 0;
-			sparam.self = params[index].self;
-			sparams.push_back(sparam);
-		}
-		__syncwarp();
-		int depth = 0;
-		while (depth >= 0) {
-			//			auto tm2 = clock64();
-			//			node_count++;
-			auto const& self = tree_nodes[sparams.back().self];
-			switch (sparams.back().phase) {
+__global__ void cudaKickKernel(KickReturn* rc, KickParams globalParams, CudaKickData data,
+    CudaKickParams* params, int itemCount, int* nextItem) {
+    //	auto tm1 = clock64();
+    int const& tid = threadIdx.x;
+    extern __shared__ int shmemPtr[];
+    CudaKickShmem& shmem = *(CudaKickShmem*) shmemPtr;
+    new (shmemPtr) CudaKickShmem;
+    auto& sparams = shmem.params;
+    auto& lValue3 = shmem.l;
+    auto& dchecks = shmem.dchecks;
+    auto& echecks = shmem.echecks;
+    auto& nextlist = shmem.nextlist;
+    auto& cclist = shmem.cclist;
+    auto& cplist = shmem.cplist;
+    auto& pclist = shmem.pclist;
+    auto& leaflist = shmem.leaflist;
+    auto& barrier = shmem.barrier;
+    auto& force = shmem.f;
+    auto& treeNodes = data.treeNodes;
+    float const& h = globalParams.h;
+    float const hinv = 1.f / h;
+    int index;
+    auto group = cooperative_groups::this_thread_block();
+    if (group.thread_rank() == 0) {
+        init(&barrier, group.size());
+    }
+    group.sync();
+    if (tid == 0) {
+        index = atomicAdd(nextItem, 1);
+    }
+    index = __shfl_sync(0xFFFFFFFF, index, 0);
+    __syncthreads();
+    KickReturn kr;
+    while (index < itemCount) {
+        FlopCounter<int> flops = 0;
+        lValue3.resize(0);
+        dchecks.resize(0);
+        echecks.resize(0);
+        sparams.resize(0);
+        {
+            ExpansionType thisL;
+            thisL.pos = params[index].lpos;
+            thisL.expansion = params[index].lValue;
+            lValue3.pushBack(thisL);
+        }
+        dchecks.resize(params[index].dcount);
+        echecks.resize(params[index].ecount);
+        for (int i = tid; i < params[index].dcount; i += WARP_SIZE) {
+            dchecks[i] = params[index].dchecks[i];
+        }
+        for (int i = tid; i < params[index].ecount; i += WARP_SIZE) {
+            echecks[i] = params[index].echecks[i];
+        }
+        {
+            SearchParams sparam;
+            sparam.phase = 0;
+            sparam.self = params[index].self;
+            sparams.pushBack(sparam);
+        }
+        __syncwarp();
+        int depth = 0;
+        while (depth >= 0) {
+            //			auto tm2 = clock64();
+            //			node_count++;
+            auto const& self = treeNodes[sparams.back().self];
+            switch (sparams.back().phase) {
+            case 0: {
+                Array<float, NDIM> dx;
+                for (int dim = 0; dim < NDIM; dim++) {
+                    dx[dim] = distance(self.pos[dim], lValue3.back().pos[dim]);
+                }
+                flops += 3;
+                {
+                    auto const thisL = l2LCuda(lValue3.back().expansion, dx, globalParams.doPhi);
+                    if (tid == 0) {
+                        lValue3.back().expansion = thisL;
+                        lValue3.back().pos = self.pos;
+                    }
+                    flops += 2650 + globalParams.doPhi * 332;
+                }
+                PartInt const nsinks = self.partRange.second - self.partRange.first;
+                if (self.leaf) {
+                    force.resize(nsinks);
+                    for (int l = tid; l < nsinks; l += WARP_SIZE) {
+                        auto& f = force[l];
+                        f.gx = f.gy = f.gz = 0.f;
+                        float const mass = data.sph ?
+                            (data.type[self.partRange.first + l] == DARK_MATTER_TYPE ?
+                                    data.dmMass :
+                                    data.sphMass) :
+                            1.0f;
+                        f.phi = mass * selfPhi() * hinv;
+                    }
+                }
+                __syncwarp();
+                if (nsinks) {
+                    nextlist.resize(0);
+                    cclist.resize(0);
+                    constexpr int kCc = 0;
+                    constexpr int kNext = 1;
+                    constexpr int kNlists = 2;
+                    Array<bool, kNlists> sw;
+                    DeviceVector<int>* lists[kNlists] = {&cclist, &nextlist};
 
-			case 0: {
-				array<float, NDIM> dx;
-				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(self.pos[dim], L.back().pos[dim]);
-				}
-				flops += 3;
-				{
-					auto const this_L = L2L_cuda(L.back().expansion, dx, global_params.do_phi);
-					if (tid == 0) {
-						L.back().expansion = this_L;
-						L.back().pos = self.pos;
-					}
-					flops += 2650 + global_params.do_phi * 332;
-				}
-				part_int const nsinks = self.part_range.second - self.part_range.first;
-				if (self.leaf) {
-					force.resize(nsinks);
-					for (int l = tid; l < nsinks; l += WARP_SIZE) {
-						auto& f = force[l];
-						f.gx = f.gy = f.gz = 0.f;
-						float const mass = data.sph ? (data.type[self.part_range.first + l] == DARK_MATTER_TYPE ? data.dm_mass : data.sph_mass) : 1.0f;
-						f.phi = mass * self_phi() * hinv;
-					}
-				}
-				__syncwarp();
-				if (nsinks) {
-					nextlist.resize(0);
-					cclist.resize(0);
-					constexpr int CC = 0;
-					constexpr int NEXT = 1;
-					constexpr int NLISTS = 2;
-					array<bool, NLISTS> sw;
-					device_vector<int>* lists[NLISTS] = {&cclist, &nextlist};
+                    auto& checks = echecks;
+                    float const thetainv = 1.f / globalParams.theta;
+                    int const maxi = roundUp(checks.size(), WARP_SIZE);
+                    for (int i = tid; i < maxi; i += WARP_SIZE) {
+                        for (int n = 0; n < kNlists; n++) {
+                            sw[n] = false;
+                        }
+                        if (i < checks.size()) {
+                            TreeNode const& other = treeNodes[checks[i]];
+                            if (other.nparts()) {
+                                for (int dim = 0; dim < NDIM; dim++) {
+                                    dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
+                                }
+                                float r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                                r2 =
+                                    fmaxf(r2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
+                                float const dcc = (self.radius + other.radius) * thetainv;
+                                sw[kCc] = r2 > sqr(dcc);
+                                flops += 24;
+                                if (!sw[kCc]) {
+                                    sw[kNext] = true;
+                                    ALWAYS_ASSERT(!other.leaf);
+                                }
+                            }
+                        }
+                        {
+                            Array<int, kNlists> l, total;
+                            for (int n = 0; n < kNlists; n++) {
+                                l[n] = sw[n];
+                            }
+                            computeIndicesArray(l, total);
+                            for (int n = 0; n < kNlists; n++) {
+                                int const start = lists[n]->size();
+                                __syncwarp();
+                                lists[n]->resize(start + total[n]);
+                                if (sw[n]) {
+                                    (*lists[n])[l[n] + start] = checks[i];
+                                }
+                            }
+                        }
+                    }
+                    __syncwarp();
+                    checks.resize(NCHILD * nextlist.size());
+                    for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+                        auto const& node = treeNodes[nextlist[i]];
+                        auto const& children = node.children;
+                        checks[NCHILD * i + LEFT] = children[LEFT].index;
+                        checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+                    }
+                    nextlist.resize(0);
+                    __syncwarp();
+                    cudaGravityCcEwald(
+                        data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
+                }
+                if (nsinks) {
+                    nextlist.resize(0);
+                    leaflist.resize(0);
+                    cclist.resize(0);
+                    cplist.resize(0);
+                    pclist.resize(0);
+                    constexpr int kCc = 0;
+                    constexpr int kLeaf = 1;
+                    constexpr int kCp = 2;
+                    constexpr int kPc = 3;
+                    constexpr int kNext = 4;
+                    constexpr int kNlists = 5;
+                    Array<bool, kNlists> sw;
+                    DeviceVector<int>* lists[kNlists] = {
+                        &cclist, &leaflist, &cplist, &pclist, &nextlist};
+                    auto& checks = dchecks;
+                    float const thetainv = 1.f / globalParams.theta;
+                    do {
+                        int const maxi = roundUp(checks.size(), WARP_SIZE);
+                        for (int i = tid; i < maxi; i += WARP_SIZE) {
+                            for (int n = 0; n < kNlists; n++) {
+                                sw[n] = false;
+                            }
+                            if (i < checks.size()) {
+                                TreeNode const& other = treeNodes[checks[i]];
+                                if (other.nparts()) {
+                                    for (int dim = 0; dim < NDIM; dim++) {
+                                        dx[dim] = distance(self.pos[dim], other.pos[dim]);    // 3
+                                    }
+                                    float const r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
+                                    float const mind = self.radius + other.radius + h;
+                                    float const dcc =
+                                        fmaxf((self.radius + other.radius) * thetainv, mind);
+                                    auto const selfParts = self.nparts();
+                                    auto const otherParts = other.nparts();
+                                    sw[kCc] =
+                                        (r2 > sqr(dcc));    // && min(self_parts, (part_int)
+                                                            // (2*MIN_PARTS2_CC)) * min(other_parts,
+                                                            // (part_int) (2*MIN_PARTS2_CC)) >=
+                                                            // MIN_PARTS2_CC;
+                                    flops += 20;
+                                    if (!sw[kCc] && other.leaf && self.leaf) {
+                                        float const dcp =
+                                            fmaxf((self.radius * thetainv + other.radius), mind);
+                                        float const dpc =
+                                            fmaxf((self.radius + other.radius * thetainv), mind);
+                                        sw[kPc] = (r2 > sqr(dpc) ||
+                                                      !boxIntersectsSphere(self.box, other.pos,
+                                                          fmaxf(thetainv * other.radius, h))) &&
+                                            selfParts >= MIN_PARTS_PCCP;
+                                        sw[kCp] = (r2 > sqr(dcp) ||
+                                                      !boxIntersectsSphere(other.box, self.pos,
+                                                          fmaxf(thetainv * self.radius, h))) &&
+                                            otherParts >= MIN_PARTS_PCCP;
+                                        if (sw[kPc] && sw[kCp]) {
+                                            if (selfParts < otherParts) {
+                                                sw[kCp] = false;
+                                            } else if (selfParts > otherParts) {
+                                                sw[kPc] = false;
+                                            } else {
+                                                sw[kCp] = sw[kPc] = false;
+                                            }
+                                        }
+                                        flops += 33;
+                                    }
+                                    if (!sw[kCc] && !sw[kCp] && !sw[kPc]) {
+                                        sw[kLeaf] = other.leaf;
+                                        sw[kNext] = !sw[kLeaf];
+                                    }
+                                }
+                            }
+                            {
+                                Array<int, kNlists> l, total;
+                                for (int n = 0; n < kNlists; n++) {
+                                    l[n] = sw[n];
+                                }
+                                computeIndicesArray(l, total);
+                                for (int n = 0; n < kNlists; n++) {
+                                    int const start = lists[n]->size();
+                                    __syncwarp();
+                                    lists[n]->resize(start + total[n]);
+                                    if (sw[n]) {
+                                        (*lists[n])[l[n] + start] = checks[i];
+                                    }
+                                }
+                            }
+                        }
+                        __syncwarp();
+                        checks.resize(NCHILD * nextlist.size());
+                        for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
+                            auto const& node = treeNodes[nextlist[i]];
+                            auto const& children = node.children;
+                            checks[NCHILD * i + LEFT] = children[LEFT].index;
+                            checks[NCHILD * i + RIGHT] = children[RIGHT].index;
+                        }
+                        nextlist.resize(0);
+                        __syncwarp();
 
-					auto& checks = echecks;
-					float const thetainv = 1.f / global_params.theta;
-					int const maxi = round_up(checks.size(), WARP_SIZE);
-					for (int i = tid; i < maxi; i += WARP_SIZE) {
-						for (int n = 0; n < NLISTS; n++) {
-							sw[n] = false;
-						}
-						if (i < checks.size()) {
-							tree_node const& other = tree_nodes[checks[i]];
-							if (other.nparts()) {
-								for (int dim = 0; dim < NDIM; dim++) {
-									dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-								}
-								float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-								R2 = fmaxf(R2, sqr(fmaxf(0.5f - (self.radius + other.radius), 0.f)));
-								float const dcc = (self.radius + other.radius) * thetainv;
-								sw[CC] = R2 > sqr(dcc);
-								flops += 24;
-								if (!sw[CC]) {
-									sw[NEXT] = true;
-									ALWAYS_ASSERT(!other.leaf);
-								}
-							}
-						}
-						{
-							array<int, NLISTS> l, total;
-							for (int n = 0; n < NLISTS; n++) {
-								l[n] = sw[n];
-							}
-							compute_indices_array(l, total);
-							for (int n = 0; n < NLISTS; n++) {
-								int const start = lists[n]->size();
-								__syncwarp();
-								lists[n]->resize(start + total[n]);
-								if (sw[n]) {
-									(*lists[n])[l[n] + start] = checks[i];
-								}
-							}
-						}
-					}
-					__syncwarp();
-					checks.resize(NCHILD * nextlist.size());
-					for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-						auto const& node = tree_nodes[nextlist[i]];
-						auto const& children = node.children;
-						checks[NCHILD * i + LEFT] = children[LEFT].index;
-						checks[NCHILD * i + RIGHT] = children[RIGHT].index;
-					}
-					nextlist.resize(0);
-					__syncwarp();
-					cuda_gravity_cc_ewald(data, L.back().expansion, self, cclist, global_params.do_phi);
-				}
-				if (nsinks) {
-					nextlist.resize(0);
-					leaflist.resize(0);
-					cclist.resize(0);
-					cplist.resize(0);
-					pclist.resize(0);
-					constexpr int CC = 0;
-					constexpr int LEAF = 1;
-					constexpr int CP = 2;
-					constexpr int PC = 3;
-					constexpr int NEXT = 4;
-					constexpr int NLISTS = 5;
-					array<bool, NLISTS> sw;
-					device_vector<int>* lists[NLISTS] = {&cclist, &leaflist, &cplist, &pclist, &nextlist};
-					auto& checks = dchecks;
-					float const thetainv = 1.f / global_params.theta;
-					do {
-						int const maxi = round_up(checks.size(), WARP_SIZE);
-						for (int i = tid; i < maxi; i += WARP_SIZE) {
-							for (int n = 0; n < NLISTS; n++) {
-								sw[n] = false;
-							}
-							if (i < checks.size()) {
-								tree_node const& other = tree_nodes[checks[i]];
-								if (other.nparts()) {
-									for (int dim = 0; dim < NDIM; dim++) {
-										dx[dim] = distance(self.pos[dim], other.pos[dim]); // 3
-									}
-									float const R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);
-									float const mind = self.radius + other.radius + h;
-									float const dcc = fmaxf((self.radius + other.radius) * thetainv, mind);
-									auto const self_parts = self.nparts();
-									auto const other_parts = other.nparts();
-									sw[CC] = (R2 > sqr(dcc)); // && min(self_parts, (part_int) (2*MIN_PARTS2_CC)) * min(other_parts, (part_int)
-															  // (2*MIN_PARTS2_CC)) >= MIN_PARTS2_CC;
-									flops += 20;
-									if (!sw[CC] && other.leaf && self.leaf) {
-										float const dcp = fmaxf((self.radius * thetainv + other.radius), mind);
-										float const dpc = fmaxf((self.radius + other.radius * thetainv), mind);
-										sw[PC] = (R2 > sqr(dpc) || !box_intersects_sphere(self.box, other.pos, fmaxf(thetainv * other.radius, h))) &&
-												 self_parts >= MIN_PARTS_PCCP;
-										sw[CP] = (R2 > sqr(dcp) || !box_intersects_sphere(other.box, self.pos, fmaxf(thetainv * self.radius, h))) &&
-												 other_parts >= MIN_PARTS_PCCP;
-										if (sw[PC] && sw[CP]) {
-											if (self_parts < other_parts) {
-												sw[CP] = false;
-											} else if (self_parts > other_parts) {
-												sw[PC] = false;
-											} else {
-												sw[CP] = sw[PC] = false;
-											}
-										}
-										flops += 33;
-									}
-									if (!sw[CC] && !sw[CP] && !sw[PC]) {
-										sw[LEAF] = other.leaf;
-										sw[NEXT] = !sw[LEAF];
-									}
-								}
-							}
-							{
-								array<int, NLISTS> l, total;
-								for (int n = 0; n < NLISTS; n++) {
-									l[n] = sw[n];
-								}
-								compute_indices_array(l, total);
-								for (int n = 0; n < NLISTS; n++) {
-									int const start = lists[n]->size();
-									__syncwarp();
-									lists[n]->resize(start + total[n]);
-									if (sw[n]) {
-										(*lists[n])[l[n] + start] = checks[i];
-									}
-								}
-							}
-						}
-						__syncwarp();
-						checks.resize(NCHILD * nextlist.size());
-						for (int i = tid; i < nextlist.size(); i += WARP_SIZE) {
-							auto const& node = tree_nodes[nextlist[i]];
-							auto const& children = node.children;
-							checks[NCHILD * i + LEFT] = children[LEFT].index;
-							checks[NCHILD * i + RIGHT] = children[RIGHT].index;
-						}
-						nextlist.resize(0);
-						__syncwarp();
+                    } while (checks.size() && self.leaf);
+                    if (self.leaf) {
+                        __syncwarp();
+                        float const h = globalParams.h;
+                        cudaGravityCcDirect(
+                            data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
+                        cudaGravityCpDirect(
+                            data, lValue3.back().expansion, self, cplist, globalParams.doPhi);
+                        cudaGravityPcDirect(data, self, pclist, globalParams.doPhi);
+                        cudaGravityPpDirect(data, self, leaflist, h, globalParams.doPhi);
+                    } else {
+                        int const start = checks.size();
+                        checks.resize(start + leaflist.size());
+                        cuda::memcpy_async(group, checks.data() + start, leaflist.data(),
+                            leaflist.size() * sizeof(int), barrier);
+                        cudaGravityCcDirect(
+                            data, lValue3.back().expansion, self, cclist, globalParams.doPhi);
+                        barrier.arrive_and_wait();
+                    }
+                }
+                if (self.leaf) {
+                    __syncwarp();
+                    if (nsinks) {
+                        doKick(kr, globalParams, data, lValue3.back().expansion, self);
+                    }
+                    sparams.popBack();
+                    depth--;
+                } else {
+                    TreeId const child = self.children[LEFT];
+                    int const i1 = lValue3.size() - 1;
+                    int const i2 = lValue3.size();
+                    lValue3.resize(i2 + 1);
+                    cuda::memcpy_async(group, &lValue3[i2].expansion, &lValue3[i1].expansion,
+                        sizeof(float) * EXPANSION_SIZE, barrier);
+                    if (tid < NDIM) {
+                        lValue3[i2].pos[tid] = lValue3[i1].pos[tid];
+                    }
+                    __syncwarp();
+                    dchecks.pushTop();
+                    echecks.pushTop();
+                    sparams.back().phase += 1;
+                    {
+                        SearchParams sparam;
+                        sparam.phase = 0;
+                        sparam.self = child.index;
+                        sparams.pushBack(sparam);
+                    }
+                    depth++;
+                    barrier.arrive_and_wait();
+                }
 
-					} while (checks.size() && self.leaf);
-					if (self.leaf) {
-						__syncwarp();
-						float const h = global_params.h;
-						cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
-						cuda_gravity_cp_direct(data, L.back().expansion, self, cplist, global_params.do_phi);
-						cuda_gravity_pc_direct(data, self, pclist, global_params.do_phi);
-						cuda_gravity_pp_direct(data, self, leaflist, h, global_params.do_phi);
-					} else {
-						int const start = checks.size();
-						checks.resize(start + leaflist.size());
-						cuda::memcpy_async(group, checks.data() + start, leaflist.data(), leaflist.size() * sizeof(int), barrier);
-						cuda_gravity_cc_direct(data, L.back().expansion, self, cclist, global_params.do_phi);
-						barrier.arrive_and_wait();
-					}
-				}
-				if (self.leaf) {
-					__syncwarp();
-					if (nsinks) {
-						do_kick(kr, global_params, data, L.back().expansion, self);
-					}
-					sparams.pop_back();
-					depth--;
-				} else {
-					tree_id const child = self.children[LEFT];
-					int const i1 = L.size() - 1;
-					int const i2 = L.size();
-					L.resize(i2 + 1);
-					cuda::memcpy_async(group, &L[i2].expansion, &L[i1].expansion, sizeof(float) * EXPANSION_SIZE, barrier);
-					if (tid < NDIM) {
-						L[i2].pos[tid] = L[i1].pos[tid];
-					}
-					__syncwarp();
-					dchecks.push_top();
-					echecks.push_top();
-					sparams.back().phase += 1;
-					{
-						search_params sparam;
-						sparam.phase = 0;
-						sparam.self = child.index;
-						sparams.push_back(sparam);
-					}
-					depth++;
-					barrier.arrive_and_wait();
-				}
+            } break;
+            case 1: {
+                lValue3.popBack();
+                dchecks.popTop();
+                echecks.popTop();
+                sparams.back().phase += 1;
+                {
+                    SearchParams sparam;
+                    sparam.phase = 0;
+                    sparam.self = self.children[RIGHT].index;
+                    sparams.pushBack(sparam);
+                }
+                depth++;
+            } break;
+            case 2: {
+                sparams.popBack();
+                depth--;
+            } break;
+            }
+        }
 
-			} break;
-			case 1: {
-				L.pop_back();
-				dchecks.pop_top();
-				echecks.pop_top();
-				sparams.back().phase += 1;
-				{
-					search_params sparam;
-					sparam.phase = 0;
-					sparam.self = self.children[RIGHT].index;
-					sparams.push_back(sparam);
-				}
-				depth++;
-			} break;
-			case 2: {
-				sparams.pop_back();
-				depth--;
-			} break;
-			}
-		}
+        if (tid == 0) {
+            index = atomicAdd(nextItem, 1);
+        }
+        index = __shfl_sync(0xFFFFFFFF, index, 0);
+        ASSERT(lValue3.size() == 1);
+        addGpuFlops(flops);
+    }
+    if (tid == 0) {
+        atomicAdd(&rc->dkin, kr.dkin);
+        atomicAdd(&rc->kin, kr.kin);
+        atomicAdd(&rc->pot, kr.pot);
+        atomicAdd(&rc->xmom, kr.xmom);
+        atomicAdd(&rc->ymom, kr.ymom);
+        atomicAdd(&rc->zmom, kr.zmom);
+        atomicAdd(&rc->nmom, kr.nmom);
+        atomicAdd(&rc->dmKineticCorrection, kr.dmKineticCorrection);
+        atomicAdd(&rc->dmXMomentumCorrection, kr.dmXMomentumCorrection);
+        atomicAdd(&rc->dmYMomentumCorrection, kr.dmYMomentumCorrection);
+        atomicAdd(&rc->dmZMomentumCorrection, kr.dmZMomentumCorrection);
+        atomicAdd(&rc->dmMomentumNormCorrection, kr.dmMomentumNormCorrection);
 
-		if (tid == 0) {
-			index = atomicAdd(next_item, 1);
-		}
-		index = __shfl_sync(0xFFFFFFFF, index, 0);
-		ASSERT(L.size() == 1);
-		add_gpu_flops(flops);
-	}
-	if (tid == 0) {
-		atomicAdd(&rc->dkin, kr.dkin);
-		atomicAdd(&rc->kin, kr.kin);
-		atomicAdd(&rc->pot, kr.pot);
-		atomicAdd(&rc->xmom, kr.xmom);
-		atomicAdd(&rc->ymom, kr.ymom);
-		atomicAdd(&rc->zmom, kr.zmom);
-		atomicAdd(&rc->nmom, kr.nmom);
-		atomicAdd(&rc->dmKineticCorrection, kr.dmKineticCorrection);
-		atomicAdd(&rc->dmXMomentumCorrection, kr.dmXMomentumCorrection);
-		atomicAdd(&rc->dmYMomentumCorrection, kr.dmYMomentumCorrection);
-		atomicAdd(&rc->dmZMomentumCorrection, kr.dmZMomentumCorrection);
-		atomicAdd(&rc->dmMomentumNormCorrection, kr.dmMomentumNormCorrection);
+        atomicMax(&rc->maxRung, kr.maxRung);
+    }
+    ((CudaKickShmem*) shmemPtr)->~CudaKickShmem();
 
-		atomicMax(&rc->max_rung, kr.max_rung);
-	}
-	((cuda_kick_shmem*)shmem_ptr)->~cuda_kick_shmem();
-
-	//	atomicAdd(&total_time, ((double) (clock64() - tm1)));
+    //	atomicAdd(&total_time, ((double) (clock64() - tm1)));
 }
 
-kick_return cuda_execute_kicks(kick_params kparams, fixed32* dev_x, fixed32* dev_y, fixed32* dev_z, tree_node* dev_tree_nodes,
-							   vector<kick_workitem> workitems) {
-	timer tm;
-	tm.start();
-	int nblocks = kick_block_count();
-	ALWAYS_ASSERT(workitems.size());
-	nblocks = std::min(nblocks, (int)workitems.size());
-	static char* data_ptr = nullptr;
-	static char* dev_data_ptr = nullptr;
-	static int data_size = 0;
-	int dcount = 0;
-	int ecount = 0;
-	for (int i = 0; i < workitems.size(); i++) {
-		dcount += workitems[i].dchecklist.size();
-		ecount += workitems[i].echecklist.size();
-	}
-	int const alloc_size = sizeof(int) + sizeof(cuda_kick_params) * workitems.size() + sizeof(kick_return) + sizeof(int) * dcount + sizeof(int) * ecount;
-	if (data_size < alloc_size) {
-		if (data_ptr) {
-			CUDA_CHECK(cudaFree(dev_data_ptr));
-			free(data_ptr);
-		}
-		data_size = alloc_size;
-		data_ptr = (char*)malloc(alloc_size);
-		CUDA_CHECK(cudaMalloc(&dev_data_ptr, alloc_size));
-	}
-	int offset = 0;
-	kick_return* return_ = (kick_return*)(data_ptr + offset);
-	offset += sizeof(kick_return);
-	cuda_kick_params* ikick_params = (cuda_kick_params*)(data_ptr + offset);
-	offset += sizeof(cuda_kick_params) * workitems.size();
-	int* dchecks = (int*)(data_ptr + offset);
-	offset += sizeof(int) * dcount;
-	int* echecks = (int*)(data_ptr + offset);
-	offset += sizeof(int) * ecount;
-	int* current_index = (int*)(data_ptr + offset);
-	offset += sizeof(int);
-	offset = 0;
-	kick_return* dev_return_ = (kick_return*)(dev_data_ptr + offset);
-	offset += sizeof(kick_return);
-	cuda_kick_params* dev_ikick_params = (cuda_kick_params*)(dev_data_ptr + offset);
-	offset += sizeof(cuda_kick_params) * workitems.size();
-	int* dev_dchecks = (int*)(dev_data_ptr + offset);
-	offset += sizeof(int) * dcount;
-	int* dev_echecks = (int*)(dev_data_ptr + offset);
-	offset += sizeof(int) * ecount;
-	int* dev_current_index = (int*)(dev_data_ptr + offset);
-	offset += sizeof(int);
-	*current_index = 0;
-	*return_ = kick_return();
-	vector<int> dindices(workitems.size() + 1);
-	vector<int> eindices(workitems.size() + 1);
-	dcount = 0;
-	ecount = 0;
-	for (int i = 0; i < workitems.size(); i++) {
-		dindices[i] = dcount;
-		eindices[i] = ecount;
-		for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-			dchecks[dcount] = workitems[i].dchecklist[j].index;
-			dcount++;
-		}
-		for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-			echecks[ecount] = workitems[i].echecklist[j].index;
-			ecount++;
-		}
-	}
+KickReturn cudaExecuteKicks(KickParams kparams, Fixed32* devX, Fixed32* devY, Fixed32* devZ,
+    TreeNode* devTreeNodes, Vector<KickWorkitem> workitems) {
+    Timer tm;
+    tm.start();
+    int nblocks = kickBlockCount();
+    ALWAYS_ASSERT(workitems.size());
+    nblocks = std::min(nblocks, (int) workitems.size());
+    static char* dataPtr = nullptr;
+    static char* devDataPtr = nullptr;
+    static int dataSize = 0;
+    int dcount = 0;
+    int ecount = 0;
+    for (int i = 0; i < workitems.size(); i++) {
+        dcount += workitems[i].dchecklist.size();
+        ecount += workitems[i].echecklist.size();
+    }
+    int const allocSize = sizeof(int) + sizeof(CudaKickParams) * workitems.size() +
+        sizeof(KickReturn) + sizeof(int) * dcount + sizeof(int) * ecount;
+    if (dataSize < allocSize) {
+        if (dataPtr) {
+            CUDA_CHECK(cudaFree(devDataPtr));
+            free(dataPtr);
+        }
+        dataSize = allocSize;
+        dataPtr = (char*) malloc(allocSize);
+        CUDA_CHECK(cudaMalloc(&devDataPtr, allocSize));
+    }
+    int offset = 0;
+    KickReturn* result = (KickReturn*) (dataPtr + offset);
+    offset += sizeof(KickReturn);
+    CudaKickParams* ikickParams = (CudaKickParams*) (dataPtr + offset);
+    offset += sizeof(CudaKickParams) * workitems.size();
+    int* dchecks = (int*) (dataPtr + offset);
+    offset += sizeof(int) * dcount;
+    int* echecks = (int*) (dataPtr + offset);
+    offset += sizeof(int) * ecount;
+    int* currentIndex = (int*) (dataPtr + offset);
+    offset += sizeof(int);
+    offset = 0;
+    KickReturn* devReturnArg = (KickReturn*) (devDataPtr + offset);
+    offset += sizeof(KickReturn);
+    CudaKickParams* devIkickParams = (CudaKickParams*) (devDataPtr + offset);
+    offset += sizeof(CudaKickParams) * workitems.size();
+    int* devDchecks = (int*) (devDataPtr + offset);
+    offset += sizeof(int) * dcount;
+    int* devEchecks = (int*) (devDataPtr + offset);
+    offset += sizeof(int) * ecount;
+    int* devCurrentIndex = (int*) (devDataPtr + offset);
+    offset += sizeof(int);
+    *currentIndex = 0;
+    *result = KickReturn();
+    Vector<int> dindices(workitems.size() + 1);
+    Vector<int> eindices(workitems.size() + 1);
+    dcount = 0;
+    ecount = 0;
+    for (int i = 0; i < workitems.size(); i++) {
+        dindices[i] = dcount;
+        eindices[i] = ecount;
+        for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
+            dchecks[dcount] = workitems[i].dchecklist[j].index;
+            dcount++;
+        }
+        for (int j = 0; j < workitems[i].echecklist.size(); j++) {
+            echecks[ecount] = workitems[i].echecklist[j].index;
+            ecount++;
+        }
+    }
 
-	dindices[workitems.size()] = dcount;
-	eindices[workitems.size()] = ecount;
-	cuda_kick_data data;
-	data.x = dev_x;
-	data.y = dev_y;
-	data.z = dev_z;
-	data.tree_nodes = dev_tree_nodes;
-	data.vel = particles_vel_data();
-	data.rungs = &particles_rung(0);
-	data.sph = get_options().sph;
-	data.vsoft = false;
-	data.dm_mass = get_options().dm_mass;
-	data.sph_mass = get_options().sph_mass;
-	data.type = data.sph ? &particles_type(0) : nullptr;
-	data.cat_index = data.sph ? &particles_cat_index(0) : nullptr;
-	data.sph_gx = data.sph ? &sph_particles_gforce(XDIM, 0) : nullptr;
-	data.sph_gy = data.sph ? &sph_particles_gforce(YDIM, 0) : nullptr;
-	data.sph_gz = data.sph ? &sph_particles_gforce(ZDIM, 0) : nullptr;
-	if (kparams.save_force) {
-		data.gx = &particles_gforce(XDIM, 0);
-		data.gy = &particles_gforce(YDIM, 0);
-		data.gz = &particles_gforce(ZDIM, 0);
-		data.pot = &particles_pot(0);
-	} else {
-		data.gx = data.gy = data.gz = data.pot = nullptr;
-	}
+    dindices[workitems.size()] = dcount;
+    eindices[workitems.size()] = ecount;
+    CudaKickData data;
+    data.x = devX;
+    data.y = devY;
+    data.z = devZ;
+    data.treeNodes = devTreeNodes;
+    data.vel = particlesVelData();
+    data.rungs = &particlesRung(0);
+    data.sph = getOptions().sph;
+    data.vsoft = false;
+    data.dmMass = getOptions().dmMass;
+    data.sphMass = getOptions().sphMass;
+    data.type = data.sph ? &particlesType(0) : nullptr;
+    data.catIndex = data.sph ? &particlesCatIndex(0) : nullptr;
+    data.sphGx = data.sph ? &sphParticlesGforce(XDIM, 0) : nullptr;
+    data.sphGy = data.sph ? &sphParticlesGforce(YDIM, 0) : nullptr;
+    data.sphGz = data.sph ? &sphParticlesGforce(ZDIM, 0) : nullptr;
+    if (kparams.saveForce) {
+        data.gx = &particlesGforce(XDIM, 0);
+        data.gy = &particlesGforce(YDIM, 0);
+        data.gz = &particlesGforce(ZDIM, 0);
+        data.pot = &particlesPot(0);
+    } else {
+        data.gx = data.gy = data.gz = data.pot = nullptr;
+    }
 
-	for (int i = 0; i < workitems.size(); i++) {
-		cuda_kick_params params;
-		params.Lpos = workitems[i].pos;
-		params.L = workitems[i].L;
-		params.self = workitems[i].self.index;
-		params.dchecks = dev_dchecks + dindices[i];
-		params.echecks = dev_echecks + eindices[i];
-		params.dcount = dindices[i + 1] - dindices[i];
-		params.ecount = eindices[i + 1] - eindices[i];
-		ikick_params[i] = std::move(params);
-	}
-	cuda_set_device();
-	CUDA_CHECK(cudaMemcpyAsync(dev_data_ptr, data_ptr, sizeof(char) * alloc_size, cudaMemcpyHostToDevice, 0));
-	cuda_kick_kernel<<<nblocks, WARP_SIZE, sizeof(cuda_kick_shmem)>>>(dev_return_, kparams, data, dev_ikick_params, workitems.size(), dev_current_index);
-	CUDA_CHECK(cudaMemcpyAsync(return_, dev_return_, sizeof(kick_return), cudaMemcpyDeviceToHost, 0));
-	CUDA_CHECK(cudaDeviceSynchronize());
-	return *return_;
+    for (int i = 0; i < workitems.size(); i++) {
+        CudaKickParams params;
+        params.lpos = workitems[i].pos;
+        params.lValue = workitems[i].l;
+        params.self = workitems[i].self.index;
+        params.dchecks = devDchecks + dindices[i];
+        params.echecks = devEchecks + eindices[i];
+        params.dcount = dindices[i + 1] - dindices[i];
+        params.ecount = eindices[i + 1] - eindices[i];
+        ikickParams[i] = std::move(params);
+    }
+    cudaSetDevice();
+    CUDA_CHECK(
+        cudaMemcpyAsync(devDataPtr, dataPtr, sizeof(char) * allocSize, cudaMemcpyHostToDevice, 0));
+    cudaKickKernel<<<nblocks, WARP_SIZE, sizeof(CudaKickShmem)>>>(
+        devReturnArg, kparams, data, devIkickParams, workitems.size(), devCurrentIndex);
+    CUDA_CHECK(
+        cudaMemcpyAsync(result, devReturnArg, sizeof(KickReturn), cudaMemcpyDeviceToHost, 0));
+    CUDA_CHECK(cudaDeviceSynchronize());
+    return *result;
 }
 
-int kick_block_count() {
-	static int nblocks;
-	static bool shown = false;
-	if (!shown) {
-		cudaFuncAttributes attr;
-		CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*)cuda_kick_kernel));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (void const*)cuda_kick_kernel, WARP_SIZE, sizeof(cuda_kick_shmem)));
-		PRINT("Occupancy is %i shmem size = %li numregs = %i\n", nblocks, sizeof(cuda_kick_shmem), attr.numRegs);
-		nblocks *= cuda_smp_count();
-		shown = true;
-	}
-	return nblocks;
+int kickBlockCount() {
+    static int nblocks;
+    static bool shown = false;
+    if (!shown) {
+        cudaFuncAttributes attr;
+        CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaKickKernel));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &nblocks, (void const*) cudaKickKernel, WARP_SIZE, sizeof(CudaKickShmem)));
+        PRINT("Occupancy is %i shmem size = %li numregs = %i\n", nblocks, sizeof(CudaKickShmem),
+            attr.numRegs);
+        nblocks *= cudaSmpCount();
+        shown = true;
+    }
+    return nblocks;
 }

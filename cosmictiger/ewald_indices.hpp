@@ -24,26 +24,23 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/tensor.hpp>
 
-
 #define NREAL 178
 #define NFOUR 92
 
-
-struct ewald_const {
-	CUDA_EXPORT static int nfour();
-	CUDA_EXPORT static int nreal();
-	static void init();
-	static void init_gpu();
-	CUDA_EXPORT static const array<float,NDIM>& real_index(int i);
-	CUDA_EXPORT static const array<float,NDIM>& four_index(int i);
-	CUDA_EXPORT static const tensor_trless_sym<float,LORDER>& four_expansion(int i);
-	CUDA_EXPORT static const tensor_sym<float,LORDER> D0();
+struct EwaldConst {
+    CUDA_EXPORT static int nfour();
+    CUDA_EXPORT static int nreal();
+    static void init();
+    static void initGpu();
+    CUDA_EXPORT static Array<float, NDIM> const& realIndex(int i);
+    CUDA_EXPORT static Array<float, NDIM> const& fourIndex(int i);
+    CUDA_EXPORT static TensorTrlessSym<float, LORDER> const& fourExpansion(int i);
+    CUDA_EXPORT static TensorSym<float, LORDER> const d0();
 };
 
-
-struct ewald_constants {
-	array<array<float, NDIM>, NREAL> real_indices;
-	array<array<float, NDIM>, NFOUR> four_indices;
-	array<tensor_trless_sym<float, LORDER>, NFOUR> four_expanse;
-	tensor_sym<float,LORDER> D0;
+struct EwaldConstants {
+    Array<Array<float, NDIM>, NREAL> realIndices;
+    Array<Array<float, NDIM>, NFOUR> fourIndices;
+    Array<TensorTrlessSym<float, LORDER>, NFOUR> fourExpanse;
+    TensorSym<float, LORDER> d0;
 };

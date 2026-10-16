@@ -17,27 +17,26 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/defs.hpp>
 #include <cosmictiger/cuda_reduce.hpp>
+#include <cosmictiger/defs.hpp>
 
-static __managed__ double gpu_flops = 0.0;
+static __managed__ double gpuFlops = 0.0;
 
-void reset_gpu_flops() {
-	gpu_flops = 0.0;
+void resetGpuFlops() {
+    gpuFlops = 0.0;
 }
 
-double get_gpu_flops() {
-	return gpu_flops;
+double getGpuFlops() {
+    return gpuFlops;
 }
 
-__device__
-void add_gpu_flops(int count) {
+__device__ void addGpuFlops(int count) {
 #ifdef COUNT_FLOPS
-	const int& tid = threadIdx.x;
-	int total = count;
-	shared_reduce_add(count);
-	if (tid == 0) {
-		atomicAdd(&gpu_flops, (double) count);
-	}
+    int const& tid = threadIdx.x;
+    int total = count;
+    sharedReduceAdd(count);
+    if (tid == 0) {
+        atomicAdd(&gpuFlops, (double) count);
+    }
 #endif
 }

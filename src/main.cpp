@@ -44,96 +44,95 @@
 #include <cosmictiger/unordered_set_ts.hpp>
 
 int hpx_main(int argc, char* argv[]) {
+    /*	simd_double8 x;
+     for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
+     PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
+     }*/
 
-	/*	simd_double8 x;
-	 for( x[0] = 0.0; x[0] < 0.87; x[0] += 0.01 ) {
-	 PRINT( "%e %e\n", -x[0], (erfnearzero(-x)[0] - erf(-x[0]))/erf(-x[0]));
-	 }*/
+    Expansion<SimdFloat> d;
+    Array<SimdFloat, NDIM> xValue;
 
-	expansion<simd_float> D;
-	array<simd_float, NDIM> X;
-
-	std::atomic<int> i;
-	PRINT("%i\n", sizeof(rockstar_record));
-	for (double q = 0.0; q < 1.0; q += 0.01) {
-		//		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
-	}
-	FILE* fp = fopen("soft.txt", "wt");
-	for (double r = 0.0; r < 1.0; r += 0.01) {
-		double f, phi;
-		gsoft(f, phi, r * r, 1.0, 1.0, 1.0, true);
-		fprintf(fp, "%e %e %e\n", r, phi, f);
-	}
-	fclose(fp);
-	if (!i.is_lock_free()) {
-		PRINT("std::atomic<int> is not lock free!\n");
-		PRINT("std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
-		PRINT("Exiting...\n");
-		return hpx::finalize();
-	} else {
-		PRINT("std::atomic<int> is lock free!\n");
-	}
-	PRINT("tree_node size = %i\n", sizeof(tree_node));
-	hpx_init();
-	healpix_init();
-	PRINT("Starting mem use daemon\n");
-	start_memuse_daemon();
-	try {
-		if (process_options(argc, argv)) {
-			ewald_const::init();
-			FILE* fp = fopen("ewald.txt", "wt");
-			X[0] = X[1] = X[2] = 0.00;
-			for (double x = 0.00; x < 0.5; x += 0.001) {
-				X[0] = x;
-				D = 0.0;
-				ewald_greens_function(D, X);
-				fprintf(fp, "%e ", x);
-				for (int n = 0; n < LORDER; n++) {
-					for (int m = 0; m < LORDER - n; m++) {
-						for (int l = 0; l < LORDER - n - m; l++) {
-							if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
-								continue;
-							}
-							fprintf(fp, "%e ", D(n, m, l)[0]);
-						}
-					}
-				}
-				fprintf(fp, "\n");
-			}
-			fclose(fp);
-			if (get_options().test != "") {
-				test(get_options().test);
-			} else {
-				driver();
-			}
-		}
-		particles_destroy();
-	} catch (std::exception const& error) {
-		PRINT("CosmicTiger failed: %s\n", error.what());
-		stop_memuse_daemon();
-		hpx::finalize();
-		return EXIT_FAILURE;
-	} catch (...) {
-		PRINT("CosmicTiger failed with an unknown exception\n");
-		stop_memuse_daemon();
-		hpx::finalize();
-		return EXIT_FAILURE;
-	}
-	stop_memuse_daemon();
-	return hpx::finalize();
+    std::atomic<int> i;
+    PRINT("%i\n", sizeof(RockstarRecord));
+    for (double q = 0.0; q < 1.0; q += 0.01) {
+        //		PRINT( "%e %e %e\n",q, sph_Wh3(q,1.0),sph_dWh3dq(q,1.0));
+    }
+    FILE* fp = fopen("soft.txt", "wt");
+    for (double r = 0.0; r < 1.0; r += 0.01) {
+        double f, phi;
+        gsoft(f, phi, r * r, 1.0, 1.0, 1.0, true);
+        fprintf(fp, "%e %e %e\n", r, phi, f);
+    }
+    fclose(fp);
+    if (!i.is_lock_free()) {
+        PRINT("std::atomic<int> is not lock free!\n");
+        PRINT("std::atomic<int> must be lock_free for CosmicTiger to run properly.\n");
+        PRINT("Exiting...\n");
+        return hpx::finalize();
+    } else {
+        PRINT("std::atomic<int> is lock free!\n");
+    }
+    PRINT("tree_node size = %i\n", sizeof(TreeNode));
+    hpxInit();
+    healpixInit();
+    PRINT("Starting mem use daemon\n");
+    startMemuseDaemon();
+    try {
+        if (processOptions(argc, argv)) {
+            EwaldConst::init();
+            FILE* fp = fopen("ewald.txt", "wt");
+            xValue[0] = xValue[1] = xValue[2] = 0.00;
+            for (double x = 0.00; x < 0.5; x += 0.001) {
+                xValue[0] = x;
+                d = 0.0;
+                ewaldGreensFunction(d, xValue);
+                fprintf(fp, "%e ", x);
+                for (int n = 0; n < LORDER; n++) {
+                    for (int m = 0; m < LORDER - n; m++) {
+                        for (int l = 0; l < LORDER - n - m; l++) {
+                            if (l > 1 && !(l == 2 && n == 0 && m == 0)) {
+                                continue;
+                            }
+                            fprintf(fp, "%e ", d(n, m, l)[0]);
+                        }
+                    }
+                }
+                fprintf(fp, "\n");
+            }
+            fclose(fp);
+            if (getOptions().test != "") {
+                test(getOptions().test);
+            } else {
+                driver();
+            }
+        }
+        particlesDestroy();
+    } catch (std::exception const& error) {
+        PRINT("CosmicTiger failed: %s\n", error.what());
+        stopMemuseDaemon();
+        hpx::finalize();
+        return EXIT_FAILURE;
+    } catch (...) {
+        PRINT("CosmicTiger failed with an unknown exception\n");
+        stopMemuseDaemon();
+        hpx::finalize();
+        return EXIT_FAILURE;
+    }
+    stopMemuseDaemon();
+    return hpx::finalize();
 }
 
 #ifndef HPX_LITE
 int main(int argc, char* argv[]) {
-	PRINT("STARTING MAIN\n");
-	std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
-	cfg.push_back("hpx.stacks.small_size=524288");
+    PRINT("STARTING MAIN\n");
+    std::vector<std::string> cfg = {"hpx.commandline.allow_unknown=1"};
+    cfg.push_back("hpx.stacks.small_size=524288");
 #ifdef HPX_EARLY
-	return hpx::init(argc, argv, cfg);
+    return hpx::init(argc, argv, cfg);
 #else
-	hpx::init_params init_params;
-	init_params.cfg = std::move(cfg);
-	return hpx::init(argc, argv, init_params);
+    hpx::init_params initParams;
+    initParams.cfg = std::move(cfg);
+    return hpx::init(argc, argv, initParams);
 #endif
 }
 #endif

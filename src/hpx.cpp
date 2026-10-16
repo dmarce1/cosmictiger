@@ -17,129 +17,129 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/hpx.hpp>
-#include <cosmictiger/cuda.hpp>
-#include <cosmictiger/containers.hpp>
-#include <string>
 #include <set>
+#include <string>
+
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/cuda.hpp>
+#include <cosmictiger/hpx.hpp>
 
 static int rank;
 static int nranks;
-static vector<hpx::id_type> localities;
-static vector<hpx::id_type> children;
+static Vector<hpx::id_type> localities;
+static Vector<hpx::id_type> children;
 static int ppnode;
 static bool hyper;
 
-HPX_PLAIN_ACTION (hpx_init);
+HPX_PLAIN_ACTION(hpxInit, HpxInitAction);
 
-static void detect_processes_per_node();
-static bool detect_hyperthreading();
+static void detectProcessesPerNode();
+static bool detectHyperthreading();
 
-void hpx_yield() {
-	hpx::this_thread::yield();
+void hpxYield() {
+    hpx::this_thread::yield();
 }
 
-int hpx_hardware_concurrency() {
-	static bool first_call = true;
-	int threads = hpx::thread::hardware_concurrency();
-	if (hyper) {
-		threads /= 2 * ppnode;
-	} else {
-		threads /= ppnode;
-	}
-	if (threads == 0) {
-		threads = 1;
-	}
-	if (first_call) {
-		PRINT("Detected a hardware concurrency of %i\n", threads);
-		first_call = false;
-	}
-	return threads;
+int hpxHardwareConcurrency() {
+    static bool firstCall = true;
+    int threads = hpx::thread::hardware_concurrency();
+    if (hyper) {
+        threads /= 2 * ppnode;
+    } else {
+        threads /= ppnode;
+    }
+    if (threads == 0) {
+        threads = 1;
+    }
+    if (firstCall) {
+        PRINT("Detected a hardware concurrency of %i\n", threads);
+        firstCall = false;
+    }
+    return threads;
 }
 
-void hpx_init() {
-	rank = hpx::get_locality_id();
-	auto tmp = hpx::find_all_localities();
-	localities.insert(localities.end(), tmp.begin(), tmp.end());
-	nranks = localities.size();
-	int base = (rank + 1) << 1;
-	const int index1 = base - 1;
-	const int index2 = base;
-	if (index1 < nranks) {
-		children.push_back(localities[index1]);
-	}
-	if (index2 < nranks) {
-		children.push_back(localities[index2]);
-	}
+void hpxInit() {
+    rank = hpx::get_locality_id();
+    auto tmp = hpx::find_all_localities();
+    localities.insert(localities.end(), tmp.begin(), tmp.end());
+    nranks = localities.size();
+    int base = (rank + 1) << 1;
+    int const index1 = base - 1;
+    int const index2 = base;
+    if (index1 < nranks) {
+        children.push_back(localities[index1]);
+    }
+    if (index2 < nranks) {
+        children.push_back(localities[index2]);
+    }
 #ifdef USE_CUDA
-	cuda_init();
+    cudaInit();
 #endif
 
-	vector<hpx::future<void>> futs;
-	for (auto c : hpx_children()) {
-		futs.push_back(hpx::async<hpx_init_action>(c));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	detect_processes_per_node();
-	hyper = detect_hyperthreading();
+    Vector<hpx::future<void>> futs;
+    for (auto c : hpxChildren()) {
+        futs.push_back(hpx::async<HpxInitAction>(c));
+    }
+    hpx::wait_all(futs.begin(), futs.end());
+    detectProcessesPerNode();
+    hyper = detectHyperthreading();
 }
 
-int hpx_rank() {
-	return rank;
+int hpxRank() {
+    return rank;
 }
 
-int hpx_size() {
-	return nranks;
+int hpxSize() {
+    return nranks;
 }
 
-const vector<hpx::id_type>& hpx_localities() {
-	return localities;
+Vector<hpx::id_type> const& hpxLocalities() {
+    return localities;
 }
 
-const vector<hpx::id_type>& hpx_children() {
-	return children;
+Vector<hpx::id_type> const& hpxChildren() {
+    return children;
 }
 
-static bool detect_hyperthreading() {
-	FILE* fp = fopen("/sys/devices/system/cpu/smt/active", "rt");
-	if (fp != nullptr) {
-		char c;
-		fread(&c, sizeof(char), 1, fp);
-		auto rc = c == '1';
-		if (rc) {
-			PRINT("Hyperthreading detected\n");
-		} else {
-			PRINT("Hyperthreading NOT detected\n");
-		}
-		return rc;
-	} else {
-		return false;
-	}
+static bool detectHyperthreading() {
+    FILE* fp = fopen("/sys/devices/system/cpu/smt/active", "rt");
+    if (fp != nullptr) {
+        char c;
+        fread(&c, sizeof(char), 1, fp);
+        auto rc = c == '1';
+        if (rc) {
+            PRINT("Hyperthreading detected\n");
+        } else {
+            PRINT("Hyperthreading NOT detected\n");
+        }
+        return rc;
+    } else {
+        return false;
+    }
 }
 
-static std::string get_hostname() {
-	char buffer[1024];
-	gethostname(buffer, 1023);
-	std::string name = buffer;
-	return name;
-
+static std::string getHostname() {
+    char buffer[1024];
+    gethostname(buffer, 1023);
+    std::string name = buffer;
+    return name;
 }
 
-HPX_PLAIN_ACTION (get_hostname);
+HPX_PLAIN_ACTION(getHostname, GetHostnameAction);
 
-static void detect_processes_per_node() {
-	vector < hpx::future < std::string >> futs;
-	for (int i = 0; i < localities.size(); i++) {
-		futs.push_back(hpx::async<get_hostname_action>(localities[i]));
-	}
+static void detectProcessesPerNode() {
+    Vector<hpx::future<std::string>> futs;
+    for (int i = 0; i < localities.size(); i++) {
+        futs.push_back(hpx::async<GetHostnameAction>(localities[i]));
+    }
 
-	std::set < std::string > names;
-	for (auto& f : futs) {
-		const auto name = f.get();
-		if (names.find(name) == names.end()) {
-			names.insert(name);
-		}
-	}
-	ppnode = localities.size() / names.size();
-	PRINT("Detected %i processes per node\n", ppnode);
+    std::set<std::string> names;
+    for (auto& f : futs) {
+        auto const name = f.get();
+        if (names.find(name) == names.end()) {
+            names.insert(name);
+        }
+    }
+    ppnode = localities.size() / names.size();
+    PRINT("Detected %i processes per node\n", ppnode);
 }

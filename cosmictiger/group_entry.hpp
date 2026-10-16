@@ -17,62 +17,56 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef GROUP_ENTRY_HPP_
 #define GROUP_ENTRY_HPP_
-
-#include <cosmictiger/defs.hpp>
-#include <cosmictiger/containers.hpp>
 
 #include <array>
 #include <unordered_map>
 
+#include <cosmictiger/containers.hpp>
+#include <cosmictiger/defs.hpp>
 
-using group_int = long long;
+using GroupInt = long long;
 
-
-struct group_header {
-	int number;
-	double time;
-	double box_len;
-	double scale;
+struct GroupHeader {
+    int number;
+    double time;
+    double boxLen;
+    double scale;
 };
 
-struct group_entry {
-	group_int id;
-	array<double, NDIM> com;
-	array<float, NDIM> vel;
-	array<float, NDIM> lang;
-	float mass;
-	float ekin;
-	float epot;
-	float r25;
-	float r50;
-	float r75;
-	float r90;
-	float rmax;
-	float ravg;
-	float vxdisp;
-	float vydisp;
-	float vzdisp;
-	float Ixx;
-	float Ixy;
-	float Ixz;
-	float Iyy;
-	float Iyz;
-	float Izz;
-	bool incomplete;
-	std::unordered_map<group_int, int> parents;
-	group_entry() = default;
-	group_entry(group_entry&&) = default;
-	group_entry(const group_entry&) = delete;
-	group_entry& operator=(group_entry&&) = default;
-	group_entry& operator=(const group_entry&) = delete;
-	void write(FILE* fp);
-	bool read(FILE* fp);
+struct GroupEntry {
+    GroupInt id;
+    Array<double, NDIM> com;
+    Array<float, NDIM> vel;
+    Array<float, NDIM> lang;
+    float mass;
+    float ekin;
+    float epot;
+    float r25;
+    float r50;
+    float r75;
+    float r90;
+    float rmax;
+    float ravg;
+    float vxdisp;
+    float vydisp;
+    float vzdisp;
+    float ixx;
+    float ixy;
+    float ixz;
+    float iyy;
+    float iyz;
+    float izz;
+    bool incomplete;
+    std::unordered_map<GroupInt, int> parents;
+    GroupEntry() = default;
+    GroupEntry(GroupEntry&&) = default;
+    GroupEntry(GroupEntry const&) = delete;
+    GroupEntry& operator=(GroupEntry&&) = default;
+    GroupEntry& operator=(GroupEntry const&) = delete;
+    void write(FILE* fp);
+    bool read(FILE* fp);
 };
-
-
-
 
 #endif /* GROUP_ENTRY_HPP_ */

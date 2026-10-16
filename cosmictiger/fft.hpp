@@ -20,30 +20,30 @@
 #ifndef FFT_HPP_
 #define FFT_HPP_
 
+#include <cosmictiger/complex.hpp>
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/range.hpp>
-#include <cosmictiger/complex.hpp>
 
-void fft3d_init(int64_t N, float init_const = 0.0);
-void fft3d_execute();
-void fft3d_inv_execute();
-vector<float> fft3d_read_real(const range<int64_t>&);
-vector<cmplx> fft3d_read_complex(const range<int64_t>&);
-void fft3d_accumulate_real(const range<int64_t>&, const vector<float>&);
-void fft3d_accumulate_complex(const range<int64_t>&, const vector<cmplx>&);
-void fft3d_destroy();
-void fft3d_force_real();
-range<int64_t> fft3d_complex_range();
-range<int64_t> fft3d_real_range();
-vector<cmplx>& fft3d_complex_vector();
+void fft3dInit(int64_t n, float initConst = 0.0);
+void fft3dExecute();
+void fft3dInvExecute();
+Vector<float> fft3dReadReal(Range<int64_t> const&);
+Vector<Cmplx> fft3dReadComplex(Range<int64_t> const&);
+void fft3dAccumulateReal(Range<int64_t> const&, Vector<float> const&);
+void fft3dAccumulateComplex(Range<int64_t> const&, Vector<Cmplx> const&);
+void fft3dDestroy();
+void fft3dForceReal();
+Range<int64_t> fft3dComplexRange();
+Range<int64_t> fft3dRealRange();
+Vector<Cmplx>& fft3dComplexVector();
 
-struct power_spectrum_t {
-	vector<float> P;
-	vector<float> k;
-	vector<float> Perr;
+struct PowerSpectrumT {
+    Vector<float> p;
+    Vector<float> k;
+    Vector<float> perr;
 };
 
-power_spectrum_t fft3d_power_spectrum();
+PowerSpectrumT fft3dPowerSpectrum();
 void fft3d2silo(bool real);
 /*
  inline CUDA_EXPORT float cloud_weight(float x) {
@@ -71,11 +71,11 @@ void fft3d2silo(bool real);
  } else if (x < 1.0f) {
  return 151.0 / 315.0 - x2 / 3.0 + x4 / 9.0 - x6 / 36.0 + x7 / 144.0;
  } else if (x < 2.0f) {
- return 103 / 210. - 7 / 90. * x - x2 / 10. - 7. / 18. * x3 + x4 / 2.0 - 7.0 * x5 / 30.0 + x6 / 20.0 - x7 / 240.0;
- } else if (x < 3.0f) {
- return -139.0 / 630.0 + 217.0 / 90.0 * x - 23.0 * x2 / 6.0 + 49 * x3 / 18.00 - 19 * x4 / 18 + 7 * x5 / 30 - x6 / 36 + x7 / 720.0;
- } else {
- return 1024 / 315.0 - 256.0 * x / 45.0 + 64.0 * x2 / 15.0 - 16. * x3 / 9.0 + 4.0 * x4 / 9.0 - x5 / 15.0 + x6 / 180 - x7 / 5040.0;
+ return 103 / 210. - 7 / 90. * x - x2 / 10. - 7. / 18. * x3 + x4 / 2.0 - 7.0 * x5 / 30.0 + x6 / 20.0
+ - x7 / 240.0; } else if (x < 3.0f) { return -139.0 / 630.0 + 217.0 / 90.0 * x - 23.0 * x2 / 6.0 +
+ 49 * x3 / 18.00 - 19 * x4 / 18 + 7 * x5 / 30 - x6 / 36 + x7 / 720.0; } else { return 1024 / 315.0 -
+ 256.0 * x / 45.0 + 64.0 * x2 / 15.0 - 16. * x3 / 9.0 + 4.0 * x4 / 9.0 - x5 / 15.0 + x6 / 180 - x7 /
+ 5040.0;
  }
  }
 
@@ -112,28 +112,27 @@ void fft3d2silo(bool real);
  */
 #define CLOUD_MIN -2
 #define CLOUD_MAX 3
-inline CUDA_EXPORT float cloud_weight(float x) {
-	x = fabs(x);
-	const float x2 = sqr(x);
-	const float x3 = x * x2;
-	const float x4 = x2 * x2;
-	const float x5 = x3 * x2;
-	if (x > 3.0f) {
-		return 0.0f;
-	} else if (x < 1.0f) {
-		return (33.0f - 30.0 * x2 + 15.0f * x4 - 5.0f * x5) / 60.0f;
-	} else if (x < 2.0f) {
-		return (51.0 + 75.0 * x - 210 * x2 + 150 * x3 - 45 * x4 + 5 * x5) / 120.0;
-	} else {
-		return (243.0 - 405.0 * x + 270 * x2 - 90 * x3 + 15 * x4 - x5) / 120.0;
-	}
+inline CUDA_EXPORT float cloudWeight(float x) {
+    x = fabs(x);
+    float const x2 = sqr(x);
+    float const x3 = x * x2;
+    float const x4 = x2 * x2;
+    float const x5 = x3 * x2;
+    if (x > 3.0f) {
+        return 0.0f;
+    } else if (x < 1.0f) {
+        return (33.0f - 30.0 * x2 + 15.0f * x4 - 5.0f * x5) / 60.0f;
+    } else if (x < 2.0f) {
+        return (51.0 + 75.0 * x - 210 * x2 + 150 * x3 - 45 * x4 + 5 * x5) / 120.0;
+    } else {
+        return (243.0 - 405.0 * x + 270 * x2 - 90 * x3 + 15 * x4 - x5) / 120.0;
+    }
 }
 
-inline double cloud_filter(double kh) {
-	const double s = sinc(0.5 * kh);
-	return 1.0 / (sqr(s * sqr(s)));
+inline double cloudFilter(double kh) {
+    double const s = sinc(0.5 * kh);
+    return 1.0 / (sqr(s * sqr(s)));
 }
-
 
 /*
  inline CUDA_EXPORT float cloud_weight(float  x) {

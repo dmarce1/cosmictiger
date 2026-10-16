@@ -1,4 +1,4 @@
 
 int main() {
-	printf( "%i\n", getValue() ) ;
+    printf("%i\n", getValue());
 }

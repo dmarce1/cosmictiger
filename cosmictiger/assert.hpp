@@ -25,22 +25,22 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #define ASSERT(a)
 #else
 #ifdef __CUDA_ARCH__
-#define ASSERT(a) cosmictiger_cuda_assert( #a, a, __FILE__, __LINE__)
+#define ASSERT(a) cosmictigerCudaAssert(#a, a, __FILE__, __LINE__)
 #else
-#define ASSERT(a) cosmictiger_assert( #a, a, __FILE__, __LINE__)
+#define ASSERT(a) cosmictigerAssert(#a, a, __FILE__, __LINE__)
 #endif
 #endif
 
 #ifdef __CUDA_ARCH__
-#define ALWAYS_ASSERT(a) cosmictiger_cuda_assert( #a, a, __FILE__, __LINE__)
+#define ALWAYS_ASSERT(a) cosmictigerCudaAssert(#a, a, __FILE__, __LINE__)
 #else
-#define ALWAYS_ASSERT(a) cosmictiger_assert( #a, a, __FILE__, __LINE__)
+#define ALWAYS_ASSERT(a) cosmictigerAssert(#a, a, __FILE__, __LINE__)
 #endif
 
 #ifdef __CUDA_ARCH__
-__device__ void cosmictiger_cuda_assert( const char*, bool, const char*, int);
+__device__ void cosmictigerCudaAssert(char const*, bool, char const*, int);
 #else
-void cosmictiger_assert( const char*, bool, const char*, int);
+void cosmictigerAssert(char const*, bool, char const*, int);
 #endif
 
 #else

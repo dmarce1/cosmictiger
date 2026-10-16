@@ -10,50 +10,50 @@
 
 #include <cosmictiger/cuda.hpp>
 
-template<class T>
-class flop_counter {
-	T cnt;
+template <class T>
+class FlopCounter {
+    T cnt_;
+
 public:
-	CUDA_EXPORT
-	inline flop_counter& operator=(T i) {
+    CUDA_EXPORT
+    inline FlopCounter& operator=(T i) {
 #ifdef COUNT_FLOPS
-		cnt = i;
+        cnt_ = i;
 #endif
-	}
-	CUDA_EXPORT
-	inline flop_counter(T i) {
+    }
+    CUDA_EXPORT
+    inline FlopCounter(T i) {
 #ifdef COUNT_FLOPS
-		cnt = i;
+        cnt_ = i;
 #endif
-	}
-	CUDA_EXPORT
-	inline flop_counter& operator+=(T i) {
+    }
+    CUDA_EXPORT
+    inline FlopCounter& operator+=(T i) {
 #ifdef COUNT_FLOPS
-		cnt += i;
+        cnt_ += i;
 #endif
-		return *this;
-	}
-	CUDA_EXPORT
-	inline flop_counter& operator-=(T i) {
+        return *this;
+    }
+    CUDA_EXPORT
+    inline FlopCounter& operator-=(T i) {
 #ifdef COUNT_FLOPS
-		cnt -= i;
+        cnt_ -= i;
 #endif
-		return *this;
-	}
-	CUDA_EXPORT
-	inline operator T() const {
-		return cnt;
-	}
+        return *this;
+    }
+    CUDA_EXPORT
+    inline operator T() const {
+        return cnt_;
+    }
 };
 
-void reset_flops();
-void reset_gpu_flops();
-double flops_per_second();
-double get_gpu_flops();
-void add_cpu_flops(int count);
+void resetFlops();
+void resetGpuFlops();
+double flopsPerSecond();
+double getGpuFlops();
+void addCpuFlops(int count);
 #ifdef __CUDACC__
-__device__
-void add_gpu_flops(int count);
+__device__ void addGpuFlops(int count);
 #endif
 
 #endif /* FLOPS_HPP_ */

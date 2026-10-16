@@ -20,448 +20,448 @@
 #ifndef RANGE_HPP_
 #define RANGE_HPP_
 
+#include <cosmictiger/containers.hpp>
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/defs.hpp>
-#include <cosmictiger/containers.hpp>
-#include <cosmictiger/options.hpp>
 #include <cosmictiger/math.hpp>
+#include <cosmictiger/options.hpp>
 #include <cosmictiger/simd.hpp>
 
-template<class T>
-inline array<T, NDIM> shift_up(array<T, NDIM> i) {
-	array<T, NDIM> j;
-	j[2] = i[0];
-	j[0] = i[1];
-	j[1] = i[2];
-	return j;
+template <class T>
+inline Array<T, NDIM> shiftUp(Array<T, NDIM> i) {
+    Array<T, NDIM> j;
+    j[2] = i[0];
+    j[0] = i[1];
+    j[1] = i[2];
+    return j;
 }
 
-template<class T>
-inline array<T, NDIM> shift_down(array<T, NDIM> i) {
-	array<T, NDIM> j;
-	j[1] = i[0];
-	j[2] = i[1];
-	j[0] = i[2];
-	return j;
+template <class T>
+inline Array<T, NDIM> shiftDown(Array<T, NDIM> i) {
+    Array<T, NDIM> j;
+    j[1] = i[0];
+    j[2] = i[1];
+    j[0] = i[2];
+    return j;
 }
 
-template<class T, int N = NDIM>
-struct range {
-	array<T, N> begin;
-	array<T, N> end;
+template <class T, int n = NDIM>
+struct Range {
+    Array<T, n> begin;
+    Array<T, n> end;
 
-	CUDA_EXPORT
-	inline range<T, N> intersection(const range<T, N>& other) const {
-		range<T, N> I;
-		for (int dim = 0; dim < N; dim++) {
+    CUDA_EXPORT
+    inline Range<T, n> intersection(Range<T, n> const& other) const {
+        Range<T, n> iValue;
+        for (int dim = 0; dim < n; dim++) {
 #ifdef __CUDA_ARCH__
-			I.begin[dim] = max(begin[dim], other.begin[dim]);
-			I.end[dim] = min(end[dim], other.end[dim]);
+            I.begin[dim] = max(begin[dim], other.begin[dim]);
+            I.end[dim] = min(end[dim], other.end[dim]);
 #else
-			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
-			I.end[dim] = std::min(end[dim], other.end[dim]);
+            iValue.begin[dim] = std::max(begin[dim], other.begin[dim]);
+            iValue.end[dim] = std::min(end[dim], other.end[dim]);
 #endif
-		}
-		return I;
-	}
-	CUDA_EXPORT
-	inline range periodic_intersection(const range& other) const {
-		range I;
+        }
+        return iValue;
+    }
+    CUDA_EXPORT
+    inline Range periodicIntersection(Range const& other) const {
+        Range iValue;
 #ifdef __CUDA_ARCH__
-		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = max(begin[dim], other.begin[dim]);
-			I.end[dim] = min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = min(end[dim] + T(1), other.end[dim]);
-				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
-					I.end[dim] = min(end[dim] - T(1), other.end[dim]);
-				}
-			}
-		}
+        for (int dim = 0; dim < N; dim++) {
+            I.begin[dim] = max(begin[dim], other.begin[dim]);
+            I.end[dim] = min(end[dim], other.end[dim]);
+            if (I.end[dim] <= I.begin[dim]) {
+                I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
+                I.end[dim] = min(end[dim] + T(1), other.end[dim]);
+                if (I.end[dim] <= I.begin[dim]) {
+                    I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
+                    I.end[dim] = min(end[dim] - T(1), other.end[dim]);
+                }
+            }
+        }
 #else
-		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
-			I.end[dim] = std::min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
-				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
-					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
-				}
-			}
-		}
+        for (int dim = 0; dim < n; dim++) {
+            iValue.begin[dim] = std::max(begin[dim], other.begin[dim]);
+            iValue.end[dim] = std::min(end[dim], other.end[dim]);
+            if (iValue.end[dim] <= iValue.begin[dim]) {
+                iValue.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
+                iValue.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+                if (iValue.end[dim] <= iValue.begin[dim]) {
+                    iValue.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+                    iValue.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+                }
+            }
+        }
 #endif
-		return I;
-	}
-	CUDA_EXPORT
-	inline bool periodic_intersects(const range& other) const {
-		range I;
+        return iValue;
+    }
+    CUDA_EXPORT
+    inline bool periodicIntersects(Range const& other) const {
+        Range iValue;
 #ifdef __CUDA_ARCH__
-		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = max(begin[dim], other.begin[dim]);
-			I.end[dim] = min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = min(end[dim] + T(1), other.end[dim]);
-				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
-					I.end[dim] = min(end[dim] - T(1), other.end[dim]);
-				}
-			}
-		}
+        for (int dim = 0; dim < N; dim++) {
+            I.begin[dim] = max(begin[dim], other.begin[dim]);
+            I.end[dim] = min(end[dim], other.end[dim]);
+            if (I.end[dim] <= I.begin[dim]) {
+                I.begin[dim] = max(begin[dim] + T(1), other.begin[dim]);
+                I.end[dim] = min(end[dim] + T(1), other.end[dim]);
+                if (I.end[dim] <= I.begin[dim]) {
+                    I.begin[dim] = max(begin[dim] - T(1), other.begin[dim]);
+                    I.end[dim] = min(end[dim] - T(1), other.end[dim]);
+                }
+            }
+        }
 #else
-		for (int dim = 0; dim < N; dim++) {
-			I.begin[dim] = std::max(begin[dim], other.begin[dim]);
-			I.end[dim] = std::min(end[dim], other.end[dim]);
-			if (I.end[dim] <= I.begin[dim]) {
-				I.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
-				I.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
-				if (I.end[dim] <= I.begin[dim]) {
-					I.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
-					I.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
-				}
-			}
-		}
+        for (int dim = 0; dim < n; dim++) {
+            iValue.begin[dim] = std::max(begin[dim], other.begin[dim]);
+            iValue.end[dim] = std::min(end[dim], other.end[dim]);
+            if (iValue.end[dim] <= iValue.begin[dim]) {
+                iValue.begin[dim] = std::max(begin[dim] + T(1), other.begin[dim]);
+                iValue.end[dim] = std::min(end[dim] + T(1), other.end[dim]);
+                if (iValue.end[dim] <= iValue.begin[dim]) {
+                    iValue.begin[dim] = std::max(begin[dim] - T(1), other.begin[dim]);
+                    iValue.end[dim] = std::min(end[dim] - T(1), other.end[dim]);
+                }
+            }
+        }
 #endif
-		for (int dim = 0; dim < NDIM; dim++) {
-			if (I.end[dim] <= I.begin[dim]) {
-				return false;
-			}
-		}
-		return true;
-	}
+        for (int dim = 0; dim < NDIM; dim++) {
+            if (iValue.end[dim] <= iValue.begin[dim]) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-	inline bool empty() const {
-		return volume() == T(0);
-	}
+    inline bool empty() const {
+        return volume() == T(0);
+    }
 
-	range() = default;
-	range(const range&) = default;
-	range(range&&) = default;
-	range& operator=(const range&) = default;
-	range& operator=(range&&) = default;
+    Range() = default;
+    Range(Range const&) = default;
+    Range(Range&&) = default;
+    Range& operator=(Range const&) = default;
+    Range& operator=(Range&&) = default;
 
-	inline range shift(const array<T, N>& s) const {
-		range r = *this;
-		for (int dim = 0; dim < N; dim++) {
-			r.begin[dim] += s[dim];
-			r.end[dim] += s[dim];
-		}
-		return r;
-	}
+    inline Range shift(Array<T, n> const& s) const {
+        Range r = *this;
+        for (int dim = 0; dim < n; dim++) {
+            r.begin[dim] += s[dim];
+            r.end[dim] += s[dim];
+        }
+        return r;
+    }
 
-	range(const T& sz) {
-		for (int dim = 0; dim < N; dim++) {
-			begin[dim] = T(0);
-			end[dim] = sz;
-		}
-	}
+    Range(T const& sz) {
+        for (int dim = 0; dim < n; dim++) {
+            begin[dim] = T(0);
+            end[dim] = sz;
+        }
+    }
 
-	CUDA_EXPORT
-	inline bool contains(const range<T, N>& box) const {
-		bool rc = true;
-		for (int dim = 0; dim < N; dim++) {
-			if (begin[dim] > box.begin[dim]) {
-				rc = false;
-				break;
-			}
-			if (end[dim] < box.end[dim]) {
-				rc = false;
-				break;
-			}
-		}
-		return rc;
-	}
+    CUDA_EXPORT
+    inline bool contains(Range<T, n> const& box) const {
+        bool rc = true;
+        for (int dim = 0; dim < n; dim++) {
+            if (begin[dim] > box.begin[dim]) {
+                rc = false;
+                break;
+            }
+            if (end[dim] < box.end[dim]) {
+                rc = false;
+                break;
+            }
+        }
+        return rc;
+    }
 
-	CUDA_EXPORT
-	inline bool contains(const array<T, N>& p) const {
-		for (int dim = 0; dim < N; dim++) {
-			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
-				return false;
-			}
-		}
-		return true;
-	}
+    CUDA_EXPORT
+    inline bool contains(Array<T, n> const& p) const {
+        for (int dim = 0; dim < n; dim++) {
+            if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
+                return false;
+            }
+        }
+        return true;
+    }
 
-	inline bool periodic_contains(const array<T, N>& p) const {
-		for (int dim = 0; dim < N; dim++) {
-			if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
-				if (p[dim] + T(1) < begin[dim] || p[dim] + T(1) >= end[dim]) {
-					if (p[dim] - T(1) < begin[dim] || p[dim] - T(1) >= end[dim]) {
-						return false;
-					}
-				}
-			}
-		}
-		return true;
-	}
+    inline bool periodicContains(Array<T, n> const& p) const {
+        for (int dim = 0; dim < n; dim++) {
+            if (p[dim] < begin[dim] || p[dim] >= end[dim]) {
+                if (p[dim] + T(1) < begin[dim] || p[dim] + T(1) >= end[dim]) {
+                    if (p[dim] - T(1) < begin[dim] || p[dim] - T(1) >= end[dim]) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
 
-	inline std::string to_string() const {
-		std::string str;
-		for (int dim = 0; dim < N; dim++) {
-			str += std::to_string(dim) + ":(";
-			str += std::to_string(begin[dim]) + ",";
-			str += std::to_string(end[dim]) + ") ";
-		}
-		return str;
-	}
+    inline std::string toString() const {
+        std::string str;
+        for (int dim = 0; dim < n; dim++) {
+            str += std::to_string(dim) + ":(";
+            str += std::to_string(begin[dim]) + ",";
+            str += std::to_string(end[dim]) + ") ";
+        }
+        return str;
+    }
 
-	inline int longest_dim() const {
-		int max_dim;
-		T max_span = T(-1);
-		for (int dim = 0; dim < N; dim++) {
-			const T span = end[dim] - begin[dim];
-			if (span > max_span) {
-				max_span = span;
-				max_dim = dim;
-			}
-		}
-		return max_dim;
-	}
+    inline int longestDim() const {
+        int maxDim;
+        T maxSpan = T(-1);
+        for (int dim = 0; dim < n; dim++) {
+            T const span = end[dim] - begin[dim];
+            if (span > maxSpan) {
+                maxSpan = span;
+                maxDim = dim;
+            }
+        }
+        return maxDim;
+    }
 
-	inline int shortest_dim() const {
-		int min_dim;
-		T min_span = T(1);
-		for (int dim = 0; dim < N; dim++) {
-			const T span = end[dim] - begin[dim];
-			if (span <= min_span) {
-				min_span = span;
-				min_dim = dim;
-			}
-		}
-		return min_dim;
-	}
+    inline int shortestDim() const {
+        int minDim;
+        T minSpan = T(1);
+        for (int dim = 0; dim < n; dim++) {
+            T const span = end[dim] - begin[dim];
+            if (span <= minSpan) {
+                minSpan = span;
+                minDim = dim;
+            }
+        }
+        return minDim;
+    }
 
-	inline std::pair<range<T, N>, range<T, N>> split() const {
-		auto left = *this;
-		auto right = *this;
-		int max_dim;
-		T max_span = 0;
-		for (int dim = 0; dim < N; dim++) {
-			const T span = end[dim] - begin[dim];
-			if (span > max_span) {
-				max_span = span;
-				max_dim = dim;
-			}
-		}
-		const T mid = (end[max_dim] + begin[max_dim]) / T(2);
-		left.end[max_dim] = right.begin[max_dim] = mid;
-		return std::make_pair(left, right);
-	}
+    inline std::pair<Range<T, n>, Range<T, n>> split() const {
+        auto left = *this;
+        auto right = *this;
+        int maxDim;
+        T maxSpan = 0;
+        for (int dim = 0; dim < n; dim++) {
+            T const span = end[dim] - begin[dim];
+            if (span > maxSpan) {
+                maxSpan = span;
+                maxDim = dim;
+            }
+        }
+        T const mid = (end[maxDim] + begin[maxDim]) / T(2);
+        left.end[maxDim] = right.begin[maxDim] = mid;
+        return std::make_pair(left, right);
+    }
 
-	range<T, N> shift_up() const {
-		range<T, N> rc;
-		rc.begin = ::shift_up(begin);
-		rc.end = ::shift_up(end);
-		return rc;
-	}
+    Range<T, n> shiftUp() const {
+        Range<T, n> rc;
+        rc.begin = ::shiftUp(begin);
+        rc.end = ::shiftUp(end);
+        return rc;
+    }
 
-	range<T, N> shift_down() const {
-		range<T, N> rc;
-		rc.begin = ::shift_down(begin);
-		rc.end = ::shift_down(end);
-		return rc;
-	}
+    Range<T, n> shiftDown() const {
+        Range<T, n> rc;
+        rc.begin = ::shiftDown(begin);
+        rc.end = ::shiftDown(end);
+        return rc;
+    }
 
-	CUDA_EXPORT
-	inline T index(T xi, T yi, T zi) const {
-		const auto spanz = end[2] - begin[2];
-		const auto spany = end[1] - begin[1];
-		return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
-	}
+    CUDA_EXPORT
+    inline T index(T xi, T yi, T zi) const {
+        auto const spanz = end[2] - begin[2];
+        auto const spany = end[1] - begin[1];
+        return spanz * (spany * (xi - begin[0]) + (yi - begin[1])) + (zi - begin[2]);
+    }
 
-	CUDA_EXPORT
-	inline T index(const array<T, N> & i) const {
-		return index(i.data());
-	}
+    CUDA_EXPORT
+    inline T index(Array<T, n> const& i) const {
+        return index(i.data());
+    }
 
-	CUDA_EXPORT
-	inline T index(const T * i) const {
-		const auto spanz = end[2] - begin[2];
-		const auto spany = end[1] - begin[1];
-		return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
-	}
+    CUDA_EXPORT
+    inline T index(T const* i) const {
+        auto const spanz = end[2] - begin[2];
+        auto const spany = end[1] - begin[1];
+        return spanz * (spany * (i[0] - begin[0]) + (i[1] - begin[1])) + (i[2] - begin[2]);
+    }
 
-	inline range<T, N> transpose(int dim1, int dim2) const {
-		auto rc = *this;
-		std::swap(rc.begin[dim1], rc.begin[dim2]);
-		std::swap(rc.end[dim1], rc.end[dim2]);
-		return rc;
-	}
+    inline Range<T, n> transpose(int dim1, int dim2) const {
+        auto rc = *this;
+        std::swap(rc.begin[dim1], rc.begin[dim2]);
+        std::swap(rc.end[dim1], rc.end[dim2]);
+        return rc;
+    }
 
-	CUDA_EXPORT
-	inline T volume() const {
-		T vol = T(1);
-		for (int dim = 0; dim < N; dim++) {
-			const T span = end[dim] - begin[dim];
-			if (span < T(0)) {
-				return T(0);
-			}
-			vol *= span;
-		}
-		return vol;
-	}
+    CUDA_EXPORT
+    inline T volume() const {
+        T vol = T(1);
+        for (int dim = 0; dim < n; dim++) {
+            T const span = end[dim] - begin[dim];
+            if (span < T(0)) {
+                return T(0);
+            }
+            vol *= span;
+        }
+        return vol;
+    }
 
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		for (int dim = 0; dim < N; dim++) {
-			arc & begin[dim];
-			arc & end[dim];
-		}
-	}
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        for (int dim = 0; dim < n; dim++) {
+            arc& begin[dim];
+            arc& end[dim];
+        }
+    }
 
-	CUDA_EXPORT
-	inline range<T, N> pad(T dx = T(1)) const {
-		range<T, N> r;
-		for (int dim = 0; dim < N; dim++) {
-			r.begin[dim] = begin[dim] - dx;
-			r.end[dim] = end[dim] + dx;
-		}
-		return r;
-	}
-
+    CUDA_EXPORT
+    inline Range<T, n> pad(T dx = T(1)) const {
+        Range<T, n> r;
+        for (int dim = 0; dim < n; dim++) {
+            r.begin[dim] = begin[dim] - dx;
+            r.end[dim] = end[dim] + dx;
+        }
+        return r;
+    }
 };
 
-template<class T, int N = NDIM>
-inline range<T, N> unit_box() {
-	range<T, N> r;
-	for (int dim = 0; dim < N; dim++) {
-		r.begin[dim] = T(0);
-		r.end[dim] = T(1);
-	}
-	return r;
+template <class T, int n = NDIM>
+inline Range<T, n> unitBox() {
+    Range<T, n> r;
+    for (int dim = 0; dim < n; dim++) {
+        r.begin[dim] = T(0);
+        r.end[dim] = T(1);
+    }
+    return r;
 }
 
 #include <cosmictiger/fixed.hpp>
 
-inline range<fixed32> fixed32_unit_box() {
-	range<fixed32> r;
-	for (int dim = 0; dim < NDIM; dim++) {
-		r.begin[dim] = 0.0;
-		r.end[dim] = fixed32::max();
-	}
-	return r;
+inline Range<Fixed32> fixed32UnitBox() {
+    Range<Fixed32> r;
+    for (int dim = 0; dim < NDIM; dim++) {
+        r.begin[dim] = 0.0;
+        r.end[dim] = Fixed32::max();
+    }
+    return r;
 }
 
-inline range<fixed32> rngdbl2rngfixed32(const range<double>& other) {
-	range<fixed32> rc;
-	for (int dim = 0; dim < NDIM; dim++) {
-		rc.begin[dim] = other.begin[dim];
-		rc.end[dim] = other.end[dim];
-	}
-	return rc;
+inline Range<Fixed32> rngdbl2rngfixed32(Range<double> const& other) {
+    Range<Fixed32> rc;
+    for (int dim = 0; dim < NDIM; dim++) {
+        rc.begin[dim] = other.begin[dim];
+        rc.end[dim] = other.end[dim];
+    }
+    return rc;
 }
 
-using range_fixed = fixed<int,29>;
+using RangeFixed = Fixed<int, 29>;
 
-struct fixed32_range: public range<range_fixed> {
-	fixed32_range() {
-	}
-	CUDA_EXPORT
-	fixed32_range& operator=(const fixed32_range& other) {
-		begin = other.begin;
-		end = other.end;
-		return *this;
-	}
-	CUDA_EXPORT
-	fixed32_range& operator=(fixed32_range&& other) {
-		begin = other.begin;
-		end = other.end;
-		return *this;
-	}
-	CUDA_EXPORT
-	fixed32_range(const fixed32_range& other) {
-		begin = other.begin;
-		end = other.end;
-	}
-	CUDA_EXPORT
-	fixed32_range(fixed32_range&& other) {
-		begin = other.begin;
-		end = other.end;
-	}
-	CUDA_EXPORT
-	bool contains(const array<fixed32, NDIM>& pt) const {
-		for (int i = -1; i <= 1; i++) {
-			for (int j = -1; j <= 1; j++) {
-				for (int k = -1; k <= 1; k++) {
-					bool contains = true;
-					array<double, NDIM> I;
-					I[0] = i;
-					I[1] = j;
-					I[2] = k;
-					for (int dim = 0; dim < NDIM; dim++) {
-						if (range_fixed(pt[dim]) + range_fixed::min() < begin[dim] + range_fixed(I[dim])) {
-							contains = false;
-							break;
-						}
-						if (range_fixed(pt[dim]) > end[dim] + range_fixed(I[dim]) + range_fixed::min()) {
-							contains = false;
-							break;
-						}
-					}
-					if (contains == true) {
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-	/*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
-	 if (!valid) {
-	 for (int dim = 0; dim < NDIM; dim++) {
-	 begin[dim] = pt[dim].to_double() - h;
-	 end[dim] = pt[dim].to_double() + h;
-	 }
-	 valid = true;
-	 } else {
-	 for (int dim = 0; dim < NDIM; dim++) {
-	 begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
-	 end[dim] = std::max(end[dim], pt[dim].to_double() + h);
-	 }
-	 }
-	 }*/
-	/*	void accumulate(const fixed32_range& other) {
-	 if (valid && other.valid) {
-	 for (int dim = 0; dim < NDIM; dim++) {
-	 begin[dim] = std::min(begin[dim], other.begin[dim]);
-	 end[dim] = std::max(end[dim], other.end[dim]);
-	 }
-	 } else if (!valid && other.valid) {
-	 *this = other;
-	 }
-	 }*/
-	template<class A>
-	void serialize(A&& arc, unsigned i) {
-		range<range_fixed>::serialize(arc, i);
-	}
+struct Fixed32Range : public Range<RangeFixed> {
+    Fixed32Range() {}
+    CUDA_EXPORT
+    Fixed32Range& operator=(Fixed32Range const& other) {
+        begin = other.begin;
+        end = other.end;
+        return *this;
+    }
+    CUDA_EXPORT
+    Fixed32Range& operator=(Fixed32Range&& other) {
+        begin = other.begin;
+        end = other.end;
+        return *this;
+    }
+    CUDA_EXPORT
+    Fixed32Range(Fixed32Range const& other) {
+        begin = other.begin;
+        end = other.end;
+    }
+    CUDA_EXPORT
+    Fixed32Range(Fixed32Range&& other) {
+        begin = other.begin;
+        end = other.end;
+    }
+    CUDA_EXPORT
+    bool contains(Array<Fixed32, NDIM> const& pt) const {
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                for (int k = -1; k <= 1; k++) {
+                    bool contains = true;
+                    Array<double, NDIM> iValue;
+                    iValue[0] = i;
+                    iValue[1] = j;
+                    iValue[2] = k;
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        if (RangeFixed(pt[dim]) + RangeFixed::min() <
+                            begin[dim] + RangeFixed(iValue[dim])) {
+                            contains = false;
+                            break;
+                        }
+                        if (RangeFixed(pt[dim]) >
+                            end[dim] + RangeFixed(iValue[dim]) + RangeFixed::min()) {
+                            contains = false;
+                            break;
+                        }
+                    }
+                    if (contains == true) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    /*	void accumulate(const array<fixed32, NDIM>& pt, float h = float(0)) {
+     if (!valid) {
+     for (int dim = 0; dim < NDIM; dim++) {
+     begin[dim] = pt[dim].to_double() - h;
+     end[dim] = pt[dim].to_double() + h;
+     }
+     valid = true;
+     } else {
+     for (int dim = 0; dim < NDIM; dim++) {
+     begin[dim] = std::min(begin[dim], pt[dim].to_double() - h);
+     end[dim] = std::max(end[dim], pt[dim].to_double() + h);
+     }
+     }
+     }*/
+    /*	void accumulate(const fixed32_range& other) {
+     if (valid && other.valid) {
+     for (int dim = 0; dim < NDIM; dim++) {
+     begin[dim] = std::min(begin[dim], other.begin[dim]);
+     end[dim] = std::max(end[dim], other.end[dim]);
+     }
+     } else if (!valid && other.valid) {
+     *this = other;
+     }
+     }*/
+    template <class A>
+    void serialize(A&& arc, unsigned i) {
+        Range<RangeFixed>::serialize(arc, i);
+    }
 };
 
 CUDA_EXPORT
-inline float distance(range_fixed a, fixed32 b) {
-	float f = a.to_double() - b.to_double();
-	f -= double(f > 0.5);
-	f += double(f < -0.5);
-	return f;
+inline float distance(RangeFixed a, Fixed32 b) {
+    float f = a.toDouble() - b.toDouble();
+    f -= double(f > 0.5);
+    f += double(f < -0.5);
+    return f;
 }
 
 CUDA_EXPORT
-inline float distance(fixed32 b, range_fixed a) {
-	return -distance(a, b);
-
+inline float distance(Fixed32 b, RangeFixed a) {
+    return -distance(a, b);
 }
 
-__device__
-inline bool box_intersects_sphere(const fixed32_range& box, const array<fixed32, NDIM>& x, float r) {
-	float d2 = 0.0f;
-	for (int dim = 0; dim < NDIM; dim++) {
-		const float d2begin = sqr(distance(x[dim], box.begin[dim]));
-		const float d2end = sqr(distance(x[dim], box.end[dim]));
-		d2 += ((range_fixed(x[dim]) < box.begin[dim]) + (range_fixed(x[dim]) > box.end[dim])) * fminf(d2begin, d2end);
-	}
-	return d2 < sqr(r);
+__device__ inline bool boxIntersectsSphere(
+    Fixed32Range const& box, Array<Fixed32, NDIM> const& x, float r) {
+    float d2 = 0.0f;
+    for (int dim = 0; dim < NDIM; dim++) {
+        float const d2begin = sqr(distance(x[dim], box.begin[dim]));
+        float const d2end = sqr(distance(x[dim], box.end[dim]));
+        d2 += ((RangeFixed(x[dim]) < box.begin[dim]) + (RangeFixed(x[dim]) > box.end[dim])) *
+            fminf(d2begin, d2end);
+    }
+    return d2 < sqr(r);
 }
 #endif /* RANGE_HPP_ */

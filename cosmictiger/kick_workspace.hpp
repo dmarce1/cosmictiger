@@ -30,34 +30,37 @@
 #include <cosmictiger/tree.hpp>
 #include <cosmictiger/unordered_set_ts.hpp>
 
-struct kick_workspace_tree_id_hash {
-	inline size_t operator()(tree_id id) const { return id.index * hpx_size() + id.proc; }
+struct KickWorkspaceTreeIdHash {
+    inline size_t operator()(TreeId id) const {
+        return id.index * hpxSize() + id.proc;
+    }
 };
 
 #ifndef __CUDACC__
 
-class kick_workspace {
-	mutex_type mutex;
-	vector<kick_workitem> workitems;
-	part_int total_parts;
-	part_int nparts;
-	kick_params params;
-	std::unordered_set<tree_id, kick_workspace_tree_id_hash> tree_ids;
+class KickWorkspace {
+    MutexType mutex_;
+    Vector<KickWorkitem> workitems_;
+    PartInt totalParts_;
+    PartInt nparts_;
+    KickParams params_;
+    std::unordered_set<TreeId, KickWorkspaceTreeIdHash> treeIds_;
 
-  public:
-	static void clear_buffers();
-	kick_workspace() = default;
-	kick_workspace(kick_params, part_int);
-	kick_workspace(kick_workspace const&) = delete;
-	kick_workspace(kick_workspace&&) = delete;
-	kick_workspace& operator=(kick_workspace const&) = delete;
-	kick_workspace& operator=(kick_workspace&&) = delete;
-	~kick_workspace();
-	template <class A> void serialize(A&&, unsigned) {}
-	void add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id>&& dchecklist,
-				  vector<tree_id>&& echecklist);
-	void add_parts(std::shared_ptr<kick_workspace> ptr, part_int n);
-	void to_gpu();
+public:
+    static void clearBuffers();
+    KickWorkspace() = default;
+    KickWorkspace(KickParams, PartInt);
+    KickWorkspace(KickWorkspace const&) = delete;
+    KickWorkspace(KickWorkspace&&) = delete;
+    KickWorkspace& operator=(KickWorkspace const&) = delete;
+    KickWorkspace& operator=(KickWorkspace&&) = delete;
+    ~KickWorkspace();
+    template <class A>
+    void serialize(A&&, unsigned) {}
+    void addWork(std::shared_ptr<KickWorkspace> ptr, Expansion<float> l, Array<Fixed32, NDIM> pos,
+        TreeId self, Vector<TreeId>&& dchecklist, Vector<TreeId>&& echecklist);
+    void addParts(std::shared_ptr<KickWorkspace> ptr, PartInt n);
+    void toGpu();
 };
 
 #endif

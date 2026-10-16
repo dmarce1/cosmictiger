@@ -19,111 +19,122 @@
 
 #include <cosmictiger/sph_cuda.hpp>
 
-sph_run_return sph_run_cuda(sph_run_params params, sph_run_cuda_data data, cudaStream_t stream) {
-	sph_run_return rc;
-	sph_reduction* reduce;
-	CUDA_CHECK(cudaMallocManaged(&reduce, sizeof(sph_reduction)));
-	reduce->counter = reduce->flag = 0;
-	reduce->hmin = std::numeric_limits<float>::max();
-	reduce->hmax = 0.0f;
-	reduce->flops = 0.0;
-	reduce->vsig_max = 0.0;
-	reduce->max_rung_grav = 0;
-	reduce->max_rung_hydro = 0;
-	reduce->max_rung = 0;
-	reduce->dtinv_acc = 0.f;
-	reduce->dtinv_cond = 0.f;
-	reduce->dtinv_diff = 0.f;
-	reduce->dtinv_divv = 0.f;
-	reduce->dtinv_cfl = 0.f;
-	reduce->dtinv_visc = 0.f;
-	reduce->dtinv_omega = 0.f;
-	static int prehydro1_nblocks;
-	static int prehydro2_nblocks;
-	static int aux_nblocks;
-	static int hydro_nblocks;
-	static int rungs_nblocks;
-	static int cond_init_nblocks;
-	static int conduction_nblocks;
-	static bool first = true;
-	timer tm;
-	if (first) {
-		first = false;
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&aux_nblocks, (void const*)sph_cuda_aux, AUX_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&prehydro1_nblocks, (void const*)sph_cuda_prehydro1, PREHYDRO1_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&prehydro2_nblocks, (void const*)sph_cuda_prehydro2, PREHYDRO2_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&hydro_nblocks, (void const*)sph_cuda_hydro, HYDRO_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&conduction_nblocks, (void const*)sph_cuda_conduction, CONDUCTION_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&cond_init_nblocks, (void const*)sph_cuda_cond_init, COND_INIT_BLOCK_SIZE, 0));
-		CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&rungs_nblocks, (void const*)sph_cuda_rungs, RUNGS_BLOCK_SIZE, 0));
-		PRINT("%i %i %i %i %i %i\n", prehydro1_nblocks, prehydro2_nblocks, hydro_nblocks, aux_nblocks, rungs_nblocks, cond_init_nblocks, conduction_nblocks);
-		aux_nblocks *= cuda_smp_count();
-		prehydro1_nblocks *= cuda_smp_count();
-		prehydro2_nblocks *= cuda_smp_count();
-		hydro_nblocks *= cuda_smp_count();
-		conduction_nblocks *= cuda_smp_count();
-		cond_init_nblocks *= cuda_smp_count();
-		rungs_nblocks *= cuda_smp_count();
-	}
-	tm.start();
-	switch (params.run_type) {
-	case SPH_RUN_PREHYDRO1: {
-		sph_cuda_prehydro1<<<prehydro1_nblocks, PREHYDRO1_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-		rc.rc = reduce->flag;
-		rc.hmin = reduce->hmin;
-		rc.hmax = reduce->hmax;
-	} break;
-	case SPH_RUN_PREHYDRO2: {
-		sph_cuda_prehydro2<<<prehydro2_nblocks, PREHYDRO2_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-		rc.rc = reduce->flag;
-		rc.hmin = reduce->hmin;
-		rc.hmax = reduce->hmax;
-	} break;
-	case SPH_RUN_AUX: {
-		sph_cuda_aux<<<aux_nblocks, AUX_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-		rc.max_rung = reduce->max_rung;
-		rc.dtinv_divv = reduce->dtinv_divv;
-		rc.dtinv_omega = reduce->dtinv_omega;
-	} break;
-	case SPH_RUN_COND_INIT: {
-		sph_cuda_cond_init<<<cond_init_nblocks, COND_INIT_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-	} break;
-	case SPH_RUN_CONDUCTION: {
-		sph_cuda_conduction<<<conduction_nblocks, CONDUCTION_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-	} break;
-	case SPH_RUN_RUNGS: {
-		sph_cuda_rungs<<<hydro_nblocks, RUNGS_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-		auto gflops = reduce->flops / tm.read() / (1024.0 * 1024 * 1024);
-		rc.max_vsig = reduce->vsig_max;
-		rc.max_rung_grav = reduce->max_rung_grav;
-		rc.max_rung_hydro = reduce->max_rung_hydro;
-		rc.max_rung = reduce->max_rung;
-		rc.rc = reduce->flag;
-	} break;
-	case SPH_RUN_HYDRO: {
-		sph_cuda_hydro<<<hydro_nblocks, HYDRO_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
-		cuda_stream_synchronize(stream);
-		rc.max_vsig = reduce->vsig_max;
-		rc.max_rung_grav = reduce->max_rung_grav;
-		rc.max_rung_hydro = reduce->max_rung_hydro;
-		rc.max_rung = reduce->max_rung;
-		rc.dtinv_acc = reduce->dtinv_acc;
-		rc.dtinv_cfl = reduce->dtinv_cfl;
-		rc.dtinv_visc = reduce->dtinv_visc;
-		rc.dtinv_diff = reduce->dtinv_diff;
-		rc.dtinv_cond = reduce->dtinv_cond;
-	} break;
-	}
-	tm.stop();
-	rc.flops = reduce->flops;
-	PRINT("GFLOPS = %e\n", reduce->flops / (1024.0 * 1024.0 * 1024.0) / tm.read());
-	(cudaFree(reduce));
+SphRunReturn sphRunCuda(SphRunParams params, SphRunCudaData data, cudaStream_t stream) {
+    SphRunReturn rc;
+    SphReduction* reduce;
+    CUDA_CHECK(cudaMallocManaged(&reduce, sizeof(SphReduction)));
+    reduce->counter = reduce->flag = 0;
+    reduce->hmin = std::numeric_limits<float>::max();
+    reduce->hmax = 0.0f;
+    reduce->flops = 0.0;
+    reduce->vsigMax = 0.0;
+    reduce->maxRungGrav = 0;
+    reduce->maxRungHydro = 0;
+    reduce->maxRung = 0;
+    reduce->dtinvAcc = 0.f;
+    reduce->dtinvCond = 0.f;
+    reduce->dtinvDiff = 0.f;
+    reduce->dtinvDivv = 0.f;
+    reduce->dtinvCfl = 0.f;
+    reduce->dtinvVisc = 0.f;
+    reduce->dtinvOmega = 0.f;
+    static int prehydro1Nblocks;
+    static int prehydro2Nblocks;
+    static int auxNblocks;
+    static int hydroNblocks;
+    static int rungsNblocks;
+    static int condInitNblocks;
+    static int conductionNblocks;
+    static bool first = true;
+    Timer tm;
+    if (first) {
+        first = false;
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &auxNblocks, (void const*) sphCudaAux, AUX_BLOCK_SIZE, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &prehydro1Nblocks, (void const*) sphCudaPrehydro1, PREHYDRO1_BLOCK_SIZE, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &prehydro2Nblocks, (void const*) sphCudaPrehydro2, PREHYDRO2_BLOCK_SIZE, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &hydroNblocks, (void const*) sphCudaHydro, HYDRO_BLOCK_SIZE, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &conductionNblocks, (void const*) sphCudaConduction, CONDUCTION_BLOCK_SIZE, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &condInitNblocks, (void const*) sphCudaCondInit, COND_INIT_BLOCK_SIZE, 0));
+        CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+            &rungsNblocks, (void const*) sphCudaRungs, RUNGS_BLOCK_SIZE, 0));
+        PRINT("%i %i %i %i %i %i\n", prehydro1Nblocks, prehydro2Nblocks, hydroNblocks, auxNblocks,
+            rungsNblocks, condInitNblocks, conductionNblocks);
+        auxNblocks *= cudaSmpCount();
+        prehydro1Nblocks *= cudaSmpCount();
+        prehydro2Nblocks *= cudaSmpCount();
+        hydroNblocks *= cudaSmpCount();
+        conductionNblocks *= cudaSmpCount();
+        condInitNblocks *= cudaSmpCount();
+        rungsNblocks *= cudaSmpCount();
+    }
+    tm.start();
+    switch (params.runType) {
+    case SPH_RUN_PREHYDRO1: {
+        sphCudaPrehydro1<<<prehydro1Nblocks, PREHYDRO1_BLOCK_SIZE, 0, stream>>>(
+            params, data, reduce);
+        synchronizeCudaStream(stream);
+        rc.rc = reduce->flag;
+        rc.hmin = reduce->hmin;
+        rc.hmax = reduce->hmax;
+    } break;
+    case SPH_RUN_PREHYDRO2: {
+        sphCudaPrehydro2<<<prehydro2Nblocks, PREHYDRO2_BLOCK_SIZE, 0, stream>>>(
+            params, data, reduce);
+        synchronizeCudaStream(stream);
+        rc.rc = reduce->flag;
+        rc.hmin = reduce->hmin;
+        rc.hmax = reduce->hmax;
+    } break;
+    case SPH_RUN_AUX: {
+        sphCudaAux<<<auxNblocks, AUX_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
+        synchronizeCudaStream(stream);
+        rc.maxRung = reduce->maxRung;
+        rc.dtinvDivv = reduce->dtinvDivv;
+        rc.dtinvOmega = reduce->dtinvOmega;
+    } break;
+    case SPH_RUN_COND_INIT: {
+        sphCudaCondInit<<<condInitNblocks, COND_INIT_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
+        synchronizeCudaStream(stream);
+    } break;
+    case SPH_RUN_CONDUCTION: {
+        sphCudaConduction<<<conductionNblocks, CONDUCTION_BLOCK_SIZE, 0, stream>>>(
+            params, data, reduce);
+        synchronizeCudaStream(stream);
+    } break;
+    case SPH_RUN_RUNGS: {
+        sphCudaRungs<<<hydroNblocks, RUNGS_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
+        synchronizeCudaStream(stream);
+        auto gflops = reduce->flops / tm.read() / (1024.0 * 1024 * 1024);
+        rc.maxVsig = reduce->vsigMax;
+        rc.maxRungGrav = reduce->maxRungGrav;
+        rc.maxRungHydro = reduce->maxRungHydro;
+        rc.maxRung = reduce->maxRung;
+        rc.rc = reduce->flag;
+    } break;
+    case SPH_RUN_HYDRO: {
+        sphCudaHydro<<<hydroNblocks, HYDRO_BLOCK_SIZE, 0, stream>>>(params, data, reduce);
+        synchronizeCudaStream(stream);
+        rc.maxVsig = reduce->vsigMax;
+        rc.maxRungGrav = reduce->maxRungGrav;
+        rc.maxRungHydro = reduce->maxRungHydro;
+        rc.maxRung = reduce->maxRung;
+        rc.dtinvAcc = reduce->dtinvAcc;
+        rc.dtinvCfl = reduce->dtinvCfl;
+        rc.dtinvVisc = reduce->dtinvVisc;
+        rc.dtinvDiff = reduce->dtinvDiff;
+        rc.dtinvCond = reduce->dtinvCond;
+    } break;
+    }
+    tm.stop();
+    rc.flops = reduce->flops;
+    PRINT("GFLOPS = %e\n", reduce->flops / (1024.0 * 1024.0 * 1024.0) / tm.read());
+    (cudaFree(reduce));
 
-	return rc;
+    return rc;
 }

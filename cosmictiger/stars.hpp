@@ -19,44 +19,47 @@
 
 #include <cosmictiger/particles.hpp>
 
-struct star_particle {
-	float zform;
-	float time_remaining;
-	float total_life;
-	float stellar_mass;
-	float Y;
-	float Z;
-	int type;
-	bool remove;
-	int dm_index;
+struct StarParticle {
+    float zform;
+    float timeRemaining;
+    float totalLife;
+    float stellarMass;
+    float y;
+    float z;
+    int type;
+    bool remove;
+    int dmIndex;
 };
 
-struct stars_stats {
-	size_t stars;
-	size_t popI;
-	size_t popII;
-	size_t popIII;
-	stars_stats() { popI = popII = popIII = stars = 0; }
-	stars_stats& operator+=(stars_stats const& other) {
-		stars += other.stars;
-		popI += other.popI;
-		popII += other.popII;
-		popIII += other.popIII;
-		return *this;
-	}
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & stars;
-		arc & popI;
-		arc & popII;
-		arc & popIII;
-	}
+struct StarsStats {
+    size_t stars;
+    size_t popI;
+    size_t popII;
+    size_t popIII;
+    StarsStats() {
+        popI = popII = popIII = stars = 0;
+    }
+    StarsStats& operator+=(StarsStats const& other) {
+        stars += other.stars;
+        popI += other.popI;
+        popII += other.popII;
+        popIII += other.popIII;
+        return *this;
+    }
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & stars;
+        arc & popI;
+        arc & popII;
+        arc & popIII;
+    }
 };
 
-star_particle& stars_get(part_int index);
-part_int stars_size();
-double stars_find(float a, float dt, int minrung, int step, float tau);
-void stars_remove(float a, float dt, int minrung, int step);
-stars_stats stars_statistics(float);
-void stars_save(FILE* fp);
-void stars_load(FILE* fp);
-void stars_test_mass();
+StarParticle& starsGet(PartInt index);
+PartInt starsSize();
+double starsFind(float a, float dt, int minrung, int step, float tau);
+void starsRemove(float a, float dt, int minrung, int step);
+StarsStats starsStatistics(float);
+void starsSave(FILE* fp);
+void starsLoad(FILE* fp);
+void starsTestMass();

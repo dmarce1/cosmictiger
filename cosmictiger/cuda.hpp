@@ -38,75 +38,77 @@
 
 #ifdef USE_CUDA
 
-#define CUDA_MALLOC(a, b) cuda_malloc2(a, b, __FILE__, __LINE__)
-#define CUDA_CHECK(a)                                                                                                                                          \
-	if (a != cudaSuccess)                                                                                                                                      \
-	printf("CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a))
+#define CUDA_MALLOC(a, b) cudaMalloc2(a, b, __FILE__, __LINE__)
+#define CUDA_CHECK(a)     \
+    if (a != cudaSuccess) \
+    printf("CUDA error on line %i of %s : %s\n", __LINE__, __FILE__, cudaGetErrorString(a))
 
 /* error checker from https://forums.developer.nvidia.com/t/cufft-error-handling/29231 */
-static char const* _cudaGetErrorEnum(cufftResult error) {
-	switch (error) {
-	case CUFFT_SUCCESS:
-		return "CUFFT_SUCCESS";
+static char const* cudaGetErrorEnum(cufftResult error) {
+    switch (error) {
+    case CUFFT_SUCCESS:
+        return "CUFFT_SUCCESS";
 
-	case CUFFT_INVALID_PLAN:
-		return "CUFFT_INVALID_PLAN";
+    case CUFFT_INVALID_PLAN:
+        return "CUFFT_INVALID_PLAN";
 
-	case CUFFT_ALLOC_FAILED:
-		return "CUFFT_ALLOC_FAILED";
+    case CUFFT_ALLOC_FAILED:
+        return "CUFFT_ALLOC_FAILED";
 
-	case CUFFT_INVALID_TYPE:
-		return "CUFFT_INVALID_TYPE";
+    case CUFFT_INVALID_TYPE:
+        return "CUFFT_INVALID_TYPE";
 
-	case CUFFT_INVALID_VALUE:
-		return "CUFFT_INVALID_VALUE";
+    case CUFFT_INVALID_VALUE:
+        return "CUFFT_INVALID_VALUE";
 
-	case CUFFT_INTERNAL_ERROR:
-		return "CUFFT_INTERNAL_ERROR";
+    case CUFFT_INTERNAL_ERROR:
+        return "CUFFT_INTERNAL_ERROR";
 
-	case CUFFT_EXEC_FAILED:
-		return "CUFFT_EXEC_FAILED";
+    case CUFFT_EXEC_FAILED:
+        return "CUFFT_EXEC_FAILED";
 
-	case CUFFT_SETUP_FAILED:
-		return "CUFFT_SETUP_FAILED";
+    case CUFFT_SETUP_FAILED:
+        return "CUFFT_SETUP_FAILED";
 
-	case CUFFT_INVALID_SIZE:
-		return "CUFFT_INVALID_SIZE";
+    case CUFFT_INVALID_SIZE:
+        return "CUFFT_INVALID_SIZE";
 
-	case CUFFT_UNALIGNED_DATA:
-		return "CUFFT_UNALIGNED_DATA";
-	}
-	ALWAYS_ASSERT(false);
-	return "->unknown<-";
+    case CUFFT_UNALIGNED_DATA:
+        return "CUFFT_UNALIGNED_DATA";
+    }
+    ALWAYS_ASSERT(false);
+    return "->unknown<-";
 }
 
-inline void _cuda_fft_check(cufftResult err, char const* file, int const line) {
-	if (CUFFT_SUCCESS != err) {
-		fprintf(stderr, "CUFFT error in file '%s', line %d\nerror %d: %s\nterminating!\n", file, line, err, _cudaGetErrorEnum(err));
-		cudaDeviceReset();
-		ASSERT(0);
-	}
+inline void cudaFftCheck(cufftResult err, char const* file, int const line) {
+    if (CUFFT_SUCCESS != err) {
+        fprintf(stderr, "CUFFT error in file '%s', line %d\nerror %d: %s\nterminating!\n", file,
+            line, err, cudaGetErrorEnum(err));
+        cudaDeviceReset();
+        ASSERT(0);
+    }
 }
 
-#define CUDA_FFT_CHECK(a) _cuda_fft_check(a, __FILE__, __LINE__)
+#define CUDA_FFT_CHECK(a) cudaFftCheck(a, __FILE__, __LINE__)
 
-void cuda_set_device();
+void cudaSetDevice();
 
 #ifdef __CUDA_ARCH__
 #if __CUDA_ARCH__ < 600
 /**** TAKEN FROM THE CUDA DOCUMENTATION *****/
 inline __device__ double atomicAdd(double* address, double val) {
-	unsigned long long int* address_as_ull = (unsigned long long int*)address;
-	unsigned long long int old = *address_as_ull, assumed;
+    unsigned long long int* address_as_ull = (unsigned long long int*) address;
+    unsigned long long int old = *address_as_ull, assumed;
 
-	do {
-		assumed = old;
-		old = atomicCAS(address_as_ull, assumed, __double_as_longlong(val + __longlong_as_double(assumed)));
+    do {
+        assumed = old;
+        old = atomicCAS(
+            address_as_ull, assumed, __double_as_longlong(val + __longlong_as_double(assumed)));
 
-		// Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-	} while (assumed != old);
+        // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
 
-	return __longlong_as_double(old);
+    return __longlong_as_double(old);
 }
 #endif
 
@@ -116,79 +118,90 @@ inline __device__ double atomicAdd(double* address, double val) {
 
 // CUDA 12 no longer provides Thrust's experimental pinned allocator.
 // Keep the original host-vector contract with CUDA page-locked allocations.
-template <typename T> class pinned_allocator {
-  public:
-	using value_type = T;
-	using is_always_equal = std::true_type;
+template <typename T>
+class PinnedAllocator {
+public:
+    using value_type = T;
+    using is_always_equal = std::true_type;
 
-	pinned_allocator() = default;
-	template <typename U> pinned_allocator(pinned_allocator<U> const&) noexcept {}
+    PinnedAllocator() = default;
+    template <typename U>
+    PinnedAllocator(PinnedAllocator<U> const&) noexcept {}
 
-	T* allocate(size_t count) {
-		if (count > std::numeric_limits<size_t>::max() / sizeof(T)) {
-			throw std::bad_array_new_length();
-		}
-		if (count == 0) {
-			return nullptr;
-		}
-		void* pointer = nullptr;
-		if (cudaHostAlloc(&pointer, count * sizeof(T), cudaHostAllocDefault) != cudaSuccess) {
-			throw std::bad_alloc();
-		}
-		return static_cast<T*>(pointer);
-	}
+    T* allocate(size_t count) {
+        if (count > std::numeric_limits<size_t>::max() / sizeof(T)) {
+            throw std::bad_array_new_length();
+        }
+        if (count == 0) {
+            return nullptr;
+        }
+        void* pointer = nullptr;
+        if (cudaHostAlloc(&pointer, count * sizeof(T), cudaHostAllocDefault) != cudaSuccess) {
+            throw std::bad_alloc();
+        }
+        return static_cast<T*>(pointer);
+    }
 
-	void deallocate(T* pointer, size_t) noexcept {
-		if (pointer != nullptr) {
-			cudaFreeHost(pointer);
-		}
-	}
+    void deallocate(T* pointer, size_t) noexcept {
+        if (pointer != nullptr) {
+            cudaFreeHost(pointer);
+        }
+    }
 
-	template <typename U> bool operator==(pinned_allocator<U> const&) const noexcept { return true; }
+    template <typename U>
+    bool operator==(PinnedAllocator<U> const&) const noexcept {
+        return true;
+    }
 };
 
-void cuda_set_device();
-size_t cuda_free_mem();
-int cuda_smp_count();
-size_t cuda_free_mem();
-size_t cuda_total_mem();
-int cuda_smp_count();
-void cuda_init();
-cudaStream_t cuda_get_stream();
-void cuda_end_stream(cudaStream_t stream);
-int cuda_get_device();
-void cuda_stream_synchronize(cudaStream_t stream);
+void cudaSetDevice();
+size_t cudaFreeMem();
+int cudaSmpCount();
+size_t cudaFreeMem();
+size_t cudaTotalMem();
+int cudaSmpCount();
+void cudaInit();
+cudaStream_t cudaGetStream();
+void cudaEndStream(cudaStream_t stream);
+int cudaGetDevice();
+void synchronizeCudaStream(cudaStream_t stream);
 
-void cuda_malloc(void** ptr, size_t size, char const* file, int line);
+void cudaAllocate(void** ptr, size_t size, char const* file, int line);
 
-template <class T> void cuda_malloc2(T** ptr, size_t size, char const* file, int line) { cuda_malloc((void**)ptr, size, file, line); }
+template <class T>
+void cudaMalloc2(T** ptr, size_t size, char const* file, int line) {
+    cudaAllocate((void**) ptr, size, file, line);
+}
 
 /*********************************************************************************/
 // From https://localcoder.org/how-do-i-use-atomicmax-on-floating-point-values-in-cuda
 #ifdef __CUDACC__
 __device__ static float atomicMax(float* address, float val) {
-	int* address_as_i = (int*)address;
-	int old = *address_as_i, assumed;
-	do {
-		assumed = old;
-		old = ::atomicCAS(address_as_i, assumed, __float_as_int(::fmaxf(val, __int_as_float(assumed))));
-	} while (assumed != old);
-	return __int_as_float(old);
+    int* addressAsI = (int*) address;
+    int old = *addressAsI, assumed;
+    do {
+        assumed = old;
+        old =
+            ::atomicCAS(addressAsI, assumed, __float_as_int(::fmaxf(val, __int_as_float(assumed))));
+    } while (assumed != old);
+    return __int_as_float(old);
 }
 __device__ static float atomicMin(float* address, float val) {
-	int* address_as_i = (int*)address;
-	int old = *address_as_i, assumed;
-	do {
-		assumed = old;
-		old = ::atomicCAS(address_as_i, assumed, __float_as_int(::fminf(val, __int_as_float(assumed))));
-	} while (assumed != old);
-	return __int_as_float(old);
+    int* addressAsI = (int*) address;
+    int old = *addressAsI, assumed;
+    do {
+        assumed = old;
+        old =
+            ::atomicCAS(addressAsI, assumed, __float_as_int(::fminf(val, __int_as_float(assumed))));
+    } while (assumed != old);
+    return __int_as_float(old);
 }
 #endif
 /*********************************************************************************/
 #else
 
-template <class T> using pinned_allocator = std::allocator<T>;
+template <class T>
+using PinnedAllocator = std::allocator<T>;
 
 #define CUDA_EXPORT
 

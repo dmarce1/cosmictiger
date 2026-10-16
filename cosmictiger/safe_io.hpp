@@ -17,99 +17,98 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef SAFE_IO_HPP_
 #define SAFE_IO_HPP_
 
-#include <cosmictiger/assert.hpp>
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <cosmictiger/assert.hpp>
+
 #define PRINT(...) print(__VA_ARGS__)
 
-#define PRINT_BOTH(fp, ...) print_both(fp, __VA_ARGS__)
+#define PRINT_BOTH(fp, ...) printBoth(fp, __VA_ARGS__)
 
-#define THROW_ERROR(...) throw_error(__FILE__, __LINE__, __VA_ARGS__)
+#define THROW_ERROR(...) throwError(__FILE__, __LINE__, __VA_ARGS__)
 
-template<class ...Args>
+template <class... Args>
 #ifdef __CUDA_ARCH__
 __device__
 #endif
-inline void print(const char* fmt, Args ...args) {
-	printf(fmt, args...);
+    inline void print(char const* fmt, Args... args) {
+    printf(fmt, args...);
 #ifndef __CUDA_ARCH__
-	fflush(stdout);
+    fflush(stdout);
 #endif
 }
 
-template<class ...Args>
-inline void print_both(FILE* fp, const char* fmt, Args ...args) {
-	printf(fmt, args...);
-	fprintf(fp, fmt, args...);
-	fflush(stdout);
-	fflush(fp);
+template <class... Args>
+inline void printBoth(FILE* fp, char const* fmt, Args... args) {
+    printf(fmt, args...);
+    fprintf(fp, fmt, args...);
+    fflush(stdout);
+    fflush(fp);
 }
-
-
 
 #ifdef __CUDA_ARCH__
 __device__
 #endif
-inline void print(const char* str) {
-	printf("%s", str);
+    inline void print(char const* str) {
+    printf("%s", str);
 #ifndef __CUDA_ARCH__
-	fflush(stdout);
+    fflush(stdout);
 #endif
 }
-template<class ...Args>
+template <class... Args>
 #ifdef __CUDA_ARCH__
 __device__
 #endif
-inline void throw_error(const char* file, int line, const char* fmt, Args ...args) {
-	printf(fmt, args...);
-	printf("Error in %s on line %i\n", file, line);
+    inline void throwError(char const* file, int line, char const* fmt, Args... args) {
+    printf(fmt, args...);
+    printf("Error in %s on line %i\n", file, line);
 #ifndef __CUDA_ARCH__
-	fflush(stdout);
-	ALWAYS_ASSERT(false);
+    fflush(stdout);
+    ALWAYS_ASSERT(false);
 #else
-	__trap();
+    __trap();
 #endif
 }
 
-
-inline void throw_error(const char* file, int line, const char* str) {
-	printf("%s", str);
-	printf("Error in %s on line %i\n", file, line);
+inline void throwError(char const* file, int line, char const* str) {
+    printf("%s", str);
+    printf("Error in %s on line %i\n", file, line);
 #ifndef __CUDA_ARCH__
-	fflush(stdout);
-	ALWAYS_ASSERT(false);
+    fflush(stdout);
+    ALWAYS_ASSERT(false);
 #else
-	__trap();
+    __trap();
 #endif
 }
 
+#define FREAD(a, b, c, d) safeFread(a, b, c, d, __LINE__, __FILE__)
+#define FWRITE(a, b, c, d) safeFwrite(a, b, c, d, __LINE__, __FILE__)
 
-#define FREAD(a,b,c,d) __safe_fread(a,b,c,d,__LINE__,__FILE__)
-#define FWRITE(a,b,c,d) __safe_fwrite(a,b,c,d,__LINE__,__FILE__)
-
-static void __safe_fread(void* src, size_t size, size_t count, FILE* fp, int line, const char* file) {
-	auto read = fread(src, size, count, fp);
-	if (read != count) {
-		PRINT("Attempt to read %li elements of size %li in %s on line %i failed - only %li elements read.\n", count, size,
-				file, line, read);
-		abort();
-	}
+static void safeFread(void* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
+    auto read = fread(src, size, count, fp);
+    if (read != count) {
+        PRINT("Attempt to read %li elements of size %li in %s on line %i failed - only %li "
+              "elements read.\n",
+            count, size, file, line, read);
+        abort();
+    }
 }
 
-static void __safe_fwrite(void* src, size_t size, size_t count, FILE* fp, int line, const char* file) {
-	auto write = fwrite(src, size, count, fp);
-	if (write != count) {
-		PRINT("Attempt to write %li elements of size %li in %s on line %i failed - only %li elements written.\n", count, size,
-				file, line, write);
-		abort();
-	}
+static void safeFwrite(void* src, size_t size, size_t count, FILE* fp, int line, char const* file) {
+    auto write = fwrite(src, size, count, fp);
+    if (write != count) {
+        PRINT("Attempt to write %li elements of size %li in %s on line %i failed - only %li "
+              "elements written.\n",
+            count, size, file, line, write);
+        abort();
+    }
 }
 
-
-#define ASPRINTF(...) if( asprintf(__VA_ARGS__) == 0 ) printf( "asprintf failed\n")
+#define ASPRINTF(...)               \
+    if (asprintf(__VA_ARGS__) == 0) \
+    printf("asprintf failed\n")
 #endif /* SAFE_IO_HPP_ */

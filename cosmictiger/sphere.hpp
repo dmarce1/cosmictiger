@@ -20,7 +20,7 @@
 #ifndef SPHERE_HPP_
 #define SPHERE_HPP_
 
-void sphere_surface_test();
-void solve_sphere_surface_problem(vector<array<vector<float>, NDIM>>& X);
+void sphereSurfaceTest();
+void solveSphereSurfaceProblem(Vector<Array<Vector<float>, NDIM>>& x);
 
 #endif /* SPHERE_HPP_ */

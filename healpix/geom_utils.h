@@ -44,37 +44,33 @@
 
     If \a loc is the North or South pole, the returned angle is
     \a atan2(dir.y,dir.x). */
-inline double orientation (const vec3 &loc, const vec3 &dir)
-  {
-// FIXME: here is still optimization potential
-  if (loc.x==0 && loc.y==0)
-    return (loc.z>0) ? safe_atan2(dir.y,-dir.x) : safe_atan2(dir.y,dir.x);
-  vec3 east (-loc.y, loc.x, 0);
-  vec3 north = crossprod(loc,east);
-  return safe_atan2(-dotprod(dir,east),dotprod(dir,north));
-  }
+inline double orientation(const vec3& loc, const vec3& dir) {
+    // FIXME: here is still optimization potential
+    if (loc.x == 0 && loc.y == 0)
+        return (loc.z > 0) ? safe_atan2(dir.y, -dir.x) : safe_atan2(dir.y, dir.x);
+    vec3 east(-loc.y, loc.x, 0);
+    vec3 north = crossprod(loc, east);
+    return safe_atan2(-dotprod(dir, east), dotprod(dir, north));
+}
 
 /*! Returns the angle between \a v1 and \a v2 in radians. */
-inline double v_angle (const vec3 &v1, const vec3 &v2)
-  {
-  using namespace std;
-  return atan2 (crossprod(v1,v2).Length(), dotprod(v1,v2));
-  }
+inline double v_angle(const vec3& v1, const vec3& v2) {
+    using namespace std;
+    return atan2(crossprod(v1, v2).Length(), dotprod(v1, v2));
+}
 
 /*! Returns the cosine of the angle between the two points on the sphere defined
     by (\a z1, \a phi1) and (\a z2, \a phi2), respectively. \a z is the cosine
     of the colatitude, and \a phi is the longitude. */
-inline double cosdist_zphi (double z1, double phi1, double z2, double phi2)
-  {
-  using namespace std;
-  return z1*z2+cos(phi1-phi2)*sqrt((1.-z1*z1)*(1.-z2*z2));
-  }
+inline double cosdist_zphi(double z1, double phi1, double z2, double phi2) {
+    using namespace std;
+    return z1 * z2 + cos(phi1 - phi2) * sqrt((1. - z1 * z1) * (1. - z2 * z2));
+}
 
 /*! Finds the smallest enclosing cone for a point set on the sphere according to
     Barequet & Elber: Information Processing Letters 93(2005), p.83.
     All points are expected to be passed as unit vectors.
     The enclosing cone must have an opening angle <pi/2. */
-void find_enclosing_circle (const std::vector<vec3> &point, vec3 &center,
-  double &cosrad);
+void find_enclosing_circle(const std::vector<vec3>& point, vec3& center, double& cosrad);
 
 #endif

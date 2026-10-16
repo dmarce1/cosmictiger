@@ -20,270 +20,273 @@
 #ifndef SIMD_INT_HPP_
 #define SIMD_INT_HPP_
 
-class alignas(sizeof(__m128i)) simd_int4 {
+#include <stddef.h>
+
+class alignas(sizeof(__m128i)) SimdInt4 {
 private:
-	union {
-		__m128i v;
-		int ints[4];
-	};
+    union {
+        __m128i v_;
+        int ints_[4];
+    };
+
 public:
-	simd_int4() = default;
-	simd_int4(const simd_int4&) = default;
-	simd_int4(int i) {
-		v = _mm_set_epi32(i, i, i, i);
-	}
-	simd_int4(simd_float4 r) {
-		v = _mm_cvtps_epi32(_mm_floor_ps(r.v));
-	}
-	inline simd_int4& operator=(const simd_int4 &other) = default;
-	simd_int4& operator=(simd_int4 &&other) = default;
-	inline simd_int4 operator+(const simd_int4 &other) const {
-		simd_int4 r;
-		r.v = _mm_add_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int4 operator-(const simd_int4 &other) const {
-		simd_int4 r;
-		r.v = _mm_sub_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int4 operator*(const simd_int4 &other) const {
-		simd_int4 r;
-		r.v = _mm_mul_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int4 operator+() const {
-		return *this;
-	}
-	inline simd_int4 operator-() const {
-		return simd_int4(0.0) - *this;
-	}
-	inline int& operator[](std::size_t i) {
-		return ints[i];
-	}
-	inline int operator[](std::size_t i) const {
-		return v[i];
-	}
-	inline simd_int4 operator<<=(int shft) {
-		v = _mm_slli_epi32(v, shft);
-		return *this;
-	}
-	friend class simd_float4;
+    SimdInt4() = default;
+    SimdInt4(SimdInt4 const&) = default;
+    SimdInt4(int i) {
+        v_ = _mm_set_epi32(i, i, i, i);
+    }
+    SimdInt4(SimdFloat4 r) {
+        v_ = _mm_cvtps_epi32(_mm_floor_ps(r.v_));
+    }
+    inline SimdInt4& operator=(SimdInt4 const& other) = default;
+    SimdInt4& operator=(SimdInt4&& other) = default;
+    inline SimdInt4 operator+(SimdInt4 const& other) const {
+        SimdInt4 r;
+        r.v_ = _mm_add_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt4 operator-(SimdInt4 const& other) const {
+        SimdInt4 r;
+        r.v_ = _mm_sub_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt4 operator*(SimdInt4 const& other) const {
+        SimdInt4 r;
+        r.v_ = _mm_mul_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt4 operator+() const {
+        return *this;
+    }
+    inline SimdInt4 operator-() const {
+        return SimdInt4(0.0) - *this;
+    }
+    inline int& operator[](size_t i) {
+        return ints_[i];
+    }
+    inline int operator[](size_t i) const {
+        return v_[i];
+    }
+    inline SimdInt4 operator<<=(int shft) {
+        v_ = _mm_slli_epi32(v_, shft);
+        return *this;
+    }
+    friend class SimdFloat4;
 };
 
-inline simd_float4::simd_float4(simd_int4 a) {
-	v = _mm_cvtepi32_ps(a.v);
+inline SimdFloat4::SimdFloat4(SimdInt4 a) {
+    v_ = _mm_cvtepi32_ps(a.v_);
 }
 
 #if defined(USE_AVX)
 
-class alignas(2*sizeof(__m128i)) simd_int8 {
-	__m128i v[2];
+class alignas(2 * sizeof(__m128i)) SimdInt8 {
+    __m128i v_[2];
 
 public:
-	simd_int8(int i) {
-		v[0] = _mm_set_epi32(i, i, i, i);
-		v[1] = _mm_set_epi32(i, i, i, i);
-	}
-	simd_int8() = default;
-	simd_int8(const simd_int8&) = default;
-	inline simd_int8(float d) {
-		v[0] = _mm_set_epi32(d, d, d, d);
-		v[1] = _mm_set_epi32(d, d, d, d);
-	}
-	inline simd_int8& operator=(const simd_int8 &other) = default;
-	simd_int8& operator=(simd_int8 &&other) = default;
-	inline simd_int8 operator+(const simd_int8 &other) const {
-		simd_int8 r;
-		r.v[0] = _mm_add_epi32(v[0], other.v[0]);
-		r.v[1] = _mm_add_epi32(v[1], other.v[1]);
-		return r;
-	}
-	inline simd_int8 operator-(const simd_int8 &other) const {
-		simd_int8 r;
-		r.v[0] = _mm_sub_epi32(v[0], other.v[0]);
-		r.v[1] = _mm_sub_epi32(v[1], other.v[1]);
-		return r;
-	}
-	inline simd_int8 operator*(const simd_int8 &other) const {
-		simd_int8 r;
-		r.v[0] = _mm_mul_epi32(v[0], other.v[0]);
-		r.v[1] = _mm_mul_epi32(v[1], other.v[1]);
-		return r;
-	}
-	inline simd_int8 operator+() const {
-		return *this;
-	}
-	inline simd_int8 operator-() const {
-		return simd_int8(0) - *this;
-	}
-	inline simd_int8& operator+=(const simd_int8 &other) {
-		v[0] = _mm_add_epi32(v[0], other.v[0]);
-		v[1] = _mm_add_epi32(v[1], other.v[1]);
-		return *this;
-	}
-	inline simd_int8& operator-=(const simd_int8 &other) {
-		v[0] = _mm_sub_epi32(v[0], other.v[0]);
-		v[1] = _mm_sub_epi32(v[1], other.v[1]);
-		return *this;
-	}
-	inline simd_int8& operator*=(const simd_int8 &other) {
-		v[0] = _mm_mul_epi32(v[0], other.v[0]);
-		v[1] = _mm_mul_epi32(v[1], other.v[1]);
-		return *this;
-	}
-	inline simd_int8 operator<<(const simd_int8& other) {
-
-	}
-	inline simd_int8 operator*(float d) const {
-		const simd_int8 other = d;
-		return other * *this;
-	}
-	inline simd_int8 operator*=(float d) {
-		*this = *this * d;
-		return *this;
-	}
-	inline int& operator[](std::size_t i) {
-		return *(((int*) &v) + i);
-	}
-	inline int operator[](std::size_t i) const {
-		return v[i / 2][i % 4];
-	}
-	simd_int8(const simd_float8& r) {
-		v[0] = _mm_cvtps_epi32(_mm_floor_ps(r.v[0]));
-		v[1] = _mm_cvtps_epi32(_mm_floor_ps(r.v[1]));
-	}
-	friend class simd_float8;
+    SimdInt8(int i) {
+        v_[0] = _mm_set_epi32(i, i, i, i);
+        v_[1] = _mm_set_epi32(i, i, i, i);
+    }
+    SimdInt8() = default;
+    SimdInt8(SimdInt8 const&) = default;
+    inline SimdInt8(float d) {
+        v_[0] = _mm_set_epi32(d, d, d, d);
+        v_[1] = _mm_set_epi32(d, d, d, d);
+    }
+    inline SimdInt8& operator=(SimdInt8 const& other) = default;
+    SimdInt8& operator=(SimdInt8&& other) = default;
+    inline SimdInt8 operator+(SimdInt8 const& other) const {
+        SimdInt8 r;
+        r.v_[0] = _mm_add_epi32(v_[0], other.v_[0]);
+        r.v_[1] = _mm_add_epi32(v_[1], other.v_[1]);
+        return r;
+    }
+    inline SimdInt8 operator-(SimdInt8 const& other) const {
+        SimdInt8 r;
+        r.v_[0] = _mm_sub_epi32(v_[0], other.v_[0]);
+        r.v_[1] = _mm_sub_epi32(v_[1], other.v_[1]);
+        return r;
+    }
+    inline SimdInt8 operator*(SimdInt8 const& other) const {
+        SimdInt8 r;
+        r.v_[0] = _mm_mul_epi32(v_[0], other.v_[0]);
+        r.v_[1] = _mm_mul_epi32(v_[1], other.v_[1]);
+        return r;
+    }
+    inline SimdInt8 operator+() const {
+        return *this;
+    }
+    inline SimdInt8 operator-() const {
+        return SimdInt8(0) - *this;
+    }
+    inline SimdInt8& operator+=(SimdInt8 const& other) {
+        v_[0] = _mm_add_epi32(v_[0], other.v_[0]);
+        v_[1] = _mm_add_epi32(v_[1], other.v_[1]);
+        return *this;
+    }
+    inline SimdInt8& operator-=(SimdInt8 const& other) {
+        v_[0] = _mm_sub_epi32(v_[0], other.v_[0]);
+        v_[1] = _mm_sub_epi32(v_[1], other.v_[1]);
+        return *this;
+    }
+    inline SimdInt8& operator*=(SimdInt8 const& other) {
+        v_[0] = _mm_mul_epi32(v_[0], other.v_[0]);
+        v_[1] = _mm_mul_epi32(v_[1], other.v_[1]);
+        return *this;
+    }
+    inline SimdInt8 operator<<(SimdInt8 const& other) {}
+    inline SimdInt8 operator*(float d) const {
+        SimdInt8 const other = d;
+        return other * *this;
+    }
+    inline SimdInt8 operator*=(float d) {
+        *this = *this * d;
+        return *this;
+    }
+    inline int& operator[](size_t i) {
+        return *(((int*) &v_) + i);
+    }
+    inline int operator[](size_t i) const {
+        return v_[i / 2][i % 4];
+    }
+    SimdInt8(SimdFloat8 const& r) {
+        v_[0] = _mm_cvtps_epi32(_mm_floor_ps(r.v_[0]));
+        v_[1] = _mm_cvtps_epi32(_mm_floor_ps(r.v_[1]));
+    }
+    friend class SimdFloat8;
 };
 
-inline simd_float8::simd_float8(simd_int8 a) {
-	v[0] = _mm_cvtepi32_ps(a.v[0]);
-	v[1] = _mm_cvtepi32_ps(a.v[1]);
+inline SimdFloat8::SimdFloat8(SimdInt8 a) {
+    v_[0] = _mm_cvtepi32_ps(a.v_[0]);
+    v_[1] = _mm_cvtepi32_ps(a.v_[1]);
 }
 #endif
 
 #if defined(USE_AVX2) || defined(USE_AVX512)
 
-class alignas(sizeof(__m256i)) simd_int8 {
+class alignas(sizeof(__m256i)) SimdInt8 {
 private:
-	union {
-		__m256i v;
-		int ints[8];
-	};
-public:
-	simd_int8() = default;
-	simd_int8(const simd_int8&) = default;
-	simd_int8(simd_float8 r) {
-		v = _mm256_cvtps_epi32(_mm256_floor_ps(r.v));
-	}
-	simd_int8(int i) {
-		v = _mm256_set_epi32(i, i, i, i, i, i, i, i);
-	}
-	inline simd_int8& operator=(const simd_int8 &other) = default;
-	simd_int8& operator=(simd_int8 &&other) = default;
-	inline simd_int8 operator+(const simd_int8 &other) const {
-		simd_int8 r;
-		r.v = _mm256_add_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int8 operator-(const simd_int8 &other) const {
-		simd_int8 r;
-		r.v = _mm256_sub_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int8 operator*(const simd_int8 &other) const {
-		simd_int8 r;
-		r.v = _mm256_mul_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int8 operator+() const {
-		return *this;
-	}
-	inline simd_int8 operator-() const {
-		return simd_int8(0.0) - *this;
-	}
-	inline int& operator[](std::size_t i) {
-		return ints[i];
-	}
-	inline int operator[](std::size_t i) const {
-		return v[i];
-	}
-	inline simd_int8 operator<<=(int shft) {
-		v = _mm256_slli_epi32(v, shft);
-		return *this;
-	}
-	simd_int8 operator==(const simd_int8& other) const {
-		simd_int8 rc;
-		rc.v = _mm256_cmpeq_epi32(v, other.v);
-		rc.v = -rc.v;
-		return rc;
-	}
-	friend class simd_double8;
+    union {
+        __m256i v_;
+        int ints_[8];
+    };
 
-	friend class simd_float8;
+public:
+    SimdInt8() = default;
+    SimdInt8(SimdInt8 const&) = default;
+    SimdInt8(SimdFloat8 r) {
+        v_ = _mm256_cvtps_epi32(_mm256_floor_ps(r.v_));
+    }
+    SimdInt8(int i) {
+        v_ = _mm256_set_epi32(i, i, i, i, i, i, i, i);
+    }
+    inline SimdInt8& operator=(SimdInt8 const& other) = default;
+    SimdInt8& operator=(SimdInt8&& other) = default;
+    inline SimdInt8 operator+(SimdInt8 const& other) const {
+        SimdInt8 r;
+        r.v_ = _mm256_add_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt8 operator-(SimdInt8 const& other) const {
+        SimdInt8 r;
+        r.v_ = _mm256_sub_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt8 operator*(SimdInt8 const& other) const {
+        SimdInt8 r;
+        r.v_ = _mm256_mul_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt8 operator+() const {
+        return *this;
+    }
+    inline SimdInt8 operator-() const {
+        return SimdInt8(0.0) - *this;
+    }
+    inline int& operator[](size_t i) {
+        return ints_[i];
+    }
+    inline int operator[](size_t i) const {
+        return v_[i];
+    }
+    inline SimdInt8 operator<<=(int shft) {
+        v_ = _mm256_slli_epi32(v_, shft);
+        return *this;
+    }
+    SimdInt8 operator==(SimdInt8 const& other) const {
+        SimdInt8 rc;
+        rc.v_ = _mm256_cmpeq_epi32(v_, other.v_);
+        rc.v_ = -rc.v_;
+        return rc;
+    }
+    friend class SimdDouble8;
+
+    friend class SimdFloat8;
 };
 
-inline simd_float8::simd_float8(simd_int8 a) {
-	v = _mm256_cvtepi32_ps(a.v);
+inline SimdFloat8::SimdFloat8(SimdInt8 a) {
+    v_ = _mm256_cvtepi32_ps(a.v_);
 }
 
 #endif
 
 #if defined(USE_AVX512)
 
-class alignas(sizeof(__m512i)) simd_int16 {
+class alignas(sizeof(__m512i)) SimdInt16 {
 private:
-	union {
-		__m512i v;
-		int ints[16];
-	};
+    union {
+        __m512i v_;
+        int ints_[16];
+    };
+
 public:
-	simd_int16() = default;
-	simd_int16(const simd_int16&) = default;
-	simd_int16(simd_float16 r) {
-		v = _mm512_cvtps_epi32(r.v);
-	}
-	simd_int16(int i) {
-		v = _mm512_set_epi32(i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i);
-	}
-	inline simd_int16& operator=(const simd_int16 &other) = default;
-	simd_int16& operator=(simd_int16 &&other) = default;
-	inline simd_int16 operator+(const simd_int16 &other) const {
-		simd_int16 r;
-		r.v = _mm512_add_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int16 operator-(const simd_int16 &other) const {
-		simd_int16 r;
-		r.v = _mm512_sub_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int16 operator*(const simd_int16 &other) const {
-		simd_int16 r;
-		r.v = _mm512_mul_epi32(v, other.v);
-		return r;
-	}
-	inline simd_int16 operator+() const {
-		return *this;
-	}
-	inline simd_int16 operator-() const {
-		return simd_int16(0.0) - *this;
-	}
-	inline int& operator[](std::size_t i) {
-		return ints[i];
-	}
-	inline int operator[](std::size_t i) const {
-		return v[i];
-	}
-	inline simd_int16 operator<<=(int shft) {
-		v = _mm512_slli_epi32(v, shft);
-		return *this;
-	}
-	friend class simd_float16;
+    SimdInt16() = default;
+    SimdInt16(SimdInt16 const&) = default;
+    SimdInt16(SimdFloat16 r) {
+        v_ = _mm512_cvtps_epi32(r.v_);
+    }
+    SimdInt16(int i) {
+        v_ = _mm512_set_epi32(i, i, i, i, i, i, i, i, i, i, i, i, i, i, i, i);
+    }
+    inline SimdInt16& operator=(SimdInt16 const& other) = default;
+    SimdInt16& operator=(SimdInt16&& other) = default;
+    inline SimdInt16 operator+(SimdInt16 const& other) const {
+        SimdInt16 r;
+        r.v_ = _mm512_add_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt16 operator-(SimdInt16 const& other) const {
+        SimdInt16 r;
+        r.v_ = _mm512_sub_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt16 operator*(SimdInt16 const& other) const {
+        SimdInt16 r;
+        r.v_ = _mm512_mul_epi32(v_, other.v_);
+        return r;
+    }
+    inline SimdInt16 operator+() const {
+        return *this;
+    }
+    inline SimdInt16 operator-() const {
+        return SimdInt16(0.0) - *this;
+    }
+    inline int& operator[](size_t i) {
+        return ints_[i];
+    }
+    inline int operator[](size_t i) const {
+        return v_[i];
+    }
+    inline SimdInt16 operator<<=(int shft) {
+        v_ = _mm512_slli_epi32(v_, shft);
+        return *this;
+    }
+    friend class SimdFloat16;
 };
 
-inline simd_float16::simd_float16(simd_int16 a) {
-	v = _mm512_cvtepi32_ps(a.v);
+inline SimdFloat16::SimdFloat16(SimdInt16 a) {
+    v_ = _mm512_cvtepi32_ps(a.v_);
 }
 
 #endif

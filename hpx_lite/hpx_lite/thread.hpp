@@ -19,95 +19,94 @@
 namespace hpx {
 class thread {
 private:
+    template <class F, class... Args>
+    using tuple_type = std::tuple<typename std::decay<F>::type, typename std::decay<Args>::type...>;
 
-	template<class F, class...Args>
-	using tuple_type = std::tuple<typename std::decay<F>::type, typename std::decay<Args>::type...>;
+    template <class F, class... Args>
+    static void wrapper(void* arg);
 
-	template<class F, class ...Args>
-	static void wrapper(void* arg);
+    std::shared_ptr<detail::context> handle;
 
-	std::shared_ptr<detail::context> handle;
 public:
+    bool attempt_continuation(std::function<void()>& func);
 
-	bool attempt_continuation(std::function<void()>& func);
+    class id;
+    typedef void native_handle_type;
 
-	class id;
-	typedef void native_handle_type;
+    thread();
+    thread(const thread&) = delete;
+    thread(thread&&) = default;
+    ~thread() = default;
 
-	thread();
-	thread(const thread&) = delete;
-	thread(thread&&) = default;
-	~thread() = default;
+    thread& operator=(const thread&) = delete;
+    thread& operator=(thread&&) = default;
 
-	thread& operator=(const thread&) = delete;
-	thread& operator=(thread&&) = default;
+    bool joinable() const;
+    id get_id() const;
+    native_handle_type native_handle();
+    void detach();
+    void join();
+    void swap(thread&);
 
-	bool joinable() const;
-	id get_id() const;
-	native_handle_type native_handle();
-	void detach();
-	void join();
-	void swap(thread&);
+    template <class F, class... Args>
+    thread(F&& f, Args&&... args);
 
-	template<class F, class ...Args>
-	thread(F&& f, Args&&...args);
-
-	static unsigned hardware_concurrency();
-
+    static unsigned hardware_concurrency();
 };
 
 namespace this_thread {
-void yield(const std::shared_ptr<bool> yield_bit=nullptr);
-thread::id get_id();
+    void yield(const std::shared_ptr<bool> yield_bit = nullptr);
+    thread::id get_id();
 
-template<class Rep, class Period>
-void sleep_for(const std::chrono::duration<Rep, Period>&);
+    template <class Rep, class Period>
+    void sleep_for(const std::chrono::duration<Rep, Period>&);
 
-template<class Clock, class Duration>
-void sleep_until(const std::chrono::time_point<Clock, Duration>&);
+    template <class Clock, class Duration>
+    void sleep_until(const std::chrono::time_point<Clock, Duration>&);
 
-}
+}    // namespace this_thread
 
 class thread::id {
 private:
-	std::uintptr_t local;
-	int global;
+    std::uintptr_t local;
+    int global;
+
 public:
+    id();
+    id(const id&) = default;
+    id& operator=(const id&) = default;
+    bool operator==(const id& other) const;
+    bool operator!=(const id& other) const;
+    bool operator<(const id& other) const;
+    bool operator>(const id& other) const;
+    bool operator<=(const id& other) const;
+    bool operator>=(const id& other) const;
 
+    template <class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits>& operator<<(
+        std::basic_ostream<CharT, Traits>&, thread::id);
 
-	id();
-	id(const id&) = default;
-	id& operator=(const id&) = default;
-	bool operator==( const id& other) const;
-	bool operator!=( const id& other) const;
-	bool operator<( const id& other) const;
-	bool operator>( const id& other) const;
-	bool operator<=( const id& other) const;
-	bool operator>=( const id& other) const;
-
-	template<class CharT, class Traits>
-	friend std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>&, thread::id);
-
-	friend class std::hash<thread::id>;
-	friend class thread;
-	friend id this_thread::get_id();
+    friend class std::hash<thread::id>;
+    friend class thread;
+    friend id this_thread::get_id();
 };
 
-}
+}    // namespace hpx
 
 namespace std {
 
-template<class CharT, class Traits>
-std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& ost, hpx::thread::id id);
+template <class CharT, class Traits>
+std::basic_ostream<CharT, Traits>& operator<<(
+    std::basic_ostream<CharT, Traits>& ost, hpx::thread::id id);
 
-template<>
+template <>
 struct hash<hpx::thread::id> {
-	size_t operator()(const hpx::thread::id& id) const;
+    size_t operator()(const hpx::thread::id& id) const;
 };
 
 void swap(hpx::thread&, hpx::thread&);
 
-}
+}    // namespace std
 
 #include "detail/thread_impl.hpp"
 

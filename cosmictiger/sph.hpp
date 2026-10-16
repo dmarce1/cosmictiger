@@ -35,57 +35,59 @@
 #define SPH_AV_MM 1
 #define SPH_AV_CONSTANT 2
 
-struct sph_values {
-	float vx;
-	float vy;
-	float vz;
-	float rho;
-	float p;
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & vx;
-		arc & vy;
-		arc & vz;
-		arc & rho;
-		arc & p;
-	}
+struct SphValues {
+    float vx;
+    float vy;
+    float vz;
+    float rho;
+    float p;
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & vx;
+        arc & vy;
+        arc & vz;
+        arc & rho;
+        arc & p;
+    }
 };
 
 #ifndef __CUDACC__
-struct sph_tree_neighbor_return {
-	fixed32_range inner_box;
-	fixed32_range outer_box;
-	sph_values value_at;
-	bool has_value_at;
-	CUDA_EXPORT
-	sph_tree_neighbor_return() {
-		has_value_at = false;
-		for (int dim = 0; dim < NDIM; dim++) {
-			inner_box.begin[dim] = 1.9;
-			inner_box.end[dim] = -0.9;
-			outer_box.begin[dim] = 1.9;
-			outer_box.end[dim] = -0.9;
-		}
-	}
-	CUDA_EXPORT
-	sph_tree_neighbor_return& operator+=(sph_tree_neighbor_return const& other) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			inner_box.begin[dim] = std::min(inner_box.begin[dim], other.inner_box.begin[dim]);
-			inner_box.end[dim] = std::max(inner_box.end[dim], other.inner_box.end[dim]);
-			outer_box.begin[dim] = std::min(outer_box.begin[dim], other.outer_box.begin[dim]);
-			outer_box.end[dim] = std::max(outer_box.end[dim], other.outer_box.end[dim]);
-		}
-		if (!has_value_at && other.has_value_at) {
-			value_at = other.value_at;
-			has_value_at = true;
-		}
-		return *this;
-	}
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & has_value_at;
-		arc & inner_box;
-		arc & outer_box;
-		arc & value_at;
-	}
+struct SphTreeNeighborReturn {
+    Fixed32Range innerBox;
+    Fixed32Range outerBox;
+    SphValues valueAt;
+    bool hasValueAt;
+    CUDA_EXPORT
+    SphTreeNeighborReturn() {
+        hasValueAt = false;
+        for (int dim = 0; dim < NDIM; dim++) {
+            innerBox.begin[dim] = 1.9;
+            innerBox.end[dim] = -0.9;
+            outerBox.begin[dim] = 1.9;
+            outerBox.end[dim] = -0.9;
+        }
+    }
+    CUDA_EXPORT
+    SphTreeNeighborReturn& operator+=(SphTreeNeighborReturn const& other) {
+        for (int dim = 0; dim < NDIM; dim++) {
+            innerBox.begin[dim] = std::min(innerBox.begin[dim], other.innerBox.begin[dim]);
+            innerBox.end[dim] = std::max(innerBox.end[dim], other.innerBox.end[dim]);
+            outerBox.begin[dim] = std::min(outerBox.begin[dim], other.outerBox.begin[dim]);
+            outerBox.end[dim] = std::max(outerBox.end[dim], other.outerBox.end[dim]);
+        }
+        if (!hasValueAt && other.hasValueAt) {
+            valueAt = other.valueAt;
+            hasValueAt = true;
+        }
+        return *this;
+    }
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & hasValueAt;
+        arc & innerBox;
+        arc & outerBox;
+        arc & valueAt;
+    }
 };
 #endif
 
@@ -98,202 +100,205 @@ struct sph_tree_neighbor_return {
 #define SPH_SET_ACTIVE 1
 #define SPH_SET_ALL 4
 
-struct sph_tree_neighbor_params {
-	int run_type = 0;
-	float h_wt = 1.0f;
-	int min_rung = 0;
-	int seti = 0;
-	int seto = 0;
-	double x = 0.0;
-	double y = 0.0;
-	double z = 0.0;
-	template <typename T> void serialize(T&& arc, unsigned) {
-		arc & seti;
-		arc & seto;
-		arc & run_type;
-		arc & h_wt;
-		arc & min_rung;
-		arc & x;
-		arc & y;
-		arc & z;
-	}
+struct SphTreeNeighborParams {
+    int runType = 0;
+    float hWt = 1.0f;
+    int minRung = 0;
+    int seti = 0;
+    int seto = 0;
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+    template <typename T>
+    void serialize(T&& arc, unsigned) {
+        arc & seti;
+        arc & seto;
+        arc & runType;
+        arc & hWt;
+        arc & minRung;
+        arc & x;
+        arc & y;
+        arc & z;
+    }
 };
 
-struct sph_run_return {
-	float hmin;
-	float hmax;
-	double flops;
-	int max_rung_hydro;
-	int max_rung_grav;
-	int max_rung;
-	float max_vsig;
-	bool rc;
-	float ekin;
-	float ent;
-	float etherm;
-	float momx;
-	float momy;
-	float momz;
-	float vol;
-	float dtinv_cfl;
-	float dtinv_visc;
-	float dtinv_diff;
-	float dtinv_cond;
-	float dtinv_divv;
-	float dtinv_acc;
-	float dtinv_omega;
-	sph_run_return() {
-		flops = 0.0;
-		ent = 0.0;
-		hmax = 0.0;
-		hmin = std::numeric_limits<float>::max();
-		max_rung_hydro = 0;
-		max_rung_grav = 0;
-		max_rung = 0;
-		max_vsig = 0.0;
-		etherm = vol = ekin = momx = momy = momz = 0.0;
-		dtinv_cfl = 0.0f;
-		dtinv_visc = 0.0f;
-		dtinv_diff = 0.0f;
-		dtinv_cond = 0.0f;
-		dtinv_divv = 0.0f;
-		dtinv_acc = 0.0f;
-		dtinv_omega = 0.0f;
-		rc = false;
-	}
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & rc;
-		arc & flops;
-		arc & dtinv_cfl;
-		arc & dtinv_visc;
-		arc & dtinv_diff;
-		arc & dtinv_cond;
-		arc & dtinv_divv;
-		arc & dtinv_acc;
-		arc & hmin;
-		arc & hmax;
-		arc & max_rung_hydro;
-		arc & max_rung_grav;
-		arc & max_rung;
-		arc & max_vsig;
-		arc & ekin;
-		arc & momx;
-		arc & momy;
-		arc & momz;
-		arc & vol;
-		arc & ent;
-		arc & etherm;
-		arc & dtinv_omega;
-	}
-	sph_run_return& operator+=(sph_run_return const& other) {
-		flops += other.flops;
-		hmax = std::max(hmax, other.hmax);
-		hmin = std::min(hmin, other.hmin);
-		max_rung_hydro = std::max(max_rung_hydro, other.max_rung_hydro);
-		max_rung_grav = std::max(max_rung_grav, other.max_rung_grav);
-		max_rung = std::max(max_rung, other.max_rung);
-		max_vsig = std::max(max_vsig, other.max_vsig);
-		dtinv_cfl = std::max(dtinv_cfl, other.dtinv_cfl);
-		dtinv_visc = std::max(dtinv_visc, other.dtinv_visc);
-		dtinv_acc = std::max(dtinv_acc, other.dtinv_acc);
-		dtinv_diff = std::max(dtinv_diff, other.dtinv_diff);
-		dtinv_cond = std::max(dtinv_cond, other.dtinv_cond);
-		dtinv_divv = std::max(dtinv_divv, other.dtinv_divv);
-		dtinv_omega = std::max(dtinv_omega, other.dtinv_omega);
-		ekin += other.ekin;
-		momx += other.momx;
-		momy += other.momy;
-		momz += other.momz;
-		vol += other.vol;
-		etherm += other.etherm;
-		ent += other.ent;
-		rc = rc || other.rc;
-		return *this;
-	}
+struct SphRunReturn {
+    float hmin;
+    float hmax;
+    double flops;
+    int maxRungHydro;
+    int maxRungGrav;
+    int maxRung;
+    float maxVsig;
+    bool rc;
+    float ekin;
+    float ent;
+    float etherm;
+    float momx;
+    float momy;
+    float momz;
+    float vol;
+    float dtinvCfl;
+    float dtinvVisc;
+    float dtinvDiff;
+    float dtinvCond;
+    float dtinvDivv;
+    float dtinvAcc;
+    float dtinvOmega;
+    SphRunReturn() {
+        flops = 0.0;
+        ent = 0.0;
+        hmax = 0.0;
+        hmin = std::numeric_limits<float>::max();
+        maxRungHydro = 0;
+        maxRungGrav = 0;
+        maxRung = 0;
+        maxVsig = 0.0;
+        etherm = vol = ekin = momx = momy = momz = 0.0;
+        dtinvCfl = 0.0f;
+        dtinvVisc = 0.0f;
+        dtinvDiff = 0.0f;
+        dtinvCond = 0.0f;
+        dtinvDivv = 0.0f;
+        dtinvAcc = 0.0f;
+        dtinvOmega = 0.0f;
+        rc = false;
+    }
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & rc;
+        arc & flops;
+        arc & dtinvCfl;
+        arc & dtinvVisc;
+        arc & dtinvDiff;
+        arc & dtinvCond;
+        arc & dtinvDivv;
+        arc & dtinvAcc;
+        arc & hmin;
+        arc & hmax;
+        arc & maxRungHydro;
+        arc & maxRungGrav;
+        arc & maxRung;
+        arc & maxVsig;
+        arc & ekin;
+        arc & momx;
+        arc & momy;
+        arc & momz;
+        arc & vol;
+        arc & ent;
+        arc & etherm;
+        arc & dtinvOmega;
+    }
+    SphRunReturn& operator+=(SphRunReturn const& other) {
+        flops += other.flops;
+        hmax = std::max(hmax, other.hmax);
+        hmin = std::min(hmin, other.hmin);
+        maxRungHydro = std::max(maxRungHydro, other.maxRungHydro);
+        maxRungGrav = std::max(maxRungGrav, other.maxRungGrav);
+        maxRung = std::max(maxRung, other.maxRung);
+        maxVsig = std::max(maxVsig, other.maxVsig);
+        dtinvCfl = std::max(dtinvCfl, other.dtinvCfl);
+        dtinvVisc = std::max(dtinvVisc, other.dtinvVisc);
+        dtinvAcc = std::max(dtinvAcc, other.dtinvAcc);
+        dtinvDiff = std::max(dtinvDiff, other.dtinvDiff);
+        dtinvCond = std::max(dtinvCond, other.dtinvCond);
+        dtinvDivv = std::max(dtinvDivv, other.dtinvDivv);
+        dtinvOmega = std::max(dtinvOmega, other.dtinvOmega);
+        ekin += other.ekin;
+        momx += other.momx;
+        momy += other.momy;
+        momz += other.momz;
+        vol += other.vol;
+        etherm += other.etherm;
+        ent += other.ent;
+        rc = rc || other.rc;
+        return *this;
+    }
 };
 
-struct sph_run_params {
-	bool vsoft;
-	int av_type;
-	int run_type;
-	int set;
-	int phase;
-	int min_rung;
-	float t0;
-	float a;
-	float adot;
-	bool tzero;
-	float cfl;
-	float hmin;
-	float hmax;
-	int max_rung;
-	float gy;
-	float tau;
-	int iter;
-	float max_dt;
-	float alpha0;
-	float alpha1;
-	float beta;
-	float alpha_decay;
-	float omega_m;
-	float H0;
-	float damping;
-	bool diffusion;
-	bool conduction;
-	double code_to_s;
-	double code_to_g;
-	double code_to_cm;
-	bool stars;
-	sph_run_params() {
-		iter = 0;
-		auto const opts = get_options();
-		hmin = opts.hmin;
-		hmax = opts.hmax;
-		stars = opts.stars;
-		vsoft = opts.vsoft;
-		av_type = opts.visc_type;
-		code_to_s = opts.code_to_s;
-		code_to_g = opts.code_to_g;
-		code_to_cm = opts.code_to_cm;
-		damping = opts.damping;
-		diffusion = opts.diffusion;
-		conduction = opts.conduction;
-		gy = opts.gy;
-		max_dt = 1e30;
-		alpha0 = opts.alpha0;
-		alpha1 = opts.alpha1;
-		beta = opts.beta;
-		alpha_decay = opts.alpha_decay;
-		if (opts.test == "") {
-			H0 = opts.hubble * constants::H0 * opts.code_to_s;
-			omega_m = opts.omega_m;
-		} else {
-			H0 = omega_m = 0.0;
-		}
-	}
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & hmin;
-		arc & hmax;
-		arc & omega_m;
-		arc & vsoft;
-		arc & H0;
-		arc & adot;
-		arc & iter;
-		arc & max_dt;
-		arc & gy;
-		arc & av_type;
-		arc & tau;
-		arc & tzero;
-		arc & t0;
-		arc & phase;
-		arc & run_type;
-		arc & set;
-		arc & min_rung;
-		arc & t0;
-		arc & a;
-		arc & cfl;
-		arc & max_rung;
-	}
+struct SphRunParams {
+    bool vsoft;
+    int avType;
+    int runType;
+    int set;
+    int phase;
+    int minRung;
+    float t0;
+    float a;
+    float adot;
+    bool tzero;
+    float cfl;
+    float hmin;
+    float hmax;
+    int maxRung;
+    float gy;
+    float tau;
+    int iter;
+    float maxDt;
+    float alpha0;
+    float alpha1;
+    float beta;
+    float alphaDecay;
+    float omegaM;
+    float h0;
+    float damping;
+    bool diffusion;
+    bool conduction;
+    double codeToS;
+    double codeToG;
+    double codeToCm;
+    bool stars;
+    SphRunParams() {
+        iter = 0;
+        auto const opts = getOptions();
+        hmin = opts.hmin;
+        hmax = opts.hmax;
+        stars = opts.stars;
+        vsoft = opts.vsoft;
+        avType = opts.viscType;
+        codeToS = opts.codeToS;
+        codeToG = opts.codeToG;
+        codeToCm = opts.codeToCm;
+        damping = opts.damping;
+        diffusion = opts.diffusion;
+        conduction = opts.conduction;
+        gy = opts.gy;
+        maxDt = 1e30;
+        alpha0 = opts.alpha0;
+        alpha1 = opts.alpha1;
+        beta = opts.beta;
+        alphaDecay = opts.alphaDecay;
+        if (opts.test == "") {
+            h0 = opts.hubble * constants::kH0 * opts.codeToS;
+            omegaM = opts.omegaM;
+        } else {
+            h0 = omegaM = 0.0;
+        }
+    }
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & hmin;
+        arc & hmax;
+        arc & omegaM;
+        arc & vsoft;
+        arc & h0;
+        arc & adot;
+        arc & iter;
+        arc & maxDt;
+        arc & gy;
+        arc & avType;
+        arc & tau;
+        arc & tzero;
+        arc & t0;
+        arc & phase;
+        arc & runType;
+        arc & set;
+        arc & minRung;
+        arc & t0;
+        arc & a;
+        arc & cfl;
+        arc & maxRung;
+    }
 };
 
 #define SPH_RUN_PREHYDRO1 0
@@ -304,25 +309,27 @@ struct sph_run_params {
 #define SPH_RUN_COND_INIT 5
 #define SPH_RUN_CONDUCTION 6
 
-float sph_apply_diffusion_update(int minrung, float toler);
-void sph_init_diffusion();
+float sphApplyDiffusionUpdate(int minrung, float toler);
+void sphInitDiffusion();
 
-struct cond_update_return {
-	float err_max;
-	float err_rms;
-	size_t N;
-	template <typename A> void serialize(A& arc, unsigned) {
-		arc & err_max;
-		arc & err_rms;
-		arc & N;
-	}
+struct CondUpdateReturn {
+    float errMax;
+    float errRms;
+    size_t n;
+    template <typename A>
+    void serialize(A& arc, unsigned) {
+        arc & errMax;
+        arc & errRms;
+        arc & n;
+    }
 };
-cond_update_return sph_apply_conduction_update(int minrung);
-sph_run_return sph_run(sph_run_params params, bool cuda = false);
+CondUpdateReturn sphApplyConductionUpdate(int minrung);
+SphRunReturn sphRun(SphRunParams params, bool cuda = false);
 #ifndef __CUDACC__
-hpx::future<sph_tree_neighbor_return> sph_tree_neighbor(sph_tree_neighbor_params params, tree_id self, vector<tree_id> checklist, int level = 0);
+hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
+    SphTreeNeighborParams params, TreeId self, Vector<TreeId> checklist, int level = 0);
 #endif
-vector<sph_values> sph_values_at(vector<double> x, vector<double> y, vector<double> z);
+Vector<SphValues> sphValuesAt(Vector<double> x, Vector<double> y, Vector<double> z);
 /*
  template<typename T>
  CUDA_EXPORT

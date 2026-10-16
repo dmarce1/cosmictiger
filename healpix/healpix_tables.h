@@ -35,29 +35,27 @@
 #include "datatypes.h"
 
 /*! The two possible ordering schemes of a HEALPix map. */
-enum Healpix_Ordering_Scheme { RING, /*!< RING scheme */
-                               NEST  /*!< NESTED scheme */
-                             };
+enum Healpix_Ordering_Scheme {
+    RING, /*!< RING scheme */
+    NEST  /*!< NESTED scheme */
+};
 
-Healpix_Ordering_Scheme string2HealpixScheme (const std::string &inp);
+Healpix_Ordering_Scheme string2HealpixScheme(const std::string& inp);
 
 class nside_dummy {};
 extern const nside_dummy SET_NSIDE;
 
-class Healpix_Tables
-  {
-  protected:
+class Healpix_Tables {
+protected:
     static const uint16 ctab[], utab[];
 
     static const int jrll[], jpll[];
 
-    static const uint8 peano_face2path[2][12], peano_face2face[2][12],
-                       peano_arr[],peano_arr2[];
+    static const uint8 peano_face2path[2][12], peano_face2face[2][12], peano_arr[], peano_arr2[];
 
-    static const int nb_xoffset[], nb_yoffset[],
-                     nb_facearray[][12], nb_swaparray[][3];
+    static const int nb_xoffset[], nb_yoffset[], nb_facearray[][12], nb_swaparray[][3];
 
     static const int swap_clen[], swap_cycle[];
-  };
+};
 
 #endif

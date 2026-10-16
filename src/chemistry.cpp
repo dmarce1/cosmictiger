@@ -30,171 +30,176 @@
 #define NRATES 20
 #define NCOOL 15
 
-float const Ktoev = float(1. / 11604.45);
+float const ktoev = float(1. / 11604.45);
 
-HPX_PLAIN_ACTION(chemistry_do_step);
+HPX_PLAIN_ACTION(chemistryDoStep, ChemistryDoStepAction);
 
-pair<double> chemistry_do_step(float a, int minrung, float t0, float adot, int dir) {
-	profiler_enter(__FUNCTION__);
-	timer tm;
-	tm.start();
-	vector<hpx::future<pair<double>>> futs;
-	if (!get_options().chem) {
-		pair<double> rc;
-		rc.first = rc.second = 0.0;
-		return rc;
-	}
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<chemistry_do_step_action>(c, a, minrung, t0, adot, dir));
-	}
-	double echange = 0.0;
-	int nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async([proc, nthreads, a, minrung, t0, dir, adot]() {
-			part_int const b = (size_t)proc * sph_particles_size() / nthreads;
-			part_int const e = (size_t)(proc + 1) * sph_particles_size() / nthreads;
-			vector<chem_attribs> chems;
-			float const mass = get_options().sph_mass;
-			float const stars = get_options().stars;
-			int const N = get_options().sneighbor_number;
-			for (part_int i = b; i < e; i++) {
-				int rung1 = sph_particles_rung(i);
-				//	int rung2 = sph_particles_oldrung(i);
-				if (rung1 >= minrung && !sph_particles_isstar(i)) {
-					chem_attribs chem;
-					float T = sph_particles_temperature(i, a);
-					sph_particles_normalize_fracs(i);
-					float const factor = 1.0f / (1.0f - sph_particles_Z(i));
-					chem.H = sph_particles_H(i) * factor;
-					chem.He = sph_particles_He0(i) * factor;
-					chem.Hp = sph_particles_Hp(i) * factor;
-					chem.Hn = sph_particles_Hn(i) * factor;
-					chem.H2 = sph_particles_H2(i) * factor;
-					chem.Hep = sph_particles_Hep(i) * factor;
-					chem.Hepp = sph_particles_Hepp(i) * factor;
+Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir) {
+    profilerEnter(__FUNCTION__);
+    Timer tm;
+    tm.start();
+    Vector<hpx::future<Pair<double>>> futs;
+    if (!getOptions().chem) {
+        Pair<double> rc;
+        rc.first = rc.second = 0.0;
+        return rc;
+    }
+    for (auto& c : hpxChildren()) {
+        futs.push_back(hpx::async<ChemistryDoStepAction>(c, a, minrung, t0, adot, dir));
+    }
+    double echange = 0.0;
+    int nthreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < nthreads; proc++) {
+        futs.push_back(hpx::async([proc, nthreads, a, minrung, t0, dir, adot]() {
+            PartInt const b = (size_t) proc * sphParticlesSize() / nthreads;
+            PartInt const e = (size_t) (proc + 1) * sphParticlesSize() / nthreads;
+            Vector<ChemAttribs> chems;
+            float const mass = getOptions().sphMass;
+            float const stars = getOptions().stars;
+            int const n = getOptions().sneighborNumber;
+            for (PartInt i = b; i < e; i++) {
+                int rung1 = sphParticlesRung(i);
+                //	int rung2 = sph_particles_oldrung(i);
+                if (rung1 >= minrung && !sphParticlesIsstar(i)) {
+                    ChemAttribs chem;
+                    float t = sphParticlesTemperature(i, a);
+                    sphParticlesNormalizeFracs(i);
+                    float const factor = 1.0f / (1.0f - sphParticlesZ(i));
+                    chem.h = sphParticlesH(i) * factor;
+                    chem.he = sphParticlesHe0(i) * factor;
+                    chem.hp = sphParticlesHp(i) * factor;
+                    chem.hn = sphParticlesHn(i) * factor;
+                    chem.h2 = sphParticlesH2(i) * factor;
+                    chem.hep = sphParticlesHep(i) * factor;
+                    chem.hepp = sphParticlesHepp(i) * factor;
 #ifdef HOPKINS
-					chem.eint = sph_particles_eint_rho(i);
-					chem.rho = sph_particles_rho_rho(i);
+                    chem.eint = sphParticlesEintRho(i);
+                    chem.rho = sphParticlesRhoRho(i);
 #else
-					chem.eint = sph_particles_eint(i);
-					chem.rho = sph_particles_rho(i);
+                    chem.eint = sphParticlesEint(i);
+                    chem.rho = sphParticlesRho(i);
 #endif
 
-					if (chem.He < 0.0 && chem.He > -5e-7) {
-						chem.Hep += chem.He;
-						chem.He = 0.0;
-					}
-					if (chem.Hepp < 0.0 && chem.Hepp > -5e-7) {
-						chem.Hep += chem.Hepp;
-						chem.Hepp = 0.0;
-					}
-					ALWAYS_ASSERT(chem.Hepp >= 0.f);
-					ALWAYS_ASSERT(chem.H2 >= 0.f);
-					ALWAYS_ASSERT(chem.Hp >= 0.f);
-					ALWAYS_ASSERT(chem.Hn >= 0.f);
-					ALWAYS_ASSERT(chem.Hep >= 0.f);
-					//					if( stars ) {
-					//						chem.cold_mass = sph_particles_cold_mass(i);
-					//					} else {
-					chem.cold_mass = 0.f;
-					//					}
-					if (chem.cold_mass > -1e-4 && chem.cold_mass < 0.0) {
-						chem.cold_mass = 0.0;
-					} else if (chem.cold_mass < 0.0) {
-						PRINT("%e\n", chem.cold_mass);
-						ALWAYS_ASSERT(chem.cold_mass >= 0.0);
-					}
-					double dt = (rung_dt[rung1]) * t0;
-					if (stars) {
-					}
-					chem.dt = dt;
-					if (T > 5e8) {
-						PRINT("T-------------> %e\n", T);
-						if (T > TMAX) {
-							int k = sph_particles_dm_index(i);
-							float vx = particles_vel(XDIM, k);
-							float vy = particles_vel(YDIM, k);
-							float vz = particles_vel(ZDIM, k);
-							PRINT("CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho, chem.eint, sph_particles_smooth_len(i), vx, vy, vz);
-							PRINT("%e %e %e %e %e %e %e\n", chem.He, chem.Hp, chem.Hn, chem.H2, chem.Hep, chem.Hepp, sph_particles_Z(i));
-						}
-					}
-					if (T < 0.f) {
-						PRINT("NEGATIVE T !\n", T);
-						abort();
-					}
-					chems.push_back(chem);
-				}
-			}
-			double flops;
-			flops = cuda_chemistry_step(chems, a);
-			int j = 0;
-			double echange = 0.0;
-			double const sph_mass = get_options().sph_mass;
-			for (part_int i = b; i < e; i++) {
-				int rung1 = sph_particles_rung(i);
-				if (rung1 >= minrung && !sph_particles_isstar(i)) {
-					chem_attribs chem = chems[j++];
-					//					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 * (chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2);
-					//					double gamma = 1. + 1. / cv;
-					double gamma = get_options().gamma;
-					//		PRINT( "%e\n", gamma);
-					float const factor = 1.0f - sph_particles_Z(i);
-					sph_particles_H(i) = chem.H * factor;
-					sph_particles_He0(i) = chem.He * factor;
-					sph_particles_Hp(i) = chem.Hp * factor;
-					sph_particles_Hn(i) = chem.Hn * factor;
-					sph_particles_H2(i) = chem.H2 * factor;
-					sph_particles_Hep(i) = chem.Hep * factor;
-					sph_particles_Hepp(i) = chem.Hepp * factor;
-					sph_particles_normalize_fracs(i);
-					sph_particles_tcool(i) = chem.tcool > 0.0 ? chem.tcool : 1e38;
+                    if (chem.he < 0.0 && chem.he > -5e-7) {
+                        chem.hep += chem.he;
+                        chem.he = 0.0;
+                    }
+                    if (chem.hepp < 0.0 && chem.hepp > -5e-7) {
+                        chem.hep += chem.hepp;
+                        chem.hepp = 0.0;
+                    }
+                    ALWAYS_ASSERT(chem.hepp >= 0.f);
+                    ALWAYS_ASSERT(chem.h2 >= 0.f);
+                    ALWAYS_ASSERT(chem.hp >= 0.f);
+                    ALWAYS_ASSERT(chem.hn >= 0.f);
+                    ALWAYS_ASSERT(chem.hep >= 0.f);
+                    //					if( stars ) {
+                    //						chem.cold_mass = sph_particles_cold_mass(i);
+                    //					} else {
+                    chem.coldMass = 0.f;
+                    //					}
+                    if (chem.coldMass > -1e-4 && chem.coldMass < 0.0) {
+                        chem.coldMass = 0.0;
+                    } else if (chem.coldMass < 0.0) {
+                        PRINT("%e\n", chem.coldMass);
+                        ALWAYS_ASSERT(chem.coldMass >= 0.0);
+                    }
+                    double dt = (rungDt[rung1]) * t0;
+                    if (stars) {
+                    }
+                    chem.dt = dt;
+                    if (t > 5e8) {
+                        PRINT("T-------------> %e\n", t);
+                        if (t > TMAX) {
+                            int k = sphParticlesDmIndex(i);
+                            float vx = particlesVel(XDIM, k);
+                            float vy = particlesVel(YDIM, k);
+                            float vz = particlesVel(ZDIM, k);
+                            PRINT("CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho,
+                                chem.eint, sphParticlesSmoothLen(i), vx, vy, vz);
+                            PRINT("%e %e %e %e %e %e %e\n", chem.he, chem.hp, chem.hn, chem.h2,
+                                chem.hep, chem.hepp, sphParticlesZ(i));
+                        }
+                    }
+                    if (t < 0.f) {
+                        PRINT("NEGATIVE T !\n", t);
+                        abort();
+                    }
+                    chems.push_back(chem);
+                }
+            }
+            double flops;
+            flops = cudaChemistryStep(chems, a);
+            int j = 0;
+            double echange = 0.0;
+            double const sphMass = getOptions().sphMass;
+            for (PartInt i = b; i < e; i++) {
+                int rung1 = sphParticlesRung(i);
+                if (rung1 >= minrung && !sphParticlesIsstar(i)) {
+                    ChemAttribs chem = chems[j++];
+                    //					double cv = 1.5 + 0.5* chem.H2 / (1. - .75 *
+                    //(chem.He+chem.Hep+chem.Hepp) - 0.5 * chem.H2); 					double gamma
+                    //= 1. + 1. / cv;
+                    double gamma = getOptions().gamma;
+                    //		PRINT( "%e\n", gamma);
+                    float const factor = 1.0f - sphParticlesZ(i);
+                    sphParticlesH(i) = chem.h * factor;
+                    sphParticlesHe0(i) = chem.he * factor;
+                    sphParticlesHp(i) = chem.hp * factor;
+                    sphParticlesHn(i) = chem.hn * factor;
+                    sphParticlesH2(i) = chem.h2 * factor;
+                    sphParticlesHep(i) = chem.hep * factor;
+                    sphParticlesHepp(i) = chem.hepp * factor;
+                    sphParticlesNormalizeFracs(i);
+                    sphParticlesTcool(i) = chem.tcool > 0.0 ? chem.tcool : 1e38;
 #ifdef HOPKINS
-					double const e0 = sph_particles_eint_rho(i);
-					double const rho = sph_particles_rho_rho(i);
+                    double const e0 = sphParticlesEintRho(i);
+                    double const rho = sphParticlesRhoRho(i);
 #ifdef ENTROPY
-					sph_particles_rec2(i).A = (gamma - 1.0) * chem.eint * pow(rho, (1.0 - gamma));
+                    sphParticlesRec2(i).entropy =
+                        (gamma - 1.0) * chem.eint * pow(rho, (1.0 - gamma));
 #else
-					sph_particles_rec2(i).eint = chem.eint;
+                    sphParticlesRec2(i).eint = chem.eint;
 #endif
-					double const this_change = (sph_particles_eint_rho(i) - e0) * sph_mass / sqr(a);
+                    double const thisChange = (sphParticlesEintRho(i) - e0) * sphMass / sqr(a);
 #else
-					double const e0 = sph_particles_eint(i);
-					double const rho = sph_particles_rho(i);
+                    double const e0 = sphParticlesEint(i);
+                    double const rho = sphParticlesRho(i);
 #ifdef ENTROPY
-					sph_particles_rec2(i).A = (gamma - 1.0) * chem.eint * pow(rho, (1.0 - gamma));
+                    sphParticlesRec2(i).entropy =
+                        (gamma - 1.0) * chem.eint * pow(rho, (1.0 - gamma));
 #else
-					sph_particles_rec2(i).eint = chem.eint;
+                    sphParticlesRec2(i).eint = chem.eint;
 #endif
-					double const this_change = (sph_particles_eint(i) - e0) * sph_mass / sqr(a);
+                    double const thisChange = (sphParticlesEint(i) - e0) * sphMass / sqr(a);
 #endif
-					//			PRINT( "%e\n", this_change );
-					echange += this_change;
-					if (stars) {
-						ALWAYS_ASSERT(chem.cold_mass >= 0.0);
-						//						sph_particles_cold_mass(i) = chem.cold_mass;
-					}
-				}
-			}
-			pair<double> rc;
-			rc.first = echange;
-			rc.second = flops;
-			return rc;
-		}));
-	}
-	double flops = 0.0;
-	for (auto& f : futs) {
-		auto tmp = f.get();
-		echange += tmp.first;
-		flops += tmp.second;
-	}
-	tm.stop();
-	if (hpx_rank() == 0) {
-		PRINT("CHEM GFLOPS = %e eheat = %e\n", flops / 1024 / 1024 / 1024 / tm.read(), echange);
-	}
-	profiler_exit();
-	pair<double> rc;
-	rc.first = echange;
-	rc.second = flops;
-	return rc;
+                    //			PRINT( "%e\n", this_change );
+                    echange += thisChange;
+                    if (stars) {
+                        ALWAYS_ASSERT(chem.coldMass >= 0.0);
+                        //						sph_particles_cold_mass(i) = chem.cold_mass;
+                    }
+                }
+            }
+            Pair<double> rc;
+            rc.first = echange;
+            rc.second = flops;
+            return rc;
+        }));
+    }
+    double flops = 0.0;
+    for (auto& f : futs) {
+        auto tmp = f.get();
+        echange += tmp.first;
+        flops += tmp.second;
+    }
+    tm.stop();
+    if (hpxRank() == 0) {
+        PRINT("CHEM GFLOPS = %e eheat = %e\n", flops / 1024 / 1024 / 1024 / tm.read(), echange);
+    }
+    profilerExit();
+    Pair<double> rc;
+    rc.first = echange;
+    rc.second = flops;
+    return rc;
 }

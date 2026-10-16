@@ -6,4 +6,3 @@
  */
 
 #include "hpx_lite/mutex.hpp"
-

@@ -21,11 +21,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/safe_io.hpp>
 
 #ifdef __CUDA_ARCH__
-__device__ void cosmictiger_cuda_assert( const char* cond_str, bool cond, const char* filename, int line) {
-		if (!cond) {
-			PRINT( "Condition \"%s\" failed in %s on line %i in CUDA_ARCH\n", cond_str, filename, line);
-			__trap();
-		}
-
+__device__ void cosmictigerCudaAssert(
+    char const* condStr, bool cond, char const* filename, int line) {
+    if (!cond) {
+        PRINT("Condition \"%s\" failed in %s on line %i in CUDA_ARCH\n", condStr, filename, line);
+        __trap();
+    }
 }
 #endif

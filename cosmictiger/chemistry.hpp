@@ -32,40 +32,40 @@
 #define TMAX 1e10f
 #define TMIN 100.f
 
-struct species_t {
-	union {
-		float n[NSPECIES];
-		struct {
-			float H;
-			float Hp;
-			float Hn;
-			float He;
-			float Hep;
-			float Hepp;
-			float H2;
-		};
-	};
-	species_t fractions_to_number_density(float rho) const;
-	CUDA_EXPORT
-	species_t number_density_to_fractions() const;
+struct SpeciesT {
+    union {
+        float n[NSPECIES];
+        struct {
+            float h;
+            float hp;
+            float hn;
+            float he;
+            float hep;
+            float hepp;
+            float h2;
+        };
+    };
+    SpeciesT fractionsToNumberDensity(float rho) const;
+    CUDA_EXPORT
+    SpeciesT numberDensityToFractions() const;
 };
 
-struct chem_attribs {
-	float H;
-	float Hp;
-	float H2;
-	float Hn;
-	float He;
-	float Hep;
-	float Hepp;
-	float rho;
-	float eint;
-	float dt;
-	float tcool;
-	float cold_mass;
+struct ChemAttribs {
+    float h;
+    float hp;
+    float h2;
+    float hn;
+    float he;
+    float hep;
+    float hepp;
+    float rho;
+    float eint;
+    float dt;
+    float tcool;
+    float coldMass;
 };
 
-void chemistry_test();
-double cuda_chemistry_step(vector<chem_attribs>& chems, float scale);
-void test_cuda_chemistry_kernel();
-pair<double> chemistry_do_step(float, int, float, float, int);
+void chemistryTest();
+double cudaChemistryStep(Vector<ChemAttribs>& chems, float scale);
+void testCudaChemistryKernel();
+Pair<double> chemistryDoStep(float, int, float, float, int);

@@ -14,62 +14,57 @@ class id_type;
 
 namespace detail {
 
-struct agas_entry_t;
+    struct agas_entry_t;
 
+    template <class T>
+    struct action_base;
 
-template<class T>
-struct action_base;
+    typedef void (*deleter_type)(void*);
 
+    struct agas_entry_t {
+        std::uintptr_t pointer;
+        hpx::mutex mtx;
+        int reference_count;
+        deleter_type deleter;
 
-typedef void (*deleter_type)(void*);
+        agas_entry_t(std::uintptr_t, deleter_type);
+    };
 
+    void add_ref_count(std::uintptr_t, int change);
 
-struct agas_entry_t {
-	std::uintptr_t pointer;
-	hpx::mutex mtx;
-	int reference_count;
-	deleter_type deleter;
+    template <class ReturnType, class... Args>
+    struct action_base<ReturnType(Args...)> {
+        typedef ReturnType return_type;
+        const std::string name;
+        ReturnType (*fptr)(Args...);
 
-	agas_entry_t(std::uintptr_t, deleter_type);
-};
+        action_base(const std::string&);
 
-void add_ref_count(std::uintptr_t, int change);
+        template <class... Args2>
+        ReturnType operator()(const id_type& id, Args2&&... args) const;
 
+        template <class... Args2>
+        hpx::future<ReturnType> get_action_future(const id_type& id, Args2&&... args) const;
+    };
 
-template<class ReturnType, class ...Args>
-struct action_base<ReturnType(Args...)> {
-	typedef ReturnType return_type;
-	const std::string name;
-	ReturnType (*fptr)(Args...);
+    template <class... Args>
+    struct action_base<void(Args...)> {
+        typedef void return_type;
 
-	action_base(const std::string&);
+        const std::string name;
 
-	template<class ...Args2>
-	ReturnType operator()(const id_type& id, Args2&& ...args) const;
+        void (*fptr)(Args...);
 
-	template<class...Args2>
-	hpx::future<ReturnType> get_action_future(const id_type& id, Args2&& ...args) const;
-};
+        action_base(const std::string& str);
 
-template<class ...Args>
-struct action_base<void(Args...)> {
-	typedef void return_type;
+        template <class... Args2>
+        void operator()(const id_type& id, Args2&&... args) const;
 
-	const std::string name;
+        template <class... Args2>
+        hpx::future<void> get_action_future(const id_type& id, Args2&&... args) const;
+    };
 
-	void (*fptr)(Args...);
-
-	action_base(const std::string& str);
-
-	template<class ...Args2>
-	void operator()(const id_type& id, Args2&& ...args) const;
-
-	template<class...Args2>
-	hpx::future<void> get_action_future(const id_type& id, Args2&& ...args) const;
-};
-
-}
-}
-
+}    // namespace detail
+}    // namespace hpx
 
 #endif /* ID_TYPE_DETAIL_HPP_ */

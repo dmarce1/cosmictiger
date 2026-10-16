@@ -26,39 +26,43 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/sph_particles.hpp>
 
-HPX_PLAIN_ACTION(drift);
+HPX_PLAIN_ACTION(drift, DriftAction);
 
-void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung, double drag) {
-	profiler_enter(__FUNCTION__);
-	bool const sph = get_options().sph;
-	vector<hpx::future<void>> futures;
-	if (sph && rung < 0) {
-		for (auto const& child : hpx_children()) {
-			futures.push_back(hpx::async<drift_action>(child, scale, dt, tau0, tau1, tau_max, rung, drag));
-		}
-	}
-	cuda_drift(rung, scale, dt, tau0, tau1, tau_max, drag);
-	particles_memadvise_cpu();
-	if (sph) {
-		double const adot = get_options().test.empty() ? scale * cosmos_dadt(scale) : 0.0;
-		float const hmin = get_options().hmin;
-		float const hmax = get_options().hmax;
-		for (part_int i = 0; i < sph_particles_size(); i++) {
-			if (rung >= 0 && sph_particles_rung(i) != rung) {
-				continue;
-			}
-			if (sph_particles_isstar(i)) {
-				continue;
-			}
-			float& h = sph_particles_smooth_len(i);
-			float const divv = sph_particles_divv(i);
-			// Preserve the donor predictor; the next prehydro solve enforces the neighbor constraint.
-			double const dloghdt = (1.0 / 3.0) * (divv - 3.0 * adot / scale) / (3.0 + dlogsmoothX_dlogh(h, hmin, hmax));
-			h *= std::exp(dloghdt * dt);
-		}
-	}
-	for (auto& future : futures) {
-		future.get();
-	}
-	profiler_exit();
+void drift(
+    double scale, double dt, double tau0, double tau1, double tauMax, int rung, double drag) {
+    profilerEnter(__FUNCTION__);
+    bool const sph = getOptions().sph;
+    Vector<hpx::future<void>> futures;
+    if (sph && rung < 0) {
+        for (auto const& child : hpxChildren()) {
+            futures.push_back(
+                hpx::async<DriftAction>(child, scale, dt, tau0, tau1, tauMax, rung, drag));
+        }
+    }
+    cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
+    particlesMemadviseCpu();
+    if (sph) {
+        double const adot = getOptions().test.empty() ? scale * cosmosDadt(scale) : 0.0;
+        float const hmin = getOptions().hmin;
+        float const hmax = getOptions().hmax;
+        for (PartInt i = 0; i < sphParticlesSize(); i++) {
+            if (rung >= 0 && sphParticlesRung(i) != rung) {
+                continue;
+            }
+            if (sphParticlesIsstar(i)) {
+                continue;
+            }
+            float& h = sphParticlesSmoothLen(i);
+            float const divv = sphParticlesDivv(i);
+            // Preserve the donor predictor; the next prehydro solve enforces the neighbor
+            // constraint.
+            double const dloghdt =
+                (1.0 / 3.0) * (divv - 3.0 * adot / scale) / (3.0 + dlogsmoothXDlogh(h, hmin, hmax));
+            h *= std::exp(dloghdt * dt);
+        }
+    }
+    for (auto& future : futures) {
+        future.get();
+    }
+    profilerExit();
 }

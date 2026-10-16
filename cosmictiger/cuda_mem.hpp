@@ -19,43 +19,47 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <cosmictiger/cuda.hpp>
 #include <cosmictiger/containers.hpp>
+#include <cosmictiger/cuda.hpp>
 #include <cosmictiger/math.hpp>
 
 CUDA_EXPORT
 inline void syncthreads() {
 #ifdef __CUDA_ARCH__
-	__syncthreads();
+    __syncthreads();
 #endif
 }
 
-#define CUDA_MEM_STACK_SIZE (1024*1024)
+#define CUDA_MEM_STACK_SIZE (1024 * 1024)
 #define CUDA_MEM_NBIN 32
 
-using cuda_mem_int = uint64_t;
+using CudaMemInt = uint64_t;
 
-class cuda_mem {
-	array<array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q;
-	array<long long, CUDA_MEM_NBIN> qin;
-	array<long long, CUDA_MEM_NBIN> qout;
-	char* heap_begin;
-	char* next;
-	char* heap_end;CUDA_EXPORT
-	void push(int bin, char* ptr);CUDA_EXPORT
-	char* pop(int bin);CUDA_EXPORT
-	bool create_new_allocation(int bin);
+class CudaMem {
+    Array<Array<char*, CUDA_MEM_STACK_SIZE>, CUDA_MEM_NBIN> q_;
+    Array<long long, CUDA_MEM_NBIN> qin_;
+    Array<long long, CUDA_MEM_NBIN> qout_;
+    char* heapBegin_;
+    char* next_;
+    char* heapEnd_;
+    CUDA_EXPORT
+    void push(int bin, char* ptr);
+    CUDA_EXPORT
+    char* pop(int bin);
+    CUDA_EXPORT
+    bool createNewAllocation(int bin);
+
 public:
-	CUDA_EXPORT
-	void* allocate(size_t sz);CUDA_EXPORT
-	void free(void* ptr);
-	cuda_mem(size_t heap_size);
-	~cuda_mem();
-	void reset();
+    CUDA_EXPORT
+    void* allocate(size_t sz);
+    CUDA_EXPORT
+    void free(void* ptr);
+    CudaMem(size_t heapSize);
+    ~CudaMem();
+    void reset();
 };
 
-void cuda_mem_init(size_t heap_size);
-CUDA_EXPORT void* cuda_malloc(size_t sz);
-CUDA_EXPORT void cuda_free(void* ptr);
-CUDA_EXPORT void cuda_memcpy(void* d, void* s, int sz);
-
+void cudaMemInit(size_t heapSize);
+CUDA_EXPORT void* cudaAllocate(size_t sz);
+CUDA_EXPORT void cudaRelease(void* ptr);
+CUDA_EXPORT void copyCudaMemory(void* d, void* s, int sz);

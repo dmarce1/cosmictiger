@@ -25,53 +25,52 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/power.hpp>
 
-static void compute_density_folded(int M);
+static void computeDensityFolded(int m);
 
-HPX_PLAIN_ACTION (compute_density_folded);
+HPX_PLAIN_ACTION(computeDensityFolded, ComputeDensityFoldedAction);
 
-power_spectrum_t power_spectrum_compute(int M) {
-	const int N = get_options().Nfour;
-	fft3d_init(N,-1.0f);
-	compute_density_folded(M);
-	fft3d_execute();
-	auto power = fft3d_power_spectrum();
-	for( int i = 0; i < power.k.size(); i++) {
-		power.k[i] *= M;
-	}
-	fft3d_destroy();
-	return power;
+PowerSpectrumT powerSpectrumCompute(int m) {
+    int const n = getOptions().nfour;
+    fft3dInit(n, -1.0f);
+    computeDensityFolded(m);
+    fft3dExecute();
+    auto power = fft3dPowerSpectrum();
+    for (int i = 0; i < power.k.size(); i++) {
+        power.k[i] *= m;
+    }
+    fft3dDestroy();
+    return power;
 }
 
-static void compute_density_folded(int M) {
-	vector<float> rho0;
-	vector<hpx::future<void>> futs1;
-	vector<hpx::future<void>> futs2;
-	for (auto c : hpx_children()) {
-		futs1.push_back(hpx::async<compute_density_folded_action>(c, M));
-	}
-	const size_t Ndim = get_options().Nfour;
-	const size_t nparts = get_options().nparts;
-	const size_t parts_per_rank = nparts / hpx_size();
-	size_t Nper = Ndim;
-	while (sqr(Nper) * Nper > parts_per_rank) {
-		Nper /= 2;
-	}
-	const int Np = Ndim / Nper;
-	for (int j = 0; j < Np; j++) {
-		for (int k = 0; k < Np; k++) {
-			for (int l = 0; l < Np; l++) {
-				range<int64_t> intbox;
-				intbox.begin[XDIM] = j * Nper + CLOUD_MIN;
-				intbox.begin[YDIM] = k * Nper + CLOUD_MIN;
-				intbox.begin[ZDIM] = l * Nper + CLOUD_MIN;
-				intbox.end[XDIM] = (j + 1) * Nper + CLOUD_MAX;
-				intbox.end[YDIM] = (k + 1) * Nper + CLOUD_MAX;
-				intbox.end[ZDIM] = (l + 1) * Nper + CLOUD_MAX;
-				auto rho = accumulate_density_cuda(M,Ndim, intbox);
-				fft3d_accumulate_real(intbox, rho);
-			}
-		}
-	}
-	hpx::wait_all(futs1.begin(), futs1.end());
+static void computeDensityFolded(int m) {
+    Vector<float> rho0;
+    Vector<hpx::future<void>> futs1;
+    Vector<hpx::future<void>> futs2;
+    for (auto c : hpxChildren()) {
+        futs1.push_back(hpx::async<ComputeDensityFoldedAction>(c, m));
+    }
+    size_t const ndim = getOptions().nfour;
+    size_t const nparts = getOptions().nparts;
+    size_t const partsPerRank = nparts / hpxSize();
+    size_t nper = ndim;
+    while (sqr(nper) * nper > partsPerRank) {
+        nper /= 2;
+    }
+    int const np = ndim / nper;
+    for (int j = 0; j < np; j++) {
+        for (int k = 0; k < np; k++) {
+            for (int l = 0; l < np; l++) {
+                Range<int64_t> intbox;
+                intbox.begin[XDIM] = j * nper + CLOUD_MIN;
+                intbox.begin[YDIM] = k * nper + CLOUD_MIN;
+                intbox.begin[ZDIM] = l * nper + CLOUD_MIN;
+                intbox.end[XDIM] = (j + 1) * nper + CLOUD_MAX;
+                intbox.end[YDIM] = (k + 1) * nper + CLOUD_MAX;
+                intbox.end[ZDIM] = (l + 1) * nper + CLOUD_MAX;
+                auto rho = accumulateDensityCuda(m, ndim, intbox);
+                fft3dAccumulateReal(intbox, rho);
+            }
+        }
+    }
+    hpx::wait_all(futs1.begin(), futs1.end());
 }
-

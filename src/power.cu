@@ -28,73 +28,74 @@
 
 #define BLOCK_SIZE 256
 
-__global__ void accumulate_density_kernel(fixed32* X, fixed32* Y, fixed32* Z, float* rho, float const* masses, int Mfold, size_t Nparts, int Ndim,
-										  range<int64_t> intbox) {
-	int const tid = threadIdx.x;
-	int const bid = blockIdx.x;
-	int const gsz = gridDim.x;
-	part_int const ibegin = (size_t)bid * Nparts / (size_t)gsz;
-	part_int const iend = (size_t)(bid + 1) * Nparts / (size_t)gsz;
-	for (part_int i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
-		ALWAYS_ASSERT(i < Nparts);
-		float x = fmodf(Mfold * X[i].to_float(), 1.0f);
-		float y = fmodf(Mfold * Y[i].to_float(), 1.0f);
-		float z = fmodf(Mfold * Z[i].to_float(), 1.0f);
-		int const j = (x * Ndim);
-		if (j >= intbox.begin[XDIM] + 1 && j < intbox.end[XDIM] - 1) {
-			int const k = (y * Ndim);
-			if (k >= intbox.begin[YDIM] + 1 && k < intbox.end[YDIM] - 1) {
-				int const l = (z * Ndim);
-				if (l >= intbox.begin[ZDIM] + 1 && l < intbox.end[ZDIM] - 1) {
-					float const x0 = x * Ndim - j;
-					float const y0 = y * Ndim - k;
-					float const z0 = z * Ndim - l;
-					for (int j0 = CLOUD_MIN; j0 <= CLOUD_MAX; j0++) {
-						float wt_x = cloud_weight(x0 - j0);
-						for (int k0 = CLOUD_MIN; k0 <= CLOUD_MAX; k0++) {
-							float wt_y = cloud_weight(y0 - k0);
-							for (int l0 = CLOUD_MIN; l0 <= CLOUD_MAX; l0++) {
-								float wt_z = cloud_weight(z0 - l0);
-								float const mass = masses == nullptr ? 1.0f : masses[i];
-								float const wt = wt_x * wt_y * wt_z * mass;
-								atomicAdd(rho + intbox.index(j0 + j, k0 + k, l0 + l), wt);
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+__global__ void accumulateDensityKernel(Fixed32* xValue, Fixed32* yValue, Fixed32* zValue,
+    float* rho, float const* masses, int mfold, size_t nparts, int ndim, Range<int64_t> intbox) {
+    int const tid = threadIdx.x;
+    int const bid = blockIdx.x;
+    int const gsz = gridDim.x;
+    PartInt const ibegin = (size_t) bid * nparts / (size_t) gsz;
+    PartInt const iend = (size_t) (bid + 1) * nparts / (size_t) gsz;
+    for (PartInt i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
+        ALWAYS_ASSERT(i < nparts);
+        float x = fmodf(mfold * xValue[i].toFloat(), 1.0f);
+        float y = fmodf(mfold * yValue[i].toFloat(), 1.0f);
+        float z = fmodf(mfold * zValue[i].toFloat(), 1.0f);
+        int const j = (x * ndim);
+        if (j >= intbox.begin[XDIM] + 1 && j < intbox.end[XDIM] - 1) {
+            int const k = (y * ndim);
+            if (k >= intbox.begin[YDIM] + 1 && k < intbox.end[YDIM] - 1) {
+                int const l = (z * ndim);
+                if (l >= intbox.begin[ZDIM] + 1 && l < intbox.end[ZDIM] - 1) {
+                    float const x0 = x * ndim - j;
+                    float const y0 = y * ndim - k;
+                    float const z0 = z * ndim - l;
+                    for (int j0 = CLOUD_MIN; j0 <= CLOUD_MAX; j0++) {
+                        float wtX = cloudWeight(x0 - j0);
+                        for (int k0 = CLOUD_MIN; k0 <= CLOUD_MAX; k0++) {
+                            float wtY = cloudWeight(y0 - k0);
+                            for (int l0 = CLOUD_MIN; l0 <= CLOUD_MAX; l0++) {
+                                float wtZ = cloudWeight(z0 - l0);
+                                float const mass = masses == nullptr ? 1.0f : masses[i];
+                                float const wt = wtX * wtY * wtZ * mass;
+                                atomicAdd(rho + intbox.index(j0 + j, k0 + k, l0 + l), wt);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
-vector<float> accumulate_density_cuda(int M, int Ndim, range<int64_t> intbox) {
-	int nblocks;
-	auto const N3 = intbox.volume();
-	vector<float> rho(N3, 0.0f);
-	if (particles_size() == 0) {
-		return rho;
-	}
-	float* dev_rho;
-	float* masses = nullptr;
-	if (get_options().sph) {
-		masses = static_cast<float*>(cuda_malloc(particles_size() * sizeof(float)));
-		for (part_int i = 0; i < particles_size(); i++) {
-			masses[i] = particles_mass(i);
-		}
-	}
-	CUDA_CHECK(cudaMallocManaged(&dev_rho, N3 * sizeof(float)));
-	for (int i = 0; i < N3; i++) {
-		dev_rho[i] = 0.f;
-	}
-	CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(&nblocks, (void const*)accumulate_density_kernel, BLOCK_SIZE, 0));
-	nblocks *= cuda_smp_count();
-	accumulate_density_kernel<<<nblocks, BLOCK_SIZE>>>(&particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), dev_rho, masses, M,
-													   particles_size(), Ndim, intbox);
-	CUDA_CHECK(cudaDeviceSynchronize());
-	memcpy(rho.data(), dev_rho, sizeof(float) * N3);
-	CUDA_CHECK(cudaFree(dev_rho));
-	if (masses != nullptr) {
-		cuda_free(masses);
-	}
-	return rho;
+Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
+    int nblocks;
+    auto const n3 = intbox.volume();
+    Vector<float> rho(n3, 0.0f);
+    if (particlesSize() == 0) {
+        return rho;
+    }
+    float* devRho;
+    float* masses = nullptr;
+    if (getOptions().sph) {
+        masses = static_cast<float*>(cudaAllocate(particlesSize() * sizeof(float)));
+        for (PartInt i = 0; i < particlesSize(); i++) {
+            masses[i] = particlesMass(i);
+        }
+    }
+    CUDA_CHECK(cudaMallocManaged(&devRho, n3 * sizeof(float)));
+    for (int i = 0; i < n3; i++) {
+        devRho[i] = 0.f;
+    }
+    CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &nblocks, (void const*) accumulateDensityKernel, BLOCK_SIZE, 0));
+    nblocks *= cudaSmpCount();
+    accumulateDensityKernel<<<nblocks, BLOCK_SIZE>>>(&particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
+        &particlesPos(ZDIM, 0), devRho, masses, m, particlesSize(), ndim, intbox);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    memcpy(rho.data(), devRho, sizeof(float) * n3);
+    CUDA_CHECK(cudaFree(devRho));
+    if (masses != nullptr) {
+        cudaRelease(masses);
+    }
+    return rho;
 }

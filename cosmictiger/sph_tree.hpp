@@ -28,118 +28,137 @@
 #include <cosmictiger/range.hpp>
 #include <cosmictiger/tree.hpp>
 
-struct sph_tree_node {
-	array<tree_id, NCHILD> children;
-	pair<int, int> proc_range;
-	pair<part_int> part_range;
-	pair<part_int> sink_part_range;
-	fixed32_range inner_box;
-	fixed32_range outer_box;
-	fixed32_range box;
-	size_t nactive;
-	bool local_root;
-	bool leaf;
-	bool converged;
-	size_t node_count;
-	size_t active_nodes;
-	int depth;
-	pair<int, int> neighbor_range;
-	sph_tree_node()
-		: proc_range(0, 0), part_range(0, 0), sink_part_range(0, 0), nactive(0), local_root(false), leaf(true), converged(false), node_count(0),
-		  active_nodes(0), depth(0), neighbor_range(0, 0) {
-		for (int child = 0; child < NCHILD; child++) {
-			children[child].proc = -1;
-			children[child].index = -1;
-		}
-		for (int dim = 0; dim < NDIM; dim++) {
-			inner_box.begin[dim] = inner_box.end[dim] = 0.0;
-			outer_box.begin[dim] = outer_box.end[dim] = 0.0;
-			box.begin[dim] = box.end[dim] = 0.0;
-		}
-	}
-	inline part_int nparts() const { return part_range.second - part_range.first; }
-	inline particle_global_range global_part_range() const {
-		particle_global_range r;
-		r.proc = proc_range.first;
-		r.range = part_range;
-		return r;
-	}
-	inline bool is_local() const { return proc_range.second - proc_range.first == 1; }
-	inline bool is_local_here() const { return is_local() && proc_range.first == hpx_rank(); }
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & converged;
-		arc & neighbor_range;
-		arc & box;
-		arc & sink_part_range;
-		arc & inner_box;
-		arc & outer_box;
-		arc & children;
-		arc & proc_range;
-		arc & part_range;
-		arc & nactive;
-		arc & local_root;
-		arc & leaf;
-		arc & active_nodes;
-		arc & node_count;
-		arc & depth;
-	}
+struct SphTreeNode {
+    Array<TreeId, NCHILD> children;
+    Pair<int, int> procRange;
+    Pair<PartInt> partRange;
+    Pair<PartInt> sinkPartRange;
+    Fixed32Range innerBox;
+    Fixed32Range outerBox;
+    Fixed32Range box;
+    size_t nactive;
+    bool localRoot;
+    bool leaf;
+    bool converged;
+    size_t nodeCount;
+    size_t activeNodes;
+    int depth;
+    Pair<int, int> neighborRange;
+    SphTreeNode()
+      : procRange(0, 0)
+      , partRange(0, 0)
+      , sinkPartRange(0, 0)
+      , nactive(0)
+      , localRoot(false)
+      , leaf(true)
+      , converged(false)
+      , nodeCount(0)
+      , activeNodes(0)
+      , depth(0)
+      , neighborRange(0, 0) {
+        for (int child = 0; child < NCHILD; child++) {
+            children[child].proc = -1;
+            children[child].index = -1;
+        }
+        for (int dim = 0; dim < NDIM; dim++) {
+            innerBox.begin[dim] = innerBox.end[dim] = 0.0;
+            outerBox.begin[dim] = outerBox.end[dim] = 0.0;
+            box.begin[dim] = box.end[dim] = 0.0;
+        }
+    }
+    inline PartInt nparts() const {
+        return partRange.second - partRange.first;
+    }
+    inline ParticleGlobalRange globalPartRange() const {
+        ParticleGlobalRange r;
+        r.proc = procRange.first;
+        r.range = partRange;
+        return r;
+    }
+    inline bool isLocal() const {
+        return procRange.second - procRange.first == 1;
+    }
+    inline bool isLocalHere() const {
+        return isLocal() && procRange.first == hpxRank();
+    }
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & converged;
+        arc & neighborRange;
+        arc & box;
+        arc & sinkPartRange;
+        arc & innerBox;
+        arc & outerBox;
+        arc & children;
+        arc & procRange;
+        arc & partRange;
+        arc & nactive;
+        arc & localRoot;
+        arc & leaf;
+        arc & activeNodes;
+        arc & nodeCount;
+        arc & depth;
+    }
 };
 
-struct sph_tree_create_return {
-	fixed32_range inner_box;
-	fixed32_range outer_box;
-	tree_id id;
-	size_t nactive;
-	size_t active_nodes;
-	size_t node_count;
-	size_t active_leaf_nodes;
-	size_t leaf_nodes;
-	int max_depth;
-	int min_depth;
-	double flops;
-	template <typename A> void serialize(A&& a, unsigned) {
-		a & active_leaf_nodes;
-		a & leaf_nodes;
-		a & active_nodes;
-		a & inner_box;
-		a & outer_box;
-		a & id;
-		a & nactive;
-		a & node_count;
-		a & flops;
-		a & max_depth;
-		a & min_depth;
-	}
+struct SphTreeCreateReturn {
+    Fixed32Range innerBox;
+    Fixed32Range outerBox;
+    TreeId id;
+    size_t nactive;
+    size_t activeNodes;
+    size_t nodeCount;
+    size_t activeLeafNodes;
+    size_t leafNodes;
+    int maxDepth;
+    int minDepth;
+    double flops;
+    template <typename A>
+    void serialize(A&& a, unsigned) {
+        a & activeLeafNodes;
+        a & leafNodes;
+        a & activeNodes;
+        a & innerBox;
+        a & outerBox;
+        a & id;
+        a & nactive;
+        a & nodeCount;
+        a & flops;
+        a & maxDepth;
+        a & minDepth;
+    }
 };
 
-struct sph_tree_create_params {
-	int min_rung;
-	float h_wt;
-	sph_tree_create_params() = default;
-	sph_tree_create_params(int min_rung, float h_wt);
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & min_rung;
-		arc & h_wt;
-	}
+struct SphTreeCreateParams {
+    int minRung;
+    float hWt;
+    SphTreeCreateParams() = default;
+    SphTreeCreateParams(int minRung, float hWt);
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & minRung;
+        arc & hWt;
+    }
 };
 
-sph_tree_create_return sph_tree_create(sph_tree_create_params params, size_t key = 1, pair<int, int> proc_range = pair<int>(0, hpx_size()),
-									   pair<part_int> part_range = pair<part_int>(-1, -1), range<double> box = unit_box<double>(), int depth = 0,
-									   bool local_root = (hpx_size() == 1));
-void sph_tree_cache_clear();
-void sph_tree_destroy(bool free_sph_tree = false);
-sph_tree_node const* sph_tree_get_node(tree_id);
-void sph_tree_sort_sph_particles_by_particles();
-void sph_tree_set_converged(tree_id id, bool = true);
-void sph_tree_set_nactive(tree_id id, part_int i);
-void sph_tree_set_boxes(tree_id, fixed32_range const&, fixed32_range const&);
-void sph_tree_free_neighbor_list();
-int sph_tree_allocate_neighbor_list(vector<tree_id> const&);
-tree_id& sph_tree_get_neighbor(int i);
-long long sph_tree_nodes_size();
-void sph_tree_set_neighbor_range(tree_id id, pair<int, int> rng);
-int sph_tree_leaflist_size();
-tree_id const sph_tree_get_leaf(int i);
-void sph_tree_clear_neighbor_ranges();
+SphTreeCreateReturn sphTreeCreate(SphTreeCreateParams params, size_t key = 1,
+    Pair<int, int> procRange = Pair<int>(0, hpxSize()),
+    Pair<PartInt> partRange = Pair<PartInt>(-1, -1), Range<double> box = unitBox<double>(),
+    int depth = 0, bool localRoot = (hpxSize() == 1));
+void sphTreeCacheClear();
+void sphTreeDestroy(bool freeSphTree = false);
+SphTreeNode const* sphTreeGetNode(TreeId);
+void sphTreeSortSphParticlesByParticles();
+void sphTreeSetConverged(TreeId id, bool = true);
+void sphTreeSetNactive(TreeId id, PartInt i);
+void sphTreeSetBoxes(TreeId, Fixed32Range const&, Fixed32Range const&);
+void sphTreeFreeNeighborList();
+int sphTreeAllocateNeighborList(Vector<TreeId> const&);
+TreeId& sphTreeGetNeighbor(int i);
+long long sphTreeNodesSize();
+void sphTreeSetNeighborRange(TreeId id, Pair<int, int> rng);
+int sphTreeLeaflistSize();
+TreeId const sphTreeGetLeaf(int i);
+void sphTreeClearNeighborRanges();
 
 #endif /* SPH_TREE_HPP_ */

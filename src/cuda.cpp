@@ -19,94 +19,95 @@
 
 #include <cosmictiger/cuda.hpp>
 #include <cosmictiger/cuda_mem.hpp>
+#include <cosmictiger/ewald_indices.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/particles.hpp>
-#include <cosmictiger/ewald_indices.hpp>
 
 #ifdef USE_CUDA
 
-void cuda_malloc(void** ptr, size_t size, const char* file, int line ) {
-	static mutex_type mutex;
-	std::lock_guard<mutex_type> lock(mutex);
-	double free_mem = cuda_free_mem();
-	double total_mem = cuda_total_mem();
-	if( (free_mem - (double) size) / total_mem < 0.15 ) {
-		PRINT( "Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% memory\n", size, hpx_rank(), file, line);
-		abort();
-	}
-	CUDA_CHECK(cudaMalloc(ptr,size));
+void cudaAllocate(void** ptr, size_t size, char const* file, int line) {
+    static MutexType mutex;
+    std::lock_guard<MutexType> lock(mutex);
+    double freeMem = cudaFreeMem();
+    double totalMem = cudaTotalMem();
+    if ((freeMem - (double) size) / totalMem < 0.15) {
+        PRINT("Attempt to allocate %li bytes on rank %i in %s on line %i leaves less than 15%% "
+              "memory\n",
+            size, hpxRank(), file, line);
+        abort();
+    }
+    CUDA_CHECK(cudaMalloc(ptr, size));
 }
 
-void cuda_set_device() {
-	int count;
-	CUDA_CHECK(cudaGetDeviceCount(&count));
-	const int device_num = hpx_rank() % count;
-	CUDA_CHECK(cudaSetDevice(device_num));
+void cudaSetDevice() {
+    int count;
+    CUDA_CHECK(cudaGetDeviceCount(&count));
+    int const deviceNum = hpxRank() % count;
+    CUDA_CHECK(cudaSetDevice(deviceNum));
 }
 
-int cuda_get_device() {
-	int count;
-	CUDA_CHECK(cudaGetDeviceCount(&count));
-	const int device_num = hpx_rank() % count;
-	return device_num;
+int cudaGetDevice() {
+    int count;
+    CUDA_CHECK(cudaGetDeviceCount(&count));
+    int const deviceNum = hpxRank() % count;
+    return deviceNum;
 }
 
-size_t cuda_total_mem() {
-	size_t total;
-	size_t free;
-	cuda_set_device();
-	CUDA_CHECK(cudaMemGetInfo(&free, &total));
-	return total;
+size_t cudaTotalMem() {
+    size_t total;
+    size_t free;
+    cudaSetDevice();
+    CUDA_CHECK(cudaMemGetInfo(&free, &total));
+    return total;
 }
 
-size_t cuda_free_mem() {
-	size_t total;
-	size_t free;
-	cuda_set_device();
-	CUDA_CHECK(cudaMemGetInfo(&free, &total));
-	return free;
+size_t cudaFreeMem() {
+    size_t total;
+    size_t free;
+    cudaSetDevice();
+    CUDA_CHECK(cudaMemGetInfo(&free, &total));
+    return free;
 }
 
-int cuda_smp_count() {
-	int count;
-	cuda_set_device();
-	CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, cuda_get_device()));
-	return count;
-
+int cudaSmpCount() {
+    int count;
+    cudaSetDevice();
+    CUDA_CHECK(cudaDeviceGetAttribute(&count, cudaDevAttrMultiProcessorCount, cudaGetDevice()));
+    return count;
 }
 
-cudaStream_t cuda_get_stream() {
-	cudaStream_t stream;
-	cuda_set_device();
-	CUDA_CHECK(cudaStreamCreate(&stream));
-	return stream;
+cudaStream_t cudaGetStream() {
+    cudaStream_t stream;
+    cudaSetDevice();
+    CUDA_CHECK(cudaStreamCreate(&stream));
+    return stream;
 }
 
-void cuda_stream_synchronize(cudaStream_t stream) {
-	int device;
-	CUDA_CHECK(cudaGetDevice(&device));
-	while(cudaStreamQuery(stream) != cudaSuccess) {
-		hpx_yield();
-	}
-	CUDA_CHECK(cudaSetDevice(device));
+void synchronizeCudaStream(cudaStream_t stream) {
+    int device;
+    CUDA_CHECK(cudaGetDevice(&device));
+    while (cudaStreamQuery(stream) != cudaSuccess) {
+        hpxYield();
+    }
+    CUDA_CHECK(cudaSetDevice(device));
 }
 
-void cuda_end_stream(cudaStream_t stream) {
-	CUDA_CHECK(cudaStreamSynchronize(stream));
-	CUDA_CHECK(cudaStreamDestroy(stream));
+void cudaEndStream(cudaStream_t stream) {
+    CUDA_CHECK(cudaStreamSynchronize(stream));
+    CUDA_CHECK(cudaStreamDestroy(stream));
 }
 
-void cuda_init() {
-	cuda_set_device();
-	CUDA_CHECK(cudaDeviceReset());
-/*	size_t value = 64;
-	size_t oval = value;
-	CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity , value));
-	CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity ));
-	if (value != oval) {
-		THROW_ERROR("Unable to set stack size to %li\n", oval);
-	}*/
-	cuda_mem_init(HEAP_SIZE);
+void cudaInit() {
+    cudaSetDevice();
+    CUDA_CHECK(cudaDeviceReset());
+    /*	size_t value = 64;
+        size_t oval = value;
+        CUDA_CHECK(cudaDeviceSetLimit(cudaLimitMaxL2FetchGranularity , value));
+        CUDA_CHECK(cudaDeviceGetLimit(&value, cudaLimitMaxL2FetchGranularity ));
+        if (value != oval) {
+            THROW_ERROR("Unable to set stack size to %li\n", oval);
+        }*/
+    cudaMemInit(HEAP_SIZE);
 }
 
 #endif

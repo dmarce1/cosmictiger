@@ -20,162 +20,165 @@
 #ifndef CUDA_UNORDERED_MAP_HPP_
 #define CUDA_UNORDERED_MAP_HPP_
 
-#include <cosmictiger/device_vector.hpp>
 #include <cuda/std/climits>
 
-template<class T>
-class cuda_unordered_map {
-	device_vector<device_vector<pair<int, T>>> buckets;
-	int sz;
-	CUDA_EXPORT
-	void initialize() {
-		sz = 0;
-	}
-	CUDA_EXPORT
-	void rehash() {
-		int new_mod = std::max(buckets.size(),8);
-		while( size() / new_mod > 2 ) {
-			new_mod *= 2;
-		}
-		if( new_mod > buckets.size()) {
-			device_vector<device_vector<pair<int, T>>> new_buckets;
-			new_buckets.resize(new_mod);
-			for( int i = 0; i < buckets.size(); i++) {
-				for( int j = 0; j < buckets[i].size(); j++) {
-					new_buckets[buckets[i][j].first % new_mod].push_back(std::move(buckets[i][j]));
-				}
-			}
-			buckets.swap(new_buckets);
-		}
-	}
+#include <cosmictiger/device_vector.hpp>
+
+template <class T>
+class CudaUnorderedMap {
+    DeviceVector<DeviceVector<Pair<int, T>>> buckets_;
+    int sz_;
+    CUDA_EXPORT
+    void initialize() {
+        sz_ = 0;
+    }
+    CUDA_EXPORT
+    void rehash() {
+        int newMod = std::max(buckets_.size(), 8);
+        while (size() / newMod > 2) {
+            newMod *= 2;
+        }
+        if (newMod > buckets_.size()) {
+            DeviceVector<DeviceVector<Pair<int, T>>> newBuckets;
+            newBuckets.resize(newMod);
+            for (int i = 0; i < buckets_.size(); i++) {
+                for (int j = 0; j < buckets_[i].size(); j++) {
+                    newBuckets[buckets_[i][j].first % newMod].pushBack(std::move(buckets_[i][j]));
+                }
+            }
+            buckets_.swap(newBuckets);
+        }
+    }
+
 public:
-	class iterator {
-		int bucket;
-		int index;
-		cuda_unordered_map<T>* map;
-	public:
-		CUDA_EXPORT
-		T& operator*() {
-			return map->buckets[bucket][index];
-		}
-		CUDA_EXPORT
-		pair<int,T>* operator->() {
-			return map->buckets[bucket].data() + index;
-		}
-		CUDA_EXPORT
-		bool operator==(const iterator& other) {
-			return bucket == other.bucket && index == other.index;
-		}
-		CUDA_EXPORT
-		bool operator!=(const iterator& other) {
-			return bucket != other.bucket || index != other.index;
-		}
-		CUDA_EXPORT
-		iterator& operator++() {
-			index++;
-			if( index >= map->buckets[index].size()) {
-				index = 0;
-				bucket++;
-			}
-			return *this;
-		}
-		CUDA_EXPORT
-		iterator operator++(int) {
-			auto old = *this;
-			operator++();
-			return *this;
-		}
-		friend class cuda_unordered_map<T>;
-	};
-	CUDA_EXPORT
-	iterator find( int key) {
-		if( buckets.size()) {
-			int bucket_index = key % buckets.size();
-			auto& bucket = buckets[bucket_index];
-			for( int i = 0; i < bucket.size(); i++) {
-				if( bucket[i].first == key ) {
-					iterator iter;
-					iter.bucket = bucket_index;
-					iter.index = i;
-					iter.map = this;
-					return iter;
-				}
-			}
-			return end();
-		} else {
-			return end();
-		}
-	}
-	CUDA_EXPORT
-	iterator begin() {
-		iterator i;
-		i.bucket = 0;
-		i.index = 0;
-		i.map = this;
-		return i;
-	}
-	CUDA_EXPORT
-	iterator end() {
-		iterator i;
-		i.bucket = buckets.size();
-		i.index = 0;
-		i.map = this;
-		return i;
-	}
-	CUDA_EXPORT
-	cuda_unordered_map() {
-		initialize();
-	}
-	CUDA_EXPORT
-	void clear() {
-		for( int i = 0; i < buckets.size(); i++) {
-			buckets[i].resize(0);
-		}
-	}
-	CUDA_EXPORT
-	iterator insert(pair<int,T>&& entry ) {
+    class Iterator {
+        int bucket_;
+        int index_;
+        CudaUnorderedMap<T>* map_;
+
+    public:
+        CUDA_EXPORT
+        T& operator*() {
+            return map_->buckets_[bucket_][index_];
+        }
+        CUDA_EXPORT
+        Pair<int, T>* operator->() {
+            return map_->buckets_[bucket_].data() + index_;
+        }
+        CUDA_EXPORT
+        bool operator==(Iterator const& other) {
+            return bucket_ == other.bucket_ && index_ == other.index_;
+        }
+        CUDA_EXPORT
+        bool operator!=(Iterator const& other) {
+            return bucket_ != other.bucket_ || index_ != other.index_;
+        }
+        CUDA_EXPORT
+        Iterator& operator++() {
+            index_++;
+            if (index_ >= map_->buckets_[index_].size()) {
+                index_ = 0;
+                bucket_++;
+            }
+            return *this;
+        }
+        CUDA_EXPORT
+        Iterator operator++(int) {
+            auto old = *this;
+            operator++();
+            return *this;
+        }
+        friend class CudaUnorderedMap<T>;
+    };
+    CUDA_EXPORT
+    Iterator find(int key) {
+        if (buckets_.size()) {
+            int bucketIndex = key % buckets_.size();
+            auto& bucket = buckets_[bucketIndex];
+            for (int i = 0; i < bucket.size(); i++) {
+                if (bucket[i].first == key) {
+                    Iterator iter;
+                    iter.bucket_ = bucketIndex;
+                    iter.index_ = i;
+                    iter.map_ = this;
+                    return iter;
+                }
+            }
+            return end();
+        } else {
+            return end();
+        }
+    }
+    CUDA_EXPORT
+    Iterator begin() {
+        Iterator i;
+        i.bucket_ = 0;
+        i.index_ = 0;
+        i.map_ = this;
+        return i;
+    }
+    CUDA_EXPORT
+    Iterator end() {
+        Iterator i;
+        i.bucket_ = buckets_.size();
+        i.index_ = 0;
+        i.map_ = this;
+        return i;
+    }
+    CUDA_EXPORT
+    CudaUnorderedMap() {
+        initialize();
+    }
+    CUDA_EXPORT
+    void clear() {
+        for (int i = 0; i < buckets_.size(); i++) {
+            buckets_[i].resize(0);
+        }
+    }
+    CUDA_EXPORT
+    Iterator insert(Pair<int, T>&& entry) {
 #ifdef __CUDA_ARCH__
-		ALWAYS_ASSERT(false);
-		return end();
+        ALWAYS_ASSERT(false);
+        return end();
 #else
-		rehash();
-		int bucket_index = entry.first % buckets.size();
-		auto& bucket = buckets[bucket_index];
-		bucket.push_back(std::move(entry));
-		sz++;
-		iterator iter;
-		iter.map = this;
-		iter.bucket = bucket_index;
-		iter.index = bucket.size() - 1;
-		return iter;
+        rehash();
+        int bucketIndex = entry.first % buckets_.size();
+        auto& bucket = buckets_[bucketIndex];
+        bucket.pushBack(std::move(entry));
+        sz_++;
+        Iterator iter;
+        iter.map_ = this;
+        iter.bucket_ = bucketIndex;
+        iter.index_ = bucket.size() - 1;
+        return iter;
 #endif
-	}
-	CUDA_EXPORT
-	void erase(int key) {
-		int bucket_index = key % buckets.size();
-		auto& bucket = buckets[bucket_index];
-		for( int i = 0; i < bucket.size(); i++) {
-			if( bucket[i].first == key ) {
-				bucket.back() = bucket[i];
-				bucket.pop_back();
-			}
-		}
-		sz--;
-	}
-	CUDA_EXPORT
-	int size() const {
-		return sz;
-	}
-	CUDA_EXPORT
-	T& operator[]( int key ) {
-		auto iter = find(key);
-		if(iter == end()) {
-			pair<int,T> I;
-			I.first = key;
-			iter = insert(std::move(I));
-		}
-		return iter->second;
-	}
+    }
+    CUDA_EXPORT
+    void erase(int key) {
+        int bucketIndex = key % buckets_.size();
+        auto& bucket = buckets_[bucketIndex];
+        for (int i = 0; i < bucket.size(); i++) {
+            if (bucket[i].first == key) {
+                bucket.back() = bucket[i];
+                bucket.popBack();
+            }
+        }
+        sz_--;
+    }
+    CUDA_EXPORT
+    int size() const {
+        return sz_;
+    }
+    CUDA_EXPORT
+    T& operator[](int key) {
+        auto iter = find(key);
+        if (iter == end()) {
+            Pair<int, T> iValue;
+            iValue.first = key;
+            iter = insert(std::move(iValue));
+        }
+        return iter->second;
+    }
 };
 
 #endif /* CUDA_UNORDERED_MAP_HPP_ */

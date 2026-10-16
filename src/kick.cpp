@@ -17,7 +17,7 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-constexpr bool verbose = true;
+constexpr bool kVerbose = true;
 #include <stack>
 
 #include <unistd.h>
@@ -33,549 +33,578 @@ constexpr bool verbose = true;
 #include <cosmictiger/stack_trace.hpp>
 #include <cosmictiger/timer.hpp>
 
-HPX_PLAIN_ACTION(kick);
+HPX_PLAIN_ACTION(kick, KickAction);
 
-simd_float box_intersects_sphere(range<simd_double8> const& box, array<simd_int, NDIM> const& x, simd_float r) {
-	simd_float d2 = 0.0f;
-	for (int dim = 0; dim < NDIM; dim++) {
-		simd_double8 const X = simd_double8(x[dim]) * simd_double8(fixed32::to_float_factor);
-		simd_double8 d2begin = X - box.begin[dim];
-		simd_double8 d2beginp1 = d2begin + simd_double8(1.0);
-		simd_double8 d2beginm1 = d2begin + simd_double8(-1.0);
-		d2begin = sqr(d2begin);
-		d2beginp1 = sqr(d2beginp1);
-		d2beginm1 = sqr(d2beginm1);
-		d2begin = min(d2begin, min(d2beginp1, d2beginm1));
-		simd_double8 d2end = X - box.end[dim];
-		simd_double8 d2endp1 = d2end + simd_double8(1.0);
-		simd_double8 d2endm1 = d2end + simd_double8(-1.0);
-		d2end = sqr(d2end);
-		d2endp1 = sqr(d2endp1);
-		d2endm1 = sqr(d2endm1);
-		d2end = min(d2end, min(d2endp1, d2endm1));
-		d2 += simd_float(((X < box.begin[dim]) + (X > box.end[dim])) * min(d2begin, d2end));
-	}
-	return d2 < sqr(r);
+SimdFloat boxIntersectsSphere(
+    Range<SimdDouble8> const& box, Array<SimdInt, NDIM> const& x, SimdFloat r) {
+    SimdFloat d2 = 0.0f;
+    for (int dim = 0; dim < NDIM; dim++) {
+        SimdDouble8 const xValue = SimdDouble8(x[dim]) * SimdDouble8(Fixed32::kToFloatFactor_);
+        SimdDouble8 d2begin = xValue - box.begin[dim];
+        SimdDouble8 d2beginp1 = d2begin + SimdDouble8(1.0);
+        SimdDouble8 d2beginm1 = d2begin + SimdDouble8(-1.0);
+        d2begin = sqr(d2begin);
+        d2beginp1 = sqr(d2beginp1);
+        d2beginm1 = sqr(d2beginm1);
+        d2begin = min(d2begin, min(d2beginp1, d2beginm1));
+        SimdDouble8 d2end = xValue - box.end[dim];
+        SimdDouble8 d2endp1 = d2end + SimdDouble8(1.0);
+        SimdDouble8 d2endm1 = d2end + SimdDouble8(-1.0);
+        d2end = sqr(d2end);
+        d2endp1 = sqr(d2endp1);
+        d2endm1 = sqr(d2endm1);
+        d2end = min(d2end, min(d2endp1, d2endm1));
+        d2 +=
+            SimdFloat(((xValue < box.begin[dim]) + (xValue > box.end[dim])) * min(d2begin, d2end));
+    }
+    return d2 < sqr(r);
 }
 
 #define MAX_ACTIVE_WORKSPACES 1
 
-struct workspace {
-	vector<tree_id> nextlist;
-	vector<tree_id> cplist;
-	vector<tree_id> pclist;
-	vector<tree_id> cclist;
-	vector<tree_id> leaflist;
-	workspace() = default;
-	workspace(workspace const&) = delete;
-	workspace& operator=(workspace const&) = delete;
-	workspace(workspace&&) = default;
-	workspace& operator=(workspace&&) = default;
+struct Workspace {
+    Vector<TreeId> nextlist;
+    Vector<TreeId> cplist;
+    Vector<TreeId> pclist;
+    Vector<TreeId> cclist;
+    Vector<TreeId> leaflist;
+    Workspace() = default;
+    Workspace(Workspace const&) = delete;
+    Workspace& operator=(Workspace const&) = delete;
+    Workspace(Workspace&&) = default;
+    Workspace& operator=(Workspace&&) = default;
 };
 
-static thread_local std::stack<workspace> local_workspaces;
-static std::atomic<size_t> parts_covered;
-static hpx::promise<kick_return> local_return_promise;
-static hpx::future<kick_return> local_return_future;
-static kick_return local_return;
-static mutex_type localReturnMutex;
+static thread_local std::stack<Workspace> localWorkspaces;
+static std::atomic<size_t> partsCovered;
+static hpx::promise<KickReturn> localReturnPromise;
+static hpx::future<KickReturn> localReturnFuture;
+static KickReturn localReturn;
+static MutexType localReturnMutex;
 static size_t localParticleGoal;
 static bool localReturnSent;
 
-static workspace get_workspace() {
-	if (local_workspaces.empty()) {
-		local_workspaces.push(workspace());
-	}
-	workspace workspace = std::move(local_workspaces.top());
-	local_workspaces.pop();
-	return std::move(workspace);
+static Workspace getWorkspace() {
+    if (localWorkspaces.empty()) {
+        localWorkspaces.push(Workspace());
+    }
+    Workspace workspace = std::move(localWorkspaces.top());
+    localWorkspaces.pop();
+    return std::move(workspace);
 }
 
-static void cleanup_workspace(workspace&& workspace) {
-	workspace.cclist.resize(0);
-	workspace.cplist.resize(0);
-	workspace.pclist.resize(0);
-	workspace.nextlist.resize(0);
-	workspace.leaflist.resize(0);
-	local_workspaces.push(std::move(workspace));
+static void cleanupWorkspace(Workspace&& workspace) {
+    workspace.cclist.resize(0);
+    workspace.cplist.resize(0);
+    workspace.pclist.resize(0);
+    workspace.nextlist.resize(0);
+    workspace.leaflist.resize(0);
+    localWorkspaces.push(std::move(workspace));
 }
 
-hpx::future<kick_return> kick_fork(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist,
-								   vector<tree_id> echecklist, std::shared_ptr<kick_workspace> cuda_workspace, bool threadme) {
-	static std::atomic<int> nthreads(1);
-	hpx::future<kick_return> rc;
-	tree_node const* self_ptr = tree_get_node(self);
-	bool remote = false;
-	bool all_local = true;
-	for (auto const& i : dchecklist) {
-		if (i.proc != hpx_rank()) {
-			all_local = false;
-			break;
-		}
-	}
-	if (self.proc != hpx_rank()) {
-		threadme = true;
-		remote = true;
-	} else if (threadme) {
-		threadme = self_ptr->part_range.second - self_ptr->part_range.first > MIN_KICK_THREAD_PARTS;
-		int const maxthreads = std::max(1, hpx_size() == 1 ? (int)hpx_hardware_concurrency() * 2 : (int)hpx_hardware_concurrency() / 2);
-		if (threadme) {
-			if (nthreads++ < maxthreads || !self_ptr->is_local()) {
-				threadme = true;
-			} else {
-				threadme = false;
-				nthreads--;
-			}
-		}
-	}
-	if (!threadme) {
-		if (all_local) {
-			hpx_yield();
-		}
-		rc = hpx::make_ready_future(kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), std::move(cuda_workspace)));
-	} else if (remote) {
-		rc = hpx::async<kick_action>(hpx_localities()[self_ptr->proc_range.first], params, L, pos, self, std::move(dchecklist), std::move(echecklist), nullptr);
-	} else {
-		if (all_local) {
-			rc = hpx::async(
-				[params, self, L, pos, cuda_workspace](vector<tree_id> dchecklist, vector<tree_id> echecklist) {
-					auto rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), cuda_workspace);
-					nthreads--;
-					return rc;
-				},
-				std::move(dchecklist), std::move(echecklist));
-		} else {
-			rc = hpx::async(
-				HPX_PRIORITY_HI,
-				[params, self, L, pos, cuda_workspace](vector<tree_id> dchecklist, vector<tree_id> echecklist) {
-					auto rc = kick(params, L, pos, self, std::move(dchecklist), std::move(echecklist), cuda_workspace);
-					nthreads--;
-					return rc;
-				},
-				std::move(dchecklist), std::move(echecklist));
-		}
-	}
-	return rc;
+hpx::future<KickReturn> kickFork(KickParams params, Expansion<float> l, Array<Fixed32, NDIM> pos,
+    TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
+    static std::atomic<int> nthreads(1);
+    hpx::future<KickReturn> rc;
+    TreeNode const* selfPtr = treeGetNode(self);
+    bool remote = false;
+    bool allLocal = true;
+    for (auto const& i : dchecklist) {
+        if (i.proc != hpxRank()) {
+            allLocal = false;
+            break;
+        }
+    }
+    if (self.proc != hpxRank()) {
+        threadme = true;
+        remote = true;
+    } else if (threadme) {
+        threadme = selfPtr->partRange.second - selfPtr->partRange.first > MIN_KICK_THREAD_PARTS;
+        int const maxthreads = std::max(1,
+            hpxSize() == 1 ? (int) hpxHardwareConcurrency() * 2 :
+                             (int) hpxHardwareConcurrency() / 2);
+        if (threadme) {
+            if (nthreads++ < maxthreads || !selfPtr->isLocal()) {
+                threadme = true;
+            } else {
+                threadme = false;
+                nthreads--;
+            }
+        }
+    }
+    if (!threadme) {
+        if (allLocal) {
+            hpxYield();
+        }
+        rc = hpx::make_ready_future(kick(params, l, pos, self, std::move(dchecklist),
+            std::move(echecklist), std::move(cudaWorkspace)));
+    } else if (remote) {
+        rc = hpx::async<KickAction>(hpxLocalities()[selfPtr->procRange.first], params, l, pos, self,
+            std::move(dchecklist), std::move(echecklist), nullptr);
+    } else {
+        if (allLocal) {
+            rc = hpx::async(
+                [params, self, l, pos, cudaWorkspace](
+                    Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
+                    auto rc = kick(params, l, pos, self, std::move(dchecklist),
+                        std::move(echecklist), cudaWorkspace);
+                    nthreads--;
+                    return rc;
+                },
+                std::move(dchecklist), std::move(echecklist));
+        } else {
+            rc = hpx::async(
+                HPX_PRIORITY_HI,
+                [params, self, l, pos, cudaWorkspace](
+                    Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
+                    auto rc = kick(params, l, pos, self, std::move(dchecklist),
+                        std::move(echecklist), cudaWorkspace);
+                    nthreads--;
+                    return rc;
+                },
+                std::move(dchecklist), std::move(echecklist));
+        }
+    }
+    return rc;
 }
 
-kick_return kick(kick_params params, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id> dchecklist, vector<tree_id> echecklist,
-				 std::shared_ptr<kick_workspace> cuda_workspace) {
-	flop_counter<int> flops = 0;
-	if (self.proc == 0 && self.index == 0) {
-		profiler_enter(__FUNCTION__);
-	}
-	stack_trace_activate();
-	tree_node const* self_ptr = tree_get_node(self);
-	timer tm;
-	if (self_ptr->local_root) {
-		tm.start();
-		parts_covered = 0;
-		localParticleGoal = self_ptr->nparts();
-		localReturnSent = false;
-		local_return = kick_return();
-		local_return_promise = decltype(local_return_promise)();
-		local_return_future = local_return_promise.get_future();
-	}
-	ASSERT(self.proc == hpx_rank());
-	bool thread_left = true;
-	size_t cuda_mem_usage;
-	if (get_options().cuda && params.gpu) {
-		if (params.gpu && cuda_workspace == nullptr && self_ptr->is_local()) {
-			cuda_workspace = std::make_shared<kick_workspace>(params, self_ptr->nparts());
-		}
-		size_t max_parts = CUDA_KICK_PARTS_MAX;
-		auto const rng = particles_current_range();
-		max_parts = std::min((size_t)max_parts, (size_t)std::max((part_int)(rng.second - rng.first) / kick_block_count(), (part_int)get_options().bucket_size));
-		if (params.gpu && self_ptr->nparts() <= max_parts && self_ptr->is_local()) {
-			if (self_ptr->nparts()) {
-				cuda_workspace->add_work(cuda_workspace, L, pos, self, std::move(dchecklist), std::move(echecklist));
-				parts_covered += self_ptr->nparts();
-			}
-			if (self_ptr->local_root) {
-				auto kr = local_return_future.get();
-				return kr;
-			} else {
-				return kick_return();
-			}
-		}
-		thread_left = cuda_workspace != nullptr;
-	}
-	kick_return kr;
-	float const hfloat = params.h;
-	float const GM = params.GM;
-	float const eta = params.eta;
-	bool const save_force = params.save_force;
-	auto workspace = get_workspace();
-	vector<tree_id>& nextlist = workspace.nextlist;
-	vector<tree_id>& cclist = workspace.cclist;
-	vector<tree_id>& cplist = workspace.cplist;
-	vector<tree_id>& pclist = workspace.pclist;
-	vector<tree_id>& leaflist = workspace.leaflist;
-	simd_float const thetainv2(1.0 / sqr(params.theta));
-	simd_float const thetainv(1.0 / params.theta);
-	static simd_float const sink_bias(SINK_BIAS);
-	array<tree_node const*, SIMD_FLOAT_SIZE> other_ptrs;
-	array<float, NDIM> Ldx;
-	simd_float self_radius = self_ptr->radius;
-	array<simd_int, NDIM> self_pos;
-	range<simd_double8> self_box;
-	array<simd_int, NDIM> other_pos;
-	array<simd_float, NDIM> dx;
-	simd_float other_radius;
-	simd_float other_leaf;
-	range<simd_double8> other_box;
-	for (int dim = 0; dim < NDIM; dim++) {
-		self_pos[dim] = self_ptr->pos[dim].raw();
-		self_box.begin[dim] = (double)self_ptr->box.begin[dim].raw();
-		self_box.end[dim] = (double)self_ptr->box.end[dim].raw();
-	}
-	for (int dim = 0; dim < NDIM; dim++) {
-		self_box.begin[dim] *= range_fixed::to_float_factor;
-		self_box.end[dim] *= range_fixed::to_float_factor;
-	}
-	for (int dim = 0; dim < NDIM; dim++) {
-		Ldx[dim] = distance(self_ptr->pos[dim], pos[dim]);
-	}
-	L = L2L(L, Ldx, params.do_phi);
-	flops += 1511 + params.do_phi * 178;
-	simd_float my_hsoft;
-	my_hsoft = get_options().hsoft;
-	float const hinv = 1.0f / get_options().hsoft;
-	force_vectors forces;
-	part_int const mynparts = self_ptr->nparts();
-	if (self_ptr->leaf) {
-		forces = force_vectors(mynparts);
-		for (part_int i = 0; i < mynparts; i++) {
-			forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-			forces.phi[i] = particles_mass(self_ptr->part_range.first + i) * self_phi() * hinv;
-		}
-	}
-	{
-		nextlist.resize(0);
-		cclist.resize(0);
-		leaflist.resize(0);
-		auto& checklist = echecklist;
-		do {
-			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-				int const maxci = std::min((int)checklist.size(), ci + SIMD_FLOAT_SIZE);
-				int const maxi = maxci - ci;
-				for (int i = ci; i < maxci; i++) {
-					other_ptrs[i - ci] = tree_get_node(checklist[i]);
-				}
-				for (int i = 0; i < maxi; i++) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
-					}
-					other_radius[i] = other_ptrs[i]->radius;
-					other_leaf[i] = other_ptrs[i]->leaf;
-				}
-				for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = 0.f;
-					}
-					other_radius[i] = 0.f;
-					other_leaf[i] = 0;
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_box.begin[dim][i] = other_box.end[dim][i] = 0.0;
-					}
-				}
-				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float; // 3
-				}
-				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
-				R2 = max(R2, max(sqr(simd_float(0.5) - (self_radius + other_radius)), simd_float(0)));
-				auto const hsoft = my_hsoft;
-				simd_float const dcc = (self_radius + other_radius) * thetainv;
-				simd_float const cc = R2 > sqr(dcc);
-				flops += maxi * 15;
-				for (int i = 0; i < maxi; i++) {
-					if (cc[i]) {
-						cclist.push_back(checklist[ci + i]);
-					} else if (other_leaf[i]) {
-						leaflist.push_back(checklist[ci + i]);
-					} else {
-						auto const child_checks = other_ptrs[i]->children;
-						nextlist.push_back(child_checks[LEFT]);
-						nextlist.push_back(child_checks[RIGHT]);
-					}
-					if (!cc[i]) {
-						ALWAYS_ASSERT(!other_leaf[i] || !self_ptr->leaf);
-					}
-				}
-			}
-			std::swap(checklist, nextlist);
-			nextlist.resize(0);
-		} while (checklist.size() && self_ptr->leaf);
-		cpu_gravity_cc(GRAVITY_EWALD, L, cclist, self, params.do_phi);
-		if (!self_ptr->leaf) {
-			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-		}
-	}
+KickReturn kick(KickParams params, Expansion<float> l, Array<Fixed32, NDIM> pos, TreeId self,
+    Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
+    std::shared_ptr<KickWorkspace> cudaWorkspace) {
+    FlopCounter<int> flops = 0;
+    if (self.proc == 0 && self.index == 0) {
+        profilerEnter(__FUNCTION__);
+    }
+    stackTraceActivate();
+    TreeNode const* selfPtr = treeGetNode(self);
+    Timer tm;
+    if (selfPtr->localRoot) {
+        tm.start();
+        partsCovered = 0;
+        localParticleGoal = selfPtr->nparts();
+        localReturnSent = false;
+        localReturn = KickReturn();
+        localReturnPromise = decltype(localReturnPromise)();
+        localReturnFuture = localReturnPromise.get_future();
+    }
+    ASSERT(self.proc == hpxRank());
+    bool threadLeft = true;
+    size_t cudaMemUsage;
+    if (getOptions().cuda && params.gpu) {
+        if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
+            cudaWorkspace = std::make_shared<KickWorkspace>(params, selfPtr->nparts());
+        }
+        size_t maxParts = CUDA_KICK_PARTS_MAX;
+        auto const rng = particlesCurrentRange();
+        maxParts = std::min((size_t) maxParts,
+            (size_t) std::max((PartInt) (rng.second - rng.first) / kickBlockCount(),
+                (PartInt) getOptions().bucketSize));
+        if (params.gpu && selfPtr->nparts() <= maxParts && selfPtr->isLocal()) {
+            if (selfPtr->nparts()) {
+                cudaWorkspace->addWork(
+                    cudaWorkspace, l, pos, self, std::move(dchecklist), std::move(echecklist));
+                partsCovered += selfPtr->nparts();
+            }
+            if (selfPtr->localRoot) {
+                auto kr = localReturnFuture.get();
+                return kr;
+            } else {
+                return KickReturn();
+            }
+        }
+        threadLeft = cudaWorkspace != nullptr;
+    }
+    KickReturn kr;
+    float const hfloat = params.h;
+    float const gm = params.gm;
+    float const eta = params.eta;
+    bool const saveForce = params.saveForce;
+    auto workspace = getWorkspace();
+    Vector<TreeId>& nextlist = workspace.nextlist;
+    Vector<TreeId>& cclist = workspace.cclist;
+    Vector<TreeId>& cplist = workspace.cplist;
+    Vector<TreeId>& pclist = workspace.pclist;
+    Vector<TreeId>& leaflist = workspace.leaflist;
+    SimdFloat const thetainv2(1.0 / sqr(params.theta));
+    SimdFloat const thetainv(1.0 / params.theta);
+    static SimdFloat const sinkBias(SINK_BIAS);
+    Array<TreeNode const*, SIMD_FLOAT_SIZE> otherPtrs;
+    Array<float, NDIM> ldx;
+    SimdFloat selfRadius = selfPtr->radius;
+    Array<SimdInt, NDIM> selfPos;
+    Range<SimdDouble8> selfBox;
+    Array<SimdInt, NDIM> otherPos;
+    Array<SimdFloat, NDIM> dx;
+    SimdFloat otherRadius;
+    SimdFloat otherLeaf;
+    Range<SimdDouble8> otherBox;
+    for (int dim = 0; dim < NDIM; dim++) {
+        selfPos[dim] = selfPtr->pos[dim].raw();
+        selfBox.begin[dim] = (double) selfPtr->box.begin[dim].raw();
+        selfBox.end[dim] = (double) selfPtr->box.end[dim].raw();
+    }
+    for (int dim = 0; dim < NDIM; dim++) {
+        selfBox.begin[dim] *= RangeFixed::kToFloatFactor_;
+        selfBox.end[dim] *= RangeFixed::kToFloatFactor_;
+    }
+    for (int dim = 0; dim < NDIM; dim++) {
+        ldx[dim] = distance(selfPtr->pos[dim], pos[dim]);
+    }
+    l = l2L(l, ldx, params.doPhi);
+    flops += 1511 + params.doPhi * 178;
+    SimdFloat myHsoft;
+    myHsoft = getOptions().hsoft;
+    float const hinv = 1.0f / getOptions().hsoft;
+    ForceVectors forces;
+    PartInt const mynparts = selfPtr->nparts();
+    if (selfPtr->leaf) {
+        forces = ForceVectors(mynparts);
+        for (PartInt i = 0; i < mynparts; i++) {
+            forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
+            forces.phi[i] = particlesMass(selfPtr->partRange.first + i) * selfPhi() * hinv;
+        }
+    }
+    {
+        nextlist.resize(0);
+        cclist.resize(0);
+        leaflist.resize(0);
+        auto& checklist = echecklist;
+        do {
+            for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+                int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+                int const maxi = maxci - ci;
+                for (int i = ci; i < maxci; i++) {
+                    otherPtrs[i - ci] = treeGetNode(checklist[i]);
+                }
+                for (int i = 0; i < maxi; i++) {
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        otherPos[dim][i] = otherPtrs[i]->pos[dim].raw();
+                    }
+                    otherRadius[i] = otherPtrs[i]->radius;
+                    otherLeaf[i] = otherPtrs[i]->leaf;
+                }
+                for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        otherPos[dim][i] = 0.f;
+                    }
+                    otherRadius[i] = 0.f;
+                    otherLeaf[i] = 0;
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        otherBox.begin[dim][i] = otherBox.end[dim][i] = 0.0;
+                    }
+                }
+                for (int dim = 0; dim < NDIM; dim++) {
+                    dx[dim] = SimdFloat(selfPos[dim] - otherPos[dim]) * kFixed2float;    // 3
+                }
+                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
+                r2 = max(r2, max(sqr(SimdFloat(0.5) - (selfRadius + otherRadius)), SimdFloat(0)));
+                auto const hsoft = myHsoft;
+                SimdFloat const dcc = (selfRadius + otherRadius) * thetainv;
+                SimdFloat const cc = r2 > sqr(dcc);
+                flops += maxi * 15;
+                for (int i = 0; i < maxi; i++) {
+                    if (cc[i]) {
+                        cclist.push_back(checklist[ci + i]);
+                    } else if (otherLeaf[i]) {
+                        leaflist.push_back(checklist[ci + i]);
+                    } else {
+                        auto const childChecks = otherPtrs[i]->children;
+                        nextlist.push_back(childChecks[LEFT]);
+                        nextlist.push_back(childChecks[RIGHT]);
+                    }
+                    if (!cc[i]) {
+                        ALWAYS_ASSERT(!otherLeaf[i] || !selfPtr->leaf);
+                    }
+                }
+            }
+            std::swap(checklist, nextlist);
+            nextlist.resize(0);
+        } while (checklist.size() && selfPtr->leaf);
+        cpuGravityCc(kGravityEwald, l, cclist, self, params.doPhi);
+        if (!selfPtr->leaf) {
+            checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+        }
+    }
 
-	{
-		nextlist.resize(0);
-		cclist.resize(0);
-		pclist.resize(0);
-		cplist.resize(0);
-		leaflist.resize(0);
-		auto& checklist = dchecklist;
-		do {
-			for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
-				int const maxci = std::min((int)checklist.size(), ci + SIMD_FLOAT_SIZE);
-				int const maxi = maxci - ci;
-				for (int i = ci; i < maxci; i++) {
-					other_ptrs[i - ci] = tree_get_node(checklist[i]);
-				}
-				for (int i = 0; i < maxi; i++) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = other_ptrs[i]->pos[dim].raw();
-					}
-					other_radius[i] = other_ptrs[i]->radius;
-					other_leaf[i] = other_ptrs[i]->leaf;
-				}
-				for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_pos[dim][i] = 0.f;
-					}
-					other_radius[i] = 0.f;
-					other_leaf[i] = 0;
-				}
-				for (int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = simd_float(self_pos[dim] - other_pos[dim]) * fixed2float; // 3
-				}
-				simd_float R2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]); // 5
-				auto const hsoft = my_hsoft;
-				auto const mind = self_radius + other_radius + hsoft;
-				simd_float const dcc = max((self_radius + other_radius) * thetainv, mind);
-				simd_float const dcp = max((thetainv * self_radius + other_radius), mind);
-				simd_float const dpc = max((self_radius + other_radius * thetainv), mind);
-				simd_float const cc = R2 > sqr(dcc);
-				flops += maxi * 20;
-				simd_float pc, cp;
-				cp = simd_float(0);
-				pc = simd_float(0);
-				if (self_ptr->leaf) {
-					for (int i = 0; i < maxi; i++) {
-						for (int dim = 0; dim < NDIM; dim++) {
-							other_box.begin[dim][i] = other_ptrs[i]->box.begin[dim].raw();
-							other_box.end[dim][i] = other_ptrs[i]->box.end[dim].raw();
-						}
-					}
-					for (int dim = 0; dim < NDIM; dim++) {
-						other_box.begin[dim] *= range_fixed::to_float_factor;
-						other_box.end[dim] *= range_fixed::to_float_factor;
-					}
-					for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
-						for (int dim = 0; dim < NDIM; dim++) {
-							other_box.begin[dim][i] = other_box.end[dim][i] = 0.0;
-						}
-					}
-					auto const nocc = (simd_float(1) - cc) * other_leaf;
-					pc = nocc * ((R2 > sqr(dpc)) + box_intersects_sphere(self_box, other_pos, other_radius)) * (dpc > dcp);
-					cp = nocc * ((R2 > sqr(dcp)) + box_intersects_sphere(other_box, self_pos, self_radius)) * (dcp > dpc);
-					flops += maxi * 34;
-				}
-				for (int i = 0; i < maxi; i++) {
-					if (cc[i]) {
-						cclist.push_back(checklist[ci + i]);
-					} else if (cp[i]) {
-						cplist.push_back(checklist[ci + i]);
-					} else if (pc[i]) {
-						pclist.push_back(checklist[ci + i]);
-					} else if (other_leaf[i]) {
-						leaflist.push_back(checklist[ci + i]);
-					} else {
-						auto const child_checks = other_ptrs[i]->children;
-						nextlist.push_back(child_checks[LEFT]);
-						nextlist.push_back(child_checks[RIGHT]);
-					}
-				}
-			}
-			std::swap(checklist, nextlist);
-			nextlist.resize(0);
-		} while (checklist.size() && self_ptr->leaf);
-		cpu_gravity_cc(GRAVITY_DIRECT, L, cclist, self, params.do_phi);
-		if (self_ptr->leaf) {
-			if (self_ptr->nparts() > 0) {
-				if (cuda_workspace != nullptr) {
-					cuda_workspace->add_parts(cuda_workspace, self_ptr->nparts());
-				}
-				cpu_gravity_cp(L, cplist, self, params.do_phi);
-				cpu_gravity_pc(forces, params.do_phi, self, pclist);
-				cpu_gravity_pp(forces, params.do_phi, self, leaflist, params.h);
-			}
-		} else {
-			ALWAYS_ASSERT(cplist.size() == 0);
-			checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
-		}
-	}
+    {
+        nextlist.resize(0);
+        cclist.resize(0);
+        pclist.resize(0);
+        cplist.resize(0);
+        leaflist.resize(0);
+        auto& checklist = dchecklist;
+        do {
+            for (int ci = 0; ci < checklist.size(); ci += SIMD_FLOAT_SIZE) {
+                int const maxci = std::min((int) checklist.size(), ci + SIMD_FLOAT_SIZE);
+                int const maxi = maxci - ci;
+                for (int i = ci; i < maxci; i++) {
+                    otherPtrs[i - ci] = treeGetNode(checklist[i]);
+                }
+                for (int i = 0; i < maxi; i++) {
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        otherPos[dim][i] = otherPtrs[i]->pos[dim].raw();
+                    }
+                    otherRadius[i] = otherPtrs[i]->radius;
+                    otherLeaf[i] = otherPtrs[i]->leaf;
+                }
+                for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        otherPos[dim][i] = 0.f;
+                    }
+                    otherRadius[i] = 0.f;
+                    otherLeaf[i] = 0;
+                }
+                for (int dim = 0; dim < NDIM; dim++) {
+                    dx[dim] = SimdFloat(selfPos[dim] - otherPos[dim]) * kFixed2float;    // 3
+                }
+                SimdFloat r2 = sqr(dx[XDIM], dx[YDIM], dx[ZDIM]);    // 5
+                auto const hsoft = myHsoft;
+                auto const mind = selfRadius + otherRadius + hsoft;
+                SimdFloat const dcc = max((selfRadius + otherRadius) * thetainv, mind);
+                SimdFloat const dcp = max((thetainv * selfRadius + otherRadius), mind);
+                SimdFloat const dpc = max((selfRadius + otherRadius * thetainv), mind);
+                SimdFloat const cc = r2 > sqr(dcc);
+                flops += maxi * 20;
+                SimdFloat pc, cp;
+                cp = SimdFloat(0);
+                pc = SimdFloat(0);
+                if (selfPtr->leaf) {
+                    for (int i = 0; i < maxi; i++) {
+                        for (int dim = 0; dim < NDIM; dim++) {
+                            otherBox.begin[dim][i] = otherPtrs[i]->box.begin[dim].raw();
+                            otherBox.end[dim][i] = otherPtrs[i]->box.end[dim].raw();
+                        }
+                    }
+                    for (int dim = 0; dim < NDIM; dim++) {
+                        otherBox.begin[dim] *= RangeFixed::kToFloatFactor_;
+                        otherBox.end[dim] *= RangeFixed::kToFloatFactor_;
+                    }
+                    for (int i = maxi; i < SIMD_FLOAT_SIZE; i++) {
+                        for (int dim = 0; dim < NDIM; dim++) {
+                            otherBox.begin[dim][i] = otherBox.end[dim][i] = 0.0;
+                        }
+                    }
+                    auto const nocc = (SimdFloat(1) - cc) * otherLeaf;
+                    pc = nocc *
+                        ((r2 > sqr(dpc)) + boxIntersectsSphere(selfBox, otherPos, otherRadius)) *
+                        (dpc > dcp);
+                    cp = nocc *
+                        ((r2 > sqr(dcp)) + boxIntersectsSphere(otherBox, selfPos, selfRadius)) *
+                        (dcp > dpc);
+                    flops += maxi * 34;
+                }
+                for (int i = 0; i < maxi; i++) {
+                    if (cc[i]) {
+                        cclist.push_back(checklist[ci + i]);
+                    } else if (cp[i]) {
+                        cplist.push_back(checklist[ci + i]);
+                    } else if (pc[i]) {
+                        pclist.push_back(checklist[ci + i]);
+                    } else if (otherLeaf[i]) {
+                        leaflist.push_back(checklist[ci + i]);
+                    } else {
+                        auto const childChecks = otherPtrs[i]->children;
+                        nextlist.push_back(childChecks[LEFT]);
+                        nextlist.push_back(childChecks[RIGHT]);
+                    }
+                }
+            }
+            std::swap(checklist, nextlist);
+            nextlist.resize(0);
+        } while (checklist.size() && selfPtr->leaf);
+        cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
+        if (selfPtr->leaf) {
+            if (selfPtr->nparts() > 0) {
+                if (cudaWorkspace != nullptr) {
+                    cudaWorkspace->addParts(cudaWorkspace, selfPtr->nparts());
+                }
+                cpuGravityCp(l, cplist, self, params.doPhi);
+                cpuGravityPc(forces, params.doPhi, self, pclist);
+                cpuGravityPp(forces, params.doPhi, self, leaflist, params.h);
+            }
+        } else {
+            ALWAYS_ASSERT(cplist.size() == 0);
+            checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
+        }
+    }
 
-	if (self_ptr->leaf) {
-		cleanup_workspace(std::move(workspace));
-		auto const rng = self_ptr->part_range;
-		for (part_int i = rng.first; i < rng.second; i++) {
-			if (particles_rung(i) >= params.min_rung) {
-				part_int const j = i - rng.first;
-				array<float, NDIM> dx;
-				for (part_int dim = 0; dim < NDIM; dim++) {
-					dx[dim] = distance(particles_pos(dim, i), self_ptr->pos[dim]);
-				}
-				auto const L2 = L2P(L, dx, true);
-				float hsoft = get_options().hsoft;
-				forces.phi[j] += SCALE_FACTOR1 * L2(0, 0, 0);
-				forces.gx[j] -= SCALE_FACTOR2 * L2(1, 0, 0);
-				forces.gy[j] -= SCALE_FACTOR2 * L2(0, 1, 0);
-				forces.gz[j] -= SCALE_FACTOR2 * L2(0, 0, 1);
-				forces.gx[j] *= GM;
-				forces.gy[j] *= GM;
-				forces.gz[j] *= GM;
-				forces.phi[j] *= GM;
-				if (save_force) {
-					particles_gforce(XDIM, i) = forces.gx[j];
-					particles_gforce(YDIM, i) = forces.gy[j];
-					particles_gforce(ZDIM, i) = forces.gz[j];
-					particles_pot(i) = forces.phi[j];
-				}
-				auto& vx = particles_vel(XDIM, i);
-				auto& vy = particles_vel(YDIM, i);
-				auto& vz = particles_vel(ZDIM, i);
-				auto& rung = particles_rung(i);
-				if (params.htime) {
-					float g2;
-					float kin0 = 0.5 * sqr(vx, vy, vz);
-					float const sgn = params.top ? 1 : -1;
-					if (params.ascending) {
-						float const dt = 0.5f * rung_dt[params.min_rung] * params.t0;
-						if (!params.first_call) {
-							vx = fmaf(sgn * forces.gx[j], dt, vx);
-							vy = fmaf(sgn * forces.gy[j], dt, vy);
-							vz = fmaf(sgn * forces.gz[j], dt, vz);
-							flops += 9;
-						}
-					}
-					kr.kin += 0.5 * sqr(vx, vy, vz);
-					kr.xmom += vx;
-					kr.ymom += vy;
-					kr.zmom += vz;
-					kr.nmom += sqrt(sqr(vx, vy, vz));
-					if (params.descending) {
-						g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;			  // 6
-						float const factor = eta * sqrtf(params.a);								  // 5
-						float dt = std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float)params.t0); // 14
-						dt = std::min(params.max_dt, dt);
-						rung = std::max(params.min_rung + int((int)ceilf(log2f(params.t0 / dt)) > params.min_rung), (int)(rung - 1)); // 13
-						kr.max_rung = std::max((int)rung, kr.max_rung);
-						ALWAYS_ASSERT(rung >= 0);
-						ALWAYS_ASSERT(rung < MAX_RUNG);
-						dt = 0.5f * rung_dt[params.min_rung] * params.t0; // 2
-						vx = fmaf(sgn * forces.gx[j], dt, vx);			  // 3
-						vy = fmaf(sgn * forces.gy[j], dt, vy);			  // 3
-						vz = fmaf(sgn * forces.gz[j], dt, vz);			  // 3
-						flops += 49;
-					}
-					float kin1 = 0.5 * sqr(vx, vy, vz);
-					kr.pot += 0.5 * forces.phi[j];
-					kr.dkin += kin1 - kin0;
-				} else {
-					float const mass = particles_mass(i);
-					bool const gas = particles_type(i) == SPH_TYPE;
-					float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
-					if (gas) {
-						part_int const k = particles_cat_index(i);
-						sph_particles_gforce(XDIM, k) = forces.gx[j];
-						sph_particles_gforce(YDIM, k) = forces.gy[j];
-						sph_particles_gforce(ZDIM, k) = forces.gz[j];
-					} else if (!params.first_call) {
-						float const dt = 0.5f * rung_dt[rung] * params.t0;
-						vx = fmaf(forces.gx[j], dt, vx);
-						vy = fmaf(forces.gy[j], dt, vy);
-						vz = fmaf(forces.gz[j], dt, vz);
-					}
-					kr.kin += 0.5f * mass * sqr(vx, vy, vz);
-					kr.xmom += mass * vx;
-					kr.ymom += mass * vy;
-					kr.zmom += mass * vz;
-					kr.nmom += mass * sqrt(sqr(vx, vy, vz));
-					if (!gas) {
-						float const syncVx = vx, syncVy = vy, syncVz = vz;
-						float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
-						float dt = std::min(eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
-						dt = std::min(dt, params.max_dt);
-						rung = std::max(std::max((int)ceilf(log2f(params.t0 / dt)), std::max((int)rung - 1, params.min_rung)), 1);
-						ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
-						dt = 0.5f * rung_dt[rung] * params.t0;
-						vx = fmaf(forces.gx[j], dt, vx);
-						vy = fmaf(forces.gy[j], dt, vy);
-						vz = fmaf(forces.gz[j], dt, vz);
-						kr.dmKineticCorrection += 0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
-						kr.dmXMomentumCorrection += mass * (syncVx - vx);
-						kr.dmYMomentumCorrection += mass * (syncVy - vy);
-						kr.dmZMomentumCorrection += mass * (syncVz - vz);
-						kr.dmMomentumNormCorrection += mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
-					}
-					kr.max_rung = std::max(kr.max_rung, (int)rung);
-					kr.pot += 0.5f * mass * forces.phi[j];
-					kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
-				}
-				flops += 570 + params.do_phi * 178;
-			}
-		}
-		kick_return completed;
-		bool publish = false;
-		{
-			std::lock_guard<mutex_type> lock(localReturnMutex);
-			parts_covered += self_ptr->nparts();
-			local_return += kr;
-			if (cuda_workspace == nullptr && parts_covered == localParticleGoal && !localReturnSent) {
-				completed = local_return;
-				localReturnSent = true;
-				publish = true;
-			}
-		}
-		if (publish) {
-			local_return_promise.set_value(completed);
-		}
-		add_cpu_flops(flops);
-		if (self_ptr->local_root) {
-			return local_return;
-		} else {
-			return kick_return();
-		}
-	} else {
-		cleanup_workspace(std::move(workspace));
-		tree_node const* cl = tree_get_node(self_ptr->children[LEFT]);
-		tree_node const* cr = tree_get_node(self_ptr->children[RIGHT]);
-		std::array<hpx::future<kick_return>, NCHILD> futs;
-		futs[RIGHT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[RIGHT], dchecklist, echecklist, cuda_workspace, thread_left);
-		futs[LEFT] = kick_fork(params, L, self_ptr->pos, self_ptr->children[LEFT], std::move(dchecklist), std::move(echecklist), cuda_workspace, false);
-		if (self_ptr->proc_range.second - self_ptr->proc_range.first > 1) {
-			auto const rcl = futs[LEFT].get();
-			auto const rcr = futs[RIGHT].get();
-			kr += rcl;
-			kr += rcr;
-			flops += 12;
-		} else {
-			if (self_ptr->local_root) {
-				kr = local_return_future.get();
-			}
-		}
-		if (self.proc == 0 && self.index == 0) {
-			profiler_exit();
-		}
-		flops += 12;
+    if (selfPtr->leaf) {
+        cleanupWorkspace(std::move(workspace));
+        auto const rng = selfPtr->partRange;
+        for (PartInt i = rng.first; i < rng.second; i++) {
+            if (particlesRung(i) >= params.minRung) {
+                PartInt const j = i - rng.first;
+                Array<float, NDIM> dx;
+                for (PartInt dim = 0; dim < NDIM; dim++) {
+                    dx[dim] = distance(particlesPos(dim, i), selfPtr->pos[dim]);
+                }
+                auto const l2 = l2P(l, dx, true);
+                float hsoft = getOptions().hsoft;
+                forces.phi[j] += SCALE_FACTOR1 * l2(0, 0, 0);
+                forces.gx[j] -= SCALE_FACTOR2 * l2(1, 0, 0);
+                forces.gy[j] -= SCALE_FACTOR2 * l2(0, 1, 0);
+                forces.gz[j] -= SCALE_FACTOR2 * l2(0, 0, 1);
+                forces.gx[j] *= gm;
+                forces.gy[j] *= gm;
+                forces.gz[j] *= gm;
+                forces.phi[j] *= gm;
+                if (saveForce) {
+                    particlesGforce(XDIM, i) = forces.gx[j];
+                    particlesGforce(YDIM, i) = forces.gy[j];
+                    particlesGforce(ZDIM, i) = forces.gz[j];
+                    particlesPot(i) = forces.phi[j];
+                }
+                auto& vx = particlesVel(XDIM, i);
+                auto& vy = particlesVel(YDIM, i);
+                auto& vz = particlesVel(ZDIM, i);
+                auto& rung = particlesRung(i);
+                if (params.htime) {
+                    float g2;
+                    float kin0 = 0.5 * sqr(vx, vy, vz);
+                    float const sgn = params.top ? 1 : -1;
+                    if (params.ascending) {
+                        float const dt = 0.5f * rungDt[params.minRung] * params.t0;
+                        if (!params.firstCall) {
+                            vx = fmaf(sgn * forces.gx[j], dt, vx);
+                            vy = fmaf(sgn * forces.gy[j], dt, vy);
+                            vz = fmaf(sgn * forces.gz[j], dt, vz);
+                            flops += 9;
+                        }
+                    }
+                    kr.kin += 0.5 * sqr(vx, vy, vz);
+                    kr.xmom += vx;
+                    kr.ymom += vy;
+                    kr.zmom += vz;
+                    kr.nmom += sqrt(sqr(vx, vy, vz));
+                    if (params.descending) {
+                        g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;    // 6
+                        float const factor = eta * sqrtf(params.a);                     // 5
+                        float dt =
+                            std::min(factor * sqrtf(hsoft / sqrtf(g2)), (float) params.t0);    // 14
+                        dt = std::min(params.maxDt, dt);
+                        rung = std::max(params.minRung +
+                                int((int) ceilf(log2f(params.t0 / dt)) > params.minRung),
+                            (int) (rung - 1));    // 13
+                        kr.maxRung = std::max((int) rung, kr.maxRung);
+                        ALWAYS_ASSERT(rung >= 0);
+                        ALWAYS_ASSERT(rung < MAX_RUNG);
+                        dt = 0.5f * rungDt[params.minRung] * params.t0;    // 2
+                        vx = fmaf(sgn * forces.gx[j], dt, vx);             // 3
+                        vy = fmaf(sgn * forces.gy[j], dt, vy);             // 3
+                        vz = fmaf(sgn * forces.gz[j], dt, vz);             // 3
+                        flops += 49;
+                    }
+                    float kin1 = 0.5 * sqr(vx, vy, vz);
+                    kr.pot += 0.5 * forces.phi[j];
+                    kr.dkin += kin1 - kin0;
+                } else {
+                    float const mass = particlesMass(i);
+                    bool const gas = particlesType(i) == SPH_TYPE;
+                    float const kin0 = 0.5f * mass * sqr(vx, vy, vz);
+                    if (gas) {
+                        PartInt const k = particlesCatIndex(i);
+                        sphParticlesGforce(XDIM, k) = forces.gx[j];
+                        sphParticlesGforce(YDIM, k) = forces.gy[j];
+                        sphParticlesGforce(ZDIM, k) = forces.gz[j];
+                    } else if (!params.firstCall) {
+                        float const dt = 0.5f * rungDt[rung] * params.t0;
+                        vx = fmaf(forces.gx[j], dt, vx);
+                        vy = fmaf(forces.gy[j], dt, vy);
+                        vz = fmaf(forces.gz[j], dt, vz);
+                    }
+                    kr.kin += 0.5f * mass * sqr(vx, vy, vz);
+                    kr.xmom += mass * vx;
+                    kr.ymom += mass * vy;
+                    kr.zmom += mass * vz;
+                    kr.nmom += mass * sqrt(sqr(vx, vy, vz));
+                    if (!gas) {
+                        float const syncVx = vx, syncVy = vy, syncVz = vz;
+                        float const g2 = sqr(forces.gx[j], forces.gy[j], forces.gz[j]) + 1e-35f;
+                        float dt =
+                            std::min(eta * sqrtf(params.a) * sqrtf(hsoft / sqrtf(g2)), params.t0);
+                        dt = std::min(dt, params.maxDt);
+                        rung = std::max(std::max((int) ceilf(log2f(params.t0 / dt)),
+                                            std::max((int) rung - 1, params.minRung)),
+                            1);
+                        ALWAYS_ASSERT(rung >= 0 && rung < MAX_RUNG);
+                        dt = 0.5f * rungDt[rung] * params.t0;
+                        vx = fmaf(forces.gx[j], dt, vx);
+                        vy = fmaf(forces.gy[j], dt, vy);
+                        vz = fmaf(forces.gz[j], dt, vz);
+                        kr.dmKineticCorrection +=
+                            0.5f * mass * (sqr(syncVx, syncVy, syncVz) - sqr(vx, vy, vz));
+                        kr.dmXMomentumCorrection += mass * (syncVx - vx);
+                        kr.dmYMomentumCorrection += mass * (syncVy - vy);
+                        kr.dmZMomentumCorrection += mass * (syncVz - vz);
+                        kr.dmMomentumNormCorrection +=
+                            mass * (sqrtf(sqr(syncVx, syncVy, syncVz)) - sqrtf(sqr(vx, vy, vz)));
+                    }
+                    kr.maxRung = std::max(kr.maxRung, (int) rung);
+                    kr.pot += 0.5f * mass * forces.phi[j];
+                    kr.dkin += 0.5f * mass * sqr(vx, vy, vz) - kin0;
+                }
+                flops += 570 + params.doPhi * 178;
+            }
+        }
+        KickReturn completed;
+        bool publish = false;
+        {
+            std::lock_guard<MutexType> lock(localReturnMutex);
+            partsCovered += selfPtr->nparts();
+            localReturn += kr;
+            if (cudaWorkspace == nullptr && partsCovered == localParticleGoal && !localReturnSent) {
+                completed = localReturn;
+                localReturnSent = true;
+                publish = true;
+            }
+        }
+        if (publish) {
+            localReturnPromise.set_value(completed);
+        }
+        addCpuFlops(flops);
+        if (selfPtr->localRoot) {
+            return localReturn;
+        } else {
+            return KickReturn();
+        }
+    } else {
+        cleanupWorkspace(std::move(workspace));
+        TreeNode const* cl = treeGetNode(selfPtr->children[LEFT]);
+        TreeNode const* cr = treeGetNode(selfPtr->children[RIGHT]);
+        std::array<hpx::future<KickReturn>, NCHILD> futs;
+        futs[RIGHT] = kickFork(params, l, selfPtr->pos, selfPtr->children[RIGHT], dchecklist,
+            echecklist, cudaWorkspace, threadLeft);
+        futs[LEFT] = kickFork(params, l, selfPtr->pos, selfPtr->children[LEFT],
+            std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
+        if (selfPtr->procRange.second - selfPtr->procRange.first > 1) {
+            auto const rcl = futs[LEFT].get();
+            auto const rcr = futs[RIGHT].get();
+            kr += rcl;
+            kr += rcr;
+            flops += 12;
+        } else {
+            if (selfPtr->localRoot) {
+                kr = localReturnFuture.get();
+            }
+        }
+        if (self.proc == 0 && self.index == 0) {
+            profilerExit();
+        }
+        flops += 12;
 
-		add_cpu_flops(flops);
-		return kr;
-	}
+        addCpuFlops(flops);
+        return kr;
+    }
 }
 
-void kick_set_rc(kick_return kr) {
-	kick_return completed;
-	{
-		std::lock_guard<mutex_type> lock(localReturnMutex);
-		local_return += kr;
-		completed = local_return;
-		localReturnSent = true;
-	}
-	local_return_promise.set_value(completed);
+void kickSetRc(KickReturn kr) {
+    KickReturn completed;
+    {
+        std::lock_guard<MutexType> lock(localReturnMutex);
+        localReturn += kr;
+        completed = localReturn;
+        localReturnSent = true;
+    }
+    localReturnPromise.set_value(completed);
 }

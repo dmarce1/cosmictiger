@@ -20,9 +20,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef STACK_TRACE_HPP_
 #define STACK_TRACE_HPP_
 
-
-void stack_trace_activate();
-
-
+void stackTraceActivate();
 
 #endif /* STACK_TRACE_HPP_ */

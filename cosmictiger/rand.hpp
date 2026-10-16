@@ -20,43 +20,44 @@
 #ifndef RA22ND_HPP_
 #define RA22ND_HPP_
 
-class rnd_gen {
-	//L’Ecuyer, Blouin and Coutre
-	static constexpr unsigned a1 = 107374182;
-	static constexpr unsigned a5 = 104480;
-	static constexpr unsigned m = (1U << 31) - 1;
-	unsigned x1;
-	unsigned x2;
-	unsigned x3;
-	unsigned x4;
-	unsigned x5;
+class RndGen {
+    // L’Ecuyer, Blouin and Coutre
+    static constexpr unsigned kA1_ = 107374182;
+    static constexpr unsigned kA5_ = 104480;
+    static constexpr unsigned kM_ = (1U << 31) - 1;
+    unsigned x1_;
+    unsigned x2_;
+    unsigned x3_;
+    unsigned x4_;
+    unsigned x5_;
+
 public:
-	void reseed(int seed) {
-		const unsigned a0 = 48271;
-		x1 = seed;
-		x2 = (x1 * a0) % m;
-		x3 = (x2 * a0) % m;
-		x4 = (x3 * a0) % m;
-		x5 = (x4 * a0) % m;
-	}
-	rnd_gen(int seed) {
-		reseed(seed);
-	}
-	int rnd_number() {
-		const long long x0 = (a1 * x1 + a5 * x5) % m;
-		x5 = x4;
-		x4 = x3;
-		x3 = x2;
-		x2 = x1;
-		x1 = x0;
-		return (int) x0;
-	}
-	int rnd_max() const {
-		return m - 1;
-	}
-	float rnd_one() {
-		return ((float) rnd_number() + 0.5f) / (float) rnd_max();
-	}
+    void reseed(int seed) {
+        unsigned const a0 = 48271;
+        x1_ = seed;
+        x2_ = (x1_ * a0) % kM_;
+        x3_ = (x2_ * a0) % kM_;
+        x4_ = (x3_ * a0) % kM_;
+        x5_ = (x4_ * a0) % kM_;
+    }
+    RndGen(int seed) {
+        reseed(seed);
+    }
+    int rndNumber() {
+        long long const x0 = (kA1_ * x1_ + kA5_ * x5_) % kM_;
+        x5_ = x4_;
+        x4_ = x3_;
+        x3_ = x2_;
+        x2_ = x1_;
+        x1_ = x0;
+        return (int) x0;
+    }
+    int rndMax() const {
+        return kM_ - 1;
+    }
+    float rndOne() {
+        return ((float) rndNumber() + 0.5f) / (float) rndMax();
+    }
 };
 
 #endif /* RAND_HPP_ */

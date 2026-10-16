@@ -19,22 +19,22 @@
 
 #include <cosmictiger/sph_cuda.hpp>
 
-struct aux_record1 {
-	fixed32 x;
-	fixed32 y;
-	fixed32 z;
+struct AuxRecord1 {
+    Fixed32 x;
+    Fixed32 y;
+    Fixed32 z;
 };
 
-struct aux_record2 {
-	float vx;
-	float vy;
-	float vz;
+struct AuxRecord2 {
+    float vx;
+    float vy;
+    float vz;
 };
 
-struct aux_workspace {
-	device_vector<aux_record1> rec1;
-	device_vector<aux_record2> rec2;
-	device_vector<int> neighbors;
+struct AuxWorkspace {
+    DeviceVector<AuxRecord1> rec1;
+    DeviceVector<AuxRecord2> rec2;
+    DeviceVector<int> neighbors;
 };
 
-__global__ void sph_cuda_aux(sph_run_params params, sph_run_cuda_data data, sph_reduction* reduce) {}
+__global__ void sphCudaAux(SphRunParams params, SphRunCudaData data, SphReduction* reduce) {}

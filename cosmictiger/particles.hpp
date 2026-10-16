@@ -33,23 +33,24 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/range.hpp>
 
-static __constant__ float rung_dt[MAX_RUNG] = {1.0 / (1 << 0),	1.0 / (1 << 1),	 1.0 / (1 << 2),  1.0 / (1 << 3), 1.0 / (1 << 4),  1.0 / (1 << 5),
-											   1.0 / (1 << 6),	1.0 / (1 << 7),	 1.0 / (1 << 8),  1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11),
-											   1.0 / (1 << 12), 1.0 / (1 << 13), 1.0 / (1 << 14), 1.0 / (1 << 15)};
+static __constant__ float rungDt[MAX_RUNG] = {1.0 / (1 << 0), 1.0 / (1 << 1), 1.0 / (1 << 2),
+    1.0 / (1 << 3), 1.0 / (1 << 4), 1.0 / (1 << 5), 1.0 / (1 << 6), 1.0 / (1 << 7), 1.0 / (1 << 8),
+    1.0 / (1 << 9), 1.0 / (1 << 10), 1.0 / (1 << 11), 1.0 / (1 << 12), 1.0 / (1 << 13),
+    1.0 / (1 << 14), 1.0 / (1 << 15)};
 
-#define NO_INDEX ((part_int)0xFFFFFFFFU)
+#define NO_INDEX ((PartInt) 0xFFFFFFFFU)
 
 #define DARK_MATTER_TYPE 0
 #define SPH_TYPE 1
 #define STAR_TYPE 2
 
 #ifdef LONG_LONG_PART_INT
-using part_int = long long;
+using PartInt = long long;
 #else
-using part_int = int;
+using PartInt = int;
 #endif
 
-#define NO_GROUP group_int(0x7FFFFFFFFFFFFFFFLL)
+#define NO_GROUP GroupInt(0x7FFFFFFFFFFFFFFFLL)
 
 #ifdef PARTICLES_CPP
 #define PARTICLES_EXTERN
@@ -57,387 +58,402 @@ using part_int = int;
 #define PARTICLES_EXTERN extern
 #endif
 
-struct group_particle {
-	array<fixed32, NDIM> x;
-	group_int g;
-	template <class A> void serialize(A&& arc, unsigned) {
-		arc & x;
-		arc & g;
-	}
+struct GroupParticle {
+    Array<Fixed32, NDIM> x;
+    GroupInt g;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & x;
+        arc & g;
+    }
 };
 
-struct output_particle {
-	array<fixed32, NDIM> x;
-	array<float, NDIM> v;
-	char r;
-	template <class A> void serialize(A&& a, unsigned) {
-		a & x;
-		a & v;
-		a & r;
-	}
+struct OutputParticle {
+    Array<Fixed32, NDIM> x;
+    Array<float, NDIM> v;
+    char r;
+    template <class A>
+    void serialize(A&& a, unsigned) {
+        a & x;
+        a & v;
+        a & r;
+    }
 };
 
 #define NTYPES_HEADER 2
 
 /** copied from Gadget-4 **/
-struct gadget_io_header {
-	long long npart[NTYPES_HEADER];		 /**< number of particles of each type in this file */
-	long long npartTotal[NTYPES_HEADER]; /**< total number of particles of each type in this snapshot. This can be
-	 different from npart if one is dealing with a multi-file snapshot. */
-	double mass[NTYPES_HEADER];			 /**< mass of particles of each type. If 0, then the masses are explicitly
-			  stored in the mass-block of the snapshot file, otherwise they are omitted */
-	double time;						 /**< time of snapshot file */
-	double redshift;					 /**< redshift of snapshot file */
-	double BoxSize;						 /**< box-size of simulation in case periodic boundaries were used */
-	int num_files;						 /**< number of files in multi-file snapshot */
+struct GadgetIoHeader {
+    long long npart[NTYPES_HEADER];      /**< number of particles of each type in this file */
+    long long npartTotal[NTYPES_HEADER]; /**< total number of particles of each type in this
+     snapshot. This can be different from npart if one is dealing with a multi-file snapshot. */
+    double mass[NTYPES_HEADER]; /**< mass of particles of each type. If 0, then the masses are
+     explicitly stored in the mass-block of the snapshot file, otherwise they are omitted */
+    double time;                /**< time of snapshot file */
+    double redshift;            /**< redshift of snapshot file */
+    double boxSize;             /**< box-size of simulation in case periodic boundaries were used */
+    int numFiles;               /**< number of files in multi-file snapshot */
 
-	long long Ntrees;
-	long long TotNtrees;
+    long long ntrees;
+    long long totNtrees;
 
-	template <class A> void serialize(A&& arc, unsigned) {
-		for (int i = 0; i < NTYPES_HEADER; i++) {
-			arc& npart[i];
-			arc& npartTotal[i];
-			arc& mass[i];
-		}
-		arc & time;
-		arc & redshift;
-		arc & BoxSize;
-		arc & num_files;
-	}
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        for (int i = 0; i < NTYPES_HEADER; i++) {
+            arc& npart[i];
+            arc& npartTotal[i];
+            arc& mass[i];
+        }
+        arc & time;
+        arc & redshift;
+        arc & boxSize;
+        arc & numFiles;
+    }
 };
 /*****************************/
 
-struct particle {
-	array<fixed32, NDIM> x;
-	array<float, NDIM> v;
-	group_int lg;
-	part_int cat_index;
-	char r;
-	char t;
-	char type;
-	template <class A> void serialize(A&& a, unsigned) {
-		static bool do_groups = get_options().do_groups;
-		static bool do_tracers = get_options().do_tracers;
-		for (int dim = 0; dim < NDIM; dim++) {
-			a& x[dim];
-			a& v[dim];
-		}
-		a & r;
-		if (do_groups) {
-			a & lg;
-		}
-		if (do_tracers) {
-			a & t;
-		}
-		if (get_options().sph) {
-			a & cat_index;
-			a & type;
-		}
-	}
+struct Particle {
+    Array<Fixed32, NDIM> x;
+    Array<float, NDIM> v;
+    GroupInt lg;
+    PartInt catIndex;
+    char r;
+    char t;
+    char type;
+    template <class A>
+    void serialize(A&& a, unsigned) {
+        static bool doGroups = getOptions().doGroups;
+        static bool doTracers = getOptions().doTracers;
+        for (int dim = 0; dim < NDIM; dim++) {
+            a& x[dim];
+            a& v[dim];
+        }
+        a & r;
+        if (doGroups) {
+            a & lg;
+        }
+        if (doTracers) {
+            a & t;
+        }
+        if (getOptions().sph) {
+            a & catIndex;
+            a & type;
+        }
+    }
 };
 
-struct particle_sample {
-	array<fixed32, NDIM> x;
-	array<float, NDIM> g;
-	float p;
-	template <class A> void serialize(A&& a, unsigned) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			a& x[dim];
-			a& g[dim];
-		}
-		a & p;
-	}
+struct ParticleSample {
+    Array<Fixed32, NDIM> x;
+    Array<float, NDIM> g;
+    float p;
+    template <class A>
+    void serialize(A&& a, unsigned) {
+        for (int dim = 0; dim < NDIM; dim++) {
+            a& x[dim];
+            a& g[dim];
+        }
+        a & p;
+    }
 };
 
 #ifdef CHECK_BOUNDS
-#define CHECK_PART_BOUNDS(i)                                                                                                                                   \
-	if (i < 0 || i >= particles_size()) {                                                                                                                      \
-		PRINT("particle bound check failure %li should be between %li and %li\n", (long long)i, (long long)0, (long long)particles_size());                    \
-		ALWAYS_ASSERT(false);                                                                                                                                  \
-	}
+#define CHECK_PART_BOUNDS(i)                                                                     \
+    if (i < 0 || i >= particlesSize()) {                                                         \
+        PRINT("particle bound check failure %li should be between %li and %li\n", (long long) i, \
+            (long long) 0, (long long) particlesSize());                                         \
+        ALWAYS_ASSERT(false);                                                                    \
+    }
 #else
 #define CHECK_PART_BOUNDS(i)
 #endif
 
-PARTICLES_EXTERN array<fixed32*, NDIM> particles_x;
-PARTICLES_EXTERN array<float, NDIM>* particles_v;
-PARTICLES_EXTERN char* particles_r;
-PARTICLES_EXTERN array<float*, NDIM> particles_g;
-PARTICLES_EXTERN float* particles_s;
-PARTICLES_EXTERN float* particles_z;
-PARTICLES_EXTERN float* particles_rh;
-PARTICLES_EXTERN char* particles_c;
-PARTICLES_EXTERN char* particles_sa;
-PARTICLES_EXTERN float* particles_p;
-PARTICLES_EXTERN float* particles_dv;
-PARTICLES_EXTERN std::atomic<group_int>* particles_grp
+PARTICLES_EXTERN Array<Fixed32*, NDIM> particlesX;
+PARTICLES_EXTERN Array<float, NDIM>* particlesV;
+PARTICLES_EXTERN char* particlesR;
+PARTICLES_EXTERN Array<float*, NDIM> particlesG;
+PARTICLES_EXTERN float* particlesS;
+PARTICLES_EXTERN float* particlesZ;
+PARTICLES_EXTERN float* particlesRh;
+PARTICLES_EXTERN char* particlesC;
+PARTICLES_EXTERN char* particlesSa;
+PARTICLES_EXTERN float* particlesP;
+PARTICLES_EXTERN float* particlesDv;
+PARTICLES_EXTERN std::atomic<GroupInt>* particlesGrp
 #ifdef PARTICLES_CPP
-	= nullptr
+    = nullptr
 #endif
-	;
-PARTICLES_EXTERN part_int* particles_sph;
-PARTICLES_EXTERN group_int* particles_lgrp;
-PARTICLES_EXTERN char* particles_tr;
-PARTICLES_EXTERN char* particles_ty;
-PARTICLES_EXTERN size_t particles_global_offset;
+    ;
+PARTICLES_EXTERN PartInt* particlesSph;
+PARTICLES_EXTERN GroupInt* particlesLgrp;
+PARTICLES_EXTERN char* particlesTr;
+PARTICLES_EXTERN char* particlesTy;
+PARTICLES_EXTERN size_t particlesGlobalOffset;
 
-struct particle_global_range {
-	int proc;
-	pair<part_int> range;
+struct ParticleGlobalRange {
+    int proc;
+    Pair<PartInt> range;
 };
 
-part_int particles_size();
-std::unordered_map<int, part_int> particles_groups_init();
-void particles_groups_destroy();
-void particles_resize(part_int, bool lock = true);
-void particles_reset_converged();
-void particles_random_init();
-void particles_resolve_with_sph_particles();
-int particles_apply_updates(int minrung, float t0, float a);
-void particles_pop_rungs();
-void particles_push_rungs();
-void particles_displace(double dx, double dy, double dz);
-void particles_destroy();
-void particles_sort_by_sph(pair<part_int> rng);
-void particles_global_read_pos(particle_global_range, fixed32* x, fixed32* y, fixed32* z, char* type, float* zeta, part_int offset);
-inline void particles_global_read_pos(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, part_int offset) {
-	particles_global_read_pos(range, x, y, z, nullptr, nullptr, offset);
+PartInt particlesSize();
+std::unordered_map<int, PartInt> particlesGroupsInit();
+void particlesGroupsDestroy();
+void particlesResize(PartInt, bool lock = true);
+void particlesResetConverged();
+void particlesRandomInit();
+void particlesResolveWithSphParticles();
+int particlesApplyUpdates(int minrung, float t0, float a);
+void particlesPopRungs();
+void particlesPushRungs();
+void particlesDisplace(double dx, double dy, double dz);
+void particlesDestroy();
+void particlesSortBySph(Pair<PartInt> rng);
+void particlesGlobalReadPos(ParticleGlobalRange, Fixed32* x, Fixed32* y, Fixed32* z, char* type,
+    float* zeta, PartInt offset);
+inline void particlesGlobalReadPos(
+    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, PartInt offset) {
+    particlesGlobalReadPos(range, x, y, z, nullptr, nullptr, offset);
 }
-void particles_global_read_softlens(particle_global_range range, float* h, part_int offset);
-void particles_global_read_pos_and_group(particle_global_range range, fixed32* x, fixed32* y, fixed32* z, group_int* g, part_int offset);
-part_int particles_sort(pair<part_int> rng, double xm, int xdim);
-gadget_io_header particles_read_gadget4(std::string);
+void particlesGlobalReadSoftlens(ParticleGlobalRange range, float* h, PartInt offset);
+void particlesGlobalReadPosAndGroup(
+    ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, GroupInt* g, PartInt offset);
+PartInt particlesSort(Pair<PartInt> rng, double xm, int xdim);
+GadgetIoHeader particlesReadGadget4(std::string);
 #ifndef __CUDACC__
-hpx::future<vector<int>> particles_get(int rank, const vector<pair<part_int>>& ranges);
+hpx::future<Vector<int>> particlesGet(int rank, Vector<Pair<PartInt>> const& ranges);
 #endif
-void particles_cache_free();
-void particles_group_cache_free();
-pair<array<double, NDIM>, double> particles_enclosing_sphere(pair<part_int> rng);
-vector<output_particle> particles_get_sample(range<double> const& box);
-vector<particle_sample> particles_sample(int cnt);
-void particles_load(FILE* fp);
-void particles_save(FILE* fp);
-void particles_inc_group_cache_epoch();
-void particles_global_read_rungs(particle_global_range range, char* r, part_int offset);
-int particles_group_home(group_int);
+void particlesCacheFree();
+void particlesGroupCacheFree();
+Pair<Array<double, NDIM>, double> particlesEnclosingSphere(Pair<PartInt> rng);
+Vector<OutputParticle> particlesGetSample(Range<double> const& box);
+Vector<ParticleSample> particlesSample(int cnt);
+void particlesLoad(FILE* fp);
+void particlesSave(FILE* fp);
+void particlesIncGroupCacheEpoch();
+void particlesGlobalReadRungs(ParticleGlobalRange range, char* r, PartInt offset);
+int particlesGroupHome(GroupInt);
 #ifndef __CUDACC__
-shared_mutex_type& particles_shared_mutex();
+SharedMutexType& particlesSharedMutex();
 #endif
-void particles_set_tracers(size_t count = 0);
-vector<output_particle> particles_get_tracers();
-void particles_memadvise_cpu();
-void particles_global_read_vels(particle_global_range range, float* vx, float* vy, float* z, part_int offset);
-void particles_memadvise_gpu();
-vector<size_t> particles_rung_counts();
-void particles_set_minrung(int minrung);
-void particles_free();
-void particles_save_glass(char const* filename);
-void particles_sort_by_rung(int minrung);
-double particles_active_pct();
-pair<part_int, part_int> particles_current_range();
+void particlesSetTracers(size_t count = 0);
+Vector<OutputParticle> particlesGetTracers();
+void particlesMemadviseCpu();
+void particlesGlobalReadVels(
+    ParticleGlobalRange range, float* vx, float* vy, float* z, PartInt offset);
+void particlesMemadviseGpu();
+Vector<size_t> particlesRungCounts();
+void particlesSetMinrung(int minrung);
+void particlesFree();
+void particlesSaveGlass(char const* filename);
+void particlesSortByRung(int minrung);
+double particlesActivePct();
+Pair<PartInt, PartInt> particlesCurrentRange();
 
-inline char& particles_type(part_int index) {
-	static bool const sph = get_options().sph;
-	if (get_options().sph) {
-		CHECK_PART_BOUNDS(index);
-		return particles_ty[index];
-	} else {
-		static char dm = DARK_MATTER_TYPE;
-		return dm;
-	}
+inline char& particlesType(PartInt index) {
+    static bool const sph = getOptions().sph;
+    if (getOptions().sph) {
+        CHECK_PART_BOUNDS(index);
+        return particlesTy[index];
+    } else {
+        static char dm = DARK_MATTER_TYPE;
+        return dm;
+    }
 }
 
-inline float particles_mass(part_int index) {
-	if (!get_options().sph) {
-		return 1.0f;
-	}
-	float const sph_mass = get_options().sph_mass;
-	float const dm_mass = get_options().dm_mass;
-	if (particles_type(index) != DARK_MATTER_TYPE) {
-		return sph_mass;
-	} else {
-		return dm_mass;
-	}
+inline float particlesMass(PartInt index) {
+    if (!getOptions().sph) {
+        return 1.0f;
+    }
+    float const sphMass = getOptions().sphMass;
+    float const dmMass = getOptions().dmMass;
+    if (particlesType(index) != DARK_MATTER_TYPE) {
+        return sphMass;
+    } else {
+        return dmMass;
+    }
 }
 
-inline float& particles_divv(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_dv[index];
+inline float& particlesDivv(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesDv[index];
 }
 
-inline float& particles_pot(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_p[index];
+inline float& particlesPot(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesP[index];
 }
 
-inline float& particles_rho(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_rh[index];
+inline float& particlesRho(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesRh[index];
 }
 
-inline char& particles_converged(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_c[index];
+inline char& particlesConverged(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesC[index];
 }
 
-inline char& particles_semiactive(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_sa[index];
+inline char& particlesSemiactive(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesSa[index];
 }
 
-inline fixed32& particles_pos(int dim, part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_x[dim][index];
+inline Fixed32& particlesPos(int dim, PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesX[dim][index];
 }
 
-inline float& particles_vel(int dim, part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_v[index][dim];
+inline float& particlesVel(int dim, PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesV[index][dim];
 }
 
-inline array<float, NDIM>* particles_vel_data() { return particles_v; }
-
-inline char& particles_rung(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_r[index];
+inline Array<float, NDIM>* particlesVelData() {
+    return particlesV;
 }
 
-inline float& particles_softlen(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_s[index];
+inline char& particlesRung(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesR[index];
 }
 
-inline float& particles_zeta(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_z[index];
+inline float& particlesSoftlen(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesS[index];
 }
 
-inline float& particles_gforce(int dim, part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_g[dim][index];
+inline float& particlesZeta(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesZ[index];
 }
 
-inline group_int particles_group_init(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_global_offset + index;
+inline float& particlesGforce(int dim, PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesG[dim][index];
 }
 
-inline std::atomic<group_int>& particles_group(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	ASSERT(particles_grp);
-	return particles_grp[index];
+inline GroupInt particlesGroupInit(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesGlobalOffset + index;
 }
 
-inline group_int& particles_lastgroup(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	ASSERT(particles_lgrp);
-	return particles_lgrp[index];
+inline std::atomic<GroupInt>& particlesGroup(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    ASSERT(particlesGrp);
+    return particlesGrp[index];
 }
 
-inline char& particles_tracer(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_tr[index];
+inline GroupInt& particlesLastgroup(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    ASSERT(particlesLgrp);
+    return particlesLgrp[index];
 }
 
-inline part_int& particles_cat_index(part_int index) {
-	CHECK_PART_BOUNDS(index);
-	return particles_sph[index];
+inline char& particlesTracer(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesTr[index];
 }
 
-inline particle particles_get_particle(part_int index) {
-	static bool do_groups = get_options().do_groups;
-	static bool do_tracers = get_options().do_tracers;
-	CHECK_PART_BOUNDS(index);
-	particle p;
-	for (int dim = 0; dim < NDIM; dim++) {
-		p.x[dim] = particles_pos(dim, index);
-		p.v[dim] = particles_vel(dim, index);
-	}
-	p.r = particles_rung(index);
-	if (do_groups) {
-		p.lg = particles_lastgroup(index);
-	}
-	if (do_tracers) {
-		p.t = particles_tracer(index);
-	}
-	if (get_options().sph) {
-		p.type = particles_type(index);
-		p.cat_index = particles_cat_index(index);
-	}
-	return p;
+inline PartInt& particlesCatIndex(PartInt index) {
+    CHECK_PART_BOUNDS(index);
+    return particlesSph[index];
 }
 
-inline void particles_set_particle(particle p, part_int index) {
-	static bool do_groups = get_options().do_groups;
-	static bool do_tracers = get_options().do_tracers;
-	CHECK_PART_BOUNDS(index);
-	for (int dim = 0; dim < NDIM; dim++) {
-		particles_pos(dim, index) = p.x[dim];
-		particles_vel(dim, index) = p.v[dim];
-	}
-	particles_rung(index) = p.r;
-	if (do_groups) {
-		particles_lastgroup(index) = p.lg;
-	}
-	if (do_tracers) {
-		particles_tracer(index) = p.t;
-	}
-	if (get_options().sph) {
-		particles_type(index) = p.type;
-		particles_cat_index(index) = p.cat_index;
-	}
+inline Particle particlesGetParticle(PartInt index) {
+    static bool doGroups = getOptions().doGroups;
+    static bool doTracers = getOptions().doTracers;
+    CHECK_PART_BOUNDS(index);
+    Particle p;
+    for (int dim = 0; dim < NDIM; dim++) {
+        p.x[dim] = particlesPos(dim, index);
+        p.v[dim] = particlesVel(dim, index);
+    }
+    p.r = particlesRung(index);
+    if (doGroups) {
+        p.lg = particlesLastgroup(index);
+    }
+    if (doTracers) {
+        p.t = particlesTracer(index);
+    }
+    if (getOptions().sph) {
+        p.type = particlesType(index);
+        p.catIndex = particlesCatIndex(index);
+    }
+    return p;
 }
 
-inline bool particles_is_sph(int index) { return particles_type(index) == SPH_TYPE; }
+inline void particlesSetParticle(Particle p, PartInt index) {
+    static bool doGroups = getOptions().doGroups;
+    static bool doTracers = getOptions().doTracers;
+    CHECK_PART_BOUNDS(index);
+    for (int dim = 0; dim < NDIM; dim++) {
+        particlesPos(dim, index) = p.x[dim];
+        particlesVel(dim, index) = p.v[dim];
+    }
+    particlesRung(index) = p.r;
+    if (doGroups) {
+        particlesLastgroup(index) = p.lg;
+    }
+    if (doTracers) {
+        particlesTracer(index) = p.t;
+    }
+    if (getOptions().sph) {
+        particlesType(index) = p.type;
+        particlesCatIndex(index) = p.catIndex;
+    }
+}
 
-struct energies_t {
-	double therm;
-	double heating;
-	double pot;
-	double kin;
-	double tckin;
-	double xmom;
-	double ymom;
-	double cosmic;
-	double zmom;
-	double nmom;
-	energies_t() {
-		therm = heating = 0.0;
-		pot = kin = 0.f;
-		xmom = ymom = zmom = nmom = 0.0;
-		cosmic = 0.0;
-		tckin = 0.0;
-	}
-	energies_t& operator+=(energies_t const& other) {
-		therm += other.therm;
-		heating += other.heating;
-		pot += other.pot;
-		kin += other.kin;
-		cosmic += other.cosmic;
-		xmom += other.xmom;
-		ymom += other.ymom;
-		zmom += other.zmom;
-		nmom += other.nmom;
-		tckin += other.tckin;
-		return *this;
-	}
-	template <class A> void serialize(A&& arc, unsigned) {
-		arc & xmom;
-		arc & ymom;
-		arc & cosmic;
-		arc & zmom;
-		arc & nmom;
-		arc & pot;
-		arc & kin;
-		arc & tckin;
-		if (get_options().sph) {
-			arc & therm;
-			arc & heating;
-		}
-	}
+inline bool particlesIsSph(int index) {
+    return particlesType(index) == SPH_TYPE;
+}
+
+struct EnergiesT {
+    double therm;
+    double heating;
+    double pot;
+    double kin;
+    double tckin;
+    double xmom;
+    double ymom;
+    double cosmic;
+    double zmom;
+    double nmom;
+    EnergiesT() {
+        therm = heating = 0.0;
+        pot = kin = 0.f;
+        xmom = ymom = zmom = nmom = 0.0;
+        cosmic = 0.0;
+        tckin = 0.0;
+    }
+    EnergiesT& operator+=(EnergiesT const& other) {
+        therm += other.therm;
+        heating += other.heating;
+        pot += other.pot;
+        kin += other.kin;
+        cosmic += other.cosmic;
+        xmom += other.xmom;
+        ymom += other.ymom;
+        zmom += other.zmom;
+        nmom += other.nmom;
+        tckin += other.tckin;
+        return *this;
+    }
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & xmom;
+        arc & ymom;
+        arc & cosmic;
+        arc & zmom;
+        arc & nmom;
+        arc & pot;
+        arc & kin;
+        arc & tckin;
+        if (getOptions().sph) {
+            arc & therm;
+            arc & heating;
+        }
+    }
 };
 
-energies_t particles_sum_energies();
+EnergiesT particlesSumEnergies();
 
 #endif /* PARTICLES_HPP_ */

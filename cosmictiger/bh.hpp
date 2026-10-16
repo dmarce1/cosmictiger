@@ -17,42 +17,41 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef BH_HPP_
 #define BH_HPP_
 
 #include <cosmictiger/containers.hpp>
 #include <cosmictiger/defs.hpp>
+#include <cosmictiger/device_vector.hpp>
 #include <cosmictiger/fixed.hpp>
 #include <cosmictiger/fixedcapvec.hpp>
 #include <cosmictiger/range.hpp>
-#include <cosmictiger/device_vector.hpp>
 
-struct bh_tree_node {
-	array<float, NDIM> pos;
-	array<int, NDIM> children;
-	pair<int> parts;
-	float mass;
-	float radius;
-	bh_tree_node() {
-		children[LEFT] = children[RIGHT] = -1;
-		mass = 0;
-	}
+struct BhTreeNode {
+    Array<float, NDIM> pos;
+    Array<int, NDIM> children;
+    Pair<int> parts;
+    float mass;
+    float radius;
+    BhTreeNode() {
+        children[LEFT] = children[RIGHT] = -1;
+        mass = 0;
+    }
 };
 
-
-struct bh_source {
-	array<float, NDIM> x;
-	float m;
+struct BhSource {
+    Array<float, NDIM> x;
+    float m;
 };
 
-
-device_vector<float> bh_evaluate_potential(device_vector<array<float, NDIM>>& x, bool gpu = false);
-device_vector<float> bh_evaluate_points(device_vector<array<float, NDIM>>& y, device_vector<array<float, NDIM>>& x, bool gpu = false);
-device_vector<float> bh_evaluate_potential_gpu(const device_vector<bh_tree_node>& tree_nodes, const device_vector<array<float, NDIM>>& x, const device_vector<int> sink_buckets,
-		float theta, float hsoft, float GM);
-device_vector<float> bh_evaluate_potential_points_gpu(const device_vector<bh_tree_node>& tree_nodes, const device_vector<array<float, NDIM>>& x, const device_vector<array<float, NDIM>>& y,
-		float theta, float hsoft, float GM);
-
+DeviceVector<float> bhEvaluatePotential(DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePoints(
+    DeviceVector<Array<float, NDIM>>& y, DeviceVector<Array<float, NDIM>>& x, bool gpu = false);
+DeviceVector<float> bhEvaluatePotentialGpu(DeviceVector<BhTreeNode> const& treeNodes,
+    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<int> const sinkBuckets, float theta,
+    float hsoft, float gm);
+DeviceVector<float> bhEvaluatePotentialPointsGpu(DeviceVector<BhTreeNode> const& treeNodes,
+    DeviceVector<Array<float, NDIM>> const& x, DeviceVector<Array<float, NDIM>> const& y,
+    float theta, float hsoft, float gm);
 
 #endif /* BH_HPP_ */

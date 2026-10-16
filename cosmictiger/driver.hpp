@@ -27,51 +27,53 @@
 #include <cosmictiger/sph_tree.hpp>
 #include <cosmictiger/time.hpp>
 
-struct driver_params {
-	double a;
-	double adot;
-	double dummy;
-	double tau;
-	double tau_max;
-	double energy0;
-	energies_t energies;
-	int max_rung;
-	int iter;
-	int minrung0;
-	int step;
-	int bucket_size;
-	size_t total_processed;
-	double flops;
-	double runtime;
-	double years;
-	time_type itime;
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & bucket_size;
-		arc & max_rung;
-		arc & adot;
-		arc & minrung0;
-		arc & step;
-		arc & a;
-		arc & tau;
-		arc & tau_max;
-		arc & energies;
-		arc & energy0;
-		arc & iter;
-		arc & total_processed;
-		arc & flops;
-		arc & runtime;
-		arc & itime;
-		arc & years;
-	}
+struct DriverParams {
+    double a;
+    double adot;
+    double dummy;
+    double tau;
+    double tauMax;
+    double energy0;
+    EnergiesT energies;
+    int maxRung;
+    int iter;
+    int minrung0;
+    int step;
+    int bucketSize;
+    size_t totalProcessed;
+    double flops;
+    double runtime;
+    double years;
+    TimeType itime;
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & bucketSize;
+        arc & maxRung;
+        arc & adot;
+        arc & minrung0;
+        arc & step;
+        arc & a;
+        arc & tau;
+        arc & tauMax;
+        arc & energies;
+        arc & energy0;
+        arc & iter;
+        arc & totalProcessed;
+        arc & flops;
+        arc & runtime;
+        arc & itime;
+        arc & years;
+    }
 };
 
-void write_checkpoint(driver_params params);
-driver_params read_checkpoint();
-sph_tree_create_return sph_step1(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, double* eheat,
-								 bool verbose = true);
-sph_run_return sph_step2(int minrung, double scale, double tau, double t0, int phase, double adot, int max_rung, int iter, double dt, energies_t* eheat,
-						 bool verbose = true);
-std::pair<kick_return, tree_create_return> kick_step(int minrung, double scale, double, double t0, double theta, bool first_call, bool full_eval);
+void writeCheckpoint(DriverParams params);
+DriverParams readCheckpoint();
+SphTreeCreateReturn sphStep1(int minrung, double scale, double tau, double t0, int phase,
+    double adot, int maxRung, int iter, double dt, double* eheat, bool verbose = true);
+SphRunReturn sphStep2(int minrung, double scale, double tau, double t0, int phase, double adot,
+    int maxRung, int iter, double dt, EnergiesT* eheat, bool verbose = true);
+std::pair<KickReturn, TreeCreateReturn> kickStep(
+    int minrung, double scale, double, double t0, double theta, bool firstCall, bool fullEval);
 
 void driver();
 void checkpointStateTest();

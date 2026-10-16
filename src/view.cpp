@@ -34,502 +34,512 @@
 #include <cosmictiger/stars.hpp>
 #include <cosmictiger/view.hpp>
 
-HPX_PLAIN_ACTION(output_view);
+HPX_PLAIN_ACTION(outputView, OutputViewAction);
 
-static vector<range<double>> view_boxes;
+static Vector<Range<double>> viewBoxes;
 
-struct dm_part_info {
-	fixed32 x;
-	fixed32 y;
-	fixed32 z;
-	float vx;
-	float vy;
-	float vz;
-	int rung;
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & x;
-		arc & y;
-		arc & z;
-		arc & vx;
-		arc & vy;
-		arc & vz;
-		arc & rung;
-	}
+struct DmPartInfo {
+    Fixed32 x;
+    Fixed32 y;
+    Fixed32 z;
+    float vx;
+    float vy;
+    float vz;
+    int rung;
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & x;
+        arc & y;
+        arc & z;
+        arc & vx;
+        arc & vy;
+        arc & vz;
+        arc & rung;
+    }
 };
 
-struct sph_part_info : public dm_part_info {
-	float eint;
-	float rho;
-	float h;
-	float H;
-	float Hp;
-	float H2;
-	float Hn;
-	float Hep;
-	float Hepp;
-	float He;
-	float Z;
-	float alpha;
-	float cold_frac;
-	template <typename A> void serialize(A&& arc, unsigned ver) {
-		dm_part_info::serialize(arc, ver);
-		arc & eint;
-		arc & rho;
-		arc & h;
-		arc & H;
-		arc & Hp;
-		arc & H2;
-		arc & Hn;
-		arc & Hep;
-		arc & Hepp;
-		arc & cold_frac;
-		arc & He;
-		arc & Z;
-		arc & alpha;
-	}
+struct SphPartInfo : public DmPartInfo {
+    float eint;
+    float rho;
+    float h;
+    float hValue2;
+    float hp;
+    float h2;
+    float hn;
+    float hep;
+    float hepp;
+    float he;
+    float zValue2;
+    float alpha;
+    float coldFrac;
+    template <typename A>
+    void serialize(A&& arc, unsigned ver) {
+        DmPartInfo::serialize(arc, ver);
+        arc & eint;
+        arc & rho;
+        arc & h;
+        arc & hValue2;
+        arc & hp;
+        arc & h2;
+        arc & hn;
+        arc & hep;
+        arc & hepp;
+        arc & coldFrac;
+        arc & he;
+        arc & zValue2;
+        arc & alpha;
+    }
 };
 
-struct star_part_info : public dm_part_info {
-	float Y;
-	float Z;
-	float M;
-	float zform;
-	template <typename A> void serialize(A&& arc, unsigned ver) {
-		dm_part_info::serialize(arc, ver);
-		arc & Y;
-		arc & Z;
-		arc & M;
-		arc & zform;
-	}
+struct StarPartInfo : public DmPartInfo {
+    float yValue2;
+    float zValue2;
+    float m;
+    float zform;
+    template <typename A>
+    void serialize(A&& arc, unsigned ver) {
+        DmPartInfo::serialize(arc, ver);
+        arc & yValue2;
+        arc & zValue2;
+        arc & m;
+        arc & zform;
+    }
 };
 
-struct view_return {
-	vector<vector<sph_part_info>> hydro;
-	vector<vector<dm_part_info>> dm;
-	vector<vector<star_part_info>> star;
-	template <typename A> void serialize(A&& arc, unsigned) {
-		arc & hydro;
-		arc & dm;
-		arc & star;
-	}
+struct ViewReturn {
+    Vector<Vector<SphPartInfo>> hydro;
+    Vector<Vector<DmPartInfo>> dm;
+    Vector<Vector<StarPartInfo>> star;
+    template <typename A>
+    void serialize(A&& arc, unsigned) {
+        arc & hydro;
+        arc & dm;
+        arc & star;
+    }
 };
 
-view_return view_get_particles(vector<range<double>> boxes);
+ViewReturn viewGetParticles(Vector<Range<double>> boxes);
 
-HPX_PLAIN_ACTION(view_get_particles);
+HPX_PLAIN_ACTION(viewGetParticles, ViewGetParticlesAction);
 
-view_return view_get_particles(vector<range<double>> boxes = vector<range<double>>()) {
-	if (hpx_rank() == 0) {
-		boxes = view_boxes;
-	}
-	view_return rc;
-	rc.hydro.resize(boxes.size());
-	rc.dm.resize(boxes.size());
-	rc.star.resize(boxes.size());
-	vector<hpx::future<view_return>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<view_get_particles_action>(c, boxes));
-	}
-	bool const chem = get_options().chem;
-	bool const stars = get_options().stars;
-	int const nthreads = hpx_hardware_concurrency();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async(hpx::annotated_function(
-			[proc, nthreads, boxes, chem, stars]() {
-				view_return rc;
-				rc.hydro.resize(boxes.size());
-				rc.dm.resize(boxes.size());
-				rc.star.resize(boxes.size());
-				part_int const b = (size_t)proc * particles_size() / nthreads;
-				part_int const e = (size_t)(proc + 1) * particles_size() / nthreads;
-				for (part_int i = b; i < e; i++) {
-					array<double, NDIM> x;
-					x[XDIM] = particles_pos(XDIM, i).to_double();
-					x[YDIM] = particles_pos(YDIM, i).to_double();
-					x[ZDIM] = particles_pos(ZDIM, i).to_double();
-					for (int j = 0; j < boxes.size(); j++) {
-						if (boxes[j].contains(x)) {
-							part_int const k = particles_type(i);
-							switch (k) {
-							case DARK_MATTER_TYPE: {
-								dm_part_info info{};
-								info.x = particles_pos(XDIM, i);
-								info.y = particles_pos(YDIM, i);
-								info.z = particles_pos(ZDIM, i);
-								info.vx = particles_vel(XDIM, i);
-								info.vy = particles_vel(YDIM, i);
-								info.vz = particles_vel(ZDIM, i);
-								info.rung = particles_rung(i);
-								rc.dm[j].push_back(info);
-								break;
-							}
-							case SPH_TYPE: {
-								sph_part_info info{};
-								int const l = particles_cat_index(i);
-								if (!sph_particles_isstar(l)) {
-									info.x = particles_pos(XDIM, i);
-									info.y = particles_pos(YDIM, i);
-									info.z = particles_pos(ZDIM, i);
-									info.vx = particles_vel(XDIM, i);
-									info.vy = particles_vel(YDIM, i);
-									info.vz = particles_vel(ZDIM, i);
+ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>()) {
+    if (hpxRank() == 0) {
+        boxes = viewBoxes;
+    }
+    ViewReturn rc;
+    rc.hydro.resize(boxes.size());
+    rc.dm.resize(boxes.size());
+    rc.star.resize(boxes.size());
+    Vector<hpx::future<ViewReturn>> futs;
+    for (auto& c : hpxChildren()) {
+        futs.push_back(hpx::async<ViewGetParticlesAction>(c, boxes));
+    }
+    bool const chem = getOptions().chem;
+    bool const stars = getOptions().stars;
+    int const nthreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < nthreads; proc++) {
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [proc, nthreads, boxes, chem, stars]() {
+                ViewReturn rc;
+                rc.hydro.resize(boxes.size());
+                rc.dm.resize(boxes.size());
+                rc.star.resize(boxes.size());
+                PartInt const b = (size_t) proc * particlesSize() / nthreads;
+                PartInt const e = (size_t) (proc + 1) * particlesSize() / nthreads;
+                for (PartInt i = b; i < e; i++) {
+                    Array<double, NDIM> x;
+                    x[XDIM] = particlesPos(XDIM, i).toDouble();
+                    x[YDIM] = particlesPos(YDIM, i).toDouble();
+                    x[ZDIM] = particlesPos(ZDIM, i).toDouble();
+                    for (int j = 0; j < boxes.size(); j++) {
+                        if (boxes[j].contains(x)) {
+                            PartInt const k = particlesType(i);
+                            switch (k) {
+                            case DARK_MATTER_TYPE: {
+                                DmPartInfo info{};
+                                info.x = particlesPos(XDIM, i);
+                                info.y = particlesPos(YDIM, i);
+                                info.z = particlesPos(ZDIM, i);
+                                info.vx = particlesVel(XDIM, i);
+                                info.vy = particlesVel(YDIM, i);
+                                info.vz = particlesVel(ZDIM, i);
+                                info.rung = particlesRung(i);
+                                rc.dm[j].push_back(info);
+                                break;
+                            }
+                            case SPH_TYPE: {
+                                SphPartInfo info{};
+                                int const l = particlesCatIndex(i);
+                                if (!sphParticlesIsstar(l)) {
+                                    info.x = particlesPos(XDIM, i);
+                                    info.y = particlesPos(YDIM, i);
+                                    info.z = particlesPos(ZDIM, i);
+                                    info.vx = particlesVel(XDIM, i);
+                                    info.vy = particlesVel(YDIM, i);
+                                    info.vz = particlesVel(ZDIM, i);
 #ifdef HOPKINS
-									info.eint = sph_particles_eint_pre(l);
-									info.rho = sph_particles_rho_rho(l);
+                                    info.eint = sphParticlesEintPre(l);
+                                    info.rho = sphParticlesRhoRho(l);
 #else
-									info.eint = sph_particles_eint(l);
-									info.rho = sph_particles_rho(l);
+                                    info.eint = sphParticlesEint(l);
+                                    info.rho = sphParticlesRho(l);
 #endif
-									info.h = sph_particles_smooth_len(l);
-									info.rung = particles_rung(i);
-									info.alpha = sph_particles_alpha(l);
-									if (chem) {
-										info.H = sph_particles_H(l);
-										info.Hp = sph_particles_Hp(l);
-										info.Hn = sph_particles_Hn(l);
-										info.H2 = sph_particles_H2(l);
-										info.Hep = sph_particles_Hep(l);
-										info.Hepp = sph_particles_Hepp(l);
-										info.Z = sph_particles_Z(l);
-										info.He = sph_particles_He0(l);
-									}
-									if (stars) {
-										info.cold_frac = sph_particles_cold_mass(l);
-									} else {
-										info.cold_frac = 0.0;
-									}
-									rc.hydro[j].push_back(info);
-								} else {
-									int const k = particles_cat_index(i);
-									star_part_info info{};
-									info.x = particles_pos(XDIM, i);
-									info.y = particles_pos(YDIM, i);
-									info.z = particles_pos(ZDIM, i);
-									info.vx = particles_vel(XDIM, i);
-									info.vy = particles_vel(YDIM, i);
-									info.vz = particles_vel(ZDIM, i);
-									info.rung = particles_rung(i);
-									rc.star[j].push_back(info);
-								}
-								break;
-							}
-							}
-						}
-					}
-				}
-				return rc;
-			},
-			"collect_view_particles")));
-	}
+                                    info.h = sphParticlesSmoothLen(l);
+                                    info.rung = particlesRung(i);
+                                    info.alpha = sphParticlesAlpha(l);
+                                    if (chem) {
+                                        info.hValue2 = sphParticlesH(l);
+                                        info.hp = sphParticlesHp(l);
+                                        info.hn = sphParticlesHn(l);
+                                        info.h2 = sphParticlesH2(l);
+                                        info.hep = sphParticlesHep(l);
+                                        info.hepp = sphParticlesHepp(l);
+                                        info.zValue2 = sphParticlesZ(l);
+                                        info.he = sphParticlesHe0(l);
+                                    }
+                                    if (stars) {
+                                        info.coldFrac = sphParticlesColdMass(l);
+                                    } else {
+                                        info.coldFrac = 0.0;
+                                    }
+                                    rc.hydro[j].push_back(info);
+                                } else {
+                                    int const k = particlesCatIndex(i);
+                                    StarPartInfo info{};
+                                    info.x = particlesPos(XDIM, i);
+                                    info.y = particlesPos(YDIM, i);
+                                    info.z = particlesPos(ZDIM, i);
+                                    info.vx = particlesVel(XDIM, i);
+                                    info.vy = particlesVel(YDIM, i);
+                                    info.vz = particlesVel(ZDIM, i);
+                                    info.rung = particlesRung(i);
+                                    rc.star[j].push_back(info);
+                                }
+                                break;
+                            }
+                            }
+                        }
+                    }
+                }
+                return rc;
+            },
+            "collect_view_particles")));
+    }
 
-	for (auto& f : futs) {
-		auto tmp = f.get();
-		for (int i = 0; i < boxes.size(); i++) {
-			rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
-			rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
-			rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
-		}
-	}
-	return rc;
+    for (auto& f : futs) {
+        auto tmp = f.get();
+        for (int i = 0; i < boxes.size(); i++) {
+            rc.hydro[i].insert(rc.hydro[i].begin(), tmp.hydro[i].begin(), tmp.hydro[i].end());
+            rc.dm[i].insert(rc.dm[i].begin(), tmp.dm[i].begin(), tmp.dm[i].end());
+            rc.star[i].insert(rc.star[i].begin(), tmp.star[i].begin(), tmp.star[i].end());
+        }
+    }
+    return rc;
 }
 
-void view_output_views(int cycle, double a) {
-	profiler_enter("view_output_views");
-	bool const chem = get_options().chem;
-	bool const stars = get_options().stars;
-	if (!view_boxes.size()) {
-		return;
-	}
-	double const code_to_cm = get_options().code_to_cm;
-	double const code_to_s = get_options().code_to_s;
-	double const code_to_g = get_options().code_to_g;
-	//	const double code_to_velocity = code_to_cm / code_to_s / a;
-	//	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
-	//	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
-	double const code_to_velocity = 1.;
-	double const code_to_energy = 1.;
-	double const code_to_density = 1.;
-	for (int bi = 0; bi < view_boxes.size(); bi++) {
-		bool stars = get_options().stars;
-		PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", view_boxes[bi].begin[XDIM], view_boxes[bi].end[XDIM], view_boxes[bi].begin[YDIM],
-			  view_boxes[bi].end[YDIM], view_boxes[bi].begin[ZDIM], view_boxes[bi].end[ZDIM]);
-		std::string filename = "view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo";
-		DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
-		view_return parts;
-		parts = view_get_particles();
-		vector<float> x, y, z;
-		auto opts = DBMakeOptlist(1);
-		float z0 = 1.0 / a - 1.0;
-		float tm = cosmos_time(1e-6, a) * get_options().code_to_s * constants::seconds_to_years / 1e9;
-		DBAddOption(opts, DBOPT_TIME, &tm);
-		if (parts.dm[bi].size()) {
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(parts.dm[bi][i].x.to_float());
-				y.push_back(parts.dm[bi][i].y.to_float());
-				z.push_back(parts.dm[bi][i].z.to_float());
-			}
-			float* coords1[NDIM] = {x.data(), y.data(), z.data()};
-			DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(parts.dm[bi][i].vx * code_to_velocity);
-				y.push_back(parts.dm[bi][i].vy * code_to_velocity);
-				z.push_back(parts.dm[bi][i].vz * code_to_velocity);
-			}
-			DBPutPointvar1(db, "vx", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "vy", "dark_matter", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "vz", "dark_matter", z.data(), x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			for (int i = 0; i < parts.dm[bi].size(); i++) {
-				x.push_back(parts.dm[bi][i].rung);
-			}
-			DBPutPointvar1(db, "rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
-		}
-		if (parts.hydro[bi].size()) {
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].x.to_float());
-				y.push_back(parts.hydro[bi][i].y.to_float());
-				z.push_back(parts.hydro[bi][i].z.to_float());
-			}
-			float* coords2[NDIM] = {x.data(), y.data(), z.data()};
-			//			PRINT( "gas points\n");
-			DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].vx * code_to_velocity);
-				y.push_back(parts.hydro[bi][i].vy * code_to_velocity);
-				z.push_back(parts.hydro[bi][i].vz * code_to_velocity);
-			}
-			// PRINT( "Vels\n");
-			DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				x.push_back(parts.hydro[bi][i].rung);
-			}
-			// PRINT( "rungs\n");
-			DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			if (stars) {
-				x.resize(0);
-				for (int i = 0; i < parts.hydro[bi].size(); i++) {
-					x.push_back(parts.hydro[bi][i].cold_frac);
-				}
-				DBPutPointvar1(db, "cold_frac", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			}
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.hydro[bi].size(); i++) {
-				double const h = parts.hydro[bi][i].h;
-				x.push_back(parts.hydro[bi][i].rho * code_to_density);
-				y.push_back(parts.hydro[bi][i].eint * code_to_energy);
-				z.push_back(parts.hydro[bi][i].alpha);
-			}
-			//			PRINT( "h and ent\n");
-			DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			if (chem) {
-				double const code_to_energy_density = get_options().code_to_g / (get_options().code_to_cm * sqr(get_options().code_to_s)); // 7
-				double const code_to_density = pow(get_options().code_to_cm, -3) * get_options().code_to_g;								   // 10
-				vector<float> p, q, t, u, w, s;
-				for (int i = 0; i < parts.hydro[bi].size(); i++) {
-					x.push_back(parts.hydro[bi][i].Hp);
-					y.push_back(parts.hydro[bi][i].Hn);
-					z.push_back(parts.hydro[bi][i].H2);
-					p.push_back(parts.hydro[bi][i].Hep);
-					q.push_back(parts.hydro[bi][i].Hepp);
-					u.push_back(parts.hydro[bi][i].He);
-					s.push_back(parts.hydro[bi][i].H);
-					w.push_back(parts.hydro[bi][i].Z);
-					double const h = parts.hydro[bi][i].h;
-					double rho = parts.hydro[bi][i].rho;
-					double const Hp = parts.hydro[bi][i].Hp;
-					double const Hn = parts.hydro[bi][i].Hn;
-					double const H2 = parts.hydro[bi][i].H2;
-					double const He = parts.hydro[bi][i].He;
-					double const Z = parts.hydro[bi][i].Z;
-					double const Hep = parts.hydro[bi][i].Hep;
-					double const Hepp = parts.hydro[bi][i].Hepp;
-					double const Y = He + Hep + Hepp;
-					double const H = parts.hydro[bi][i].H;
-					double n = H + 2.f * Hp + .5f * H2 + .25f * He + .5f * Hep + .75f * Hepp + Z / 10.0;
-					rho *= code_to_density * pow(a, -3);
-					n *= constants::avo * rho;								// 8
-					double cv = 1.5 + 0.5 * H2 / (1. - .75 * Y - 0.5 * H2); // 4
-					double gamma = 1. + 1. / cv;							// 5
-					cv *= double(constants::kb);							// 1
-					double eint = parts.hydro[bi][i].eint;					// 11
-					eint /= sqr(a);
-					eint *= sqr(get_options().code_to_cm / get_options().code_to_s);
-					// PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
-					double energy = eint * rho;
-					double T = energy / (n * cv); // 5
-					if (stars) {
-						T /= 1.f - parts.hydro[bi][i].cold_frac;
-					}
-					//	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
-					t.push_back(T);
-				}
-				DBPutPointvar1(db, "H", "gas", s.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, opts);
-				DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, opts);
-			}
-		}
-		if (parts.star[bi].size()) {
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(parts.star[bi][i].x.to_float());
-				y.push_back(parts.star[bi][i].y.to_float());
-				z.push_back(parts.star[bi][i].z.to_float());
-			}
-			float* coords3[NDIM] = {x.data(), y.data(), z.data()};
-			DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(parts.star[bi][i].vx * code_to_velocity);
-				y.push_back(parts.star[bi][i].vy * code_to_velocity);
-				z.push_back(parts.star[bi][i].vz * code_to_velocity);
-			}
-			DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, opts);
-			x.resize(0);
-			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(parts.star[bi][i].rung);
-			}
-			DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, opts);
+void viewOutputViews(int cycle, double a) {
+    profilerEnter("view_output_views");
+    bool const chem = getOptions().chem;
+    bool const stars = getOptions().stars;
+    if (!viewBoxes.size()) {
+        return;
+    }
+    double const codeToCm = getOptions().codeToCm;
+    double const codeToS = getOptions().codeToS;
+    double const codeToG = getOptions().codeToG;
+    //	const double code_to_velocity = code_to_cm / code_to_s / a;
+    //	const double code_to_energy = sqr(code_to_cm / code_to_s / a);
+    //	const double code_to_density = code_to_g / (code_to_cm * sqr(code_to_cm));
+    double const codeToVelocity = 1.;
+    double const codeToEnergy = 1.;
+    double const codeToDensity = 1.;
+    for (int bi = 0; bi < viewBoxes.size(); bi++) {
+        bool stars = getOptions().stars;
+        PRINT("Outputing view for box (%e %e) (%e %e) (%e %e)\n", viewBoxes[bi].begin[XDIM],
+            viewBoxes[bi].end[XDIM], viewBoxes[bi].begin[YDIM], viewBoxes[bi].end[YDIM],
+            viewBoxes[bi].begin[ZDIM], viewBoxes[bi].end[ZDIM]);
+        std::string filename = "view." + std::to_string(bi) + "." + std::to_string(cycle) + ".silo";
+        DBfile* db = DBCreateReal(filename.c_str(), DB_CLOBBER, DB_LOCAL, "Meshless", DB_PDB);
+        ViewReturn parts;
+        parts = viewGetParticles();
+        Vector<float> x, y, z;
+        auto opts = DBMakeOptlist(1);
+        float z0 = 1.0 / a - 1.0;
+        float tm = cosmosTime(1e-6, a) * getOptions().codeToS * constants::kSecondsToYears / 1e9;
+        DBAddOption(opts, DBOPT_TIME, &tm);
+        if (parts.dm[bi].size()) {
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.dm[bi].size(); i++) {
+                x.push_back(parts.dm[bi][i].x.toFloat());
+                y.push_back(parts.dm[bi][i].y.toFloat());
+                z.push_back(parts.dm[bi][i].z.toFloat());
+            }
+            float* coords1[NDIM] = {x.data(), y.data(), z.data()};
+            DBPutPointmesh(db, "dark_matter", NDIM, coords1, x.size(), DB_FLOAT, opts);
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.dm[bi].size(); i++) {
+                x.push_back(parts.dm[bi][i].vx * codeToVelocity);
+                y.push_back(parts.dm[bi][i].vy * codeToVelocity);
+                z.push_back(parts.dm[bi][i].vz * codeToVelocity);
+            }
+            DBPutPointvar1(db, "vx", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "vy", "dark_matter", y.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "vz", "dark_matter", z.data(), x.size(), DB_FLOAT, opts);
+            x.resize(0);
+            for (int i = 0; i < parts.dm[bi].size(); i++) {
+                x.push_back(parts.dm[bi][i].rung);
+            }
+            DBPutPointvar1(db, "rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
+        }
+        if (parts.hydro[bi].size()) {
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.hydro[bi].size(); i++) {
+                x.push_back(parts.hydro[bi][i].x.toFloat());
+                y.push_back(parts.hydro[bi][i].y.toFloat());
+                z.push_back(parts.hydro[bi][i].z.toFloat());
+            }
+            float* coords2[NDIM] = {x.data(), y.data(), z.data()};
+            //			PRINT( "gas points\n");
+            DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, opts);
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.hydro[bi].size(); i++) {
+                x.push_back(parts.hydro[bi][i].vx * codeToVelocity);
+                y.push_back(parts.hydro[bi][i].vy * codeToVelocity);
+                z.push_back(parts.hydro[bi][i].vz * codeToVelocity);
+            }
+            // PRINT( "Vels\n");
+            DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, opts);
+            x.resize(0);
+            for (int i = 0; i < parts.hydro[bi].size(); i++) {
+                x.push_back(parts.hydro[bi][i].rung);
+            }
+            // PRINT( "rungs\n");
+            DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, opts);
+            if (stars) {
+                x.resize(0);
+                for (int i = 0; i < parts.hydro[bi].size(); i++) {
+                    x.push_back(parts.hydro[bi][i].coldFrac);
+                }
+                DBPutPointvar1(db, "cold_frac", "gas", x.data(), x.size(), DB_FLOAT, opts);
+            }
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.hydro[bi].size(); i++) {
+                double const h = parts.hydro[bi][i].h;
+                x.push_back(parts.hydro[bi][i].rho * codeToDensity);
+                y.push_back(parts.hydro[bi][i].eint * codeToEnergy);
+                z.push_back(parts.hydro[bi][i].alpha);
+            }
+            //			PRINT( "h and ent\n");
+            DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "alpha", "gas", z.data(), z.size(), DB_FLOAT, opts);
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            if (chem) {
+                double const codeToEnergyDensity = getOptions().codeToG /
+                    (getOptions().codeToCm * sqr(getOptions().codeToS));    // 7
+                double const codeToDensity =
+                    pow(getOptions().codeToCm, -3) * getOptions().codeToG;    // 10
+                Vector<float> p, q, t, u, w, s;
+                for (int i = 0; i < parts.hydro[bi].size(); i++) {
+                    x.push_back(parts.hydro[bi][i].hp);
+                    y.push_back(parts.hydro[bi][i].hn);
+                    z.push_back(parts.hydro[bi][i].h2);
+                    p.push_back(parts.hydro[bi][i].hep);
+                    q.push_back(parts.hydro[bi][i].hepp);
+                    u.push_back(parts.hydro[bi][i].he);
+                    s.push_back(parts.hydro[bi][i].hValue2);
+                    w.push_back(parts.hydro[bi][i].zValue2);
+                    double const h = parts.hydro[bi][i].h;
+                    double rho = parts.hydro[bi][i].rho;
+                    double const hp = parts.hydro[bi][i].hp;
+                    double const hn = parts.hydro[bi][i].hn;
+                    double const h2 = parts.hydro[bi][i].h2;
+                    double const he = parts.hydro[bi][i].he;
+                    double const zValue = parts.hydro[bi][i].zValue2;
+                    double const hep = parts.hydro[bi][i].hep;
+                    double const hepp = parts.hydro[bi][i].hepp;
+                    double const yValue = he + hep + hepp;
+                    double const hValue = parts.hydro[bi][i].hValue2;
+                    double n = hValue + 2.f * hp + .5f * h2 + .25f * he + .5f * hep + .75f * hepp +
+                        zValue / 10.0;
+                    rho *= codeToDensity * pow(a, -3);
+                    n *= constants::kAvo * rho;                                     // 8
+                    double cv = 1.5 + 0.5 * h2 / (1. - .75 * yValue - 0.5 * h2);    // 4
+                    double gamma = 1. + 1. / cv;                                    // 5
+                    cv *= double(constants::kB);                                    // 1
+                    double eint = parts.hydro[bi][i].eint;                          // 11
+                    eint /= sqr(a);
+                    eint *= sqr(getOptions().codeToCm / getOptions().codeToS);
+                    // PRINT( "%e\n",  (code_to_energy_density * pow(code_to_density, -gamma)));
+                    double energy = eint * rho;
+                    double tValue = energy / (n * cv);    // 5
+                    if (stars) {
+                        tValue /= 1.f - parts.hydro[bi][i].coldFrac;
+                    }
+                    //	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
+                    t.push_back(tValue);
+                }
+                DBPutPointvar1(db, "H", "gas", s.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, opts);
+                DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, opts);
+            }
+        }
+        if (parts.star[bi].size()) {
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.star[bi].size(); i++) {
+                x.push_back(parts.star[bi][i].x.toFloat());
+                y.push_back(parts.star[bi][i].y.toFloat());
+                z.push_back(parts.star[bi][i].z.toFloat());
+            }
+            float* coords3[NDIM] = {x.data(), y.data(), z.data()};
+            DBPutPointmesh(db, "stars", NDIM, coords3, x.size(), DB_FLOAT, opts);
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.star[bi].size(); i++) {
+                x.push_back(parts.star[bi][i].vx * codeToVelocity);
+                y.push_back(parts.star[bi][i].vy * codeToVelocity);
+                z.push_back(parts.star[bi][i].vz * codeToVelocity);
+            }
+            DBPutPointvar1(db, "star_vx", "stars", x.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "star_vy", "stars", y.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "star_vz", "stars", z.data(), x.size(), DB_FLOAT, opts);
+            x.resize(0);
+            for (int i = 0; i < parts.star[bi].size(); i++) {
+                x.push_back(parts.star[bi][i].rung);
+            }
+            DBPutPointvar1(db, "star_rung", "stars", x.data(), x.size(), DB_FLOAT, opts);
 
-			vector<float> p;
-			x.resize(0);
-			y.resize(0);
-			z.resize(0);
-			for (int i = 0; i < parts.star[bi].size(); i++) {
-				x.push_back(parts.star[bi][i].Y);
-				y.push_back(parts.star[bi][i].Z);
-				z.push_back(parts.star[bi][i].M);
-				p.push_back(parts.star[bi][i].zform);
-			}
-			DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
-			DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
-		}
-		DBFreeOptlist(opts);
-		DBClose(db);
-	}
-	profiler_exit();
+            Vector<float> p;
+            x.resize(0);
+            y.resize(0);
+            z.resize(0);
+            for (int i = 0; i < parts.star[bi].size(); i++) {
+                x.push_back(parts.star[bi][i].yValue2);
+                y.push_back(parts.star[bi][i].zValue2);
+                z.push_back(parts.star[bi][i].m);
+                p.push_back(parts.star[bi][i].zform);
+            }
+            DBPutPointvar1(db, "star_Y", "stars", x.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "star_Z", "stars", y.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "star_M", "stars", z.data(), x.size(), DB_FLOAT, opts);
+            DBPutPointvar1(db, "star_zform", "stars", p.data(), x.size(), DB_FLOAT, opts);
+        }
+        DBFreeOptlist(opts);
+        DBClose(db);
+    }
+    profilerExit();
 }
 
-void view_read_view_file() {
-	FILE* fp = fopen("view.txt", "rt");
-	if (fp == nullptr) {
-		PRINT("No view file found.\n");
-		return;
-	}
-	range<float> view_box;
-	while (fscanf(fp, "%f %f %f %f %f %f\n", &view_box.begin[XDIM], &view_box.end[XDIM], &view_box.begin[YDIM], &view_box.end[YDIM], &view_box.begin[ZDIM],
-				  &view_box.end[ZDIM]) == 2 * NDIM) {
-		PRINT("Reading box for view at x range (%f,%f) yrange (%f,%f) zrange (%f,%f)\n", view_box.begin[XDIM], view_box.end[XDIM], view_box.begin[YDIM],
-			  view_box.end[YDIM], view_box.begin[ZDIM], view_box.end[ZDIM]);
-		range<double> view_box_d;
-		for (int dim = 0; dim < NDIM; dim++) {
-			view_box_d.begin[dim] = view_box.begin[dim];
-			view_box_d.end[dim] = view_box.end[dim];
-		}
-		view_boxes.push_back(view_box_d);
-	}
-	fclose(fp);
+void viewReadViewFile() {
+    FILE* fp = fopen("view.txt", "rt");
+    if (fp == nullptr) {
+        PRINT("No view file found.\n");
+        return;
+    }
+    Range<float> viewBox;
+    while (fscanf(fp, "%f %f %f %f %f %f\n", &viewBox.begin[XDIM], &viewBox.end[XDIM],
+               &viewBox.begin[YDIM], &viewBox.end[YDIM], &viewBox.begin[ZDIM],
+               &viewBox.end[ZDIM]) == 2 * NDIM) {
+        PRINT("Reading box for view at x range (%f,%f) yrange (%f,%f) zrange (%f,%f)\n",
+            viewBox.begin[XDIM], viewBox.end[XDIM], viewBox.begin[YDIM], viewBox.end[YDIM],
+            viewBox.begin[ZDIM], viewBox.end[ZDIM]);
+        Range<double> viewBoxD;
+        for (int dim = 0; dim < NDIM; dim++) {
+            viewBoxD.begin[dim] = viewBox.begin[dim];
+            viewBoxD.end[dim] = viewBox.end[dim];
+        }
+        viewBoxes.push_back(viewBoxD);
+    }
+    fclose(fp);
 }
 
-vector<float> output_view(int number, double time) {
-	profiler_enter("output_view");
-	vector<hpx::future<void>> futs;
-	vector<hpx::future<vector<float>>> val_futs;
-	for (auto const& c : hpx_children()) {
-		val_futs.push_back(hpx::async<output_view_action>(c, number, time));
-	}
-	int const nthreads = hpx_hardware_concurrency();
-	int const Nside = get_options().view_size;
-	int const Npix = 12 * sqr(Nside);
-	vector<std::atomic<float>> values(Npix);
-	for (auto& v : values) {
-		v = 0.0f;
-	}
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs.push_back(hpx::async(hpx::annotated_function(
-			[nthreads, proc, Nside, &values]() {
-				part_int const begin = (size_t)proc * particles_size() / nthreads;
-				part_int const end = (size_t)(proc + 1) * particles_size() / nthreads;
-				for (int i = begin; i < end; i++) {
-					for (int xi = -1; xi <= 0; xi++) {
-						for (int yi = -1; yi <= 0; yi++) {
-							for (int zi = -1; zi <= 0; zi++) {
-								double vec[NDIM];
-								long int ipix;
-								vec[XDIM] = particles_pos(XDIM, i).to_float() + xi;
-								vec[YDIM] = particles_pos(YDIM, i).to_float() + yi;
-								vec[ZDIM] = particles_pos(ZDIM, i).to_float() + zi;
-								float const r2 = sqr(vec[XDIM], vec[YDIM], vec[ZDIM]);
-								if (r2 < 1.0 && r2 > 0.0) {
-									vec2pix_ring(Nside, vec, &ipix);
-									atomic_add(values[ipix], particles_mass(i) / r2);
-								}
-							}
-						}
-					}
-				}
-			},
-			"project_view_mass")));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
-	vector<float> results(values.size());
-	for (int i = 0; i < results.size(); i++) {
-		results[i] = values[i];
-	}
-	for (auto& val_fut : val_futs) {
-		auto const vals = val_fut.get();
-		for (int i = 0; i < vals.size(); i++) {
-			results[i] += vals[i];
-		}
-	}
-	if (hpx_rank() == 0) {
-		std::string filename = "view." + std::to_string(number) + ".dat";
-		FILE* fp = fopen(filename.c_str(), "wb");
-		if (fp == NULL) {
-			THROW_ERROR("unable to open %s for writing\n", filename.c_str());
-		}
-		fwrite(&Nside, sizeof(int), 1, fp);
-		fwrite(&Npix, sizeof(int), 1, fp);
-		fwrite(results.data(), sizeof(float), Npix, fp);
-		fwrite(&number, sizeof(int), 1, fp);
-		fwrite(&time, sizeof(double), 1, fp);
-		fclose(fp);
-	}
-	profiler_exit();
-	return results;
+Vector<float> outputView(int number, double time) {
+    profilerEnter("output_view");
+    Vector<hpx::future<void>> futs;
+    Vector<hpx::future<Vector<float>>> valFuts;
+    for (auto const& c : hpxChildren()) {
+        valFuts.push_back(hpx::async<OutputViewAction>(c, number, time));
+    }
+    int const nthreads = hpxHardwareConcurrency();
+    int const nside = getOptions().viewSize;
+    int const npix = 12 * sqr(nside);
+    Vector<std::atomic<float>> values(npix);
+    for (auto& v : values) {
+        v = 0.0f;
+    }
+    for (int proc = 0; proc < nthreads; proc++) {
+        futs.push_back(hpx::async(hpx::annotated_function(
+            [nthreads, proc, nside, &values]() {
+                PartInt const begin = (size_t) proc * particlesSize() / nthreads;
+                PartInt const end = (size_t) (proc + 1) * particlesSize() / nthreads;
+                for (int i = begin; i < end; i++) {
+                    for (int xi = -1; xi <= 0; xi++) {
+                        for (int yi = -1; yi <= 0; yi++) {
+                            for (int zi = -1; zi <= 0; zi++) {
+                                double vec[NDIM];
+                                long int ipix;
+                                vec[XDIM] = particlesPos(XDIM, i).toFloat() + xi;
+                                vec[YDIM] = particlesPos(YDIM, i).toFloat() + yi;
+                                vec[ZDIM] = particlesPos(ZDIM, i).toFloat() + zi;
+                                float const r2 = sqr(vec[XDIM], vec[YDIM], vec[ZDIM]);
+                                if (r2 < 1.0 && r2 > 0.0) {
+                                    vec2pix_ring(nside, vec, &ipix);
+                                    atomicAdd(values[ipix], particlesMass(i) / r2);
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "project_view_mass")));
+    }
+    hpx::wait_all(futs.begin(), futs.end());
+    Vector<float> results(values.size());
+    for (int i = 0; i < results.size(); i++) {
+        results[i] = values[i];
+    }
+    for (auto& valFut : valFuts) {
+        auto const vals = valFut.get();
+        for (int i = 0; i < vals.size(); i++) {
+            results[i] += vals[i];
+        }
+    }
+    if (hpxRank() == 0) {
+        std::string filename = "view." + std::to_string(number) + ".dat";
+        FILE* fp = fopen(filename.c_str(), "wb");
+        if (fp == NULL) {
+            THROW_ERROR("unable to open %s for writing\n", filename.c_str());
+        }
+        fwrite(&nside, sizeof(int), 1, fp);
+        fwrite(&npix, sizeof(int), 1, fp);
+        fwrite(results.data(), sizeof(float), npix, fp);
+        fwrite(&number, sizeof(int), 1, fp);
+        fwrite(&time, sizeof(double), 1, fp);
+        fclose(fp);
+    }
+    profilerExit();
+    return results;
 }

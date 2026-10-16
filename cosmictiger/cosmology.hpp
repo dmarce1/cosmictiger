@@ -17,24 +17,20 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef COSMOLOGY_HPP_
 #define COSMOLOGY_HPP_
 
 #include <cosmictiger/containers.hpp>
 
-
-void cosmos_update(double& adotdot, double& adot, double& a, double dt);
-double cosmos_growth_factor(double omega_m, float a);
-double cosmos_dadtau(double a);
-double cosmos_dadt(double a);
-double cosmos_time(double a0, double a1);
-double cosmos_conformal_time(double a0, double a1);
-double cosmos_tau_to_scale(double a0, double t1);
-void cosmos_NFW_fit(vector<double> n, double& Rs, double& rho0);
-double cosmos_Klypin_fit(double vmax, double rvir, double mvir);
-double cosmos_ainv(double& adot, double& a, double dt0);
-
-
+void cosmosUpdate(double& adotdot, double& adot, double& a, double dt);
+double cosmosGrowthFactor(double omegaM, float a);
+double cosmosDadtau(double a);
+double cosmosDadt(double a);
+double cosmosTime(double a0, double a1);
+double cosmosConformalTime(double a0, double a1);
+double cosmosTauToScale(double a0, double t1);
+void cosmosNfwFit(Vector<double> n, double& rs, double& rho0);
+double cosmosKlypinFit(double vmax, double rvir, double mvir);
+double cosmosAinv(double& adot, double& a, double dt0);
 
 #endif /* COSMOLOGY_HPP_ */

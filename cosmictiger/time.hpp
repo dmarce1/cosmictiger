@@ -22,23 +22,23 @@
 
 #include <cstdint>
 
-using rung_type = std::int8_t;
-using time_type = std::uint64_t;
+using RungType = std::int8_t;
+using TimeType = std::uint64_t;
 
-inline time_type inc(time_type t, rung_type max_rung) {
-	if (max_rung > 0) {
-		t += (time_type(1) << time_type(64 - max_rung));
-	}
-	return t;
+inline TimeType inc(TimeType t, RungType maxRung) {
+    if (maxRung > 0) {
+        t += (TimeType(1) << TimeType(64 - maxRung));
+    }
+    return t;
 }
 
-inline rung_type min_rung(time_type t) {
-	rung_type min_rung = 64;
-	while (((t & 1) == 0) && (min_rung != 0)) {
-		min_rung--;
-		t >>= 1;
-	}
-	return min_rung;
+inline RungType minRung(TimeType t) {
+    RungType minRung = 64;
+    while (((t & 1) == 0) && (minRung != 0)) {
+        minRung--;
+        t >>= 1;
+    }
+    return minRung;
 }
 
 #endif /* TIME_HPP_ */

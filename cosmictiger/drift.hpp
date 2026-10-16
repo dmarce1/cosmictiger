@@ -23,30 +23,32 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/particles.hpp>
 
-struct drift_return {
-	double kin;
-	double therm;
-	double vol;
-	double momx;
-	double momy;
-	double momz;
-	double cold_mass;
-	double flops;
-	part_int nmapped;
-	template <class Arc> void serialize(Arc&& a, unsigned) {
-		a & vol;
-		a & therm;
-		a & kin;
-		a & momx;
-		a & momy;
-		a & momz;
-		a & nmapped;
-		a & flops;
-	}
+struct DriftReturn {
+    double kin;
+    double therm;
+    double vol;
+    double momx;
+    double momy;
+    double momz;
+    double coldMass;
+    double flops;
+    PartInt nmapped;
+    template <class Arc>
+    void serialize(Arc&& a, unsigned) {
+        a & vol;
+        a & therm;
+        a & kin;
+        a & momx;
+        a & momy;
+        a & momz;
+        a & nmapped;
+        a & flops;
+    }
 };
 
-void drift(double scale, double dt, double tau0, double tau1, double tau_max, int rung = -1, double drag = 0.0);
+void drift(double scale, double dt, double tau0, double tau1, double tauMax, int rung = -1,
+    double drag = 0.0);
 
-void cuda_drift(int rung, float a, float dt, float tau0, float tau1, float tau_max, double drag);
+void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag);
 
 #endif /* DRIFT_HPP_ */

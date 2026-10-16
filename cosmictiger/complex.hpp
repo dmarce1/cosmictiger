@@ -17,149 +17,144 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef COMPLEX_HPP_
 #define COMPLEX_HPP_
 
 #include <algorithm>
-
-
 #include <math.h>
 
-template<class T = float>
-class complex {
-	T x, y;
+template <class T = float>
+class Complex {
+    T x_, y_;
+
 public:
-	complex() = default;
+    Complex() = default;
 
-	complex(T a) {
-		x = a;
-		y = T(0.0);
-	}
+    Complex(T a) {
+        x_ = a;
+        y_ = T(0.0);
+    }
 
-	complex(T a, T b) {
-		x = a;
-		y = b;
-	}
+    Complex(T a, T b) {
+        x_ = a;
+        y_ = b;
+    }
 
-	complex& operator+=(complex other) {
-		x += other.x;
-		y += other.y;
-		return *this;
-	}
+    Complex& operator+=(Complex other) {
+        x_ += other.x_;
+        y_ += other.y_;
+        return *this;
+    }
 
-	complex& operator-=(complex other) {
-		x -= other.x;
-		y -= other.y;
-		return *this;
-	}
+    Complex& operator-=(Complex other) {
+        x_ -= other.x_;
+        y_ -= other.y_;
+        return *this;
+    }
 
-	complex operator*(complex other) const {
-		complex a;
-		a.x = x * other.x - y * other.y;
-		a.y = x * other.y + y * other.x;
-		return a;
-	}
+    Complex operator*(Complex other) const {
+        Complex a;
+        a.x_ = x_ * other.x_ - y_ * other.y_;
+        a.y_ = x_ * other.y_ + y_ * other.x_;
+        return a;
+    }
 
-	complex operator/(complex other) const {
-		return *this * other.conj() / other.norm();
-	}
+    Complex operator/(Complex other) const {
+        return *this * other.conj() / other.norm();
+    }
 
-	complex operator/(T other) const {
-		complex b;
-		b.x = x / other;
-		b.y = y / other;
-		return b;
-	}
+    Complex operator/(T other) const {
+        Complex b;
+        b.x_ = x_ / other;
+        b.y_ = y_ / other;
+        return b;
+    }
 
-	complex operator*(T other) const {
-		complex b;
-		b.x = x * other;
-		b.y = y * other;
-		return b;
-	}
+    Complex operator*(T other) const {
+        Complex b;
+        b.x_ = x_ * other;
+        b.y_ = y_ * other;
+        return b;
+    }
 
-	complex& operator*=(T other) {
-		x *= other;
-		y *= other;
-		return *this;
-	}
+    Complex& operator*=(T other) {
+        x_ *= other;
+        y_ *= other;
+        return *this;
+    }
 
-	complex operator+(complex other) const {
-		complex a;
-		a.x = x + other.x;
-		a.y = y + other.y;
-		return a;
-	}
+    Complex operator+(Complex other) const {
+        Complex a;
+        a.x_ = x_ + other.x_;
+        a.y_ = y_ + other.y_;
+        return a;
+    }
 
-	complex operator-(complex other) const {
-		complex a;
-		a.x = x - other.x;
-		a.y = y - other.y;
-		return a;
-	}
+    Complex operator-(Complex other) const {
+        Complex a;
+        a.x_ = x_ - other.x_;
+        a.y_ = y_ - other.y_;
+        return a;
+    }
 
-	complex conj() const {
-		complex a;
-		a.x = x;
-		a.y = -y;
-		return a;
-	}
+    Complex conj() const {
+        Complex a;
+        a.x_ = x_;
+        a.y_ = -y_;
+        return a;
+    }
 
-	T real() const {
-		return x;
-	}
+    T real() const {
+        return x_;
+    }
 
-	T imag() const {
-		return y;
-	}
+    T imag() const {
+        return y_;
+    }
 
-	T& real() {
-		return x;
-	}
+    T& real() {
+        return x_;
+    }
 
-	T& imag() {
-		return y;
-	}
+    T& imag() {
+        return y_;
+    }
 
-	T norm() const {
-		return ((*this) * conj()).real();
-	}
+    T norm() const {
+        return ((*this) * conj()).real();
+    }
 
-	T abs() const {
-		return sqrtf(norm());
-	}
+    T abs() const {
+        return sqrtf(norm());
+    }
 
-	complex operator-() const {
-		complex a;
-		a.x = -x;
-		a.y = -y;
-		return a;
-	}
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & x;
-		arc & y;
-	}
+    Complex operator-() const {
+        Complex a;
+        a.x_ = -x_;
+        a.y_ = -y_;
+        return a;
+    }
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & x_;
+        arc & y_;
+    }
 };
 
-template<class T>
-inline void swap(complex<T>& a, complex<T>& b) {
-	std::swap(a.real(), b.real());
-	std::swap(a.imag(), b.imag());
+template <class T>
+inline void swap(Complex<T>& a, Complex<T>& b) {
+    std::swap(a.real(), b.real());
+    std::swap(a.imag(), b.imag());
 }
 
+using Cmplx = Complex<float>;
 
-
-using cmplx = complex<float>;
-
-
-inline cmplx expc(cmplx z) {
-	float x, y;
-	float t = std::exp(z.real());
-	sincosf(z.imag(), &y, &x);
-	x *= t;
-	y *= t;
-	return cmplx(x, y);
+inline Cmplx expc(Cmplx z) {
+    float x, y;
+    float t = std::exp(z.real());
+    sincosf(z.imag(), &y, &x);
+    x *= t;
+    y *= t;
+    return Cmplx(x, y);
 }
 #endif /* COMPLEX_HPP_ */

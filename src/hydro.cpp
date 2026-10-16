@@ -28,1067 +28,1102 @@
 #include <cosmictiger/time.hpp>
 #include <cosmictiger/view.hpp>
 
-static inline double pow_n(double y, double n) { return std::pow(y, n); }
+static inline double powN(double y, double n) {
+    return std::pow(y, n);
+}
 
-static inline double fy(double y, double z, double r) { return z; }
+static inline double fy(double y, double z, double r) {
+    return z;
+}
 
 static inline double fz(double y, double z, double r, double n) {
-	if (r != 0.0) {
-		return -(pow_n(y, n) + 2.0 * z / r);
-	}
-	return -3.0;
+    if (r != 0.0) {
+        return -(powN(y, n) + 2.0 * z / r);
+    }
+    return -3.0;
 }
 
 static inline double fm(double theta, double dummy, double r, double n) {
-	constexpr static double four_pi = double(4) * M_PI;
-	return four_pi * pow_n(theta, n) * r * r;
+    constexpr static double kFourPi = double(4) * M_PI;
+    return kFourPi * powN(theta, n) * r * r;
 }
 
-double lane_emden(double r0, double dr, double n, double& menc) {
-	double dy1, dz1, y, z, r, dy2, dz2, dy3, dz3, dy4, dz4, y0, z0;
-	double dm1, m, dm2, dm3, dm4, m0;
-	int done = 0;
-	y = 1.0;
-	z = 0.0;
-	m = 0.0;
-	int N = static_cast<int>(r0 / dr + 0.5);
-	if (N < 1) {
-		N = 1;
-	}
-	r = 0.0;
-	do {
-		if (r + dr > r0) {
-			dr = r0 - r;
-			done = 1;
-		}
-		y0 = y;
-		z0 = z;
-		m0 = m;
-		dy1 = fy(y, z, r) * dr;
-		dz1 = fz(y, z, r, n) * dr;
-		dm1 = fm(y, z, r, n) * dr;
-		y += 0.5 * dy1;
-		z += 0.5 * dz1;
-		m += 0.5 * dm1;
-		if (y <= 0.0) {
-			y = 0.0;
-			break;
-		}
-		double rdr2 = r + 0.5 * dr;
-		dy2 = fy(y, z, rdr2) * dr;
-		dz2 = fz(y, z, rdr2, n) * dr;
-		dm2 = fm(y, z, rdr2, n) * dr;
-		y = y0 + 0.5 * dy2;
-		z = z0 + 0.5 * dz2;
-		m = m0 + 0.5 * dm2;
-		if (y <= 0.0) {
-			y = 0.0;
-			break;
-		}
-		dy3 = fy(y, z, rdr2) * dr;
-		dz3 = fz(y, z, rdr2, n) * dr;
-		dm3 = fm(y, z, rdr2, n) * dr;
-		y = y0 + dy3;
-		z = z0 + dz3;
-		m = m0 + dm3;
-		if (y <= 0.0) {
-			y = 0.0;
-			break;
-		}
-		double rdr = r + dr;
-		dy4 = fy(y, z, rdr) * dr;
-		dz4 = fz(y, z, rdr, n) * dr;
-		dm4 = fm(y, z, rdr, n) * dr;
-		y = y0 + (dy1 + dy4 + 2.0 * (dy3 + dy2)) / 6.0;
-		z = z0 + (dz1 + dz4 + 2.0 * (dz3 + dz2)) / 6.0;
-		m = m0 + (dm1 + dm4 + 2.0 * (dm3 + dm2)) / 6.0;
-		if (y <= 0.0) {
-			y = 0.0;
-			break;
-		}
-		r += dr;
-	} while (done == 0);
-	menc = m;
-	if (y < 0.0) {
-		return 0.0;
-	}
-	return pow(y, n);
+double laneEmden(double r0, double dr, double n, double& menc) {
+    double dy1, dz1, y, z, r, dy2, dz2, dy3, dz3, dy4, dz4, y0, z0;
+    double dm1, m, dm2, dm3, dm4, m0;
+    int done = 0;
+    y = 1.0;
+    z = 0.0;
+    m = 0.0;
+    int nValue = static_cast<int>(r0 / dr + 0.5);
+    if (nValue < 1) {
+        nValue = 1;
+    }
+    r = 0.0;
+    do {
+        if (r + dr > r0) {
+            dr = r0 - r;
+            done = 1;
+        }
+        y0 = y;
+        z0 = z;
+        m0 = m;
+        dy1 = fy(y, z, r) * dr;
+        dz1 = fz(y, z, r, n) * dr;
+        dm1 = fm(y, z, r, n) * dr;
+        y += 0.5 * dy1;
+        z += 0.5 * dz1;
+        m += 0.5 * dm1;
+        if (y <= 0.0) {
+            y = 0.0;
+            break;
+        }
+        double rdr2 = r + 0.5 * dr;
+        dy2 = fy(y, z, rdr2) * dr;
+        dz2 = fz(y, z, rdr2, n) * dr;
+        dm2 = fm(y, z, rdr2, n) * dr;
+        y = y0 + 0.5 * dy2;
+        z = z0 + 0.5 * dz2;
+        m = m0 + 0.5 * dm2;
+        if (y <= 0.0) {
+            y = 0.0;
+            break;
+        }
+        dy3 = fy(y, z, rdr2) * dr;
+        dz3 = fz(y, z, rdr2, n) * dr;
+        dm3 = fm(y, z, rdr2, n) * dr;
+        y = y0 + dy3;
+        z = z0 + dz3;
+        m = m0 + dm3;
+        if (y <= 0.0) {
+            y = 0.0;
+            break;
+        }
+        double rdr = r + dr;
+        dy4 = fy(y, z, rdr) * dr;
+        dz4 = fz(y, z, rdr, n) * dr;
+        dm4 = fm(y, z, rdr, n) * dr;
+        y = y0 + (dy1 + dy4 + 2.0 * (dy3 + dy2)) / 6.0;
+        z = z0 + (dz1 + dz4 + 2.0 * (dz3 + dz2)) / 6.0;
+        m = m0 + (dm1 + dm4 + 2.0 * (dm3 + dm2)) / 6.0;
+        if (y <= 0.0) {
+            y = 0.0;
+            break;
+        }
+        r += dr;
+    } while (done == 0);
+    menc = m;
+    if (y < 0.0) {
+        return 0.0;
+    }
+    return pow(y, n);
 }
 
-void hydro_driver(double tmax, int nsteps = 64) {
-	time_type itime = 0;
-	int minrung = 0;
-	double t = 0.0;
-	double t0 = tmax / nsteps;
-	int step = 0;
-	int main_step = 0;
-	float e0, ent0;
-	double etot0 = 0.0;
-	double const m = get_options().sph_mass;
-	domains_rebound();
-	do {
-		int minrung = min_rung(itime);
-		energies_t dummy;
-		if (minrung == 0) {
-			view_output_views(main_step, 1.0);
-			//			output_line(main_step);
-			main_step++;
-		}
-		kick_return kr{};
-		if (get_options().gravity) {
-			auto tmp = kick_step(minrung, 1.0, 0.0, t0, 0.5, t == 0.0, minrung == 0);
-			kr = tmp.first;
-		}
-		double dumm1;
-		sph_step1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dumm1, true);
-		sph_run_return rc2 = sph_step2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
-		if (minrung == 0) {
-			double const ekin = dummy.kin + kr.dmKineticCorrection;
-			double const eint = dummy.therm;
-			double rho_max = 0.0;
-			double const epot = kr.pot;
-			double const xmom = dummy.xmom + kr.dmXMomentumCorrection;
-			double const ymom = dummy.ymom + kr.dmYMomentumCorrection;
-			double const zmom = dummy.zmom + kr.dmZMomentumCorrection;
-			for (part_int i = 0; i < sph_particles_size(); i++) {
+void hydroDriver(double tmax, int nsteps = 64) {
+    TimeType itime = 0;
+    int minrung = 0;
+    double t = 0.0;
+    double t0 = tmax / nsteps;
+    int step = 0;
+    int mainStep = 0;
+    float e0, ent0;
+    double etot0 = 0.0;
+    double const m = getOptions().sphMass;
+    domainsRebound();
+    do {
+        int minrung = minRung(itime);
+        EnergiesT dummy;
+        if (minrung == 0) {
+            viewOutputViews(mainStep, 1.0);
+            //			output_line(main_step);
+            mainStep++;
+        }
+        KickReturn kr{};
+        if (getOptions().gravity) {
+            auto tmp = kickStep(minrung, 1.0, 0.0, t0, 0.5, t == 0.0, minrung == 0);
+            kr = tmp.first;
+        }
+        double dumm1;
+        sphStep1(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dumm1, true);
+        SphRunReturn rc2 = sphStep2(minrung, 1.0, t, t0, 1, 0.0, 0, 0, 0.0, &dummy, true);
+        if (minrung == 0) {
+            double const ekin = dummy.kin + kr.dmKineticCorrection;
+            double const eint = dummy.therm;
+            double rhoMax = 0.0;
+            double const epot = kr.pot;
+            double const xmom = dummy.xmom + kr.dmXMomentumCorrection;
+            double const ymom = dummy.ymom + kr.dmYMomentumCorrection;
+            double const zmom = dummy.zmom + kr.dmZMomentumCorrection;
+            for (PartInt i = 0; i < sphParticlesSize(); i++) {
 #ifdef HOPKINS
-				rho_max = std::max(rho_max, double(sph_particles_rho_rho(i)));
+                rhoMax = std::max(rhoMax, double(sphParticlesRhoRho(i)));
 #else
-				rho_max = std::max(rho_max, double(sph_particles_rho(i)));
+                rhoMax = std::max(rhoMax, double(sphParticlesRho(i)));
 #endif
-			}
-			FILE* fp = fopen("energy.dat", "at");
-			double const etot = ekin + eint + epot;
-			if (t == 0.0) {
-				etot0 = etot;
-			}
-			fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot, (etot - etot0) / etot);
-			fclose(fp);
-			fp = fopen("rho.dat", "at");
-			fprintf(fp, "%e %e\n", t, rho_max);
-			fclose(fp);
-		}
-		if (!get_options().gravity) {
-			kr.max_rung = rc2.max_rung;
-		}
-		int maxrung = std::max((int)rc2.max_rung, (int)kr.max_rung);
-		double dt = t0 / (1 << maxrung);
-		drift(1.0, dt, t, t + dt, tmax);
-		itime = inc(itime, maxrung);
-		if (t == 0.0) {
-			e0 = rc2.ekin + rc2.etherm;
-			ent0 = rc2.ent;
-		}
-		t += dt;
-		PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
-		step++;
-	} while (t < tmax);
-	view_output_views(main_step, 1.0);
+            }
+            FILE* fp = fopen("energy.dat", "at");
+            double const etot = ekin + eint + epot;
+            if (t == 0.0) {
+                etot0 = etot;
+            }
+            fprintf(fp, "%e %e %e %e %e %e %e %e %e\n", t, xmom, ymom, zmom, ekin, eint, etot, epot,
+                (etot - etot0) / etot);
+            fclose(fp);
+            fp = fopen("rho.dat", "at");
+            fprintf(fp, "%e %e\n", t, rhoMax);
+            fclose(fp);
+        }
+        if (!getOptions().gravity) {
+            kr.maxRung = rc2.maxRung;
+        }
+        int maxrung = std::max((int) rc2.maxRung, (int) kr.maxRung);
+        double dt = t0 / (1 << maxrung);
+        drift(1.0, dt, t, t + dt, tmax);
+        itime = inc(itime, maxrung);
+        if (t == 0.0) {
+            e0 = rc2.ekin + rc2.etherm;
+            ent0 = rc2.ent;
+        }
+        t += dt;
+        PRINT("%i %e %e %i %i\n", step, t, dt, minrung, maxrung);
+        step++;
+    } while (t < tmax);
+    viewOutputViews(mainStep, 1.0);
 }
 
-void hydro_plummer() {
-	part_int N = pow(get_options().parts_dim, 3);
-	double const a = 0.01;
-	auto opts = get_options();
-	opts.sph_mass = 1.;
-	opts.dm_mass = 1.;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	double const G = opts.GM;
-	double const M0 = N * m;
-	double const rho0 = 3.0 * M0 / (4.0 * M_PI) / (a * a * a);
-	PRINT("Central density = %e\n", rho0);
-	double pot = 0.0;
-	double ekin = 0.0;
-	double maxr = 5.0 * a;
-	while (particles_size() < N) {
-		double x = maxr * (2.0 * rand1() - 1.0);
-		double y = maxr * (2.0 * rand1() - 1.0);
-		double z = maxr * (2.0 * rand1() - 1.0);
-		double r = sqrt(sqr(x, y, z));
-		double dist = powf(1.0 + sqr(r / a), -2.5);
-		if (rand1() < dist) {
-			double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
-			part_int k = particles_size();
-			particles_resize(k + 1);
-			double phi = -G * M0 / sqrt(r * r + a * a);
-			double v = sqrt(-phi / 2.0);
-			particles_pos(XDIM, k) = x - 0.5;
-			particles_pos(YDIM, k) = y - 0.5;
-			particles_pos(ZDIM, k) = z - 0.5;
-			x = rand1();
-			y = rand1();
-			v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
-			x = rand1() - 0.5;
-			y = rand1() - 0.5;
-			z = rand1() - 0.5;
-			double norminv = 1.0 / sqrt(sqr(x, y, z));
-			x *= norminv;
-			y *= norminv;
-			z *= norminv;
-			particles_vel(XDIM, k) = x * v;
-			particles_vel(YDIM, k) = y * v;
-			particles_vel(ZDIM, k) = z * v;
-			particles_rung(k) = 0;
-			particles_softlen(k) = h;
-		}
-	}
-	sph_particles_resize(0);
-	int k = 0;
-	while (k < 0) {
-		double x = maxr * (2.0 * rand1() - 1.0);
-		double y = maxr * (2.0 * rand1() - 1.0);
-		double z = maxr * (2.0 * rand1() - 1.0);
-		double r = sqrt(sqr(x, y, z));
-		double dist = powf(1.0 + sqr(r / a), -2.5);
-		if (rand1() < dist) {
-			double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
-			//			part_int k = sph_particles_size();
-			//			sph_particles_resize(k + 1);
-			double phi = -G * M0 / sqrt(r * r + a * a);
-			double v = sqrt(-phi / 2.0);
-			sph_particles_pos(XDIM, k) = x - 0.5;
-			sph_particles_pos(YDIM, k) = y - 0.5;
-			sph_particles_pos(ZDIM, k) = z - 0.5;
-			x = rand1();
-			y = rand1();
-			v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
-			x = rand1() - 0.5;
-			y = rand1() - 0.5;
-			z = rand1() - 0.5;
-			double norminv = 1.0 / sqrt(sqr(x, y, z));
-			x *= norminv;
-			y *= norminv;
-			z *= norminv;
-			sph_particles_vel(XDIM, k) = x * v;
-			sph_particles_vel(YDIM, k) = y * v;
-			sph_particles_vel(ZDIM, k) = z * v;
-			float const eint = 1e-3 * (v * v * 0.5);
+void hydroPlummer() {
+    PartInt nValue = pow(getOptions().partsDim, 3);
+    double const a = 0.01;
+    auto opts = getOptions();
+    opts.sphMass = 1.;
+    opts.dmMass = 1.;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    double const g = opts.gm;
+    double const m0Value = nValue * m;
+    double const rho0 = 3.0 * m0Value / (4.0 * M_PI) / (a * a * a);
+    PRINT("Central density = %e\n", rho0);
+    double pot = 0.0;
+    double ekin = 0.0;
+    double maxr = 5.0 * a;
+    while (particlesSize() < nValue) {
+        double x = maxr * (2.0 * rand1() - 1.0);
+        double y = maxr * (2.0 * rand1() - 1.0);
+        double z = maxr * (2.0 * rand1() - 1.0);
+        double r = sqrt(sqr(x, y, z));
+        double dist = powf(1.0 + sqr(r / a), -2.5);
+        if (rand1() < dist) {
+            double h =
+                pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+            PartInt k = particlesSize();
+            particlesResize(k + 1);
+            double phi = -g * m0Value / sqrt(r * r + a * a);
+            double v = sqrt(-phi / 2.0);
+            particlesPos(XDIM, k) = x - 0.5;
+            particlesPos(YDIM, k) = y - 0.5;
+            particlesPos(ZDIM, k) = z - 0.5;
+            x = rand1();
+            y = rand1();
+            v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
+            x = rand1() - 0.5;
+            y = rand1() - 0.5;
+            z = rand1() - 0.5;
+            double norminv = 1.0 / sqrt(sqr(x, y, z));
+            x *= norminv;
+            y *= norminv;
+            z *= norminv;
+            particlesVel(XDIM, k) = x * v;
+            particlesVel(YDIM, k) = y * v;
+            particlesVel(ZDIM, k) = z * v;
+            particlesRung(k) = 0;
+            particlesSoftlen(k) = h;
+        }
+    }
+    sphParticlesResize(0);
+    int k = 0;
+    while (k < 0) {
+        double x = maxr * (2.0 * rand1() - 1.0);
+        double y = maxr * (2.0 * rand1() - 1.0);
+        double z = maxr * (2.0 * rand1() - 1.0);
+        double r = sqrt(sqr(x, y, z));
+        double dist = powf(1.0 + sqr(r / a), -2.5);
+        if (rand1() < dist) {
+            double h =
+                pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0 * dist), 1.0 / 3.0);
+            //			part_int k = sph_particles_size();
+            //			sph_particles_resize(k + 1);
+            double phi = -g * m0Value / sqrt(r * r + a * a);
+            double v = sqrt(-phi / 2.0);
+            sphParticlesPos(XDIM, k) = x - 0.5;
+            sphParticlesPos(YDIM, k) = y - 0.5;
+            sphParticlesPos(ZDIM, k) = z - 0.5;
+            x = rand1();
+            y = rand1();
+            v *= sqrt(-2.0 * log(x)) * cos(2.0 * M_PI * y);
+            x = rand1() - 0.5;
+            y = rand1() - 0.5;
+            z = rand1() - 0.5;
+            double norminv = 1.0 / sqrt(sqr(x, y, z));
+            x *= norminv;
+            y *= norminv;
+            z *= norminv;
+            sphParticlesVel(XDIM, k) = x * v;
+            sphParticlesVel(YDIM, k) = y * v;
+            sphParticlesVel(ZDIM, k) = z * v;
+            float const eint = 1e-3 * (v * v * 0.5);
 #ifdef ENTROPY
-			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.0) / pow(rho0, get_options().gamma - 1.0);
+            sphParticlesRec2(k).entropy =
+                eint * (getOptions().gamma - 1.0) / pow(rho0, getOptions().gamma - 1.0);
 #else
-			sph_particles_rec2(k).eint = eint;
+            sphParticlesRec2(k).eint = eint;
 #endif
-			sph_particles_rung(k) = 0;
-			sph_particles_smooth_len(k) = h;
-			particles_softlen(sph_particles_dm_index(k)) = h;
-			ekin += 0.5 * m * sqr(v);
-			pot += 0.5 * m * phi;
-			k++;
-		}
-	}
-	PRINT("Virial error is %e\n", (2.0 * ekin + pot) / (2.0 * ekin - pot));
-	double const tdyn = sqrt(4.0 * M_PI * a * a * a / (3.0 * G * M0));
-	hydro_driver(100.0 * tdyn, 1024);
+            sphParticlesRung(k) = 0;
+            sphParticlesSmoothLen(k) = h;
+            particlesSoftlen(sphParticlesDmIndex(k)) = h;
+            ekin += 0.5 * m * sqr(v);
+            pot += 0.5 * m * phi;
+            k++;
+        }
+    }
+    PRINT("Virial error is %e\n", (2.0 * ekin + pot) / (2.0 * ekin - pot));
+    double const tdyn = sqrt(4.0 * M_PI * a * a * a / (3.0 * g * m0Value));
+    hydroDriver(100.0 * tdyn, 1024);
 }
 
-void hydro_star_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double const r0 = 20.0;
-	int const N = nparts_total;
-	auto opts = get_options();
-	PRINT("Making star\n");
-	opts.sph_mass = 203. / N / (r0 * r0 * r0) / 5.99071;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	double rho0 = 1.0;
-	double const npoly = 1.5;
-	auto const rho = [rho0, npoly](double r) {
-		if (r == 0.0) {
-			return rho0;
-		} else {
-			double menc;
-			return rho0 * lane_emden(r, r / 100.0, npoly, menc);
-		}
-	};
-	double K = 4.0 * M_PI * opts.GM / (npoly + 1.0) * powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
-	double d;
-	double r = 0.0;
-	int Ntot = 0;
-	int Nr = 0;
-	double rmax = 3.65375 / r0;
-	vector<array<vector<float>, NDIM>> X;
-	vector<float> radius;
-	do {
-		d = rho(r * r0);
-		double dr1 = pow(m / d, 1.0 / 3.0);
-		double dr2;
-		r += 0.5 * dr1;
-		if (r < rmax) {
-			double diff;
-			d = rho(r * r0);
-			dr2 = pow(m / d, 1.0 / 3.0);
-			r += 0.5 * (dr2 - dr1);
-			if (r < rmax) {
-				dr1 = dr2;
-				int const N = 4.0 * M_PI * r * r * dr2 * (d / m) + 0.5;
-				array<vector<float>, NDIM> x;
-				for (int dim = 0; dim < NDIM; dim++) {
-					x[dim].resize(N);
-				}
-				X.push_back(std::move(x));
-				printf("%i %e %i %e\n", Nr, r, N, dr1);
-				Ntot += N;
-				radius.push_back(r);
-				r += 0.5 * dr1;
-				Nr++;
-			}
-		}
-	} while (r < rmax);
-	printf("Ntot = %i\n", Ntot);
-	solve_sphere_surface_problem(X);
-	for (int i = 0; i < X.size(); i++) {
-		double const d = rho(radius[i] * r0);
-		double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
-		int const N = X[i][XDIM].size();
-		for (int l = 0; l < N; l++) {
-			part_int const k = sph_particles_size();
-			sph_particles_resize(k + 1);
-			sph_particles_pos(XDIM, k) = X[i][XDIM][l] * radius[i] + 0.5;
-			sph_particles_pos(YDIM, k) = X[i][YDIM][l] * radius[i] + 0.5;
-			sph_particles_pos(ZDIM, k) = X[i][ZDIM][l] * radius[i] + 0.5;
-			sph_particles_smooth_len(k) = h;
-			double const P = K * pow(d, 1.0 + 1.0 / npoly);
-			double const E = P * npoly;
-			double const eint = E / d;
+void hydroStarTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    double const r0 = 20.0;
+    int const nValue = npartsTotal;
+    auto opts = getOptions();
+    PRINT("Making star\n");
+    opts.sphMass = 203. / nValue / (r0 * r0 * r0) / 5.99071;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    double rho0 = 1.0;
+    double const npoly = 1.5;
+    auto const rho = [rho0, npoly](double r) {
+        if (r == 0.0) {
+            return rho0;
+        } else {
+            double menc;
+            return rho0 * laneEmden(r, r / 100.0, npoly, menc);
+        }
+    };
+    double kValue = 4.0 * M_PI * opts.gm / (npoly + 1.0) * powf(rho0, 1.0 - 1.0 / npoly) / sqr(r0);
+    double d;
+    double r = 0.0;
+    int ntot = 0;
+    int nr = 0;
+    double rmax = 3.65375 / r0;
+    Vector<Array<Vector<float>, NDIM>> xValue;
+    Vector<float> radius;
+    do {
+        d = rho(r * r0);
+        double dr1 = pow(m / d, 1.0 / 3.0);
+        double dr2;
+        r += 0.5 * dr1;
+        if (r < rmax) {
+            double diff;
+            d = rho(r * r0);
+            dr2 = pow(m / d, 1.0 / 3.0);
+            r += 0.5 * (dr2 - dr1);
+            if (r < rmax) {
+                dr1 = dr2;
+                int const nValue = 4.0 * M_PI * r * r * dr2 * (d / m) + 0.5;
+                Array<Vector<float>, NDIM> x;
+                for (int dim = 0; dim < NDIM; dim++) {
+                    x[dim].resize(nValue);
+                }
+                xValue.push_back(std::move(x));
+                printf("%i %e %i %e\n", nr, r, nValue, dr1);
+                ntot += nValue;
+                radius.push_back(r);
+                r += 0.5 * dr1;
+                nr++;
+            }
+        }
+    } while (r < rmax);
+    printf("Ntot = %i\n", ntot);
+    solveSphereSurfaceProblem(xValue);
+    for (int i = 0; i < xValue.size(); i++) {
+        double const d = rho(radius[i] * r0);
+        double h = pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * d), 1.0 / 3.0);
+        int const nValue = xValue[i][XDIM].size();
+        for (int l = 0; l < nValue; l++) {
+            PartInt const k = sphParticlesSize();
+            sphParticlesResize(k + 1);
+            sphParticlesPos(XDIM, k) = xValue[i][XDIM][l] * radius[i] + 0.5;
+            sphParticlesPos(YDIM, k) = xValue[i][YDIM][l] * radius[i] + 0.5;
+            sphParticlesPos(ZDIM, k) = xValue[i][ZDIM][l] * radius[i] + 0.5;
+            sphParticlesSmoothLen(k) = h;
+            double const pValue = kValue * pow(d, 1.0 + 1.0 / npoly);
+            double const eValue = pValue * npoly;
+            double const eint = eValue / d;
 #ifdef ENTROPY
-			sph_particles_rec2(k).A = eint * (get_options().gamma - 1.) / pow(d, get_options().gamma - 1.);
+            sphParticlesRec2(k).entropy =
+                eint * (getOptions().gamma - 1.) / pow(d, getOptions().gamma - 1.);
 #else
-			sph_particles_rec2(k).eint = eint;
+            sphParticlesRec2(k).eint = eint;
 #endif
-			sph_particles_vel(XDIM, k) = 0;
-			sph_particles_vel(YDIM, k) = 0;
-			sph_particles_vel(ZDIM, k) = 0;
-			sph_particles_rung(k) = 0;
-		}
-	}
-	double const tdyn = sqrt(1.0 / (opts.GM * rho0));
-	PRINT("************************************\n");
-	PRINT("tdyn = %e\n", 1.0 / sqrt(opts.GM * rho0));
-	PRINT("************************************\n");
-	opts = get_options();
-	opts.damping = 1.0;
-	opts.alpha0 = 0.0;
-	opts.alpha1 = 0.0;
-	set_options(opts);
-	hydro_driver(10.0 * tdyn, 25);
-	opts.damping = 0.0;
-	opts.alpha0 = 0.05;
-	opts.alpha1 = 1.5;
-	set_options(opts);
-	hydro_driver(100.0 * tdyn, 250);
-	int const Nsample = 1000;
-	double l2 = 0.0;
-	double norm = 0.0;
-	for (int i = 0; i < Nsample; i++) {
-		part_int const k = rand() % sph_particles_size();
+            sphParticlesVel(XDIM, k) = 0;
+            sphParticlesVel(YDIM, k) = 0;
+            sphParticlesVel(ZDIM, k) = 0;
+            sphParticlesRung(k) = 0;
+        }
+    }
+    double const tdyn = sqrt(1.0 / (opts.gm * rho0));
+    PRINT("************************************\n");
+    PRINT("tdyn = %e\n", 1.0 / sqrt(opts.gm * rho0));
+    PRINT("************************************\n");
+    opts = getOptions();
+    opts.damping = 1.0;
+    opts.alpha0 = 0.0;
+    opts.alpha1 = 0.0;
+    setOptions(opts);
+    hydroDriver(10.0 * tdyn, 25);
+    opts.damping = 0.0;
+    opts.alpha0 = 0.05;
+    opts.alpha1 = 1.5;
+    setOptions(opts);
+    hydroDriver(100.0 * tdyn, 250);
+    int const nsample = 1000;
+    double l2 = 0.0;
+    double norm = 0.0;
+    for (int i = 0; i < nsample; i++) {
+        PartInt const k = rand() % sphParticlesSize();
 #ifdef HOPKINS
-		float const d0 = sph_particles_rho_rho(k);
+        float const d0 = sphParticlesRhoRho(k);
 #else
-		float const d0 = sph_particles_rho(k);
+        float const d0 = sphParticlesRho(k);
 #endif
-		float const x = sph_particles_pos(XDIM, k).to_double();
-		float const y = sph_particles_pos(YDIM, k).to_double();
-		float const z = sph_particles_pos(ZDIM, k).to_double();
-		float const r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-		float d1 = 0.0;
-		if (r < rmax) {
-			d1 = rho(r * r0);
-		}
-		l2 += sqr(d1 - d0);
-		norm += d1 * d0;
-	}
-	l2 /= norm;
-	l2 = sqrt(l2);
-	PRINT("L2 Error = %e\n", l2);
+        float const x = sphParticlesPos(XDIM, k).toDouble();
+        float const y = sphParticlesPos(YDIM, k).toDouble();
+        float const z = sphParticlesPos(ZDIM, k).toDouble();
+        float const r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+        float d1 = 0.0;
+        if (r < rmax) {
+            d1 = rho(r * r0);
+        }
+        l2 += sqr(d1 - d0);
+        norm += d1 * d0;
+    }
+    l2 /= norm;
+    l2 = sqrt(l2);
+    PRINT("L2 Error = %e\n", l2);
 }
 
-void hydro_rt_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	part_int hi_parts = 2 * nparts_total / 3;
-	part_int lo_parts = nparts_total / 3;
-	part_int dim = pow(lo_parts * 0.25, (1. / 3.));
-	double rho1 = 2.0;
-	double rho0 = 1.0;
-	lo_parts = 4 * dim * dim * dim;
-	hi_parts = 2 * lo_parts;
-	double const gy = get_options().gy;
-	auto opts = get_options();
-	opts.sph_mass = rho0 / lo_parts * 0.5;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	rho1 = hi_parts * m / 0.5;
-	rho0 = lo_parts * m / 0.5;
+void hydroRtTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    PartInt hiParts = 2 * npartsTotal / 3;
+    PartInt loParts = npartsTotal / 3;
+    PartInt dim = pow(loParts * 0.25, (1. / 3.));
+    double rho1 = 2.0;
+    double rho0 = 1.0;
+    loParts = 4 * dim * dim * dim;
+    hiParts = 2 * loParts;
+    double const gy = getOptions().gy;
+    auto opts = getOptions();
+    opts.sphMass = rho0 / loParts * 0.5;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    rho1 = hiParts * m / 0.5;
+    rho0 = loParts * m / 0.5;
 
-	if (gy >= 0.0) {
-		//	PRINT("Error gy must be negative for RT test\n");
-		//	abort();
-	}
-	constexpr double eta = 0.01;
-	double dx = .5 / dim;
-	int i = 0;
-	double v0 = 0.1;
-	for (int ix = 0; ix < 2 * dim; ix++) {
-		for (int iy = dim / 2; iy <= 3 * dim / 2; iy++) {
-			for (int iz = 0; iz < 2 * dim; iz++) {
-				double x = (ix + 0.5) * dx;
-				double y = (iy + 0.5) * dx;
-				double z = (iz + 0.5) * dx;
-				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
-				double p = 1.5 + fabs(rho0 * gy * (y - 0.5));
-				double eint = p / (get_options().gamma - 1) / rho0;
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = vy;
-				;
-				sph_particles_vel(ZDIM, i) = 0;
-				;
-				sph_particles_rung(i) = 0;
+    if (gy >= 0.0) {
+        //	PRINT("Error gy must be negative for RT test\n");
+        //	abort();
+    }
+    constexpr double kEta = 0.01;
+    double dx = .5 / dim;
+    int i = 0;
+    double v0 = 0.1;
+    for (int ix = 0; ix < 2 * dim; ix++) {
+        for (int iy = dim / 2; iy <= 3 * dim / 2; iy++) {
+            for (int iz = 0; iz < 2 * dim; iz++) {
+                double x = (ix + 0.5) * dx;
+                double y = (iy + 0.5) * dx;
+                double z = (iz + 0.5) * dx;
+                double vy = v0 / 4.0 *
+                    (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
+                double p = 1.5 + fabs(rho0 * gy * (y - 0.5));
+                double eint = p / (getOptions().gamma - 1) / rho0;
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = 0;
+                sphParticlesVel(YDIM, i) = vy;
+                ;
+                sphParticlesVel(ZDIM, i) = 0;
+                ;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
 
-				;
-				i++;
-			}
-		}
-	}
-	for (int ix = 0; ix < 2 * dim; ix++) {
-		for (int iy = 0; iy < 2 * dim; iy++) {
-			for (int iz = 0; iz < 2 * dim; iz++) {
-				double x = (ix + 0.5) * dx;
-				double y = (iy + 0.5) * dx;
-				double z = (iz + 0.5) * dx;
-				double p;
-				double vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
-				if (y > 0.75 || y < 0.25) {
-					if (y >= 0.75) {
-						p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
-					} else {
-						p = 1.5 + fabs(rho1 * gy * (y - 0.25)) + fabs(rho0 * gy * .25);
-					}
-					double eint = p / (get_options().gamma - 1) / rho1;
-					sph_particles_resize(sph_particles_size() + 1);
-					sph_particles_smooth_len(i) = h;
-					sph_particles_pos(XDIM, i) = x;
-					sph_particles_pos(YDIM, i) = y;
-					sph_particles_pos(ZDIM, i) = z;
-					sph_particles_vel(XDIM, i) = 0;
-					;
-					sph_particles_vel(YDIM, i) = vy;
-					;
-					sph_particles_vel(ZDIM, i) = 0;
-					;
-					sph_particles_rung(i) = 0;
+                ;
+                i++;
+            }
+        }
+    }
+    for (int ix = 0; ix < 2 * dim; ix++) {
+        for (int iy = 0; iy < 2 * dim; iy++) {
+            for (int iz = 0; iz < 2 * dim; iz++) {
+                double x = (ix + 0.5) * dx;
+                double y = (iy + 0.5) * dx;
+                double z = (iz + 0.5) * dx;
+                double p;
+                double vy = v0 / 4.0 *
+                    (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                if (y > 0.75 || y < 0.25) {
+                    if (y >= 0.75) {
+                        p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
+                    } else {
+                        p = 1.5 + fabs(rho1 * gy * (y - 0.25)) + fabs(rho0 * gy * .25);
+                    }
+                    double eint = p / (getOptions().gamma - 1) / rho1;
+                    sphParticlesResize(sphParticlesSize() + 1);
+                    sphParticlesSmoothLen(i) = h;
+                    sphParticlesPos(XDIM, i) = x;
+                    sphParticlesPos(YDIM, i) = y;
+                    sphParticlesPos(ZDIM, i) = z;
+                    sphParticlesVel(XDIM, i) = 0;
+                    ;
+                    sphParticlesVel(YDIM, i) = vy;
+                    ;
+                    sphParticlesVel(ZDIM, i) = 0;
+                    ;
+                    sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+                    sphParticlesRec2(i).entropy =
+                        eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
 #else
-					sph_particles_rec2(i).eint = eint;
+                    sphParticlesRec2(i).eint = eint;
 #endif
 
-					;
-					i++;
-				}
-				x = (ix + 0.0) * dx;
-				y = (iy + 0.0) * dx;
-				z = (iz + 0.0) * dx;
-				vy = v0 / 4.0 * (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
-				if (y > 0.75 || y < 0.25) {
-					if (y >= 0.75) {
-						p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
-					} else {
-						p = 1.5 + fabs(rho1 * gy * (y - 0.25)) + fabs(rho0 * gy * .25);
-					}
-					double eint = p / (get_options().gamma - 1) / rho1;
-					sph_particles_resize(sph_particles_size() + 1);
-					sph_particles_smooth_len(i) = h;
-					sph_particles_pos(XDIM, i) = x;
-					sph_particles_pos(YDIM, i) = y;
-					sph_particles_pos(ZDIM, i) = z;
-					sph_particles_vel(XDIM, i) = 0;
-					;
-					sph_particles_vel(YDIM, i) = vy;
-					;
-					sph_particles_vel(ZDIM, i) = 0;
-					;
-					sph_particles_rung(i) = 0;
+                    ;
+                    i++;
+                }
+                x = (ix + 0.0) * dx;
+                y = (iy + 0.0) * dx;
+                z = (iz + 0.0) * dx;
+                vy = v0 / 4.0 *
+                    (1.0 + cos(8.0 * M_PI * (x - 0.5)) * (1.0 + cos(6.0 * M_PI * (x - 0.5))));
+                if (y > 0.75 || y < 0.25) {
+                    if (y >= 0.75) {
+                        p = 1.5 + fabs(rho1 * gy * (y - 0.75)) + fabs(rho0 * gy * .25);
+                    } else {
+                        p = 1.5 + fabs(rho1 * gy * (y - 0.25)) + fabs(rho0 * gy * .25);
+                    }
+                    double eint = p / (getOptions().gamma - 1) / rho1;
+                    sphParticlesResize(sphParticlesSize() + 1);
+                    sphParticlesSmoothLen(i) = h;
+                    sphParticlesPos(XDIM, i) = x;
+                    sphParticlesPos(YDIM, i) = y;
+                    sphParticlesPos(ZDIM, i) = z;
+                    sphParticlesVel(XDIM, i) = 0;
+                    ;
+                    sphParticlesVel(YDIM, i) = vy;
+                    ;
+                    sphParticlesVel(ZDIM, i) = 0;
+                    ;
+                    sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+                    sphParticlesRec2(i).entropy =
+                        eint * (getOptions().gamma - 1.) / pow(rho1, getOptions().gamma - 1.);
 #else
-					sph_particles_rec2(i).eint = eint;
+                    sphParticlesRec2(i).eint = eint;
 #endif
 
-					i++;
-				}
-			}
-		}
-	}
-	/*	for (int ix0 = 0; ix0 < 2 * dim; ix0++) {
-	 int ix = ix0;
-	 for (int iy = dim; iy < 2 * dim; iy++) {
-	 for (int iz = 0; iz < 2 * dim; iz++) {
-	 double x = (ix + 0.25) * dx;
-	 double y = (iy + 0.25) * dx;
-	 double z = (iz + 0.25) * dx;
-	 double p = -(1.0 - y) * rho1 * gy;
-	 double eint = p / rho1 / (get_options().gamma - 1);
-	 double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
-	 sph_particles_resize(sph_particles_size() + 1);
-	 sph_particles_smooth_len (i) = h;
-	 sph_particles_pos(XDIM, i) = x;
-	 sph_particles_pos(YDIM, i) = y;
-	 sph_particles_pos(ZDIM, i) = z;
-	 sph_particles_vel(XDIM, i) = 0.0;
-	 sph_particles_vel(YDIM, i) = 0.0;
-	 sph_particles_vel(ZDIM, i) = 0.0;
-	 sph_particles_rung(i) = 0;
-	 sph_particles_eint(i) = eint;
-	 i++;
-	 x = (ix + 0.75) * dx;
-	 y = (iy + 0.75) * dx;
-	 z = (iz + 0.75) * dx;
-	 p = -rho1 * (1.0 - y) * gy;
-	 eint = p / rho1 / (get_options().gamma - 1);
-	 sph_particles_resize(sph_particles_size() + 1);
-	 sph_particles_smooth_len(i) = h;
-	 sph_particles_pos(XDIM, i) = x;
-	 sph_particles_pos(YDIM, i) = y;
-	 sph_particles_pos(ZDIM, i) = z;
-	 sph_particles_vel(XDIM, i) = 0.0;
-	 sph_particles_vel(YDIM, i) = 0.0;
-	 sph_particles_vel(ZDIM, i) = 0.0;
-	 sph_particles_rung(i) = 0;
-	 sph_particles_eint(i) = eint;
-	 i++;
-	 }
-	 }
-	 }*/
-	constexpr float t = 10.0;
-	constexpr int N = 1000;
-	hydro_driver(t, 256);
+                    i++;
+                }
+            }
+        }
+    }
+    /*	for (int ix0 = 0; ix0 < 2 * dim; ix0++) {
+     int ix = ix0;
+     for (int iy = dim; iy < 2 * dim; iy++) {
+     for (int iz = 0; iz < 2 * dim; iz++) {
+     double x = (ix + 0.25) * dx;
+     double y = (iy + 0.25) * dx;
+     double z = (iz + 0.25) * dx;
+     double p = -(1.0 - y) * rho1 * gy;
+     double eint = p / rho1 / (get_options().gamma - 1);
+     double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+     sph_particles_resize(sph_particles_size() + 1);
+     sph_particles_smooth_len (i) = h;
+     sph_particles_pos(XDIM, i) = x;
+     sph_particles_pos(YDIM, i) = y;
+     sph_particles_pos(ZDIM, i) = z;
+     sph_particles_vel(XDIM, i) = 0.0;
+     sph_particles_vel(YDIM, i) = 0.0;
+     sph_particles_vel(ZDIM, i) = 0.0;
+     sph_particles_rung(i) = 0;
+     sph_particles_eint(i) = eint;
+     i++;
+     x = (ix + 0.75) * dx;
+     y = (iy + 0.75) * dx;
+     z = (iz + 0.75) * dx;
+     p = -rho1 * (1.0 - y) * gy;
+     eint = p / rho1 / (get_options().gamma - 1);
+     sph_particles_resize(sph_particles_size() + 1);
+     sph_particles_smooth_len(i) = h;
+     sph_particles_pos(XDIM, i) = x;
+     sph_particles_pos(YDIM, i) = y;
+     sph_particles_pos(ZDIM, i) = z;
+     sph_particles_vel(XDIM, i) = 0.0;
+     sph_particles_vel(YDIM, i) = 0.0;
+     sph_particles_vel(ZDIM, i) = 0.0;
+     sph_particles_rung(i) = 0;
+     sph_particles_eint(i) = eint;
+     i++;
+     }
+     }
+     }*/
+    constexpr float kT = 10.0;
+    constexpr int kN = 1000;
+    hydroDriver(kT, 256);
 }
 
-void hydro_disc_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double const rinner = 0.2;
-	double const router = 0.3;
-	double const rho = nparts_total;
-	double const p0 = 1.0e-30;
-	double const m = 1.0;
-	double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
-	int i = 0;
-	int const nz = 3;
-	int dim = sqrt(nparts_total) / nz;
-	double dx = 1.0 / dim;
-	for (int iz = dim / 2 - nz; iz < dim / 2 + nz; iz++) {
-		for (int k = 0; k < dim; k++) {
-			for (int l = 0; l < dim; l++) {
-				double r, x, y, z;
-				x = dx * k;
-				y = dx * l;
-				z = iz * dx;
-				r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-				if (r > rinner && r < router) {
-					double eint = p0 / rho / (get_options().gamma - 1);
-					sph_particles_resize(sph_particles_size() + 1);
-					sph_particles_smooth_len(i) = h;
-					sph_particles_pos(XDIM, i) = x;
-					sph_particles_pos(YDIM, i) = y;
-					sph_particles_pos(ZDIM, i) = z;
-					double const v = 1.00 * sqrt(1 / r);
-					double const vx = -(y - 0.5) / r * v;
-					double const vy = (x - 0.5) / r * v;
-					double const vz = 0.0;
-					double sgn;
-					if (r > (rinner + router) / 2.0) {
-						sgn = 1.0;
-					} else {
-						sgn = 1.0;
-					}
-					sph_particles_vel(XDIM, i) = sgn * vx;
-					sph_particles_vel(YDIM, i) = sgn * vy;
-					sph_particles_vel(ZDIM, i) = vz;
-					sph_particles_rung(i) = 0;
+void hydroDiscTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    double const rinner = 0.2;
+    double const router = 0.3;
+    double const rho = npartsTotal;
+    double const p0 = 1.0e-30;
+    double const m = 1.0;
+    double h = pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+    int i = 0;
+    int const nz = 3;
+    int dim = sqrt(npartsTotal) / nz;
+    double dx = 1.0 / dim;
+    for (int iz = dim / 2 - nz; iz < dim / 2 + nz; iz++) {
+        for (int k = 0; k < dim; k++) {
+            for (int l = 0; l < dim; l++) {
+                double r, x, y, z;
+                x = dx * k;
+                y = dx * l;
+                z = iz * dx;
+                r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+                if (r > rinner && r < router) {
+                    double eint = p0 / rho / (getOptions().gamma - 1);
+                    sphParticlesResize(sphParticlesSize() + 1);
+                    sphParticlesSmoothLen(i) = h;
+                    sphParticlesPos(XDIM, i) = x;
+                    sphParticlesPos(YDIM, i) = y;
+                    sphParticlesPos(ZDIM, i) = z;
+                    double const v = 1.00 * sqrt(1 / r);
+                    double const vx = -(y - 0.5) / r * v;
+                    double const vy = (x - 0.5) / r * v;
+                    double const vz = 0.0;
+                    double sgn;
+                    if (r > (rinner + router) / 2.0) {
+                        sgn = 1.0;
+                    } else {
+                        sgn = 1.0;
+                    }
+                    sphParticlesVel(XDIM, i) = sgn * vx;
+                    sphParticlesVel(YDIM, i) = sgn * vy;
+                    sphParticlesVel(ZDIM, i) = vz;
+                    sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-					sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
+                    sphParticlesRec2(i).entropy =
+                        eint * (getOptions().gamma - 1.) / pow(rho, getOptions().gamma - 1.);
 #else
-					sph_particles_rec2(i).eint = eint;
+                    sphParticlesRec2(i).eint = eint;
 #endif
 
-					;
-					i++;
-				}
-			}
-		}
-	}
-	double const t = 16.0;
-	hydro_driver(t, 1024);
+                    ;
+                    i++;
+                }
+            }
+        }
+    }
+    double const t = 16.0;
+    hydroDriver(t, 1024);
 }
 
-void hydro_sod_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho0 = 0.125;
-	double rho1 = 1.0;
-	double vx1 = 0.0;
-	double vy1 = 0.0;
-	double vz1 = 0.0;
-	double vx0 = 0.0;
-	double vy0 = -0.0;
-	double vz0 = -0.0e-1;
-	double p0 = .1;
-	double p1 = 1.0;
-	sod_init_t sod;
-	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-	part_int nparts_left = 2 * left_dim * sqr(2 * left_dim);
-	part_int nparts_right = 2 * right_dim * sqr(2 * right_dim);
-	nparts_total = nparts_left + nparts_right;
-	double dx = 0.5 / left_dim;
-	part_int i = 0;
-	auto opts = get_options();
-	opts.sph_mass = rho1 * 0.5 / nparts_left;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	rho1 = nparts_left * m / 0.5;
-	rho0 = nparts_right * m / 0.5;
-	sod.rhol = rho1;
-	sod.rhor = rho0;
-	sod.pl = p1;
-	sod.pr = p0;
-	sod.gamma = get_options().gamma;
-	constexpr float eta = 0.0;
-	double const Ne = get_options().sneighbor_number;
-	PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * right_dim, 2 * left_dim, rho0 / (m * Ne) * (4.0 * M_PI / 3.0),
-		  rho1 / (m * Ne) * (4.0 * M_PI / 3.0));
-	for (int ix = 0; ix < left_dim; ix++) {
-		for (int iy = 0; iy < 2 * left_dim; iy++) {
-			for (int iz = 0; iz < 2 * left_dim; iz++) {
-				double x = (ix)*dx;
-				double y = (iy)*dx;
-				double z = (iz)*dx;
-				double ent = p1 / powf(rho1, get_options().gamma);
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
-				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
-				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx0;
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = vz0;
-				sph_particles_rung(i) = 0;
+void hydroSodTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    double rho0 = 0.125;
+    double rho1 = 1.0;
+    double vx1 = 0.0;
+    double vy1 = 0.0;
+    double vz1 = 0.0;
+    double vx0 = 0.0;
+    double vy0 = -0.0;
+    double vz0 = -0.0e-1;
+    double p0 = .1;
+    double p1 = 1.0;
+    SodInitT sod;
+    PartInt leftDim = pow(0.25 * npartsTotal * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+    PartInt rightDim = pow(0.25 * npartsTotal * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+    PartInt npartsLeft = 2 * leftDim * sqr(2 * leftDim);
+    PartInt npartsRight = 2 * rightDim * sqr(2 * rightDim);
+    npartsTotal = npartsLeft + npartsRight;
+    double dx = 0.5 / leftDim;
+    PartInt i = 0;
+    auto opts = getOptions();
+    opts.sphMass = rho1 * 0.5 / npartsLeft;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    rho1 = npartsLeft * m / 0.5;
+    rho0 = npartsRight * m / 0.5;
+    sod.rhol = rho1;
+    sod.rhor = rho0;
+    sod.pl = p1;
+    sod.pr = p0;
+    sod.gamma = getOptions().gamma;
+    constexpr float kEta = 0.0;
+    double const ne = getOptions().sneighborNumber;
+    PRINT("Sod dimensions are %i and %i rho0 %e rho1 %e\n", 2 * rightDim, 2 * leftDim,
+        rho0 / (m * ne) * (4.0 * M_PI / 3.0), rho1 / (m * ne) * (4.0 * M_PI / 3.0));
+    for (int ix = 0; ix < leftDim; ix++) {
+        for (int iy = 0; iy < 2 * leftDim; iy++) {
+            for (int iz = 0; iz < 2 * leftDim; iz++) {
+                double x = (ix) *dx;
+                double y = (iy) *dx;
+                double z = (iz) *dx;
+                double ent = p1 / powf(rho1, getOptions().gamma);
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVel(XDIM, i) = vx0;
+                sphParticlesVel(YDIM, i) = vy0;
+                sphParticlesVel(ZDIM, i) = vz0;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = ent;
+                sphParticlesRec2(i).entropy = ent;
 #else
-				sph_particles_rec2(i).eint = p1 / (get_options().gamma - 1.0) / rho1;
+                sphParticlesRec2(i).eint = p1 / (getOptions().gamma - 1.0) / rho1;
 #endif
-				i++;
-				x = (ix + 0.5) * dx;
-				y = (iy + 0.5) * dx;
-				z = (iz + 0.5) * dx;
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
-				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
-				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = vx0;
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = vz0;
-				sph_particles_rung(i) = 0;
+                i++;
+                x = (ix + 0.5) * dx;
+                y = (iy + 0.5) * dx;
+                z = (iz + 0.5) * dx;
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVel(XDIM, i) = vx0;
+                sphParticlesVel(YDIM, i) = vy0;
+                sphParticlesVel(ZDIM, i) = vz0;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = ent;
+                sphParticlesRec2(i).entropy = ent;
 #else
-				sph_particles_rec2(i).eint = p1 / (get_options().gamma - 1.0) / rho1;
+                sphParticlesRec2(i).eint = p1 / (getOptions().gamma - 1.0) / rho1;
 #endif
-				i++;
-				//			PRINT("%i\n", i);
-			}
-		}
-	}
-	dx = 0.5 / right_dim;
-	for (int ix0 = right_dim; ix0 < 2 * right_dim; ix0++) {
-		int ix = ix0;
-		for (int iy = 0; iy < 2 * right_dim; iy++) {
-			for (int iz = 0; iz < 2 * right_dim; iz++) {
-				double x = (ix)*dx;
-				double y = (iy)*dx;
-				double z = (iz)*dx;
-				double ent = p0 / powf(rho0, get_options().gamma);
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
-				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
-				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = 0;
-				sph_particles_vel(ZDIM, i) = 0;
-				;
-				sph_particles_rung(i) = 0;
+                i++;
+                //			PRINT("%i\n", i);
+            }
+        }
+    }
+    dx = 0.5 / rightDim;
+    for (int ix0 = rightDim; ix0 < 2 * rightDim; ix0++) {
+        int ix = ix0;
+        for (int iy = 0; iy < 2 * rightDim; iy++) {
+            for (int iz = 0; iz < 2 * rightDim; iz++) {
+                double x = (ix) *dx;
+                double y = (iy) *dx;
+                double z = (iz) *dx;
+                double ent = p0 / powf(rho0, getOptions().gamma);
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVel(XDIM, i) = 0;
+                sphParticlesVel(YDIM, i) = 0;
+                sphParticlesVel(ZDIM, i) = 0;
+                ;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = ent;
+                sphParticlesRec2(i).entropy = ent;
 #else
-				sph_particles_rec2(i).eint = p0 / (get_options().gamma - 1.0) / rho0;
+                sphParticlesRec2(i).eint = p0 / (getOptions().gamma - 1.0) / rho0;
 #endif
-				;
-				//		PRINT("%i\n", i);
-				i++;
-				x = (ix + 0.5) * dx;
-				y = (iy + 0.5) * dx;
-				z = (iz + 0.5) * dx;
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x + rand1() * dx * eta;
-				sph_particles_pos(YDIM, i) = y + rand1() * dx * eta;
-				sph_particles_pos(ZDIM, i) = z + rand1() * dx * eta;
-				sph_particles_vel(XDIM, i) = 0;
-				sph_particles_vel(YDIM, i) = 0;
-				sph_particles_vel(ZDIM, i) = 0;
-				;
-				sph_particles_rung(i) = 0;
+                ;
+                //		PRINT("%i\n", i);
+                i++;
+                x = (ix + 0.5) * dx;
+                y = (iy + 0.5) * dx;
+                z = (iz + 0.5) * dx;
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x + rand1() * dx * kEta;
+                sphParticlesPos(YDIM, i) = y + rand1() * dx * kEta;
+                sphParticlesPos(ZDIM, i) = z + rand1() * dx * kEta;
+                sphParticlesVel(XDIM, i) = 0;
+                sphParticlesVel(YDIM, i) = 0;
+                sphParticlesVel(ZDIM, i) = 0;
+                ;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = ent;
+                sphParticlesRec2(i).entropy = ent;
 #else
-				sph_particles_rec2(i).eint = p0 / (get_options().gamma - 1.0) / rho0;
+                sphParticlesRec2(i).eint = p0 / (getOptions().gamma - 1.0) / rho0;
 #endif
-				;
-				i++;
-			}
-		}
-	}
-	constexpr float t = .09;
-	constexpr int N = 1000;
-	hydro_driver(t, 20);
-	FILE* fp = fopen("sod.txt", "wt");
-	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
-	double norm1 = 0.0, norm2 = 0.0;
-	for (int l = 0; l < N; l++) {
-		int const i = rand() % sph_particles_size();
-		int const j = sph_particles_dm_index(i);
-		float x = particles_pos(XDIM, j).to_double();
-		float const h = sph_particles_smooth_len(i);
+                ;
+                i++;
+            }
+        }
+    }
+    constexpr float kT = .09;
+    constexpr int kN = 1000;
+    hydroDriver(kT, 20);
+    FILE* fp = fopen("sod.txt", "wt");
+    double l1 = 0.0, l2 = 0.0, lmax = 0.0;
+    double norm1 = 0.0, norm2 = 0.0;
+    for (int l = 0; l < kN; l++) {
+        int const i = rand() % sphParticlesSize();
+        int const j = sphParticlesDmIndex(i);
+        float x = particlesPos(XDIM, j).toDouble();
+        float const h = sphParticlesSmoothLen(i);
 #ifdef HOPKINS
-		float const rho = sph_particles_rho_rho(i);
-		float const p = sph_particles_pressure(i);
+        float const rho = sphParticlesRhoRho(i);
+        float const p = sphParticlesPressure(i);
 #else
-		float const rho = sph_particles_rho(i);
-		float const eint = sph_particles_eint(i);
-		float const p = (get_options().gamma - 1.0) * rho * eint;
+        float const rho = sphParticlesRho(i);
+        float const eint = sphParticlesEint(i);
+        float const p = (getOptions().gamma - 1.0) * rho * eint;
 #endif
-		sod_state_t state;
-		float x0 = x;
-		x0 -= 0.5;
-		if (x0 > 0.25) {
-			x0 = 0.5 - x0;
-		} else if (x0 < -0.25) {
-			x0 = -0.5 - x0;
-		}
-		exact_sod(&state, &sod, x0, t, 0);
-		double dif = fabs(rho - state.rho);
-		norm1 += state.rho;
-		norm2 += sqr(state.rho);
-		l1 += dif;
-		l2 += dif * dif;
-		lmax = std::max(lmax, dif);
-		fprintf(fp, "%e %e %e %e %e\n", x, rho, state.rho, p, state.p);
-	}
-	l1 /= norm1;
-	l2 /= norm2;
-	l2 = sqrt(l2);
-	PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
-	fclose(fp);
+        SodStateT state;
+        float x0 = x;
+        x0 -= 0.5;
+        if (x0 > 0.25) {
+            x0 = 0.5 - x0;
+        } else if (x0 < -0.25) {
+            x0 = -0.5 - x0;
+        }
+        exactSod(&state, &sod, x0, kT, 0);
+        double dif = fabs(rho - state.rho);
+        norm1 += state.rho;
+        norm2 += sqr(state.rho);
+        l1 += dif;
+        l2 += dif * dif;
+        lmax = std::max(lmax, dif);
+        fprintf(fp, "%e %e %e %e %e\n", x, rho, state.rho, p, state.p);
+    }
+    l1 /= norm1;
+    l2 /= norm2;
+    l2 = sqrt(l2);
+    PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
+    fclose(fp);
 }
 
-void hydro_helmholtz_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho1 = 0.5;
-	double rho0 = 1.0;
-	double vx1 = 0.0;
-	double vy1 = 1.0;
-	double vz1 = 0.0;
-	double vx0 = 0.0;
-	double vy0 = -1.0;
-	double vz0 = 0.0;
-	double p1 = 19.2;
-	double p0 = 19.2;
-	constexpr double eta = 1e-1;
-	constexpr double freq = 2.0;
-	part_int left_dim = pow(0.25 * nparts_total * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-	part_int right_dim = pow(0.25 * nparts_total * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
-	part_int nparts_left = 2 * left_dim * sqr(2 * left_dim);
-	part_int nparts_right = 2 * right_dim * sqr(2 * right_dim);
-	nparts_total = nparts_left + nparts_right;
-	double dx = 0.5 / left_dim;
-	part_int i = 0;
-	auto opts = get_options();
-	opts.sph_mass = rho1 * 0.5 / nparts_left;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	rho1 = nparts_left * m / 0.5f;
-	rho0 = nparts_right * m / 0.5f;
-	for (int ix = 0; ix < left_dim; ix++) {
-		for (int iy = 0; iy < 2 * left_dim; iy++) {
-			for (int iz = 0; iz < 2 * left_dim; iz++) {
-				double x = (ix + 0.5) * dx;
-				double y = (iy + 0.5) * dx;
-				double z = (iz + 0.5) * dx;
-				double eint = p1 / rho1 / (get_options().gamma - 1);
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
-				sph_particles_vel(YDIM, i) = vy1;
-				sph_particles_vel(ZDIM, i) = 0.0;
-				sph_particles_rung(i) = 0;
+void hydroHelmholtzTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    double rho1 = 0.5;
+    double rho0 = 1.0;
+    double vx1 = 0.0;
+    double vy1 = 1.0;
+    double vz1 = 0.0;
+    double vx0 = 0.0;
+    double vy0 = -1.0;
+    double vz0 = 0.0;
+    double p1 = 19.2;
+    double p0 = 19.2;
+    constexpr double kEta = 1e-1;
+    constexpr double kFreq = 2.0;
+    PartInt leftDim = pow(0.25 * npartsTotal * rho1 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+    PartInt rightDim = pow(0.25 * npartsTotal * rho0 / (rho1 + rho0) / 2, 1.0 / 3.0) + 0.49999;
+    PartInt npartsLeft = 2 * leftDim * sqr(2 * leftDim);
+    PartInt npartsRight = 2 * rightDim * sqr(2 * rightDim);
+    npartsTotal = npartsLeft + npartsRight;
+    double dx = 0.5 / leftDim;
+    PartInt i = 0;
+    auto opts = getOptions();
+    opts.sphMass = rho1 * 0.5 / npartsLeft;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    rho1 = npartsLeft * m / 0.5f;
+    rho0 = npartsRight * m / 0.5f;
+    for (int ix = 0; ix < leftDim; ix++) {
+        for (int iy = 0; iy < 2 * leftDim; iy++) {
+            for (int iz = 0; iz < 2 * leftDim; iz++) {
+                double x = (ix + 0.5) * dx;
+                double y = (iy + 0.5) * dx;
+                double z = (iz + 0.5) * dx;
+                double eint = p1 / rho1 / (getOptions().gamma - 1);
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho1), 1.0 / 3.0);
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVel(YDIM, i) = vy1;
+                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho1, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
 
-				i++;
-				x = (ix)*dx;
-				y = (iy)*dx;
-				z = (iz)*dx;
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
-				sph_particles_vel(YDIM, i) = vy1;
-				sph_particles_vel(ZDIM, i) = 0.0;
-				sph_particles_rung(i) = 0;
+                i++;
+                x = (ix) *dx;
+                y = (iy) *dx;
+                z = (iz) *dx;
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVel(YDIM, i) = vy1;
+                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho1, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho1, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
 
-				i++;
-				//			PRINT("%i\n", i);
-			}
-		}
-	}
-	dx = 0.5 / right_dim;
-	for (int ix0 = right_dim; ix0 < 2 * right_dim; ix0++) {
-		int ix = ix0;
-		for (int iy = 0; iy < 2 * right_dim; iy++) {
-			for (int iz = 0; iz < 2 * right_dim; iz++) {
-				double x = (ix + 0.5) * dx;
-				double y = (iy + 0.5) * dx;
-				double z = (iz + 0.5) * dx;
-				double eint = p0 / rho0 / (get_options().gamma - 1);
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = 0.0;
-				sph_particles_rung(i) = 0;
+                i++;
+                //			PRINT("%i\n", i);
+            }
+        }
+    }
+    dx = 0.5 / rightDim;
+    for (int ix0 = rightDim; ix0 < 2 * rightDim; ix0++) {
+        int ix = ix0;
+        for (int iy = 0; iy < 2 * rightDim; iy++) {
+            for (int iz = 0; iz < 2 * rightDim; iz++) {
+                double x = (ix + 0.5) * dx;
+                double y = (iy + 0.5) * dx;
+                double z = (iz + 0.5) * dx;
+                double eint = p0 / rho0 / (getOptions().gamma - 1);
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVel(YDIM, i) = vy0;
+                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
-				;
+                ;
 
-				//		PRINT("%i\n", i);
-				i++;
-				x = (ix)*dx;
-				y = (iy)*dx;
-				z = (iz)*dx;
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = eta * sin(freq * 2.0 * M_PI * y);
-				sph_particles_vel(YDIM, i) = vy0;
-				sph_particles_vel(ZDIM, i) = 0.0;
-				sph_particles_rung(i) = 0;
+                //		PRINT("%i\n", i);
+                i++;
+                x = (ix) *dx;
+                y = (iy) *dx;
+                z = (iz) *dx;
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = kEta * sin(kFreq * 2.0 * M_PI * y);
+                sphParticlesVel(YDIM, i) = vy0;
+                sphParticlesVel(ZDIM, i) = 0.0;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
 
-				;
-				//		PRINT("%i\n", i);
-				i++;
-			}
-		}
-	}
-	hydro_driver(10.00, 1024);
+                ;
+                //		PRINT("%i\n", i);
+                i++;
+            }
+        }
+    }
+    hydroDriver(10.00, 1024);
 }
 
-void hydro_blast_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho0 = 1.0;
-	double eblast = 1.0;
-	double p0 = 1.0e-20f;
-	auto opts = get_options();
-	part_int ndim = get_options().parts_dim;
-	part_int nparts = std::pow(ndim, NDIM);
-	ndim = pow(nparts / 2, 1. / 3.);
-	nparts = 2 * ndim * ndim * ndim;
-	opts.sph_mass = rho0 / nparts;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	part_int i = 0;
-	double const dx = 1.0 / ndim;
-	double sigma = .015;
-	for (int ix = 0; ix < ndim; ix++) {
-		for (int iy = 0; iy < ndim; iy++) {
-			for (int iz = 0; iz < ndim; iz++) {
-				double x = (ix + 0.5) * dx;
-				double y = (iy + 0.5) * dx;
-				double z = (iz + 0.5) * dx;
-				double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-				double eint = std::max(1.0 / sigma / sigma / sigma / sqrt(8.0 * M_PI * M_PI * M_PI) * exp(-0.5 * sqr(r / sigma)), 1e-20);
-				double vx = 0.0;
-				double vy = 0.0;
-				double vz = 0.0;
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = vx;
-				sph_particles_vel(YDIM, i) = vy;
-				sph_particles_vel(ZDIM, i) = vz;
-				sph_particles_rung(i) = 0;
+void hydroBlastTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    double rho0 = 1.0;
+    double eblast = 1.0;
+    double p0 = 1.0e-20f;
+    auto opts = getOptions();
+    PartInt ndim = getOptions().partsDim;
+    PartInt nparts = std::pow(ndim, NDIM);
+    ndim = pow(nparts / 2, 1. / 3.);
+    nparts = 2 * ndim * ndim * ndim;
+    opts.sphMass = rho0 / nparts;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    PartInt i = 0;
+    double const dx = 1.0 / ndim;
+    double sigma = .015;
+    for (int ix = 0; ix < ndim; ix++) {
+        for (int iy = 0; iy < ndim; iy++) {
+            for (int iz = 0; iz < ndim; iz++) {
+                double x = (ix + 0.5) * dx;
+                double y = (iy + 0.5) * dx;
+                double z = (iz + 0.5) * dx;
+                double r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+                double eint = std::max(1.0 / sigma / sigma / sigma /
+                        sqrt(8.0 * M_PI * M_PI * M_PI) * exp(-0.5 * sqr(r / sigma)),
+                    1e-20);
+                double vx = 0.0;
+                double vy = 0.0;
+                double vz = 0.0;
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho0), 1.0 / 3.0);
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = vx;
+                sphParticlesVel(YDIM, i) = vy;
+                sphParticlesVel(ZDIM, i) = vz;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
-				;
-				i++;
-				x = (ix + 0.0) * dx;
-				y = (iy + 0.0) * dx;
-				z = (iz + 0.0) * dx;
-				r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
-				eint = std::max(1.0 / sigma / sigma / sigma / sqrt(8.0 * M_PI * M_PI * M_PI) * exp(-0.5 * sqr(r / sigma)), 1e-20);
-				vx = 0.0;
-				vy = 0.0;
-				vz = 0.0;
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = vx;
-				sph_particles_vel(YDIM, i) = vy;
-				sph_particles_vel(ZDIM, i) = vz;
-				sph_particles_rung(i) = 0;
+                ;
+                i++;
+                x = (ix + 0.0) * dx;
+                y = (iy + 0.0) * dx;
+                z = (iz + 0.0) * dx;
+                r = sqrt(sqr(x - 0.5, y - 0.5, z - 0.5));
+                eint = std::max(1.0 / sigma / sigma / sigma / sqrt(8.0 * M_PI * M_PI * M_PI) *
+                        exp(-0.5 * sqr(r / sigma)),
+                    1e-20);
+                vx = 0.0;
+                vy = 0.0;
+                vz = 0.0;
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = vx;
+                sphParticlesVel(YDIM, i) = vy;
+                sphParticlesVel(ZDIM, i) = vz;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho0, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho0, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
-				;
-				i++;
-			}
-		}
-	}
-	double const t = 5e-3;
-	hydro_driver(t, 16);
-	FILE* fp = fopen("blast.txt", "wt");
-	double l1 = 0.0, l2 = 0.0, lmax = 0.0;
-	double norm1 = 0.0, norm2 = 0.0;
-	constexpr int N = 100000;
-	for (int l = 0; l < N; l++) {
-		int const i = rand() % sph_particles_size();
-		int const j = sph_particles_dm_index(i);
-		float x = particles_pos(XDIM, j).to_double() - 0.5;
-		float y = particles_pos(YDIM, j).to_double() - 0.5;
-		float z = particles_pos(ZDIM, j).to_double() - 0.5;
+                ;
+                i++;
+            }
+        }
+    }
+    double const t = 5e-3;
+    hydroDriver(t, 16);
+    FILE* fp = fopen("blast.txt", "wt");
+    double l1 = 0.0, l2 = 0.0, lmax = 0.0;
+    double norm1 = 0.0, norm2 = 0.0;
+    constexpr int kN = 100000;
+    for (int l = 0; l < kN; l++) {
+        int const i = rand() % sphParticlesSize();
+        int const j = sphParticlesDmIndex(i);
+        float x = particlesPos(XDIM, j).toDouble() - 0.5;
+        float y = particlesPos(YDIM, j).toDouble() - 0.5;
+        float z = particlesPos(ZDIM, j).toDouble() - 0.5;
 #ifdef HOPKINS
-		float const rho = sph_particles_rho_rho(i);
+        float const rho = sphParticlesRhoRho(i);
 #else
-		float const rho = sph_particles_rho(i);
+        float const rho = sphParticlesRho(i);
 #endif
-		double time = t;
-		double r = sqrt(sqr(x, y, z));
-		double rmax = sqrt(1.5);
-		double d, v, p;
-		int ndim = 3;
-		sedov::solution(time, r, rmax, d, v, p, ndim);
-		double dif = fabs(rho - d);
-		norm1 += d;
-		norm2 += sqr(d);
-		l1 += dif;
-		l2 += dif * dif;
-		lmax = std::max(lmax, dif);
-		fprintf(fp, "%e %e %e\n", r, rho, d);
-	}
-	l1 /= norm1;
-	l2 /= norm2;
-	l2 = sqrt(l2);
-	PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
-	fclose(fp);
+        double time = t;
+        double r = sqrt(sqr(x, y, z));
+        double rmax = sqrt(1.5);
+        double d, v, p;
+        int ndim = 3;
+        sedov::solution(time, r, rmax, d, v, p, ndim);
+        double dif = fabs(rho - d);
+        norm1 += d;
+        norm2 += sqr(d);
+        l1 += dif;
+        l2 += dif * dif;
+        lmax = std::max(lmax, dif);
+        fprintf(fp, "%e %e %e\n", r, rho, d);
+    }
+    l1 /= norm1;
+    l2 /= norm2;
+    l2 = sqrt(l2);
+    PRINT("L1 = %e L2 = %e Lmax = %e\n", l1, l2, lmax);
+    fclose(fp);
 }
 
-void hydro_wave_test() {
-	part_int nparts_total = pow(get_options().parts_dim, 3);
-	double rho = 1.0;
-	double p0 = 0.845154255;
-	auto opts = get_options();
-	part_int const ndim = get_options().parts_dim;
-	part_int const nparts = std::pow(ndim, NDIM);
-	opts.sph_mass = rho / nparts;
-	double const m = opts.sph_mass;
-	set_options(opts);
-	part_int i = 0;
-	double const dx = 1.0 / ndim;
-	for (int ix = 0; ix < ndim; ix++) {
-		for (int iy = 0; iy < ndim; iy++) {
-			for (int iz = 0; iz < ndim; iz++) {
-				double x = (ix + 0.5) * dx;
-				double y = (iy + 0.5) * dx;
-				double z = (iz + 0.5) * dx;
-				double eint = p0 / rho / (get_options().gamma - 1);
-				double h = pow(m * get_options().sneighbor_number / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
-				//	PRINT( "%e\n", h);
-				if (ix == ndim / 2) {
-					x += 0.99 * dx;
-				} else if (ix == ndim / 2 - 1) {
-					x -= 0.99 * dx;
-				}
-				sph_particles_resize(sph_particles_size() + 1);
-				sph_particles_smooth_len(i) = h;
-				sph_particles_pos(XDIM, i) = x;
-				sph_particles_pos(YDIM, i) = y;
-				sph_particles_pos(ZDIM, i) = z;
-				sph_particles_vel(XDIM, i) = 0.f;
-				sph_particles_vel(YDIM, i) = 0.f;
-				sph_particles_vel(ZDIM, i) = 0.f;
-				sph_particles_rung(i) = 0;
+void hydroWaveTest() {
+    PartInt npartsTotal = pow(getOptions().partsDim, 3);
+    double rho = 1.0;
+    double p0 = 0.845154255;
+    auto opts = getOptions();
+    PartInt const ndim = getOptions().partsDim;
+    PartInt const nparts = std::pow(ndim, NDIM);
+    opts.sphMass = rho / nparts;
+    double const m = opts.sphMass;
+    setOptions(opts);
+    PartInt i = 0;
+    double const dx = 1.0 / ndim;
+    for (int ix = 0; ix < ndim; ix++) {
+        for (int iy = 0; iy < ndim; iy++) {
+            for (int iz = 0; iz < ndim; iz++) {
+                double x = (ix + 0.5) * dx;
+                double y = (iy + 0.5) * dx;
+                double z = (iz + 0.5) * dx;
+                double eint = p0 / rho / (getOptions().gamma - 1);
+                double h =
+                    pow(m * getOptions().sneighborNumber / (4.0 * M_PI / 3.0 * rho), 1.0 / 3.0);
+                //	PRINT( "%e\n", h);
+                if (ix == ndim / 2) {
+                    x += 0.99 * dx;
+                } else if (ix == ndim / 2 - 1) {
+                    x -= 0.99 * dx;
+                }
+                sphParticlesResize(sphParticlesSize() + 1);
+                sphParticlesSmoothLen(i) = h;
+                sphParticlesPos(XDIM, i) = x;
+                sphParticlesPos(YDIM, i) = y;
+                sphParticlesPos(ZDIM, i) = z;
+                sphParticlesVel(XDIM, i) = 0.f;
+                sphParticlesVel(YDIM, i) = 0.f;
+                sphParticlesVel(ZDIM, i) = 0.f;
+                sphParticlesRung(i) = 0;
 #ifdef ENTROPY
-				sph_particles_rec2(i).A = eint * (get_options().gamma - 1.) / pow(rho, get_options().gamma - 1.);
+                sphParticlesRec2(i).entropy =
+                    eint * (getOptions().gamma - 1.) / pow(rho, getOptions().gamma - 1.);
 #else
-				sph_particles_rec2(i).eint = eint;
+                sphParticlesRec2(i).eint = eint;
 #endif
-				i++;
-				//			PRINT("%i\n", i);
-			}
-		}
-	}
-	hydro_driver(0.5);
+                i++;
+                //			PRINT("%i\n", i);
+            }
+        }
+    }
+    hydroDriver(0.5);
 }

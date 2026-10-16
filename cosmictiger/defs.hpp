@@ -73,7 +73,7 @@
 #define HEAP_SIZE (8ULL * 1024ULL * 1024ULL * 1024ULL)
 #define L2FETCH 64
 #define STACK_SIZE (32 * 1024)
-#define KICK_WORKSPACE_PART_SIZE 20 // In % of total mem
+#define KICK_WORKSPACE_PART_SIZE 20    // In % of total mem
 #define MIN_KICK_PC_WARP 8
 #define MIN_KICK_WARP 16
 #define UNORDERED_SET_SIZE 1024

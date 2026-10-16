@@ -20,247 +20,247 @@
 #ifndef CUDA_REDUCE_HPP_
 #define CUDA_REDUCE_HPP_
 
-#include <cosmictiger/defs.hpp>
 #include <cosmictiger/containers.hpp>
+#include <cosmictiger/defs.hpp>
 
 #ifdef __CUDACC__
 
-__device__ inline void compute_indices(int& index, int& total) {
-	const int& tid = threadIdx.x;
-	for (int P = 1; P < WARP_SIZE; P *= 2) {
-		auto tmp = __shfl_up_sync(0xFFFFFFFF, index, P);
-		if (tid >= P) {
-			index += tmp;
-		}
-	}
-	total = __shfl_sync(0xFFFFFFFF, index, WARP_SIZE - 1);
-	auto tmp = __shfl_up_sync(0xFFFFFFFF, index, 1);
-	if (tid >= 1) {
-		index = tmp;
-	} else {
-		index = 0;
-	}
+__device__ inline void computeIndices(int& index, int& total) {
+    int const& tid = threadIdx.x;
+    for (int p = 1; p < WARP_SIZE; p *= 2) {
+        auto tmp = __shfl_up_sync(0xFFFFFFFF, index, p);
+        if (tid >= p) {
+            index += tmp;
+        }
+    }
+    total = __shfl_sync(0xFFFFFFFF, index, WARP_SIZE - 1);
+    auto tmp = __shfl_up_sync(0xFFFFFFFF, index, 1);
+    if (tid >= 1) {
+        index = tmp;
+    } else {
+        index = 0;
+    }
 }
 
-template<int N>
-__device__ inline void compute_indices_array(array<int,N>& indices, array<int,N>& total) {
-	const int& tid = threadIdx.x;
-	for( int n = 0; n < N; n++) {
-		for (int P = 1; P < WARP_SIZE; P *= 2) {
-			auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], P);
-			if (tid >= P) {
-				indices[n] += tmp;
-			}
-		}
-		total[n] = __shfl_sync(0xFFFFFFFF, indices[n], WARP_SIZE - 1);
-		auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], 1);
-		if (tid >= 1) {
-			indices[n] = tmp;
-		} else {
-			indices[n] = 0;
-		}
-	}
+template <int nValue>
+__device__ inline void computeIndicesArray(Array<int, nValue>& indices, Array<int, nValue>& total) {
+    int const& tid = threadIdx.x;
+    for (int n = 0; n < nValue; n++) {
+        for (int p = 1; p < WARP_SIZE; p *= 2) {
+            auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], p);
+            if (tid >= p) {
+                indices[n] += tmp;
+            }
+        }
+        total[n] = __shfl_sync(0xFFFFFFFF, indices[n], WARP_SIZE - 1);
+        auto tmp = __shfl_up_sync(0xFFFFFFFF, indices[n], 1);
+        if (tid >= 1) {
+            indices[n] = tmp;
+        } else {
+            indices[n] = 0;
+        }
+    }
 }
 
-template<class T>
-__device__ inline void shared_reduce_add(T& number) {
-	for (int P = warpSize / 2; P >= 1; P /= 2) {
-		number += __shfl_xor_sync(0xffffffff, number, P);
-	}
+template <class T>
+__device__ inline void sharedReduceAdd(T& number) {
+    for (int p = warpSize / 2; p >= 1; p /= 2) {
+        number += __shfl_xor_sync(0xffffffff, number, p);
+    }
 }
 
-template<class T, int N>
-__device__ inline void shared_reduce_add_array(array<T, N>& number) {
-	for (int P = warpSize / 2; P >= 1; P /= 2) {
-		for( int n = 0; n < N; n++ ) {
-			number[n] += __shfl_xor_sync(0xffffffff, number[n], P);
-		}
-	}
+template <class T, int nValue>
+__device__ inline void sharedReduceAddArray(Array<T, nValue>& number) {
+    for (int p = warpSize / 2; p >= 1; p /= 2) {
+        for (int n = 0; n < nValue; n++) {
+            number[n] += __shfl_xor_sync(0xffffffff, number[n], p);
+        }
+    }
 }
 
-template<class T, int BLOCK_SIZE>
-__device__ inline void shared_reduce_add(T& number) {
-	int P = WARP_SIZE;
-	while (P < BLOCK_SIZE) {
-		P *= 2;
-	}
-	const int tid = threadIdx.x;
-	__shared__ T sum[BLOCK_SIZE];
-	sum[tid] = number;
-	__syncthreads();
-	for (int bit = P / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % P;
-		T t;
-		if (inbr < BLOCK_SIZE) {
-			t = sum[tid] + sum[inbr];
-		} else {
-			t = sum[tid];
-		}
-		__syncthreads();
-		sum[tid] = t;
-		__syncthreads();
-	}
-	__syncthreads();
-	number = sum[0];
-	__syncthreads();
+template <class T, int blockSize>
+__device__ inline void sharedReduceAdd(T& number) {
+    int p = WARP_SIZE;
+    while (p < blockSize) {
+        p *= 2;
+    }
+    int const tid = threadIdx.x;
+    __shared__ T sum[blockSize];
+    sum[tid] = number;
+    __syncthreads();
+    for (int bit = p / 2; bit > 0; bit /= 2) {
+        int const inbr = (tid + bit) % p;
+        T t;
+        if (inbr < blockSize) {
+            t = sum[tid] + sum[inbr];
+        } else {
+            t = sum[tid];
+        }
+        __syncthreads();
+        sum[tid] = t;
+        __syncthreads();
+    }
+    __syncthreads();
+    number = sum[0];
+    __syncthreads();
 }
 
-template<int BLOCK_SIZE>
-__device__ inline void shared_reduce_max(float& number) {
-	int P = WARP_SIZE;
-	while (P < BLOCK_SIZE) {
-		P *= 2;
-	}
-	const int tid = threadIdx.x;
-	__shared__ float mx[BLOCK_SIZE];
-	mx[tid] = number;
-	__syncthreads();
-	for (int bit = P / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % P;
-		float t;
-		if( inbr < BLOCK_SIZE ) {
-			t = fmaxf(mx[tid], mx[inbr]);
-		} else {
-			t = mx[tid];
-		}
-		__syncthreads();
-		mx[tid] = t;
-		__syncthreads();
-	}
-	__syncthreads();
-	number = mx[0];
-	__syncthreads();
+template <int blockSize>
+__device__ inline void sharedReduceMax(float& number) {
+    int p = WARP_SIZE;
+    while (p < blockSize) {
+        p *= 2;
+    }
+    int const tid = threadIdx.x;
+    __shared__ float mx[blockSize];
+    mx[tid] = number;
+    __syncthreads();
+    for (int bit = p / 2; bit > 0; bit /= 2) {
+        int const inbr = (tid + bit) % p;
+        float t;
+        if (inbr < blockSize) {
+            t = fmaxf(mx[tid], mx[inbr]);
+        } else {
+            t = mx[tid];
+        }
+        __syncthreads();
+        mx[tid] = t;
+        __syncthreads();
+    }
+    __syncthreads();
+    number = mx[0];
+    __syncthreads();
 }
 
-template<int BLOCK_SIZE>
-__device__ inline void shared_reduce_min(unsigned long long & number) {
-	int P = WARP_SIZE;
-	while (P < BLOCK_SIZE) {
-		P *= 2;
-	}
-	const int tid = threadIdx.x;
-	__shared__ unsigned long long mx[BLOCK_SIZE];
-	mx[tid] = number;
-	__syncthreads();
-	for (int bit = P / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % P;
-		unsigned long long t;
-		if( inbr < BLOCK_SIZE ) {
-			t = min(mx[tid], mx[inbr]);
-		} else {
-			t = mx[tid];
-		}
-		__syncthreads();
-		mx[tid] = t;
-		__syncthreads();
-	}
-	__syncthreads();
-	number = mx[0];
-	__syncthreads();
+template <int blockSize>
+__device__ inline void sharedReduceMin(unsigned long long& number) {
+    int p = WARP_SIZE;
+    while (p < blockSize) {
+        p *= 2;
+    }
+    int const tid = threadIdx.x;
+    __shared__ unsigned long long mx[blockSize];
+    mx[tid] = number;
+    __syncthreads();
+    for (int bit = p / 2; bit > 0; bit /= 2) {
+        int const inbr = (tid + bit) % p;
+        unsigned long long t;
+        if (inbr < blockSize) {
+            t = min(mx[tid], mx[inbr]);
+        } else {
+            t = mx[tid];
+        }
+        __syncthreads();
+        mx[tid] = t;
+        __syncthreads();
+    }
+    __syncthreads();
+    number = mx[0];
+    __syncthreads();
 }
 
-template<int BLOCK_SIZE>
-__device__ inline void shared_reduce_min(int & number) {
-	int P = WARP_SIZE;
-	while (P < BLOCK_SIZE) {
-		P *= 2;
-	}
-	const int tid = threadIdx.x;
-	__shared__ int mx[BLOCK_SIZE];
-	mx[tid] = number;
-	__syncthreads();
-	for (int bit = P / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % P;
-		int t;
-		if( inbr < BLOCK_SIZE ) {
-			t = min(mx[tid], mx[inbr]);
-		} else {
-			t = mx[tid];
-		}
-		__syncthreads();
-		mx[tid] = t;
-		__syncthreads();
-	}
-	__syncthreads();
-	number = mx[0];
-	__syncthreads();
+template <int blockSize>
+__device__ inline void sharedReduceMin(int& number) {
+    int p = WARP_SIZE;
+    while (p < blockSize) {
+        p *= 2;
+    }
+    int const tid = threadIdx.x;
+    __shared__ int mx[blockSize];
+    mx[tid] = number;
+    __syncthreads();
+    for (int bit = p / 2; bit > 0; bit /= 2) {
+        int const inbr = (tid + bit) % p;
+        int t;
+        if (inbr < blockSize) {
+            t = min(mx[tid], mx[inbr]);
+        } else {
+            t = mx[tid];
+        }
+        __syncthreads();
+        mx[tid] = t;
+        __syncthreads();
+    }
+    __syncthreads();
+    number = mx[0];
+    __syncthreads();
 }
 
-template<int BLOCK_SIZE>
-__device__ inline void shared_reduce_max(int& number) {
-	int P = WARP_SIZE;
-	while (P < BLOCK_SIZE) {
-		P *= 2;
-	}
-	const int tid = threadIdx.x;
-	__shared__ int mx[BLOCK_SIZE];
-	mx[tid] = number;
-	__syncthreads();
-	for (int bit = P / 2; bit > 0; bit /= 2) {
-		const int inbr = (tid + bit) % P;
-		int t;
-		if( inbr < BLOCK_SIZE) {
-			t = max(mx[tid], mx[inbr]);
-		} else {
-			t = mx[tid];
-		}
-		__syncthreads();
-		mx[tid] = t;
-		__syncthreads();
-	}
-	__syncthreads();
-	number = mx[0];
-	__syncthreads();
+template <int blockSize>
+__device__ inline void sharedReduceMax(int& number) {
+    int p = WARP_SIZE;
+    while (p < blockSize) {
+        p *= 2;
+    }
+    int const tid = threadIdx.x;
+    __shared__ int mx[blockSize];
+    mx[tid] = number;
+    __syncthreads();
+    for (int bit = p / 2; bit > 0; bit /= 2) {
+        int const inbr = (tid + bit) % p;
+        int t;
+        if (inbr < blockSize) {
+            t = max(mx[tid], mx[inbr]);
+        } else {
+            t = mx[tid];
+        }
+        __syncthreads();
+        mx[tid] = t;
+        __syncthreads();
+    }
+    __syncthreads();
+    number = mx[0];
+    __syncthreads();
 }
 
 #include <cosmictiger/safe_io.hpp>
 
-template<int BLOCK_SIZE>
-__device__ inline void compute_indices(int& index, int& total) {
-	int M = WARP_SIZE;
-	while (M < BLOCK_SIZE) {
-		M *= 2;
-	}
-	__shared__ int ind[BLOCK_SIZE];
-	const int& tid = threadIdx.x;
-	ind[tid] = index;
-	__syncthreads();
-	for (int P = 1; P < M; P *= 2) {
-		int tmp = 0;
-		if (tid >= P) {
-			tmp = ind[tid - P];
-		}
-		__syncthreads();
-		ind[tid] += tmp;
-		__syncthreads();
-	}
-	total = ind[BLOCK_SIZE - 1];
-	index = tid == 0 ? 0 : ind[tid - 1];
-	__syncthreads();
+template <int blockSize>
+__device__ inline void computeIndices(int& index, int& total) {
+    int m = WARP_SIZE;
+    while (m < blockSize) {
+        m *= 2;
+    }
+    __shared__ int ind[blockSize];
+    int const& tid = threadIdx.x;
+    ind[tid] = index;
+    __syncthreads();
+    for (int p = 1; p < m; p *= 2) {
+        int tmp = 0;
+        if (tid >= p) {
+            tmp = ind[tid - p];
+        }
+        __syncthreads();
+        ind[tid] += tmp;
+        __syncthreads();
+    }
+    total = ind[blockSize - 1];
+    index = tid == 0 ? 0 : ind[tid - 1];
+    __syncthreads();
 }
 
-__device__ inline void shared_reduce_min(int& number) {
-	for (int P = warpSize / 2; P >= 1; P /= 2) {
-		number = min(number, __shfl_xor_sync(0xffffffff, number, P));
-	}
+__device__ inline void sharedReduceMin(int& number) {
+    for (int p = warpSize / 2; p >= 1; p /= 2) {
+        number = min(number, __shfl_xor_sync(0xffffffff, number, p));
+    }
 }
 
-__device__ inline void shared_reduce_min(unsigned long long& number) {
-	for (int P = warpSize / 2; P >= 1; P /= 2) {
-		number = min(number, __shfl_xor_sync(0xffffffff, number, P));
-	}
+__device__ inline void sharedReduceMin(unsigned long long& number) {
+    for (int p = warpSize / 2; p >= 1; p /= 2) {
+        number = min(number, __shfl_xor_sync(0xffffffff, number, p));
+    }
 }
 
-__device__ inline void shared_reduce_min(float& number) {
-	for (int P = warpSize / 2; P >= 1; P /= 2) {
-		number = fminf(number, __shfl_xor_sync(0xffffffff, number, P));
-	}
+__device__ inline void sharedReduceMin(float& number) {
+    for (int p = warpSize / 2; p >= 1; p /= 2) {
+        number = fminf(number, __shfl_xor_sync(0xffffffff, number, p));
+    }
 }
 
-__device__ inline void shared_reduce_max(int& number) {
-	for (int P = warpSize / 2; P >= 1; P /= 2) {
-		number = max(number, __shfl_xor_sync(0xffffffff, number, P));
-	}
+__device__ inline void sharedReduceMax(int& number) {
+    for (int p = warpSize / 2; p >= 1; p /= 2) {
+        number = max(number, __shfl_xor_sync(0xffffffff, number, p));
+    }
 }
 
 #endif

@@ -21,25 +21,27 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 #include <chrono>
 
-class timer {
-   std::chrono::time_point<std::chrono::high_resolution_clock> start_time;
-   double time;
+class Timer {
+    std::chrono::time_point<std::chrono::high_resolution_clock> startTime_;
+    double time_;
+
 public:
-   inline timer() {
-      time = 0.0;
-   }
-   inline void stop() {
-      std::chrono::time_point<std::chrono::high_resolution_clock> stop_time = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> dur = stop_time - start_time;
-      time += dur.count();
-   }
-   inline void start() {
-      start_time = std::chrono::high_resolution_clock::now();
-   }
-   inline void reset() {
-      time = 0.0;
-   }
-   inline double read() {
-      return time;
-   }
+    inline Timer() {
+        time_ = 0.0;
+    }
+    inline void stop() {
+        std::chrono::time_point<std::chrono::high_resolution_clock> stopTime =
+            std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> dur = stopTime - startTime_;
+        time_ += dur.count();
+    }
+    inline void start() {
+        startTime_ = std::chrono::high_resolution_clock::now();
+    }
+    inline void reset() {
+        time_ = 0.0;
+    }
+    inline double read() {
+        return time_;
+    }
 };

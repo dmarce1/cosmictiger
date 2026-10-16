@@ -22,46 +22,46 @@
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/timer.hpp>
 
-static double cpu_flops = 0.0;
-static spinlock_type mutex;
-static timer tm;
+static double cpuFlops = 0.0;
+static SpinlockType mutex;
+static Timer tm;
 
-HPX_PLAIN_ACTION (reset_flops);
-HPX_PLAIN_ACTION (flops_per_second);
+HPX_PLAIN_ACTION(resetFlops, ResetFlopsAction);
+HPX_PLAIN_ACTION(flopsPerSecond, FlopsPerSecondAction);
 
-void reset_flops() {
-	vector<hpx::future<void>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<reset_flops_action>(c));
-	}
-	reset_gpu_flops();
-	cpu_flops = 0.0;
-	tm.stop();
-	tm.reset();
-	tm.start();
-	hpx::wait_all(futs.begin(), futs.end());
+void resetFlops() {
+    Vector<hpx::future<void>> futs;
+    for (auto& c : hpxChildren()) {
+        futs.push_back(hpx::async<ResetFlopsAction>(c));
+    }
+    resetGpuFlops();
+    cpuFlops = 0.0;
+    tm.stop();
+    tm.reset();
+    tm.start();
+    hpx::wait_all(futs.begin(), futs.end());
 }
 
-double flops_per_second() {
-	vector<hpx::future<double>> futs;
-	for (auto& c : hpx_children()) {
-		futs.push_back(hpx::async<flops_per_second_action>(c));
-	}
-	tm.stop();
-	double result = (get_gpu_flops() + cpu_flops);
-	tm.start();
-	for (auto& f : futs) {
-		result += f.get();
-	}
-	if (hpx_rank() == 0) {
-		result /= tm.read();
-	}
-	return result;
+double flopsPerSecond() {
+    Vector<hpx::future<double>> futs;
+    for (auto& c : hpxChildren()) {
+        futs.push_back(hpx::async<FlopsPerSecondAction>(c));
+    }
+    tm.stop();
+    double result = (getGpuFlops() + cpuFlops);
+    tm.start();
+    for (auto& f : futs) {
+        result += f.get();
+    }
+    if (hpxRank() == 0) {
+        result /= tm.read();
+    }
+    return result;
 }
 
-void add_cpu_flops(int count) {
+void addCpuFlops(int count) {
 #ifdef COUNT_FLOPS
-	std::lock_guard<spinlock_type> lock(mutex);
-	cpu_flops += count;
+    std::lock_guard<SpinlockType> lock(mutex);
+    cpuFlops += count;
 #endif
 }

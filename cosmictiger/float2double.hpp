@@ -11,25 +11,21 @@
 #include <cosmictiger/defs.hpp>
 #include <cosmictiger/simd.hpp>
 
-template<class T>
-struct todouble {
-};
+template <class T>
+struct Todouble {};
 
-template<>
-struct todouble<float> {
-	using type = double;
+template <>
+struct Todouble<float> {
+    using type = double;
 };
 
 #ifndef __CUDACC__
 
-template<>
-struct todouble<simd_float> {
-	using type = simd_double8;
+template <>
+struct Todouble<SimdFloat> {
+    using type = SimdDouble8;
 };
 
-
 #endif
-
-
 
 #endif /* FLOAT2DOUBLE_HPP_ */

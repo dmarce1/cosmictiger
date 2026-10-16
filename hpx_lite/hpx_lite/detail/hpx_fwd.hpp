@@ -14,36 +14,35 @@ namespace hpx {
 
 namespace detail {
 
-typedef char invokation_type;
-#define NAME  (char) 1
+    typedef char invokation_type;
+#define NAME (char) 1
 #define ADDRESS (char) 2
 #define PROMISE (char) 3
 
-struct agas_entry_t;
-}
+    struct agas_entry_t;
+}    // namespace detail
 
 namespace detail {
 
-int& mpi_comm_rank();
+    int& mpi_comm_rank();
 
-int& mpi_comm_size();
-template<int Index, class ...Args>
-struct variadic_type;
+    int& mpi_comm_size();
+    template <int Index, class... Args>
+    struct variadic_type;
 
-template<class T>
-struct component_action_base;
+    template <class T>
+    struct component_action_base;
 
-template<class MethodType, MethodType MethodPtr>
-struct component_action;
+    template <class MethodType, MethodType MethodPtr>
+    struct component_action;
 
-}
-
+}    // namespace detail
 
 /****************************************************typedefs***************************/
 namespace detail {
-typedef void (*naked_action_type)(ibuffer_type&, obuffer_type);
-typedef void (*promise_action_type)(obuffer_type);
-}
+    typedef void (*naked_action_type)(ibuffer_type&, obuffer_type);
+    typedef void (*promise_action_type)(obuffer_type);
+}    // namespace detail
 
-}
+}    // namespace hpx
 #endif /* HPX_FWD_HPP_ */

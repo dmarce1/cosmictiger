@@ -17,13 +17,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef TEST_HPP_
 #define TEST_HPP_
 
 #include <string>
 
 void test(std::string);
-
 
 #endif /* TEST_HPP_ */

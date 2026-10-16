@@ -8,9 +8,7 @@
 #ifndef MEMUSED_HPP_
 #define MEMUSED_HPP_
 
-
-void start_memuse_daemon();
-void stop_memuse_daemon();
-
+void startMemuseDaemon();
+void stopMemuseDaemon();
 
 #endif

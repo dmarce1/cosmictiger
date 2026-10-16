@@ -17,11 +17,10 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef OUTPUT_HPP_
 #define OUTPUT_HPP_
 
-void output_tracers(int number);
-void output_slice(int number, double time);
+void outputTracers(int number);
+void outputSlice(int number, double time);
 
 #endif /* OUTPUT_HPP_ */

@@ -22,91 +22,91 @@
 #include <cuda_fp16.h>
 
 #include <cosmictiger/containers.hpp>
-#include <cosmictiger/fixed.hpp>
 #include <cosmictiger/cuda_unordered_map.hpp>
+#include <cosmictiger/fixed.hpp>
 #include <cosmictiger/range.hpp>
 
-using lc_real = fixed<int,31>;
+using LcReal = Fixed<int, 31>;
 
 #define LC_NO_GROUP (0xFFFFFFFFFFFFFFULL)
 #define LC_EDGE_GROUP (0x0ULL)
 
-struct lc_tree_id {
-	int pix;
-	int index;
+struct LcTreeId {
+    int pix;
+    int index;
 
-	CUDA_EXPORT
-	bool operator!=(const lc_tree_id& other) const {
-		return pix != other.pix || index != other.index;
-	}
+    CUDA_EXPORT
+    bool operator!=(LcTreeId const& other) const {
+        return pix != other.pix || index != other.index;
+    }
 };
 
-struct lc_tree_node {
-	range<double> box;
-	array<lc_tree_id, NCHILD> children;
-	pair<int> part_range;
-	int active;
-	int last_active;
-	device_vector<lc_tree_id> neighbors;
-	int pix;
+struct LcTreeNode {
+    Range<double> box;
+    Array<LcTreeId, NCHILD> children;
+    Pair<int> partRange;
+    int active;
+    int lastActive;
+    DeviceVector<LcTreeId> neighbors;
+    int pix;
 };
 
-struct lc_entry {
-	lc_real x, y, z;
-	float vx, vy, vz;
-	int pix;
+struct LcEntry {
+    LcReal x, y, z;
+    float vx, vy, vz;
+    int pix;
 };
 
-using lc_velreal = __half;
-constexpr double lc_velreal_range = 100.0;
+using LcVelreal = __half;
+constexpr double kLcVelrealRange = 100.0;
 
-inline lc_velreal float2velreal(float v, float vmax) {
-	return __double2half(v / vmax * 10000.0);
+inline LcVelreal float2velreal(float v, float vmax) {
+    return __double2half(v / vmax * 10000.0);
 }
 
-inline float velreal2float(lc_velreal i, float vmax) {
-	return __half2float(i) / 10000.0 * vmax;
+inline float velreal2float(LcVelreal i, float vmax) {
+    return __half2float(i) / 10000.0 * vmax;
 }
 
-using lc_group = unsigned long long;
+using LcGroup = unsigned long long;
 
-struct lc_particle {
-	array<lc_real, NDIM> pos;
-	array<float, NDIM> vel;
-	lc_group group;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & pos;
-		arc & vel;
-		arc & group;
-	}
+struct LcParticle {
+    Array<LcReal, NDIM> pos;
+    Array<float, NDIM> vel;
+    LcGroup group;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & pos;
+        arc & vel;
+        arc & group;
+    }
 };
 
-struct lc_particles {
-	array<device_vector<lc_real>, NDIM> pos;
-	array<device_vector<float>, NDIM> vel;
-	device_vector<lc_group> group;
+struct LcParticles {
+    Array<DeviceVector<LcReal>, NDIM> pos;
+    Array<DeviceVector<float>, NDIM> vel;
+    DeviceVector<LcGroup> group;
 };
 
-using lc_part_map_type = cuda_unordered_map<lc_particles>;
-using lc_tree_map_type = cuda_unordered_map<device_vector<lc_tree_node>>;
+using LcPartMapType = CudaUnorderedMap<LcParticles>;
+using LcTreeMapType = CudaUnorderedMap<DeviceVector<LcTreeNode>>;
 
-int lc_nside();
-void lc_init(double, double);
-int lc_add_particle(double x0, double y0, double z0, double x1, double y1, double z1, float vx, float vy, float vz, float t, float dt,
-		vector<lc_particle>& this_part_buffer);
-void lc_add_parts(vector<lc_particle> &&);
-size_t lc_add_parts(const device_vector<device_vector<lc_entry>>& entries, double scale, double tau);
-void lc_buffer2homes();
-size_t lc_time_to_flush(double, double);
-void lc_particle_boundaries1();
-void lc_particle_boundaries2();
-void lc_form_trees(double tmax, double link_len);
-size_t lc_find_groups();
-size_t lc_find_neighbors();
-void lc_groups2homes();
-void lc_parts2groups(double a, double link_len, int index);
-void lc_save(FILE* fp);
-void lc_load(FILE* fp);
-size_t cuda_lightcone(const device_vector<lc_tree_id>& leaves, lc_part_map_type* part_map_ptr, lc_tree_map_type* tree_map_ptr, lc_group* next_group);
-
+int lcNside();
+void lcInit(double, double);
+int lcAddParticle(double x0, double y0, double z0, double x1, double y1, double z1, float vx,
+    float vy, float vz, float t, float dt, Vector<LcParticle>& thisPartBuffer);
+void lcAddParts(Vector<LcParticle>&&);
+size_t lcAddParts(DeviceVector<DeviceVector<LcEntry>> const& entries, double scale, double tau);
+void lcBuffer2homes();
+size_t lcTimeToFlush(double, double);
+void lcParticleBoundaries1();
+void lcParticleBoundaries2();
+void lcFormTrees(double tmax, double linkLen);
+size_t lcFindGroups();
+size_t lcFindNeighbors();
+void lcGroups2homes();
+void lcParts2groups(double a, double linkLen, int index);
+void lcSave(FILE* fp);
+void lcLoad(FILE* fp);
+size_t cudaLightcone(DeviceVector<LcTreeId> const& leaves, LcPartMapType* partMapPtr,
+    LcTreeMapType* treeMapPtr, LcGroup* nextGroup);

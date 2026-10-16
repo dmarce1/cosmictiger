@@ -24,47 +24,48 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/range.hpp>
 #include <cosmictiger/tree.hpp>
 
-using group_range = range<double>;
+using GroupRange = Range<double>;
 
-struct group_tree_node {
-	group_range box;
-	array<tree_id, NCHILD> children;
-	pair<part_int> part_range;
-	pair<int> proc_range;
-	bool local_root;
-	bool active;
-	bool last_active;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & active;
-		arc & last_active;
-		arc & box;
-		arc & children;
-		arc & part_range;
-		arc & proc_range;
-		arc & local_root;
-	}
-	inline particle_global_range global_part_range() const {
-		particle_global_range r;
-		r.proc = proc_range.first;
-		r.range = part_range;
-		return r;
-	}
+struct GroupTreeNode {
+    GroupRange box;
+    Array<TreeId, NCHILD> children;
+    Pair<PartInt> partRange;
+    Pair<int> procRange;
+    bool localRoot;
+    bool active;
+    bool lastActive;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & active;
+        arc & lastActive;
+        arc & box;
+        arc & children;
+        arc & partRange;
+        arc & procRange;
+        arc & localRoot;
+    }
+    inline ParticleGlobalRange globalPartRange() const {
+        ParticleGlobalRange r;
+        r.proc = procRange.first;
+        r.range = partRange;
+        return r;
+    }
 };
 
-struct group_tree_return {
-	tree_id id;
-	group_range box;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & id;
-		arc & box;
-	}
+struct GroupTreeReturn {
+    TreeId id;
+    GroupRange box;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & id;
+        arc & box;
+    }
 };
 
-group_tree_return group_tree_create(size_t key = 1, pair<int, int> proc_range = { 0, hpx_size() }, pair<part_int> part_range = { -1, -1 }, group_range box = unit_box<double>(),
-		int depth = 0, bool local_root = hpx_size() == 1);
-void group_tree_destroy();
-const group_tree_node* group_tree_get_node(tree_id id);
-void group_tree_set_active(tree_id, bool);
-void group_tree_inc_cache_epoch();
+GroupTreeReturn groupTreeCreate(size_t key = 1, Pair<int, int> procRange = {0, hpxSize()},
+    Pair<PartInt> partRange = {-1, -1}, GroupRange box = unitBox<double>(), int depth = 0,
+    bool localRoot = hpxSize() == 1);
+void groupTreeDestroy();
+GroupTreeNode const* groupTreeGetNode(TreeId id);
+void groupTreeSetActive(TreeId, bool);
+void groupTreeIncCacheEpoch();

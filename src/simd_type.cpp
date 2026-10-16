@@ -17,16 +17,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #include <stdio.h>
-
 
 int main() {
 #if defined(__AVX2__)
-	printf( "Using AVX2");
+    printf("Using AVX2");
 #elif defined(__AVX__)
-	printf( "Using AVX");
+    printf("Using AVX");
 #else
-	printf( "Error! No AVX!");
+    printf("Error! No AVX!");
 #endif
 }

@@ -17,208 +17,209 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 #define CUDA_MEM_CU
-#include <cosmictiger/cuda_mem.hpp>
 #include <cooperative_groups.h>
 #include <cuda/barrier>
 
-using barrier_type = cuda::barrier<cuda::thread_scope::thread_scope_block>;
+#include <cosmictiger/cuda_mem.hpp>
 
-template<class T>
-CUDA_EXPORT T atomic_cas(T* this_, T expected, T value) {
+using BarrierType = cuda::barrier<cuda::thread_scope::thread_scope_block>;
+
+template <class T>
+CUDA_EXPORT T systemAtomicCompareExchange(T* self, T expected, T value) {
 #ifdef __CUDA_ARCH__
-	return atomicCAS_system(this_, expected, value);
+    return atomicCAS_system(self, expected, value);
 #else
-	return __sync_val_compare_and_swap(this_, expected, value);
+    return __sync_val_compare_and_swap(self, expected, value);
 #endif
 }
 
-template<class T>
-CUDA_EXPORT T atomic_add(T* this_, T value) {
+template <class T>
+CUDA_EXPORT T systemAtomicAdd(T* self, T value) {
 #ifdef __CUDA_ARCH__
-	return atomicAdd_system(this_, value);
+    return atomicAdd_system(self, value);
 #else
-	T expected, sum, rc;
-	do {
-		expected = *this_;
-		sum = expected + value;
-		rc = atomic_cas(this_, expected, sum);
-	} while (rc != expected);
-	return expected;
+    T expected, sum, rc;
+    do {
+        expected = *self;
+        sum = expected + value;
+        rc = systemAtomicCompareExchange(self, expected, sum);
+    } while (rc != expected);
+    return expected;
 #endif
 }
 
 CUDA_EXPORT void fence() {
 #ifdef __CUDA_ARCH__
-	__threadfence_system();
+    __threadfence_system();
 #else
-	__sync_synchronize();
+    __sync_synchronize();
 #endif
 }
 
-template<class T>
-CUDA_EXPORT T atomic_max(T* this_, T value) {
+template <class T>
+CUDA_EXPORT T systemAtomicMax(T* self, T value) {
 #ifdef __CUDA_ARCH__
-	return atomicMax_system(this_, value);
+    return atomicMax_system(self, value);
 #else
-	T expected, maxvalue, rc;
-	do {
-		expected = *this_;
-		maxvalue = std::max(expected, value);
-		rc = atomic_cas(this_, expected, maxvalue);
-	} while (rc != expected);
-	return maxvalue;
+    T expected, maxvalue, rc;
+    do {
+        expected = *self;
+        maxvalue = std::max(expected, value);
+        rc = systemAtomicCompareExchange(self, expected, maxvalue);
+    } while (rc != expected);
+    return maxvalue;
 #endif
 }
 
-template<class T>
-CUDA_EXPORT T atomic_exch(T* this_, T value) {
+template <class T>
+CUDA_EXPORT T systemAtomicExchange(T* self, T value) {
 #ifdef __CUDA_ARCH__
-	return atomicExch_system(this_, value);
+    return atomicExch_system(self, value);
 #else
-	T expected, rc;
-	do {
-		expected = *this_;
-		rc = atomic_cas(this_, expected, value);
-	} while (rc != expected);
-	return expected;
+    T expected, rc;
+    do {
+        expected = *self;
+        rc = systemAtomicCompareExchange(self, expected, value);
+    } while (rc != expected);
+    return expected;
 #endif
 }
 
 CUDA_EXPORT
-void cuda_mem::push(int bin, char* ptr) {
-	using itype = unsigned long long int;
-	auto& this_q = q[bin];
-	auto in = qin[bin];
-	const auto& out = qout[bin];
-	if (in - out >= CUDA_MEM_STACK_SIZE) {
-		PRINT("Q full! %li %li\n", out, in);
-		ALWAYS_ASSERT(false);
-	}
-	while (atomic_cas((itype*) &this_q[in % CUDA_MEM_STACK_SIZE], (itype) 0, (itype) ptr) != 0) {
-		in++;
-		if (in - out >= CUDA_MEM_STACK_SIZE) {
-			PRINT("cuda mem Q full! %li %li\n", out, in);
-			ALWAYS_ASSERT(false);
-		}
-	}
-	in++;
-	atomic_max((itype*) &qin[bin], (itype) in);
+void CudaMem::push(int bin, char* ptr) {
+    using Itype = unsigned long long int;
+    auto& thisQ = q_[bin];
+    auto in = qin_[bin];
+    auto const& out = qout_[bin];
+    if (in - out >= CUDA_MEM_STACK_SIZE) {
+        PRINT("Q full! %li %li\n", out, in);
+        ALWAYS_ASSERT(false);
+    }
+    while (systemAtomicCompareExchange(
+               (Itype*) &thisQ[in % CUDA_MEM_STACK_SIZE], (Itype) 0, (Itype) ptr) != 0) {
+        in++;
+        if (in - out >= CUDA_MEM_STACK_SIZE) {
+            PRINT("cuda mem Q full! %li %li\n", out, in);
+            ALWAYS_ASSERT(false);
+        }
+    }
+    in++;
+    systemAtomicMax((Itype*) &qin_[bin], (Itype) in);
 }
 
 CUDA_EXPORT
-char* cuda_mem::pop(int bin) {
-	using itype = unsigned long long int;
-	auto& this_q = q[bin];
-	const auto& in = qin[bin];
-	auto out = qout[bin];
-	if (out >= in) {
-		return nullptr;
-	}
-	char* ptr;
-	while ((ptr = (char*) atomic_exch((itype*) &this_q[out % CUDA_MEM_STACK_SIZE], (itype) 0)) == nullptr) {
-		if (out >= in) {
-			return nullptr;
-		}
-		out++;
-	}
-	out++;
-	atomic_max((itype*) &qout[bin], (itype) out);
-	return ptr;
-
+char* CudaMem::pop(int bin) {
+    using Itype = unsigned long long int;
+    auto& thisQ = q_[bin];
+    auto const& in = qin_[bin];
+    auto out = qout_[bin];
+    if (out >= in) {
+        return nullptr;
+    }
+    char* ptr;
+    while ((ptr = (char*) systemAtomicExchange(
+                (Itype*) &thisQ[out % CUDA_MEM_STACK_SIZE], (Itype) 0)) == nullptr) {
+        if (out >= in) {
+            return nullptr;
+        }
+        out++;
+    }
+    out++;
+    systemAtomicMax((Itype*) &qout_[bin], (Itype) out);
+    return ptr;
 }
 
 CUDA_EXPORT
-bool cuda_mem::create_new_allocation(int bin) {
-	size_t size = (1 << bin) + sizeof(size_t);
-	auto* ptr = (char*) atomic_add((unsigned long long*) &next, (unsigned long long) size);
-	if (next >= heap_end) {
-		return false;
-	} else {
-		push(bin, ptr + sizeof(size_t));
-		*((size_t*) ptr) = bin;
-		fence();
-		return true;
-	}
+bool CudaMem::createNewAllocation(int bin) {
+    size_t size = (1 << bin) + sizeof(size_t);
+    auto* ptr = (char*) systemAtomicAdd((unsigned long long*) &next_, (unsigned long long) size);
+    if (next_ >= heapEnd_) {
+        return false;
+    } else {
+        push(bin, ptr + sizeof(size_t));
+        *((size_t*) ptr) = bin;
+        fence();
+        return true;
+    }
 }
 
 CUDA_EXPORT
-void* cuda_mem::allocate(size_t sz) {
-	int alloc_size = 8;
-	int bin = 3;
-	while (alloc_size < sz) {
-		alloc_size *= 2;
-		bin++;
-	}
-	if (bin >= CUDA_MEM_NBIN) {
-		printf("Allocation request for %li too large\n", sz);
-		ALWAYS_ASSERT(false);
-	}
-	char* ptr;
-	while ((ptr = pop(bin)) == nullptr) {
-		if (!create_new_allocation(bin)) {
-			return nullptr;
-		}
-	}
-	return ptr;
+void* CudaMem::allocate(size_t sz) {
+    int allocSize = 8;
+    int bin = 3;
+    while (allocSize < sz) {
+        allocSize *= 2;
+        bin++;
+    }
+    if (bin >= CUDA_MEM_NBIN) {
+        printf("Allocation request for %li too large\n", sz);
+        ALWAYS_ASSERT(false);
+    }
+    char* ptr;
+    while ((ptr = pop(bin)) == nullptr) {
+        if (!createNewAllocation(bin)) {
+            return nullptr;
+        }
+    }
+    return ptr;
 }
 
-CUDA_EXPORT void cuda_mem::free(void* ptr) {
-	size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
-	if (*binptr >= CUDA_MEM_NBIN) {
-		printf("Corrupt free! %li\n", *binptr);
-		ALWAYS_ASSERT(false);
-	}
-	push(*binptr, (char*) ptr);
+CUDA_EXPORT void CudaMem::free(void* ptr) {
+    size_t* binptr = (size_t*) ((char*) ptr - sizeof(size_t));
+    if (*binptr >= CUDA_MEM_NBIN) {
+        printf("Corrupt free! %li\n", *binptr);
+        ALWAYS_ASSERT(false);
+    }
+    push(*binptr, (char*) ptr);
 }
 
-cuda_mem::cuda_mem(size_t heap_size) {
-	CUDA_CHECK(cudaMallocManaged(&heap_begin, heap_size));
-	heap_end = heap_begin + heap_size;
-	reset();
+CudaMem::CudaMem(size_t heapSize) {
+    CUDA_CHECK(cudaMallocManaged(&heapBegin_, heapSize));
+    heapEnd_ = heapBegin_ + heapSize;
+    reset();
 }
 
-void cuda_mem::reset() {
-	next = heap_begin;
-	for (int i = 0; i < CUDA_MEM_NBIN; i++) {
-		for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
-			q[i][j] = nullptr;
-		}
-		qin[i] = 0;
-		qout[i] = 0;
-	}
+void CudaMem::reset() {
+    next_ = heapBegin_;
+    for (int i = 0; i < CUDA_MEM_NBIN; i++) {
+        for (int j = 0; j < CUDA_MEM_STACK_SIZE; j++) {
+            q_[i][j] = nullptr;
+        }
+        qin_[i] = 0;
+        qout_[i] = 0;
+    }
 }
 
-cuda_mem::~cuda_mem() {
-	CUDA_CHECK(cudaFree(heap_begin));
+CudaMem::~CudaMem() {
+    CUDA_CHECK(cudaFree(heapBegin_));
 }
 
-__managed__ cuda_mem* memory;
+__managed__ CudaMem* memory;
 
-CUDA_EXPORT void* cuda_malloc(size_t sz) {
-	return memory->allocate(sz);
+CUDA_EXPORT void* cudaAllocate(size_t sz) {
+    return memory->allocate(sz);
 }
 
-CUDA_EXPORT void cuda_free(void* ptr) {
-	memory->free(ptr);
+CUDA_EXPORT void cudaRelease(void* ptr) {
+    memory->free(ptr);
 }
 
-void cuda_mem_init(size_t heap_size) {
-	CUDA_CHECK(cudaMallocManaged(&memory, sizeof(cuda_mem)));
-	new (memory) cuda_mem(heap_size);
+void cudaMemInit(size_t heapSize) {
+    CUDA_CHECK(cudaMallocManaged(&memory, sizeof(CudaMem)));
+    new (memory) CudaMem(heapSize);
 }
 
-void cuda_memcpy(void* dest, void* src, int size) {
+void copyCudaMemory(void* dest, void* src, int size) {
 #ifdef __CUDA_ARCH__
-	__shared__ barrier_type barrier;
-	auto group = cooperative_groups::this_thread_block();
-	if (group.thread_rank() == 0) {
-		init(&barrier, group.size());
-	}
-	syncthreads();
-	cuda::memcpy_async(group, dest, src, size, barrier);
-	barrier.arrive_and_wait();
+    __shared__ BarrierType barrier;
+    auto group = cooperative_groups::this_thread_block();
+    if (group.thread_rank() == 0) {
+        init(&barrier, group.size());
+    }
+    syncthreads();
+    cuda::memcpy_async(group, dest, src, size, barrier);
+    barrier.arrive_and_wait();
 #else
-	memcpy(dest, src, size);
+    memcpy(dest, src, size);
 #endif
-
 }

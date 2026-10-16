@@ -17,133 +17,133 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <chealpix.h>
+
 #include <cosmictiger/ewald_indices.hpp>
+#include <cosmictiger/fmm_kernels.hpp>
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/math.hpp>
-#include <chealpix.h>
-#include <cosmictiger/fmm_kernels.hpp>
 
 #define NHEAL 1024
 
-HPX_PLAIN_ACTION(ewald_const::init, ewald_const_init_action);
+HPX_PLAIN_ACTION(EwaldConst::init, EwaldConstInitAction);
 
 #ifndef USE_CUDA
 
-ewald_constants ec;
+EwaldConstants ec;
 
-int ewald_const::nfour() {
-	return NFOUR;
+int EwaldConst::nfour() {
+    return NFOUR;
 }
 
-int ewald_const::nreal() {
-	return NREAL;
+int EwaldConst::nreal() {
+    return NREAL;
 }
 
-const array<float, NDIM>& ewald_const::real_index(int i) {
-	return ec.real_indices[i];
+Array<float, NDIM> const& EwaldConst::realIndex(int i) {
+    return ec.realIndices[i];
 }
 
-const array<float, NDIM>& ewald_const::four_index(int i) {
-	return ec.four_indices[i];
+Array<float, NDIM> const& EwaldConst::fourIndex(int i) {
+    return ec.fourIndices[i];
 }
 
-const tensor_trless_sym<float, LORDER>& ewald_const::four_expansion(int i) {
-	return ec.four_expanse[i];
+TensorTrlessSym<float, LORDER> const& EwaldConst::fourExpansion(int i) {
+    return ec.fourExpanse[i];
 }
 
-const tensor_sym<float, LORDER> ewald_const::D0() {
-	return ec.D0;
+TensorSym<float, LORDER> const EwaldConst::d0() {
+    return ec.d0;
 }
 
 #endif
 
-void ewald_const::init() {
-	vector<hpx::future<void>> futs;
-	auto children = hpx_children();
-	for (const auto& c : children) {
-		futs.push_back(hpx::async<ewald_const_init_action>(c));
-	}
+void EwaldConst::init() {
+    Vector<hpx::future<void>> futs;
+    auto children = hpxChildren();
+    for (auto const& c : children) {
+        futs.push_back(hpx::async<EwaldConstInitAction>(c));
+    }
 
 #ifdef USE_CUDA
-	ewald_const::init_gpu();
+    EwaldConst::initGpu();
 #else
 
-	int n2max = 10;
-	int nmax = std::sqrt(n2max) + 1;
-	array<float, NDIM> this_h;
-	int count = 0;
-	for (int i = -nmax; i <= nmax; i++) {
-		for (int j = -nmax; j <= nmax; j++) {
-			for (int k = -nmax; k <= nmax; k++) {
-				const int i2 = i * i + j * j + k * k;
-				if (i2 <= n2max && i2 > 0) {
-					this_h[0] = i;
-					this_h[1] = j;
-					this_h[2] = k;
-					ec.real_indices[count++] = this_h;
-				}
-			}
-		}
-	}
-	const auto sort_func = [](const array<float,NDIM>& a, const array<float,NDIM>& b) {
-		const auto a2 = sqr(a[0],a[1],a[2]);
-		const auto b2 = sqr(b[0],b[1],b[2]);
-		return a2 > b2;
-	};
-	std::sort(ec.real_indices.begin(), ec.real_indices.end(), sort_func);
-	n2max = 8;
-	nmax = std::sqrt(n2max) + 1;
-	count = 0;
-	for (int i = -nmax; i <= nmax; i++) {
-		for (int j = -nmax; j <= nmax; j++) {
-			for (int k = -nmax; k <= nmax; k++) {
-				if (i * i + j * j + k * k <= n2max) {
-					this_h[0] = i;
-					this_h[1] = j;
-					this_h[2] = k;
-					const auto hdot = sqr(this_h[0]) + sqr(this_h[1]) + sqr(this_h[2]);
-					if (hdot > 0) {
-						ec.four_indices[count++] = this_h;
-					}
-				}
-			}
-		}
-	}
-	std::sort(ec.four_indices.begin(), ec.four_indices.end(), sort_func);
-	count = 0;
-	for (int i = 0; i < NFOUR; i++) {
-		array<float, NDIM> h = ec.four_indices[i];
-		auto D0 = vector_to_sym_tensor<float, LORDER>(h);
-		const float h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);                     // 5 OP
-		const float c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
-		array<int, NDIM> n;
-		const int signs[4] = { 1, -1, -1, 1 };
-		for (n[0] = 0; n[0] < LORDER; n[0]++) {
-			for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
-				for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
-					const int n0 = n[0] + n[1] + n[2];
-					D0(n) *= signs[n0 % 4] * pow(2.0 * M_PI, n0) * c0;
-				}
-			}
-		}
-		ec.four_expanse[count++] = D0.detraceD();
-	}
-	tensor_sym<float, LORDER> D;
-	for (int n = 0; n < EXPANSION_SIZE; n++) {
-		D[n] = 0.0;
-	}
-	constexpr double alpha = 2.0;
-	for (int n = 0; n < LORDER; n += 2) {
-		for (int m = 0; m < LORDER - n; m += 2) {
-			for (int l = 0; l < LORDER - n - m; l += 2) {
-				D(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) * pow(alpha, n + m + l + 1) * double_factorial(n - 1)
-						* double_factorial(m - 1) * double_factorial(l - 1);
-			}
-		}
-	}
-	ec.D0 = D;
+    int n2max = 10;
+    int nmax = std::sqrt(n2max) + 1;
+    Array<float, NDIM> thisH;
+    int count = 0;
+    for (int i = -nmax; i <= nmax; i++) {
+        for (int j = -nmax; j <= nmax; j++) {
+            for (int k = -nmax; k <= nmax; k++) {
+                int const i2 = i * i + j * j + k * k;
+                if (i2 <= n2max && i2 > 0) {
+                    thisH[0] = i;
+                    thisH[1] = j;
+                    thisH[2] = k;
+                    ec.realIndices[count++] = thisH;
+                }
+            }
+        }
+    }
+    auto const sortFunc = [](Array<float, NDIM> const& a, Array<float, NDIM> const& b) {
+        auto const a2 = sqr(a[0], a[1], a[2]);
+        auto const b2 = sqr(b[0], b[1], b[2]);
+        return a2 > b2;
+    };
+    std::sort(ec.realIndices.begin(), ec.realIndices.end(), sortFunc);
+    n2max = 8;
+    nmax = std::sqrt(n2max) + 1;
+    count = 0;
+    for (int i = -nmax; i <= nmax; i++) {
+        for (int j = -nmax; j <= nmax; j++) {
+            for (int k = -nmax; k <= nmax; k++) {
+                if (i * i + j * j + k * k <= n2max) {
+                    thisH[0] = i;
+                    thisH[1] = j;
+                    thisH[2] = k;
+                    auto const hdot = sqr(thisH[0]) + sqr(thisH[1]) + sqr(thisH[2]);
+                    if (hdot > 0) {
+                        ec.fourIndices[count++] = thisH;
+                    }
+                }
+            }
+        }
+    }
+    std::sort(ec.fourIndices.begin(), ec.fourIndices.end(), sortFunc);
+    count = 0;
+    for (int i = 0; i < NFOUR; i++) {
+        Array<float, NDIM> h = ec.fourIndices[i];
+        auto d0Value = vectorToSymTensor<float, LORDER>(h);
+        float const h2 = sqr(h[0]) + sqr(h[1]) + sqr(h[2]);    // 5 OP
+        float const c0 = -1.0 / h2 * exp(-M_PI * M_PI * h2 / 4.0) / M_PI;
+        Array<int, NDIM> n;
+        int const signs[4] = {1, -1, -1, 1};
+        for (n[0] = 0; n[0] < LORDER; n[0]++) {
+            for (n[1] = 0; n[1] < LORDER - n[0]; n[1]++) {
+                for (n[2] = 0; n[2] < LORDER - n[0] - n[1]; n[2]++) {
+                    int const n0 = n[0] + n[1] + n[2];
+                    d0Value(n) *= signs[n0 % 4] * pow(2.0 * M_PI, n0) * c0;
+                }
+            }
+        }
+        ec.fourExpanse[count++] = d0Value.detraceD();
+    }
+    TensorSym<float, LORDER> d;
+    for (int n = 0; n < EXPANSION_SIZE; n++) {
+        d[n] = 0.0;
+    }
+    constexpr double kAlpha = 2.0;
+    for (int n = 0; n < LORDER; n += 2) {
+        for (int m = 0; m < LORDER - n; m += 2) {
+            for (int l = 0; l < LORDER - n - m; l += 2) {
+                d(n, m, l) = pow(-2.0, (n + m + l) / 2 + 1) / ((n + m + l + 1.0) * sqrt(M_PI)) *
+                    pow(kAlpha, n + m + l + 1) * doubleFactorial(n - 1) * doubleFactorial(m - 1) *
+                    doubleFactorial(l - 1);
+            }
+        }
+    }
+    ec.d0 = d;
 #endif
-	hpx::wait_all(futs.begin(), futs.end());
-
+    hpx::wait_all(futs.begin(), futs.end());
 }
-

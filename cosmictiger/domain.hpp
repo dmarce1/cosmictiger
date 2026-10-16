@@ -17,7 +17,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-
 #ifndef DOMAIN_HPP_
 #define DOMAIN_HPP_
 
@@ -25,44 +24,44 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/range.hpp>
 
-void domains_begin(int rung);
-void domains_end();
-void domains_rebound();
-range<double> domains_find_my_box();
-range<double> domains_range(size_t key);
-void domains_save(FILE* fp);
-void domains_load(FILE *fp);
-double domains_get_load_imbalance();
-pair<int, double> domains_find_ewald_level(double theta, size_t key = 1, range<double> box = unit_box<double>(), int depth = 0, double rb = -1.0);
+void domainsBegin(int rung);
+void domainsEnd();
+void domainsRebound();
+Range<double> domainsFindMyBox();
+Range<double> domainsRange(size_t key);
+void domainsSave(FILE* fp);
+void domainsLoad(FILE* fp);
+double domainsGetLoadImbalance();
+Pair<int, double> domainsFindEwaldLevel(double theta, size_t key = 1,
+    Range<double> box = unitBox<double>(), int depth = 0, double rb = -1.0);
 
-
-struct domain_t {
-	range<double> box;
-	double midx;
-	int rank;
-	template<class A>
-	void serialize(A&& arc, unsigned) {
-		arc & box;
-		arc & midx;
-		arc & rank;
-	}
+struct DomainT {
+    Range<double> box;
+    double midx;
+    int rank;
+    template <class A>
+    void serialize(A&& arc, unsigned) {
+        arc & box;
+        arc & midx;
+        arc & rank;
+    }
 };
 
-struct domain_global {
-	range<double> box;
-	pair<int> proc_range;
-	size_t total_count;
-	size_t lo_count;
-	double midhi;
-	double midlo;
-	size_t key;
+struct DomainGlobal {
+    Range<double> box;
+    Pair<int> procRange;
+    size_t totalCount;
+    size_t loCount;
+    double midhi;
+    double midlo;
+    size_t key;
 };
 
-struct domain_local {
-	range<double> box;
-	pair<int> proc_range;
-	pair<part_int> part_range;
-	int depth;
+struct DomainLocal {
+    Range<double> box;
+    Pair<int> procRange;
+    Pair<PartInt> partRange;
+    int depth;
 };
 
 #endif /* DOMAIN_HPP_ */

@@ -24,56 +24,55 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/safe_io.hpp>
 
-void kernel_set_type(int type) {}
+void kernelSetType(int type) {}
 
-void kernel_output() {
-	FILE* fp = fopen("kernel.txt", "wt");
-	for (double q = 0.0; q <= 1.0; q += 0.0001) {
-		fprintf(fp, "%e %e %e %e %e\n", q, kernelW(q), dkernelW_dq(q), kernelFqinv(q), kernelPot(q));
-	}
-	fclose(fp);
+void kernelOutput() {
+    FILE* fp = fopen("kernel.txt", "wt");
+    for (double q = 0.0; q <= 1.0; q += 0.0001) {
+        fprintf(fp, "%e %e %e %e %e\n", q, kernelW(q), dkernelWDq(q), kernelFqinv(q), kernelPot(q));
+    }
+    fclose(fp);
 }
 
-double kernel_stddev(std::function<double(double)> W) {
-	double sum = 0.f;
-	int N = 10000;
-	double dq = 1.0 / N;
-	for (int i = 0; i < N; i++) {
-		double q = (i + 0.5) * dq;
-		sum += sqr(sqr(q)) * W(q) * dq;
-	}
-	sum *= 4.0 * M_PI;
-	return sqrt(sum);
+double kernelStddev(std::function<double(double)> w) {
+    double sum = 0.f;
+    int n = 10000;
+    double dq = 1.0 / n;
+    for (int i = 0; i < n; i++) {
+        double q = (i + 0.5) * dq;
+        sum += sqr(sqr(q)) * w(q) * dq;
+    }
+    sum *= 4.0 * M_PI;
+    return sqrt(sum);
 }
 
-void kernel_adjust_options(options& opts) {
-
-	double h0 = 4.743416e-01;
-	double h;
-	h = kernel_stddev(kernelW<double>);
-	PRINT("kernel width = %e\n", h0 / h);
-	//	opts.neighbor_number *= pow(h0 / h, 3);
-	opts.sph_bucket_size = 8.0 / M_PI * opts.sneighbor_number;
+void kernelAdjustOptions(Options& opts) {
+    double h0 = 4.743416e-01;
+    double h;
+    h = kernelStddev(kernelW<double>);
+    PRINT("kernel width = %e\n", h0 / h);
+    //	opts.neighbor_number *= pow(h0 / h, 3);
+    opts.sphBucketSize = 8.0 / M_PI * opts.sneighborNumber;
 #ifdef KERNEL_CUBIC_SPLINE
-	opts.cfl = 0.20;
-	opts.eta = 0.17;
-	opts.gneighbor_number = 60;
-	opts.sneighbor_number = 60;
+    opts.cfl = 0.20;
+    opts.eta = 0.17;
+    opts.gneighborNumber = 60;
+    opts.sneighborNumber = 60;
 #endif
 #ifdef KERNEL_QUARTIC_SPLINE
-	opts.cfl = 0.16;
-	opts.eta = 0.15;
-	opts.gneighbor_number = 117;
-	opts.sneighbor_number = 117;
+    opts.cfl = 0.16;
+    opts.eta = 0.15;
+    opts.gneighborNumber = 117;
+    opts.sneighborNumber = 117;
 #endif
 #ifdef KERNEL_QUINTIC_SPLINE
-	opts.cfl = 0.13;
-	opts.eta = 0.14;
-	opts.gneighbor_number = 203;
-	opts.sneighbor_number = 203;
+    opts.cfl = 0.13;
+    opts.eta = 0.14;
+    opts.gneighborNumber = 203;
+    opts.sneighborNumber = 203;
 #endif
-	PRINT("Setting:\n");
-	PRINT("SPH Bucket size       = %i\n", opts.sph_bucket_size);
-	PRINT("CFL = %f\n", opts.cfl);
-	PRINT("eta = %f\n", opts.eta);
+    PRINT("Setting:\n");
+    PRINT("SPH Bucket size       = %i\n", opts.sphBucketSize);
+    PRINT("CFL = %f\n", opts.cfl);
+    PRINT("eta = %f\n", opts.eta);
 }

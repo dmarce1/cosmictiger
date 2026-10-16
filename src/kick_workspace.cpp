@@ -23,359 +23,372 @@
 #include <cosmictiger/particles.hpp>
 #include <cosmictiger/timer.hpp>
 
-HPX_PLAIN_ACTION(kick_workspace::clear_buffers, clear_buffers_action);
+HPX_PLAIN_ACTION(KickWorkspace::clearBuffers, ClearBuffersAction);
 
-kick_workspace::kick_workspace(kick_params p, part_int total_parts_) {
-	total_parts = total_parts_;
-	params = p;
-	nparts = 0;
+KickWorkspace::KickWorkspace(KickParams p, PartInt totalPartsArg) {
+    totalParts_ = totalPartsArg;
+    params_ = p;
+    nparts_ = 0;
 }
 
-kick_workspace::~kick_workspace() {}
+KickWorkspace::~KickWorkspace() {}
 
-static void add_tree_node(std::vector<tree_id>& trees, tree_id id) {
-	tree_node const* node = tree_get_node(id);
-	trees.push_back(id);
-	if (node->children[LEFT].index != -1) {
-		add_tree_node(trees, node->children[LEFT]);
-		add_tree_node(trees, node->children[RIGHT]);
-	}
+static void addTreeNode(std::vector<TreeId>& trees, TreeId id) {
+    TreeNode const* node = treeGetNode(id);
+    trees.push_back(id);
+    if (node->children[LEFT].index != -1) {
+        addTreeNode(trees, node->children[LEFT]);
+        addTreeNode(trees, node->children[RIGHT]);
+    }
 }
 
-bool morton_compare(array<fixed32, NDIM> a, array<fixed32, NDIM> b) {
-	array<unsigned, NDIM> abits;
-	array<unsigned, NDIM> bbits;
-	for (int dim = 0; dim < NDIM; dim++) {
-		abits[dim] = a[dim].raw();
-		bbits[dim] = b[dim].raw();
-	}
-	for (int i = 0; i < 64; i++) {
-		for (int dim = 0; dim < NDIM; dim++) {
-			int const abit = abits[dim] & (unsigned)0x80000000;
-			int const bbit = bbits[dim] & (unsigned)0x80000000;
-			if (bbit && !abit) {
-				return true;
-			} else if (!bbit && abit) {
-				return false;
-			}
-			abits[dim] <<= 1;
-			bbits[dim] <<= 1;
-		}
-	}
-	return false;
+bool mortonCompare(Array<Fixed32, NDIM> a, Array<Fixed32, NDIM> b) {
+    Array<unsigned, NDIM> abits;
+    Array<unsigned, NDIM> bbits;
+    for (int dim = 0; dim < NDIM; dim++) {
+        abits[dim] = a[dim].raw();
+        bbits[dim] = b[dim].raw();
+    }
+    for (int i = 0; i < 64; i++) {
+        for (int dim = 0; dim < NDIM; dim++) {
+            int const abit = abits[dim] & (unsigned) 0x80000000;
+            int const bbit = bbits[dim] & (unsigned) 0x80000000;
+            if (bbit && !abit) {
+                return true;
+            } else if (!bbit && abit) {
+                return false;
+            }
+            abits[dim] <<= 1;
+            bbits[dim] <<= 1;
+        }
+    }
+    return false;
 }
 
-void kick_workspace::to_gpu() {
+void KickWorkspace::toGpu() {
+    cudaSetDevice();
+    //	PRINT("Preparing gpu send on %i\n", hpx_rank());
 
-	cuda_set_device();
-	//	PRINT("Preparing gpu send on %i\n", hpx_rank());
+    Timer tm;
+    tm.start();
+    auto const treeNodesRemoteBegin = treeNodesNextIndex();
+    if (workitems_.size() == 0) {
+        return;
+    }
 
-	timer tm;
-	tm.start();
-	auto const tree_nodes_remote_begin = tree_nodes_next_index();
-	if (workitems.size() == 0) {
-		return;
-	}
+    struct GlobalPartRange {
+        int rank;
+        Pair<PartInt> range;
+        bool operator==(GlobalPartRange other) const {
+            return rank == other.rank && range == other.range;
+        }
+    };
 
-	struct global_part_range {
-		int rank;
-		pair<part_int> range;
-		bool operator==(global_part_range other) const { return rank == other.rank && range == other.range; }
-	};
+    struct GlobalPartRangeHash {
+        size_t operator()(GlobalPartRange g) const {
+            return (size_t) hpxSize() * g.range.first + g.rank;
+        }
+    };
+    Timer tm2;
+    Timer tm3;
+    Timer tm4;
+    tm2.start();
+    MutexType mutex;
+    Vector<hpx::future<void>> futs1;
+    Vector<TreeId> treeIdsVector(treeIds_.begin(), treeIds_.end());
+    Vector<Vector<TreeId>> idsByDepth(MAX_DEPTH);
+    int nthreads = hpxSize() == 1 ? 1 : std::max(1, (int) hpxHardwareConcurrency() / 2);
+    for (int proc = 0; proc < nthreads; proc++) {
+        futs1.push_back(hpx::async([proc, nthreads, &treeIdsVector, &idsByDepth, &mutex]() {
+            std::unique_lock<MutexType> lock(mutex);
+            int const b = (size_t) proc * treeIdsVector.size() / nthreads;
+            int const e = (size_t) (proc + 1) * treeIdsVector.size() / nthreads;
+            for (int i = b; i < e; i++) {
+                lock.unlock();
+                TreeNode const* ptr = treeGetNode(treeIdsVector[i]);
+                lock.lock();
+                idsByDepth[ptr->depth].push_back(treeIdsVector[i]);
+            }
+        }));
+    }
+    hpx::wait_all(futs1.begin(), futs1.end());
+    tm2.stop();
+    tm3.start();
+    struct PartRequest {
+        Vector<Vector<Pair<PartInt>>> data;
+        size_t count;
+        PartRequest() {
+            count = 0;
+            data.resize(1);
+        }
+    };
+    std::unordered_map<TreeId, int, KickWorkspaceTreeIdHash> treeMap;
+    std::unordered_map<int, PartRequest> partRequests;
+    std::unordered_map<GlobalPartRange, Pair<PartInt>, GlobalPartRangeHash> partMap;
+    std::set<TreeId> remoteRoots;
+    PartInt partIndex = particlesSize();
+    Vector<hpx::future<void>> futs2;
+    Vector<hpx::future<void>> futs3;
+    size_t const opartsize = particlesSize();
+    size_t const maxParts = 64 * 1024 * 1024;
+    Vector<hpx::future<Vector<TreeId>>> futs0;
+    Vector<TreeId> trees;
+    for (int depth = 0; depth < MAX_DEPTH; depth++) {
+        auto const& ids = idsByDepth[depth];
+        for (int proc = 0; proc < nthreads; proc++) {
+            futs0.push_back(hpx::async([proc, nthreads, &ids, &treeMap, &mutex, &partRequests,
+                                           &partMap, &partIndex, &remoteRoots]() {
+                Vector<TreeId> trees;
+                int const b = (size_t) proc * ids.size() / nthreads;
+                int const e = (size_t) (proc + 1) * ids.size() / nthreads;
+                for (int i = b; i < e; i++) {
+                    if (treeMap.find(ids[i]) == treeMap.end()) {
+                        TreeNode const* node = treeGetNode(ids[i]);
+                        addTreeNode(trees, ids[i]);
+                        int const rank = node->procRange.first;
+                        if (rank != hpxRank()) {
+                            auto const range = node->partRange;
+                            auto const thisCount = range.second - range.first;
+                            GlobalPartRange gpr;
+                            gpr.rank = rank;
+                            gpr.range = range;
+                            size_t const nparts = node->nparts();
+                            std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
+                            auto& entry = partRequests[rank];
+                            entry.data.back().push_back(range);
+                            entry.count += thisCount;
+                            partMap[gpr].first = partIndex;
+                            partMap[gpr].second = partIndex + nparts;
+                            partIndex += nparts;
+                            particlesResize(partIndex, false);
+                            remoteRoots.insert(ids[i]);
+                            if (entry.count > maxParts) {
+                                size_t count = entry.count;
+                                PartInt index = 0;
+                                entry.count = 0;
+                                entry.data.resize(entry.data.size() + 1);
+                            }
+                        }
+                    }
+                }
+                return trees;
+            }));
+        }
+        hpx::wait_all(futs0.begin(), futs0.end());
+        auto const start = trees.size();
+        for (auto& f : futs0) {
+            auto tmp = f.get();
+            trees.reserve(trees.size() + tmp.size());
+            for (auto const& entry : tmp) {
+                trees.push_back(entry);
+            }
+        }
+        for (int i = start; i < trees.size(); i++) {
+            if (trees[i].proc == hpxRank()) {
+                treeMap[trees[i]] = trees[i].index;
+            } else {
+                treeMap[trees[i]] = -1;
+            }
+        }
+        futs0.resize(0);
+    }
+    tm3.stop();
+    tm4.start();
+    for (int i = 0; i < trees.size(); i++) {
+        if (trees[i].proc != hpxRank()) {
+            treeMap[trees[i]] = treeAddRemote(*treeGetNode(trees[i]));
+        }
+    }
+    tm4.stop();
 
-	struct global_part_range_hash {
-		size_t operator()(global_part_range g) const { return (size_t)hpx_size() * g.range.first + g.rank; }
-	};
-	timer tm2;
-	timer tm3;
-	timer tm4;
-	tm2.start();
-	mutex_type mutex;
-	vector<hpx::future<void>> futs1;
-	vector<tree_id> tree_ids_vector(tree_ids.begin(), tree_ids.end());
-	vector<vector<tree_id>> ids_by_depth(MAX_DEPTH);
-	int nthreads = hpx_size() == 1 ? 1 : std::max(1, (int)hpx_hardware_concurrency() / 2);
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs1.push_back(hpx::async([proc, nthreads, &tree_ids_vector, &ids_by_depth, &mutex]() {
-			std::unique_lock<mutex_type> lock(mutex);
-			int const b = (size_t)proc * tree_ids_vector.size() / nthreads;
-			int const e = (size_t)(proc + 1) * tree_ids_vector.size() / nthreads;
-			for (int i = b; i < e; i++) {
-				lock.unlock();
-				tree_node const* ptr = tree_get_node(tree_ids_vector[i]);
-				lock.lock();
-				ids_by_depth[ptr->depth].push_back(tree_ids_vector[i]);
-			}
-		}));
-	}
-	hpx::wait_all(futs1.begin(), futs1.end());
-	tm2.stop();
-	tm3.start();
-	struct part_request {
-		vector<vector<pair<part_int>>> data;
-		size_t count;
-		part_request() {
-			count = 0;
-			data.resize(1);
-		}
-	};
-	std::unordered_map<tree_id, int, kick_workspace_tree_id_hash> tree_map;
-	std::unordered_map<int, part_request> part_requests;
-	std::unordered_map<global_part_range, pair<part_int>, global_part_range_hash> part_map;
-	std::set<tree_id> remote_roots;
-	part_int part_index = particles_size();
-	vector<hpx::future<void>> futs2;
-	vector<hpx::future<void>> futs3;
-	size_t const opartsize = particles_size();
-	size_t const max_parts = 64 * 1024 * 1024;
-	vector<hpx::future<vector<tree_id>>> futs0;
-	vector<tree_id> trees;
-	for (int depth = 0; depth < MAX_DEPTH; depth++) {
-		auto const& ids = ids_by_depth[depth];
-		for (int proc = 0; proc < nthreads; proc++) {
-			futs0.push_back(hpx::async([proc, nthreads, &ids, &tree_map, &mutex, &part_requests, &part_map, &part_index, &remote_roots]() {
-				vector<tree_id> trees;
-				int const b = (size_t)proc * ids.size() / nthreads;
-				int const e = (size_t)(proc + 1) * ids.size() / nthreads;
-				for (int i = b; i < e; i++) {
-					if (tree_map.find(ids[i]) == tree_map.end()) {
-						tree_node const* node = tree_get_node(ids[i]);
-						add_tree_node(trees, ids[i]);
-						int const rank = node->proc_range.first;
-						if (rank != hpx_rank()) {
-							auto const range = node->part_range;
-							auto const this_count = range.second - range.first;
-							global_part_range gpr;
-							gpr.rank = rank;
-							gpr.range = range;
-							size_t const nparts = node->nparts();
-							std::unique_lock<shared_mutex_type> lock(particles_shared_mutex());
-							auto& entry = part_requests[rank];
-							entry.data.back().push_back(range);
-							entry.count += this_count;
-							part_map[gpr].first = part_index;
-							part_map[gpr].second = part_index + nparts;
-							part_index += nparts;
-							particles_resize(part_index, false);
-							remote_roots.insert(ids[i]);
-							if (entry.count > max_parts) {
-								size_t count = entry.count;
-								part_int index = 0;
-								entry.count = 0;
-								entry.data.resize(entry.data.size() + 1);
-							}
-						}
-					}
-				}
-				return trees;
-			}));
-		}
-		hpx::wait_all(futs0.begin(), futs0.end());
-		auto const start = trees.size();
-		for (auto& f : futs0) {
-			auto tmp = f.get();
-			trees.reserve(trees.size() + tmp.size());
-			for (auto const& entry : tmp) {
-				trees.push_back(entry);
-			}
-		}
-		for (int i = start; i < trees.size(); i++) {
-			if (trees[i].proc == hpx_rank()) {
-				tree_map[trees[i]] = trees[i].index;
-			} else {
-				tree_map[trees[i]] = -1;
-			}
-		}
-		futs0.resize(0);
-	}
-	tm3.stop();
-	tm4.start();
-	for (int i = 0; i < trees.size(); i++) {
-		if (trees[i].proc != hpx_rank()) {
-			tree_map[trees[i]] = tree_add_remote(*tree_get_node(trees[i]));
-		}
-	}
-	tm4.stop();
-
-	//	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read() + tm3.read() + tm4.read(), tm2.read(), tm3.read(), tm4.read());
-	tm2.reset();
-	futs1.resize(0);
-	nthreads = std::max(1, (int)hpx_hardware_concurrency());
-	for (auto i = part_requests.begin(); i != part_requests.end(); i++) {
-		int const rank = i->first;
-		hpx::future<void> fut = hpx::make_ready_future();
-		for (int j = 0; j < i->second.data.size(); j++) {
-			size_t const count = i->second.data[j].size();
-			if (count) {
-				fut = fut.then([rank, count, &part_map, i, j](hpx::future<void> fut) {
-					fut.get();
-					auto const& ranges = i->second.data[j];
-					auto const data = particles_get(rank, ranges).get();
-					part_int index = 0;
-					for (int k = 0; k < ranges.size(); k++) {
-						index += ranges[k].second - ranges[k].first;
-					}
-					size_t sz = index;
-					index = 0;
-					for (int k = 0; k < ranges.size(); k++) {
-						global_part_range gpr;
-						gpr.rank = rank;
-						gpr.range = ranges[k];
-						auto local_range = part_map[gpr];
-						auto const nparts = local_range.second - local_range.first;
-						for (int dim = 0; dim < NDIM; dim++) {
-							memcpy(&particles_pos(dim, local_range.first), &data[sz * dim + index], nparts * sizeof(fixed32));
-						}
-						if (get_options().sph) {
-							vector<fixed32> x(nparts), y(nparts), z(nparts);
-							vector<char> types(nparts);
-							particle_global_range source;
-							source.proc = rank;
-							source.range = ranges[k];
-							particles_global_read_pos(source, x.data(), y.data(), z.data(), types.data(), nullptr, 0);
-							std::memcpy(&particles_type(local_range.first), types.data(), nparts * sizeof(char));
-						}
-						index += nparts;
-					}
-				});
-			}
-		}
-		futs1.push_back(std::move(fut));
-	}
-	auto* tree_nodes = tree_data();
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [proc, nthreads, &tree_map, &tree_nodes, tree_nodes_remote_begin]() {
-			for (int i = tree_nodes_remote_begin + proc; i < tree_nodes_next_index(); i += nthreads) {
-				if (tree_nodes[i].children[LEFT].index != -1) {
-					ASSERT(tree_map.find(tree_nodes[i].children[LEFT]) != tree_map.end());
-					ASSERT(tree_map.find(tree_nodes[i].children[RIGHT]) != tree_map.end());
-					auto& left = tree_nodes[i].children[LEFT];
-					auto& right = tree_nodes[i].children[RIGHT];
-					left.index = tree_map[left];
-					right.index = tree_map[right];
-				}
-			}
-		}));
-	}
-	hpx::wait_all(futs2.begin(), futs2.end());
-	futs2.resize(0);
-	std::function<void(int, part_int)> const adjust_part_refs = [&adjust_part_refs, &tree_nodes](int index, part_int offset) -> void {
-		auto& node = tree_nodes[index];
-		node.part_range.first += offset;
-		node.part_range.second += offset;
-		ASSERT(node.part_range.first >= 0);
-		ASSERT(node.part_range.second <= particles_size());
-		if (node.children[LEFT].index != -1) {
-			adjust_part_refs(node.children[LEFT].index, offset);
-			adjust_part_refs(node.children[RIGHT].index, offset);
-		}
-	};
-	for (auto i = remote_roots.begin(); i != remote_roots.end(); i++) {
-		futs3.push_back(hpx::async(HPX_PRIORITY_HI, [i, &tree_map, &part_map, adjust_part_refs, &tree_nodes, tree_nodes_remote_begin]() {
-			global_part_range gpr;
-			ASSERT(tree_map.find(*i) != tree_map.end());
-			int index = tree_map[*i];
-			ASSERT(index >= tree_nodes_remote_begin);
-			auto& node = tree_nodes[index];
-			gpr.rank = node.proc_range.first;
-			gpr.range = node.part_range;
-			ASSERT(part_map.find(gpr) != part_map.end());
-			auto local_range = part_map[gpr];
-			part_int offset = local_range.first - gpr.range.first;
-			ASSERT(tree_nodes[index].part_range.first == gpr.range.first);
-			adjust_part_refs(index, offset);
-		}));
-	}
-	for (int proc = 0; proc < nthreads; proc++) {
-		futs2.push_back(hpx::async(HPX_PRIORITY_HI, [this, proc, nthreads, &tree_map]() {
-			for (int i = proc; i < workitems.size(); i += nthreads) {
-				for (int j = 0; j < workitems[i].dchecklist.size(); j++) {
-					if (workitems[i].dchecklist[j].proc != hpx_rank()) {
-						auto const iter = tree_map.find(workitems[i].dchecklist[j]);
-						ASSERT(iter != tree_map.end());
-						workitems[i].dchecklist[j].index = iter->second;
-					}
-				}
-				for (int j = 0; j < workitems[i].echecklist.size(); j++) {
-					if (workitems[i].echecklist[j].proc != hpx_rank()) {
-						auto const iter = tree_map.find(workitems[i].echecklist[j]);
-						ASSERT(iter != tree_map.end());
-						workitems[i].echecklist[j].index = iter->second;
-					}
-				}
-			}
-		}));
-	}
-	hpx::wait_all(futs2.begin(), futs2.end());
-	futs2.resize(0);
-	auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems.begin(), workitems.end(), [](kick_workitem const& a, kick_workitem const& b) {
-		return tree_get_node(a.self)->part_range.first < tree_get_node(b.self)->part_range.first;
-	});
-	hpx::wait_all(futs3.begin(), futs3.end());
-	hpx::wait_all(futs1.begin(), futs1.end());
-	sfut.get();
-	tm.stop();
-	//	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
-	tm.reset();
-	tm.start();
-	tree_2_gpu();
-	particles_memadvise_gpu();
-	auto const kr = cuda_execute_kicks(params, &particles_pos(XDIM, 0), &particles_pos(YDIM, 0), &particles_pos(ZDIM, 0), tree_nodes, std::move(workitems));
-	tree_2_cpu();
-	tm.stop();
-	particles_resize(opartsize);
-	kick_set_rc(kr);
-	//	PRINT("GPU took %e seconds\n", tm.read());
+    //	PRINT("%e / %e %e %e to load tree nodes\n", tm2.read() + tm3.read() + tm4.read(),
+    // tm2.read(), tm3.read(), tm4.read());
+    tm2.reset();
+    futs1.resize(0);
+    nthreads = std::max(1, (int) hpxHardwareConcurrency());
+    for (auto i = partRequests.begin(); i != partRequests.end(); i++) {
+        int const rank = i->first;
+        hpx::future<void> fut = hpx::make_ready_future();
+        for (int j = 0; j < i->second.data.size(); j++) {
+            size_t const count = i->second.data[j].size();
+            if (count) {
+                fut = fut.then([rank, count, &partMap, i, j](hpx::future<void> fut) {
+                    fut.get();
+                    auto const& ranges = i->second.data[j];
+                    auto const data = particlesGet(rank, ranges).get();
+                    PartInt index = 0;
+                    for (int k = 0; k < ranges.size(); k++) {
+                        index += ranges[k].second - ranges[k].first;
+                    }
+                    size_t sz = index;
+                    index = 0;
+                    for (int k = 0; k < ranges.size(); k++) {
+                        GlobalPartRange gpr;
+                        gpr.rank = rank;
+                        gpr.range = ranges[k];
+                        auto localRange = partMap[gpr];
+                        auto const nparts = localRange.second - localRange.first;
+                        for (int dim = 0; dim < NDIM; dim++) {
+                            memcpy(&particlesPos(dim, localRange.first), &data[sz * dim + index],
+                                nparts * sizeof(Fixed32));
+                        }
+                        if (getOptions().sph) {
+                            Vector<Fixed32> x(nparts), y(nparts), z(nparts);
+                            Vector<char> types(nparts);
+                            ParticleGlobalRange source;
+                            source.proc = rank;
+                            source.range = ranges[k];
+                            particlesGlobalReadPos(
+                                source, x.data(), y.data(), z.data(), types.data(), nullptr, 0);
+                            std::memcpy(&particlesType(localRange.first), types.data(),
+                                nparts * sizeof(char));
+                        }
+                        index += nparts;
+                    }
+                });
+            }
+        }
+        futs1.push_back(std::move(fut));
+    }
+    auto* treeNodes = treeData();
+    for (int proc = 0; proc < nthreads; proc++) {
+        futs2.push_back(hpx::async(
+            HPX_PRIORITY_HI, [proc, nthreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
+                for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex(); i += nthreads) {
+                    if (treeNodes[i].children[LEFT].index != -1) {
+                        ASSERT(treeMap.find(treeNodes[i].children[LEFT]) != treeMap.end());
+                        ASSERT(treeMap.find(treeNodes[i].children[RIGHT]) != treeMap.end());
+                        auto& left = treeNodes[i].children[LEFT];
+                        auto& right = treeNodes[i].children[RIGHT];
+                        left.index = treeMap[left];
+                        right.index = treeMap[right];
+                    }
+                }
+            }));
+    }
+    hpx::wait_all(futs2.begin(), futs2.end());
+    futs2.resize(0);
+    std::function<void(int, PartInt)> const adjustPartRefs =
+        [&adjustPartRefs, &treeNodes](int index, PartInt offset) -> void {
+        auto& node = treeNodes[index];
+        node.partRange.first += offset;
+        node.partRange.second += offset;
+        ASSERT(node.partRange.first >= 0);
+        ASSERT(node.partRange.second <= particlesSize());
+        if (node.children[LEFT].index != -1) {
+            adjustPartRefs(node.children[LEFT].index, offset);
+            adjustPartRefs(node.children[RIGHT].index, offset);
+        }
+    };
+    for (auto i = remoteRoots.begin(); i != remoteRoots.end(); i++) {
+        futs3.push_back(hpx::async(HPX_PRIORITY_HI,
+            [i, &treeMap, &partMap, adjustPartRefs, &treeNodes, treeNodesRemoteBegin]() {
+                GlobalPartRange gpr;
+                ASSERT(treeMap.find(*i) != treeMap.end());
+                int index = treeMap[*i];
+                ASSERT(index >= treeNodesRemoteBegin);
+                auto& node = treeNodes[index];
+                gpr.rank = node.procRange.first;
+                gpr.range = node.partRange;
+                ASSERT(partMap.find(gpr) != partMap.end());
+                auto localRange = partMap[gpr];
+                PartInt offset = localRange.first - gpr.range.first;
+                ASSERT(treeNodes[index].partRange.first == gpr.range.first);
+                adjustPartRefs(index, offset);
+            }));
+    }
+    for (int proc = 0; proc < nthreads; proc++) {
+        futs2.push_back(hpx::async(HPX_PRIORITY_HI, [this, proc, nthreads, &treeMap]() {
+            for (int i = proc; i < workitems_.size(); i += nthreads) {
+                for (int j = 0; j < workitems_[i].dchecklist.size(); j++) {
+                    if (workitems_[i].dchecklist[j].proc != hpxRank()) {
+                        auto const iter = treeMap.find(workitems_[i].dchecklist[j]);
+                        ASSERT(iter != treeMap.end());
+                        workitems_[i].dchecklist[j].index = iter->second;
+                    }
+                }
+                for (int j = 0; j < workitems_[i].echecklist.size(); j++) {
+                    if (workitems_[i].echecklist[j].proc != hpxRank()) {
+                        auto const iter = treeMap.find(workitems_[i].echecklist[j]);
+                        ASSERT(iter != treeMap.end());
+                        workitems_[i].echecklist[j].index = iter->second;
+                    }
+                }
+            }
+        }));
+    }
+    hpx::wait_all(futs2.begin(), futs2.end());
+    futs2.resize(0);
+    auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems_.begin(), workitems_.end(),
+        [](KickWorkitem const& a, KickWorkitem const& b) {
+            return treeGetNode(a.self)->partRange.first < treeGetNode(b.self)->partRange.first;
+        });
+    hpx::wait_all(futs3.begin(), futs3.end());
+    hpx::wait_all(futs1.begin(), futs1.end());
+    sfut.get();
+    tm.stop();
+    //	PRINT("Took %e seconds to prepare gpu send\n", tm.read());
+    tm.reset();
+    tm.start();
+    tree2Gpu();
+    particlesMemadviseGpu();
+    auto const kr = cudaExecuteKicks(params_, &particlesPos(XDIM, 0), &particlesPos(YDIM, 0),
+        &particlesPos(ZDIM, 0), treeNodes, std::move(workitems_));
+    tree2Cpu();
+    tm.stop();
+    particlesResize(opartsize);
+    kickSetRc(kr);
+    //	PRINT("GPU took %e seconds\n", tm.read());
 }
 
-void kick_workspace::add_parts(std::shared_ptr<kick_workspace> ptr, part_int n) {
-	bool do_work = false;
-	std::unique_lock<mutex_type> lock(mutex);
-	nparts += n;
-	if (nparts == total_parts) {
-		do_work = true;
-	}
-	lock.unlock();
-	if (do_work) {
-		ptr->to_gpu();
-	}
+void KickWorkspace::addParts(std::shared_ptr<KickWorkspace> ptr, PartInt n) {
+    bool doWork = false;
+    std::unique_lock<MutexType> lock(mutex_);
+    nparts_ += n;
+    if (nparts_ == totalParts_) {
+        doWork = true;
+    }
+    lock.unlock();
+    if (doWork) {
+        ptr->toGpu();
+    }
 }
 
-void kick_workspace::clear_buffers() {
-	vector<hpx::future<void>> futs;
-	for (auto const& c : hpx_children()) {
-		futs.push_back(hpx::async<clear_buffers_action>(c));
-	}
-	hpx::wait_all(futs.begin(), futs.end());
+void KickWorkspace::clearBuffers() {
+    Vector<hpx::future<void>> futs;
+    for (auto const& c : hpxChildren()) {
+        futs.push_back(hpx::async<ClearBuffersAction>(c));
+    }
+    hpx::wait_all(futs.begin(), futs.end());
 }
 
-void kick_workspace::add_work(std::shared_ptr<kick_workspace> ptr, expansion<float> L, array<fixed32, NDIM> pos, tree_id self, vector<tree_id>&& dchecks,
-							  vector<tree_id>&& echecks) {
-	kick_workitem item;
-	item.L = L;
-	item.pos = pos;
-	item.self = self;
-	bool do_work = false;
-	{
-		part_int const these_nparts = tree_get_node(self)->nparts();
-		std::lock_guard<mutex_type> lock(mutex);
-		nparts += these_nparts;
-		if (nparts == total_parts) {
-			do_work = true;
-		}
-		for (int i = 0; i < dchecks.size(); i++) {
-			tree_ids.insert(dchecks[i]);
-		}
-		for (int i = 0; i < echecks.size(); i++) {
-			tree_ids.insert(echecks[i]);
-		}
-	}
-	item.dchecklist = std::move(dchecks);
-	item.echecklist = std::move(echecks);
-	std::unique_lock<mutex_type> lock(mutex);
-	workitems.push_back(std::move(item));
-	lock.unlock();
-	if (do_work) {
-		ptr->to_gpu();
-	}
+void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, Expansion<float> l,
+    Array<Fixed32, NDIM> pos, TreeId self, Vector<TreeId>&& dchecks, Vector<TreeId>&& echecks) {
+    KickWorkitem item;
+    item.l = l;
+    item.pos = pos;
+    item.self = self;
+    bool doWork = false;
+    {
+        PartInt const theseNparts = treeGetNode(self)->nparts();
+        std::lock_guard<MutexType> lock(mutex_);
+        nparts_ += theseNparts;
+        if (nparts_ == totalParts_) {
+            doWork = true;
+        }
+        for (int i = 0; i < dchecks.size(); i++) {
+            treeIds_.insert(dchecks[i]);
+        }
+        for (int i = 0; i < echecks.size(); i++) {
+            treeIds_.insert(echecks[i]);
+        }
+    }
+    item.dchecklist = std::move(dchecks);
+    item.echecklist = std::move(echecks);
+    std::unique_lock<MutexType> lock(mutex_);
+    workitems_.push_back(std::move(item));
+    lock.unlock();
+    if (doWork) {
+        ptr->toGpu();
+    }
 }
