@@ -174,6 +174,7 @@ set(cosmictiger_header_files
     cosmictiger/rockstar.hpp
     cosmictiger/safe_io.hpp
     cosmictiger/sedov.hpp
+    cosmictiger/silo_spheres.hpp
     cosmictiger/simd.hpp
     cosmictiger/stack_vector.hpp
     cosmictiger/stack_trace.hpp
@@ -309,6 +310,15 @@ if(BUILD_TESTING)
     target_include_directories(monaghan_sph_test PRIVATE ${PROJECT_SOURCE_DIR})
     add_test(NAME monaghan_sph COMMAND monaghan_sph_test)
     set_tests_properties(monaghan_sph PROPERTIES TIMEOUT 20)
+
+    add_executable(silo_spheres_test tests/silo_spheres.cpp)
+    target_include_directories(silo_spheres_test PRIVATE ${PROJECT_SOURCE_DIR} ${SILO_INCLUDE_DIR})
+    target_link_libraries(silo_spheres_test PRIVATE ${SILO_LIBRARY})
+    set(silo_spheres_workdir "${PROJECT_BINARY_DIR}/tests/silo_spheres")
+    file(MAKE_DIRECTORY "${silo_spheres_workdir}")
+    add_test(NAME silo_spheres COMMAND silo_spheres_test)
+    set_tests_properties(silo_spheres PROPERTIES
+        WORKING_DIRECTORY "${silo_spheres_workdir}" TIMEOUT 20)
 
     add_executable(particle_selection_test tests/particle_selection.cpp)
     target_include_directories(particle_selection_test PRIVATE ${PROJECT_SOURCE_DIR})

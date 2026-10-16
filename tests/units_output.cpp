@@ -58,6 +58,8 @@ void requireUnitsOutputClose(double actual, double expected, std::string const& 
 using UnitsOutputFile = std::unique_ptr<DBfile, decltype(&DBClose)>;
 using UnitsOutputMesh = std::unique_ptr<DBpointmesh, decltype(&DBFreePointmesh)>;
 using UnitsOutputField = std::unique_ptr<DBpointvar, decltype(&DBFreePointvar)>;
+using UnitsOutputCsgMesh = std::unique_ptr<DBcsgmesh, decltype(&DBFreeCsgmesh)>;
+using UnitsOutputCsgField = std::unique_ptr<DBcsgvar, decltype(&DBFreeCsgvar)>;
 
 UnitsOutputFile openUnitsOutput(int cycle) {
     auto const filename = std::filesystem::path(getOptions().outputDirectory) /
@@ -142,6 +144,59 @@ void checkUnitsOutputField(
     }
 }
 
+void checkUnitsOutputSpheres(DBfile* file, std::string const& name, int count,
+    double coordinateScale, char const* lengthUnit = nullptr, double time = 0.0) {
+    UnitsOutputCsgMesh mesh(DBGetCsgmesh(file, name.c_str()), DBFreeCsgmesh);
+    requireUnitsOutput(bool(mesh), name + " CSG mesh exists");
+    requireUnitsOutput(mesh->ndims == NDIM && mesh->datatype == DB_DOUBLE, name + " CSG shape");
+    requireUnitsOutput(mesh->nbounds == count && mesh->lcoeffs == 4 * count,
+        name + " one sphere boundary per particle");
+    requireUnitsOutput(mesh->coeffs && mesh->typeflags, name + " sphere coefficients");
+    requireUnitsOutput(mesh->zones && mesh->zones->nregs == count && mesh->zones->nzones == count,
+        name + " one CSG zone per particle");
+    requireUnitsOutput(mesh->zones->typeflags && mesh->zones->leftids && mesh->zones->zonelist,
+        name + " CSG zone topology");
+    if (lengthUnit) {
+        requireUnitsOutputClose(mesh->dtime, time, name + " mesh time metadata");
+        for (int dim = 0; dim < NDIM; dim++) {
+            requireUnitsOutput(mesh->units[dim] && std::string(mesh->units[dim]) == lengthUnit,
+                name + " coordinate unit");
+        }
+    }
+    for (int i = 0; i < count; i++) {
+        requireUnitsOutput(mesh->typeflags[i] == DBCSG_SPHERE_PR, name + " sphere boundary type");
+        requireUnitsOutput(mesh->zones->typeflags[i] == DBCSG_INNER &&
+                mesh->zones->leftids[i] == i && mesh->zones->zonelist[i] == i,
+            name + " sphere interior zone");
+        for (int component = 0; component < 4; component++) {
+            int const index = 4 * i + component;
+            double const value = static_cast<double const*>(mesh->coeffs)[index];
+            double const expected = component == 3 ?
+                0.03125 * coordinateScale :
+                (0.5 + (component == XDIM ? std::ldexp(1.0, -32) : 0.0)) * coordinateScale;
+            requireUnitsOutputClose(value, expected, name + " sphere center and radius");
+        }
+    }
+}
+
+void checkUnitsOutputCsgField(DBfile* file, std::string const& name, int count, int datatype,
+    double expected, char const* unit = nullptr) {
+    UnitsOutputCsgField field(DBGetCsgvar(file, name.c_str()), DBFreeCsgvar);
+    requireUnitsOutput(bool(field), name + " CSG field exists");
+    requireUnitsOutput(field->datatype == datatype && field->centering == DB_ZONECENT,
+        name + " zone-centered datatype");
+    requireUnitsOutput(field->nels == count && field->nvals == 1, name + " CSG field shape");
+    requireUnitsOutput(field->vals && field->vals[0], name + " CSG values");
+    if (unit) {
+        requireUnitsOutput(field->units && std::string(field->units) == unit, name + " units");
+    }
+    for (int i = 0; i < field->nels; i++) {
+        double const value = datatype == DB_FLOAT ? static_cast<float const*>(field->vals[0])[i] :
+                                                    static_cast<double const*>(field->vals[0])[i];
+        requireUnitsOutputClose(value, expected, name + " value");
+    }
+}
+
 void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
     std::string const path =
         std::string(cosmological ? "cosmological/" : "cgs/") + (lab ? "lab/" : "comoving/");
@@ -216,18 +271,25 @@ void checkConvertedUnitsOutput(DBfile* file, bool cosmological, bool lab) {
             requireUnitsOutput(hi > lo, "adjacent fixed-point positions stay distinct");
         }
     }
+    checkUnitsOutputSpheres(file, path + "gas", hpxSize(), coordinateScale, lengthUnit, epoch);
     checkUnitsOutputField(file, path + "vx", 2, 0.0, velocityUnit);
     checkUnitsOutputField(file, path + "vy", 2, 0.0, velocityUnit);
     checkUnitsOutputField(file, path + "vz", 2, 0.0, velocityUnit);
     checkUnitsOutputField(file, path + "mass", 2, 0.75 * massScale, massUnit);
-    checkUnitsOutputField(file, path + "hydro_vx", 1, 0.125 * velocityScale, velocityUnit);
-    checkUnitsOutputField(file, path + "hydro_vy", 1, 0.25 * velocityScale, velocityUnit);
-    checkUnitsOutputField(file, path + "hydro_vz", 1, -0.5 * velocityScale, velocityUnit);
-    checkUnitsOutputField(file, path + "hydro_mass", 1, 0.25 * massScale, massUnit);
-    checkUnitsOutputField(file, path + "rho", 1, 8.0 * densityScale, densityUnit);
-    checkUnitsOutputField(file, path + "eint", 1, 4.0 * energyScale, energyUnit);
-    checkUnitsOutputField(
-        file, path + "kernel_support_radius", 1, 0.03125 * coordinateScale, lengthUnit);
+    checkUnitsOutputCsgField(
+        file, path + "hydro_vx", hpxSize(), DB_DOUBLE, 0.125 * velocityScale, velocityUnit);
+    checkUnitsOutputCsgField(
+        file, path + "hydro_vy", hpxSize(), DB_DOUBLE, 0.25 * velocityScale, velocityUnit);
+    checkUnitsOutputCsgField(
+        file, path + "hydro_vz", hpxSize(), DB_DOUBLE, -0.5 * velocityScale, velocityUnit);
+    checkUnitsOutputCsgField(
+        file, path + "hydro_mass", hpxSize(), DB_DOUBLE, 0.25 * massScale, massUnit);
+    checkUnitsOutputCsgField(
+        file, path + "rho", hpxSize(), DB_DOUBLE, 8.0 * densityScale, densityUnit);
+    checkUnitsOutputCsgField(
+        file, path + "eint", hpxSize(), DB_DOUBLE, 4.0 * energyScale, energyUnit);
+    checkUnitsOutputCsgField(file, path + "kernel_support_radius", hpxSize(), DB_DOUBLE,
+        0.03125 * coordinateScale, lengthUnit);
 }
 
 }    // namespace detail
@@ -245,7 +307,7 @@ void unitsOutputParticleFixture(bool initialize) {
         sphParticlesResize(1, false);
         for (ParticleInteger i = 0; i < 3; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
-                particlesPos(dim, i).setInteger(0x80000000U + (i == 1 && dim == XDIM ? 1U : 0U));
+                particlesPos(dim, i).setInteger(0x80000000U + (i != 0 && dim == XDIM ? 1U : 0U));
                 particlesVel(dim, i) = i == 2 ? (dim == XDIM        ? 0.125 :
                                                         dim == YDIM ? 0.25 :
                                                                       -0.5) :
@@ -310,23 +372,22 @@ void unitsOutputTest() {
         auto file = openUnitsOutput(0);
         checkUnitsOutputCommandLine(file.get());
         requireUnitsOutput(
-            !DBInqVarExists(file.get(), "alpha"), "legacy output omits particle alpha");
+            !DBInqVarExists(file.get(), "alpha"), "code-unit output omits particle alpha");
         UnitsOutputMesh mesh(DBGetPointmesh(file.get(), "dark_matter"), DBFreePointmesh);
         requireUnitsOutput(bool(mesh) && mesh->datatype == DB_FLOAT && mesh->nels == 2 * hpxSize(),
-            "legacy mesh schema");
+            "code-unit dark matter mesh schema");
         auto const* positions = static_cast<float const*>(mesh->coords[XDIM]);
         for (int i = 0; i < mesh->nels; i++) {
-            requireUnitsOutput(positions[i] == 0.5f, "legacy float position collapse fixture");
+            requireUnitsOutput(positions[i] == 0.5f, "code-unit dark matter float position");
         }
-        UnitsOutputField energy(DBGetPointvar(file.get(), "eint"), DBFreePointvar);
+        checkUnitsOutputSpheres(file.get(), "gas", hpxSize(), 1.0);
+        checkUnitsOutputCsgField(file.get(), "hydro_vx", hpxSize(), DB_FLOAT, 0.125);
+        checkUnitsOutputCsgField(file.get(), "hydro_rung", hpxSize(), DB_FLOAT, 1.0);
+        checkUnitsOutputCsgField(file.get(), "rho", hpxSize(), DB_FLOAT, 8.0);
+        checkUnitsOutputCsgField(file.get(), "eint", hpxSize(), DB_FLOAT, 4.0);
+        checkUnitsOutputCsgField(file.get(), "kernel_support_radius", hpxSize(), DB_FLOAT, 0.03125);
         requireUnitsOutput(
-            bool(energy) && energy->datatype == DB_FLOAT && energy->nels == hpxSize(),
-            "legacy energy shape and datatype");
-        for (int i = 0; i < energy->nels; i++) {
-            requireUnitsOutput(
-                static_cast<float const*>(energy->vals[0])[i] == 4.0f, "legacy energy unchanged");
-        }
-        requireUnitsOutput(!DBInqVarExists(file.get(), "cgs/lab/gas"), "legacy output selection");
+            !DBInqVarExists(file.get(), "cgs/lab/gas"), "code-unit output selection");
     }
     options.outputUnits = "both";
     options.outputFrame = "both";

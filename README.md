@@ -87,6 +87,13 @@ and is created automatically when Silo output is enabled. Snapshots are named
 are also supported. `output.silo=false` disables particle output.
 `analysis.views` independently controls HEALPix maps.
 
+Gas particles are written as Silo CSG spheres in the `gas` mesh. Each sphere's
+radius is the stored SPH kernel support radius (`H = 2h`), also available as the
+zone-centered `kernel_support_radius` field. Sphere centers and radii follow the
+selected output units and frame. Dark matter and stars remain point meshes.
+VisIt discretizes overlapping CSG zones for display, which can show seams where
+spheres overlap.
+
 Particle positions retain the fixed-point representation used by the solver and
 checkpoints. Set `output.units=cgs` for CGS quantities or
 `output.units=cosmological` for Mpc/h, solar masses/h, and km/s. Set

@@ -18,10 +18,12 @@
  */
 
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <set>
+#include <span>
 #include <string>
 #include <system_error>
 #include <type_traits>
@@ -38,6 +40,7 @@
 #include <cosmictiger/options.hpp>
 #include <cosmictiger/options_metadata.hpp>
 #include <cosmictiger/particles.hpp>
+#include <cosmictiger/silo_spheres.hpp>
 #include <cosmictiger/sph.hpp>
 #include <cosmictiger/sph_particles.hpp>
 #include <cosmictiger/stars.hpp>
@@ -243,6 +246,27 @@ public:
     }
 };
 
+template <typename Position, typename Radius>
+void writeGasSpheres(DBfile* db, Vector<SphParticleInfo> const& particles, Position position,
+    Radius radius, DBoptlist* options) {
+    Vector<double> coefficients;
+    coefficients.reserve(4 * particles.size());
+    for (auto const& particle : particles) {
+        coefficients.push_back(position(particle.x));
+        coefficients.push_back(position(particle.y));
+        coefficients.push_back(position(particle.z));
+        coefficients.push_back(radius(particle.h));
+    }
+    writeSiloSpheres(db, "gas", "gas_zones",
+        std::span<double const>(coefficients.data(), coefficients.size()), options);
+}
+
+void writeCodeGasField(
+    DBfile* db, char const* name, Vector<float> const& values, DBoptlist* options) {
+    writeSiloSphereVariable(
+        db, name, "gas", std::span<float const>(values.data(), values.size()), options);
+}
+
 template <typename Particle, typename Value>
 void writeViewField(DBfile* db, char const* name, char const* mesh,
     Vector<Particle> const& particles, char const* unitName, Value value) {
@@ -253,8 +277,13 @@ void writeViewField(DBfile* db, char const* name, char const* mesh,
     }
     auto* options = DBMakeOptlist(1);
     DBAddOption(options, DBOPT_UNITS, const_cast<char*>(unitName));
-    checkViewWrite(
-        DBPutPointvar1(db, name, mesh, values.data(), values.size(), DB_DOUBLE, options), name);
+    if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
+        writeSiloSphereVariable(
+            db, name, mesh, std::span<double const>(values.data(), values.size()), options);
+    } else {
+        checkViewWrite(
+            DBPutPointvar1(db, name, mesh, values.data(), values.size(), DB_DOUBLE, options), name);
+    }
     DBFreeOptlist(options);
 }
 
@@ -262,22 +291,30 @@ template <typename Particle>
 void writeViewSpecies(DBfile* db, char const* mesh, char const* prefix,
     Vector<Particle> const& particles, ViewUnitConversion const& conversion, char const* lengthUnit,
     char const* velocityUnit, char const* massUnit, double mass, double time) {
-    Vector<double> x, y, z;
-    x.reserve(particles.size());
-    y.reserve(particles.size());
-    z.reserve(particles.size());
-    for (auto const& particle : particles) {
-        x.push_back(conversion.position(particle.x));
-        y.push_back(conversion.position(particle.y));
-        z.push_back(conversion.position(particle.z));
-    }
-    double* coordinates[NDIM] = {x.data(), y.data(), z.data()};
     auto* options = DBMakeOptlist(4);
     DBAddOption(options, DBOPT_XUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_YUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_ZUNITS, const_cast<char*>(lengthUnit));
     DBAddOption(options, DBOPT_DTIME, &time);
-    checkViewWrite(DBPutPointmesh(db, mesh, NDIM, coordinates, x.size(), DB_DOUBLE, options), mesh);
+    if constexpr (std::is_same_v<Particle, SphParticleInfo>) {
+        writeGasSpheres(
+            db, particles,
+            [&conversion](Fixed32 const& value) { return conversion.position(value); },
+            [&conversion](float value) { return conversion.length(value); }, options);
+    } else {
+        Vector<double> x, y, z;
+        x.reserve(particles.size());
+        y.reserve(particles.size());
+        z.reserve(particles.size());
+        for (auto const& particle : particles) {
+            x.push_back(conversion.position(particle.x));
+            y.push_back(conversion.position(particle.y));
+            z.push_back(conversion.position(particle.z));
+        }
+        double* coordinates[NDIM] = {x.data(), y.data(), z.data()};
+        checkViewWrite(
+            DBPutPointmesh(db, mesh, NDIM, coordinates, x.size(), DB_DOUBLE, options), mesh);
+    }
     DBFreeOptlist(options);
     std::string const fieldPrefix(prefix);
     writeViewField(db, (fieldPrefix + "vx").c_str(), mesh, particles, velocityUnit,
@@ -617,17 +654,9 @@ void viewOutputViews(int cycle, double a, bool force) {
             DBPutPointvar1(db, "rung", "dark_matter", x.data(), x.size(), DB_FLOAT, opts);
         }
         if (parts.hydro[bi].size()) {
-            x.resize(0);
-            y.resize(0);
-            z.resize(0);
-            for (int i = 0; i < parts.hydro[bi].size(); i++) {
-                x.push_back(parts.hydro[bi][i].x.toFloat());
-                y.push_back(parts.hydro[bi][i].y.toFloat());
-                z.push_back(parts.hydro[bi][i].z.toFloat());
-            }
-            float* coords2[NDIM] = {x.data(), y.data(), z.data()};
-            //			PRINT( "gas points\n");
-            DBPutPointmesh(db, "gas", NDIM, coords2, x.size(), DB_FLOAT, opts);
+            detail::writeGasSpheres(
+                db, parts.hydro[bi], [](Fixed32 const& value) { return value.toDouble(); },
+                [](float value) { return double(value); }, opts);
             x.resize(0);
             y.resize(0);
             z.resize(0);
@@ -636,34 +665,32 @@ void viewOutputViews(int cycle, double a, bool force) {
                 y.push_back(parts.hydro[bi][i].vy * codeToVelocity);
                 z.push_back(parts.hydro[bi][i].vz * codeToVelocity);
             }
-            // PRINT( "Vels\n");
-            DBPutPointvar1(db, "hydro_vx", "gas", x.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "hydro_vy", "gas", y.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "hydro_vz", "gas", z.data(), x.size(), DB_FLOAT, opts);
+            detail::writeCodeGasField(db, "hydro_vx", x, opts);
+            detail::writeCodeGasField(db, "hydro_vy", y, opts);
+            detail::writeCodeGasField(db, "hydro_vz", z, opts);
             x.resize(0);
             for (int i = 0; i < parts.hydro[bi].size(); i++) {
                 x.push_back(parts.hydro[bi][i].rung);
             }
-            // PRINT( "rungs\n");
-            DBPutPointvar1(db, "hydro_rung", "gas", x.data(), x.size(), DB_FLOAT, opts);
+            detail::writeCodeGasField(db, "hydro_rung", x, opts);
             if (stars) {
                 x.resize(0);
                 for (int i = 0; i < parts.hydro[bi].size(); i++) {
                     x.push_back(parts.hydro[bi][i].coldFrac);
                 }
-                DBPutPointvar1(db, "cold_frac", "gas", x.data(), x.size(), DB_FLOAT, opts);
+                detail::writeCodeGasField(db, "cold_frac", x, opts);
             }
             x.resize(0);
             y.resize(0);
             z.resize(0);
             for (int i = 0; i < parts.hydro[bi].size(); i++) {
-                double const h = parts.hydro[bi][i].h;
                 x.push_back(parts.hydro[bi][i].rho * codeToDensity);
                 y.push_back(parts.hydro[bi][i].eint * codeToEnergy);
+                z.push_back(parts.hydro[bi][i].h);
             }
-            //			PRINT( "h and ent\n");
-            DBPutPointvar1(db, "rho", "gas", x.data(), x.size(), DB_FLOAT, opts);
-            DBPutPointvar1(db, "eint", "gas", y.data(), x.size(), DB_FLOAT, opts);
+            detail::writeCodeGasField(db, "rho", x, opts);
+            detail::writeCodeGasField(db, "eint", y, opts);
+            detail::writeCodeGasField(db, "kernel_support_radius", z, opts);
             x.resize(0);
             y.resize(0);
             z.resize(0);
@@ -712,15 +739,15 @@ void viewOutputViews(int cycle, double a, bool force) {
                     //	PRINT("%e %e %e %e %e %e \n", energy, n, cv, rho, K, T);
                     t.push_back(tValue);
                 }
-                DBPutPointvar1(db, "H", "gas", s.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "He", "gas", u.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "Hp", "gas", x.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "Hn", "gas", y.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "H2", "gas", z.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "Hep", "gas", p.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "Hepp", "gas", q.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "Z", "gas", w.data(), x.size(), DB_FLOAT, opts);
-                DBPutPointvar1(db, "T", "gas", t.data(), x.size(), DB_FLOAT, opts);
+                detail::writeCodeGasField(db, "H", s, opts);
+                detail::writeCodeGasField(db, "He", u, opts);
+                detail::writeCodeGasField(db, "Hp", x, opts);
+                detail::writeCodeGasField(db, "Hn", y, opts);
+                detail::writeCodeGasField(db, "H2", z, opts);
+                detail::writeCodeGasField(db, "Hep", p, opts);
+                detail::writeCodeGasField(db, "Hepp", q, opts);
+                detail::writeCodeGasField(db, "Z", w, opts);
+                detail::writeCodeGasField(db, "T", t, opts);
             }
         }
         if (parts.star[bi].size()) {
