@@ -68,7 +68,7 @@ __global__ void sphCudaCondInit(
     float const cv0 = constants::kB / (gamma0 - 1.0f);                           // 5
     float const invgm1 = 1.f / (gamma0 - 1.0);
     flops += 128;
-    while (index < data.numberTargetNodes) {
+    while (index < data.numberOfTargetNodes) {
         __syncthreads();
         int flops = 0;
         ws.rec1.resize(0);
@@ -76,15 +76,16 @@ __global__ void sphCudaCondInit(
         SphTreeNode const& self = data.trees[data.selfs[index]];
         for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
             SphTreeNode const& other = data.trees[data.neighbors[ni]];
-            int const maxpi = roundUp(other.partRange.second - other.partRange.first, blockSize) +
-                other.partRange.first;
-            for (int pi = other.partRange.first + tid; pi < maxpi; pi += blockSize) {
+            int const maxpi =
+                roundUp(other.particleRange.second - other.particleRange.first, blockSize) +
+                other.particleRange.first;
+            for (int pi = other.particleRange.first + tid; pi < maxpi; pi += blockSize) {
                 bool contains = false;
                 int j;
                 int total;
                 float h;
                 int rung;
-                if (pi < other.partRange.second) {
+                if (pi < other.particleRange.second) {
                     h = data.h[pi];
                     rung = data.rungs[pi];
                     if (rung >= params.minRung) {
@@ -141,11 +142,11 @@ __global__ void sphCudaCondInit(
         }
         float const& m = data.m;
         flops++;
-        for (int i = self.partRange.first; i < self.partRange.second; i++) {
+        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
-            int const snki = self.sinkPartRange.first - self.partRange.first + i;
+            int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
             bool const active = data.rungs[i] >= params.minRung;
-            bool const semiactive = !active && data.saSnk[snki];
+            bool const semiactive = !active && data.saSnk[sinkIndex];
             flops += 2;
             if (semiactive || active) {
                 float cfracI = 0.f;
@@ -174,7 +175,7 @@ __global__ void sphCudaCondInit(
                 float gradx = 0.0f;
                 float grady = 0.0f;
                 float gradz = 0.0f;
-                float const omegaI = data.omegaSnk[snki];
+                float const omegaI = data.omegaSnk[sinkIndex];
                 flops += 11;
                 ws.neighbors.resize(0);
                 float const jmax = roundUp(ws.rec1.size(), blockSize);
@@ -263,11 +264,11 @@ __global__ void sphCudaCondInit(
                     sharedReduceAdd<float, COND_INIT_BLOCK_SIZE>(gradz);    // 31
                     if (tid == 0) {
                         flops += 93;
-                        auto const& fracI = data.rec1Snk[snki].frac;
+                        auto const& fracI = data.rec1Snk[sinkIndex].frac;
 #ifdef ENTROPY
-                        float const& aI = data.rec2Snk[snki].entropy;
+                        float const& aI = data.rec2Snk[sinkIndex].entropy;
 #else
-                        float const& eintI = data.rec2Snk[snki].eint;
+                        float const& eintI = data.rec2Snk[sinkIndex].eint;
 #endif
                         float const& hValue = fracI[CHEM_H];
                         float const& hp = fracI[CHEM_HP];
@@ -304,11 +305,11 @@ __global__ void sphCudaCondInit(
                             (2.f + 3.f * rValue + 3.f * sqr(rValue));    // 11
                         kappaI *= phi;                                   // 1
                         ALWAYS_ASSERT(kappaI >= 0.0f);
-                        data.kapSnk[snki] = kappaI;
+                        data.kapSnk[sinkIndex] = kappaI;
 #ifdef ENTROPY
-                        data.entr0Snk[snki] = aI;
+                        data.entr0Snk[sinkIndex] = aI;
 #else
-                        data.eint0Snk[snki] = eintI;
+                        data.eint0Snk[sinkIndex] = eintI;
 #endif
                     }
                 }

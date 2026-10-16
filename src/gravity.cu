@@ -26,11 +26,11 @@
 
 __managed__ double iclose;
 __managed__ double idirect;
-__managed__ double inparts;
+__managed__ double numberOfProcessedSinkParticles;
 __managed__ bool useGravityCounters = false;
 
 void resetGravityCounters() {
-    iclose = idirect = inparts = 0;
+    iclose = idirect = numberOfProcessedSinkParticles = 0;
 }
 
 void setGravityCounterUse(bool code) {
@@ -38,11 +38,11 @@ void setGravityCounterUse(bool code) {
 }
 
 void getGravityCounters(double& close, double& direct) {
-    if (inparts == 0.0) {
+    if (numberOfProcessedSinkParticles == 0.0) {
         close = direct = 0.0;
     } else {
-        close = iclose / inparts;
-        direct = idirect / inparts;
+        close = iclose / numberOfProcessedSinkParticles;
+        direct = idirect / numberOfProcessedSinkParticles;
     }
 }
 
@@ -81,25 +81,25 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, Expansion<float>& 
     TreeNode const& self, DeviceVector<int> const& partlist, bool doPhi) {
     __shared__ extern int shmemPtr[];
     CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
-    auto const* mainSrcX = data.x;
-    auto const* mainSrcY = data.y;
-    auto const* mainSrcZ = data.z;
-    auto& srcX = shmem.xValue.x;
-    auto& srcY = shmem.xValue.y;
-    auto& srcZ = shmem.xValue.z;
-    auto& srcMass = shmem.xValue.mass;
+    auto const* mainSourceX = data.x;
+    auto const* mainSourceY = data.y;
+    auto const* mainSourceZ = data.z;
+    auto& sourceX = shmem.xValue.x;
+    auto& sourceY = shmem.xValue.y;
+    auto& sourceZ = shmem.xValue.z;
+    auto& sourceMass = shmem.xValue.mass;
     auto& barrier = shmem.barrier;
     auto const* treeNodes = data.treeNodes;
     int const& tid = threadIdx.x;
     FlopCounter<int> flops = 0;
     if (partlist.size()) {
-        int partIndex;
+        int particleIndex;
         Expansion<float> l;
         for (int j = 0; j < EXPANSION_SIZE; j++) {
             l[j] = 0.0;
         }
         int i = 0;
-        auto theseParts = treeNodes[partlist[0]].partRange;
+        auto particleRange = treeNodes[partlist[0]].particleRange;
         auto const partsz = partlist.size();
         while (i < partsz) {
             auto group = cooperative_groups::this_thread_block();
@@ -107,53 +107,53 @@ __device__ void cudaGravityCpDirect(CudaKickData const& data, Expansion<float>& 
                 init(&barrier, group.size());
             }
             group.sync();
-            partIndex = 0;
-            while (partIndex < KICK_PP_MAX && i < partsz) {
+            particleIndex = 0;
+            while (particleIndex < KICK_PP_MAX && i < partsz) {
                 while (i + 1 < partsz) {
-                    auto const otherTreeParts = treeNodes[partlist[i + 1]].partRange;
-                    if (theseParts.second == otherTreeParts.first) {
-                        theseParts.second = otherTreeParts.second;
+                    auto const otherTreeParticleRange = treeNodes[partlist[i + 1]].particleRange;
+                    if (particleRange.second == otherTreeParticleRange.first) {
+                        particleRange.second = otherTreeParticleRange.second;
                         i++;
                     } else {
                         break;
                     }
                 }
-                ParticleInteger const imin = theseParts.first;
+                ParticleInteger const imin = particleRange.first;
                 ParticleInteger const imax =
-                    min(theseParts.first + (KICK_PP_MAX - partIndex), theseParts.second);
+                    min(particleRange.first + (KICK_PP_MAX - particleIndex), particleRange.second);
                 int const sz = imax - imin;
-                cuda::memcpy_async(
-                    group, srcX.data() + partIndex, mainSrcX + imin, sizeof(Fixed32) * sz, barrier);
-                cuda::memcpy_async(
-                    group, srcY.data() + partIndex, mainSrcY + imin, sizeof(Fixed32) * sz, barrier);
-                cuda::memcpy_async(
-                    group, srcZ.data() + partIndex, mainSrcZ + imin, sizeof(Fixed32) * sz, barrier);
+                cuda::memcpy_async(group, sourceX.data() + particleIndex, mainSourceX + imin,
+                    sizeof(Fixed32) * sz, barrier);
+                cuda::memcpy_async(group, sourceY.data() + particleIndex, mainSourceY + imin,
+                    sizeof(Fixed32) * sz, barrier);
+                cuda::memcpy_async(group, sourceZ.data() + particleIndex, mainSourceZ + imin,
+                    sizeof(Fixed32) * sz, barrier);
                 for (int j = tid; j < sz; j += WARP_SIZE) {
-                    srcMass[partIndex + j] = data.sph ?
+                    sourceMass[particleIndex + j] = data.sph ?
                         (data.type[imin + j] == DARK_MATTER_TYPE ? data.dmMass : data.sphMass) :
                         1.0f;
                 }
                 __syncwarp();
-                theseParts.first += sz;
-                partIndex += sz;
-                if (theseParts.first == theseParts.second) {
+                particleRange.first += sz;
+                particleIndex += sz;
+                if (particleRange.first == particleRange.second) {
                     i++;
                     if (i < partsz) {
-                        theseParts = treeNodes[partlist[i]].partRange;
+                        particleRange = treeNodes[partlist[i]].particleRange;
                     }
                 }
             }
             barrier.arrive_and_wait();
             __syncwarp();
-            for (int j = tid; j < partIndex; j += warpSize) {
+            for (int j = tid; j < particleIndex; j += warpSize) {
                 Array<float, NDIM> dx;
-                dx[XDIM] = distance(self.mpos->pos[XDIM], srcX[j]);
-                dx[YDIM] = distance(self.mpos->pos[YDIM], srcY[j]);
-                dx[ZDIM] = distance(self.mpos->pos[ZDIM], srcZ[j]);
+                dx[XDIM] = distance(self.mpos->pos[XDIM], sourceX[j]);
+                dx[YDIM] = distance(self.mpos->pos[YDIM], sourceY[j]);
+                dx[ZDIM] = distance(self.mpos->pos[ZDIM], sourceZ[j]);
                 Expansion<float> d;
                 flops += EXPANSION_SIZE + 6 + greensFunction(d, dx);
                 for (int k = 0; k < EXPANSION_SIZE; k++) {
-                    l[k] += srcMass[j] * d[k];
+                    l[k] += sourceMass[j] * d[k];
                 }
             }
         }
@@ -175,10 +175,10 @@ __device__ void cudaGravityPcDirect(
     CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
     auto& force = shmem.f;
     auto& multis = shmem.mpos;
-    int const numberSinks = self.partRange.second - self.partRange.first;
-    auto const* sinkX = data.x + self.partRange.first;
-    auto const* sinkY = data.y + self.partRange.first;
-    auto const* sinkZ = data.z + self.partRange.first;
+    int const numberOfSinks = self.particleRange.second - self.particleRange.first;
+    auto const* sinkX = data.x + self.particleRange.first;
+    auto const* sinkY = data.y + self.particleRange.first;
+    auto const* sinkZ = data.z + self.particleRange.first;
     auto& barrier = shmem.barrier;
     auto const* treeNodes = data.treeNodes;
     FlopCounter<int> flops = 0;
@@ -202,7 +202,7 @@ __device__ void cudaGravityPcDirect(
             for (int j = 0; j < mend; j++) {
                 auto const& pos = multis[j].pos;
                 auto const& m = multis[j].multi;
-                for (int k = tid; k < numberSinks; k += WARP_SIZE) {
+                for (int k = tid; k < numberOfSinks; k += WARP_SIZE) {
                     auto& fValue = force[k];
                     l(0, 0, 0) = l(1, 0, 0) = l(0, 1, 0) = l(0, 0, 1) = 0.0f;
                     dx[XDIM] = distance(sinkX[k], pos[XDIM]);
@@ -263,20 +263,20 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
     __shared__ extern int shmemPtr[];
     CudaKickSharedMemory& shmem = *(CudaKickSharedMemory*) shmemPtr;
     auto& force = shmem.f;
-    int const numberSinks = self.partRange.second - self.partRange.first;
-    auto const* sinkX = data.x + self.partRange.first;
-    auto const* sinkY = data.y + self.partRange.first;
-    auto const* sinkZ = data.z + self.partRange.first;
+    int const numberOfSinks = self.particleRange.second - self.particleRange.first;
+    auto const* sinkX = data.x + self.particleRange.first;
+    auto const* sinkY = data.y + self.particleRange.first;
+    auto const* sinkZ = data.z + self.particleRange.first;
     auto& barrier = shmem.barrier;
-    auto const* mainSrcX = data.x;
-    auto const* mainSrcY = data.y;
-    auto const* mainSrcZ = data.z;
-    auto& srcX = shmem.xValue.x;
-    auto& srcY = shmem.xValue.y;
-    auto& srcZ = shmem.xValue.z;
-    auto& srcMass = shmem.xValue.mass;
+    auto const* mainSourceX = data.x;
+    auto const* mainSourceY = data.y;
+    auto const* mainSourceZ = data.z;
+    auto& sourceX = shmem.xValue.x;
+    auto& sourceY = shmem.xValue.y;
+    auto& sourceZ = shmem.xValue.z;
+    auto& sourceMass = shmem.xValue.mass;
     auto const* treeNodes = data.treeNodes;
-    int partIndex;
+    int particleIndex;
     float const h2 = sqr(h);
     float const hinv = 1.f / h;
     float const h2inv = sqr(hinv);
@@ -286,43 +286,43 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
     int direct = 0;
     if (partlist.size()) {
         int i = 0;
-        auto theseParts = treeNodes[partlist[0]].partRange;
+        auto particleRange = treeNodes[partlist[0]].particleRange;
         auto const partsz = partlist.size();
         while (i < partsz) {
             auto group = cooperative_groups::this_thread_block();
-            partIndex = 0;
-            while (partIndex < KICK_PP_MAX && i < partsz) {
+            particleIndex = 0;
+            while (particleIndex < KICK_PP_MAX && i < partsz) {
                 while (i + 1 < partsz) {
-                    auto const otherTreeParts = treeNodes[partlist[i + 1]].partRange;
-                    if (theseParts.second == otherTreeParts.first) {
-                        theseParts.second = otherTreeParts.second;
+                    auto const otherTreeParticleRange = treeNodes[partlist[i + 1]].particleRange;
+                    if (particleRange.second == otherTreeParticleRange.first) {
+                        particleRange.second = otherTreeParticleRange.second;
                         i++;
                     } else {
                         break;
                     }
                 }
-                ParticleInteger const imin = theseParts.first;
+                ParticleInteger const imin = particleRange.first;
                 ParticleInteger const imax =
-                    min(theseParts.first + (KICK_PP_MAX - partIndex), theseParts.second);
+                    min(particleRange.first + (KICK_PP_MAX - particleIndex), particleRange.second);
                 int const sz = imax - imin;
-                cuda::memcpy_async(
-                    group, srcX.data() + partIndex, mainSrcX + imin, sizeof(Fixed32) * sz, barrier);
-                cuda::memcpy_async(
-                    group, srcY.data() + partIndex, mainSrcY + imin, sizeof(Fixed32) * sz, barrier);
-                cuda::memcpy_async(
-                    group, srcZ.data() + partIndex, mainSrcZ + imin, sizeof(Fixed32) * sz, barrier);
+                cuda::memcpy_async(group, sourceX.data() + particleIndex, mainSourceX + imin,
+                    sizeof(Fixed32) * sz, barrier);
+                cuda::memcpy_async(group, sourceY.data() + particleIndex, mainSourceY + imin,
+                    sizeof(Fixed32) * sz, barrier);
+                cuda::memcpy_async(group, sourceZ.data() + particleIndex, mainSourceZ + imin,
+                    sizeof(Fixed32) * sz, barrier);
                 for (int j = tid; j < sz; j += WARP_SIZE) {
-                    srcMass[partIndex + j] = data.sph ?
+                    sourceMass[particleIndex + j] = data.sph ?
                         (data.type[imin + j] == DARK_MATTER_TYPE ? data.dmMass : data.sphMass) :
                         1.0f;
                 }
                 __syncwarp();
-                theseParts.first += sz;
-                partIndex += sz;
-                if (theseParts.first == theseParts.second) {
+                particleRange.first += sz;
+                particleIndex += sz;
+                if (particleRange.first == particleRange.second) {
                     i++;
                     if (i < partsz) {
-                        theseParts = treeNodes[partlist[i]].partRange;
+                        particleRange = treeNodes[partlist[i]].particleRange;
                     }
                 }
             }
@@ -337,19 +337,19 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
             float r3inv;
             float r1inv;
             __syncwarp();
-            int kmid = (numberSinks / WARP_SIZE) * WARP_SIZE;
-            if (numberSinks - kmid >= WARP_SIZE / 2) {
-                kmid = numberSinks;
+            int kmid = (numberOfSinks / WARP_SIZE) * WARP_SIZE;
+            if (numberOfSinks - kmid >= WARP_SIZE / 2) {
+                kmid = numberOfSinks;
             }
             for (int k = tid; k < kmid; k += WARP_SIZE) {
                 fx = 0.f;
                 fy = 0.f;
                 fz = 0.f;
                 pot = 0.f;
-                for (int j = 0; j < partIndex; j++) {
-                    dx0 = distance(sinkX[k], srcX[j]);     // 1
-                    dx1 = distance(sinkY[k], srcY[j]);     // 1
-                    dx2 = distance(sinkZ[k], srcZ[j]);     // 1
+                for (int j = 0; j < particleIndex; j++) {
+                    dx0 = distance(sinkX[k], sourceX[j]);    // 1
+                    dx1 = distance(sinkY[k], sourceY[j]);    // 1
+                    dx2 = distance(sinkZ[k], sourceZ[j]);    // 1
                     auto const r2 = sqr(dx0, dx1, dx2);    // 5
                     if (r2 > h2) {
                         r1inv = rsqrt(r2);             // 4
@@ -359,9 +359,9 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                         close++;
                         gsoft(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
                     }
-                    r3inv *= srcMass[j];
+                    r3inv *= sourceMass[j];
                     if (doPhi) {
-                        r1inv *= srcMass[j];
+                        r1inv *= sourceMass[j];
                     }
                     fx = fmaf(dx0, r3inv, fx);    // 2
                     fy = fmaf(dx1, r3inv, fy);    // 2
@@ -376,15 +376,15 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                 flops += 4;
                 fValue.phi += pot;
             }
-            for (int k = kmid; k < numberSinks; k++) {
+            for (int k = kmid; k < numberOfSinks; k++) {
                 fx = 0.f;
                 fy = 0.f;
                 fz = 0.f;
                 pot = 0.f;
-                for (int j = tid; j < partIndex; j += WARP_SIZE) {
-                    dx0 = distance(sinkX[k], srcX[j]);     // 2
-                    dx1 = distance(sinkY[k], srcY[j]);     // 2
-                    dx2 = distance(sinkZ[k], srcZ[j]);     // 2
+                for (int j = tid; j < particleIndex; j += WARP_SIZE) {
+                    dx0 = distance(sinkX[k], sourceX[j]);    // 2
+                    dx1 = distance(sinkY[k], sourceY[j]);    // 2
+                    dx2 = distance(sinkZ[k], sourceZ[j]);    // 2
                     auto const r2 = sqr(dx0, dx1, dx2);    // 5
                     if (r2 > h2) {
                         r1inv = rsqrt(r2);             // 4
@@ -394,9 +394,9 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
                         close++;
                         gsoft(r3inv, r1inv, r2, hinv, h2inv, h3inv, doPhi);
                     }
-                    r3inv *= srcMass[j];
+                    r3inv *= sourceMass[j];
                     if (doPhi) {
-                        r1inv *= srcMass[j];
+                        r1inv *= sourceMass[j];
                     }
                     fx = fmaf(dx0, r3inv, fx);    // 2
                     fy = fmaf(dx1, r3inv, fy);    // 2
@@ -427,7 +427,7 @@ __device__ void cudaGravityPpDirect(CudaKickData const& data, TreeNode const& se
     if (tid == 0 && useGravityCounters) {
         atomicAdd(&iclose, close);
         atomicAdd(&idirect, direct);
-        atomicAdd(&inparts, numberSinks);
+        atomicAdd(&numberOfProcessedSinkParticles, numberOfSinks);
     }
 
     __syncwarp();

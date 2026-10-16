@@ -48,11 +48,11 @@ Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir
         futs.push_back(hpx::async<ChemistryDoStepAction>(c, a, minrung, t0, adot, dir));
     }
     double echange = 0.0;
-    int numberThreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads, a, minrung, t0, dir, adot]() {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+    int numberOfThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads, a, minrung, t0, dir, adot]() {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             Vector<ChemistryAttributes> chems;
             float const mass = getOptions().sphMass;
             float const stars = getOptions().stars;
@@ -116,7 +116,7 @@ Pair<double> chemistryDoStep(float a, int minrung, float t0, float adot, int dir
                             float vy = particlesVel(YDIM, k);
                             float vz = particlesVel(ZDIM, k);
                             PRINT("CHEMISTRY OUT OF RANGE %e %e %e  %e  %e  %e \n", chem.rho,
-                                chem.eint, sphParticlesSmoothLen(i), vx, vy, vz);
+                                chem.eint, sphParticlesSmoothingLength(i), vx, vy, vz);
                             PRINT("%e %e %e %e %e %e %e\n", chem.he, chem.hp, chem.hn, chem.h2,
                                 chem.hep, chem.hepp, sphParticlesZ(i));
                         }

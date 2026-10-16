@@ -38,9 +38,9 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
         y[i] = parts[i].x[YDIM].toDouble();
         z[i] = parts[i].x[ZDIM].toDouble();
     }
-    int const numberParticles = parts.size();
+    int const numberOfParticles = parts.size();
     double* coords[NDIM] = {x.data(), y.data(), z.data()};
-    DBPutPointmesh(db, "points", NDIM, coords, numberParticles, DB_DOUBLE, NULL);
+    DBPutPointmesh(db, "points", NDIM, coords, numberOfParticles, DB_DOUBLE, NULL);
     x = decltype(x)();
     y = decltype(y)();
     z = decltype(z)();
@@ -50,13 +50,13 @@ void outputParticles(std::string const filename, Vector<OutputParticle> const& p
             v[i] = parts[i].v[dim];
         }
         std::string nm = std::string() + "v_" + char('x' + char(dim));
-        DBPutPointvar1(db, nm.c_str(), "points", v.data(), numberParticles, DB_FLOAT, NULL);
+        DBPutPointvar1(db, nm.c_str(), "points", v.data(), numberOfParticles, DB_FLOAT, NULL);
     }
     Vector<int> r(parts.size());
     for (int i = 0; i < parts.size(); i++) {
         r[i] = parts[i].r;
     }
-    DBPutPointvar1(db, "rung", "points", r.data(), numberParticles, DB_INT, NULL);
+    DBPutPointvar1(db, "rung", "points", r.data(), numberOfParticles, DB_INT, NULL);
     DBClose(db);
 }
 

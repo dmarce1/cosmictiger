@@ -29,8 +29,8 @@ using GroupRange = Range<double>;
 struct GroupTreeNode {
     GroupRange box;
     Array<TreeId, NCHILD> children;
-    Pair<ParticleInteger> partRange;
-    Pair<int> procRange;
+    Pair<ParticleInteger> particleRange;
+    Pair<int> processRange;
     bool localRoot;
     bool active;
     bool lastActive;
@@ -40,14 +40,14 @@ struct GroupTreeNode {
         arc & lastActive;
         arc & box;
         arc & children;
-        arc & partRange;
-        arc & procRange;
+        arc & particleRange;
+        arc & processRange;
         arc & localRoot;
     }
-    inline ParticleGlobalRange globalPartRange() const {
+    inline ParticleGlobalRange globalParticleRange() const {
         ParticleGlobalRange r;
-        r.proc = procRange.first;
-        r.range = partRange;
+        r.proc = processRange.first;
+        r.range = particleRange;
         return r;
     }
 };
@@ -62,9 +62,9 @@ struct GroupTreeReturn {
     }
 };
 
-GroupTreeReturn groupTreeCreate(size_t key = 1, Pair<int, int> procRange = {0, hpxSize()},
-    Pair<ParticleInteger> partRange = {-1, -1}, GroupRange box = unitBox<double>(), int depth = 0,
-    bool localRoot = hpxSize() == 1);
+GroupTreeReturn groupTreeCreate(size_t key = 1, Pair<int, int> processRange = {0, hpxSize()},
+    Pair<ParticleInteger> particleRange = {-1, -1}, GroupRange box = unitBox<double>(),
+    int depth = 0, bool localRoot = hpxSize() == 1);
 void groupTreeDestroy();
 GroupTreeNode const* groupTreeGetNode(TreeId id);
 void groupTreeSetActive(TreeId, bool);

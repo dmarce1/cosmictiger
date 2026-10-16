@@ -42,10 +42,10 @@ struct Options {
     bool createGlass;
     int readCheck;
     int tracerCount;
-    int partsDim;
+    int particlesPerDimension;
     int treeCacheLineSize;
     int treeAllocLineSize;
-    int partCacheLineSize;
+    int particleCacheLineSize;
     int checkFreq;
     int maxIter;
     int minrung;
@@ -54,10 +54,10 @@ struct Options {
     int lcMapSize;
     int minGroup;
     int sliceRes;
-    int numberSteps;
+    int numberOfSteps;
     double lcB;
     double sliceSize;
-    double linkLen;
+    double linkingLength;
     double hsoft;
     double gm;
     double eta;
@@ -81,7 +81,7 @@ struct Options {
     double y0;
     double neff;
     double omegaK;
-    size_t numberParticles;
+    size_t numberOfParticles;
     std::string configFile;
     std::string test;
     std::string lcDir;
@@ -103,6 +103,7 @@ struct Options {
     double alpha0{};
     double alpha1{};
     double beta{};
+    double viscosityEpsilon{};
     double alphaDecay{};
     double gneighborNumber{};
     double sneighborNumber{};
@@ -138,6 +139,7 @@ struct Options {
         arc & alpha0;
         arc & alpha1;
         arc & beta;
+        arc & viscosityEpsilon;
         arc & alphaDecay;
         arc & gneighborNumber;
         arc & sneighborNumber;
@@ -155,7 +157,7 @@ struct Options {
         arc & gcentral;
         arc & hcentral;
         arc & closePack;
-        arc & numberParticles;
+        arc & numberOfParticles;
         arc & useGlass;
         arc & createGlass;
         arc & gadget4Restart;
@@ -165,7 +167,7 @@ struct Options {
         arc & omegaK;
         arc & omegaLam;
         arc & bucketSize;
-        arc & numberSteps;
+        arc & numberOfSteps;
         arc & nfour;
         arc & cuda;
         arc & doLc;
@@ -179,10 +181,10 @@ struct Options {
         arc & usePowerFile;
         arc & lcDir;
         arc & tracerCount;
-        arc & partsDim;
+        arc & particlesPerDimension;
         arc & treeCacheLineSize;
         arc & treeAllocLineSize;
-        arc & partCacheLineSize;
+        arc & particleCacheLineSize;
         arc & readCheck;
         arc & checkFreq;
         arc & maxIter;
@@ -194,7 +196,7 @@ struct Options {
         arc & lcB;
         arc & theta;
         arc & sliceSize;
-        arc & linkLen;
+        arc & linkingLength;
         arc & hsoft;
         arc & gm;
         arc & eta;

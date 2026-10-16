@@ -49,7 +49,7 @@ struct DomainT {
 
 struct DomainGlobal {
     Range<double> box;
-    Pair<int> procRange;
+    Pair<int> processRange;
     size_t totalCount;
     size_t loCount;
     double midhi;
@@ -59,8 +59,8 @@ struct DomainGlobal {
 
 struct DomainLocal {
     Range<double> box;
-    Pair<int> procRange;
-    Pair<ParticleInteger> partRange;
+    Pair<int> processRange;
+    Pair<ParticleInteger> particleRange;
     int depth;
 };
 

@@ -108,7 +108,7 @@ struct SphRunCudaData {
     SphRecord6* rec6Snk;
     float codeDifToCgs;
     float n;
-    int numberTargetNodes;
+    int numberOfTargetNodes;
     SphTreeNode* trees;
     int* selfs;
     int* neighbors;

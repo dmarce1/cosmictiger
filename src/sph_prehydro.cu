@@ -36,20 +36,21 @@ __global__ void sphCudaPrehydro1(
     __syncthreads();
     new (&ws) Prehydro1Workspace();
     Array<Fixed32, NDIM> x;
-    while (index < data.numberTargetNodes) {
+    while (index < data.numberOfTargetNodes) {
         int flops = 0;
         __syncthreads();
         ws.rec1.resize(0);
         SphTreeNode const& self = data.trees[data.selfs[index]];
         for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
             SphTreeNode const& other = data.trees[data.neighbors[ni]];
-            int const maxpi = roundUp(other.partRange.second - other.partRange.first, blockSize) +
-                other.partRange.first;
-            for (int pi = other.partRange.first + tid; pi < maxpi; pi += blockSize) {
+            int const maxpi =
+                roundUp(other.particleRange.second - other.particleRange.first, blockSize) +
+                other.particleRange.first;
+            for (int pi = other.particleRange.first + tid; pi < maxpi; pi += blockSize) {
                 bool contains = false;
                 int j;
                 int total;
-                if (pi < other.partRange.second) {
+                if (pi < other.particleRange.second) {
                     x[XDIM] = data.x[pi];
                     x[YDIM] = data.y[pi];
                     x[ZDIM] = data.z[pi];
@@ -74,18 +75,18 @@ __global__ void sphCudaPrehydro1(
         float hmaxAll = 0.0;
         float const w0 = kernelW(0.f);
         __syncthreads();
-        for (int i = self.partRange.first; i < self.partRange.second; i++) {
+        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
-            int const snki = self.sinkPartRange.first - self.partRange.first + i;
-            auto const rung = data.rungsSnk[data.dmIndexSnk[snki]];
+            int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
+            auto const rung = data.rungsSnk[data.dmIndexSnk[sinkIndex]];
             bool const active = rung >= params.minRung;
-            auto& converged = data.convergedSnk[snki];
+            auto& converged = data.convergedSnk[sinkIndex];
             bool const use = active && !converged;
             if (use) {
                 x[XDIM] = data.x[i];
                 x[YDIM] = data.y[i];
                 x[ZDIM] = data.z[i];
-                float& h = data.rec2Snk[snki].h;
+                float& h = data.rec2Snk[sinkIndex].h;
                 float wcount;
                 if (!computeSoftlens<PREHYDRO1_BLOCK_SIZE>(h, params.hmin, params.hmax, data.n,
                         ws.rec1, x, self.outerBox, SPH_TYPE, wcount)) {
@@ -152,7 +153,7 @@ __global__ void sphCudaPrehydro2(
     __syncthreads();
     new (&ws) Prehydro2Workspace();
     Array<Fixed32, NDIM> x;
-    while (index < data.numberTargetNodes) {
+    while (index < data.numberOfTargetNodes) {
         int flops = 0;
         __syncthreads();
         ws.rec1.resize(0);
@@ -160,13 +161,14 @@ __global__ void sphCudaPrehydro2(
         SphTreeNode const& self = data.trees[data.selfs[index]];
         for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
             SphTreeNode const& other = data.trees[data.neighbors[ni]];
-            int const maxpi = roundUp(other.partRange.second - other.partRange.first, blockSize) +
-                other.partRange.first;
-            for (int pi = other.partRange.first + tid; pi < maxpi; pi += blockSize) {
+            int const maxpi =
+                roundUp(other.particleRange.second - other.particleRange.first, blockSize) +
+                other.particleRange.first;
+            for (int pi = other.particleRange.first + tid; pi < maxpi; pi += blockSize) {
                 bool contains = false;
                 int j;
                 int total;
-                if (pi < other.partRange.second) {
+                if (pi < other.particleRange.second) {
                     x[XDIM] = data.x[pi];
                     x[YDIM] = data.y[pi];
                     x[ZDIM] = data.z[pi];
@@ -224,10 +226,10 @@ __global__ void sphCudaPrehydro2(
         float hmax = 0.0;
         float const w0 = kernelW(0.f);
         __syncthreads();
-        for (int i = self.partRange.first; i < self.partRange.second; i++) {
+        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
-            int const snki = self.sinkPartRange.first - self.partRange.first + i;
-            auto const rung = data.rungsSnk[data.dmIndexSnk[snki]];
+            int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
+            auto const rung = data.rungsSnk[data.dmIndexSnk[sinkIndex]];
             bool const active = rung >= params.minRung;
             int semiactive = 0;
             x[XDIM] = data.x[i];
@@ -236,17 +238,17 @@ __global__ void sphCudaPrehydro2(
             Fixed32 const& xI = x[XDIM];
             Fixed32 const& yI = x[YDIM];
             Fixed32 const& zI = x[ZDIM];
-            float const& hI = data.rec2Snk[snki].h;
+            float const& hI = data.rec2Snk[sinkIndex].h;
             float const hinvI = 1.f / hI;    // 4
             float const h2I = sqr(hI);       // 1
             if (active) {
                 if (tid == 0) {
-                    data.saSnk[snki] = true;
+                    data.saSnk[sinkIndex] = true;
                 }
             } else {
                 int const jmax = roundUp(ws.rec1.size(), blockSize);
                 if (tid == 0) {
-                    data.saSnk[snki] = false;
+                    data.saSnk[sinkIndex] = false;
                 }
                 for (int j = tid; j < jmax; j += blockSize) {
                     if (j < ws.rec1.size()) {
@@ -271,21 +273,21 @@ __global__ void sphCudaPrehydro2(
                     sharedReduceAdd<int, PREHYDRO2_BLOCK_SIZE>(semiactive);
                     if (semiactive) {
                         if (tid == 0) {
-                            data.saSnk[snki] = true;
+                            data.saSnk[sinkIndex] = true;
                         }
                         break;
                     }
                 }
             }
             int boxXceeded = false;
-            auto& converged = data.convergedSnk[snki];
+            auto& converged = data.convergedSnk[sinkIndex];
             bool path;
             if (semiactive && !params.vsoft && !converged) {
                 path = true;
                 x[XDIM] = data.x[i];
                 x[YDIM] = data.y[i];
                 x[ZDIM] = data.z[i];
-                float& h = data.rec2Snk[snki].h;
+                float& h = data.rec2Snk[sinkIndex].h;
                 float wcount;
                 if (!computeSoftlens<PREHYDRO2_BLOCK_SIZE>(h, params.hmin, params.hmax, data.n,
                         ws.rec1, x, self.outerBox, SPH_TYPE, wcount)) {
@@ -304,8 +306,8 @@ __global__ void sphCudaPrehydro2(
             }
             if ((active || semiactive) && !boxXceeded) {
                 __syncthreads();
-                int const snki = self.sinkPartRange.first - self.partRange.first + i;
-                float const& hI = data.rec2Snk[snki].h;
+                int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
+                float const& hI = data.rec2Snk[sinkIndex].h;
                 ALWAYS_ASSERT(hI >= params.hmin);
                 float const& vxI = data.vx[i];
                 float const& vyI = data.vy[i];
@@ -399,7 +401,7 @@ __global__ void sphCudaPrehydro2(
                 sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(pre);
                 sharedReduceAdd<float, PREHYDRO2_BLOCK_SIZE>(dpredh);
 #endif
-                data.rhoSnk[snki] = rhoI;
+                data.rhoSnk[sinkIndex] = rhoI;
                 auto const one = wSum / (3.0 / 4.0 / M_PI * data.n);
                 //	ALWAYS_ASSERT(fabs(one - 1.0) < .001);
                 float const a = 0.33333333333f * dwSum / wSum;
@@ -407,22 +409,24 @@ __global__ void sphCudaPrehydro2(
                 dsmoothXDh(hI, params.hmin, params.hmax, f, dfdh);
                 float const b = 0.33333333333f * hI / f * dfdh;
                 float const omegaI = (a + b) / (1.0f + b);
-                data.omegaSnk[snki] = omegaI;
+                data.omegaSnk[sinkIndex] = omegaI;
 #ifdef HOPKINS
-                data.omegaPSnk[snki] =
+                data.omegaPSnk[sinkIndex] =
                     1.f / ((-pre + 0.33333333333333f * dpredh) / (f * wSum)) * omegaI;
 #ifdef ENTROPY
-                data.preSnk[snki] = powf(data.m * pre * h3invI, data.defGamma);
+                data.preSnk[sinkIndex] = powf(data.m * pre * h3invI, data.defGamma);
 #else
-                data.preSnk[snki] = data.m * pre * h3invI;
+                data.preSnk[sinkIndex] = data.m * pre * h3invI;
 #endif
                 if (tid == 0) {
-                    //				PRINT( "%e %e %e\n", data.pre_snk[snki], rho_i, x_i.to_float());
+                    //				PRINT( "%e %e %e\n", data.pre_snk[sinkIndex], rho_i,
+                    //x_i.to_float());
                 }
 #else
-                data.omegaPSnk[snki] = 1.f / ((-1.f + entropy * f * wSum) / (f * wSum)) * omegaI;
+                data.omegaPSnk[sinkIndex] =
+                    1.f / ((-1.f + entropy * f * wSum) / (f * wSum)) * omegaI;
 #endif
-                //	PRINT( "%e\n", 	data.omegaP_snk[snki] );
+                //	PRINT( "%e\n", 	data.omegaP_snk[sinkIndex] );
                 if (!(omegaI > 0.0)) {
                     PRINT("%e %e %e %e %e %e\n", omegaI, a, b, hI, wSum, dwSum);
                 }
@@ -502,7 +506,7 @@ __global__ void sphCudaPrehydro2(
                     shearYz = 0.5f * (dvyDz + dvzDy);        // 2
                     float const shearv = sqrtf(sqr(shearXx) + sqr(shearYy) + sqr(shearZz) +
                         2.0f * (sqr(shearXy) + sqr(shearXz) + sqr(shearYz)));    // 16
-                    data.shearSnk[snki] = shearv;
+                    data.shearSnk[sinkIndex] = shearv;
                 }
             }
         }

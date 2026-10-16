@@ -76,7 +76,7 @@ struct Workspace {
 };
 
 static thread_local std::stack<Workspace> localWorkspaces;
-static std::atomic<size_t> partsCovered;
+static std::atomic<size_t> particlesCovered;
 static hpx::promise<KickReturn> localReturnPromise;
 static hpx::future<KickReturn> localReturnFuture;
 static KickReturn localReturn;
@@ -105,7 +105,7 @@ static void cleanupWorkspace(Workspace&& workspace) {
 hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
     Array<Fixed32, NDIM> pos, TreeId self, Vector<TreeId> dchecklist, Vector<TreeId> echecklist,
     std::shared_ptr<KickWorkspace> cudaWorkspace, bool threadme) {
-    static std::atomic<int> numberThreads(1);
+    static std::atomic<int> numberOfThreads(1);
     hpx::future<KickReturn> rc;
     TreeNode const* selfPtr = treeGetNode(self);
     bool remote = false;
@@ -120,16 +120,17 @@ hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = selfPtr->partRange.second - selfPtr->partRange.first > MIN_KICK_THREAD_PARTS;
+        threadme =
+            selfPtr->particleRange.second - selfPtr->particleRange.first > MIN_KICK_THREAD_PARTS;
         int const maximumThreads = std::max(1,
             hpxSize() == 1 ? (int) hpxHardwareConcurrency() * 2 :
                              (int) hpxHardwareConcurrency() / 2);
         if (threadme) {
-            if (numberThreads++ < maximumThreads || !selfPtr->isLocal()) {
+            if (numberOfThreads++ < maximumThreads || !selfPtr->isLocal()) {
                 threadme = true;
             } else {
                 threadme = false;
-                numberThreads--;
+                numberOfThreads--;
             }
         }
     }
@@ -140,8 +141,8 @@ hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
         rc = hpx::make_ready_future(kick(params, l, pos, self, std::move(dchecklist),
             std::move(echecklist), std::move(cudaWorkspace)));
     } else if (remote) {
-        rc = hpx::async<KickAction>(hpxLocalities()[selfPtr->procRange.first], params, l, pos, self,
-            std::move(dchecklist), std::move(echecklist), nullptr);
+        rc = hpx::async<KickAction>(hpxLocalities()[selfPtr->processRange.first], params, l, pos,
+            self, std::move(dchecklist), std::move(echecklist), nullptr);
     } else {
         if (allLocal) {
             rc = hpx::async(
@@ -149,7 +150,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
                     Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
                     auto rc = kick(params, l, pos, self, std::move(dchecklist),
                         std::move(echecklist), cudaWorkspace);
-                    numberThreads--;
+                    numberOfThreads--;
                     return rc;
                 },
                 std::move(dchecklist), std::move(echecklist));
@@ -160,7 +161,7 @@ hpx::future<KickReturn> kickFork(KickParameters params, Expansion<float> l,
                     Vector<TreeId> dchecklist, Vector<TreeId> echecklist) {
                     auto rc = kick(params, l, pos, self, std::move(dchecklist),
                         std::move(echecklist), cudaWorkspace);
-                    numberThreads--;
+                    numberOfThreads--;
                     return rc;
                 },
                 std::move(dchecklist), std::move(echecklist));
@@ -181,8 +182,8 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     Timer tm;
     if (selfPtr->localRoot) {
         tm.start();
-        partsCovered = 0;
-        localParticleGoal = selfPtr->numberParticles();
+        particlesCovered = 0;
+        localParticleGoal = selfPtr->numberOfParticles();
         localReturnSent = false;
         localReturn = KickReturn();
         localReturnPromise = decltype(localReturnPromise)();
@@ -193,18 +194,19 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     size_t cudaMemUsage;
     if (getOptions().cuda && params.gpu) {
         if (params.gpu && cudaWorkspace == nullptr && selfPtr->isLocal()) {
-            cudaWorkspace = std::make_shared<KickWorkspace>(params, selfPtr->numberParticles());
+            cudaWorkspace = std::make_shared<KickWorkspace>(params, selfPtr->numberOfParticles());
         }
-        size_t maxParts = CUDA_KICK_PARTS_MAX;
+        size_t maximumGpuParticles = CUDA_KICK_PARTS_MAX;
         auto const rng = particlesCurrentRange();
-        maxParts = std::min((size_t) maxParts,
+        maximumGpuParticles = std::min((size_t) maximumGpuParticles,
             (size_t) std::max((ParticleInteger) (rng.second - rng.first) / kickBlockCount(),
                 (ParticleInteger) getOptions().bucketSize));
-        if (params.gpu && selfPtr->numberParticles() <= maxParts && selfPtr->isLocal()) {
-            if (selfPtr->numberParticles()) {
+        if (params.gpu && selfPtr->numberOfParticles() <= maximumGpuParticles &&
+            selfPtr->isLocal()) {
+            if (selfPtr->numberOfParticles()) {
                 cudaWorkspace->addWork(
                     cudaWorkspace, l, pos, self, std::move(dchecklist), std::move(echecklist));
-                partsCovered += selfPtr->numberParticles();
+                particlesCovered += selfPtr->numberOfParticles();
             }
             if (selfPtr->localRoot) {
                 auto kr = localReturnFuture.get();
@@ -257,12 +259,12 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
     myHsoft = getOptions().hsoft;
     float const hinv = 1.0f / getOptions().hsoft;
     ForceVectors forces;
-    ParticleInteger const numberSelfParticles = selfPtr->numberParticles();
+    ParticleInteger const numberOfSelfParticles = selfPtr->numberOfParticles();
     if (selfPtr->leaf) {
-        forces = ForceVectors(numberSelfParticles);
-        for (ParticleInteger i = 0; i < numberSelfParticles; i++) {
+        forces = ForceVectors(numberOfSelfParticles);
+        for (ParticleInteger i = 0; i < numberOfSelfParticles; i++) {
             forces.gx[i] = forces.gy[i] = forces.gz[i] = 0.0f;
-            forces.phi[i] = particlesMass(selfPtr->partRange.first + i) * selfPhi() * hinv;
+            forces.phi[i] = particlesMass(selfPtr->particleRange.first + i) * selfPhi() * hinv;
         }
     }
     {
@@ -415,9 +417,10 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         } while (checklist.size() && selfPtr->leaf);
         cpuGravityCc(kGravityDirect, l, cclist, self, params.doPhi);
         if (selfPtr->leaf) {
-            if (selfPtr->numberParticles() > 0) {
+            if (selfPtr->numberOfParticles() > 0) {
                 if (cudaWorkspace != nullptr) {
-                    cudaWorkspace->addParts(cudaWorkspace, selfPtr->numberParticles());
+                    cudaWorkspace->recordProcessedParticles(
+                        cudaWorkspace, selfPtr->numberOfParticles());
                 }
                 cpuGravityCp(l, cplist, self, params.doPhi);
                 cpuGravityPc(forces, params.doPhi, self, pclist);
@@ -431,7 +434,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
 
     if (selfPtr->leaf) {
         cleanupWorkspace(std::move(workspace));
-        auto const rng = selfPtr->partRange;
+        auto const rng = selfPtr->particleRange;
         for (ParticleInteger i = rng.first; i < rng.second; i++) {
             if (particlesRung(i) >= params.minRung) {
                 ParticleInteger const j = i - rng.first;
@@ -551,9 +554,10 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
         bool publish = false;
         {
             std::lock_guard<MutexType> lock(localReturnMutex);
-            partsCovered += selfPtr->numberParticles();
+            particlesCovered += selfPtr->numberOfParticles();
             localReturn += kr;
-            if (cudaWorkspace == nullptr && partsCovered == localParticleGoal && !localReturnSent) {
+            if (cudaWorkspace == nullptr && particlesCovered == localParticleGoal &&
+                !localReturnSent) {
                 completed = localReturn;
                 localReturnSent = true;
                 publish = true;
@@ -577,7 +581,7 @@ KickReturn kick(KickParameters params, Expansion<float> l, Array<Fixed32, NDIM> 
             echecklist, cudaWorkspace, threadLeft);
         futs[LEFT] = kickFork(params, l, selfPtr->pos, selfPtr->children[LEFT],
             std::move(dchecklist), std::move(echecklist), cudaWorkspace, false);
-        if (selfPtr->procRange.second - selfPtr->procRange.first > 1) {
+        if (selfPtr->processRange.second - selfPtr->processRange.first > 1) {
             auto const rcl = futs[LEFT].get();
             auto const rcr = futs[RIGHT].get();
             kr += rcl;

@@ -98,8 +98,8 @@ MultiPos* treeAddMultipole(MultiPos const& mpos);
 struct TreeNode {
     Fixed32Range box;
     Array<TreeId, NCHILD> children;
-    Pair<ParticleInteger> partRange;
-    Pair<int, int> procRange;
+    Pair<ParticleInteger> particleRange;
+    Pair<int, int> processRange;
     Array<Fixed32, NDIM> pos;
     MultiPos* mpos;
     float radius;
@@ -111,20 +111,20 @@ struct TreeNode {
     CUDA_EXPORT
 
     CUDA_EXPORT
-    inline ParticleInteger numberParticles() const {
-        return partRange.second - partRange.first;
+    inline ParticleInteger numberOfParticles() const {
+        return particleRange.second - particleRange.first;
     }
-    inline ParticleGlobalRange globalPartRange() const {
+    inline ParticleGlobalRange globalParticleRange() const {
         ParticleGlobalRange r;
-        r.proc = procRange.first;
-        r.range = partRange;
+        r.proc = processRange.first;
+        r.range = particleRange;
         return r;
     }
     inline bool isLocal() const {
-        return procRange.second - procRange.first == 1;
+        return processRange.second - processRange.first == 1;
     }
     inline bool isLocalHere() const {
-        return isLocal() && procRange.first == hpxRank();
+        return isLocal() && processRange.first == hpxRank();
     }
     HPX_SERIALIZATION_SPLIT_MEMBER();
     template <class A>
@@ -135,8 +135,8 @@ struct TreeNode {
         arc & box;
         arc & pos;
         arc & children;
-        arc & procRange;
-        arc & partRange;
+        arc & processRange;
+        arc & particleRange;
         arc & radius;
         int localRoot0;
         int leaf0;
@@ -154,8 +154,8 @@ struct TreeNode {
         arc & box;
         arc & pos;
         arc & children;
-        arc & procRange;
-        arc & partRange;
+        arc & processRange;
+        arc & particleRange;
         arc & radius;
         int localRoot0;
         int leaf0;
@@ -187,7 +187,7 @@ struct TreeCreateReturn {
 struct TreeCreateParameters {
     int minRung;
     double theta;
-    ParticleInteger parParts;
+    ParticleInteger parallelParticleThreshold;
     int minLevel;
     bool leafPushed;
     bool doLeafSizes;
@@ -198,7 +198,7 @@ struct TreeCreateParameters {
     TreeCreateParameters(int minRung, double theta, double hmax);
     template <class A>
     void serialize(A&& arc, unsigned) {
-        arc & parParts;
+        arc & parallelParticleThreshold;
         arc & doLeafSizes;
         arc & leafPushed;
         arc & minRung;
@@ -208,8 +208,8 @@ struct TreeCreateParameters {
 };
 
 TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key = 1,
-    Pair<int, int> procRange = Pair<int>(0, hpxSize()),
-    Pair<ParticleInteger> partRange = Pair<ParticleInteger>(-1, -1),
+    Pair<int, int> processRange = Pair<int>(0, hpxSize()),
+    Pair<ParticleInteger> particleRange = Pair<ParticleInteger>(-1, -1),
     Range<double> box = unitBox<double>(), int depth = 0, bool localRoot = (hpxSize() == 1));
 void treeReset();
 void treeDestroy(bool freeTree = false);

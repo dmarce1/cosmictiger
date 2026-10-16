@@ -61,22 +61,23 @@ __global__ void sphCudaConduction(
     Array<Fixed32, NDIM> x;
     float const cons = -2.f * sqr(params.a) * m;
     int flops = 4;
-    while (index < data.numberTargetNodes) {
+    while (index < data.numberOfTargetNodes) {
         __syncthreads();
         ws.rec1.resize(0);
         ws.rec2.resize(0);
         SphTreeNode const& self = data.trees[data.selfs[index]];
         for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
             SphTreeNode const& other = data.trees[data.neighbors[ni]];
-            int const maxpi = roundUp(other.partRange.second - other.partRange.first, blockSize) +
-                other.partRange.first;
-            for (int pi = other.partRange.first + tid; pi < maxpi; pi += blockSize) {
+            int const maxpi =
+                roundUp(other.particleRange.second - other.particleRange.first, blockSize) +
+                other.particleRange.first;
+            for (int pi = other.particleRange.first + tid; pi < maxpi; pi += blockSize) {
                 bool contains = false;
                 int j;
                 int total;
                 float h;
                 int rung;
-                if (pi < other.partRange.second) {
+                if (pi < other.particleRange.second) {
                     h = data.h[pi];
                     ALWAYS_ASSERT(h > 0.f);
                     rung = data.rungs[pi];
@@ -134,11 +135,11 @@ __global__ void sphCudaConduction(
             }
         }
         __syncthreads();
-        for (int i = self.partRange.first; i < self.partRange.second; i++) {
-            int const snki = self.sinkPartRange.first - self.partRange.first + i;
+        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
+            int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
             bool const active = data.rungs[i] >= params.minRung;
-            bool const semiactive = !active && data.saSnk[snki];
-            bool const converged = data.convergedSnk[snki];
+            bool const semiactive = !active && data.saSnk[sinkIndex];
+            bool const converged = data.convergedSnk[sinkIndex];
             if ((active || semiactive) && !converged) {
                 ws.neighbors.resize(0);
                 float const jmax = roundUp(ws.rec1.size(), blockSize);
@@ -274,16 +275,16 @@ __global__ void sphCudaConduction(
                     flops += (CONDUCTION_BLOCK_SIZE - 1) * 2;
                     flops += 7;
 #ifdef ENTROPY
-                    float const a0 = data.entr0Snk[snki];
+                    float const a0 = data.entr0Snk[sinkIndex];
                     float const a1 = (a0 + num) / (1.f + den);
                     float const dA = a1 - aI;
-                    data.dentr1Snk[snki] = dA;
+                    data.dentr1Snk[sinkIndex] = dA;
                     ALWAYS_ASSERT(aI + dA >= 0.0);
 #else
-                    float const eint0 = data.eint0Snk[snki];
+                    float const eint0 = data.eint0Snk[sinkIndex];
                     float const eint1 = (eint0 + num) / (1.f + den);
                     float const deint = eint1 - eintI;
-                    data.deint1Snk[snki] = deint;
+                    data.deint1Snk[sinkIndex] = deint;
                     ALWAYS_ASSERT(eintI + deint >= 0.0);
 #endif
                 }

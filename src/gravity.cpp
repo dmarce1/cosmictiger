@@ -34,8 +34,8 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
         static SimdFloat const toFloatFactor(kFixed2float);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
-        int const numberSinks = selfPtr->numberParticles();
-        int const numberSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
+        int const numberOfSinks = selfPtr->numberOfParticles();
+        int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
         for (int i = 0; i < list.size(); i++) {
             treePtrs[i] = treeGetNode(list[i]);
         }
@@ -47,8 +47,8 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
             boost::alignment::aligned_allocator<Array<SimdInt, NDIM>,
                 SIMD_FLOAT_SIZE * sizeof(float)>>
             yValue;
-        mValue.resize(numberSources);
-        yValue.resize(numberSources);
+        mValue.resize(numberOfSources);
+        yValue.resize(numberOfSources);
         for (int i = 0; i < treePtrs.size(); i++) {
             int const k = i / SIMD_FLOAT_SIZE;
             int const l = i % SIMD_FLOAT_SIZE;
@@ -63,7 +63,7 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
         }
         int const lastk = (treePtrs.size() - 1) / SIMD_FLOAT_SIZE;
         int const lastl = (treePtrs.size() - 1) % SIMD_FLOAT_SIZE;
-        for (int i = treePtrs.size(); i < numberSources * SIMD_FLOAT_SIZE; i++) {
+        for (int i = treePtrs.size(); i < numberOfSources * SIMD_FLOAT_SIZE; i++) {
             int const k = i / SIMD_FLOAT_SIZE;
             int const l = i % SIMD_FLOAT_SIZE;
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
@@ -79,7 +79,7 @@ void cpuGravityCc(GravityCcType type, Expansion<float>& lValue, Vector<TreeId> c
         }
         Expansion<SimdFloat> l0;
         l0 = SimdFloat(0.0f);
-        for (int j = 0; j < numberSources; j++) {
+        for (int j = 0; j < numberOfSources; j++) {
             int const count =
                 std::min(SIMD_FLOAT_SIZE, (int) (treePtrs.size() - j * SIMD_FLOAT_SIZE));
             Array<SimdFloat, NDIM> dx;
@@ -115,44 +115,44 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
         SimdFloat const one(1.0);
         SimdFloat const tiny(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
-        int const numberSinks = selfPtr->numberParticles();
+        int const numberOfSinks = selfPtr->numberOfParticles();
         for (int li = 0; li < list.size(); li += kChunkSize) {
             Array<TreeNode const*, kChunkSize> treePtrs;
-            int numberSources = 0;
+            int numberOfSources = 0;
             int const maxi = std::min((int) list.size(), li + kChunkSize) - li;
             for (int i = 0; i < maxi; i++) {
                 treePtrs[i] = treeGetNode(list[i + li]);
-                numberSources += treePtrs[i]->numberParticles();
+                numberOfSources += treePtrs[i]->numberOfParticles();
             }
-            numberSources = roundUp(numberSources, SIMD_FLOAT_SIZE);
+            numberOfSources = roundUp(numberOfSources, SIMD_FLOAT_SIZE);
             Vector<Fixed32> srcx;
             Vector<Fixed32> srcy;
             Vector<Fixed32> srcz;
             Vector<float> masses;
             Vector<char> types;
-            srcx.resize(numberSources);
-            srcy.resize(numberSources);
-            srcz.resize(numberSources);
-            masses.resize(numberSources);
-            types.resize(numberSources);
+            srcx.resize(numberOfSources);
+            srcy.resize(numberOfSources);
+            srcz.resize(numberOfSources);
+            masses.resize(numberOfSources);
+            types.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                particlesGlobalReadPos(treePtrs[i]->globalPartRange(), srcx.data(), srcy.data(),
+                particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
                     srcz.data(), types.data(), nullptr, count);
-                count += treePtrs[i]->numberParticles();
+                count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
                 masses[i] = getOptions().sph ?
                     (types[i] == DARK_MATTER_TYPE ? getOptions().dmMass : getOptions().sphMass) :
                     1.0f;
             }
-            for (int i = count; i < numberSources; i++) {
+            for (int i = count; i < numberOfSources; i++) {
                 srcx[i] = 0.0;
                 srcy[i] = 0.0;
                 srcz[i] = 0.0;
                 masses[i] = 0.0;
             }
-            auto const range = selfPtr->partRange;
+            auto const range = selfPtr->particleRange;
             Array<SimdInt, NDIM> x;
             Array<SimdInt, NDIM> yValue;
             for (int dim = 0; dim < NDIM; dim++) {
@@ -160,7 +160,7 @@ void cpuGravityCp(Expansion<float>& lValue, Vector<TreeId> const& list, TreeId s
             }
             Expansion<SimdFloat> l0;
             l0 = SimdFloat(0.0f);
-            for (int j = 0; j < numberSources; j += SIMD_FLOAT_SIZE) {
+            for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
                 int const cnt = std::min(count - j, SIMD_FLOAT_SIZE);
                 int const k = j / SIMD_FLOAT_SIZE;
                 SimdFloat mass;
@@ -197,8 +197,8 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         static SimdFloat const toFloatFactor(kFixed2float);
         Vector<TreeNode const*> treePtrs(list.size());
         TreeNode const* selfPtr = treeGetNode(self);
-        int const numberSinks = selfPtr->numberParticles();
-        int const numberSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
+        int const numberOfSinks = selfPtr->numberOfParticles();
+        int const numberOfSources = roundUp((int) list.size(), SIMD_FLOAT_SIZE) / SIMD_FLOAT_SIZE;
         for (int i = 0; i < list.size(); i++) {
             treePtrs[i] = treeGetNode(list[i]);
         }
@@ -210,8 +210,8 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             boost::alignment::aligned_allocator<Array<SimdInt, NDIM>,
                 SIMD_FLOAT_SIZE * sizeof(float)>>
             yValue;
-        mValue.resize(numberSources);
-        yValue.resize(numberSources);
+        mValue.resize(numberOfSources);
+        yValue.resize(numberOfSources);
         int count = 0;
         for (int i = 0; i < treePtrs.size(); i++) {
             int const k = i / SIMD_FLOAT_SIZE;
@@ -227,7 +227,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
         }
         int const lastk = (treePtrs.size() - 1) / SIMD_FLOAT_SIZE;
         int const lastl = (treePtrs.size() - 1) % SIMD_FLOAT_SIZE;
-        for (int i = treePtrs.size(); i < numberSources * SIMD_FLOAT_SIZE; i++) {
+        for (int i = treePtrs.size(); i < numberOfSources * SIMD_FLOAT_SIZE; i++) {
             int const k = i / SIMD_FLOAT_SIZE;
             int const l = i % SIMD_FLOAT_SIZE;
             for (int j = 0; j < MULTIPOLE_SIZE; j++) {
@@ -237,7 +237,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
                 yValue[k][j][l] = yValue[lastk][j][lastl];
             }
         }
-        auto const range = selfPtr->partRange;
+        auto const range = selfPtr->particleRange;
         Array<SimdInt, NDIM> x;
         for (ParticleInteger i = range.first; i < range.second; i++) {
             Expansion2<SimdFloat> lValue2;
@@ -248,7 +248,7 @@ void cpuGravityPc(ForceVectors& f, int doPhi, TreeId self, Vector<TreeId> const&
             for (int dim = 0; dim < NDIM; dim++) {
                 x[dim] = particlesPos(dim, i).raw();
             }
-            for (int j = 0; j < numberSources; j++) {
+            for (int j = 0; j < numberOfSources; j++) {
                 int const count =
                     std::min(SIMD_FLOAT_SIZE, (int) (treePtrs.size() - j * SIMD_FLOAT_SIZE));
                 Array<SimdFloat, NDIM> dx;
@@ -291,20 +291,20 @@ void cpuGravityPp(
         SimdFloat const one(1.0);
         SimdFloat const tiny(1.0e-20);
         TreeNode const* selfPtr = treeGetNode(self);
-        int const numberSinks = selfPtr->numberParticles();
-        auto const range = selfPtr->partRange;
+        int const numberOfSinks = selfPtr->numberOfParticles();
+        auto const range = selfPtr->particleRange;
         for (int li = 0; li < list.size(); li += kChunkSize) {
             Array<SimdInt, NDIM> x;
             Array<SimdInt, NDIM> yValue;
             SimdInt srcType;
             Array<TreeNode const*, kChunkSize> treePtrs;
-            int numberSources = 0;
+            int numberOfSources = 0;
             int const maxi = std::min((int) list.size(), li + kChunkSize) - li;
             for (int i = li; i < li + maxi; i++) {
                 treePtrs[i - li] = treeGetNode(list[i]);
-                numberSources += treePtrs[i - li]->numberParticles();
+                numberOfSources += treePtrs[i - li]->numberOfParticles();
             }
-            numberSources = roundUp(numberSources, SIMD_FLOAT_SIZE);
+            numberOfSources = roundUp(numberOfSources, SIMD_FLOAT_SIZE);
             Vector<Fixed32> srcx;
             Vector<Fixed32> srcy;
             Vector<Fixed32> srcz;
@@ -313,23 +313,23 @@ void cpuGravityPp(
             Vector<char> type;
             Vector<float> masses;
             Vector<char> types;
-            srcx.resize(numberSources);
-            srcy.resize(numberSources);
-            srcz.resize(numberSources);
-            masses.resize(numberSources);
-            types.resize(numberSources);
+            srcx.resize(numberOfSources);
+            srcy.resize(numberOfSources);
+            srcz.resize(numberOfSources);
+            masses.resize(numberOfSources);
+            types.resize(numberOfSources);
             int count = 0;
             for (int i = 0; i < maxi; i++) {
-                particlesGlobalReadPos(treePtrs[i]->globalPartRange(), srcx.data(), srcy.data(),
+                particlesGlobalReadPos(treePtrs[i]->globalParticleRange(), srcx.data(), srcy.data(),
                     srcz.data(), types.data(), nullptr, count);
-                count += treePtrs[i]->numberParticles();
+                count += treePtrs[i]->numberOfParticles();
             }
             for (int i = 0; i < count; i++) {
                 masses[i] = getOptions().sph ?
                     (types[i] == DARK_MATTER_TYPE ? getOptions().dmMass : getOptions().sphMass) :
                     1.0f;
             }
-            for (int i = count; i < numberSources; i++) {
+            for (int i = count; i < numberOfSources; i++) {
                 srcx[i] = 0.f;
                 srcy[i] = 0.f;
                 srcz[i] = 0.f;
@@ -348,7 +348,7 @@ void cpuGravityPp(
                     x[dim] = particlesPos(dim, i).raw();
                 }
                 //					simd_float self_flags(0);
-                for (int j = 0; j < numberSources; j += SIMD_FLOAT_SIZE) {
+                for (int j = 0; j < numberOfSources; j += SIMD_FLOAT_SIZE) {
                     int const& count = maxi;
                     int const k = j / SIMD_FLOAT_SIZE;
                     SimdFloat mass;

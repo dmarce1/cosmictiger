@@ -239,6 +239,6 @@ KickReturn cudaExecuteKicks(
     KickParameters params, Fixed32*, Fixed32*, Fixed32*, TreeNode*, Vector<KickWorkitem> workitems);
 #endif
 int kickBlockCount();
-size_t kickEstimateCudaMemoryUsage(double theta, int numberParticles, int checkCount);
+size_t kickEstimateCudaMemoryUsage(double theta, int numberOfParticles, int checkCount);
 
 #endif /* KICK_HPP_ */

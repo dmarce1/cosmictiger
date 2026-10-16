@@ -243,24 +243,24 @@ static PowerSpectrumReturn powerSpectrumCompute(Vector<float> const& kbins) {
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumComputeAction>(c, kbins));
     }
-    int64_t const n = getOptions().partsDim;
+    int64_t const n = getOptions().particlesPerDimension;
     float const boxSize = getOptions().codeToCm / constants::kMpcToCm;
     auto const& box = cmplxMybox[ZDIM];
     Array<int64_t, NDIM> iValue;
 
-    int const numberBins = kbins.size() - 1;
-    Vector<float> power(numberBins, 0.0);
-    Vector<double> count(numberBins, 0);
-    Vector<float> ktot(numberBins, 0.0);
+    int const numberOfBins = kbins.size() - 1;
+    Vector<float> power(numberOfBins, 0.0);
+    Vector<double> count(numberOfBins, 0);
+    Vector<float> ktot(numberOfBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, numberBins, &kbins, box](Array<int64_t, NDIM> iValue2) {
+            [n, numberOfBins, &kbins, box](Array<int64_t, NDIM> iValue2) {
                 int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
                 double const sx = cloudFilter(2.0 * M_PI * i / n);
                 PowerSpectrumReturn ret;
-                Vector<float> power(numberBins, 0.0);
-                Vector<double> count(numberBins, 0);
-                Vector<float> ktot(numberBins, 0.0);
+                Vector<float> power(numberOfBins, 0.0);
+                Vector<double> count(numberOfBins, 0);
+                Vector<float> ktot(numberOfBins, 0.0);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
                     double const sy = cloudFilter(2.0 * M_PI * j / n);
@@ -271,7 +271,7 @@ static PowerSpectrumReturn powerSpectrumCompute(Vector<float> const& kbins) {
                         yValue[box.index(iValue2)] *= c0;
                         double const iii = std::sqrt(i * i + j * j + k * k);
                         if (iii > 0) {
-                            int const bin = searchKbins(kbins, iii, 0, numberBins);
+                            int const bin = searchKbins(kbins, iii, 0, numberOfBins);
                             if (bin >= 0) {
                                 float const pwr = yValue[box.index(iValue2)].norm();
                                 count[bin] += 1;
@@ -312,20 +312,20 @@ static PowerSpectrumReturn powerSpectrumCompute2(
     for (auto c : hpxChildren()) {
         futs.push_back(hpx::async<PowerSpectrumCompute2Action>(c, rc, kbins));
     }
-    int64_t const n = getOptions().partsDim;
+    int64_t const n = getOptions().particlesPerDimension;
     float const boxSize = getOptions().codeToCm / constants::kMpcToCm;
     auto const& box = cmplxMybox[ZDIM];
     Array<int64_t, NDIM> iValue;
 
-    int const numberBins = kbins.size() - 1;
-    Vector<float> devs(numberBins, 0.0);
+    int const numberOfBins = kbins.size() - 1;
+    Vector<float> devs(numberOfBins, 0.0);
     for (iValue[0] = box.begin[0]; iValue[0] != box.end[0]; iValue[0]++) {
         futs.push_back(hpx::async(
-            [n, numberBins, &kbins, box, rc](Array<int64_t, NDIM> iValue2) {
+            [n, numberOfBins, &kbins, box, rc](Array<int64_t, NDIM> iValue2) {
                 int64_t const i = iValue2[0] < n / 2 ? iValue2[0] : iValue2[0] - n;
                 double const sx = sinc(M_PI * i / n);
                 PowerSpectrumReturn ret;
-                Vector<float> pdev(numberBins, 0.0);
+                Vector<float> pdev(numberOfBins, 0.0);
                 for (iValue2[1] = box.begin[1]; iValue2[1] != box.end[1]; iValue2[1]++) {
                     int64_t const j = iValue2[1] < n / 2 ? iValue2[1] : iValue2[1] - n;
                     double const sy = sinc(M_PI * j / n);
@@ -336,7 +336,7 @@ static PowerSpectrumReturn powerSpectrumCompute2(
                         yValue[box.index(iValue2)] *= c0;
                         double const iii = std::sqrt(i * i + j * j + k * k);
                         if (iii > 0) {
-                            int const bin = searchKbins(kbins, iii, 0, numberBins);
+                            int const bin = searchKbins(kbins, iii, 0, numberOfBins);
                             if (bin >= 0) {
                                 float const pwr = yValue[box.index(iValue2)].norm();
                                 pdev[bin] += sqr(pwr - rc.p[bin]);
@@ -352,7 +352,7 @@ static PowerSpectrumReturn powerSpectrumCompute2(
     for (auto& f : futs) {
         auto const pr = f.get();
         auto const& thisPdev = pr.pdev;
-        for (int i = 0; i < numberBins; i++) {
+        for (int i = 0; i < numberOfBins; i++) {
             devs[i] += thisPdev[i];
         }
     }

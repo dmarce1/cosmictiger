@@ -623,7 +623,7 @@ double cudaChemistryStep(Vector<ChemistryAttributes>& chems, float scale) {
     int* index;
     ChemistryAttributes* devChems;
     ChemistryParameters params;
-    int numberBlocks;
+    int numberOfBlocks;
     auto stream = cudaGetStream();
     for (int i = 0; i < NCOOL; i++) {
         coolingTotals[i] = 0.f;
@@ -642,10 +642,10 @@ double cudaChemistryStep(Vector<ChemistryAttributes>& chems, float scale) {
     params.codeToG = opts.codeToG;
     params.codeToS = opts.codeToS;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberBlocks, (void const*) chemistryKernel, CHEM_BLOCK_SIZE, 0));
-    numberBlocks *= cudaSmpCount();
+        &numberOfBlocks, (void const*) chemistryKernel, CHEM_BLOCK_SIZE, 0));
+    numberOfBlocks *= cudaSmpCount();
     tm.start();
-    chemistryKernel<<<numberBlocks, CHEM_BLOCK_SIZE, 0, stream>>>(
+    chemistryKernel<<<numberOfBlocks, CHEM_BLOCK_SIZE, 0, stream>>>(
         params, devChems, chems.size(), index, flops);
     synchronizeCudaStream(stream);
     tm.stop();

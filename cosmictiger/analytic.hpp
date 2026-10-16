@@ -25,6 +25,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 std::pair<Vector<double>, Array<Vector<double>, NDIM>> gravityAnalyticCallKernel(
     Vector<Fixed32> const& sinkx, Vector<Fixed32> const& sinky, Vector<Fixed32> const& sinkz);
-Pair<double> analyticCompare(int numberSamples);
+Pair<double> analyticCompare(int numberOfSamples);
 
 #endif /* ANALYTIC_HPP_ */

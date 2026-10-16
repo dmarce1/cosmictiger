@@ -44,7 +44,7 @@ struct LightconeTreeId {
 struct LightconeTreeNode {
     Range<double> box;
     Array<LightconeTreeId, NCHILD> children;
-    Pair<int> partRange;
+    Pair<int> particleRange;
     int active;
     int lastActive;
     DeviceVector<LightconeTreeId> neighbors;
@@ -94,21 +94,21 @@ using LightconeTreeMapType = CudaUnorderedMap<DeviceVector<LightconeTreeNode>>;
 int lcNside();
 void lcInit(double, double);
 int lcAddParticle(double x0, double y0, double z0, double x1, double y1, double z1, float vx,
-    float vy, float vz, float t, float dt, Vector<LightconeParticle>& thisPartBuffer);
-void lcAddParts(Vector<LightconeParticle>&&);
-size_t lcAddParts(
+    float vy, float vz, float t, float dt, Vector<LightconeParticle>& thisParticleBuffer);
+void lcAddParticles(Vector<LightconeParticle>&&);
+size_t lcAddParticles(
     DeviceVector<DeviceVector<LightconeEntry>> const& entries, double scale, double tau);
 void lcBuffer2homes();
 size_t lcTimeToFlush(double, double);
 void lcParticleBoundaries1();
 void lcParticleBoundaries2();
-void lcFormTrees(double tmax, double linkLen);
+void lcFormTrees(double tmax, double linkingLength);
 size_t lcFindGroups();
 size_t lcFindNeighbors();
 void lcGroups2homes();
-void lcParts2groups(double a, double linkLen, int index);
+void lcParts2groups(double a, double linkingLength, int index);
 void lcSave(FILE* fp);
 void lcLoad(FILE* fp);
 size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
-    LightconeParticleMapType* partMapPtr, LightconeTreeMapType* treeMapPtr,
+    LightconeParticleMapType* particleMapPtr, LightconeTreeMapType* treeMapPtr,
     LightconeGroup* nextGroup);

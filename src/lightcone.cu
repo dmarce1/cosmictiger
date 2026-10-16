@@ -24,13 +24,13 @@
 
 #define BLOCK_SIZE 32
 
-__global__ void cudaLightconeKernel(LightconeParticleMapType* partMapPtr,
+__global__ void cudaLightconeKernel(LightconeParticleMapType* particleMapPtr,
     LightconeTreeMapType* treeMapPtr, int* rcPtr, LightconeTreeId const* leaves, int n,
-    int* indexPtr, LightconeGroup* nextIdPtr, double linkLen, int hpxSize, int hpxRank) {
+    int* indexPtr, LightconeGroup* nextIdPtr, double linkingLength, int hpxSize, int hpxRank) {
     int const& tid = threadIdx.x;
     __shared__ int index;
-    float const linkLen2 = sqr(linkLen);
-    auto& partMap = *partMapPtr;
+    float const linkingLengthSquared = sqr(linkingLength);
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     if (tid == 0) {
         index = atomicAdd(indexPtr, 1);
@@ -46,33 +46,34 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* partMapPtr,
         auto const& thisLeaf = leaves[index];
         auto const& self = treeMap[thisLeaf.pix][thisLeaf.index];
         if (self.lastActive) {
-            Range<double> mybox = self.box.pad(1.01 * linkLen);
+            Range<double> mybox = self.box.pad(1.01 * linkingLength);
             int foundAnyLink = false;
             auto const& neighbors = self.neighbors;
-            auto& selfParts = partMap[self.pix];
+            auto& selfParticles = particleMap[self.pix];
             for (int li = 0; li < neighbors.size(); li++) {
                 if (thisLeaf != neighbors[li]) {
                     auto const ni = neighbors[li];
                     auto const& other = treeMap[ni.pix][ni.index];
-                    auto const& otherParts = partMap[other.pix];
-                    for (int pi = other.partRange.first; pi < other.partRange.second; pi++) {
-                        auto const bValue = otherParts.group[pi];
+                    auto const& otherParticles = particleMap[other.pix];
+                    for (int pi = other.particleRange.first; pi < other.particleRange.second;
+                         pi++) {
+                        auto const bValue = otherParticles.group[pi];
                         Array<double, NDIM> b;
-                        b[XDIM] = otherParts.pos[XDIM][pi].toDouble();
-                        b[YDIM] = otherParts.pos[YDIM][pi].toDouble();
-                        b[ZDIM] = otherParts.pos[ZDIM][pi].toDouble();
+                        b[XDIM] = otherParticles.pos[XDIM][pi].toDouble();
+                        b[YDIM] = otherParticles.pos[YDIM][pi].toDouble();
+                        b[ZDIM] = otherParticles.pos[ZDIM][pi].toDouble();
                         if (mybox.contains(b)) {
-                            for (int pj = self.partRange.first + tid; pj < self.partRange.second;
-                                pj += BLOCK_SIZE) {
-                                auto& a = selfParts.group[pj];
-                                float const dx =
-                                    distance(selfParts.pos[XDIM][pj], otherParts.pos[XDIM][pi]);
-                                float const dy =
-                                    distance(selfParts.pos[YDIM][pj], otherParts.pos[YDIM][pi]);
-                                float const dz =
-                                    distance(selfParts.pos[ZDIM][pj], otherParts.pos[ZDIM][pi]);
+                            for (int pj = self.particleRange.first + tid;
+                                 pj < self.particleRange.second; pj += BLOCK_SIZE) {
+                                auto& a = selfParticles.group[pj];
+                                float const dx = distance(
+                                    selfParticles.pos[XDIM][pj], otherParticles.pos[XDIM][pi]);
+                                float const dy = distance(
+                                    selfParticles.pos[YDIM][pj], otherParticles.pos[YDIM][pi]);
+                                float const dz = distance(
+                                    selfParticles.pos[ZDIM][pj], otherParticles.pos[ZDIM][pi]);
                                 float const r2 = sqr(dx, dy, dz);
-                                if (r2 < linkLen2) {
+                                if (r2 < linkingLengthSquared) {
                                     if (a == LC_NO_GROUP) {
                                         if (bValue != LC_NO_GROUP) {
                                             a = bValue;
@@ -98,25 +99,25 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* partMapPtr,
             bool foundLink;
             do {
                 foundLink = false;
-                for (int pj = self.partRange.first; pj < self.partRange.second; pj++) {
-                    auto& a = selfParts.group[pj];
+                for (int pj = self.particleRange.first; pj < self.particleRange.second; pj++) {
+                    auto& a = selfParticles.group[pj];
                     LightconeGroup minGroup = LC_NO_GROUP;
                     int thisFoundLink = 0;
                     auto const maxpi =
-                        roundUp(self.partRange.second - self.partRange.first, BLOCK_SIZE) +
-                        self.partRange.first;
-                    for (int pi = self.partRange.first + tid; pi < maxpi; pi += BLOCK_SIZE) {
+                        roundUp(self.particleRange.second - self.particleRange.first, BLOCK_SIZE) +
+                        self.particleRange.first;
+                    for (int pi = self.particleRange.first + tid; pi < maxpi; pi += BLOCK_SIZE) {
                         LightconeGroup thisMinGroup = LC_NO_GROUP;
-                        if (pi != pj && pi < self.partRange.second) {
-                            auto const bValue = selfParts.group[pi];
+                        if (pi != pj && pi < self.particleRange.second) {
+                            auto const bValue = selfParticles.group[pi];
                             float const dx =
-                                distance(selfParts.pos[XDIM][pi], selfParts.pos[XDIM][pj]);
+                                distance(selfParticles.pos[XDIM][pi], selfParticles.pos[XDIM][pj]);
                             float const dy =
-                                distance(selfParts.pos[YDIM][pi], selfParts.pos[YDIM][pj]);
+                                distance(selfParticles.pos[YDIM][pi], selfParticles.pos[YDIM][pj]);
                             float const dz =
-                                distance(selfParts.pos[ZDIM][pi], selfParts.pos[ZDIM][pj]);
+                                distance(selfParticles.pos[ZDIM][pi], selfParticles.pos[ZDIM][pj]);
                             float const r2 = sqr(dx, dy, dz);
-                            if (r2 < linkLen2) {
+                            if (r2 < linkingLengthSquared) {
                                 thisMinGroup = bValue;
                                 thisFoundLink++;
                             }
@@ -160,12 +161,12 @@ __global__ void cudaLightconeKernel(LightconeParticleMapType* partMapPtr,
 }
 
 size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
-    LightconeParticleMapType* partMapPtr, LightconeTreeMapType* treeMapPtr,
+    LightconeParticleMapType* particleMapPtr, LightconeTreeMapType* treeMapPtr,
     LightconeGroup* nextIdValue) {
-    int numberBlocks;
+    int numberOfBlocks;
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberBlocks, (void const*) cudaLightconeKernel, BLOCK_SIZE, 0));
-    numberBlocks *= cudaSmpCount();
+        &numberOfBlocks, (void const*) cudaLightconeKernel, BLOCK_SIZE, 0));
+    numberOfBlocks *= cudaSmpCount();
     int* indexPtr;
     LightconeGroup* nextIdPtr;
     int* rcPtr;
@@ -176,12 +177,12 @@ size_t cudaLightcone(DeviceVector<LightconeTreeId> const& leaves,
     *indexPtr = 0;
     *nextIdPtr = *nextIdValue;
     auto const b = getOptions().lcB;
-    auto const numberParticles = getOptions().numberParticles;
-    double const linkLen = b * pow(numberParticles, -1.0 / NDIM);
-    cudaLightconeKernel<<<numberBlocks, BLOCK_SIZE>>>(partMapPtr, treeMapPtr, rcPtr, leaves.data(),
-        leaves.size(), indexPtr, nextIdPtr, linkLen, hpxSize(), hpxRank());
+    auto const numberOfParticles = getOptions().numberOfParticles;
+    double const linkingLength = b * pow(numberOfParticles, -1.0 / NDIM);
+    cudaLightconeKernel<<<numberOfBlocks, BLOCK_SIZE>>>(particleMapPtr, treeMapPtr, rcPtr,
+        leaves.data(), leaves.size(), indexPtr, nextIdPtr, linkingLength, hpxSize(), hpxRank());
     CUDA_CHECK(cudaDeviceSynchronize());
-    PRINT("lc blocks = %i next id = %lli\n", numberBlocks, *nextIdPtr);
+    PRINT("lc blocks = %i next id = %lli\n", numberOfBlocks, *nextIdPtr);
     size_t rc = *rcPtr;
     *nextIdValue = *nextIdPtr;
     cudaRelease(rcPtr);

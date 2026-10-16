@@ -52,7 +52,7 @@ void initializePair(double separation) {
         particlesCatIndex(i) = i == 0 ? NO_INDEX : 0;
     }
     sphParticlesDmIndex(0) = 1;
-    sphParticlesSmoothLen(0) = 0.02;
+    sphParticlesSmoothingLength(0) = 0.02;
 #ifdef ENTROPY
     sphParticlesR2[0].A = 4.0;
 #else
@@ -69,7 +69,7 @@ TreeId findLeaf(TreeId node, ParticleInteger particle) {
     }
     for (int child = 0; child < NCHILD; child++) {
         auto const next = ptr->children[child];
-        auto const range = treeGetNode(next)->partRange;
+        auto const range = treeGetNode(next)->particleRange;
         if (particle >= range.first && particle < range.second) {
             return findLeaf(next, particle);
         }
@@ -274,7 +274,7 @@ void checkpointPair() {
     auto const position = particlesPos(XDIM, gas);
     particlesSave(file);
     particlesPos(XDIM, gas) = 0.9;
-    sphParticlesSmoothLen(0) = 0.5;
+    sphParticlesSmoothingLength(0) = 0.5;
     std::rewind(file);
     particlesLoad(file);
     std::fclose(file);
@@ -283,7 +283,7 @@ void checkpointPair() {
     requireClose("checkpoint gas count", sphParticlesSize(), 1);
     requireClose("checkpoint position", particlesPos(XDIM, sphParticlesDmIndex(0)).toDouble(),
         position.toDouble());
-    requireClose("checkpoint hydro length", sphParticlesSmoothLen(0), 0.02);
+    requireClose("checkpoint hydro length", sphParticlesSmoothingLength(0), 0.02);
     requireClose("checkpoint composition", sphParticlesR1[0].frac[0], 0.75);
     requireClose("checkpoint chemistry stage", sphParticlesR5[0].dfrac[0], 0.125);
 }
@@ -356,7 +356,7 @@ void sphGravityTest() {
     opts.dmMass = 0.75;
     opts.sphMass = 0.25;
     opts.bucketSize = 1;
-    opts.numberParticles = 2 * hpxSize();
+    opts.numberOfParticles = 2 * hpxSize();
     opts.hsoft = 0.01;
     setOptions(opts);
     if (hpxSize() == 1) {

@@ -53,14 +53,14 @@ void directForceTest() {
     for (int i = 0; i < hpxSize(); i++) {
         futs1.push_back(hpx::async<DirectGetTestParticlesAction>(hpxLocalities()[i], counts[i]));
     }
-    std::vector<TestParticle> testParts;
+    std::vector<TestParticle> testParticles;
     for (auto& f : futs1) {
         auto tmp = f.get();
-        testParts.insert(testParts.end(), tmp.begin(), tmp.end());
+        testParticles.insert(testParticles.end(), tmp.begin(), tmp.end());
     }
     std::vector<std::array<Fixed32, NDIM>> pts;
-    for (int i = 0; i < testParts.size(); i++) {
-        pts.push_back(testParts[i].x);
+    for (int i = 0; i < testParticles.size(); i++) {
+        pts.push_back(testParticles[i].x);
     }
     std::vector<hpx::future<std::vector<gforce>>> futs2;
     for (int i = 0; i < hpxSize(); i++) {
@@ -90,11 +90,11 @@ void directForceTest() {
         double phinum, phidir;
         for (int dim = 0; dim < NDIM; dim++) {
             gdir += sqr(total[i].f[dim]);
-            gnum += sqr(testParts[i].f.f[dim]);
+            gnum += sqr(testParticles[i].f.f[dim]);
         }
         gdir = std::sqrt(gdir);
         gnum = std::sqrt(gnum);
-        phinum = testParts[i].f.phi;
+        phinum = testParticles[i].f.phi;
         phidir = total[i].phi - PHI0 * global().opts.G * global().opts.M;
         gnorm += gdir;
         phinorm += std::abs(phidir);

@@ -127,10 +127,10 @@ void domainsInitRebounds() {
     }
     localDomains.resize(1);
     localDomains[0].box = unitBox<double>();
-    localDomains[0].procRange.first = 0;
-    localDomains[0].procRange.second = hpxSize();
-    localDomains[0].partRange.first = 0;
-    localDomains[0].partRange.second = particlesSize();
+    localDomains[0].processRange.first = 0;
+    localDomains[0].processRange.second = hpxSize();
+    localDomains[0].particleRange.first = 0;
+    localDomains[0].particleRange.second = particlesSize();
     localDomains[0].depth = 0;
     //	PRINT( "Setting init rebound on %i %i %i\n", hpx_rank(), 0, particles_size());
     hpx::wait_all(futs.begin(), futs.end());
@@ -145,19 +145,19 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
             futs.push_back(hpx::async([i, &bounds, depth, &counts]() {
                 //							PRINT("???? %i %i %i %i \n", hpx_rank(), i,
                 // local_domains[i].part_range.first, local_domains[i].part_range.second);
-                auto const rng = localDomains[i].partRange;
-                int const numberThreads = std::max(2 * (size_t) (rng.second - rng.first) *
+                auto const rng = localDomains[i].particleRange;
+                int const numberOfThreads = std::max(2 * (size_t) (rng.second - rng.first) *
                         hpxHardwareConcurrency() / (size_t) particlesSize(),
                     (size_t) 1);
                 Vector<hpx::future<void>> futs;
                 int const xdim = depth % NDIM;
                 Fixed32 const xmid = bounds[i];
                 std::atomic<size_t> count(0);
-                auto const func = [numberThreads, rng, xdim, xmid, &count, &counts](int proc) {
+                auto const func = [numberOfThreads, rng, xdim, xmid, &count, &counts](int proc) {
                     size_t const begin =
-                        rng.first + (size_t) proc * (rng.second - rng.first) / numberThreads;
-                    size_t const end =
-                        rng.first + (size_t) (proc + 1) * (rng.second - rng.first) / numberThreads;
+                        rng.first + (size_t) proc * (rng.second - rng.first) / numberOfThreads;
+                    size_t const end = rng.first +
+                        (size_t) (proc + 1) * (rng.second - rng.first) / numberOfThreads;
                     size_t thisCount = 0;
                     for (size_t i = begin; i < end; i++) {
                         if (particlesPos(xdim, i) < xmid) {
@@ -167,7 +167,7 @@ Vector<size_t> domainsCountBelow(Vector<double> bounds, int depth) {
                     count += thisCount;
                 };
 
-                for (int proc = 1; proc < numberThreads; proc++) {
+                for (int proc = 1; proc < numberOfThreads; proc++) {
                     futs.push_back(hpx::async(func, proc));
                 }
                 func(0);
@@ -187,7 +187,7 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     for (int i = 0; i < localDomains.size(); i++) {
         if (localDomains[i].depth == depth) {
             futs.push_back(hpx::async([i, &bounds, depth, &mids]() {
-                mids[i] = particlesSort(localDomains[i].partRange, bounds[i], depth % NDIM);
+                mids[i] = particlesSort(localDomains[i].particleRange, bounds[i], depth % NDIM);
                 ///	PRINT( "!!!!!!!! %i %i %e %i %i\n", hpx_rank(), mids[i], bounds[i],
                 /// local_domains[i].part_range.first, local_domains[i].part_range.second);
             }));
@@ -196,15 +196,15 @@ void domainsReboundSort(Vector<double> bounds, int depth) {
     hpx::wait_all(futs.begin(), futs.end());
     Vector<DomainLocal> newDomains;
     for (int i = 0; i < localDomains.size(); i++) {
-        if (localDomains[i].procRange.second - localDomains[i].procRange.first > 1) {
+        if (localDomains[i].processRange.second - localDomains[i].processRange.first > 1) {
             DomainLocal left;
             DomainLocal right;
             left = localDomains[i];
             right = localDomains[i];
             left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
-            left.partRange.second = right.partRange.first = mids[i];
-            left.procRange.second = right.procRange.first =
-                (localDomains[i].procRange.first + localDomains[i].procRange.second) / 2;
+            left.particleRange.second = right.particleRange.first = mids[i];
+            left.processRange.second = right.processRange.first =
+                (localDomains[i].processRange.first + localDomains[i].processRange.second) / 2;
             left.depth = right.depth = localDomains[i].depth + 1;
             newDomains.push_back(left);
             newDomains.push_back(right);
@@ -222,23 +222,24 @@ void domainsRebound() {
     Vector<DomainGlobal> domains(1);
     boxesByKey = decltype(boxesByKey)();
     domains[0].box = unitBox<double>();
-    domains[0].procRange.first = 0;
-    domains[0].procRange.second = hpxSize();
-    domains[0].totalCount = getOptions().numberParticles;
+    domains[0].processRange.first = 0;
+    domains[0].processRange.second = hpxSize();
+    domains[0].totalCount = getOptions().numberOfParticles;
     domains[0].midhi = 1.0;
     domains[0].midlo = 0.0;
     domains[0].key = 1;
     boxesByKey[domains[0].key].box = domains[0].box;
-    boxesByKey[domains[0].key].rank = domains[0].procRange.second - domains[0].procRange.first > 1 ?
+    boxesByKey[domains[0].key].rank =
+        domains[0].processRange.second - domains[0].processRange.first > 1 ?
         -1 :
-        domains[0].procRange.first;
+        domains[0].processRange.first;
     Vector<DomainGlobal> newDomains;
     std::swap(domains, newDomains);
     int depth = 0;
     auto const allLeaves = [](Vector<DomainGlobal> const& domains) {
         bool all = true;
         for (int i = 0; i < domains.size(); i++) {
-            if (domains[i].procRange.second - domains[i].procRange.first > 1) {
+            if (domains[i].processRange.second - domains[i].processRange.first > 1) {
                 all = false;
                 break;
             }
@@ -274,12 +275,12 @@ void domainsRebound() {
             //			PRINT( "Done counting\n");
             for (int i = 0; i < domains.size(); i++) {
                 //				PRINT( "%i\n", i);
-                int const firstProc = domains[i].procRange.first;
-                int const lastProc = domains[i].procRange.second;
-                int const midProc = (firstProc + lastProc) / 2;
-                ALWAYS_ASSERT(lastProc - firstProc >= 1);
-                size_t const targetCount =
-                    (size_t) (midProc - firstProc) * domains[i].totalCount / (lastProc - firstProc);
+                int const firstProcess = domains[i].processRange.first;
+                int const lastProcess = domains[i].processRange.second;
+                int const middleProcess = (firstProcess + lastProcess) / 2;
+                ALWAYS_ASSERT(lastProcess - firstProcess >= 1);
+                size_t const targetCount = (size_t) (middleProcess - firstProcess) *
+                    domains[i].totalCount / (lastProcess - firstProcess);
                 double const midx = (domains[i].midhi + domains[i].midlo) * 0.5;
                 if (counts[i] < targetCount) {
                     domains[i].midlo = midx;
@@ -292,7 +293,7 @@ void domainsRebound() {
         }
         Vector<double> bounds;
         for (int i = 0; i < domains.size(); i++) {
-            if (domains[i].procRange.second - domains[i].procRange.first) {
+            if (domains[i].processRange.second - domains[i].processRange.first) {
                 double const midx = (domains[i].midhi + domains[i].midlo) * 0.5;
                 boxesByKey[domains[i].key].midx = midx;
                 bounds.push_back(midx);
@@ -308,14 +309,14 @@ void domainsRebound() {
         hpx::wait_all(sortFuts.begin(), sortFuts.end());
         newDomains.resize(0);
         for (int i = 0; i < domains.size(); i++) {
-            if (domains[i].procRange.second - domains[i].procRange.first > 1) {
+            if (domains[i].processRange.second - domains[i].processRange.first > 1) {
                 DomainGlobal left;
                 DomainGlobal right;
                 left = domains[i];
                 right = domains[i];
                 left.box.end[depth % NDIM] = right.box.begin[depth % NDIM] = bounds[i];
-                left.procRange.second = right.procRange.first =
-                    (domains[i].procRange.first + domains[i].procRange.second) / 2;
+                left.processRange.second = right.processRange.first =
+                    (domains[i].processRange.first + domains[i].processRange.second) / 2;
                 int const leftdim = (depth + 1) % NDIM;
                 int const rightdim = (depth + 1) % NDIM;
                 left.totalCount = counts[i];
@@ -328,10 +329,13 @@ void domainsRebound() {
                 right.key = (domains[i].key << 1) + 1;
                 boxesByKey[left.key].box = left.box;
                 boxesByKey[right.key].box = right.box;
-                boxesByKey[left.key].rank =
-                    left.procRange.second - left.procRange.first > 1 ? -1 : left.procRange.first;
+                boxesByKey[left.key].rank = left.processRange.second - left.processRange.first > 1 ?
+                    -1 :
+                    left.processRange.first;
                 boxesByKey[right.key].rank =
-                    right.procRange.second - right.procRange.first > 1 ? -1 : right.procRange.first;
+                    right.processRange.second - right.processRange.first > 1 ?
+                    -1 :
+                    right.processRange.first;
                 newDomains.push_back(left);
                 newDomains.push_back(right);
             } else {
@@ -585,13 +589,13 @@ void domainsBegin(int rung) {
     auto const myDomain = domainsFindMyBox();
     freeIndices.resize(0);
     MutexType mutex;
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     auto const currentRange = particlesCurrentRange();
     std::atomic<ParticleInteger> nextBegin(0);
     constexpr int kChunkSize = 1024;
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads, &mutex, &nextBegin, myDomain, currentRange,
-                                      rung]() {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads, &mutex, &nextBegin, myDomain,
+                                      currentRange, rung]() {
             std::unordered_map<int, Vector<Particle>> sends;
             Vector<hpx::future<void>> futs;
             Vector<ParticleInteger> myFreeIndices;
@@ -677,9 +681,9 @@ void domainsEnd() {
     }
     allTransParticles.resize(sz);
     Vector<hpx::future<void>> futs1;
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     std::atomic<int> index(0);
-    for (int proc = 0; proc < numberThreads; proc++) {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
         futs1.push_back(hpx::async([&index, &allTransParticles, &offsets]() {
             int i;
             while ((i = index++) < transParticles.size()) {
@@ -714,10 +718,10 @@ void domainsEnd() {
         }
     }
     // PRINT("unloading particles on %i\n", hpx_rank());
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([numberThreads, proc, &allTransParticles]() {
-            ParticleInteger const begin = (size_t) proc * freeIndices.size() / numberThreads;
-            ParticleInteger const end = (size_t) (proc + 1) * freeIndices.size() / numberThreads;
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([numberOfThreads, proc, &allTransParticles]() {
+            ParticleInteger const begin = (size_t) proc * freeIndices.size() / numberOfThreads;
+            ParticleInteger const end = (size_t) (proc + 1) * freeIndices.size() / numberOfThreads;
             for (ParticleInteger i = begin; i < end; i++) {
                 particlesSetParticle(allTransParticles[i], freeIndices[i]);
             }
@@ -739,15 +743,15 @@ Range<double> domainsFindMyBox() {
 static void domainsCheck() {
     std::atomic<int> fail(0);
     auto const myDomain = domainsFindMyBox();
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs;
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads, &fail, myDomain]() {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads, &fail, myDomain]() {
             auto const rng = particlesCurrentRange();
             ParticleInteger const begin =
-                size_t(proc) * (rng.second - rng.first) / numberThreads + rng.first;
+                size_t(proc) * (rng.second - rng.first) / numberOfThreads + rng.first;
             ParticleInteger const end =
-                size_t(proc + 1) * (rng.second - rng.first) / numberThreads + rng.first;
+                size_t(proc + 1) * (rng.second - rng.first) / numberOfThreads + rng.first;
             for (ParticleInteger i = begin; i < end; i++) {
                 Array<double, NDIM> x;
                 for (int dim = 0; dim < NDIM; dim++) {

@@ -68,10 +68,10 @@ double flopsPerParticle = 1e5;
 bool usedGpu;
 
 struct Timing {
-    double numberParticles;
+    double numberOfParticles;
     double time;
     Timing() {
-        numberParticles = time = 0.0;
+        numberOfParticles = time = 0.0;
     }
 };
 
@@ -195,8 +195,8 @@ double sampleDensityDistribution(std::function<double(double)> const& f) {
  }
  */
 void plummerInit(double r0) {
-    auto const numberParticles = getOptions().numberParticles;
-    particlesResize(numberParticles);
+    auto const numberOfParticles = getOptions().numberOfParticles;
+    particlesResize(numberOfParticles);
     auto const pdf = [](double x) {
         if (x > 0.0) {
             return sqr(x) * pow(1.0 + sqr(x), -2.5);
@@ -217,7 +217,7 @@ void plummerInit(double r0) {
     double y0 = 0.5;
     double z0 = 0.5;
 
-    for (ParticleInteger i = 0; i < numberParticles; i += 2) {
+    for (ParticleInteger i = 0; i < numberOfParticles; i += 2) {
         double r, p;
         //		r = sample_density_distribution(nfw_density);
         r = sampleDensityDistribution(
@@ -239,9 +239,9 @@ void plummerInit(double r0) {
         double z = z0 + r * nz;
         // double e = abs();
         //	double v = sqrt(-2.0 * log(rand1())) * abs(cos(2.0 * M_PI * rand1()));
-        double v =
-            sqrt(getOptions().gm * numberParticles / sqrt(sqr(getOptions().plummerR) + sqr(r)) / 2);
-        double v0 = sqrt(getOptions().gm * numberParticles * 0.25);
+        double v = sqrt(
+            getOptions().gm * numberOfParticles / sqrt(sqr(getOptions().plummerR) + sqr(r)) / 2);
+        double v0 = sqrt(getOptions().gm * numberOfParticles * 0.25);
         do {
             nx = 2.0 * rand1() - 1.0;
             ny = 2.0 * rand1() - 1.0;
@@ -306,8 +306,8 @@ static void flushTimings(bool reset) {
     FILE* fp = fopen(fname, "wt");
     free(fname);
     for (int i = 0; i < timings.size(); i++) {
-        if (timings[i].numberParticles > 0.0) {
-            fprintf(fp, "%i %e\n", i, timings[i].numberParticles / timings[i].time);
+        if (timings[i].numberOfParticles > 0.0) {
+            fprintf(fp, "%i %e\n", i, timings[i].numberOfParticles / timings[i].time);
         }
     }
     if (reset) {
@@ -342,7 +342,7 @@ void doGroups(int number, double scale) {
         Vector<TreeId> checklist;
         checklist.push_back(rootId);
         tm.start();
-        active = groupsFind(rootId, std::move(checklist), getOptions().linkLen).get();
+        active = groupsFind(rootId, std::move(checklist), getOptions().linkingLength).get();
         tm.stop();
         PRINT("%i groups_find = %e active = %li\n", iter, tm.read(), active);
         tm.reset();
@@ -424,7 +424,7 @@ SphTreeCreateReturn sphStep1(int minrung, double scale, double tau, double t0, i
     profilerExit();
     tm.stop();
     if (verbose) {
-        PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.numberActive);
+        PRINT("sph_tree_create time = %e %i\n", tm.read(), sr.numberOfActiveParticles);
     }
     tm.reset();
     return sr;
@@ -877,7 +877,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStep(int minrung, double scale, doub
     sortTime += tm.read();
     tm.reset();
     tm.start();
-    //	PRINT("numberActive = %li\n", sr.numberActive);
+    //	PRINT("numberOfActiveParticles = %li\n", sr.numberOfActiveParticles);
     KickParameters kparams;
     if (dadt != 0.0) {
         kparams.maxDt = SCALE_DT * scale / fabs(dadt);
@@ -947,7 +947,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
     //	PRINT("climbing kick ladder\n");
     Timer totalTime;
     totalTime.start();
-    double partsProcessed = 0.0;
+    double particlesProcessed = 0.0;
     for (int li = 0; li < levels.size(); li++) {
         if (levels[li] == minrung) {
             ascending = false;
@@ -984,11 +984,11 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
             //			PRINT("Rung sort took %e\n", tm.read());
         }
         auto rng = particlesCurrentRange();
-        partsProcessed += rng.second - rng.first;
+        particlesProcessed += rng.second - rng.first;
         if (top && minrung == minrung0) {
             auto counts = particlesRungCounts();
             if (counts.size() > minrung0 + 1) {
-                auto const total = getOptions().numberParticles;
+                auto const total = getOptions().numberOfParticles;
                 //				PRINT("Rungs\n");
                 for (int i = 0; i < counts.size(); i++) {
                     //					PRINT("%i %li %f %%\n", i, counts[i], 100.0 * counts[i] /
@@ -1114,7 +1114,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
                 a = 1.0;
             }
             //			PRINT( "%e %e %e\n", a, a0, a1);
-            drift(a, dt, tau, tau + dt, getOptions().numberSteps * t0, levels[li], drag);
+            drift(a, dt, tau, tau + dt, getOptions().numberOfSteps * t0, levels[li], drag);
             tm.stop();
             // PRINT("Drift took %e\n", tm.read());
         }
@@ -1132,7 +1132,7 @@ std::pair<KickReturn, TreeCreateReturn> kickStepHierarchical(int& minrung, int m
     if (timings.size() <= bucketSize) {
         timings.resize(bucketSize + 1);
     }
-    timings[bucketSize].numberParticles += partsProcessed;
+    timings[bucketSize].numberOfParticles += particlesProcessed;
     timings[bucketSize].time += totalTime.read();
     profilerExit();
     return std::make_pair(kr, sr);
@@ -1173,7 +1173,7 @@ double doPowerSpectrum(int num, double a) {
         //		kmax = sqrt(power0.k.front() * kmax * M);
         //	}
         double const c1 = h * h * h * factor;
-        double const kshot = 2.0 * M_PI * getOptions().partsDim / boxSize;
+        double const kshot = 2.0 * M_PI * getOptions().particlesPerDimension / boxSize;
         for (int i = 0; i < power0.p.size(); i++) {
             double const k = power0.k[i];
             if (k >= kmin && k <= kmax) {
@@ -1197,7 +1197,7 @@ void outputTimeFile() {
     double const a0 = 1.0 / (1.0 + getOptions().z0);
     double const tauMax = cosmosConformalTime(a0, 1.0);
     double a = a0;
-    int m = getOptions().numberSteps;
+    int m = getOptions().numberOfSteps;
     int n = 64;
     double const dtau = tauMax / (m * n);
     double tau = cosmosConformalTime(a0 * 1.0e-6, a0);
@@ -1226,7 +1226,7 @@ void outputTimeFile() {
 }
 
 void saveGlass() {
-    int const n = getOptions().partsDim;
+    int const n = getOptions().particlesPerDimension;
     FILE* fp = fopen("glass.bin", "wb");
     fwrite(&n, sizeof(int), 1, fp);
     fwrite(&particlesPos(XDIM, 0), sizeof(Fixed32), particlesSize(), fp);
@@ -1255,9 +1255,9 @@ void driver() {
             if (hpxSize() != 1) {
                 THROW_ERROR("Create glass can only be done with a single locality\n");
             }
-            size_t const numberParticles = getOptions().numberParticles;
-            size_t const b = hpxRank() * numberParticles / hpxSize();
-            size_t const e = (hpxRank() + 1) * numberParticles / hpxSize();
+            size_t const numberOfParticles = getOptions().numberOfParticles;
+            size_t const b = hpxRank() * numberOfParticles / hpxSize();
+            size_t const e = (hpxRank() + 1) * numberOfParticles / hpxSize();
             particlesResize(e - b);
             for (ParticleInteger i = 0; i < e - b; i++) {
                 double const x = rand1();
@@ -1309,16 +1309,16 @@ void driver() {
     auto const gadgetFile = getOptions().gadget4Restart;
     if (gadgetFile != "") {
         auto header = particlesReadGadget4(gadgetFile);
-        auto const numberParticles = header.npartTotal[1];
+        auto const numberOfParticles = header.npartTotal[1];
         auto opts = getOptions();
         opts.codeToG = header.mass[1] * 1e10 / opts.hubble;
         opts.codeToG *= constants::kM0;
-        opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * numberParticles * constants::kG /
+        opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * numberOfParticles * constants::kG /
                 (3.0 * opts.omegaM * sqr(constants::kH0 * opts.hubble)),
             1.0 / 3.0);
         opts.codeToS = opts.codeToCm / constants::kC;
         double hValue = constants::kH0 * opts.codeToS;
-        opts.gm = opts.omegaM * 3.0 * sqr(hValue * opts.hubble) / (8.0 * M_PI) / numberParticles;
+        opts.gm = opts.omegaM * 3.0 * sqr(hValue * opts.hubble) / (8.0 * M_PI) / numberOfParticles;
         setOptions(opts);
         params.a = 1.0 / (header.redshift + 1.0);
         params.adot = cosmosDadt(a0);
@@ -1346,9 +1346,9 @@ void driver() {
     int& step = params.step;
     auto& totalProcessed = params.totalProcessed;
     auto& runtime = params.runtime;
-    int numberSteps = getOptions().numberSteps;
+    int numberOfSteps = getOptions().numberOfSteps;
     double z0 = getOptions().z0;
-    double dloga = log(z0 + 1.0) / numberSteps;
+    double dloga = log(z0 + 1.0) / numberOfSteps;
     double pot;
     int thisIter = 0;
     double lastTheta = -1.0;
@@ -1378,9 +1378,9 @@ void driver() {
             PRINT("lc_particles_boundaries1 %e\n", tm.read());
             tm.reset();
             tm.start();
-            double const linkLen =
-                getOptions().lcB * pow(getOptions().numberParticles, -1.0 / NDIM);
-            lcFormTrees(tau, linkLen);
+            double const linkingLength =
+                getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
+            lcFormTrees(tau, linkingLength);
             tm.stop();
             PRINT("lc_form_trees %e\n", tm.read());
             tm.reset();
@@ -1412,7 +1412,7 @@ void driver() {
             PRINT("lc_groups2homes %e\n", tm.read());
             tm.reset();
             tm.start();
-            lcParts2groups(a, linkLen, iter);
+            lcParts2groups(a, linkingLength, iter);
             tm.stop();
             PRINT("lc_parts2groups %e\n", tm.read());
             tm.reset();
@@ -1433,7 +1433,7 @@ void driver() {
     double glassError = 1.0;
     for (;; step++) {
         //		PRINT("STEP  = %i\n", step);
-        double t0 = tauMax / getOptions().numberSteps;
+        double t0 = tauMax / getOptions().numberOfSteps;
         do {
             Timer stepTm;
             stepTm.start();
@@ -1514,7 +1514,7 @@ void driver() {
                     theta = 0.61;
                 }
             }
-            auto const ts = 100 * tau / t0 / getOptions().numberSteps;
+            auto const ts = 100 * tau / t0 / getOptions().numberOfSteps;
             if (ts <= 10.0) {
                 bucketSize = 112;
             } else if (ts < 55.0) {
@@ -1655,7 +1655,7 @@ void driver() {
             runtime += totalTime.read();
             double pps = totalProcessed / runtime;
             //	PRINT( "%e %e %e %e\n", kr.node_flops, kr.part_flops, sr.flops, dr.flops);
-            double const numberParticles = getOptions().numberParticles;
+            double const numberOfParticles = getOptions().numberOfParticles;
             double close, direct;
             getGravityCounters(close, direct);
             direct += close;
@@ -1811,7 +1811,7 @@ uint32_t checkpointFlags(Options const& opts) {
 CheckpointHeader checkpointHeader(Options const& opts) {
     return {kCheckpointMagic, kCheckpointVersion, checkpointFlags(opts), opts.dmMass, opts.sphMass,
         opts.gamma, opts.hsoft, opts.gm, opts.omegaM, opts.omegaR, opts.omegaLam, opts.codeToCm,
-        opts.codeToS, opts.codeToG, opts.numberParticles, opts.numberSteps, 0U};
+        opts.codeToS, opts.codeToG, opts.numberOfParticles, opts.numberOfSteps, 0U};
 }
 
 bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
@@ -1821,8 +1821,8 @@ bool checkpointCompatible(CheckpointHeader const& header, Options const& opts) {
         header.gravitationalMass == opts.gm && header.omegaMatter == opts.omegaM &&
         header.omegaRadiation == opts.omegaR && header.omegaLambda == opts.omegaLam &&
         header.unitLength == opts.codeToCm && header.unitTime == opts.codeToS &&
-        header.unitMass == opts.codeToG && header.particlesPerSpecies == opts.numberParticles &&
-        header.nominalSteps == opts.numberSteps;
+        header.unitMass == opts.codeToG && header.particlesPerSpecies == opts.numberOfParticles &&
+        header.nominalSteps == opts.numberOfSteps;
 }
 
 void writeDriverState(FILE* fp, DriverParameters const& params) {
@@ -1921,10 +1921,10 @@ void checkpointStateTest() {
     changed.chem = !changed.chem;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    changed.numberSteps++;
+    changed.numberOfSteps++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     changed = getOptions();
-    changed.numberParticles++;
+    changed.numberOfParticles++;
     ALWAYS_ASSERT(!detail::checkpointCompatible(header, changed));
     if (!getOptions().sph) {
         detail::LegacyDriver legacy{};

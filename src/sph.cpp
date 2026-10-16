@@ -105,7 +105,7 @@ inline bool rangeContains(Fixed32Range const& a, Array<Fixed32, NDIM> const x) {
 
 hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters params,
     TreeId self, Vector<TreeId> checklist, int level, bool threadme) {
-    static std::atomic<int> numberThreads(0);
+    static std::atomic<int> numberOfThreads(0);
     hpx::future<SphTreeNeighborReturn> rc;
     SphTreeNode const* selfPtr = sphTreeGetNode(self);
     bool remote = false;
@@ -120,14 +120,15 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = selfPtr->partRange.second - selfPtr->partRange.first > MIN_KICK_THREAD_PARTS;
+        threadme =
+            selfPtr->particleRange.second - selfPtr->particleRange.first > MIN_KICK_THREAD_PARTS;
         if (threadme) {
-            if (numberThreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
+            if (numberOfThreads++ < KICK_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
                 !selfPtr->isLocal()) {
                 threadme = true;
             } else {
                 threadme = false;
-                numberThreads--;
+                numberOfThreads--;
             }
         }
     }
@@ -137,13 +138,13 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighborFork(SphTreeNeighborParameters
         }
         rc = sphTreeNeighbor(params, self, std::move(checklist), level + 1);
     } else if (remote) {
-        rc = hpx::async<SphTreeNeighborAction>(hpxLocalities()[selfPtr->procRange.first], params,
+        rc = hpx::async<SphTreeNeighborAction>(hpxLocalities()[selfPtr->processRange.first], params,
             self, std::move(checklist), level + 1);
     } else {
         rc = hpx::async(
             [self, level, params](Vector<TreeId> checklist) {
                 auto rc = sphTreeNeighbor(params, self, std::move(checklist), level + 1);
-                numberThreads--;
+                numberOfThreads--;
                 return rc;
             },
             std::move(checklist));
@@ -154,7 +155,7 @@ HPX_PLAIN_ACTION(sphRun, SphRunAction);
 
 bool isConverged(SphTreeNode const* self, int minrung) {
     bool converged = true;
-    for (int i = self->partRange.first; i < self->partRange.second; i++) {
+    for (int i = self->particleRange.first; i < self->particleRange.second; i++) {
         if (!sphParticlesConverged(i)) {
             converged = false;
             break;
@@ -167,7 +168,7 @@ static bool hasActiveNeighbors(SphTreeNode const* self) {
     bool rc = false;
     for (int i = self->neighborRange.first; i < self->neighborRange.second; i++) {
         auto const id = sphTreeGetNeighbor(i);
-        if (sphTreeGetNode(id)->numberActive > 0) {
+        if (sphTreeGetNode(id)->numberOfActiveParticles > 0) {
             rc = true;
             break;
         }
@@ -245,7 +246,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
     Vector<TreeId> nextlist;
     Vector<TreeId> leaflist;
     Fixed32Range box;
-    if ((params.seti | SPH_INTERACTIONS_I) && selfPtr->numberActive) {
+    if ((params.seti | SPH_INTERACTIONS_I) && selfPtr->numberOfActiveParticles) {
         if (!rangeIntersect(selfPtr->outerBox, selfPtr->innerBox)) {
             for (int dim = 0; dim < NDIM; dim++) {
                 PRINT("%e %e\n", selfPtr->outerBox.begin[dim].toDouble(),
@@ -256,7 +257,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
         }
     }
 
-    if ((params.seti | SPH_INTERACTIONS_J) && selfPtr->numberActive) {
+    if ((params.seti | SPH_INTERACTIONS_J) && selfPtr->numberOfActiveParticles) {
         ALWAYS_ASSERT(rangeIntersect(selfPtr->innerBox, selfPtr->outerBox));
     }
 
@@ -303,14 +304,15 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
             }
             bool show = false;
             bool factive = false;
-            for (ParticleInteger i = selfPtr->partRange.first; i < selfPtr->partRange.second; i++) {
+            for (ParticleInteger i = selfPtr->particleRange.first;
+                 i < selfPtr->particleRange.second; i++) {
                 bool const active = sphParticlesRung(i) >= params.minRung;
-                float const h = params.hWt * sphParticlesSmoothLen(i);
+                float const h = params.hWt * sphParticlesSmoothingLength(i);
                 //				PRINT( "%e\n", params.h_wt);
                 auto const myx = sphParticlesPos(XDIM, i);
                 auto const myy = sphParticlesPos(YDIM, i);
                 auto const myz = sphParticlesPos(ZDIM, i);
-                int const k = i - selfPtr->partRange.first;
+                int const k = i - selfPtr->particleRange.first;
                 maxh = std::max(maxh, h);
                 Array<Fixed32, NDIM> xValue;
                 xValue[XDIM] = myx;
@@ -345,7 +347,7 @@ hpx::future<SphTreeNeighborReturn> sphTreeNeighbor(
                     }
                 }
             }
-            if (selfPtr->numberActive) {
+            if (selfPtr->numberOfActiveParticles) {
                 ALWAYS_ASSERT(factive);
             }
             if (show) {
@@ -419,17 +421,17 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphRunAction>(c, params, cuda));
     }
-    int numberThreads = hpxHardwareConcurrency();
+    int numberOfThreads = hpxHardwareConcurrency();
     if (hpxSize() > 1) {
-        numberThreads *= 4;
+        numberOfThreads *= 4;
     }
     static std::atomic<int> next;
     next = 0;
     static std::atomic<int> gpuWork;
     gpuWork = 0;
     //	PRINT( "sph_tree_list_size = %i\n", sph_tree_size());
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs2.push_back(hpx::async([proc, numberThreads, params, cuda, workspacePtr]() {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs2.push_back(hpx::async([proc, numberOfThreads, params, cuda, workspacePtr]() {
             SphRunReturn rc;
             int index = next++;
             SphDataVecs data;
@@ -440,15 +442,15 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
                 bool test;
                 switch (params.runType) {
                 case SPH_RUN_AUX:
-                    test = self->numberActive > 0;
+                    test = self->numberOfActiveParticles > 0;
                     break;
 
                 case SPH_RUN_RUNGS:
-                    test = self->numberActive > 0;
+                    test = self->numberOfActiveParticles > 0;
                     break;
 
                 case SPH_RUN_PREHYDRO1:
-                    test = self->numberActive > 0 && !isConverged(self, params.minRung);
+                    test = self->numberOfActiveParticles > 0 && !isConverged(self, params.minRung);
                     break;
 
                 case SPH_RUN_PREHYDRO2:
@@ -465,7 +467,7 @@ SphRunReturn sphRun(SphRunParameters params, bool cuda) {
                     break;
 
                 case SPH_RUN_HYDRO:
-                    test = self->numberActive > 0;
+                    test = self->numberOfActiveParticles > 0;
                     break;
                 }
                 if (test) {
@@ -533,7 +535,7 @@ void SphRunWorkspace::addWork(TreeId selfid) {
 }
 
 SphRunReturn SphRunWorkspace::toGpu() {
-    size_t partsSize = 0;
+    size_t particleStorageSize = 0;
     bool const chem = getOptions().chem;
     bool const stars = getOptions().stars;
     bool const gravity = getOptions().gravity;
@@ -545,173 +547,178 @@ SphRunReturn SphRunWorkspace::toGpu() {
     bool const explicitConduction = conduction;
 #endif
     for (auto& node : hostTrees) {
-        partsSize += node.partRange.second - node.partRange.first;
+        particleStorageSize += node.particleRange.second - node.particleRange.first;
     }
-    hostX.resize(partsSize);
-    hostY.resize(partsSize);
-    hostZ.resize(partsSize);
+    hostX.resize(particleStorageSize);
+    hostY.resize(particleStorageSize);
+    hostZ.resize(particleStorageSize);
     if (params.runType == SPH_RUN_RUNGS) {
-        hostRungs.resize(partsSize);
+        hostRungs.resize(particleStorageSize);
     } else if (params.runType == SPH_RUN_COND_INIT) {
-        hostRungs.resize(partsSize);
-        hostH.resize(partsSize);
+        hostRungs.resize(particleStorageSize);
+        hostH.resize(particleStorageSize);
 #ifdef ENTROPY
-        hostEntr.resize(partsSize);
+        hostEntr.resize(particleStorageSize);
 #else
-        hostEint.resize(partsSize);
+        hostEint.resize(particleStorageSize);
 #endif
-        hostRho.resize(partsSize);
+        hostRho.resize(particleStorageSize);
         if (stars) {
-            hostColdFrac.resize(partsSize);
-            hostStar.resize(partsSize);
+            hostColdFrac.resize(particleStorageSize);
+            hostStar.resize(particleStorageSize);
         }
     } else if (params.runType == SPH_RUN_CONDUCTION) {
-        hostRho.resize(partsSize);
-        hostRungs.resize(partsSize);
-        hostH.resize(partsSize);
+        hostRho.resize(particleStorageSize);
+        hostRungs.resize(particleStorageSize);
+        hostH.resize(particleStorageSize);
 #ifdef ENTROPY
-        hostEntr.resize(partsSize);
+        hostEntr.resize(particleStorageSize);
 #else
-        hostEint.resize(partsSize);
+        hostEint.resize(particleStorageSize);
 #endif
-        hostKappa.resize(partsSize);
-        hostOmega.resize(partsSize);
+        hostKappa.resize(particleStorageSize);
+        hostOmega.resize(particleStorageSize);
         if (stars) {
-            hostColdFrac.resize(partsSize);
-            hostStar.resize(partsSize);
+            hostColdFrac.resize(particleStorageSize);
+            hostStar.resize(particleStorageSize);
         }
     } else if (params.runType == SPH_RUN_PREHYDRO2) {
-        hostH.resize(partsSize);
+        hostH.resize(particleStorageSize);
 #ifdef ENTROPY
-        hostEntr.resize(partsSize);
+        hostEntr.resize(particleStorageSize);
 #else
-        hostEint.resize(partsSize);
+        hostEint.resize(particleStorageSize);
 #endif
-        hostVx.resize(partsSize);
-        hostVy.resize(partsSize);
-        hostVz.resize(partsSize);
-        hostRungs.resize(partsSize);
+        hostVx.resize(particleStorageSize);
+        hostVy.resize(particleStorageSize);
+        hostVz.resize(particleStorageSize);
+        hostRungs.resize(particleStorageSize);
         if (stars) {
-            hostStar.resize(partsSize);
+            hostStar.resize(particleStorageSize);
         }
     } else if (params.runType == SPH_RUN_HYDRO) {
         if (explicitConduction) {
-            hostKappa.resize(partsSize);
+            hostKappa.resize(particleStorageSize);
         }
-        hostRho.resize(partsSize);
-        hostH.resize(partsSize);
+        hostRho.resize(particleStorageSize);
+        hostH.resize(particleStorageSize);
 #ifdef ENTROPY
-        hostEntr.resize(partsSize);
+        hostEntr.resize(particleStorageSize);
 #else
-        hostEint.resize(partsSize);
+        hostEint.resize(particleStorageSize);
 #endif
-        hostVx.resize(partsSize);
-        hostVy.resize(partsSize);
-        hostVz.resize(partsSize);
-        hostAlpha.resize(partsSize);
-        hostOmegaP.resize(partsSize);
-        hostOmega.resize(partsSize);
-        hostPre.resize(partsSize);
+        hostVx.resize(particleStorageSize);
+        hostVy.resize(particleStorageSize);
+        hostVz.resize(particleStorageSize);
+        hostAlpha.resize(particleStorageSize);
+        hostOmegaP.resize(particleStorageSize);
+        hostOmega.resize(particleStorageSize);
+        hostPre.resize(particleStorageSize);
         if (stars) {
-            hostColdFrac.resize(partsSize);
+            hostColdFrac.resize(particleStorageSize);
         }
         if (diffusion) {
-            hostShearv.resize(partsSize);
+            hostShearv.resize(particleStorageSize);
             if (chem) {
-                hostChem.resize(partsSize);
+                hostChem.resize(particleStorageSize);
             }
         }
         if (stars) {
-            hostStar.resize(partsSize);
+            hostStar.resize(particleStorageSize);
         }
     }
     Vector<hpx::future<void>> futs;
-    int const numberThreads = 8 * hpxHardwareConcurrency();
+    int const numberOfThreads = 8 * hpxHardwareConcurrency();
     std::atomic<int> index(0);
-    std::atomic<ParticleInteger> partIndex(0);
+    std::atomic<ParticleInteger> particleIndex(0);
     for (int i = 0; i < hostSelflist.size(); i++) {
         hostTrees[hostSelflist[i]].neighborRange = neighborRanges[i];
     }
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([&index, proc, numberThreads, this, &partIndex, chem, stars,
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([&index, proc, numberOfThreads, this, &particleIndex, chem, stars,
                                       conduction, explicitConduction, diffusion]() {
             int thisIndex = index++;
             while (thisIndex < hostTrees.size()) {
                 auto& node = hostTrees[thisIndex];
-                ParticleInteger const size = node.partRange.second - node.partRange.first;
-                ParticleInteger const offset = (partIndex += size) - size;
+                ParticleInteger const size = node.particleRange.second - node.particleRange.first;
+                ParticleInteger const offset = (particleIndex += size) - size;
                 sphParticlesGlobalReadPos(
-                    node.globalPartRange(), hostX.data(), hostY.data(), hostZ.data(), offset);
+                    node.globalParticleRange(), hostX.data(), hostY.data(), hostZ.data(), offset);
                 if (params.runType == SPH_RUN_PREHYDRO2) {
-                    sphParticlesGlobalReadRungs(node.globalPartRange(), hostRungs.data(), offset);
-                    sphParticlesGlobalReadVels(node.globalPartRange(), hostVx.data(), hostVy.data(),
-                        hostVz.data(), offset);
+                    sphParticlesGlobalReadRungs(
+                        node.globalParticleRange(), hostRungs.data(), offset);
+                    sphParticlesGlobalReadVels(node.globalParticleRange(), hostVx.data(),
+                        hostVy.data(), hostVz.data(), offset);
 #ifdef ENTROPY
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEntr.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEntr.data(), hostH.data(), offset);
 #else
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEint.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEint.data(), hostH.data(), offset);
 #endif
                     if (stars) {
                         sphParticlesGlobalReadFcold(
-                            node.globalPartRange(), nullptr, hostStar.data(), offset);
+                            node.globalParticleRange(), nullptr, hostStar.data(), offset);
                     }
                 } else if (params.runType == SPH_RUN_HYDRO) {
                     if (stars) {
-                        sphParticlesGlobalReadFcold(
-                            node.globalPartRange(), hostColdFrac.data(), hostStar.data(), offset);
+                        sphParticlesGlobalReadFcold(node.globalParticleRange(), hostColdFrac.data(),
+                            hostStar.data(), offset);
                     }
 #ifdef ENTROPY
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEntr.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEntr.data(), hostH.data(), offset);
 #else
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEint.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEint.data(), hostH.data(), offset);
 #endif
-                    sphParticlesGlobalReadVels(node.globalPartRange(), hostVx.data(), hostVy.data(),
-                        hostVz.data(), offset);
-                    sphParticlesGlobalReadAux(node.globalPartRange(), hostAlpha.data(),
+                    sphParticlesGlobalReadVels(node.globalParticleRange(), hostVx.data(),
+                        hostVy.data(), hostVz.data(), offset);
+                    sphParticlesGlobalReadAux(node.globalParticleRange(), hostAlpha.data(),
                         hostOmega.data(), hostOmegaP.data(), hostPre.data(),
                         diffusion ? hostShearv.data() : nullptr, chem ? hostChem.data() : nullptr,
                         offset);
-                    sphParticlesGlobalReadRho(node.globalPartRange(), hostRho.data(), offset);
+                    sphParticlesGlobalReadRho(node.globalParticleRange(), hostRho.data(), offset);
                 } else if (params.runType == SPH_RUN_RUNGS) {
-                    sphParticlesGlobalReadRungs(node.globalPartRange(), hostRungs.data(), offset);
+                    sphParticlesGlobalReadRungs(
+                        node.globalParticleRange(), hostRungs.data(), offset);
                 } else if (params.runType == SPH_RUN_COND_INIT) {
-                    sphParticlesGlobalReadRho(node.globalPartRange(), hostRho.data(), offset);
+                    sphParticlesGlobalReadRho(node.globalParticleRange(), hostRho.data(), offset);
                     if (stars) {
-                        sphParticlesGlobalReadFcold(
-                            node.globalPartRange(), hostColdFrac.data(), hostStar.data(), offset);
+                        sphParticlesGlobalReadFcold(node.globalParticleRange(), hostColdFrac.data(),
+                            hostStar.data(), offset);
                     }
-                    sphParticlesGlobalReadRungs(node.globalPartRange(), hostRungs.data(), offset);
+                    sphParticlesGlobalReadRungs(
+                        node.globalParticleRange(), hostRungs.data(), offset);
 #ifdef ENTROPY
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEntr.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEntr.data(), hostH.data(), offset);
 #else
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEint.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEint.data(), hostH.data(), offset);
 #endif
                 } else if (params.runType == SPH_RUN_CONDUCTION) {
                     if (stars) {
-                        sphParticlesGlobalReadFcold(
-                            node.globalPartRange(), hostColdFrac.data(), hostStar.data(), offset);
+                        sphParticlesGlobalReadFcold(node.globalParticleRange(), hostColdFrac.data(),
+                            hostStar.data(), offset);
                     }
-                    sphParticlesGlobalReadKappas(node.globalPartRange(), hostKappa.data(), offset);
-                    sphParticlesGlobalReadRho(node.globalPartRange(), hostRho.data(), offset);
-                    sphParticlesGlobalReadRungs(node.globalPartRange(), hostRungs.data(), offset);
+                    sphParticlesGlobalReadKappas(
+                        node.globalParticleRange(), hostKappa.data(), offset);
+                    sphParticlesGlobalReadRho(node.globalParticleRange(), hostRho.data(), offset);
+                    sphParticlesGlobalReadRungs(
+                        node.globalParticleRange(), hostRungs.data(), offset);
 #ifdef ENTROPY
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEntr.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEntr.data(), hostH.data(), offset);
 #else
                     sphParticlesGlobalReadEnergyAndSmoothlen(
-                        node.globalPartRange(), hostEint.data(), hostH.data(), offset);
+                        node.globalParticleRange(), hostEint.data(), hostH.data(), offset);
 #endif
-                    sphParticlesGlobalReadAux(node.globalPartRange(), nullptr, hostOmega.data(),
+                    sphParticlesGlobalReadAux(node.globalParticleRange(), nullptr, hostOmega.data(),
                         nullptr, nullptr, nullptr, nullptr, offset);
                 }
-                node.partRange.first = offset;
-                node.partRange.second = offset + size;
+                node.particleRange.first = offset;
+                node.particleRange.second = offset + size;
                 thisIndex = index++;
             }
         }));
@@ -957,7 +964,7 @@ SphRunReturn SphRunWorkspace::toGpu() {
     cudaData.gzSnk = &sphParticlesGforce(ZDIM, 0);
     cudaData.defGamma = getOptions().gamma;
     cudaData.gsoft = getOptions().hsoft;
-    cudaData.numberTargetNodes = hostSelflist.size();
+    cudaData.numberOfTargetNodes = hostSelflist.size();
     cudaData.chemistry = getOptions().chem;
     cudaData.convergedSnk = &sphParticlesConverged(0);
     cudaData.gravity = getOptions().gravity;
@@ -1005,8 +1012,8 @@ SphRunReturn SphRunWorkspace::toGpu() {
     if (params.runType == SPH_RUN_RUNGS) {
         for (int i = 0; i < hostSelflist.size(); i++) {
             auto const& node = hostTrees[hostSelflist[i]];
-            ParticleInteger const offset = node.sinkPartRange.first - node.partRange.first;
-            for (ParticleInteger j = node.partRange.first; j < node.partRange.second; j++) {
+            ParticleInteger const offset = node.sinkParticleRange.first - node.particleRange.first;
+            for (ParticleInteger j = node.particleRange.first; j < node.particleRange.second; j++) {
                 sphParticlesRung(j + offset) = hostRungs[j];
             }
         }
@@ -1097,19 +1104,19 @@ SphRunReturn SphRunWorkspace::toGpu() {
 HPX_PLAIN_ACTION(sphApplyConductionUpdate, SphApplyConductionUpdateAction);
 
 CondUpdateReturn sphApplyConductionUpdate(int minrung) {
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     float errMax = 0.0;
     std::vector<hpx::future<CondUpdateReturn>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphApplyConductionUpdateAction>(c, minrung));
     }
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads, minrung] {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads, minrung] {
             float errMax = 0.0;
             float errRms = 0.0;
             size_t n = 0;
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (ParticleInteger i = b; i < e; i++) {
                 if (!sphParticlesConverged(i) &&
                     (sphParticlesRung(i) >= minrung || sphParticlesSemiactive(i)) &&

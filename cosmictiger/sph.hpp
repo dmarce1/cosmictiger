@@ -238,6 +238,7 @@ struct SphRunParameters {
     float alpha0;
     float alpha1;
     float beta;
+    float viscosityEpsilon;
     float alphaDecay;
     float omegaM;
     float h0;
@@ -267,6 +268,7 @@ struct SphRunParameters {
         alpha0 = opts.alpha0;
         alpha1 = opts.alpha1;
         beta = opts.beta;
+        viscosityEpsilon = opts.viscosityEpsilon;
         alphaDecay = opts.alphaDecay;
         if (opts.test == "") {
             h0 = opts.hubble * constants::kH0 * opts.codeToS;
@@ -277,6 +279,18 @@ struct SphRunParameters {
     }
     template <typename A>
     void serialize(A&& arc, unsigned) {
+        arc & alpha0;
+        arc & alpha1;
+        arc & beta;
+        arc & viscosityEpsilon;
+        arc & alphaDecay;
+        arc & damping;
+        arc & diffusion;
+        arc & conduction;
+        arc & codeToS;
+        arc & codeToG;
+        arc & codeToCm;
+        arc & stars;
         arc & hmin;
         arc & hmax;
         arc & omegaM;
@@ -294,7 +308,6 @@ struct SphRunParameters {
         arc & runType;
         arc & set;
         arc & minRung;
-        arc & t0;
         arc & a;
         arc & cfl;
         arc & maxRung;

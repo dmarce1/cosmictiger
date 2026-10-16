@@ -7,9 +7,9 @@
 #define BLOCK_SIZE 32
 
 __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leaves,
-    RockstarParticle* parts, float linkLen, int* nextIndex, int* numberActive);
+    RockstarParticle* parts, float linkingLength, int* nextIndex, int* numberOfActiveLeaves);
 __global__ void rockstarAssignLinklenKernel(RockstarTree const* nodes, int const* leaves,
-    RockstarParticle* parts, float linkLen, bool phase);
+    RockstarParticle* parts, float linkingLength, bool phase);
 
 static std::atomic<int> blocksUsed(0);
 
@@ -18,27 +18,27 @@ bool rockstarCudaFree() {
 }
 
 void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
-    DeviceVector<int> const& leaves, DeviceVector<RockstarParticle>& parts, float linkLen,
+    DeviceVector<int> const& leaves, DeviceVector<RockstarParticle>& parts, float linkingLength,
     bool phase) {
     auto stream = cudaGetStream();
     blocksUsed += leaves.size();
     rockstarAssignLinklenKernel<<<leaves.size(), BLOCK_SIZE, 0, stream>>>(
-        nodes.data(), leaves.data(), parts.data(), linkLen, phase);
+        nodes.data(), leaves.data(), parts.data(), linkingLength, phase);
     cudaEndStream(stream);
     blocksUsed -= leaves.size();
 }
 
 void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<int> const& inleaves,
-    DeviceVector<RockstarParticle>& parts, float linkLen, int& nextId) {
+    DeviceVector<RockstarParticle>& parts, float linkingLength, int& nextId) {
     int* nextIndex;
-    int* numberActive;
+    int* numberOfActiveLeaves;
     nextIndex = (int*) cudaAllocate(sizeof(int));
-    numberActive = (int*) cudaAllocate(sizeof(int));
+    numberOfActiveLeaves = (int*) cudaAllocate(sizeof(int));
     *nextIndex = nextId;
     int cnt = 0;
     do {
         DeviceVector<int> leaves;
-        *numberActive = 0;
+        *numberOfActiveLeaves = 0;
         for (int i = 0; i < inleaves.size(); i++) {
             int const li = inleaves[i];
             nodes[li].lastActive = nodes[li].active;
@@ -48,42 +48,43 @@ void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<i
         }
         auto stream = cudaGetStream();
         blocksUsed += leaves.size();
-        rockstarFindSubgroupsKernel<<<leaves.size(), BLOCK_SIZE, 0, stream>>>(
-            nodes.data(), leaves.data(), parts.data(), linkLen, nextIndex, numberActive);
+        rockstarFindSubgroupsKernel<<<leaves.size(), BLOCK_SIZE, 0, stream>>>(nodes.data(),
+            leaves.data(), parts.data(), linkingLength, nextIndex, numberOfActiveLeaves);
         cudaEndStream(stream);
         blocksUsed -= leaves.size();
         cnt++;
-    } while (*numberActive);
+    } while (*numberOfActiveLeaves);
     nextId = *nextIndex;
 }
 
 __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leaves,
-    RockstarParticle* parts, float linkLen, int* nextIndex, int* numberActive) {
+    RockstarParticle* parts, float linkingLength, int* nextIndex, int* numberOfActiveLeaves) {
     int const& tid = threadIdx.x;
     int const& index = blockIdx.x;
     __syncthreads();
     int const selfi = leaves[index];
     RockstarTree const& self = nodes[selfi];
-    auto const selfbox = self.box.pad(1.0001 * linkLen);
+    auto const selfbox = self.box.pad(1.0001 * linkingLength);
     if (self.lastActive) {
         auto const& neighbors = self.neighbors;
-        float const linkLen2 = sqr(linkLen);
+        float const linkingLengthSquared = sqr(linkingLength);
         int foundAnyLink = false;
         auto const generateId = [nextIndex]() { return atomicAdd(nextIndex, 1); };
         for (int ni = 0; ni < neighbors.size(); ni++) {
             int const otheri = neighbors[ni];
             if (otheri != selfi) {
                 auto const& other = nodes[otheri];
-                for (int i = other.partBegin; i < other.partEnd; i++) {
+                for (int i = other.particleBegin; i < other.particleEnd; i++) {
                     auto const& xb = parts[i].xValue;
                     if (selfbox.contains(xb)) {
-                        for (int j = self.partBegin + tid; j < self.partEnd; j += BLOCK_SIZE) {
+                        for (int j = self.particleBegin + tid; j < self.particleEnd;
+                             j += BLOCK_SIZE) {
                             auto const& xa = parts[j].xValue;
                             float dx2 = 0.0f;
                             for (int dim = 0; dim < 2 * NDIM; dim++) {
                                 dx2 += sqr(xa[dim] - xb[dim]);
                             }
-                            if (dx2 < linkLen2) {
+                            if (dx2 < linkingLengthSquared) {
                                 auto& a = parts[j].subgroup;
                                 auto const& b = parts[i].subgroup;
                                 if (a == ROCKSTAR_NO_GROUP) {
@@ -105,22 +106,22 @@ __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leav
         int thisFoundLink;
         do {
             foundLink = false;
-            for (int i = self.partBegin; i < self.partEnd; i++) {
+            for (int i = self.particleBegin; i < self.particleEnd; i++) {
                 auto const& xa = parts[i].xValue;
                 int const jend =
-                    roundUp(self.partEnd - self.partBegin, BLOCK_SIZE) + self.partBegin;
+                    roundUp(self.particleEnd - self.particleBegin, BLOCK_SIZE) + self.particleBegin;
                 int bmin = ROCKSTAR_NO_GROUP;
-                for (int j = self.partBegin + tid; j < jend; j += BLOCK_SIZE) {
+                for (int j = self.particleBegin + tid; j < jend; j += BLOCK_SIZE) {
                     thisFoundLink = false;
                     auto const& xb = parts[j].xValue;
                     auto const& b = parts[j].subgroup;
                     int thisMin = ROCKSTAR_NO_GROUP;
-                    if (j != i && j < self.partEnd) {
+                    if (j != i && j < self.particleEnd) {
                         float dx2 = 0.0f;
                         for (int dim = 0; dim < 2 * NDIM; dim++) {
                             dx2 += sqr(xa[dim] - xb[dim]);
                         }
-                        if (dx2 < linkLen2) {
+                        if (dx2 < linkingLengthSquared) {
                             thisMin = min(thisMin, b);
                             thisFoundLink = true;
                         }
@@ -151,35 +152,35 @@ __global__ void rockstarFindSubgroupsKernel(RockstarTree* nodes, int const* leav
                 auto& other = nodes[neighbors[i]];
                 other.active = true;
             }
-            atomicAdd(numberActive, 1);
+            atomicAdd(numberOfActiveLeaves, 1);
         }
     }
 }
 
 __global__ void rockstarAssignLinklenKernel(RockstarTree const* nodes, int const* leaves,
-    RockstarParticle* parts, float linkLen, bool phase) {
+    RockstarParticle* parts, float linkingLength, bool phase) {
     int const& tid = threadIdx.x;
     int const& index = blockIdx.x;
     __syncthreads();
     int const selfi = leaves[index];
     RockstarTree const& self = nodes[selfi];
-    auto const selfbox = self.box.pad(1.0001 * linkLen);
+    auto const selfbox = self.box.pad(1.0001 * linkingLength);
     auto const& neighbors = self.neighbors;
-    float const linkLen2 = sqr(linkLen);
+    float const linkingLengthSquared = sqr(linkingLength);
     int const dimmax = phase ? 2 * NDIM : NDIM;
     for (int ni = 0; ni < neighbors.size(); ni++) {
         int const otheri = neighbors[ni];
         auto const& other = nodes[otheri];
-        for (int i = other.partBegin; i < other.partEnd; i++) {
+        for (int i = other.particleBegin; i < other.particleEnd; i++) {
             auto const& xb = parts[i].xValue;
             if (selfbox.contains(xb)) {
-                for (int j = self.partBegin + tid; j < self.partEnd; j += BLOCK_SIZE) {
+                for (int j = self.particleBegin + tid; j < self.particleEnd; j += BLOCK_SIZE) {
                     auto const& xa = parts[j].xValue;
                     float dx2 = 0.0f;
                     for (int dim = 0; dim < dimmax; dim++) {
                         dx2 += sqr(xa[dim] - xb[dim]);
                     }
-                    if (dx2 < linkLen2 && dx2 > 0.0f) {
+                    if (dx2 < linkingLengthSquared && dx2 > 0.0f) {
                         parts[j].minDist2 = min(dx2, parts[j].minDist2);
                     }
                 }

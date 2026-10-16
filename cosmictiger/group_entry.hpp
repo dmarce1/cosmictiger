@@ -31,7 +31,7 @@ using GroupInteger = long long;
 struct GroupHeader {
     int number;
     double time;
-    double boxLen;
+    double boxLength;
     double scale;
 };
 

@@ -42,7 +42,6 @@ void drift(
     cudaDrift(rung, scale, dt, tau0, tau1, tauMax, drag);
     particlesMemadviseCpu();
     if (sph) {
-        double const adot = getOptions().test.empty() ? scale * cosmosDadt(scale) : 0.0;
         float const hmin = getOptions().hmin;
         float const hmax = getOptions().hmax;
         for (ParticleInteger i = 0; i < sphParticlesSize(); i++) {
@@ -52,13 +51,13 @@ void drift(
             if (sphParticlesIsstar(i)) {
                 continue;
             }
-            float& h = sphParticlesSmoothLen(i);
+            float& h = sphParticlesSmoothingLength(i);
             float const divv = sphParticlesDivv(i);
-            // Preserve the donor predictor; the next prehydro solve enforces the neighbor
-            // constraint.
+            // Predict the comoving support from the peculiar divergence (Monaghan 6.2).
+            // The next density solve enforces the neighbor constraint.
             double const dloghdt =
-                (1.0 / 3.0) * (divv - 3.0 * adot / scale) / (3.0 + dlogsmoothXDlogh(h, hmin, hmax));
-            h *= std::exp(dloghdt * dt);
+                divv / (3.0 + dlogsmoothXDlogh(h, hmin, hmax));
+            h = std::clamp(h * std::exp(dloghdt * dt), double(hmin), double(hmax));
         }
     }
     for (auto& future : futures) {

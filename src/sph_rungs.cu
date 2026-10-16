@@ -39,7 +39,7 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
     int flops = 0;
     Array<Fixed32, NDIM> x;
     int changes = 0;
-    while (index < data.numberTargetNodes) {
+    while (index < data.numberOfTargetNodes) {
         __syncthreads();
         ws.x.resize(0);
         ws.y.resize(0);
@@ -48,14 +48,15 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
         SphTreeNode const& self = data.trees[data.selfs[index]];
         for (int ni = self.neighborRange.first; ni < self.neighborRange.second; ni++) {
             SphTreeNode const& other = data.trees[data.neighbors[ni]];
-            int const maxpi = roundUp(other.partRange.second - other.partRange.first, blockSize) +
-                other.partRange.first;
-            for (int pi = other.partRange.first + tid; pi < maxpi; pi += blockSize) {
+            int const maxpi =
+                roundUp(other.particleRange.second - other.particleRange.first, blockSize) +
+                other.particleRange.first;
+            for (int pi = other.particleRange.first + tid; pi < maxpi; pi += blockSize) {
                 bool contains = false;
                 int j;
                 int total;
                 int rung;
-                if (pi < other.partRange.second) {
+                if (pi < other.particleRange.second) {
                     rung = data.rungs[pi];
                     if (rung >= params.minRung) {
                         x[XDIM] = data.x[pi];
@@ -85,14 +86,14 @@ __global__ void sphCudaRungs(SphRunParameters params, SphRunCudaData data, SphRe
                 }
             }
         }
-        for (int i = self.partRange.first; i < self.partRange.second; i++) {
+        for (int i = self.particleRange.first; i < self.particleRange.second; i++) {
             __syncthreads();
             if (data.rungs[i] >= params.minRung) {
-                int const snki = self.sinkPartRange.first - self.partRange.first + i;
+                int const sinkIndex = self.sinkParticleRange.first - self.particleRange.first + i;
                 auto const xI = data.x[i];
                 auto const yI = data.y[i];
                 auto const zI = data.z[i];
-                auto const hI = data.rec2Snk[snki].h;
+                auto const hI = data.rec2Snk[sinkIndex].h;
                 char& rungI = data.rungs[i];
                 auto const h2I = sqr(hI);
                 int const jmax = roundUp(ws.x.size(), blockSize);

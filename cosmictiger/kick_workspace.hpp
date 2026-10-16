@@ -42,7 +42,7 @@ class KickWorkspace {
     MutexType mutex_;
     Vector<KickWorkitem> workitems_;
     ParticleInteger totalParticles_;
-    ParticleInteger numberProcessedParticles_;
+    ParticleInteger numberOfProcessedParticles_;
     KickParameters params_;
     std::unordered_set<TreeId, KickWorkspaceTreeIdHash> treeIds_;
 
@@ -59,7 +59,7 @@ public:
     void serialize(A&&, unsigned) {}
     void addWork(std::shared_ptr<KickWorkspace> ptr, Expansion<float> l, Array<Fixed32, NDIM> pos,
         TreeId self, Vector<TreeId>&& dchecklist, Vector<TreeId>&& echecklist);
-    void addParts(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
+    void recordProcessedParticles(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n);
     void toGpu();
 };
 

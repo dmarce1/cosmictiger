@@ -43,8 +43,8 @@ struct RockstarParticle {
 };
 
 struct RockstarTree {
-    int partBegin;
-    int partEnd;
+    int particleBegin;
+    int particleEnd;
     Array<int, NCHILD> children;
     Range<float, 2 * NDIM> box;
     int activeCount;
@@ -131,7 +131,7 @@ struct Subgroup {
     float sigma2X;
     float vcircMax;
     float rVir;
-    int hostPartCnt;
+    int hostParticleCount;
     int depth;
     Subgroup() {
         depth = -1;
@@ -143,8 +143,8 @@ struct Subgroup {
 Vector<Subgroup> rockstarFindSubgroups(Vector<ParticleData> const& parts, float scale);
 Vector<RockstarRecord> rockstarFindSubgroups(Vector<LightconeEntry> const& parts, double);
 void rockstarFindSubgroupsCuda(DeviceVector<RockstarTree>& nodes, DeviceVector<int> const& leaves,
-    DeviceVector<RockstarParticle>& parts, float linkLen, int& nextId);
+    DeviceVector<RockstarParticle>& parts, float linkingLength, int& nextId);
 void rockstarAssignLinklenCuda(DeviceVector<RockstarTree> const& nodes,
-    DeviceVector<int> const& leaves, DeviceVector<RockstarParticle>& parts, float linkLen,
+    DeviceVector<int> const& leaves, DeviceVector<RockstarParticle>& parts, float linkingLength,
     bool phase);
 bool rockstarCudaFree();

@@ -136,16 +136,16 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
     }
     bool const chem = getOptions().chem;
     bool const stars = getOptions().stars;
-    int const numberThreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < numberThreads; proc++) {
+    int const numberOfThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [proc, numberThreads, boxes, chem, stars]() {
+            [proc, numberOfThreads, boxes, chem, stars]() {
                 ViewReturn rc;
                 rc.hydro.resize(boxes.size());
                 rc.dm.resize(boxes.size());
                 rc.star.resize(boxes.size());
-                ParticleInteger const b = (size_t) proc * particlesSize() / numberThreads;
-                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+                ParticleInteger const b = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 for (ParticleInteger i = b; i < e; i++) {
                     Array<double, NDIM> x;
                     x[XDIM] = particlesPos(XDIM, i).toDouble();
@@ -184,7 +184,7 @@ ViewReturn viewGetParticles(Vector<Range<double>> boxes = Vector<Range<double>>(
                                     info.eint = sphParticlesEint(l);
                                     info.rho = sphParticlesRho(l);
 #endif
-                                    info.h = sphParticlesSmoothLen(l);
+                                    info.h = sphParticlesSmoothingLength(l);
                                     info.rung = particlesRung(i);
                                     info.alpha = sphParticlesAlpha(l);
                                     if (chem) {
@@ -483,18 +483,18 @@ Vector<float> outputView(int number, double time) {
     for (auto const& c : hpxChildren()) {
         valFuts.push_back(hpx::async<OutputViewAction>(c, number, time));
     }
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     int const nside = getOptions().viewSize;
     int const npix = 12 * sqr(nside);
     Vector<std::atomic<float>> values(npix);
     for (auto& v : values) {
         v = 0.0f;
     }
-    for (int proc = 0; proc < numberThreads; proc++) {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async(hpx::annotated_function(
-            [numberThreads, proc, nside, &values]() {
-                ParticleInteger const begin = (size_t) proc * particlesSize() / numberThreads;
-                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            [numberOfThreads, proc, nside, &values]() {
+                ParticleInteger const begin = (size_t) proc * particlesSize() / numberOfThreads;
+                ParticleInteger const end = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 for (int i = begin; i < end; i++) {
                     for (int xi = -1; xi <= 0; xi++) {
                         for (int yi = -1; yi <= 0; yi++) {

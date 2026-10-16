@@ -80,17 +80,17 @@ struct HaloT {
 int main(int argc, char* argv[]) {
     std::string outfile;
     int innum;
-    int numberBins;
+    int numberOfBins;
     float boxSize;
 
     namespace po = boost::program_options;
     po::options_description commandOpts("options");
 
-    commandOpts.add_options()                                                                //
-        ("help", "produce help message")                                                     //
-        ("in", po::value<int>(&innum)->default_value(-1), "input number")                    //
-        ("box_size", po::value<float>(&boxSize)->default_value(684.0), "box size in Mpc")    //
-        ("nbins", po::value<int>(&numberBins)->default_value(1000), "number of log bins")    //
+    commandOpts.add_options()                                                                  //
+        ("help", "produce help message")                                                       //
+        ("in", po::value<int>(&innum)->default_value(-1), "input number")                      //
+        ("box_size", po::value<float>(&boxSize)->default_value(684.0), "box size in Mpc")      //
+        ("nbins", po::value<int>(&numberOfBins)->default_value(1000), "number of log bins")    //
         ;
     boost::program_options::variables_map vm;
     po::store(po::parse_command_line(argc, argv, commandOpts), vm);
@@ -118,13 +118,13 @@ int main(int argc, char* argv[]) {
     }
     float const logmax = log10(massMax);
     float const logmin = log10(massMin);
-    float const dlog = (logmax - logmin) / numberBins;
-    std::vector<int> bins(numberBins, 0);
+    float const dlog = (logmax - logmin) / numberOfBins;
+    std::vector<int> bins(numberOfBins, 0);
     for (int i = 0; i < masses.size(); i++) {
-        int bin = std::min((int) ((log10(masses[i]) - logmin) / dlog), numberBins - 1);
+        int bin = std::min((int) ((log10(masses[i]) - logmin) / dlog), numberOfBins - 1);
         bins[bin]++;
     }
-    for (int i = 0; i < numberBins; i++) {
+    for (int i = 0; i < numberOfBins; i++) {
         float logmass = (i + 0.5) * dlog + logmin;
         printf("%e %e\n", logmass, bins[i] / dlog / boxSize / boxSize / boxSize);
     }

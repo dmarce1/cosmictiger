@@ -17,8 +17,10 @@
  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+#include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 
 #include <hpx/modules/program_options.hpp>
 
@@ -135,9 +137,10 @@ bool processOptions(int argc, char* argv[]) {
         ("view_size", po::value<int>(&(opts.viewSize))->default_value(1024),
             "view healpix Nside")    //
         ("slice_res", po::value<int>(&(opts.sliceRes))->default_value(4096),
-            "slice resolution")                                                                //
-        ("parts_dim", po::value<int>(&(opts.partsDim))->default_value(128), "nparts^(1/3)")    //
-        ("nsteps", po::value<int>(&(opts.numberSteps))->default_value(64),
+            "slice resolution")    //
+        ("parts_dim", po::value<int>(&(opts.particlesPerDimension))->default_value(128),
+            "nparts^(1/3)")    //
+        ("nsteps", po::value<int>(&(opts.numberOfSteps))->default_value(64),
             "Number of super-timesteps")                                                   //
         ("z0", po::value<double>(&(opts.z0))->default_value(49.0), "starting redshift")    //
         ("z1", po::value<double>(&(opts.z1))->default_value(0.0), "ending redshift")       //
@@ -162,40 +165,45 @@ bool processOptions(int argc, char* argv[]) {
         ("code_to_g", po::value<double>(&(opts.codeToG))->default_value(1.e9 / .6732),
             "mass resolution")    //
 
-        ("hydro.sph", po::value<bool>(&(opts.sph))->default_value(false), "use SPH")    //
+        ("hydro.sph", po::value<bool>(&(opts.sph))->default_value(false),
+            "use Monaghan (1992) density/internal-energy SPH")    //
         ("hydro.chem", po::value<bool>(&(opts.chem))->default_value(false),
-            "enable gas chemistry")    //
+            "legacy chemistry (currently detached from SPH)")    //
         ("hydro.conduction", po::value<bool>(&(opts.conduction))->default_value(false),
-            "do conduction")                                                                      //
+            "legacy conduction (currently detached from SPH)")    //
         ("hydro.gravity", po::value<bool>(&(opts.gravity))->default_value(true), "do gravity")    //
         ("hydro.diffusion", po::value<bool>(&(opts.diffusion))->default_value(false),
-            "do diffusion")    //
+            "legacy diffusion (currently detached from SPH)")    //
         ("hydro.yreflect", po::value<bool>(&(opts.yreflect))->default_value(false),
             "Reflecting y for SPH only")    //
         ("hydro.gy", po::value<double>(&(opts.gy))->default_value(0.0),
             "gravitational acceleration in y direction (for SPH)")    //
-        ("hydro.alpha0", po::value<double>(&(opts.alpha0))->default_value(0.05),
-            "alpha0 viscosity")    //
+        ("hydro.alpha", po::value<double>(),
+            "constant linear artificial-viscosity coefficient (alias for hydro.alpha0)")    //
+        ("hydro.alpha0", po::value<double>(&(opts.alpha0))->default_value(1.0),
+            "constant linear artificial-viscosity coefficient alpha")    //
         ("hydro.alpha1", po::value<double>(&(opts.alpha1))->default_value(1.0),
-            "alpha1 for viscosity")    //
+            "legacy viscosity-switch parameter; only its default is accepted with SPH")    //
         ("hydro.alphaDecay", po::value<double>(&(opts.alphaDecay))->default_value(0.1),
-            "alpha_decay time for viscosity")    //
+            "legacy viscosity-switch parameter; only its default is accepted with SPH")    //
         ("hydro.beta", po::value<double>(&(opts.beta))->default_value(2.0),
-            "beta for viscosity")    //
+            "constant quadratic artificial-viscosity coefficient beta")    //
+        ("hydro.viscosityEpsilon", po::value<double>(&(opts.viscosityEpsilon))->default_value(0.01),
+            "viscosity denominator regularization eta^2/h_Monaghan^2")    //
         ("hydro.gamma", po::value<double>(&(opts.gamma))->default_value(5.0 / 3.0),
-            "gamma for when chemistry is off")    //
+            "ideal-gas adiabatic index")    //
         ("hydro.gcentral", po::value<double>(&(opts.gcentral))->default_value(0.0),
             "magnitude of central force")    //
         ("hydro.hcentral", po::value<double>(&(opts.hcentral))->default_value(0.01),
             "softening length for central force")    //
-        ("hydro.viscType", po::value<int>(&(opts.viscType))->default_value(0),
-            "AV type - 0 = Hu 1 = M&M 2 = constant")    //
+        ("hydro.viscType", po::value<int>(&(opts.viscType))->default_value(2),
+            "artificial-viscosity type; Monaghan SPH supports only 2 (constant)")    //
         ("hydro.hmin", po::value<double>(&(opts.hmin))->default_value(1.0e-6),
-            "minimum smoothing length")    //
+            "minimum kernel support radius (2 h_Monaghan), in interparticle spacings")    //
         ("hydro.hmax", po::value<double>(&(opts.hmax))->default_value(1000.0),
-            "maximum smoothing length")    //
-        ("hydro.sneighborNumber", po::value<double>(&(opts.sneighborNumber))->default_value(128),
-            "SPH neighbor number")                                                            //
+            "maximum kernel support radius (2 h_Monaghan), in interparticle spacings")    //
+        ("hydro.sneighborNumber", po::value<double>(&(opts.sneighborNumber))->default_value(60),
+            "kernel-weighted neighbor target within the support sphere, including self")    //
         ("hydro.cfl", po::value<double>(&(opts.cfl))->default_value(0.2), "CFL condition")    //
         ;
     PRINT("Processing options\n");
@@ -236,8 +244,8 @@ bool processOptions(int argc, char* argv[]) {
     opts.damping = 0.0;
     opts.sigma8C = opts.sigma8;
     opts.sphBucketSize = opts.bucketSize;
-    opts.hmin /= opts.partsDim;
-    opts.hmax /= opts.partsDim;
+    opts.hmin /= opts.particlesPerDimension;
+    opts.hmax /= opts.particlesPerDimension;
     bool const hydroTest = opts.test == "sphGravity" || opts.test == "sod" ||
         opts.test == "blast" || opts.test == "helmholtz" || opts.test == "rt" ||
         opts.test == "disc" || opts.test == "star" || opts.test == "plummer";
@@ -269,34 +277,34 @@ bool processOptions(int argc, char* argv[]) {
     }
     opts.hsoft *= selfPhi();
     opts.eta /= sqrt(selfPhi());
-    opts.numberParticles = sqr(opts.partsDim) * opts.partsDim;
-    opts.nfour = opts.partsDim;
+    opts.numberOfParticles = sqr(opts.particlesPerDimension) * opts.particlesPerDimension;
+    opts.nfour = opts.particlesPerDimension;
     if (opts.closePack) {
-        opts.numberParticles *= 2;
+        opts.numberOfParticles *= 2;
         //		opts.Nfour *= 2;
     }
     opts.treeCacheLineSize = 65536 / sizeof(TreeNode);
     opts.treeAllocLineSize = 16 * opts.treeCacheLineSize;
-    opts.partCacheLineSize = 131072 / (sizeof(Fixed32) * NDIM);
+    opts.particleCacheLineSize = 131072 / (sizeof(Fixed32) * NDIM);
     opts.saveForce = opts.test == "force";
     opts.omegaM = opts.omegaB + opts.omegaC;
     opts.dmMass = opts.sph ? opts.omegaC / opts.omegaM : 1.0;
     opts.sphMass = opts.sph ? opts.omegaB / opts.omegaM : 0.0;
-    opts.rho0B = opts.numberParticles * opts.omegaB / opts.omegaM;
-    opts.rho0C = opts.numberParticles * opts.omegaC / opts.omegaM;
+    opts.rho0B = opts.numberOfParticles * opts.omegaB / opts.omegaM;
+    opts.rho0C = opts.numberOfParticles * opts.omegaC / opts.omegaM;
 
     opts.codeToG *= constants::kM0;
-    opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * opts.numberParticles * constants::kG /
+    opts.codeToCm = pow(opts.codeToG * (8.0 * M_PI) * opts.numberOfParticles * constants::kG /
             (3.0 * opts.omegaM * sqr(constants::kH0 * opts.hubble)),
         1.0 / 3.0);
     opts.codeToS = opts.codeToCm / constants::kC;
     double h = constants::kH0 * opts.codeToS;
-    opts.gm = opts.omegaM * 3.0 * sqr(h * opts.hubble) / (8.0 * M_PI) / opts.numberParticles;
+    opts.gm = opts.omegaM * 3.0 * sqr(h * opts.hubble) / (8.0 * M_PI) / opts.numberOfParticles;
     PRINT("box_size = %e Mpc\n", opts.codeToCm / constants::kMpcToCm);
     opts.sliceSize = std::min((20.0 / opts.hubble) / (opts.codeToCm / constants::kMpcToCm), 1.0);
     double const neff = 3.086;
     double const thetaValue = 1.0;
-    auto const nside1 = pow(M_PI * opts.numberParticles / 10000.0 / 12.0, 0.5);
+    auto const nside1 = pow(M_PI * opts.numberOfParticles / 10000.0 / 12.0, 0.5);
     int nside = 1;
     while (nside < nside1 / 2.0) {
         nside *= 2;
@@ -316,21 +324,21 @@ bool processOptions(int argc, char* argv[]) {
     } else {
         opts.omegaK = 1.0 - opts.omegaM - opts.omegaR - opts.omegaLam;
     }
-    opts.linkLen = pow(opts.numberParticles, -1.0 / NDIM) * 0.28;
+    opts.linkingLength = pow(opts.numberOfParticles, -1.0 / NDIM) * 0.28;
     opts.minGroup = 20;
     opts.lcMinGroup = 20;
     if (opts.createGlass) {
-        opts.gm = 1.0 / opts.numberParticles;
+        opts.gm = 1.0 / opts.numberOfParticles;
         opts.codeToCm = constants::kMpcToCm;
         opts.hubble = 1.0;
     }
-    if (opts.partsDim % 2 == 1) {
+    if (opts.particlesPerDimension % 2 == 1) {
         THROW_ERROR("parts_dim must be an even number\n");
     }
-    opts.hsoft *= pow(opts.numberParticles, -1.0 / NDIM);
+    opts.hsoft *= pow(opts.numberOfParticles, -1.0 / NDIM);
     if (opts.plummer) {
         opts.hsoft = selfPhi() *
-            pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.numberParticles, 1.0 / 3.0);
+            pow((4.0 / 3.0 * M_PI * pow(opts.plummerR, 3.0)) / opts.numberOfParticles, 1.0 / 3.0);
     }
     SHOW("sph", sph);
     SHOW("htime", htime);
@@ -340,7 +348,7 @@ bool processOptions(int argc, char* argv[]) {
     PRINT("code_to_M_solar = %e\n", opts.codeToG / 1.98e33);
     PRINT("Box size = %e cm/h\n", opts.codeToCm / constants::kMpcToCm * opts.hubble);
     if (opts.plummer) {
-        opts.gm = 1.0 / opts.numberParticles;
+        opts.gm = 1.0 / opts.numberOfParticles;
         opts.theta = 0.4;
     }
 #ifdef CHECK_MUTUAL_SORT
@@ -365,7 +373,7 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("lc_b", lcB);
     SHOW("lc_min_group", lcMinGroup);
     SHOW("lc_map_size", lcMapSize);
-    SHOW("link_len", linkLen);
+    SHOW("link_len", linkingLength);
     SHOW("max_iter", maxIter);
     SHOW("min_group", minGroup);
     SHOW("omega_b", omegaB);
@@ -374,8 +382,8 @@ bool processOptions(int argc, char* argv[]) {
     SHOW("omega_m", omegaM);
     SHOW("omega_nu", omegaNu);
     SHOW("omega_r", omegaR);
-    SHOW("part_cache_line_size", partCacheLineSize);
-    SHOW("parts_dim", partsDim);
+    SHOW("part_cache_line_size", particleCacheLineSize);
+    SHOW("parts_dim", particlesPerDimension);
     SHOW("read_check", readCheck);
     SHOW("save_force", saveForce);
     SHOW("sigma8", sigma8);

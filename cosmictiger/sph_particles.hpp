@@ -232,7 +232,7 @@ void sphParticlesResetSemiactive();
 void sphParticlesLoad(FILE* fp);
 void sphParticlesSave(FILE* fp);
 void sphCheckpointTest();
-float sphParticlesMaxSmoothLen();
+float sphParticlesMaximumSmoothingLength();
 float sphParticlesTemperature(ParticleInteger, float);
 float sphParticlesMmw(ParticleInteger);
 void sphParticlesSoftlens2smoothlens(int minrung);
@@ -489,7 +489,7 @@ inline float sphParticlesEkin(ParticleInteger index) {
     return ekin;
 }
 
-inline float& sphParticlesSmoothLen(ParticleInteger index) {
+inline float& sphParticlesSmoothingLength(ParticleInteger index) {
     CHECK_SPH_PART_BOUNDS(index);
     return sphParticlesR2[index].h;
 }
@@ -577,7 +577,7 @@ inline SphParticle getSphParticle(ParticleInteger i) {
         part.dvel[dim] = sphParticlesDvel(dim, i);
     }
     part.omega = sphParticlesOmega(i);
-    part.h = sphParticlesSmoothLen(i);
+    part.h = sphParticlesSmoothingLength(i);
     part.shearv = sphParticlesShear(i);
     part.alpha = sphParticlesAlpha(i);
 #ifdef ENTROPY

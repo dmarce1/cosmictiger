@@ -27,4 +27,4 @@ struct CompressedParticles {
     int size();
 };
 
-CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, LightconeGroup);
+CompressedParticles compressParticles(Vector<LightconeEntry> const& inputParticles, LightconeGroup);

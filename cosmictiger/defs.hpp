@@ -27,7 +27,7 @@
 
 #define COUNT_FLOPS
 
-#define HOPKINS
+// Density/internal-energy SPH follows Monaghan (1992).
 #define IMPLICIT_CONDUCTION
 #define SPH_DIFFUSION_TOLER1 1e-3f
 #define SPH_DIFFUSION_TOLER2 1e-4f

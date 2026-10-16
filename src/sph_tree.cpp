@@ -65,7 +65,7 @@ public:
 static Vector<SphTreeAllocator*> allocatorList;
 static thread_local SphTreeAllocator allocator;
 static Vector<SphTreeNode> nodes;
-static std::atomic<int> numThreads(0);
+static std::atomic<int> treeThreadCount(0);
 static std::atomic<int> nextId;
 static Array<std::unordered_map<TreeId, std::shared_ptr<hpx::shared_future<Vector<SphTreeNode>>>,
                  TreeIdHashHi>,
@@ -73,8 +73,8 @@ static Array<std::unordered_map<TreeId, std::shared_ptr<hpx::shared_future<Vecto
     treeCache;
 static Array<SpinlockType, SPH_TREE_CACHE_SIZE> mutex;
 static std::atomic<int> allocatorMtx(0);
-static Vector<Pair<ParticleInteger>> leafPartRanges;
-static MutexType leafPartRangeMutex;
+static Vector<Pair<ParticleInteger>> leafParticleRanges;
+static MutexType leafParticleRangeMutex;
 static Vector<TreeId> neighborList;
 static Vector<int> leaflist;
 static MutexType leaflistMutex;
@@ -224,36 +224,37 @@ SphTreeAllocator::~SphTreeAllocator() {
 }
 
 FastFuture<SphTreeCreateReturn> sphTreeCreateFork(SphTreeCreateParameters params, size_t key,
-    Pair<int, int> const& procRange, Pair<ParticleInteger> const& partRange,
+    Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
     Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
-    static std::atomic<int> numberThreads(0);
+    static std::atomic<int> numberOfThreads(0);
     FastFuture<SphTreeCreateReturn> rc;
     bool remote = false;
-    if (procRange.first != hpxRank()) {
+    if (processRange.first != hpxRank()) {
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = partRange.second - partRange.first > MIN_SORT_THREAD_PARTS;
+        threadme = particleRange.second - particleRange.first > MIN_SORT_THREAD_PARTS;
         if (threadme) {
-            if (numberThreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
-                procRange.second - procRange.first > 1) {
+            if (numberOfThreads++ < SORT_OVERSUBSCRIPTION * hpx::thread::hardware_concurrency() ||
+                processRange.second - processRange.first > 1) {
                 threadme = true;
             } else {
                 threadme = false;
-                numberThreads--;
+                numberOfThreads--;
             }
         }
     }
     if (!threadme) {
-        rc.setValue(sphTreeCreate(params, key, procRange, partRange, box, depth, localRoot));
+        rc.setValue(sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot));
     } else if (remote) {
         //		PRINT( "%i calling local on %i at %li\n", hpx_rank(), proc_range.first, time(NULL));
-        rc = hpx::async<SphTreeCreateAction>(hpxLocalities()[procRange.first], params, key,
-            procRange, partRange, box, depth, localRoot);
+        rc = hpx::async<SphTreeCreateAction>(hpxLocalities()[processRange.first], params, key,
+            processRange, particleRange, box, depth, localRoot);
     } else {
-        rc = hpx::async([params, procRange, key, partRange, depth, localRoot, box]() {
-            auto rc = sphTreeCreate(params, key, procRange, partRange, box, depth, localRoot);
-            numberThreads--;
+        rc = hpx::async([params, processRange, key, particleRange, depth, localRoot, box]() {
+            auto rc =
+                sphTreeCreate(params, key, processRange, particleRange, box, depth, localRoot);
+            numberOfThreads--;
             return rc;
         });
     }
@@ -282,7 +283,7 @@ static void sphTreeAllocateNodes() {
 }
 
 SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
-    Pair<int, int> procRange, Pair<ParticleInteger> partRange, Range<double> box, int depth,
+    Pair<int, int> processRange, Pair<ParticleInteger> particleRange, Range<double> box, int depth,
     bool localRoot) {
     // PRINT( "%i\n", depth);
     stackTraceActivate();
@@ -296,13 +297,13 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     }
     if (localRoot) {
         leaflist.resize(0);
-        partRange.first = 0;
-        partRange.second = sphParticlesSize();
+        particleRange.first = 0;
+        particleRange.second = sphParticlesSize();
     }
     Array<TreeId, NCHILD> children;
     Array<Fixed32, NDIM> x;
     Array<double, NDIM> xc;
-    size_t numberActive;
+    size_t numberOfActiveParticles;
     int flops = 0;
     double totalFlops = 0.0;
     float radius;
@@ -326,17 +327,18 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     }
     Fixed32Range innerBox;
     Fixed32Range outerBox;
-    if (procRange.second - procRange.first > 1 || partRange.second - partRange.first > bucketSize) {
+    if (processRange.second - processRange.first > 1 ||
+        particleRange.second - particleRange.first > bucketSize) {
         auto leftBox = box;
         auto rightBox = box;
-        auto leftRange = procRange;
-        auto rightRange = procRange;
-        auto leftParts = partRange;
-        auto rightParts = partRange;
+        auto leftRange = processRange;
+        auto rightRange = processRange;
+        auto leftParticleRange = particleRange;
+        auto rightParticleRange = particleRange;
         bool leftLocalRoot = false;
         bool rightLocalRoot = false;
-        if (procRange.second - procRange.first > 1) {
-            int const mid = (procRange.first + procRange.second) / 2;
+        if (processRange.second - processRange.first > 1) {
+            int const mid = (processRange.first + processRange.second) / 2;
             auto const dleftBox = domainsRange(key << 1);
             auto const drightBox = domainsRange((key << 1) + 1);
             leftRange.second = rightRange.first = mid;
@@ -354,15 +356,15 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                 }
             }
             double const xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
-            ParticleInteger const mid = sphParticlesSort(partRange, xmid, xdim);
-            leftParts.second = rightParts.first = mid;
+            ParticleInteger const mid = sphParticlesSort(particleRange, xmid, xdim);
+            leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
             flops += 2;
         }
-        auto futr = sphTreeCreateFork(params, (key << 1) + 1, rightRange, rightParts, rightBox,
-            depth + 1, rightLocalRoot, true);
-        auto futl = sphTreeCreateFork(
-            params, (key << 1), leftRange, leftParts, leftBox, depth + 1, leftLocalRoot, false);
+        auto futr = sphTreeCreateFork(params, (key << 1) + 1, rightRange, rightParticleRange,
+            rightBox, depth + 1, rightLocalRoot, true);
+        auto futl = sphTreeCreateFork(params, (key << 1), leftRange, leftParticleRange, leftBox,
+            depth + 1, leftLocalRoot, false);
         SphTreeCreateReturn const rcl = futl.get();
         SphTreeCreateReturn const rcr = futr.get();
         auto const iboxl = rcl.innerBox;
@@ -372,13 +374,13 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
         minDepth = std::min(rcl.minDepth, rcr.minDepth);
         maxDepth = std::max(rcl.maxDepth, rcr.maxDepth);
         totalFlops += rcl.flops + rcr.flops;
-        numberActive = rcl.numberActive + rcr.numberActive;
+        numberOfActiveParticles = rcl.numberOfActiveParticles + rcr.numberOfActiveParticles;
         children[LEFT] = rcl.id;
         children[RIGHT] = rcr.id;
         nodeCount = 1 + rcl.nodeCount + rcr.nodeCount;
         leafNodes = rcl.leafNodes + rcr.leafNodes;
         activeLeafNodes = rcl.activeLeafNodes + rcr.activeLeafNodes;
-        if (rcl.numberActive || rcr.numberActive) {
+        if (rcl.numberOfActiveParticles || rcr.numberOfActiveParticles) {
             activeNodes += 1 + rcl.activeNodes + rcr.activeNodes;
         }
         for (int dim = 0; dim < NDIM; dim++) {
@@ -394,7 +396,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     } else {
         children[LEFT].index = children[RIGHT].index = -1;
         children[LEFT].proc = children[RIGHT].proc = -1;
-        numberActive = 0;
+        numberOfActiveParticles = 0;
         for (int dim = 0; dim < NDIM; dim++) {
             innerBox.begin[dim] = 1.9;
             innerBox.end[dim] = -0.9;
@@ -402,8 +404,8 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
             outerBox.end[dim] = -0.9;
         }
         auto const tiny = 2.0 * RangeFixed::min().toDouble();
-        for (ParticleInteger i = partRange.first; i < partRange.second; i++) {
-            float const h = params.hWt * sphParticlesSmoothLen(i);
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
+            float const h = params.hWt * sphParticlesSmoothingLength(i);
             Array<Fixed32, NDIM> xValue;
             for (int dim = 0; dim < NDIM; dim++) {
                 xValue[dim] = sphParticlesPos(dim, i);
@@ -418,7 +420,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
                 }
             }
             if (sphParticlesRung(i) >= params.minRung) {
-                numberActive++;
+                numberOfActiveParticles++;
             }
         }
 
@@ -440,7 +442,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
 
         nodeCount = 1;
         leafNodes = 1;
-        if (numberActive) {
+        if (numberOfActiveParticles) {
             activeLeafNodes++;
             activeNodes++;
         }
@@ -455,17 +457,17 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
 
     node.children = children;
     node.localRoot = localRoot;
-    node.partRange = partRange;
-    node.procRange = procRange;
-    node.numberActive = numberActive;
+    node.particleRange = particleRange;
+    node.processRange = processRange;
+    node.numberOfActiveParticles = numberOfActiveParticles;
     node.activeNodes = activeNodes;
     node.neighborRange.first = -1;
     node.neighborRange.second = -1;
     node.depth = depth;
-    node.sinkPartRange = partRange;
-    ParticleInteger const numberParticles = partRange.second - partRange.first;
-    bool const global = procRange.second - procRange.first > 1;
-    node.leaf = !global && (numberParticles <= getOptions().sphBucketSize);
+    node.sinkParticleRange = particleRange;
+    ParticleInteger const numberOfParticles = particleRange.second - particleRange.first;
+    bool const global = processRange.second - processRange.first > 1;
+    node.leaf = !global && (numberOfParticles <= getOptions().sphBucketSize);
     /*	if ( BUCKET_SIZE <= get_options().sph_bucket_size) {
      if (node.leaf) {
      std::lock_guard<mutex_type> lock(leaf_part_range_mutex);
@@ -491,7 +493,7 @@ SphTreeCreateReturn sphTreeCreate(SphTreeCreateParameters params, size_t key,
     rc.leafNodes = leafNodes;
     rc.activeLeafNodes = activeLeafNodes;
     rc.nodeCount = node.nodeCount;
-    rc.numberActive = numberActive;
+    rc.numberOfActiveParticles = numberOfActiveParticles;
     totalFlops += flops;
     rc.flops = totalFlops;
     rc.minDepth = minDepth;
@@ -513,11 +515,11 @@ void sphTreeDestroy(bool freeSphTree) {
     if (freeSphTree) {
         nodes = decltype(nodes)();
     } else {
-        int const numberThreads = hpxHardwareConcurrency();
-        for (int proc = 0; proc < numberThreads; proc++) {
-            futs.push_back(hpx::async([proc, numberThreads]() {
-                int const b = (size_t) proc * nodes.size() / numberThreads;
-                int const e = (size_t) (proc + 1) * nodes.size() / numberThreads;
+        int const numberOfThreads = hpxHardwareConcurrency();
+        for (int proc = 0; proc < numberOfThreads; proc++) {
+            futs.push_back(hpx::async([proc, numberOfThreads]() {
+                int const b = (size_t) proc * nodes.size() / numberOfThreads;
+                int const e = (size_t) (proc + 1) * nodes.size() / numberOfThreads;
                 for (int i = b; i < e; i++) {
                     nodes[i].innerBox = Fixed32Range();
                     nodes[i].outerBox = Fixed32Range();
@@ -531,8 +533,8 @@ void sphTreeDestroy(bool freeSphTree) {
     profilerExit();
 }
 
-void sphTreeSetNumberActive(TreeId id, ParticleInteger i) {
-    nodes[id.index].numberActive = i;
+void sphTreeSetNumberOfActiveParticles(TreeId id, ParticleInteger i) {
+    nodes[id.index].numberOfActiveParticles = i;
 }
 
 void sphTreeSetConverged(TreeId id, bool c) {

@@ -45,7 +45,7 @@ struct LineIdType {
 
 struct LineIdHash {
     inline size_t operator()(LineIdType id) const {
-        ParticleInteger const lineSize = getOptions().partCacheLineSize;
+        ParticleInteger const lineSize = getOptions().particleCacheLineSize;
         ParticleInteger const i = id.index / lineSize;
         return i * (hpxSize() - 1) + ((id.proc < hpxRank()) ? id.proc : id.proc - 1);
     }
@@ -103,31 +103,31 @@ HPX_PLAIN_ACTION(sphParticlesFetchAuxCacheLine, SphParticlesFetchAuxCacheLineAct
 static Array<std::unordered_map<LineIdType,
                  std::shared_ptr<hpx::shared_future<Vector<Array<Fixed32, NDIM>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
-    partCache;
+    particleCache;
 static Array<std::unordered_map<LineIdType,
                  std::shared_ptr<hpx::shared_future<Vector<Pair<float>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
-    entrPartCache;
+    energyAndSmoothingLengthParticleCache;
 static Array<std::unordered_map<LineIdType,
                  std::shared_ptr<hpx::shared_future<Vector<Pair<float, char>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
-    fcoldPartCache;
+    coldFractionParticleCache;
 static Array<
     std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<char>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
-    rungPartCache;
+    rungParticleCache;
 static Array<std::unordered_map<LineIdType,
                  std::shared_ptr<hpx::shared_future<Vector<Array<float, NDIM>>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
-    velsPartCache;
+    particleVelocityCache;
 static Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<float>>>,
                  LineIdHashHi>,
     PART_CACHE_SIZE>
-    kappasPartCache;
+    conductivityParticleCache;
 static Array<std::unordered_map<LineIdType, std::shared_ptr<hpx::shared_future<Vector<float>>>,
                  LineIdHashHi>,
     PART_CACHE_SIZE>
-    rhoPartCache;
+    densityParticleCache;
 static Array<std::unordered_map<LineIdType,
                  std::shared_ptr<hpx::shared_future<Vector<AuxiliaryQuantities>>>, LineIdHashHi>,
     PART_CACHE_SIZE>
@@ -187,21 +187,21 @@ static T const* readSphCacheLine(LineIdType lineId,
     return future->get().data();
 }
 
-HPX_PLAIN_ACTION(sphParticlesMaxSmoothLen, SphParticlesMaxSmoothLenAction);
+HPX_PLAIN_ACTION(sphParticlesMaximumSmoothingLength, SphParticlesMaximumSmoothingLengthAction);
 
-float sphParticlesMaxSmoothLen() {
+float sphParticlesMaximumSmoothingLength() {
     Vector<hpx::future<float>> futs;
     for (auto& c : hpxChildren()) {
-        futs.push_back(hpx::async<SphParticlesMaxSmoothLenAction>(c));
+        futs.push_back(hpx::async<SphParticlesMaximumSmoothingLengthAction>(c));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([numberThreads, proc]() {
+    int const numberOfThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([numberOfThreads, proc]() {
             float maxh = 0.0;
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (int i = b; i < e; i++) {
-                maxh = std::max(maxh, sphParticlesSmoothLen(i));
+                maxh = std::max(maxh, sphParticlesSmoothingLength(i));
             }
             return maxh;
         }));
@@ -227,15 +227,15 @@ std::pair<double, double> sphParticlesApplyUpdates(
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesApplyUpdatesAction>(c, minrung, phase, t0, tau, w));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([t0, numberThreads, proc, phase, minrung, tau, w]() {
+    int const numberOfThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([t0, numberOfThreads, proc, phase, minrung, tau, w]() {
             auto const chem = getOptions().chem;
             auto const stars = getOptions().stars;
             double error = 0.0;
             double norm = 0.0;
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (int i = b; i < e; i++) {
                 ParticleInteger const k = sphParticlesDmIndex(i);
                 auto const rung2 = sphParticlesRung(i);
@@ -344,15 +344,15 @@ void sphParticlesSoftlens2smoothlens(int minrung) {
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesSoftlens2smoothlensAction>(c, minrung));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([numberThreads, proc, minrung]() {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+    int const numberOfThreads = hpxHardwareConcurrency();
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([numberOfThreads, proc, minrung]() {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (int i = b; i < e; i++) {
                 ParticleInteger const k = sphParticlesDmIndex(i);
                 //		if( particles_rung(k) >= minrung || particles_semiactive(k)) {
-                sphParticlesSmoothLen(i) = particlesSoftlen(k);
+                sphParticlesSmoothingLength(i) = particlesSoftlen(k);
                 //	}
             }
         }));
@@ -373,7 +373,7 @@ float sphParticlesTemperature(ParticleInteger i, float a) {
             sqr(getOptions().codeToCm) / (sqr(getOptions().codeToS));                          // 7
         double const codeToDensity = pow(getOptions().codeToCm, -3) * getOptions().codeToG;    // 10
         double const codeToEntropy = codeToEnergy / pow(codeToDensity, getOptions().gamma - 1.0);
-        double const h = sphParticlesSmoothLen(i);
+        double const h = sphParticlesSmoothingLength(i);
         double const hp = sphParticlesHp(i);
         double const hn = sphParticlesHn(i);
         double const h2 = sphParticlesH2(i);
@@ -574,14 +574,14 @@ void sphParticlesResize(ParticleInteger sz, bool parts2) {
         }
         capacity = newCapacity;
     }
-    ParticleInteger newParts = sz - size;
+    ParticleInteger numberOfNewParticles = sz - size;
     ParticleInteger offset = particlesSize();
     if (parts2) {
-        particlesResize(particlesSize() + newParts);
+        particlesResize(particlesSize() + numberOfNewParticles);
     }
     int oldsz = size;
     size = sz;
-    for (int i = 0; i < newParts; i++) {
+    for (int i = 0; i < numberOfNewParticles; i++) {
         ParticleInteger const slot = oldsz + i;
         sphParticlesR1[slot] = {};
         sphParticlesR2[slot] = {};
@@ -656,12 +656,12 @@ void sphParticlesFree() {
 }
 
 void sphParticlesResolveWithParticles() {
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads] {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads] {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (ParticleInteger i = b; i < e; i++) {
                 int const j = sphParticlesDmIndex(i);
                 particlesCatIndex(j) = i;
@@ -673,7 +673,7 @@ void sphParticlesResolveWithParticles() {
 
 void sphParticlesGlobalReadPos(
     ParticleGlobalRange range, Fixed32* x, Fixed32* y, Fixed32* z, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -708,11 +708,11 @@ void sphParticlesGlobalReadPos(
 }
 
 static Array<Fixed32, NDIM> const* sphParticlesCacheReadLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchCacheLineAction>(lineId, partCache, mutexes);
+    return readSphCacheLine<SphParticlesFetchCacheLineAction>(lineId, particleCache, mutexes);
 }
 
 static Vector<Array<Fixed32, NDIM>> sphParticlesFetchCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<Array<Fixed32, NDIM>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -726,7 +726,7 @@ static Vector<Array<Fixed32, NDIM>> sphParticlesFetchCacheLine(ParticleInteger i
 
 void sphParticlesGlobalReadFcold(
     ParticleGlobalRange range, float* cfrac, char* isstar, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     int const sz = offset + range.range.second - range.range.first;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
@@ -770,11 +770,11 @@ void sphParticlesGlobalReadFcold(
 
 static Pair<float, char> const* sphParticlesFcoldCacheReadLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchFcoldCacheLineAction>(
-        lineId, fcoldPartCache, fcoldMutexes);
+        lineId, coldFractionParticleCache, fcoldMutexes);
 }
 
 static Vector<Pair<float, char>> sphParticlesFetchFcoldCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<Pair<float, char>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -787,7 +787,7 @@ static Vector<Pair<float, char>> sphParticlesFetchFcoldCacheLine(ParticleInteger
 
 void sphParticlesGlobalReadEnergyAndSmoothlen(
     ParticleGlobalRange range, float* ent, float* h, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     int const sz = offset + range.range.second - range.range.first;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
@@ -803,7 +803,7 @@ void sphParticlesGlobalReadEnergyAndSmoothlen(
 #endif
                 }
                 if (h) {
-                    h[j] = sphParticlesSmoothLen(i);
+                    h[j] = sphParticlesSmoothingLength(i);
                 }
             }
         } else {
@@ -834,11 +834,11 @@ void sphParticlesGlobalReadEnergyAndSmoothlen(
 
 static Pair<float> const* sphParticlesEnergyAndSmoothlenCacheReadLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchEnergyAndSmoothlenCacheLineAction>(
-        lineId, entrPartCache, entrMutexes);
+        lineId, energyAndSmoothingLengthParticleCache, entrMutexes);
 }
 
 static Vector<Pair<float>> sphParticlesFetchEnergyAndSmoothlenCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<Pair<float>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -848,13 +848,13 @@ static Vector<Pair<float>> sphParticlesFetchEnergyAndSmoothlenCacheLine(Particle
 #else
         line[i - begin].first = sphParticlesEint(i);
 #endif
-        line[i - begin].second = sphParticlesSmoothLen(i);
+        line[i - begin].second = sphParticlesSmoothingLength(i);
     }
     return line;
 }
 
 void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -886,11 +886,11 @@ void sphParticlesGlobalReadRungs(ParticleGlobalRange range, char* rungs, Particl
 
 static char const* sphParticlesRungCacheReadLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchRungCacheLineAction>(
-        lineId, rungPartCache, rungMutexes);
+        lineId, rungParticleCache, rungMutexes);
 }
 
 static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<char> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -902,7 +902,7 @@ static Vector<char> sphParticlesFetchRungCacheLine(ParticleInteger index) {
 
 void sphParticlesGlobalReadVels(
     ParticleGlobalRange range, float* vx, float* vy, float* vz, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -939,11 +939,11 @@ void sphParticlesGlobalReadVels(
 
 static Array<float, NDIM> const* sphParticlesVelsCacheReadLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchVelsCacheLineAction>(
-        lineId, velsPartCache, velsMutexes);
+        lineId, particleVelocityCache, velsMutexes);
 }
 
 static Vector<Array<float, NDIM>> sphParticlesFetchVelsCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<Array<float, NDIM>> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -958,7 +958,7 @@ static Vector<Array<float, NDIM>> sphParticlesFetchVelsCacheLine(ParticleInteger
 
 void sphParticlesGlobalReadKappas(
     ParticleGlobalRange range, float* kappas, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -990,11 +990,11 @@ void sphParticlesGlobalReadKappas(
 
 static float const* sphParticlesKappasCacheReadLine(LineIdType lineId) {
     return readSphCacheLine<SphParticlesFetchKappasCacheLineAction>(
-        lineId, kappasPartCache, kappasMutexes);
+        lineId, conductivityParticleCache, kappasMutexes);
 }
 
 static Vector<float> sphParticlesFetchKappasCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<float> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -1005,7 +1005,7 @@ static Vector<float> sphParticlesFetchKappasCacheLine(ParticleInteger index) {
 }
 
 void sphParticlesGlobalReadRho(ParticleGlobalRange range, float* rho, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     if (range.range.first != range.range.second) {
         if (range.proc == hpxRank()) {
             ParticleInteger const dif = offset - range.range.first;
@@ -1040,11 +1040,12 @@ void sphParticlesGlobalReadRho(ParticleGlobalRange range, float* rho, ParticleIn
 }
 
 static float const* sphParticlesRhoCacheReadLine(LineIdType lineId) {
-    return readSphCacheLine<SphParticlesFetchRhoCacheLineAction>(lineId, rhoPartCache, rhoMutexes);
+    return readSphCacheLine<SphParticlesFetchRhoCacheLineAction>(
+        lineId, densityParticleCache, rhoMutexes);
 }
 
 static Vector<float> sphParticlesFetchRhoCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<float> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -1060,7 +1061,7 @@ static Vector<float> sphParticlesFetchRhoCacheLine(ParticleInteger index) {
 
 void sphParticlesGlobalReadAux(ParticleGlobalRange range, float* alpha, float* omega, float* omegaP,
     float* pre, float* shearv, Array<float, NCHEMFRACS>* fracs, ParticleInteger offset) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     if (range.range.first == range.range.second) {
         return;
     }
@@ -1131,7 +1132,7 @@ static AuxiliaryQuantities const* sphParticlesAuxCacheReadLine(LineIdType lineId
 }
 
 static Vector<AuxiliaryQuantities> sphParticlesFetchAuxCacheLine(ParticleInteger index) {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<AuxiliaryQuantities> line(lineSize);
     ParticleInteger const begin = (index / lineSize) * lineSize;
     ParticleInteger const end = std::min(sphParticlesSize(), begin + lineSize);
@@ -1148,9 +1149,9 @@ void sphParticlesCacheFree1() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesCacheFree1Action>(c));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    entrPartCache = decltype(entrPartCache)();
-    velsPartCache = decltype(velsPartCache)();
+    int const numberOfThreads = hpxHardwareConcurrency();
+    energyAndSmoothingLengthParticleCache = decltype(energyAndSmoothingLengthParticleCache)();
+    particleVelocityCache = decltype(particleVelocityCache)();
     auxCache = decltype(auxCache)();
     hpx::wait_all(futs.begin(), futs.end());
     profilerExit();
@@ -1164,8 +1165,8 @@ void sphParticlesCacheFreeEntr() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesCacheFreeEntrAction>(c));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    entrPartCache = decltype(entrPartCache)();
+    int const numberOfThreads = hpxHardwareConcurrency();
+    energyAndSmoothingLengthParticleCache = decltype(energyAndSmoothingLengthParticleCache)();
     hpx::wait_all(futs.begin(), futs.end());
     profilerExit();
 }
@@ -1177,8 +1178,8 @@ void sphParticlesCacheFreeEint() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesCacheFreeEintAction>(c));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    entrPartCache = decltype(entrPartCache)();
+    int const numberOfThreads = hpxHardwareConcurrency();
+    energyAndSmoothingLengthParticleCache = decltype(energyAndSmoothingLengthParticleCache)();
     hpx::wait_all(futs.begin(), futs.end());
     profilerExit();
 }
@@ -1191,14 +1192,14 @@ void sphParticlesCacheFree2() {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesCacheFree2Action>(c));
     }
-    int const numberThreads = hpxHardwareConcurrency();
-    partCache = decltype(partCache)();
-    entrPartCache = decltype(entrPartCache)();
-    rungPartCache = decltype(rungPartCache)();
-    fcoldPartCache = decltype(fcoldPartCache)();
-    velsPartCache = decltype(velsPartCache)();
-    kappasPartCache = decltype(kappasPartCache)();
-    rhoPartCache = decltype(rhoPartCache)();
+    int const numberOfThreads = hpxHardwareConcurrency();
+    particleCache = decltype(particleCache)();
+    energyAndSmoothingLengthParticleCache = decltype(energyAndSmoothingLengthParticleCache)();
+    rungParticleCache = decltype(rungParticleCache)();
+    coldFractionParticleCache = decltype(coldFractionParticleCache)();
+    particleVelocityCache = decltype(particleVelocityCache)();
+    conductivityParticleCache = decltype(conductivityParticleCache)();
+    densityParticleCache = decltype(densityParticleCache)();
     auxCache = decltype(auxCache)();
     hpx::wait_all(futs.begin(), futs.end());
     profilerExit();
@@ -1298,15 +1299,15 @@ void sphCheckpointTest() {
 HPX_PLAIN_ACTION(sphParticlesResetConverged, SphParticlesResetConvergedAction);
 
 void sphParticlesResetConverged() {
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesResetConvergedAction>(c));
     }
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads] {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads] {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (ParticleInteger i = b; i < e; i++) {
                 sphParticlesConverged(i) = false;
             }
@@ -1318,15 +1319,15 @@ void sphParticlesResetConverged() {
 HPX_PLAIN_ACTION(sphParticlesResetSemiactive, SphParticlesResetSemiactiveAction);
 
 void sphParticlesResetSemiactive() {
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     std::vector<hpx::future<void>> futs;
     for (auto& c : hpxChildren()) {
         futs.push_back(hpx::async<SphParticlesResetSemiactiveAction>(c));
     }
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads] {
-            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberThreads;
-            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberThreads;
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads] {
+            ParticleInteger const b = (size_t) proc * sphParticlesSize() / numberOfThreads;
+            ParticleInteger const e = (size_t) (proc + 1) * sphParticlesSize() / numberOfThreads;
             for (ParticleInteger i = b; i < e; i++) {
                 sphParticlesSemiactive(i) = false;
             }

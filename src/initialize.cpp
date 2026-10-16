@@ -686,7 +686,7 @@ static void initX0() {
         }
     }
     Vector<hpx::future<void>> futs;
-    double const ninv = 1.0 / getOptions().partsDim;
+    double const ninv = 1.0 / getOptions().particlesPerDimension;
     auto const ibox = findMyBox();
     auto const glass = getOptions().useGlass;
     auto const closePack = getOptions().closePack;
@@ -727,26 +727,27 @@ static void initX0() {
         if (!fp) {
             THROW_ERROR("Unable to open glass.bin\n");
         }
-        int glassPartsDim;
-        int partsDim = getOptions().partsDim;
+        int glassParticlesPerDimension;
+        int particlesPerDimension = getOptions().particlesPerDimension;
         for (int dim = 0; dim < NDIM; dim++) {
-            box.begin[dim] = (double) ibox.begin[dim] / partsDim;
-            box.end[dim] = (double) ibox.end[dim] / partsDim;
+            box.begin[dim] = (double) ibox.begin[dim] / particlesPerDimension;
+            box.end[dim] = (double) ibox.end[dim] / particlesPerDimension;
         }
-        FREAD(&glassPartsDim, sizeof(int), 1, fp);
-        if (partsDim % glassPartsDim != 0) {
-            THROW_ERROR("parts_dim (=%i) must be a multiple of the glass dim (%i)\n", partsDim,
-                glassPartsDim);
+        FREAD(&glassParticlesPerDimension, sizeof(int), 1, fp);
+        if (particlesPerDimension % glassParticlesPerDimension != 0) {
+            THROW_ERROR("parts_dim (=%i) must be a multiple of the glass dim (%i)\n",
+                particlesPerDimension, glassParticlesPerDimension);
         }
-        int nf = partsDim / glassPartsDim;
+        int nf = particlesPerDimension / glassParticlesPerDimension;
         PRINT("glass factor = %i\n", nf);
-        size_t glassNparts = sqr(glassPartsDim) * glassPartsDim;
-        static Vector<Fixed32> x(glassNparts);
-        static Vector<Fixed32> y(glassNparts);
-        static Vector<Fixed32> z(glassNparts);
-        FREAD(x.data(), sizeof(float), glassNparts, fp);
-        FREAD(y.data(), sizeof(float), glassNparts, fp);
-        FREAD(z.data(), sizeof(float), glassNparts, fp);
+        size_t numberOfGlassParticles =
+            sqr(glassParticlesPerDimension) * glassParticlesPerDimension;
+        static Vector<Fixed32> x(numberOfGlassParticles);
+        static Vector<Fixed32> y(numberOfGlassParticles);
+        static Vector<Fixed32> z(numberOfGlassParticles);
+        FREAD(x.data(), sizeof(float), numberOfGlassParticles, fp);
+        FREAD(y.data(), sizeof(float), numberOfGlassParticles, fp);
+        FREAD(z.data(), sizeof(float), numberOfGlassParticles, fp);
         fclose(fp);
 
         int const jb = box.begin[XDIM] * nf;
@@ -758,12 +759,12 @@ static void initX0() {
         MutexType mutex;
         Vector<ParticleInteger> counts(je - jb);
         for (int j = jb; j < je; j++) {
-            futs.push_back(
-                hpx::async([j, lb, le, jb, kb, ke, glassNparts, &mutex, box, nf, &counts]() {
+            futs.push_back(hpx::async(
+                [j, lb, le, jb, kb, ke, numberOfGlassParticles, &mutex, box, nf, &counts]() {
                     ParticleInteger thisCount = 0;
                     for (int k = kb; k < ke; k++) {
                         for (int l = lb; l < le; l++) {
-                            for (size_t i = 0; i < glassNparts; i++) {
+                            for (size_t i = 0; i < numberOfGlassParticles; i++) {
                                 double x0 = x[i].toDouble();
                                 double y0 = y[i].toDouble();
                                 double z0 = z[i].toDouble();
@@ -796,12 +797,12 @@ static void initX0() {
         }
         for (int j = jb; j < je; j++) {
             ParticleInteger const indexBegin = counts[j - jb];
-            futs.push_back(
-                hpx::async([j, lb, le, kb, ke, glassNparts, &mutex, box, nf, indexBegin]() {
+            futs.push_back(hpx::async(
+                [j, lb, le, kb, ke, numberOfGlassParticles, &mutex, box, nf, indexBegin]() {
                     ParticleInteger iii = indexBegin;
                     for (int k = kb; k < ke; k++) {
                         for (int l = lb; l < le; l++) {
-                            for (size_t i = 0; i < glassNparts; i++) {
+                            for (size_t i = 0; i < numberOfGlassParticles; i++) {
                                 double x0 = x[i].toDouble();
                                 double y0 = y[i].toDouble();
                                 double z0 = z[i].toDouble();
@@ -836,7 +837,7 @@ static void initX0() {
         particlesRung(i) = 0;
     }
     if (getOptions().sph) {
-        // numberParticles counts one species; the two species carry complementary mass fractions.
+        // numberOfParticles counts one species; the two species carry complementary mass fractions.
         ParticleInteger const count = particlesSize();
         sphParticlesResize(count);
         double const gasOffset = (closePack ? 0.25 : 0.5) * ninv;
@@ -858,9 +859,9 @@ static void initX0() {
         double const initialTemperature = 1000.0;
         double const thermalEnergy =
             1.5 * constants::kB * constants::kAvo * neutralNumber * initialTemperature / energyUnit;
-        double const density = getOptions().sphMass * getOptions().numberParticles;
+        double const density = getOptions().sphMass * getOptions().numberOfParticles;
         float const smoothLength = std::cbrt(
-            getOptions().sneighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberParticles));
+            getOptions().sneighborNumber / ((4.0 * M_PI / 3.0) * getOptions().numberOfParticles));
         for (ParticleInteger i = 0; i < count; i++) {
             particlesRung(count + i) = 0;
 #ifdef ENTROPY
@@ -869,7 +870,7 @@ static void initX0() {
 #else
             sphParticlesRec2(i).eint = thermalEnergy * scale * scale;
 #endif
-            sphParticlesSmoothLen(i) = smoothLength;
+            sphParticlesSmoothingLength(i) = smoothLength;
             sphParticlesAlpha(i) = getOptions().alpha0;
             sphParticlesShear(i) = 0.0f;
             sphParticlesOmega(i) = 1.0f;
@@ -897,7 +898,7 @@ static void initX0() {
     }
 }
 
-static float zeldovichEnd(int dim, bool initParts, float d1Value, float prefac1) {
+static float zeldovichEnd(int dim, bool initializeParticles, float d1Value, float prefac1) {
     // PRINT( "enter zeldovich_end\n");
     float dxmax = 0.0;
     SpinlockType mutex;
@@ -911,19 +912,20 @@ static float zeldovichEnd(int dim, bool initParts, float d1Value, float prefac1)
     }
     Vector<hpx::future<float>> futs;
     for (auto c : hpxChildren()) {
-        futs.push_back(hpx::async<ZeldovichEndAction>(c, dim, initParts, d1Value, prefac1));
+        futs.push_back(
+            hpx::async<ZeldovichEndAction>(c, dim, initializeParticles, d1Value, prefac1));
     }
     static Vector<float> yValue;
     yValue = fft3dReadReal(box);
     Array<int64_t, NDIM> iValue;
     float const ninv = 1.0 / n;
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     double const boxSizeInv = 1.0 / boxSize;
-    for (ParticleInteger proc = 0; proc < numberThreads; proc++) {
+    for (ParticleInteger proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(
-            hpx::async([proc, numberThreads, n, box, boxSizeInv, dim, d1Value, prefac1]() {
-                size_t const b = (size_t) proc * particlesSize() / numberThreads;
-                size_t const e = (size_t) (proc + 1) * particlesSize() / numberThreads;
+            hpx::async([proc, numberOfThreads, n, box, boxSizeInv, dim, d1Value, prefac1]() {
+                size_t const b = (size_t) proc * particlesSize() / numberOfThreads;
+                size_t const e = (size_t) (proc + 1) * particlesSize() / numberOfThreads;
                 double dxmax = 0.0;
                 for (ParticleInteger i = b; i < e; i++) {
                     double const x0 = x0Value[XDIM][i].toDouble();
@@ -967,7 +969,7 @@ static float zeldovichEnd(int dim, bool initParts, float d1Value, float prefac1)
                     }
                     particlesPos(dim, i) = x;
                     particlesVel(dim, i) += prefac1 * dx;
-                    double const ndim = pow(getOptions().numberParticles, 1.0 / NDIM);
+                    double const ndim = pow(getOptions().numberOfParticles, 1.0 / NDIM);
                     dxmax = std::max(std::abs(dxmax), dx * ndim);
                 }
                 return (float) dxmax;

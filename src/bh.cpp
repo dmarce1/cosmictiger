@@ -171,13 +171,13 @@ void bhTreeEvaluate(DeviceVector<BhTreeNode> const& nodes, DeviceVector<int>& si
     float const h2inv = 1.0 / (h * h);
     float const h2 = h * h;
     SimdFloat const tiny(1e-20);
-    int const numberThreads =
+    int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs.push_back(hpx::async([proc, numberThreads, &sinkBuckets, &nodes, &phi, &parts, h, gm,
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs.push_back(hpx::async([proc, numberOfThreads, &sinkBuckets, &nodes, &phi, &parts, h, gm,
                                       hinv, h2inv, h2, theta, tiny]() {
-            for (int i = proc; i < sinkBuckets.size(); i += numberThreads) {
+            for (int i = proc; i < sinkBuckets.size(); i += numberOfThreads) {
                 auto const& sinkBucket = sinkBuckets[i];
                 Vector<int> checklist(1, 0);
                 Vector<int> nextlist;
@@ -280,7 +280,7 @@ void bhTreeEvaluatePoint(DeviceVector<BhTreeNode> const& nodes, Array<float, NDI
     float const h2inv = 1.0 / (4.f * h * h);
     float const h2 = 4.f * h * h;
     SimdFloat const tiny(1e-20);
-    int const numberThreads =
+    int const numberOfThreads =
         std::max(std::min((int) parts.size() / 512, 2 * (int) hpxHardwareConcurrency()), 1);
     Vector<hpx::future<void>> futs;
     Vector<int> checklist(1, 0);

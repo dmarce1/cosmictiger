@@ -104,43 +104,43 @@ static void resetLastCacheEntries() {
     }
 }
 
-FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> procRange,
-    Pair<ParticleInteger> partRange, GroupRange box, int depth, bool localRoot, bool threadme) {
-    static std::atomic<int> numberThreads(0);
+FastFuture<GroupTreeReturn> groupTreeCreateFork(size_t key, Pair<int, int> processRange,
+    Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot, bool threadme) {
+    static std::atomic<int> numberOfThreads(0);
     FastFuture<GroupTreeReturn> rc;
     bool remote = false;
-    if (procRange.first != hpxRank()) {
+    if (processRange.first != hpxRank()) {
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = partRange.second - partRange.first > MIN_SORT_THREAD_PARTS;
+        threadme = particleRange.second - particleRange.first > MIN_SORT_THREAD_PARTS;
         if (threadme) {
-            if (numberThreads++ < SORT_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
-                procRange.second - procRange.first > 1) {
+            if (numberOfThreads++ < SORT_OVERSUBSCRIPTION * hpxHardwareConcurrency() ||
+                processRange.second - processRange.first > 1) {
                 threadme = true;
             } else {
                 threadme = false;
-                numberThreads--;
+                numberOfThreads--;
             }
         }
     }
     if (!threadme) {
-        rc.setValue(groupTreeCreate(key, procRange, partRange, box, depth, localRoot));
+        rc.setValue(groupTreeCreate(key, processRange, particleRange, box, depth, localRoot));
     } else if (remote) {
-        rc = hpx::async<GroupTreeCreateAction>(
-            hpxLocalities()[procRange.first], key, procRange, partRange, box, depth, localRoot);
+        rc = hpx::async<GroupTreeCreateAction>(hpxLocalities()[processRange.first], key,
+            processRange, particleRange, box, depth, localRoot);
     } else {
-        rc = hpx::async([procRange, partRange, depth, localRoot, box, key]() {
-            auto rc = groupTreeCreate(key, procRange, partRange, box, depth, localRoot);
-            numberThreads--;
+        rc = hpx::async([processRange, particleRange, depth, localRoot, box, key]() {
+            auto rc = groupTreeCreate(key, processRange, particleRange, box, depth, localRoot);
+            numberOfThreads--;
             return rc;
         });
     }
     return rc;
 }
 
-GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange,
-    Pair<ParticleInteger> partRange, GroupRange box, int depth, bool localRoot) {
+GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> processRange,
+    Pair<ParticleInteger> particleRange, GroupRange box, int depth, bool localRoot) {
     int const treeCacheLineSize = getOptions().treeCacheLineSize;
     if (depth >= MAX_DEPTH) {
         THROW_ERROR("%s\n", "Maximum depth exceeded\n");
@@ -159,8 +159,8 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange,
         allocatorMtx--;
     }
     if (localRoot) {
-        partRange.first = 0;
-        partRange.second = particlesSize();
+        particleRange.first = 0;
+        particleRange.second = particlesSize();
         treeCacheEpoch = 0;
     }
     if (!allocator.ready_) {
@@ -169,21 +169,21 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange,
     }
     int const index = allocator.allocate();
     GroupTreeNode node;
-    GroupRange partBox;
-    if (procRange.second - procRange.first > 1 ||
-        partRange.second - partRange.first > GROUP_BUCKET_SIZE) {
+    GroupRange particleBox;
+    if (processRange.second - processRange.first > 1 ||
+        particleRange.second - particleRange.first > GROUP_BUCKET_SIZE) {
         auto leftBox = box;
         auto rightBox = box;
-        auto leftRange = procRange;
-        auto rightRange = procRange;
-        auto leftParts = partRange;
-        auto rightParts = partRange;
+        auto leftRange = processRange;
+        auto rightRange = processRange;
+        auto leftParticleRange = particleRange;
+        auto rightParticleRange = particleRange;
         bool leftLocalRoot = false;
         bool rightLocalRoot = false;
-        if (procRange.second - procRange.first > 1) {
-            int const mid = (procRange.first + procRange.second) / 2;
-            double const wt =
-                double(procRange.second - mid) / double(procRange.second - procRange.first);
+        if (processRange.second - processRange.first > 1) {
+            int const mid = (processRange.first + processRange.second) / 2;
+            double const wt = double(processRange.second - mid) /
+                double(processRange.second - processRange.first);
             leftRange.second = rightRange.first = mid;
             leftBox = domainsRange(key << 1);
             rightBox = domainsRange((key << 1) + 1);
@@ -192,39 +192,39 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange,
         } else {
             int const xdim = box.longestDim();
             double const xmid = (box.begin[xdim] + box.end[xdim]) * 0.5;
-            ParticleInteger const mid = particlesSort(partRange, xmid, xdim);
-            leftParts.second = rightParts.first = mid;
+            ParticleInteger const mid = particlesSort(particleRange, xmid, xdim);
+            leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
         }
-        auto futr = groupTreeCreateFork(
-            (key << 1) + 1, rightRange, rightParts, rightBox, depth + 1, rightLocalRoot, true);
+        auto futr = groupTreeCreateFork((key << 1) + 1, rightRange, rightParticleRange, rightBox,
+            depth + 1, rightLocalRoot, true);
         auto futl = groupTreeCreateFork(
-            (key << 1), leftRange, leftParts, leftBox, depth + 1, leftLocalRoot, false);
+            (key << 1), leftRange, leftParticleRange, leftBox, depth + 1, leftLocalRoot, false);
         auto const rcl = futl.get();
         auto const rcr = futr.get();
         node.children[LEFT] = rcl.id;
         node.children[RIGHT] = rcr.id;
         for (int dim = 0; dim < NDIM; dim++) {
-            partBox.begin[dim] = std::min(rcr.box.begin[dim], rcl.box.begin[dim]);
-            partBox.end[dim] = std::max(rcr.box.end[dim], rcl.box.end[dim]);
+            particleBox.begin[dim] = std::min(rcr.box.begin[dim], rcl.box.begin[dim]);
+            particleBox.end[dim] = std::max(rcr.box.end[dim], rcl.box.end[dim]);
         }
     } else {
         for (int dim = 0; dim < NDIM; dim++) {
-            partBox.begin[dim] = 1.0;
-            partBox.end[dim] = 0.0;
+            particleBox.begin[dim] = 1.0;
+            particleBox.end[dim] = 0.0;
         }
-        for (ParticleInteger i = partRange.first; i < partRange.second; i++) {
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = particlesPos(dim, i).toDouble();
-                partBox.begin[dim] = std::min(partBox.begin[dim], x);
-                partBox.end[dim] = std::max(partBox.end[dim], x);
+                particleBox.begin[dim] = std::min(particleBox.begin[dim], x);
+                particleBox.end[dim] = std::max(particleBox.end[dim], x);
             }
         }
         node.children[LEFT].index = node.children[RIGHT].index = -1;
     }
-    node.procRange = procRange;
-    node.partRange = partRange;
-    node.box = partBox;
+    node.processRange = processRange;
+    node.particleRange = particleRange;
+    node.box = particleBox;
     node.active = true;
     node.lastActive = true;
     node.localRoot = localRoot;
@@ -234,7 +234,7 @@ GroupTreeReturn groupTreeCreate(size_t key, Pair<int, int> procRange,
     myid.proc = hpxRank();
     GroupTreeReturn rc;
     rc.id = myid;
-    rc.box = partBox;
+    rc.box = particleBox;
     return rc;
 }
 
@@ -389,7 +389,7 @@ static Vector<unsigned> groupTreeRefreshCacheLine(int index) {
 }
 
 void groupTreeIncCacheEpoch() {
-    ParticleInteger const lineSize = getOptions().partCacheLineSize;
+    ParticleInteger const lineSize = getOptions().particleCacheLineSize;
     Vector<hpx::future<void>> futs;
     auto const children = hpxChildren();
     for (auto const& c : children) {

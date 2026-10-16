@@ -29,15 +29,15 @@
 #define BLOCK_SIZE 256
 
 __global__ void accumulateDensityKernel(Fixed32* xValue, Fixed32* yValue, Fixed32* zValue,
-    float* rho, float const* masses, int mfold, size_t numberParticles, int ndim,
+    float* rho, float const* masses, int mfold, size_t numberOfParticles, int ndim,
     Range<int64_t> intbox) {
     int const tid = threadIdx.x;
     int const bid = blockIdx.x;
     int const gsz = gridDim.x;
-    ParticleInteger const ibegin = (size_t) bid * numberParticles / (size_t) gsz;
-    ParticleInteger const iend = (size_t) (bid + 1) * numberParticles / (size_t) gsz;
+    ParticleInteger const ibegin = (size_t) bid * numberOfParticles / (size_t) gsz;
+    ParticleInteger const iend = (size_t) (bid + 1) * numberOfParticles / (size_t) gsz;
     for (ParticleInteger i = ibegin + tid; i < iend; i += BLOCK_SIZE) {
-        ALWAYS_ASSERT(i < numberParticles);
+        ALWAYS_ASSERT(i < numberOfParticles);
         float x = fmodf(mfold * xValue[i].toFloat(), 1.0f);
         float y = fmodf(mfold * yValue[i].toFloat(), 1.0f);
         float z = fmodf(mfold * zValue[i].toFloat(), 1.0f);
@@ -69,7 +69,7 @@ __global__ void accumulateDensityKernel(Fixed32* xValue, Fixed32* yValue, Fixed3
 }
 
 Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
-    int numberBlocks;
+    int numberOfBlocks;
     auto const n3 = intbox.volume();
     Vector<float> rho(n3, 0.0f);
     if (particlesSize() == 0) {
@@ -88,9 +88,9 @@ Vector<float> accumulateDensityCuda(int m, int ndim, Range<int64_t> intbox) {
         devRho[i] = 0.f;
     }
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberBlocks, (void const*) accumulateDensityKernel, BLOCK_SIZE, 0));
-    numberBlocks *= cudaSmpCount();
-    accumulateDensityKernel<<<numberBlocks, BLOCK_SIZE>>>(&particlesPos(XDIM, 0),
+        &numberOfBlocks, (void const*) accumulateDensityKernel, BLOCK_SIZE, 0));
+    numberOfBlocks *= cudaSmpCount();
+    accumulateDensityKernel<<<numberOfBlocks, BLOCK_SIZE>>>(&particlesPos(XDIM, 0),
         &particlesPos(YDIM, 0), &particlesPos(ZDIM, 0), devRho, masses, m, particlesSize(), ndim,
         intbox);
     CUDA_CHECK(cudaDeviceSynchronize());

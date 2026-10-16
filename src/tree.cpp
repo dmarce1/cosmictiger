@@ -68,9 +68,9 @@ static TreeNode* nodes = nullptr;
 static MultiPos* multis = nullptr;
 // Cache lines span reserved allocator slots, including holes between threads.
 static std::vector<unsigned char> populatedNodes;
-static Vector<Pair<ParticleInteger>> leafPartRanges;
-static MutexType leafPartRangeMutex;
-static std::atomic<int> numThreads(0);
+static Vector<Pair<ParticleInteger>> leafParticleRanges;
+static MutexType leafParticleRangeMutex;
+static std::atomic<int> treeThreadCount(0);
 static std::atomic<int> nextId;
 static std::atomic<int> nextMultId;
 static Array<
@@ -181,28 +181,28 @@ TreeCreateParameters::TreeCreateParameters(int minimumRung, double openingAngle,
     minLevel = 9;
     leafPushed = false;
     doLeafSizes = false;
-    parParts = 0;
+    parallelParticleThreshold = 0;
 }
 
 FastFuture<TreeCreateReturn> treeCreateFork(TreeCreateParameters params, size_t key,
-    Pair<int, int> const& procRange, Pair<ParticleInteger> const& partRange,
+    Pair<int, int> const& processRange, Pair<ParticleInteger> const& particleRange,
     Range<double> const& box, int const depth, bool const localRoot, bool threadme) {
     FastFuture<TreeCreateReturn> rc;
     bool remote = false;
-    if (procRange.first != hpxRank()) {
+    if (processRange.first != hpxRank()) {
         threadme = true;
         remote = true;
     } else if (threadme) {
-        threadme = partRange.second - partRange.first >= params.parParts;
+        threadme = particleRange.second - particleRange.first >= params.parallelParticleThreshold;
     }
     if (!threadme) {
-        rc.setValue(treeCreate(params, key, procRange, partRange, box, depth, localRoot));
+        rc.setValue(treeCreate(params, key, processRange, particleRange, box, depth, localRoot));
     } else if (remote) {
-        rc = hpx::async<TreeCreateAction>(hpxLocalities()[procRange.first], params, key, procRange,
-            partRange, box, depth, localRoot);
+        rc = hpx::async<TreeCreateAction>(hpxLocalities()[processRange.first], params, key,
+            processRange, particleRange, box, depth, localRoot);
     } else {
-        rc = hpx::async([params, procRange, key, partRange, depth, localRoot, box]() {
-            auto rc = treeCreate(params, key, procRange, partRange, box, depth, localRoot);
+        rc = hpx::async([params, processRange, key, particleRange, depth, localRoot, box]() {
+            auto rc = treeCreate(params, key, processRange, particleRange, box, depth, localRoot);
             return rc;
         });
     }
@@ -288,8 +288,8 @@ long long treeNodesNextIndex() {
     return nextId + treeAllocLineSize;
 }
 
-TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, int> procRange,
-    Pair<ParticleInteger> partRange, Range<double> box, int depth, bool localRoot) {
+TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, int> processRange,
+    Pair<ParticleInteger> particleRange, Range<double> box, int depth, bool localRoot) {
     if (key == 1) {
         profilerEnter(__FUNCTION__);
     }
@@ -305,14 +305,14 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         treeAllocateNodes();
     }
     if (localRoot) {
-        partRange = particlesCurrentRange();
-        size_t cnt = partRange.second - partRange.first;
-        int numberThreads = 1;
-        while (numberThreads < 4 * hpxHardwareConcurrency()) {
-            numberThreads *= 2;
+        particleRange = particlesCurrentRange();
+        size_t cnt = particleRange.second - particleRange.first;
+        int numberOfThreads = 1;
+        while (numberOfThreads < 4 * hpxHardwareConcurrency()) {
+            numberOfThreads *= 2;
             cnt /= 2;
         }
-        params.parParts = cnt;
+        params.parallelParticleThreshold = cnt;
     }
     Array<TreeId, NCHILD> children;
     Array<Fixed32, NDIM>& x = rc.pos;
@@ -327,7 +327,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     }
     int const index = allocator.allocate();
     bool isleaf = true;
-    auto const numberParticles = partRange.second - partRange.first;
+    auto const numberOfParticles = particleRange.second - particleRange.first;
     float boxR = 0.0f;
     for (int dim = 0; dim < NDIM; dim++) {
         boxR += sqr(0.5 * (box.end[dim] - box.begin[dim]));    // 12
@@ -338,20 +338,20 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     double maxRatio = 1.0;
     flops += 26;
     static SimdFloat const toFloatFactor = kFixed2float;
-    if (procRange.second - procRange.first > 1 || numberParticles > bucketSize ||
-        (!ewaldSatisfied && numberParticles > 0)) {
+    if (processRange.second - processRange.first > 1 || numberOfParticles > bucketSize ||
+        (!ewaldSatisfied && numberOfParticles > 0)) {
         isleaf = false;
         int const xdim = box.longestDim();
         auto leftBox = box;
         auto rightBox = box;
-        auto leftRange = procRange;
-        auto rightRange = procRange;
-        auto leftParts = partRange;
-        auto rightParts = partRange;
+        auto leftRange = processRange;
+        auto rightRange = processRange;
+        auto leftParticleRange = particleRange;
+        auto rightParticleRange = particleRange;
         bool leftLocalRoot = false;
         bool rightLocalRoot = false;
-        if (procRange.second - procRange.first > 1) {
-            int const mid = (procRange.first + procRange.second) / 2;
+        if (processRange.second - processRange.first > 1) {
+            int const mid = (processRange.first + processRange.second) / 2;
             leftBox = domainsRange(key << 1);
             rightBox = domainsRange((key << 1) + 1);
             leftRange.second = rightRange.first = mid;
@@ -360,14 +360,14 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         } else {
             double const xmid = 0.5 * (box.end[xdim] + box.begin[xdim]);
             flops += 2;
-            ParticleInteger const mid = particlesSort(partRange, xmid, xdim);
-            leftParts.second = rightParts.first = mid;
+            ParticleInteger const mid = particlesSort(particleRange, xmid, xdim);
+            leftParticleRange.second = rightParticleRange.first = mid;
             leftBox.end[xdim] = rightBox.begin[xdim] = xmid;
         }
-        auto futr = treeCreateFork(params, (key << 1) + 1, rightRange, rightParts, rightBox,
+        auto futr = treeCreateFork(params, (key << 1) + 1, rightRange, rightParticleRange, rightBox,
             depth + 1, rightLocalRoot, true);
-        auto futl = treeCreateFork(
-            params, (key << 1), leftRange, leftParts, leftBox, depth + 1, leftLocalRoot, false);
+        auto futl = treeCreateFork(params, (key << 1), leftRange, leftParticleRange, leftBox,
+            depth + 1, leftLocalRoot, false);
         auto const rcl = futl.get();
         auto const rcr = futr.get();
         auto const& xl = rcl.pos;
@@ -397,7 +397,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         Array<double, NDIM> xc1, xc2;
         double radius1 = 0.0, radius2;
         bool tried1 = false;
-        if (numberParticles <= 64 * getOptions().bucketSize &&
+        if (numberOfParticles <= 64 * getOptions().bucketSize &&
             (rbox.end[xdim] - rbox.begin[xdim] <= 0.5)) {
             tried1 = true;
             for (int dim = 0; dim < NDIM; dim++) {
@@ -409,10 +409,11 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             }
             flops += 6;
             SimdFloat r2Max(0.0);
-            for (ParticleInteger i = partRange.first; i < partRange.second; i += SIMD_FLOAT_SIZE) {
+            for (ParticleInteger i = particleRange.first; i < particleRange.second;
+                 i += SIMD_FLOAT_SIZE) {
                 SimdInt x;
                 Array<SimdFloat, NDIM> dx;
-                int const maxj = std::min(partRange.second - i, SIMD_FLOAT_SIZE);
+                int const maxj = std::min(particleRange.second - i, SIMD_FLOAT_SIZE);
                 for (int dim = 0; dim < NDIM; dim++) {
                     for (int j = 0; j < maxj; j++) {
                         x[j] = particlesPos(dim, i + j).raw();
@@ -525,7 +526,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
             xminValue[dim] = box.end[dim];
             xmaxValue[dim] = box.begin[dim];
         }
-        for (ParticleInteger i = partRange.first; i < partRange.second; i++) {
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = particlesPos(dim, i).toDouble();    // 3
                 xmaxValue[dim] = std::max(xmaxValue[dim], x);        // 3
@@ -537,7 +538,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         }
         r = 0.0;
         flops += 15;
-        for (ParticleInteger i = partRange.first; i < partRange.second; i++) {
+        for (ParticleInteger i = particleRange.first; i < particleRange.second; i++) {
             double thisRadius = 0.0;
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = particlesPos(dim, i).toDouble();    // 3
@@ -554,17 +555,17 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         }
         Array<double, NDIM> dx;
         ParticleInteger const maxi =
-            roundUp(partRange.second - partRange.first, (ParticleInteger) SIMD_FLOAT_SIZE) +
-            partRange.first;
+            roundUp(particleRange.second - particleRange.first, (ParticleInteger) SIMD_FLOAT_SIZE) +
+            particleRange.first;
         Array<SimdInt, NDIM> y;
         for (int dim = 0; dim < NDIM; dim++) {
             y[dim] = Fixed32(xcValue[dim]).raw();
         }
 
-        for (ParticleInteger i = partRange.first; i < maxi; i += SIMD_FLOAT_SIZE) {
+        for (ParticleInteger i = particleRange.first; i < maxi; i += SIMD_FLOAT_SIZE) {
             Array<SimdInt, NDIM> xValue;
             SimdFloat mask;
-            ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, partRange.second);
+            ParticleInteger const maxj = std::min(i + SIMD_FLOAT_SIZE, particleRange.second);
             for (ParticleInteger j = i; j < maxj; j++) {
                 for (int dim = 0; dim < NDIM; dim++) {
                     xValue[dim][j - i] = particlesPos(dim, j).raw();
@@ -599,8 +600,8 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
     node.radius = radius;
     node.children = children;
     node.localRoot = localRoot;
-    node.partRange = partRange;
-    node.procRange = procRange;
+    node.particleRange = particleRange;
+    node.processRange = processRange;
     node.pos = x;
     node.mpos = multis + index;
     node.mpos->pos = x;
@@ -610,7 +611,7 @@ TreeCreateReturn treeCreate(TreeCreateParameters params, size_t key, Pair<int, i
         node.box.begin[dim] = rbox.begin[dim];
         node.box.end[dim] = rbox.end[dim];
     }
-    bool const global = procRange.second - procRange.first > 1;
+    bool const global = processRange.second - processRange.first > 1;
     node.leaf = isleaf;
     if (index >= nodesSize) {
         THROW_ERROR("%s\n", "Tree arena full\n");
@@ -779,7 +780,7 @@ static Vector<TreeNode> treeFetchCacheLine(int index) {
             TreeNode empty{};
             empty.mpos = &emptyMultipole;
             empty.leaf = true;
-            empty.procRange = Pair<int>(hpxRank(), hpxRank() + 1);
+            empty.processRange = Pair<int>(hpxRank(), hpxRank() + 1);
             for (int child = 0; child < NCHILD; child++) {
                 empty.children[child].proc = hpxRank();
                 empty.children[child].index = -1;

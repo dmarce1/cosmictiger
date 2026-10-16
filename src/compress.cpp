@@ -4,14 +4,14 @@
 #include <cosmictiger/compress.hpp>
 
 double CompressedParticles::compressionRatio() {
-    size_t numberParticles = 0;
-    size_t numberBytes = 36;
+    size_t numberOfParticles = 0;
+    size_t numberOfBytes = 36;
     for (int i = 0; i < blocks.size(); i++) {
         int const n = blocks[i].x[XDIM].size();
-        numberBytes += 33 + 2 * NDIM * n;
-        numberParticles += n;
+        numberOfBytes += 33 + 2 * NDIM * n;
+        numberOfParticles += n;
     }
-    return (double) (24 * numberParticles) / numberBytes;
+    return (double) (24 * numberOfParticles) / numberOfBytes;
 }
 
 int CompressedParticles::size() {
@@ -148,14 +148,14 @@ Vector<CompressedBlock> compressedLeavesToBlocks(
 }
 
 void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * NDIM>>& parts,
-    Range<double, 2 * NDIM> const& box, Pair<int> const& partRange) {
-    int const numberParticles = partRange.second - partRange.first;
-    if (numberParticles <= 64) {
-        leaves.push_back(partRange);
+    Range<double, 2 * NDIM> const& box, Pair<int> const& particleRange) {
+    int const numberOfParticles = particleRange.second - particleRange.first;
+    if (numberOfParticles <= 64) {
+        leaves.push_back(particleRange);
     } else {
         int xdim = box.longestDim();
-        int lo = partRange.first;
-        int hi = partRange.second;
+        int lo = particleRange.first;
+        int hi = particleRange.second;
         double xmid = 0.5 * (box.begin[xdim] + box.end[xdim]);
         while (lo < hi) {
             if (parts[lo][xdim] >= xmid) {
@@ -170,15 +170,15 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * ND
             lo++;
         }
         int mid = hi;
-        if (mid == partRange.first || mid == partRange.second) {
-            mid = partRange.first + numberParticles / 2;
-            std::nth_element(parts.begin() + partRange.first, parts.begin() + mid,
-                parts.begin() + partRange.second,
+        if (mid == particleRange.first || mid == particleRange.second) {
+            mid = particleRange.first + numberOfParticles / 2;
+            std::nth_element(parts.begin() + particleRange.first, parts.begin() + mid,
+                parts.begin() + particleRange.second,
                 [xdim](auto const& left, auto const& right) { return left[xdim] < right[xdim]; });
             xmid = parts[mid][xdim];
         }
-        auto leftRange = partRange;
-        auto rightRange = partRange;
+        auto leftRange = particleRange;
+        auto rightRange = particleRange;
         auto leftBox = box;
         auto rightBox = box;
         leftRange.second = rightRange.first = mid;
@@ -190,27 +190,28 @@ void compressedTreeCreate(Vector<Pair<int>>& leaves, Vector<Array<double, 2 * ND
 
 #ifndef LC2GADGET2
 
-CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, LightconeGroup id) {
-    if (inparts.empty()) {
+CompressedParticles compressParticles(
+    Vector<LightconeEntry> const& inputParticles, LightconeGroup id) {
+    if (inputParticles.empty()) {
         CompressedParticles arc{};
         arc.groupId = id;
         return arc;
     }
     Vector<Array<double, 2 * NDIM>> particles;
-    particles.reserve(inparts.size());
+    particles.reserve(inputParticles.size());
     Array<double, NDIM> xc;
     Array<double, NDIM> vc;
     for (int dim = 0; dim < NDIM; dim++) {
         xc[dim] = vc[dim] = 0.0;
     }
-    for (int i = 0; i < inparts.size(); i++) {
+    for (int i = 0; i < inputParticles.size(); i++) {
         Array<double, 2 * NDIM> x;
-        x[XDIM] = inparts[i].x.toDouble();
-        x[YDIM] = inparts[i].y.toDouble();
-        x[ZDIM] = inparts[i].z.toDouble();
-        x[NDIM + XDIM] = inparts[i].vx;
-        x[NDIM + YDIM] = inparts[i].vy;
-        x[NDIM + ZDIM] = inparts[i].vz;
+        x[XDIM] = inputParticles[i].x.toDouble();
+        x[YDIM] = inputParticles[i].y.toDouble();
+        x[ZDIM] = inputParticles[i].z.toDouble();
+        x[NDIM + XDIM] = inputParticles[i].vx;
+        x[NDIM + YDIM] = inputParticles[i].vy;
+        x[NDIM + ZDIM] = inputParticles[i].vz;
         for (int dim = 0; dim < NDIM; dim++) {
             xc[dim] += x[dim];
             vc[dim] += x[NDIM + dim];
@@ -250,10 +251,10 @@ CompressedParticles compressParticles(Vector<LightconeEntry> const& inparts, Lig
         }
     }
     Vector<Pair<int>> leaves;
-    Pair<int> partRange;
-    partRange.first = 0;
-    partRange.second = particles.size();
-    compressedTreeCreate(leaves, particles, box, partRange);
+    Pair<int> particleRange;
+    particleRange.first = 0;
+    particleRange.second = particles.size();
+    compressedTreeCreate(leaves, particles, box, particleRange);
     CompressedParticles arc;
     arc.blocks = compressedLeavesToBlocks(leaves, particles);
     for (int dim = 0; dim < NDIM; dim++) {

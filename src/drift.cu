@@ -44,9 +44,9 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
     double const c0 = doLc ? 1.0 / tauMax : 0.0;
     double const t0(tau0);
     double const ainv = 1.0 / a;
-    auto const& numberBlocks = gridDim.x;
-    ParticleInteger const begin = (size_t) bid * count / numberBlocks;
-    ParticleInteger const end = (size_t) (bid + 1) * count / numberBlocks;
+    auto const& numberOfBlocks = gridDim.x;
+    ParticleInteger const begin = (size_t) bid * count / numberOfBlocks;
+    ParticleInteger const end = (size_t) (bid + 1) * count / numberOfBlocks;
     ParticleInteger const end0 = roundUp(end - begin, BLOCK_SIZE) + begin;
     double const c1 = dt / a;
     if (doLc) {
@@ -161,20 +161,20 @@ __global__ void cudaDriftKernel(Fixed32* __restrict__ const x, Fixed32* __restri
 
 void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax, double drag) {
     static bool init = false;
-    int numberBlocks;
+    int numberOfBlocks;
     Timer tm1;
     tm1.start();
     CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-        &numberBlocks, (void const*) cudaDriftKernel, BLOCK_SIZE, 0));
+        &numberOfBlocks, (void const*) cudaDriftKernel, BLOCK_SIZE, 0));
     cudaFuncAttributes attr;
     CUDA_CHECK(cudaFuncGetAttributes(&attr, (void const*) cudaDriftKernel));
-    numberBlocks *= cudaSmpCount();
+    numberOfBlocks *= cudaSmpCount();
     auto const rng = rung < 0 ? Pair<ParticleInteger>(0, particlesSize()) : particlesCurrentRange();
     if (rng.first == rng.second) {
         return;
     }
     bool const doLc = getOptions().doLc && tauMax - tau1 < 1.0f;
-    numberBlocks = std::min(numberBlocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
+    numberOfBlocks = std::min(numberOfBlocks, std::max((rng.second - rng.first) / BLOCK_SIZE, 1));
     auto cnt = rng.second - rng.first;
     if (doLc) {
         if (!init) {
@@ -182,7 +182,7 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
             new (listPtr) ListType;
             init = true;
         }
-        listPtr->resize(numberBlocks);
+        listPtr->resize(numberOfBlocks);
     }
     Fixed32* x = &particlesPos(XDIM, rng.first);
     Fixed32* y = &particlesPos(YDIM, rng.first);
@@ -190,13 +190,13 @@ void cudaDrift(int rung, float a, float dt, float tau0, float tau1, float tauMax
     auto* vels = particlesVelData() + rng.first;
     auto const* rungs = &particlesRung(rng.first);
     drag = getOptions().createGlass ? M_PI : 0.0;
-    cudaDriftKernel<<<numberBlocks, BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0,
+    cudaDriftKernel<<<numberOfBlocks, BLOCK_SIZE>>>(x, y, z, vels, rungs, cnt, rung, a, dt, tau0,
         tau1, tauMax, doLc, getOptions().lcMapSize, drag);
     CUDA_CHECK(cudaDeviceSynchronize());
     cnt = 0;
     static size_t totalCnt = 0;
     if (doLc) {
-        cnt += lcAddParts(*listPtr, a, tau0);
+        cnt += lcAddParticles(*listPtr, a, tau0);
     }
     if (cnt != 0) {
         totalCnt += cnt;

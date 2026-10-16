@@ -54,12 +54,12 @@ struct LightconeGroupData {
 static std::shared_ptr<HealpixType> healpix;
 static Pair<int> myPixRange;
 static std::unordered_set<int> bndPix;
-static LightconeParticleMapType* partMapPtr = nullptr;
+static LightconeParticleMapType* particleMapPtr = nullptr;
 static LightconeTreeMapType* treeMapPtr = nullptr;
 static std::unordered_map<int, std::shared_ptr<SpinlockType>> mutexMap;
 static LightconeGroup groupIdCounter = 0;
 // static vector<group_entry> saved_groups;
-static Vector<LightconeParticle> partBuffer;
+static Vector<LightconeParticle> particleBuffer;
 static SharedMutexType sharedMutex;
 static SpinlockType uniqueMutex;
 static SpinlockType leafMutex;
@@ -94,25 +94,25 @@ HPX_PLAIN_ACTION(lcFindNeighbors, LcFindNeighborsAction);
 HPX_PLAIN_ACTION(lcParticleBoundaries1, LcParticleBoundaries1Action);
 HPX_PLAIN_ACTION(lcParticleBoundaries2, LcParticleBoundaries2Action);
 
-static std::atomic<int> nextFilenum = 0;
+static std::atomic<int> nextFileNumber = 0;
 
-static int lcNextFilenum();
+static int lcNextFileNumber();
 
-HPX_PLAIN_ACTION(lcNextFilenum, LcNextFilenumAction);
+HPX_PLAIN_ACTION(lcNextFileNumber, LcNextFileNumberAction);
 
-static int lcNextFilenum() {
+static int lcNextFileNumber() {
     if (hpxRank() == 0) {
-        return nextFilenum++;
+        return nextFileNumber++;
     } else {
-        LcNextFilenumAction act;
+        LcNextFileNumberAction act;
         static auto const root = hpxLocalities()[0];
         return act(root);
     }
 }
 
-size_t lcAddParts(
+size_t lcAddParticles(
     DeviceVector<DeviceVector<LightconeEntry>> const& entries, double scale, double tau) {
-    int const start = partBuffer.size();
+    int const start = particleBuffer.size();
     Vector<size_t> counts(entries.size() + 1);
     size_t count = 0;
     for (int i = 0; i < entries.size(); i++) {
@@ -120,8 +120,8 @@ size_t lcAddParts(
         count += entries[i].size();
     }
     counts.back() = count;
-    partBuffer.resize(start + count);
-    int const numberThreads = hpxHardwareConcurrency();
+    particleBuffer.resize(start + count);
+    int const numberOfThreads = hpxHardwareConcurrency();
     Vector<hpx::future<void>> futs;
     std::atomic<int> index(0);
     size_t const npix = sqr((size_t) getOptions().lcMapSize) * 12;
@@ -130,9 +130,9 @@ size_t lcAddParts(
     int maxPix = 0;
     MutexType mutex;
     if (counts.back()) {
-        for (int proc = 0; proc < numberThreads; proc++) {
+        for (int proc = 0; proc < numberOfThreads; proc++) {
             futs.push_back(hpx::async([&pix, npix, &mutex, &minPix, &maxPix, scale, tau, &index,
-                                          start, numberThreads, proc, &entries, &counts]() {
+                                          start, numberOfThreads, proc, &entries, &counts]() {
                 int k = index++;
                 int thisMinPix = npix;
                 int thisMaxPix = 0;
@@ -142,7 +142,7 @@ size_t lcAddParts(
                     int const e = start + counts[k + 1];
                     for (int i = b; i < e; i++) {
                         int const j = i - b;
-                        auto& pi = partBuffer[i];
+                        auto& pi = particleBuffer[i];
                         auto const& pj = entry[j];
                         pi.pos[XDIM] = pj.x;
                         pi.pos[YDIM] = pj.y;
@@ -187,9 +187,9 @@ int lcNside() {
 
 void lcSave(FILE* fp) {
     int dummy;
-    size_t sz = partBuffer.size();
+    size_t sz = particleBuffer.size();
     fwrite(&sz, sizeof(size_t), 1, fp);
-    fwrite(partBuffer.data(), sizeof(LightconeParticle), partBuffer.size(), fp);
+    fwrite(particleBuffer.data(), sizeof(LightconeParticle), particleBuffer.size(), fp);
     fwrite(&epoch, sizeof(int), 1, fp);
     fwrite(&sz, sizeof(size_t), 1, fp);
     fwrite(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
@@ -199,8 +199,8 @@ void lcLoad(FILE* fp) {
     size_t sz;
     int dummy;
     FREAD(&sz, sizeof(size_t), 1, fp);
-    partBuffer.resize(sz);
-    FREAD(partBuffer.data(), sizeof(LightconeParticle), partBuffer.size(), fp);
+    particleBuffer.resize(sz);
+    FREAD(particleBuffer.data(), sizeof(LightconeParticle), particleBuffer.size(), fp);
     FREAD(&epoch, sizeof(int), 1, fp);
     FREAD(&sz, sizeof(size_t), 1, fp);
     FREAD(&groupIdCounter, sizeof(LightconeGroup), 1, fp);
@@ -211,43 +211,43 @@ size_t lcTimeToFlush(double tau, double requestedTauMax) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcTimeToFlushAction>(c, tau, requestedTauMax));
     }
-    size_t numberParticles = partBuffer.size();
+    size_t numberOfParticles = particleBuffer.size();
     for (auto& f : futs) {
-        numberParticles = std::max(numberParticles, f.get());
+        numberOfParticles = std::max(numberOfParticles, f.get());
     }
     if (hpxRank() == 0) {
         tauMax = requestedTauMax;
         int const nside = computeNside(tau);
         int const npix = nside == 0 ? 1 : 12 * sqr(nside);
         size_t const ranks = std::min(npix, hpxSize());
-        size_t const partsPerRank = getOptions().numberParticles / hpxSize();
+        size_t const particlesPerRank = getOptions().numberOfParticles / hpxSize();
         /*		double factor = 1.0 / 8.0;
          double tm = tau / tau_max * 64;
          if (tm > 63.0) {
          factor = (64.0 - tm) / 8.0;
          }*/
-        if (numberParticles >= (M_PI / 10.0) * partsPerRank) {
+        if (numberOfParticles >= (M_PI / 10.0) * particlesPerRank) {
             return 1;
         } else {
             return 0;
         }
     } else {
-        return numberParticles;
+        return numberOfParticles;
     }
 }
 
-void lcParts2groups(double a, double linkLen, int ti) {
+void lcParts2groups(double a, double linkingLength, int ti) {
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
-        futs.push_back(hpx::async<LcParts2groupsAction>(c, a, linkLen, ti));
+        futs.push_back(hpx::async<LcParts2groupsAction>(c, a, linkingLength, ti));
     }
     std::unordered_map<LightconeGroup, Vector<LightconeEntry>> groupsMap;
     int i = 0;
-    while (i < partBuffer.size()) {
-        auto const grp = partBuffer[i].group;
+    while (i < particleBuffer.size()) {
+        auto const grp = particleBuffer[i].group;
         if (grp != LC_EDGE_GROUP) {
             LightconeEntry entry;
-            auto const& p = partBuffer[i];
+            auto const& p = particleBuffer[i];
             entry.x = p.pos[XDIM];
             entry.y = p.pos[YDIM];
             entry.z = p.pos[ZDIM];
@@ -255,8 +255,8 @@ void lcParts2groups(double a, double linkLen, int ti) {
             entry.vy = p.vel[YDIM];
             entry.vz = p.vel[ZDIM];
             groupsMap[grp].push_back(entry);
-            partBuffer[i] = partBuffer.back();
-            partBuffer.pop_back();
+            particleBuffer[i] = particleBuffer.back();
+            particleBuffer.pop_back();
         } else {
             i++;
         }
@@ -288,10 +288,10 @@ void lcParts2groups(double a, double linkLen, int ti) {
             return a.second.size() > b.second.size();
         });
     std::atomic<int> nextIndex(0);
-    int const numberThreads = 2 * hpxHardwareConcurrency();
+    int const numberOfThreads = 2 * hpxHardwareConcurrency();
     MutexType mutex;
     Vector<RockstarRecord> recs;
-    for (int proc = 0; proc < numberThreads; proc++) {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
         futs.push_back(hpx::async([&recs, &mutex, &nextIndex, &groups]() {
             int index = nextIndex++;
             while (index < groups.size()) {
@@ -331,32 +331,32 @@ static int rankFromGroupId(long long id) {
 
 static void lcSendParticles(Vector<LightconeParticle> parts) {
     Timer tm;
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     for (auto const& part : parts) {
         int const pix = vec2pix(
             part.pos[XDIM].toDouble(), part.pos[YDIM].toDouble(), part.pos[ZDIM].toDouble());
         std::unique_lock<SpinlockType> lock(*mutexMap[pix]);
         for (int dim = 0; dim < NDIM; dim++) {
-            partMap[pix].pos[dim].pushBack(part.pos[dim]);
-            partMap[pix].vel[dim].pushBack(part.vel[dim]);
+            particleMap[pix].pos[dim].pushBack(part.pos[dim]);
+            particleMap[pix].vel[dim].pushBack(part.vel[dim]);
         }
-        partMap[pix].group.pushBack(part.group);
+        particleMap[pix].group.pushBack(part.group);
     }
 }
 
 static void lcSendBufferParticles(Vector<LightconeParticle> parts) {
     int start, stop;
     std::unique_lock<SharedMutexType> ulock(sharedMutex);
-    start = partBuffer.size();
-    partBuffer.resize(start + parts.size());
-    stop = partBuffer.size();
+    start = particleBuffer.size();
+    particleBuffer.resize(start + parts.size());
+    stop = particleBuffer.size();
     ulock.unlock();
     constexpr int kChunkSize = 1024;
     for (int i = 0; i < parts.size(); i += kChunkSize) {
         int const end = std::min((int) parts.size(), i + kChunkSize);
         std::shared_lock<SharedMutexType> lock(sharedMutex);
         for (int j = i; j < end; j++) {
-            partBuffer[j + start] = parts[j];
+            particleBuffer[j + start] = parts[j];
         }
     }
 }
@@ -367,15 +367,15 @@ void lcBuffer2homes() {
     for (auto const& c : hpxChildren()) {
         futs1.push_back(hpx::async<LcBuffer2homesAction>(c));
     }
-    int const numberThreads = hpxHardwareConcurrency();
+    int const numberOfThreads = hpxHardwareConcurrency();
     static MutexType mapMutex;
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs2.push_back(hpx::async([proc, numberThreads]() {
-            int const begin = (size_t) proc * partBuffer.size() / numberThreads;
-            int const end = (size_t) (proc + 1) * partBuffer.size() / numberThreads;
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs2.push_back(hpx::async([proc, numberOfThreads]() {
+            int const begin = (size_t) proc * particleBuffer.size() / numberOfThreads;
+            int const end = (size_t) (proc + 1) * particleBuffer.size() / numberOfThreads;
             std::unordered_map<int, Vector<LightconeParticle>> sends;
             for (int i = begin; i < end; i++) {
-                auto const& part = partBuffer[i];
+                auto const& part = particleBuffer[i];
                 int const pix = vec2pix(part.pos[XDIM].toDouble(), part.pos[YDIM].toDouble(),
                     part.pos[ZDIM].toDouble());
                 int const rank = pix2rank(pix);
@@ -390,20 +390,20 @@ void lcBuffer2homes() {
         }));
     }
     hpx::wait_all(futs2.begin(), futs2.end());
-    partBuffer = decltype(partBuffer)();
+    particleBuffer = decltype(particleBuffer)();
     hpx::wait_all(futs1.begin(), futs1.end());
 }
 
 void lcGroups2homes() {
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcGroups2homesAction>(c));
     }
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
-        futs.push_back(hpx::async([pix, &partMap]() {
+        futs.push_back(hpx::async([pix, &particleMap]() {
             Vector<hpx::future<void>> futs;
-            auto& parts = partMap[pix];
+            auto& parts = particleMap[pix];
             std::unordered_map<int, Vector<LightconeParticle>> sends;
             for (int i = 0; i < parts.group.size(); i++) {
                 int rank = rankFromGroupId(parts.group[i]);
@@ -438,8 +438,8 @@ static int lcParticlesSort(int pix, Pair<int> rng, double xm, int xdim) {
     int end = rng.second;
     int lo = begin;
     int hi = end;
-    auto& partMap = *partMapPtr;
-    auto& parts = partMap[pix];
+    auto& particleMap = *particleMapPtr;
+    auto& parts = particleMap[pix];
     LightconeReal xmid = xm;
     while (lo < hi) {
         if (parts.pos[xdim][lo] >= xmid) {
@@ -460,31 +460,31 @@ static int lcParticlesSort(int pix, Pair<int> rng, double xm, int xdim) {
     return hi;
 }
 
-std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int> partRange) {
+std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int> particleRange) {
     constexpr int kBucketSize = GROUP_BUCKET_SIZE;
     LightconeTreeNode thisNode;
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     auto& nodes = treeMap[pix];
-    auto& parts = partMap[pix];
-    Range<double> partBox;
+    auto& parts = particleMap[pix];
+    Range<double> particleBox;
     bool leaf;
-    if (partRange.second - partRange.first > kBucketSize) {
+    if (particleRange.second - particleRange.first > kBucketSize) {
         leaf = false;
         int const xdim = box.longestDim();
         double const xmid = 0.5 * (box.begin[xdim] + box.end[xdim]);
-        int const mid = lcParticlesSort(pix, partRange, xmid, xdim);
+        int const mid = lcParticlesSort(pix, particleRange, xmid, xdim);
         auto boxLeft = box;
         auto boxRight = box;
-        auto partsLeft = partRange;
-        auto partsRight = partRange;
+        auto leftParticleRange = particleRange;
+        auto rightParticleRange = particleRange;
         boxLeft.end[xdim] = boxRight.begin[xdim] = xmid;
-        partsLeft.second = partsRight.first = mid;
-        auto const rcl = lcTreeCreate(pix, boxLeft, partsLeft);
-        auto const rcr = lcTreeCreate(pix, boxRight, partsRight);
+        leftParticleRange.second = rightParticleRange.first = mid;
+        auto const rcl = lcTreeCreate(pix, boxLeft, leftParticleRange);
+        auto const rcr = lcTreeCreate(pix, boxRight, rightParticleRange);
         for (int dim = 0; dim < NDIM; dim++) {
-            partBox.begin[dim] = std::min(rcl.second.begin[dim], rcr.second.begin[dim]);
-            partBox.end[dim] = std::max(rcl.second.end[dim], rcr.second.end[dim]);
+            particleBox.begin[dim] = std::min(rcl.second.begin[dim], rcr.second.begin[dim]);
+            particleBox.end[dim] = std::max(rcl.second.end[dim], rcr.second.end[dim]);
         }
         thisNode.children[LEFT].pix = thisNode.children[RIGHT].pix = pix;
         thisNode.children[LEFT].index = rcl.first;
@@ -492,22 +492,22 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
     } else {
         leaf = true;
         for (int dim = 0; dim < NDIM; dim++) {
-            partBox.begin[dim] = 1.0;
-            partBox.end[dim] = -1.0;
+            particleBox.begin[dim] = 1.0;
+            particleBox.end[dim] = -1.0;
         }
-        for (int i = partRange.first; i < partRange.second; i++) {
+        for (int i = particleRange.first; i < particleRange.second; i++) {
             parts.group[i] = LC_NO_GROUP;
             for (int dim = 0; dim < NDIM; dim++) {
                 double const x = parts.pos[dim][i].toDouble();
-                partBox.begin[dim] = std::min(partBox.begin[dim], x);
-                partBox.end[dim] = std::max(partBox.end[dim], x);
+                particleBox.begin[dim] = std::min(particleBox.begin[dim], x);
+                particleBox.end[dim] = std::max(particleBox.end[dim], x);
             }
         }
         thisNode.children[LEFT].index = thisNode.children[RIGHT].index = -1;
         thisNode.children[LEFT].pix = thisNode.children[RIGHT].pix = -1;
     }
-    thisNode.partRange = partRange;
-    thisNode.box = partBox;
+    thisNode.particleRange = particleRange;
+    thisNode.box = particleBox;
     thisNode.pix = pix;
     thisNode.active = 1;
     thisNode.lastActive = 0;
@@ -522,12 +522,12 @@ std::pair<int, Range<double>> lcTreeCreate(int pix, Range<double> box, Pair<int>
     }
     std::pair<int, Range<double>> rc;
     rc.first = index;
-    rc.second = partBox;
+    rc.second = particleBox;
     return rc;
 }
 
 void lcFindNeighborsLocal(
-    LightconeTreeId selfId, Vector<LightconeTreeId> checklist, double linkLen) {
+    LightconeTreeId selfId, Vector<LightconeTreeId> checklist, double linkingLength) {
     static thread_local Vector<LightconeTreeId> nextlist;
     static thread_local Vector<LightconeTreeId> leaflist;
     nextlist.resize(0);
@@ -535,7 +535,7 @@ void lcFindNeighborsLocal(
     auto& treeMap = *treeMapPtr;
     auto& self = treeMap[selfId.pix][selfId.index];
     bool const iamleaf = self.children[LEFT].index == -1;
-    auto mybox = self.box.pad(linkLen * 1.01);
+    auto mybox = self.box.pad(linkingLength * 1.01);
     do {
         for (int ci = 0; ci < checklist.size(); ci++) {
             auto const check = checklist[ci];
@@ -558,8 +558,8 @@ void lcFindNeighborsLocal(
     } else {
         checklist.insert(checklist.end(), leaflist.begin(), leaflist.end());
         if (checklist.size()) {
-            lcFindNeighborsLocal(self.children[LEFT], checklist, linkLen);
-            lcFindNeighborsLocal(self.children[RIGHT], std::move(checklist), linkLen);
+            lcFindNeighborsLocal(self.children[LEFT], checklist, linkingLength);
+            lcFindNeighborsLocal(self.children[RIGHT], std::move(checklist), linkingLength);
         }
     }
 }
@@ -571,9 +571,10 @@ size_t lcFindNeighbors() {
         futs.push_back(hpx::async<LcFindNeighborsAction>(c));
     }
     size_t rc = 0;
-    double const linkLen = getOptions().lcB * pow(getOptions().numberParticles, -1.0 / NDIM);
+    double const linkingLength =
+        getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
-        futs.push_back(hpx::async([pix, linkLen, &treeMap]() {
+        futs.push_back(hpx::async([pix, linkingLength, &treeMap]() {
             Vector<int> checkPix;
             checkPix = pixNeighbors(pix);
             checkPix.push_back(pix);
@@ -582,7 +583,7 @@ size_t lcFindNeighbors() {
                 checklist[i].pix = checkPix[i];
                 checklist[i].index = treeMap[checkPix[i]].size() - 1;
             }
-            lcFindNeighborsLocal(checklist.back(), checklist, linkLen);
+            lcFindNeighborsLocal(checklist.back(), checklist, linkingLength);
         }));
     }
     for (auto& f : futs) {
@@ -598,7 +599,8 @@ size_t lcFindGroups() {
         futs.push_back(hpx::async<LcFindGroupsAction>(c));
     }
     size_t rc = 0;
-    double const linkLen = getOptions().lcB * pow(getOptions().numberParticles, -1.0 / NDIM);
+    double const linkingLength =
+        getOptions().lcB * pow(getOptions().numberOfParticles, -1.0 / NDIM);
     Vector<hpx::future<void>> futs2;
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
         futs2.push_back(hpx::async([pix, &treeMap]() {
@@ -611,19 +613,19 @@ size_t lcFindGroups() {
     }
     hpx::wait_all(futs2.begin(), futs2.end());
 
-    return cudaLightcone(leafNodes, partMapPtr, treeMapPtr, &groupIdCounter);
+    return cudaLightcone(leafNodes, particleMapPtr, treeMapPtr, &groupIdCounter);
 }
 
 static LightconeParticles lcGetParticles1(int pix) {
-    auto& partMap = *partMapPtr;
-    return partMap[pix];
+    auto& particleMap = *particleMapPtr;
+    return particleMap[pix];
 }
 
 static Pair<Vector<long long>, Vector<char>> lcGetParticles2(int pix) {
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     Pair<Vector<long long>, Vector<char>> rc;
-    auto const& parts = partMap[pix];
+    auto const& parts = particleMap[pix];
     for (int i = 0; i < parts.group.size(); i++) {
         rc.first.push_back((long long) parts.group[i]);
     }
@@ -658,7 +660,7 @@ static int pix2rank(int pix) {
 }
 
 void lcParticleBoundaries1() {
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -672,13 +674,13 @@ void lcParticleBoundaries1() {
     }
     int i = 0;
     for (auto pix : bndPix) {
-        partMap[pix] = pfuts[i].get();
+        particleMap[pix] = pfuts[i].get();
         i++;
     }
 }
 
 void lcParticleBoundaries2() {
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
@@ -693,13 +695,13 @@ void lcParticleBoundaries2() {
     int i = 0;
     for (auto pix : bndPix) {
         auto const p = pfuts[i].get();
-        int const numberThreads = hpxHardwareConcurrency();
+        int const numberOfThreads = hpxHardwareConcurrency();
         Vector<hpx::future<void>> futs;
-        auto& parts = partMap[pix];
-        for (int thread = 0; thread < numberThreads; thread++) {
-            futs.push_back(hpx::async([thread, numberThreads, &p, &parts]() {
-                int const jmin = thread * parts.group.size() / numberThreads;
-                int const jmax = (thread + 1) * parts.group.size() / numberThreads;
+        auto& parts = particleMap[pix];
+        for (int thread = 0; thread < numberOfThreads; thread++) {
+            futs.push_back(hpx::async([thread, numberOfThreads, &p, &parts]() {
+                int const jmin = thread * parts.group.size() / numberOfThreads;
+                int const jmax = (thread + 1) * parts.group.size() / numberOfThreads;
                 for (int j = jmin; j < jmax; j++) {
                     parts.group[j] = p.first[j];
                 }
@@ -707,10 +709,10 @@ void lcParticleBoundaries2() {
         }
         hpx::wait_all(futs.begin(), futs.end());
         auto& nodes = treeMap[pix];
-        for (int thread = 0; thread < numberThreads; thread++) {
-            futs.push_back(hpx::async([thread, numberThreads, &p, &nodes]() {
-                int const jmin = thread * nodes.size() / numberThreads;
-                int const jmax = (thread + 1) * nodes.size() / numberThreads;
+        for (int thread = 0; thread < numberOfThreads; thread++) {
+            futs.push_back(hpx::async([thread, numberOfThreads, &p, &nodes]() {
+                int const jmin = thread * nodes.size() / numberOfThreads;
+                int const jmax = (thread + 1) * nodes.size() / numberOfThreads;
                 for (int j = jmin; j < jmax; j++) {
                     nodes[j].lastActive = p.second[j];
                 }
@@ -723,21 +725,21 @@ void lcParticleBoundaries2() {
     hpx::wait_all(futs.begin(), futs.end());
 }
 
-void lcFormTrees(double tau, double linkLen) {
-    auto& partMap = *partMapPtr;
+void lcFormTrees(double tau, double linkingLength) {
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     Vector<hpx::future<void>> futs;
     for (auto const& c : hpxChildren()) {
-        futs.push_back(hpx::async<LcFormTreesAction>(c, tau, linkLen));
+        futs.push_back(hpx::async<LcFormTreesAction>(c, tau, linkingLength));
     }
-    for (auto iter = partMap.begin(); iter != partMap.end(); iter++) {
+    for (auto iter = particleMap.begin(); iter != particleMap.end(); iter++) {
         int const pix = iter->first;
-        futs.push_back(hpx::async([pix, linkLen, tau, &partMap]() {
-            auto& parts = partMap[pix];
+        futs.push_back(hpx::async([pix, linkingLength, tau, &particleMap]() {
+            auto& parts = particleMap[pix];
             Range<double> box;
-            Pair<int> partRange;
-            partRange.first = 0;
-            partRange.second = parts.group.size();
+            Pair<int> particleRange;
+            particleRange.first = 0;
+            particleRange.second = parts.group.size();
             for (int dim = 0; dim < NDIM; dim++) {
                 box.begin[dim] = 1.0;
                 box.end[dim] = -1.0;
@@ -749,14 +751,15 @@ void lcFormTrees(double tau, double linkLen) {
                     box.end[dim] = std::max(box.end[dim], x);
                 }
             }
-            lcTreeCreate(pix, box, partRange);
+            lcTreeCreate(pix, box, particleRange);
             for (int i = 0; i < parts.group.size(); i++) {
                 double const x = parts.pos[XDIM][i].toDouble();
                 double const y = parts.pos[YDIM][i].toDouble();
                 double const z = parts.pos[ZDIM][i].toDouble();
                 double const r2 = sqr(x, y, z);
                 double const rValue = sqrt(r2);
-                if (sqr((float) (rValue - (tauMax - tau))) < (float) sqr(linkLen) && tau < tauMax) {
+                if (sqr((float) (rValue - (tauMax - tau))) < (float) sqr(linkingLength) &&
+                    tau < tauMax) {
                     parts.group[i] = LC_EDGE_GROUP;
                 } else {
                     parts.group[i] = LC_NO_GROUP;
@@ -776,7 +779,7 @@ void lcFormTrees(double tau, double linkLen) {
         } else {
             auto const aValue = treeMap[a.pix][a.index];
             auto const bValue = treeMap[b.pix][b.index];
-            return aValue.partRange.first < bValue.partRange.first;
+            return aValue.particleRange.first < bValue.particleRange.first;
         }
     });
     hpx::wait_all(futs.begin(), futs.end());
@@ -801,7 +804,7 @@ static int computeNside(double tau) {
     double nside = std::sqrt(8.0 * hpxHardwareConcurrency() * hpxSize() / 12.0);
     double const w0 = std::max((tauMax - tau) / tauMax, 0.0);
     nside = std::min(nside,
-        (pow(getOptions().numberParticles, 1.0 / NDIM) * std::sqrt(3) / getOptions().lcB / 2.0 *
+        (pow(getOptions().numberOfParticles, 1.0 / NDIM) * std::sqrt(3) / getOptions().lcB / 2.0 *
             w0));
     nsideValue = 1;
     while (nsideValue < nside) {
@@ -817,13 +820,13 @@ void lcInit(double tau, double requestedTauMax) {
     for (auto const& c : hpxChildren()) {
         futs.push_back(hpx::async<LcInitAction>(c, tau, requestedTauMax));
     }
-    if (partMapPtr == nullptr) {
-        CUDA_CHECK(cudaMallocManaged(&partMapPtr, sizeof(LightconeParticleMapType)));
+    if (particleMapPtr == nullptr) {
+        CUDA_CHECK(cudaMallocManaged(&particleMapPtr, sizeof(LightconeParticleMapType)));
         CUDA_CHECK(cudaMallocManaged(&treeMapPtr, sizeof(LightconeTreeMapType)));
-        new (partMapPtr) LightconeParticleMapType;
+        new (particleMapPtr) LightconeParticleMapType;
         new (treeMapPtr) LightconeTreeMapType;
     }
-    auto& partMap = *partMapPtr;
+    auto& particleMap = *particleMapPtr;
     auto& treeMap = *treeMapPtr;
     mutexMap = decltype(mutexMap)();
     bndPix = decltype(bndPix)();
@@ -839,10 +842,10 @@ void lcInit(double tau, double requestedTauMax) {
     myPixRange.first = (size_t) hpxRank() * npixValue / hpxSize();
     myPixRange.second = (size_t) (hpxRank() + 1) * npixValue / hpxSize();
     for (int pix = myPixRange.first; pix < myPixRange.second; pix++) {
-        partMap[pix].group.resize(0);
+        particleMap[pix].group.resize(0);
         for (int dim = 0; dim < NDIM; dim++) {
-            partMap[pix].pos[dim].resize(0);
-            partMap[pix].vel[dim].resize(0);
+            particleMap[pix].pos[dim].resize(0);
+            particleMap[pix].vel[dim].resize(0);
         }
         treeMap[pix].resize(0);
         mutexMap[pix] = std::make_shared<SpinlockType>();
@@ -850,10 +853,10 @@ void lcInit(double tau, double requestedTauMax) {
         for (auto const& n : neighbors) {
             if (n < myPixRange.first || n >= myPixRange.second) {
                 bndPix.insert(n);
-                partMap[n].group.resize(0);
+                particleMap[n].group.resize(0);
                 for (int dim = 0; dim < NDIM; dim++) {
-                    partMap[n].pos[dim].resize(0);
-                    partMap[n].vel[dim].resize(0);
+                    particleMap[n].pos[dim].resize(0);
+                    particleMap[n].vel[dim].resize(0);
                 }
                 treeMap[n].resize(0);
             }
@@ -863,7 +866,7 @@ void lcInit(double tau, double requestedTauMax) {
 }
 
 int lcAddParticle(double x0, double y0, double z0, double x1, double y1, double z1, float vx,
-    float vy, float vz, float t0, float t1, Vector<LightconeParticle>& thisPartBuffer) {
+    float vy, float vz, float t0, float t1, Vector<LightconeParticle>& thisParticleBuffer) {
     int rc = 0;
     /*static simd_float8 images[NDIM] =
      { simd_float8(0, -1, 0, -1, 0, -1, 0, -1), simd_float8(0, 0, -1, -1, 0, 0, -1, -1),
@@ -919,18 +922,18 @@ int lcAddParticle(double x0, double y0, double z0, double x1, double y1, double 
     return rc;
 }
 
-void lcAddParts(Vector<LightconeParticle>&& theseParts) {
+void lcAddParticles(Vector<LightconeParticle>&& theseParticles) {
     std::unique_lock<SharedMutexType> ulock(sharedMutex);
-    int const start = partBuffer.size();
-    partBuffer.resize(start + theseParts.size());
-    int const stop = partBuffer.size();
+    int const start = particleBuffer.size();
+    particleBuffer.resize(start + theseParticles.size());
+    int const stop = particleBuffer.size();
     ulock.unlock();
     int const chunkSize = 64;
-    for (int i = 0; i < theseParts.size(); i += chunkSize) {
+    for (int i = 0; i < theseParticles.size(); i += chunkSize) {
         std::shared_lock<SharedMutexType> slock(sharedMutex);
-        int const jend = std::min(i + chunkSize, (int) theseParts.size());
+        int const jend = std::min(i + chunkSize, (int) theseParticles.size());
         for (int j = i; j < jend; j++) {
-            partBuffer[j + start] = theseParts[j];
+            particleBuffer[j + start] = theseParticles[j];
         }
     }
 }

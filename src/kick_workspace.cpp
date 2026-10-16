@@ -28,7 +28,7 @@ HPX_PLAIN_ACTION(KickWorkspace::clearBuffers, ClearBuffersAction);
 KickWorkspace::KickWorkspace(KickParameters p, ParticleInteger totalParticlesArgument) {
     totalParticles_ = totalParticlesArgument;
     params_ = p;
-    numberProcessedParticles_ = 0;
+    numberOfProcessedParticles_ = 0;
 }
 
 KickWorkspace::~KickWorkspace() {}
@@ -76,16 +76,16 @@ void KickWorkspace::toGpu() {
         return;
     }
 
-    struct GlobalPartRange {
+    struct GlobalParticleRange {
         int rank;
         Pair<ParticleInteger> range;
-        bool operator==(GlobalPartRange other) const {
+        bool operator==(GlobalParticleRange other) const {
             return rank == other.rank && range == other.range;
         }
     };
 
-    struct GlobalPartRangeHash {
-        size_t operator()(GlobalPartRange g) const {
+    struct GlobalParticleRangeHash {
+        size_t operator()(GlobalParticleRange g) const {
             return (size_t) hpxSize() * g.range.first + g.rank;
         }
     };
@@ -97,12 +97,12 @@ void KickWorkspace::toGpu() {
     Vector<hpx::future<void>> futs1;
     Vector<TreeId> treeIdsVector(treeIds_.begin(), treeIds_.end());
     Vector<Vector<TreeId>> idsByDepth(MAX_DEPTH);
-    int numberThreads = hpxSize() == 1 ? 1 : std::max(1, (int) hpxHardwareConcurrency() / 2);
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs1.push_back(hpx::async([proc, numberThreads, &treeIdsVector, &idsByDepth, &mutex]() {
+    int numberOfThreads = hpxSize() == 1 ? 1 : std::max(1, (int) hpxHardwareConcurrency() / 2);
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs1.push_back(hpx::async([proc, numberOfThreads, &treeIdsVector, &idsByDepth, &mutex]() {
             std::unique_lock<MutexType> lock(mutex);
-            int const b = (size_t) proc * treeIdsVector.size() / numberThreads;
-            int const e = (size_t) (proc + 1) * treeIdsVector.size() / numberThreads;
+            int const b = (size_t) proc * treeIdsVector.size() / numberOfThreads;
+            int const e = (size_t) (proc + 1) * treeIdsVector.size() / numberOfThreads;
             for (int i = b; i < e; i++) {
                 lock.unlock();
                 TreeNode const* ptr = treeGetNode(treeIdsVector[i]);
@@ -114,65 +114,67 @@ void KickWorkspace::toGpu() {
     hpx::wait_all(futs1.begin(), futs1.end());
     tm2.stop();
     tm3.start();
-    struct PartRequest {
+    struct ParticleRequest {
         Vector<Vector<Pair<ParticleInteger>>> data;
         size_t count;
-        PartRequest() {
+        ParticleRequest() {
             count = 0;
             data.resize(1);
         }
     };
     std::unordered_map<TreeId, int, KickWorkspaceTreeIdHash> treeMap;
-    std::unordered_map<int, PartRequest> partRequests;
-    std::unordered_map<GlobalPartRange, Pair<ParticleInteger>, GlobalPartRangeHash> partMap;
+    std::unordered_map<int, ParticleRequest> particleRequests;
+    std::unordered_map<GlobalParticleRange, Pair<ParticleInteger>, GlobalParticleRangeHash>
+        particleMap;
     std::set<TreeId> remoteRoots;
-    ParticleInteger partIndex = particlesSize();
+    ParticleInteger particleIndex = particlesSize();
     Vector<hpx::future<void>> futs2;
     Vector<hpx::future<void>> futs3;
-    size_t const opartsize = particlesSize();
-    size_t const maxParts = 64 * 1024 * 1024;
+    size_t const originalParticleCount = particlesSize();
+    size_t const maximumParticlesPerRequest = 64 * 1024 * 1024;
     Vector<hpx::future<Vector<TreeId>>> futs0;
     Vector<TreeId> trees;
     for (int depth = 0; depth < MAX_DEPTH; depth++) {
         auto const& ids = idsByDepth[depth];
-        for (int proc = 0; proc < numberThreads; proc++) {
-            futs0.push_back(hpx::async([proc, numberThreads, &ids, &treeMap, &mutex, &partRequests,
-                                           &partMap, &partIndex, &remoteRoots]() {
-                Vector<TreeId> trees;
-                int const b = (size_t) proc * ids.size() / numberThreads;
-                int const e = (size_t) (proc + 1) * ids.size() / numberThreads;
-                for (int i = b; i < e; i++) {
-                    if (treeMap.find(ids[i]) == treeMap.end()) {
-                        TreeNode const* node = treeGetNode(ids[i]);
-                        addTreeNode(trees, ids[i]);
-                        int const rank = node->procRange.first;
-                        if (rank != hpxRank()) {
-                            auto const range = node->partRange;
-                            auto const thisCount = range.second - range.first;
-                            GlobalPartRange gpr;
-                            gpr.rank = rank;
-                            gpr.range = range;
-                            size_t const numberParticles = node->numberParticles();
-                            std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
-                            auto& entry = partRequests[rank];
-                            entry.data.back().push_back(range);
-                            entry.count += thisCount;
-                            partMap[gpr].first = partIndex;
-                            partMap[gpr].second = partIndex + numberParticles;
-                            partIndex += numberParticles;
-                            particlesResize(partIndex, false);
-                            remoteRoots.insert(ids[i]);
-                            if (entry.count > maxParts) {
-                                size_t count = entry.count;
-                                ParticleInteger index = 0;
-                                entry.count = 0;
-                                entry.data.resize(entry.data.size() + 1);
+        for (int proc = 0; proc < numberOfThreads; proc++) {
+            futs0.push_back(
+                hpx::async([proc, numberOfThreads, &ids, &treeMap, &mutex, &particleRequests,
+                               &particleMap, &particleIndex, &remoteRoots]() {
+                    Vector<TreeId> trees;
+                    int const b = (size_t) proc * ids.size() / numberOfThreads;
+                    int const e = (size_t) (proc + 1) * ids.size() / numberOfThreads;
+                    for (int i = b; i < e; i++) {
+                        if (treeMap.find(ids[i]) == treeMap.end()) {
+                            TreeNode const* node = treeGetNode(ids[i]);
+                            addTreeNode(trees, ids[i]);
+                            int const rank = node->processRange.first;
+                            if (rank != hpxRank()) {
+                                auto const range = node->particleRange;
+                                auto const thisCount = range.second - range.first;
+                                GlobalParticleRange gpr;
+                                gpr.rank = rank;
+                                gpr.range = range;
+                                size_t const numberOfParticles = node->numberOfParticles();
+                                std::unique_lock<SharedMutexType> lock(particlesSharedMutex());
+                                auto& entry = particleRequests[rank];
+                                entry.data.back().push_back(range);
+                                entry.count += thisCount;
+                                particleMap[gpr].first = particleIndex;
+                                particleMap[gpr].second = particleIndex + numberOfParticles;
+                                particleIndex += numberOfParticles;
+                                particlesResize(particleIndex, false);
+                                remoteRoots.insert(ids[i]);
+                                if (entry.count > maximumParticlesPerRequest) {
+                                    size_t count = entry.count;
+                                    ParticleInteger index = 0;
+                                    entry.count = 0;
+                                    entry.data.resize(entry.data.size() + 1);
+                                }
                             }
                         }
                     }
-                }
-                return trees;
-            }));
+                    return trees;
+                }));
         }
         hpx::wait_all(futs0.begin(), futs0.end());
         auto const start = trees.size();
@@ -205,14 +207,14 @@ void KickWorkspace::toGpu() {
     // tm2.read(), tm3.read(), tm4.read());
     tm2.reset();
     futs1.resize(0);
-    numberThreads = std::max(1, (int) hpxHardwareConcurrency());
-    for (auto i = partRequests.begin(); i != partRequests.end(); i++) {
+    numberOfThreads = std::max(1, (int) hpxHardwareConcurrency());
+    for (auto i = particleRequests.begin(); i != particleRequests.end(); i++) {
         int const rank = i->first;
         hpx::future<void> fut = hpx::make_ready_future();
         for (int j = 0; j < i->second.data.size(); j++) {
             size_t const count = i->second.data[j].size();
             if (count) {
-                fut = fut.then([rank, count, &partMap, i, j](hpx::future<void> fut) {
+                fut = fut.then([rank, count, &particleMap, i, j](hpx::future<void> fut) {
                     fut.get();
                     auto const& ranges = i->second.data[j];
                     auto const data = particlesGet(rank, ranges).get();
@@ -223,28 +225,28 @@ void KickWorkspace::toGpu() {
                     size_t sz = index;
                     index = 0;
                     for (int k = 0; k < ranges.size(); k++) {
-                        GlobalPartRange gpr;
+                        GlobalParticleRange gpr;
                         gpr.rank = rank;
                         gpr.range = ranges[k];
-                        auto localRange = partMap[gpr];
-                        auto const numberParticles = localRange.second - localRange.first;
+                        auto localRange = particleMap[gpr];
+                        auto const numberOfParticles = localRange.second - localRange.first;
                         for (int dim = 0; dim < NDIM; dim++) {
                             memcpy(&particlesPos(dim, localRange.first), &data[sz * dim + index],
-                                numberParticles * sizeof(Fixed32));
+                                numberOfParticles * sizeof(Fixed32));
                         }
                         if (getOptions().sph) {
-                            Vector<Fixed32> x(numberParticles), y(numberParticles),
-                                z(numberParticles);
-                            Vector<char> types(numberParticles);
+                            Vector<Fixed32> x(numberOfParticles), y(numberOfParticles),
+                                z(numberOfParticles);
+                            Vector<char> types(numberOfParticles);
                             ParticleGlobalRange source;
                             source.proc = rank;
                             source.range = ranges[k];
                             particlesGlobalReadPos(
                                 source, x.data(), y.data(), z.data(), types.data(), nullptr, 0);
                             std::memcpy(&particlesType(localRange.first), types.data(),
-                                numberParticles * sizeof(char));
+                                numberOfParticles * sizeof(char));
                         }
-                        index += numberParticles;
+                        index += numberOfParticles;
                     }
                 });
             }
@@ -252,11 +254,11 @@ void KickWorkspace::toGpu() {
         futs1.push_back(std::move(fut));
     }
     auto* treeNodes = treeData();
-    for (int proc = 0; proc < numberThreads; proc++) {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
         futs2.push_back(hpx::async(
-            HPX_PRIORITY_HI, [proc, numberThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
+            HPX_PRIORITY_HI, [proc, numberOfThreads, &treeMap, &treeNodes, treeNodesRemoteBegin]() {
                 for (int i = treeNodesRemoteBegin + proc; i < treeNodesNextIndex();
-                    i += numberThreads) {
+                     i += numberOfThreads) {
                     if (treeNodes[i].children[LEFT].index != -1) {
                         ASSERT(treeMap.find(treeNodes[i].children[LEFT]) != treeMap.end());
                         ASSERT(treeMap.find(treeNodes[i].children[RIGHT]) != treeMap.end());
@@ -270,38 +272,39 @@ void KickWorkspace::toGpu() {
     }
     hpx::wait_all(futs2.begin(), futs2.end());
     futs2.resize(0);
-    std::function<void(int, ParticleInteger)> const adjustPartRefs =
-        [&adjustPartRefs, &treeNodes](int index, ParticleInteger offset) -> void {
+    std::function<void(int, ParticleInteger)> const adjustParticleReferences =
+        [&adjustParticleReferences, &treeNodes](int index, ParticleInteger offset) -> void {
         auto& node = treeNodes[index];
-        node.partRange.first += offset;
-        node.partRange.second += offset;
-        ASSERT(node.partRange.first >= 0);
-        ASSERT(node.partRange.second <= particlesSize());
+        node.particleRange.first += offset;
+        node.particleRange.second += offset;
+        ASSERT(node.particleRange.first >= 0);
+        ASSERT(node.particleRange.second <= particlesSize());
         if (node.children[LEFT].index != -1) {
-            adjustPartRefs(node.children[LEFT].index, offset);
-            adjustPartRefs(node.children[RIGHT].index, offset);
+            adjustParticleReferences(node.children[LEFT].index, offset);
+            adjustParticleReferences(node.children[RIGHT].index, offset);
         }
     };
     for (auto i = remoteRoots.begin(); i != remoteRoots.end(); i++) {
         futs3.push_back(hpx::async(HPX_PRIORITY_HI,
-            [i, &treeMap, &partMap, adjustPartRefs, &treeNodes, treeNodesRemoteBegin]() {
-                GlobalPartRange gpr;
+            [i, &treeMap, &particleMap, adjustParticleReferences, &treeNodes,
+                treeNodesRemoteBegin]() {
+                GlobalParticleRange gpr;
                 ASSERT(treeMap.find(*i) != treeMap.end());
                 int index = treeMap[*i];
                 ASSERT(index >= treeNodesRemoteBegin);
                 auto& node = treeNodes[index];
-                gpr.rank = node.procRange.first;
-                gpr.range = node.partRange;
-                ASSERT(partMap.find(gpr) != partMap.end());
-                auto localRange = partMap[gpr];
+                gpr.rank = node.processRange.first;
+                gpr.range = node.particleRange;
+                ASSERT(particleMap.find(gpr) != particleMap.end());
+                auto localRange = particleMap[gpr];
                 ParticleInteger offset = localRange.first - gpr.range.first;
-                ASSERT(treeNodes[index].partRange.first == gpr.range.first);
-                adjustPartRefs(index, offset);
+                ASSERT(treeNodes[index].particleRange.first == gpr.range.first);
+                adjustParticleReferences(index, offset);
             }));
     }
-    for (int proc = 0; proc < numberThreads; proc++) {
-        futs2.push_back(hpx::async(HPX_PRIORITY_HI, [this, proc, numberThreads, &treeMap]() {
-            for (int i = proc; i < workitems_.size(); i += numberThreads) {
+    for (int proc = 0; proc < numberOfThreads; proc++) {
+        futs2.push_back(hpx::async(HPX_PRIORITY_HI, [this, proc, numberOfThreads, &treeMap]() {
+            for (int i = proc; i < workitems_.size(); i += numberOfThreads) {
                 for (int j = 0; j < workitems_[i].dchecklist.size(); j++) {
                     if (workitems_[i].dchecklist[j].proc != hpxRank()) {
                         auto const iter = treeMap.find(workitems_[i].dchecklist[j]);
@@ -323,7 +326,8 @@ void KickWorkspace::toGpu() {
     futs2.resize(0);
     auto sfut = hpx::sort(PAR_EXECUTION_POLICY, workitems_.begin(), workitems_.end(),
         [](KickWorkitem const& a, KickWorkitem const& b) {
-            return treeGetNode(a.self)->partRange.first < treeGetNode(b.self)->partRange.first;
+            return treeGetNode(a.self)->particleRange.first <
+                treeGetNode(b.self)->particleRange.first;
         });
     hpx::wait_all(futs3.begin(), futs3.end());
     hpx::wait_all(futs1.begin(), futs1.end());
@@ -338,16 +342,17 @@ void KickWorkspace::toGpu() {
         &particlesPos(ZDIM, 0), treeNodes, std::move(workitems_));
     tree2Cpu();
     tm.stop();
-    particlesResize(opartsize);
+    particlesResize(originalParticleCount);
     kickSetRc(kr);
     //	PRINT("GPU took %e seconds\n", tm.read());
 }
 
-void KickWorkspace::addParts(std::shared_ptr<KickWorkspace> ptr, ParticleInteger n) {
+void KickWorkspace::recordProcessedParticles(
+    std::shared_ptr<KickWorkspace> ptr, ParticleInteger n) {
     bool doWork = false;
     std::unique_lock<MutexType> lock(mutex_);
-    numberProcessedParticles_ += n;
-    if (numberProcessedParticles_ == totalParticles_) {
+    numberOfProcessedParticles_ += n;
+    if (numberOfProcessedParticles_ == totalParticles_) {
         doWork = true;
     }
     lock.unlock();
@@ -372,10 +377,10 @@ void KickWorkspace::addWork(std::shared_ptr<KickWorkspace> ptr, Expansion<float>
     item.self = self;
     bool doWork = false;
     {
-        ParticleInteger const numberNodeParticles = treeGetNode(self)->numberParticles();
+        ParticleInteger const numberOfNodeParticles = treeGetNode(self)->numberOfParticles();
         std::lock_guard<MutexType> lock(mutex_);
-        numberProcessedParticles_ += numberNodeParticles;
-        if (numberProcessedParticles_ == totalParticles_) {
+        numberOfProcessedParticles_ += numberOfNodeParticles;
+        if (numberOfProcessedParticles_ == totalParticles_) {
             doWork = true;
         }
         for (int i = 0; i < dchecks.size(); i++) {

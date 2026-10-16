@@ -23,4 +23,4 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include <cosmictiger/hpx.hpp>
 #include <cosmictiger/tree.hpp>
 
-hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double linkLen);
+hpx::future<size_t> groupsFind(TreeId self, Vector<TreeId> checklist, double linkingLength);

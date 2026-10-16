@@ -42,9 +42,9 @@ void uncompressParticles(ParticlesSet& parts, CompressedParticles const& arc) {
     int id = 0;
     for (int i = 0; i < arc.blocks.size(); i++) {
         auto const& block = arc.blocks[i];
-        int const numberParticles = block.x[XDIM].size();
-        total += numberParticles;
-        for (int j = 0; j < numberParticles; j++) {
+        int const numberOfParticles = block.x[XDIM].size();
+        total += numberOfParticles;
+        for (int j = 0; j < numberOfParticles; j++) {
             for (int dim = 0; dim < NDIM; dim++) {
                 double x = (block.x[dim][j] + 0.5) / (1 << 15) - 1.0;
                 double v = (block.v[dim][j] + 0.5) / (1 << 15) - 1.0;
@@ -120,16 +120,16 @@ void readAscii(
     }
 }
 
-size_t numLines(std::string file) {
-    size_t numLines = 0;
+size_t numberOfLines(std::string file) {
+    size_t numberOfLines = 0;
     std::ifstream in(file);
     if (in) {
         std::string unused;
         while (std::getline(in, unused)) {
-            ++numLines;
+            ++numberOfLines;
         }
     }
-    return numLines;
+    return numberOfLines;
 }
 
 #define DATABASE_NAME "lightcone.txt"
@@ -141,16 +141,16 @@ int main(int argc, char* argv[]) {
         printf("Unable to open %s for reading\n", infile);
         return -1;
     }
-    size_t baseId = numLines(DATABASE_NAME);
-    int numGroups;
-    fread(&numGroups, sizeof(int), 1, fpin);
-    printf("%i FoF groups found.\n", numGroups);
+    size_t baseId = numberOfLines(DATABASE_NAME);
+    int numberOfGroups;
+    fread(&numberOfGroups, sizeof(int), 1, fpin);
+    printf("%i FoF groups found.\n", numberOfGroups);
     Options* opts = (Options*) malloc(sizeof(Options));
     fread(opts, sizeof(Options), 1, fpin);
     std::unordered_map<std::string, Vector<double>> db;
     size_t haloCount = 0;
     size_t subhaloCount = 0;
-    for (int i = 0; i < numGroups; i++) {
+    for (int i = 0; i < numberOfGroups; i++) {
         printf("\r%i %li %li %li", i, haloCount, subhaloCount, haloCount + subhaloCount);
         fflush(stdout);
         FILE* fpout = fopen("gadget.tmp", "wb");
@@ -163,7 +163,7 @@ int main(int argc, char* argv[]) {
         CompressedParticles arc;
         arc.read(fpin);
         uncompressParticles(parts, arc);
-        int numberParticles = arc.size();
+        int numberOfParticles = arc.size();
         double const xscale = opts->codeToCm * opts->hubble / constants::kMpcToCm;
         double const vscale = opts->codeToCm / opts->codeToS / 100000.0;
         Array<double, NDIM> minx;
@@ -192,8 +192,8 @@ int main(int argc, char* argv[]) {
         }
         header.boxSize = boxSize;
         header.npart[0] = 0;
-        header.npart[1] = numberParticles;
-        header.npartTotal[1] = numberParticles;
+        header.npart[1] = numberOfParticles;
+        header.npartTotal[1] = numberOfParticles;
         header.npartTotal[2] = 0;
         header.mass[1] = opts->codeToG * opts->hubble / constants::kM0;
         header.hubbleParam = opts->hubble;
@@ -224,9 +224,9 @@ int main(int argc, char* argv[]) {
             return -3;
         }
         double const h = opts->hsoft * opts->codeToCm * opts->hubble / constants::kMpcToCm / 2.0;
-        double const linkLen =
+        double const linkingLength =
             opts->lcB;    /// opts->parts_dim * opts->code_to_cm * opts->hubble /
-                          /// constants::mpc_to_cm / box_size * pow(numberParticles, 1.0 / 3.0);
+                          /// constants::mpc_to_cm / box_size * pow(numberOfParticles, 1.0 / 3.0);
         fprintf(fpout, "FILE_FORMAT = \"GADGET2\"\n");
         fprintf(fpout, "h0 = %f\n", opts->hubble);
         fprintf(fpout, "Om = %f\n", opts->omegaM);
@@ -235,10 +235,10 @@ int main(int argc, char* argv[]) {
         fprintf(fpout, "GADGET_MASS_CONVERSION = 1\n");
         fprintf(fpout, "FORCE_RES = %e\n", h);
         //	fprintf(fpout, "LIGHTCONE = 1\n");
-        fprintf(fpout, "FOF_LINKING_LENGTH = %e\n", linkLen);
+        fprintf(fpout, "FOF_LINKING_LENGTH = %e\n", linkingLength);
         //	fprintf(fpout, "STRICT_SO_MASSES = 1\n");
         //		fprintf(fpout, "UNBOUND_THRESHOLD = -10000000.0\n");
-        //		fprintf(fpout, "AVG_PARTICLE_SPACING = %e\n", box_size / pow(numberParticles, 1.0
+        //		fprintf(fpout, "AVG_PARTICLE_SPACING = %e\n", box_size / pow(numberOfParticles, 1.0
         /// 3.0));
         fclose(fpout);
         if (system("./rockstar -c config.cfg ./gadget.tmp\n") != 0) {
